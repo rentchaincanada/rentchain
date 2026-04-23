@@ -30,11 +30,9 @@ import {
 } from "../lib/maintenanceNotifications";
 import { createTransaction } from "../services/financialTransactionService";
 import { writeCanonicalEvent } from "../lib/events/buildEvent";
-import { executeAutomation } from "../lib/automation/automationExecutor";
-import { hasSupportingEvidenceForWorkOrder } from "../lib/maintenanceApprovalReadiness";
+import { executeMaintenanceApprovalAutomation } from "../services/maintenanceApprovalExecutionService";
 import { buildMaintenancePolicyRequest } from "../lib/policy/policyAdapters";
 import { evaluatePolicy, toAutopilotPolicySummary, writePolicyEvaluatedEvent } from "../lib/policy/policyEvaluator";
-import { MAINTENANCE_AUTO_APPROVAL_THRESHOLD_CENTS } from "../lib/policy/policyRules";
 
 const router = Router();
 
@@ -2760,6 +2758,25 @@ router.post("/landlord/work-orders/:id/review-cost", requireAuth, async (req: an
     if (decision === "revision_requested" && !note) {
       return res.status(400).json({ ok: false, error: "COST_REVISION_NOTE_REQUIRED" });
     }
+    if (automationRequested) {
+      const automation = await executeMaintenanceApprovalAutomation({
+        workOrderId,
+        workOrder: access.item,
+        actorId: access.userId,
+        actorRole: isAdmin(req) ? "admin" : "landlord",
+        landlordId: asOptionalString((access.item as any)?.landlordId, 120) || access.landlordId || null,
+        initiatedFrom: "work_order_review_cost",
+      });
+      const fallbackItem = await toWorkOrderResponseForAudience(workOrderId, access.item, "landlord");
+      return res.json({
+        ok: true,
+        item: automation.workOrder
+          ? await toWorkOrderResponseForAudience(automation.workOrderId, automation.workOrder, "landlord")
+          : fallbackItem,
+        autopilotPolicy: automation.autopilotPolicy,
+        automationResult: automation.automationResult,
+      });
+    }
     const policyRequest = buildMaintenancePolicyRequest({
       action: decision === "approve" ? "approve_cost" : "review_cost",
       actorRole: isAdmin(req) ? "admin" : "landlord",
@@ -2866,45 +2883,6 @@ router.post("/landlord/work-orders/:id/review-cost", requireAuth, async (req: an
       const refreshed = await db.collection("workOrders").doc(workOrderId).get();
       return await toWorkOrderResponseForAudience(refreshed.id, refreshed.data(), "landlord");
     };
-
-    if (automationRequested) {
-      const automation = await executeAutomation({
-        action: "maintenance.auto_approve_cost",
-        policyResult,
-        actor: {
-          type: isAdmin(req) ? "admin" : "landlord",
-          id: access.userId,
-          role: isAdmin(req) ? "admin" : "landlord",
-        },
-        resource: {
-          type: "work_order",
-          id: workOrderId,
-        },
-        visibility: "internal",
-        metadata: {
-          domain: "maintenance",
-          landlordId: asOptionalString((access.item as any)?.landlordId, 120),
-          maintenanceRequestId: asOptionalString((access.item as any)?.maintenanceRequestId, 120),
-          propertyId: asOptionalString((access.item as any)?.propertyId, 120),
-          unitId: asOptionalString((access.item as any)?.unitId, 120),
-          policyAction: "approve_cost",
-        },
-        context: {
-          alreadyApproved: String(currentCost.reviewStatus || "").toLowerCase() === "approved",
-          actualCostCents: currentCost.actualCostCents,
-          thresholdCents: MAINTENANCE_AUTO_APPROVAL_THRESHOLD_CENTS,
-          hasSupportingEvidence: hasSupportingEvidenceForWorkOrder(access.item),
-          execute: executeDecision,
-        },
-      });
-      const fallbackItem = await toWorkOrderResponseForAudience(workOrderId, access.item, "landlord");
-      return res.json({
-        ok: true,
-        item: automation.data || fallbackItem,
-        autopilotPolicy,
-        automationResult: automation.automationResult,
-      });
-    }
 
     const item = await executeDecision();
     return res.json({

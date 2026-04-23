@@ -17,6 +17,8 @@ const getLeaseForLandlordWorkflow = vi.fn();
 const normalizeLeaseRecord = vi.fn();
 const performLeaseNoticeSendFromPreviewInput = vi.fn();
 const loadLandlordDecisionTimeline = vi.fn();
+const loadMaintenanceApprovalWorkOrderForLandlord = vi.fn();
+const executeMaintenanceApprovalAutomation = vi.fn();
 
 vi.mock("../../middleware/requireAuth", () => ({
   requireAuth: (req: any, res: any, next: any) => {
@@ -75,6 +77,11 @@ vi.mock("../../services/leaseNoticeWorkflowService", () => ({
 
 vi.mock("../../services/landlord/landlordDecisionHistory", () => ({
   loadLandlordDecisionTimeline,
+}));
+
+vi.mock("../../services/maintenanceApprovalExecutionService", () => ({
+  loadMaintenanceApprovalWorkOrderForLandlord,
+  executeMaintenanceApprovalAutomation,
 }));
 
 vi.mock("../../lib/events/buildEvent", () => ({
@@ -262,6 +269,40 @@ describe("landlordAnalyticsRoutes", () => {
         actor: "Landlord",
       },
     ]);
+    loadMaintenanceApprovalWorkOrderForLandlord.mockResolvedValue({
+      ok: true,
+      workOrder: {
+        id: "wo-1",
+        landlordId: "landlord-1",
+        propertyId: "prop-2",
+        unitId: "unit-9",
+        maintenanceRequestId: "maint-1",
+        cost: {
+          actualCostCents: 32000,
+          currency: "CAD",
+          reviewStatus: "pending_review",
+        },
+        costAttachments: [{ id: "attachment-1" }],
+      },
+    });
+    executeMaintenanceApprovalAutomation.mockResolvedValue({
+      autopilotPolicy: {
+        outcome: "allow",
+        requiresManualApproval: false,
+        topReasonCode: "ALLOW",
+      },
+      automationResult: {
+        action: "maintenance.auto_approve_cost",
+        executed: true,
+        skipped: false,
+        timestamp: "2026-04-20T12:00:00.000Z",
+      },
+      workOrderId: "wo-1",
+      workOrder: {
+        id: "wo-1",
+        landlordId: "landlord-1",
+      },
+    });
     loadLandlordAnalyticsSnapshot.mockResolvedValue({
       summary: {
         occupiedUnits: 4,
@@ -747,6 +788,121 @@ describe("landlordAnalyticsRoutes", () => {
     expect(executeAutomation).not.toHaveBeenCalled();
   });
 
+  it("executes a ready mapped maintenance decision and persists executed state", async () => {
+    saveExecutedLandlordDecisionState.mockResolvedValueOnce({
+      id: "landlord-1__approve_maintenance_cost:wo-1",
+      landlordId: "landlord-1",
+      decisionId: "approve_maintenance_cost:wo-1",
+      state: "executed",
+      reviewedAt: null,
+      executedAt: "2026-04-20T12:00:00.000Z",
+      executionOutcomeStatus: "succeeded",
+      executionOutcomeAt: "2026-04-20T12:00:00.000Z",
+      executionOutcomeReason: null,
+      createdAt: "2026-04-20T12:00:00.000Z",
+      updatedAt: "2026-04-20T12:00:00.000Z",
+    });
+    loadLandlordAnalyticsSnapshot.mockResolvedValueOnce({
+      decisions: {
+        items: [
+          {
+            id: "approve_maintenance_cost:wo-1",
+            decisionType: "approve_maintenance_cost",
+            priority: "high",
+            explanation: "Approve this maintenance cost.",
+            supportingSignals: [],
+            recommendedAction: "Review work order approval",
+            actionKey: "open_maintenance_cost_approval_flow",
+            actionLabel: "Open cost approval",
+            destination: "/work-orders?entry=maintenance-cost-approval&propertyId=prop-2&workOrderId=wo-1",
+            workflowCategory: "maintenance_cost_approval",
+            automationEligible: true,
+            automationState: "ready",
+            automationReason: "This decision is active and already mapped to a deterministic automation path.",
+            executionMappingState: "mapped",
+            executionMapping: {
+              action: "maintenance.auto_approve_cost",
+              resourceType: "work_order",
+              resourceId: "wo-1",
+              prerequisitesMet: true,
+              prerequisiteReason: null,
+            },
+            executionInputState: "complete",
+            executionInputReason: null,
+            executionInputMissingFields: [],
+            executionInput: {
+              actualCostCents: 32000,
+              currency: "CAD",
+              reviewStatus: "pending_review",
+              linkedExpenseStatus: "not_linked",
+              hasSupportingEvidence: true,
+              thresholdCents: 100000,
+              withinAutoApprovalThreshold: true,
+            },
+            executedAt: null,
+            executionOutcomeStatus: "none",
+            executionOutcomeAt: null,
+            executionOutcomeReason: null,
+            href: "/work-orders?entry=maintenance-cost-approval&propertyId=prop-2&workOrderId=wo-1",
+            state: "pending",
+            reviewedAt: null,
+          },
+        ],
+      },
+    });
+
+    const router = (await import("../landlordAnalyticsRoutes")).default;
+    const response = await invokeRouter(router, {
+      method: "POST",
+      url: "/landlord/analytics/decisions/approve_maintenance_cost%3Awo-1/execute",
+      user: { id: "landlord-1", role: "landlord" },
+    });
+
+    expect(response.status).toBe(200);
+    expect(loadMaintenanceApprovalWorkOrderForLandlord).toHaveBeenCalledWith({
+      landlordId: "landlord-1",
+      workOrderId: "wo-1",
+    });
+    expect(executeMaintenanceApprovalAutomation).toHaveBeenCalledWith({
+      workOrderId: "wo-1",
+      workOrder: expect.objectContaining({ id: "wo-1" }),
+      actorId: "landlord-1",
+      actorRole: "landlord",
+      landlordId: "landlord-1",
+      initiatedFrom: "decision_execute",
+      decisionId: "approve_maintenance_cost:wo-1",
+    });
+    expect(saveExecutedLandlordDecisionState).toHaveBeenCalledWith({
+      landlordId: "landlord-1",
+      decisionId: "approve_maintenance_cost:wo-1",
+    });
+    expect(writeCanonicalEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "decision.execution_requested",
+        metadata: expect.objectContaining({
+          decisionId: "approve_maintenance_cost:wo-1",
+          action: "maintenance.auto_approve_cost",
+          resourceId: "wo-1",
+        }),
+      })
+    );
+    expect(writeCanonicalEvent).toHaveBeenCalledWith(expect.objectContaining({ type: "decision.executed" }));
+    expect(response.body).toEqual(
+      expect.objectContaining({
+        ok: true,
+        execution: expect.objectContaining({
+          decisionId: "approve_maintenance_cost:wo-1",
+          action: "maintenance.auto_approve_cost",
+          resourceId: "wo-1",
+        }),
+        state: expect.objectContaining({
+          state: "executed",
+          executionOutcomeStatus: "succeeded",
+        }),
+      })
+    );
+  });
+
   it("persists failed execution feedback without resolving the decision", async () => {
     loadLandlordAnalyticsSnapshot.mockResolvedValueOnce({
       decisions: {
@@ -834,6 +990,111 @@ describe("landlordAnalyticsRoutes", () => {
           state: "pending",
           executionOutcomeStatus: "failed",
           executionOutcomeReason: "AUTOMATION_EXECUTION_FAILED",
+        }),
+      })
+    );
+  });
+
+  it("persists failed maintenance execution feedback without resolving the decision", async () => {
+    saveFailedLandlordDecisionExecutionOutcome.mockResolvedValueOnce({
+      id: "landlord-1__approve_maintenance_cost:wo-1",
+      landlordId: "landlord-1",
+      decisionId: "approve_maintenance_cost:wo-1",
+      state: "pending",
+      reviewedAt: null,
+      executedAt: null,
+      executionOutcomeStatus: "failed",
+      executionOutcomeAt: "2026-04-20T12:00:00.000Z",
+      executionOutcomeReason: "MAINTENANCE_COST_REVIEW_REQUIRED",
+      createdAt: "2026-04-20T12:00:00.000Z",
+      updatedAt: "2026-04-20T12:00:00.000Z",
+    });
+    loadLandlordAnalyticsSnapshot.mockResolvedValueOnce({
+      decisions: {
+        items: [
+          {
+            id: "approve_maintenance_cost:wo-1",
+            decisionType: "approve_maintenance_cost",
+            priority: "high",
+            explanation: "Approve this maintenance cost.",
+            supportingSignals: [],
+            recommendedAction: "Review work order approval",
+            actionKey: "open_maintenance_cost_approval_flow",
+            actionLabel: "Open cost approval",
+            destination: "/work-orders?entry=maintenance-cost-approval&propertyId=prop-2&workOrderId=wo-1",
+            workflowCategory: "maintenance_cost_approval",
+            automationEligible: true,
+            automationState: "ready",
+            automationReason: "This decision is active and already mapped to a deterministic automation path.",
+            executionMappingState: "mapped",
+            executionMapping: {
+              action: "maintenance.auto_approve_cost",
+              resourceType: "work_order",
+              resourceId: "wo-1",
+              prerequisitesMet: true,
+              prerequisiteReason: null,
+            },
+            executionInputState: "complete",
+            executionInputReason: null,
+            executionInputMissingFields: [],
+            executionInput: {
+              actualCostCents: 32000,
+              currency: "CAD",
+              reviewStatus: "pending_review",
+              linkedExpenseStatus: "not_linked",
+              hasSupportingEvidence: true,
+              thresholdCents: 100000,
+              withinAutoApprovalThreshold: true,
+            },
+            executedAt: null,
+            executionOutcomeStatus: "none",
+            executionOutcomeAt: null,
+            executionOutcomeReason: null,
+            href: "/work-orders?entry=maintenance-cost-approval&propertyId=prop-2&workOrderId=wo-1",
+            state: "pending",
+            reviewedAt: null,
+          },
+        ],
+      },
+    });
+    executeMaintenanceApprovalAutomation.mockResolvedValueOnce({
+      autopilotPolicy: {
+        outcome: "review",
+        requiresManualApproval: true,
+        topReasonCode: "MAINTENANCE_COST_REVIEW_REQUIRED",
+      },
+      automationResult: {
+        action: "maintenance.auto_approve_cost",
+        executed: false,
+        skipped: true,
+        reason: "MAINTENANCE_COST_REVIEW_REQUIRED",
+        timestamp: "2026-04-20T12:00:00.000Z",
+      },
+      workOrderId: "wo-1",
+      workOrder: null,
+    });
+
+    const router = (await import("../landlordAnalyticsRoutes")).default;
+    const response = await invokeRouter(router, {
+      method: "POST",
+      url: "/landlord/analytics/decisions/approve_maintenance_cost%3Awo-1/execute",
+      user: { id: "landlord-1", role: "landlord" },
+    });
+
+    expect(response.status).toBe(409);
+    expect(saveFailedLandlordDecisionExecutionOutcome).toHaveBeenCalledWith({
+      landlordId: "landlord-1",
+      decisionId: "approve_maintenance_cost:wo-1",
+      reason: "MAINTENANCE_COST_REVIEW_REQUIRED",
+    });
+    expect(response.body).toEqual(
+      expect.objectContaining({
+        ok: false,
+        error: "DECISION_EXECUTION_FAILED",
+        state: expect.objectContaining({
+          state: "pending",
+          executionOutcomeStatus: "failed",
+          executionOutcomeReason: "MAINTENANCE_COST_REVIEW_REQUIRED",
         }),
       })
     );

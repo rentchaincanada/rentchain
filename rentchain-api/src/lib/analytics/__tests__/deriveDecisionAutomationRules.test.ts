@@ -134,6 +134,6 @@ describe("deriveDecisionAutomationRule", () => {
       }),
     ]);
 
-    expect(result.map((decision) => decision.automationState)).toEqual(["blocked", "blocked", "manual_only"]);
+    expect(result.map((decision) => decision.automationState)).toEqual(["blocked", "ready", "manual_only"]);
   });
 });

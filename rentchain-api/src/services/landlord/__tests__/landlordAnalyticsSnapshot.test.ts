@@ -368,9 +368,9 @@ describe("loadLandlordAnalyticsSnapshot", () => {
           destination: "/work-orders?entry=maintenance-cost-approval&propertyId=prop-2&workOrderId=wo-1",
           workflowCategory: "maintenance_cost_approval",
           recommendedAction: "Review work order approval",
-          automationEligible: false,
-          automationState: "blocked",
-          automationReason: expect.stringContaining("explicit maintenance execution is not enabled yet"),
+          automationEligible: true,
+          automationState: "ready",
+          automationReason: "This decision is active and already mapped to a deterministic automation path.",
           executionMappingState: "mapped",
           executionMapping: expect.objectContaining({
             action: "maintenance.auto_approve_cost",
