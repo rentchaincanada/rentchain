@@ -31,6 +31,7 @@ import {
 import { createTransaction } from "../services/financialTransactionService";
 import { writeCanonicalEvent } from "../lib/events/buildEvent";
 import { executeAutomation } from "../lib/automation/automationExecutor";
+import { hasSupportingEvidenceForWorkOrder } from "../lib/maintenanceApprovalReadiness";
 import { buildMaintenancePolicyRequest } from "../lib/policy/policyAdapters";
 import { evaluatePolicy, toAutopilotPolicySummary, writePolicyEvaluatedEvent } from "../lib/policy/policyEvaluator";
 import { MAINTENANCE_AUTO_APPROVAL_THRESHOLD_CENTS } from "../lib/policy/policyRules";
@@ -97,12 +98,6 @@ function asOptionalString(value: unknown, max = 2000): string | null {
 
 function isAutomationRequested(body: any) {
   return Boolean(body?.automationEnabled || body?.automation?.enabled);
-}
-
-function hasSupportingEvidenceForWorkOrder(workOrder: any) {
-  const evidence = Array.isArray(workOrder?.evidence) ? workOrder.evidence : [];
-  const costAttachments = Array.isArray(workOrder?.costAttachments) ? workOrder.costAttachments : [];
-  return evidence.length > 0 || costAttachments.length > 0;
 }
 
 function uniqueStrings(input: unknown, max = 100): string[] {

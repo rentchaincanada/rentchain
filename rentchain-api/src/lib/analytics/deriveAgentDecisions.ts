@@ -12,6 +12,7 @@ import type {
   LandlordPredictiveMetric,
 } from "./analyticsTypes";
 import type { AnalyticsAlert } from "./alertTypes";
+import { deriveMaintenanceApprovalExecutionInputSnapshot } from "../maintenanceApprovalReadiness";
 
 type AgentDecisionInput = {
   filters: {
@@ -35,6 +36,7 @@ type AgentDecisionInput = {
   alerts: AnalyticsAlert[];
   predictiveMetrics: LandlordPredictiveMetric[];
   benchmarking: LandlordPortfolioBenchmarking;
+  workOrders: any[];
 };
 
 const PRIORITY_WEIGHT: Record<LandlordAgentDecisionPriority, number> = {
@@ -46,10 +48,11 @@ const PRIORITY_WEIGHT: Record<LandlordAgentDecisionPriority, number> = {
 const DECISION_ORDER: Record<LandlordAgentDecisionType, number> = {
   reduce_vacancy_risk: 0,
   review_lease_renewals: 1,
-  address_maintenance_backlog: 2,
-  improve_application_conversion: 3,
-  review_revenue_pressure: 4,
-  focus_highest_risk_property: 5,
+  approve_maintenance_cost: 2,
+  address_maintenance_backlog: 3,
+  improve_application_conversion: 4,
+  review_revenue_pressure: 5,
+  focus_highest_risk_property: 6,
 };
 
 function getPredictiveMetric(metrics: LandlordPredictiveMetric[], key: LandlordPredictiveMetric["key"]) {
@@ -139,7 +142,8 @@ function buildDestination(pathname: string, params: Record<string, string | null
 
 function deriveActionHook(
   type: LandlordAgentDecisionType,
-  propertyId?: string | null
+  propertyId?: string | null,
+  resourceId?: string | null
 ): {
   actionKey: LandlordDecisionActionKey;
   actionLabel: string;
@@ -156,6 +160,20 @@ function deriveActionHook(
         propertyId: propertyId || null,
       }),
       workflowCategory: "lease_renewals",
+      automationEligible: false,
+    };
+  }
+
+  if (type === "approve_maintenance_cost") {
+    return {
+      actionKey: "open_maintenance_cost_approval_flow",
+      actionLabel: "Open cost approval",
+      destination: buildDestination("/work-orders", {
+        entry: "maintenance-cost-approval",
+        propertyId: propertyId || null,
+        workOrderId: resourceId || null,
+      }),
+      workflowCategory: "maintenance_cost_approval",
       automationEligible: false,
     };
   }
@@ -225,8 +243,8 @@ function deriveActionHook(
   };
 }
 
-function decisionId(decisionType: LandlordAgentDecisionType, propertyId?: string | null) {
-  return propertyId ? `${decisionType}:${propertyId}` : decisionType;
+function decisionId(decisionType: LandlordAgentDecisionType, scopeId?: string | null) {
+  return scopeId ? `${decisionType}:${scopeId}` : decisionType;
 }
 
 function dedupeSignals(signals: Array<LandlordAgentDecisionSupportingSignal | null | undefined>) {
@@ -254,14 +272,16 @@ function buildDecision(params: {
   explanation: string;
   recommendedAction: string;
   propertyId?: string | null;
+  scopeId?: string | null;
   signals: Array<LandlordAgentDecisionSupportingSignal | null | undefined>;
 }) {
   if (!params.priority) return null;
   const supportingSignals = dedupeSignals(params.signals);
   if (params.priority === "low" && supportingSignals.length < 2) return null;
-  const hook = deriveActionHook(params.decisionType, params.propertyId || null);
+  const scopeId = params.scopeId ?? params.propertyId ?? null;
+  const hook = deriveActionHook(params.decisionType, params.propertyId || null, scopeId);
   return {
-    id: decisionId(params.decisionType, params.propertyId || null),
+    id: decisionId(params.decisionType, scopeId),
     decisionType: params.decisionType,
     priority: params.priority,
     explanation: params.explanation,
@@ -288,6 +308,42 @@ function buildDecision(params: {
     executionOutcomeAt: null,
     executionOutcomeReason: null,
   } satisfies LandlordAgentDecision;
+}
+
+function asString(value: unknown, max = 240) {
+  return String(value || "").trim().slice(0, max);
+}
+
+function normalizeMaintenanceDecisionWorkOrder(workOrder: any) {
+  return {
+    id: asString(workOrder?.id, 240),
+    propertyId: asString(workOrder?.propertyId, 240) || null,
+    propertyLabel: asString(workOrder?.propertyLabel || workOrder?.propertyName, 240) || null,
+    unitLabel: asString(workOrder?.unitLabel || workOrder?.unitNumber || workOrder?.unitId, 120) || null,
+    summary:
+      asString(
+        workOrder?.title ||
+          workOrder?.summary ||
+          workOrder?.issue ||
+          workOrder?.issueTitle ||
+          workOrder?.description,
+        240
+      ) || null,
+  };
+}
+
+function formatCurrency(cents: number | null, currency: string | null) {
+  if (typeof cents !== "number" || !Number.isFinite(cents) || cents <= 0) return null;
+  const safeCurrency = asString(currency || "CAD", 8).toUpperCase() || "CAD";
+  try {
+    return new Intl.NumberFormat("en-CA", {
+      style: "currency",
+      currency: safeCurrency,
+      maximumFractionDigits: 2,
+    }).format(cents / 100);
+  } catch {
+    return `${(cents / 100).toFixed(2)} ${safeCurrency}`;
+  }
 }
 
 function deriveLeaseRenewalDecision(input: AgentDecisionInput) {
@@ -425,6 +481,57 @@ function deriveMaintenanceDecision(input: AgentDecisionInput) {
   });
 }
 
+function deriveMaintenanceApprovalDecision(input: AgentDecisionInput) {
+  const candidates = (input.workOrders || [])
+    .map((workOrder) => ({
+      workOrder,
+      readiness: deriveMaintenanceApprovalExecutionInputSnapshot(workOrder),
+    }))
+    .filter(({ workOrder, readiness }) => asString(workOrder?.id, 240) && readiness.state === "complete");
+
+  if (candidates.length !== 1) return null;
+
+  const { workOrder, readiness } = candidates[0];
+  const normalized = normalizeMaintenanceDecisionWorkOrder(workOrder);
+  if (!normalized.id) return null;
+
+  const alerts = input.alerts.filter(
+    (alert) =>
+      alert.status === "active" &&
+      normalized.propertyId != null &&
+      alert.propertyId === normalized.propertyId &&
+      (alert.type === "work_order_concentration" || alert.type === "maintenance_cost_spike")
+  );
+  const benchmark =
+    normalized.propertyId != null
+      ? getBenchmarkInsight(
+          input.benchmarking.insights.filter((insight) => insight.propertyId === normalized.propertyId),
+          "maintenance_concentration"
+        )
+      : null;
+
+  const priority = derivePriority([priorityFromAlert(alerts), benchmark?.severity]) || "medium";
+  const costLabel = formatCurrency(readiness.input.actualCostCents, readiness.input.currency);
+  const locationLabel = [normalized.propertyLabel, normalized.unitLabel].filter(Boolean).join(" • ");
+  const subject =
+    normalized.summary || (locationLabel ? `work order for ${locationLabel}` : `work order ${normalized.id}`);
+
+  return buildDecision({
+    decisionType: "approve_maintenance_cost",
+    priority,
+    explanation: costLabel
+      ? `${subject} has a submitted cost of ${costLabel} with supporting evidence and is within the maintenance auto-approval threshold.`
+      : `${subject} has a submitted maintenance cost with supporting evidence and is within the maintenance auto-approval threshold.`,
+    recommendedAction: "Review work order approval",
+    propertyId: normalized.propertyId,
+    scopeId: normalized.id,
+    signals: [
+      ...alerts.map(supportFromAlert),
+      benchmark ? supportFromBenchmark(benchmark) : null,
+    ],
+  });
+}
+
 function deriveRevenueDecision(input: AgentDecisionInput) {
   const predictive = getPredictiveMetric(input.predictiveMetrics, "projected_revenue_pressure_signal");
   const priority = priorityFromPredictive(predictive);
@@ -503,6 +610,7 @@ export function deriveAgentDecisions(input: AgentDecisionInput): LandlordAgentDe
   const decisions = [
     deriveVacancyDecision(input),
     deriveLeaseRenewalDecision(input),
+    deriveMaintenanceApprovalDecision(input),
     deriveMaintenanceDecision(input),
     deriveApplicationDecision(input),
     deriveRevenueDecision(input),

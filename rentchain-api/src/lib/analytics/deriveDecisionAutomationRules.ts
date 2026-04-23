@@ -15,6 +15,8 @@ const WORKFLOW_BLOCK_REASONS: Partial<Record<LandlordDecisionWorkflowCategory, s
     "A lease automation path exists, but this decision still needs a specific lease target and notice inputs before execution.",
   application_funnel:
     "A screening automation path exists, but this decision does not yet identify a specific application to execute against.",
+  maintenance_cost_approval:
+    "A deterministic maintenance approval target exists, but explicit maintenance execution is not enabled yet.",
   maintenance_backlog:
     "A maintenance automation path exists, but this decision does not yet identify a specific work order with execution-ready evidence.",
 };
@@ -36,6 +38,12 @@ export function deriveDecisionAutomationRule(decision: LandlordAgentDecision): A
   }
   if (decision.state === "reviewed") {
     return lifecycleBlockedRule("Reviewed decisions stay manual until a new active decision is surfaced.");
+  }
+
+  if (decision.decisionType === "approve_maintenance_cost") {
+    return lifecycleBlockedRule(
+      "A deterministic maintenance approval target exists, but explicit maintenance execution is not enabled yet."
+    );
   }
 
   if (decision.automationEligible) {

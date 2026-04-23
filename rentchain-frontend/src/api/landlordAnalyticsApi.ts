@@ -30,6 +30,7 @@ export type LandlordAgentDecisionSupportingSignal = {
 
 export type LandlordDecisionWorkflowCategory =
   | "lease_renewals"
+  | "maintenance_cost_approval"
   | "vacancy_readiness"
   | "application_funnel"
   | "maintenance_backlog"
@@ -38,6 +39,7 @@ export type LandlordDecisionWorkflowCategory =
 
 export type LandlordDecisionActionKey =
   | "open_lease_renewals_flow"
+  | "open_maintenance_cost_approval_flow"
   | "open_vacancy_readiness_flow"
   | "open_application_funnel_review_flow"
   | "open_maintenance_backlog_flow"
@@ -68,6 +70,16 @@ export type LandlordDecisionLeaseNoticeExecutionInput = {
   responseDeadlineAt: number | null;
 };
 
+export type LandlordDecisionMaintenanceApprovalExecutionInput = {
+  actualCostCents: number | null;
+  currency: string | null;
+  reviewStatus: "pending_review" | "approved" | "rejected" | "revision_requested" | null;
+  linkedExpenseStatus: "not_linked" | "linked" | null;
+  hasSupportingEvidence: boolean;
+  thresholdCents: number;
+  withinAutoApprovalThreshold: boolean;
+};
+
 export type LandlordAgentDecision = {
   id: string;
   decisionType: string;
@@ -96,8 +108,12 @@ export type LandlordAgentDecision = {
     | "newLeaseStartDate"
     | "newLeaseEndDate"
     | "responseDeadlineAt"
+    | "actualCostCents"
+    | "reviewStatus"
+    | "supportingEvidence"
+    | "autoApprovalThreshold"
   )[];
-  executionInput: LandlordDecisionLeaseNoticeExecutionInput | null;
+  executionInput: (LandlordDecisionLeaseNoticeExecutionInput | LandlordDecisionMaintenanceApprovalExecutionInput) | null;
   executedAt?: string | null;
   executionOutcomeStatus: "none" | "succeeded" | "failed";
   executionOutcomeAt: string | null;

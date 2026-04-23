@@ -101,6 +101,28 @@ describe("deriveDecisionAutomationRule", () => {
     const result = applyDecisionAutomationRules([
       baseDecision(),
       baseDecision({
+        id: "approve_maintenance_cost:wo-1",
+        decisionType: "approve_maintenance_cost",
+        actionKey: "open_maintenance_cost_approval_flow",
+        actionLabel: "Open cost approval",
+        workflowCategory: "maintenance_cost_approval",
+        recommendedAction: "Review work order approval",
+        destination: "/work-orders?entry=maintenance-cost-approval&workOrderId=wo-1",
+        href: "/work-orders?entry=maintenance-cost-approval&workOrderId=wo-1",
+        automationEligible: true,
+        executionMappingState: "mapped",
+        executionInputState: "complete",
+        executionInput: {
+          actualCostCents: 32000,
+          currency: "CAD",
+          reviewStatus: "pending_review",
+          linkedExpenseStatus: "not_linked",
+          hasSupportingEvidence: true,
+          thresholdCents: 100000,
+          withinAutoApprovalThreshold: true,
+        } as any,
+      }),
+      baseDecision({
         id: "focus_highest_risk_property:prop-2",
         decisionType: "focus_highest_risk_property",
         actionKey: "open_property_focus_flow",
@@ -112,6 +134,6 @@ describe("deriveDecisionAutomationRule", () => {
       }),
     ]);
 
-    expect(result.map((decision) => decision.automationState)).toEqual(["blocked", "manual_only"]);
+    expect(result.map((decision) => decision.automationState)).toEqual(["blocked", "blocked", "manual_only"]);
   });
 });

@@ -737,6 +737,7 @@ export function deriveLandlordAnalyticsSnapshot(input: AdminAnalyticsDerivedInpu
     alerts: alerts.alerts,
     predictiveMetrics: snapshotBase.predictive.metrics,
     benchmarking,
+    workOrders: input.workOrders,
   });
 
   return {

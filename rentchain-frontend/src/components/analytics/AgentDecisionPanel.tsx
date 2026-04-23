@@ -21,6 +21,7 @@ const priorityTone: Record<"low" | "medium" | "high", { bg: string; text: string
 
 const workflowCategoryLabel: Record<NonNullable<LandlordAgentDecision["workflowCategory"]>, string> = {
   lease_renewals: "Lease renewals",
+  maintenance_cost_approval: "Maintenance cost approval",
   vacancy_readiness: "Vacancy readiness",
   application_funnel: "Application funnel",
   maintenance_backlog: "Maintenance backlog",
