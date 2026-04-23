@@ -1,8 +1,10 @@
 import type {
+  LandlordAgentDecision,
   LandlordDecisionBlockedReason,
   LandlordDecisionExecutionState,
   LandlordDecisionExecutionSummary,
 } from "@/api/landlordAnalyticsApi";
+import { deriveDecisionExecutionState } from "./decisionExecutionAggregation";
 
 type BadgeTone = {
   bg: string;
@@ -20,6 +22,17 @@ export type ExecutionStateDisplay = {
 export type BlockedReasonDisplay = {
   title: string;
   description: string;
+};
+
+export type AutomationPreview = {
+  heading: string;
+  status: string;
+  summary: string;
+  safeguardLabel: string;
+  safeguardDescription: string;
+  nextStep: string;
+  duplicateProtectionActive: boolean;
+  guardKeyLabel: string | null;
 };
 
 export const executionStateDisplay: Record<LandlordDecisionExecutionState, ExecutionStateDisplay> = {
@@ -107,4 +120,95 @@ export function formatExecutionSummary(summary?: LandlordDecisionExecutionSummar
   const lastRunLabel = lastRun ? `Last run: ${lastRun}` : null;
 
   return [countLabel, outcomeLabel, lastRunLabel].filter(Boolean) as string[];
+}
+
+function suggestedAction(decision: LandlordAgentDecision) {
+  return decision.actionLabel || decision.recommendedAction || "Review this decision";
+}
+
+function failClosedPreview(decision: LandlordAgentDecision): AutomationPreview {
+  return {
+    heading: "Automation preview",
+    status: "Automation preview unavailable",
+    summary: `${suggestedAction(decision)} is not available for preview from the current decision state.`,
+    safeguardLabel: "Human confirmation required",
+    safeguardDescription: "Manual review is required because the current automation state is incomplete or ambiguous.",
+    nextStep: "Manual review required before any execution can be considered.",
+    duplicateProtectionActive: Boolean(decision.duplicateGuardActive),
+    guardKeyLabel: decision.executionGuardKey ? `Guard key: ${decision.executionGuardKey}` : null,
+  };
+}
+
+export function deriveAutomationPreview(decision: LandlordAgentDecision): AutomationPreview {
+  const executionState = deriveDecisionExecutionState(decision);
+  const blockedReason = decision.blockedReason ? blockedReasonDisplay[decision.blockedReason] : null;
+  const action = suggestedAction(decision);
+  const guardKeyLabel = decision.executionGuardKey ? `Guard key: ${decision.executionGuardKey}` : null;
+
+  if (!decision.actionLabel && !decision.recommendedAction) {
+    return failClosedPreview(decision);
+  }
+
+  if (executionState === "unsafe_duplicate") {
+    return {
+      heading: "Automation preview",
+      status: "Duplicate protection active",
+      summary: `${action} is protected from repeat execution.`,
+      safeguardLabel: "Duplicate safeguard active",
+      safeguardDescription:
+        "A prior successful run or matching guard key was detected, so another execution preview is held fail-closed.",
+      nextStep: "Human confirmation is still required, but no repeat execution is available right now.",
+      duplicateProtectionActive: true,
+      guardKeyLabel,
+    };
+  }
+
+  if (executionState === "already_executed") {
+    return {
+      heading: "Automation preview",
+      status: "Completed preview",
+      summary: `${action} has already been completed for this decision.`,
+      safeguardLabel: "Human confirmation required",
+      safeguardDescription: "This preview is historical only. No new execution is available from this completed state.",
+      nextStep: "Review the recorded outcome if follow-up is needed.",
+      duplicateProtectionActive: Boolean(decision.duplicateGuardActive),
+      guardKeyLabel,
+    };
+  }
+
+  if (executionState === "executable" && decision.automationEligible) {
+    return {
+      heading: "Automation preview",
+      status: "Eligible for human-confirmed execution",
+      summary: `${action} would be the next controlled step if a human operator chooses to run it.`,
+      safeguardLabel: "Human confirmation required",
+      safeguardDescription:
+        "Execution remains manual. Existing mapping, readiness, and duplicate safeguards stay in place until a human confirms the action.",
+      nextStep: "Review the decision, then use the existing execute control if you want to continue.",
+      duplicateProtectionActive: Boolean(decision.duplicateGuardActive),
+      guardKeyLabel,
+    };
+  }
+
+  if (executionState === "blocked") {
+    const reasonDescription = blockedReason?.description || decision.automationReason;
+    const manualOnly = decision.automationState === "manual_only";
+    return {
+      heading: "Automation preview",
+      status: decision.automationEligible ? "Blocked until requirements are complete" : "Automation preview unavailable",
+      summary: reasonDescription
+        ? `${action} is not currently available. ${reasonDescription}`
+        : `${action} is not currently available from the current decision state.`,
+      safeguardLabel: "Human confirmation required",
+      safeguardDescription:
+        "This decision stays fail-closed until the blocking requirement is resolved and a human reviews it again.",
+      nextStep: manualOnly
+        ? "Manual review required before any execution can be considered."
+        : "Open the existing review flow to resolve the blocking requirement before execution is considered.",
+      duplicateProtectionActive: Boolean(decision.duplicateGuardActive),
+      guardKeyLabel,
+    };
+  }
+
+  return failClosedPreview(decision);
 }

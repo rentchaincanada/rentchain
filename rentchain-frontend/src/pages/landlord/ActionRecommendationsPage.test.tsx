@@ -167,6 +167,8 @@ describe("ActionRecommendationsPage", () => {
     expect(screen.getByText(/all-time landlord decision outcomes from canonical decision events/i)).toBeInTheDocument();
     expect(screen.getByText(/resolution rate 75%/i)).toBeInTheDocument();
     expect(fetchLandlordAnalyticsSnapshot).toHaveBeenCalledTimes(1);
+    expect(screen.getAllByText(/Automation preview/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Human confirmation required/i).length).toBeGreaterThan(0);
 
     const actionLinks = screen.getAllByRole("link");
     expect(actionLinks.map((node) => node.textContent)).toEqual(["Open vacancy readiness", "Open lease renewals"]);

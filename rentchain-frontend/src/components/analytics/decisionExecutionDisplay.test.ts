@@ -1,5 +1,48 @@
 import { describe, expect, it } from "vitest";
-import { blockedReasonDisplay, executionStateDisplay, formatExecutionSummary } from "./decisionExecutionDisplay";
+import type { LandlordAgentDecision } from "@/api/landlordAnalyticsApi";
+import {
+  blockedReasonDisplay,
+  deriveAutomationPreview,
+  executionStateDisplay,
+  formatExecutionSummary,
+} from "./decisionExecutionDisplay";
+
+function buildDecision(overrides?: Partial<LandlordAgentDecision>): LandlordAgentDecision {
+  return {
+    id: "decision-1",
+    decisionType: "review_lease_renewals",
+    priority: "medium",
+    explanation: "Review renewals",
+    supportingSignals: [],
+    recommendedAction: "Review renewals",
+    href: "/leases",
+    state: "pending",
+    reviewedAt: null,
+    actionKey: "open_lease_renewals_flow",
+    actionLabel: "Open lease renewals",
+    destination: "/leases",
+    workflowCategory: "lease_renewals",
+    automationEligible: false,
+    automationState: "blocked",
+    automationReason: "Blocked",
+    executionMappingState: "none",
+    executionMapping: null,
+    executionInputState: "none",
+    executionInputReason: null,
+    executionInputMissingFields: [],
+    executionInput: null,
+    executionState: undefined,
+    blockedReason: null,
+    executionGuardKey: null,
+    duplicateGuardActive: false,
+    executionSummary: undefined,
+    executedAt: null,
+    executionOutcomeStatus: "none",
+    executionOutcomeAt: null,
+    executionOutcomeReason: null,
+    ...overrides,
+  };
+}
 
 describe("decisionExecutionDisplay", () => {
   it("maps execution states to operator-facing labels", () => {
@@ -37,5 +80,70 @@ describe("decisionExecutionDisplay", () => {
         lastExecutionOutcomeAt: null,
       })
     ).toEqual([]);
+  });
+
+  it("derives a controlled preview for executable decisions", () => {
+    const result = deriveAutomationPreview(
+      buildDecision({
+        automationEligible: true,
+        automationState: "ready",
+        executionMappingState: "mapped",
+        executionInputState: "complete",
+        executionGuardKey: "lease.auto_send_notice:lease:lease-1",
+      })
+    );
+
+    expect(result.status).toBe("Eligible for human-confirmed execution");
+    expect(result.safeguardLabel).toBe("Human confirmation required");
+    expect(result.guardKeyLabel).toContain("lease.auto_send_notice:lease:lease-1");
+  });
+
+  it("derives a blocked preview without changing blocked-reason semantics", () => {
+    const result = deriveAutomationPreview(
+      buildDecision({
+        blockedReason: "missing_required_inputs",
+        automationReason: "Still missing notice inputs.",
+      })
+    );
+
+    expect(result.status).toBe("Automation preview unavailable");
+    expect(result.summary).toMatch(/required execution inputs/i);
+  });
+
+  it("derives a duplicate-guarded preview", () => {
+    const result = deriveAutomationPreview(
+      buildDecision({
+        executionState: "unsafe_duplicate",
+        duplicateGuardActive: true,
+        executionGuardKey: "maintenance.auto_approve_cost:work_order:wo-1",
+      })
+    );
+
+    expect(result.status).toBe("Duplicate protection active");
+    expect(result.duplicateProtectionActive).toBe(true);
+  });
+
+  it("fails closed for manual-only decisions", () => {
+    const result = deriveAutomationPreview(
+      buildDecision({
+        automationEligible: false,
+        automationState: "manual_only",
+      })
+    );
+
+    expect(result.status).toBe("Automation preview unavailable");
+    expect(result.nextStep).toMatch(/Manual review required/i);
+  });
+
+  it("fails closed when the action label is missing", () => {
+    const result = deriveAutomationPreview(
+      buildDecision({
+        actionLabel: "" as LandlordAgentDecision["actionLabel"],
+        recommendedAction: "" as LandlordAgentDecision["recommendedAction"],
+      })
+    );
+
+    expect(result.status).toBe("Automation preview unavailable");
+    expect(result.summary).toMatch(/not available for preview/i);
   });
 });
