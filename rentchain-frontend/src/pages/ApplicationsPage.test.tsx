@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import ApplicationsPage from "./ApplicationsPage";
@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({
   fetchRentalApplication: vi.fn(),
   fetchApplicationDecisionSummary: vi.fn(),
   evaluateApplicationRiskSnapshot: vi.fn(),
-  recordApplicationRiskDecision: vi.fn(),
+  submitRentalApplicationDecisionAction: vi.fn(),
   fetchScreeningQuote: vi.fn(),
   fetchScreeningResult: vi.fn(),
   fetchScreeningReceipt: vi.fn(),
@@ -31,7 +31,7 @@ vi.mock("@/api/rentalApplicationsApi", () => ({
   fetchRentalApplication: mocks.fetchRentalApplication,
   fetchApplicationDecisionSummary: mocks.fetchApplicationDecisionSummary,
   evaluateApplicationRiskSnapshot: mocks.evaluateApplicationRiskSnapshot,
-  recordApplicationRiskDecision: mocks.recordApplicationRiskDecision,
+  submitRentalApplicationDecisionAction: mocks.submitRentalApplicationDecisionAction,
   updateRentalApplicationStatus: vi.fn(),
   fetchScreeningQuote: mocks.fetchScreeningQuote,
   createScreeningCheckout: vi.fn(),
@@ -147,7 +147,19 @@ vi.mock("../components/billing/SamplePdfModal", () => ({
 }));
 
 vi.mock("@/components/applications/ApplicationDecisionSummaryCard", () => ({
-  ApplicationDecisionSummaryCard: () => <div>Decision Summary</div>,
+  ApplicationDecisionSummaryCard: ({ onDecision, submittingDecision }: any) => (
+    <div>
+      <button type="button" onClick={() => onDecision?.("request_info", "Need paystub")} disabled={submittingDecision}>
+        Trigger Request More Info
+      </button>
+      <button type="button" onClick={() => onDecision?.("approve", "Looks good")} disabled={submittingDecision}>
+        Trigger Approve
+      </button>
+      <button type="button" onClick={() => onDecision?.("reject", "Not a fit")} disabled={submittingDecision}>
+        Trigger Reject
+      </button>
+    </div>
+  ),
 }));
 
 vi.mock("@/components/integrations/TransUnionConnectionCard", () => ({
@@ -236,9 +248,36 @@ describe("ApplicationsPage", () => {
     mocks.fetchProperties.mockResolvedValue({
       items: [{ id: "prop-1", name: "Harbour View" }],
     });
-    mocks.fetchRentalApplications.mockResolvedValue([]);
-    mocks.fetchRentalApplication.mockResolvedValue(null);
+    mocks.fetchRentalApplications.mockResolvedValue([
+      {
+        id: "app-1",
+        applicantName: "Jamie Stone",
+        email: "jamie@example.com",
+        propertyId: "prop-1",
+        unitId: "unit-1",
+        status: "SUBMITTED",
+        submittedAt: Date.now(),
+      },
+    ]);
+    mocks.fetchRentalApplication.mockResolvedValue({
+      id: "app-1",
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      applicationLinkId: "link-1",
+      createdAt: Date.now(),
+      submittedAt: Date.now(),
+      updatedAt: Date.now(),
+      status: "SUBMITTED",
+      applicant: { firstName: "Jamie", lastName: "Stone", email: "jamie@example.com" },
+      residentialHistory: [],
+      employment: { applicant: {} },
+      consent: { creditConsent: true, referenceConsent: true, dataSharingConsent: true, acceptedAt: Date.now() },
+      screening: { requested: false },
+      landlordNote: null,
+    });
     mocks.fetchApplicationDecisionSummary.mockResolvedValue(null);
+    mocks.submitRentalApplicationDecisionAction.mockReset();
     mocks.fetchScreeningQuote.mockResolvedValue({ ok: false, detail: "Screening not eligible." });
     mocks.fetchScreeningResult.mockResolvedValue({ ok: false });
     mocks.fetchScreeningReceipt.mockResolvedValue({ ok: false });
@@ -290,6 +329,121 @@ describe("ApplicationsPage", () => {
       currentPlan: "free",
       requiredPlan: "starter",
       source: "applications_page_screening",
+    });
+  });
+
+  it("opens a request-more-info modal and sends the actionable request", async () => {
+    mocks.submitRentalApplicationDecisionAction.mockResolvedValue({
+      application: {
+        id: "app-1",
+        landlordId: "landlord-1",
+        propertyId: "prop-1",
+        unitId: "unit-1",
+        applicationLinkId: "link-1",
+        createdAt: Date.now(),
+        submittedAt: Date.now(),
+        updatedAt: Date.now(),
+        status: "IN_REVIEW",
+        applicant: { firstName: "Jamie", lastName: "Stone", email: "jamie@example.com" },
+        residentialHistory: [],
+        employment: { applicant: {} },
+        consent: { creditConsent: true, referenceConsent: true, dataSharingConsent: true, acceptedAt: Date.now() },
+        screening: { requested: false },
+        landlordNote: "Need paystub",
+      },
+      action: { type: "request_info", status: "IN_REVIEW", emailSent: true },
+    });
+
+    render(
+      <MemoryRouter>
+        <ApplicationsPage />
+      </MemoryRouter>
+    );
+
+    await screen.findAllByText("Jamie Stone");
+    fireEvent.click(screen.getAllByText("Jamie Stone")[0]);
+    fireEvent.click(await screen.findByRole("button", { name: "Trigger Request More Info" }));
+
+    expect(await screen.findByRole("dialog", { name: /request more information/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText("Upload ID"));
+    fireEvent.click(screen.getByRole("button", { name: /send request/i }));
+
+    await waitFor(() => {
+      expect(mocks.submitRentalApplicationDecisionAction).toHaveBeenCalledWith("app-1", {
+        action: "request_info",
+        requestedItems: ["upload_id"],
+        customMessage: "Need paystub",
+      });
+    });
+  });
+
+  it("sends approve and reject actions through the canonical action route", async () => {
+    mocks.submitRentalApplicationDecisionAction.mockResolvedValue({
+      application: {
+        id: "app-1",
+        landlordId: "landlord-1",
+        propertyId: "prop-1",
+        unitId: "unit-1",
+        applicationLinkId: "link-1",
+        createdAt: Date.now(),
+        submittedAt: Date.now(),
+        updatedAt: Date.now(),
+        status: "APPROVED",
+        applicant: { firstName: "Jamie", lastName: "Stone", email: "jamie@example.com" },
+        residentialHistory: [],
+        employment: { applicant: {} },
+        consent: { creditConsent: true, referenceConsent: true, dataSharingConsent: true, acceptedAt: Date.now() },
+        screening: { requested: false },
+        landlordNote: "Looks good",
+      },
+      action: { type: "approve", status: "APPROVED", emailSent: true, paymentEmail: "owner@example.com" },
+    });
+
+    render(
+      <MemoryRouter>
+        <ApplicationsPage />
+      </MemoryRouter>
+    );
+
+    await screen.findAllByText("Jamie Stone");
+    fireEvent.click(screen.getAllByText("Jamie Stone")[0]);
+    fireEvent.click(await screen.findByRole("button", { name: "Trigger Approve" }));
+
+    await waitFor(() => {
+      expect(mocks.submitRentalApplicationDecisionAction).toHaveBeenCalledWith("app-1", {
+        action: "approve",
+        note: "Looks good",
+      });
+    });
+
+    mocks.submitRentalApplicationDecisionAction.mockResolvedValueOnce({
+      application: {
+        id: "app-1",
+        landlordId: "landlord-1",
+        propertyId: "prop-1",
+        unitId: "unit-1",
+        applicationLinkId: "link-1",
+        createdAt: Date.now(),
+        submittedAt: Date.now(),
+        updatedAt: Date.now(),
+        status: "DECLINED",
+        applicant: { firstName: "Jamie", lastName: "Stone", email: "jamie@example.com" },
+        residentialHistory: [],
+        employment: { applicant: {} },
+        consent: { creditConsent: true, referenceConsent: true, dataSharingConsent: true, acceptedAt: Date.now() },
+        screening: { requested: false },
+        landlordNote: "Not a fit",
+      },
+      action: { type: "reject", status: "DECLINED", emailSent: true },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Trigger Reject" }));
+
+    await waitFor(() => {
+      expect(mocks.submitRentalApplicationDecisionAction).toHaveBeenCalledWith("app-1", {
+        action: "reject",
+        note: "Not a fit",
+      });
     });
   });
 });

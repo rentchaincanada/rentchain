@@ -42,6 +42,7 @@ import { createSignedUrl, putPdfObject } from "../storage/pdfStore";
 import { buildReviewSummary, buildReviewSummaryPdf } from "../lib/reviewSummary";
 import { buildApplicationDecisionSummary } from "../services/risk/applicationDecisionSummary";
 import { getLatestApplicationRisk } from "../services/riskAgent/riskAgentService";
+import { recordRiskDecisionAudit } from "../services/riskAgent/riskDecisionAuditService";
 import { rateLimitScreeningIp, rateLimitScreeningUser } from "../middleware/rateLimit";
 import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
 import { sendEmail } from "../services/emailService";
@@ -70,8 +71,15 @@ const ALLOWED_STATUS = [
 ];
 
 const ELIGIBLE_STATUS = ["SUBMITTED", "IN_REVIEW"];
+const APPLICATION_DECISION_ACTIONS = ["request_info", "approve", "reject"] as const;
 const SERVICE_LEVELS = ["SELF_SERVE", "VERIFIED", "VERIFIED_AI"] as const;
 const CONSENT_VERSION = "v1.0";
+const INFO_REQUEST_ITEM_LABELS: Record<string, string> = {
+  upload_id: "Upload ID",
+  phone_number: "Phone number",
+  employer_contact: "Employer contact",
+  references: "References",
+};
 
 const ALLOWED_REDIRECT_ORIGINS = ["https://www.rentchain.ai", "https://rentchain.ai", "http://localhost:5173"];
 const REVIEW_SUMMARY_TEMPLATE_PATH = "src/lib/reviewSummary.ts";
@@ -115,6 +123,164 @@ function resolveFrontendOrigin(req: any) {
       : "http://localhost:5173";
   const base = String(process.env.FRONTEND_URL || fallback).trim();
   return normalizeOrigin(base) || null;
+}
+
+function getPublicAppBaseUrl() {
+  const raw = String(process.env.PUBLIC_APP_URL || process.env.FRONTEND_ORIGIN || "https://www.rentchain.ai").trim();
+  return raw.replace(/\/$/, "");
+}
+
+function normalizeRequestInfoItems(value: any): string[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const items: string[] = [];
+  for (const item of value) {
+    const normalized = String(item || "").trim().toLowerCase();
+    if (!normalized || !INFO_REQUEST_ITEM_LABELS[normalized] || seen.has(normalized)) continue;
+    seen.add(normalized);
+    items.push(normalized);
+  }
+  return items;
+}
+
+async function resolveLandlordContactEmail(landlordId: string, fallbackEmail?: string | null) {
+  const normalizedLandlordId = String(landlordId || "").trim();
+  const fallback = String(fallbackEmail || "").trim();
+  if (!normalizedLandlordId) return fallback || null;
+  try {
+    const snap = await db.collection("landlords").doc(normalizedLandlordId).get();
+    if (!snap.exists) return fallback || null;
+    const data = snap.data() as any;
+    return String(data?.email || fallback || "").trim() || null;
+  } catch {
+    return fallback || null;
+  }
+}
+
+async function sendRentalApplicationDecisionEmail(params: {
+  action: (typeof APPLICATION_DECISION_ACTIONS)[number];
+  application: any;
+  landlordEmail: string | null;
+  requestInfoItems?: string[];
+  customMessage?: string | null;
+}) {
+  const applicantEmail = String(params.application?.applicant?.email || "").trim();
+  if (!applicantEmail) {
+    throw new Error("APPLICANT_EMAIL_MISSING");
+  }
+
+  const applicantFirstName = String(params.application?.applicant?.firstName || "").trim() || "there";
+  const applicantLastName = String(params.application?.applicant?.lastName || "").trim();
+  const applicantName = `${applicantFirstName} ${applicantLastName}`.trim();
+  const propertyLabel = String(params.application?.propertyName || params.application?.propertyId || "the property").trim();
+  const publicAppBaseUrl = getPublicAppBaseUrl();
+  const ctaUrl = params.landlordEmail ? `mailto:${encodeURIComponent(params.landlordEmail)}` : `${publicAppBaseUrl}/login`;
+  const replyTo = params.landlordEmail || undefined;
+  const from = process.env.EMAIL_FROM || process.env.FROM_EMAIL;
+  const customMessage = String(params.customMessage || "").trim();
+
+  if (!from) {
+    throw new Error("EMAIL_FROM missing");
+  }
+
+  if (params.action === "approve") {
+    const paymentEmail = String(params.landlordEmail || "").trim();
+    if (!paymentEmail) {
+      throw new Error("LANDLORD_PAYMENT_EMAIL_MISSING");
+    }
+    const intro = `Hi ${applicantFirstName}, your rental application for ${propertyLabel} has been approved. To hold the unit, please send an e-transfer for one half of one month's rent to ${paymentEmail}.`;
+    const bullets = [
+      `Send the e-transfer to ${paymentEmail}.`,
+      "Include your full name and the property or unit reference in the transfer note.",
+      "Reply to this email if you need to confirm the next leasing steps.",
+    ];
+    await sendEmail({
+      to: applicantEmail,
+      from,
+      replyTo,
+      subject: `Your RentChain application is approved`,
+      text: buildEmailText({
+        intro,
+        bullets,
+        ctaText: "Reply to confirm next steps",
+        ctaUrl,
+        footerNote: "This approval was sent by your landlord through RentChain.",
+      }),
+      html: buildEmailHtml({
+        title: "Application approved",
+        intro,
+        bullets,
+        ctaText: "Reply to confirm next steps",
+        ctaUrl,
+        footerNote: "This approval was sent by your landlord through RentChain.",
+        preheader: "Your landlord approved the application and shared the next payment step.",
+      }),
+    });
+    return { ok: true, paymentEmail };
+  }
+
+  if (params.action === "reject") {
+    const intro = `Hi ${applicantFirstName}, thank you for your interest in ${propertyLabel}. After review, the landlord has decided not to move forward with this application.`;
+    const bullets = [
+      "Your application has been closed in RentChain.",
+      "This message is intended to keep the decision clear and timely.",
+    ];
+    await sendEmail({
+      to: applicantEmail,
+      from,
+      replyTo,
+      subject: `Update on your RentChain rental application`,
+      text: buildEmailText({
+        intro,
+        bullets,
+        ctaText: "View RentChain",
+        ctaUrl: `${publicAppBaseUrl}/login`,
+        footerNote: "Thank you again for applying.",
+      }),
+      html: buildEmailHtml({
+        title: "Application update",
+        intro,
+        bullets,
+        ctaText: "View RentChain",
+        ctaUrl: `${publicAppBaseUrl}/login`,
+        footerNote: "Thank you again for applying.",
+        preheader: "Your landlord has shared the outcome of the application review.",
+      }),
+    });
+    return { ok: true, paymentEmail: null };
+  }
+
+  const items = normalizeRequestInfoItems(params.requestInfoItems);
+  const labeledItems = items.map((item) => INFO_REQUEST_ITEM_LABELS[item]);
+  const bullets = labeledItems.length
+    ? labeledItems.map((item) => `Please send: ${item}.`)
+    : ["Please reply with the additional information your landlord requested."];
+  if (customMessage) {
+    bullets.push(`Landlord note: ${customMessage}`);
+  }
+  await sendEmail({
+    to: applicantEmail,
+    from,
+    replyTo,
+    subject: `More information requested for your RentChain application`,
+    text: buildEmailText({
+      intro: `Hi ${applicantName || applicantFirstName}, your landlord needs a little more information before finishing the review for ${propertyLabel}.`,
+      bullets,
+      ctaText: params.landlordEmail ? "Reply to your landlord" : "Open RentChain",
+      ctaUrl,
+      footerNote: "This request was sent after an explicit landlord review action in RentChain.",
+    }),
+    html: buildEmailHtml({
+      title: "More information requested",
+      intro: `Hi ${applicantName || applicantFirstName}, your landlord needs a little more information before finishing the review for ${propertyLabel}.`,
+      bullets,
+      ctaText: params.landlordEmail ? "Reply to your landlord" : "Open RentChain",
+      ctaUrl,
+      footerNote: "This request was sent after an explicit landlord review action in RentChain.",
+      preheader: "Your landlord requested a few follow-up items before finishing the review.",
+    }),
+  });
+  return { ok: true, paymentEmail: null };
 }
 
 function buildRedirectUrl(params: {
@@ -1620,6 +1786,114 @@ router.patch("/rental-applications/:id", async (req: any, res) => {
   } catch (err: any) {
     console.error("[rental-applications] update failed", err?.message || err);
     return res.status(500).json({ ok: false, error: "RENTAL_APPLICATION_UPDATE_FAILED" });
+  }
+});
+
+router.post("/rental-applications/:id/decision-action", async (req: any, res) => {
+  try {
+    const role = String(req.user?.role || "").toLowerCase();
+    if (role !== "landlord" && role !== "admin") {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+    const actorUserId = String(req.user?.id || "").trim() || null;
+    const actorEmail = String(req.user?.email || "").trim() || null;
+    const fallbackLandlordId = String(req.user?.landlordId || req.user?.id || "").trim() || null;
+    if (!fallbackLandlordId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+
+    const id = String(req.params?.id || "").trim();
+    if (!id) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+
+    const action = String(req.body?.action || "").trim().toLowerCase();
+    if (!APPLICATION_DECISION_ACTIONS.includes(action as (typeof APPLICATION_DECISION_ACTIONS)[number])) {
+      return res.status(400).json({ ok: false, error: "INVALID_ACTION" });
+    }
+
+    const snap = await db.collection("rentalApplications").doc(id).get();
+    if (!snap.exists) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+    const data = snap.data() as any;
+    const applicationLandlordId = String(data?.landlordId || fallbackLandlordId || "").trim() || null;
+    if (applicationLandlordId && role !== "admin" && applicationLandlordId !== fallbackLandlordId) {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const requestedItems = normalizeRequestInfoItems(req.body?.requestedItems);
+    const note = String(req.body?.note || req.body?.customMessage || "").trim().slice(0, 5000) || null;
+    const landlordEmail = await resolveLandlordContactEmail(applicationLandlordId || fallbackLandlordId, actorEmail);
+
+    if (action === "request_info" && requestedItems.length === 0 && !note) {
+      return res.status(400).json({ ok: false, error: "REQUEST_INFO_EMPTY" });
+    }
+
+    const emailResult = await sendRentalApplicationDecisionEmail({
+      action: action as (typeof APPLICATION_DECISION_ACTIONS)[number],
+      application: data,
+      landlordEmail,
+      requestInfoItems: requestedItems,
+      customMessage: note,
+    });
+
+    const now = Date.now();
+    const nextStatus =
+      action === "approve" ? "APPROVED" : action === "reject" ? "DECLINED" : "IN_REVIEW";
+    const updates: any = {
+      updatedAt: now,
+      status: nextStatus,
+      landlordNote: note,
+      lastLandlordAction: {
+        type: action,
+        actedAt: now,
+        actedBy: actorUserId,
+        actorRole: role,
+        emailSentAt: now,
+        paymentEmail: emailResult?.paymentEmail || null,
+        note,
+        requestedItems: action === "request_info" ? requestedItems : [],
+      },
+    };
+
+    if (action === "request_info") {
+      updates.landlordInfoRequest = {
+        requestedItems,
+        customMessage: note,
+        requestedAt: now,
+        requestedBy: actorUserId,
+      };
+    } else {
+      updates.landlordInfoRequest = null;
+    }
+
+    await db.collection("rentalApplications").doc(id).set(updates, { merge: true });
+
+    await recordRiskDecisionAudit({
+      applicationId: id,
+      landlordId: applicationLandlordId || fallbackLandlordId,
+      userId: actorUserId,
+      role,
+      decision: action as "approve" | "reject" | "request_info",
+      notes: note,
+    });
+
+    const refreshed = await db.collection("rentalApplications").doc(id).get();
+    return res.json({
+      ok: true,
+      data: { id: refreshed.id, ...(refreshed.data() as any) },
+      action: {
+        type: action,
+        status: nextStatus,
+        emailSent: true,
+        paymentEmail: emailResult?.paymentEmail || null,
+      },
+    });
+  } catch (err: any) {
+    const message = String(err?.message || "RENTAL_APPLICATION_ACTION_FAILED");
+    const status =
+      message === "LANDLORD_PAYMENT_EMAIL_MISSING" || message === "APPLICANT_EMAIL_MISSING" || message === "EMAIL_FROM missing"
+        ? 400
+        : 500;
+    if (status >= 500) {
+      console.error("[rental-applications] decision action failed", err?.message || err);
+    }
+    return res.status(status).json({ ok: false, error: message });
   }
 });
 
