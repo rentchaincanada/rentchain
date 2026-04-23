@@ -178,6 +178,31 @@ describe("TenantsPage", () => {
     expect(screen.getByText("lease-1")).toBeInTheDocument();
   });
 
+  it("fails closed by hiding the targeted cleanup tenant ids from the landlord list", async () => {
+    mocks.fetchTenantsMock.mockResolvedValue([
+      {
+        id: "c43992df00d07acae140ba76",
+        fullName: "test2",
+        email: "hello+tenanttest2@rentchain.ai",
+      },
+      {
+        id: "tenant-1",
+        fullName: "Taylor Tenant",
+        email: "tenant@example.com",
+      },
+    ]);
+    mocks.fetchTenantTenanciesMock.mockResolvedValue([]);
+
+    render(
+      <MemoryRouter>
+        <TenantsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Taylor Tenant")).toBeInTheDocument();
+    expect(screen.queryByText("test2")).not.toBeInTheDocument();
+  });
+
   it("prefills the invite modal from the selected tenant profile", async () => {
     mocks.useCapabilitiesMock.mockReturnValue({
       features: { tenant_invites: true },
