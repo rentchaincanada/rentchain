@@ -101,6 +101,18 @@ function sectionHeadingStyle() {
   } as const;
 }
 
+const HISTORY_VISIBILITY_STORAGE_KEY = "landlordDecisionHistoryVisibilityV2";
+
+function readPersistedHistoryVisibility() {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(HISTORY_VISIBILITY_STORAGE_KEY);
+    return raw ? (JSON.parse(raw) as Record<string, boolean>) : {};
+  } catch {
+    return {};
+  }
+}
+
 function HistoryToggle(props: {
   decisionId: string;
   showHistory: boolean;
@@ -134,7 +146,11 @@ function HistoryToggle(props: {
           {historyLoading ? <div style={{ color: "#64748b" }}>Loading history…</div> : null}
           {!historyLoading && historyError ? <div style={{ color: "#b91c1c" }}>{historyError}</div> : null}
           {!historyLoading && !historyError ? (
-            <Timeline items={historyItems} emptyMessage="No canonical decision history is available yet." />
+            <Timeline
+              items={historyItems}
+              emptyMessage="No canonical decision history is available yet."
+              storageKey={`decision-history-timeline:${decisionId}`}
+            />
           ) : null}
         </div>
       ) : null}
@@ -439,7 +455,9 @@ export function AgentDecisionPanel({
   const [workingAction, setWorkingAction] = React.useState<"review" | "snooze" | "dismiss" | "execute" | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [showExecuted, setShowExecuted] = React.useState(false);
-  const [expandedHistoryDecisionIds, setExpandedHistoryDecisionIds] = React.useState<Record<string, boolean>>({});
+  const [expandedHistoryDecisionIds, setExpandedHistoryDecisionIds] = React.useState<Record<string, boolean>>(
+    () => readPersistedHistoryVisibility()
+  );
   const [historyItemsByDecisionId, setHistoryItemsByDecisionId] = React.useState<Record<string, TimelineItem[]>>({});
   const [historyLoadingByDecisionId, setHistoryLoadingByDecisionId] = React.useState<Record<string, boolean>>({});
   const [historyErrorByDecisionId, setHistoryErrorByDecisionId] = React.useState<Record<string, string | null>>({});
@@ -448,17 +466,19 @@ export function AgentDecisionPanel({
     setItems(decisions);
   }, [decisions]);
 
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(HISTORY_VISIBILITY_STORAGE_KEY, JSON.stringify(expandedHistoryDecisionIds));
+    } catch {
+      // Ignore persistence failures and keep local UI state functional.
+    }
+  }, [expandedHistoryDecisionIds]);
+
   const activeItems = React.useMemo(() => items.filter((decision) => decision.state !== "executed"), [items]);
   const executedItems = React.useMemo(() => items.filter((decision) => decision.state === "executed"), [items]);
 
-  const handleToggleHistory = async (decisionId: string) => {
-    const currentlyExpanded = Boolean(expandedHistoryDecisionIds[decisionId]);
-    if (currentlyExpanded) {
-      setExpandedHistoryDecisionIds((current) => ({ ...current, [decisionId]: false }));
-      return;
-    }
-
-    setExpandedHistoryDecisionIds((current) => ({ ...current, [decisionId]: true }));
+  const loadHistory = React.useCallback(async (decisionId: string) => {
     if (historyItemsByDecisionId[decisionId] || historyLoadingByDecisionId[decisionId]) return;
 
     try {
@@ -475,6 +495,28 @@ export function AgentDecisionPanel({
     } finally {
       setHistoryLoadingByDecisionId((current) => ({ ...current, [decisionId]: false }));
     }
+  }, [historyItemsByDecisionId, historyLoadingByDecisionId, period, propertyId]);
+
+  React.useEffect(() => {
+    const visibleExpandedDecisionIds = items
+      .map((decision) => decision.id)
+      .filter((decisionId) => expandedHistoryDecisionIds[decisionId]);
+
+    for (const decisionId of visibleExpandedDecisionIds) {
+      if (historyItemsByDecisionId[decisionId] || historyLoadingByDecisionId[decisionId]) continue;
+      void loadHistory(decisionId);
+    }
+  }, [expandedHistoryDecisionIds, historyItemsByDecisionId, historyLoadingByDecisionId, items, loadHistory]);
+
+  const handleToggleHistory = async (decisionId: string) => {
+    const currentlyExpanded = Boolean(expandedHistoryDecisionIds[decisionId]);
+    if (currentlyExpanded) {
+      setExpandedHistoryDecisionIds((current) => ({ ...current, [decisionId]: false }));
+      return;
+    }
+
+    setExpandedHistoryDecisionIds((current) => ({ ...current, [decisionId]: true }));
+    await loadHistory(decisionId);
   };
 
   const handleReview = async (decisionId: string) => {

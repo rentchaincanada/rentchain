@@ -38,6 +38,7 @@ vi.mock("../ui/Ui", () => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
+  window.localStorage.clear();
   snoozeLandlordDecision.mockResolvedValue({
     state: {
       decisionId: "reduce_vacancy_risk:prop-2",
@@ -106,6 +107,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  window.localStorage.clear();
 });
 
 describe("AgentDecisionPanel", () => {
@@ -648,5 +650,76 @@ describe("AgentDecisionPanel", () => {
     expect(await screen.findByText("Appeared")).toBeInTheDocument();
     expect(screen.getByText("Reviewed")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Hide history/i })).toBeInTheDocument();
+  });
+
+  it("persists per-decision history visibility across remounts", async () => {
+    const decision = {
+      id: "review_lease_renewals:prop-1",
+      decisionType: "review_lease_renewals",
+      priority: "high",
+      explanation: "Review upcoming renewals.",
+      recommendedAction: "Review renewals",
+      actionKey: "open_lease_renewals_flow",
+      actionLabel: "Open renewals focus",
+      destination: "/portfolio-health?entry=lease-renewals&propertyId=prop-1",
+      workflowCategory: "lease_renewals",
+      automationEligible: true,
+      automationState: "ready",
+      automationReason: "This decision is active and already mapped to a deterministic automation path.",
+      executionMappingState: "mapped",
+      executionMapping: {
+        action: "lease.auto_send_notice",
+        resourceType: "lease",
+        resourceId: "lease-1",
+        prerequisitesMet: true,
+        prerequisiteReason: null,
+      },
+      executionInputState: "complete",
+      executionInputReason: null,
+      executionInputMissingFields: [],
+      executionInput: {
+        noticeType: "renewal_offer",
+        legalTemplateKey: "ns.fixed_term.renewal_offer.v1",
+        noticeRuleVersion: "ns-v1",
+        province: "NS",
+        leaseType: "fixed_term",
+        currentRent: 1650,
+        noticeDueAt: Date.UTC(2026, 1, 10, 0, 0, 0, 0),
+        rentChangeMode: "no_change",
+        proposedRent: null,
+        newTermType: "fixed_term",
+        newLeaseStartDate: "2026-05-11",
+        newLeaseEndDate: "2027-05-10",
+        responseDeadlineAt: Date.UTC(2026, 4, 1, 12, 0, 0, 0),
+      },
+      executedAt: null,
+      executionOutcomeStatus: "none",
+      executionOutcomeAt: null,
+      executionOutcomeReason: null,
+      href: "/portfolio-health?entry=lease-renewals&propertyId=prop-1",
+      state: "pending",
+      reviewedAt: null,
+      supportingSignals: [],
+    } as const;
+
+    const { unmount } = render(
+      <MemoryRouter>
+        <AgentDecisionPanel period="90d" decisions={[decision]} />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /View history/i }));
+    await screen.findByText("Appeared");
+    unmount();
+
+    render(
+      <MemoryRouter>
+        <AgentDecisionPanel period="90d" decisions={[decision]} />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole("button", { name: /Hide history/i })).toBeInTheDocument();
+    expect(await screen.findByText("Appeared")).toBeInTheDocument();
+    expect(fetchLandlordDecisionHistory).toHaveBeenCalledTimes(2);
   });
 });

@@ -1,37 +1,103 @@
 import React from "react";
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Timeline } from "./Timeline";
 
 describe("Timeline", () => {
-  it("renders grouped timeline items", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-03T15:00:00.000Z"));
+    window.localStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    window.localStorage.clear();
+    cleanup();
+  });
+
+  it("renders timeline items in time buckets and collapses older history by default", () => {
     render(
       <Timeline
         items={[
           {
-            id: "event-1",
-            title: "Lease activated",
-            description: "Lease activated for unit 4.",
+            id: "event-today",
+            title: "Reviewed",
+            description: "Decision reviewed.",
             timestamp: "2026-04-03T10:15:00.000Z",
-            domain: "lease",
-            status: "active",
+            domain: "system",
+            status: "reviewed",
             actor: "Landlord",
           },
           {
-            id: "event-2",
-            title: "Screening payment completed",
-            description: "Screening payment completed for the application.",
-            timestamp: "2026-04-03T09:30:00.000Z",
-            domain: "screening",
+            id: "event-yesterday",
+            title: "Appeared",
+            description: "Decision appeared.",
+            timestamp: "2026-04-02T09:30:00.000Z",
+            domain: "system",
             actor: "System",
           },
+          {
+            id: "event-earlier",
+            title: "Executed",
+            description: "Decision executed.",
+            timestamp: "2026-03-28T12:00:00.000Z",
+            domain: "system",
+            actor: "Landlord",
+          },
         ]}
+        storageKey="timeline-test"
       />
     );
 
-    expect(screen.getAllByText(/Lease activated/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Screening payment completed/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/2026/)).toBeInTheDocument();
+    expect(screen.getByText("Today")).toBeInTheDocument();
+    expect(screen.getByText("Yesterday")).toBeInTheDocument();
+    expect(screen.getByText("Earlier")).toBeInTheDocument();
+    expect(screen.getByText("Reviewed")).toBeInTheDocument();
+    expect(screen.getByText("Appeared")).toBeInTheDocument();
+    expect(screen.queryByText(/Decision executed\./i)).not.toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button", { name: "Show" })[0]);
+    expect(screen.getByText(/Decision executed\./i)).toBeInTheDocument();
+    expect(screen.getAllByText(/2026/).length).toBeGreaterThan(0);
+  });
+
+  it("persists bucket visibility in local storage", () => {
+    const { unmount } = render(
+      <Timeline
+        items={[
+          {
+            id: "event-earlier",
+            title: "Executed",
+            description: "Decision executed.",
+            timestamp: "2026-03-28T12:00:00.000Z",
+            domain: "system",
+            actor: "Landlord",
+          },
+        ]}
+        storageKey="timeline-persist"
+      />
+    );
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Show" })[0]);
+    unmount();
+
+    render(
+      <Timeline
+        items={[
+          {
+            id: "event-earlier",
+            title: "Executed",
+            description: "Decision executed.",
+            timestamp: "2026-03-28T12:00:00.000Z",
+            domain: "system",
+            actor: "Landlord",
+          },
+        ]}
+        storageKey="timeline-persist"
+      />
+    );
+
+    expect(screen.getByText(/Decision executed\./i)).toBeInTheDocument();
   });
 
   it("shows an empty state when there are no items", () => {
