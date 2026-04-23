@@ -12,6 +12,7 @@ import {
   type LandlordAgentDecision,
 } from "@/api/landlordAnalyticsApi";
 import type { TimelineItem } from "@/api/timelineApi";
+import { blockedReasonDisplay, executionStateDisplay, formatExecutionSummary } from "./decisionExecutionDisplay";
 
 const priorityTone: Record<"low" | "medium" | "high", { bg: string; text: string }> = {
   low: { bg: "rgba(14, 165, 233, 0.12)", text: "#075985" },
@@ -60,40 +61,6 @@ const executionOutcomeTone: Record<
     text: "#991b1b",
     label: "Execution failed",
   },
-};
-
-const executionStateTone: Record<
-  LandlordAgentDecision["executionState"],
-  { bg: string; text: string; label: string }
-> = {
-  executable: {
-    bg: "rgba(21, 128, 61, 0.1)",
-    text: "#166534",
-    label: "Executable now",
-  },
-  blocked: {
-    bg: "rgba(217, 119, 6, 0.12)",
-    text: "#92400e",
-    label: "Blocked",
-  },
-  already_executed: {
-    bg: "rgba(21, 128, 61, 0.1)",
-    text: "#166534",
-    label: "Already executed",
-  },
-  unsafe_duplicate: {
-    bg: "rgba(185, 28, 28, 0.1)",
-    text: "#991b1b",
-    label: "Duplicate prevented",
-  },
-};
-
-const blockedReasonLabel: Record<NonNullable<LandlordAgentDecision["blockedReason"]>, string> = {
-  missing_required_inputs: "Missing required inputs",
-  policy_blocked: "Blocked by policy or safety threshold",
-  automation_disabled: "Execution disabled for this decision state",
-  duplicate_prevented: "Duplicate execution prevented",
-  unknown_state_fail_closed: "Blocked because execution state is ambiguous",
 };
 
 type Props = {
@@ -162,24 +129,6 @@ function effectiveExecutionSummary(decision: LandlordAgentDecision): NonNullable
       lastExecutionOutcomeAt: decision.executionOutcomeAt || null,
     }
   );
-}
-
-function formatExecutionSummary(decision: LandlordAgentDecision) {
-  const summary = effectiveExecutionSummary(decision);
-  const count = summary.executionCount;
-  if (!count) return null;
-
-  const outcomeLabel =
-    summary.lastExecutionOutcome === "succeeded"
-      ? "Last outcome: succeeded"
-      : summary.lastExecutionOutcome === "failed"
-        ? "Last outcome: failed"
-        : null;
-  const lastExecutedLabel = summary.lastExecutedAt
-    ? `Last executed: ${new Date(summary.lastExecutedAt).toLocaleString()}`
-    : null;
-
-  return [`Attempts: ${count}`, outcomeLabel, lastExecutedLabel].filter(Boolean).join(" • ");
 }
 
 function sectionHeadingStyle() {
@@ -286,7 +235,9 @@ function ActionDecisionCard(props: {
   const decisionExecutionState = effectiveExecutionState(decision);
   const decisionBlockedReason = effectiveBlockedReason(decision);
   const canExecuteNow = decisionExecutionState === "executable";
-  const governanceSummary = formatExecutionSummary(decision);
+  const governanceSummary = formatExecutionSummary(effectiveExecutionSummary(decision));
+  const executionDisplay = executionStateDisplay[decisionExecutionState];
+  const blockedDisplay = decisionBlockedReason ? blockedReasonDisplay[decisionBlockedReason] : null;
 
   return (
     <div
@@ -337,32 +288,85 @@ function ActionDecisionCard(props: {
             {automationTone[decision.automationState].label}
           </div>
         ) : null}
-        <div
-          style={{
-            justifySelf: "start",
-            padding: "4px 9px",
-            borderRadius: 999,
-            background: executionStateTone[decisionExecutionState].bg,
-            color: executionStateTone[decisionExecutionState].text,
-            fontWeight: 700,
-            fontSize: "0.78rem",
-          }}
-        >
-          {executionStateTone[decisionExecutionState].label}
-        </div>
       </div>
       {support ? <div style={{ color: "#64748b", fontSize: "0.88rem" }}>{support}</div> : null}
       {decision.automationState !== "manual_only" && decision.automationReason ? (
         <div style={{ color: "#64748b", fontSize: "0.84rem" }}>{decision.automationReason}</div>
       ) : null}
-      {decisionExecutionState !== "executable" && decisionBlockedReason ? (
-        <div style={{ color: "#475569", fontSize: "0.84rem", fontWeight: 600 }}>
-          Governance: {blockedReasonLabel[decisionBlockedReason]}
+      <div
+        aria-label="Execution controls"
+        style={{
+          display: "grid",
+          gap: 8,
+          padding: 12,
+          borderRadius: 12,
+          border: "1px solid #e2e8f0",
+          background: "#f8fafc",
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <div style={{ fontSize: "0.78rem", fontWeight: 800, letterSpacing: "0.04em", textTransform: "uppercase", color: "#64748b" }}>
+            Execution controls
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <div
+              style={{
+                justifySelf: "start",
+                padding: "4px 9px",
+                borderRadius: 999,
+                border: `1px solid ${executionDisplay.badgeTone.border}`,
+                background: executionDisplay.badgeTone.bg,
+                color: executionDisplay.badgeTone.text,
+                fontWeight: 700,
+                fontSize: "0.78rem",
+              }}
+            >
+              {executionDisplay.label}
+            </div>
+            {decision.duplicateGuardActive ? (
+              <div
+                style={{
+                  justifySelf: "start",
+                  padding: "4px 9px",
+                  borderRadius: 999,
+                  border: "1px solid rgba(185, 28, 28, 0.18)",
+                  background: "rgba(185, 28, 28, 0.08)",
+                  color: "#991b1b",
+                  fontWeight: 700,
+                  fontSize: "0.78rem",
+                }}
+              >
+                Duplicate safeguard active
+              </div>
+            ) : null}
+          </div>
         </div>
-      ) : null}
-      {governanceSummary ? (
-        <div style={{ color: "#64748b", fontSize: "0.82rem" }}>{governanceSummary}</div>
-      ) : null}
+        <div style={{ display: "grid", gap: 4 }}>
+          <div style={{ color: "#0f172a", fontSize: "0.94rem", fontWeight: 700 }}>{executionDisplay.title}</div>
+          <div style={{ color: "#475569", fontSize: "0.84rem" }}>{executionDisplay.description}</div>
+        </div>
+        {blockedDisplay ? (
+          <div
+            style={{
+              display: "grid",
+              gap: 2,
+              paddingLeft: 10,
+              borderLeft: "3px solid #f59e0b",
+            }}
+          >
+            <div style={{ color: "#0f172a", fontSize: "0.84rem", fontWeight: 700 }}>{blockedDisplay.title}</div>
+            <div style={{ color: "#475569", fontSize: "0.82rem" }}>{blockedDisplay.description}</div>
+          </div>
+        ) : null}
+        {governanceSummary.length ? (
+          <div style={{ display: "grid", gap: 2 }}>
+            <div style={{ color: "#64748b", fontSize: "0.78rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+              Execution summary
+            </div>
+            <div style={{ color: "#334155", fontSize: "0.82rem" }}>{governanceSummary.join(" • ")}</div>
+          </div>
+        ) : null}
+      </div>
       {decision.executionOutcomeStatus !== "none" ? (
         <div
           style={{
@@ -501,6 +505,8 @@ function ExecutedDecisionCard(props: {
     : decision.href
       ? decision.recommendedAction
       : null;
+  const executionDisplay = executionStateDisplay.already_executed;
+  const governanceSummary = formatExecutionSummary(effectiveExecutionSummary(decision));
 
   return (
     <div
@@ -535,22 +541,48 @@ function ExecutedDecisionCard(props: {
         </div>
       ) : null}
       <div
+        aria-label="Execution controls"
         style={{
-          justifySelf: "start",
-          padding: "4px 9px",
-          borderRadius: 999,
-          background: executionStateTone.already_executed.bg,
-          color: executionStateTone.already_executed.text,
-          fontWeight: 700,
-          fontSize: "0.78rem",
+          display: "grid",
+          gap: 8,
+          padding: 12,
+          borderRadius: 12,
+          border: "1px solid #dcfce7",
+          background: "#f0fdf4",
         }}
       >
-        {executionStateTone.already_executed.label}
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <div style={{ fontSize: "0.78rem", fontWeight: 800, letterSpacing: "0.04em", textTransform: "uppercase", color: "#166534" }}>
+            Execution controls
+          </div>
+          <div
+            style={{
+              justifySelf: "start",
+              padding: "4px 9px",
+              borderRadius: 999,
+              border: `1px solid ${executionDisplay.badgeTone.border}`,
+              background: executionDisplay.badgeTone.bg,
+              color: executionDisplay.badgeTone.text,
+              fontWeight: 700,
+              fontSize: "0.78rem",
+            }}
+          >
+            {executionDisplay.label}
+          </div>
+        </div>
+        <div style={{ display: "grid", gap: 4 }}>
+          <div style={{ color: "#14532d", fontSize: "0.94rem", fontWeight: 700 }}>{executionDisplay.title}</div>
+          <div style={{ color: "#166534", fontSize: "0.84rem" }}>{formatExecutedCopy(decision.executedAt)}</div>
+        </div>
+        {governanceSummary.length ? (
+          <div style={{ display: "grid", gap: 2 }}>
+            <div style={{ color: "#166534", fontSize: "0.78rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+              Execution summary
+            </div>
+            <div style={{ color: "#166534", fontSize: "0.82rem" }}>{governanceSummary.join(" • ")}</div>
+          </div>
+        ) : null}
       </div>
-      <div style={{ color: "#166534", fontSize: "0.84rem" }}>{formatExecutedCopy(decision.executedAt)}</div>
-      {formatExecutionSummary(decision) ? (
-        <div style={{ color: "#64748b", fontSize: "0.82rem" }}>{formatExecutionSummary(decision)}</div>
-      ) : null}
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
         {ctaDestination && ctaLabel ? (
           <Link to={ctaDestination} style={{ color: "#0f766e", fontWeight: 700, textDecoration: "none" }}>
