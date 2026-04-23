@@ -245,4 +245,45 @@ describe("LandlordActiveLeasesPage", () => {
     expect(screen.getAllByText("Jane Tenant").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Mark Harbor").length).toBeGreaterThan(0);
   });
+
+  it("fails closed by hiding targeted synthetic cleanup leases from the landlord list", async () => {
+    mocks.getActiveLeasesForLandlord.mockResolvedValue({
+      leases: [
+        {
+          id: "test_lease_quit_01",
+          propertyId: "prop-1",
+          propertyName: "Property_test",
+          unitNumber: "UNIT_B",
+          monthlyRent: 1800,
+          startDate: "2026-01-01",
+          endDate: "2026-12-31",
+          status: "active",
+          tenantName: "test2",
+          tenantEmail: "hello+tenanttest2@rentchain.ai",
+        },
+        {
+          id: "lease-visible",
+          propertyId: "prop-2",
+          propertyName: "Harbour View",
+          unitNumber: "101",
+          monthlyRent: 1850,
+          startDate: "2026-01-01",
+          endDate: "2026-12-31",
+          status: "active",
+          tenantName: "Jane Tenant",
+          tenantEmail: "jane@example.com",
+        },
+      ],
+    });
+
+    render(
+      <MemoryRouter>
+        <LandlordActiveLeasesPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Harbour View")).toBeInTheDocument();
+    expect(screen.queryByText("Property_test")).not.toBeInTheDocument();
+    expect(screen.queryByText("test2")).not.toBeInTheDocument();
+  });
 });

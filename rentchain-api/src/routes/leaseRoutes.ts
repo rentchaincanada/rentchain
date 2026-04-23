@@ -28,6 +28,9 @@ import { loadPropertyCredibilitySummary } from "../services/risk/propertyCredibi
 import { dedupePropertyScopedLeasesByUnit, filterPropertyScopedLeases } from "../services/risk/propertyLeaseIsolation";
 import { writeCanonicalEvent } from "../lib/events/buildEvent";
 import { getSignedDownloadUrl } from "../lib/gcsSignedUrl";
+import {
+  isTargetedHiddenLeaseId,
+} from "../lib/testDataVisibilityTargets";
 
 const router = Router();
 const LEDGER_COLLECTION = "ledgerEntries";
@@ -149,6 +152,9 @@ function normalizeLeaseRow(id: string, raw: any) {
         ? risk.confidence
         : null,
     riskTimeline: Array.isArray(raw?.riskTimeline) ? raw.riskTimeline : [],
+    hiddenFromActiveLists: raw?.hiddenFromActiveLists === true,
+    cleanupReason: String(raw?.cleanupReason || "").trim() || null,
+    cleanupBatch: String(raw?.cleanupBatch || "").trim() || null,
     createdAt: raw?.createdAt || null,
     updatedAt: raw?.updatedAt || null,
   };
@@ -169,6 +175,10 @@ function mergeLeaseRows(rows: any[]) {
 
 function isCurrentLeaseStatus(status: unknown): boolean {
   return CURRENT_LEASE_STATUSES.has(String(status || "").trim().toLowerCase());
+}
+
+function isHiddenFromLandlordLeaseLists(row: any): boolean {
+  return row?.hiddenFromActiveLists === true || isTargetedHiddenLeaseId(row?.id);
 }
 
 async function loadLeaseDocumentUrlForLease(raw: any): Promise<string | null> {
@@ -271,6 +281,7 @@ async function listLandlordLeaseRows(landlordId: string, opts?: { archived?: boo
   const rows = (snap.docs || []).map((doc: any) => ({ id: doc.id, ...(doc.data() as any) }));
   const archivedFlag = opts?.archived;
   const filtered = rows.filter((row: any) => {
+    if (isHiddenFromLandlordLeaseLists(row)) return false;
     const isArchived = Boolean(row?.archivedAt);
     if (archivedFlag === true) return isArchived;
     if (archivedFlag === false) return !isArchived && isCurrentLeaseStatus(row?.status);

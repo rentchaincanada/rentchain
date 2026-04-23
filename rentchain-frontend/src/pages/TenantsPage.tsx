@@ -23,6 +23,7 @@ import { hydrateTenantSummariesBatch, getCachedTenantSummary } from "../lib/tena
 import { track } from "../lib/analytics";
 import { useCapabilities } from "@/hooks/useCapabilities";
 import { openUpgradeFlow } from "@/billing/openUpgradeFlow";
+import { isTargetedHiddenTenantId } from "@/lib/testDataVisibilityTargets";
 import "./TenantsPage.css";
 
 type TenantWithTenancies = TenantApiModel & { tenancies?: TenancyApiModel[] };
@@ -308,7 +309,11 @@ export const TenantsPage: React.FC = () => {
       setLoading(true);
       setError(null);
       const rows = await fetchTenants();
-      const visibleRows = rows.filter((tenant) => tenant?.hiddenFromActiveLists !== true);
+      const visibleRows = rows.filter(
+        (tenant) =>
+          tenant?.hiddenFromActiveLists !== true &&
+          !isTargetedHiddenTenantId(tenant?.id)
+      );
       const enriched = await Promise.all(
         visibleRows.map(async (tenant) => {
           if (!tenant?.id) return { ...tenant, tenancies: [] };

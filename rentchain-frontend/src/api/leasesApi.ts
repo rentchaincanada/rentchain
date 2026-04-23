@@ -49,6 +49,9 @@ export interface LandlordActiveLease extends Lease {
   tenantName?: string | null;
   tenantEmail?: string | null;
   documentUrl?: string | null;
+  hiddenFromActiveLists?: boolean;
+  cleanupReason?: string | null;
+  cleanupBatch?: string | null;
   archivedAt?: string | null;
   archivedByUserId?: string | null;
   isArchived?: boolean;

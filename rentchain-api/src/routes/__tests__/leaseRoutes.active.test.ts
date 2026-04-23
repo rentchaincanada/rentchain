@@ -171,4 +171,43 @@ describe("leaseRoutes GET /active", () => {
       })
     );
   });
+
+  it("excludes targeted synthetic cleanup leases from landlord active lists", async () => {
+    seedDoc("properties", "prop-1", { landlordId: "landlord-1", name: "Harbour View" });
+    seedDoc("tenants", "tenant-1", { landlordId: "landlord-1", fullName: "Jane Tenant" });
+    seedDoc("leases", "test_lease_quit_01", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      tenantId: "tenant-1",
+      primaryTenantId: "tenant-1",
+      unitId: "unit-1",
+      unitNumber: "101",
+      monthlyRent: 1850,
+      startDate: "2026-01-01",
+      endDate: "2026-12-31",
+      status: "active",
+      createdAt: 2,
+      updatedAt: 2,
+    });
+    seedDoc("leases", "lease-visible", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      tenantId: "tenant-1",
+      primaryTenantId: "tenant-1",
+      unitId: "unit-2",
+      unitNumber: "102",
+      monthlyRent: 1900,
+      startDate: "2026-01-01",
+      endDate: "2026-12-31",
+      status: "active",
+      createdAt: 3,
+      updatedAt: 3,
+    });
+
+    const app = await makeApp();
+    const res = await request(app).get("/active");
+
+    expect(res.status).toBe(200);
+    expect(res.body?.leases.map((lease: { id: string }) => lease.id)).toEqual(["lease-visible"]);
+  });
 });

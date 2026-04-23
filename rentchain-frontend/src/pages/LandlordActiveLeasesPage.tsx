@@ -10,6 +10,7 @@ import {
   type LandlordActiveLease,
   type LeaseReconciliationCandidate,
 } from "@/api/leasesApi";
+import { isTargetedHiddenLeaseId } from "@/lib/testDataVisibilityTargets";
 
 function formatCurrency(value: number | null | undefined) {
   const amount = typeof value === "number" ? value : 0;
@@ -99,6 +100,10 @@ function matchesLeaseSearch(lease: LandlordActiveLease, normalizedQuery: string)
   return haystack.includes(normalizedQuery);
 }
 
+function isVisibleLease(lease: LandlordActiveLease) {
+  return lease.hiddenFromActiveLists !== true && !isTargetedHiddenLeaseId(lease.id);
+}
+
 function statusBadge(status: string | null | undefined) {
   return (
     <span
@@ -144,7 +149,10 @@ export default function LandlordActiveLeasesPage() {
         view === "archived" ? getArchivedLeasesForLandlord() : getActiveLeasesForLandlord(),
         view === "active" ? getLeaseReconciliationCandidates() : Promise.resolve({ candidates: [] }),
       ]);
-      setLeases(Array.isArray(leaseResponse?.leases) ? leaseResponse.leases : []);
+      const nextLeases = Array.isArray(leaseResponse?.leases)
+        ? leaseResponse.leases.filter(isVisibleLease)
+        : [];
+      setLeases(nextLeases);
       setCandidates(Array.isArray(candidateResponse?.candidates) ? candidateResponse.candidates : []);
     } catch (err: unknown) {
       setError(errorMessage(err, "Failed to load lease operations."));
