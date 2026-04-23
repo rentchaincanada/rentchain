@@ -36,6 +36,7 @@ import { PropertyRegistryStatusCard } from "@/components/properties/PropertyRegi
 import { HalifaxRegistrySubmissionAssistant } from "@/components/properties/HalifaxRegistrySubmissionAssistant";
 import type { PropertyCredibilitySummary } from "@/types/credibilitySummary";
 import { calculateConfiguredUnitRentTotal, resolveConfiguredUnitRent } from "@/lib/propertyRentSummary";
+import { buildPropertySummaryMetrics } from "@/lib/propertySummaryMetrics";
 import { getUnitsNeedingOccupancySetup } from "./occupancyPrompt";
 
 interface PropertyDetailPanelProps {
@@ -578,48 +579,16 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
     return [];
   }, [units, unitCount]);
 
-  const activeLeases = useMemo(
-    () =>
-      leases.filter((l) =>
-        ["active", "notice_pending", "renewal_pending", "renewal_accepted", "move_out_pending"].includes(
-          String(l.status || "").toLowerCase()
-        )
-      ),
-    [leases]
-  );
-  const activeLeaseUnitNumbers = useMemo(
-    () => new Set(activeLeases.map((lease) => String(lease.unitNumber || "").trim()).filter(Boolean)),
-    [activeLeases]
-  );
-  const occupiedUnits = useMemo(
-    () =>
-      displayedUnits.filter((unit) => {
-        const unitNumber = String((unit as any)?.unitNumber || "").trim();
-        const status = String((unit as any)?.occupancyStatus || (unit as any)?.status || "").trim().toLowerCase();
-        return status === "occupied" || (unitNumber && activeLeaseUnitNumbers.has(unitNumber));
-      }),
-    [activeLeaseUnitNumbers, displayedUnits]
-  );
-  const leasedUnits = occupiedUnits.length;
-  const occupancy = unitCount > 0 ? (leasedUnits / unitCount) * 100 : 0;
-  const activeLeaseRentRoll = activeLeases.reduce(
-    (sum, l) => sum + (typeof l.monthlyRent === "number" ? l.monthlyRent : 0),
-    0
-  );
-  const occupiedUnitsFallbackRent = occupiedUnits.reduce((sum, unit) => {
-    const unitNumber = String((unit as any)?.unitNumber || "").trim();
-    if (unitNumber && activeLeaseUnitNumbers.has(unitNumber)) return sum;
-    const configuredRent = resolveConfiguredUnitRent(unit);
-    return sum + (configuredRent != null ? Number(configuredRent) || 0 : 0);
-  }, 0);
-  const leaseRentRoll = activeLeaseRentRoll + occupiedUnitsFallbackRent;
+  const {
+    activeLeases,
+    leasedUnits,
+    occupancyRate,
+    activeLeaseRentTotal,
+    currentOccupiedRentTotal,
+  } = useMemo(() => buildPropertySummaryMetrics(displayedUnits, leases, unitCount), [displayedUnits, leases, unitCount]);
   const collectionRate =
-    leaseRentRoll > 0 ? totalCollectedThisMonth / leaseRentRoll : 0;
+    currentOccupiedRentTotal > 0 ? totalCollectedThisMonth / currentOccupiedRentTotal : 0;
 
-  const leasedUnitNumbers = useMemo(
-    () => new Set(occupiedUnits.map((unit: any) => String(unit?.unitNumber || "").trim()).filter(Boolean)),
-    [occupiedUnits]
-  );
   const unitsNeedingOccupancySetup = useMemo(
     () => getUnitsNeedingOccupancySetup(displayedUnits, activeLeases),
     [activeLeases, displayedUnits]
@@ -1098,7 +1067,10 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
             Leased units
           </div>
           <div className="rc-kpi-value" style={{ color: "#0b1220", fontWeight: 700, fontSize: "1.1rem" }}>
-            {leasedUnits}
+            {leasedUnits.length}
+          </div>
+          <div className="rc-kpi-subtext" style={{ color: "#4b5563", fontSize: "0.75rem", marginTop: 2 }}>
+            Counts units with an active lease record.
           </div>
         </div>
         <div
@@ -1114,7 +1086,10 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
             Occupancy
           </div>
           <div className="rc-kpi-value" style={{ color: "#0b1220", fontWeight: 700, fontSize: "1.05rem" }}>
-            {unitCount === 0 ? "--" : `${occupancy.toFixed(0)}%`}
+            {unitCount === 0 ? "--" : `${occupancyRate.toFixed(0)}%`}
+          </div>
+          <div className="rc-kpi-subtext" style={{ color: "#4b5563", fontSize: "0.75rem", marginTop: 2 }}>
+            Based on units marked occupied in the unit table.
           </div>
         </div>
         <div
@@ -1147,13 +1122,33 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
           }}
         >
           <div className="rc-kpi-label" style={{ color: "#111827", fontSize: "0.8rem" }}>
+            Active lease rent total
+          </div>
+          <div className="rc-kpi-value" style={{ color: "#0b1220", fontWeight: 700, fontSize: "1.05rem" }}>
+            {formatCurrency(activeLeaseRentTotal)}
+          </div>
+          <div className="rc-kpi-subtext" style={{ color: "#4b5563", fontSize: "0.75rem", marginTop: 2 }}>
+            Strictly from active lease records.
+          </div>
+        </div>
+
+        <div
+          className="rc-kpi-card"
+          style={{
+            padding: 12,
+            borderRadius: 12,
+            background: "rgba(255,255,255,0.02)",
+            border: "1px solid rgba(148,163,184,0.15)",
+          }}
+        >
+          <div className="rc-kpi-label" style={{ color: "#111827", fontSize: "0.8rem" }}>
             Current occupied rent total
           </div>
           <div className="rc-kpi-value" style={{ color: "#0b1220", fontWeight: 700, fontSize: "1.05rem" }}>
-            {formatCurrency(leaseRentRoll)}
+            {formatCurrency(currentOccupiedRentTotal)}
           </div>
           <div className="rc-kpi-subtext" style={{ color: "#4b5563", fontSize: "0.75rem", marginTop: 2 }}>
-            Uses active lease rent when present and occupied unit rent where current occupancy has been set manually.
+            Uses active lease rent when present and otherwise falls back to occupied unit rent.
           </div>
         </div>
 
@@ -1187,7 +1182,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
             Collection
           </div>
           <div className="rc-kpi-value" style={{ color: "#0b1220", fontWeight: 700, fontSize: "1.05rem" }}>
-            {leaseRentRoll === 0 ? "--" : `${(collectionRate * 100).toFixed(0)}%`}
+            {currentOccupiedRentTotal === 0 ? "--" : `${(collectionRate * 100).toFixed(0)}%`}
           </div>
         </div>
       </div>
