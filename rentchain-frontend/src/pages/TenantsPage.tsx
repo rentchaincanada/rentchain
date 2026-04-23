@@ -297,7 +297,7 @@ export const TenantsPage: React.FC = () => {
     );
   }, []);
 
-  const loadTenants = useCallback(async () => {
+const loadTenants = useCallback(async () => {
     if (!ready || authLoading || authStatus === "restoring") return;
     if (!canViewTenants) {
       setTenants([]);
