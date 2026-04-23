@@ -9,8 +9,11 @@ import {
   fetchTenantTenancies,
   fetchTenants,
   type TenancyApiModel,
+  type TenantApiModel,
+  updateTenantRecord,
   updateTenancy,
 } from "@/api/tenantsApi";
+import { createTenantEvent } from "@/api/tenantEventsWriteApi";
 import { spacing, radius, colors, text } from "../styles/tokens";
 import { Card, Section, Input } from "../components/ui/Ui";
 import { ResponsiveMasterDetail } from "../components/layout/ResponsiveMasterDetail";
@@ -22,7 +25,7 @@ import { useCapabilities } from "@/hooks/useCapabilities";
 import { openUpgradeFlow } from "@/billing/openUpgradeFlow";
 import "./TenantsPage.css";
 
-type TenantWithTenancies = any & { tenancies?: TenancyApiModel[] };
+type TenantWithTenancies = TenantApiModel & { tenancies?: TenancyApiModel[] };
 type MoveOutReason = "LEASE_TERM_END" | "EARLY_LEASE_END" | "EVICTED" | "OTHER";
 
 type OccupancyEditorState = {
@@ -35,6 +38,21 @@ type OccupancyEditorState = {
   moveOutReasonNote: string;
 };
 
+type TenantEditState = {
+  open: boolean;
+  tenantId: string | null;
+  fullName: string;
+  email: string;
+  phone: string;
+};
+
+type TenantNoteState = {
+  open: boolean;
+  tenantId: string | null;
+  tenantName: string;
+  note: string;
+};
+
 const EMPTY_EDITOR: OccupancyEditorState = {
   open: false,
   tenantId: null,
@@ -43,6 +61,21 @@ const EMPTY_EDITOR: OccupancyEditorState = {
   moveOutAt: "",
   moveOutReason: "",
   moveOutReasonNote: "",
+};
+
+const EMPTY_TENANT_EDIT: TenantEditState = {
+  open: false,
+  tenantId: null,
+  fullName: "",
+  email: "",
+  phone: "",
+};
+
+const EMPTY_TENANT_NOTE: TenantNoteState = {
+  open: false,
+  tenantId: null,
+  tenantName: "",
+  note: "",
 };
 
 const MOVE_OUT_REASON_LABEL: Record<MoveOutReason, string> = {
@@ -91,6 +124,37 @@ function buildPropertyLink(tenancy: TenancyApiModel): string | null {
     return `/properties?propertyId=${propertyId}&unitId=${encodeURIComponent(String(unitRef))}`;
   }
   return `/properties?propertyId=${propertyId}`;
+}
+
+function normalizePhoneInput(value: string): string {
+  const digits = String(value || "").replace(/\D/g, "").slice(0, 15);
+  return digits;
+}
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message) return error.message;
+  return fallback;
+}
+
+function describeTenantLinkage(tenant: TenantApiModel & { tenancies?: TenancyApiModel[] }) {
+  const tenancies = Array.isArray(tenant.tenancies) ? tenant.tenancies : [];
+  const activeTenancies = tenancies.filter((tenancy) => tenancy.status !== "inactive");
+  const primaryProperty = tenant.propertyName || tenant.propertyId || "No property linked";
+  const primaryUnit = tenant.unit || tenant.unitLabel || tenant.unitId || "No unit linked";
+  const leaseState = tenant.currentLeaseId ? tenant.currentLeaseId : "No current lease linked";
+
+  return {
+    propertyLabel: primaryProperty,
+    unitLabel: primaryUnit,
+    leaseLabel: leaseState,
+    activeTenancyCount: activeTenancies.length,
+    linkageNote:
+      !tenant.propertyId && !tenant.unitId && !tenant.currentLeaseId
+        ? "This tenant record has no canonical property, unit, or current lease linkage yet."
+        : activeTenancies.length === 0
+        ? "No active tenancy registrations are linked to this tenant."
+        : "Tenant profile links remain separate from tenancy and lease lifecycle state.",
+  };
 }
 
 type TenantsErrorBoundaryState = {
@@ -194,6 +258,10 @@ export const TenantsPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [tenantEdit, setTenantEdit] = useState<TenantEditState>(EMPTY_TENANT_EDIT);
+  const [tenantNote, setTenantNote] = useState<TenantNoteState>(EMPTY_TENANT_NOTE);
+  const [savingTenantProfile, setSavingTenantProfile] = useState(false);
+  const [savingTenantNote, setSavingTenantNote] = useState(false);
   const [savingTenancyId, setSavingTenancyId] = useState<string | null>(null);
   const [occupancySaveError, setOccupancySaveError] = useState<string | null>(null);
   const [occupancyEditor, setOccupancyEditor] = useState<OccupancyEditorState>(EMPTY_EDITOR);
@@ -243,8 +311,8 @@ export const TenantsPage: React.FC = () => {
         rows.map(async (tenant) => {
           if (!tenant?.id) return { ...tenant, tenancies: [] };
           try {
-            const tenancies = Array.isArray((tenant as any).tenancies)
-              ? ((tenant as any).tenancies as TenancyApiModel[])
+            const tenancies = Array.isArray(tenant.tenancies)
+              ? tenant.tenancies
               : await fetchTenantTenancies(String(tenant.id));
             return { ...tenant, tenancies };
           } catch {
@@ -352,11 +420,12 @@ export const TenantsPage: React.FC = () => {
 
       showToast({ message: "Occupancy updated", variant: "success" });
       closeOccupancyEditor();
-    } catch (err: any) {
-      setOccupancySaveError(err?.message || "Failed to update occupancy.");
+    } catch (err: unknown) {
+      const message = getErrorMessage(err, "Failed to update occupancy.");
+      setOccupancySaveError(message);
       showToast({
         message: "Failed to update occupancy",
-        description: err?.message || "Please try again.",
+        description: message,
         variant: "error",
       });
     } finally {
@@ -368,6 +437,7 @@ export const TenantsPage: React.FC = () => {
     ? tenants.find((t) => t.id === selectedTenantId) || null
     : null;
   const tenantExists = Boolean(selectedTenant);
+  const selectedTenantLinkage = selectedTenant ? describeTenantLinkage(selectedTenant) : null;
 
   const filteredTenants = useMemo(() => {
     const base = tenants || [];
@@ -389,6 +459,98 @@ export const TenantsPage: React.FC = () => {
   useEffect(() => {
     void hydrateTenantSummariesBatch(visibleTenantIds);
   }, [visibleTenantIds]);
+
+  const openTenantEdit = () => {
+    if (!selectedTenant) return;
+    setTenantEdit({
+      open: true,
+      tenantId: String(selectedTenant.id),
+      fullName: String(selectedTenant.fullName || selectedTenant.name || ""),
+      email: String(selectedTenant.email || ""),
+      phone: String(selectedTenant.phone || ""),
+    });
+  };
+
+  const closeTenantEdit = () => setTenantEdit(EMPTY_TENANT_EDIT);
+
+  const openTenantNote = () => {
+    if (!selectedTenant) return;
+    setTenantNote({
+      open: true,
+      tenantId: String(selectedTenant.id),
+      tenantName: String(selectedTenant.fullName || selectedTenant.name || "Tenant"),
+      note: "",
+    });
+  };
+
+  const closeTenantNote = () => setTenantNote(EMPTY_TENANT_NOTE);
+
+  const handleSaveTenantProfile = async () => {
+    if (!tenantEdit.tenantId) return;
+    const fullName = tenantEdit.fullName.trim();
+    if (!fullName) {
+      showToast({ message: "Tenant name is required", variant: "warning" });
+      return;
+    }
+
+    try {
+      setSavingTenantProfile(true);
+      const updated = await updateTenantRecord(tenantEdit.tenantId, {
+        fullName,
+        email: tenantEdit.email.trim() || null,
+        phone: tenantEdit.phone.trim() || null,
+      });
+      setTenants((prev) =>
+        prev.map((tenant) =>
+          String(tenant.id) === String(tenantEdit.tenantId)
+            ? { ...tenant, ...updated }
+            : tenant
+        )
+      );
+      showToast({ message: "Tenant updated", variant: "success" });
+      closeTenantEdit();
+    } catch (err: unknown) {
+      showToast({
+        message: "Failed to update tenant",
+        description: getErrorMessage(err, "Please try again."),
+        variant: "error",
+      });
+    } finally {
+      setSavingTenantProfile(false);
+    }
+  };
+
+  const handleCreateTenantNote = async () => {
+    if (!tenantNote.tenantId) return;
+    const note = tenantNote.note.trim();
+    if (!note) {
+      showToast({ message: "Add a note before saving", variant: "warning" });
+      return;
+    }
+
+    try {
+      setSavingTenantNote(true);
+      await createTenantEvent({
+        tenantId: tenantNote.tenantId,
+        type: "NOTE_ADDED",
+        description: note,
+      });
+      showToast({
+        message: "Tenant note added",
+        description: `Saved to ${tenantNote.tenantName}'s timeline.`,
+        variant: "success",
+      });
+      closeTenantNote();
+    } catch (err: unknown) {
+      showToast({
+        message: "Failed to add tenant note",
+        description: getErrorMessage(err, "Please try again."),
+        variant: "error",
+      });
+    } finally {
+      setSavingTenantNote(false);
+    }
+  };
 
   if (ready && !authLoading && authStatus !== "restoring" && !canViewTenants) {
     return (
@@ -637,7 +799,7 @@ export const TenantsPage: React.FC = () => {
                 className="rc-full-width-mobile"
               >
                 <option value="">Select tenant</option>
-                {filteredTenants.map((tenant: any) => (
+                {filteredTenants.map((tenant) => (
                   <option key={tenant.id} value={tenant.id}>
                     {tenant.name || tenant.fullName || "Tenant"}
                   </option>
@@ -653,6 +815,107 @@ export const TenantsPage: React.FC = () => {
           }}
           detail={
             <div className="rc-tenants-detail">
+              {selectedTenant && selectedTenantLinkage ? (
+                <Section>
+                  <div style={{ display: "grid", gap: 12 }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: 12,
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <div style={{ display: "grid", gap: 4 }}>
+                        <div style={{ fontSize: 16, fontWeight: 700, color: text.primary }}>
+                          Tenant actions
+                        </div>
+                        <div style={{ fontSize: 12, color: text.muted }}>
+                          Manage the tenant person record separately from tenancy and lease state.
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <button
+                          type="button"
+                          onClick={openTenantEdit}
+                          style={{
+                            padding: "8px 10px",
+                            borderRadius: radius.md,
+                            border: `1px solid ${colors.border}`,
+                            background: colors.card,
+                            color: text.primary,
+                            cursor: "pointer",
+                          }}
+                        >
+                          Edit tenant
+                        </button>
+                        <button
+                          type="button"
+                          onClick={openTenantNote}
+                          style={{
+                            padding: "8px 10px",
+                            borderRadius: radius.md,
+                            border: `1px solid ${colors.border}`,
+                            background: colors.card,
+                            color: text.primary,
+                            cursor: "pointer",
+                          }}
+                        >
+                          Add note
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleInviteAction}
+                          style={{
+                            padding: "8px 10px",
+                            borderRadius: radius.md,
+                            border: `1px solid ${inviteEnabled ? colors.border : "#f5d0fe"}`,
+                            background: inviteEnabled ? colors.card : "#faf5ff",
+                            color: text.primary,
+                            cursor: "pointer",
+                          }}
+                        >
+                          {inviteEnabled ? "Send tenant invite" : "Unlock Tenant Invites"}
+                        </button>
+                      </div>
+                    </div>
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                        gap: 10,
+                      }}
+                    >
+                      <Card>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: text.muted }}>Property</div>
+                        <div style={{ marginTop: 4, fontSize: 14, color: text.primary }}>
+                          {selectedTenantLinkage.propertyLabel}
+                        </div>
+                      </Card>
+                      <Card>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: text.muted }}>Unit</div>
+                        <div style={{ marginTop: 4, fontSize: 14, color: text.primary }}>
+                          {selectedTenantLinkage.unitLabel}
+                        </div>
+                      </Card>
+                      <Card>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: text.muted }}>Current lease link</div>
+                        <div style={{ marginTop: 4, fontSize: 14, color: text.primary }}>
+                          {selectedTenantLinkage.leaseLabel}
+                        </div>
+                      </Card>
+                      <Card>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: text.muted }}>Active registered units</div>
+                        <div style={{ marginTop: 4, fontSize: 14, color: text.primary }}>
+                          {selectedTenantLinkage.activeTenancyCount}
+                        </div>
+                      </Card>
+                    </div>
+                    <div style={{ fontSize: 12, color: text.muted }}>{selectedTenantLinkage.linkageNote}</div>
+                  </div>
+                </Section>
+              ) : null}
               <Section style={{ minHeight: 0 }}>
                 {!selectedTenantId && <div style={{ fontSize: 13, color: text.muted }}>Select a tenant from the list to see details.</div>}
                 {selectedTenantId && !tenantExists && !loading && (
@@ -718,10 +981,159 @@ export const TenantsPage: React.FC = () => {
       <InviteTenantModal
         open={inviteOpen}
         onClose={() => setInviteOpen(false)}
+        defaultPropertyId={selectedTenant?.propertyId || undefined}
+        defaultUnitId={selectedTenant?.unitId || undefined}
+        defaultTenantEmail={selectedTenant?.email || undefined}
+        defaultTenantName={selectedTenant?.fullName || selectedTenant?.name || undefined}
         onInviteCreated={() => {
           void loadTenants();
         }}
       />
+
+      {tenantEdit.open ? (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(15, 23, 42, 0.45)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 2200,
+            padding: 16,
+          }}
+        >
+          <Card style={{ width: "min(480px, 96vw)", borderRadius: radius.lg }}>
+            <div style={{ display: "grid", gap: 12 }}>
+              <div style={{ fontWeight: 700, fontSize: 16 }}>Edit tenant</div>
+              <label style={{ display: "grid", gap: 4, fontSize: 12, color: text.muted }}>
+                Full name
+                <input
+                  value={tenantEdit.fullName}
+                  onChange={(e) => setTenantEdit((prev) => ({ ...prev, fullName: e.target.value }))}
+                  style={{ padding: 8, borderRadius: radius.md, border: `1px solid ${colors.border}` }}
+                />
+              </label>
+              <label style={{ display: "grid", gap: 4, fontSize: 12, color: text.muted }}>
+                Email
+                <input
+                  value={tenantEdit.email}
+                  onChange={(e) => setTenantEdit((prev) => ({ ...prev, email: e.target.value }))}
+                  style={{ padding: 8, borderRadius: radius.md, border: `1px solid ${colors.border}` }}
+                />
+              </label>
+              <label style={{ display: "grid", gap: 4, fontSize: 12, color: text.muted }}>
+                Phone
+                <input
+                  value={tenantEdit.phone}
+                  onChange={(e) =>
+                    setTenantEdit((prev) => ({
+                      ...prev,
+                      phone: normalizePhoneInput(e.target.value),
+                    }))
+                  }
+                  style={{ padding: 8, borderRadius: radius.md, border: `1px solid ${colors.border}` }}
+                />
+              </label>
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                <button
+                  type="button"
+                  onClick={closeTenantEdit}
+                  style={{
+                    padding: "8px 10px",
+                    borderRadius: radius.md,
+                    border: `1px solid ${colors.border}`,
+                    background: colors.card,
+                    color: text.primary,
+                    cursor: "pointer",
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleSaveTenantProfile()}
+                  disabled={savingTenantProfile}
+                  style={{
+                    padding: "8px 10px",
+                    borderRadius: radius.md,
+                    border: `1px solid ${colors.accent}`,
+                    background: "rgba(37, 99, 235, 0.12)",
+                    color: colors.accent,
+                    cursor: "pointer",
+                    opacity: savingTenantProfile ? 0.7 : 1,
+                  }}
+                >
+                  {savingTenantProfile ? "Saving..." : "Save tenant"}
+                </button>
+              </div>
+            </div>
+          </Card>
+        </div>
+      ) : null}
+
+      {tenantNote.open ? (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(15, 23, 42, 0.45)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 2200,
+            padding: 16,
+          }}
+        >
+          <Card style={{ width: "min(480px, 96vw)", borderRadius: radius.lg }}>
+            <div style={{ display: "grid", gap: 12 }}>
+              <div style={{ fontWeight: 700, fontSize: 16 }}>Add tenant note</div>
+              <div style={{ fontSize: 12, color: text.muted }}>
+                Notes are saved as audited tenant timeline events.
+              </div>
+              <textarea
+                value={tenantNote.note}
+                onChange={(e) => setTenantNote((prev) => ({ ...prev, note: e.target.value }))}
+                rows={5}
+                placeholder="Add a note about contact details, follow-up, or context."
+                style={{ padding: 8, borderRadius: radius.md, border: `1px solid ${colors.border}`, resize: "vertical" }}
+              />
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                <button
+                  type="button"
+                  onClick={closeTenantNote}
+                  style={{
+                    padding: "8px 10px",
+                    borderRadius: radius.md,
+                    border: `1px solid ${colors.border}`,
+                    background: colors.card,
+                    color: text.primary,
+                    cursor: "pointer",
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleCreateTenantNote()}
+                  disabled={savingTenantNote}
+                  style={{
+                    padding: "8px 10px",
+                    borderRadius: radius.md,
+                    border: `1px solid ${colors.accent}`,
+                    background: "rgba(37, 99, 235, 0.12)",
+                    color: colors.accent,
+                    cursor: "pointer",
+                    opacity: savingTenantNote ? 0.7 : 1,
+                  }}
+                >
+                  {savingTenantNote ? "Saving..." : "Save note"}
+                </button>
+              </div>
+            </div>
+          </Card>
+        </div>
+      ) : null}
 
       {occupancyEditor.open ? (
         <div

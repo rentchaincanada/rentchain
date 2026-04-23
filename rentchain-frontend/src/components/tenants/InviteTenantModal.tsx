@@ -14,10 +14,39 @@ import { Button } from "../ui/Ui";
 interface Props {
   open: boolean;
   onClose: () => void;
-  onInviteCreated?: (payload: any) => void;
+  onInviteCreated?: (payload: unknown) => void;
   defaultPropertyId?: string;
   defaultUnitId?: string;
   defaultLeaseId?: string;
+  defaultTenantEmail?: string;
+  defaultTenantName?: string;
+}
+
+type PropertyOption = { id: string; name: string };
+type UnitOption = {
+  id: string;
+  label: string;
+  inviteEligible: boolean;
+  inviteEligibilityReason?: string | null;
+};
+type InviteResponse = {
+  ok?: boolean;
+  inviteUrl?: string;
+  invite?: { inviteUrl?: string };
+  emailed?: boolean;
+  emailError?: string;
+  error?: string;
+  capability?: string;
+  plan?: string;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object";
+}
+
+function extractErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String(error || "");
 }
 
 export const InviteTenantModal: React.FC<Props> = ({
@@ -26,6 +55,8 @@ export const InviteTenantModal: React.FC<Props> = ({
   onInviteCreated,
   defaultPropertyId,
   defaultUnitId,
+  defaultTenantEmail,
+  defaultTenantName,
 }) => {
   const [tenantEmail, setTenantEmail] = useState("");
   const [tenantName, setTenantName] = useState("");
@@ -34,10 +65,8 @@ export const InviteTenantModal: React.FC<Props> = ({
   const [successMsg, setSuccessMsg] = useState("");
   const [infoMsg, setInfoMsg] = useState("");
   const [loading, setLoading] = useState(false);
-  const [properties, setProperties] = useState<Array<{ id: string; name: string }>>([]);
-  const [units, setUnits] = useState<
-    Array<{ id: string; label: string; inviteEligible: boolean; inviteEligibilityReason?: string | null }>
-  >([]);
+  const [properties, setProperties] = useState<PropertyOption[]>([]);
+  const [units, setUnits] = useState<UnitOption[]>([]);
   const [propertyId, setPropertyId] = useState(defaultPropertyId || "");
   const [unitId, setUnitId] = useState(defaultUnitId || "");
   const [loadingProperties, setLoadingProperties] = useState(false);
@@ -84,27 +113,43 @@ export const InviteTenantModal: React.FC<Props> = ({
 
   React.useEffect(() => {
     if (!open) return;
+    setTenantEmail(String(defaultTenantEmail || ""));
+    setTenantName(String(defaultTenantName || ""));
+    setPropertyId(String(defaultPropertyId || ""));
+    setUnitId(String(defaultUnitId || ""));
+    setInviteUrl("");
+    setErr("");
+    setSuccessMsg("");
+    setInfoMsg("");
+  }, [open, defaultPropertyId, defaultTenantEmail, defaultTenantName, defaultUnitId]);
+
+  React.useEffect(() => {
+    if (!open) return;
     let mounted = true;
     (async () => {
       setLoadingProperties(true);
       try {
-        const res: any = await fetchProperties();
+        const res = await fetchProperties();
         if (!mounted) return;
-        const list = Array.isArray(res?.properties)
-          ? res.properties
-          : Array.isArray(res?.items)
-          ? res.items
+        const record = isRecord(res) ? res : null;
+        const list = Array.isArray(record?.properties)
+          ? record.properties
+          : Array.isArray(record?.items)
+          ? record.items
           : Array.isArray(res)
           ? res
           : [];
         const normalized = list
-          .map((p: any) => ({
-            id: String(p?.id || p?.propertyId || "").trim(),
-            name: String(p?.name || p?.addressLine1 || p?.id || "Property"),
-          }))
-          .filter((p: any) => Boolean(p.id));
+          .map((property) => {
+            const row = isRecord(property) ? property : null;
+            return {
+              id: String(row?.id || row?.propertyId || "").trim(),
+              name: String(row?.name || row?.addressLine1 || row?.id || "Property"),
+            };
+          })
+          .filter((property) => Boolean(property.id));
         setProperties(normalized);
-        if (!propertyId && normalized.length > 0) {
+        if (!String(defaultPropertyId || "").trim() && !propertyId && normalized.length > 0) {
           setPropertyId(String(defaultPropertyId || normalized[0].id));
         }
       } catch {
@@ -116,7 +161,7 @@ export const InviteTenantModal: React.FC<Props> = ({
     return () => {
       mounted = false;
     };
-  }, [open, defaultPropertyId]);
+  }, [open, defaultPropertyId, propertyId]);
 
   React.useEffect(() => {
     if (!open || !propertyId) {
@@ -131,19 +176,22 @@ export const InviteTenantModal: React.FC<Props> = ({
         const res = await fetchUnitsForProperty(propertyId);
         if (!mounted) return;
         const mapped = (res || [])
-          .map((u: any) => ({
-            id: String(u?.id || u?.unitId || "").trim(),
-            label: String(u?.unitNumber || u?.label || u?.name || "Unit"),
-            inviteEligible: u?.inviteEligible !== false,
+          .map((unit) => {
+            const row = isRecord(unit) ? unit : null;
+            return {
+            id: String(row?.id || row?.unitId || "").trim(),
+            label: String(row?.unitNumber || row?.label || row?.name || "Unit"),
+            inviteEligible: row?.inviteEligible !== false,
             inviteEligibilityReason:
-              u?.inviteEligibilityReason != null ? String(u.inviteEligibilityReason) : null,
-          }))
-          .filter((u: any) => Boolean(u.id));
+              row?.inviteEligibilityReason != null ? String(row.inviteEligibilityReason) : null,
+          };
+          })
+          .filter((unit) => Boolean(unit.id));
         setUnits(mapped);
-        if (defaultUnitId && mapped.some((u: any) => u.id === defaultUnitId)) {
+        if (defaultUnitId && mapped.some((unit) => unit.id === defaultUnitId)) {
           setUnitId(defaultUnitId);
         } else {
-          setUnitId((prev) => (mapped.some((u: any) => u.id === prev) ? prev : ""));
+          setUnitId((prev) => (mapped.some((unit) => unit.id === prev) ? prev : ""));
         }
       } catch {
         if (mounted) setUnits([]);
@@ -188,12 +236,12 @@ export const InviteTenantModal: React.FC<Props> = ({
         setErr("Please enter a valid tenant email.");
         return;
       }
-      const data: any = await createTenantInvite({
+      const data = (await createTenantInvite({
         tenantEmail: normalizedEmail,
         tenantName: tenantName || undefined,
         propertyId,
         unitId,
-      });
+      })) as InviteResponse;
 
       if (!data?.ok) {
         const errorCode = String(data?.error || "").trim().toLowerCase();
@@ -243,10 +291,13 @@ export const InviteTenantModal: React.FC<Props> = ({
       });
       await setOnboardingStep("tenantInvited", true).catch(() => {});
       onInviteCreated?.(data);
-    } catch (e: any) {
+    } catch (e: unknown) {
+      const errorRecord = isRecord(e) ? e : null;
+      const responseRecord = isRecord(errorRecord?.response) ? errorRecord.response : null;
+      const dataRecord = isRecord(responseRecord?.data) ? responseRecord.data : null;
       const respDetail =
-        (e as any)?.response?.data?.detail || (e as any)?.response?.data?.error;
-      const msg = String(respDetail || e?.message || "Failed to send invite");
+        dataRecord?.detail || dataRecord?.error;
+      const msg = String(respDetail || extractErrorMessage(e) || "Failed to send invite");
       console.debug("[invite-tenant] request error", {
         message: msg,
         raw: e,
