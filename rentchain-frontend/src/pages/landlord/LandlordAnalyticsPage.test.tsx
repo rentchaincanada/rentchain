@@ -501,6 +501,8 @@ describe("LandlordAnalyticsPage", () => {
     expect(screen.getByRole("heading", { name: /Decision outcomes/i })).toBeInTheDocument();
     expect(screen.getByText(/all-time landlord decision outcomes from canonical decision events/i)).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Recommended next actions/i })).toBeInTheDocument();
+    expect(screen.getAllByText(/Automation preview/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Human confirmation required/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Beta carries the strongest vacancy pressure/i)).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Predictive metrics/i })).toBeInTheDocument();
     expect(screen.getByText(/Vacancy pressure is present in the current view/i)).toBeInTheDocument();

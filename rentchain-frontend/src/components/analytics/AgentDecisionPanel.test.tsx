@@ -160,6 +160,8 @@ describe("AgentDecisionPanel", () => {
     expect(screen.getByText(/Workflow: Vacancy readiness/i)).toBeInTheDocument();
     expect(screen.getByText(/Action required/i)).toBeInTheDocument();
     expect(screen.getByText(/Execution controls/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Automation preview/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Human confirmation required/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Execution disabled for this state/i)).toBeInTheDocument();
     expect(screen.getByText(/This decision is in a lifecycle state that does not allow execution/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Open vacancy readiness/i })).toHaveAttribute("href", "/analytics?propertyId=prop-2");
@@ -578,8 +580,10 @@ describe("AgentDecisionPanel", () => {
     );
 
     expect(screen.getByText(/Already processed/i)).toBeInTheDocument();
-    expect(screen.getByText(/Duplicate safeguard active/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Duplicate safeguard active/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Duplicate protection active/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Duplicate execution prevented/i)).toBeInTheDocument();
+    expect(screen.getByText(/Guard key: maintenance.auto_approve_cost:work_order:wo-1/i)).toBeInTheDocument();
     expect(screen.getByText(/Executed 1 time/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Execute now/i })).not.toBeInTheDocument();
   });

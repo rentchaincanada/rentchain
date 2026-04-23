@@ -13,7 +13,12 @@ import {
 } from "@/api/landlordAnalyticsApi";
 import type { TimelineItem } from "@/api/timelineApi";
 import { deriveDecisionExecutionState } from "./decisionExecutionAggregation";
-import { blockedReasonDisplay, executionStateDisplay, formatExecutionSummary } from "./decisionExecutionDisplay";
+import {
+  blockedReasonDisplay,
+  deriveAutomationPreview,
+  executionStateDisplay,
+  formatExecutionSummary,
+} from "./decisionExecutionDisplay";
 
 const priorityTone: Record<"low" | "medium" | "high", { bg: string; text: string }> = {
   low: { bg: "rgba(14, 165, 233, 0.12)", text: "#075985" },
@@ -226,6 +231,7 @@ function ActionDecisionCard(props: {
   const governanceSummary = formatExecutionSummary(effectiveExecutionSummary(decision));
   const executionDisplay = executionStateDisplay[decisionExecutionState];
   const blockedDisplay = decisionBlockedReason ? blockedReasonDisplay[decisionBlockedReason] : null;
+  const automationPreview = deriveAutomationPreview(decision);
 
   return (
     <div
@@ -354,6 +360,31 @@ function ActionDecisionCard(props: {
             <div style={{ color: "#334155", fontSize: "0.82rem" }}>{governanceSummary.join(" • ")}</div>
           </div>
         ) : null}
+        <div
+          style={{
+            display: "grid",
+            gap: 4,
+            padding: 10,
+            borderRadius: 10,
+            border: "1px dashed #cbd5e1",
+            background: "#fff",
+          }}
+        >
+          <div style={{ color: "#64748b", fontSize: "0.78rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+            {automationPreview.heading}
+          </div>
+          <div style={{ color: "#0f172a", fontSize: "0.84rem", fontWeight: 700 }}>{automationPreview.status}</div>
+          <div style={{ color: "#475569", fontSize: "0.82rem" }}>{automationPreview.summary}</div>
+          <div style={{ color: "#0f172a", fontSize: "0.8rem", fontWeight: 700 }}>{automationPreview.safeguardLabel}</div>
+          <div style={{ color: "#475569", fontSize: "0.8rem" }}>{automationPreview.safeguardDescription}</div>
+          {automationPreview.duplicateProtectionActive ? (
+            <div style={{ color: "#991b1b", fontSize: "0.8rem", fontWeight: 700 }}>Duplicate protection active</div>
+          ) : null}
+          {automationPreview.guardKeyLabel ? (
+            <div style={{ color: "#64748b", fontSize: "0.78rem", fontFamily: "monospace" }}>{automationPreview.guardKeyLabel}</div>
+          ) : null}
+          <div style={{ color: "#334155", fontSize: "0.8rem" }}>{automationPreview.nextStep}</div>
+        </div>
       </div>
       {decision.executionOutcomeStatus !== "none" ? (
         <div
