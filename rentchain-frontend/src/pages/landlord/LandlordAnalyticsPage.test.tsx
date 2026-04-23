@@ -512,6 +512,24 @@ describe("LandlordAnalyticsPage", () => {
     expect(macShellSpy).toHaveBeenCalledWith(expect.objectContaining({ title: "Analytics", showTopNav: false }));
   });
 
+  it("shows an operator queue summary above the analytics decision list", async () => {
+    await mockEntitlements();
+    await mockApiResolved();
+
+    render(
+      <MemoryRouter>
+        <LandlordAnalyticsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole("region", { name: /Operator queue/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Action required · 1/i })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Action required · 1/i }));
+
+    expect(screen.getByText(/Beta carries the strongest vacancy pressure/i)).toBeInTheDocument();
+  });
+
   it("hydrates analytics focus from destination query params", async () => {
     await mockEntitlements();
     const fetchLandlordAnalyticsSnapshot = await mockApiResolved();

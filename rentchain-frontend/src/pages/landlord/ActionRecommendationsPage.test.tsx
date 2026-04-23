@@ -1,6 +1,6 @@
 import React from "react";
 import type { LandlordAnalyticsSnapshot } from "../../api/landlordAnalyticsApi";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import ActionRecommendationsPage from "./ActionRecommendationsPage";
@@ -171,6 +171,106 @@ describe("ActionRecommendationsPage", () => {
     const actionLinks = screen.getAllByRole("link");
     expect(actionLinks.map((node) => node.textContent)).toEqual(["Open lease renewals", "Open vacancy readiness"]);
     expect(screen.getByText(/Workflow: Lease renewals/i)).toBeInTheDocument();
+  });
+
+  it("shows an operator queue summary and filters the current inbox in memory", async () => {
+    await mockEntitlements();
+    const { fetchLandlordAnalyticsSnapshot } = await import("../../api/landlordAnalyticsApi");
+    vi.mocked(fetchLandlordAnalyticsSnapshot).mockResolvedValue({
+      decisionOutcomeAnalytics: {
+        scope: "landlord_all_time",
+        appearedCount: 4,
+        reviewedCount: 1,
+        dismissedCount: 0,
+        executedCount: 1,
+        failedExecutionCount: 0,
+        resolvedCount: 2,
+        resolutionRate: 0.5,
+        medianTimeToResolutionHours: 12,
+        averageTimeToExecutionHours: 8,
+      },
+      decisions: {
+        items: [
+          {
+            id: "ready",
+            decisionType: "start_screening_checkout",
+            priority: "medium",
+            explanation: "A screening checkout can start now.",
+            recommendedAction: "Start screening checkout",
+            actionKey: "open_screening_checkout_flow",
+            actionLabel: "Open screening checkout",
+            destination: "/applications/app-1",
+            workflowCategory: "screening_checkout",
+            automationEligible: true,
+            automationState: "ready",
+            automationReason: null,
+            executionMappingState: "mapped",
+            executionMapping: {
+              action: "screening.auto_start_checkout",
+              resourceType: "rental_application",
+              resourceId: "app-1",
+              prerequisitesMet: true,
+              prerequisiteReason: null,
+            },
+            executionInputState: "complete",
+            executionInputReason: null,
+            executionInputMissingFields: [],
+            executionInput: null,
+            executedAt: null,
+            executionOutcomeStatus: "none",
+            executionOutcomeAt: null,
+            executionOutcomeReason: null,
+            href: "/applications/app-1",
+            state: "pending",
+            reviewedAt: null,
+            supportingSignals: [],
+          },
+          {
+            id: "blocked",
+            decisionType: "review_lease_renewals",
+            priority: "medium",
+            explanation: "Renewal inputs are still incomplete.",
+            recommendedAction: "Review renewals",
+            actionKey: "open_lease_renewals_flow",
+            actionLabel: "Open lease renewals",
+            destination: "/leases",
+            workflowCategory: "lease_renewals",
+            automationEligible: false,
+            automationState: "blocked",
+            automationReason: "Inputs missing",
+            executionMappingState: "none",
+            executionMapping: null,
+            executionInputState: "none",
+            executionInputReason: null,
+            executionInputMissingFields: [],
+            executionInput: null,
+            executedAt: null,
+            executionOutcomeStatus: "none",
+            executionOutcomeAt: null,
+            executionOutcomeReason: null,
+            href: "/leases",
+            state: "pending",
+            reviewedAt: null,
+            supportingSignals: [],
+          },
+        ],
+      },
+    } as LandlordAnalyticsSnapshot);
+
+    render(
+      <MemoryRouter>
+        <ActionRecommendationsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole("region", { name: /Operator queue/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Ready to run · 1/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Action required · 1/i })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Ready to run · 1/i }));
+
+    expect(screen.getByText(/A screening checkout can start now/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Renewal inputs are still incomplete/i)).not.toBeInTheDocument();
   });
 
   it("renders a clean empty state when the snapshot has no decisions", async () => {

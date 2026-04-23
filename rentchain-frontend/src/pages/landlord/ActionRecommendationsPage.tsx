@@ -8,7 +8,14 @@ import { LockedFeature } from "@/components/billing/LockedFeature";
 import { FeatureTeaser } from "@/components/billing/FeatureTeaser";
 import { resolveRequiredPlanLabel } from "@/lib/upgradePrompt";
 import AgentDecisionPanel from "../../components/analytics/AgentDecisionPanel";
+import DecisionQueueSummary from "../../components/analytics/DecisionQueueSummary";
 import DecisionOutcomeAnalyticsPanel from "../../components/analytics/DecisionOutcomeAnalyticsPanel";
+import {
+  filterDecisionsByExecutionState,
+  type DecisionExecutionFilter,
+} from "../../components/analytics/decisionExecutionAggregation";
+
+const EMPTY_DECISIONS: LandlordAnalyticsSnapshot["decisions"]["items"] = [];
 
 function errorMessage(error: unknown) {
   if (error instanceof Error && error.message) return error.message;
@@ -26,8 +33,14 @@ export default function ActionRecommendationsPage() {
   const [snapshot, setSnapshot] = React.useState<LandlordAnalyticsSnapshot | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
+  const [executionFilter, setExecutionFilter] = React.useState<DecisionExecutionFilter>("all");
   const canViewAnalyticsDecisions = canViewPortfolioScore && hasCapability("portfolio_analytics");
   const canViewDecisionInbox = canViewActionRecommendations && canViewAnalyticsDecisions;
+  const decisions = snapshot?.decisions?.items ?? EMPTY_DECISIONS;
+  const filteredDecisions = React.useMemo(
+    () => filterDecisionsByExecutionState(decisions, executionFilter),
+    [decisions, executionFilter]
+  );
 
   React.useEffect(() => {
     if (entitlementLoading || !canViewDecisionInbox) {
@@ -113,8 +126,13 @@ export default function ActionRecommendationsPage() {
         {!entitlementLoading && canViewDecisionInbox && !loading && !error ? (
           <>
             <DecisionOutcomeAnalyticsPanel analytics={snapshot?.decisionOutcomeAnalytics} />
+            <DecisionQueueSummary
+              decisions={decisions}
+              filter={executionFilter}
+              onFilterChange={setExecutionFilter}
+            />
             <AgentDecisionPanel
-              decisions={snapshot?.decisions?.items || []}
+              decisions={filteredDecisions}
               title="Decision inbox"
               description="Review the next landlord actions surfaced directly from your current analytics snapshot."
               emptyMessage="No prioritized landlord actions are surfaced for this view right now."
