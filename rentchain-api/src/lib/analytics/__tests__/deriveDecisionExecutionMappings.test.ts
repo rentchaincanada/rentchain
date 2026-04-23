@@ -303,7 +303,7 @@ describe("applyDecisionExecutionMappings", () => {
     );
   });
 
-  it("maps a deterministic screening checkout decision to one exact application but keeps execution disabled for now", () => {
+  it("maps a deterministic screening checkout decision to one exact application and marks it execution-ready", () => {
     const result = applyDecisionExecutionMappings({
       decisions: [
         baseDecision({
@@ -316,7 +316,7 @@ describe("applyDecisionExecutionMappings", () => {
           workflowCategory: "screening_checkout",
           recommendedAction: "Start screening checkout",
           automationState: "blocked",
-          automationReason: "This screening checkout decision now has a deterministic application target, but explicit screening execution is not enabled in this mission.",
+          automationReason: "This screening checkout decision still needs one exact screening-ready application and complete checkout inputs before execution.",
         }),
       ],
       leases: [],
@@ -357,7 +357,7 @@ describe("applyDecisionExecutionMappings", () => {
 
     expect(result[0]).toEqual(
       expect.objectContaining({
-        automationEligible: false,
+        automationEligible: true,
         executionMappingState: "mapped",
         executionMapping: {
           action: "screening.auto_start_checkout",

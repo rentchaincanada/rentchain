@@ -82,7 +82,7 @@ describe("deriveDecisionAutomationRule", () => {
     );
   });
 
-  it("keeps screening checkout decisions blocked until explicit screening execution is enabled", () => {
+  it("marks screening checkout decisions ready once deterministic execution is enabled", () => {
     expect(
       deriveDecisionAutomationRule(
         baseDecision({
@@ -94,6 +94,7 @@ describe("deriveDecisionAutomationRule", () => {
           recommendedAction: "Start screening checkout",
           destination: "/applications?entry=screening-checkout&applicationId=app-1",
           href: "/applications?entry=screening-checkout&applicationId=app-1",
+          automationEligible: true,
           executionMappingState: "mapped",
           executionMapping: {
             action: "screening.auto_start_checkout",
@@ -127,9 +128,9 @@ describe("deriveDecisionAutomationRule", () => {
       )
     ).toEqual(
       expect.objectContaining({
-        automationEligible: false,
-        automationState: "blocked",
-        automationReason: expect.stringContaining("explicit screening execution is not enabled"),
+        automationEligible: true,
+        automationState: "ready",
+        automationReason: "This decision is active and already mapped to a deterministic automation path.",
       })
     );
   });

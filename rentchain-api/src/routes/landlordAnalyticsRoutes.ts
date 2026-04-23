@@ -1,10 +1,12 @@
 import { Router } from "express";
 import { writeCanonicalEvent } from "../lib/events/buildEvent";
 import { executeAutomation } from "../lib/automation/automationExecutor";
-import { buildLeaseNoticePolicyRequest } from "../lib/policy/policyAdapters";
+import { buildLeaseNoticePolicyRequest, buildScreeningPolicyRequest } from "../lib/policy/policyAdapters";
 import { evaluatePolicy, toAutopilotPolicySummary, writePolicyEvaluatedEvent } from "../lib/policy/policyEvaluator";
 import { requireAuth } from "../middleware/requireAuth";
 import { requireLandlord } from "../middleware/requireLandlord";
+import { getScreeningProviderHealth } from "../services/screening/providerHealth";
+import { assertTransUnionConnectedForScreening } from "../services/integrations/transunion/transunionService";
 import {
   buildLeaseNoticePreviewInputFromLease,
   getLeaseForLandlordWorkflow,
@@ -15,6 +17,13 @@ import {
   executeMaintenanceApprovalAutomation,
   loadMaintenanceApprovalWorkOrderForLandlord,
 } from "../services/maintenanceApprovalExecutionService";
+import {
+  executeScreeningCheckout,
+  isTransUnionReferralMode,
+  loadLatestScreeningOrderForApplication,
+  loadScreeningApplicationForLandlord,
+  shouldUseMockScreeningCheckoutOverride,
+} from "../services/screeningCheckoutExecutionService";
 import { loadLandlordAnalyticsSnapshot } from "../services/landlord/landlordAnalyticsSnapshot";
 import {
   saveExecutedLandlordDecisionState,
@@ -24,11 +33,26 @@ import {
   saveSnoozedLandlordDecisionState,
 } from "../services/landlord/landlordDecisionStates";
 import { loadLandlordDecisionTimeline } from "../services/landlord/landlordDecisionHistory";
+import {
+  deriveScreeningCheckoutExecutionInputSnapshot,
+  evaluateScreeningApplicationEligibility,
+  resolveScreeningConsentPayload,
+  validateScreeningConsentPayload,
+} from "../lib/screeningCheckoutReadiness";
 
 const router = Router();
 
 function asString(value: unknown, max = 240) {
   return String(value || "").trim().slice(0, max);
+}
+
+function resolveFrontendOriginInput(req: any) {
+  return (
+    req?.headers?.["x-frontend-origin"] ||
+    req?.headers?.origin ||
+    req?.headers?.referer ||
+    null
+  );
 }
 
 function decisionStatePayload(state: any) {
@@ -263,6 +287,7 @@ router.post("/landlord/analytics/decisions/:decisionId/execute", requireAuth, re
     if (!resolved) return;
     const { landlordId, decisionId, decision } = resolved;
     const actorId = asString(req.user?.id || landlordId, 240) || null;
+    const actorRole = asString(req.user?.role, 80).toLowerCase() || "landlord";
 
     if (decision.automationState !== "ready") {
       return res.status(409).json({ ok: false, error: "DECISION_NOT_READY", reason: decision.automationReason || null });
@@ -431,6 +456,166 @@ router.post("/landlord/analytics/decisions/:decisionId/execute", requireAuth, re
           landlordId,
           initiatedFrom: "decision_execute",
           decisionId,
+        });
+      } else if (
+        decision.executionMapping.action === "screening.auto_start_checkout" &&
+        decision.executionMapping.resourceType === "rental_application"
+      ) {
+        const applicationId = decision.executionMapping.resourceId;
+        const applicationResult = await loadScreeningApplicationForLandlord({
+          landlordId,
+          applicationId,
+        });
+        if (!applicationResult.ok) {
+          return res.status(applicationResult.error === "FORBIDDEN" ? 403 : 404).json({
+            ok: false,
+            error: applicationResult.error,
+          });
+        }
+        const application = applicationResult.application as any;
+
+        const latestOrder = await loadLatestScreeningOrderForApplication(applicationId);
+        const executionInput = deriveScreeningCheckoutExecutionInputSnapshot({
+          application,
+          latestOrder,
+          now: Date.now(),
+        });
+        if (executionInput.state !== "complete") {
+          return res.status(409).json({
+            ok: false,
+            error: "DECISION_INPUTS_INCOMPLETE",
+            missingFields: executionInput.missingFields || [],
+            reason: executionInput.reason || null,
+          });
+        }
+
+        const consent = resolveScreeningConsentPayload({}, application);
+        const consentCheck = validateScreeningConsentPayload(consent);
+        if (!consentCheck.ok) {
+          return res.status(409).json({
+            ok: false,
+            error: "DECISION_INPUTS_INCOMPLETE",
+            missingFields: decision.executionInputMissingFields || [],
+            reason: consentCheck.error,
+          });
+        }
+
+        const providerHealth = await getScreeningProviderHealth();
+        const referralMode = isTransUnionReferralMode();
+        const allowMockOverride = shouldUseMockScreeningCheckoutOverride({
+          role: actorRole,
+          seedKey: decision.executionMapping.resourceId,
+        });
+        const providerReady =
+          referralMode ||
+          allowMockOverride ||
+          process.env.NODE_ENV !== "production" ||
+          (providerHealth.configured && providerHealth.preflightOk);
+
+        if (
+          process.env.NODE_ENV === "production" &&
+          !referralMode &&
+          providerHealth.configured &&
+          providerHealth.preflightOk &&
+          !allowMockOverride
+        ) {
+          try {
+            await assertTransUnionConnectedForScreening(
+              asString(application?.landlordId, 240) || landlordId
+            );
+          } catch (error: any) {
+            if (error?.statusCode === 409 && error?.code === "transunion_not_connected") {
+              return res.status(409).json({
+                ok: false,
+                error: "TRANSUNION_NOT_CONNECTED",
+              });
+            }
+            throw error;
+          }
+        }
+
+        const eligibility = evaluateScreeningApplicationEligibility(application);
+        const policyRequest = buildScreeningPolicyRequest({
+          action: "start_checkout",
+          actorRole,
+          actorUserId: actorId,
+          applicationId,
+          eligibility,
+          application,
+          consentComplete: consentCheck.ok,
+          providerReady,
+        });
+        const policyResult = evaluatePolicy(policyRequest);
+        const autopilotPolicy = toAutopilotPolicySummary(policyResult);
+        await writePolicyEvaluatedEvent({
+          request: policyRequest,
+          result: policyResult,
+          actorType: actorRole === "admin" ? "admin" : "landlord",
+          metadata: {
+            landlordId,
+            propertyId: asString(application?.propertyId, 240) || null,
+            unitId: asString(application?.unitId, 240) || null,
+            initiatedFrom: "decision_execute",
+            decisionId,
+          },
+        });
+
+        automation = await executeAutomation({
+          action: "screening.auto_start_checkout",
+          policyResult,
+          actor: {
+            type: actorRole === "admin" ? "admin" : "landlord",
+            id: actorId,
+            role: actorRole,
+          },
+          resource: {
+            type: "rental_application",
+            id: applicationId,
+          },
+          visibility: "internal",
+          metadata: {
+            domain: "screening",
+            initiatedFrom: "decision_execute",
+            landlordId,
+            propertyId: application?.propertyId || null,
+            unitId: application?.unitId || null,
+            decisionId,
+            policyAction: "start_checkout",
+          },
+          context: {
+            quoteExists: executionInput.input.quoteStatus === "generated",
+            existingCheckout: executionInput.input.blockingReason === "SCREENING_CHECKOUT_ALREADY_EXISTS",
+            alreadyPaid:
+              executionInput.input.blockingReason === "SCREENING_ALREADY_PAID" ||
+              executionInput.input.paymentStatus === "paid",
+            execute: async () => {
+              const execution = await executeScreeningCheckout({
+                role: actorRole,
+                actorId,
+                landlordId,
+                applicationId,
+                application,
+                body: req.body || {},
+                consent,
+                providerHealth,
+                autopilotPolicy,
+                frontendOrigin: resolveFrontendOriginInput(req),
+                logBase: {
+                  route: "landlord_analytics_decision_execute",
+                  decisionId,
+                  applicationId,
+                },
+              });
+              if (execution.status !== 200) {
+                const executionPayload = execution.payload as any;
+                const error = new Error(String(executionPayload?.error || "AUTOMATION_EXECUTION_FAILED"));
+                (error as any).code =
+                  executionPayload?.errorCode || executionPayload?.error || "AUTOMATION_EXECUTION_FAILED";
+                throw error;
+              }
+              return execution.payload;
+            },
+          },
         });
       } else {
         return res.status(409).json({ ok: false, error: "DECISION_EXECUTION_UNSUPPORTED" });
