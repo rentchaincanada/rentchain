@@ -7,6 +7,7 @@ describe("deriveAgentDecisions", () => {
       filters: {
         propertyId: null,
       },
+      workOrders: [],
       deltas: {
         summary: {
           vacancyRate: { current: 0.25, prior: 0.1, absoluteDelta: 0.15, relativeDelta: 1.5, direction: "worse" },
@@ -183,6 +184,7 @@ describe("deriveAgentDecisions", () => {
       filters: {
         propertyId: "prop-1",
       },
+      workOrders: [],
       deltas: {
         summary: {
           vacancyRate: { current: 0, prior: 0, absoluteDelta: 0, relativeDelta: 0, direction: "flat" },
@@ -233,6 +235,7 @@ describe("deriveAgentDecisions", () => {
       filters: {
         propertyId: null,
       },
+      workOrders: [],
       deltas: {
         summary: {
           vacancyRate: { current: 0.2, prior: 0.05, absoluteDelta: 0.15, relativeDelta: 3, direction: "worse" },
@@ -468,5 +471,135 @@ describe("deriveAgentDecisions", () => {
         }),
       ])
     );
+  });
+
+  it("emits one exact maintenance approval decision only when one approval-ready work order is visible", () => {
+    const result = deriveAgentDecisions({
+      filters: {
+        propertyId: null,
+      },
+      workOrders: [
+        {
+          id: "wo-1",
+          propertyId: "prop-4",
+          propertyLabel: "Delta",
+          unitLabel: "Unit 2",
+          title: "Replace sink valve",
+          cost: {
+            actualCostCents: 32000,
+            currency: "CAD",
+            reviewStatus: "pending_review",
+            linkedExpenseStatus: "not_linked",
+          },
+          costAttachments: [{ id: "attachment-1" }],
+        },
+      ],
+      deltas: {
+        summary: {
+          vacancyRate: { current: 0, prior: 0, absoluteDelta: 0, relativeDelta: 0, direction: "flat" },
+          applicationConversionRate: { current: 0.5, prior: 0.5, absoluteDelta: 0, relativeDelta: 0, direction: "flat" },
+          activeApplications: { current: 2, prior: 2, absoluteDelta: 0, relativeDelta: 0, direction: "flat" },
+          openWorkOrders: { current: 1, prior: 1, absoluteDelta: 0, relativeDelta: 0, direction: "flat" },
+          maintenanceCostCents: { current: 32000, prior: 32000, absoluteDelta: 0, relativeDelta: 0, direction: "flat" },
+          estimatedScheduledRentCents: { current: 300000, prior: 300000, absoluteDelta: 0, relativeDelta: 0, direction: "flat" },
+          leasesEndingSoon: { current: 0, prior: 0, absoluteDelta: 0, relativeDelta: 0, direction: "flat" },
+        },
+        applications: {
+          submitted: { current: 2, prior: 2, absoluteDelta: 0, relativeDelta: 0, direction: "flat" },
+          conversionRate: { current: 0.5, prior: 0.5, absoluteDelta: 0, relativeDelta: 0, direction: "flat" },
+        },
+      },
+      alerts: [],
+      predictiveMetrics: [],
+      benchmarking: {
+        summary: {
+          propertyCount: 1,
+          comparedPropertyCount: 1,
+          benchmarkDimensions: ["openWorkOrders"],
+        },
+        comparisons: [],
+        insights: [],
+        filters: {
+          period: "90d",
+          propertyId: null,
+          from: "2026-01-20T00:00:00.000Z",
+          to: "2026-04-20T00:00:00.000Z",
+        },
+      },
+    });
+
+    expect(result.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "approve_maintenance_cost:wo-1",
+          decisionType: "approve_maintenance_cost",
+          priority: "medium",
+          recommendedAction: "Review work order approval",
+          actionKey: "open_maintenance_cost_approval_flow",
+          actionLabel: "Open cost approval",
+          destination: "/work-orders?entry=maintenance-cost-approval&propertyId=prop-4&workOrderId=wo-1",
+          workflowCategory: "maintenance_cost_approval",
+          automationEligible: false,
+          automationState: "manual_only",
+          executionMappingState: "none",
+        }),
+      ])
+    );
+  });
+
+  it("does not emit the maintenance approval decision when multiple approval-ready work orders are visible", () => {
+    const result = deriveAgentDecisions({
+      filters: {
+        propertyId: null,
+      },
+      workOrders: [
+        {
+          id: "wo-1",
+          propertyId: "prop-4",
+          cost: { actualCostCents: 32000, currency: "CAD", reviewStatus: "pending_review" },
+          costAttachments: [{ id: "attachment-1" }],
+        },
+        {
+          id: "wo-2",
+          propertyId: "prop-5",
+          cost: { actualCostCents: 41000, currency: "CAD", reviewStatus: "pending_review" },
+          evidence: [{ id: "evidence-1" }],
+        },
+      ],
+      deltas: {
+        summary: {
+          vacancyRate: { current: 0, prior: 0, absoluteDelta: 0, relativeDelta: 0, direction: "flat" },
+          applicationConversionRate: { current: 0.5, prior: 0.5, absoluteDelta: 0, relativeDelta: 0, direction: "flat" },
+          activeApplications: { current: 2, prior: 2, absoluteDelta: 0, relativeDelta: 0, direction: "flat" },
+          openWorkOrders: { current: 2, prior: 2, absoluteDelta: 0, relativeDelta: 0, direction: "flat" },
+          maintenanceCostCents: { current: 73000, prior: 73000, absoluteDelta: 0, relativeDelta: 0, direction: "flat" },
+          estimatedScheduledRentCents: { current: 300000, prior: 300000, absoluteDelta: 0, relativeDelta: 0, direction: "flat" },
+          leasesEndingSoon: { current: 0, prior: 0, absoluteDelta: 0, relativeDelta: 0, direction: "flat" },
+        },
+        applications: {
+          submitted: { current: 2, prior: 2, absoluteDelta: 0, relativeDelta: 0, direction: "flat" },
+          conversionRate: { current: 0.5, prior: 0.5, absoluteDelta: 0, relativeDelta: 0, direction: "flat" },
+        },
+      },
+      alerts: [],
+      predictiveMetrics: [],
+      benchmarking: {
+        summary: {
+          propertyCount: 2,
+          comparedPropertyCount: 2,
+          benchmarkDimensions: ["openWorkOrders"],
+        },
+        comparisons: [],
+        insights: [],
+        filters: {
+          period: "90d",
+          propertyId: null,
+          from: "2026-01-20T00:00:00.000Z",
+          to: "2026-04-20T00:00:00.000Z",
+        },
+      },
+    });
+
+    expect(result.items.find((decision) => decision.decisionType === "approve_maintenance_cost")).toBeUndefined();
   });
 });

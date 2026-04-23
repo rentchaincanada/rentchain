@@ -1,6 +1,10 @@
 import type { AutomationAction } from "../automation/automationTypes";
 import type { LeaseNoticeType, LeaseType, RentChangeMode } from "../../config/leaseNoticeRules";
 import type { LeaseNoticeExecutionInputMissingField } from "../../services/leaseNoticeWorkflowService";
+import type {
+  MaintenanceApprovalExecutionInput,
+  MaintenanceApprovalExecutionInputMissingField,
+} from "../maintenanceApprovalReadiness";
 import type { ScreeningReconciliationStatus } from "../reconciliation/reconciliationTypes";
 
 export type AdminAnalyticsPeriod = "30d" | "90d" | "365d" | "month_to_date";
@@ -245,6 +249,7 @@ export type LandlordPredictiveMetrics = {
 
 export type LandlordAgentDecisionType =
   | "review_lease_renewals"
+  | "approve_maintenance_cost"
   | "reduce_vacancy_risk"
   | "improve_application_conversion"
   | "address_maintenance_backlog"
@@ -266,6 +271,7 @@ export type LandlordAgentDecisionSupportingSignal = {
 
 export type LandlordDecisionWorkflowCategory =
   | "lease_renewals"
+  | "maintenance_cost_approval"
   | "vacancy_readiness"
   | "application_funnel"
   | "maintenance_backlog"
@@ -274,6 +280,7 @@ export type LandlordDecisionWorkflowCategory =
 
 export type LandlordDecisionActionKey =
   | "open_lease_renewals_flow"
+  | "open_maintenance_cost_approval_flow"
   | "open_vacancy_readiness_flow"
   | "open_application_funnel_review_flow"
   | "open_maintenance_backlog_flow"
@@ -310,6 +317,14 @@ export type LandlordDecisionLeaseNoticeExecutionInput = {
   responseDeadlineAt: number | null;
 };
 
+export type LandlordDecisionExecutionInput =
+  | LandlordDecisionLeaseNoticeExecutionInput
+  | MaintenanceApprovalExecutionInput;
+
+export type LandlordDecisionExecutionInputMissingField =
+  | LeaseNoticeExecutionInputMissingField
+  | MaintenanceApprovalExecutionInputMissingField;
+
 export type LandlordAgentDecision = {
   id: string;
   decisionType: LandlordAgentDecisionType;
@@ -331,8 +346,8 @@ export type LandlordAgentDecision = {
   executionMapping: LandlordDecisionExecutionMapping | null;
   executionInputState: LandlordDecisionExecutionInputState;
   executionInputReason: string | null;
-  executionInputMissingFields: LeaseNoticeExecutionInputMissingField[];
-  executionInput: LandlordDecisionLeaseNoticeExecutionInput | null;
+  executionInputMissingFields: LandlordDecisionExecutionInputMissingField[];
+  executionInput: LandlordDecisionExecutionInput | null;
   executedAt?: string | null;
   executionOutcomeStatus: LandlordDecisionExecutionOutcomeStatus;
   executionOutcomeAt: string | null;

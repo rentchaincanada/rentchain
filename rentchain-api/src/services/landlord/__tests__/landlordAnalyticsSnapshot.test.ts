@@ -312,6 +312,85 @@ describe("loadLandlordAnalyticsSnapshot", () => {
     );
   });
 
+  it("derives one exact maintenance approval decision when one approval-ready work order is visible", async () => {
+    const nowIso = "2026-04-20T12:00:00.000Z";
+    seedDoc("properties", "prop-2", {
+      landlordId: "landlord-1",
+      name: "Beta",
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    });
+    seedDoc("workOrders", "wo-1", {
+      landlordId: "landlord-1",
+      propertyId: "prop-2",
+      propertyLabel: "Beta",
+      unitLabel: "Unit 2",
+      title: "Replace sink valve",
+      status: "completed",
+      cost: {
+        actualCostCents: 32000,
+        currency: "CAD",
+        submittedByRole: "contractor",
+        submittedById: "contractor-1",
+        submittedAt: Date.UTC(2026, 3, 19, 12, 0, 0, 0),
+        reviewStatus: "pending_review",
+        linkedExpenseStatus: "not_linked",
+        latestRevisionNumber: 1,
+      },
+      costAttachments: [
+        {
+          id: "attachment-1",
+          uploadedAt: Date.UTC(2026, 3, 19, 12, 0, 0, 0),
+          uploadedByRole: "contractor",
+          uploadedById: "contractor-1",
+          visibility: "landlord_only",
+          fileName: "invoice.pdf",
+        },
+      ],
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    });
+
+    const { loadLandlordAnalyticsSnapshot } = await import("../landlordAnalyticsSnapshot");
+    const result = await loadLandlordAnalyticsSnapshot({
+      landlordId: "landlord-1",
+      propertyId: "prop-2",
+      now: Date.UTC(2026, 3, 20, 12, 0, 0, 0),
+    });
+
+    expect(result.decisions.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "approve_maintenance_cost:wo-1",
+          decisionType: "approve_maintenance_cost",
+          actionKey: "open_maintenance_cost_approval_flow",
+          actionLabel: "Open cost approval",
+          destination: "/work-orders?entry=maintenance-cost-approval&propertyId=prop-2&workOrderId=wo-1",
+          workflowCategory: "maintenance_cost_approval",
+          recommendedAction: "Review work order approval",
+          automationEligible: false,
+          automationState: "blocked",
+          automationReason: expect.stringContaining("explicit maintenance execution is not enabled yet"),
+          executionMappingState: "mapped",
+          executionMapping: expect.objectContaining({
+            action: "maintenance.auto_approve_cost",
+            resourceType: "work_order",
+            resourceId: "wo-1",
+            prerequisitesMet: true,
+          }),
+          executionInputState: "complete",
+          executionInputMissingFields: [],
+          executionInput: expect.objectContaining({
+            actualCostCents: 32000,
+            reviewStatus: "pending_review",
+            hasSupportingEvidence: true,
+            withinAutoApprovalThreshold: true,
+          }),
+        }),
+      ])
+    );
+  });
+
   it("emits a first-seen decision.appeared event once across repeated snapshot loads", async () => {
     const now = Date.UTC(2026, 3, 20, 12, 0, 0, 0);
 

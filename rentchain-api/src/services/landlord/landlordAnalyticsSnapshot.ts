@@ -265,6 +265,7 @@ export async function loadLandlordAnalyticsSnapshot(params: LandlordAnalyticsPar
     applyDecisionExecutionMappings({
       decisions: mergeLandlordDecisionStates(snapshot.decisions.items, decisionStates),
       leases: derivedInput.leases,
+      workOrders: derivedInput.workOrders,
       now,
     })
   );

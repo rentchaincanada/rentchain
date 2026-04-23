@@ -47,6 +47,7 @@ describe("applyDecisionExecutionMappings", () => {
           endDate: "2026-05-10T00:00:00.000Z",
         },
       ],
+      workOrders: [],
       now: Date.UTC(2026, 3, 20, 12, 0, 0, 0),
     });
 
@@ -105,6 +106,7 @@ describe("applyDecisionExecutionMappings", () => {
           endDate: "2026-05-15T00:00:00.000Z",
         },
       ],
+      workOrders: [],
       now: Date.UTC(2026, 3, 20, 12, 0, 0, 0),
     });
 
@@ -140,6 +142,7 @@ describe("applyDecisionExecutionMappings", () => {
           endDate: "2026-05-10T00:00:00.000Z",
         },
       ],
+      workOrders: [],
       now: Date.UTC(2026, 3, 20, 12, 0, 0, 0),
     });
 
@@ -170,6 +173,7 @@ describe("applyDecisionExecutionMappings", () => {
           status: "active",
         },
       ],
+      workOrders: [],
       now: Date.UTC(2026, 3, 20, 12, 0, 0, 0),
     });
 
@@ -214,6 +218,7 @@ describe("applyDecisionExecutionMappings", () => {
           status: "active",
         },
       ],
+      workOrders: [],
       now: Date.UTC(2026, 3, 20, 12, 0, 0, 0),
     });
 
@@ -234,6 +239,65 @@ describe("applyDecisionExecutionMappings", () => {
           newLeaseStartDate: "2026-05-11",
           newLeaseEndDate: "2027-05-10",
           responseDeadlineAt: Date.UTC(2026, 4, 1, 12, 0, 0, 0),
+        }),
+      })
+    );
+  });
+
+  it("maps a deterministic maintenance approval decision to one exact work order", () => {
+    const result = applyDecisionExecutionMappings({
+      decisions: [
+        baseDecision({
+          id: "approve_maintenance_cost:wo-1",
+          decisionType: "approve_maintenance_cost",
+          actionKey: "open_maintenance_cost_approval_flow",
+          actionLabel: "Open cost approval",
+          destination: "/work-orders?entry=maintenance-cost-approval&propertyId=prop-2&workOrderId=wo-1",
+          href: "/work-orders?entry=maintenance-cost-approval&propertyId=prop-2&workOrderId=wo-1",
+          workflowCategory: "maintenance_cost_approval",
+          recommendedAction: "Review work order approval",
+          automationState: "blocked",
+          automationReason: "A deterministic maintenance approval target exists, but explicit maintenance execution is not enabled yet.",
+        }),
+      ],
+      leases: [],
+      workOrders: [
+        {
+          id: "wo-1",
+          propertyId: "prop-2",
+          cost: {
+            actualCostCents: 32000,
+            currency: "CAD",
+            reviewStatus: "pending_review",
+            linkedExpenseStatus: "not_linked",
+          },
+          costAttachments: [{ id: "attachment-1" }],
+        },
+      ],
+      now: Date.UTC(2026, 3, 20, 12, 0, 0, 0),
+    });
+
+    expect(result[0]).toEqual(
+      expect.objectContaining({
+        automationEligible: true,
+        executionMappingState: "mapped",
+        executionMapping: {
+          action: "maintenance.auto_approve_cost",
+          resourceType: "work_order",
+          resourceId: "wo-1",
+          prerequisitesMet: true,
+          prerequisiteReason: null,
+        },
+        executionInputState: "complete",
+        executionInputReason: null,
+        executionInputMissingFields: [],
+        executionInput: expect.objectContaining({
+          actualCostCents: 32000,
+          currency: "CAD",
+          reviewStatus: "pending_review",
+          hasSupportingEvidence: true,
+          thresholdCents: 100000,
+          withinAutoApprovalThreshold: true,
         }),
       })
     );
