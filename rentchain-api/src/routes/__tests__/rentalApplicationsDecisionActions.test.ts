@@ -1,0 +1,387 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+type StoredDoc = { id: string; data: any };
+
+const { dbMock, resetDb, upsertDoc, sendEmailMock, recordRiskDecisionAuditMock } = vi.hoisted(() => {
+  const collections = new Map<string, Map<string, StoredDoc>>();
+  let autoId = 0;
+
+  function ensureCollection(name: string) {
+    if (!collections.has(name)) collections.set(name, new Map());
+    return collections.get(name)!;
+  }
+
+  function toDocRef(collectionName: string, docId: string) {
+    const col = ensureCollection(collectionName);
+    return {
+      id: docId,
+      path: `${collectionName}/${docId}`,
+      get: async () => {
+        const entry = col.get(docId);
+        return {
+          id: docId,
+          exists: Boolean(entry),
+          data: () => entry?.data,
+        };
+      },
+      set: async (payload: any, options?: { merge?: boolean }) => {
+        if (options?.merge && col.has(docId)) {
+          const existing = col.get(docId)!;
+          col.set(docId, { id: docId, data: { ...(existing.data || {}), ...(payload || {}) } });
+          return;
+        }
+        col.set(docId, { id: docId, data: payload });
+      },
+    };
+  }
+
+  return {
+    dbMock: {
+      collection: (name: string) => ({
+        doc: (id?: string) => toDocRef(name, id || `auto_${++autoId}`),
+        where: (_field: string, _op: string, _value: any) => ({
+          limit: (_count: number) => ({
+            get: async () => ({ docs: [], empty: true }),
+          }),
+        }),
+      }),
+    },
+    resetDb: () => {
+      collections.clear();
+      autoId = 0;
+      sendEmailMock.mockReset();
+      recordRiskDecisionAuditMock.mockReset();
+    },
+    upsertDoc: (collectionName: string, id: string, data: any) => {
+      ensureCollection(collectionName).set(id, { id, data });
+    },
+    sendEmailMock: vi.fn(async () => undefined),
+    recordRiskDecisionAuditMock: vi.fn(async (payload: any) => ({
+      id: "audit-1",
+      createdAt: "2026-04-01T00:00:00.000Z",
+      ...payload,
+    })),
+  };
+});
+
+vi.mock("../../config/firebase", () => ({ db: dbMock }));
+
+vi.mock("../../middleware/authMiddleware", () => ({
+  authenticateJwt: (req: any, _res: any, next: any) => {
+    const token = String(req.headers?.authorization || "").replace(/^Bearer\s+/i, "").trim().toLowerCase();
+    if (token === "admin") {
+      req.user = { id: "admin-1", landlordId: "admin-1", role: "admin", email: "admin@example.com" };
+      return next();
+    }
+    if (token === "missing-email") {
+      req.user = { id: "landlord-1", landlordId: "landlord-1", role: "landlord", email: "" };
+      return next();
+    }
+    req.user = { id: "landlord-1", landlordId: "landlord-1", role: "landlord", email: "owner@example.com" };
+    return next();
+  },
+}));
+
+vi.mock("../../middleware/attachAccount", () => ({
+  attachAccount: (_req: any, _res: any, next: any) => next(),
+}));
+
+vi.mock("../../middleware/rateLimit", () => ({
+  rateLimitScreeningIp: (_req: any, _res: any, next: any) => next(),
+  rateLimitScreeningUser: (_req: any, _res: any, next: any) => next(),
+}));
+
+vi.mock("../../services/stripeService", () => ({
+  isStripeConfigured: () => false,
+  getStripeClient: () => null,
+}));
+
+vi.mock("../../services/capabilityGuard", () => ({
+  requireCapability: vi.fn(async () => ({ ok: true })),
+}));
+
+vi.mock("../../billing/screeningPricing", () => ({
+  getScreeningPricing: vi.fn(() => ({
+    baseAmountCents: 0,
+    verifiedAddOnCents: 0,
+    aiAddOnCents: 0,
+    scoreAddOnCents: 0,
+    expeditedAddOnCents: 0,
+    totalAmountCents: 0,
+    currency: "cad",
+  })),
+}));
+
+vi.mock("../../services/stripeFinalize", () => ({
+  finalizeStripePayment: vi.fn(),
+}));
+
+vi.mock("../../services/stripeScreeningProcessor", () => ({
+  applyScreeningResultsFromOrder: vi.fn(),
+}));
+
+vi.mock("../../services/screening/screeningPayload", () => ({
+  buildScreeningStatusPayload: vi.fn(),
+}));
+
+vi.mock("../../services/screening/screeningEvents", () => ({
+  writeScreeningEvent: vi.fn(async () => undefined),
+}));
+
+vi.mock("../../services/screening/reportPdf", () => ({
+  buildScreeningPdf: vi.fn(),
+}));
+
+vi.mock("../../services/screening/reportExportService", () => ({
+  buildShareUrl: vi.fn(),
+  createReportExport: vi.fn(),
+}));
+
+vi.mock("../../services/screening/providerHealth", () => ({
+  getScreeningProviderHealth: vi.fn(),
+}));
+
+vi.mock("../../services/integrations/transunion/transunionService", () => ({
+  assertTransUnionConnectedForScreening: vi.fn(),
+}));
+
+vi.mock("../../services/screening/providers/bureauProvider", () => ({
+  getBureauProvider: vi.fn(() => ({
+    preflight: vi.fn(async () => ({ ok: true })),
+    name: "mock",
+  })),
+}));
+
+vi.mock("../../services/screening/cutoverCompare", () => ({
+  compareQuoteResponses: vi.fn(),
+}));
+
+vi.mock("../../services/screening/cutoverConfig", () => ({
+  getPrimaryTimeoutMs: vi.fn(() => 1000),
+  hashSeedKey: vi.fn(() => "hash"),
+  isAllowlistedSeed: vi.fn(() => false),
+  parseAllowlist: vi.fn(() => []),
+}));
+
+vi.mock("../../services/screening/cutoverTelemetry", () => ({
+  logCutoverEvent: vi.fn(),
+}));
+
+vi.mock("../../services/screening/runPrimaryWithFallback", () => ({
+  runPrimaryWithFallback: vi.fn(async ({ runLegacy }: any) => (runLegacy ? runLegacy() : { ok: true })),
+}));
+
+vi.mock("../../services/screening/inviteTokens", () => ({
+  buildTenantInviteUrl: vi.fn(),
+  createInviteToken: vi.fn(),
+}));
+
+vi.mock("../../services/screening/transunionReferral", () => ({
+  buildTransUnionReferralUrl: vi.fn(),
+}));
+
+vi.mock("../../services/screening/referralTracking", () => ({
+  findReferralDoc: vi.fn(),
+  hashLandlordId: vi.fn(),
+  markReferralCompleted: vi.fn(),
+  writeReferralInitiated: vi.fn(),
+}));
+
+vi.mock("../../services/screeningJobs", () => ({
+  enqueueScreeningJob: vi.fn(),
+}));
+
+vi.mock("../../storage/pdfStore", () => ({
+  createSignedUrl: vi.fn(),
+  putPdfObject: vi.fn(),
+}));
+
+vi.mock("../../lib/reviewSummary", () => ({
+  buildReviewSummary: vi.fn(),
+  buildReviewSummaryPdf: vi.fn(),
+}));
+
+vi.mock("../../services/risk/applicationDecisionSummary", () => ({
+  buildApplicationDecisionSummary: vi.fn(() => null),
+}));
+
+vi.mock("../../services/riskAgent/riskAgentService", () => ({
+  getLatestApplicationRisk: vi.fn(),
+}));
+
+vi.mock("../../email/templates/baseEmailTemplate", () => ({
+  buildEmailHtml: vi.fn(() => "<p>email</p>"),
+  buildEmailText: vi.fn(() => "email"),
+}));
+
+vi.mock("../../services/emailService", () => ({
+  sendEmail: sendEmailMock,
+}));
+
+vi.mock("../../services/riskAgent/riskDecisionAuditService", () => ({
+  recordRiskDecisionAudit: recordRiskDecisionAuditMock,
+}));
+
+async function invokeRouter(router: any, options: { method: string; url: string; body?: any; headers?: Record<string, string> }) {
+  return await new Promise<{ status: number; body: any }>((resolve, reject) => {
+    const req: any = {
+      method: options.method,
+      url: options.url,
+      originalUrl: options.url,
+      path: options.url,
+      body: options.body ?? {},
+      headers: options.headers ?? {},
+      get(name: string) {
+        return this.headers[String(name).toLowerCase()];
+      },
+      header(name: string) {
+        return this.get(name);
+      },
+      params: {},
+      query: {},
+    };
+    const res: any = {
+      statusCode: 200,
+      headers: {} as Record<string, string>,
+      setHeader(name: string, value: string) {
+        this.headers[name.toLowerCase()] = value;
+      },
+      status(code: number) {
+        this.statusCode = code;
+        return this;
+      },
+      json(payload: any) {
+        resolve({ status: this.statusCode, body: payload });
+        return this;
+      },
+      send(payload: any) {
+        resolve({ status: this.statusCode, body: payload });
+        return this;
+      },
+    };
+    router.handle(req, res, (error: any) => {
+      if (error) reject(error);
+    });
+  });
+}
+
+async function createRouter() {
+  const router = (await import("../rentalApplicationsRoutes")).default;
+  return router;
+}
+
+describe("rentalApplications decision actions", () => {
+  beforeEach(() => {
+    resetDb();
+    process.env.EMAIL_FROM = "noreply@rentchain.test";
+    process.env.PUBLIC_APP_URL = "https://www.rentchain.test";
+    upsertDoc("rentalApplications", "app-1", {
+      id: "app-1",
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      propertyName: "Harbour View",
+      status: "SUBMITTED",
+      applicant: {
+        firstName: "Jamie",
+        lastName: "Stone",
+        email: "jamie@example.com",
+      },
+    });
+    upsertDoc("landlords", "landlord-1", {
+      id: "landlord-1",
+      email: "payments@example.com",
+    });
+  });
+
+  it("stores structured request-info state and sends an applicant email", async () => {
+    const router = await createRouter();
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/rental-applications/app-1/decision-action",
+      headers: { authorization: "Bearer landlord" },
+      body: {
+        action: "request_info",
+        requestedItems: ["upload_id", "references"],
+        customMessage: "Please send the missing documents by Friday.",
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.ok).toBe(true);
+    expect(res.body?.data?.status).toBe("IN_REVIEW");
+    expect(res.body?.data?.landlordInfoRequest).toMatchObject({
+      requestedItems: ["upload_id", "references"],
+      customMessage: "Please send the missing documents by Friday.",
+    });
+    expect(sendEmailMock).toHaveBeenCalledTimes(1);
+    expect(recordRiskDecisionAuditMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        applicationId: "app-1",
+        decision: "request_info",
+      })
+    );
+  });
+
+  it("approves the application and includes the configured landlord payment email", async () => {
+    const router = await createRouter();
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/rental-applications/app-1/decision-action",
+      headers: { authorization: "Bearer landlord" },
+      body: {
+        action: "approve",
+        note: "Looks good to move forward.",
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.data?.status).toBe("APPROVED");
+    expect(res.body?.action?.paymentEmail).toBe("payments@example.com");
+    expect(sendEmailMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: "jamie@example.com",
+        replyTo: "payments@example.com",
+        subject: expect.stringMatching(/approved/i),
+      })
+    );
+  });
+
+  it("fails closed when approval is attempted without a landlord payment email", async () => {
+    upsertDoc("landlords", "landlord-1", { id: "landlord-1", email: "" });
+    const router = await createRouter();
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/rental-applications/app-1/decision-action",
+      headers: { authorization: "Bearer missing-email" },
+      body: {
+        action: "approve",
+      },
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body?.error).toBe("LANDLORD_PAYMENT_EMAIL_MISSING");
+    expect(sendEmailMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects the application and sends a polite applicant update", async () => {
+    const router = await createRouter();
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/rental-applications/app-1/decision-action",
+      headers: { authorization: "Bearer landlord" },
+      body: {
+        action: "reject",
+        note: "Thank you for applying.",
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.data?.status).toBe("DECLINED");
+    expect(sendEmailMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: "jamie@example.com",
+        subject: expect.stringMatching(/update/i),
+      })
+    );
+  });
+});

@@ -21,6 +21,9 @@ export type RentalApplicationStatus =
   | "CONDITIONAL_COSIGNER"
   | "CONDITIONAL_DEPOSIT";
 
+export type RentalApplicationDecisionAction = "request_info" | "approve" | "reject";
+export type RequestInfoChecklistItem = "upload_id" | "phone_number" | "employer_contact" | "references";
+
 export type RentalApplicationSummary = {
   id: string;
   applicantName: string;
@@ -309,6 +312,22 @@ export type RentalApplication = {
   screeningLastEligibilityReasonCode?: string | null;
   screeningLastEligibilityCheckedAt?: number | null;
   landlordNote?: string | null;
+  landlordInfoRequest?: {
+    requestedItems: RequestInfoChecklistItem[];
+    customMessage?: string | null;
+    requestedAt?: number | null;
+    requestedBy?: string | null;
+  } | null;
+  lastLandlordAction?: {
+    type: RentalApplicationDecisionAction;
+    actedAt?: number | null;
+    actedBy?: string | null;
+    actorRole?: string | null;
+    emailSentAt?: number | null;
+    paymentEmail?: string | null;
+    note?: string | null;
+    requestedItems?: RequestInfoChecklistItem[];
+  } | null;
 };
 
 export type ScreeningQuote = {
@@ -427,6 +446,44 @@ export async function updateRentalApplicationStatus(
     body: JSON.stringify({ status, note }),
   });
   return res?.data as RentalApplication;
+}
+
+export async function submitRentalApplicationDecisionAction(
+  id: string,
+  payload: {
+    action: RentalApplicationDecisionAction;
+    note?: string | null;
+    customMessage?: string | null;
+    requestedItems?: RequestInfoChecklistItem[];
+  }
+): Promise<{
+  application: RentalApplication;
+  action: {
+    type: RentalApplicationDecisionAction;
+    status: RentalApplicationStatus;
+    emailSent: boolean;
+    paymentEmail?: string | null;
+  };
+}> {
+  const res: any = await apiFetch(`/rental-applications/${encodeURIComponent(id)}/decision-action`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      action: payload.action,
+      note: payload.note,
+      customMessage: payload.customMessage,
+      requestedItems: payload.requestedItems || [],
+    }),
+  });
+  return {
+    application: res?.data as RentalApplication,
+    action: res?.action as {
+      type: RentalApplicationDecisionAction;
+      status: RentalApplicationStatus;
+      emailSent: boolean;
+      paymentEmail?: string | null;
+    },
+  };
 }
 
 export async function fetchScreeningQuote(

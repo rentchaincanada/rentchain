@@ -8,7 +8,7 @@ import {
   fetchRentalApplication,
   fetchApplicationDecisionSummary,
   evaluateApplicationRiskSnapshot,
-  recordApplicationRiskDecision,
+  submitRentalApplicationDecisionAction,
   updateRentalApplicationStatus,
   fetchScreeningQuote,
   createScreeningCheckout,
@@ -22,8 +22,10 @@ import {
   adminRecomputeScreening,
   exportScreeningReport,
   type RentalApplication,
+  type RentalApplicationDecisionAction,
   type RentalApplicationStatus,
   type RentalApplicationSummary,
+  type RequestInfoChecklistItem,
   type ScreeningQuote,
   type ScreeningPipeline,
   type ScreeningResult,
@@ -148,6 +150,13 @@ const SCREENING_REASON_LABELS: Record<string, string> = {
   LANDLORD_NOT_AUTHORIZED: "You don’t have access to start screening for this application.",
 };
 
+const REQUEST_INFO_OPTIONS: Array<{ value: RequestInfoChecklistItem; label: string }> = [
+  { value: "upload_id", label: "Upload ID" },
+  { value: "phone_number", label: "Phone number" },
+  { value: "employer_contact", label: "Employer contact" },
+  { value: "references", label: "References" },
+];
+
 const formatScreeningStatus = (value?: string | null) => {
   if (!value) return "unknown";
   return value.replace(/_/g, " ");
@@ -262,6 +271,9 @@ const ApplicationsPage: React.FC = () => {
   const [decisionSummary, setDecisionSummary] = useState<ApplicationDecisionSummary | null>(null);
   const [evaluatingRisk, setEvaluatingRisk] = useState(false);
   const [savingDecision, setSavingDecision] = useState(false);
+  const [requestInfoOpen, setRequestInfoOpen] = useState(false);
+  const [requestInfoItems, setRequestInfoItems] = useState<RequestInfoChecklistItem[]>([]);
+  const [requestInfoMessage, setRequestInfoMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -718,18 +730,38 @@ const ApplicationsPage: React.FC = () => {
     async (decision: LandlordDecisionAction, notes: string) => {
       const id = String(detail?.id || "").trim();
       if (!id) return;
+      if (decision === "request_info") {
+        setRequestInfoItems([]);
+        setRequestInfoMessage(notes);
+        setRequestInfoOpen(true);
+        return;
+      }
       setSavingDecision(true);
       try {
-        await recordApplicationRiskDecision(id, { decision, notes });
+        const result = await submitRentalApplicationDecisionAction(id, {
+          action: decision as RentalApplicationDecisionAction,
+          note: notes,
+        });
+        setDetail(result.application);
+        setApplications((prev) =>
+          prev.map((application) =>
+            application.id === result.application.id
+              ? { ...application, status: result.application.status }
+              : application
+          )
+        );
         showToast({
-          message: "Decision note saved",
-          description: "Your landlord decision was captured without changing application status.",
+          message: decision === "approve" ? "Application approved" : "Application rejected",
+          description:
+            decision === "approve"
+              ? "The applicant was notified and the application status was updated."
+              : "The applicant was notified and the application status was updated.",
           variant: "success",
         });
       } catch (err: any) {
         showToast({
-          message: "Decision note failed",
-          description: err?.message || "Unable to save the landlord decision note.",
+          message: "Decision action failed",
+          description: err?.message || "Unable to complete the landlord action.",
           variant: "error",
         });
       } finally {
@@ -738,6 +770,55 @@ const ApplicationsPage: React.FC = () => {
     },
     [detail?.id, showToast]
   );
+
+  const toggleRequestInfoItem = useCallback((item: RequestInfoChecklistItem) => {
+    setRequestInfoItems((current) => (current.includes(item) ? current.filter((value) => value !== item) : [...current, item]));
+  }, []);
+
+  const handleSubmitRequestInfo = useCallback(async () => {
+    const id = String(detail?.id || "").trim();
+    if (!id) return;
+    if (!requestInfoItems.length && !requestInfoMessage.trim()) {
+      showToast({
+        message: "Select at least one follow-up item",
+        description: "Choose a checklist item or add a custom request before sending the email.",
+        variant: "error",
+      });
+      return;
+    }
+    setSavingDecision(true);
+    try {
+      const result = await submitRentalApplicationDecisionAction(id, {
+        action: "request_info",
+        requestedItems: requestInfoItems,
+        customMessage: requestInfoMessage.trim() || null,
+      });
+      setDetail(result.application);
+      setApplications((prev) =>
+        prev.map((application) =>
+          application.id === result.application.id
+            ? { ...application, status: result.application.status }
+            : application
+        )
+      );
+      setRequestInfoOpen(false);
+      setRequestInfoItems([]);
+      setRequestInfoMessage("");
+      showToast({
+        message: "More information requested",
+        description: "The applicant was emailed and the application remains in review.",
+        variant: "success",
+      });
+    } catch (err: any) {
+      showToast({
+        message: "Request failed",
+        description: err?.message || "Unable to send the information request.",
+        variant: "error",
+      });
+    } finally {
+      setSavingDecision(false);
+    }
+  }, [detail?.id, requestInfoItems, requestInfoMessage, showToast]);
 
   useEffect(() => {
     let alive = true;
@@ -1278,6 +1359,12 @@ const ApplicationsPage: React.FC = () => {
       setTransUnionSubmitting(false);
     }
   }, [showToast]);
+
+  useEffect(() => {
+    setRequestInfoOpen(false);
+    setRequestInfoItems([]);
+    setRequestInfoMessage("");
+  }, [selectedId]);
 
   const handleExportReport = async (copyOnly: boolean) => {
     if (!detail?.id) return;
@@ -2003,6 +2090,84 @@ const ApplicationsPage: React.FC = () => {
                 onDecision={saveLandlordDecision}
                 submittingDecision={savingDecision}
               />
+              {requestInfoOpen ? (
+                <Card
+                  role="dialog"
+                  aria-modal="true"
+                  aria-label="Request more information"
+                  style={{
+                    border: `1px solid ${colors.accent}`,
+                    background: "rgba(239,246,255,0.98)",
+                    display: "grid",
+                    gap: spacing.md,
+                  }}
+                >
+                  <div style={{ display: "grid", gap: 4 }}>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: text.primary }}>Request More Info</div>
+                    <div style={{ color: text.muted, fontSize: 13, lineHeight: 1.6 }}>
+                      Choose the missing items to request and add an optional note for the applicant email.
+                    </div>
+                  </div>
+                  <div style={{ display: "grid", gap: 10 }}>
+                    {REQUEST_INFO_OPTIONS.map((option) => (
+                      <label
+                        key={option.value}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 10,
+                          color: text.primary,
+                          fontSize: 14,
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={requestInfoItems.includes(option.value)}
+                          onChange={() => toggleRequestInfoItem(option.value)}
+                        />
+                        <span>{option.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <div style={{ display: "grid", gap: 6 }}>
+                    <div style={{ color: text.muted, fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                      Optional note
+                    </div>
+                    <textarea
+                      value={requestInfoMessage}
+                      onChange={(event) => setRequestInfoMessage(event.target.value)}
+                      placeholder="Add any extra context for the applicant."
+                      rows={4}
+                      style={{
+                        width: "100%",
+                        boxSizing: "border-box",
+                        resize: "vertical",
+                        padding: "10px 12px",
+                        borderRadius: radius.md,
+                        border: `1px solid ${colors.border}`,
+                        background: colors.card,
+                        color: text.primary,
+                      }}
+                    />
+                  </div>
+                  <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap" }}>
+                    <Button
+                      variant="secondary"
+                      onClick={() => {
+                        setRequestInfoOpen(false);
+                        setRequestInfoItems([]);
+                        setRequestInfoMessage("");
+                      }}
+                      disabled={savingDecision}
+                    >
+                      Cancel
+                    </Button>
+                    <Button onClick={() => void handleSubmitRequestInfo()} disabled={savingDecision}>
+                      {savingDecision ? "Sending..." : "Send request"}
+                    </Button>
+                  </div>
+                </Card>
+              ) : null}
               <div ref={screeningSectionRef}>
                 <Card>
                   <div className="rc-applications-card-header" style={{ marginBottom: 8 }}>
