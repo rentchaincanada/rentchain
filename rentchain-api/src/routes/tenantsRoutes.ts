@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { db, FieldValue } from "../config/firebase";
 import { requireLandlord } from "../middleware/requireLandlord";
 import {
   getTenantDetailBundle,
@@ -30,13 +31,77 @@ router.get("/", async (req: any, res) => {
   const landlordId = getLandlordId(req);
 
   try {
-    const tenants = await getTenantsList({ landlordId: landlordId || undefined });
+    const tenants = await getTenantsList({
+      landlordId: landlordId || undefined,
+      excludeHiddenFromActiveLists: true,
+    });
     return res.status(200).json({ ok: true, tenants });
   } catch (err: any) {
     console.error("[GET /api/tenants] error:", err);
     return res.status(500).json({
       ok: false,
       error: err?.message ?? "Failed to load tenants",
+    });
+  }
+});
+
+router.patch("/:tenantId", async (req: any, res) => {
+  const landlordId = getLandlordId(req);
+  const tenantId = String(req.params?.tenantId || "").trim();
+  if (!tenantId) return res.status(400).json({ ok: false, error: "tenantId is required" });
+
+  const fullNameInput = req.body?.fullName;
+  const emailInput = req.body?.email;
+  const phoneInput = req.body?.phone;
+  const hasSupportedField =
+    fullNameInput !== undefined || emailInput !== undefined || phoneInput !== undefined;
+  if (!hasSupportedField) {
+    return res.status(400).json({ ok: false, error: "No supported tenant profile fields provided" });
+  }
+
+  const updates: Record<string, unknown> = {
+    updatedAt: FieldValue.serverTimestamp(),
+  };
+
+  if (fullNameInput !== undefined) {
+    const fullName = String(fullNameInput || "").trim();
+    if (!fullName) {
+      return res.status(400).json({ ok: false, error: "fullName is required" });
+    }
+    updates.fullName = fullName.slice(0, 160);
+  }
+
+  if (emailInput !== undefined) {
+    const email = String(emailInput || "").trim().toLowerCase();
+    if (email && !email.includes("@")) {
+      return res.status(400).json({ ok: false, error: "email must be valid" });
+    }
+    updates.email = email || null;
+  }
+
+  if (phoneInput !== undefined) {
+    const phone = String(phoneInput || "").trim();
+    updates.phone = phone || null;
+  }
+
+  try {
+    const bundle = await getTenantDetailBundle(tenantId, { landlordId: landlordId || undefined });
+    if (!bundle?.tenant) {
+      return res.status(404).json({ ok: false, error: "Tenant not found" });
+    }
+
+    await db.collection("tenants").doc(tenantId).set(updates, { merge: true });
+    const refreshed = await getTenantDetailBundle(tenantId, { landlordId: landlordId || undefined });
+
+    return res.status(200).json({
+      ok: true,
+      tenant: refreshed?.tenant ?? bundle.tenant,
+    });
+  } catch (err: any) {
+    console.error("[PATCH /api/tenants/:tenantId] error:", err);
+    return res.status(500).json({
+      ok: false,
+      error: err?.message ?? "Failed to update tenant",
     });
   }
 });

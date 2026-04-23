@@ -11,7 +11,8 @@ type EventType =
   | "RENT_PAID"
   | "RENT_LATE"
   | "NOTICE_SERVED"
-  | "LEASE_ENDED";
+  | "LEASE_ENDED"
+  | "NOTE_ADDED";
 
 type Severity = "positive" | "neutral" | "negative";
 type RiskTier = "low" | "medium" | "high" | "neutral";
@@ -23,6 +24,7 @@ const ALLOWED_TYPES: EventType[] = [
   "RENT_LATE",
   "NOTICE_SERVED",
   "LEASE_ENDED",
+  "NOTE_ADDED",
 ];
 
 function inferSeverity(type: EventType): Severity {
@@ -34,6 +36,7 @@ function inferSeverity(type: EventType): Severity {
     case "NOTICE_SERVED":
       return "negative";
     case "LEASE_ENDED":
+    case "NOTE_ADDED":
     default:
       return "neutral";
   }
@@ -51,6 +54,8 @@ function defaultTitle(type: EventType): string {
       return "Notice served";
     case "LEASE_ENDED":
       return "Lease ended";
+    case "NOTE_ADDED":
+      return "Note added";
     default:
       return "Tenant event";
   }

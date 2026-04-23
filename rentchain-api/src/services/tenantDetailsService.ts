@@ -33,6 +33,9 @@ export interface TenantRecord {
   fullName: string;
   email?: string;
   phone?: string;
+  hiddenFromActiveLists?: boolean;
+  cleanupReason?: string | null;
+  cleanupBatch?: string | null;
   propertyId?: string | null;
   unitId?: string | null;
   propertyName?: string;
@@ -140,6 +143,7 @@ const CONVERTED_TENANTS: TenantRecord[] = [];
 
 type TenantQueryOptions = {
   landlordId?: string | null;
+  excludeHiddenFromActiveLists?: boolean;
 };
 
 function toMillis(value: any): number | null {
@@ -195,6 +199,9 @@ function mapTenant(docId: string, data: any): TenantRecord {
     fullName: data.fullName ?? data.name ?? "Unnamed Tenant",
     email: data.email ?? null,
     phone: data.phone ?? null,
+    hiddenFromActiveLists: data.hiddenFromActiveLists === true,
+    cleanupReason: data.cleanupReason ?? null,
+    cleanupBatch: data.cleanupBatch ?? null,
     propertyId: data.propertyId ?? null,
     unitId: data.unitId ?? data.unit ?? null,
     propertyName: data.propertyName ?? data.property ?? null,
@@ -418,6 +425,7 @@ export function addConvertedTenant(tenant: TenantRecord): void {
 
 export async function getTenantsList(opts: TenantQueryOptions = {}): Promise<TenantRecord[]> {
   const landlordId = opts.landlordId?.trim?.() ? String(opts.landlordId).trim() : null;
+  const excludeHiddenFromActiveLists = opts.excludeHiddenFromActiveLists === true;
 
   try {
     const collection = db.collection("tenants");
@@ -428,7 +436,9 @@ export async function getTenantsList(opts: TenantQueryOptions = {}): Promise<Ten
     const out: TenantRecord[] = [];
     snap.forEach((doc) => {
       const data = doc.data() as any;
-      out.push(mapTenant(doc.id, data));
+      const tenant = mapTenant(doc.id, data);
+      if (excludeHiddenFromActiveLists && tenant.hiddenFromActiveLists) return;
+      out.push(tenant);
     });
 
     out.sort((a, b) => {

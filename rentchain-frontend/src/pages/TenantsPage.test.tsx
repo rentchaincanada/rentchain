@@ -1,7 +1,22 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TenantsPage } from "./TenantsPage";
+
+type ResponsiveMasterDetailProps = {
+  master: ReactNode;
+  detail: ReactNode;
+  searchSlot?: ReactNode;
+};
+
+type InviteTenantModalProps = {
+  open: boolean;
+  defaultTenantEmail?: string;
+  defaultTenantName?: string;
+  defaultPropertyId?: string;
+  defaultUnitId?: string;
+};
 
 const mocks = vi.hoisted(() => ({
   useAuthMock: vi.fn(),
@@ -9,11 +24,14 @@ const mocks = vi.hoisted(() => ({
   useCapabilitiesMock: vi.fn(),
   fetchTenantsMock: vi.fn(),
   fetchTenantTenanciesMock: vi.fn(),
+  updateTenantRecordMock: vi.fn(),
   updateTenancyMock: vi.fn(),
+  createTenantEventMock: vi.fn(),
   hydrateTenantSummariesBatchMock: vi.fn(),
   getCachedTenantSummaryMock: vi.fn(),
   openUpgradeFlowMock: vi.fn(),
   trackMock: vi.fn(),
+  inviteTenantModalMock: vi.fn(),
 }));
 
 vi.mock("../context/useAuth", () => ({
@@ -31,7 +49,12 @@ vi.mock("@/hooks/useCapabilities", () => ({
 vi.mock("@/api/tenantsApi", () => ({
   fetchTenants: mocks.fetchTenantsMock,
   fetchTenantTenancies: mocks.fetchTenantTenanciesMock,
+  updateTenantRecord: mocks.updateTenantRecordMock,
   updateTenancy: mocks.updateTenancyMock,
+}));
+
+vi.mock("@/api/tenantEventsWriteApi", () => ({
+  createTenantEvent: mocks.createTenantEventMock,
 }));
 
 vi.mock("../components/tenants/TenantDetailPanel", () => ({
@@ -47,7 +70,7 @@ vi.mock("../components/tenants/TenantPaymentsPanel", () => ({
 }));
 
 vi.mock("../components/layout/ResponsiveMasterDetail", () => ({
-  ResponsiveMasterDetail: ({ master, detail, searchSlot }: any) => (
+  ResponsiveMasterDetail: ({ master, detail, searchSlot }: ResponsiveMasterDetailProps) => (
     <div>
       {searchSlot}
       {master}
@@ -57,7 +80,10 @@ vi.mock("../components/layout/ResponsiveMasterDetail", () => ({
 }));
 
 vi.mock("../components/tenants/InviteTenantModal", () => ({
-  InviteTenantModal: () => null,
+  InviteTenantModal: (props: InviteTenantModalProps) => {
+    mocks.inviteTenantModalMock(props);
+    return props.open ? <div>Invite modal open</div> : null;
+  },
 }));
 
 vi.mock("../components/tenant/TenantScorePill", () => ({
@@ -78,6 +104,10 @@ vi.mock("@/billing/openUpgradeFlow", () => ({
 }));
 
 describe("TenantsPage", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   beforeEach(() => {
     mocks.useAuthMock.mockReturnValue({
       user: { id: "user-1", role: "landlord" },
@@ -91,11 +121,14 @@ describe("TenantsPage", () => {
     });
     mocks.fetchTenantsMock.mockResolvedValue([]);
     mocks.fetchTenantTenanciesMock.mockResolvedValue([]);
+    mocks.updateTenantRecordMock.mockResolvedValue({});
     mocks.updateTenancyMock.mockResolvedValue({});
+    mocks.createTenantEventMock.mockResolvedValue({ ok: true });
     mocks.hydrateTenantSummariesBatchMock.mockResolvedValue(undefined);
     mocks.getCachedTenantSummaryMock.mockReturnValue(null);
     mocks.openUpgradeFlowMock.mockResolvedValue(true);
     mocks.trackMock.mockReset();
+    mocks.inviteTenantModalMock.mockReset();
   });
 
   it("uses the working upgrade flow for locked tenant invites", async () => {
@@ -110,5 +143,149 @@ describe("TenantsPage", () => {
     expect(mocks.openUpgradeFlowMock).toHaveBeenCalledWith(
       expect.objectContaining({ fallbackPath: "/pricing" })
     );
+  });
+
+  it("shows a tenant action hub with edit, note, and invite actions", async () => {
+    mocks.useCapabilitiesMock.mockReturnValue({
+      features: { tenant_invites: true },
+    });
+    mocks.fetchTenantsMock.mockResolvedValue([
+      {
+        id: "tenant-1",
+        fullName: "Taylor Tenant",
+        email: "tenant@example.com",
+        propertyName: "Main Street",
+        propertyId: "property-1",
+        unit: "Unit 4",
+        unitId: "unit-4",
+        currentLeaseId: "lease-1",
+      },
+    ]);
+    mocks.fetchTenantTenanciesMock.mockResolvedValue([
+      { id: "tenancy-1", tenantId: "tenant-1", status: "active", unitLabel: "Unit 4" },
+    ]);
+
+    render(
+      <MemoryRouter initialEntries={["/tenants?tenantId=tenant-1"]}>
+        <TenantsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Tenant actions")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Edit tenant" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add note" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Send tenant invite" })).toBeInTheDocument();
+    expect(screen.getByText("lease-1")).toBeInTheDocument();
+  });
+
+  it("prefills the invite modal from the selected tenant profile", async () => {
+    mocks.useCapabilitiesMock.mockReturnValue({
+      features: { tenant_invites: true },
+    });
+    mocks.fetchTenantsMock.mockResolvedValue([
+      {
+        id: "tenant-1",
+        fullName: "Taylor Tenant",
+        email: "tenant@example.com",
+        propertyId: "property-1",
+        unitId: "unit-4",
+      },
+    ]);
+    mocks.fetchTenantTenanciesMock.mockResolvedValue([]);
+
+    render(
+      <MemoryRouter initialEntries={["/tenants?tenantId=tenant-1"]}>
+        <TenantsPage />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Send tenant invite" }));
+
+    expect(await screen.findByText("Invite modal open")).toBeInTheDocument();
+    const lastInviteCall = mocks.inviteTenantModalMock.mock.calls.at(-1)?.[0];
+    expect(lastInviteCall).toEqual(
+      expect.objectContaining({
+        defaultTenantEmail: "tenant@example.com",
+        defaultTenantName: "Taylor Tenant",
+        defaultPropertyId: "property-1",
+        defaultUnitId: "unit-4",
+      })
+    );
+  });
+
+  it("saves tenant profile edits through the landlord-safe patch path", async () => {
+    mocks.useCapabilitiesMock.mockReturnValue({
+      features: { tenant_invites: true },
+    });
+    mocks.fetchTenantsMock.mockResolvedValue([
+      {
+        id: "tenant-1",
+        fullName: "Taylor Tenant",
+        email: "tenant@example.com",
+        phone: "9025550000",
+      },
+    ]);
+    mocks.fetchTenantTenanciesMock.mockResolvedValue([]);
+    mocks.updateTenantRecordMock.mockResolvedValue({
+      id: "tenant-1",
+      fullName: "Taylor Tenant Updated",
+      email: "updated@example.com",
+      phone: "9025551111",
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/tenants?tenantId=tenant-1"]}>
+        <TenantsPage />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Edit tenant" }));
+    fireEvent.change(screen.getByLabelText("Full name"), {
+      target: { value: "Taylor Tenant Updated" },
+    });
+    fireEvent.change(screen.getByLabelText("Email"), {
+      target: { value: "updated@example.com" },
+    });
+    fireEvent.change(screen.getByLabelText("Phone"), {
+      target: { value: "(902) 555-1111" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save tenant" }));
+
+    expect(mocks.updateTenantRecordMock).toHaveBeenCalledWith("tenant-1", {
+      fullName: "Taylor Tenant Updated",
+      email: "updated@example.com",
+      phone: "9025551111",
+    });
+  });
+
+  it("records tenant notes through the audited tenant-events path", async () => {
+    mocks.useCapabilitiesMock.mockReturnValue({
+      features: { tenant_invites: true },
+    });
+    mocks.fetchTenantsMock.mockResolvedValue([
+      {
+        id: "tenant-1",
+        fullName: "Taylor Tenant",
+      },
+    ]);
+    mocks.fetchTenantTenanciesMock.mockResolvedValue([]);
+
+    render(
+      <MemoryRouter initialEntries={["/tenants?tenantId=tenant-1"]}>
+        <TenantsPage />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Add note" }));
+    fireEvent.change(screen.getByPlaceholderText("Add a note about contact details, follow-up, or context."), {
+      target: { value: "Confirmed unit details by phone." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save note" }));
+
+    expect(mocks.createTenantEventMock).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      type: "NOTE_ADDED",
+      description: "Confirmed unit details by phone.",
+    });
   });
 });
