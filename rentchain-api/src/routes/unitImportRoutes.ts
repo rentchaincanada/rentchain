@@ -319,6 +319,9 @@ async function runUnitImport(opts: {
     mode,
     requestId,
     imported: wouldInsert,
+    createdCount: wouldInsert,
+    updatedCount: 0,
+    skippedCount,
     summary,
     issues: issues.slice(0, 200),
   };

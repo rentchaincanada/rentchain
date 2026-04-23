@@ -1,9 +1,34 @@
 import { Router } from "express";
+import multer from "multer";
 import { db, FieldValue } from "../config/firebase";
 import { authenticateJwt } from "../middleware/authMiddleware";
 import { requireCapability } from "../services/capabilityGuard";
+import { uploadBufferToGcs } from "../lib/gcs";
+import { getSignedDownloadUrl } from "../lib/gcsSignedUrl";
 
 const router = Router();
+const leaseDocumentUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const name = String(file?.originalname || "").toLowerCase();
+    const mime = String(file?.mimetype || "").toLowerCase();
+    const allowedMime = new Set([
+      "application/pdf",
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "image/jpeg",
+      "image/png",
+    ]);
+    const allowedExtension = [".pdf", ".doc", ".docx", ".jpg", ".jpeg", ".png"].some((ext) =>
+      name.endsWith(ext)
+    );
+    if (allowedMime.has(mime) || allowedExtension) {
+      return cb(null, true);
+    }
+    return cb(new Error("Unsupported lease document type"));
+  },
+});
 
 function requireLandlord(req: any, res: any, next: any) {
   if (!req.user) {
@@ -76,6 +101,26 @@ async function ensurePropertyOwned(propertyId: string, landlordId: string) {
 
 function normalizeStatus(value: any): string {
   return String(value || "").trim().toLowerCase();
+}
+
+async function attachSignedLeaseDocument(unit: any) {
+  const leaseDocument = unit?.leaseDocument;
+  if (!leaseDocument || typeof leaseDocument !== "object") return unit;
+  const bucket = String(leaseDocument.bucket || "").trim();
+  const path = String(leaseDocument.path || "").trim();
+  if (!bucket || !path) return unit;
+  try {
+    const url = await getSignedDownloadUrl({ bucket, path, expiresMinutes: 30 });
+    return {
+      ...unit,
+      leaseDocument: {
+        ...leaseDocument,
+        url,
+      },
+    };
+  } catch {
+    return unit;
+  }
 }
 
 function leaseIndicatesSigned(status: any): boolean {
@@ -157,16 +202,18 @@ router.get(
       propertyId,
       units: items,
     });
-    const normalizedItems = items.map((item) => {
+    const normalizedItems = await Promise.all(items.map(async (item) => {
       const key = String(item?.id || item?.unitId || "").trim();
       const eligibility = inviteEligibility.get(key);
-      if (!eligibility) return item;
-      return {
+      const baseItem = !eligibility
+        ? item
+        : {
         ...item,
         inviteEligible: eligibility.eligible,
         inviteEligibilityReason: eligibility.reason || null,
       };
-    });
+      return attachSignedLeaseDocument(baseItem);
+    }));
     normalizedItems.sort((a, b) => String(a.unitNumber || "").localeCompare(String(b.unitNumber || "")));
 
     const realCount = normalizedItems.length;
@@ -220,16 +267,18 @@ router.get("/units", authenticateJwt, requireLandlord, async (req: any, res) => 
     propertyId,
     units: items,
   });
-  const normalizedItems = items.map((item) => {
+  const normalizedItems = await Promise.all(items.map(async (item) => {
     const key = String(item?.id || item?.unitId || "").trim();
     const eligibility = inviteEligibility.get(key);
-    if (!eligibility) return item;
-    return {
+    const baseItem = !eligibility
+      ? item
+      : {
       ...item,
       inviteEligible: eligibility.eligible,
       inviteEligibilityReason: eligibility.reason || null,
     };
-  });
+    return attachSignedLeaseDocument(baseItem);
+  }));
   normalizedItems.sort((a, b) => String(a.unitNumber || "").localeCompare(String(b.unitNumber || "")));
 
   const realCount = normalizedItems.length;
@@ -423,5 +472,91 @@ router.patch("/units/:unitId", authenticateJwt, requireLandlord, async (req: any
   const updated = { id: unitId, ...existing, ...updates };
   return res.json({ ok: true, unit: updated });
 });
+
+router.post(
+  "/units/:unitId/lease-document",
+  authenticateJwt,
+  requireLandlord,
+  (req, res, next) => leaseDocumentUpload.single("file")(req, res, next),
+  async (req: any, res) => {
+    const landlordId = req.user?.landlordId || req.user?.id;
+    const unitId = String(req.params?.unitId || "");
+    if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+    if (!unitId) return res.status(400).json({ ok: false, error: "Missing unitId" });
+    if (!(await enforceUnitsCapability(req, res))) return;
+
+    const ref = db.collection("units").doc(unitId);
+    const snap = await ref.get();
+    if (!snap.exists) {
+      return res.status(404).json({ ok: false, error: "UNIT_NOT_FOUND" });
+    }
+    const existing = snap.data() as any;
+    const propertyId = String(existing?.propertyId || "").trim();
+    if (existing?.landlordId !== landlordId) {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+    if (propertyId) {
+      const ownership = await ensurePropertyOwned(propertyId, landlordId);
+      if (!ownership.ok) {
+        return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+      }
+    }
+
+    const file = req.file as Express.Multer.File | undefined;
+    if (!file?.buffer) {
+      return res.status(400).json({ ok: false, error: "lease_document_file_required" });
+    }
+
+    const safeName = String(file.originalname || "lease-document").replace(/[^a-zA-Z0-9._-]+/g, "_");
+    const path = `units/lease-documents/${landlordId}/${propertyId || "property"}/${unitId}/${Date.now()}_${safeName}`;
+    const uploaded = await uploadBufferToGcs({
+      path,
+      contentType: file.mimetype || "application/octet-stream",
+      buffer: file.buffer,
+      metadata: {
+        landlordId: String(landlordId),
+        propertyId,
+        unitId,
+        originalName: file.originalname || safeName,
+      },
+    });
+
+    const leaseDocument = {
+      fileName: file.originalname || safeName,
+      contentType: file.mimetype || "application/octet-stream",
+      bucket: uploaded.bucket,
+      path: uploaded.path,
+      uploadedAt: new Date().toISOString(),
+      uploadedByUserId: String(req.user?.id || landlordId),
+    };
+
+    await ref.set(
+      {
+        leaseDocument,
+        updatedAt: new Date(),
+        updatedAtServer: FieldValue.serverTimestamp ? FieldValue.serverTimestamp() : new Date(),
+      },
+      { merge: true }
+    );
+
+    const url = await getSignedDownloadUrl({
+      bucket: uploaded.bucket,
+      path: uploaded.path,
+      expiresMinutes: 30,
+    }).catch(() => null);
+
+    return res.json({
+      ok: true,
+      unit: {
+        id: unitId,
+        ...existing,
+        leaseDocument: {
+          ...leaseDocument,
+          url,
+        },
+      },
+    });
+  }
+);
 
 export default router;

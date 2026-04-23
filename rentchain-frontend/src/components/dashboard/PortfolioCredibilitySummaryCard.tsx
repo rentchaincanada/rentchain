@@ -1,4 +1,5 @@
 import React from "react";
+import { Link } from "react-router-dom";
 import { Card } from "@/components/ui/Ui";
 import { RiskScoreBadge } from "@/components/leases/RiskScoreBadge";
 import { colors, radius, spacing, text } from "@/styles/tokens";
@@ -6,6 +7,7 @@ import type { PortfolioCredibilitySummary } from "@/types/portfolioCredibilitySu
 
 interface PortfolioCredibilitySummaryCardProps {
   summary?: PortfolioCredibilitySummary | null;
+  activeLeasesHref?: string;
 }
 
 function healthTone(status?: PortfolioCredibilitySummary["healthStatus"] | null) {
@@ -40,7 +42,10 @@ const MetricTile: React.FC<{ label: string; value: React.ReactNode; caption?: Re
   </div>
 );
 
-export const PortfolioCredibilitySummaryCard: React.FC<PortfolioCredibilitySummaryCardProps> = ({ summary }) => {
+export const PortfolioCredibilitySummaryCard: React.FC<PortfolioCredibilitySummaryCardProps> = ({
+  summary,
+  activeLeasesHref,
+}) => {
   const [isMobile, setIsMobile] = React.useState(false);
 
   React.useEffect(() => {
@@ -125,7 +130,19 @@ export const PortfolioCredibilitySummaryCard: React.FC<PortfolioCredibilitySumma
           value={<RiskScoreBadge grade={summary.leaseRiskGradeAverage} score={summary.leaseRiskAverage} />}
           caption={`${summary.leasesWithRiskCount} leases with risk`}
         />
-        <MetricTile label="Active leases" value={summary.activeLeaseCount} caption="Current lease agreements in this rollup" />
+        <MetricTile
+          label="Active leases"
+          value={
+            activeLeasesHref ? (
+              <Link to={activeLeasesHref} style={{ color: text.primary, textDecoration: "underline" }}>
+                {summary.activeLeaseCount}
+              </Link>
+            ) : (
+              summary.activeLeaseCount
+            )
+          }
+          caption="Current lease agreements in this rollup"
+        />
         <MetricTile label="Properties represented" value={summary.propertyCount} caption="Properties contributing active credibility evidence" />
       </div>
 

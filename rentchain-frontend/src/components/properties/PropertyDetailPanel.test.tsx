@@ -6,6 +6,7 @@ import { AuthProvider } from "@/context/AuthContext";
 
 const mocks = vi.hoisted(() => ({
   updateProperty: vi.fn(),
+  archiveProperty: vi.fn(),
   getLeasesForProperty: vi.fn(),
   getPropertyMonthlyPayments: vi.fn(),
   fetchUnitsForProperty: vi.fn(),
@@ -20,7 +21,7 @@ vi.mock("../../api/propertiesApi", async () => {
   return {
     ...actual,
     updateProperty: mocks.updateProperty,
-    archiveProperty: vi.fn(),
+    archiveProperty: mocks.archiveProperty,
     publishProperty: vi.fn(),
     unarchiveProperty: vi.fn(),
   };
@@ -95,6 +96,9 @@ describe("PropertyDetailPanel", () => {
   beforeEach(() => {
     mocks.updateProperty.mockResolvedValue({
       property: { id: "prop-1" },
+    });
+    mocks.archiveProperty.mockResolvedValue({
+      property: { id: "prop-1", portfolioStatus: "archived" },
     });
     mocks.getLeasesForProperty.mockResolvedValue({ leases: [], credibilitySummary: null });
     mocks.getPropertyMonthlyPayments.mockResolvedValue({ payments: [], total: 0 });
@@ -225,5 +229,85 @@ render(
         source: "property_detail_panel_units",
       })
     );
+  });
+
+  it("derives occupancy and occupied rent from canonical unit state when no active lease exists yet", async () => {
+    mocks.fetchUnitsForProperty.mockResolvedValue([
+      {
+        id: "unit-1",
+        unitNumber: "101",
+        status: "occupied",
+        occupantName: "Jane Tenant",
+        rent: 1800,
+      },
+      {
+        id: "unit-2",
+        unitNumber: "102",
+        status: "vacant",
+        rent: 1700,
+      },
+    ]);
+
+    render(
+      <AuthProvider>
+        <MemoryRouter>
+          <PropertyDetailPanel
+            property={{
+              id: "prop-1",
+              name: "Harbour View",
+              addressLine1: "12 Wharf Street",
+              city: "Halifax",
+              province: "NS",
+              postalCode: "B3H 1A1",
+              country: "Canada",
+              totalUnits: 2,
+              amenities: [],
+              units: [],
+              createdAt: new Date().toISOString(),
+            }}
+            onRefresh={vi.fn()}
+          />
+        </MemoryRouter>
+      </AuthProvider>
+    );
+
+    expect((await screen.findAllByText("Occupied")).length).toBeGreaterThan(0);
+    expect(screen.getByText("50%")).toBeInTheDocument();
+    expect(screen.getAllByText("$1,800").length).toBeGreaterThan(0);
+  });
+
+  it("uses the updated archive confirmation copy before archiving", async () => {
+    const confirmMock = vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    render(
+      <AuthProvider>
+        <MemoryRouter>
+          <PropertyDetailPanel
+            property={{
+              id: "prop-1",
+              name: "Harbour View",
+              addressLine1: "12 Wharf Street",
+              city: "Halifax",
+              province: "NS",
+              postalCode: "B3H 1A1",
+              country: "Canada",
+              totalUnits: 1,
+              amenities: [],
+              units: [],
+              createdAt: new Date().toISOString(),
+            }}
+            onRefresh={vi.fn()}
+          />
+        </MemoryRouter>
+      </AuthProvider>
+    );
+
+    fireEvent.click(screen.getAllByRole("button", { name: /archive property/i })[0]);
+
+    expect(confirmMock).toHaveBeenCalledWith(
+      "Are you sure you want to archive this property? You can reactivate this property later."
+    );
+    await waitFor(() => expect(mocks.archiveProperty).toHaveBeenCalledWith("prop-1"));
+    confirmMock.mockRestore();
   });
 });

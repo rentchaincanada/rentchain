@@ -219,9 +219,15 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
       }
       const idempotencyKey = `${property.id}:${pendingFile.name}:${pendingFile.size}:${pendingFile.lastModified}`;
       const result = await importUnitsCsv(property.id, csvText, "partial", idempotencyKey);
-      const created = result?.createdCount ?? result?.created ?? 0;
+      const created = result?.createdCount ?? result?.created ?? result?.imported ?? result?.summary?.insertable ?? 0;
       const updated = result?.updatedCount ?? result?.updated ?? 0;
-      const skipped = result?.skippedCount ?? result?.skipped ?? 0;
+      const skipped =
+        result?.skippedCount ??
+        result?.skipped ??
+        ((result?.summary?.invalid ?? 0) +
+          (result?.summary?.duplicatesInCsv ?? 0) +
+          (result?.summary?.conflicts ?? 0)) ??
+        0;
       const errCount = Array.isArray(result?.errors) ? result.errors.length : 0;
       showToast({
         message: "Units imported",
@@ -581,18 +587,38 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
       ),
     [leases]
   );
-  const leasedUnits = activeLeases.length;
+  const activeLeaseUnitNumbers = useMemo(
+    () => new Set(activeLeases.map((lease) => String(lease.unitNumber || "").trim()).filter(Boolean)),
+    [activeLeases]
+  );
+  const occupiedUnits = useMemo(
+    () =>
+      displayedUnits.filter((unit) => {
+        const unitNumber = String((unit as any)?.unitNumber || "").trim();
+        const status = String((unit as any)?.occupancyStatus || (unit as any)?.status || "").trim().toLowerCase();
+        return status === "occupied" || (unitNumber && activeLeaseUnitNumbers.has(unitNumber));
+      }),
+    [activeLeaseUnitNumbers, displayedUnits]
+  );
+  const leasedUnits = occupiedUnits.length;
   const occupancy = unitCount > 0 ? (leasedUnits / unitCount) * 100 : 0;
-  const leaseRentRoll = activeLeases.reduce(
+  const activeLeaseRentRoll = activeLeases.reduce(
     (sum, l) => sum + (typeof l.monthlyRent === "number" ? l.monthlyRent : 0),
     0
   );
+  const occupiedUnitsFallbackRent = occupiedUnits.reduce((sum, unit) => {
+    const unitNumber = String((unit as any)?.unitNumber || "").trim();
+    if (unitNumber && activeLeaseUnitNumbers.has(unitNumber)) return sum;
+    const configuredRent = resolveConfiguredUnitRent(unit);
+    return sum + (configuredRent != null ? Number(configuredRent) || 0 : 0);
+  }, 0);
+  const leaseRentRoll = activeLeaseRentRoll + occupiedUnitsFallbackRent;
   const collectionRate =
     leaseRentRoll > 0 ? totalCollectedThisMonth / leaseRentRoll : 0;
 
   const leasedUnitNumbers = useMemo(
-    () => new Set(activeLeases.map((lease) => lease.unitNumber)),
-    [activeLeases]
+    () => new Set(occupiedUnits.map((unit: any) => String(unit?.unitNumber || "").trim()).filter(Boolean)),
+    [occupiedUnits]
   );
   const unitsNeedingOccupancySetup = useMemo(
     () => getUnitsNeedingOccupancySetup(displayedUnits, activeLeases),
@@ -663,8 +689,8 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
     if (!property?.id) return;
     const confirmed = window.confirm(
       isArchived
-        ? "Restore this property to your active portfolio?"
-        : "Archive this property? It will be hidden from active portfolio views but preserved for records and history."
+        ? "Restore this property to your active portfolio? You can archive it again later if needed."
+        : "Are you sure you want to archive this property? You can reactivate this property later."
     );
     if (!confirmed) return;
 
@@ -1121,13 +1147,13 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
           }}
         >
           <div className="rc-kpi-label" style={{ color: "#111827", fontSize: "0.8rem" }}>
-            Active lease rent total
+            Current occupied rent total
           </div>
           <div className="rc-kpi-value" style={{ color: "#0b1220", fontWeight: 700, fontSize: "1.05rem" }}>
             {formatCurrency(leaseRentRoll)}
           </div>
           <div className="rc-kpi-subtext" style={{ color: "#4b5563", fontSize: "0.75rem", marginTop: 2 }}>
-            Based on signed active leases for this property.
+            Uses active lease rent when present and occupied unit rent where current occupancy has been set manually.
           </div>
         </div>
 
@@ -1498,6 +1524,17 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                                 : ""}
                             </div>
                           ) : null}
+                          {(u as any).leaseDocument?.fileName ? (
+                            <div style={{ fontSize: "0.78rem", color: "#2563eb" }}>
+                              {(u as any).leaseDocument?.url ? (
+                                <a href={(u as any).leaseDocument.url} target="_blank" rel="noreferrer">
+                                  View lease document
+                                </a>
+                              ) : (
+                                `Lease document: ${String((u as any).leaseDocument.fileName)}`
+                              )}
+                            </div>
+                          ) : null}
                         </div>
                       </td>
                       <td className="rc-units-col-actions" style={{ padding: "10px 12px" }}>
@@ -1615,6 +1652,17 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                           : ""}
                       </div>
                     ) : null}
+                    {(u as any).leaseDocument?.fileName ? (
+                      <div style={{ fontSize: "0.78rem", color: "#2563eb", marginTop: 4 }}>
+                        {(u as any).leaseDocument?.url ? (
+                          <a href={(u as any).leaseDocument.url} target="_blank" rel="noreferrer">
+                            View lease document
+                          </a>
+                        ) : (
+                          `Lease document: ${String((u as any).leaseDocument.fileName)}`
+                        )}
+                      </div>
+                    ) : null}
                   </div>
                 </div>
                 <div className="rc-unit-card-row rc-unit-card-specs" style={{ marginTop: 8 }}>
@@ -1697,6 +1745,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
         onClose={() => setEditingUnit(null)}
         onSaved={(updated) => {
           setUnits((prev) => prev.map((u) => (u?.id === updated?.id ? { ...u, ...updated } : u)));
+          setEditingUnit(null);
         }}
       />
       <SendApplicationModal

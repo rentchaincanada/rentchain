@@ -44,6 +44,13 @@ export interface Lease {
   updatedAt: string;
 }
 
+export interface LandlordActiveLease extends Lease {
+  propertyName: string;
+  tenantName?: string | null;
+  tenantEmail?: string | null;
+  documentUrl?: string | null;
+}
+
 export interface CreateLeasePayload {
   tenantId: string;
   tenantIds?: string[];
@@ -79,6 +86,10 @@ export async function getLeasesForProperty(
   return apiJson<{ leases: Lease[]; diagnostics?: any; credibilitySummary?: PropertyCredibilitySummary | null }>(
     `/leases/property/${encodeURIComponent(propertyId)}`
   );
+}
+
+export async function getActiveLeasesForLandlord(): Promise<{ leases: LandlordActiveLease[] }> {
+  return apiJson<{ leases: LandlordActiveLease[] }>("/leases/active");
 }
 
 export async function createLease(
