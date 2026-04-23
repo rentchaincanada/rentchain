@@ -12,6 +12,7 @@ import DecisionQueueSummary from "../../components/analytics/DecisionQueueSummar
 import DecisionOutcomeAnalyticsPanel from "../../components/analytics/DecisionOutcomeAnalyticsPanel";
 import {
   filterDecisionsByExecutionState,
+  prioritizeDecisions,
   type DecisionExecutionFilter,
 } from "../../components/analytics/decisionExecutionAggregation";
 
@@ -41,6 +42,7 @@ export default function ActionRecommendationsPage() {
     () => filterDecisionsByExecutionState(decisions, executionFilter),
     [decisions, executionFilter]
   );
+  const prioritizedDecisions = React.useMemo(() => prioritizeDecisions(filteredDecisions), [filteredDecisions]);
 
   React.useEffect(() => {
     if (entitlementLoading || !canViewDecisionInbox) {
@@ -132,7 +134,7 @@ export default function ActionRecommendationsPage() {
               onFilterChange={setExecutionFilter}
             />
             <AgentDecisionPanel
-              decisions={filteredDecisions}
+              decisions={prioritizedDecisions}
               title="Decision inbox"
               description="Review the next landlord actions surfaced directly from your current analytics snapshot."
               emptyMessage="No prioritized landlord actions are surfaced for this view right now."

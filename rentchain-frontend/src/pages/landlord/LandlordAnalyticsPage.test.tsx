@@ -530,6 +530,251 @@ describe("LandlordAnalyticsPage", () => {
     expect(screen.getByText(/Beta carries the strongest vacancy pressure/i)).toBeInTheDocument();
   });
 
+  it("renders analytics decisions in deterministic operator priority order", async () => {
+    await mockEntitlements();
+    const { fetchLandlordAnalyticsSnapshot } = await import("../../api/landlordAnalyticsApi");
+    const { fetchLandlordAnalyticsAlerts } = await import("../../api/landlordAnalyticsAlertsApi");
+    const { fetchLandlordAnalyticsBenchmarking } = await import("../../api/landlordAnalyticsBenchmarkingApi");
+
+    vi.mocked(fetchLandlordAnalyticsSnapshot).mockResolvedValue({
+      summary: {
+        occupiedUnits: 4,
+        vacancyRate: 0.2,
+        activeApplications: 2,
+        applicationConversionRate: 0.5,
+        openWorkOrders: 1,
+        maintenanceCostCents: 12500,
+        estimatedScheduledRentCents: 660000,
+        leasesEndingSoon: 1,
+      },
+      applications: {
+        started: 4,
+        submitted: 3,
+        approved: 2,
+        rejected: 0,
+        declined: 0,
+        pendingReviewCount: 2,
+        conversionRate: 0.5,
+      },
+      leasing: {
+        totalProperties: 2,
+        totalUnits: 5,
+        occupiedUnits: 4,
+        vacantUnits: 1,
+        occupancyRate: 0.8,
+        leasesEndingIn30Days: 1,
+        leasesEndingIn60Days: 1,
+        leasesEndingIn90Days: 2,
+        turnoverCount: 0,
+      },
+      maintenance: {
+        openWorkOrders: 1,
+        completedWorkOrders: 2,
+        reopenedWorkOrders: 0,
+        maintenanceCostCents: 12500,
+        averageCostPerCompletedWorkOrderCents: 6250,
+        costConcentrationByProperty: [],
+      },
+      revenue: {
+        estimatedScheduledRentCents: 660000,
+        averageRentPerOccupiedUnitCents: 165000,
+      },
+      decisionOutcomeAnalytics: {
+        scope: "landlord_all_time",
+        appearedCount: 4,
+        reviewedCount: 1,
+        dismissedCount: 0,
+        executedCount: 1,
+        failedExecutionCount: 0,
+        resolvedCount: 2,
+        resolutionRate: 0.5,
+        medianTimeToResolutionHours: 12,
+        averageTimeToExecutionHours: 8,
+      },
+      decisions: {
+        items: [
+          {
+            id: "executed",
+            decisionType: "review_lease_renewals",
+            priority: "high",
+            explanation: "Completed decision explanation.",
+            recommendedAction: "Completed decision",
+            actionKey: "open_lease_renewals_flow",
+            actionLabel: "Open completed decision",
+            destination: "/analytics/completed",
+            workflowCategory: "lease_renewals",
+            automationEligible: true,
+            automationState: "ready",
+            automationReason: null,
+            executionMappingState: "mapped",
+            executionMapping: null,
+            executionInputState: "complete",
+            executionInputReason: null,
+            executionInputMissingFields: [],
+            executionInput: null,
+            executedAt: "2026-04-22T12:00:00.000Z",
+            executionOutcomeStatus: "succeeded",
+            executionOutcomeAt: "2026-04-22T12:00:00.000Z",
+            executionOutcomeReason: null,
+            href: "/analytics/completed",
+            state: "executed",
+            reviewedAt: null,
+            supportingSignals: [],
+          },
+          {
+            id: "blocked",
+            decisionType: "review_lease_renewals",
+            priority: "medium",
+            explanation: "Blocked decision explanation.",
+            recommendedAction: "Blocked decision",
+            actionKey: "open_lease_renewals_flow",
+            actionLabel: "Open blocked decision",
+            destination: "/analytics/blocked",
+            workflowCategory: "lease_renewals",
+            automationEligible: false,
+            automationState: "blocked",
+            automationReason: "Inputs missing",
+            executionMappingState: "none",
+            executionMapping: null,
+            executionInputState: "none",
+            executionInputReason: null,
+            executionInputMissingFields: [],
+            executionInput: null,
+            executedAt: null,
+            executionOutcomeStatus: "none",
+            executionOutcomeAt: null,
+            executionOutcomeReason: null,
+            href: "/analytics/blocked",
+            state: "pending",
+            reviewedAt: null,
+            supportingSignals: [],
+          },
+          {
+            id: "ready",
+            decisionType: "start_screening_checkout",
+            priority: "low",
+            explanation: "Ready decision explanation.",
+            recommendedAction: "Ready decision",
+            actionKey: "open_screening_checkout_flow",
+            actionLabel: "Open ready decision",
+            destination: "/analytics/ready",
+            workflowCategory: "screening_checkout",
+            automationEligible: true,
+            automationState: "ready",
+            automationReason: null,
+            executionMappingState: "mapped",
+            executionMapping: null,
+            executionInputState: "complete",
+            executionInputReason: null,
+            executionInputMissingFields: [],
+            executionInput: null,
+            executedAt: null,
+            executionOutcomeStatus: "none",
+            executionOutcomeAt: null,
+            executionOutcomeReason: null,
+            href: "/analytics/ready",
+            state: "pending",
+            reviewedAt: null,
+            supportingSignals: [],
+          },
+          {
+            id: "duplicate",
+            decisionType: "approve_maintenance_cost",
+            priority: "high",
+            explanation: "Duplicate decision explanation.",
+            recommendedAction: "Duplicate decision",
+            actionKey: "open_maintenance_cost_approval_flow",
+            actionLabel: "Open duplicate decision",
+            destination: "/analytics/duplicate",
+            workflowCategory: "maintenance_cost_approval",
+            automationEligible: true,
+            automationState: "ready",
+            automationReason: null,
+            executionMappingState: "mapped",
+            executionMapping: null,
+            executionInputState: "complete",
+            executionInputReason: null,
+            executionInputMissingFields: [],
+            executionInput: null,
+            executionState: "unsafe_duplicate",
+            executedAt: null,
+            executionOutcomeStatus: "none",
+            executionOutcomeAt: null,
+            executionOutcomeReason: null,
+            href: "/analytics/duplicate",
+            state: "pending",
+            reviewedAt: null,
+            supportingSignals: [],
+          },
+        ],
+      },
+      predictive: { metrics: [] },
+      insights: [],
+      comparisons: buildComparisons(),
+      properties: [{ id: "prop-1", name: "Alpha" }],
+      propertyMetrics: [],
+      filters: {
+        period: "90d",
+        propertyId: null,
+        from: "2026-01-20T00:00:00.000Z",
+        to: "2026-04-20T00:00:00.000Z",
+      },
+    } as LandlordAnalyticsSnapshot);
+
+    vi.mocked(fetchLandlordAnalyticsAlerts).mockResolvedValue({
+      summary: {
+        activeCount: 0,
+        highSeverityCount: 0,
+        mediumSeverityCount: 0,
+        lowSeverityCount: 0,
+      },
+      alerts: [],
+      filters: { period: "90d", propertyId: null, status: "active" },
+    } as LandlordAnalyticsAlertsResponse);
+
+    vi.mocked(fetchLandlordAnalyticsBenchmarking).mockResolvedValue({
+      summary: {
+        propertyCount: 0,
+        comparedPropertyCount: 0,
+        benchmarkDimensions: [],
+      },
+      comparisons: [],
+      insights: [],
+      filters: {
+        period: "90d",
+        propertyId: null,
+        from: "2026-01-20T00:00:00.000Z",
+        to: "2026-04-20T00:00:00.000Z",
+      },
+    } as LandlordAnalyticsBenchmarkingResponse);
+
+    render(
+      <MemoryRouter>
+        <LandlordAnalyticsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole("heading", { name: /Recommended next actions/i })).toBeInTheDocument();
+
+    const actionLinks = screen
+      .getAllByRole("link")
+      .map((node) => node.textContent)
+      .filter((value) =>
+        [
+          "Open ready decision",
+          "Open blocked decision",
+          "Open duplicate decision",
+          "Open completed decision",
+        ].includes(value || "")
+      );
+
+    expect(actionLinks).toEqual([
+      "Open ready decision",
+      "Open blocked decision",
+      "Open duplicate decision",
+    ]);
+  });
+
   it("hydrates analytics focus from destination query params", async () => {
     await mockEntitlements();
     const fetchLandlordAnalyticsSnapshot = await mockApiResolved();

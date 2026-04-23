@@ -26,6 +26,7 @@ import PortfolioBenchmarkingPanel from "../../components/analytics/PortfolioBenc
 import PredictiveMetricsPanel from "../../components/analytics/PredictiveMetricsPanel";
 import {
   filterDecisionsByExecutionState,
+  prioritizeDecisions,
   type DecisionExecutionFilter,
 } from "../../components/analytics/decisionExecutionAggregation";
 
@@ -179,6 +180,7 @@ export default function LandlordAnalyticsPage() {
     () => filterDecisionsByExecutionState(decisions, executionFilter),
     [decisions, executionFilter]
   );
+  const prioritizedDecisions = React.useMemo(() => prioritizeDecisions(filteredDecisions), [filteredDecisions]);
 
   const summaryItems = snapshot
     ? [
@@ -279,7 +281,7 @@ export default function LandlordAnalyticsPage() {
                   onFilterChange={setExecutionFilter}
                 />
                 <AgentDecisionPanel
-                  decisions={filteredDecisions}
+                  decisions={prioritizedDecisions}
                   period={period}
                   propertyId={propertyId}
                 />

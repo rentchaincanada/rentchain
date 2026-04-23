@@ -4,6 +4,7 @@ import {
   aggregateDecisionStates,
   deriveDecisionExecutionState,
   filterDecisionsByExecutionState,
+  prioritizeDecisions,
 } from "./decisionExecutionAggregation";
 
 function buildDecision(
@@ -99,5 +100,32 @@ describe("decisionExecutionAggregation", () => {
     expect(filterDecisionsByExecutionState([ready, blocked], "all")).toEqual([ready, blocked]);
     expect(filterDecisionsByExecutionState([ready, blocked], "executable")).toEqual([ready]);
     expect(filterDecisionsByExecutionState([ready, blocked], "blocked")).toEqual([blocked]);
+  });
+
+  it("prioritizes decisions by execution state, then by existing decision priority", () => {
+    const ready = buildDecision({
+      id: "ready",
+      priority: "low",
+      automationState: "ready",
+      executionMappingState: "mapped",
+      executionInputState: "complete",
+    });
+    const blockedHigh = buildDecision({ id: "blocked-high", priority: "high" });
+    const duplicate = buildDecision({ id: "duplicate", executionState: "unsafe_duplicate", priority: "high" });
+    const executed = buildDecision({ id: "executed", state: "executed", priority: "high" });
+
+    expect(prioritizeDecisions([executed, duplicate, blockedHigh, ready]).map((decision) => decision.id)).toEqual([
+      "ready",
+      "blocked-high",
+      "duplicate",
+      "executed",
+    ]);
+  });
+
+  it("keeps original input order when decisions tie on state and priority", () => {
+    const first = buildDecision({ id: "first", priority: "medium" });
+    const second = buildDecision({ id: "second", priority: "medium" });
+
+    expect(prioritizeDecisions([first, second]).map((decision) => decision.id)).toEqual(["first", "second"]);
   });
 });
