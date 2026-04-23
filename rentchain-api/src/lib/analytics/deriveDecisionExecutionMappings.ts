@@ -170,7 +170,7 @@ function mapScreeningCheckoutDecision(decision: LandlordAgentDecision, input: Ma
 
   return {
     ...decision,
-    automationEligible: false,
+    automationEligible: executionInput.state === "complete",
     executionMappingState: "mapped",
     executionMapping: mapping,
     executionInputState: executionInput.state,

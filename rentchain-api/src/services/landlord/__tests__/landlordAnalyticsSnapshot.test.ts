@@ -577,9 +577,9 @@ describe("loadLandlordAnalyticsSnapshot", () => {
           decisionType: "start_screening_checkout",
           actionKey: "open_screening_checkout_flow",
           workflowCategory: "screening_checkout",
-          automationEligible: false,
-          automationState: "blocked",
-          automationReason: expect.stringContaining("explicit screening execution is not enabled"),
+          automationEligible: true,
+          automationState: "ready",
+          automationReason: "This decision is active and already mapped to a deterministic automation path.",
           executionMappingState: "mapped",
           executionMapping: expect.objectContaining({
             action: "screening.auto_start_checkout",

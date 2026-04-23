@@ -9,6 +9,7 @@ const saveFailedLandlordDecisionExecutionOutcome = vi.fn();
 const writeCanonicalEvent = vi.fn();
 const executeAutomation = vi.fn();
 const buildLeaseNoticePolicyRequest = vi.fn();
+const buildScreeningPolicyRequest = vi.fn();
 const evaluatePolicy = vi.fn();
 const toAutopilotPolicySummary = vi.fn();
 const writePolicyEvaluatedEvent = vi.fn();
@@ -19,6 +20,13 @@ const performLeaseNoticeSendFromPreviewInput = vi.fn();
 const loadLandlordDecisionTimeline = vi.fn();
 const loadMaintenanceApprovalWorkOrderForLandlord = vi.fn();
 const executeMaintenanceApprovalAutomation = vi.fn();
+const getScreeningProviderHealth = vi.fn();
+const assertTransUnionConnectedForScreening = vi.fn();
+const loadScreeningApplicationForLandlord = vi.fn();
+const loadLatestScreeningOrderForApplication = vi.fn();
+const executeScreeningCheckout = vi.fn();
+const isTransUnionReferralMode = vi.fn();
+const shouldUseMockScreeningCheckoutOverride = vi.fn();
 
 vi.mock("../../middleware/requireAuth", () => ({
   requireAuth: (req: any, res: any, next: any) => {
@@ -60,6 +68,7 @@ vi.mock("../../lib/automation/automationExecutor", () => ({
 
 vi.mock("../../lib/policy/policyAdapters", () => ({
   buildLeaseNoticePolicyRequest,
+  buildScreeningPolicyRequest,
 }));
 
 vi.mock("../../lib/policy/policyEvaluator", () => ({
@@ -82,6 +91,22 @@ vi.mock("../../services/landlord/landlordDecisionHistory", () => ({
 vi.mock("../../services/maintenanceApprovalExecutionService", () => ({
   loadMaintenanceApprovalWorkOrderForLandlord,
   executeMaintenanceApprovalAutomation,
+}));
+
+vi.mock("../../services/screening/providerHealth", () => ({
+  getScreeningProviderHealth,
+}));
+
+vi.mock("../../services/integrations/transunion/transunionService", () => ({
+  assertTransUnionConnectedForScreening,
+}));
+
+vi.mock("../../services/screeningCheckoutExecutionService", () => ({
+  loadScreeningApplicationForLandlord,
+  loadLatestScreeningOrderForApplication,
+  executeScreeningCheckout,
+  isTransUnionReferralMode,
+  shouldUseMockScreeningCheckoutOverride,
 }));
 
 vi.mock("../../lib/events/buildEvent", () => ({
@@ -303,6 +328,60 @@ describe("landlordAnalyticsRoutes", () => {
         landlordId: "landlord-1",
       },
     });
+    buildScreeningPolicyRequest.mockReturnValue({
+      domain: "screening",
+      action: "start_checkout",
+      context: { providerReady: true, consentComplete: true },
+    });
+    getScreeningProviderHealth.mockResolvedValue({
+      provider: "singlekey",
+      configured: true,
+      preflightOk: true,
+      preflightDetail: null,
+    });
+    assertTransUnionConnectedForScreening.mockResolvedValue(undefined);
+    loadScreeningApplicationForLandlord.mockResolvedValue({
+      ok: true,
+      application: {
+        id: "app-1",
+        landlordId: "landlord-1",
+        propertyId: "prop-3",
+        unitId: "unit-7",
+        status: "SUBMITTED",
+        applicant: {
+          firstName: "Jane",
+          lastName: "Doe",
+          email: "jane@example.com",
+          dob: "1990-01-01",
+        },
+        consent: {
+          creditConsent: true,
+          referenceConsent: true,
+          acceptedAt: "2026-04-20T10:00:00.000Z",
+          version: "v1.0",
+        },
+        residentialHistory: [{ address: "123 Main St" }],
+        screeningMonetization: {
+          eligibility: "eligible",
+          quoteStatus: "generated",
+          paymentStatus: "pending_checkout",
+          fulfillmentStatus: "ready",
+          quoteId: "quote_app-1",
+          quoteGeneratedAt: "2026-12-20T11:00:00.000Z",
+          quoteExpiresAt: "2026-12-20T11:30:00.000Z",
+        },
+      },
+    });
+    loadLatestScreeningOrderForApplication.mockResolvedValue(null);
+    executeScreeningCheckout.mockResolvedValue({
+      status: 200,
+      payload: {
+        ok: true,
+        checkoutUrl: "https://checkout.test/session_1",
+      },
+    });
+    isTransUnionReferralMode.mockReturnValue(false);
+    shouldUseMockScreeningCheckoutOverride.mockReturnValue(false);
     loadLandlordAnalyticsSnapshot.mockResolvedValue({
       summary: {
         occupiedUnits: 4,
@@ -788,6 +867,101 @@ describe("landlordAnalyticsRoutes", () => {
     expect(executeAutomation).not.toHaveBeenCalled();
   });
 
+  it("fails closed when a screening decision is no longer input-complete at execution time", async () => {
+    loadScreeningApplicationForLandlord.mockResolvedValueOnce({
+      ok: true,
+      application: {
+        id: "app-1",
+        landlordId: "landlord-1",
+        propertyId: "prop-3",
+        unitId: "unit-7",
+        status: "SUBMITTED",
+        applicant: {
+          firstName: "Jane",
+          lastName: "Doe",
+          email: "jane@example.com",
+          dob: "1990-01-01",
+        },
+        consent: {
+          creditConsent: true,
+          referenceConsent: true,
+          acceptedAt: "2026-04-20T10:00:00.000Z",
+          version: "v1.0",
+        },
+        residentialHistory: [{ address: "123 Main St" }],
+        screeningMonetization: {
+          eligibility: "eligible",
+          quoteStatus: "expired",
+          paymentStatus: "pending_checkout",
+          fulfillmentStatus: "ready",
+          quoteId: "quote_app-1",
+          quoteGeneratedAt: "2026-04-20T11:00:00.000Z",
+          quoteExpiresAt: "2026-04-20T11:05:00.000Z",
+        },
+      },
+    });
+    loadLandlordAnalyticsSnapshot.mockResolvedValueOnce({
+      decisions: {
+        items: [
+          {
+            id: "start_screening_checkout:app-1",
+            decisionType: "start_screening_checkout",
+            priority: "high",
+            explanation: "Start screening checkout for this applicant.",
+            supportingSignals: [],
+            recommendedAction: "Start screening checkout",
+            actionKey: "open_screening_checkout_flow",
+            actionLabel: "Open screening checkout",
+            destination: "/applications?entry=screening-checkout&propertyId=prop-3&applicationId=app-1",
+            workflowCategory: "screening_checkout",
+            automationEligible: true,
+            automationState: "ready",
+            automationReason: "This decision is active and already mapped to a deterministic automation path.",
+            executionMappingState: "mapped",
+            executionMapping: {
+              action: "screening.auto_start_checkout",
+              resourceType: "rental_application",
+              resourceId: "app-1",
+              prerequisitesMet: true,
+              prerequisiteReason: null,
+            },
+            executionInputState: "complete",
+            executionInputReason: null,
+            executionInputMissingFields: [],
+            executionInput: {
+              applicationId: "app-1",
+              quoteStatus: "generated",
+            },
+            executedAt: null,
+            executionOutcomeStatus: "none",
+            executionOutcomeAt: null,
+            executionOutcomeReason: null,
+            href: "/applications?entry=screening-checkout&propertyId=prop-3&applicationId=app-1",
+            state: "pending",
+            reviewedAt: null,
+          },
+        ],
+      },
+    });
+
+    const router = (await import("../landlordAnalyticsRoutes")).default;
+    const response = await invokeRouter(router, {
+      method: "POST",
+      url: "/landlord/analytics/decisions/start_screening_checkout%3Aapp-1/execute",
+      user: { id: "landlord-1", role: "landlord" },
+    });
+
+    expect(response.status).toBe(409);
+    expect(response.body).toEqual(
+      expect.objectContaining({
+        ok: false,
+        error: "DECISION_INPUTS_INCOMPLETE",
+      })
+    );
+    expect(executeAutomation).not.toHaveBeenCalled();
+    expect(executeScreeningCheckout).not.toHaveBeenCalled();
+  });
+
   it("executes a ready mapped maintenance decision and persists executed state", async () => {
     saveExecutedLandlordDecisionState.mockResolvedValueOnce({
       id: "landlord-1__approve_maintenance_cost:wo-1",
@@ -899,6 +1073,127 @@ describe("landlordAnalyticsRoutes", () => {
           state: "executed",
           executionOutcomeStatus: "succeeded",
         }),
+      })
+    );
+  });
+
+  it("executes a ready mapped screening decision and persists executed state", async () => {
+    saveExecutedLandlordDecisionState.mockResolvedValueOnce({
+      id: "landlord-1__start_screening_checkout:app-1",
+      landlordId: "landlord-1",
+      decisionId: "start_screening_checkout:app-1",
+      state: "executed",
+      reviewedAt: null,
+      executedAt: "2026-04-20T12:00:00.000Z",
+      executionOutcomeStatus: "succeeded",
+      executionOutcomeAt: "2026-04-20T12:00:00.000Z",
+      executionOutcomeReason: null,
+      createdAt: "2026-04-20T12:00:00.000Z",
+      updatedAt: "2026-04-20T12:00:00.000Z",
+    });
+    loadLandlordAnalyticsSnapshot.mockResolvedValueOnce({
+      decisions: {
+        items: [
+          {
+            id: "start_screening_checkout:app-1",
+            decisionType: "start_screening_checkout",
+            priority: "high",
+            explanation: "Start screening checkout for this applicant.",
+            supportingSignals: [],
+            recommendedAction: "Start screening checkout",
+            actionKey: "open_screening_checkout_flow",
+            actionLabel: "Open screening checkout",
+            destination: "/applications?entry=screening-checkout&propertyId=prop-3&applicationId=app-1",
+            workflowCategory: "screening_checkout",
+            automationEligible: true,
+            automationState: "ready",
+            automationReason: "This decision is active and already mapped to a deterministic automation path.",
+            executionMappingState: "mapped",
+            executionMapping: {
+              action: "screening.auto_start_checkout",
+              resourceType: "rental_application",
+              resourceId: "app-1",
+              prerequisitesMet: true,
+              prerequisiteReason: null,
+            },
+            executionInputState: "complete",
+            executionInputReason: null,
+            executionInputMissingFields: [],
+            executionInput: {
+              applicationId: "app-1",
+              propertyId: "prop-3",
+              unitId: "unit-7",
+              applicantEmail: "jane@example.com",
+              quoteId: "quote_app-1",
+              quoteStatus: "generated",
+              paymentStatus: "pending_checkout",
+              fulfillmentStatus: "ready",
+              blockingReason: null,
+              policyOutcome: "allow",
+              canStartCheckout: true,
+            },
+            executedAt: null,
+            executionOutcomeStatus: "none",
+            executionOutcomeAt: null,
+            executionOutcomeReason: null,
+            href: "/applications?entry=screening-checkout&propertyId=prop-3&applicationId=app-1",
+            state: "pending",
+            reviewedAt: null,
+          },
+        ],
+      },
+    });
+
+    const router = (await import("../landlordAnalyticsRoutes")).default;
+    const response = await invokeRouter(router, {
+      method: "POST",
+      url: "/landlord/analytics/decisions/start_screening_checkout%3Aapp-1/execute",
+      user: { id: "landlord-1", role: "landlord" },
+    });
+
+    expect(response.status).toBe(200);
+    expect(loadScreeningApplicationForLandlord).toHaveBeenCalledWith({
+      landlordId: "landlord-1",
+      applicationId: "app-1",
+    });
+    expect(loadLatestScreeningOrderForApplication).toHaveBeenCalledWith("app-1");
+    expect(getScreeningProviderHealth).toHaveBeenCalled();
+    expect(executeScreeningCheckout).toHaveBeenCalledWith(
+      expect.objectContaining({
+        role: "landlord",
+        landlordId: "landlord-1",
+        applicationId: "app-1",
+        frontendOrigin: null,
+      })
+    );
+    expect(saveExecutedLandlordDecisionState).toHaveBeenCalledWith({
+      landlordId: "landlord-1",
+      decisionId: "start_screening_checkout:app-1",
+    });
+    expect(writeCanonicalEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "decision.execution_requested",
+        metadata: expect.objectContaining({
+          decisionId: "start_screening_checkout:app-1",
+          action: "screening.auto_start_checkout",
+          resourceId: "app-1",
+        }),
+      })
+    );
+    expect(writeCanonicalEvent).toHaveBeenCalledWith(expect.objectContaining({ type: "decision.executed" }));
+    expect(response.body).toEqual(
+      expect.objectContaining({
+        ok: true,
+        execution: expect.objectContaining({
+          decisionId: "start_screening_checkout:app-1",
+          action: "screening.auto_start_checkout",
+          resourceId: "app-1",
+        }),
+        state: expect.objectContaining({
+          state: "executed",
+          executionOutcomeStatus: "succeeded",
+        }),
+        checkoutUrl: "https://checkout.test/session_1",
       })
     );
   });
@@ -1095,6 +1390,102 @@ describe("landlordAnalyticsRoutes", () => {
           state: "pending",
           executionOutcomeStatus: "failed",
           executionOutcomeReason: "MAINTENANCE_COST_REVIEW_REQUIRED",
+        }),
+      })
+    );
+  });
+
+  it("persists failed screening execution feedback without resolving the decision", async () => {
+    saveFailedLandlordDecisionExecutionOutcome.mockResolvedValueOnce({
+      id: "landlord-1__start_screening_checkout:app-1",
+      landlordId: "landlord-1",
+      decisionId: "start_screening_checkout:app-1",
+      state: "pending",
+      reviewedAt: null,
+      executedAt: null,
+      executionOutcomeStatus: "failed",
+      executionOutcomeAt: "2026-04-20T12:00:00.000Z",
+      executionOutcomeReason: "SCREENING_AUTO_START_CHECKOUT_POLICY_BLOCKED",
+      createdAt: "2026-04-20T12:00:00.000Z",
+      updatedAt: "2026-04-20T12:00:00.000Z",
+    });
+    executeAutomation.mockResolvedValueOnce({
+      automationResult: {
+        action: "screening.auto_start_checkout",
+        executed: false,
+        skipped: true,
+        reason: "SCREENING_AUTO_START_CHECKOUT_POLICY_BLOCKED",
+        timestamp: "2026-04-20T12:00:00.000Z",
+      },
+    });
+    loadLandlordAnalyticsSnapshot.mockResolvedValueOnce({
+      decisions: {
+        items: [
+          {
+            id: "start_screening_checkout:app-1",
+            decisionType: "start_screening_checkout",
+            priority: "high",
+            explanation: "Start screening checkout for this applicant.",
+            supportingSignals: [],
+            recommendedAction: "Start screening checkout",
+            actionKey: "open_screening_checkout_flow",
+            actionLabel: "Open screening checkout",
+            destination: "/applications?entry=screening-checkout&propertyId=prop-3&applicationId=app-1",
+            workflowCategory: "screening_checkout",
+            automationEligible: true,
+            automationState: "ready",
+            automationReason: "This decision is active and already mapped to a deterministic automation path.",
+            executionMappingState: "mapped",
+            executionMapping: {
+              action: "screening.auto_start_checkout",
+              resourceType: "rental_application",
+              resourceId: "app-1",
+              prerequisitesMet: true,
+              prerequisiteReason: null,
+            },
+            executionInputState: "complete",
+            executionInputReason: null,
+            executionInputMissingFields: [],
+            executionInput: {
+              applicationId: "app-1",
+              quoteStatus: "generated",
+              paymentStatus: "pending_checkout",
+              blockingReason: null,
+            },
+            executedAt: null,
+            executionOutcomeStatus: "none",
+            executionOutcomeAt: null,
+            executionOutcomeReason: null,
+            href: "/applications?entry=screening-checkout&propertyId=prop-3&applicationId=app-1",
+            state: "pending",
+            reviewedAt: null,
+          },
+        ],
+      },
+    });
+
+    const router = (await import("../landlordAnalyticsRoutes")).default;
+    const response = await invokeRouter(router, {
+      method: "POST",
+      url: "/landlord/analytics/decisions/start_screening_checkout%3Aapp-1/execute",
+      user: { id: "landlord-1", role: "landlord" },
+    });
+
+    expect(response.status).toBe(409);
+    expect(saveFailedLandlordDecisionExecutionOutcome).toHaveBeenCalledWith({
+      landlordId: "landlord-1",
+      decisionId: "start_screening_checkout:app-1",
+      reason: "SCREENING_AUTO_START_CHECKOUT_POLICY_BLOCKED",
+    });
+    expect(executeScreeningCheckout).not.toHaveBeenCalled();
+    expect(response.body).toEqual(
+      expect.objectContaining({
+        ok: false,
+        error: "DECISION_EXECUTION_FAILED",
+        state: expect.objectContaining({
+          state: "pending",
+          executionOutcomeStatus: "failed",
+          executionOutcomeReason: "SCREENING_AUTO_START_CHECKOUT_POLICY_BLOCKED",
         }),
       })
     );
