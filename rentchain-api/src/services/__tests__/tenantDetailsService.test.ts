@@ -114,4 +114,20 @@ describe("getTenantsList", () => {
       "tenant-visible",
     ]);
   });
+
+  it("hides the targeted test-tenant ids even if the cleanup flag was never written", async () => {
+    tenantDocs.set("c43992df00d07acae140ba76", {
+      landlordId: "landlord-1",
+      fullName: "test2",
+      createdAt: "2026-01-04T00:00:00.000Z",
+    });
+
+    const { getTenantsList } = await import("../tenantDetailsService");
+    const tenants = await getTenantsList({
+      landlordId: "landlord-1",
+      excludeHiddenFromActiveLists: true,
+    });
+
+    expect(tenants.map((tenant) => tenant.id)).toEqual(["tenant-visible"]);
+  });
 });

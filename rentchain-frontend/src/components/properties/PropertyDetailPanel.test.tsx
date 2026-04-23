@@ -276,6 +276,59 @@ render(
     expect(screen.getAllByText("$1,800").length).toBeGreaterThan(0);
   });
 
+  it("renders safely when lease-backed occupancy falls back from active leases", async () => {
+    mocks.fetchUnitsForProperty.mockResolvedValue([
+      {
+        id: "unit-1",
+        unitNumber: "101",
+        rent: 1850,
+      },
+    ]);
+    mocks.getLeasesForProperty.mockResolvedValue({
+      leases: [
+        {
+          id: "lease-1",
+          tenantId: "tenant-1",
+          propertyId: "prop-1",
+          unitId: "unit-1",
+          unitNumber: "101",
+          monthlyRent: 1850,
+          startDate: "2026-01-01",
+          endDate: "2026-12-31",
+          status: "active",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+      credibilitySummary: null,
+    });
+
+    render(
+      <AuthProvider>
+        <MemoryRouter>
+          <PropertyDetailPanel
+            property={{
+              id: "prop-1",
+              name: "Harbour View",
+              addressLine1: "12 Wharf Street",
+              city: "Halifax",
+              province: "NS",
+              postalCode: "B3H 1A1",
+              country: "Canada",
+              totalUnits: 1,
+              amenities: [],
+              units: [],
+              createdAt: new Date().toISOString(),
+            }}
+            onRefresh={vi.fn()}
+          />
+        </MemoryRouter>
+      </AuthProvider>
+    );
+
+    expect((await screen.findAllByText("Occupied")).length).toBeGreaterThan(0);
+  });
+
   it("uses the updated archive confirmation copy before archiving", async () => {
     const confirmMock = vi.spyOn(window, "confirm").mockReturnValue(true);
 

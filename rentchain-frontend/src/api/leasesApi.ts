@@ -141,6 +141,8 @@ export async function convertUnitReferenceToLease(
     occupantName?: string;
     tenantEmail?: string;
     tenantPhone?: string;
+    coApplicantEmail?: string;
+    coApplicantPhone?: string;
     startDate: string;
     endDate?: string | null;
     monthlyRent?: number;

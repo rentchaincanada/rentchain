@@ -1,23 +1,32 @@
 import React, { useEffect, useState } from "react";
 import { colors, radius, text } from "../../styles/tokens";
-import { getMyTenantEvents, type TenantEvent } from "../../api/tenantEvents";
+import { listTenantEvents, type TenantEvent } from "../../api/tenantEvents";
 
 type Props = {
   tenantId: string | null | undefined;
+  refreshKey?: number;
 };
 
-function toMillis(ts: any): number | null {
+function toMillis(ts: unknown): number | null {
   if (ts == null) return null;
   if (typeof ts === "number") return ts;
-  if (typeof ts?.toMillis === "function") return ts.toMillis();
-  if (typeof ts?.seconds === "number") return ts.seconds * 1000;
+  if (typeof ts === "object" && ts !== null) {
+    const candidate = ts as { toMillis?: () => number; seconds?: number };
+    if (typeof candidate.toMillis === "function") return candidate.toMillis();
+    if (typeof candidate.seconds === "number") return candidate.seconds * 1000;
+  }
   const d = new Date(ts);
   return Number.isNaN(d.getTime()) ? null : d.getTime();
 }
 
-export const TenantActivityPanel: React.FC<Props> = ({ tenantId }) => {
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error && error.message) return error.message;
+  return "Failed to load tenant activity";
+}
+
+export const TenantActivityPanel: React.FC<Props> = ({ tenantId, refreshKey = 0 }) => {
   const [items, setItems] = useState<TenantEvent[]>([]);
-  const [nextCursor, setNextCursor] = useState<any>(null);
+  const [nextCursor, setNextCursor] = useState<string | number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -32,12 +41,16 @@ export const TenantActivityPanel: React.FC<Props> = ({ tenantId }) => {
     setLoading(true);
     setError(null);
     try {
-      const resp = await getMyTenantEvents(25);
-      const newItems = (resp as any)?.items || [];
-      setItems(initial ? newItems : [...items, ...newItems]);
-      setNextCursor(null);
-    } catch (e: any) {
-      setError(e?.message || "Failed to load tenant activity");
+      const resp = await listTenantEvents({
+        tenantId,
+        limit: 25,
+        cursor: initial ? undefined : nextCursor ?? undefined,
+      });
+      const newItems = Array.isArray(resp?.items) ? resp.items : [];
+      setItems((prev) => (initial ? newItems : [...prev, ...newItems]));
+      setNextCursor(resp?.nextCursor ?? null);
+    } catch (error: unknown) {
+      setError(getErrorMessage(error));
     } finally {
       setLoading(false);
     }
@@ -56,7 +69,7 @@ export const TenantActivityPanel: React.FC<Props> = ({ tenantId }) => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tenantId]);
+  }, [tenantId, refreshKey]);
 
   const canLoadMore = !!nextCursor && !loading;
 

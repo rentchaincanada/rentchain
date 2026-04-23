@@ -586,8 +586,24 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
     activeLeaseRentTotal,
     currentOccupiedRentTotal,
   } = useMemo(() => buildPropertySummaryMetrics(displayedUnits, leases, unitCount), [displayedUnits, leases, unitCount]);
+  const leasedUnitIds = useMemo(
+    () => new Set(activeLeases.map((lease) => String(lease.unitId || "").trim()).filter(Boolean)),
+    [activeLeases]
+  );
+  const leasedUnitNumbers = useMemo(
+    () => new Set(activeLeases.map((lease) => String(lease.unitNumber || "").trim()).filter(Boolean)),
+    [activeLeases]
+  );
   const collectionRate =
     currentOccupiedRentTotal > 0 ? totalCollectedThisMonth / currentOccupiedRentTotal : 0;
+  const isLeaseBackedUnit = useCallback(
+    (unit: any) => {
+      const unitId = String(unit?.id || unit?.unitId || "").trim();
+      const unitNumber = String(unit?.unitNumber || unit?.label || "").trim();
+      return (unitId && leasedUnitIds.has(unitId)) || (unitNumber && leasedUnitNumbers.has(unitNumber));
+    },
+    [leasedUnitIds, leasedUnitNumbers]
+  );
 
   const unitsNeedingOccupancySetup = useMemo(
     () => getUnitsNeedingOccupancySetup(displayedUnits, activeLeases),
@@ -1430,7 +1446,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                     (u as any).baths ?? (u as any).bathrooms ?? (u as any).bathroomsCount ?? null;
                   const rentVal = resolveConfiguredUnitRent(u);
                   const sqftVal = (u as any).sqft ?? null;
-                  const statusVal = (u as any).status || (leasedUnitNumbers.has(unitNum) ? "occupied" : "vacant");
+                  const statusVal = (u as any).status || (isLeaseBackedUnit(u) ? "occupied" : "vacant");
                   const isLeased = String(statusVal || "").toLowerCase() === "occupied";
                   const rentDisplay =
                     rentVal !== null && rentVal !== undefined
@@ -1599,7 +1615,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
               (u as any).baths ?? (u as any).bathrooms ?? (u as any).bathroomsCount ?? null;
             const rentVal = resolveConfiguredUnitRent(u);
             const sqftVal = (u as any).sqft ?? null;
-            const statusVal = (u as any).status || (leasedUnitNumbers.has(unitNum) ? "occupied" : "vacant");
+            const statusVal = (u as any).status || (isLeaseBackedUnit(u) ? "occupied" : "vacant");
             const isLeased = String(statusVal || "").toLowerCase() === "occupied";
             const rentDisplay =
               rentVal !== null && rentVal !== undefined

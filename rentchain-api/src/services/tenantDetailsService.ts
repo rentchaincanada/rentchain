@@ -140,6 +140,13 @@ const FALLBACK_TENANTS: TenantRecord[] = [
 ];
 
 const CONVERTED_TENANTS: TenantRecord[] = [];
+const TARGETED_HIDDEN_TENANT_IDS = new Set([
+  "c43992df00d07acae140ba76",
+  "6b8df37863a292ead2a07401",
+  "b815152e3fbaf302897f6ce4",
+  "bcea70bf3f353746c8895bc9",
+  "ff45a28cdfad7737958592de",
+]);
 
 type TenantQueryOptions = {
   landlordId?: string | null;
@@ -181,6 +188,10 @@ function pickString(...values: any[]): string | null {
     if (next) return next;
   }
   return null;
+}
+
+function isHiddenFromActiveLists(tenant: Pick<TenantRecord, "id" | "hiddenFromActiveLists">) {
+  return tenant.hiddenFromActiveLists === true || TARGETED_HIDDEN_TENANT_IDS.has(String(tenant.id || "").trim());
 }
 
 function mapTenant(docId: string, data: any): TenantRecord {
@@ -437,7 +448,7 @@ export async function getTenantsList(opts: TenantQueryOptions = {}): Promise<Ten
     snap.forEach((doc) => {
       const data = doc.data() as any;
       const tenant = mapTenant(doc.id, data);
-      if (excludeHiddenFromActiveLists && tenant.hiddenFromActiveLists) return;
+      if (excludeHiddenFromActiveLists && isHiddenFromActiveLists(tenant)) return;
       out.push(tenant);
     });
 

@@ -222,7 +222,13 @@ describe("leaseRoutes integrity repairs", () => {
     const app = await makeApp();
     const res = await request(app)
       .post("/reconciliation-candidates/unit-1/convert")
-      .send({ startDate: "2026-04-01", monthlyRent: 1850 });
+      .send({
+        startDate: "2026-04-01",
+        monthlyRent: 1850,
+        tenantPhone: "(902) 555-1111 ext 9",
+        coApplicantEmail: "coapplicant@example.com",
+        coApplicantPhone: "902-555-3333",
+      });
 
     expect(res.status).toBe(201);
     expect(res.body?.ok).toBe(true);
@@ -231,6 +237,11 @@ describe("leaseRoutes integrity repairs", () => {
     const leaseSnap = await fakeDb.collection("leases").doc(String(res.body?.lease?.id || "")).get();
     expect(leaseSnap.exists).toBe(true);
     expect(leaseSnap.data()?.referenceDocument?.fileName).toBe("lease.pdf");
+    expect(leaseSnap.data()?.coApplicant).toEqual({
+      email: "coapplicant@example.com",
+      phone: "9025553333",
+    });
+    expect(res.body?.tenant?.phone).toBe("90255511119");
   });
 
   it("lists notes and archive visibility metadata for landlord leases", async () => {

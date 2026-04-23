@@ -262,6 +262,7 @@ export const TenantsPage: React.FC = () => {
   const [tenantNote, setTenantNote] = useState<TenantNoteState>(EMPTY_TENANT_NOTE);
   const [savingTenantProfile, setSavingTenantProfile] = useState(false);
   const [savingTenantNote, setSavingTenantNote] = useState(false);
+  const [activityRefreshKey, setActivityRefreshKey] = useState(0);
   const [savingTenancyId, setSavingTenancyId] = useState<string | null>(null);
   const [occupancySaveError, setOccupancySaveError] = useState<string | null>(null);
   const [occupancyEditor, setOccupancyEditor] = useState<OccupancyEditorState>(EMPTY_EDITOR);
@@ -307,8 +308,9 @@ export const TenantsPage: React.FC = () => {
       setLoading(true);
       setError(null);
       const rows = await fetchTenants();
+      const visibleRows = rows.filter((tenant) => tenant?.hiddenFromActiveLists !== true);
       const enriched = await Promise.all(
-        rows.map(async (tenant) => {
+        visibleRows.map(async (tenant) => {
           if (!tenant?.id) return { ...tenant, tenancies: [] };
           try {
             const tenancies = Array.isArray(tenant.tenancies)
@@ -540,6 +542,7 @@ export const TenantsPage: React.FC = () => {
         description: `Saved to ${tenantNote.tenantName}'s timeline.`,
         variant: "success",
       });
+      setActivityRefreshKey((prev) => prev + 1);
       closeTenantNote();
     } catch (err: unknown) {
       showToast({
@@ -963,7 +966,9 @@ export const TenantsPage: React.FC = () => {
                     </div>
                   </div>
                 )}
-                {selectedTenantId && tenantExists && <TenantDetailPanel tenantId={selectedTenantId} />}
+                {selectedTenantId && tenantExists && (
+                  <TenantDetailPanel tenantId={selectedTenantId} activityRefreshKey={activityRefreshKey} />
+                )}
               </Section>
 
               <Section>
