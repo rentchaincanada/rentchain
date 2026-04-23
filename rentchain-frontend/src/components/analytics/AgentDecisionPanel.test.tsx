@@ -158,8 +158,10 @@ describe("AgentDecisionPanel", () => {
     expect(screen.getByText(/Vacancy pressure is concentrated in Beta/i)).toBeInTheDocument();
     expect(screen.getByText(/high priority/i)).toBeInTheDocument();
     expect(screen.getByText(/Workflow: Vacancy readiness/i)).toBeInTheDocument();
-    expect(screen.getByText(/Blocked/i)).toBeInTheDocument();
-    expect(screen.getByText(/Governance: Execution disabled for this decision state/i)).toBeInTheDocument();
+    expect(screen.getByText(/Action required/i)).toBeInTheDocument();
+    expect(screen.getByText(/Execution controls/i)).toBeInTheDocument();
+    expect(screen.getByText(/Execution disabled for this state/i)).toBeInTheDocument();
+    expect(screen.getByText(/This decision is in a lifecycle state that does not allow execution/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Open vacancy readiness/i })).toHaveAttribute("href", "/analytics?propertyId=prop-2");
     expect(screen.getByText(/Vacancy is elevated/i)).toBeInTheDocument();
     expect(screen.queryByText(/Automation blocked/i)).not.toBeInTheDocument();
@@ -575,9 +577,10 @@ describe("AgentDecisionPanel", () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByText(/Duplicate prevented/i)).toBeInTheDocument();
-    expect(screen.getByText(/Governance: Duplicate execution prevented/i)).toBeInTheDocument();
-    expect(screen.getByText(/Attempts: 1/i)).toBeInTheDocument();
+    expect(screen.getByText(/Already processed/i)).toBeInTheDocument();
+    expect(screen.getByText(/Duplicate safeguard active/i)).toBeInTheDocument();
+    expect(screen.getByText(/Duplicate execution prevented/i)).toBeInTheDocument();
+    expect(screen.getByText(/Executed 1 time/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Execute now/i })).not.toBeInTheDocument();
   });
 
