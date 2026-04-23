@@ -288,4 +288,31 @@ describe("TenantsPage", () => {
       description: "Confirmed unit details by phone.",
     });
   });
+
+  it("filters hidden tenants from the active landlord list even if they are returned by the API", async () => {
+    mocks.useCapabilitiesMock.mockReturnValue({
+      features: { tenant_invites: true },
+    });
+    mocks.fetchTenantsMock.mockResolvedValue([
+      {
+        id: "tenant-hidden",
+        fullName: "Hidden Test Tenant",
+        hiddenFromActiveLists: true,
+      },
+      {
+        id: "tenant-visible",
+        fullName: "Visible Tenant",
+      },
+    ]);
+    mocks.fetchTenantTenanciesMock.mockResolvedValue([]);
+
+    render(
+      <MemoryRouter>
+        <TenantsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Visible Tenant")).toBeInTheDocument();
+    expect(screen.queryByText("Hidden Test Tenant")).not.toBeInTheDocument();
+  });
 });

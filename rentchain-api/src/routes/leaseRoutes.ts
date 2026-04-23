@@ -56,6 +56,11 @@ function normalizeStatus(value: unknown): string {
   return String(value || "").trim().toLowerCase();
 }
 
+function normalizePhoneDigits(value: unknown): string | null {
+  const digits = String(value || "").replace(/\D/g, "").slice(0, 15);
+  return digits || null;
+}
+
 function escapeCsvCell(value: unknown): string {
   const raw = String(value ?? "");
   if (/[",\n]/.test(raw)) {
@@ -524,11 +529,20 @@ router.post("/reconciliation-candidates/:unitId/convert", requireLandlord, async
     }
 
     const occupantName = String(req.body?.occupantName || unit?.occupantName || "").trim();
-    const tenantEmail = String(req.body?.tenantEmail || "").trim() || null;
-    const tenantPhone = String(req.body?.tenantPhone || "").trim() || null;
+    const tenantEmail = String(req.body?.tenantEmail || "").trim().toLowerCase() || null;
+    const tenantPhone = normalizePhoneDigits(req.body?.tenantPhone);
+    const coApplicantEmail = String(req.body?.coApplicantEmail || "").trim().toLowerCase() || null;
+    const coApplicantPhone = normalizePhoneDigits(req.body?.coApplicantPhone);
     const startDate = toIsoDate(req.body?.startDate);
     const endDate = toIsoDate(req.body?.endDate);
     const monthlyRent = Number(req.body?.monthlyRent ?? unit?.rent);
+    const coApplicant =
+      coApplicantEmail || coApplicantPhone
+        ? {
+            email: coApplicantEmail,
+            phone: coApplicantPhone,
+          }
+        : null;
 
     if (!occupantName) return res.status(400).json({ ok: false, error: "occupant_name_required" });
     if (!startDate) return res.status(400).json({ ok: false, error: "start_date_required" });
@@ -555,6 +569,7 @@ router.post("/reconciliation-candidates/:unitId/convert", requireLandlord, async
         leaseStart: startDate,
         leaseEnd: endDate || null,
         monthlyRent,
+        coApplicant,
         status: "Current",
         createdAt: nowIso,
         updatedAt: nowIso,
@@ -612,6 +627,7 @@ router.post("/reconciliation-candidates/:unitId/convert", requireLandlord, async
       source: "occupied_unit_reconciliation",
       sourceUnitId: unitId,
       referenceDocument: unit?.leaseDocument || null,
+      coApplicant,
     };
     await db.collection("leases").doc(lease.id).set(firestoreLeaseRecord, { merge: false });
     await tenantRef.set({ currentLeaseId: lease.id, updatedAt: new Date().toISOString() }, { merge: true });

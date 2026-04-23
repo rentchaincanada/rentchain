@@ -66,6 +66,39 @@ function errorMessage(error: unknown, fallback: string) {
   return fallback;
 }
 
+function normalizePhoneInput(value: string) {
+  return String(value || "").replace(/\D/g, "").slice(0, 15);
+}
+
+function formatBlockingReason(reason: string) {
+  switch (String(reason || "").trim().toLowerCase()) {
+    case "occupant_name_required":
+      return "Occupant name required";
+    case "rent_required":
+      return "Monthly rent required";
+    default:
+      return String(reason || "")
+        .replace(/_/g, " ")
+        .replace(/\b\w/g, (char) => char.toUpperCase());
+  }
+}
+
+function buildCompleteTenantInfoHref(candidate: LeaseReconciliationCandidate) {
+  const params = new URLSearchParams();
+  params.set("propertyId", String(candidate.propertyId));
+  params.set("unitId", String(candidate.unitId));
+  return `/properties?${params.toString()}`;
+}
+
+function matchesLeaseSearch(lease: LandlordActiveLease, normalizedQuery: string) {
+  if (!normalizedQuery) return true;
+  const haystack = [lease.tenantName, lease.unitNumber, lease.propertyName]
+    .map((value) => String(value || "").trim().toLowerCase())
+    .filter(Boolean)
+    .join(" ");
+  return haystack.includes(normalizedQuery);
+}
+
 function statusBadge(status: string | null | undefined) {
   return (
     <span
@@ -91,11 +124,14 @@ export default function LandlordActiveLeasesPage() {
   const [candidates, setCandidates] = React.useState<LeaseReconciliationCandidate[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = React.useState("");
   const [selectedCandidate, setSelectedCandidate] = React.useState<LeaseReconciliationCandidate | null>(null);
   const [convertSaving, setConvertSaving] = React.useState(false);
   const [occupantName, setOccupantName] = React.useState("");
   const [tenantEmail, setTenantEmail] = React.useState("");
   const [tenantPhone, setTenantPhone] = React.useState("");
+  const [coApplicantEmail, setCoApplicantEmail] = React.useState("");
+  const [coApplicantPhone, setCoApplicantPhone] = React.useState("");
   const [startDate, setStartDate] = React.useState(todayIso());
   const [endDate, setEndDate] = React.useState("");
   const [monthlyRent, setMonthlyRent] = React.useState("");
@@ -128,6 +164,8 @@ export default function LandlordActiveLeasesPage() {
     setOccupantName(String(selectedCandidate.occupantName || ""));
     setTenantEmail("");
     setTenantPhone("");
+    setCoApplicantEmail("");
+    setCoApplicantPhone("");
     setStartDate(todayIso());
     setEndDate(String(selectedCandidate.leaseEndDate || ""));
     setMonthlyRent(String(selectedCandidate.monthlyRent || ""));
@@ -156,6 +194,8 @@ export default function LandlordActiveLeasesPage() {
         occupantName,
         tenantEmail: tenantEmail.trim() || undefined,
         tenantPhone: tenantPhone.trim() || undefined,
+        coApplicantEmail: coApplicantEmail.trim() || undefined,
+        coApplicantPhone: coApplicantPhone.trim() || undefined,
         startDate,
         endDate: endDate || null,
         monthlyRent: Number(monthlyRent || 0),
@@ -168,6 +208,12 @@ export default function LandlordActiveLeasesPage() {
       setConvertSaving(false);
     }
   }
+
+  const normalizedSearchQuery = searchQuery.trim().toLowerCase();
+  const filteredLeases = React.useMemo(
+    () => leases.filter((lease) => matchesLeaseSearch(lease, normalizedSearchQuery)),
+    [leases, normalizedSearchQuery]
+  );
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
@@ -207,6 +253,23 @@ export default function LandlordActiveLeasesPage() {
         </button>
       </div>
 
+      <label style={{ display: "grid", gap: 6, maxWidth: 420 }}>
+        <span style={{ fontSize: 13, fontWeight: 700, color: "#0f172a" }}>Search leases</span>
+        <input
+          aria-label="Search leases"
+          value={searchQuery}
+          onChange={(event) => setSearchQuery(event.target.value)}
+          placeholder="Search by tenant, unit, or property"
+          style={{
+            padding: "10px 12px",
+            borderRadius: 10,
+            border: "1px solid #cbd5e1",
+            background: "#fff",
+            color: "#0f172a",
+          }}
+        />
+      </label>
+
       {loading ? <div>Loading lease operations…</div> : null}
       {error ? <div style={{ color: "#b91c1c" }}>{error}</div> : null}
 
@@ -243,26 +306,41 @@ export default function LandlordActiveLeasesPage() {
                       View reference
                     </a>
                   ) : null}
-                  <button
-                    type="button"
-                    aria-label={`Convert unit ${candidate.unitNumber} to lease`}
-                    disabled={!candidate.canConvert}
-                    onClick={() => setSelectedCandidate(candidate)}
-                    style={{
-                      padding: "6px 10px",
-                      borderRadius: 8,
-                      border: "1px solid #cbd5e1",
-                      background: candidate.canConvert ? "#fff" : "#f8fafc",
-                      color: candidate.canConvert ? "#0f172a" : "#94a3b8",
-                    }}
-                  >
-                    Convert to lease
-                  </button>
+                  {candidate.canConvert ? (
+                    <button
+                      type="button"
+                      aria-label={`Convert unit ${candidate.unitNumber} to lease`}
+                      onClick={() => setSelectedCandidate(candidate)}
+                      style={{
+                        padding: "6px 10px",
+                        borderRadius: 8,
+                        border: "1px solid #cbd5e1",
+                        background: "#fff",
+                        color: "#0f172a",
+                      }}
+                    >
+                      Convert to lease
+                    </button>
+                  ) : (
+                    <Link
+                      to={buildCompleteTenantInfoHref(candidate)}
+                      style={{
+                        padding: "6px 10px",
+                        borderRadius: 8,
+                        border: "1px solid #cbd5e1",
+                        background: "#fff",
+                        color: "#0f172a",
+                        textDecoration: "none",
+                      }}
+                    >
+                      Complete tenant info
+                    </Link>
+                  )}
                 </div>
               </div>
               {!candidate.canConvert && candidate.blockingReasons.length > 0 ? (
                 <div style={{ color: "#b45309", fontSize: 12 }}>
-                  Missing: {candidate.blockingReasons.join(", ").replace(/_/g, " ")}
+                  Missing: {candidate.blockingReasons.map(formatBlockingReason).join(", ")}
                 </div>
               ) : null}
             </div>
@@ -284,7 +362,21 @@ export default function LandlordActiveLeasesPage() {
         </div>
       ) : null}
 
-      {!loading && !error && leases.length > 0 ? (
+      {!loading && !error && leases.length > 0 && filteredLeases.length === 0 ? (
+        <div
+          style={{
+            padding: 16,
+            borderRadius: 12,
+            border: "1px solid #e2e8f0",
+            background: "#fff",
+            color: "#475569",
+          }}
+        >
+          No leases match your search.
+        </div>
+      ) : null}
+
+      {!loading && !error && filteredLeases.length > 0 ? (
         <div style={{ overflowX: "auto", border: "1px solid #e2e8f0", borderRadius: 12, background: "#fff" }}>
           <table style={{ width: "100%", minWidth: 1040, borderCollapse: "collapse" }}>
             <thead>
@@ -297,7 +389,7 @@ export default function LandlordActiveLeasesPage() {
               </tr>
             </thead>
             <tbody>
-              {leases.map((lease) => {
+              {filteredLeases.map((lease) => {
                 const ledgerPath = `/leases/${encodeURIComponent(lease.id)}/ledger`;
                 const ledgerUrl =
                   typeof window !== "undefined"
@@ -456,7 +548,23 @@ export default function LandlordActiveLeasesPage() {
             </label>
             <label style={{ display: "grid", gap: 4 }}>
               <span>Tenant phone (optional)</span>
-              <input value={tenantPhone} onChange={(event) => setTenantPhone(event.target.value)} />
+              <input
+                inputMode="numeric"
+                value={tenantPhone}
+                onChange={(event) => setTenantPhone(normalizePhoneInput(event.target.value))}
+              />
+            </label>
+            <label style={{ display: "grid", gap: 4 }}>
+              <span>Co-applicant email (optional)</span>
+              <input value={coApplicantEmail} onChange={(event) => setCoApplicantEmail(event.target.value)} />
+            </label>
+            <label style={{ display: "grid", gap: 4 }}>
+              <span>Co-applicant phone (optional)</span>
+              <input
+                inputMode="numeric"
+                value={coApplicantPhone}
+                onChange={(event) => setCoApplicantPhone(normalizePhoneInput(event.target.value))}
+              />
             </label>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8 }}>
               <label style={{ display: "grid", gap: 4 }}>
