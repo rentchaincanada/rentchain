@@ -1,4 +1,5 @@
 import { cleanup, render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it } from "vitest";
 import { PortfolioCredibilitySummaryCard } from "./PortfolioCredibilitySummaryCard";
 
@@ -9,27 +10,31 @@ afterEach(() => {
 describe("PortfolioCredibilitySummaryCard", () => {
   it("renders the portfolio summary metrics when data is available", () => {
     render(
-      <PortfolioCredibilitySummaryCard
-        summary={{
-          propertyCount: 3,
-          activeLeaseCount: 5,
-          tenantScoreAverage: 77,
-          tenantScoreGradeAverage: "B",
-          leaseRiskAverage: 69,
-          leaseRiskGradeAverage: "C",
-          tenantsWithScoreCount: 4,
-          leasesWithRiskCount: 5,
-          lowConfidenceCount: 2,
-          missingCredibilityCount: 1,
-          healthStatus: "watch",
-        }}
-      />
+      <MemoryRouter>
+        <PortfolioCredibilitySummaryCard
+          summary={{
+            propertyCount: 3,
+            activeLeaseCount: 5,
+            tenantScoreAverage: 77,
+            tenantScoreGradeAverage: "B",
+            leaseRiskAverage: 69,
+            leaseRiskGradeAverage: "C",
+            tenantsWithScoreCount: 4,
+            leasesWithRiskCount: 5,
+            lowConfidenceCount: 2,
+            missingCredibilityCount: 1,
+            healthStatus: "watch",
+          }}
+          activeLeasesHref="/leases"
+        />
+      </MemoryRouter>
     );
 
     expect(screen.getByText("Portfolio credibility summary")).toBeInTheDocument();
     expect(screen.getByText("Watch")).toBeInTheDocument();
     expect(screen.getByText("Properties represented")).toBeInTheDocument();
     expect(screen.getByText("Missing credibility")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "5" })).toHaveAttribute("href", "/leases");
   });
 
   it("renders the empty state when no summary data is available", () => {

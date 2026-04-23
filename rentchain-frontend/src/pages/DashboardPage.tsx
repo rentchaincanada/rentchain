@@ -594,7 +594,10 @@ const DashboardPage: React.FC = () => {
         {dataReady ? <KpiStrip kpis={kpis} loading={loading} /> : null}
         {dataReady ? (
           <div style={{ marginTop: spacing.md }}>
-            <PortfolioCredibilitySummaryCard summary={data?.portfolioCredibilitySummary ?? null} />
+            <PortfolioCredibilitySummaryCard
+              summary={data?.portfolioCredibilitySummary ?? null}
+              activeLeasesHref="/leases"
+            />
           </div>
         ) : null}
         {dataReady &&

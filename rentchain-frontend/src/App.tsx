@@ -87,6 +87,7 @@ import TenantLeaseNoticeDetailPage from "./pages/tenant/TenantLeaseNoticeDetailP
 import MaintenanceRequestsPage from "./pages/MaintenanceRequestsPage";
 import PdfSamplePage from "./pages/PdfSamplePage";
 import LeaseLedgerPage from "./pages/LeaseLedgerPage";
+import LandlordActiveLeasesPage from "./pages/LandlordActiveLeasesPage";
 import ApplicationReviewSummaryPage from "./pages/ApplicationReviewSummaryPage";
 import ReferralsPage from "./pages/ReferralsPage";
 import AccountPage from "./pages/AccountPage";
@@ -1013,6 +1014,16 @@ function App() {
                 <Suspense fallback={<div style={{ padding: 20 }}>Loading timeline...</div>}>
                   <AutomationTimelinePage />
                 </Suspense>
+              </LandlordNav>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/leases"
+          element={
+            <RequireAuth>
+              <LandlordNav>
+                <LandlordActiveLeasesPage />
               </LandlordNav>
             </RequireAuth>
           }

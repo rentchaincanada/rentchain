@@ -139,6 +139,35 @@ function mergeLeaseRows(rows: any[]) {
   });
 }
 
+function isCurrentLeaseStatus(status: unknown): boolean {
+  return CURRENT_LEASE_STATUSES.has(String(status || "").trim().toLowerCase());
+}
+
+async function loadLeaseDocumentUrlForLease(raw: any): Promise<string | null> {
+  const directUrl =
+    String(raw?.documentUrl || raw?.approvedDocumentUrl || raw?.documentRef || "").trim() || null;
+  if (directUrl) return directUrl;
+
+  const draftId = String(raw?.sourceDraftId || "").trim();
+  if (!draftId) return null;
+
+  try {
+    const draftSnap = await db.collection("leaseDrafts").doc(draftId).get();
+    if (!draftSnap.exists) return null;
+    const draft = draftSnap.data() as any;
+    const snapshotId = String(draft?.lastGeneratedSnapshotId || "").trim();
+    if (!snapshotId) return null;
+    const snapshotSnap = await db.collection("leaseSnapshots").doc(snapshotId).get();
+    if (!snapshotSnap.exists) return null;
+    const snapshot = snapshotSnap.data() as any;
+    const generatedFiles = Array.isArray(snapshot?.generatedFiles) ? snapshot.generatedFiles : [];
+    const firstFile = generatedFiles.find((item: any) => String(item?.url || "").trim());
+    return String(firstFile?.url || "").trim() || null;
+  } catch {
+    return null;
+  }
+}
+
 
 async function assertNoConflictingActiveAgreement(input: {
   leaseId?: string | null;
@@ -217,6 +246,83 @@ async function enforceLeaseCapability(req: any, res: Response): Promise<boolean>
 router.get("/", (_req: Request, res: Response) => {
   const leases = leaseService.getAll();
   res.json({ leases });
+});
+
+router.get("/active", requireLandlord, async (req: any, res: Response) => {
+  try {
+    if (!(await enforceLeaseCapability(req, res))) return;
+    const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
+    if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+
+    const collectionRef: any = (db as any).collection("leases");
+    if (!collectionRef || typeof collectionRef.where !== "function") {
+      return res.status(200).json({ ok: true, leases: [] });
+    }
+
+    const snap = await collectionRef.where("landlordId", "==", landlordId).get();
+    const rawLeases = (snap.docs || [])
+      .map((doc: any) => ({ id: doc.id, ...(doc.data() as any) }))
+      .filter((lease: any) => isCurrentLeaseStatus(lease?.status));
+
+    const propertyIds: string[] = Array.from(
+      new Set(rawLeases.map((lease: any) => String(lease?.propertyId || "").trim()).filter(Boolean))
+    );
+    const tenantIds: string[] = Array.from(
+      new Set(
+        rawLeases.flatMap((lease: any) =>
+          Array.isArray(lease?.tenantIds)
+            ? lease.tenantIds.map((value: any) => String(value || "").trim()).filter(Boolean)
+            : [String(lease?.tenantId || lease?.primaryTenantId || "").trim()].filter(Boolean)
+        )
+      )
+    );
+
+    const [propertyDocs, tenantDocs] = await Promise.all([
+      Promise.all(propertyIds.map((propertyId) => db.collection("properties").doc(propertyId).get().catch(() => null))),
+      Promise.all(tenantIds.map((tenantId) => db.collection("tenants").doc(tenantId).get().catch(() => null))),
+    ]);
+
+    const propertyNameById = new Map(
+      propertyDocs
+        .filter((doc: any) => doc?.exists)
+        .map((doc: any) => [
+          doc.id,
+          String(doc.data()?.name || doc.data()?.addressLine1 || "Property").trim() || "Property",
+        ])
+    );
+    const tenantById = new Map(
+      tenantDocs
+        .filter((doc: any) => doc?.exists)
+        .map((doc: any) => [
+          doc.id,
+          {
+            name: String(doc.data()?.fullName || doc.data()?.name || "").trim() || null,
+            email: String(doc.data()?.email || "").trim() || null,
+          },
+        ])
+    );
+
+    const leases = await Promise.all(
+      rawLeases.map(async (raw: any) => {
+        const lease = normalizeLeaseRow(raw.id, raw);
+        const tenantId =
+          String(lease.primaryTenantId || lease.tenantId || lease.tenantIds?.[0] || "").trim() || null;
+        const tenant = tenantId ? tenantById.get(tenantId) || null : null;
+        return {
+          ...lease,
+          propertyName: propertyNameById.get(lease.propertyId) || "Property",
+          tenantName: tenant?.name || null,
+          tenantEmail: tenant?.email || null,
+          documentUrl: await loadLeaseDocumentUrlForLease(raw),
+        };
+      })
+    );
+
+    return res.status(200).json({ ok: true, leases: mergeLeaseRows(leases) });
+  } catch (err) {
+    console.error("[GET /api/leases/active] error", err);
+    return res.status(500).json({ ok: false, error: "Failed to load active leases" });
+  }
 });
 
 router.post("/drafts", requireLandlord, async (req: any, res: Response) => {

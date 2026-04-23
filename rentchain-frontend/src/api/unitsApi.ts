@@ -41,3 +41,12 @@ export async function updateUnit(unitId: string, payload: any) {
     body: JSON.stringify(payload),
   });
 }
+
+export async function uploadUnitLeaseDocument(unitId: string, file: File) {
+  const formData = new FormData();
+  formData.append("file", file);
+  return apiFetch(`/units/${unitId}/lease-document`, {
+    method: "POST",
+    body: formData,
+  });
+}
