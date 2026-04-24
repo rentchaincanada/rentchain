@@ -8,6 +8,7 @@ export type TimelineItem = {
   domain: string;
   status?: string;
   actor?: string;
+  details?: string[];
 };
 
 export type TimelineResponse = {
