@@ -1070,102 +1070,90 @@ expect(screen.getByRole("button", { name: "View details" })).toBeInTheDocument()
   });
 
   it("shows upgrade prompts for filing workflow and history when the user lacks registry filing entitlements", async () => {
-    window.localStorage.setItem(
-      "rentchain:registryAcquisitionAttribution",
-      JSON.stringify({
-        source: "google",
-        medium: "cpc",
-        campaign: "halifax-readiness",
-        variant: "spring-a",
-        landingPath: "/?utm_source=google",
-        capturedAt: "2026-04-05T12:00:00.000Z",
-      })
-    );
-
-    mocks.useEntitlements.mockReturnValue({
-      isAdmin: false,
-      plan: "free",
-      hasCapability: () => false,
+    const originalLocation = window.location;
+    const assignSpy = vi.fn();
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: {
+        ...originalLocation,
+        assign: assignSpy,
+      },
     });
-    mocks.fetchPropertyRegistryStatus.mockResolvedValue(
-      buildStatus({
-        filing: {
-          ready: {
-            schemaVersion: 3,
-            readyId: "ready-1",
-            sourceDraftId: "prop-1__halifax_rental_registry_form",
-            sourceDraftVersion: 2,
-            propertyId: "prop-1",
-            sourceKey: "halifax_rental_registry_form",
-            schemaKey: "halifax_rental_registry_v1",
-            schemaLabel: "Halifax Rental Registry",
-            assistantType: "halifax_registry_submission_assistant",
-            filingChannel: "manual_portal",
-            status: "ready_to_file",
-            createdAt: "2026-04-05T12:00:00.000Z",
-            updatedAt: "2026-04-05T12:00:00.000Z",
-            actor: { landlordId: "landlord-1", updatedBy: "operator-1" },
-            jurisdiction: { country: "CA", province: "NS", municipality: "Halifax" },
-            validation: { missingRequiredFields: [], missingConsentItems: [], warnings: [], readinessScore: 96, completionPercent: 96, exportReady: true, errors: [] },
-            consentLock: {
-              preparationAuthorized: true,
-              preparationAuthorizedAt: "2026-04-05T00:00:00.000Z",
-              preparationAuthorizedBy: "landlord-1",
-              declarationsConfirmed: true,
-              declarationsConfirmedAt: "2026-04-05T00:02:00.000Z",
-              declarationsConfirmedBy: "landlord-1",
-              finalReviewConfirmed: false,
-              finalReviewConfirmedAt: null,
+    try {
+      window.localStorage.setItem(
+        "rentchain:registryAcquisitionAttribution",
+        JSON.stringify({
+          source: "google",
+          medium: "cpc",
+          campaign: "halifax-readiness",
+          variant: "spring-a",
+          landingPath: "/?utm_source=google",
+          capturedAt: "2026-04-05T12:00:00.000Z",
+        })
+      );
+
+      mocks.useEntitlements.mockReturnValue({
+        isAdmin: false,
+        plan: "free",
+        hasCapability: () => false,
+      });
+      mocks.fetchPropertyRegistryStatus.mockResolvedValue(
+        buildStatus({
+          filing: {
+            ready: {
+              schemaVersion: 3,
+              readyId: "ready-1",
+              sourceDraftId: "prop-1__halifax_rental_registry_form",
+              sourceDraftVersion: 2,
+              propertyId: "prop-1",
+              sourceKey: "halifax_rental_registry_form",
+              schemaKey: "halifax_rental_registry_v1",
+              schemaLabel: "Halifax Rental Registry",
+              assistantType: "halifax_registry_submission_assistant",
+              filingChannel: "manual_portal",
+              status: "ready_to_file",
+              createdAt: "2026-04-05T12:00:00.000Z",
+              updatedAt: "2026-04-05T12:00:00.000Z",
+              actor: { landlordId: "landlord-1", updatedBy: "operator-1" },
+              jurisdiction: { country: "CA", province: "NS", municipality: "Halifax" },
+              validation: { missingRequiredFields: [], missingConsentItems: [], warnings: [], readinessScore: 96, completionPercent: 96, exportReady: true, errors: [] },
+              consentLock: {
+                preparationAuthorized: true,
+                preparationAuthorizedAt: "2026-04-05T00:00:00.000Z",
+                preparationAuthorizedBy: "landlord-1",
+                declarationsConfirmed: true,
+                declarationsConfirmedAt: "2026-04-05T00:02:00.000Z",
+                declarationsConfirmedBy: "landlord-1",
+                finalReviewConfirmed: false,
+                finalReviewConfirmedAt: null,
+              },
+              declarationsLock: { items: [], acceptedIds: [] },
+              normalizedSubmission: { sections: [], attachments: [], disclaimer: "Draft only." },
+              audit: { sourceDraftUpdatedAt: "2026-04-05T11:00:00.000Z", events: [] },
             },
-            declarationsLock: { items: [], acceptedIds: [] },
-            normalizedSubmission: { sections: [], attachments: [], disclaimer: "Draft only." },
-            audit: { sourceDraftUpdatedAt: "2026-04-05T11:00:00.000Z", events: [] },
-          },
-          request: {
-            schemaVersion: 3,
-            requestId: "request-1",
-            readyId: "ready-1",
-            sourceDraftId: "prop-1__halifax_rental_registry_form",
-            propertyId: "prop-1",
-            sourceKey: "halifax_rental_registry_form",
-            schemaKey: "halifax_rental_registry_v1",
-            schemaLabel: "Halifax Rental Registry",
-            filingChannel: "manual_portal",
-            adapterKey: "halifax_rental_registry_manual_portal_v1",
-            status: "ready_to_file",
-            createdAt: "2026-04-05T12:10:00.000Z",
-            updatedAt: "2026-04-05T12:10:00.000Z",
-            actor: { requestedBy: "operator-1", updatedBy: "operator-1" },
-            checklist: { portalUrl: null, steps: [], notes: [] },
-            payload: { sections: [], disclaimer: "Draft only." },
-            referenceNumbers: [],
-            operatorNotes: null,
-            evidence: [],
-            audit: { events: [] },
-          },
-          latestAttempt: {
-            schemaVersion: 3,
-            attemptId: "attempt-1",
-            propertyId: "prop-1",
-            sourceDraftId: "prop-1__halifax_rental_registry_form",
-            readyId: "ready-1",
-            requestId: "request-1",
-            resultId: null,
-            attemptNumber: 1,
-            filingChannel: "manual_portal",
-            adapterKey: "halifax_rental_registry_manual_portal_v1",
-            status: "ready_to_file",
-            createdAt: "2026-04-05T12:10:00.000Z",
-            updatedAt: "2026-04-05T12:10:00.000Z",
-            createdBy: "operator-1",
-            updatedBy: "operator-1",
-            referenceNumbers: [],
-            operatorNotes: null,
-            evidence: [],
-            audit: { events: [] },
-          },
-          attempts: [
-            {
+            request: {
+              schemaVersion: 3,
+              requestId: "request-1",
+              readyId: "ready-1",
+              sourceDraftId: "prop-1__halifax_rental_registry_form",
+              propertyId: "prop-1",
+              sourceKey: "halifax_rental_registry_form",
+              schemaKey: "halifax_rental_registry_v1",
+              schemaLabel: "Halifax Rental Registry",
+              filingChannel: "manual_portal",
+              adapterKey: "halifax_rental_registry_manual_portal_v1",
+              status: "ready_to_file",
+              createdAt: "2026-04-05T12:10:00.000Z",
+              updatedAt: "2026-04-05T12:10:00.000Z",
+              actor: { requestedBy: "operator-1", updatedBy: "operator-1" },
+              checklist: { portalUrl: null, steps: [], notes: [] },
+              payload: { sections: [], disclaimer: "Draft only." },
+              referenceNumbers: [],
+              operatorNotes: null,
+              evidence: [],
+              audit: { events: [] },
+            },
+            latestAttempt: {
               schemaVersion: 3,
               attemptId: "attempt-1",
               propertyId: "prop-1",
@@ -1186,73 +1174,102 @@ expect(screen.getByRole("button", { name: "View details" })).toBeInTheDocument()
               evidence: [],
               audit: { events: [] },
             },
-          ],
-          result: null,
-          currentStatus: "ready_to_file",
-        },
-      })
-    );
-    mocks.fetchPropertyRegistrySubmission.mockResolvedValue(buildSubmission());
+            attempts: [
+              {
+                schemaVersion: 3,
+                attemptId: "attempt-1",
+                propertyId: "prop-1",
+                sourceDraftId: "prop-1__halifax_rental_registry_form",
+                readyId: "ready-1",
+                requestId: "request-1",
+                resultId: null,
+                attemptNumber: 1,
+                filingChannel: "manual_portal",
+                adapterKey: "halifax_rental_registry_manual_portal_v1",
+                status: "ready_to_file",
+                createdAt: "2026-04-05T12:10:00.000Z",
+                updatedAt: "2026-04-05T12:10:00.000Z",
+                createdBy: "operator-1",
+                updatedBy: "operator-1",
+                referenceNumbers: [],
+                operatorNotes: null,
+                evidence: [],
+                audit: { events: [] },
+              },
+            ],
+            result: null,
+            currentStatus: "ready_to_file",
+          },
+        })
+      );
+      mocks.fetchPropertyRegistrySubmission.mockResolvedValue(buildSubmission());
 
-    render(
-      <PropertyRegistryStatusCard
-        property={{
-          id: "prop-1",
-          name: "Harbour View",
-          addressLine1: "12 Wharf Street",
-          city: "Halifax",
-          province: "NS",
-          postalCode: "B3H 1A1",
-          totalUnits: 8,
-          units: [],
-          createdAt: "2026-04-05T00:00:00.000Z",
-        }}
-      />
-    );
+      render(
+        <PropertyRegistryStatusCard
+          property={{
+            id: "prop-1",
+            name: "Harbour View",
+            addressLine1: "12 Wharf Street",
+            city: "Halifax",
+            province: "NS",
+            postalCode: "B3H 1A1",
+            totalUnits: 8,
+            units: [],
+            createdAt: "2026-04-05T00:00:00.000Z",
+          }}
+        />
+      );
 
-    fireEvent.click(await screen.findByRole("button", { name: "View details" }));
-    const dialog = await screen.findByRole("dialog", { name: "Compliance and registry details" });
+      fireEvent.click(await screen.findByRole("button", { name: "View details" }));
+      const dialog = await screen.findByRole("dialog", { name: "Compliance and registry details" });
 
-    expect(
-      REGISTRY_VARIANT_HEADLINES.some((headline) => within(dialog).queryByText(headline))
-    ).toBe(true);
-    expect(within(dialog).queryByRole("button", { name: "Mark as Filed" })).not.toBeInTheDocument();
-    expect(within(dialog).getByText("Unlock attempts history")).toBeInTheDocument();
-    expect(mocks.track).toHaveBeenCalledWith(
-      "registry_upgrade_prompt_viewed",
-      expect.objectContaining({
-        propertyId: "prop-1",
-        userId: "user-1",
-        plan: "free",
-        variant: expect.any(String),
-        source: "google",
-        medium: "cpc",
-        campaign: "halifax-readiness",
-        acquisitionVariant: "spring-a",
-      })
-    );
+      expect(
+        REGISTRY_VARIANT_HEADLINES.some((headline) => within(dialog).queryByText(headline))
+      ).toBe(true);
+      expect(within(dialog).queryByRole("button", { name: "Mark as Filed" })).not.toBeInTheDocument();
+      expect(within(dialog).getByText("Unlock attempts history")).toBeInTheDocument();
+      expect(mocks.track).toHaveBeenCalledWith(
+        "registry_upgrade_prompt_viewed",
+        expect.objectContaining({
+          propertyId: "prop-1",
+          userId: "user-1",
+          plan: "free",
+          variant: expect.any(String),
+          source: "google",
+          medium: "cpc",
+          campaign: "halifax-readiness",
+          acquisitionVariant: "spring-a",
+        })
+      );
 
-    const historyButton = within(dialog).getByRole("button", { name: "Unlock filing history" });
-    fireEvent.click(historyButton);
+      const historyButton = within(dialog).getByRole("button", { name: "Unlock filing history" });
+      fireEvent.click(historyButton);
 
-    expect(mocks.track).toHaveBeenCalledWith(
-      "registry_attempts_history_gate_hit",
-      expect.objectContaining({
-        propertyId: "prop-1",
-        userId: "user-1",
-        plan: "free",
-        location: "history_panel",
-        variant: expect.any(String),
-      })
-    );
-    expect(mocks.track).toHaveBeenCalledWith(
-      "registry_upgrade_clicked",
-      expect.objectContaining({
-        propertyId: "prop-1",
-        location: "history_panel",
-        requiredPlan: "pro",
-        variant: expect.any(String),
-      })
-    );
+      expect(mocks.track).toHaveBeenCalledWith(
+        "registry_attempts_history_gate_hit",
+        expect.objectContaining({
+          propertyId: "prop-1",
+          userId: "user-1",
+          plan: "free",
+          location: "history_panel",
+          variant: expect.any(String),
+        })
+      );
+      expect(mocks.track).toHaveBeenCalledWith(
+        "registry_upgrade_clicked",
+        expect.objectContaining({
+          propertyId: "prop-1",
+          location: "history_panel",
+          requiredPlan: "pro",
+          variant: expect.any(String),
+        })
+      );
+      expect(assignSpy).toHaveBeenCalledWith("/pricing?feature=registry_filing_access");
+    } finally {
+      Object.defineProperty(window, "location", {
+        configurable: true,
+        value: originalLocation,
+      });
+    }
   });
 });
