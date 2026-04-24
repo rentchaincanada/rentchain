@@ -3,6 +3,7 @@ import { Button, Card, Pill, Section } from "../../components/ui/Ui";
 import { MacShell } from "../../components/layout/MacShell";
 import { useToast } from "../../components/ui/ToastProvider";
 import {
+  downloadAdminTransUnionUsagePdf,
   fetchAdminTransUnionUsage,
   type TransUnionUsageReport,
 } from "../../api/adminScreeningUsageApi";
@@ -82,6 +83,7 @@ export default function AdminTransUnionUsagePage() {
     "last_30_days"
   );
   const [loading, setLoading] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<TransUnionUsageReport>(EMPTY_REPORT);
 
@@ -108,6 +110,28 @@ export default function AdminTransUnionUsagePage() {
 
   const jsonSummary = useMemo(() => JSON.stringify(report, null, 2), [report]);
 
+  const downloadPdf = async () => {
+    try {
+      setDownloadingPdf(true);
+      const result = await downloadAdminTransUnionUsagePdf({ period });
+      const url = window.URL.createObjectURL(result.blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = result.filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      showToast({
+        message: "Failed to download PDF report",
+        description: err?.message || "",
+        variant: "error",
+      });
+    } finally {
+      setDownloadingPdf(false);
+    }
+  };
   return (
     <MacShell title="Admin · TransUnion Usage">
       <div style={{ display: "grid", gap: 16 }}>
@@ -145,6 +169,9 @@ export default function AdminTransUnionUsagePage() {
               ))}
               <Button variant="ghost" onClick={() => void navigator.clipboard?.writeText(jsonSummary)}>
                 Copy Report Summary
+              </Button>
+              <Button variant="secondary" onClick={() => void downloadPdf()} disabled={loading || downloadingPdf}>
+                {downloadingPdf ? "Downloading PDF..." : "Download PDF report"}
               </Button>
             </div>
           </div>
@@ -245,4 +272,3 @@ export default function AdminTransUnionUsagePage() {
     </MacShell>
   );
 }
-
