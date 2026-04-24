@@ -37,6 +37,7 @@ function buildScreening(overrides?: Record<string, unknown>) {
     propertyLabel: "123 Main St",
     unitLabel: "Unit 4",
     applicantName: "Taylor Tenant",
+    requesterDisplayLabel: "Harbour Homes Ltd.",
     nextAction: "awaiting_applicant_consent",
     consent: null,
     session: null,
@@ -53,6 +54,13 @@ function buildScreening(overrides?: Record<string, unknown>) {
     auditTrail: [],
     ...overrides,
   } as any;
+}
+
+function hasExactText(expected: string) {
+  return (_content: string, node: Element | null) => {
+    const text = node?.textContent?.replace(/\s+/g, " ").trim() || "";
+    return text === expected;
+  };
 }
 
 describe("TenantScreeningInboxPage", () => {
@@ -78,6 +86,7 @@ describe("TenantScreeningInboxPage", () => {
     expect(await screen.findByRole("link", { name: /Open application checklist/i })).toBeInTheDocument();
     expect(screen.getByText(/^Screening Requests$/i)).toBeInTheDocument();
     expect(screen.getByText(/Requested for 123 Main St - Unit 4/i)).toBeInTheDocument();
+    expect(screen.getByText(hasExactText("Requested by Harbour Homes Ltd."))).toBeInTheDocument();
     expect(screen.getAllByText(/Consent required/i).length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: /Authorize screening/i })).toBeDisabled();
   });
@@ -127,6 +136,21 @@ describe("TenantScreeningInboxPage", () => {
     expect(await screen.findByText(/Screening consent confirmed/i)).toBeInTheDocument();
     expect(screen.getByText(/Confirmed at:/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Authorize screening/i })).not.toBeInTheDocument();
+  });
+
+  it("uses a safe fallback requester label when no landlord display label is available", async () => {
+    tenantScreeningApi.listTenantScreenings.mockResolvedValue({
+      ok: true,
+      items: [buildScreening({ requesterDisplayLabel: null })],
+    });
+
+    render(
+      <MemoryRouter>
+        <TenantScreeningInboxPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText(hasExactText("Requested by your landlord"))).toBeInTheDocument();
   });
 
   it("renders neutral copy for completed, manual review, and blocked states", async () => {

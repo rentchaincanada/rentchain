@@ -23,6 +23,7 @@ export type TenantScreeningInboxItemView = {
   nextAction: TenantScreeningInboxNextAction;
   nextActionLabel: string;
   providerLabel: string;
+  requesterLabel: string;
   propertyContext: string;
   requestContext: string;
   requestedAt: number | null;
@@ -129,6 +130,11 @@ function propertyContext(item: TenantScreeningRequest) {
   return label || "Rental application";
 }
 
+function requesterLabel(item: TenantScreeningRequest) {
+  const label = String(item.requesterDisplayLabel || "").trim();
+  return label || "your landlord";
+}
+
 function requestContext(item: TenantScreeningRequest) {
   const propertyLabel = propertyContext(item);
   if (propertyLabel === "Rental application") {
@@ -157,6 +163,7 @@ export function buildTenantScreeningInboxItemView(item: TenantScreeningRequest):
     nextAction: nextAction(status),
     nextActionLabel: nextActionLabel(nextAction(status)),
     providerLabel: resolveProviderLabel(item),
+    requesterLabel: requesterLabel(item),
     propertyContext: propertyContext(item),
     requestContext: requestContext(item),
     requestedAt: item.requestedAt || null,

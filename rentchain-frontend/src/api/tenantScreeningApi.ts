@@ -53,6 +53,7 @@ export type TenantScreeningRequest = {
   propertyLabel: string | null;
   unitLabel: string | null;
   applicantName: string | null;
+  requesterDisplayLabel?: string | null;
   nextAction: string | null;
   consent: {
     id: string;

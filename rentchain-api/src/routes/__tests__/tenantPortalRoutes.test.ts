@@ -186,6 +186,23 @@ describe("tenantPortalRoutes foundation", () => {
       phone: "902-555-0100",
       internalNotes: "do-not-expose",
     });
+    ensureCollection("landlords").set("landlord-1", {
+      businessName: "Harbour Homes Ltd.",
+      email: "private-landlord@example.com",
+      phone: "902-555-0199",
+      providerSetupState: "connected",
+      internalNotes: "do-not-expose",
+    });
+    ensureCollection("users").set("landlord-1", {
+      displayName: "Morgan Landlord",
+      email: "private-user@example.com",
+      phone: "902-555-0110",
+    });
+    ensureCollection("accounts").set("landlord-1", {
+      displayName: "Harbour Homes Account",
+      businessName: "Harbour Homes Account Business",
+      email: "private-account@example.com",
+    });
     ensureCollection("maintenanceRequests").set("maint-1", {
       tenantId: "tenant-1",
       propertyId: "prop-1",
@@ -1321,6 +1338,48 @@ describe("tenantPortalRoutes foundation", () => {
           event.metadata?.providerKey === "transunion_redirect"
       )
     ).toBe(true);
+  });
+
+  it("returns a tenant-safe requester display label without exposing private landlord fields", async () => {
+    ensureCollection("screening_requests").set("screening-label-1", {
+      rentalApplicationId: "app-1",
+      landlordId: "landlord-1",
+      applicantTenantId: "tenant-1",
+      applicantUserId: "user-1",
+      applicantEmail: "tenant@example.com",
+      applicantName: "Taylor Tenant",
+      propertyId: "prop-1",
+      propertyLabel: "123 Main St",
+      unitLabel: "Unit 4",
+      providerSelection: "transunion_redirect",
+      status: "consent_pending",
+      createdAt: 100,
+      updatedAt: 100,
+    });
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/screening",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    const item = (res.body?.items || []).find((entry: any) => entry.id === "screening-label-1");
+    expect(item?.requesterDisplayLabel).toBe("Harbour Homes Ltd.");
+    expect(item).not.toHaveProperty("landlordEmail");
+    expect(item).not.toHaveProperty("landlordPhone");
+    expect(item).not.toHaveProperty("providerSetupState");
+    expect(JSON.stringify(item)).not.toContain("private-landlord@example.com");
+    expect(JSON.stringify(item)).not.toContain("private-user@example.com");
+    expect(JSON.stringify(item)).not.toContain("private-account@example.com");
   });
 
   it("rejects screening consent for another tenant's request", async () => {

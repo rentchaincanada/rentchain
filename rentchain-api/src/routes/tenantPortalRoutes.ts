@@ -996,6 +996,85 @@ function getScreeningProviderLabel(providerKey: ScreeningProviderKey | null | un
   return "Selected screening provider";
 }
 
+function isSafeRequesterLabel(value: any): value is string {
+  if (typeof value !== "string") return false;
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  if (trimmed.includes("@")) return false;
+  return true;
+}
+
+function pickSafeRequesterLabel(source: any, candidates: string[]) {
+  for (const key of candidates) {
+    const value = source?.[key];
+    if (isSafeRequesterLabel(value)) {
+      return String(value).trim();
+    }
+  }
+  return null;
+}
+
+async function resolveTenantSafeRequesterLabel(landlordId: string | null | undefined): Promise<string | null> {
+  const normalizedLandlordId = cleanString(landlordId, 160);
+  if (!normalizedLandlordId) return null;
+
+  try {
+    const landlordSnap = await db.collection("landlords").doc(normalizedLandlordId).get();
+    if (landlordSnap.exists) {
+      const landlord = (landlordSnap.data() as any) || {};
+      const landlordLabel = pickSafeRequesterLabel(landlord, [
+        "businessName",
+        "displayName",
+        "companyName",
+        "company",
+        "name",
+        "fullName",
+      ]);
+      if (landlordLabel) return landlordLabel;
+    }
+  } catch {
+    // ignore lookup errors
+  }
+
+  try {
+    const accountSnap = await db.collection("accounts").doc(normalizedLandlordId).get();
+    if (accountSnap.exists) {
+      const account = (accountSnap.data() as any) || {};
+      const accountLabel = pickSafeRequesterLabel(account, [
+        "displayName",
+        "businessName",
+        "companyName",
+        "accountName",
+        "organizationName",
+        "company",
+      ]);
+      if (accountLabel) return accountLabel;
+    }
+  } catch {
+    // ignore lookup errors
+  }
+
+  try {
+    const userSnap = await db.collection("users").doc(normalizedLandlordId).get();
+    if (userSnap.exists) {
+      const user = (userSnap.data() as any) || {};
+      const userLabel = pickSafeRequesterLabel(user, [
+        "displayName",
+        "businessName",
+        "companyName",
+        "company",
+        "name",
+        "fullName",
+      ]);
+      if (userLabel) return userLabel;
+    }
+  } catch {
+    // ignore lookup errors
+  }
+
+  return null;
+}
+
 function buildScreeningConsentSummary(input: {
   providerKey: ScreeningProviderKey | null | undefined;
   propertyLabel?: string | null;
@@ -1420,6 +1499,7 @@ function shapeScreeningResponse(input: {
   session: ScreeningSessionRecord | null;
   result: ScreeningResultRecord | null;
   auditTrail?: any[];
+  requesterDisplayLabel?: string | null;
 }) {
   const { request, consent, session, result } = input;
   const returnState = resolveReturnState(request, session, result);
@@ -1439,6 +1519,7 @@ function shapeScreeningResponse(input: {
     propertyLabel: request.propertyLabel,
     unitLabel: request.unitLabel,
     applicantName: request.applicantName,
+    requesterDisplayLabel: input.requesterDisplayLabel || null,
     nextAction: request.nextAction || null,
     consent: consent
       ? {
@@ -1530,6 +1611,20 @@ function shapeScreeningResponse(input: {
         }))
       : [],
   };
+}
+
+async function shapeTenantScreeningResponse(input: {
+  request: ScreeningRequestRecord;
+  consent: ScreeningConsentRecord | null;
+  session: ScreeningSessionRecord | null;
+  result: ScreeningResultRecord | null;
+  auditTrail?: any[];
+}) {
+  const requesterDisplayLabel = await resolveTenantSafeRequesterLabel(input.request.landlordId);
+  return shapeScreeningResponse({
+    ...input,
+    requesterDisplayLabel,
+  });
 }
 
 async function createScreeningSessionSafely(input: {
@@ -3662,7 +3757,7 @@ router.get("/screening", requireTenant, async (req: any, res) => {
           getLatestSession(item.id),
           getLatestResult(item.id),
         ]);
-        return shapeScreeningResponse({ request, consent, session, result });
+        return shapeTenantScreeningResponse({ request, consent, session, result });
       })
     );
 
@@ -3715,7 +3810,7 @@ router.get("/screening/:requestId/status", requireTenant, async (req: any, res) 
 
     return res.json({
       ok: true,
-      screeningRequest: shapeScreeningResponse({ request, consent, session, result, auditTrail }),
+      screeningRequest: await shapeTenantScreeningResponse({ request, consent, session, result, auditTrail }),
     });
   } catch (err: any) {
     console.error("[tenant/screening/:requestId/status] failed", {
@@ -3751,7 +3846,7 @@ router.post("/screening/:requestId/consent", requireTenant, async (req: any, res
     if (accepted && existingConsent?.acceptedAt) {
       return res.json({
         ok: true,
-        screeningRequest: shapeScreeningResponse({
+        screeningRequest: await shapeTenantScreeningResponse({
           request,
           consent: existingConsent,
           session: await getLatestSession(requestId),
@@ -3848,7 +3943,7 @@ router.post("/screening/:requestId/consent", requireTenant, async (req: any, res
     }
     return res.json({
       ok: true,
-      screeningRequest: shapeScreeningResponse({
+      screeningRequest: await shapeTenantScreeningResponse({
         request: refreshedRequest || request,
         consent: refreshedConsent,
         session: await getLatestSession(requestId),
@@ -3982,7 +4077,7 @@ router.post("/screening/:requestId/start", requireTenant, async (req: any, res) 
     const refreshedRequest = await getScreeningRequestById(requestId);
     return res.json({
       ok: true,
-      screeningRequest: shapeScreeningResponse({
+      screeningRequest: await shapeTenantScreeningResponse({
         request: refreshedRequest || started.request,
         consent: started.consent,
         session: await getLatestSession(requestId),
@@ -4048,7 +4143,7 @@ router.post("/screening/:requestId/retry", requireTenant, async (req: any, res) 
     });
     return res.json({
       ok: true,
-      screeningRequest: shapeScreeningResponse({
+      screeningRequest: await shapeTenantScreeningResponse({
         request: refreshedRequest || request,
         consent: await getLatestConsent(requestId),
         session: await getLatestSession(requestId),
@@ -4208,7 +4303,7 @@ router.post("/screening/provider/transunion/callback", async (req: any, res) => 
       return res.json({
         ok: true,
         duplicate: true,
-        screeningRequest: shapeScreeningResponse({
+        screeningRequest: await shapeTenantScreeningResponse({
           request,
           consent: await getLatestConsent(request.id),
           session,
@@ -4386,7 +4481,7 @@ router.post("/screening/provider/transunion/callback", async (req: any, res) => 
     return res.json({
       ok: true,
       duplicate: false,
-      screeningRequest: shapeScreeningResponse({
+      screeningRequest: await shapeTenantScreeningResponse({
         request: refreshedRequest || request,
         consent: await getLatestConsent(request.id),
         session: refreshedSession || session,
