@@ -10,6 +10,7 @@ type Props = {
 
 const navItems = [
   { label: "Dashboard", to: "/tenant/dashboard" },
+  { label: "Screening Requests", to: "/tenant/screening" },
   { label: "Profile", to: "/tenant/profile" },
   { label: "Access", to: "/tenant/access" },
   { label: "Application", to: "/tenant/application" },
@@ -76,7 +77,7 @@ export const TenantNav: React.FC<Props> = ({ children }) => {
       try {
         const summary = await getTenantCommunicationSummary();
         if (!cancelled) {
-          setUnreadMessages(Number(summary?.unreadMessages || 0) + Number(summary?.unreadScreeningUpdates || 0));
+          setUnreadMessages(Number(summary?.unreadMessages || 0));
           setUnreadNotices(Number(summary?.unreadNotices || 0));
           setUnreadScreening(Number(summary?.unreadScreeningUpdates || 0));
         }
@@ -179,7 +180,7 @@ export const TenantNav: React.FC<Props> = ({ children }) => {
                       {unreadMessages > 99 ? "99+" : unreadMessages}
                     </span>
                   ) : null}
-                  {item.to === "/tenant/messages" && unreadScreening > 0 ? (
+                  {item.to === "/tenant/screening" && unreadScreening > 0 ? (
                     <span
                       style={{
                         minWidth: 18,

@@ -7,6 +7,7 @@ import { getTenantProfile } from "../../api/tenantProfile";
 import { getTenantApplicationCompletion } from "../../api/tenantApplicationCompletion";
 import { getTenantNotificationPreferences } from "../../api/tenantNotificationPreferences";
 import { getTenantCommunicationsWorkspace } from "../../api/tenantCommunicationsApi";
+import { listTenantScreenings, type TenantScreeningRequest } from "../../api/tenantScreeningApi";
 import {
   TenantEmptyState,
   TenantErrorState,
@@ -31,6 +32,7 @@ import TenantWorkspaceModeBanner from "./TenantWorkspaceModeBanner";
 import StructuredNotificationList from "../StructuredNotificationList";
 import { buildTenantStructuredNotificationTriggers } from "../structuredNotificationTriggers";
 import { filterStructuredNotificationsByPreferences } from "../notificationChannelRouting";
+import { buildTenantScreeningDashboardSummary } from "./tenantScreeningInboxView";
 
 export default function TenantWorkspacePage() {
   const [data, setData] = React.useState<Awaited<ReturnType<typeof getTenantWorkspace>> | null>(null);
@@ -40,6 +42,7 @@ export default function TenantWorkspacePage() {
   const [completion, setCompletion] = React.useState<Awaited<ReturnType<typeof getTenantApplicationCompletion>> | null>(null);
   const [notificationPreferences, setNotificationPreferences] = React.useState<Awaited<ReturnType<typeof getTenantNotificationPreferences>> | null>(null);
   const [communications, setCommunications] = React.useState<Awaited<ReturnType<typeof getTenantCommunicationsWorkspace>> | null>(null);
+  const [screenings, setScreenings] = React.useState<TenantScreeningRequest[]>([]);
   const [profileLoading, setProfileLoading] = React.useState(true);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -48,13 +51,14 @@ export default function TenantWorkspacePage() {
     setLoading(true);
     setError(null);
     try {
-      const [workspaceResult, accessResult, attachmentsResult, completionResult, preferencesResult, communicationsResult] = await Promise.allSettled([
+      const [workspaceResult, accessResult, attachmentsResult, completionResult, preferencesResult, communicationsResult, screeningsResult] = await Promise.allSettled([
         getTenantWorkspace(),
         getTenantAccess(),
         getTenantAttachments(),
         getTenantApplicationCompletion(),
         getTenantNotificationPreferences(),
         getTenantCommunicationsWorkspace(),
+        listTenantScreenings(),
       ]);
 
       if (workspaceResult.status === "rejected") {
@@ -67,6 +71,11 @@ export default function TenantWorkspacePage() {
       setCompletion(completionResult.status === "fulfilled" ? completionResult.value : null);
       setNotificationPreferences(preferencesResult.status === "fulfilled" ? preferencesResult.value : null);
       setCommunications(communicationsResult.status === "fulfilled" ? communicationsResult.value : null);
+      setScreenings(
+        screeningsResult.status === "fulfilled" && Array.isArray((screeningsResult.value as any)?.items)
+          ? (screeningsResult.value as any).items
+          : [],
+      );
     } catch (err: any) {
       setData(null);
       setAccess(null);
@@ -74,6 +83,7 @@ export default function TenantWorkspacePage() {
       setCompletion(null);
       setNotificationPreferences(null);
       setCommunications(null);
+      setScreenings([]);
       setError(err?.payload?.error || err?.message || "Unable to load your tenant workspace.");
     } finally {
       setLoading(false);
@@ -155,6 +165,7 @@ export default function TenantWorkspacePage() {
     lease: data?.lease,
   });
   const communicationsView = buildTenantCommunicationsWorkspaceState(communications);
+  const screeningSummary = buildTenantScreeningDashboardSummary(screenings);
   const notificationItems = filterStructuredNotificationsByPreferences(
     buildTenantStructuredNotificationTriggers({
       packageCategories: reuse.packageCategories,
@@ -402,6 +413,26 @@ export default function TenantWorkspacePage() {
             <Link to="/tenant/messages">Open communications inbox</Link>
           </div>
         </TenantInfoCard>
+
+        {screenings.length ? (
+          <TenantInfoCard heading="Screening Requests" accent="#1d4ed8">
+            <div style={{ display: "grid", gap: spacing.sm }}>
+              <div style={{ color: textTokens.secondary }}>
+                {screeningSummary.pendingConsentCount > 0
+                  ? `Screening consent requested for ${screeningSummary.pendingConsentCount} application${screeningSummary.pendingConsentCount === 1 ? "" : "s"}.`
+                  : `${screeningSummary.total} screening request${screeningSummary.total === 1 ? "" : "s"} currently visible in your tenant workspace.`}
+              </div>
+              <div style={{ color: textTokens.muted }}>
+                {screeningSummary.pendingConsentCount > 0
+                  ? "Review the request and record your authorization when you are ready."
+                  : screeningSummary.latest?.description || "Review the latest screening workflow status for your applications."}
+              </div>
+              <Link to="/tenant/screening" style={{ fontWeight: 700 }}>
+                {screeningSummary.pendingConsentCount > 0 ? "Review request" : "Open screening requests"}
+              </Link>
+            </div>
+          </TenantInfoCard>
+        ) : null}
       </div>
 
       {nextActions.length ? (

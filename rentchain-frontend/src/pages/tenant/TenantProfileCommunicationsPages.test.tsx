@@ -101,6 +101,7 @@ describe("tenant profile and communications pages", () => {
     );
 
     expect(await screen.findByText(/RentChain Tenant Space/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Screening Requests/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Profile/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Access/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /History/i })).toBeInTheDocument();

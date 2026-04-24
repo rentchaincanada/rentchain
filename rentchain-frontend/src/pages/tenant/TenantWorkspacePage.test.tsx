@@ -45,6 +45,10 @@ const tenantCommunicationsApi = vi.hoisted(() => ({
   getTenantCommunicationsWorkspace: vi.fn(),
 }));
 
+const tenantScreeningApi = vi.hoisted(() => ({
+  listTenantScreenings: vi.fn(),
+}));
+
 vi.mock("../../api/tenantPortal", () => tenantPortalApi);
 vi.mock("../../api/tenantApplicationCompletion", () => tenantApplicationCompletionApi);
 vi.mock("../../api/tenantAccess", () => tenantAccessApi);
@@ -52,6 +56,13 @@ vi.mock("../../api/tenantAttachmentsApi", () => tenantAttachmentsApi);
 vi.mock("../../api/tenantProfile", () => tenantProfileApi);
 vi.mock("../../api/tenantNotificationPreferences", () => tenantNotificationPreferencesApi);
 vi.mock("../../api/tenantCommunicationsApi", () => tenantCommunicationsApi);
+vi.mock("../../api/tenantScreeningApi", async () => {
+  const actual = await vi.importActual<any>("../../api/tenantScreeningApi");
+  return {
+    ...actual,
+    listTenantScreenings: tenantScreeningApi.listTenantScreenings,
+  };
+});
 vi.mock("../../api/maintenanceWorkflowApi", async () => {
   const actual = await vi.importActual<any>("../../api/maintenanceWorkflowApi");
   return {
@@ -67,7 +78,7 @@ describe("tenant workspace frontend shell", () => {
     tenantCommunicationsApi.getTenantCommunicationSummary.mockResolvedValue({
       unreadMessages: 1,
       unreadNotices: 2,
-      unreadScreeningUpdates: 0,
+      unreadScreeningUpdates: 1,
     });
     tenantCommunicationsApi.getTenantCommunicationsWorkspace.mockResolvedValue({
       canSend: true,
@@ -96,6 +107,42 @@ describe("tenant workspace frontend shell", () => {
       sections: [],
       nextSteps: ["Upload government id"],
       updatedAt: "2026-01-02T00:00:00.000Z",
+    });
+    tenantScreeningApi.listTenantScreenings.mockResolvedValue({
+      ok: true,
+      items: [
+        {
+          id: "screening-1",
+          rentalApplicationId: "app-1",
+          status: "consent_pending",
+          normalizedResultStatus: "pending",
+          requestedAt: 1710000000000,
+          consentedAt: null,
+          startedAt: null,
+          completedAt: null,
+          provider: "transunion_redirect",
+          providerLabel: "TransUnion",
+          packageType: "basic",
+          payerType: "landlord",
+          propertyLabel: "123 Main St",
+          unitLabel: "Unit 4",
+          applicantName: "Taylor Tenant",
+          nextAction: "awaiting_applicant_consent",
+          consent: null,
+          session: null,
+          result: null,
+          returnFlow: null,
+          summary: {
+            status: "consent_pending",
+            provider: "transunion_redirect",
+            requestedDate: 1710000000000,
+            package: "basic",
+            summaryResult: "Consent is required before screening can begin.",
+            nextActions: ["Provide consent"],
+          },
+          auditTrail: [],
+        },
+      ],
     });
     tenantAccessApi.getTenantAccess.mockResolvedValue({
       summary: {
@@ -252,6 +299,7 @@ describe("tenant workspace frontend shell", () => {
 
     expect(await screen.findByText(/RentChain Tenant Space/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Dashboard/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Screening Requests/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Access/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Documents/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /History/i })).toBeInTheDocument();
@@ -333,6 +381,8 @@ describe("tenant workspace frontend shell", () => {
     expect(screen.getByText(/Needs reply/i)).toBeInTheDocument();
     expect(screen.getByText(/Please confirm the final move-in details/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Open communications inbox/i })).toBeInTheDocument();
+    expect(screen.getByText(/Screening consent requested for 1 application/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Review request/i })).toBeInTheDocument();
     expect(screen.getByText(/123 Main St, Unit 4, Halifax, NS/i)).toBeInTheDocument();
     expect(screen.getByText(/finish_profile/i)).toBeInTheDocument();
     expect(screen.getAllByText(/1 active access grant/i).length).toBeGreaterThan(0);
