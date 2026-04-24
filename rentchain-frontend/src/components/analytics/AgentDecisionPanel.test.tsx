@@ -40,6 +40,7 @@ vi.mock("../ui/Ui", () => ({
 beforeEach(() => {
   vi.clearAllMocks();
   window.localStorage.clear();
+  const now = Date.now();
   snoozeLandlordDecision.mockResolvedValue({
     state: {
       decisionId: "reduce_vacancy_risk:prop-2",
@@ -90,7 +91,7 @@ beforeEach(() => {
         id: "event-1",
         title: "Appeared",
         description: "Analytics decision review_lease_renewals:prop-1 appeared.",
-        timestamp: "2026-04-22T09:00:00.000Z",
+        timestamp: new Date(now - 60 * 60 * 1000).toISOString(),
         domain: "system",
         actor: "System",
       },
@@ -98,7 +99,7 @@ beforeEach(() => {
         id: "event-2",
         title: "Reviewed",
         description: "Analytics decision review_lease_renewals:prop-1 reviewed.",
-        timestamp: "2026-04-22T10:00:00.000Z",
+        timestamp: new Date(now - 30 * 60 * 1000).toISOString(),
         domain: "system",
         actor: "Landlord",
       },
