@@ -136,7 +136,7 @@ export default function TenantScreeningInboxPage() {
         {items.map((item) => {
           const view = buildTenantScreeningInboxItemView(item);
           const badge = badgeColors(view.status);
-          const showConsentCard = view.status === "consent_required" || view.status === "consent_confirmed";
+          const showConsentCard = view.nextAction === "authorize_screening" || view.status === "consent_confirmed";
           return (
             <TenantInfoCard key={item.id} heading={view.propertyContext} accent={badge.color}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: spacing.sm, flexWrap: "wrap" }}>

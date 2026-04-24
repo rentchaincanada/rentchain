@@ -39,6 +39,10 @@ function buildScreening(overrides?: Record<string, unknown>) {
     applicantName: "Taylor Tenant",
     requesterDisplayLabel: "Harbour Homes Ltd.",
     nextAction: "awaiting_applicant_consent",
+    tenantStatus: null,
+    tenantStatusLabel: null,
+    tenantStatusDescription: null,
+    tenantNextAction: null,
     consent: null,
     session: null,
     result: null,
@@ -74,7 +78,15 @@ describe("TenantScreeningInboxPage", () => {
   it("renders screening request cards and consent-required flow", async () => {
     tenantScreeningApi.listTenantScreenings.mockResolvedValue({
       ok: true,
-      items: [buildScreening()],
+      items: [
+        buildScreening({
+          tenantStatus: "consent_required",
+          tenantStatusLabel: "Consent required",
+          tenantStatusDescription:
+            "The landlord has requested screening for this application. Your authorization is required before it can proceed.",
+          tenantNextAction: "authorize_screening",
+        }),
+      ],
     });
 
     render(
@@ -89,6 +101,31 @@ describe("TenantScreeningInboxPage", () => {
     expect(screen.getByText(hasExactText("Requested by Harbour Homes Ltd."))).toBeInTheDocument();
     expect(screen.getAllByText(/Consent required/i).length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: /Authorize screening/i })).toBeDisabled();
+  });
+
+  it("prefers backend-provided tenant-safe status fields", async () => {
+    tenantScreeningApi.listTenantScreenings.mockResolvedValue({
+      ok: true,
+      items: [
+        buildScreening({
+          tenantStatus: "blocked",
+          tenantStatusLabel: "Screening cannot proceed yet",
+          tenantStatusDescription:
+            "Screening cannot proceed yet. The landlord may still need to complete screening setup.",
+          tenantNextAction: "wait_for_landlord",
+        }),
+      ],
+    });
+
+    render(
+      <MemoryRouter>
+        <TenantScreeningInboxPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText(/^Screening cannot proceed yet$/i)).toBeInTheDocument();
+    expect(screen.getByText(/landlord may still need to complete screening setup/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Wait for landlord$/i)).toBeInTheDocument();
   });
 
   it("renders an empty state safely", async () => {
@@ -153,13 +190,63 @@ describe("TenantScreeningInboxPage", () => {
     expect(await screen.findByText(hasExactText("Requested by your landlord"))).toBeInTheDocument();
   });
 
+  it("falls back to frontend normalization when backend tenant-safe fields are absent", async () => {
+    tenantScreeningApi.listTenantScreenings.mockResolvedValue({
+      ok: true,
+      items: [
+        buildScreening({
+          tenantStatus: null,
+          tenantStatusLabel: null,
+          tenantStatusDescription: null,
+          tenantNextAction: null,
+          status: "failed",
+          nextAction: "provider_activation_pending",
+        }),
+      ],
+    });
+
+    render(
+      <MemoryRouter>
+        <TenantScreeningInboxPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText(/Screening cannot proceed yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/landlord may still need to complete screening setup/i)).toBeInTheDocument();
+  });
+
   it("renders neutral copy for completed, manual review, and blocked states", async () => {
     tenantScreeningApi.listTenantScreenings.mockResolvedValue({
       ok: true,
       items: [
-        buildScreening({ id: "completed", status: "completed", completedAt: 1710000200000 }),
-        buildScreening({ id: "manual", status: "manual_review_required", consentedAt: 1710000100000 }),
-        buildScreening({ id: "blocked", status: "failed", nextAction: "provider_activation_pending" }),
+        buildScreening({
+          id: "completed",
+          status: "completed",
+          completedAt: 1710000200000,
+          tenantStatus: "completed",
+          tenantStatusLabel: "Screening workflow completed",
+          tenantStatusDescription: "Screening workflow completed.",
+          tenantNextAction: "no_action_needed",
+        }),
+        buildScreening({
+          id: "manual",
+          status: "manual_review_required",
+          consentedAt: 1710000100000,
+          tenantStatus: "manual_review",
+          tenantStatusLabel: "Manual review may be required",
+          tenantStatusDescription: "This screening may require manual review.",
+          tenantNextAction: "view_status",
+        }),
+        buildScreening({
+          id: "blocked",
+          status: "failed",
+          nextAction: "provider_activation_pending",
+          tenantStatus: "blocked",
+          tenantStatusLabel: "Screening cannot proceed yet",
+          tenantStatusDescription:
+            "Screening cannot proceed yet. The landlord may still need to complete screening setup.",
+          tenantNextAction: "wait_for_landlord",
+        }),
       ],
     });
 

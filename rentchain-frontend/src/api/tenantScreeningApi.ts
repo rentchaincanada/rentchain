@@ -37,6 +37,21 @@ export type TenantScreeningSessionStatus =
   | "failed"
   | "expired";
 
+export type TenantSafeScreeningStatus =
+  | "consent_required"
+  | "consent_confirmed"
+  | "screening_in_progress"
+  | "completed"
+  | "manual_review"
+  | "blocked"
+  | "unavailable";
+
+export type TenantSafeScreeningNextAction =
+  | "authorize_screening"
+  | "wait_for_landlord"
+  | "view_status"
+  | "no_action_needed";
+
 export type TenantScreeningRequest = {
   id: string;
   rentalApplicationId: string | null;
@@ -55,6 +70,10 @@ export type TenantScreeningRequest = {
   applicantName: string | null;
   requesterDisplayLabel?: string | null;
   nextAction: string | null;
+  tenantStatus?: TenantSafeScreeningStatus | null;
+  tenantStatusLabel?: string | null;
+  tenantStatusDescription?: string | null;
+  tenantNextAction?: TenantSafeScreeningNextAction | null;
   consent: {
     id: string;
     requestId?: string;

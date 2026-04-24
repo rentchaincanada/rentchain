@@ -1374,6 +1374,10 @@ describe("tenantPortalRoutes foundation", () => {
     expect(res.status).toBe(200);
     const item = (res.body?.items || []).find((entry: any) => entry.id === "screening-label-1");
     expect(item?.requesterDisplayLabel).toBe("Harbour Homes Ltd.");
+    expect(item?.tenantStatus).toBe("consent_required");
+    expect(item?.tenantStatusLabel).toBe("Consent required");
+    expect(item?.tenantStatusDescription).toMatch(/authorization is required before it can proceed/i);
+    expect(item?.tenantNextAction).toBe("authorize_screening");
     expect(item).not.toHaveProperty("landlordEmail");
     expect(item).not.toHaveProperty("landlordPhone");
     expect(item).not.toHaveProperty("providerSetupState");
@@ -1493,5 +1497,8 @@ describe("tenantPortalRoutes foundation", () => {
     expect(res.status).toBe(200);
     expect(res.body?.screeningRequest?.session?.providerKey).toBe("manual");
     expect(res.body?.screeningRequest?.status).toBe("manual_review_required");
+    expect(res.body?.screeningRequest?.tenantStatus).toBe("manual_review");
+    expect(res.body?.screeningRequest?.tenantStatusLabel).toBe("Manual review may be required");
+    expect(res.body?.screeningRequest?.tenantNextAction).toBe("view_status");
   });
 });

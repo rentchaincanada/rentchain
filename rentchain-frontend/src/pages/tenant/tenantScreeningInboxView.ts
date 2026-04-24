@@ -1,19 +1,11 @@
-import type { TenantScreeningRequest } from "../../api/tenantScreeningApi";
+import type {
+  TenantSafeScreeningNextAction,
+  TenantSafeScreeningStatus,
+  TenantScreeningRequest,
+} from "../../api/tenantScreeningApi";
 
-export type TenantScreeningInboxStatus =
-  | "consent_required"
-  | "consent_confirmed"
-  | "screening_in_progress"
-  | "completed"
-  | "manual_review"
-  | "blocked"
-  | "unavailable";
-
-export type TenantScreeningInboxNextAction =
-  | "authorize_screening"
-  | "wait_for_landlord"
-  | "view_status"
-  | "no_action_needed";
+export type TenantScreeningInboxStatus = TenantSafeScreeningStatus;
+export type TenantScreeningInboxNextAction = TenantSafeScreeningNextAction;
 
 export type TenantScreeningInboxItemView = {
   id: string;
@@ -42,6 +34,7 @@ function resolveProviderLabel(item: TenantScreeningRequest) {
 }
 
 export function normalizeTenantScreeningStatus(item: TenantScreeningRequest): TenantScreeningInboxStatus {
+  if (item.tenantStatus) return item.tenantStatus;
   const rawStatus = String(item.status || "").trim().toLowerCase();
   if (rawStatus === "consent_pending") return "consent_required";
   if (rawStatus === "consented") return "consent_confirmed";
@@ -61,17 +54,18 @@ function statusLabel(status: TenantScreeningInboxStatus) {
     case "screening_in_progress":
       return "Screening in progress";
     case "completed":
-      return "Completed";
+      return "Screening workflow completed";
     case "manual_review":
-      return "Manual review";
+      return "Manual review may be required";
     case "blocked":
-      return "Blocked";
+      return "Screening cannot proceed yet";
     default:
-      return "Unavailable";
+      return "Screening status unavailable";
   }
 }
 
 function statusDescription(item: TenantScreeningRequest, status: TenantScreeningInboxStatus) {
+  if (item.tenantStatusDescription) return item.tenantStatusDescription;
   switch (status) {
     case "consent_required":
       return "The landlord has requested screening for this application. Your authorization is required before it can proceed.";
@@ -98,17 +92,17 @@ function nextAction(status: TenantScreeningInboxStatus): TenantScreeningInboxNex
     case "consent_required":
       return "authorize_screening";
     case "consent_confirmed":
-      return "wait_for_landlord";
+      return "view_status";
     case "screening_in_progress":
       return "view_status";
     case "completed":
       return "no_action_needed";
     case "manual_review":
-      return "wait_for_landlord";
+      return "view_status";
     case "blocked":
       return "wait_for_landlord";
     default:
-      return "no_action_needed";
+      return "view_status";
   }
 }
 
@@ -155,13 +149,14 @@ function latestActivityAt(item: TenantScreeningRequest) {
 
 export function buildTenantScreeningInboxItemView(item: TenantScreeningRequest): TenantScreeningInboxItemView {
   const status = normalizeTenantScreeningStatus(item);
+  const resolvedNextAction = item.tenantNextAction || nextAction(status);
   return {
     id: item.id,
     status,
-    statusLabel: statusLabel(status),
+    statusLabel: item.tenantStatusLabel || statusLabel(status),
     description: statusDescription(item, status),
-    nextAction: nextAction(status),
-    nextActionLabel: nextActionLabel(nextAction(status)),
+    nextAction: resolvedNextAction,
+    nextActionLabel: nextActionLabel(resolvedNextAction),
     providerLabel: resolveProviderLabel(item),
     requesterLabel: requesterLabel(item),
     propertyContext: propertyContext(item),
