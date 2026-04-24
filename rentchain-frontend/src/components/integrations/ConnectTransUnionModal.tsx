@@ -198,14 +198,13 @@ export function ConnectTransUnionModal({
             RentChain.
           </p>
         </div>
-
         <div style={{ display: "grid", gap: spacing.sm, minHeight: 0, flex: 1, overflowY: "auto" }}>
           <div
             style={{
               display: "grid",
               gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
               gap: spacing.sm,
-            }}
+            }}</file>
           >
             {[
               {
