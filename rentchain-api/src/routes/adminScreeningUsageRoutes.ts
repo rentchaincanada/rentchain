@@ -2,8 +2,7 @@ import { Router } from "express";
 import { requireAuth } from "../middleware/requireAuth";
 import { requirePermission } from "../middleware/requireAuthz";
 import { loadTransUnionUsageReport } from "../services/screening/transUnionUsageReportService";
-import { buildTransUnionUsagePdfBuffer } from "../services/screening/TransUnionUsageReportPdf";
-
+import { buildTransUnionUsagePdfBuffer } from "../services/screening/transUnionUsageReportPdf";
 const router = Router();
 
 function getReportQuery(req: any) {
