@@ -2047,11 +2047,19 @@ const ApplicationsPage: React.FC = () => {
                   ) : null}
                 <div className="rc-applications-list-scroll">
                   {filtered.map((app) => (
-                    <button
+                    <div
                       key={app.id}
-                      type="button"
+                      role="button"
+                      tabIndex={0}
                       className="rc-applications-list-item"
+                      aria-pressed={app.id === selectedId}
                       onClick={() => handleSelectApplication(app.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          handleSelectApplication(app.id);
+                        }
+                      }}
                       style={{
                         textAlign: "left",
                         border: `1px solid ${app.id === selectedId ? colors.accent : colors.border}`,
@@ -2097,7 +2105,7 @@ const ApplicationsPage: React.FC = () => {
                           {SCREENING_ENABLED ? "Screen tenant" : screeningComingSoonText}
                         </button>
                       </div>
-                    </button>
+                    </div>
                   ))}
                 </div>
                 </div>
