@@ -15,6 +15,7 @@ vi.mock("../../api/landlordAnalyticsApi", () => ({
   snoozeLandlordDecision: vi.fn(),
   dismissLandlordDecision: vi.fn(),
   executeLandlordDecision: vi.fn(),
+  logLandlordControlledAutomationAuditEvent: vi.fn(),
   fetchLandlordDecisionHistory: vi.fn(),
 }));
 
@@ -436,7 +437,7 @@ describe("ActionRecommendationsPage", () => {
     expect(screen.getByText(/A screening checkout can start now/i)).toBeInTheDocument();
     expect(screen.queryByText(/Renewal inputs are still incomplete/i)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Review action/i }));
-    expect(screen.getByLabelText(/Execution confirmation/i)).toBeInTheDocument();
+    expect(await screen.findByLabelText(/Execution confirmation/i)).toBeInTheDocument();
     expect(screen.getByText(/This action will use the existing guarded execution path only after you confirm it/i)).toBeInTheDocument();
   });
 

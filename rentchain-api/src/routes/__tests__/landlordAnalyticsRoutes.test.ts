@@ -137,7 +137,9 @@ async function invokeRouter(
         return this.get(name);
       },
     };
-    const decisionMatch = path.match(/\/landlord\/analytics\/decisions\/([^/]+)\/(review|snooze|dismiss|execute|history)$/);
+    const decisionMatch = path.match(
+      /\/landlord\/analytics\/decisions\/([^/]+)\/(review|snooze|dismiss|execute|history|controlled-automation-audit)$/
+    );
     if (decisionMatch) {
       req.params.decisionId = decodeURIComponent(decisionMatch[1]);
     }
@@ -673,6 +675,183 @@ describe("landlordAnalyticsRoutes", () => {
     });
   });
 
+  it("writes a controlled automation preview event for an explicitly reviewed executable decision", async () => {
+    loadLandlordAnalyticsSnapshot.mockResolvedValueOnce({
+      decisions: {
+        items: [
+          {
+            id: "review_lease_renewals:prop-1",
+            decisionType: "review_lease_renewals",
+            priority: "high",
+            explanation: "Review renewals.",
+            supportingSignals: [],
+            recommendedAction: "Review renewals",
+            actionKey: "open_lease_renewals_flow",
+            actionLabel: "Open renewals focus",
+            destination: "/portfolio-health?entry=lease-renewals&propertyId=prop-1",
+            workflowCategory: "lease_renewals",
+            automationEligible: true,
+            automationState: "ready",
+            automationReason: "This decision is active and already mapped to a deterministic automation path.",
+            executionMappingState: "mapped",
+            executionMapping: {
+              action: "lease.auto_send_notice",
+              resourceType: "lease",
+              resourceId: "lease-1",
+              prerequisitesMet: true,
+              prerequisiteReason: null,
+            },
+            executionInputState: "complete",
+            executionInputReason: null,
+            executionInputMissingFields: [],
+            executionInput: {
+              noticeType: "renewal_offer",
+            },
+            executionGuardKey: "lease.auto_send_notice:lease:lease-1",
+            duplicateGuardActive: false,
+            executionSummary: {
+              executionCount: 0,
+              lastExecutedAt: null,
+              lastExecutionOutcome: "none",
+            },
+            executedAt: null,
+            executionOutcomeStatus: "none",
+            executionOutcomeAt: null,
+            executionOutcomeReason: null,
+            href: "/portfolio-health?entry=lease-renewals&propertyId=prop-1",
+            state: "pending",
+            reviewedAt: null,
+          },
+        ],
+      },
+    });
+
+    const router = (await import("../landlordAnalyticsRoutes")).default;
+    const response = await invokeRouter(router, {
+      method: "POST",
+      url: "/landlord/analytics/decisions/review_lease_renewals%3Aprop-1/controlled-automation-audit?period=90d&propertyId=prop-1",
+      user: { id: "landlord-1", role: "landlord" },
+      body: { event: "previewed" },
+    });
+
+    expect(response.status).toBe(200);
+    expect(writeCanonicalEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "controlled_automation.previewed",
+        action: "controlled_automation_previewed",
+        metadata: expect.objectContaining({
+          landlordId: "landlord-1",
+          decisionId: "review_lease_renewals:prop-1",
+          actionKey: "open_lease_renewals_flow",
+          actionLabel: "Open renewals focus",
+          workflowCategory: "lease_renewals",
+          executionState: "executable",
+          blockedReason: null,
+          automationEligible: true,
+          duplicateGuardActive: false,
+          executionGuardKey: "lease.auto_send_notice:lease:lease-1",
+          outcome: "previewed",
+          source: "landlord_controlled_automation",
+        }),
+      })
+    );
+    expect(response.body).toEqual(
+      expect.objectContaining({
+        ok: true,
+        event: "previewed",
+        decisionId: "review_lease_renewals:prop-1",
+      })
+    );
+  });
+
+  it("fails closed when controlled automation preview audit is requested for a blocked decision", async () => {
+    const router = (await import("../landlordAnalyticsRoutes")).default;
+    const response = await invokeRouter(router, {
+      method: "POST",
+      url: "/landlord/analytics/decisions/reduce_vacancy_risk%3Aprop-123/controlled-automation-audit",
+      user: { id: "landlord-1", role: "landlord" },
+      body: { event: "previewed" },
+    });
+
+    expect(response.status).toBe(409);
+    expect(response.body).toEqual(
+      expect.objectContaining({
+        ok: false,
+        error: "CONTROLLED_AUTOMATION_AUDIT_NOT_ALLOWED",
+      })
+    );
+  });
+
+  it("writes a controlled automation confirmed event before execution when the decision remains eligible", async () => {
+    loadLandlordAnalyticsSnapshot.mockResolvedValueOnce({
+      decisions: {
+        items: [
+          {
+            id: "approve_maintenance_cost:wo-1",
+            decisionType: "approve_maintenance_cost",
+            priority: "high",
+            explanation: "Approve this maintenance cost.",
+            supportingSignals: [],
+            recommendedAction: "Review work order approval",
+            actionKey: "open_maintenance_cost_approval_flow",
+            actionLabel: "Open cost approval",
+            destination: "/work-orders?entry=maintenance-cost-approval&propertyId=prop-2&workOrderId=wo-1",
+            workflowCategory: "maintenance_cost_approval",
+            automationEligible: true,
+            automationState: "ready",
+            automationReason: "This decision is active and already mapped to a deterministic automation path.",
+            executionMappingState: "mapped",
+            executionMapping: {
+              action: "maintenance.auto_approve_cost",
+              resourceType: "work_order",
+              resourceId: "wo-1",
+              prerequisitesMet: true,
+              prerequisiteReason: null,
+            },
+            executionInputState: "complete",
+            executionInputReason: null,
+            executionInputMissingFields: [],
+            executionInput: {
+              actualCostCents: 32000,
+            },
+            executionGuardKey: "maintenance.auto_approve_cost:work_order:wo-1",
+            duplicateGuardActive: false,
+            executedAt: null,
+            executionOutcomeStatus: "none",
+            executionOutcomeAt: null,
+            executionOutcomeReason: null,
+            href: "/work-orders?entry=maintenance-cost-approval&propertyId=prop-2&workOrderId=wo-1",
+            state: "pending",
+            reviewedAt: null,
+          },
+        ],
+      },
+    });
+
+    const router = (await import("../landlordAnalyticsRoutes")).default;
+    const response = await invokeRouter(router, {
+      method: "POST",
+      url: "/landlord/analytics/decisions/approve_maintenance_cost%3Awo-1/controlled-automation-audit",
+      user: { id: "landlord-1", role: "landlord" },
+      body: { event: "confirmed" },
+    });
+
+    expect(response.status).toBe(200);
+    expect(writeCanonicalEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "controlled_automation.confirmed",
+        action: "controlled_automation_confirmed",
+        metadata: expect.objectContaining({
+          decisionId: "approve_maintenance_cost:wo-1",
+          workflowCategory: "maintenance_cost_approval",
+          actionKey: "open_maintenance_cost_approval_flow",
+          executionGuardKey: "maintenance.auto_approve_cost:work_order:wo-1",
+          outcome: "confirmed",
+        }),
+      })
+    );
+  });
+
   it("rejects review requests for decisions that are not currently visible", async () => {
     const router = (await import("../landlordAnalyticsRoutes")).default;
     const response = await invokeRouter(router, {
@@ -831,6 +1010,18 @@ describe("landlordAnalyticsRoutes", () => {
     expect(writeCanonicalEvent).toHaveBeenCalledWith(
       expect.objectContaining({
         type: "decision.executed",
+      })
+    );
+    expect(writeCanonicalEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "controlled_automation.executed",
+        action: "controlled_automation_executed",
+        metadata: expect.objectContaining({
+          decisionId: "review_lease_renewals:prop-1",
+          outcome: "executed",
+          duplicateGuardActive: false,
+          executionState: "executable",
+        }),
       })
     );
     expect(response.body).toEqual(
@@ -1288,6 +1479,17 @@ describe("landlordAnalyticsRoutes", () => {
         }),
       })
     );
+    expect(writeCanonicalEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "controlled_automation.failed",
+        action: "controlled_automation_failed",
+        metadata: expect.objectContaining({
+          decisionId: "review_lease_renewals:prop-1",
+          outcome: "failed",
+          failureReason: "AUTOMATION_EXECUTION_FAILED",
+        }),
+      })
+    );
   });
 
   it("persists failed maintenance execution feedback without resolving the decision", async () => {
@@ -1393,6 +1595,17 @@ describe("landlordAnalyticsRoutes", () => {
         }),
       })
     );
+    expect(writeCanonicalEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "controlled_automation.failed",
+        action: "controlled_automation_failed",
+        metadata: expect.objectContaining({
+          decisionId: "approve_maintenance_cost:wo-1",
+          outcome: "failed",
+          failureReason: "MAINTENANCE_COST_REVIEW_REQUIRED",
+        }),
+      })
+    );
   });
 
   it("persists failed screening execution feedback without resolving the decision", async () => {
@@ -1486,6 +1699,17 @@ describe("landlordAnalyticsRoutes", () => {
           state: "pending",
           executionOutcomeStatus: "failed",
           executionOutcomeReason: "SCREENING_AUTO_START_CHECKOUT_POLICY_BLOCKED",
+        }),
+      })
+    );
+    expect(writeCanonicalEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "controlled_automation.failed",
+        action: "controlled_automation_failed",
+        metadata: expect.objectContaining({
+          decisionId: "start_screening_checkout:app-1",
+          outcome: "failed",
+          failureReason: "SCREENING_AUTO_START_CHECKOUT_POLICY_BLOCKED",
         }),
       })
     );

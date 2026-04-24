@@ -71,6 +71,71 @@ function decisionStatePayload(state: any) {
   };
 }
 
+function resolveDecisionExecutionState(decision: any) {
+  if (decision?.executionState) return asString(decision.executionState, 80);
+  if (decision?.duplicateGuardActive) return "unsafe_duplicate";
+  if (decision?.state === "executed" || decision?.executionOutcomeStatus === "succeeded") return "already_executed";
+  if (
+    decision?.automationState === "ready" &&
+    decision?.executionMappingState === "mapped" &&
+    decision?.executionInputState === "complete"
+  ) {
+    return "executable";
+  }
+  return "blocked";
+}
+
+function resolveDecisionBlockedReason(decision: any) {
+  if (decision?.blockedReason) return asString(decision.blockedReason, 80) || null;
+  if (decision?.duplicateGuardActive) return "duplicate_prevented";
+  if (decision?.automationState === "manual_only") return "automation_disabled";
+  if (decision?.executionInputState !== "complete" || decision?.executionMappingState !== "mapped") {
+    return "missing_required_inputs";
+  }
+  if (decision?.automationState === "blocked") return "unknown_state_fail_closed";
+  return null;
+}
+
+function controlledAutomationAuditMetadata(params: {
+  landlordId: string;
+  decisionId: string;
+  decision: any;
+  outcome: "previewed" | "confirmed" | "executed" | "failed";
+  failureReason?: string | null;
+}) {
+  const { landlordId, decisionId, decision, outcome, failureReason } = params;
+  return {
+    landlordId,
+    decisionId,
+    decisionType: asString(decision?.decisionType, 120) || null,
+    actionKey: asString(decision?.actionKey, 120) || null,
+    actionLabel: asString(decision?.actionLabel, 240) || null,
+    workflowCategory: asString(decision?.workflowCategory, 120) || null,
+    executionState: resolveDecisionExecutionState(decision),
+    blockedReason: resolveDecisionBlockedReason(decision),
+    automationEligible: Boolean(decision?.automationEligible),
+    duplicateGuardActive: Boolean(decision?.duplicateGuardActive),
+    executionGuardKey: asString(decision?.executionGuardKey, 240) || null,
+    executionSummaryExecutionCount: Number(decision?.executionSummary?.executionCount || 0),
+    executionSummaryLastOutcome: asString(decision?.executionSummary?.lastExecutionOutcome, 40) || null,
+    executionSummaryLastExecutedAt: asString(decision?.executionSummary?.lastExecutedAt, 80) || null,
+    outcome,
+    failureReason: failureReason ? asString(failureReason, 240) : null,
+    source: "landlord_controlled_automation",
+  };
+}
+
+function canAuditControlledAutomation(decision: any) {
+  return (
+    resolveDecisionExecutionState(decision) === "executable" &&
+    !decision?.duplicateGuardActive &&
+    asString(decision?.actionKey, 120) &&
+    asString(decision?.actionLabel || decision?.recommendedAction, 240) &&
+    decision?.executionMappingState === "mapped" &&
+    decision?.executionInputState === "complete"
+  );
+}
+
 async function resolveVisibleDecision(req: any, res: any) {
   const landlordId = asString(req.user?.landlordId || req.user?.id, 240);
   if (!landlordId) {
@@ -278,6 +343,50 @@ router.post("/landlord/analytics/decisions/:decisionId/dismiss", requireAuth, re
   } catch (err: any) {
     console.error("[landlord-analytics] decision dismiss failed", err?.message || err);
     return res.status(500).json({ ok: false, error: "LANDLORD_DECISION_DISMISS_FAILED" });
+  }
+});
+
+router.post("/landlord/analytics/decisions/:decisionId/controlled-automation-audit", requireAuth, requireLandlord, async (req: any, res) => {
+  try {
+    const resolved = await resolveVisibleDecision(req, res);
+    if (!resolved) return;
+    const { landlordId, decisionId, decision } = resolved;
+    const actorId = asString(req.user?.id || landlordId, 240) || landlordId;
+    const actorRole = asString(req.user?.role, 80).toLowerCase() || "landlord";
+    const auditEvent = asString(req.body?.event, 80).toLowerCase();
+
+    if (auditEvent !== "previewed" && auditEvent !== "confirmed") {
+      return res.status(400).json({ ok: false, error: "INVALID_CONTROLLED_AUTOMATION_EVENT" });
+    }
+    if (!canAuditControlledAutomation(decision)) {
+      return res.status(409).json({ ok: false, error: "CONTROLLED_AUTOMATION_AUDIT_NOT_ALLOWED" });
+    }
+
+    const occurredAt = new Date().toISOString();
+    await writeCanonicalEvent({
+      type: `controlled_automation.${auditEvent}`,
+      domain: "system",
+      action: `controlled_automation_${auditEvent}`,
+      actor: { type: "landlord", id: actorId, role: actorRole },
+      resource: { type: "analytics_decision", id: decisionId },
+      occurredAt,
+      visibility: "landlord",
+      summary:
+        auditEvent === "previewed"
+          ? `Controlled automation preview opened for ${decisionId}.`
+          : `Controlled automation confirmed for ${decisionId}.`,
+      metadata: controlledAutomationAuditMetadata({
+        landlordId,
+        decisionId,
+        decision,
+        outcome: auditEvent as "previewed" | "confirmed",
+      }),
+    });
+
+    return res.json({ ok: true, event: auditEvent, decisionId, occurredAt });
+  } catch (err: any) {
+    console.error("[landlord-analytics] controlled automation audit failed", err?.message || err);
+    return res.status(500).json({ ok: false, error: "CONTROLLED_AUTOMATION_AUDIT_FAILED" });
   }
 });
 
@@ -647,6 +756,24 @@ router.post("/landlord/analytics/decisions/:decisionId/execute", requireAuth, re
           source: "landlord_analytics_decisions",
         },
       });
+      await writeCanonicalEvent({
+        type: "controlled_automation.failed",
+        domain: "system",
+        action: "controlled_automation_failed",
+        status: "failed",
+        actor: { type: "landlord", id: actorId, role: actorRole },
+        resource: { type: "analytics_decision", id: decisionId },
+        occurredAt: persistedFailureState.executionOutcomeAt || persistedFailureState.updatedAt,
+        visibility: "landlord",
+        summary: `Controlled automation failed for ${decisionId}.`,
+        metadata: controlledAutomationAuditMetadata({
+          landlordId,
+          decisionId,
+          decision,
+          outcome: "failed",
+          failureReason: persistedFailureState.executionOutcomeReason || null,
+        }),
+      });
       return res.status(500).json({
         ok: false,
         error: "LANDLORD_DECISION_EXECUTE_FAILED",
@@ -688,6 +815,26 @@ router.post("/landlord/analytics/decisions/:decisionId/execute", requireAuth, re
         reason: automation.automationResult.reason || null,
         source: "landlord_analytics_decisions",
       },
+    });
+    await writeCanonicalEvent({
+      type: success ? "controlled_automation.executed" : "controlled_automation.failed",
+      domain: "system",
+      action: success ? "controlled_automation_executed" : "controlled_automation_failed",
+      status: success ? "executed" : "failed",
+      actor: { type: "landlord", id: actorId, role: actorRole },
+      resource: { type: "analytics_decision", id: decisionId },
+      occurredAt: automation.automationResult.timestamp,
+      visibility: "landlord",
+      summary: success
+        ? `Controlled automation executed for ${decisionId}.`
+        : `Controlled automation failed for ${decisionId}.`,
+      metadata: controlledAutomationAuditMetadata({
+        landlordId,
+        decisionId,
+        decision,
+        outcome: success ? "executed" : "failed",
+        failureReason: automation.automationResult.reason || null,
+      }),
     });
 
     if (!success) {

@@ -18,6 +18,7 @@ vi.mock("../../api/landlordAnalyticsApi", () => ({
   snoozeLandlordDecision: vi.fn(),
   dismissLandlordDecision: vi.fn(),
   executeLandlordDecision: vi.fn(),
+  logLandlordControlledAutomationAuditEvent: vi.fn(),
   fetchLandlordDecisionHistory: vi.fn(),
 }));
 

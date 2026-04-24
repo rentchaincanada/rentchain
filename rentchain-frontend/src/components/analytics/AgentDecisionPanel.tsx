@@ -6,6 +6,7 @@ import {
   dismissLandlordDecision,
   executeLandlordDecision,
   fetchLandlordDecisionHistory,
+  logLandlordControlledAutomationAuditEvent,
   markLandlordDecisionReviewed,
   snoozeLandlordDecision,
   type AnalyticsPeriod,
@@ -199,7 +200,7 @@ function ActionDecisionCard(props: {
   onReview: (decisionId: string) => Promise<void>;
   onSnooze: (decisionId: string, days: number) => Promise<void>;
   onDismiss: (decisionId: string) => Promise<void>;
-  onOpenConfirmation: (decisionId: string) => void;
+  onOpenConfirmation: (decisionId: string) => Promise<void>;
   onCloseConfirmation: () => void;
   onExecute: (decisionId: string) => Promise<void>;
   showHistory: boolean;
@@ -425,7 +426,7 @@ function ActionDecisionCard(props: {
         {canReviewBeforeExecute ? (
           <button
             type="button"
-            onClick={() => onOpenConfirmation(decision.id)}
+            onClick={() => void onOpenConfirmation(decision.id)}
             disabled={workingDecisionId === decision.id}
             style={{
               border: "1px solid #166534",
@@ -849,9 +850,26 @@ export function AgentDecisionPanel({
     }
   };
 
-  const handleOpenConfirmation = React.useCallback((decisionId: string) => {
-    setConfirmingDecisionId(decisionId);
-  }, []);
+  const handleOpenConfirmation = React.useCallback(async (decisionId: string) => {
+    try {
+      setWorkingDecisionId(decisionId);
+      setWorkingAction("execute");
+      setError(null);
+      await logLandlordControlledAutomationAuditEvent({
+        decisionId,
+        event: "previewed",
+        period,
+        propertyId,
+      });
+      setConfirmingDecisionId(decisionId);
+    } catch (err: unknown) {
+      setError(errorMessage(err));
+      setConfirmingDecisionId(null);
+    } finally {
+      setWorkingDecisionId(null);
+      setWorkingAction(null);
+    }
+  }, [period, propertyId]);
 
   const handleCloseConfirmation = React.useCallback(() => {
     setConfirmingDecisionId(null);
@@ -862,6 +880,12 @@ export function AgentDecisionPanel({
       setWorkingDecisionId(decisionId);
       setWorkingAction("execute");
       setError(null);
+      await logLandlordControlledAutomationAuditEvent({
+        decisionId,
+        event: "confirmed",
+        period,
+        propertyId,
+      });
       const response = await executeLandlordDecision({
         decisionId,
         period,
