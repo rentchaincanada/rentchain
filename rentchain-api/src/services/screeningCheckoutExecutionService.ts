@@ -16,6 +16,7 @@ import { writeReferralInitiated } from "./screening/referralTracking";
 import { enqueueScreeningJob } from "./screeningJobs";
 import { recordScreeningPaymentInitiated } from "./screeningPaymentTransactionService";
 import { writeCanonicalEvent } from "../lib/events/buildEvent";
+import { writeTransUnionUsageEvent } from "./screening/transUnionUsageEvents";
 import {
   buildScreeningMonetizationPatch,
   buildScreeningMonetizationSummary,
@@ -549,6 +550,34 @@ export async function executeScreeningCheckout(params: {
         totalAmountCents: 0,
       },
     });
+    await writeTransUnionUsageEvent({
+      eventType: "screening_request_created",
+      landlordId,
+      userId: actorId,
+      actorRole: role,
+      applicationId,
+      propertyId: application?.propertyId || null,
+      orderId,
+      sourceSurface: "applications_page",
+      status: "created",
+      metadata: {
+        applicationCreatedAt: application?.submittedAt || application?.createdAt || null,
+      },
+    });
+    await writeTransUnionUsageEvent({
+      eventType: "screening_request_submitted",
+      landlordId,
+      userId: actorId,
+      actorRole: role,
+      applicationId,
+      propertyId: application?.propertyId || null,
+      orderId,
+      sourceSurface: "applications_page",
+      status: "external_pending",
+      metadata: {
+        applicationCreatedAt: application?.submittedAt || application?.createdAt || null,
+      },
+    });
     return {
       status: 200,
       payload: {
@@ -796,6 +825,36 @@ export async function executeScreeningCheckout(params: {
       stripeCheckoutSessionId: session.id,
       serviceLevel,
       totalAmountCents: pricing.totalAmountCents,
+    },
+  });
+  await writeTransUnionUsageEvent({
+    eventType: "screening_request_created",
+    landlordId,
+    userId: actorId,
+    actorRole: role,
+    applicationId,
+    propertyId: application?.propertyId || null,
+    orderId,
+    sourceSurface: "applications_page",
+    status: "created",
+    metadata: {
+      applicationCreatedAt: application?.submittedAt || application?.createdAt || null,
+      stripeCheckoutSessionId: session.id,
+    },
+  });
+  await writeTransUnionUsageEvent({
+    eventType: "screening_request_submitted",
+    landlordId,
+    userId: actorId,
+    actorRole: role,
+    applicationId,
+    propertyId: application?.propertyId || null,
+    orderId,
+    sourceSurface: "applications_page",
+    status: "checkout_created",
+    metadata: {
+      applicationCreatedAt: application?.submittedAt || application?.createdAt || null,
+      stripeCheckoutSessionId: session.id,
     },
   });
 

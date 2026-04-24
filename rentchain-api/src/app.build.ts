@@ -87,6 +87,7 @@ import screeningJobsAdminRoutes from "./routes/screeningJobsAdminRoutes";
 import adminRoutes from "./routes/adminRoutes";
 import adminRegistryRoutes from "./routes/adminRegistryRoutes";
 import adminScreeningResultsRoutes from "./routes/adminScreeningResultsRoutes";
+import adminScreeningUsageRoutes from "./routes/adminScreeningUsageRoutes";
 import screeningReportRoutes from "./routes/screeningReportRoutes";
 import telemetryRoutes from "./routes/telemetryRoutes";
 import invitesRoutes from "./routes/invitesRoutes";
@@ -367,6 +368,7 @@ app.use("/api/admin", routeSource("adminIntegrityRoutes.ts"), adminIntegrityRout
 app.use("/api/admin", routeSource("adminSavedFiltersRoutes.ts"), adminSavedFiltersRoutes);
 app.use("/api/admin", routeSource("adminAuditRoutes.ts"), adminAuditRoutes);
 app.use("/api/admin", routeSource("adminScreeningResultsRoutes.ts"), adminScreeningResultsRoutes);
+app.use("/api/admin", routeSource("adminScreeningUsageRoutes.ts"), adminScreeningUsageRoutes);
 app.use("/api/admin/demo", routeSource("adminDemoRoutes.ts"), adminDemoRoutes);
 app.use("/api", stubsRoutes);
 app.use("/api", routeSource("screeningReportRoutes.ts"), screeningReportRoutes);
