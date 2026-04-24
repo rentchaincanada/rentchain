@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   fetchScreeningEvents: vi.fn(),
   fetchViewingRequests: vi.fn(),
   getTransUnionIntegration: vi.fn(),
+  trackTransUnionUsageEvent: vi.fn(),
   showToast: vi.fn(),
   openUpgrade: vi.fn(),
   entitlementsMock: vi.fn(),
@@ -86,6 +87,7 @@ vi.mock("@/api/integrationsApi", () => ({
   disconnectTransUnion: vi.fn(),
   getTransUnionIntegration: mocks.getTransUnionIntegration,
   requestTransUnionOnboarding: vi.fn(),
+  trackTransUnionUsageEvent: mocks.trackTransUnionUsageEvent,
   updateTransUnionCredentials: vi.fn(),
 }));
 
@@ -288,6 +290,7 @@ describe("ApplicationsPage", () => {
       status: "not_connected",
       version: 1,
     });
+    mocks.trackTransUnionUsageEvent.mockResolvedValue({ ok: true });
     mocks.showToast.mockReset();
     mocks.openUpgrade.mockReset();
   });
