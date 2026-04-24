@@ -192,6 +192,52 @@ export function ConnectTransUnionModal({
           </p>
         </div>
 
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+            gap: spacing.sm,
+          }}
+        >
+          {[
+            {
+              key: "start",
+              label: "Choose path",
+              active: showChooser,
+              complete: showCredentials || success,
+            },
+            {
+              key: "connect",
+              label: "Connect membership",
+              active: showCredentials,
+              complete: success,
+            },
+            {
+              key: "ready",
+              label: "Ready to screen",
+              active: success,
+              complete: success,
+            },
+          ].map((item) => (
+            <div
+              key={item.key}
+              style={{
+                border: `1px solid ${item.active || item.complete ? colors.accent : colors.border}`,
+                background: item.active || item.complete ? colors.accentSoft : colors.bg,
+                borderRadius: radius.md,
+                padding: spacing.sm,
+                display: "grid",
+                gap: 4,
+              }}
+            >
+              <div style={{ fontWeight: 700 }}>{item.label}</div>
+              <div style={{ color: text.muted, fontSize: "0.85rem" }}>
+                {item.active ? "Current step" : item.complete ? "Completed" : "Upcoming"}
+              </div>
+            </div>
+          ))}
+        </div>
+
         {showChooser ? (
           <div
             style={{
@@ -212,8 +258,13 @@ export function ConnectTransUnionModal({
             >
               <div style={{ fontWeight: 700 }}>Need TransUnion access?</div>
               <div style={{ color: text.muted, fontSize: "0.92rem", lineHeight: 1.5 }}>
-                Start with credentialing first. Once TransUnion issues your member code and
-                passcode, come back here to finish setup in RentChain.
+                Don&apos;t have TransUnion yet? We&apos;ll guide you through the external onboarding
+                path first. Once TransUnion issues your member code and passcode, come back here to
+                finish setup in RentChain.
+              </div>
+              <div style={{ color: text.subtle, fontSize: "0.86rem" }}>
+                Outcome: your account moves into a credentialing-in-progress state until you receive
+                the issued membership details.
               </div>
               {onGetAccess ? (
                 <div>
@@ -235,7 +286,12 @@ export function ConnectTransUnionModal({
             >
               <div style={{ fontWeight: 700 }}>Already credentialed?</div>
               <div style={{ color: text.muted, fontSize: "0.92rem", lineHeight: 1.5 }}>
-                Use the membership details TransUnion already issued to your business.
+                Already approved by TransUnion? Enter the member code and passcode that were issued
+                to your business so you can start screening in RentChain.
+              </div>
+              <div style={{ color: text.subtle, fontSize: "0.86rem" }}>
+                Outcome: once the credentials are verified, your account is connected and ready to
+                screen.
               </div>
               <div>
                 <Button
@@ -267,6 +323,10 @@ export function ConnectTransUnionModal({
               <div style={{ fontWeight: 700 }}>Membership credentials</div>
               <div style={{ color: text.muted, fontSize: "0.92rem", lineHeight: 1.5 }}>
                 Enter the member code and passcode exactly as TransUnion provided them.
+              </div>
+              <div style={{ color: text.subtle, fontSize: "0.86rem" }}>
+                Next step: connect your membership now, then return to Applications to start the
+                first screening.
               </div>
             </div>
 

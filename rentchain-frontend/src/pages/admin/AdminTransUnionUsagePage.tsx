@@ -77,6 +77,65 @@ function pct(value: number) {
   return `${Math.round((Number(value) || 0) * 100)}%`;
 }
 
+function percentOrDash(numerator: number, denominator: number) {
+  if (!denominator) return "—";
+  return `${Math.round((numerator / denominator) * 100)}%`;
+}
+
+function buildFunnelTransitions(report: TransUnionUsageReport) {
+  const transitions = [
+    {
+      label: "Viewed option → Get Access",
+      from: report.funnel.optionViewed,
+      to: report.funnel.getAccessClicks,
+    },
+    {
+      label: "Viewed option → Connect Existing Membership",
+      from: report.funnel.optionViewed,
+      to: report.funnel.haveCredentialsClicks,
+    },
+    {
+      label: "Connect Existing Membership → Credential submitted",
+      from: report.funnel.haveCredentialsClicks,
+      to: report.funnel.credentialSubmissions,
+    },
+    {
+      label: "Credential submitted → Connected",
+      from: report.funnel.credentialSubmissions,
+      to: report.funnel.connectionSuccesses,
+    },
+    {
+      label: "Connected → First screening initiated",
+      from: report.funnel.connectionSuccesses,
+      to: report.funnel.firstScreeningInitiated,
+    },
+    {
+      label: "Screening created → Screening submitted",
+      from: report.usage.totalScreeningRequests,
+      to: report.usage.totalScreeningRequests - report.usage.blockedScreenings,
+    },
+    {
+      label: "Screening submitted → Screening completed",
+      from: report.usage.totalScreeningRequests - report.usage.blockedScreenings,
+      to: report.usage.completedScreenings,
+    },
+  ].map((item) => {
+    const conversion = item.from ? item.to / item.from : null;
+    const dropOff = item.from ? 1 - item.to / item.from : null;
+    return {
+      ...item,
+      conversion,
+      dropOff,
+    };
+  });
+
+  const bottleneck = transitions
+    .filter((item) => item.dropOff != null)
+    .sort((a, b) => Number(b.dropOff || 0) - Number(a.dropOff || 0))[0] || null;
+
+  return { transitions, bottleneck };
+}
+
 export default function AdminTransUnionUsagePage() {
   const { showToast } = useToast();
   const [period, setPeriod] = useState<"last_30_days" | "last_60_days" | "last_90_days">(
@@ -109,6 +168,7 @@ export default function AdminTransUnionUsagePage() {
   }, [period]);
 
   const jsonSummary = useMemo(() => JSON.stringify(report, null, 2), [report]);
+  const funnelInsights = useMemo(() => buildFunnelTransitions(report), [report]);
 
   const downloadPdf = async () => {
     try {
@@ -217,6 +277,20 @@ export default function AdminTransUnionUsagePage() {
                 </div>
               </Card>
               <Card style={{ display: "grid", gap: 12 }}>
+                <div style={{ fontWeight: 700 }}>Funnel Conversion</div>
+                <div style={{ display: "grid", gap: 8, color: "#475569" }}>
+                  {funnelInsights.transitions.map((item) => (
+                    <div key={item.label} style={{ display: "grid", gap: 2 }}>
+                      <div>{item.label}</div>
+                      <div style={{ fontSize: 13, color: "#64748b" }}>
+                        Conversion: {item.conversion == null ? "—" : percentOrDash(item.to, item.from)} • Drop-off:{" "}
+                        {item.dropOff == null ? "—" : pct(item.dropOff)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+              <Card style={{ display: "grid", gap: 12 }}>
                 <div style={{ fontWeight: 700 }}>Operational Quality</div>
                 <div style={{ display: "grid", gap: 8, color: "#475569" }}>
                   <div>Completion rate: {pct(report.quality.completionRate)}</div>
@@ -253,6 +327,14 @@ export default function AdminTransUnionUsagePage() {
                   {report.report.partnershipReadiness.notes.map((note) => (
                     <div key={note}>{note}</div>
                   ))}
+                  <div style={{ paddingTop: 8 }}>
+                    Largest bottleneck:{" "}
+                    <strong>
+                      {funnelInsights.bottleneck
+                        ? `${funnelInsights.bottleneck.label} (${pct(funnelInsights.bottleneck.dropOff || 0)} drop-off)`
+                        : "Not enough data yet"}
+                    </strong>
+                  </div>
                 </div>
               </Card>
             </div>

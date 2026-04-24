@@ -324,6 +324,7 @@ const ApplicationsPage: React.FC = () => {
   const [screeningEventsRefreshedAt, setScreeningEventsRefreshedAt] = useState<number | null>(null);
   const [screeningHistory, setScreeningHistory] = useState<ScreeningHistoryRecord[]>([]);
   const [screeningHistoryLoading, setScreeningHistoryLoading] = useState(false);
+  const applicationsListRef = useRef<HTMLDivElement | null>(null);
   const [screeningDetailOpen, setScreeningDetailOpen] = useState(false);
   const [selectedScreeningId, setSelectedScreeningId] = useState<string | null>(null);
   const [selectedScreeningDetail, setSelectedScreeningDetail] = useState<ScreeningHistoryDetail | null>(null);
@@ -1285,6 +1286,13 @@ const ApplicationsPage: React.FC = () => {
     }, 150);
   };
 
+  const guideToApplicationsForScreening = useCallback(() => {
+    const listNode = applicationsListRef.current;
+    if (listNode && typeof listNode.scrollIntoView === "function") {
+      listNode.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, []);
+
   const emitTransUnionUsageEvent = useCallback(
     (eventType: "tu_option_viewed" | "tu_get_access_clicked" | "tu_have_credentials_clicked", sourceSurface: string) => {
       void trackTransUnionUsageEvent({
@@ -1835,6 +1843,17 @@ const ApplicationsPage: React.FC = () => {
       <TransUnionConnectionCard
         integration={transUnionIntegration}
         loading={transUnionLoading}
+        readyToScreen={Boolean(detail)}
+        selectedApplicationLabel={
+          detail ? `${detail.applicant.firstName} ${detail.applicant.lastName}`.trim() : null
+        }
+        onChooseApplicant={guideToApplicationsForScreening}
+        screeningsCompletedCount={
+          detail
+            ? screeningHistory.filter((item) => item.status === "completed").length
+            : null
+        }
+        lastScreeningDate={detail ? screeningHistory[0]?.screenedAt || screeningHistory[0]?.requestedAt || null : null}
         onGetAccess={() => {
           emitTransUnionUsageEvent("tu_get_access_clicked", "applications_page");
           setTransUnionAccessOpen(true);
@@ -1850,7 +1869,7 @@ const ApplicationsPage: React.FC = () => {
         onStartScreening={
           detail
             ? () => handleRowScreen(detail.id)
-            : () => showToast({ message: "Select an application to start screening.", variant: "warning" })
+            : guideToApplicationsForScreening
         }
       />
 
@@ -1979,7 +1998,7 @@ const ApplicationsPage: React.FC = () => {
           }
           masterTitle="Applications"
           master={
-            <div className="rc-applications-list">
+            <div className="rc-applications-list" ref={applicationsListRef}>
               {loading ? (
                 <div style={{ color: text.muted }}>Loading applications...</div>
               ) : error ? (
@@ -2003,6 +2022,29 @@ const ApplicationsPage: React.FC = () => {
                   </Button>
                 </div>
               ) : (
+                <div style={{ display: "grid", gap: spacing.sm }}>
+                  {isTransUnionConnected && !detail ? (
+                    <Card
+                      style={{
+                        border: `1px solid ${colors.accent}`,
+                        background: colors.accentSoft,
+                        display: "grid",
+                        gap: spacing.xs,
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, fontSize: "0.98rem" }}>
+                        Ready to start your first screening
+                      </div>
+                      <div style={{ color: text.muted, lineHeight: 1.6 }}>
+                        Your TransUnion connection is active. Next step: choose an applicant from this
+                        list, then open screening from that application.
+                      </div>
+                      <div style={{ color: text.subtle, fontSize: "0.9rem" }}>
+                        Start with the most review-ready applicant to reach your first completed
+                        screening faster.
+                      </div>
+                    </Card>
+                  ) : null}
                 <div className="rc-applications-list-scroll">
                   {filtered.map((app) => (
                     <button
@@ -2057,6 +2099,7 @@ const ApplicationsPage: React.FC = () => {
                       </div>
                     </button>
                   ))}
+                </div>
                 </div>
               )}
             </div>

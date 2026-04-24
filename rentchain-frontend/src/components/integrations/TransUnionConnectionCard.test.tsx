@@ -29,6 +29,9 @@ describe("TransUnionConnectionCard", () => {
 
     expect(screen.getByText("TransUnion Connection")).toBeInTheDocument();
     expect(screen.getByText(/Use your TransUnion membership to enable tenant screening/i)).toBeInTheDocument();
+    expect(screen.getAllByText("Not connected")).toHaveLength(2);
+    expect(screen.getByText("Connect or get access")).toBeInTheDocument();
+    expect(screen.getByText("Ready to screen")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Get TransUnion Access" }));
     expect(onGetAccess).toHaveBeenCalledTimes(1);
   });
@@ -49,6 +52,7 @@ describe("TransUnionConnectionCard", () => {
     expect(
       screen.getByText(/Your TransUnion credentialing is in progress/i)
     ).toBeInTheDocument();
+    expect(screen.getByText(/Next step: finish credentialing/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Enter Membership Details" })).toBeInTheDocument();
   });
 
@@ -68,12 +72,42 @@ describe("TransUnionConnectionCard", () => {
         onUpdateCredentials={vi.fn()}
         onDisconnect={vi.fn()}
         onStartScreening={vi.fn()}
+        readyToScreen
+        selectedApplicationLabel="Jamie Stone"
+        screeningsCompletedCount={2}
+        lastScreeningDate={new Date("2026-03-28T12:00:00.000Z").getTime()}
       />
     );
 
     expect(screen.getByText("Status: Connected")).toBeInTheDocument();
     expect(screen.getByText("Member code: *******7788")).toBeInTheDocument();
+    expect(screen.getByText("Screenings completed: 2")).toBeInTheDocument();
     expect(screen.queryByText(/PASS-/i)).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Start Screening" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Start Next Screening" })).toBeInTheDocument();
+  });
+
+  it("guides connected landlords to choose an applicant before first screening", () => {
+    const onChooseApplicant = vi.fn();
+    render(
+      <TransUnionConnectionCard
+        integration={buildIntegration({
+          status: "connected",
+          memberCodeMasked: "*******7788",
+          updatedAt: new Date("2026-03-27T12:00:00.000Z").getTime(),
+          credentialSource: "membership_credentials",
+        })}
+        onGetAccess={vi.fn()}
+        onConnectExisting={vi.fn()}
+        onEnterDetails={vi.fn()}
+        onViewInstructions={vi.fn()}
+        onUpdateCredentials={vi.fn()}
+        onDisconnect={vi.fn()}
+        onChooseApplicant={onChooseApplicant}
+      />
+    );
+
+    expect(screen.getByText(/next step is to choose an applicant/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Choose an Applicant" }));
+    expect(onChooseApplicant).toHaveBeenCalledTimes(1);
   });
 });
