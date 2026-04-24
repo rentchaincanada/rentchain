@@ -1643,20 +1643,6 @@ async function shapeTenantScreeningResponse(input: {
   });
 }
 
-async function shapeTenantScreeningResponse(input: {
-  request: ScreeningRequestRecord;
-  consent: ScreeningConsentRecord | null;
-  session: ScreeningSessionRecord | null;
-  result: ScreeningResultRecord | null;
-  auditTrail?: any[];
-}) {
-  const requesterDisplayLabel = await resolveTenantSafeRequesterLabel(input.request.landlordId);
-  return shapeScreeningResponse({
-    ...input,
-    requesterDisplayLabel,
-  });
-}
-
 async function createScreeningSessionSafely(input: {
   requestId: string;
   actorRole: string;
