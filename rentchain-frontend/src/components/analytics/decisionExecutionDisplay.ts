@@ -35,6 +35,21 @@ export type AutomationPreview = {
   guardKeyLabel: string | null;
 };
 
+export type ExecutionConfirmationDetails = {
+  title: string;
+  actionLabel: string;
+  workflowLabel: string | null;
+  stateLabel: string;
+  blockedTitle: string | null;
+  blockedDescription: string | null;
+  duplicateProtectionActive: boolean;
+  guardKeyLabel: string | null;
+  warning: string;
+  nextStep: string;
+  canConfirm: boolean;
+  unavailableReason: string | null;
+};
+
 export const executionStateDisplay: Record<LandlordDecisionExecutionState, ExecutionStateDisplay> = {
   executable: {
     label: "Ready to run",
@@ -123,14 +138,31 @@ export function formatExecutionSummary(summary?: LandlordDecisionExecutionSummar
 }
 
 function suggestedAction(decision: LandlordAgentDecision) {
-  return decision.actionLabel || decision.recommendedAction || "Review this decision";
+  return decision.actionLabel || decision.recommendedAction || null;
+}
+
+function workflowLabel(decision: LandlordAgentDecision) {
+  if (!decision.workflowCategory) return null;
+
+  const workflowLabels: Record<NonNullable<LandlordAgentDecision["workflowCategory"]>, string> = {
+    lease_renewals: "Lease renewals",
+    maintenance_cost_approval: "Maintenance cost approval",
+    screening_checkout: "Screening checkout",
+    vacancy_readiness: "Vacancy readiness",
+    application_funnel: "Application funnel",
+    maintenance_backlog: "Maintenance backlog",
+    revenue_follow_up: "Revenue follow-up",
+    property_focus: "Property focus",
+  };
+
+  return workflowLabels[decision.workflowCategory] || null;
 }
 
 function failClosedPreview(decision: LandlordAgentDecision): AutomationPreview {
   return {
     heading: "Automation preview",
     status: "Automation preview unavailable",
-    summary: `${suggestedAction(decision)} is not available for preview from the current decision state.`,
+    summary: `${suggestedAction(decision) || "This decision"} is not available for preview from the current decision state.`,
     safeguardLabel: "Human confirmation required",
     safeguardDescription: "Manual review is required because the current automation state is incomplete or ambiguous.",
     nextStep: "Manual review required before any execution can be considered.",
@@ -145,7 +177,7 @@ export function deriveAutomationPreview(decision: LandlordAgentDecision): Automa
   const action = suggestedAction(decision);
   const guardKeyLabel = decision.executionGuardKey ? `Guard key: ${decision.executionGuardKey}` : null;
 
-  if (!decision.actionLabel && !decision.recommendedAction) {
+  if (!action) {
     return failClosedPreview(decision);
   }
 
@@ -184,7 +216,7 @@ export function deriveAutomationPreview(decision: LandlordAgentDecision): Automa
       safeguardLabel: "Human confirmation required",
       safeguardDescription:
         "Execution remains manual. Existing mapping, readiness, and duplicate safeguards stay in place until a human confirms the action.",
-      nextStep: "Review the decision, then use the existing execute control if you want to continue.",
+      nextStep: "Review the decision, then confirm manually if you want to continue.",
       duplicateProtectionActive: Boolean(decision.duplicateGuardActive),
       guardKeyLabel,
     };
@@ -211,4 +243,46 @@ export function deriveAutomationPreview(decision: LandlordAgentDecision): Automa
   }
 
   return failClosedPreview(decision);
+}
+
+export function canOpenExecutionConfirmation(decision: LandlordAgentDecision) {
+  return Boolean(
+    deriveDecisionExecutionState(decision) === "executable" &&
+      !decision.duplicateGuardActive &&
+      suggestedAction(decision) &&
+      decision.actionKey
+  );
+}
+
+export function getExecutionConfirmationDetails(decision: LandlordAgentDecision): ExecutionConfirmationDetails {
+  const executionState = deriveDecisionExecutionState(decision);
+  const action = suggestedAction(decision);
+  const blockedDisplay = decision.blockedReason ? blockedReasonDisplay[decision.blockedReason] : null;
+  const canConfirm = canOpenExecutionConfirmation(decision);
+  const unavailableReason = !action
+    ? "Manual review required because the action context is incomplete."
+    : executionState !== "executable"
+      ? blockedDisplay?.description || executionStateDisplay[executionState].description
+      : decision.duplicateGuardActive
+        ? "Duplicate protection remains active for this decision."
+        : !decision.actionKey
+          ? "Manual review required because the execution context is incomplete."
+          : null;
+
+  return {
+    title: "Confirm action",
+    actionLabel: action || "Action unavailable",
+    workflowLabel: workflowLabel(decision),
+    stateLabel: executionStateDisplay[executionState].label,
+    blockedTitle: blockedDisplay?.title || null,
+    blockedDescription: blockedDisplay?.description || null,
+    duplicateProtectionActive: Boolean(decision.duplicateGuardActive),
+    guardKeyLabel: decision.executionGuardKey ? `Guard key: ${decision.executionGuardKey}` : null,
+    warning: "This action will use the existing guarded execution path only after you confirm it.",
+    nextStep: canConfirm
+      ? "Select Confirm action to continue through the existing guarded execution path."
+      : "Manual review required before any execution can proceed.",
+    canConfirm,
+    unavailableReason,
+  };
 }
