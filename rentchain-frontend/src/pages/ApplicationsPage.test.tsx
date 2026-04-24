@@ -165,7 +165,18 @@ vi.mock("@/components/applications/ApplicationDecisionSummaryCard", () => ({
 }));
 
 vi.mock("@/components/integrations/TransUnionConnectionCard", () => ({
-  TransUnionConnectionCard: () => <div>TransUnion Connection</div>,
+  TransUnionConnectionCard: (props: any) => (
+    <div>
+      <div>TransUnion Connection</div>
+      <div>{props.readyToScreen ? "Ready to screen now" : "Choose an applicant first"}</div>
+      <button type="button" onClick={() => props.onStartScreening?.()}>
+        Connection Primary Action
+      </button>
+      <button type="button" onClick={() => props.onChooseApplicant?.()}>
+        Choose Applicant
+      </button>
+    </div>
+  ),
 }));
 
 vi.mock("@/components/integrations/GetTransUnionAccessModal", () => ({
@@ -312,6 +323,44 @@ describe("ApplicationsPage", () => {
     expect(screen.getByText("TransUnion Connection")).toBeInTheDocument();
   });
 
+  it("guides connected landlords back to the application list instead of showing a dead-end screening toast", async () => {
+    mocks.entitlementsMock.mockReturnValue({
+      loading: false,
+      plan: "starter",
+      role: "landlord",
+      isAdmin: false,
+      capabilities: {},
+      hasCapability: () => true,
+      requiredPlanFor: () => "starter",
+      canScreen: true,
+      canViewScreeningHistory: true,
+      canExportPdf: false,
+      hasMoveInReadiness: false,
+      canUseWorkOrders: false,
+      canViewReviewSummary: false,
+    });
+    mocks.getTransUnionIntegration.mockResolvedValue({
+      provider: "transunion",
+      status: "connected",
+      version: 1,
+    });
+
+    render(
+      <MemoryRouter>
+        <ApplicationsPage />
+      </MemoryRouter>
+    );
+
+    await screen.findAllByRole("heading", { name: "Applications" });
+    expect(screen.getAllByText("Choose an applicant first").length).toBeGreaterThan(0);
+    fireEvent.click(screen.getAllByRole("button", { name: "Connection Primary Action" })[0]);
+
+    expect(mocks.showToast).not.toHaveBeenCalledWith(
+      expect.objectContaining({ message: "Select an application to start screening." })
+    );
+    expect(screen.getByText(/Ready to start your first screening/i)).toBeInTheDocument();
+  });
+
   it("shows Starter-aligned screening upgrade copy instead of the old Pro gate", async () => {
     const dispatchSpy = vi.spyOn(window, "dispatchEvent");
 
@@ -321,7 +370,7 @@ describe("ApplicationsPage", () => {
       </MemoryRouter>
     );
 
-    const button = await screen.findByRole("button", { name: "Send screening invite" });
+    const [button] = await screen.findAllByRole("button", { name: "Send screening invite" });
     button.click();
 
     expect(dispatchSpy).toHaveBeenCalled();

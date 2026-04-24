@@ -55,6 +55,36 @@ export function GetTransUnionAccessModal({
         </div>
         <div
           style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+            gap: spacing.sm,
+          }}
+        >
+          {[
+            { label: "Not connected", state: "complete" },
+            { label: "Get access", state: "current" },
+            { label: "Return to connect", state: "upcoming" },
+          ].map((step) => (
+            <div
+              key={step.label}
+              style={{
+                border: `1px solid ${step.state === "upcoming" ? colors.border : colors.accent}`,
+                background: step.state === "upcoming" ? colors.bg : colors.accentSoft,
+                borderRadius: radius.md,
+                padding: spacing.sm,
+                display: "grid",
+                gap: 4,
+              }}
+            >
+              <div style={{ fontWeight: 700 }}>{step.label}</div>
+              <div style={{ color: text.muted, fontSize: "0.85rem" }}>
+                {step.state === "current" ? "Current step" : step.state === "complete" ? "Completed" : "Upcoming"}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div
+          style={{
             border: `1px solid ${colors.border}`,
             borderRadius: radius.md,
             padding: spacing.sm,
@@ -69,6 +99,20 @@ export function GetTransUnionAccessModal({
             <li>Wait for your member code and passcode to be issued.</li>
             <li>Return to RentChain and connect your account.</li>
           </ol>
+        </div>
+        <div
+          style={{
+            border: `1px solid ${colors.border}`,
+            borderRadius: radius.md,
+            padding: spacing.sm,
+            background: "#fff",
+            color: text.primary,
+            fontSize: "0.92rem",
+            lineHeight: 1.6,
+          }}
+        >
+          Expected outcome: your account will be marked as credentialing in progress so you always
+          know the next step is to return and connect the issued membership details.
         </div>
         <div
           style={{

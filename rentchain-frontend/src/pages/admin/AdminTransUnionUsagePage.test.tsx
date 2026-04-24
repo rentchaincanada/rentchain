@@ -127,8 +127,11 @@ describe("AdminTransUnionUsagePage", () => {
     expect(screen.getByText("TransUnion Usage Summary")).toBeInTheDocument();
     expect(screen.getByText("Connected landlords")).toBeInTheDocument();
     expect(screen.getByText("Compliance Controls")).toBeInTheDocument();
+    expect(screen.getByText("Funnel Conversion")).toBeInTheDocument();
     expect(screen.getByText("Appendix")).toBeInTheDocument();
     expect(screen.getByText(/Tenant consent captured before screening: 100%/)).toBeInTheDocument();
+    expect(screen.getByText(/Viewed option → Get Access/)).toBeInTheDocument();
+    expect(screen.getByText(/Largest bottleneck:/)).toBeInTheDocument();
   });
 
   it("downloads the PDF report and shows loading state", async () => {
