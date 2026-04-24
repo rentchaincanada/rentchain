@@ -358,7 +358,8 @@ describe("ApplicationsPage", () => {
     expect(mocks.showToast).not.toHaveBeenCalledWith(
       expect.objectContaining({ message: "Select an application to start screening." })
     );
-    expect(screen.getByText(/Ready to start your first screening/i)).toBeInTheDocument();
+    expect(screen.getAllByText("Choose an applicant first").length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: "Choose Applicant" }).length).toBeGreaterThan(0);
   });
 
   it("shows Starter-aligned screening upgrade copy instead of the old Pro gate", async () => {
