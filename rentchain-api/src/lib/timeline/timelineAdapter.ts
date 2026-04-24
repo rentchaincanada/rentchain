@@ -8,6 +8,7 @@ export type TimelineItem = {
   domain: string;
   status?: string;
   actor?: string;
+  details?: string[];
 };
 
 const TITLE_BY_TYPE: Record<string, string> = {
@@ -62,6 +63,47 @@ function actorLabel(event: CanonicalEventV1) {
   return type ? startCase(type) : undefined;
 }
 
+function metadataString(value: unknown, max = 240) {
+  return String(value || "").trim().slice(0, max);
+}
+
+function controlledAutomationDetails(event: CanonicalEventV1) {
+  const type = String(event.type || "").trim();
+  if (!type.startsWith("controlled_automation.")) return undefined;
+
+  const metadata = event.metadata || {};
+  const details: string[] = [];
+  const actionLabel = metadataString(metadata.actionLabel, 240);
+  const actionKey = metadataString(metadata.actionKey, 120);
+  const workflowCategory = metadataString(metadata.workflowCategory, 120);
+  const executionGuardKey = metadataString(metadata.executionGuardKey, 240);
+  const failureReason = metadataString(metadata.failureReason, 240);
+
+  if (actionLabel) {
+    details.push(`Action: ${actionLabel}`);
+  } else if (actionKey) {
+    details.push(`Action key: ${actionKey}`);
+  }
+
+  if (workflowCategory) {
+    details.push(`Workflow: ${startCase(workflowCategory)}`);
+  }
+
+  if (metadata.duplicateGuardActive === true) {
+    details.push("Duplicate protection active");
+  }
+
+  if (executionGuardKey) {
+    details.push(`Guard key: ${executionGuardKey}`);
+  }
+
+  if (type === "controlled_automation.failed" && failureReason) {
+    details.push(`Failure reason: ${failureReason}`);
+  }
+
+  return details.length ? details : undefined;
+}
+
 export function canonicalEventToTimelineItem(event: CanonicalEventV1): TimelineItem {
   const type = String(event.type || "").trim();
   return {
@@ -72,5 +114,6 @@ export function canonicalEventToTimelineItem(event: CanonicalEventV1): TimelineI
     domain: event.domain,
     status: event.status || undefined,
     actor: actorLabel(event),
+    details: controlledAutomationDetails(event),
   };
 }

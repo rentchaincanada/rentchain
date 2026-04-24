@@ -190,6 +190,15 @@ export function Timeline({
                             <div className="timelineDate">{formatTimestamp(item.timestamp)}</div>
                           </div>
                           <div className="timelineDesc">{item.description}</div>
+                          {item.details?.length ? (
+                            <div style={{ display: "grid", gap: 4 }}>
+                              {item.details.map((detail) => (
+                                <div key={`${item.id}-${detail}`} style={{ color: "#475569", fontSize: "0.82rem" }}>
+                                  {detail}
+                                </div>
+                              ))}
+                            </div>
+                          ) : null}
                           <div className="timelineMeta">
                             <span>{item.domain}</span>
                             {item.status ? <span>• {item.status}</span> : null}
