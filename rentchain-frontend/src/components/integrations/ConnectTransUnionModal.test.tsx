@@ -14,6 +14,11 @@ describe("ConnectTransUnionModal", () => {
     );
 
     expect(screen.getByText("Connect Your TransUnion Account")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Connect your TransUnion membership by entering the member code and passcode issued to your business. Screening requests are initiated under your TransUnion credentials within RentChain."
+      )
+    ).toBeInTheDocument();
     expect(screen.getByText("Need TransUnion access?")).toBeInTheDocument();
     expect(screen.getByText("Already credentialed?")).toBeInTheDocument();
     expect(screen.getByText("Choose path")).toBeInTheDocument();
@@ -45,6 +50,9 @@ describe("ConnectTransUnionModal", () => {
 
     expect(dialogQueries.getByText("Member code")).toBeInTheDocument();
     expect(dialogQueries.getByText("Passcode")).toBeInTheDocument();
+    expect(dialogQueries.getByRole("button", { name: "Back" })).toBeInTheDocument();
+    expect(dialogQueries.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+    expect(dialogQueries.getByRole("button", { name: "Connect Account" })).toBeInTheDocument();
     expect(dialogQueries.getByText("Business details required for setup")).toBeInTheDocument();
     expect(
       dialogQueries.getByText(/Next step: connect your membership now, then return to Applications/i),
