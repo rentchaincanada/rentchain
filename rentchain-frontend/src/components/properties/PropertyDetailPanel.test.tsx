@@ -2,7 +2,6 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PropertyDetailPanel } from "./PropertyDetailPanel";
-import { AuthProvider } from "@/context/AuthContext";
 
 const mocks = vi.hoisted(() => ({
   updateProperty: vi.fn(),
@@ -72,6 +71,14 @@ vi.mock("@/context/UpgradeContext", () => ({
   useUpgrade: () => ({ openUpgrade: vi.fn() }),
 }));
 
+vi.mock("@/components/properties/PropertyRegistryStatusCard", () => ({
+  PropertyRegistryStatusCard: () => null,
+}));
+
+vi.mock("@/components/properties/HalifaxRegistrySubmissionAssistant", () => ({
+  HalifaxRegistrySubmissionAssistant: () => null,
+}));
+
 vi.mock("./UnitsCsvPreviewModal", () => ({
   UnitsCsvPreviewModal: () => null,
 }));
@@ -118,28 +125,26 @@ describe("PropertyDetailPanel", () => {
 
   it("opens a working property edit modal and saves changes", async () => {
     const onRefresh = vi.fn();
-render(
-  <AuthProvider>
-    <MemoryRouter>
-      <PropertyDetailPanel
-        property={{
-          id: "prop-1",
-          name: "Harbour View",
-          addressLine1: "12 Wharf Street",
-          city: "Halifax",
-          province: "NS",
-          postalCode: "B3H 1A1",
-          country: "Canada",
-          totalUnits: 1,
-          amenities: [],
-          units: [],
-          createdAt: new Date().toISOString(),
-        }}
-        onRefresh={onRefresh}
-      />
-    </MemoryRouter>
-  </AuthProvider>
-);
+    render(
+      <MemoryRouter>
+        <PropertyDetailPanel
+          property={{
+            id: "prop-1",
+            name: "Harbour View",
+            addressLine1: "12 Wharf Street",
+            city: "Halifax",
+            province: "NS",
+            postalCode: "B3H 1A1",
+            country: "Canada",
+            totalUnits: 1,
+            amenities: [],
+            units: [],
+            createdAt: new Date().toISOString(),
+          }}
+          onRefresh={onRefresh}
+        />
+      </MemoryRouter>
+    );
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
 
     expect(await screen.findByRole("dialog", { name: "Edit property details" })).toBeInTheDocument();
@@ -191,26 +196,24 @@ render(
     });
 
     render(
-      <AuthProvider>
-        <MemoryRouter>
-          <PropertyDetailPanel
-            property={{
-              id: "prop-1",
-              name: "Harbour View",
-              addressLine1: "12 Wharf Street",
-              city: "Halifax",
-              province: "NS",
-              postalCode: "B3H 1A1",
-              country: "Canada",
-              totalUnits: 1,
-              amenities: [],
-              units: [],
-              createdAt: new Date().toISOString(),
-            }}
-            onRefresh={vi.fn()}
-          />
-        </MemoryRouter>
-      </AuthProvider>
+      <MemoryRouter>
+        <PropertyDetailPanel
+          property={{
+            id: "prop-1",
+            name: "Harbour View",
+            addressLine1: "12 Wharf Street",
+            city: "Halifax",
+            province: "NS",
+            postalCode: "B3H 1A1",
+            country: "Canada",
+            totalUnits: 1,
+            amenities: [],
+            units: [],
+            createdAt: new Date().toISOString(),
+          }}
+          onRefresh={vi.fn()}
+        />
+      </MemoryRouter>
     );
 
     const blockedButtons = await screen.findAllByRole("button", {
@@ -249,26 +252,24 @@ render(
     ]);
 
     render(
-      <AuthProvider>
-        <MemoryRouter>
-          <PropertyDetailPanel
-            property={{
-              id: "prop-1",
-              name: "Harbour View",
-              addressLine1: "12 Wharf Street",
-              city: "Halifax",
-              province: "NS",
-              postalCode: "B3H 1A1",
-              country: "Canada",
-              totalUnits: 2,
-              amenities: [],
-              units: [],
-              createdAt: new Date().toISOString(),
-            }}
-            onRefresh={vi.fn()}
-          />
-        </MemoryRouter>
-      </AuthProvider>
+      <MemoryRouter>
+        <PropertyDetailPanel
+          property={{
+            id: "prop-1",
+            name: "Harbour View",
+            addressLine1: "12 Wharf Street",
+            city: "Halifax",
+            province: "NS",
+            postalCode: "B3H 1A1",
+            country: "Canada",
+            totalUnits: 2,
+            amenities: [],
+            units: [],
+            createdAt: new Date().toISOString(),
+          }}
+          onRefresh={vi.fn()}
+        />
+      </MemoryRouter>
     );
 
     expect((await screen.findAllByText("Occupied")).length).toBeGreaterThan(0);
@@ -304,26 +305,24 @@ render(
     });
 
     render(
-      <AuthProvider>
-        <MemoryRouter>
-          <PropertyDetailPanel
-            property={{
-              id: "prop-1",
-              name: "Harbour View",
-              addressLine1: "12 Wharf Street",
-              city: "Halifax",
-              province: "NS",
-              postalCode: "B3H 1A1",
-              country: "Canada",
-              totalUnits: 1,
-              amenities: [],
-              units: [],
-              createdAt: new Date().toISOString(),
-            }}
-            onRefresh={vi.fn()}
-          />
-        </MemoryRouter>
-      </AuthProvider>
+      <MemoryRouter>
+        <PropertyDetailPanel
+          property={{
+            id: "prop-1",
+            name: "Harbour View",
+            addressLine1: "12 Wharf Street",
+            city: "Halifax",
+            province: "NS",
+            postalCode: "B3H 1A1",
+            country: "Canada",
+            totalUnits: 1,
+            amenities: [],
+            units: [],
+            createdAt: new Date().toISOString(),
+          }}
+          onRefresh={vi.fn()}
+        />
+      </MemoryRouter>
     );
 
     expect((await screen.findAllByText("Occupied")).length).toBeGreaterThan(0);
@@ -333,26 +332,24 @@ render(
     const confirmMock = vi.spyOn(window, "confirm").mockReturnValue(true);
 
     render(
-      <AuthProvider>
-        <MemoryRouter>
-          <PropertyDetailPanel
-            property={{
-              id: "prop-1",
-              name: "Harbour View",
-              addressLine1: "12 Wharf Street",
-              city: "Halifax",
-              province: "NS",
-              postalCode: "B3H 1A1",
-              country: "Canada",
-              totalUnits: 1,
-              amenities: [],
-              units: [],
-              createdAt: new Date().toISOString(),
-            }}
-            onRefresh={vi.fn()}
-          />
-        </MemoryRouter>
-      </AuthProvider>
+      <MemoryRouter>
+        <PropertyDetailPanel
+          property={{
+            id: "prop-1",
+            name: "Harbour View",
+            addressLine1: "12 Wharf Street",
+            city: "Halifax",
+            province: "NS",
+            postalCode: "B3H 1A1",
+            country: "Canada",
+            totalUnits: 1,
+            amenities: [],
+            units: [],
+            createdAt: new Date().toISOString(),
+          }}
+          onRefresh={vi.fn()}
+        />
+      </MemoryRouter>
     );
 
     fireEvent.click(screen.getAllByRole("button", { name: /archive property/i })[0]);
