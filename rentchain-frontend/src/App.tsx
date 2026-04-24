@@ -41,26 +41,12 @@ import TenantPortalComingSoon from "./pages/tenant/TenantPortalComingSoon";
 import TenantLayout from "./pages/tenant/TenantLayout";
 import { buildTenantApplicationEntryPath } from "./pages/tenant/tenantApplicationFlow";
 import MonthlyOpsReportPageWithNudge from "./pages/reports/MonthlyOpsReportPageWithNudge";
-import InvitesPage from "./pages/landlord/InvitesPage";
 import PublicApplyPage from "./pages/PublicApplyPage";
-import MessagesPage from "./pages/MessagesPage";
 import TenantMessagesCenterPage from "./pages/tenant/TenantMessagesCenterPage";
 import TenantNoticeDetailPage from "./pages/tenant/TenantNoticeDetailPage";
 import TenantLeaseNoticesPage from "./pages/tenant/TenantLeaseNoticesPage";
 import TenantLeaseNoticeDetailPage from "./pages/tenant/TenantLeaseNoticeDetailPage";
-import MaintenanceRequestsPage from "./pages/MaintenanceRequestsPage";
 import PdfSamplePage from "./pages/PdfSamplePage";
-import LeaseLedgerPage from "./pages/LeaseLedgerPage";
-import LandlordActiveLeasesPage from "./pages/LandlordActiveLeasesPage";
-import ApplicationReviewSummaryPage from "./pages/ApplicationReviewSummaryPage";
-import ReferralsPage from "./pages/ReferralsPage";
-import AccountPage from "./pages/AccountPage";
-import AccountProfilePage from "./pages/account/AccountProfilePage";
-import AccountDataPage from "./pages/account/AccountDataPage";
-import ExpensesPage from "./pages/ExpensesPage";
-import WorkOrdersPage from "./pages/landlord/WorkOrdersPage";
-import WorkOrderNewPage from "./pages/landlord/WorkOrderNewPage";
-import ContractorsPage from "./pages/landlord/ContractorsPage";
 import ContractorDashboardPage from "./pages/contractor/ContractorDashboardPage";
 import ContractorJobsPage from "./pages/contractor/ContractorJobsPage";
 import ContractorProfilePage from "./pages/contractor/ContractorProfilePage";
@@ -130,6 +116,20 @@ const LandlordAnalyticsPage = lazy(() => import("./pages/landlord/LandlordAnalyt
 const LandlordPortfolioScorePage = lazy(() => import("./pages/landlord/PortfolioScorePage"));
 const SharedPortfolioScorePage = lazy(() => import("./pages/public/SharedPortfolioScorePage"));
 const ActionRecommendationsPage = lazy(() => import("./pages/landlord/ActionRecommendationsPage"));
+const InvitesPage = lazy(() => import("./pages/landlord/InvitesPage"));
+const MessagesPage = lazy(() => import("./pages/MessagesPage"));
+const MaintenanceRequestsPage = lazy(() => import("./pages/MaintenanceRequestsPage"));
+const LeaseLedgerPage = lazy(() => import("./pages/LeaseLedgerPage"));
+const LandlordActiveLeasesPage = lazy(() => import("./pages/LandlordActiveLeasesPage"));
+const ApplicationReviewSummaryPage = lazy(() => import("./pages/ApplicationReviewSummaryPage"));
+const ReferralsPage = lazy(() => import("./pages/ReferralsPage"));
+const AccountPage = lazy(() => import("./pages/AccountPage"));
+const AccountProfilePage = lazy(() => import("./pages/account/AccountProfilePage"));
+const AccountDataPage = lazy(() => import("./pages/account/AccountDataPage"));
+const ExpensesPage = lazy(() => import("./pages/ExpensesPage"));
+const WorkOrdersPage = lazy(() => import("./pages/landlord/WorkOrdersPage"));
+const WorkOrderNewPage = lazy(() => import("./pages/landlord/WorkOrderNewPage"));
+const ContractorsPage = lazy(() => import("./pages/landlord/ContractorsPage"));
 const LandingPage = lazy(() => import("./pages/marketing/LandingPage"));
 const AboutPage = lazy(() => import("./pages/marketing/AboutPage"));
 const MarketingPricingPage = lazy(() => import("./pages/marketing/PricingPage"));
@@ -467,7 +467,9 @@ function App() {
           element={
             <RequireAuth>
               <LandlordNav>
-                <ApplicationReviewSummaryPage />
+                <Suspense fallback={null}>
+                  <ApplicationReviewSummaryPage />
+                </Suspense>
               </LandlordNav>
             </RequireAuth>
           }
@@ -533,7 +535,9 @@ function App() {
           element={
             <RequireAuth>
               <LandlordNav>
-                <ReferralsPage />
+                <Suspense fallback={null}>
+                  <ReferralsPage />
+                </Suspense>
               </LandlordNav>
             </RequireAuth>
           }
@@ -807,7 +811,9 @@ function App() {
           element={
             <RequireAuth>
               <LandlordNav>
-                <ExpensesPage />
+                <Suspense fallback={null}>
+                  <ExpensesPage />
+                </Suspense>
               </LandlordNav>
             </RequireAuth>
           }
@@ -817,7 +823,9 @@ function App() {
           element={
             <RequireAuth>
               <LandlordNav>
-                <WorkOrdersPage />
+                <Suspense fallback={null}>
+                  <WorkOrdersPage />
+                </Suspense>
               </LandlordNav>
             </RequireAuth>
           }
@@ -827,7 +835,9 @@ function App() {
           element={
             <RequireAuth>
               <LandlordNav>
-                <WorkOrderNewPage />
+                <Suspense fallback={null}>
+                  <WorkOrderNewPage />
+                </Suspense>
               </LandlordNav>
             </RequireAuth>
           }
@@ -837,7 +847,9 @@ function App() {
           element={
             <RequireAuth>
               <LandlordNav>
-                <ContractorsPage />
+                <Suspense fallback={null}>
+                  <ContractorsPage />
+                </Suspense>
               </LandlordNav>
             </RequireAuth>
           }
@@ -924,7 +936,9 @@ function App() {
           element={
             <RequireAuth>
               <LandlordNav>
-                <MessagesPage />
+                <Suspense fallback={null}>
+                  <MessagesPage />
+                </Suspense>
               </LandlordNav>
             </RequireAuth>
           }
@@ -934,7 +948,9 @@ function App() {
           element={
             <RequireAuth>
               <LandlordNav>
-                <MaintenanceRequestsPage />
+                <Suspense fallback={null}>
+                  <MaintenanceRequestsPage />
+                </Suspense>
               </LandlordNav>
             </RequireAuth>
           }
@@ -944,7 +960,9 @@ function App() {
           element={
             <RequireAuth>
               <LandlordNav>
-                <MaintenanceRequestsPage />
+                <Suspense fallback={null}>
+                  <MaintenanceRequestsPage />
+                </Suspense>
               </LandlordNav>
             </RequireAuth>
           }
@@ -1042,7 +1060,9 @@ function App() {
           element={
             <RequireAuth>
               <LandlordNav>
-                <LandlordActiveLeasesPage />
+                <Suspense fallback={null}>
+                  <LandlordActiveLeasesPage />
+                </Suspense>
               </LandlordNav>
             </RequireAuth>
           }
@@ -1052,7 +1072,9 @@ function App() {
           element={
             <RequireAuth>
               <LandlordNav>
-                <LeaseLedgerPage />
+                <Suspense fallback={null}>
+                  <LeaseLedgerPage />
+                </Suspense>
               </LandlordNav>
             </RequireAuth>
           }
@@ -1062,7 +1084,9 @@ function App() {
           element={
             <RequireAuth>
               <LandlordNav>
-                <InvitesPage />
+                <Suspense fallback={null}>
+                  <InvitesPage />
+                </Suspense>
               </LandlordNav>
             </RequireAuth>
           }
@@ -1087,7 +1111,9 @@ function App() {
             <RequireAuth>
               <AccountRouteGate>
                 <LandlordNav>
-                  <AccountPage />
+                  <Suspense fallback={null}>
+                    <AccountPage />
+                  </Suspense>
                 </LandlordNav>
               </AccountRouteGate>
             </RequireAuth>
@@ -1111,7 +1137,9 @@ function App() {
             <RequireAuth>
               <AccountRouteGate>
                 <LandlordNav>
-                  <AccountProfilePage />
+                  <Suspense fallback={null}>
+                    <AccountProfilePage />
+                  </Suspense>
                 </LandlordNav>
               </AccountRouteGate>
             </RequireAuth>
@@ -1123,7 +1151,9 @@ function App() {
             <RequireAuth>
               <AccountRouteGate>
                 <LandlordNav>
-                  <AccountDataPage />
+                  <Suspense fallback={null}>
+                    <AccountDataPage />
+                  </Suspense>
                 </LandlordNav>
               </AccountRouteGate>
             </RequireAuth>
