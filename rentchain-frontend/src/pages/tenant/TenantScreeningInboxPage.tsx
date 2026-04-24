@@ -144,6 +144,9 @@ export default function TenantScreeningInboxPage() {
                   <div style={{ fontWeight: 700, color: textTokens.primary }}>
                     {view.requestContext}
                   </div>
+                  <div style={{ color: textTokens.secondary }}>
+                    Requested by <strong style={{ color: textTokens.primary }}>{view.requesterLabel}</strong>
+                  </div>
                   <div style={{ color: textTokens.secondary }}>{view.description}</div>
                 </div>
                 <div
