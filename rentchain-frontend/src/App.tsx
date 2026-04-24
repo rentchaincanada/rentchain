@@ -16,26 +16,7 @@ import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import AuthActionPage from "./pages/AuthActionPage";
 import AuthOnboardPage from "./pages/AuthOnboardPage";
 import TenantLoginPageV2 from "./pages/tenant/TenantLoginPage.v2";
-import LandingPage from "./pages/marketing/LandingPage";
-import AboutPage from "./pages/marketing/AboutPage";
-import MarketingPricingPage from "./pages/marketing/PricingPage";
-import RequestAccessPage from "./pages/marketing/RequestAccessPage";
-import ScreeningDemoPage from "./pages/marketing/ScreeningDemoPage";
 import InviteRedeemPage from "./pages/InviteRedeemPage";
-import LegalHelpPage from "./pages/marketing/LegalHelpPage";
-import HelpIndexPage from "./pages/help/HelpIndexPage";
-import HelpLandlordsPage from "./pages/help/HelpLandlordsPage";
-import HelpTenantsPage from "./pages/help/HelpTenantsPage";
-import TemplatesPage from "./pages/help/TemplatesPage";
-import PrivacyPage from "./pages/legal/PrivacyPage";
-import TermsPage from "./pages/legal/TermsPage";
-import AcceptableUsePage from "./pages/legal/AcceptableUsePage";
-import TrustPage from "./pages/trust/TrustPage";
-import SecurityPage from "./pages/security/SecurityPage";
-import SubprocessorsPage from "./pages/subprocessors/SubprocessorsPage";
-import AccessibilityPage from "./pages/accessibility/AccessibilityPage";
-import StatusPage from "./pages/status/StatusPage";
-import ContactPage from "./pages/contact/ContactPage";
 import NotFoundPage from "./pages/NotFoundPage";
 import { TwoFactorPage } from "./pages/TwoFactorPage";
 import { AccountSecurityPage } from "./pages/AccountSecurityPage";
@@ -57,25 +38,7 @@ import MicroLiveInvitePage from "./pages/MicroLiveInvitePage";
 import TenantInviteRedeem from "./tenant/TenantInviteRedeem";
 import { LandlordNav } from "./components/layout/LandlordNav";
 import TenantPortalComingSoon from "./pages/tenant/TenantPortalComingSoon";
-import TenantLandingPage from "./pages/tenant/TenantLandingPage";
 import TenantLayout from "./pages/tenant/TenantLayout";
-import TenantWorkspacePage from "./pages/tenant/TenantWorkspacePage";
-import TenantApplicationStatusPage from "./pages/tenant/TenantApplicationStatusPage";
-import TenantLeasePage from "./pages/tenant/TenantLeasePage";
-import TenantLedgerPage from "./pages/tenant/TenantLedgerPage";
-import TenantActivityPage from "./pages/tenant/TenantActivityPage";
-import TenantAttachmentsPage from "./pages/tenant/TenantAttachmentsPage";
-import TenantNoticesCenterPage from "./pages/tenant/TenantNoticesCenterPage";
-import TenantProfilePage from "./pages/tenant/TenantProfilePage";
-import TenantAccessPage from "./pages/tenant/TenantAccessPage";
-import TenantAccountPage from "./pages/tenant/TenantAccountPage";
-import TenantScreeningInboxPage from "./pages/tenant/TenantScreeningInboxPage";
-import TenantMagicRedeemPage from "./pages/tenant/TenantMagicRedeemPage";
-import TenantInviteRedeemPage from "./pages/tenant/TenantInviteRedeemPage";
-import TenantMaintenanceRequestDetailPage from "./pages/tenant/TenantMaintenanceRequestDetailPage";
-import TenantMaintenanceRequestsPage from "./pages/tenant/TenantMaintenanceRequestsPage";
-import TenantMaintenanceRequestNewPage from "./pages/tenant/TenantMaintenanceRequestNewPage";
-import FeedbackSubmissionPage from "./pages/tenant/FeedbackSubmissionPage";
 import { buildTenantApplicationEntryPath } from "./pages/tenant/tenantApplicationFlow";
 import MonthlyOpsReportPageWithNudge from "./pages/reports/MonthlyOpsReportPageWithNudge";
 import InvitesPage from "./pages/landlord/InvitesPage";
@@ -167,6 +130,43 @@ const LandlordAnalyticsPage = lazy(() => import("./pages/landlord/LandlordAnalyt
 const LandlordPortfolioScorePage = lazy(() => import("./pages/landlord/PortfolioScorePage"));
 const SharedPortfolioScorePage = lazy(() => import("./pages/public/SharedPortfolioScorePage"));
 const ActionRecommendationsPage = lazy(() => import("./pages/landlord/ActionRecommendationsPage"));
+const LandingPage = lazy(() => import("./pages/marketing/LandingPage"));
+const AboutPage = lazy(() => import("./pages/marketing/AboutPage"));
+const MarketingPricingPage = lazy(() => import("./pages/marketing/PricingPage"));
+const RequestAccessPage = lazy(() => import("./pages/marketing/RequestAccessPage"));
+const ScreeningDemoPage = lazy(() => import("./pages/marketing/ScreeningDemoPage"));
+const LegalHelpPage = lazy(() => import("./pages/marketing/LegalHelpPage"));
+const HelpIndexPage = lazy(() => import("./pages/help/HelpIndexPage"));
+const HelpLandlordsPage = lazy(() => import("./pages/help/HelpLandlordsPage"));
+const HelpTenantsPage = lazy(() => import("./pages/help/HelpTenantsPage"));
+const TemplatesPage = lazy(() => import("./pages/help/TemplatesPage"));
+const PrivacyPage = lazy(() => import("./pages/legal/PrivacyPage"));
+const TermsPage = lazy(() => import("./pages/legal/TermsPage"));
+const AcceptableUsePage = lazy(() => import("./pages/legal/AcceptableUsePage"));
+const TrustPage = lazy(() => import("./pages/trust/TrustPage"));
+const SecurityPage = lazy(() => import("./pages/security/SecurityPage"));
+const SubprocessorsPage = lazy(() => import("./pages/subprocessors/SubprocessorsPage"));
+const AccessibilityPage = lazy(() => import("./pages/accessibility/AccessibilityPage"));
+const StatusPage = lazy(() => import("./pages/status/StatusPage"));
+const ContactPage = lazy(() => import("./pages/contact/ContactPage"));
+const TenantLandingPage = lazy(() => import("./pages/tenant/TenantLandingPage"));
+const TenantWorkspacePage = lazy(() => import("./pages/tenant/TenantWorkspacePage"));
+const TenantApplicationStatusPage = lazy(() => import("./pages/tenant/TenantApplicationStatusPage"));
+const TenantLeasePage = lazy(() => import("./pages/tenant/TenantLeasePage"));
+const TenantLedgerPage = lazy(() => import("./pages/tenant/TenantLedgerPage"));
+const TenantActivityPage = lazy(() => import("./pages/tenant/TenantActivityPage"));
+const TenantAttachmentsPage = lazy(() => import("./pages/tenant/TenantAttachmentsPage"));
+const TenantNoticesCenterPage = lazy(() => import("./pages/tenant/TenantNoticesCenterPage"));
+const TenantProfilePage = lazy(() => import("./pages/tenant/TenantProfilePage"));
+const TenantAccessPage = lazy(() => import("./pages/tenant/TenantAccessPage"));
+const TenantAccountPage = lazy(() => import("./pages/tenant/TenantAccountPage"));
+const TenantScreeningInboxPage = lazy(() => import("./pages/tenant/TenantScreeningInboxPage"));
+const TenantMagicRedeemPage = lazy(() => import("./pages/tenant/TenantMagicRedeemPage"));
+const TenantInviteRedeemPage = lazy(() => import("./pages/tenant/TenantInviteRedeemPage"));
+const TenantMaintenanceRequestDetailPage = lazy(() => import("./pages/tenant/TenantMaintenanceRequestDetailPage"));
+const TenantMaintenanceRequestsPage = lazy(() => import("./pages/tenant/TenantMaintenanceRequestsPage"));
+const TenantMaintenanceRequestNewPage = lazy(() => import("./pages/tenant/TenantMaintenanceRequestNewPage"));
+const FeedbackSubmissionPage = lazy(() => import("./pages/tenant/FeedbackSubmissionPage"));
 
 const AuthLoadingScreen = () => (
   <div
@@ -294,7 +294,13 @@ const AccountRouteGate: React.FC<{ children: React.ReactNode }> = ({ children })
 const TenantEntryRouteGate: React.FC = () => {
   const location = useLocation();
   const tenantToken = typeof window === "undefined" ? null : getTenantToken();
-  if (!tenantToken) return <TenantLandingPage />;
+  if (!tenantToken) {
+    return (
+      <Suspense fallback={null}>
+        <TenantLandingPage />
+      </Suspense>
+    );
+  }
 
   const destination = resolveTenantPostAuthDestination({
     search: location.search,
@@ -317,12 +323,13 @@ function App() {
     ) : (
       <TenantPortalComingSoon />
     );
+  const suspensePage = (page: React.ReactNode) => <Suspense fallback={null}>{page}</Suspense>;
 
   return (
     <>
       <Routes>
-        <Route path="/" element={<LandingPage />} />
-        <Route path="/site" element={<LandingPage />} />
+        <Route path="/" element={suspensePage(<LandingPage />)} />
+        <Route path="/site" element={suspensePage(<LandingPage />)} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignupPage />} />
         <Route path="/app/login" element={<LoginPage />} />
@@ -341,32 +348,32 @@ function App() {
         />
         <Route
           path="/auth/magic"
-          element={TENANT_PORTAL_ENABLED ? <TenantMagicRedeemPage /> : <TenantPortalComingSoon />}
+          element={TENANT_PORTAL_ENABLED ? suspensePage(<TenantMagicRedeemPage />) : <TenantPortalComingSoon />}
         />
         <Route path="/2fa" element={<TwoFactorPage />} />
         <Route path="/pricing" element={<PricingGate />} />
-        <Route path="/site/pricing" element={<MarketingPricingPage />} />
-        <Route path="/screening/demo" element={<ScreeningDemoPage />} />
-        <Route path="/site/screening/demo" element={<ScreeningDemoPage />} />
-        <Route path="/site/request-access" element={<RequestAccessPage />} />
-        <Route path="/request-access" element={<RequestAccessPage />} />
-        <Route path="/about" element={<AboutPage />} />
-        <Route path="/site/about" element={<AboutPage />} />
-        <Route path="/legal" element={<LegalHelpPage />} />
-        <Route path="/site/legal" element={<LegalHelpPage />} />
-        <Route path="/help" element={<HelpIndexPage />} />
-        <Route path="/help/landlords" element={<HelpLandlordsPage />} />
-        <Route path="/help/tenants" element={<HelpTenantsPage />} />
-        <Route path="/help/templates" element={<TemplatesPage />} />
-        <Route path="/privacy" element={<PrivacyPage />} />
-        <Route path="/terms" element={<TermsPage />} />
-        <Route path="/acceptable-use" element={<AcceptableUsePage />} />
-        <Route path="/subprocessors" element={<SubprocessorsPage />} />
-        <Route path="/trust" element={<TrustPage />} />
-        <Route path="/security" element={<SecurityPage />} />
-        <Route path="/accessibility" element={<AccessibilityPage />} />
-        <Route path="/status" element={<StatusPage />} />
-        <Route path="/contact" element={<ContactPage />} />
+        <Route path="/site/pricing" element={suspensePage(<MarketingPricingPage />)} />
+        <Route path="/screening/demo" element={suspensePage(<ScreeningDemoPage />)} />
+        <Route path="/site/screening/demo" element={suspensePage(<ScreeningDemoPage />)} />
+        <Route path="/site/request-access" element={suspensePage(<RequestAccessPage />)} />
+        <Route path="/request-access" element={suspensePage(<RequestAccessPage />)} />
+        <Route path="/about" element={suspensePage(<AboutPage />)} />
+        <Route path="/site/about" element={suspensePage(<AboutPage />)} />
+        <Route path="/legal" element={suspensePage(<LegalHelpPage />)} />
+        <Route path="/site/legal" element={suspensePage(<LegalHelpPage />)} />
+        <Route path="/help" element={suspensePage(<HelpIndexPage />)} />
+        <Route path="/help/landlords" element={suspensePage(<HelpLandlordsPage />)} />
+        <Route path="/help/tenants" element={suspensePage(<HelpTenantsPage />)} />
+        <Route path="/help/templates" element={suspensePage(<TemplatesPage />)} />
+        <Route path="/privacy" element={suspensePage(<PrivacyPage />)} />
+        <Route path="/terms" element={suspensePage(<TermsPage />)} />
+        <Route path="/acceptable-use" element={suspensePage(<AcceptableUsePage />)} />
+        <Route path="/subprocessors" element={suspensePage(<SubprocessorsPage />)} />
+        <Route path="/trust" element={suspensePage(<TrustPage />)} />
+        <Route path="/security" element={suspensePage(<SecurityPage />)} />
+        <Route path="/accessibility" element={suspensePage(<AccessibilityPage />)} />
+        <Route path="/status" element={suspensePage(<StatusPage />)} />
+        <Route path="/contact" element={suspensePage(<ContactPage />)} />
         <Route path="/micro-live" element={<MicroLiveInvitePage />} />
         <Route
           path="/tenant/invite/:token"
@@ -1131,47 +1138,47 @@ function App() {
         />
         <Route
           path="/tenant/dashboard"
-          element={renderTenantShell(<TenantWorkspacePage />)}
+          element={renderTenantShell(suspensePage(<TenantWorkspacePage />))}
         />
         <Route
           path="/tenant/application"
-          element={renderTenantShell(<TenantApplicationStatusPage />)}
+          element={renderTenantShell(suspensePage(<TenantApplicationStatusPage />))}
         />
         <Route
           path="/tenant/lease"
-          element={renderTenantShell(<TenantLeasePage />)}
+          element={renderTenantShell(suspensePage(<TenantLeasePage />))}
         />
         <Route
           path="/tenant/activity"
-          element={renderTenantShell(<TenantActivityPage />)}
+          element={renderTenantShell(suspensePage(<TenantActivityPage />))}
         />
         <Route
           path="/tenant/ledger"
-          element={renderTenantShell(<TenantLedgerPage />)}
+          element={renderTenantShell(suspensePage(<TenantLedgerPage />))}
         />
         <Route
           path="/tenant/attachments"
-          element={renderTenantShell(<TenantAttachmentsPage />)}
+          element={renderTenantShell(suspensePage(<TenantAttachmentsPage />))}
         />
         <Route
           path="/tenant/notices"
-          element={renderTenantShell(<TenantNoticesCenterPage />)}
+          element={renderTenantShell(suspensePage(<TenantNoticesCenterPage />))}
         />
         <Route
           path="/tenant/profile"
-          element={renderTenantShell(<TenantProfilePage />)}
+          element={renderTenantShell(suspensePage(<TenantProfilePage />))}
         />
         <Route
           path="/tenant/screening"
-          element={renderTenantShell(<TenantScreeningInboxPage />)}
+          element={renderTenantShell(suspensePage(<TenantScreeningInboxPage />))}
         />
         <Route
           path="/tenant/access"
-          element={renderTenantShell(<TenantAccessPage />)}
+          element={renderTenantShell(suspensePage(<TenantAccessPage />))}
         />
         <Route
           path="/tenant/account"
-          element={renderTenantShell(<TenantAccountPage />)}
+          element={renderTenantShell(suspensePage(<TenantAccountPage />))}
         />
         <Route
           path="/tenant/notices/:noticeId"
@@ -1193,23 +1200,23 @@ function App() {
         />
         <Route
           path="/tenant/maintenance"
-          element={renderTenantShell(<TenantMaintenanceRequestsPage />)}
+          element={renderTenantShell(suspensePage(<TenantMaintenanceRequestsPage />))}
         />
         <Route
           path="/tenant/maintenance/new"
-          element={renderTenantShell(<TenantMaintenanceRequestNewPage />)}
+          element={renderTenantShell(suspensePage(<TenantMaintenanceRequestNewPage />))}
         />
         <Route
           path="/tenant/maintenance/:id"
-          element={renderTenantShell(<TenantMaintenanceRequestDetailPage />)}
+          element={renderTenantShell(suspensePage(<TenantMaintenanceRequestDetailPage />))}
         />
         <Route
           path="/tenant/feedback"
-          element={renderTenantShell(<FeedbackSubmissionPage />)}
+          element={renderTenantShell(suspensePage(<FeedbackSubmissionPage />))}
         />
         <Route
           path="/tenant/invite/redeem"
-          element={renderTenantShell(<TenantInviteRedeemPage />)}
+          element={renderTenantShell(suspensePage(<TenantInviteRedeemPage />))}
         />
         {applicantApplyRedirects.map((path) => (
           <Route
