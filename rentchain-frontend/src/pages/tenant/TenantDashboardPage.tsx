@@ -10,6 +10,7 @@ import {
 import { TenantCommunicationItem } from "../../api/tenantCommunicationsApi";
 import { TenantScreeningRequest, listTenantScreenings } from "../../api/tenantScreeningApi";
 import { CreateMaintenanceRequestModal } from "../../components/tenant/CreateMaintenanceRequestModal";
+import TenantScreeningConsentCard from "../../components/tenant/TenantScreeningConsentCard";
 import { Card, Section } from "../../components/ui/Ui";
 import { clearTenantToken, getTenantToken } from "../../lib/tenantAuth";
 import { colors, radius, shadows, spacing, text as textTokens } from "../../styles/tokens";
@@ -529,6 +530,9 @@ export default function TenantDashboardPage() {
   const unreadMessage = communications.find((item) => item.type === "message" && !item.read);
   const latestMaintenanceUpdate = communications.find((item) => item.type === "maintenance_update");
   const activeScreening = screenings[0] || null;
+  const handleScreeningUpdated = React.useCallback((next: TenantScreeningRequest) => {
+    setScreenings((current) => current.map((item) => (item.id === next.id ? next : item)));
+  }, []);
 
   const checklist = useMemo(
     () => [
@@ -822,12 +826,13 @@ export default function TenantDashboardPage() {
                   Status: <strong style={{ color: textTokens.primary }}>{activeScreening.summary.status.replace(/_/g, " ")}</strong>
                 </div>
                 <div style={{ color: textTokens.secondary }}>
-                  Provider: <strong style={{ color: textTokens.primary }}>{(activeScreening.provider || "runtime selected").replace(/_/g, " ")}</strong>
+                  Provider: <strong style={{ color: textTokens.primary }}>{activeScreening.providerLabel || (activeScreening.provider || "selected screening provider").replace(/_/g, " ")}</strong>
                 </div>
                 <div style={{ color: textTokens.secondary }}>
                   Requested: <strong style={{ color: textTokens.primary }}>{fmtDate(activeScreening.requestedAt)}</strong>
                 </div>
                 <div style={{ color: textTokens.secondary }}>{activeScreening.summary.summaryResult}</div>
+                <TenantScreeningConsentCard screening={activeScreening} onConsentUpdated={handleScreeningUpdated} />
               </div>
             ) : (
               <div style={{ color: textTokens.muted }}>

@@ -27,6 +27,7 @@ import {
   applyNotificationUpdate,
   buildTenantSafeWorkOrderNotifications,
 } from "../lib/maintenanceNotifications";
+import { writeCanonicalEvent } from "../lib/events/buildEvent";
 
 const router = Router();
 router.use(authenticateJwt);
@@ -400,8 +401,17 @@ type ScreeningConsentRecord = {
   id: string;
   requestId: string;
   tenantId: string;
+  applicantId?: string | null;
+  rentalApplicationId?: string | null;
+  landlordId?: string | null;
+  propertyId?: string | null;
+  providerKey?: ScreeningProviderKey | null;
+  providerLabel?: string | null;
+  consentVersion?: string | null;
+  consentTextSummary?: string | null;
   viewedAt: number | null;
   acceptedAt: number | null;
+  acceptedBy?: string | null;
   providerDisclosure: string | null;
   disclosureVersion: string | null;
 };
@@ -753,8 +763,17 @@ async function getLatestConsent(requestId: string): Promise<ScreeningConsentReco
     id: item.id,
     requestId,
     tenantId: cleanString(item.tenantId, 160) || "",
+    applicantId: cleanString(item.applicantId, 160),
+    rentalApplicationId: cleanString(item.rentalApplicationId, 160),
+    landlordId: cleanString(item.landlordId, 160),
+    propertyId: cleanString(item.propertyId, 160),
+    providerKey: ((cleanString(item.providerKey, 80) || "") as ScreeningProviderKey | "") || null,
+    providerLabel: cleanString(item.providerLabel, 120),
+    consentVersion: cleanString(item.consentVersion, 80),
+    consentTextSummary: cleanString(item.consentTextSummary, 600),
     viewedAt: Number(item.viewedAt || 0) || null,
     acceptedAt: Number(item.acceptedAt || 0) || null,
+    acceptedBy: cleanString(item.acceptedBy, 160),
     providerDisclosure: cleanString(item.providerDisclosure, 200),
     disclosureVersion: cleanString(item.disclosureVersion, 80),
   };
@@ -968,6 +987,68 @@ function screeningSummaryText(request: ScreeningRequestRecord, session: Screenin
   if (session?.handoffType === "redirect") return "Your screening partner handoff is ready. Continue when you are ready.";
   if (request.status === "consent_pending") return "Consent is required before screening can begin.";
   return "Screening is queued and ready for the next step.";
+}
+
+function getScreeningProviderLabel(providerKey: ScreeningProviderKey | null | undefined): string {
+  if (providerKey === "transunion_redirect") return "TransUnion";
+  if (providerKey === "equifax") return "Equifax";
+  if (providerKey === "manual") return "Manual review";
+  return "Selected screening provider";
+}
+
+function buildScreeningConsentSummary(input: {
+  providerKey: ScreeningProviderKey | null | undefined;
+  propertyLabel?: string | null;
+  unitLabel?: string | null;
+}) {
+  const providerLabel = getScreeningProviderLabel(input.providerKey);
+  const locationLabel = [input.propertyLabel, input.unitLabel].filter(Boolean).join(" - ");
+  const locationSegment = locationLabel ? ` for ${locationLabel}` : "";
+  return `The landlord requested tenant screening${locationSegment}. A third-party screening provider may be used, including ${providerLabel} when applicable. RentChain records consent and workflow status for audit and application review purposes.`;
+}
+
+async function writeScreeningConsentCanonicalEvent(input: {
+  request: ScreeningRequestRecord;
+  consent: ScreeningConsentRecord;
+  actorId: string;
+}) {
+  const providerKey = input.consent.providerKey || input.request.providerSelection || null;
+  const providerLabel = input.consent.providerLabel || getScreeningProviderLabel(providerKey);
+  await writeCanonicalEvent({
+    type: "screening_consent_confirmed",
+    domain: "screening",
+    action: "screening_consent_confirmed",
+    status: "confirmed",
+    actor: {
+      type: "tenant",
+      id: input.actorId,
+      role: "tenant",
+    },
+    resource: {
+      type: "screening_request",
+      id: input.request.id,
+      parentType: input.request.rentalApplicationId ? "rental_application" : input.request.landlordId ? "landlord" : "tenant",
+      parentId: input.request.rentalApplicationId || input.request.landlordId || input.request.applicantTenantId || null,
+    },
+    visibility: "internal",
+    occurredAt: input.consent.acceptedAt || Date.now(),
+    summary: "Tenant screening consent confirmed",
+    metadata: {
+      requestId: input.request.id,
+      consentId: input.consent.id,
+      tenantId: input.request.applicantTenantId || input.consent.tenantId || null,
+      applicantId: input.request.applicantUserId || input.consent.applicantId || null,
+      applicationId: input.request.rentalApplicationId || input.consent.rentalApplicationId || null,
+      landlordId: input.request.landlordId || input.consent.landlordId || null,
+      propertyId: input.request.propertyId || input.consent.propertyId || null,
+      providerKey,
+      providerLabel,
+      consentVersion: input.consent.consentVersion || input.consent.disclosureVersion || null,
+      acceptedBy: input.consent.acceptedBy || input.actorId,
+      consentTextSummary: input.consent.consentTextSummary || null,
+    },
+    tags: ["screening-consent", `provider:${providerKey || "pending"}`],
+  });
 }
 
 async function getTenantConversationIds(tenantId: string): Promise<string[]> {
@@ -1352,6 +1433,7 @@ function shapeScreeningResponse(input: {
     startedAt: request.startedAt || session?.createdAt || null,
     completedAt: request.completedAt || result?.updatedAt || null,
     provider: session?.providerKey || request.providerSelection || null,
+    providerLabel: getScreeningProviderLabel(session?.providerKey || request.providerSelection || null),
     packageType: request.packageType,
     payerType: request.payerType,
     propertyLabel: request.propertyLabel,
@@ -1361,8 +1443,19 @@ function shapeScreeningResponse(input: {
     consent: consent
       ? {
           id: consent.id,
+          requestId: consent.requestId,
+          tenantId: consent.tenantId,
+          applicantId: consent.applicantId || null,
+          rentalApplicationId: consent.rentalApplicationId || null,
+          landlordId: consent.landlordId || null,
+          propertyId: consent.propertyId || null,
+          providerKey: consent.providerKey || null,
+          providerLabel: consent.providerLabel || null,
+          consentVersion: consent.consentVersion || consent.disclosureVersion || null,
+          consentTextSummary: consent.consentTextSummary || null,
           viewedAt: consent.viewedAt,
           acceptedAt: consent.acceptedAt,
+          acceptedBy: consent.acceptedBy || null,
           providerDisclosure: consent.providerDisclosure,
           disclosureVersion: consent.disclosureVersion,
         }
@@ -3655,6 +3748,18 @@ router.post("/screening/:requestId/consent", requireTenant, async (req: any, res
       return res.status(400).json({ ok: false, error: "CONSENT_ACTION_REQUIRED" });
     }
 
+    if (accepted && existingConsent?.acceptedAt) {
+      return res.json({
+        ok: true,
+        screeningRequest: shapeScreeningResponse({
+          request,
+          consent: existingConsent,
+          session: await getLatestSession(requestId),
+          result: await getLatestResult(requestId),
+        }),
+      });
+    }
+
     const now = Date.now();
     const consentRef =
       existingConsent && !existingConsent.acceptedAt
@@ -3664,15 +3769,33 @@ router.post("/screening/:requestId/consent", requireTenant, async (req: any, res
       cleanString(req.body?.providerDisclosure, 200) ||
       (request.providerSelection ? `This screening may be completed using ${request.providerSelection}.` : "This screening may be completed by a secure screening provider selected at runtime.");
     const disclosureVersion = cleanString(req.body?.disclosureVersion, 80) || "screening-consent-v1";
+    const providerKey = request.providerSelection || null;
+    const providerLabel = getScreeningProviderLabel(providerKey);
+    const consentSummary =
+      cleanString(req.body?.consentSummary, 600) ||
+      buildScreeningConsentSummary({
+        providerKey,
+        propertyLabel: request.propertyLabel,
+        unitLabel: request.unitLabel,
+      });
 
     await consentRef.set(
       {
         id: consentRef.id,
         requestId,
         tenantId,
+        applicantId: request.applicantUserId || request.applicantTenantId || null,
+        rentalApplicationId: request.rentalApplicationId || null,
+        landlordId: request.landlordId || null,
+        propertyId: request.propertyId || null,
+        providerKey,
+        providerLabel,
+        consentVersion: disclosureVersion,
+        consentTextSummary: consentSummary,
         applicantName: request.applicantName || null,
         viewedAt: existingConsent?.viewedAt || now,
         acceptedAt: accepted ? now : existingConsent?.acceptedAt || null,
+        acceptedBy: accepted ? actorId : existingConsent?.acceptedBy || null,
         providerDisclosure,
         disclosureVersion,
         ipAddress: cleanString(req.ip, 120),
@@ -3709,11 +3832,20 @@ router.post("/screening/:requestId/consent", requireTenant, async (req: any, res
       metadata: {
         consentId: consentRef.id,
         disclosureVersion,
+        providerKey,
+        providerLabel,
       },
     });
 
     const refreshedRequest = await getScreeningRequestById(requestId);
     const refreshedConsent = await getLatestConsent(requestId);
+    if (accepted && refreshedConsent) {
+      await writeScreeningConsentCanonicalEvent({
+        request,
+        consent: refreshedConsent,
+        actorId,
+      });
+    }
     return res.json({
       ok: true,
       screeningRequest: shapeScreeningResponse({
@@ -3875,7 +4007,11 @@ router.post("/screening/:requestId/start", requireTenant, async (req: any, res) 
         : code === "SCREENING_STILL_IN_PROGRESS"
         ? 409
         : 500;
-    return res.status(status).json({ ok: false, error: status === 500 ? "TENANT_SCREENING_START_FAILED" : code });
+    return res.status(status).json({
+      ok: false,
+      error: status === 500 ? "TENANT_SCREENING_START_FAILED" : code,
+      blockReason: code === "CONSENT_REQUIRED" ? "missing_tenant_consent" : null,
+    });
   }
 });
 
