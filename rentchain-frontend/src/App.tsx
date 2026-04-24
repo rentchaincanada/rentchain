@@ -69,6 +69,7 @@ import TenantNoticesCenterPage from "./pages/tenant/TenantNoticesCenterPage";
 import TenantProfilePage from "./pages/tenant/TenantProfilePage";
 import TenantAccessPage from "./pages/tenant/TenantAccessPage";
 import TenantAccountPage from "./pages/tenant/TenantAccountPage";
+import TenantScreeningInboxPage from "./pages/tenant/TenantScreeningInboxPage";
 import TenantMagicRedeemPage from "./pages/tenant/TenantMagicRedeemPage";
 import TenantInviteRedeemPage from "./pages/tenant/TenantInviteRedeemPage";
 import TenantMaintenanceRequestDetailPage from "./pages/tenant/TenantMaintenanceRequestDetailPage";
@@ -1159,6 +1160,10 @@ function App() {
         <Route
           path="/tenant/profile"
           element={renderTenantShell(<TenantProfilePage />)}
+        />
+        <Route
+          path="/tenant/screening"
+          element={renderTenantShell(<TenantScreeningInboxPage />)}
         />
         <Route
           path="/tenant/access"
