@@ -100,6 +100,7 @@ export function ConnectTransUnionModal({
         style={{
           position: "fixed",
           inset: 0,
+          minHeight: "100dvh",
           background: "rgba(15,23,42,0.42)",
           display: "flex",
           alignItems: "center",
@@ -166,6 +167,7 @@ export function ConnectTransUnionModal({
       style={{
         position: "fixed",
         inset: 0,
+        minHeight: "100dvh",
         background: "rgba(15,23,42,0.42)",
         display: "flex",
         alignItems: "center",
@@ -181,8 +183,9 @@ export function ConnectTransUnionModal({
           display: "flex",
           flexDirection: "column",
           gap: spacing.md,
-          maxHeight: "min(760px, calc(100vh - 32px))",
+          maxHeight: "min(760px, calc(100dvh - 32px))",
           overflow: "hidden",
+          margin: 0,
           borderRadius: radius.lg,
           boxShadow: shadows.pop,
         }}
@@ -195,8 +198,7 @@ export function ConnectTransUnionModal({
             RentChain.
           </p>
         </div>
-
-        <div style={{ display: "grid", gap: spacing.sm, minHeight: 0, overflowY: "auto" }}>
+        <div style={{ display: "grid", gap: spacing.sm, minHeight: 0, flex: 1, overflowY: "auto" }}>
           <div
             style={{
               display: "grid",
