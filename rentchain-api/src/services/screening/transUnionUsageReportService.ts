@@ -53,7 +53,7 @@ type TransUnionUsageQuality = {
   averageTimeFromApplicationToScreeningRequestMinutes: number | null;
 };
 
-type UsageMetrics = {
+export type TransUnionUsageReport = {
   ok: true;
   providerKey: "transunion";
   period: {
@@ -108,7 +108,7 @@ function toIsoDateBoundary(value: Date, mode: "start" | "end"): string {
   return copy.toISOString();
 }
 
-function parsePeriod(input: LoadTransUnionUsageReportInput): UsageMetrics["period"] {
+function parsePeriod(input: LoadTransUnionUsageReportInput): TransUnionUsageReport["period"] {
   const now = new Date();
   const period = String(input.period || "").trim().toLowerCase();
   if (period === "last_60_days") {
@@ -171,7 +171,7 @@ function landlordIdForEvent(event: CanonicalEventV1): string | null {
   return String(metadata.landlordId || event.actor?.id || event.resource?.parentId || "").trim() || null;
 }
 
-function buildUsageReport(events: CanonicalEventV1[], period: UsageMetrics["period"]): UsageMetrics {
+function buildUsageReport(events: CanonicalEventV1[], period: TransUnionUsageReport["period"]): TransUnionUsageReport {
   const filtered = events.filter((event) => {
     const type = String(event.type || "").trim();
     if (!VALID_USAGE_EVENT_TYPES.has(type)) return false;
@@ -421,7 +421,7 @@ function buildUsageReport(events: CanonicalEventV1[], period: UsageMetrics["peri
 
 export async function loadTransUnionUsageReport(
   input: LoadTransUnionUsageReportInput = {}
-): Promise<UsageMetrics> {
+): Promise<TransUnionUsageReport> {
   const period = parsePeriod(input);
   const snapshot = await db
     .collection(CANONICAL_EVENTS_COLLECTION)

@@ -1,14 +1,16 @@
-import { render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import AdminTransUnionUsagePage from "./AdminTransUnionUsagePage";
 
 const mocks = vi.hoisted(() => ({
   fetchAdminTransUnionUsageMock: vi.fn(),
+  downloadAdminTransUnionUsagePdfMock: vi.fn(),
   showToastMock: vi.fn(),
 }));
 
 vi.mock("../../api/adminScreeningUsageApi", () => ({
+  downloadAdminTransUnionUsagePdf: mocks.downloadAdminTransUnionUsagePdfMock,
   fetchAdminTransUnionUsage: mocks.fetchAdminTransUnionUsageMock,
 }));
 
@@ -21,8 +23,13 @@ vi.mock("../../components/layout/MacShell", () => ({
 }));
 
 describe("AdminTransUnionUsagePage", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   beforeEach(() => {
     mocks.showToastMock.mockReset();
+    mocks.downloadAdminTransUnionUsagePdfMock.mockReset();
     mocks.fetchAdminTransUnionUsageMock.mockResolvedValue({
       ok: true,
       providerKey: "transunion",
@@ -91,6 +98,12 @@ describe("AdminTransUnionUsagePage", () => {
         },
       },
     });
+    mocks.downloadAdminTransUnionUsagePdfMock.mockResolvedValue({
+      blob: new Blob(["pdf-bytes"], { type: "application/pdf" }),
+      filename: "rentchain-transunion-usage-summary-v1.pdf",
+    });
+    vi.spyOn(window.URL, "createObjectURL").mockReturnValue("blob:report");
+    vi.spyOn(window.URL, "revokeObjectURL").mockImplementation(() => undefined);
   });
 
   it("renders KPI sections and compliance summary", async () => {
@@ -112,5 +125,53 @@ describe("AdminTransUnionUsagePage", () => {
     expect(screen.getByText("Appendix")).toBeInTheDocument();
     expect(screen.getByText(/Tenant consent captured before screening: 100%/)).toBeInTheDocument();
   });
-});
 
+  it("downloads the PDF report and shows loading state", async () => {
+    const appendSpy = vi.spyOn(document.body, "appendChild");
+    const removeSpy = vi.spyOn(HTMLElement.prototype, "remove").mockImplementation(() => undefined);
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
+
+    render(
+      <MemoryRouter initialEntries={["/admin/screening/transunion-usage"]}>
+        <Routes>
+          <Route path="/admin/screening/transunion-usage" element={<AdminTransUnionUsagePage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    const [button] = await screen.findAllByRole("button", { name: "Download PDF report" });
+    fireEvent.click(button);
+
+    expect(await screen.findByRole("button", { name: "Downloading PDF..." })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(mocks.downloadAdminTransUnionUsagePdfMock).toHaveBeenCalledWith({ period: "last_30_days" });
+    });
+    expect(clickSpy).toHaveBeenCalled();
+    expect(appendSpy).toHaveBeenCalled();
+    expect(removeSpy).toHaveBeenCalled();
+  });
+
+  it("shows an error toast when PDF download fails", async () => {
+    mocks.downloadAdminTransUnionUsagePdfMock.mockRejectedValueOnce(new Error("export failed"));
+
+    render(
+      <MemoryRouter initialEntries={["/admin/screening/transunion-usage"]}>
+        <Routes>
+          <Route path="/admin/screening/transunion-usage" element={<AdminTransUnionUsagePage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    const [button] = await screen.findAllByRole("button", { name: "Download PDF report" });
+    fireEvent.click(button);
+
+    await waitFor(() => {
+      expect(mocks.showToastMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: "Failed to download PDF report",
+          variant: "error",
+        })
+      );
+    });
+  });
+});

@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   verifyAuthTokenMock: vi.fn(),
   buildCanonicalSessionUserFromClaimsMock: vi.fn(),
   loadTransUnionUsageReportMock: vi.fn(),
+  buildTransUnionUsagePdfBufferMock: vi.fn(),
 }));
 
 vi.mock("../../auth/jwt", () => ({
@@ -16,6 +17,10 @@ vi.mock("../../services/sessionUserService", () => ({
 
 vi.mock("../../services/screening/transUnionUsageReportService", () => ({
   loadTransUnionUsageReport: mocks.loadTransUnionUsageReportMock,
+}));
+
+vi.mock("../../services/screening/transUnionUsageReportPdf", () => ({
+  buildTransUnionUsagePdfBuffer: mocks.buildTransUnionUsagePdfBufferMock,
 }));
 
 function createReq(headers?: Record<string, string>, query?: Record<string, unknown>) {
@@ -31,6 +36,7 @@ function createRes() {
   return {
     statusCode: 200,
     body: undefined as any,
+    headers: {} as Record<string, string>,
     status(code: number) {
       this.statusCode = code;
       return this;
@@ -39,12 +45,18 @@ function createRes() {
       this.body = payload;
       return this;
     },
-    setHeader: vi.fn(),
+    send(payload: unknown) {
+      this.body = payload;
+      return this;
+    },
+    setHeader(name: string, value: string) {
+      this.headers[String(name).toLowerCase()] = value;
+    },
   } as any;
 }
 
-async function runRoute(router: any, req: any) {
-  const layer = router.stack.find((entry: any) => entry.route?.path === "/screening/transunion-usage");
+async function runRoute(router: any, path: string, req: any) {
+  const layer = router.stack.find((entry: any) => entry.route?.path === path);
   if (!layer) throw new Error("route not found");
   const res = createRes();
   const stack = [...layer.route.stack];
@@ -81,6 +93,7 @@ describe("adminScreeningUsageRoutes", () => {
     mocks.verifyAuthTokenMock.mockReset();
     mocks.buildCanonicalSessionUserFromClaimsMock.mockReset();
     mocks.loadTransUnionUsageReportMock.mockReset();
+    mocks.buildTransUnionUsagePdfBufferMock.mockReset();
     mocks.loadTransUnionUsageReportMock.mockResolvedValue({
       ok: true,
       providerKey: "transunion",
@@ -95,11 +108,12 @@ describe("adminScreeningUsageRoutes", () => {
       quality: {},
       report: {},
     });
+    mocks.buildTransUnionUsagePdfBufferMock.mockResolvedValue(Buffer.from("pdf-bytes"));
   });
 
   it("returns 401 for unauthenticated requests", async () => {
     const router = (await import("../adminScreeningUsageRoutes")).default;
-    const res = await runRoute(router, createReq());
+    const res = await runRoute(router, "/screening/transunion-usage", createReq());
     expect(res.statusCode).toBe(401);
   });
 
@@ -112,7 +126,11 @@ describe("adminScreeningUsageRoutes", () => {
       revokedPermissions: [],
     });
     const router = (await import("../adminScreeningUsageRoutes")).default;
-    const res = await runRoute(router, createReq({ authorization: "Bearer landlord-token" }));
+    const res = await runRoute(
+      router,
+      "/screening/transunion-usage",
+      createReq({ authorization: "Bearer landlord-token" })
+    );
     expect(res.statusCode).toBe(403);
   });
 
@@ -127,6 +145,7 @@ describe("adminScreeningUsageRoutes", () => {
     const router = (await import("../adminScreeningUsageRoutes")).default;
     const res = await runRoute(
       router,
+      "/screening/transunion-usage",
       createReq({ authorization: "Bearer admin-token" }, { period: "last_60_days" })
     );
     expect(res.statusCode).toBe(200);
@@ -135,5 +154,49 @@ describe("adminScreeningUsageRoutes", () => {
       startDate: null,
       endDate: null,
     });
+  });
+
+  it("allows admins to request the PDF with correct headers", async () => {
+    mocks.verifyAuthTokenMock.mockReturnValue({ sub: "admin-1" });
+    mocks.buildCanonicalSessionUserFromClaimsMock.mockResolvedValue({
+      id: "admin-1",
+      role: "admin",
+      permissions: ["system.admin"],
+      revokedPermissions: [],
+    });
+    const router = (await import("../adminScreeningUsageRoutes")).default;
+    const res = await runRoute(
+      router,
+      "/screening/transunion-usage/pdf",
+      createReq({ authorization: "Bearer admin-token" }, { period: "last_90_days" })
+    );
+    expect(res.statusCode).toBe(200);
+    expect(res.headers["content-type"]).toBe("application/pdf");
+    expect(res.headers["content-disposition"]).toContain(
+      'attachment; filename="rentchain-transunion-usage-summary-v1.pdf"'
+    );
+    expect(Buffer.isBuffer(res.body)).toBe(true);
+    expect(mocks.loadTransUnionUsageReportMock).toHaveBeenCalledWith({
+      period: "last_90_days",
+      startDate: null,
+      endDate: null,
+    });
+  });
+
+  it("keeps the PDF endpoint admin-only", async () => {
+    mocks.verifyAuthTokenMock.mockReturnValue({ sub: "landlord-1" });
+    mocks.buildCanonicalSessionUserFromClaimsMock.mockResolvedValue({
+      id: "landlord-1",
+      role: "landlord",
+      permissions: [],
+      revokedPermissions: [],
+    });
+    const router = (await import("../adminScreeningUsageRoutes")).default;
+    const res = await runRoute(
+      router,
+      "/screening/transunion-usage/pdf",
+      createReq({ authorization: "Bearer landlord-token" })
+    );
+    expect(res.statusCode).toBe(403);
   });
 });
