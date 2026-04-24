@@ -28,6 +28,7 @@ import {
   buildTenantSafeWorkOrderNotifications,
 } from "../lib/maintenanceNotifications";
 import { writeCanonicalEvent } from "../lib/events/buildEvent";
+import { adaptTenantSafeScreeningState } from "../services/screening/tenantScreeningStatusAdapter";
 
 const router = Router();
 router.use(authenticateJwt);
@@ -1503,6 +1504,14 @@ function shapeScreeningResponse(input: {
 }) {
   const { request, consent, session, result } = input;
   const returnState = resolveReturnState(request, session, result);
+  const tenantSafeState = adaptTenantSafeScreeningState({
+    requestStatus: request.status,
+    nextAction: request.nextAction,
+    consentAcceptedAt: request.consentedAt || consent?.acceptedAt || null,
+    sessionStatus: session?.status || null,
+    resultStatus: result?.status || request.normalizedResultStatus,
+    providerSessionStatus: session?.providerSessionStatus || result?.providerStatusMapped || null,
+  });
   return {
     id: request.id,
     rentalApplicationId: request.rentalApplicationId,
@@ -1521,6 +1530,10 @@ function shapeScreeningResponse(input: {
     applicantName: request.applicantName,
     requesterDisplayLabel: input.requesterDisplayLabel || null,
     nextAction: request.nextAction || null,
+    tenantStatus: tenantSafeState.tenantStatus,
+    tenantStatusLabel: tenantSafeState.tenantStatusLabel,
+    tenantStatusDescription: tenantSafeState.tenantStatusDescription,
+    tenantNextAction: tenantSafeState.tenantNextAction,
     consent: consent
       ? {
           id: consent.id,
