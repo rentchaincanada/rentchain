@@ -87,12 +87,20 @@ export default defineConfig(({ mode }) => {
           manualChunks(id) {
             if (!id.includes("node_modules")) return;
 
+            if (id.includes("/node_modules/firebase/")) {
+              return "firebase-vendor";
+            }
+
             if (
               id.includes("react") ||
               id.includes("react-dom") ||
               id.includes("react-router-dom")
             ) {
-              return "react_vendor";
+              return "react-vendor";
+            }
+
+            if (id.includes("/node_modules/recharts/")) {
+              return "charts-vendor";
             }
 
             return "vendor";
