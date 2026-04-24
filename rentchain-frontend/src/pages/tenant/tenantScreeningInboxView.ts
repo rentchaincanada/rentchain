@@ -35,7 +35,6 @@ function resolveProviderLabel(item: TenantScreeningRequest) {
 
 export function normalizeTenantScreeningStatus(item: TenantScreeningRequest): TenantScreeningInboxStatus {
   if (item.tenantStatus) return item.tenantStatus;
-
   const rawStatus = String(item.status || "").trim().toLowerCase();
   if (rawStatus === "consent_pending") return "consent_required";
   if (rawStatus === "consented") return "consent_confirmed";
@@ -67,7 +66,6 @@ function statusLabel(status: TenantScreeningInboxStatus) {
 
 function statusDescription(item: TenantScreeningRequest, status: TenantScreeningInboxStatus) {
   if (item.tenantStatusDescription) return item.tenantStatusDescription;
-
   switch (status) {
     case "consent_required":
       return "The landlord has requested screening for this application. Your authorization is required before it can proceed.";
@@ -152,7 +150,6 @@ function latestActivityAt(item: TenantScreeningRequest) {
 export function buildTenantScreeningInboxItemView(item: TenantScreeningRequest): TenantScreeningInboxItemView {
   const status = normalizeTenantScreeningStatus(item);
   const resolvedNextAction = item.tenantNextAction || nextAction(status);
-
   return {
     id: item.id,
     status,

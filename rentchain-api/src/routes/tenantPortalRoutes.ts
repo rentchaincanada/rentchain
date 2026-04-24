@@ -1033,9 +1033,7 @@ async function resolveTenantSafeRequesterLabel(landlordId: string | null | undef
       ]);
       if (landlordLabel) return landlordLabel;
     }
-  } catch {
-    // ignore lookup errors
-  }
+  } catch {}
 
   try {
     const accountSnap = await db.collection("accounts").doc(normalizedLandlordId).get();
@@ -1051,9 +1049,7 @@ async function resolveTenantSafeRequesterLabel(landlordId: string | null | undef
       ]);
       if (accountLabel) return accountLabel;
     }
-  } catch {
-    // ignore lookup errors
-  }
+  } catch {}
 
   try {
     const userSnap = await db.collection("users").doc(normalizedLandlordId).get();
@@ -1069,9 +1065,7 @@ async function resolveTenantSafeRequesterLabel(landlordId: string | null | undef
       ]);
       if (userLabel) return userLabel;
     }
-  } catch {
-    // ignore lookup errors
-  }
+  } catch {}
 
   return null;
 }
@@ -1107,8 +1101,16 @@ async function writeScreeningConsentCanonicalEvent(input: {
     resource: {
       type: "screening_request",
       id: input.request.id,
-      parentType: input.request.rentalApplicationId ? "rental_application" : input.request.landlordId ? "landlord" : "tenant",
-      parentId: input.request.rentalApplicationId || input.request.landlordId || input.request.applicantTenantId || null,
+      parentType: input.request.rentalApplicationId
+        ? "rental_application"
+        : input.request.landlordId
+        ? "landlord"
+        : "tenant",
+      parentId:
+        input.request.rentalApplicationId ||
+        input.request.landlordId ||
+        input.request.applicantTenantId ||
+        null,
     },
     visibility: "internal",
     occurredAt: input.consent.acceptedAt || Date.now(),
@@ -1118,12 +1120,14 @@ async function writeScreeningConsentCanonicalEvent(input: {
       consentId: input.consent.id,
       tenantId: input.request.applicantTenantId || input.consent.tenantId || null,
       applicantId: input.request.applicantUserId || input.consent.applicantId || null,
-      applicationId: input.request.rentalApplicationId || input.consent.rentalApplicationId || null,
+      applicationId:
+        input.request.rentalApplicationId || input.consent.rentalApplicationId || null,
       landlordId: input.request.landlordId || input.consent.landlordId || null,
       propertyId: input.request.propertyId || input.consent.propertyId || null,
       providerKey,
       providerLabel,
-      consentVersion: input.consent.consentVersion || input.consent.disclosureVersion || null,
+      consentVersion:
+        input.consent.consentVersion || input.consent.disclosureVersion || null,
       acceptedBy: input.consent.acceptedBy || input.actorId,
       consentTextSummary: input.consent.consentTextSummary || null,
     },
@@ -1493,7 +1497,6 @@ const screeningAdapters: Record<ScreeningProviderKey, ScreeningProviderAdapter> 
     },
   },
 };
-
 function shapeScreeningResponse(input: {
   request: ScreeningRequestRecord;
   consent: ScreeningConsentRecord | null;
@@ -3821,7 +3824,7 @@ router.get("/screening/:requestId/status", requireTenant, async (req: any, res) 
       });
     }
 
-    return res.json({
+      return res.json({
       ok: true,
       screeningRequest: await shapeTenantScreeningResponse({ request, consent, session, result, auditTrail }),
     });
@@ -4135,7 +4138,7 @@ router.post("/screening/:requestId/retry", requireTenant, async (req: any, res) 
     if (!request) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
     if (!request.applicantTenantId || request.applicantTenantId !== tenantId) {
       return res.status(403).json({ ok: false, error: "FORBIDDEN" });
-    }
+}
     await writeScreeningAuditEvent({
       requestId,
       eventType: "retry_requested",
@@ -6130,4 +6133,3 @@ router.post("/maintenance-requests/:id/confirmation", requireTenant, async (req:
 });
 
 export default router;
-
