@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import type { LandlordAgentDecision } from "@/api/landlordAnalyticsApi";
 import {
   blockedReasonDisplay,
+  canOpenExecutionConfirmation,
   deriveAutomationPreview,
   executionStateDisplay,
   formatExecutionSummary,
+  getExecutionConfirmationDetails,
 } from "./decisionExecutionDisplay";
 
 function buildDecision(overrides?: Partial<LandlordAgentDecision>): LandlordAgentDecision {
@@ -96,6 +98,7 @@ describe("decisionExecutionDisplay", () => {
     expect(result.status).toBe("Eligible for human-confirmed execution");
     expect(result.safeguardLabel).toBe("Human confirmation required");
     expect(result.guardKeyLabel).toContain("lease.auto_send_notice:lease:lease-1");
+    expect(result.nextStep).toMatch(/confirm manually/i);
   });
 
   it("derives a blocked preview without changing blocked-reason semantics", () => {
@@ -145,5 +148,43 @@ describe("decisionExecutionDisplay", () => {
 
     expect(result.status).toBe("Automation preview unavailable");
     expect(result.summary).toMatch(/not available for preview/i);
+  });
+
+  it("allows confirmation only for executable decisions with valid action context", () => {
+    expect(
+      canOpenExecutionConfirmation(
+        buildDecision({
+          automationEligible: true,
+          automationState: "ready",
+          executionMappingState: "mapped",
+          executionInputState: "complete",
+        })
+      )
+    ).toBe(true);
+    expect(canOpenExecutionConfirmation(buildDecision())).toBe(false);
+    expect(
+      canOpenExecutionConfirmation(
+        buildDecision({
+          executionState: "unsafe_duplicate",
+          duplicateGuardActive: true,
+        })
+      )
+    ).toBe(false);
+  });
+
+  it("returns fail-closed confirmation details when required context is missing", () => {
+    const result = getExecutionConfirmationDetails(
+      buildDecision({
+        automationEligible: true,
+        automationState: "ready",
+        executionMappingState: "mapped",
+        executionInputState: "complete",
+        actionKey: "",
+      })
+    );
+
+    expect(result.canConfirm).toBe(false);
+    expect(result.unavailableReason).toMatch(/execution context is incomplete/i);
+    expect(result.warning).toMatch(/guarded execution path/i);
   });
 });

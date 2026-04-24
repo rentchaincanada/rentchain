@@ -435,6 +435,9 @@ describe("ActionRecommendationsPage", () => {
 
     expect(screen.getByText(/A screening checkout can start now/i)).toBeInTheDocument();
     expect(screen.queryByText(/Renewal inputs are still incomplete/i)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Review action/i }));
+    expect(screen.getByLabelText(/Execution confirmation/i)).toBeInTheDocument();
+    expect(screen.getByText(/This action will use the existing guarded execution path only after you confirm it/i)).toBeInTheDocument();
   });
 
   it("renders a clean empty state when the snapshot has no decisions", async () => {

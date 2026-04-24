@@ -15,9 +15,11 @@ import type { TimelineItem } from "@/api/timelineApi";
 import { deriveDecisionExecutionState } from "./decisionExecutionAggregation";
 import {
   blockedReasonDisplay,
+  canOpenExecutionConfirmation,
   deriveAutomationPreview,
   executionStateDisplay,
   formatExecutionSummary,
+  getExecutionConfirmationDetails,
 } from "./decisionExecutionDisplay";
 
 const priorityTone: Record<"low" | "medium" | "high", { bg: string; text: string }> = {
@@ -193,9 +195,12 @@ function ActionDecisionCard(props: {
   decision: LandlordAgentDecision;
   workingDecisionId: string | null;
   workingAction: "review" | "snooze" | "dismiss" | "execute" | null;
+  confirmingDecisionId: string | null;
   onReview: (decisionId: string) => Promise<void>;
   onSnooze: (decisionId: string, days: number) => Promise<void>;
   onDismiss: (decisionId: string) => Promise<void>;
+  onOpenConfirmation: (decisionId: string) => void;
+  onCloseConfirmation: () => void;
   onExecute: (decisionId: string) => Promise<void>;
   showHistory: boolean;
   historyItems: TimelineItem[];
@@ -207,9 +212,12 @@ function ActionDecisionCard(props: {
     decision,
     workingDecisionId,
     workingAction,
+    confirmingDecisionId,
     onReview,
     onSnooze,
     onDismiss,
+    onOpenConfirmation,
+    onCloseConfirmation,
     onExecute,
     showHistory,
     historyItems,
@@ -227,11 +235,13 @@ function ActionDecisionCard(props: {
       : null;
   const decisionExecutionState = deriveDecisionExecutionState(decision);
   const decisionBlockedReason = effectiveBlockedReason(decision);
-  const canExecuteNow = decisionExecutionState === "executable";
   const governanceSummary = formatExecutionSummary(effectiveExecutionSummary(decision));
   const executionDisplay = executionStateDisplay[decisionExecutionState];
   const blockedDisplay = decisionBlockedReason ? blockedReasonDisplay[decisionBlockedReason] : null;
   const automationPreview = deriveAutomationPreview(decision);
+  const confirmationDetails = getExecutionConfirmationDetails(decision);
+  const canReviewBeforeExecute = canOpenExecutionConfirmation(decision);
+  const showConfirmation = confirmingDecisionId === decision.id;
 
   return (
     <div
@@ -412,10 +422,10 @@ function ActionDecisionCard(props: {
             {ctaLabel}
           </Link>
         ) : null}
-        {canExecuteNow ? (
+        {canReviewBeforeExecute ? (
           <button
             type="button"
-            onClick={() => void onExecute(decision.id)}
+            onClick={() => onOpenConfirmation(decision.id)}
             disabled={workingDecisionId === decision.id}
             style={{
               border: "1px solid #166534",
@@ -426,7 +436,7 @@ function ActionDecisionCard(props: {
               padding: "6px 12px",
             }}
           >
-            {workingDecisionId === decision.id && workingAction === "execute" ? "Executing…" : "Execute now"}
+            Review action
           </button>
         ) : null}
         {decision.state === "reviewed" ? (
@@ -504,6 +514,77 @@ function ActionDecisionCard(props: {
           onToggleHistory={onToggleHistory}
         />
       </div>
+      {showConfirmation ? (
+        <div
+          aria-label="Execution confirmation"
+          style={{
+            display: "grid",
+            gap: 8,
+            padding: 12,
+            borderRadius: 12,
+            border: "1px solid #bbf7d0",
+            background: "#f0fdf4",
+          }}
+        >
+          <div style={{ color: "#14532d", fontSize: "0.78rem", fontWeight: 800, letterSpacing: "0.04em", textTransform: "uppercase" }}>
+            {confirmationDetails.title}
+          </div>
+          <div style={{ color: "#0f172a", fontSize: "0.94rem", fontWeight: 700 }}>{confirmationDetails.actionLabel}</div>
+          {confirmationDetails.workflowLabel ? (
+            <div style={{ color: "#475569", fontSize: "0.82rem" }}>Workflow: {confirmationDetails.workflowLabel}</div>
+          ) : null}
+          <div style={{ color: "#475569", fontSize: "0.82rem" }}>Execution state: {confirmationDetails.stateLabel}</div>
+          {confirmationDetails.blockedTitle ? (
+            <div style={{ display: "grid", gap: 2 }}>
+              <div style={{ color: "#92400e", fontSize: "0.82rem", fontWeight: 700 }}>{confirmationDetails.blockedTitle}</div>
+              <div style={{ color: "#475569", fontSize: "0.8rem" }}>{confirmationDetails.blockedDescription}</div>
+            </div>
+          ) : null}
+          <div style={{ color: "#14532d", fontSize: "0.82rem", fontWeight: 700 }}>{confirmationDetails.warning}</div>
+          {confirmationDetails.duplicateProtectionActive ? (
+            <div style={{ color: "#991b1b", fontSize: "0.8rem", fontWeight: 700 }}>Duplicate protection remains active</div>
+          ) : null}
+          {confirmationDetails.guardKeyLabel ? (
+            <div style={{ color: "#334155", fontSize: "0.8rem" }}>{confirmationDetails.guardKeyLabel}</div>
+          ) : null}
+          <div style={{ color: "#475569", fontSize: "0.8rem" }}>{confirmationDetails.nextStep}</div>
+          {confirmationDetails.unavailableReason ? (
+            <div style={{ color: "#92400e", fontSize: "0.8rem" }}>{confirmationDetails.unavailableReason}</div>
+          ) : null}
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button
+              type="button"
+              onClick={onCloseConfirmation}
+              style={{
+                border: "1px solid #cbd5e1",
+                borderRadius: 999,
+                background: "#fff",
+                color: "#334155",
+                fontWeight: 700,
+                padding: "6px 12px",
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => void onExecute(decision.id)}
+              disabled={!confirmationDetails.canConfirm || workingDecisionId === decision.id}
+              style={{
+                border: "1px solid #166534",
+                borderRadius: 999,
+                background: confirmationDetails.canConfirm ? "#166534" : "#cbd5e1",
+                color: "#fff",
+                fontWeight: 700,
+                padding: "6px 12px",
+                cursor: confirmationDetails.canConfirm && workingDecisionId !== decision.id ? "pointer" : "not-allowed",
+              }}
+            >
+              {workingDecisionId === decision.id && workingAction === "execute" ? "Executing…" : "Confirm action"}
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -632,6 +713,7 @@ export function AgentDecisionPanel({
   const [items, setItems] = React.useState(decisions);
   const [workingDecisionId, setWorkingDecisionId] = React.useState<string | null>(null);
   const [workingAction, setWorkingAction] = React.useState<"review" | "snooze" | "dismiss" | "execute" | null>(null);
+  const [confirmingDecisionId, setConfirmingDecisionId] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [showExecuted, setShowExecuted] = React.useState(false);
   const [expandedHistoryDecisionIds, setExpandedHistoryDecisionIds] = React.useState<Record<string, boolean>>(
@@ -767,6 +849,14 @@ export function AgentDecisionPanel({
     }
   };
 
+  const handleOpenConfirmation = React.useCallback((decisionId: string) => {
+    setConfirmingDecisionId(decisionId);
+  }, []);
+
+  const handleCloseConfirmation = React.useCallback(() => {
+    setConfirmingDecisionId(null);
+  }, []);
+
   const handleExecute = async (decisionId: string) => {
     try {
       setWorkingDecisionId(decisionId);
@@ -812,6 +902,7 @@ export function AgentDecisionPanel({
             : decision
         )
       );
+      setConfirmingDecisionId(null);
     } catch (err: unknown) {
       setError(errorMessage(err));
     } finally {
@@ -843,9 +934,12 @@ export function AgentDecisionPanel({
                     decision={decision}
                     workingDecisionId={workingDecisionId}
                     workingAction={workingAction}
+                    confirmingDecisionId={confirmingDecisionId}
                     onReview={handleReview}
                     onSnooze={handleSnooze}
                     onDismiss={handleDismiss}
+                    onOpenConfirmation={handleOpenConfirmation}
+                    onCloseConfirmation={handleCloseConfirmation}
                     onExecute={handleExecute}
                     showHistory={Boolean(expandedHistoryDecisionIds[decision.id])}
                     historyItems={historyItemsByDecisionId[decision.id] || []}
