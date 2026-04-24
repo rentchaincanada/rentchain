@@ -72,6 +72,13 @@ const dbMock = {
       get: async () => queryCollection(name, [{ field, op, value }]),
     }),
   }),
+  runTransaction: async (handler: (tx: any) => Promise<any>) => {
+    const tx = {
+      get: async (docRef: any) => docRef.get(),
+      set: async (docRef: any, value: any, opts?: { merge?: boolean }) => docRef.set(value, opts),
+    };
+    return handler(tx);
+  },
 };
 
 vi.mock("../../config/firebase", () => ({
@@ -1238,5 +1245,194 @@ describe("tenantPortalRoutes foundation", () => {
 
     expect(res.status).toBe(200);
     expect(res.body?.data?.status).toBe("redeemed");
+  });
+
+  it("lets a tenant consent for their own screening request and stores strengthened metadata", async () => {
+    ensureCollection("screening_requests").set("screening-1", {
+      rentalApplicationId: "app-1",
+      landlordId: "landlord-1",
+      applicantTenantId: "tenant-1",
+      applicantUserId: "user-1",
+      applicantEmail: "tenant@example.com",
+      applicantName: "Taylor Tenant",
+      propertyId: "prop-1",
+      propertyLabel: "123 Main St",
+      unitLabel: "Unit 4",
+      providerSelection: "transunion_redirect",
+      status: "requested",
+      createdAt: 100,
+      updatedAt: 100,
+    });
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/screening/screening-1/consent",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+        "user-agent": "vitest-agent",
+      },
+      body: {
+        accepted: true,
+        providerDisclosure:
+          "The landlord is requesting screening for this rental application. A third-party screening provider may be used.",
+        disclosureVersion: "screening-consent-v2",
+        consentSummary: "Consent summary snapshot",
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.screeningRequest?.consent?.acceptedAt).toBeTypeOf("number");
+    expect(res.body?.screeningRequest?.consent?.providerLabel).toBe("TransUnion");
+    expect(res.body?.screeningRequest?.consent?.consentVersion).toBe("screening-consent-v2");
+
+    const savedConsent = Array.from(ensureCollection("screening_consents").values())[0];
+    expect(savedConsent).toEqual(
+      expect.objectContaining({
+        requestId: "screening-1",
+        tenantId: "tenant-1",
+        applicantId: "user-1",
+        rentalApplicationId: "app-1",
+        landlordId: "landlord-1",
+        propertyId: "prop-1",
+        providerKey: "transunion_redirect",
+        providerLabel: "TransUnion",
+        consentVersion: "screening-consent-v2",
+        consentTextSummary: "Consent summary snapshot",
+        acceptedBy: "user-1",
+      })
+    );
+
+    expect(
+      Array.from(ensureCollection("screening_audit_log").values()).some(
+        (event) => event.eventType === "consent_accepted"
+      )
+    ).toBe(true);
+    expect(
+      Array.from(ensureCollection("canonicalEvents").values()).some(
+        (event) =>
+          event.type === "screening_consent_confirmed" &&
+          event.metadata?.requestId === "screening-1" &&
+          event.metadata?.providerKey === "transunion_redirect"
+      )
+    ).toBe(true);
+  });
+
+  it("rejects screening consent for another tenant's request", async () => {
+    ensureCollection("screening_requests").set("screening-2", {
+      rentalApplicationId: "app-1",
+      landlordId: "landlord-1",
+      applicantTenantId: "tenant-2",
+      propertyId: "prop-1",
+      status: "requested",
+      createdAt: 100,
+      updatedAt: 100,
+    });
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/screening/screening-2/consent",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+      body: {
+        accepted: true,
+      },
+    });
+
+    expect(res.status).toBe(403);
+    expect(res.body?.error).toBe("FORBIDDEN");
+  });
+
+  it("keeps screening blocked when tenant consent is missing", async () => {
+    ensureCollection("screening_requests").set("screening-3", {
+      rentalApplicationId: "app-1",
+      landlordId: "landlord-1",
+      applicantTenantId: "tenant-1",
+      applicantUserId: "user-1",
+      propertyId: "prop-1",
+      providerSelection: "manual",
+      status: "consent_pending",
+      createdAt: 100,
+      updatedAt: 100,
+    });
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/screening/screening-3/start",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body?.error).toBe("CONSENT_REQUIRED");
+    expect(res.body?.blockReason).toBe("missing_tenant_consent");
+  });
+
+  it("allows screening to proceed past the consent gate when consent exists", async () => {
+    ensureCollection("screening_requests").set("screening-4", {
+      rentalApplicationId: "app-1",
+      landlordId: "landlord-1",
+      applicantTenantId: "tenant-1",
+      applicantUserId: "user-1",
+      applicantName: "Taylor Tenant",
+      propertyId: "prop-1",
+      propertyLabel: "123 Main St",
+      unitLabel: "Unit 4",
+      providerSelection: "manual",
+      latestConsentId: "consent-4",
+      status: "consented",
+      createdAt: 100,
+      updatedAt: 100,
+    });
+    ensureCollection("screening_consents").set("consent-4", {
+      id: "consent-4",
+      requestId: "screening-4",
+      tenantId: "tenant-1",
+      applicantId: "user-1",
+      acceptedAt: 200,
+      viewedAt: 150,
+      providerKey: "manual",
+      providerLabel: "Manual review",
+      consentVersion: "screening-consent-v2",
+      providerDisclosure: "Disclosure",
+      disclosureVersion: "screening-consent-v2",
+    });
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/screening/screening-4/start",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.screeningRequest?.session?.providerKey).toBe("manual");
+    expect(res.body?.screeningRequest?.status).toBe("manual_review_required");
   });
 });
