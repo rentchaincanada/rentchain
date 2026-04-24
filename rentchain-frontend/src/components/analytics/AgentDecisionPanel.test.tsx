@@ -20,6 +20,9 @@ const { executeLandlordDecision } = vi.hoisted(() => ({
 const { fetchLandlordDecisionHistory } = vi.hoisted(() => ({
   fetchLandlordDecisionHistory: vi.fn(),
 }));
+const { logLandlordControlledAutomationAuditEvent } = vi.hoisted(() => ({
+  logLandlordControlledAutomationAuditEvent: vi.fn(),
+}));
 
 vi.mock("@/api/landlordAnalyticsApi", async () => {
   const actual = await vi.importActual<typeof import("@/api/landlordAnalyticsApi")>("@/api/landlordAnalyticsApi");
@@ -30,6 +33,7 @@ vi.mock("@/api/landlordAnalyticsApi", async () => {
     dismissLandlordDecision,
     executeLandlordDecision,
     fetchLandlordDecisionHistory,
+    logLandlordControlledAutomationAuditEvent,
   };
 });
 
@@ -82,6 +86,12 @@ beforeEach(() => {
       updatedAt: "2026-04-22T12:00:00.000Z",
     },
     noticeId: "notice-1",
+  });
+  logLandlordControlledAutomationAuditEvent.mockResolvedValue({
+    ok: true,
+    event: "previewed",
+    decisionId: "review_lease_renewals:prop-1",
+    occurredAt: "2026-04-22T11:55:00.000Z",
   });
   fetchLandlordDecisionHistory.mockResolvedValue({
     ok: true,
@@ -408,8 +418,17 @@ describe("AgentDecisionPanel", () => {
       </MemoryRouter>
     );
 
+    expect(logLandlordControlledAutomationAuditEvent).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: /Review action/i }));
 
+    await waitFor(() => {
+      expect(logLandlordControlledAutomationAuditEvent).toHaveBeenCalledWith({
+        decisionId: "review_lease_renewals:prop-1",
+        event: "previewed",
+        period: "90d",
+        propertyId: null,
+      });
+    });
     expect(screen.getByLabelText(/Execution confirmation/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^Confirm action$/i })).toBeInTheDocument();
     expect(screen.getByText(/This action will use the existing guarded execution path only after you confirm it/i)).toBeInTheDocument();
@@ -417,6 +436,12 @@ describe("AgentDecisionPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: /^Confirm action$/i }));
 
     await waitFor(() => {
+      expect(logLandlordControlledAutomationAuditEvent).toHaveBeenCalledWith({
+        decisionId: "review_lease_renewals:prop-1",
+        event: "confirmed",
+        period: "90d",
+        propertyId: null,
+      });
       expect(executeLandlordDecision).toHaveBeenCalledWith({
         decisionId: "review_lease_renewals:prop-1",
         period: "90d",
@@ -510,9 +535,16 @@ describe("AgentDecisionPanel", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: /Review action/i }));
+    expect(await screen.findByRole("button", { name: /^Confirm action$/i })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /^Confirm action$/i }));
 
     await waitFor(() => {
+      expect(logLandlordControlledAutomationAuditEvent).toHaveBeenCalledWith({
+        decisionId: "review_lease_renewals:prop-1",
+        event: "confirmed",
+        period: "90d",
+        propertyId: null,
+      });
       expect(executeLandlordDecision).toHaveBeenCalledWith({
         decisionId: "review_lease_renewals:prop-1",
         period: "90d",
@@ -661,6 +693,155 @@ describe("AgentDecisionPanel", () => {
 
     expect(screen.queryByRole("button", { name: /Review action/i })).not.toBeInTheDocument();
     expect(screen.getByText(/Automation preview unavailable/i)).toBeInTheDocument();
+    expect(logLandlordControlledAutomationAuditEvent).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when preview audit logging cannot be completed", async () => {
+    logLandlordControlledAutomationAuditEvent.mockRejectedValueOnce(new Error("Audit unavailable"));
+
+    render(
+      <MemoryRouter>
+        <AgentDecisionPanel
+          period="90d"
+          decisions={[
+            {
+              id: "review_lease_renewals:prop-1",
+              decisionType: "review_lease_renewals",
+              priority: "high",
+              explanation: "Review upcoming renewals.",
+              recommendedAction: "Review renewals",
+              actionKey: "open_lease_renewals_flow",
+              actionLabel: "Open renewals focus",
+              destination: "/portfolio-health?entry=lease-renewals&propertyId=prop-1",
+              workflowCategory: "lease_renewals",
+              automationEligible: true,
+              automationState: "ready",
+              automationReason: "This decision is active and already mapped to a deterministic automation path.",
+              executionMappingState: "mapped",
+              executionMapping: {
+                action: "lease.auto_send_notice",
+                resourceType: "lease",
+                resourceId: "lease-1",
+                prerequisitesMet: true,
+                prerequisiteReason: null,
+              },
+              executionInputState: "complete",
+              executionInputReason: null,
+              executionInputMissingFields: [],
+              executionInput: {
+                noticeType: "renewal_offer",
+                legalTemplateKey: "ns.fixed_term.renewal_offer.v1",
+                noticeRuleVersion: "ns-v1",
+                province: "NS",
+                leaseType: "fixed_term",
+                currentRent: 1650,
+                noticeDueAt: Date.UTC(2026, 1, 10, 0, 0, 0, 0),
+                rentChangeMode: "no_change",
+                proposedRent: null,
+                newTermType: "fixed_term",
+                newLeaseStartDate: "2026-05-11",
+                newLeaseEndDate: "2027-05-10",
+                responseDeadlineAt: Date.UTC(2026, 4, 1, 12, 0, 0, 0),
+              },
+              executedAt: null,
+              executionOutcomeStatus: "none",
+              executionOutcomeAt: null,
+              executionOutcomeReason: null,
+              href: "/portfolio-health?entry=lease-renewals&propertyId=prop-1",
+              state: "pending",
+              reviewedAt: null,
+              supportingSignals: [],
+            },
+          ]}
+        />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Review action/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Audit unavailable/i)).toBeInTheDocument();
+    });
+    expect(screen.queryByLabelText(/Execution confirmation/i)).not.toBeInTheDocument();
+    expect(executeLandlordDecision).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when confirm audit logging cannot be completed", async () => {
+    logLandlordControlledAutomationAuditEvent.mockResolvedValueOnce({
+      ok: true,
+      event: "previewed",
+      decisionId: "review_lease_renewals:prop-1",
+      occurredAt: "2026-04-22T11:55:00.000Z",
+    });
+    logLandlordControlledAutomationAuditEvent.mockRejectedValueOnce(new Error("Confirm audit unavailable"));
+
+    render(
+      <MemoryRouter>
+        <AgentDecisionPanel
+          period="90d"
+          decisions={[
+            {
+              id: "review_lease_renewals:prop-1",
+              decisionType: "review_lease_renewals",
+              priority: "high",
+              explanation: "Review upcoming renewals.",
+              recommendedAction: "Review renewals",
+              actionKey: "open_lease_renewals_flow",
+              actionLabel: "Open renewals focus",
+              destination: "/portfolio-health?entry=lease-renewals&propertyId=prop-1",
+              workflowCategory: "lease_renewals",
+              automationEligible: true,
+              automationState: "ready",
+              automationReason: "This decision is active and already mapped to a deterministic automation path.",
+              executionMappingState: "mapped",
+              executionMapping: {
+                action: "lease.auto_send_notice",
+                resourceType: "lease",
+                resourceId: "lease-1",
+                prerequisitesMet: true,
+                prerequisiteReason: null,
+              },
+              executionInputState: "complete",
+              executionInputReason: null,
+              executionInputMissingFields: [],
+              executionInput: {
+                noticeType: "renewal_offer",
+                legalTemplateKey: "ns.fixed_term.renewal_offer.v1",
+                noticeRuleVersion: "ns-v1",
+                province: "NS",
+                leaseType: "fixed_term",
+                currentRent: 1650,
+                noticeDueAt: Date.UTC(2026, 1, 10, 0, 0, 0, 0),
+                rentChangeMode: "no_change",
+                proposedRent: null,
+                newTermType: "fixed_term",
+                newLeaseStartDate: "2026-05-11",
+                newLeaseEndDate: "2027-05-10",
+                responseDeadlineAt: Date.UTC(2026, 4, 1, 12, 0, 0, 0),
+              },
+              executedAt: null,
+              executionOutcomeStatus: "none",
+              executionOutcomeAt: null,
+              executionOutcomeReason: null,
+              href: "/portfolio-health?entry=lease-renewals&propertyId=prop-1",
+              state: "pending",
+              reviewedAt: null,
+              supportingSignals: [],
+            },
+          ]}
+        />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Review action/i }));
+    expect(await screen.findByLabelText(/Execution confirmation/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /^Confirm action$/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Confirm audit unavailable/i)).toBeInTheDocument();
+    });
+    expect(executeLandlordDecision).not.toHaveBeenCalled();
   });
 
   it("renders executed decisions in a collapsible secondary section", () => {

@@ -436,6 +436,32 @@ export async function fetchLandlordDecisionHistory(params: {
   );
 }
 
+export async function logLandlordControlledAutomationAuditEvent(params: {
+  decisionId: string;
+  event: "previewed" | "confirmed";
+  period?: AnalyticsPeriod;
+  propertyId?: string | null;
+}): Promise<{
+  ok: true;
+  event: "previewed" | "confirmed";
+  decisionId: string;
+  occurredAt: string;
+}> {
+  const search = new URLSearchParams();
+  if (params.period) search.set("period", params.period);
+  if (params.propertyId) search.set("propertyId", params.propertyId);
+  const suffix = search.toString() ? `?${search.toString()}` : "";
+  return await apiFetch(
+    `/landlord/analytics/decisions/${encodeURIComponent(params.decisionId)}/controlled-automation-audit${suffix}`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        event: params.event,
+      }),
+    }
+  );
+}
+
 export async function executeLandlordDecision(params: {
   decisionId: string;
   period?: AnalyticsPeriod;
