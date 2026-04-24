@@ -22,6 +22,16 @@ vi.mock("../../components/layout/MacShell", () => ({
   MacShell: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
+function renderPage() {
+  return render(
+    <MemoryRouter initialEntries={["/admin/screening/transunion-usage"]}>
+      <Routes>
+        <Route path="/admin/screening/transunion-usage" element={<AdminTransUnionUsagePage />} />
+      </Routes>
+    </MemoryRouter>
+  );
+}
+
 describe("AdminTransUnionUsagePage", () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -30,6 +40,7 @@ describe("AdminTransUnionUsagePage", () => {
   beforeEach(() => {
     mocks.showToastMock.mockReset();
     mocks.downloadAdminTransUnionUsagePdfMock.mockReset();
+    mocks.fetchAdminTransUnionUsageMock.mockReset();
     mocks.fetchAdminTransUnionUsageMock.mockResolvedValue({
       ok: true,
       providerKey: "transunion",
@@ -107,13 +118,7 @@ describe("AdminTransUnionUsagePage", () => {
   });
 
   it("renders KPI sections and compliance summary", async () => {
-    render(
-      <MemoryRouter initialEntries={["/admin/screening/transunion-usage"]}>
-        <Routes>
-          <Route path="/admin/screening/transunion-usage" element={<AdminTransUnionUsagePage />} />
-        </Routes>
-      </MemoryRouter>
-    );
+    renderPage();
 
     await waitFor(() => {
       expect(mocks.fetchAdminTransUnionUsageMock).toHaveBeenCalled();
@@ -131,13 +136,7 @@ describe("AdminTransUnionUsagePage", () => {
     const removeSpy = vi.spyOn(HTMLElement.prototype, "remove").mockImplementation(() => undefined);
     const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
 
-    render(
-      <MemoryRouter initialEntries={["/admin/screening/transunion-usage"]}>
-        <Routes>
-          <Route path="/admin/screening/transunion-usage" element={<AdminTransUnionUsagePage />} />
-        </Routes>
-      </MemoryRouter>
-    );
+    renderPage();
 
     const [button] = await screen.findAllByRole("button", { name: "Download PDF report" });
     fireEvent.click(button);
@@ -154,13 +153,7 @@ describe("AdminTransUnionUsagePage", () => {
   it("shows an error toast when PDF download fails", async () => {
     mocks.downloadAdminTransUnionUsagePdfMock.mockRejectedValueOnce(new Error("export failed"));
 
-    render(
-      <MemoryRouter initialEntries={["/admin/screening/transunion-usage"]}>
-        <Routes>
-          <Route path="/admin/screening/transunion-usage" element={<AdminTransUnionUsagePage />} />
-        </Routes>
-      </MemoryRouter>
-    );
+    renderPage();
 
     const [button] = await screen.findAllByRole("button", { name: "Download PDF report" });
     fireEvent.click(button);

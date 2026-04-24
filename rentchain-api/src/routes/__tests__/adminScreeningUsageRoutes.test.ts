@@ -57,7 +57,7 @@ function createRes() {
 
 async function runRoute(router: any, path: string, req: any) {
   const layer = router.stack.find((entry: any) => entry.route?.path === path);
-  if (!layer) throw new Error("route not found");
+  if (!layer) throw new Error(`route not found: ${path}`);
   const res = createRes();
   const stack = [...layer.route.stack];
 
@@ -94,6 +94,7 @@ describe("adminScreeningUsageRoutes", () => {
     mocks.buildCanonicalSessionUserFromClaimsMock.mockReset();
     mocks.loadTransUnionUsageReportMock.mockReset();
     mocks.buildTransUnionUsagePdfBufferMock.mockReset();
+
     mocks.loadTransUnionUsageReportMock.mockResolvedValue({
       ok: true,
       providerKey: "transunion",
@@ -111,13 +112,13 @@ describe("adminScreeningUsageRoutes", () => {
     mocks.buildTransUnionUsagePdfBufferMock.mockResolvedValue(Buffer.from("pdf-bytes"));
   });
 
-  it("returns 401 for unauthenticated requests", async () => {
+  it("returns 401 for unauthenticated report requests", async () => {
     const router = (await import("../adminScreeningUsageRoutes")).default;
     const res = await runRoute(router, "/screening/transunion-usage", createReq());
     expect(res.statusCode).toBe(401);
   });
 
-  it("returns 403 for authenticated non-admin requests", async () => {
+  it("returns 403 for authenticated non-admin report requests", async () => {
     mocks.verifyAuthTokenMock.mockReturnValue({ sub: "landlord-1" });
     mocks.buildCanonicalSessionUserFromClaimsMock.mockResolvedValue({
       id: "landlord-1",
@@ -125,12 +126,14 @@ describe("adminScreeningUsageRoutes", () => {
       permissions: [],
       revokedPermissions: [],
     });
+
     const router = (await import("../adminScreeningUsageRoutes")).default;
     const res = await runRoute(
       router,
       "/screening/transunion-usage",
       createReq({ authorization: "Bearer landlord-token" })
     );
+
     expect(res.statusCode).toBe(403);
   });
 
@@ -142,12 +145,14 @@ describe("adminScreeningUsageRoutes", () => {
       permissions: ["system.admin"],
       revokedPermissions: [],
     });
+
     const router = (await import("../adminScreeningUsageRoutes")).default;
     const res = await runRoute(
       router,
       "/screening/transunion-usage",
       createReq({ authorization: "Bearer admin-token" }, { period: "last_60_days" })
     );
+
     expect(res.statusCode).toBe(200);
     expect(mocks.loadTransUnionUsageReportMock).toHaveBeenCalledWith({
       period: "last_60_days",
@@ -164,12 +169,14 @@ describe("adminScreeningUsageRoutes", () => {
       permissions: ["system.admin"],
       revokedPermissions: [],
     });
+
     const router = (await import("../adminScreeningUsageRoutes")).default;
     const res = await runRoute(
       router,
       "/screening/transunion-usage/pdf",
       createReq({ authorization: "Bearer admin-token" }, { period: "last_90_days" })
     );
+
     expect(res.statusCode).toBe(200);
     expect(res.headers["content-type"]).toBe("application/pdf");
     expect(res.headers["content-disposition"]).toContain(
@@ -181,6 +188,7 @@ describe("adminScreeningUsageRoutes", () => {
       startDate: null,
       endDate: null,
     });
+    expect(mocks.buildTransUnionUsagePdfBufferMock).toHaveBeenCalled();
   });
 
   it("keeps the PDF endpoint admin-only", async () => {
@@ -191,12 +199,14 @@ describe("adminScreeningUsageRoutes", () => {
       permissions: [],
       revokedPermissions: [],
     });
+
     const router = (await import("../adminScreeningUsageRoutes")).default;
     const res = await runRoute(
       router,
       "/screening/transunion-usage/pdf",
       createReq({ authorization: "Bearer landlord-token" })
     );
+
     expect(res.statusCode).toBe(403);
   });
 });

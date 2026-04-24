@@ -72,35 +72,35 @@ export type TransUnionUsageReport = {
   };
 };
 
-export async function fetchAdminTransUnionUsage(params?: {
+type TransUnionUsageReportParams = {
   period?: "last_30_days" | "last_60_days" | "last_90_days";
   startDate?: string;
   endDate?: string;
-}) {
+};
+
+function buildTransUnionUsageQuery(params?: TransUnionUsageReportParams) {
   const query = new URLSearchParams();
   if (params?.period) query.set("period", params.period);
   if (params?.startDate) query.set("startDate", params.startDate);
   if (params?.endDate) query.set("endDate", params.endDate);
-  const suffix = query.toString() ? `?${query.toString()}` : "";
-  return apiFetch<TransUnionUsageReport>(`/admin/screening/transunion-usage${suffix}`);
+  return query.toString() ? `?${query.toString()}` : "";
 }
 
-export async function downloadAdminTransUnionUsagePdf(params?: {
-  period?: "last_30_days" | "last_60_days" | "last_90_days";
-  startDate?: string;
-  endDate?: string;
-}) {
-  const query = new URLSearchParams();
-  if (params?.period) query.set("period", params.period);
-  if (params?.startDate) query.set("startDate", params.startDate);
-  if (params?.endDate) query.set("endDate", params.endDate);
+export async function fetchAdminTransUnionUsage(params?: TransUnionUsageReportParams) {
+  return apiFetch<TransUnionUsageReport>(
+    `/admin/screening/transunion-usage${buildTransUnionUsageQuery(params)}`
+  );
+}
+
+export async function downloadAdminTransUnionUsagePdf(params?: TransUnionUsageReportParams) {
   const token = getAuthToken() || (await getFirebaseIdToken()) || "";
-  const path = `/admin/screening/transunion-usage/pdf${query.toString() ? `?${query.toString()}` : ""}`;
+  const path = `/admin/screening/transunion-usage/pdf${buildTransUnionUsageQuery(params)}`;
   const response = await fetch(apiUrl(path), {
     method: "GET",
     headers: token ? { Authorization: `Bearer ${token}` } : {},
     credentials: "include",
   });
+
   if (!response.ok) {
     const text = await response.text().catch(() => "");
     let message = text || "Failed to export PDF report";
@@ -108,13 +108,14 @@ export async function downloadAdminTransUnionUsagePdf(params?: {
       const json = text ? JSON.parse(text) : null;
       message = json?.message || json?.error || message;
     } catch {
-      // ignore parse errors
+      // Ignore non-JSON error responses.
     }
     throw new Error(message);
   }
+
   const blob = await response.blob();
   const disposition = response.headers.get("Content-Disposition") || "";
-  const match = disposition.match(/filename="?([^"]+)"?/i);
+  const match = disposition.match(/filename="?([^";]+)"?/i);
   return {
     blob,
     filename: match?.[1] || "rentchain-transunion-usage-summary-v1.pdf",

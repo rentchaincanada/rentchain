@@ -141,11 +141,6 @@ function parsePeriod(input: LoadTransUnionUsageReportInput): TransUnionUsageRepo
   };
 }
 
-function toFinite(value: unknown): number {
-  const num = Number(value);
-  return Number.isFinite(num) ? num : 0;
-}
-
 function roundMetric(value: number): number {
   if (!Number.isFinite(value)) return 0;
   return Math.round(value * 100) / 100;
