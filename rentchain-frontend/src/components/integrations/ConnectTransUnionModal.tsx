@@ -204,7 +204,7 @@ export function ConnectTransUnionModal({
               display: "grid",
               gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
               gap: spacing.sm,
-            }}</file>
+            }}
           >
             {[
               {
