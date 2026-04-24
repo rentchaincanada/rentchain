@@ -22,12 +22,14 @@ describe("ConnectTransUnionModal", () => {
   });
 
   it("reveals the credential form only after the landlord chooses the credentialed path", async () => {
+    const onChooseExistingCredentials = vi.fn();
     render(
       <ConnectTransUnionModal
         open
         onClose={vi.fn()}
         onSubmit={vi.fn()}
         onGetAccess={vi.fn()}
+        onChooseExistingCredentials={onChooseExistingCredentials}
       />
     );
 

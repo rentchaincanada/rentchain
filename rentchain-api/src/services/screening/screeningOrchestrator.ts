@@ -3,6 +3,7 @@ import type { ScreeningResultSummary } from "./providers/types";
 import { writeScreeningEvent } from "./screeningEvents";
 import { writeCanonicalEvent } from "../../lib/events/buildEvent";
 import { buildScreeningMonetizationPatch } from "./screeningMonetizationService";
+import { writeTransUnionUsageEvent } from "./transUnionUsageEvents";
 
 type ScreeningStatus =
   | "unpaid"
@@ -153,6 +154,21 @@ export async function markScreeningComplete(
       provider: data?.screeningProvider || "manual",
     },
   });
+  await writeTransUnionUsageEvent({
+    eventType: "screening_completed",
+    landlordId: data?.landlordId || null,
+    userId: String(actorUser?.id || "").trim() || null,
+    actorRole: String(actorUser?.role || "system").trim().toLowerCase(),
+    applicationId,
+    propertyId: data?.propertyId || null,
+    sourceSurface: "screening_orchestrator",
+    status: summary.overall === "review" ? "manual_review" : summary.overall === "fail" ? "failed" : "completed",
+    metadata: {
+      resultId: resultRef.id,
+      provider: data?.screeningProvider || "manual",
+      overall: summary.overall,
+    },
+  }).catch(() => undefined);
 
   return { ok: true, resultId: resultRef.id, idempotent: false };
 }

@@ -12,6 +12,7 @@ type Props = {
   onClose: () => void;
   onSubmit: (payload: TransUnionCredentialsPayload) => Promise<void> | void;
   onGetAccess?: () => void;
+  onChooseExistingCredentials?: () => void;
   onContinue?: () => void;
   submitLabel?: string;
   integration?: TransUnionIntegration | null;
@@ -24,6 +25,7 @@ export function ConnectTransUnionModal({
   onClose,
   onSubmit,
   onGetAccess,
+  onChooseExistingCredentials,
   onContinue,
   submitLabel = "Connect Account",
   integration,
@@ -236,7 +238,13 @@ export function ConnectTransUnionModal({
                 Use the membership details TransUnion already issued to your business.
               </div>
               <div>
-                <Button type="button" onClick={() => setStep("credentials")}>
+                <Button
+                  type="button"
+                  onClick={() => {
+                    onChooseExistingCredentials?.();
+                    setStep("credentials");
+                  }}
+                >
                   I Already Have Credentials
                 </Button>
               </div>

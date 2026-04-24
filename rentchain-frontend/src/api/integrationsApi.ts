@@ -35,7 +35,13 @@ export type TransUnionCredentialsPayload = {
   memberCode: string;
   passcode: string;
   confirmPermissibleUse: boolean;
+  sourceSurface?: string;
 };
+
+export type TransUnionUsageEventType =
+  | "tu_option_viewed"
+  | "tu_get_access_clicked"
+  | "tu_have_credentials_clicked";
 
 export async function getTransUnionIntegration(): Promise<TransUnionIntegration> {
   return apiFetch<TransUnionIntegration>("/integrations/transunion");
@@ -74,5 +80,17 @@ export async function disconnectTransUnion(): Promise<TransUnionIntegration> {
   return apiFetch<TransUnionIntegration>("/integrations/transunion/disconnect", {
     method: "POST",
     body: {},
+  });
+}
+
+export async function trackTransUnionUsageEvent(payload: {
+  eventType: TransUnionUsageEventType;
+  sourceSurface: string;
+  applicationId?: string | null;
+  propertyId?: string | null;
+}) {
+  return apiFetch<{ ok: true }>("/integrations/transunion/usage-events", {
+    method: "POST",
+    body: payload,
   });
 }

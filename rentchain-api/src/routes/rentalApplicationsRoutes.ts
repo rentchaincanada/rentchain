@@ -53,6 +53,7 @@ import {
   shouldUseMockScreeningCheckoutOverride,
 } from "../services/screeningCheckoutExecutionService";
 import { writeCanonicalEvent } from "../lib/events/buildEvent";
+import { writeTransUnionUsageEvent } from "../services/screening/transUnionUsageEvents";
 import { executeAutomation } from "../lib/automation/automationExecutor";
 import { buildScreeningPolicyRequest } from "../lib/policy/policyAdapters";
 import { evaluatePolicy, toAutopilotPolicySummary, writePolicyEvaluatedEvent } from "../lib/policy/policyEvaluator";
@@ -1950,6 +1951,17 @@ router.post(
           await assertTransUnionConnectedForScreening(String(data?.landlordId || landlordId));
         } catch (error: any) {
           if (error?.statusCode === 409 && error?.code === "transunion_not_connected") {
+            await writeTransUnionUsageEvent({
+              eventType: "screening_blocked",
+              landlordId: String(data?.landlordId || landlordId),
+              userId: String(req.user?.id || req.user?.landlordId || "").trim() || null,
+              actorRole: role,
+              applicationId: id,
+              propertyId: data?.propertyId || null,
+              sourceSurface: "applications_page",
+              blockReason: "missing_provider_connection",
+              status: "blocked",
+            }).catch(() => undefined);
             return res.status(409).json({
               error: "transunion_not_connected",
               message: "Connect your TransUnion membership before starting screening.",
@@ -1960,6 +1972,17 @@ router.post(
       }
 
       if (!consentCheck.ok) {
+        await writeTransUnionUsageEvent({
+          eventType: "screening_blocked",
+          landlordId: String(data?.landlordId || landlordId),
+          userId: String(req.user?.id || req.user?.landlordId || "").trim() || null,
+          actorRole: role,
+          applicationId: id,
+          propertyId: data?.propertyId || null,
+          sourceSurface: "applications_page",
+          blockReason: "missing_consent",
+          status: "blocked",
+        }).catch(() => undefined);
         return res.status(400).json({
           ok: false,
           error: "consent_required",
@@ -1972,6 +1995,19 @@ router.post(
           },
         });
       }
+      await writeTransUnionUsageEvent({
+        eventType: "screening_consent_confirmed",
+        landlordId: String(data?.landlordId || landlordId),
+        userId: String(req.user?.id || req.user?.landlordId || "").trim() || null,
+        actorRole: role,
+        applicationId: id,
+        propertyId: data?.propertyId || null,
+        sourceSurface: "applications_page",
+        status: "confirmed",
+        metadata: {
+          consentVersion: consent.version || null,
+        },
+      }).catch(() => undefined);
       const {
         screeningTier,
         screeningPackage,

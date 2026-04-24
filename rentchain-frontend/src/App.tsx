@@ -149,6 +149,7 @@ const AdminTenantsPage = lazy(() => import("./pages/admin/AdminTenantsPage"));
 const AdminLeasesPage = lazy(() => import("./pages/admin/AdminLeasesPage"));
 const AdminIntegrityPage = lazy(() => import("./pages/admin/AdminIntegrityPage"));
 const AdminAuditPage = lazy(() => import("./pages/admin/AdminAuditPage"));
+const AdminTransUnionUsagePage = lazy(() => import("./pages/admin/AdminTransUnionUsagePage"));
 const AutomationTimelinePage = lazy(
   () => import("./features/automation/timeline/AutomationTimelinePage")
 );
@@ -717,6 +718,16 @@ function App() {
                 </Suspense>
               </RequireAdmin>
             </RequireAuth>
+          }
+        />
+        <Route
+          path="/admin/screening/transunion-usage"
+          element={
+            <RequireAdmin>
+              <Suspense fallback={null}>
+                <AdminTransUnionUsagePage />
+              </Suspense>
+            </RequireAdmin>
           }
         />
         <Route

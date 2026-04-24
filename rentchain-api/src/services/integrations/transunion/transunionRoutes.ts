@@ -6,6 +6,7 @@ import {
   postTransUnionConnect,
   postTransUnionDisconnect,
   postTransUnionOnboardingRequest,
+  postTransUnionUsageEvent,
   postTransUnionUpdateCredentials,
 } from "./transunionController";
 
@@ -14,6 +15,7 @@ const sensitiveWriteLimiter = rateLimitSimple({ windowMs: 15 * 60 * 1000, max: 1
 
 router.use(requireLandlord);
 router.get("/transunion", getTransUnionIntegration);
+router.post("/transunion/usage-events", postTransUnionUsageEvent);
 router.post("/transunion/onboarding-request", postTransUnionOnboardingRequest);
 router.post("/transunion/connect", sensitiveWriteLimiter, postTransUnionConnect);
 router.post(
