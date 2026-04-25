@@ -83,7 +83,7 @@ export async function updateTenantProfile(input: {
 }): Promise<TenantProfileData> {
   const res = await tenantApiFetch<{ ok: boolean; data: TenantProfileData }>("/tenant/profile", {
     method: "PATCH",
-    body: JSON.stringify(input),
+    body: input,
   });
   return res.data;
 }
