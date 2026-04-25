@@ -331,6 +331,67 @@ describe("tenantPortalRoutes foundation", () => {
     expect(res.status).toBe(401);
   });
 
+  it("rejects tenant workspace access when role or tenantId is missing", async () => {
+    const router = (await import("../tenantPortalRoutes")).default;
+
+    const roleMismatch = await invokeRouter(router, {
+      method: "GET",
+      url: "/workspace",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "landlord",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+
+    const missingTenantId = await invokeRouter(router, {
+      method: "GET",
+      url: "/workspace",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+        }),
+      },
+    });
+
+    expect(roleMismatch.status).toBe(401);
+    expect(roleMismatch.body?.error).toBe("UNAUTHORIZED");
+    expect(missingTenantId.status).toBe(401);
+    expect(missingTenantId.body?.error).toBe("UNAUTHORIZED");
+  });
+
+  it("returns tenant_not_initialized when a valid tenant lacks a resolved tenancy context", async () => {
+    ensureCollection("applications").clear();
+    ensureCollection("leases").clear();
+    ensureCollection("tenancy_invites").clear();
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/workspace",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(409);
+    expect(res.body).toEqual({
+      ok: false,
+      error: "TENANT_NOT_INITIALIZED",
+      status: "tenant_not_initialized",
+    });
+  });
+
   it("returns safe projected workspace data and writes compact events", async () => {
     const router = (await import("../tenantPortalRoutes")).default;
     const res = await invokeRouter(router, {

@@ -80,16 +80,31 @@ export const RequireTenant: React.FC<{ children: React.ReactNode }> = ({ childre
   const location = useLocation();
   const [workspace, setWorkspace] = React.useState<TenantWorkspaceSummary | null>(null);
   const [workspaceLoading, setWorkspaceLoading] = React.useState(false);
+  const [workspaceInitializing, setWorkspaceInitializing] = React.useState(false);
   const [workspaceError, setWorkspaceError] = React.useState<TenantWorkspaceError>(null);
   const [workspaceResolved, setWorkspaceResolved] = React.useState(false);
   const token = getTenantToken();
 
   React.useEffect(() => {
     let cancelled = false;
+    const MAX_INITIALIZATION_RETRIES = 3;
+    const INITIALIZATION_RETRY_DELAY_MS = 250;
+
+    const isTenantNotInitialized = (error: any) => {
+      const code = String(error?.payload?.error || error?.message || "").trim().toUpperCase();
+      const status = String(error?.payload?.status || "").trim().toLowerCase();
+      return code === "TENANT_NOT_INITIALIZED" || status === "tenant_not_initialized";
+    };
+
+    const wait = (ms: number) =>
+      new Promise<void>((resolve) => {
+        window.setTimeout(resolve, ms);
+      });
 
     if (!token) {
       setWorkspace(null);
       setWorkspaceLoading(false);
+      setWorkspaceInitializing(false);
       setWorkspaceError(null);
       setWorkspaceResolved(true);
       return () => {
@@ -98,28 +113,49 @@ export const RequireTenant: React.FC<{ children: React.ReactNode }> = ({ childre
     }
 
     setWorkspaceLoading(true);
+    setWorkspaceInitializing(false);
     setWorkspaceError(null);
     setWorkspaceResolved(false);
 
-    void getTenantWorkspace()
-      .then((summary) => {
-        if (cancelled) return;
-        setWorkspace(summary);
-      })
-      .catch((error) => {
-        if (cancelled) return;
-        setWorkspace(null);
-        setWorkspaceError({
-          status: error?.status,
-          message: String(error?.message || ""),
-          payload: error?.payload ?? null,
-        });
-      })
-      .finally(() => {
-        if (cancelled) return;
-        setWorkspaceLoading(false);
-        setWorkspaceResolved(true);
-      });
+    void (async () => {
+      let lastError: TenantWorkspaceError = null;
+
+      for (let attempt = 0; attempt < MAX_INITIALIZATION_RETRIES; attempt += 1) {
+        try {
+          const summary = await getTenantWorkspace();
+          if (cancelled) return;
+          setWorkspace(summary);
+          setWorkspaceInitializing(false);
+          lastError = null;
+          return;
+        } catch (error: any) {
+          if (cancelled) return;
+          const nextError = {
+            status: error?.status,
+            message: String(error?.message || ""),
+            payload: error?.payload ?? null,
+          };
+
+          lastError = nextError;
+
+          if (!isTenantNotInitialized(error) || attempt === MAX_INITIALIZATION_RETRIES - 1) {
+            break;
+          }
+
+          setWorkspaceInitializing(true);
+          await wait(INITIALIZATION_RETRY_DELAY_MS);
+        }
+      }
+
+      if (cancelled) return;
+      setWorkspace(null);
+      setWorkspaceInitializing(false);
+      setWorkspaceError(lastError);
+    })().finally(() => {
+      if (cancelled) return;
+      setWorkspaceLoading(false);
+      setWorkspaceResolved(true);
+    });
 
     return () => {
       cancelled = true;
@@ -130,6 +166,7 @@ export const RequireTenant: React.FC<{ children: React.ReactNode }> = ({ childre
     hasTenantToken: Boolean(token),
     authLoading: isLoading || !ready,
     workspaceLoading: workspaceLoading || (Boolean(token) && !workspaceResolved),
+    workspaceInitializing,
     workspace,
     workspaceError,
     requestedPath: location.pathname,
