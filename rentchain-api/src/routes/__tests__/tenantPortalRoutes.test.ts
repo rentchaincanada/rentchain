@@ -1246,9 +1246,57 @@ describe("tenantPortalRoutes foundation", () => {
     expect(ensureCollection("tenants").get("tenant-1")?.internalNotes).toBe("do-not-expose");
     expect(ensureCollection("applications").get("app-1")?.applicantName).toBe("Taylor Updated");
     expect(ensureCollection("applications").get("app-1")?.phone).toBe("902-555-0111");
+    expect(ensureCollection("tenants").get("tenant-1")?.landlordId).toBeUndefined();
+    expect(ensureCollection("tenants").get("tenant-1")?.propertyId).toBeUndefined();
+    expect(ensureCollection("tenants").get("tenant-1")?.unitId).toBeUndefined();
+    expect(ensureCollection("tenants").get("tenant-1")?.currentLeaseId).toBeUndefined();
 
     const eventDocs = Array.from(ensureCollection("event_log").values());
     expect(eventDocs.some((event) => event.event_type === "tenant_profile_updated")).toBe(true);
+  });
+
+  it("allows phone-only tenant profile updates", async () => {
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "PATCH",
+      url: "/profile",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+      body: {
+        phone: "902-555-0122",
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.data?.profile?.phone).toBe("902-555-0122");
+    expect(ensureCollection("tenants").get("tenant-1")?.phone).toBe("902-555-0122");
+    expect(ensureCollection("applications").get("app-1")?.phone).toBe("902-555-0122");
+  });
+
+  it("rejects empty tenant profile patch payloads", async () => {
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "PATCH",
+      url: "/profile",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+      body: {},
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body?.error).toBe("TENANT_PROFILE_FIELDS_REQUIRED");
   });
 
   it("rejects unauthorized tenant profile edits", async () => {

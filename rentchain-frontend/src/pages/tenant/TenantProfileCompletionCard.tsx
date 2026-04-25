@@ -24,6 +24,7 @@ type Props = {
   completion: TenantProfileCompletionSummary;
   actionLabel?: string;
   actionPath?: string;
+  onAction?: (() => void) | null;
   compact?: boolean;
 };
 
@@ -31,6 +32,7 @@ export default function TenantProfileCompletionCard({
   completion,
   actionLabel = "View your profile",
   actionPath = "/tenant/profile",
+  onAction = null,
   compact = false,
 }: Props) {
   const tone = toneForStatus(completion.overallStatus);
@@ -112,11 +114,30 @@ export default function TenantProfileCompletionCard({
           </div>
         )}
 
-        <div>
-          <Link to={actionPath} style={{ fontWeight: 700 }}>
-            {actionLabel}
-          </Link>
-        </div>
+        {onAction ? (
+          <div>
+            <button
+              type="button"
+              onClick={onAction}
+              style={{
+                fontWeight: 700,
+                color: "#1d4ed8",
+                background: "none",
+                border: 0,
+                padding: 0,
+                cursor: "pointer",
+              }}
+            >
+              {actionLabel}
+            </button>
+          </div>
+        ) : actionPath ? (
+          <div>
+            <Link to={actionPath} style={{ fontWeight: 700 }}>
+              {actionLabel}
+            </Link>
+          </div>
+        ) : null}
       </div>
     </TenantInfoCard>
   );
