@@ -1,4 +1,5 @@
 import { cleanup, render, screen } from "@testing-library/react";
+import { act } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { RequireTenant } from "./RequireTenant";
@@ -23,6 +24,7 @@ vi.mock("../../api/tenantPortal", () => ({
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.clearAllMocks();
 });
 
@@ -189,5 +191,106 @@ describe("RequireTenant", () => {
 
     expect(await screen.findByText("Tenant login")).toBeInTheDocument();
     expect(screen.queryByText("Tenant area")).not.toBeInTheDocument();
+  });
+
+  it("shows tenant workspace setup state and retries after initialization responses", async () => {
+    vi.useFakeTimers();
+    mocks.getTenantTokenMock.mockReturnValue("tenant-token");
+    mocks.getTenantWorkspaceMock
+      .mockRejectedValueOnce({
+        status: 409,
+        payload: { error: "TENANT_NOT_INITIALIZED", status: "tenant_not_initialized" },
+        message: "TENANT_NOT_INITIALIZED",
+      })
+      .mockRejectedValueOnce({
+        status: 409,
+        payload: { error: "TENANT_NOT_INITIALIZED", status: "tenant_not_initialized" },
+        message: "TENANT_NOT_INITIALIZED",
+      })
+      .mockResolvedValue({
+        context: {
+          authority: "active_tenant",
+          propertyId: "prop-1",
+          rc_prop_id: "rc-prop-1",
+          applicationId: "app-1",
+          leaseId: "lease-1",
+          tenantId: "tenant-1",
+          unitId: "unit-1",
+          invitedEmail: "tenant@example.com",
+        },
+        property: null,
+        application: null,
+        lease: null,
+        maintenance: [],
+      });
+
+    render(
+      <MemoryRouter initialEntries={["/tenant/dashboard"]}>
+        <Routes>
+          <Route
+            path="/tenant/dashboard"
+            element={
+              <RequireTenant>
+                <div>Tenant area</div>
+              </RequireTenant>
+            }
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText(/Setting up your tenant workspace/i)).toBeInTheDocument();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText("Tenant area")).toBeInTheDocument();
+    expect(mocks.getTenantWorkspaceMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("shows the fallback recovery state only after tenant workspace retries fail", async () => {
+    vi.useFakeTimers();
+    mocks.getTenantTokenMock.mockReturnValue("tenant-token");
+    mocks.getTenantWorkspaceMock.mockRejectedValue({
+      status: 409,
+      payload: { error: "TENANT_NOT_INITIALIZED", status: "tenant_not_initialized" },
+      message: "TENANT_NOT_INITIALIZED",
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/tenant/dashboard"]}>
+        <Routes>
+          <Route
+            path="/tenant/dashboard"
+            element={
+              <RequireTenant>
+                <div>Tenant area</div>
+              </RequireTenant>
+            }
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText(/Setting up your tenant workspace/i)).toBeInTheDocument();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+      await Promise.resolve();
+    });
+
+    expect(screen.getByRole("link", { name: /Request a new sign-in link/i })).toBeInTheDocument();
+    expect(screen.getByText(/workspace setup is still finishing/i)).toBeInTheDocument();
+    expect(mocks.getTenantWorkspaceMock).toHaveBeenCalledTimes(3);
   });
 });

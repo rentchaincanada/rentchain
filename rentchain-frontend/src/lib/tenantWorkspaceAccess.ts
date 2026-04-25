@@ -6,6 +6,7 @@ type TenantWorkspaceError = {
   payload?: {
     error?: string;
     message?: string;
+    status?: string;
   } | null;
 } | null;
 
@@ -13,6 +14,7 @@ export type TenantWorkspaceAccessInput = {
   hasTenantToken: boolean;
   authLoading: boolean;
   workspaceLoading: boolean;
+  workspaceInitializing?: boolean;
   workspace: TenantWorkspaceSummary | null;
   workspaceError: TenantWorkspaceError;
   requestedPath: string;
@@ -58,6 +60,13 @@ function isUnauthorizedWorkspaceError(error: TenantWorkspaceError) {
   return code === "UNAUTHORIZED";
 }
 
+function isTenantWorkspaceInitializingError(error: TenantWorkspaceError) {
+  if (!error) return false;
+  const code = String(error.payload?.error || error.message || "").trim().toUpperCase();
+  const status = String(error.payload?.status || "").trim().toLowerCase();
+  return code === "TENANT_NOT_INITIALIZED" || status === "tenant_not_initialized";
+}
+
 export function getTenantWorkspaceDefaultDestination(
   workspace: TenantWorkspaceSummary | null
 ): string {
@@ -83,16 +92,29 @@ export function resolveTenantWorkspaceAccess(
     return { status: "login_required", redirectTo: loginPath };
   }
 
-  if (input.authLoading || input.workspaceLoading) {
+  if (input.workspaceInitializing || input.authLoading || input.workspaceLoading) {
     return {
       status: "loading",
-      title: "Finishing sign-in",
-      description: "We're restoring your tenant access and loading your workspace.",
+      title: input.workspaceInitializing ? "Setting up your tenant workspace..." : "Finishing sign-in",
+      description: input.workspaceInitializing
+        ? "We're restoring your tenant access and will retry automatically as your workspace becomes ready."
+        : "We're restoring your tenant access and loading your workspace.",
     };
   }
 
   if (isUnauthorizedWorkspaceError(input.workspaceError)) {
     return { status: "login_required", redirectTo: loginPath };
+  }
+
+  if (isTenantWorkspaceInitializingError(input.workspaceError)) {
+    return {
+      status: "blocked",
+      title: "We couldn't load your tenant workspace yet",
+      description:
+        "Your sign-in succeeded, but tenant workspace setup is still finishing. Request a new sign-in link only if this does not clear shortly.",
+      actionHref: loginPath,
+      actionLabel: "Request a new sign-in link",
+    };
   }
 
   if (input.workspaceError || !input.workspace) {

@@ -2048,8 +2048,10 @@ async function buildTenantMaintenanceUpdateItems(tenantId: string): Promise<Tena
 }
 
 function requireTenantWorkspaceIdentity(req: any, res: any, next: any) {
+  const role = String(req.user?.role || "").trim().toLowerCase();
   const userId = String(req.user?.id || "").trim();
-  if (!userId) {
+  const tenantId = String(req.user?.tenantId || "").trim();
+  if (!userId || role !== "tenant" || !tenantId) {
     return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
   }
   return next();
@@ -2114,8 +2116,21 @@ async function resolveWorkspaceContextOrRespond(req: any, res: any) {
 
   if (context.ok) return context;
 
-  const status = context.reason === "unauthenticated" ? 401 : 403;
-  res.status(status).json({ ok: false, error: context.reason === "ambiguous_authority" ? "AMBIGUOUS_TENANCY_CONTEXT" : "FORBIDDEN" });
+  if (context.reason === "unauthenticated") {
+    res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    return null;
+  }
+
+  if (context.reason === "no_authority") {
+    res.status(409).json({
+      ok: false,
+      error: "TENANT_NOT_INITIALIZED",
+      status: "tenant_not_initialized",
+    });
+    return null;
+  }
+
+  res.status(403).json({ ok: false, error: "AMBIGUOUS_TENANCY_CONTEXT" });
   return null;
 }
 
