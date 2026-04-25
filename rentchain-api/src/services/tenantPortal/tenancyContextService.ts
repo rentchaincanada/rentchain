@@ -33,6 +33,11 @@ type Candidate = {
   score: number;
 };
 
+type TenantRecordMatch = {
+  id: string;
+  data: any;
+};
+
 const ACTIVE_LEASE_STATUSES = new Set([
   "active",
   "current",
@@ -64,6 +69,47 @@ async function safeGetDocs(collectionName: string, field: string, value: string,
   } catch {
     return [];
   }
+}
+
+async function resolveTenantRecordMatch(identity: TenantWorkspaceIdentity): Promise<TenantRecordMatch | null> {
+  const tenantId = asString(identity.tenantId);
+  const email = normalizeEmail(identity.email);
+
+  if (tenantId) {
+    try {
+      const direct = await db.collection("tenants").doc(tenantId).get();
+      if (direct.exists) {
+        return {
+          id: direct.id,
+          data: (direct.data() || {}) as any,
+        };
+      }
+    } catch {
+      // ignore direct lookup errors
+    }
+
+    const byTenantId = await safeGetDocs("tenants", "tenantId", tenantId);
+    if (byTenantId.length === 1) {
+      return {
+        id: byTenantId[0].id,
+        data: (byTenantId[0].data() || {}) as any,
+      };
+    }
+  }
+
+  if (!email) return null;
+  const byEmail = await safeGetDocs("tenants", "email", email);
+  if (byEmail.length !== 1) return null;
+
+  const match = byEmail[0];
+  const data = (match.data() || {}) as any;
+  const recordEmail = normalizeEmail(data?.email);
+  if (!recordEmail || recordEmail !== email) return null;
+
+  return {
+    id: match.id,
+    data,
+  };
 }
 
 function candidateKey(candidate: Candidate): string {
@@ -115,12 +161,39 @@ export async function resolveTenancyContext(identity: TenantWorkspaceIdentity): 
     candidates.set(candidateKey(candidate), candidate);
   };
 
+  const tenantRecord = await resolveTenantRecordMatch(identity);
+  const tenantRecordId = tenantRecord?.id || tenantId;
+  const tenantRecordData = tenantRecord?.data || null;
+  const tenantRecordLeaseId =
+    asString(tenantRecordData?.leaseId) ||
+    asString(tenantRecordData?.currentLeaseId) ||
+    asString(identity.leaseId);
+  const tenantRecordPropertyId = asString(tenantRecordData?.propertyId);
+  const tenantRecordUnitId =
+    asString(tenantRecordData?.unitId) ||
+    asString(tenantRecordData?.unit) ||
+    null;
+  const tenantRecordEmail = normalizeEmail(tenantRecordData?.email) || email;
+
+  if (tenantRecordPropertyId) {
+    pushCandidate({
+      authority: "active_tenant",
+      propertyId: tenantRecordPropertyId,
+      applicationId: null,
+      leaseId: tenantRecordLeaseId,
+      tenantId: asString(tenantRecordData?.tenantId) || tenantRecordId,
+      unitId: tenantRecordUnitId,
+      invitedEmail: tenantRecordEmail,
+      score: tenantRecordLeaseId ? 95 : 80,
+    });
+  }
+
   const applicationDocs = [
     ...(email ? await safeGetDocs("applications", "applicantEmail", email) : []),
     ...(email ? await safeGetDocs("applications", "email", email) : []),
     ...(uid ? await safeGetDocs("applications", "applicantUserId", uid) : []),
     ...(uid ? await safeGetDocs("applications", "userId", uid) : []),
-    ...(tenantId ? await safeGetDocs("applications", "tenantId", tenantId) : []),
+    ...(tenantRecordId ? await safeGetDocs("applications", "tenantId", tenantRecordId) : []),
   ];
 
   for (const doc of applicationDocs) {
@@ -132,7 +205,7 @@ export async function resolveTenancyContext(identity: TenantWorkspaceIdentity): 
       propertyId,
       applicationId: doc.id,
       leaseId: asString(data?.leaseId),
-      tenantId: asString(data?.tenantId) || tenantId,
+      tenantId: asString(data?.tenantId) || tenantRecordId,
       unitId: asString(data?.unitId) || asString(data?.unitApplied) || asString(data?.unit),
       invitedEmail: email,
       score: 20,
@@ -140,9 +213,9 @@ export async function resolveTenancyContext(identity: TenantWorkspaceIdentity): 
   }
 
   const leaseDocs = [
-    ...(tenantId ? await safeGetDocs("leases", "tenantId", tenantId) : []),
-    ...(tenantId ? await safeGetDocs("leases", "tenantIds", tenantId, "array-contains") : []),
-    ...(asString(identity.leaseId) ? [await db.collection("leases").doc(String(identity.leaseId)).get().catch(() => null as any)] : []),
+    ...(tenantRecordId ? await safeGetDocs("leases", "tenantId", tenantRecordId) : []),
+    ...(tenantRecordId ? await safeGetDocs("leases", "tenantIds", tenantRecordId, "array-contains") : []),
+    ...(tenantRecordLeaseId ? [await db.collection("leases").doc(String(tenantRecordLeaseId)).get().catch(() => null as any)] : []),
   ].filter(Boolean);
 
   for (const doc of leaseDocs as any[]) {
@@ -156,14 +229,14 @@ export async function resolveTenancyContext(identity: TenantWorkspaceIdentity): 
       propertyId,
       applicationId: asString(data?.applicationId),
       leaseId: doc.id,
-      tenantId: asString(data?.tenantId) || tenantId,
+      tenantId: asString(data?.tenantId) || tenantRecordId,
       unitId: asString(data?.unitId) || asString(data?.unitNumber) || asString(data?.unitLabel),
       invitedEmail: email,
       score: 100,
     });
   }
 
-  const tenancyDocs = tenantId ? await safeGetDocs("tenancies", "tenantId", tenantId) : [];
+  const tenancyDocs = tenantRecordId ? await safeGetDocs("tenancies", "tenantId", tenantRecordId) : [];
   for (const doc of tenancyDocs) {
     const data = (doc.data() || {}) as any;
     if (String(data?.status || "").trim().toLowerCase() !== "active") continue;
@@ -174,7 +247,7 @@ export async function resolveTenancyContext(identity: TenantWorkspaceIdentity): 
       propertyId,
       applicationId: null,
       leaseId: asString(data?.leaseId),
-      tenantId,
+      tenantId: tenantRecordId,
       unitId: asString(data?.unitId) || asString(data?.unitLabel),
       invitedEmail: email,
       score: 90,
@@ -212,9 +285,9 @@ export async function resolveTenancyContext(identity: TenantWorkspaceIdentity): 
       rc_prop_id: null,
       applicationId: null,
       leaseId: null,
-      tenantId,
+      tenantId: tenantRecordId,
       unitId: null,
-      invitedEmail: email,
+      invitedEmail: tenantRecordEmail,
       reason: "no_authority",
     };
   }
@@ -228,9 +301,9 @@ export async function resolveTenancyContext(identity: TenantWorkspaceIdentity): 
       rc_prop_id: null,
       applicationId: null,
       leaseId: null,
-      tenantId,
+      tenantId: tenantRecordId,
       unitId: null,
-      invitedEmail: email,
+      invitedEmail: tenantRecordEmail,
       reason: "ambiguous_authority",
     };
   }
