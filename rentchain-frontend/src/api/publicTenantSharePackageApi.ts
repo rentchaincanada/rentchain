@@ -1,7 +1,7 @@
 import { apiFetch } from "./apiFetch";
 
 export type PublicTenantSharePackage = {
-  identity: {
+  identity?: {
     identityStatus: "incomplete" | "ready" | "verified" | "limited";
     verification: {
       level: "none" | "partial" | "strong";
@@ -9,23 +9,21 @@ export type PublicTenantSharePackage = {
     readinessLabel: string;
     readinessDescription: string;
   };
-  profile: {
-    completionStatus: "complete" | "in_progress" | "missing" | "needs_attention";
+  credibilitySummary?: {
+    completenessLevel: "low" | "medium" | "high";
+    verificationLevel: "none" | "partial" | "strong";
+    summaryLabel: string;
+    summaryDescription: string;
   };
-  application: {
+  application?: {
     reusable: boolean;
   };
-  documents: {
+  documents?: {
     completionStatus: "complete" | "in_progress" | "missing" | "needs_attention";
   };
-  screening: {
-    status: "not_started" | "in_progress" | "completed" | "needs_attention" | "blocked";
-  };
-  leases: {
-    summary: {
-      activeCount: number;
-      historicalCount: number;
-    };
+  availability: {
+    canRequestMore: boolean;
+    availableSections: Array<"identity" | "credibilitySummary" | "application" | "documents">;
   };
   generatedAt: string;
 };
@@ -40,4 +38,19 @@ export async function fetchPublicTenantSharePackage(token: string): Promise<Publ
     }
   );
   return res?.data ?? null;
+}
+
+export async function requestPublicTenantSharePackageItems(
+  token: string,
+  requestedItems: Array<"identity_summary" | "credibility_summary" | "application_summary" | "documents_summary">
+): Promise<{ requestedItems: typeof requestedItems }> {
+  const res = await apiFetch<{ ok: boolean; data: { requestedItems: typeof requestedItems } }>(
+    `/public/share/${encodeURIComponent(token)}/request`,
+    {
+      method: "POST",
+      body: { requestedItems },
+      suppressToasts: true,
+    }
+  );
+  return res.data;
 }

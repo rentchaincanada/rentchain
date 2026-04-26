@@ -54,6 +54,7 @@ const tenantSharePackagesApi = vi.hoisted(() => ({
   createTenantSharePackage: vi.fn(),
   listTenantSharePackages: vi.fn(),
   revokeTenantSharePackage: vi.fn(),
+  respondToTenantSharePackage: vi.fn(),
 }));
 
 vi.mock("../../api/tenantPortal", () => tenantPortalApi);
@@ -351,9 +352,31 @@ describe("tenant workspace frontend shell", () => {
       createdAt: 1710000000000,
       expiresAt: 1710600000000,
       status: "active",
+      permissions: {
+        identitySummary: true,
+        credibilitySummary: false,
+        applicationSummary: false,
+        documents: "none",
+      },
+      requestedItems: [],
+      approvedItems: [],
       shareUrl: "https://app.example/share/share-token-1",
     });
     tenantSharePackagesApi.revokeTenantSharePackage.mockResolvedValue(undefined);
+    tenantSharePackagesApi.respondToTenantSharePackage.mockResolvedValue({
+      id: "share-1",
+      createdAt: 1710000000000,
+      expiresAt: 1710600000000,
+      status: "active",
+      permissions: {
+        identitySummary: true,
+        credibilitySummary: true,
+        applicationSummary: false,
+        documents: "approved_only",
+      },
+      requestedItems: [],
+      approvedItems: ["credibility_summary", "documents_summary"],
+    });
     Object.assign(navigator, {
       clipboard: {
         writeText: vi.fn().mockResolvedValue(undefined),
@@ -495,7 +518,7 @@ describe("tenant workspace frontend shell", () => {
     expect(screen.getByText(/A rental application record was started\./i)).toBeInTheDocument();
     expect(screen.getByText(/Missing pieces/i)).toBeInTheDocument();
     expect(screen.getByText(/Income documents/i)).toBeInTheDocument();
-    expect(screen.getByText(/Share Your Rental Profile/i)).toBeInTheDocument();
+    expect(screen.getByText(/Manage Shared Access/i)).toBeInTheDocument();
     expect(screen.getByText(/Add missing details to keep your rental profile organized/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /View your profile/i })).toBeInTheDocument();
     expect(screen.queryByText(/^Applicant$/i)).not.toBeInTheDocument();
@@ -561,6 +584,14 @@ describe("tenant workspace frontend shell", () => {
           createdAt: 1710000000000,
           expiresAt: 1710600000000,
           status: "active",
+          permissions: {
+            identitySummary: true,
+            credibilitySummary: false,
+            applicationSummary: false,
+            documents: "none",
+          },
+          requestedItems: [],
+          approvedItems: [],
         },
       ]);
 
@@ -570,7 +601,7 @@ describe("tenant workspace frontend shell", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText(/Share Your Rental Profile/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Manage Shared Access/i)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Generate share link/i }));
 
@@ -584,6 +615,43 @@ describe("tenant workspace frontend shell", () => {
     await waitFor(() => {
       expect(tenantSharePackagesApi.revokeTenantSharePackage).toHaveBeenCalledWith("share-1");
     });
+  });
+
+  it("lets tenants approve a pending share access request", async () => {
+    tenantSharePackagesApi.listTenantSharePackages.mockResolvedValue([
+      {
+        id: "share-1",
+        createdAt: 1710000000000,
+        expiresAt: 1710600000000,
+        status: "active",
+        permissions: {
+          identitySummary: true,
+          credibilitySummary: false,
+          applicationSummary: false,
+          documents: "none",
+        },
+        requestedItems: ["credibility_summary", "documents_summary"],
+        approvedItems: [],
+      },
+    ]);
+
+    render(
+      <MemoryRouter>
+        <TenantWorkspacePage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole("button", { name: /Approve requested access/i })).toBeInTheDocument();
+    expect(screen.getByText(/Credibility summary, Documents summary/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Approve requested access/i }));
+
+    await waitFor(() => {
+      expect(tenantSharePackagesApi.respondToTenantSharePackage).toHaveBeenCalledWith("share-1", [
+        "credibility_summary",
+        "documents_summary",
+      ]);
+    });
+    expect(await screen.findByText(/Approved: Credibility summary, Documents summary/i)).toBeInTheDocument();
   });
 
   it("shows an active-tenancy transition state when tenant access is active but the lease is not active yet", async () => {
