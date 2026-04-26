@@ -396,11 +396,12 @@ router.post("/rental-applications", rateLimitPublicApply, async (req: any, res) 
     const sig = applicantProfile?.signature;
     if (!sig) {
       missingProfile.push("signature");
-    } else if (sig.type === "drawn") {
-      if (!sig.drawnDataUrl) missingProfile.push("signature.drawnDataUrl");
-    } else if (sig.type === "typed") {
-      if (!sig.typedName) missingProfile.push("signature.typedName");
-      if (!sig.typedAcknowledge) missingProfile.push("signature.typedAcknowledge");
+    } else {
+      const signatureType = String(sig.type || "").trim();
+      const typedName = String(sig.typedName || "").trim();
+      if (signatureType !== "typed" && signatureType !== "drawn") missingProfile.push("signature.type");
+      if (!typedName) missingProfile.push("signature.typedName");
+      if (sig.typedAcknowledge !== true) missingProfile.push("signature.typedAcknowledge");
     }
     if (!applicationConsent?.accepted || !applicationConsent?.acceptedAt) {
       missingProfile.push("applicationConsent");
