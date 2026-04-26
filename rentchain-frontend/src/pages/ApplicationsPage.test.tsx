@@ -243,6 +243,7 @@ afterEach(() => {
 
 describe("ApplicationsPage", () => {
   beforeEach(() => {
+    const now = Date.now();
     vi.spyOn(console, "debug").mockImplementation(() => {});
     mocks.entitlementsMock.mockReturnValue({
       loading: false,
@@ -297,7 +298,7 @@ describe("ApplicationsPage", () => {
     });
     mocks.fetchApplicationDecisionSummary.mockResolvedValue(null);
     mocks.sendApplicationLinkReminder.mockResolvedValue({
-      sentAt: 1_710_000_100_000,
+      sentAt: now,
       partialProgress: {
         status: "in_progress",
         completionPercent: 62,
@@ -306,11 +307,11 @@ describe("ApplicationsPage", () => {
         missingSections: ["employment", "references_assets", "consent"],
         hasCoApplicant: false,
         viewingChoice: "already_viewed",
-        startedAt: 1_709_999_000_000,
-        lastActivityAt: 1_710_000_000_000,
+        startedAt: now - 1_000,
+        lastActivityAt: now - 500,
         submittedAt: null,
-        reminderEligibleAt: 1_710_086_400_000,
-        reminderSentAt: 1_710_000_100_000,
+        reminderEligibleAt: now - 60_000,
+        reminderSentAt: now,
       },
     });
     mocks.submitRentalApplicationDecisionAction.mockReset();
@@ -571,6 +572,7 @@ describe("ApplicationsPage", () => {
   });
 
   it("shows Send reminder for eligible in-progress rows and updates the row after success", async () => {
+    const now = Date.now();
     mocks.fetchRentalApplications.mockResolvedValue([
       {
         id: "link-1",
@@ -581,7 +583,7 @@ describe("ApplicationsPage", () => {
         unitId: "unit-1",
         status: "IN_PROGRESS",
         submittedAt: null,
-        lastActivityAt: 1_710_000_000_000,
+        lastActivityAt: now - 60_000,
         completionPercent: 62,
         partialProgress: {
           status: "in_progress",
@@ -591,10 +593,10 @@ describe("ApplicationsPage", () => {
           missingSections: ["employment", "references_assets", "consent"],
           hasCoApplicant: false,
           viewingChoice: "already_viewed",
-          startedAt: 1_709_999_000_000,
-          lastActivityAt: 1_710_000_000_000,
+          startedAt: now - 120_000,
+          lastActivityAt: now - 60_000,
           submittedAt: null,
-          reminderEligibleAt: 1_710_086_400_000,
+          reminderEligibleAt: now - 60_000,
           reminderSentAt: null,
         },
       },
@@ -607,6 +609,7 @@ describe("ApplicationsPage", () => {
     );
 
     const button = await screen.findByRole("button", { name: "Send reminder" });
+    expect(screen.getByText("Ready to remind")).toBeInTheDocument();
     fireEvent.click(button);
 
     await waitFor(() => {
@@ -618,10 +621,11 @@ describe("ApplicationsPage", () => {
         variant: "success",
       })
     );
-    expect(await screen.findByText(/Reminder sent/i)).toBeInTheDocument();
+    expect(await screen.findByText("Recently reminded")).toBeInTheDocument();
   });
 
-  it("hides the reminder button once a reminder has already been sent", async () => {
+  it("shows recently reminded state and hides the send button inside the cooldown window", async () => {
+    const now = Date.now();
     mocks.fetchRentalApplications.mockResolvedValue([
       {
         id: "link-1",
@@ -632,7 +636,7 @@ describe("ApplicationsPage", () => {
         unitId: "unit-1",
         status: "IN_PROGRESS",
         submittedAt: null,
-        lastActivityAt: 1_710_000_000_000,
+        lastActivityAt: now - 60_000,
         completionPercent: 62,
         partialProgress: {
           status: "in_progress",
@@ -642,11 +646,11 @@ describe("ApplicationsPage", () => {
           missingSections: ["employment", "references_assets", "consent"],
           hasCoApplicant: false,
           viewingChoice: "already_viewed",
-          startedAt: 1_709_999_000_000,
-          lastActivityAt: 1_710_000_000_000,
+          startedAt: now - 120_000,
+          lastActivityAt: now - 60_000,
           submittedAt: null,
-          reminderEligibleAt: 1_710_086_400_000,
-          reminderSentAt: 1_710_000_100_000,
+          reminderEligibleAt: now - 60_000,
+          reminderSentAt: now - 60_000,
         },
       },
     ]);
@@ -657,11 +661,14 @@ describe("ApplicationsPage", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText(/Reminder sent/i)).toBeInTheDocument();
+    expect(await screen.findByText("Recently reminded")).toBeInTheDocument();
+    expect(screen.getByText(/Reminder sent/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Send reminder" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Send again" })).not.toBeInTheDocument();
   });
 
   it("shows a safe error toast when sending a reminder fails", async () => {
+    const now = Date.now();
     mocks.fetchRentalApplications.mockResolvedValue([
       {
         id: "link-1",
@@ -672,7 +679,7 @@ describe("ApplicationsPage", () => {
         unitId: "unit-1",
         status: "IN_PROGRESS",
         submittedAt: null,
-        lastActivityAt: 1_710_000_000_000,
+        lastActivityAt: now - 60_000,
         completionPercent: 62,
         partialProgress: {
           status: "in_progress",
@@ -682,10 +689,10 @@ describe("ApplicationsPage", () => {
           missingSections: ["employment", "references_assets", "consent"],
           hasCoApplicant: false,
           viewingChoice: "already_viewed",
-          startedAt: 1_709_999_000_000,
-          lastActivityAt: 1_710_000_000_000,
+          startedAt: now - 120_000,
+          lastActivityAt: now - 60_000,
           submittedAt: null,
-          reminderEligibleAt: 1_710_086_400_000,
+          reminderEligibleAt: now - 60_000,
           reminderSentAt: null,
         },
       },
@@ -708,5 +715,126 @@ describe("ApplicationsPage", () => {
         })
       );
     });
+  });
+
+  it("shows Send again when the reminder cooldown has elapsed", async () => {
+    const now = Date.now();
+    mocks.fetchRentalApplications.mockResolvedValue([
+      {
+        id: "link-1",
+        source: "application_link",
+        applicantName: "In-progress applicant",
+        email: null,
+        propertyId: "prop-1",
+        unitId: "unit-1",
+        status: "IN_PROGRESS",
+        submittedAt: null,
+        lastActivityAt: now - 60_000,
+        completionPercent: 62,
+        partialProgress: {
+          status: "in_progress",
+          completionPercent: 62,
+          currentStep: "employment",
+          completedSections: ["personal_info", "residential_history"],
+          missingSections: ["employment", "references_assets", "consent"],
+          hasCoApplicant: false,
+          viewingChoice: "already_viewed",
+          startedAt: now - 120_000,
+          lastActivityAt: now - 60_000,
+          submittedAt: null,
+          reminderEligibleAt: now - 60_000,
+          reminderSentAt: now - 25 * 60 * 60 * 1000,
+        },
+      },
+    ]);
+
+    render(
+      <MemoryRouter>
+        <ApplicationsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Ready to remind")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Send again" })).toBeInTheDocument();
+  });
+
+  it("renders the high priority follow-up label for high completion with recent activity", async () => {
+    const now = Date.now();
+    mocks.fetchRentalApplications.mockResolvedValue([
+      {
+        id: "link-1",
+        source: "application_link",
+        applicantName: "In-progress applicant",
+        email: null,
+        propertyId: "prop-1",
+        unitId: "unit-1",
+        status: "IN_PROGRESS",
+        submittedAt: null,
+        lastActivityAt: now - 2 * 24 * 60 * 60 * 1000,
+        completionPercent: 75,
+        partialProgress: {
+          status: "in_progress",
+          completionPercent: 75,
+          currentStep: "consent",
+          completedSections: ["personal_info", "residential_history", "employment"],
+          missingSections: ["references_assets", "consent"],
+          hasCoApplicant: false,
+          viewingChoice: "already_viewed",
+          startedAt: now - 3 * 24 * 60 * 60 * 1000,
+          lastActivityAt: now - 2 * 24 * 60 * 60 * 1000,
+          submittedAt: null,
+          reminderEligibleAt: now - 60_000,
+          reminderSentAt: null,
+        },
+      },
+    ]);
+
+    render(
+      <MemoryRouter>
+        <ApplicationsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("High priority")).toBeInTheDocument();
+  });
+
+  it("renders the needs follow-up label for stale low-completion drafts", async () => {
+    const now = Date.now();
+    mocks.fetchRentalApplications.mockResolvedValue([
+      {
+        id: "link-1",
+        source: "application_link",
+        applicantName: "In-progress applicant",
+        email: null,
+        propertyId: "prop-1",
+        unitId: "unit-1",
+        status: "IN_PROGRESS",
+        submittedAt: null,
+        lastActivityAt: now - 8 * 24 * 60 * 60 * 1000,
+        completionPercent: 25,
+        partialProgress: {
+          status: "started",
+          completionPercent: 25,
+          currentStep: "personal_info",
+          completedSections: [],
+          missingSections: ["personal_info", "residential_history", "employment", "references_assets", "consent"],
+          hasCoApplicant: false,
+          viewingChoice: null,
+          startedAt: now - 9 * 24 * 60 * 60 * 1000,
+          lastActivityAt: now - 8 * 24 * 60 * 60 * 1000,
+          submittedAt: null,
+          reminderEligibleAt: now - 60_000,
+          reminderSentAt: null,
+        },
+      },
+    ]);
+
+    render(
+      <MemoryRouter>
+        <ApplicationsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Needs follow-up")).toBeInTheDocument();
   });
 });
