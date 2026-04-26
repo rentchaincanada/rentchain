@@ -1,6 +1,8 @@
-import express from "express";
-import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const { sendEmailMock } = vi.hoisted(() => ({
+  sendEmailMock: vi.fn(),
+}));
 
 type StoredDoc = { id: string; data: any };
 
@@ -69,6 +71,13 @@ const {
 });
 
 vi.mock("../../config/firebase", () => ({ db: dbMock }));
+vi.mock("../../services/emailService", () => ({
+  sendEmail: sendEmailMock,
+}));
+vi.mock("../../email/templates/baseEmailTemplate", () => ({
+  buildEmailHtml: vi.fn(() => "<p>email</p>"),
+  buildEmailText: vi.fn(() => "email"),
+}));
 vi.mock("../../middleware/rateLimit", () => ({
   rateLimitPublicApply: (_req: any, _res: any, next: any) => next(),
 }));
@@ -83,21 +92,58 @@ vi.mock("../../middleware/requireLandlord", () => ({
   },
 }));
 
-async function createApp() {
-  const router = (await import("../viewingRoutes")).default;
-  const app = express();
-  app.use(express.json());
-  app.use("/api", router);
-  return app;
+async function createRouter() {
+  return (await import("../viewingRoutes")).default;
+}
+
+async function invokeRouter(router: any, options: {
+  method: string;
+  url: string;
+  body?: any;
+}) {
+  return await new Promise<{ status: number; body: any }>((resolve, reject) => {
+    const req: any = {
+      method: options.method,
+      url: options.url,
+      originalUrl: options.url,
+      path: options.url,
+      body: options.body ?? {},
+      headers: {},
+      params: {},
+      query: {},
+    };
+    const res: any = {
+      statusCode: 200,
+      status(code: number) {
+        this.statusCode = code;
+        return this;
+      },
+      json(payload: any) {
+        resolve({ status: this.statusCode, body: payload });
+        return this;
+      },
+      send(payload: any) {
+        resolve({ status: this.statusCode, body: payload });
+        return this;
+      },
+    };
+    router.handle(req, res, (error: any) => {
+      if (error) reject(error);
+    });
+  });
 }
 
 describe("viewingRoutes", () => {
   beforeEach(() => {
     resetDb();
+    sendEmailMock.mockReset();
+    sendEmailMock.mockResolvedValue(undefined);
+    process.env.EMAIL_FROM = "noreply@example.com";
     seedCollection("properties", "property-1", {
       id: "property-1",
       landlordId: "landlord-1",
       name: "Harbour House",
+      managerEmail: "manager@example.com",
     });
     seedCollection("properties", "property-2", {
       id: "property-2",
@@ -113,35 +159,50 @@ describe("viewingRoutes", () => {
   });
 
   it("creates a viewing request successfully", async () => {
-    const app = await createApp();
-    const res = await request(app).post("/api/viewings/request").send({
+    const router = await createRouter();
+    const res = await invokeRouter(router, { method: "POST", url: "/viewings/request", body: {
       unitId: "unit-1",
       applicantName: "Jordan Lee",
       applicantEmail: "jordan@example.com",
       applicantPhone: "5555550100",
       requestedMessage: "Looking for an evening showing.",
-    });
+    }});
 
     expect(res.status).toBe(200);
     expect(res.body.status).toBe("requested");
     expect(res.body.landlordId).toBe("landlord-1");
     expect(Array.isArray(res.body.proposedSlots)).toBe(true);
     expect(res.body.proposedSlots).toHaveLength(0);
+    expect(sendEmailMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the viewing request when email delivery fails", async () => {
+    sendEmailMock.mockRejectedValueOnce(new Error("mail_failed"));
+    const router = await createRouter();
+    const res = await invokeRouter(router, { method: "POST", url: "/viewings/request", body: {
+      unitId: "unit-1",
+      applicantName: "Jordan Lee",
+      applicantEmail: "jordan@example.com",
+    }});
+
+    expect(res.status).toBe(200);
+    expect(res.body.id).toBeTruthy();
+    expect(getCollection("viewingRequests").size).toBe(1);
   });
 
   it("rejects an invalid viewing request payload", async () => {
-    const app = await createApp();
-    const res = await request(app).post("/api/viewings/request").send({
+    const router = await createRouter();
+    const res = await invokeRouter(router, { method: "POST", url: "/viewings/request", body: {
       applicantName: "Jordan Lee",
       applicantEmail: "jordan@example.com",
-    });
+    }});
 
     expect(res.status).toBe(400);
     expect(res.body.error).toBe("validation_failed");
   });
 
   it("proposes slots successfully", async () => {
-    const app = await createApp();
+    const router = await createRouter();
     seedCollection("viewingRequests", "view-1", {
       id: "view-1",
       landlordId: "landlord-1",
@@ -161,7 +222,7 @@ describe("viewingRoutes", () => {
       updatedAt: "2026-03-28T10:00:00.000Z",
     });
 
-    const res = await request(app).post("/api/viewings/view-1/propose-slots").send({
+    const res = await invokeRouter(router, { method: "POST", url: "/viewings/view-1/propose-slots", body: {
       proposedSlots: [
         {
           id: "slot-1",
@@ -170,7 +231,7 @@ describe("viewingRoutes", () => {
           note: "Front entrance",
         },
       ],
-    });
+    }});
 
     expect(res.status).toBe(200);
     expect(res.body.status).toBe("slots_proposed");
@@ -179,7 +240,7 @@ describe("viewingRoutes", () => {
   });
 
   it("rejects invalid proposed slot ranges", async () => {
-    const app = await createApp();
+    const router = await createRouter();
     seedCollection("viewingRequests", "view-2", {
       id: "view-2",
       landlordId: "landlord-1",
@@ -199,7 +260,7 @@ describe("viewingRoutes", () => {
       updatedAt: "2026-03-28T10:00:00.000Z",
     });
 
-    const res = await request(app).post("/api/viewings/view-2/propose-slots").send({
+    const res = await invokeRouter(router, { method: "POST", url: "/viewings/view-2/propose-slots", body: {
       proposedSlots: [
         {
           id: "slot-1",
@@ -207,14 +268,14 @@ describe("viewingRoutes", () => {
           endAt: "2026-04-02T18:00:00.000Z",
         },
       ],
-    });
+    }});
 
     expect(res.status).toBe(400);
     expect(res.body.error).toBe("validation_failed");
   });
 
   it("selects a proposed slot successfully", async () => {
-    const app = await createApp();
+    const router = await createRouter();
     seedCollection("viewingRequests", "view-3", {
       id: "view-3",
       landlordId: "landlord-1",
@@ -243,7 +304,7 @@ describe("viewingRoutes", () => {
       updatedAt: "2026-03-28T11:00:00.000Z",
     });
 
-    const res = await request(app).post("/api/viewings/view-3/select-slot").send({ slotId: "slot-1" });
+    const res = await invokeRouter(router, { method: "POST", url: "/viewings/view-3/select-slot", body: { slotId: "slot-1" } });
 
     expect(res.status).toBe(200);
     expect(res.body.status).toBe("scheduled");
@@ -252,7 +313,7 @@ describe("viewingRoutes", () => {
   });
 
   it("rejects selection of an unknown slot", async () => {
-    const app = await createApp();
+    const router = await createRouter();
     seedCollection("viewingRequests", "view-4", {
       id: "view-4",
       landlordId: "landlord-1",
@@ -280,14 +341,14 @@ describe("viewingRoutes", () => {
       updatedAt: "2026-03-28T11:00:00.000Z",
     });
 
-    const res = await request(app).post("/api/viewings/view-4/select-slot").send({ slotId: "missing-slot" });
+    const res = await invokeRouter(router, { method: "POST", url: "/viewings/view-4/select-slot", body: { slotId: "missing-slot" } });
 
     expect(res.status).toBe(400);
     expect(res.body.error).toBe("invalid_slot_selection");
   });
 
   it("only completes from scheduled", async () => {
-    const app = await createApp();
+    const router = await createRouter();
     seedCollection("viewingRequests", "view-5", {
       id: "view-5",
       landlordId: "landlord-1",
@@ -307,7 +368,7 @@ describe("viewingRoutes", () => {
       updatedAt: "2026-03-28T10:00:00.000Z",
     });
 
-    const invalid = await request(app).post("/api/viewings/view-5/complete").send({});
+    const invalid = await invokeRouter(router, { method: "POST", url: "/viewings/view-5/complete", body: {} });
     expect(invalid.status).toBe(409);
 
     seedCollection("viewingRequests", "view-6", {
@@ -342,13 +403,13 @@ describe("viewingRoutes", () => {
       updatedAt: "2026-03-28T12:00:00.000Z",
     });
 
-    const valid = await request(app).post("/api/viewings/view-6/complete").send({});
+    const valid = await invokeRouter(router, { method: "POST", url: "/viewings/view-6/complete", body: {} });
     expect(valid.status).toBe(200);
     expect(valid.body.status).toBe("completed");
   });
 
   it("cancels from allowed states", async () => {
-    const app = await createApp();
+    const router = await createRouter();
     seedCollection("viewingRequests", "view-7", {
       id: "view-7",
       landlordId: "landlord-1",
@@ -368,9 +429,9 @@ describe("viewingRoutes", () => {
       updatedAt: "2026-03-28T10:00:00.000Z",
     });
 
-    const res = await request(app).post("/api/viewings/view-7/cancel").send({
+    const res = await invokeRouter(router, { method: "POST", url: "/viewings/view-7/cancel", body: {
       cancelledReason: "Applicant no longer available",
-    });
+    }});
 
     expect(res.status).toBe(200);
     expect(res.body.status).toBe("cancelled");
@@ -378,7 +439,7 @@ describe("viewingRoutes", () => {
   });
 
   it("lists only landlord-owned viewing requests", async () => {
-    const app = await createApp();
+    const router = await createRouter();
     seedCollection("viewingRequests", "view-a", {
       id: "view-a",
       landlordId: "landlord-1",
@@ -416,7 +477,7 @@ describe("viewingRoutes", () => {
       updatedAt: "2026-03-28T10:00:00.000Z",
     });
 
-    const res = await request(app).get("/api/viewings");
+    const res = await invokeRouter(router, { method: "GET", url: "/viewings" });
 
     expect(res.status).toBe(200);
     expect(res.body).toHaveLength(1);

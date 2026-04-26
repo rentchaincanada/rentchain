@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const getSignedDownloadUrlMock = vi.fn();
+const { sendEmailMock } = vi.hoisted(() => ({
+  sendEmailMock: vi.fn(),
+}));
 
 const collections = new Map<string, Map<string, any>>();
 
@@ -88,6 +91,12 @@ vi.mock("../../config/firebase", () => ({
     arrayUnion: (...values: any[]) => ({ __op: "arrayUnion", values }),
   },
 }));
+vi.mock("../../services/emailService", () => ({
+  sendEmail: sendEmailMock,
+}));
+vi.mock("../../config/requiredEnv", () => ({
+  getEnvFlags: () => ({ emailConfigured: true, emailProvider: "mailgun" }),
+}));
 
 vi.mock("../../middleware/authMiddleware", () => ({
   authenticateJwt: (req: any, _res: any, next: any) => {
@@ -146,6 +155,9 @@ describe("tenantPortalRoutes foundation", () => {
 
   beforeEach(() => {
     collections.clear();
+    sendEmailMock.mockReset();
+    sendEmailMock.mockResolvedValue(undefined);
+    process.env.EMAIL_FROM = "noreply@example.com";
     process.env.GCS_UPLOAD_BUCKET = "test-bucket";
     getSignedDownloadUrlMock.mockReset();
     getSignedDownloadUrlMock.mockImplementation(async ({ path }: { path: string }) => `https://signed.example/${path}`);
@@ -1336,6 +1348,34 @@ describe("tenantPortalRoutes foundation", () => {
     expect(res.status).toBe(201);
     expect(res.body?.data?.title).toBe("Broken lock");
     expect(Array.from(ensureCollection("event_log").values()).some((event) => event.event_type === "tenant_maintenance_submitted")).toBe(true);
+    expect(sendEmailMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps workspace maintenance submission when email delivery fails", async () => {
+    sendEmailMock.mockRejectedValueOnce(new Error("mail_failed"));
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/maintenance-requests",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+      body: {
+        title: "Broken heater",
+        description: "The unit is cold",
+        category: "GENERAL",
+        priority: "NORMAL",
+      },
+    });
+
+    expect(res.status).toBe(201);
+    expect(res.body?.emailed).toBe(false);
+    expect(typeof res.body?.emailError).toBe("string");
   });
 
   it("redeems invite token once for an authenticated user", async () => {

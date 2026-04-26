@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const { sendEmailMock } = vi.hoisted(() => ({
+  sendEmailMock: vi.fn(),
+}));
+
 const collections = new Map<string, Map<string, any>>();
 
 function ensureCollection(name: string) {
@@ -79,6 +83,13 @@ vi.mock("../../config/firebase", () => ({
     serverTimestamp: () => "__server_timestamp__",
   },
 }));
+vi.mock("../../services/emailService", () => ({
+  sendEmail: sendEmailMock,
+}));
+vi.mock("../../email/templates/baseEmailTemplate", () => ({
+  buildEmailHtml: vi.fn(() => "<p>email</p>"),
+  buildEmailText: vi.fn(() => "email"),
+}));
 
 vi.mock("../../middleware/authMiddleware", () => ({
   authenticateJwt: (req: any, _res: any, next: any) => {
@@ -129,10 +140,16 @@ async function invokeRouter(router: any, options: {
 describe("tenant communications routes", () => {
   beforeEach(() => {
     collections.clear();
+    sendEmailMock.mockReset();
+    sendEmailMock.mockResolvedValue(undefined);
+    process.env.EMAIL_FROM = "noreply@example.com";
     ensureCollection("properties").set("prop-1", {
       rc_prop_id: "rc-prop-1",
       landlordId: "landlord-1",
       street1: "123 Main St",
+    });
+    ensureCollection("users").set("landlord-1", {
+      email: "landlord@example.com",
     });
     ensureCollection("applications").set("app-1", {
       applicantEmail: "tenant@example.com",
@@ -227,5 +244,6 @@ describe("tenant communications routes", () => {
     );
     expect(writtenMessages).toHaveLength(1);
     expect(Array.from(ensureCollection("event_log").values()).some((event) => event.event_type === "tenant_message_sent")).toBe(true);
+    expect(sendEmailMock).toHaveBeenCalledTimes(1);
   });
 });

@@ -52,6 +52,7 @@ describe("PublicApplyPage", () => {
   beforeEach(() => {
     fetchPublicApplicationLink.mockReset();
     submitPublicApplication.mockReset();
+    window.sessionStorage.clear();
     fetchPublicApplicationLink.mockResolvedValue({
       data: { propertyId: "prop-1", unitId: "unit-1", expiresAt: null },
       context: { propertyName: "Harbour House", unitLabel: "2A" },
@@ -105,6 +106,22 @@ describe("PublicApplyPage", () => {
     expect(screen.getByText("Great. Continue below with the application.")).toBeInTheDocument();
   });
 
+  it("restores the viewing choice and draft fields from session storage", async () => {
+    const firstRender = renderPage();
+    await screen.findByText("Before you continue");
+
+    fireEvent.click(screen.getByRole("button", { name: "I need to request a viewing" }));
+    fireEvent.change(await screen.findByLabelText("First name *"), { target: { value: "Jordan" } });
+    fireEvent.change(screen.getByLabelText("Last name *"), { target: { value: "Lee" } });
+    firstRender.unmount();
+
+    renderPage();
+
+    expect(await screen.findByTestId("viewing-request-form")).toBeInTheDocument();
+    expect(screen.getByLabelText("First name *")).toHaveValue("Jordan");
+    expect(screen.getByLabelText("Last name *")).toHaveValue("Lee");
+  });
+
   it("requires co-applicant employment details before continuing", async () => {
     renderPage();
     fireEvent.change(await screen.findByLabelText("First name *"), { target: { value: "Jordan" } });
@@ -146,5 +163,70 @@ describe("PublicApplyPage", () => {
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "Next" })).toBeEnabled();
     });
+  });
+
+  it("keeps the form visible when co-applicant fields are missing on submit validation", async () => {
+    renderPage();
+    fireEvent.change(await screen.findByLabelText("First name *"), { target: { value: "Jordan" } });
+    fireEvent.change(screen.getByLabelText("Last name *"), { target: { value: "Lee" } });
+    fireEvent.change(screen.getByLabelText("Email *"), { target: { value: "jordan@example.com" } });
+    fireEvent.change(screen.getByLabelText("Date of birth *"), { target: { value: "1990-01-01" } });
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.change(screen.getAllByLabelText("First name *")[1], { target: { value: "Taylor" } });
+    fireEvent.change(screen.getAllByLabelText("Last name *")[1], { target: { value: "Lee" } });
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    await completeResidentialBase();
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.change(await screen.findByLabelText("Employer *"), { target: { value: "North Wharf Ltd." } });
+    fireEvent.change(screen.getByLabelText("Job title *"), { target: { value: "Designer" } });
+    fireEvent.change(screen.getByLabelText("Gross income *"), { target: { value: "5200" } });
+    fireEvent.change(screen.getByLabelText("Length (months) *"), { target: { value: "24" } });
+    fireEvent.change(screen.getByLabelText("Employer"), { target: { value: "Harbour Ops" } });
+    fireEvent.change(screen.getByLabelText("Job title"), { target: { value: "Analyst" } });
+    fireEvent.change(screen.getByLabelText("Gross income"), { target: { value: "4100" } });
+    fireEvent.change(screen.getByLabelText("Length (months)"), { target: { value: "18" } });
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.change(await screen.findByLabelText("Reference name *"), { target: { value: "Casey Lead" } });
+    fireEvent.change(screen.getByLabelText("Reference phone *"), { target: { value: "9025550100" } });
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.click(screen.getByLabelText(/I consent to a credit\/consumer report\./i));
+    fireEvent.click(screen.getByLabelText(/I consent to contacting references and past landlords\./i));
+    fireEvent.click(screen.getByLabelText(/I consent to data sharing for the tenant database\./i));
+    fireEvent.change(screen.getByLabelText("Applicant full name (typed) *"), { target: { value: "Jordan Lee" } });
+    fireEvent.change(screen.getByLabelText("Co-applicant full name (typed) *"), { target: { value: "Taylor Lee" } });
+    fireEvent.change(screen.getByLabelText("Type your full name *"), { target: { value: "Jordan Lee" } });
+    fireEvent.click(screen.getByLabelText(/I agree this is my legal signature\./i));
+    fireEvent.click(screen.getByLabelText(/I confirm the information provided is accurate and I authorize/i));
+    fireEvent.click(screen.getByRole("button", { name: "Submit application" }));
+
+    expect(await screen.findByText("Please complete co-applicant required fields.")).toBeInTheDocument();
+    expect(screen.getByText("Personal information")).toBeInTheDocument();
+    expect(screen.getAllByLabelText("Email *")[1]).toHaveValue("");
+  });
+
+  it("clears the session draft only after successful submit", async () => {
+    renderPage();
+    await completeStepZero();
+    await completeResidentialBase();
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.change(await screen.findByLabelText("Employer *"), { target: { value: "North Wharf Ltd." } });
+    fireEvent.change(screen.getByLabelText("Job title *"), { target: { value: "Designer" } });
+    fireEvent.change(screen.getByLabelText("Gross income *"), { target: { value: "5200" } });
+    fireEvent.change(screen.getByLabelText("Length (months) *"), { target: { value: "24" } });
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.change(await screen.findByLabelText("Reference name *"), { target: { value: "Casey Lead" } });
+    fireEvent.change(screen.getByLabelText("Reference phone *"), { target: { value: "9025550100" } });
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.click(screen.getByLabelText(/I consent to a credit\/consumer report\./i));
+    fireEvent.click(screen.getByLabelText(/I consent to contacting references and past landlords\./i));
+    fireEvent.click(screen.getByLabelText(/I consent to data sharing for the tenant database\./i));
+    fireEvent.change(screen.getByLabelText("Applicant full name (typed) *"), { target: { value: "Jordan Lee" } });
+    fireEvent.change(screen.getByLabelText("Type your full name *"), { target: { value: "Jordan Lee" } });
+    fireEvent.click(screen.getByLabelText(/I agree this is my legal signature\./i));
+    fireEvent.click(screen.getByLabelText(/I confirm the information provided is accurate and I authorize/i));
+    fireEvent.click(screen.getByRole("button", { name: "Submit application" }));
+
+    await screen.findByText("Application submitted");
+    expect(window.sessionStorage.getItem("public-application-draft:token-123")).toBeNull();
   });
 });
