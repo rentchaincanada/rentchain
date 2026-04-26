@@ -149,6 +149,24 @@ describe("PublicApplyPage", () => {
     expect(completionPercent()).toBeGreaterThan(startingPercent);
   });
 
+  it("lets applicants continue past the employment step even when employment details are incomplete", async () => {
+    renderPage();
+    await completeStepZero();
+    await completeResidentialBase();
+
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+
+    expect(await screen.findByText("Employment & income")).toBeInTheDocument();
+    expect(
+      screen.getByText("You can continue for now, but employment details are required before final submission.")
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Next" })).toBeEnabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+
+    expect(await screen.findByText("References, loans, vehicles")).toBeInTheDocument();
+  });
+
   it("sends only safe partial progress metadata to the backend", async () => {
     renderPage();
     await screen.findByText("Before you continue");
@@ -194,7 +212,22 @@ describe("PublicApplyPage", () => {
     });
   });
 
-  it("requires co-applicant employment details before continuing", async () => {
+  it("keeps employment gaps in the missing-details guidance after moving past that step", async () => {
+    renderPage();
+    await completeStepZero();
+    await completeResidentialBase();
+
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(await screen.findByText("Employment & income")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+
+    expect(await screen.findByText("Applicant employer")).toBeInTheDocument();
+    expect(screen.getByText("Applicant job title")).toBeInTheDocument();
+    expect(screen.getByText("Applicant gross income")).toBeInTheDocument();
+    expect(screen.getByText("Applicant time at current job")).toBeInTheDocument();
+  });
+
+  it("lets applicants continue past employment while showing the co-applicant employment warning", async () => {
     renderPage();
     fireEvent.change(await screen.findByLabelText("First name *"), { target: { value: "Jordan" } });
     fireEvent.change(screen.getByLabelText("Last name *"), { target: { value: "Lee" } });
@@ -217,27 +250,40 @@ describe("PublicApplyPage", () => {
     fireEvent.change(screen.getByLabelText("Gross income *"), { target: { value: "5200" } });
     fireEvent.change(screen.getByLabelText("Length (months) *"), { target: { value: "24" } });
 
-    expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
+    expect(
+      screen.getByText("You can continue for now, but employment details for both applicants are required before final submission.")
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Next" })).toBeEnabled();
 
-    fireEvent.change(screen.getByLabelText("Employer"), {
-      target: { value: "Harbour Ops" },
-    });
-    fireEvent.change(screen.getByLabelText("Job title"), {
-      target: { value: "Analyst" },
-    });
-    fireEvent.change(screen.getByLabelText("Gross income"), {
-      target: { value: "4100" },
-    });
-    fireEvent.change(screen.getByLabelText("Length (months)"), {
-      target: { value: "18" },
-    });
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
 
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Next" })).toBeEnabled();
-    });
+    expect(await screen.findByText("References, loans, vehicles")).toBeInTheDocument();
   });
 
-  it("keeps the form visible when co-applicant fields are missing on submit validation", async () => {
+  it("blocks final submit if applicant employment details are still missing", async () => {
+    renderPage();
+    await completeStepZero();
+    await completeResidentialBase();
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(await screen.findByText("Employment & income")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.change(await screen.findByLabelText("Reference name *"), { target: { value: "Casey Lead" } });
+    fireEvent.change(screen.getByLabelText("Reference phone *"), { target: { value: "9025550100" } });
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.click(screen.getByLabelText(/I consent to a credit\/consumer report\./i));
+    fireEvent.click(screen.getByLabelText(/I consent to contacting references and past landlords\./i));
+    fireEvent.click(screen.getByLabelText(/I consent to data sharing for the tenant database\./i));
+    fireEvent.change(screen.getByLabelText("Applicant full name (typed) *"), { target: { value: "Jordan Lee" } });
+    fireEvent.change(screen.getByLabelText("Type your full name *"), { target: { value: "Jordan Lee" } });
+    fireEvent.click(screen.getByLabelText(/I agree this is my legal signature\./i));
+    fireEvent.click(screen.getByLabelText(/I confirm the information provided is accurate and I authorize/i));
+    fireEvent.click(screen.getByRole("button", { name: "Submit application" }));
+
+    expect(await screen.findByText("Employment details are required.")).toBeInTheDocument();
+    expect(screen.getByText("Employment & income")).toBeInTheDocument();
+  });
+
+  it("keeps co-applicant employment required before final submit when co-applicant is enabled", async () => {
     renderPage();
     fireEvent.change(await screen.findByLabelText("First name *"), { target: { value: "Jordan" } });
     fireEvent.change(screen.getByLabelText("Last name *"), { target: { value: "Lee" } });
@@ -246,17 +292,18 @@ describe("PublicApplyPage", () => {
     fireEvent.click(screen.getByRole("checkbox"));
     fireEvent.change(screen.getAllByLabelText("First name *")[1], { target: { value: "Taylor" } });
     fireEvent.change(screen.getAllByLabelText("Last name *")[1], { target: { value: "Lee" } });
+    fireEvent.change(screen.getAllByLabelText("Email *")[1], { target: { value: "taylor@example.com" } });
+    fireEvent.change(screen.getAllByLabelText("Date of birth *")[1], { target: { value: "1991-02-02" } });
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
+
     await completeResidentialBase();
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
-    fireEvent.change(await screen.findByLabelText("Employer *"), { target: { value: "North Wharf Ltd." } });
+    expect(await screen.findByText("Employment & income")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Employer *"), { target: { value: "North Wharf Ltd." } });
     fireEvent.change(screen.getByLabelText("Job title *"), { target: { value: "Designer" } });
     fireEvent.change(screen.getByLabelText("Gross income *"), { target: { value: "5200" } });
     fireEvent.change(screen.getByLabelText("Length (months) *"), { target: { value: "24" } });
-    fireEvent.change(screen.getByLabelText("Employer"), { target: { value: "Harbour Ops" } });
-    fireEvent.change(screen.getByLabelText("Job title"), { target: { value: "Analyst" } });
-    fireEvent.change(screen.getByLabelText("Gross income"), { target: { value: "4100" } });
-    fireEvent.change(screen.getByLabelText("Length (months)"), { target: { value: "18" } });
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
     fireEvent.change(await screen.findByLabelText("Reference name *"), { target: { value: "Casey Lead" } });
     fireEvent.change(screen.getByLabelText("Reference phone *"), { target: { value: "9025550100" } });
@@ -271,9 +318,8 @@ describe("PublicApplyPage", () => {
     fireEvent.click(screen.getByLabelText(/I confirm the information provided is accurate and I authorize/i));
     fireEvent.click(screen.getByRole("button", { name: "Submit application" }));
 
-    expect(await screen.findByText("Please complete co-applicant required fields.")).toBeInTheDocument();
-    expect(screen.getByText("Personal information")).toBeInTheDocument();
-    expect(screen.getAllByLabelText("Email *")[1]).toHaveValue("");
+    expect(await screen.findByText("Co-applicant employment details are required.")).toBeInTheDocument();
+    expect(screen.getByText("Employment & income")).toBeInTheDocument();
   });
 
   it("clears the session draft only after successful submit", async () => {
