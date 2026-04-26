@@ -115,6 +115,16 @@ describe("ApplicationReviewSummaryPage", () => {
           updatedAt: "2026-04-01T00:00:00.000Z",
         },
       },
+      trustContext: {
+        trustReadiness: "ready",
+        trustLabel: "Ready for review",
+        trustDescription: "Application information appears organized enough for review, with only limited follow-up signals still visible.",
+        positiveSignals: ["Application information is mostly complete."],
+        missingSignals: ["Employment or income details are still incomplete."],
+        cautionSignals: ["Screening is not complete yet in the current normalized status view."],
+        recommendedNextAction: "review_application",
+        decisionSupportLevel: "medium",
+      },
     } as any);
 
     renderPage();
@@ -171,6 +181,11 @@ describe("ApplicationReviewSummaryPage", () => {
     expect(await screen.findByText("Jane Applicant")).toBeInTheDocument();
     expect(await screen.findByText("Landlord Decision Panel")).toBeInTheDocument();
     expect(await screen.findByText("Identity verification completed")).toBeInTheDocument();
+    expect(await screen.findByText("Trust guidance")).toBeInTheDocument();
+    expect((await screen.findAllByText("Ready for review")).length).toBeGreaterThan(0);
+    expect(await screen.findByText("Application information is mostly complete.")).toBeInTheDocument();
+    expect(await screen.findByText("Employment or income details are still incomplete.")).toBeInTheDocument();
+    expect(await screen.findByText(/Recommended next action: Review application/i)).toBeInTheDocument();
   });
 
   it("shows ready for decision when follow-up is resolved and review signals are organized", async () => {

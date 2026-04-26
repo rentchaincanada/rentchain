@@ -1,5 +1,6 @@
 import { apiFetch } from "./apiFetch";
 import type { TimelineItem } from "./timelineApi";
+import type { LandlordTrustContext } from "./reviewSummaryApi";
 
 export type AnalyticsPeriod = "30d" | "90d" | "365d" | "month_to_date";
 
@@ -183,6 +184,7 @@ export type LandlordAgentDecision = {
   reminderPriority?: "low" | "medium" | "high" | null;
   reminderBlockedReason?: LandlordDecisionBlockedReason | null | string;
   reminderNextActionLabel?: string | null;
+  trustContext?: LandlordTrustContext | null;
 };
 
 export type AnalyticsDeltaValue = {

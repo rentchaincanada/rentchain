@@ -62,7 +62,11 @@ import {
   normalizeApplicationLinkPartialProgress,
   sendApplicationLinkReminder,
 } from "../services/applicationReminderService";
-import { loadLandlordSafeTenantIdentitySummary } from "../services/tenantPortal/tenantProfileService";
+import {
+  deriveLandlordSafeApplicationReusableFromApplication,
+  loadLandlordSafeTenantIdentitySummary,
+} from "../services/tenantPortal/tenantProfileService";
+import { deriveLandlordTrustContext } from "../lib/trust/deriveLandlordTrustContext";
 import {
   buildQuoteId,
   buildScreeningMonetizationPatch,
@@ -4100,12 +4104,19 @@ router.get("/rental-applications/:id/review-summary", async (req: any, res) => {
       getLatestApplicationRisk({ applicationId: id }),
       loadLandlordSafeTenantIdentitySummary({ applicationId: id, application: access.data }),
     ]);
+    const trustContext = deriveLandlordTrustContext({
+      tenantIdentitySummary,
+      completenessScore: summary?.derived?.completeness?.score ?? null,
+      completenessFlags: Array.isArray(summary?.derived?.flags) ? summary.derived.flags : [],
+      screeningStatus: summary?.screening?.status,
+      applicationReusable: deriveLandlordSafeApplicationReusableFromApplication(access.data),
+    });
     const decisionSummary = buildApplicationDecisionSummary({
       applicationId: id,
       application: access.data,
       reviewSummary: summary,
     });
-    return res.json({ ok: true, summary, decisionSummary, risk, tenantIdentitySummary });
+    return res.json({ ok: true, summary, decisionSummary, risk, tenantIdentitySummary, trustContext });
   } catch (err: any) {
     console.error("[review_summary] failed", err?.message || err);
     return res.status(500).json({

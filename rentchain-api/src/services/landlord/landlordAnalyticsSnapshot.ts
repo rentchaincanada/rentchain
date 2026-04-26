@@ -15,9 +15,15 @@ import { applyDecisionExecutionMappings } from "../../lib/analytics/deriveDecisi
 import { applyDecisionExecutionState } from "../../lib/analytics/deriveDecisionExecutionState";
 import { deriveLandlordAnalyticsSnapshot } from "../../lib/analytics/deriveLandlordAnalyticsSnapshot";
 import { deriveScreeningReconciliation } from "../../lib/reconciliation/deriveScreeningReconciliation";
+import { buildReviewSummary } from "../../lib/reviewSummary";
+import { deriveLandlordTrustContext } from "../../lib/trust/deriveLandlordTrustContext";
 import { emitLandlordDecisionAppearanceEvents } from "./landlordDecisionAppearanceEvents";
 import { loadLandlordDecisionStates, mergeLandlordDecisionStates } from "./landlordDecisionStates";
 import { deriveLandlordDecisionOutcomeAnalytics } from "./landlordDecisionOutcomeAnalytics";
+import {
+  deriveLandlordSafeApplicationReusableFromApplication,
+  loadLandlordSafeTenantIdentitySummary,
+} from "../tenantPortal/tenantProfileService";
 
 type LandlordAnalyticsParams = {
   landlordId: string;
@@ -284,11 +290,54 @@ export async function loadLandlordAnalyticsSnapshot(params: LandlordAnalyticsPar
     occurredAt,
   });
 
+  const decisionsWithTrustContext = await Promise.all(
+    decisions.map(async (decision) => {
+      if (decision.decisionType !== "start_screening_checkout" && decision.decisionType !== "improve_application_conversion") {
+        return decision;
+      }
+
+      let application: any | null = null;
+      if (decision.decisionType === "start_screening_checkout") {
+        const applicationId = String(decision.id || "").replace(/^start_screening_checkout:/, "").trim();
+        application =
+          derivedInput.applications.find((entry: any) => asAnalyticsString(entry?.id, 240) === applicationId) || null;
+      } else {
+        const eligibleApplications = (derivedInput.applications || []).filter((entry: any) => {
+          const status = asAnalyticsString(entry?.status, 80)?.toLowerCase() || "";
+          return ["submitted", "in_progress", "pending_review", "approved"].includes(status);
+        });
+        application = eligibleApplications.length === 1 ? eligibleApplications[0] : null;
+      }
+
+      if (!application || !asAnalyticsString(application?.id, 240)) {
+        return decision;
+      }
+
+      const applicationId = asAnalyticsString(application.id, 240)!;
+      const summary = buildReviewSummary(applicationId, application);
+      const tenantIdentitySummary = await loadLandlordSafeTenantIdentitySummary({
+        applicationId,
+        application,
+      });
+
+      return {
+        ...decision,
+        trustContext: deriveLandlordTrustContext({
+          tenantIdentitySummary,
+          completenessScore: summary?.derived?.completeness?.score ?? null,
+          completenessFlags: Array.isArray(summary?.derived?.flags) ? summary.derived.flags : [],
+          screeningStatus: summary?.screening?.status,
+          applicationReusable: deriveLandlordSafeApplicationReusableFromApplication(application),
+        }),
+      };
+    })
+  );
+
   return {
       ...snapshot,
       decisions: {
         ...snapshot.decisions,
-        items: decisions,
+        items: decisionsWithTrustContext,
       },
       decisionOutcomeAnalytics: deriveLandlordDecisionOutcomeAnalytics({
         landlordId,

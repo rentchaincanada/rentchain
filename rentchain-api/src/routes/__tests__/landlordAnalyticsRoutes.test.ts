@@ -461,6 +461,16 @@ describe("landlordAnalyticsRoutes", () => {
             href: "/analytics",
             state: "pending",
             reviewedAt: null,
+            trustContext: {
+              trustReadiness: "emerging",
+              trustLabel: "Emerging supporting signals",
+              trustDescription: "Some useful identity and application signals are available, but the file still benefits from a closer landlord review.",
+              positiveSignals: ["Application information is mostly complete."],
+              missingSignals: [],
+              cautionSignals: ["Supporting records are still limited in the current review package."],
+              recommendedNextAction: "review_application",
+              decisionSupportLevel: "medium",
+            },
           },
         ],
       },
@@ -588,6 +598,12 @@ describe("landlordAnalyticsRoutes", () => {
     expect(response.body.decisions.items[0].reminderTiming).toBe("blocked");
     expect(response.body.decisions.items[0].reminderTimingLabel).toBe("Blocked");
     expect(response.body.decisions.items[0].reminderBlockedReason).toBe("automation_disabled");
+    expect(response.body.decisions.items[0].trustContext).toEqual(
+      expect.objectContaining({
+        trustReadiness: "emerging",
+        recommendedNextAction: "review_application",
+      })
+    );
     expect(response.body.predictive.metrics[0].key).toBe("projected_vacancy_risk");
     expect(response.body.comparisons.deltas.summary.occupiedUnits.direction).toBe("better");
   });
