@@ -74,6 +74,7 @@ import {
   type TransUnionCredentialsPayload,
   type TransUnionIntegration,
 } from "@/api/integrationsApi";
+import { fetchLandlordApplicationFunnel, type LandlordApplicationFunnelAnalytics } from "@/api/landlordAnalyticsApi";
 import { TransUnionConnectionCard } from "@/components/integrations/TransUnionConnectionCard";
 import { GetTransUnionAccessModal } from "@/components/integrations/GetTransUnionAccessModal";
 import { ConnectTransUnionModal } from "@/components/integrations/ConnectTransUnionModal";
@@ -214,6 +215,14 @@ const formatScreeningEventLabel = (value: ScreeningEvent["type"]) => {
     default:
       return value.replace(/_/g, " ");
   }
+};
+
+const APPLICATION_SECTION_LABELS: Record<string, string> = {
+  personal_info: "Personal information",
+  residential_history: "Residential history",
+  employment: "Employment",
+  references_assets: "References and assets",
+  consent: "Consent",
 };
 
 const mapRecommendation = (
@@ -369,6 +378,9 @@ const ApplicationsPage: React.FC = () => {
   const [viewingError, setViewingError] = useState<string | null>(null);
   const [selectedViewingId, setSelectedViewingId] = useState<string | null>(null);
   const [sendingReminderId, setSendingReminderId] = useState<string | null>(null);
+  const [funnel, setFunnel] = useState<LandlordApplicationFunnelAnalytics | null>(null);
+  const [funnelLoading, setFunnelLoading] = useState(false);
+  const [funnelError, setFunnelError] = useState<string | null>(null);
   const screeningSectionRef = React.useRef<HTMLDivElement | null>(null);
   const uiLocale = getUiLocale();
   const screeningComingSoonText = screeningComingSoonLabel(uiLocale);
@@ -950,6 +962,32 @@ const ApplicationsPage: React.FC = () => {
       alive = false;
     };
   }, [propertyFilter, statusFilter, selectedId]);
+
+  useEffect(() => {
+    let alive = true;
+    const load = async () => {
+      setFunnelLoading(true);
+      setFunnelError(null);
+      try {
+        const data = await fetchLandlordApplicationFunnel({
+          propertyId: propertyFilter || null,
+        });
+        if (!alive) return;
+        setFunnel(data);
+      } catch (err: any) {
+        if (!alive) return;
+        setFunnel(null);
+        setFunnelError(err?.message || "Failed to load application funnel.");
+      } finally {
+        if (!alive) return;
+        setFunnelLoading(false);
+      }
+    };
+    void load();
+    return () => {
+      alive = false;
+    };
+  }, [propertyFilter]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -1564,6 +1602,26 @@ const ApplicationsPage: React.FC = () => {
     return null;
   }, []);
 
+  const funnelSummary = useMemo(() => {
+    if (!funnel) return null;
+    const inProgressCount = funnel.counts.inProgress + funnel.counts.readyToSubmit;
+    const conversionPercent = Math.round((funnel.conversion.completionRate || 0) * 100);
+    const topStep = funnel.dropOff.byCurrentStep[0]?.step || null;
+    const topMissing = funnel.dropOff.byMissingSection[0]?.section || null;
+    const dropOffHint = topStep
+      ? `Most applicants currently stop in ${APPLICATION_SECTION_LABELS[topStep] || topStep.replace(/_/g, " ")}.`
+      : topMissing
+      ? `Common unfinished section: ${APPLICATION_SECTION_LABELS[topMissing] || topMissing.replace(/_/g, " ")}.`
+      : null;
+    return {
+      started: funnel.counts.started,
+      inProgress: inProgressCount,
+      completed: funnel.counts.submitted,
+      conversionPercent,
+      dropOffHint,
+    };
+  }, [funnel]);
+
   const handleSendReminder = useCallback(
     async (application: RentalApplicationSummary) => {
       if (application.source !== "application_link") return;
@@ -2063,6 +2121,68 @@ const ApplicationsPage: React.FC = () => {
       </Card>
 
       <Card elevated className="rc-applications-grid">
+        <Card
+          style={{
+            marginBottom: spacing.md,
+            border: `1px solid ${colors.border}`,
+            display: "grid",
+            gap: spacing.sm,
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", gap: spacing.sm, alignItems: "center", flexWrap: "wrap" }}>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.08em", color: text.subtle }}>
+                Application Funnel
+              </div>
+              <div style={{ color: text.muted, marginTop: 4 }}>
+                Track how many applicants have started, progressed, and completed the application flow.
+              </div>
+            </div>
+            {funnelLoading ? <div style={{ color: text.subtle, fontSize: 12 }}>Loading…</div> : null}
+          </div>
+          {funnelError ? (
+            <div style={{ color: colors.danger, fontSize: 13 }}>{funnelError}</div>
+          ) : funnelSummary ? (
+            <>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+                  gap: spacing.sm,
+                }}
+              >
+                {[
+                  { label: "Started", value: funnelSummary.started },
+                  { label: "In progress", value: funnelSummary.inProgress },
+                  { label: "Completed", value: funnelSummary.completed },
+                  { label: "Conversion", value: `${funnelSummary.conversionPercent}%` },
+                ].map((item) => (
+                  <div
+                    key={item.label}
+                    style={{
+                      border: `1px solid ${colors.border}`,
+                      borderRadius: radius.md,
+                      padding: "10px 12px",
+                      background: colors.card,
+                      display: "grid",
+                      gap: 4,
+                    }}
+                  >
+                    <div style={{ fontSize: 12, color: text.subtle, fontWeight: 700 }}>{item.label}</div>
+                    <div style={{ fontSize: 20, color: text.primary, fontWeight: 800 }}>{item.value}</div>
+                  </div>
+                ))}
+              </div>
+              {funnelSummary.dropOffHint ? (
+                <div style={{ color: text.muted, fontSize: 13 }}>{funnelSummary.dropOffHint}</div>
+              ) : (
+                <div style={{ color: text.subtle, fontSize: 13 }}>No meaningful drop-off pattern yet.</div>
+              )}
+            </>
+          ) : (
+            <div style={{ color: text.subtle, fontSize: 13 }}>No application funnel data yet.</div>
+          )}
+        </Card>
         <ResponsiveMasterDetail
           title={undefined}
           searchSlot={
