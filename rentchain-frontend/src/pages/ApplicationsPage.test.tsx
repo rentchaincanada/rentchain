@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   fetchProperties: vi.fn(),
   fetchRentalApplications: vi.fn(),
   fetchRentalApplication: vi.fn(),
+  sendApplicationLinkReminder: vi.fn(),
   fetchApplicationDecisionSummary: vi.fn(),
   evaluateApplicationRiskSnapshot: vi.fn(),
   submitRentalApplicationDecisionAction: vi.fn(),
@@ -30,6 +31,7 @@ vi.mock("../api/propertiesApi", () => ({
 vi.mock("@/api/rentalApplicationsApi", () => ({
   fetchRentalApplications: mocks.fetchRentalApplications,
   fetchRentalApplication: mocks.fetchRentalApplication,
+  sendApplicationLinkReminder: mocks.sendApplicationLinkReminder,
   fetchApplicationDecisionSummary: mocks.fetchApplicationDecisionSummary,
   evaluateApplicationRiskSnapshot: mocks.evaluateApplicationRiskSnapshot,
   submitRentalApplicationDecisionAction: mocks.submitRentalApplicationDecisionAction,
@@ -294,6 +296,23 @@ describe("ApplicationsPage", () => {
       landlordNote: null,
     });
     mocks.fetchApplicationDecisionSummary.mockResolvedValue(null);
+    mocks.sendApplicationLinkReminder.mockResolvedValue({
+      sentAt: 1_710_000_100_000,
+      partialProgress: {
+        status: "in_progress",
+        completionPercent: 62,
+        currentStep: "employment",
+        completedSections: ["personal_info", "residential_history"],
+        missingSections: ["employment", "references_assets", "consent"],
+        hasCoApplicant: false,
+        viewingChoice: "already_viewed",
+        startedAt: 1_709_999_000_000,
+        lastActivityAt: 1_710_000_000_000,
+        submittedAt: null,
+        reminderEligibleAt: 1_710_086_400_000,
+        reminderSentAt: 1_710_000_100_000,
+      },
+    });
     mocks.submitRentalApplicationDecisionAction.mockReset();
     mocks.fetchScreeningQuote.mockResolvedValue({ ok: false, detail: "Screening not eligible." });
     mocks.fetchScreeningResult.mockResolvedValue({ ok: false });
@@ -549,5 +568,145 @@ describe("ApplicationsPage", () => {
     fireEvent.click(screen.getByText("In-progress applicant"));
 
     expect(mocks.fetchRentalApplication).not.toHaveBeenCalled();
+  });
+
+  it("shows Send reminder for eligible in-progress rows and updates the row after success", async () => {
+    mocks.fetchRentalApplications.mockResolvedValue([
+      {
+        id: "link-1",
+        source: "application_link",
+        applicantName: "In-progress applicant",
+        email: null,
+        propertyId: "prop-1",
+        unitId: "unit-1",
+        status: "IN_PROGRESS",
+        submittedAt: null,
+        lastActivityAt: 1_710_000_000_000,
+        completionPercent: 62,
+        partialProgress: {
+          status: "in_progress",
+          completionPercent: 62,
+          currentStep: "employment",
+          completedSections: ["personal_info", "residential_history"],
+          missingSections: ["employment", "references_assets", "consent"],
+          hasCoApplicant: false,
+          viewingChoice: "already_viewed",
+          startedAt: 1_709_999_000_000,
+          lastActivityAt: 1_710_000_000_000,
+          submittedAt: null,
+          reminderEligibleAt: 1_710_086_400_000,
+          reminderSentAt: null,
+        },
+      },
+    ]);
+
+    render(
+      <MemoryRouter>
+        <ApplicationsPage />
+      </MemoryRouter>
+    );
+
+    const button = await screen.findByRole("button", { name: "Send reminder" });
+    fireEvent.click(button);
+
+    await waitFor(() => {
+      expect(mocks.sendApplicationLinkReminder).toHaveBeenCalledWith("link-1");
+    });
+    expect(mocks.showToast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: "Reminder sent",
+        variant: "success",
+      })
+    );
+    expect(await screen.findByText(/Reminder sent/i)).toBeInTheDocument();
+  });
+
+  it("hides the reminder button once a reminder has already been sent", async () => {
+    mocks.fetchRentalApplications.mockResolvedValue([
+      {
+        id: "link-1",
+        source: "application_link",
+        applicantName: "In-progress applicant",
+        email: null,
+        propertyId: "prop-1",
+        unitId: "unit-1",
+        status: "IN_PROGRESS",
+        submittedAt: null,
+        lastActivityAt: 1_710_000_000_000,
+        completionPercent: 62,
+        partialProgress: {
+          status: "in_progress",
+          completionPercent: 62,
+          currentStep: "employment",
+          completedSections: ["personal_info", "residential_history"],
+          missingSections: ["employment", "references_assets", "consent"],
+          hasCoApplicant: false,
+          viewingChoice: "already_viewed",
+          startedAt: 1_709_999_000_000,
+          lastActivityAt: 1_710_000_000_000,
+          submittedAt: null,
+          reminderEligibleAt: 1_710_086_400_000,
+          reminderSentAt: 1_710_000_100_000,
+        },
+      },
+    ]);
+
+    render(
+      <MemoryRouter>
+        <ApplicationsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Reminder sent/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Send reminder" })).not.toBeInTheDocument();
+  });
+
+  it("shows a safe error toast when sending a reminder fails", async () => {
+    mocks.fetchRentalApplications.mockResolvedValue([
+      {
+        id: "link-1",
+        source: "application_link",
+        applicantName: "In-progress applicant",
+        email: null,
+        propertyId: "prop-1",
+        unitId: "unit-1",
+        status: "IN_PROGRESS",
+        submittedAt: null,
+        lastActivityAt: 1_710_000_000_000,
+        completionPercent: 62,
+        partialProgress: {
+          status: "in_progress",
+          completionPercent: 62,
+          currentStep: "employment",
+          completedSections: ["personal_info", "residential_history"],
+          missingSections: ["employment", "references_assets", "consent"],
+          hasCoApplicant: false,
+          viewingChoice: "already_viewed",
+          startedAt: 1_709_999_000_000,
+          lastActivityAt: 1_710_000_000_000,
+          submittedAt: null,
+          reminderEligibleAt: 1_710_086_400_000,
+          reminderSentAt: null,
+        },
+      },
+    ]);
+    mocks.sendApplicationLinkReminder.mockRejectedValueOnce(new Error("Reminder could not be sent"));
+
+    render(
+      <MemoryRouter>
+        <ApplicationsPage />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Send reminder" }));
+
+    await waitFor(() => {
+      expect(mocks.showToast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: "Reminder could not be sent",
+          variant: "error",
+        })
+      );
+    });
   });
 });

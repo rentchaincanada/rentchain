@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 type StoredDoc = { id: string; data: any };
 
-const { dbMock, resetDb, upsertDoc, sendEmailMock, recordRiskDecisionAuditMock } = vi.hoisted(() => {
+const { dbMock, resetDb, upsertDoc, sendEmailMock, buildEmailHtmlMock, buildEmailTextMock, recordRiskDecisionAuditMock } = vi.hoisted(() => {
   const collections = new Map<string, Map<string, StoredDoc>>();
   let autoId = 0;
 
@@ -79,6 +79,8 @@ const { dbMock, resetDb, upsertDoc, sendEmailMock, recordRiskDecisionAuditMock }
       ensureCollection(collectionName).set(id, { id, data });
     },
     sendEmailMock: vi.fn(async () => undefined),
+    buildEmailHtmlMock: vi.fn(() => "<p>email</p>"),
+    buildEmailTextMock: vi.fn(() => "email"),
     recordRiskDecisionAuditMock: vi.fn(async (payload: any) => ({
       id: "audit-1",
       createdAt: "2026-04-01T00:00:00.000Z",
@@ -233,8 +235,8 @@ vi.mock("../../services/riskAgent/riskAgentService", () => ({
 }));
 
 vi.mock("../../email/templates/baseEmailTemplate", () => ({
-  buildEmailHtml: vi.fn(() => "<p>email</p>"),
-  buildEmailText: vi.fn(() => "email"),
+  buildEmailHtml: buildEmailHtmlMock,
+  buildEmailText: buildEmailTextMock,
 }));
 
 vi.mock("../../services/emailService", () => ({
@@ -296,6 +298,10 @@ async function createRouter() {
 describe("rentalApplications decision actions", () => {
   beforeEach(() => {
     resetDb();
+    buildEmailHtmlMock.mockReset();
+    buildEmailHtmlMock.mockReturnValue("<p>email</p>");
+    buildEmailTextMock.mockReset();
+    buildEmailTextMock.mockReturnValue("email");
     process.env.EMAIL_FROM = "noreply@rentchain.test";
     process.env.PUBLIC_APP_URL = "https://www.rentchain.test";
     upsertDoc("rentalApplications", "app-1", {
@@ -406,6 +412,263 @@ describe("rentalApplications decision actions", () => {
         subject: expect.stringMatching(/update/i),
       })
     );
+  });
+
+  it("sends a one-time reminder for an eligible in-progress application link", async () => {
+    upsertDoc("applicationLinks", "link-42", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitId: "unit-9",
+      applicantEmail: "applicant@example.com",
+      applicantName: null,
+      createdAt: 1700000000000,
+      expiresAt: 4102444800000,
+      status: "ACTIVE",
+      tokenHash: "old-hash",
+      partialProgress: {
+        status: "in_progress",
+        completionPercent: 62,
+        currentStep: "employment",
+        completedSections: ["personal_info", "residential_history"],
+        missingSections: ["employment", "references_assets", "consent"],
+        hasCoApplicant: false,
+        viewingChoice: "already_viewed",
+        startedAt: 1700000000000,
+        lastActivityAt: 1700003600000,
+        submittedAt: null,
+        reminderEligibleAt: 1700000000000,
+        reminderSentAt: null,
+      },
+    });
+    upsertDoc("properties", "prop-1", {
+      id: "prop-1",
+      name: "Harbour View",
+    });
+    upsertDoc("units", "unit-9", {
+      id: "unit-9",
+      unitNumber: "9",
+    });
+
+    const router = await createRouter();
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/rental-applications/in-progress/link-42/send-reminder",
+      headers: { authorization: "Bearer landlord" },
+      body: {},
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.ok).toBe(true);
+    expect(sendEmailMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: "applicant@example.com",
+        subject: "Finish your rental application",
+      })
+    );
+    expect(buildEmailTextMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        bullets: expect.arrayContaining([
+          "Missing section: Employment",
+          "Missing section: References and assets",
+          "Missing section: Consent",
+        ]),
+      })
+    );
+    expect(buildEmailTextMock).toHaveBeenCalledWith(
+      expect.not.objectContaining({
+        intro: expect.stringMatching(/income|dob|address|reference/i),
+      })
+    );
+
+    const stored = await dbMock.collection("applicationLinks").doc("link-42").get();
+    const storedData = stored.data();
+    expect(storedData?.partialProgress?.reminderSentAt).toEqual(expect.any(Number));
+    expect(storedData?.tokenHash).not.toBe("old-hash");
+  });
+
+  it("forbids reminder sends for links not owned by the landlord", async () => {
+    upsertDoc("applicationLinks", "link-42", {
+      landlordId: "other-landlord",
+      propertyId: "prop-1",
+      applicantEmail: "applicant@example.com",
+      expiresAt: 4102444800000,
+      status: "ACTIVE",
+      partialProgress: {
+        status: "in_progress",
+        completionPercent: 62,
+        currentStep: "employment",
+        completedSections: [],
+        missingSections: ["employment"],
+        hasCoApplicant: false,
+        viewingChoice: "already_viewed",
+        startedAt: 1700000000000,
+        lastActivityAt: 1700003600000,
+        submittedAt: null,
+        reminderEligibleAt: 1700000000000,
+        reminderSentAt: null,
+      },
+    });
+
+    const router = await createRouter();
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/rental-applications/in-progress/link-42/send-reminder",
+      headers: { authorization: "Bearer landlord" },
+      body: {},
+    });
+
+    expect(res.status).toBe(403);
+    expect(res.body?.error).toBe("FORBIDDEN");
+    expect(sendEmailMock).not.toHaveBeenCalled();
+  });
+
+  it("blocks reminders for submitted in-progress links", async () => {
+    upsertDoc("applicationLinks", "link-42", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      applicantEmail: "applicant@example.com",
+      expiresAt: 4102444800000,
+      status: "ACTIVE",
+      partialProgress: {
+        status: "ready_to_submit",
+        completionPercent: 100,
+        currentStep: "consent",
+        completedSections: ["personal_info", "residential_history", "employment", "references_assets", "consent"],
+        missingSections: [],
+        hasCoApplicant: false,
+        viewingChoice: "already_viewed",
+        startedAt: 1700000000000,
+        lastActivityAt: 1700003600000,
+        submittedAt: 1700007200000,
+        reminderEligibleAt: 1700000000000,
+        reminderSentAt: null,
+      },
+    });
+
+    const router = await createRouter();
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/rental-applications/in-progress/link-42/send-reminder",
+      headers: { authorization: "Bearer landlord" },
+      body: {},
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body?.error).toBe("APPLICATION_REMINDER_NOT_ELIGIBLE");
+    expect(sendEmailMock).not.toHaveBeenCalled();
+  });
+
+  it("blocks duplicate reminders after reminderSentAt is set", async () => {
+    upsertDoc("applicationLinks", "link-42", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      applicantEmail: "applicant@example.com",
+      expiresAt: 4102444800000,
+      status: "ACTIVE",
+      partialProgress: {
+        status: "in_progress",
+        completionPercent: 62,
+        currentStep: "employment",
+        completedSections: [],
+        missingSections: ["employment"],
+        hasCoApplicant: false,
+        viewingChoice: "already_viewed",
+        startedAt: 1700000000000,
+        lastActivityAt: 1700003600000,
+        submittedAt: null,
+        reminderEligibleAt: 1700000000000,
+        reminderSentAt: 1700004000000,
+      },
+    });
+
+    const router = await createRouter();
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/rental-applications/in-progress/link-42/send-reminder",
+      headers: { authorization: "Bearer landlord" },
+      body: {},
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body?.error).toBe("APPLICATION_REMINDER_NOT_ELIGIBLE");
+    expect(sendEmailMock).not.toHaveBeenCalled();
+  });
+
+  it("blocks reminders when applicantEmail is missing", async () => {
+    upsertDoc("applicationLinks", "link-42", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      applicantEmail: null,
+      expiresAt: 4102444800000,
+      status: "ACTIVE",
+      partialProgress: {
+        status: "in_progress",
+        completionPercent: 62,
+        currentStep: "employment",
+        completedSections: [],
+        missingSections: ["employment"],
+        hasCoApplicant: false,
+        viewingChoice: "already_viewed",
+        startedAt: 1700000000000,
+        lastActivityAt: 1700003600000,
+        submittedAt: null,
+        reminderEligibleAt: 1700000000000,
+        reminderSentAt: null,
+      },
+    });
+
+    const router = await createRouter();
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/rental-applications/in-progress/link-42/send-reminder",
+      headers: { authorization: "Bearer landlord" },
+      body: {},
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body?.error).toBe("APPLICATION_REMINDER_NOT_ELIGIBLE");
+    expect(sendEmailMock).not.toHaveBeenCalled();
+  });
+
+  it("does not mark reminderSentAt when reminder email delivery fails", async () => {
+    sendEmailMock.mockRejectedValueOnce(new Error("mail_failed"));
+    upsertDoc("applicationLinks", "link-42", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      applicantEmail: "applicant@example.com",
+      expiresAt: 4102444800000,
+      status: "ACTIVE",
+      tokenHash: "old-hash",
+      partialProgress: {
+        status: "in_progress",
+        completionPercent: 62,
+        currentStep: "employment",
+        completedSections: [],
+        missingSections: ["employment"],
+        hasCoApplicant: false,
+        viewingChoice: "already_viewed",
+        startedAt: 1700000000000,
+        lastActivityAt: 1700003600000,
+        submittedAt: null,
+        reminderEligibleAt: 1700000000000,
+        reminderSentAt: null,
+      },
+    });
+
+    const router = await createRouter();
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/rental-applications/in-progress/link-42/send-reminder",
+      headers: { authorization: "Bearer landlord" },
+      body: {},
+    });
+
+    expect(res.status).toBe(500);
+    expect(res.body?.error).toBe("APPLICATION_REMINDER_SEND_FAILED");
+    const stored = await dbMock.collection("applicationLinks").doc("link-42").get();
+    const storedData = stored.data();
+    expect(storedData?.partialProgress?.reminderSentAt).toBeNull();
+    expect(storedData?.tokenHash).toBe("old-hash");
   });
 
   it("includes safe in-progress application link summaries in the landlord list", async () => {

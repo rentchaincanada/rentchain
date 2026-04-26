@@ -9,6 +9,7 @@ import {
   fetchApplicationDecisionSummary,
   evaluateApplicationRiskSnapshot,
   submitRentalApplicationDecisionAction,
+  sendApplicationLinkReminder,
   updateRentalApplicationStatus,
   fetchScreeningQuote,
   createScreeningCheckout,
@@ -364,6 +365,7 @@ const ApplicationsPage: React.FC = () => {
   const [viewingActionLoading, setViewingActionLoading] = useState(false);
   const [viewingError, setViewingError] = useState<string | null>(null);
   const [selectedViewingId, setSelectedViewingId] = useState<string | null>(null);
+  const [sendingReminderId, setSendingReminderId] = useState<string | null>(null);
   const screeningSectionRef = React.useRef<HTMLDivElement | null>(null);
   const uiLocale = getUiLocale();
   const screeningComingSoonText = screeningComingSoonLabel(uiLocale);
@@ -1493,6 +1495,54 @@ const ApplicationsPage: React.FC = () => {
     }
   };
 
+  const canSendPartialReminder = useCallback((application: RentalApplicationSummary) => {
+    if (application.source !== "application_link") return false;
+    const partialProgress = application.partialProgress;
+    if (!partialProgress) return false;
+    if (partialProgress.reminderSentAt) return false;
+    if (partialProgress.submittedAt) return false;
+    if (
+      partialProgress.status !== "started" &&
+      partialProgress.status !== "in_progress" &&
+      partialProgress.status !== "ready_to_submit"
+    ) {
+      return false;
+    }
+    return (
+      typeof partialProgress.reminderEligibleAt === "number" &&
+      partialProgress.reminderEligibleAt <= Date.now()
+    );
+  }, []);
+
+  const handleSendReminder = useCallback(
+    async (application: RentalApplicationSummary) => {
+      if (application.source !== "application_link") return;
+      setSendingReminderId(application.id);
+      try {
+        const res = await sendApplicationLinkReminder(application.id);
+        setApplications((prev) =>
+          prev.map((entry) =>
+            entry.id === application.id
+              ? {
+                  ...entry,
+                  partialProgress: res.partialProgress || entry.partialProgress || null,
+                }
+              : entry
+          )
+        );
+        showToast({ message: "Reminder sent", variant: "success" });
+      } catch (err: any) {
+        showToast({
+          message: err?.message || "Unable to send reminder.",
+          variant: "error",
+        });
+      } finally {
+        setSendingReminderId(null);
+      }
+    },
+    [showToast]
+  );
+
   const runScreeningRequest = async () => {
     if (!detail) return;
     if (!SCREENING_ENABLED) {
@@ -2110,6 +2160,34 @@ const ApplicationsPage: React.FC = () => {
                             <div style={{ color: text.subtle, fontSize: 12 }}>
                               Partial application only. Full application details appear after submission.
                             </div>
+                            {app.partialProgress?.reminderSentAt ? (
+                              <div style={{ color: text.subtle, fontSize: 12 }}>
+                                Reminder sent {new Date(app.partialProgress.reminderSentAt).toLocaleString()}
+                              </div>
+                            ) : canSendPartialReminder(app) ? (
+                              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    void handleSendReminder(app);
+                                  }}
+                                  style={{
+                                    padding: "6px 10px",
+                                    borderRadius: 999,
+                                    border: `1px solid ${colors.border}`,
+                                    background: colors.accentSoft,
+                                    color: text.primary,
+                                    fontSize: 12,
+                                    fontWeight: 700,
+                                    cursor: sendingReminderId === app.id ? "wait" : "pointer",
+                                  }}
+                                  disabled={sendingReminderId === app.id}
+                                >
+                                  {sendingReminderId === app.id ? "Sending…" : "Send reminder"}
+                                </button>
+                              </div>
+                            ) : null}
                           </>
                         ) : (
                           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>

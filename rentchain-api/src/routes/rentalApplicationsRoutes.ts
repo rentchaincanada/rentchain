@@ -393,6 +393,78 @@ type RentalApplicationListItem = {
   partialProgress: ReturnType<typeof normalizeApplicationLinkPartialProgress> | null;
 };
 
+const APPLICATION_LINK_REMINDER_STATUSES = new Set(["started", "in_progress", "ready_to_submit"]);
+const APPLICATION_LINK_SECTION_LABELS: Record<string, string> = {
+  personal_info: "Personal information",
+  residential_history: "Residential history",
+  employment: "Employment",
+  references_assets: "References and assets",
+  consent: "Consent",
+};
+
+function buildApplicationResumeUrl(token: string) {
+  const baseUrl = (process.env.PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "");
+  return `${baseUrl}/apply/${encodeURIComponent(token)}`;
+}
+
+function summarizeMissingSections(sections: string[]) {
+  return sections
+    .map((section) => APPLICATION_LINK_SECTION_LABELS[section] || section.replace(/_/g, " "))
+    .filter(Boolean);
+}
+
+function getApplicationLinkReminderEligibility(link: any, now: number) {
+  const partialProgress = normalizeApplicationLinkPartialProgress(link?.partialProgress);
+  const expiresAt = typeof link?.expiresAt === "number" ? link.expiresAt : Number(link?.expiresAt || 0) || null;
+  const applicantEmail = String(link?.applicantEmail || "").trim().toLowerCase();
+  const isEligible =
+    String(link?.status || "").trim().toUpperCase() === "ACTIVE" &&
+    (!expiresAt || expiresAt > now) &&
+    APPLICATION_LINK_REMINDER_STATUSES.has(partialProgress.status) &&
+    partialProgress.submittedAt == null &&
+    partialProgress.reminderEligibleAt != null &&
+    partialProgress.reminderEligibleAt <= now &&
+    partialProgress.reminderSentAt == null &&
+    Boolean(applicantEmail);
+
+  return {
+    isEligible,
+    partialProgress,
+    applicantEmail,
+  };
+}
+
+async function resolveApplicationLinkReminderContext(link: any) {
+  let propertyLabel: string | null = null;
+  let unitLabel: string | null = null;
+
+  if (link?.propertyId) {
+    try {
+      const propertySnap = await db.collection("properties").doc(String(link.propertyId)).get();
+      if (propertySnap.exists) {
+        const property = propertySnap.data() as any;
+        propertyLabel = property?.name || property?.addressLine1 || "Property";
+      }
+    } catch {
+      // ignore best-effort lookup failures
+    }
+  }
+
+  if (link?.unitId) {
+    try {
+      const unitSnap = await db.collection("units").doc(String(link.unitId)).get();
+      if (unitSnap.exists) {
+        const unit = unitSnap.data() as any;
+        unitLabel = unit?.unitNumber || unit?.name || unit?.label || null;
+      }
+    } catch {
+      // ignore best-effort lookup failures
+    }
+  }
+
+  return { propertyLabel, unitLabel };
+}
+
 function seededNumber(input: string) {
   const hash = createHash("sha256").update(input).digest("hex");
   return parseInt(hash.slice(0, 8), 16);
@@ -1175,6 +1247,121 @@ router.get("/rental-applications", async (req: any, res) => {
   } catch (err: any) {
     console.error("[rental-applications] list failed", err?.message || err);
     return res.status(500).json({ ok: false, error: "RENTAL_APPLICATIONS_LIST_FAILED" });
+  }
+});
+
+router.post("/rental-applications/in-progress/:id/send-reminder", async (req: any, res) => {
+  try {
+    const role = String(req.user?.role || "").toLowerCase();
+    if (role !== "landlord" && role !== "admin") {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const landlordId = req.user?.landlordId || req.user?.id || null;
+    if (!landlordId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+
+    const id = String(req.params?.id || "").trim();
+    if (!id) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+
+    const linkRef = db.collection("applicationLinks").doc(id);
+    const initialSnap = await linkRef.get();
+    if (!initialSnap.exists) {
+      return res.status(404).json({ ok: false, error: "APPLICATION_LINK_NOT_FOUND" });
+    }
+
+    const initialLink = { id: initialSnap.id, ...(initialSnap.data() as any) };
+    if (String(initialLink?.landlordId || "") !== String(landlordId)) {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const now = Date.now();
+    const initialEligibility = getApplicationLinkReminderEligibility(initialLink, now);
+    if (!initialEligibility.isEligible) {
+      return res.status(400).json({
+        ok: false,
+        error: "APPLICATION_REMINDER_NOT_ELIGIBLE",
+        message: "This in-progress application is not eligible for a reminder.",
+      });
+    }
+
+    const freshSnap = await linkRef.get();
+    if (!freshSnap.exists) {
+      return res.status(404).json({ ok: false, error: "APPLICATION_LINK_NOT_FOUND" });
+    }
+
+    const link = { id: freshSnap.id, ...(freshSnap.data() as any) };
+    if (String(link?.landlordId || "") !== String(landlordId)) {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const eligibility = getApplicationLinkReminderEligibility(link, now);
+    if (!eligibility.isEligible) {
+      return res.status(400).json({
+        ok: false,
+        error: "APPLICATION_REMINDER_NOT_ELIGIBLE",
+        message: "This in-progress application is not eligible for a reminder.",
+      });
+    }
+
+    const reminderToken = randomBytes(32).toString("hex");
+    const reminderTokenHash = createHash("sha256").update(reminderToken).digest("hex");
+    const resumeUrl = buildApplicationResumeUrl(reminderToken);
+    const { propertyLabel, unitLabel } = await resolveApplicationLinkReminderContext(link);
+    const completionPercent = eligibility.partialProgress.completionPercent;
+    const missingSections = summarizeMissingSections(eligibility.partialProgress.missingSections);
+    const propertySummary = [propertyLabel, unitLabel ? `Unit ${unitLabel}` : null].filter(Boolean).join(" - ");
+    const introParts = [
+      "You can continue your rental application using the secure link below.",
+      propertySummary ? `Property: ${propertySummary}.` : null,
+      completionPercent > 0 ? `You're ${completionPercent}% complete.` : null,
+    ].filter(Boolean);
+
+    await sendEmail({
+      to: eligibility.applicantEmail,
+      from: process.env.EMAIL_FROM || process.env.FROM_EMAIL,
+      replyTo: process.env.EMAIL_REPLY_TO || process.env.REPLY_TO_EMAIL || process.env.EMAIL_FROM || process.env.FROM_EMAIL,
+      subject: "Finish your rental application",
+      text: buildEmailText({
+        intro: `Hi,\n\n${introParts.join(" ")}`,
+        bullets: missingSections.length ? missingSections.map((section) => `Missing section: ${section}`) : undefined,
+        ctaText: "Continue where you left off",
+        ctaUrl: resumeUrl,
+        footerNote: "This reminder includes only safe progress details and never includes your draft answers.",
+      }),
+      html: buildEmailHtml({
+        title: "Finish your rental application",
+        intro: `Hi, ${introParts.join(" ")}`,
+        bullets: missingSections.length ? missingSections.map((section) => `Missing section: ${section}`) : undefined,
+        ctaText: "Continue where you left off",
+        ctaUrl: resumeUrl,
+        footerNote: "This reminder includes only safe progress details and never includes your draft answers.",
+        preheader: "Resume your rental application with your secure link.",
+      }),
+    });
+
+    const nextPartialProgress = {
+      ...eligibility.partialProgress,
+      reminderSentAt: now,
+    };
+    await linkRef.set(
+      {
+        tokenHash: reminderTokenHash,
+        partialProgress: nextPartialProgress,
+      },
+      { merge: true }
+    );
+
+    return res.json({
+      ok: true,
+      data: {
+        id: link.id,
+        sentAt: now,
+        partialProgress: nextPartialProgress,
+      },
+    });
+  } catch (err: any) {
+    console.error("[rental-applications] send reminder failed", err?.message || err);
+    return res.status(500).json({ ok: false, error: "APPLICATION_REMINDER_SEND_FAILED" });
   }
 });
 
