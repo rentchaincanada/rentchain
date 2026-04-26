@@ -190,6 +190,12 @@ describe("tenantPortalRoutes foundation", () => {
       endDate: "2027-01-31",
       monthlyRent: 1800,
       documentUrl: "https://example.com/lease.pdf",
+      tenantSignature: {
+        signedAt: "2026-02-01T10:00:00.000Z",
+        signatureMethod: "drawn",
+        signatureDisplayName: "Taylor Tenant",
+        drawnDataUrl: "data:image/png;base64,should-not-leak",
+      },
       confidentialNotes: "private",
     });
     ensureCollection("tenants").set("tenant-1", {
@@ -426,6 +432,15 @@ describe("tenantPortalRoutes foundation", () => {
     expect(res.body?.data?.application?.sin).toBeUndefined();
     expect(res.body?.data?.lease?.monthlyRent).toBe(1800);
     expect(res.body?.data?.lease?.confidentialNotes).toBeUndefined();
+    expect(res.body?.data?.lease?.signatureStatus).toBe("signed");
+    expect(res.body?.data?.lease?.signatureReadinessLabel).toBe("Lease signing complete");
+    expect(res.body?.data?.lease?.tenantSignature).toEqual({
+      signedAt: "2026-02-01T10:00:00.000Z",
+      signatureMethod: "drawn",
+      signatureDisplayName: "Taylor Tenant",
+    });
+    expect(res.body?.data?.lease?.tenantSignature?.drawnDataUrl).toBeUndefined();
+    expect(res.body?.data?.lease?.leasePdfStatus).toBe("available");
     expect(res.body?.data?.maintenance?.[0]?.title).toBe("Leaky tap");
     expect(res.body?.data?.maintenance?.[0]?.assignedContractorName).toBe("North Shore Plumbing");
     expect(res.body?.data?.maintenance?.[0]?.contractorStatus).toBe("assigned");
@@ -437,6 +452,35 @@ describe("tenantPortalRoutes foundation", () => {
 
     const eventDocs = Array.from(ensureCollection("event_log").values());
     expect(eventDocs.some((event) => event.event_type === "tenant_workspace_viewed")).toBe(true);
+  });
+
+  it("returns tenant-safe lease signature and PDF readiness metadata from /tenant/lease", async () => {
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/lease",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.data?.leaseId).toBe("lease-1");
+    expect(res.body?.data?.signatureStatus).toBe("signed");
+    expect(res.body?.data?.signatureReadinessDescription).toMatch(/current signing stage as complete/i);
+    expect(res.body?.data?.tenantSignature).toEqual({
+      signedAt: "2026-02-01T10:00:00.000Z",
+      signatureMethod: "drawn",
+      signatureDisplayName: "Taylor Tenant",
+    });
+    expect(res.body?.data?.tenantSignature?.drawnDataUrl).toBeUndefined();
+    expect(res.body?.data?.leasePdfStatus).toBe("available");
+    expect(res.body?.lease?.tenantSignature?.drawnDataUrl).toBeUndefined();
   });
 
   it("returns a grouped tenant-safe application completion checklist", async () => {

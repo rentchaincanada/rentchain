@@ -552,6 +552,17 @@ describe("tenant workspace frontend shell", () => {
       monthlyRent: 1800,
       status: "active",
       documentUrl: "https://example.com/lease.pdf",
+      signatureStatus: "signed",
+      signatureReadinessLabel: "Lease signing complete",
+      signatureReadinessDescription: "The visible lease record shows the current signing stage as complete.",
+      tenantSignature: {
+        signedAt: "2026-02-01T10:00:00.000Z",
+        signatureMethod: "drawn",
+        signatureDisplayName: "Taylor Tenant",
+      },
+      leasePdfStatus: "available",
+      leasePdfLabel: "Lease document available",
+      leasePdfDescription: "A tenant-safe lease document is available in this workspace.",
     });
 
     render(
@@ -562,6 +573,10 @@ describe("tenant workspace frontend shell", () => {
 
     expect(await screen.findByText(/^Lease Summary$/i)).toBeInTheDocument();
     expect(screen.getByText(/\$1,800/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Lease signing complete$/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Lease document available$/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Drawn signature$/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Taylor Tenant$/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Open lease document/i })).toBeInTheDocument();
   });
 

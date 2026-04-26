@@ -16,6 +16,22 @@ type TenantLeaseProjection = {
   monthlyRent: number | null;
   status: string | null;
   documentUrl: string | null;
+  signatureStatus:
+    | "not_started"
+    | "awaiting_tenant_signature"
+    | "awaiting_landlord_signature"
+    | "signed"
+    | "unavailable";
+  signatureReadinessLabel: string;
+  signatureReadinessDescription: string;
+  tenantSignature: {
+    signedAt: string | null;
+    signatureMethod: "typed" | "drawn" | null;
+    signatureDisplayName: string | null;
+  } | null;
+  leasePdfStatus: "available" | "pending" | "not_available";
+  leasePdfLabel: string;
+  leasePdfDescription: string;
 };
 
 type TenantApplicationProjection = {
@@ -157,6 +173,151 @@ function toIso(value: any): string | null {
   return millis ? new Date(millis).toISOString() : asString(value);
 }
 
+function normalizeStatus(value: unknown): string {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+}
+
+function firstIso(input: any, keys: string[]): string | null {
+  for (const key of keys) {
+    const value = toIso(input?.[key]);
+    if (value) return value;
+  }
+  return null;
+}
+
+function firstString(input: any, keys: string[]): string | null {
+  for (const key of keys) {
+    const value = asString(input?.[key]);
+    if (value) return value;
+  }
+  return null;
+}
+
+function normalizeSignatureMethod(value: unknown): "typed" | "drawn" | null {
+  const normalized = normalizeStatus(value);
+  if (normalized === "typed") return "typed";
+  if (normalized === "drawn") return "drawn";
+  return null;
+}
+
+export type TenantSafeLeaseReadinessMetadata = Pick<
+  TenantLeaseProjection,
+  | "signatureStatus"
+  | "signatureReadinessLabel"
+  | "signatureReadinessDescription"
+  | "tenantSignature"
+  | "leasePdfStatus"
+  | "leasePdfLabel"
+  | "leasePdfDescription"
+>;
+
+export function deriveTenantSafeLeaseReadinessMetadata(
+  data: any,
+  options?: { documentUrl?: string | null }
+): TenantSafeLeaseReadinessMetadata {
+  const documentUrl = asString(options?.documentUrl) ?? asString(data?.documentUrl) ?? asString(data?.approvedDocumentUrl) ?? asString(data?.documentRef);
+  const normalizedLeaseStatus = normalizeStatus(data?.status);
+  const tenantSignedAt =
+    firstIso(data?.tenantSignature, ["signedAt"]) ||
+    firstIso(data, ["tenantSignedAt", "tenantSignatureCompletedAt"]);
+  const tenantSignatureMethod =
+    normalizeSignatureMethod(data?.tenantSignature?.signatureMethod) ||
+    normalizeSignatureMethod(data?.tenantSignature?.type) ||
+    normalizeSignatureMethod(data?.tenantSignatureMethod);
+  const tenantSignatureDisplayName =
+    firstString(data?.tenantSignature, ["signatureDisplayName", "displayName", "typedName"]) ||
+    firstString(data, ["tenantSignatureDisplayName", "tenantSignedByName"]);
+
+  const tenantSignature =
+    tenantSignedAt || tenantSignatureMethod || tenantSignatureDisplayName
+      ? {
+          signedAt: tenantSignedAt,
+          signatureMethod: tenantSignatureMethod,
+          signatureDisplayName: tenantSignatureDisplayName,
+        }
+      : null;
+
+  const leasePdfStatus: TenantLeaseProjection["leasePdfStatus"] = documentUrl
+    ? "available"
+    : normalizedLeaseStatus
+    ? "pending"
+    : "not_available";
+
+  const leasePdfLabel =
+    leasePdfStatus === "available"
+      ? "Lease document available"
+      : leasePdfStatus === "pending"
+      ? "Lease document pending"
+      : "Lease document unavailable";
+  const leasePdfDescription =
+    leasePdfStatus === "available"
+      ? "A tenant-safe lease document is available in this workspace."
+      : leasePdfStatus === "pending"
+      ? "A lease record is visible, but a tenant-safe lease document is not available in this workspace yet."
+      : "No tenant-safe lease document is available in this workspace yet.";
+
+  const signatureStatus: TenantLeaseProjection["signatureStatus"] = (() => {
+    if (
+      tenantSignedAt ||
+      ["signed", "active", "current", "fully_signed", "completed"].includes(normalizedLeaseStatus)
+    ) {
+      return "signed";
+    }
+    if (
+      ["tenant_signed", "signed_by_tenant", "awaiting_landlord_signature", "pending_landlord_signature"].includes(
+        normalizedLeaseStatus
+      )
+    ) {
+      return "awaiting_landlord_signature";
+    }
+    if (
+      documentUrl &&
+      ["sent", "awaiting_tenant_signature", "pending_tenant_signature", "ready_for_signature", "signature_requested"].includes(
+        normalizedLeaseStatus
+      )
+    ) {
+      return "awaiting_tenant_signature";
+    }
+    if (normalizedLeaseStatus) return "not_started";
+    return "unavailable";
+  })();
+
+  const signatureReadinessLabel =
+    signatureStatus === "signed"
+      ? "Lease signing complete"
+      : signatureStatus === "awaiting_landlord_signature"
+      ? "Awaiting landlord signature"
+      : signatureStatus === "awaiting_tenant_signature"
+      ? "Awaiting tenant signature"
+      : signatureStatus === "not_started"
+      ? "Lease signing not started"
+      : "Lease signing unavailable";
+
+  const signatureReadinessDescription =
+    signatureStatus === "signed"
+      ? "The visible lease record shows the current signing stage as complete."
+      : signatureStatus === "awaiting_landlord_signature"
+      ? "Tenant review appears complete, and the next visible signing step belongs to the landlord."
+      : signatureStatus === "awaiting_tenant_signature"
+      ? "A tenant-safe lease document is available, and the next visible signing step belongs to the tenant."
+      : signatureStatus === "not_started"
+      ? "A lease record is visible, but a tenant-safe signing step is not surfaced here yet."
+      : "Lease signing details are not available in this workspace yet.";
+
+  return {
+    signatureStatus,
+    signatureReadinessLabel,
+    signatureReadinessDescription,
+    tenantSignature,
+    leasePdfStatus,
+    leasePdfLabel,
+    leasePdfDescription,
+  };
+}
+
 function projectFeatureList(input: any): string[] {
   const list = Array.isArray(input) ? input : Array.isArray(input?.selected) ? input.selected : [];
   return list
@@ -179,6 +340,9 @@ export function projectTenantProperty(recordId: string, data: any): TenantProper
 }
 
 export function projectTenantLease(recordId: string, data: any): TenantLeaseProjection {
+  const documentUrl =
+    asString(data?.documentUrl) || asString(data?.approvedDocumentUrl) || asString(data?.documentRef);
+
   return {
     leaseId: recordId,
     startDate: asString(data?.startDate) || asString(data?.leaseStart),
@@ -188,7 +352,8 @@ export function projectTenantLease(recordId: string, data: any): TenantLeaseProj
       asNumber(data?.rentAmount) ??
       (typeof data?.rentCents === "number" ? Math.round(data.rentCents) / 100 : null),
     status: asString(data?.status),
-    documentUrl: asString(data?.documentUrl) || asString(data?.approvedDocumentUrl) || asString(data?.documentRef),
+    documentUrl,
+    ...deriveTenantSafeLeaseReadinessMetadata(data, { documentUrl }),
   };
 }
 

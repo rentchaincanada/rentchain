@@ -103,4 +103,39 @@ describe("leaseSigningWorkspaceState", () => {
     expect(result.signingState).toBe("signed_or_completed");
     expect(result.timelineEvent?.title).toBe("Lease signing completed");
   });
+
+  it("prefers backend readiness metadata when tenant signature status is already surfaced", () => {
+    const result = buildLeaseSigningWorkspaceState({
+      audience: "landlord",
+      executionWorkspace: {
+        executionState: "ready_for_execution",
+        label: "Ready for execution",
+        summary: "Lease execution workspace",
+        explanation: "Ready.",
+        blockers: [],
+        nextSteps: ["Move into the next step."],
+        timelineEvent: {
+          title: "Ready for execution",
+          description: "Ready.",
+          actionRequired: false,
+        },
+      },
+      lease: {
+        leaseId: "lease-1",
+        startDate: "2026-05-01",
+        endDate: "2027-04-30",
+        monthlyRent: 1800,
+        status: "draft",
+        documentUrl: "https://example.com/lease.pdf",
+        signatureStatus: "awaiting_landlord_signature",
+        signatureReadinessLabel: "Awaiting landlord signature",
+        signatureReadinessDescription: "Tenant review appears complete, and the next visible signing step belongs to the landlord.",
+      },
+    });
+
+    expect(result.signingState).toBe("awaiting_landlord_signature");
+    expect(result.label).toBe("Awaiting landlord signature");
+    expect(result.explanation).toMatch(/next visible signing step belongs to the landlord/i);
+    expect(result.currentActor).toBe("landlord");
+  });
 });

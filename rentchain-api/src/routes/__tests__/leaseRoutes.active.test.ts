@@ -140,6 +140,12 @@ describe("leaseRoutes GET /active", () => {
       startDate: "2026-01-01",
       endDate: "2026-12-31",
       status: "active",
+      tenantSignature: {
+        signedAt: "2026-01-05T12:00:00.000Z",
+        signatureMethod: "typed",
+        signatureDisplayName: "Jane Tenant",
+        drawnDataUrl: "data:image/png;base64,should-not-leak",
+      },
       sourceDraftId: "draft-1",
       createdAt: 1,
       updatedAt: 2,
@@ -168,8 +174,17 @@ describe("leaseRoutes GET /active", () => {
         tenantName: "Jane Tenant",
         tenantEmail: "jane@example.com",
         documentUrl: "https://files.example.com/lease.pdf",
+        signatureStatus: "signed",
+        signatureReadinessLabel: "Lease signing complete",
+        tenantSignature: {
+          signedAt: "2026-01-05T12:00:00.000Z",
+          signatureMethod: "typed",
+          signatureDisplayName: "Jane Tenant",
+        },
+        leasePdfStatus: "available",
       })
     );
+    expect(res.body?.leases?.[0]?.tenantSignature?.drawnDataUrl).toBeUndefined();
   });
 
   it("excludes targeted synthetic cleanup leases from landlord active lists", async () => {

@@ -32,6 +32,7 @@ import {
   isTargetedHiddenLeaseId,
   isTargetedHiddenTenantId,
 } from "../lib/testDataVisibilityTargets";
+import { deriveTenantSafeLeaseReadinessMetadata } from "../services/tenantPortal/tenantProjectionService";
 
 const router = Router();
 const LEDGER_COLLECTION = "ledgerEntries";
@@ -297,6 +298,7 @@ async function enrichLeaseRow(raw: any) {
     tenantName,
     tenantEmail,
     documentUrl,
+    ...deriveTenantSafeLeaseReadinessMetadata(raw, { documentUrl }),
     archivedAt: raw?.archivedAt || null,
     archivedByUserId: raw?.archivedByUserId || null,
     isArchived: Boolean(raw?.archivedAt),
