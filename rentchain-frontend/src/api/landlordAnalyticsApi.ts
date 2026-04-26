@@ -352,6 +352,43 @@ export type LandlordAnalyticsSnapshot = {
   };
 };
 
+export type LandlordInboxItem = {
+  id: string;
+  type: "application" | "lease" | "screening";
+  subjectId: string;
+  applicationId: string | null;
+  leaseId: string | null;
+  title: string;
+  description: string;
+  priority: "low" | "medium" | "high";
+  status: "action_required" | "pending" | "completed";
+  nextAction:
+    | "review_application"
+    | "request_info"
+    | "review_documents"
+    | "review_screening"
+    | "prepare_lease"
+    | "no_action";
+  nextActionHref: string | null;
+  trustSummary: {
+    readiness: "limited" | "emerging" | "ready" | "strong";
+    verificationLevel: "none" | "partial" | "strong";
+  } | null;
+  credibilitySummary: {
+    completenessLevel: "low" | "medium" | "high";
+  } | null;
+  source: "review_summary" | "analytics_overlay" | "lease_execution";
+};
+
+export type LandlordInboxResponse = {
+  items: LandlordInboxItem[];
+  summary: {
+    actionRequired: number;
+    pending: number;
+    completed: number;
+  };
+};
+
 export type LandlordDecisionHistoryResponse = {
   ok: true;
   decisionId: string;
@@ -391,6 +428,18 @@ export async function fetchLandlordAnalyticsSnapshot(params?: {
   if (params?.propertyId) search.set("propertyId", params.propertyId);
   const suffix = search.toString() ? `?${search.toString()}` : "";
   return await apiFetch<LandlordAnalyticsSnapshot>(`/landlord/analytics${suffix}`);
+}
+
+export async function fetchLandlordInbox(params?: {
+  period?: AnalyticsPeriod;
+  propertyId?: string | null;
+}): Promise<LandlordInboxResponse> {
+  const search = new URLSearchParams();
+  if (params?.period) search.set("period", params.period);
+  if (params?.propertyId) search.set("propertyId", params.propertyId);
+  const suffix = search.toString() ? `?${search.toString()}` : "";
+  const response = await apiFetch<{ ok: true; data: LandlordInboxResponse }>(`/landlord/analytics/inbox${suffix}`);
+  return response.data;
 }
 
 export async function fetchLandlordApplicationFunnel(params?: {

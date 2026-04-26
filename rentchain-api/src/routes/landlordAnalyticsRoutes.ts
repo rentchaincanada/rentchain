@@ -25,6 +25,7 @@ import {
   shouldUseMockScreeningCheckoutOverride,
 } from "../services/screeningCheckoutExecutionService";
 import { loadLandlordAnalyticsSnapshot } from "../services/landlord/landlordAnalyticsSnapshot";
+import { deriveLandlordInbox } from "../services/landlordInbox/deriveLandlordInbox";
 import {
   saveExecutedLandlordDecisionState,
   saveFailedLandlordDecisionExecutionOutcome,
@@ -267,6 +268,35 @@ router.get("/landlord/analytics", requireAuth, requireLandlord, async (req: any,
   } catch (err: any) {
     console.error("[landlord-analytics] fetch failed", err?.message || err);
     return res.status(500).json({ ok: false, error: "LANDLORD_ANALYTICS_FETCH_FAILED" });
+  }
+});
+
+router.get("/landlord/analytics/inbox", requireAuth, requireLandlord, async (req: any, res) => {
+  try {
+    const landlordId = asString(req.user?.landlordId || req.user?.id, 240);
+    if (!landlordId) {
+      return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    }
+
+    const snapshot = await loadLandlordAnalyticsSnapshot({
+      landlordId,
+      period: req.query?.period,
+      propertyId: req.query?.propertyId,
+    });
+
+    const inbox = await deriveLandlordInbox({
+      landlordId,
+      propertyId: req.query?.propertyId,
+      analyticsDecisions: Array.isArray(snapshot?.decisions?.items) ? snapshot.decisions.items : [],
+    });
+
+    return res.json({
+      ok: true,
+      data: inbox,
+    });
+  } catch (err: any) {
+    console.error("[landlord_inbox] failed", err?.message || err);
+    return res.status(500).json({ ok: false, error: "LANDLORD_INBOX_FAILED" });
   }
 });
 

@@ -28,6 +28,7 @@ const loadLatestScreeningOrderForApplication = vi.fn();
 const executeScreeningCheckout = vi.fn();
 const isTransUnionReferralMode = vi.fn();
 const shouldUseMockScreeningCheckoutOverride = vi.fn();
+const deriveLandlordInbox = vi.fn();
 
 vi.mock("../../middleware/requireAuth", () => ({
   requireAuth: (req: any, res: any, next: any) => {
@@ -53,6 +54,10 @@ vi.mock("../../middleware/requireLandlord", () => ({
 
 vi.mock("../../services/landlord/landlordAnalyticsSnapshot", () => ({
   loadLandlordAnalyticsSnapshot,
+}));
+
+vi.mock("../../services/landlordInbox/deriveLandlordInbox", () => ({
+  deriveLandlordInbox,
 }));
 
 vi.mock("../../services/landlord/landlordApplicationFunnel", () => ({
@@ -576,6 +581,36 @@ describe("landlordAnalyticsRoutes", () => {
         medianHoursToCompleteAfterReminder: 6.5,
       },
     });
+    deriveLandlordInbox.mockResolvedValue({
+      items: [
+        {
+          id: "application:app-1",
+          type: "application",
+          subjectId: "app-1",
+          applicationId: "app-1",
+          leaseId: null,
+          title: "Application ready for review",
+          description: "Current application context is ready for landlord review.",
+          priority: "medium",
+          status: "action_required",
+          nextAction: "review_application",
+          nextActionHref: "/applications/app-1/review-summary",
+          trustSummary: {
+            readiness: "ready",
+            verificationLevel: "partial",
+          },
+          credibilitySummary: {
+            completenessLevel: "medium",
+          },
+          source: "review_summary",
+        },
+      ],
+      summary: {
+        actionRequired: 1,
+        pending: 0,
+        completed: 0,
+      },
+    });
   });
 
   it("returns landlord-scoped analytics without allowing scope override", async () => {
@@ -633,6 +668,43 @@ describe("landlordAnalyticsRoutes", () => {
         },
         conversion: {
           completionRate: 0.4286,
+        },
+      },
+    });
+  });
+
+  it("returns landlord inbox items without allowing scope override", async () => {
+    const router = (await import("../landlordAnalyticsRoutes")).default;
+    const response = await invokeRouter(router, {
+      method: "GET",
+      url: "/landlord/analytics/inbox?period=90d&propertyId=prop-123&landlordId=other-landlord",
+      user: { id: "landlord-1", role: "landlord" },
+    });
+
+    expect(response.status).toBe(200);
+    expect(loadLandlordAnalyticsSnapshot).toHaveBeenCalledWith({
+      landlordId: "landlord-1",
+      period: "90d",
+      propertyId: "prop-123",
+    });
+    expect(deriveLandlordInbox).toHaveBeenCalledWith({
+      landlordId: "landlord-1",
+      propertyId: "prop-123",
+      analyticsDecisions: expect.any(Array),
+    });
+    expect(response.body).toEqual({
+      ok: true,
+      data: {
+        items: [
+          expect.objectContaining({
+            id: "application:app-1",
+            nextAction: "review_application",
+          }),
+        ],
+        summary: {
+          actionRequired: 1,
+          pending: 0,
+          completed: 0,
         },
       },
     });
