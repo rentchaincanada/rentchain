@@ -602,6 +602,17 @@ export default function PublicApplyPage() {
     setVehicles((prev) => prev.map((h, i) => (i === index ? { ...h, ...patch } : h)));
   };
 
+  const employmentStepComplete =
+    Boolean((employment.applicant.employer || "").trim()) &&
+    Boolean((employment.applicant.jobTitle || "").trim()) &&
+    Number(employment.applicant.monthlyIncomeCents || 0) > 0 &&
+    employment.applicant.lengthMonths != null &&
+    (!coApplicantEnabled ||
+      (Boolean((employment.coApplicant?.employer || "").trim()) &&
+        Boolean((employment.coApplicant?.jobTitle || "").trim()) &&
+        Number(employment.coApplicant?.monthlyIncomeCents || 0) > 0 &&
+        employment.coApplicant?.lengthMonths != null));
+
   const canContinue = () => {
     if (step === 0) {
       const dobValue = (applicant.dob ?? "").trim();
@@ -625,19 +636,6 @@ export default function PublicApplyPage() {
           (Boolean(currentLeaseStatus.leaseEndDate?.trim()) && isValidLeaseDate(currentLeaseStatus.leaseEndDate || "")))
       );
     }
-    if (step === 2) {
-      return (
-        (employment.applicant.employer || "").trim() &&
-        (employment.applicant.jobTitle || "").trim() &&
-        Number(employment.applicant.monthlyIncomeCents || 0) > 0 &&
-        employment.applicant.lengthMonths != null &&
-        (!coApplicantEnabled ||
-          ((employment.coApplicant?.employer || "").trim() &&
-            (employment.coApplicant?.jobTitle || "").trim() &&
-            Number(employment.coApplicant?.monthlyIncomeCents || 0) > 0 &&
-            employment.coApplicant?.lengthMonths != null))
-      );
-    }
     if (step === 4) {
       const hasApplicantSig = (consent.applicantNameTyped || "").trim();
       const hasCoSig = !coApplicantEnabled || (consent.coApplicantNameTyped || "").trim();
@@ -654,6 +652,8 @@ export default function PublicApplyPage() {
     }
     return true;
   };
+
+  const canAdvanceToNextStep = () => (step === 2 ? true : canContinue());
 
   const missingFieldItems = useMemo<MissingFieldItem[]>(() => {
     const items: MissingFieldItem[] = [
@@ -802,16 +802,6 @@ export default function PublicApplyPage() {
       Boolean(currentRentAmount.trim()) &&
       (currentLeaseStatus.hasActiveLease !== true ||
         (Boolean(currentLeaseStatus.leaseEndDate?.trim()) && isValidLeaseDate(currentLeaseStatus.leaseEndDate || "")));
-    const employmentComplete =
-      Boolean((employment.applicant.employer || "").trim()) &&
-      Boolean((employment.applicant.jobTitle || "").trim()) &&
-      Number(employment.applicant.monthlyIncomeCents || 0) > 0 &&
-      employment.applicant.lengthMonths != null &&
-      (!coApplicantEnabled ||
-        (Boolean((employment.coApplicant?.employer || "").trim()) &&
-          Boolean((employment.coApplicant?.jobTitle || "").trim()) &&
-          Number(employment.coApplicant?.monthlyIncomeCents || 0) > 0 &&
-          employment.coApplicant?.lengthMonths != null));
     const referencesAssetsComplete = Boolean(workReferenceName.trim()) && Boolean(workReferencePhone.trim());
     const consentComplete =
       consent.creditConsent &&
@@ -825,7 +815,7 @@ export default function PublicApplyPage() {
     return [
       { key: progressStepKeys[0], complete: personalInfoComplete },
       { key: progressStepKeys[1], complete: residentialHistoryComplete },
-      { key: progressStepKeys[2], complete: employmentComplete },
+      { key: progressStepKeys[2], complete: employmentStepComplete },
       { key: progressStepKeys[3], complete: referencesAssetsComplete },
       { key: progressStepKeys[4], complete: consentComplete },
     ];
@@ -837,7 +827,7 @@ export default function PublicApplyPage() {
     consent,
     currentLeaseStatus,
     currentRentAmount,
-    employment,
+    employmentStepComplete,
     profileAddress,
     signatureTypedAck,
     signatureTypedName,
@@ -1697,6 +1687,22 @@ export default function PublicApplyPage() {
         {step === 2 ? (
           <>
             <div style={{ fontWeight: 700, fontSize: "1.05rem" }}>Employment & income</div>
+            {!employmentStepComplete ? (
+              <div
+                style={{
+                  border: "1px solid #fde68a",
+                  background: "#fffbeb",
+                  color: "#92400e",
+                  padding: 10,
+                  borderRadius: 8,
+                  fontSize: 14,
+                  lineHeight: 1.5,
+                }}
+              >
+                You can continue for now, but employment details
+                {coApplicantEnabled ? " for both applicants" : ""} are required before final submission.
+              </div>
+            ) : null}
             <div style={{ fontWeight: 600 }}>Applicant</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 8 }}>
               <label style={labelStyle}>
@@ -2148,7 +2154,7 @@ export default function PublicApplyPage() {
             Back
           </button>
           {step < steps.length - 1 ? (
-            <button type="button" onClick={() => setStep((s) => Math.min(steps.length - 1, s + 1))} disabled={!canContinue()}>
+            <button type="button" onClick={() => setStep((s) => Math.min(steps.length - 1, s + 1))} disabled={!canAdvanceToNextStep()}>
               Next
             </button>
           ) : (
