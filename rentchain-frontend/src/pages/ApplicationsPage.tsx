@@ -1169,7 +1169,11 @@ const ApplicationsPage: React.FC = () => {
     });
   }, [applications, search]);
 
-  const handleSelectApplication = (applicationId: string) => {
+  const handleSelectApplication = (application: RentalApplicationSummary) => {
+    if (application.source === "application_link") {
+      return;
+    }
+    const applicationId = application.id;
     setSelectedId(applicationId);
     navigate(`/applications?applicationId=${applicationId}`);
   };
@@ -1280,7 +1284,9 @@ const ApplicationsPage: React.FC = () => {
 
   const handleRowScreen = (applicationId: string) => {
     if (!SCREENING_ENABLED) return;
-    handleSelectApplication(applicationId);
+    const application = applications.find((entry) => entry.id === applicationId);
+    if (!application || application.source === "application_link") return;
+    handleSelectApplication(application);
     window.setTimeout(() => {
       screeningSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 150);
@@ -2046,67 +2052,93 @@ const ApplicationsPage: React.FC = () => {
                     </Card>
                   ) : null}
                 <div className="rc-applications-list-scroll">
-                  {filtered.map((app) => (
-                    <div
-                      key={app.id}
-                      role="button"
-                      tabIndex={0}
-                      className="rc-applications-list-item"
-                      aria-pressed={app.id === selectedId}
-                      onClick={() => handleSelectApplication(app.id)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          handleSelectApplication(app.id);
-                        }
-                      }}
-                      style={{
-                        textAlign: "left",
-                        border: `1px solid ${app.id === selectedId ? colors.accent : colors.border}`,
-                        background: app.id === selectedId ? "rgba(37,99,235,0.08)" : colors.card,
-                        borderRadius: radius.md,
-                        padding: "12px 12px",
-                        cursor: "pointer",
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: 4,
-                        minWidth: 0,
-                      }}
-                    >
-                      <div style={{ fontWeight: 700, color: text.primary, fontSize: 15, overflowWrap: "anywhere" }}>
-                        {app.applicantName || "Applicant"}
+                  {filtered.map((app) => {
+                    const isPartial = app.source === "application_link";
+                    return (
+                      <div
+                        key={app.id}
+                        role={isPartial ? undefined : "button"}
+                        tabIndex={isPartial ? undefined : 0}
+                        className="rc-applications-list-item"
+                        aria-pressed={app.id === selectedId}
+                        onClick={() => {
+                          if (!isPartial) handleSelectApplication(app);
+                        }}
+                        onKeyDown={(e) => {
+                          if (isPartial) return;
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            handleSelectApplication(app);
+                          }
+                        }}
+                        style={{
+                          textAlign: "left",
+                          border: `1px solid ${app.id === selectedId ? colors.accent : colors.border}`,
+                          background: isPartial
+                            ? "rgba(148,163,184,0.08)"
+                            : app.id === selectedId
+                            ? "rgba(37,99,235,0.08)"
+                            : colors.card,
+                          borderRadius: radius.md,
+                          padding: "12px 12px",
+                          cursor: isPartial ? "default" : "pointer",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: 4,
+                          minWidth: 0,
+                        }}
+                      >
+                        <div style={{ fontWeight: 700, color: text.primary, fontSize: 15, overflowWrap: "anywhere" }}>
+                          {app.applicantName || "Applicant"}
+                        </div>
+                        <div style={{ color: text.muted, fontSize: 12, overflowWrap: "anywhere" }}>
+                          {app.email || "No email"}
+                        </div>
+                        <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                          <Pill>{app.status}</Pill>
+                          {isPartial && typeof app.completionPercent === "number" ? (
+                            <span style={{ color: text.subtle, fontSize: 12 }}>{app.completionPercent}% complete</span>
+                          ) : null}
+                        </div>
+                        {isPartial ? (
+                          <>
+                            <div style={{ color: text.muted, fontSize: 12 }}>
+                              {app.lastActivityAt
+                                ? `Last activity ${new Date(app.lastActivityAt).toLocaleString()}`
+                                : "Draft progress has started but is not yet submitted."}
+                            </div>
+                            <div style={{ color: text.subtle, fontSize: 12 }}>
+                              Partial application only. Full application details appear after submission.
+                            </div>
+                          </>
+                        ) : (
+                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleRowScreen(app.id);
+                              }}
+                              style={{
+                                padding: "6px 10px",
+                                borderRadius: 999,
+                                border: `1px solid ${colors.border}`,
+                                background: colors.accentSoft,
+                                color: text.primary,
+                                fontSize: 12,
+                                fontWeight: 700,
+                                cursor: SCREENING_ENABLED ? "pointer" : "not-allowed",
+                                opacity: SCREENING_ENABLED ? 1 : 0.7,
+                              }}
+                              disabled={!SCREENING_ENABLED}
+                            >
+                              {SCREENING_ENABLED ? "Screen tenant" : screeningComingSoonText}
+                            </button>
+                          </div>
+                        )}
                       </div>
-                      <div style={{ color: text.muted, fontSize: 12, overflowWrap: "anywhere" }}>
-                        {app.email || "No email"}
-                      </div>
-                      <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-                        <Pill>{app.status}</Pill>
-                      </div>
-                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleRowScreen(app.id);
-                          }}
-                          style={{
-                            padding: "6px 10px",
-                            borderRadius: 999,
-                            border: `1px solid ${colors.border}`,
-                            background: colors.accentSoft,
-                            color: text.primary,
-                            fontSize: 12,
-                            fontWeight: 700,
-                            cursor: SCREENING_ENABLED ? "pointer" : "not-allowed",
-                            opacity: SCREENING_ENABLED ? 1 : 0.7,
-                          }}
-                          disabled={!SCREENING_ENABLED}
-                        >
-                          {SCREENING_ENABLED ? "Screen tenant" : screeningComingSoonText}
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
                 </div>
               )}
@@ -2119,13 +2151,14 @@ const ApplicationsPage: React.FC = () => {
                 onChange={(e) => {
                   const next = e.target.value;
                   if (!next) return;
-                  handleSelectApplication(next);
+                  const application = filtered.find((entry) => entry.id === next);
+                  if (application) handleSelectApplication(application);
                 }}
                 className="rc-full-width-mobile"
               >
                 <option value="">Select application</option>
                 {filtered.map((app) => (
-                  <option key={app.id} value={app.id}>
+                  <option key={app.id} value={app.id} disabled={app.source === "application_link"}>
                     {app.applicantName || "Applicant"}
                   </option>
                 ))}

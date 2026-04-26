@@ -14,6 +14,7 @@ export type { ApplicationDecisionSummary };
 
 export type RentalApplicationStatus =
   | "DRAFT"
+  | "IN_PROGRESS"
   | "SUBMITTED"
   | "IN_REVIEW"
   | "APPROVED"
@@ -21,17 +22,38 @@ export type RentalApplicationStatus =
   | "CONDITIONAL_COSIGNER"
   | "CONDITIONAL_DEPOSIT";
 
+export type RentalApplicationListSource = "rental_application" | "application_link";
+
+export type RentalApplicationPartialProgressSummary = {
+  status: "not_started" | "started" | "in_progress" | "ready_to_submit" | "submitted";
+  completionPercent: number;
+  currentStep: string | null;
+  completedSections: string[];
+  missingSections: string[];
+  hasCoApplicant: boolean;
+  viewingChoice: "already_viewed" | "request_viewing" | null;
+  startedAt: number | null;
+  lastActivityAt: number | null;
+  submittedAt: number | null;
+  reminderEligibleAt: number | null;
+  reminderSentAt: number | null;
+};
+
 export type RentalApplicationDecisionAction = "request_info" | "approve" | "reject";
 export type RequestInfoChecklistItem = "upload_id" | "phone_number" | "employer_contact" | "references";
 
 export type RentalApplicationSummary = {
   id: string;
+  source?: RentalApplicationListSource;
   applicantName: string;
   email: string | null;
   propertyId: string | null;
   unitId: string | null;
   status: RentalApplicationStatus;
   submittedAt: number | null;
+  lastActivityAt?: number | null;
+  completionPercent?: number | null;
+  partialProgress?: RentalApplicationPartialProgressSummary | null;
 };
 
 export type ScreeningPipelineStatus =

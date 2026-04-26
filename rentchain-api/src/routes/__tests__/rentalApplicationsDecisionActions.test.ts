@@ -35,15 +35,38 @@ const { dbMock, resetDb, upsertDoc, sendEmailMock, recordRiskDecisionAuditMock }
     };
   }
 
+  function buildQuery(collectionName: string, predicates: Array<{ field: string; value: any }> = []) {
+    return {
+      where: (field: string, _op: string, value: any) =>
+        buildQuery(collectionName, [...predicates, { field, value }]),
+      limit: (_count: number) => ({
+        get: async () => {
+          const docs = Array.from(ensureCollection(collectionName).values())
+            .filter((entry) => predicates.every((predicate) => entry.data?.[predicate.field] === predicate.value))
+            .map((entry) => ({
+              id: entry.id,
+              data: () => entry.data,
+            }));
+          return { docs, empty: docs.length === 0 };
+        },
+      }),
+      get: async () => {
+        const docs = Array.from(ensureCollection(collectionName).values())
+          .filter((entry) => predicates.every((predicate) => entry.data?.[predicate.field] === predicate.value))
+          .map((entry) => ({
+            id: entry.id,
+            data: () => entry.data,
+          }));
+        return { docs, empty: docs.length === 0 };
+      },
+    };
+  }
+
   return {
     dbMock: {
       collection: (name: string) => ({
         doc: (id?: string) => toDocRef(name, id || `auto_${++autoId}`),
-        where: (_field: string, _op: string, _value: any) => ({
-          limit: (_count: number) => ({
-            get: async () => ({ docs: [], empty: true }),
-          }),
-        }),
+        where: (field: string, op: string, value: any) => buildQuery(name).where(field, op, value),
       }),
     },
     resetDb: () => {
@@ -382,6 +405,57 @@ describe("rentalApplications decision actions", () => {
         to: "jamie@example.com",
         subject: expect.stringMatching(/update/i),
       })
+    );
+  });
+
+  it("includes safe in-progress application link summaries in the landlord list", async () => {
+    upsertDoc("applicationLinks", "link-42", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitId: "unit-9",
+      createdAt: 1700000000000,
+      status: "ACTIVE",
+      partialProgress: {
+        status: "in_progress",
+        completionPercent: 62,
+        currentStep: "employment",
+        completedSections: ["personal_info", "residential_history"],
+        missingSections: ["employment", "references_assets", "consent"],
+        hasCoApplicant: false,
+        viewingChoice: "already_viewed",
+        startedAt: 1700000000000,
+        lastActivityAt: 1700003600000,
+        submittedAt: null,
+        reminderEligibleAt: 1700086400000,
+        reminderSentAt: null,
+      },
+    });
+
+    const router = await createRouter();
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/rental-applications",
+      headers: { authorization: "Bearer landlord" },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.ok).toBe(true);
+    expect(res.body?.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "link-42",
+          source: "application_link",
+          applicantName: "In-progress applicant",
+          email: null,
+          status: "IN_PROGRESS",
+          completionPercent: 62,
+          lastActivityAt: 1700003600000,
+          partialProgress: expect.objectContaining({
+            status: "in_progress",
+            completedSections: ["personal_info", "residential_history"],
+          }),
+        }),
+      ])
     );
   });
 });
