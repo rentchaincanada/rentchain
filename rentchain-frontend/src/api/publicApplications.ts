@@ -10,6 +10,28 @@ export type PublicApplicationLinkData = {
   unitId: string | null;
   expiresAt: number | null;
   landlordBrandName?: string | null;
+  partialProgress?: PublicApplicationPartialProgress | null;
+};
+
+export type PublicApplicationPartialProgress = {
+  status: "not_started" | "started" | "in_progress" | "ready_to_submit" | "submitted";
+  completionPercent: number;
+  currentStep:
+    | "personal_info"
+    | "residential_history"
+    | "employment"
+    | "references_assets"
+    | "consent"
+    | null;
+  completedSections: string[];
+  missingSections: string[];
+  hasCoApplicant: boolean;
+  viewingChoice: "already_viewed" | "request_viewing" | null;
+  startedAt: number | null;
+  lastActivityAt: number | null;
+  submittedAt: number | null;
+  reminderEligibleAt: number | null;
+  reminderSentAt: number | null;
 };
 
 export async function fetchPublicApplicationLink(token: string): Promise<{
@@ -156,4 +178,28 @@ export async function submitPublicApplication(params: RentalApplicationPayload):
     throw new Error(res?.error || "Failed to submit application");
   }
   return { applicationId: res?.data?.applicationId };
+}
+
+export async function updatePublicApplicationProgress(
+  token: string,
+  partialProgress: Pick<
+    PublicApplicationPartialProgress,
+    | "status"
+    | "completionPercent"
+    | "currentStep"
+    | "completedSections"
+    | "missingSections"
+    | "hasCoApplicant"
+    | "viewingChoice"
+  >
+): Promise<{ partialProgress?: PublicApplicationPartialProgress | null }> {
+  const res: any = await apiFetch(`/public/application-links/${encodeURIComponent(token)}/progress`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ partialProgress }),
+  });
+  if (!res?.ok && res?.error) {
+    throw new Error(res.error || "Failed to update application progress");
+  }
+  return { partialProgress: (res?.data?.partialProgress as PublicApplicationPartialProgress) || null };
 }

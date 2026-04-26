@@ -1,6 +1,6 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ApplicationsPage from "./ApplicationsPage";
 
 const mocks = vi.hoisted(() => ({
@@ -234,6 +234,10 @@ vi.mock("../config/screening", () => ({
 vi.mock("@/lib/analytics", () => ({
   track: vi.fn(),
 }));
+
+afterEach(() => {
+  cleanup();
+});
 
 describe("ApplicationsPage", () => {
   beforeEach(() => {
@@ -498,5 +502,52 @@ describe("ApplicationsPage", () => {
         note: "Not a fit",
       });
     });
+  });
+
+  it("renders in-progress application link rows safely without opening submitted application detail", async () => {
+    mocks.fetchRentalApplications.mockResolvedValue([
+      {
+        id: "link-1",
+        source: "application_link",
+        applicantName: "In-progress applicant",
+        email: null,
+        propertyId: "prop-1",
+        unitId: "unit-1",
+        status: "IN_PROGRESS",
+        submittedAt: null,
+        lastActivityAt: 1_710_000_000_000,
+        completionPercent: 62,
+        partialProgress: {
+          status: "in_progress",
+          completionPercent: 62,
+          currentStep: "employment",
+          completedSections: ["personal_info", "residential_history"],
+          missingSections: ["employment", "references_assets", "consent"],
+          hasCoApplicant: false,
+          viewingChoice: "already_viewed",
+          startedAt: 1_709_999_000_000,
+          lastActivityAt: 1_710_000_000_000,
+          submittedAt: null,
+          reminderEligibleAt: 1_710_086_400_000,
+          reminderSentAt: null,
+        },
+      },
+    ]);
+
+    render(
+      <MemoryRouter>
+        <ApplicationsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("In-progress applicant")).toBeInTheDocument();
+    expect(screen.getByText("62% complete")).toBeInTheDocument();
+    expect(screen.getByText(/Partial application only/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Screen tenant" })).not.toBeInTheDocument();
+    mocks.fetchRentalApplication.mockClear();
+
+    fireEvent.click(screen.getByText("In-progress applicant"));
+
+    expect(mocks.fetchRentalApplication).not.toHaveBeenCalled();
   });
 });

@@ -344,6 +344,55 @@ function applicantName(app: any): string {
   return `${first} ${last}`.trim() || "Applicant";
 }
 
+function normalizeApplicationLinkPartialProgress(value: any) {
+  const statusRaw = String(value?.status || "").trim();
+  const currentStepRaw = String(value?.currentStep || "").trim();
+  const viewingChoiceRaw = String(value?.viewingChoice || "").trim();
+  const completionPercentRaw = Number(value?.completionPercent);
+  return {
+    status:
+      statusRaw === "started" ||
+      statusRaw === "in_progress" ||
+      statusRaw === "ready_to_submit" ||
+      statusRaw === "submitted" ||
+      statusRaw === "not_started"
+        ? statusRaw
+        : "not_started",
+    completionPercent: Number.isFinite(completionPercentRaw)
+      ? Math.min(100, Math.max(0, Math.round(completionPercentRaw)))
+      : 0,
+    currentStep: currentStepRaw || null,
+    completedSections: Array.isArray(value?.completedSections)
+      ? value.completedSections.map((entry: any) => String(entry || "").trim()).filter(Boolean)
+      : [],
+    missingSections: Array.isArray(value?.missingSections)
+      ? value.missingSections.map((entry: any) => String(entry || "").trim()).filter(Boolean)
+      : [],
+    hasCoApplicant: value?.hasCoApplicant === true,
+    viewingChoice:
+      viewingChoiceRaw === "already_viewed" || viewingChoiceRaw === "request_viewing" ? viewingChoiceRaw : null,
+    startedAt: typeof value?.startedAt === "number" ? value.startedAt : null,
+    lastActivityAt: typeof value?.lastActivityAt === "number" ? value.lastActivityAt : null,
+    submittedAt: typeof value?.submittedAt === "number" ? value.submittedAt : null,
+    reminderEligibleAt: typeof value?.reminderEligibleAt === "number" ? value.reminderEligibleAt : null,
+    reminderSentAt: typeof value?.reminderSentAt === "number" ? value.reminderSentAt : null,
+  };
+}
+
+type RentalApplicationListItem = {
+  id: string;
+  source: "rental_application" | "application_link";
+  applicantName: string;
+  email: string | null;
+  propertyId: string | null;
+  unitId: string | null;
+  status: string;
+  submittedAt: number | null;
+  lastActivityAt: number | null;
+  completionPercent: number;
+  partialProgress: ReturnType<typeof normalizeApplicationLinkPartialProgress> | null;
+};
+
 function seededNumber(input: string) {
   const hash = createHash("sha256").update(input).digest("hex");
   return parseInt(hash.slice(0, 8), 16);
@@ -1054,20 +1103,74 @@ router.get("/rental-applications", async (req: any, res) => {
         .get();
     }
 
-    const items = snap.docs.map((doc) => {
+    const items: RentalApplicationListItem[] = snap.docs.map((doc) => {
       const data = doc.data() as any;
       return {
         id: doc.id,
+        source: "rental_application" as const,
         applicantName: applicantName(data?.applicant),
         email: data?.applicant?.email || null,
         propertyId: data?.propertyId || null,
         unitId: data?.unitId || null,
         status: data?.status || "SUBMITTED",
         submittedAt: data?.submittedAt || null,
+        lastActivityAt: data?.submittedAt || data?.updatedAt || null,
+        completionPercent: 100,
+        partialProgress: null,
       };
     });
 
-    items.sort((a, b) => Number(b.submittedAt || 0) - Number(a.submittedAt || 0));
+    const shouldIncludePartialLinks = !status || status === "IN_PROGRESS";
+    if (shouldIncludePartialLinks) {
+      let linksQuery: FirebaseFirestore.Query = db
+        .collection("applicationLinks")
+        .where("landlordId", "==", landlordId);
+      if (propertyId) {
+        linksQuery = linksQuery.where("propertyId", "==", propertyId);
+      }
+
+      let linksSnap: FirebaseFirestore.QuerySnapshot;
+      try {
+        linksSnap = await linksQuery.limit(200).get();
+      } catch (_err) {
+        linksSnap = await db
+          .collection("applicationLinks")
+          .where("landlordId", "==", landlordId)
+          .limit(200)
+          .get();
+      }
+
+      const partialItems = linksSnap.docs
+        .map((doc) => {
+          const data = doc.data() as any;
+          const partialProgress = normalizeApplicationLinkPartialProgress(data?.partialProgress);
+          return {
+            id: doc.id,
+            source: "application_link" as const,
+            applicantName: "In-progress applicant",
+            email: null,
+            propertyId: data?.propertyId || null,
+            unitId: data?.unitId || null,
+            status: "IN_PROGRESS" as const,
+            submittedAt: null,
+            lastActivityAt: partialProgress.lastActivityAt || partialProgress.startedAt || data?.createdAt || null,
+            completionPercent: partialProgress.completionPercent,
+            partialProgress,
+          };
+        })
+        .filter((item) =>
+          item.partialProgress.status === "started" ||
+          item.partialProgress.status === "in_progress" ||
+          item.partialProgress.status === "ready_to_submit"
+        );
+
+      items.push(...partialItems);
+    }
+
+    items.sort(
+      (a, b) =>
+        Number(b.submittedAt || b.lastActivityAt || 0) - Number(a.submittedAt || a.lastActivityAt || 0)
+    );
     return res.json({ ok: true, data: items });
   } catch (err: any) {
     console.error("[rental-applications] list failed", err?.message || err);

@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import {
   fetchPublicApplicationLink,
   submitPublicApplication,
+  updatePublicApplicationProgress,
   type RentalApplicationPayload,
 } from "@/api/publicApplications";
 import { ViewingRequestForm } from "@/components/viewings/ViewingRequestForm";
@@ -21,6 +22,7 @@ type LoanEntry = NonNullable<RentalApplicationPayload["loans"]>[number];
 type VehicleEntry = NonNullable<RentalApplicationPayload["vehicles"]>[number];
 
 const steps = ["Personal info", "Residential history", "Employment", "References + assets", "Consent"];
+const progressStepKeys = ["personal_info", "residential_history", "employment", "references_assets", "consent"] as const;
 
 const cardStyle: React.CSSProperties = {
   border: "1px solid rgba(0,0,0,0.08)",
@@ -697,6 +699,108 @@ export default function PublicApplyPage() {
     [missingDetails]
   );
 
+  const sectionProgress = useMemo(() => {
+    const personalInfoComplete =
+      Boolean((applicant.firstName ?? "").trim()) &&
+      Boolean((applicant.lastName ?? "").trim()) &&
+      Boolean((applicant.email ?? "").trim()) &&
+      Boolean((applicant.dob ?? "").trim()) &&
+      isValidDob((applicant.dob ?? "").trim()) &&
+      (!coApplicantEnabled ||
+        (Boolean((coApplicant.firstName ?? "").trim()) &&
+          Boolean((coApplicant.lastName ?? "").trim()) &&
+          Boolean((coApplicant.email ?? "").trim()) &&
+          Boolean((coApplicant.dob ?? "").trim()) &&
+          isValidDob((coApplicant.dob ?? "").trim())));
+    const residentialHistoryComplete =
+      Boolean(profileAddress.line1.trim()) &&
+      Boolean(profileAddress.city.trim()) &&
+      Boolean(profileAddress.provinceState.trim()) &&
+      Boolean(profileAddress.postalCode.trim()) &&
+      Boolean(timeAtAddressMonths.trim()) &&
+      Boolean(currentRentAmount.trim()) &&
+      (currentLeaseStatus.hasActiveLease !== true ||
+        (Boolean(currentLeaseStatus.leaseEndDate?.trim()) && isValidLeaseDate(currentLeaseStatus.leaseEndDate || "")));
+    const employmentComplete =
+      Boolean((employment.applicant.employer || "").trim()) &&
+      Boolean((employment.applicant.jobTitle || "").trim()) &&
+      Number(employment.applicant.monthlyIncomeCents || 0) > 0 &&
+      employment.applicant.lengthMonths != null &&
+      (!coApplicantEnabled ||
+        (Boolean((employment.coApplicant?.employer || "").trim()) &&
+          Boolean((employment.coApplicant?.jobTitle || "").trim()) &&
+          Number(employment.coApplicant?.monthlyIncomeCents || 0) > 0 &&
+          employment.coApplicant?.lengthMonths != null));
+    const referencesAssetsComplete = Boolean(workReferenceName.trim()) && Boolean(workReferencePhone.trim());
+    const consentComplete =
+      consent.creditConsent &&
+      consent.referenceConsent &&
+      consent.dataSharingConsent &&
+      Boolean((consent.applicantNameTyped || "").trim()) &&
+      (!coApplicantEnabled || Boolean((consent.coApplicantNameTyped || "").trim())) &&
+      Boolean(signatureTypedName.trim()) &&
+      signatureTypedAck &&
+      applicationConsentAccepted;
+    return [
+      { key: progressStepKeys[0], complete: personalInfoComplete },
+      { key: progressStepKeys[1], complete: residentialHistoryComplete },
+      { key: progressStepKeys[2], complete: employmentComplete },
+      { key: progressStepKeys[3], complete: referencesAssetsComplete },
+      { key: progressStepKeys[4], complete: consentComplete },
+    ];
+  }, [
+    applicant,
+    applicationConsentAccepted,
+    coApplicant,
+    coApplicantEnabled,
+    consent,
+    currentLeaseStatus,
+    currentRentAmount,
+    employment,
+    profileAddress,
+    signatureTypedAck,
+    signatureTypedName,
+    timeAtAddressMonths,
+    workReferenceName,
+    workReferencePhone,
+  ]);
+
+  const progressMetadata = useMemo(() => {
+    const completedSections = sectionProgress.filter((section) => section.complete).map((section) => section.key);
+    const missingSections = sectionProgress.filter((section) => !section.complete).map((section) => section.key);
+    const hasMeaningfulProgress =
+      completedSections.length > 0 ||
+      Boolean(viewingChoice) ||
+      step > 0 ||
+      Boolean((applicant.firstName ?? "").trim()) ||
+      Boolean((applicant.lastName ?? "").trim()) ||
+      Boolean((applicant.email ?? "").trim()) ||
+      Boolean((applicant.dob ?? "").trim()) ||
+      coApplicantEnabled;
+    return {
+      status: submitted
+        ? ("submitted" as const)
+        : completionPercent >= 100
+        ? ("ready_to_submit" as const)
+        : hasMeaningfulProgress
+        ? completedSections.length > 0
+          ? ("in_progress" as const)
+          : ("started" as const)
+        : ("not_started" as const),
+      completionPercent: submitted ? 100 : completionPercent,
+      currentStep: submitted ? null : progressStepKeys[step] || null,
+      completedSections,
+      missingSections,
+      hasCoApplicant: coApplicantEnabled,
+      viewingChoice:
+        viewingChoice === "viewed"
+          ? ("already_viewed" as const)
+          : viewingChoice === "needs_viewing"
+          ? ("request_viewing" as const)
+          : null,
+    };
+  }, [applicant, coApplicantEnabled, completionPercent, sectionProgress, step, submitted, viewingChoice]);
+
   const focusField = (key: string | null, nextStep: number) => {
     setShowResumeBanner(false);
     setStep(nextStep);
@@ -706,6 +810,16 @@ export default function PublicApplyPage() {
   const handleResume = () => {
     focusField(null, restoredDraftStep ?? step);
   };
+
+  useEffect(() => {
+    if (!token || loading || loadError || submitted) return;
+    const timer = window.setTimeout(() => {
+      void updatePublicApplicationProgress(token, progressMetadata).catch(() => {
+        // Metadata sync should never block the applicant flow.
+      });
+    }, 400);
+    return () => window.clearTimeout(timer);
+  }, [token, loading, loadError, submitted, progressMetadata]);
 
   async function handleSubmit() {
     if (!token) {

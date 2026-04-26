@@ -3,9 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import PublicApplyPage from "./PublicApplyPage";
 
-const { fetchPublicApplicationLink, submitPublicApplication } = vi.hoisted(() => ({
+const { fetchPublicApplicationLink, submitPublicApplication, updatePublicApplicationProgress } = vi.hoisted(() => ({
   fetchPublicApplicationLink: vi.fn(),
   submitPublicApplication: vi.fn(),
+  updatePublicApplicationProgress: vi.fn(),
 }));
 
 vi.mock("@/api/publicApplications", async () => {
@@ -14,10 +15,12 @@ vi.mock("@/api/publicApplications", async () => {
     ...actual,
     fetchPublicApplicationLink,
     submitPublicApplication,
+    updatePublicApplicationProgress,
   };
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   cleanup();
 });
 
@@ -58,12 +61,14 @@ describe("PublicApplyPage", () => {
   beforeEach(() => {
     fetchPublicApplicationLink.mockReset();
     submitPublicApplication.mockReset();
+    updatePublicApplicationProgress.mockReset();
     window.sessionStorage.clear();
     fetchPublicApplicationLink.mockResolvedValue({
       data: { propertyId: "prop-1", unitId: "unit-1", expiresAt: null },
       context: { propertyName: "Harbour House", unitLabel: "2A" },
     });
     submitPublicApplication.mockResolvedValue({ applicationId: "app-1" });
+    updatePublicApplicationProgress.mockResolvedValue({ partialProgress: null });
   });
 
   it("renders conditional lease status fields when applicant is under a lease", async () => {
@@ -142,6 +147,39 @@ describe("PublicApplyPage", () => {
     fireEvent.change(screen.getByLabelText("Date of birth *"), { target: { value: "1990-01-01" } });
 
     expect(completionPercent()).toBeGreaterThan(startingPercent);
+  });
+
+  it("sends only safe partial progress metadata to the backend", async () => {
+    renderPage();
+    await screen.findByText("Before you continue");
+
+    fireEvent.change(screen.getByLabelText("First name *"), { target: { value: "Jordan" } });
+    fireEvent.change(screen.getByLabelText("Last name *"), { target: { value: "Lee" } });
+    fireEvent.change(screen.getByLabelText("Email *"), { target: { value: "jordan@example.com" } });
+    fireEvent.change(screen.getByLabelText("Date of birth *"), { target: { value: "1990-01-01" } });
+
+    await waitFor(() => {
+      expect(updatePublicApplicationProgress).toHaveBeenCalled();
+    }, { timeout: 1500 });
+
+    expect(updatePublicApplicationProgress).toHaveBeenLastCalledWith(
+      "token-123",
+      expect.objectContaining({
+        status: expect.any(String),
+        completionPercent: expect.any(Number),
+        currentStep: expect.any(String),
+        completedSections: expect.any(Array),
+        missingSections: expect.any(Array),
+        hasCoApplicant: false,
+        viewingChoice: null,
+      })
+    );
+    expect(updatePublicApplicationProgress).not.toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        applicant: expect.anything(),
+      })
+    );
   });
 
   it("focuses the missing field when a missing-details item is clicked", async () => {

@@ -87,6 +87,20 @@ router.post("/", authenticateJwt, async (req: any, res) => {
       expiresAt,
       status: "ACTIVE",
       tokenHash,
+      partialProgress: {
+        status: "not_started",
+        completionPercent: 0,
+        currentStep: null,
+        completedSections: [],
+        missingSections: [],
+        hasCoApplicant: false,
+        viewingChoice: null,
+        startedAt: null,
+        lastActivityAt: null,
+        submittedAt: null,
+        reminderEligibleAt: null,
+        reminderSentAt: null,
+      },
     });
 
     const baseUrl = (process.env.PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "");
