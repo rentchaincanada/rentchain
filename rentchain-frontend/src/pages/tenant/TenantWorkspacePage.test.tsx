@@ -176,6 +176,17 @@ describe("tenant workspace frontend shell", () => {
       application: null,
       lease: null,
       maintenance: [],
+      tenantIdentityRecord: {
+        identityStatus: "ready",
+        profile: { completionStatus: "complete" },
+        application: { reusable: true, lastSubmittedAt: "2026-01-02T00:00:00.000Z" },
+        documents: { completionStatus: "in_progress", missingCategories: ["Income documents"] },
+        screening: { status: "in_progress", lastCompletedAt: null },
+        leases: { activeCount: 1, historicalCount: 0, lastSignedAt: "2026-02-01T10:00:00.000Z" },
+        verification: { level: "partial" },
+        readinessLabel: "Ready to apply",
+        readinessDescription: "Your core profile, reusable application details, and supporting records are ready for most rental workflows.",
+      },
     });
     tenantAttachmentsApi.getTenantAttachments.mockResolvedValue({
       ok: true,
@@ -360,6 +371,17 @@ describe("tenant workspace frontend shell", () => {
         documentUrl: null,
       },
       maintenance: [],
+      tenantIdentityRecord: {
+        identityStatus: "ready",
+        profile: { completionStatus: "complete" },
+        application: { reusable: true, lastSubmittedAt: "2026-01-02T00:00:00.000Z" },
+        documents: { completionStatus: "in_progress", missingCategories: ["Income documents"] },
+        screening: { status: "in_progress", lastCompletedAt: null },
+        leases: { activeCount: 1, historicalCount: 0, lastSignedAt: "2026-02-01T10:00:00.000Z" },
+        verification: { level: "partial" },
+        readinessLabel: "Ready to apply",
+        readinessDescription: "Your core profile, reusable application details, and supporting records are ready for most rental workflows.",
+      },
     });
 
     render(
@@ -375,6 +397,10 @@ describe("tenant workspace frontend shell", () => {
     expect(await screen.findByText(/Recent activity \/ notifications/i)).toBeInTheDocument();
     expect(screen.getByText(/Recent workflow updates/i)).toBeInTheDocument();
     expect(await screen.findByText(/Profile completion/i)).toBeInTheDocument();
+    expect(screen.getByText(/Your Rental Identity/i)).toBeInTheDocument();
+    expect(screen.getByText(/Ready to apply/i)).toBeInTheDocument();
+    expect(screen.getByText(/Missing pieces/i)).toBeInTheDocument();
+    expect(screen.getByText(/Income documents/i)).toBeInTheDocument();
     expect(screen.getByText(/Add missing details to keep your rental profile organized/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /View your profile/i })).toBeInTheDocument();
     expect(screen.queryByText(/^Applicant$/i)).not.toBeInTheDocument();

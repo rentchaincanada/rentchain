@@ -76,6 +76,52 @@ export type TenantApplicationReuseProjection = {
   } | null;
 };
 
+export type TenantIdentityStatus = "incomplete" | "ready" | "verified" | "limited";
+export type TenantIdentityVerificationLevel = "none" | "partial" | "strong";
+export type TenantIdentityCompletionStatus = "complete" | "in_progress" | "missing" | "needs_attention";
+export type TenantIdentityScreeningStatus =
+  | "not_started"
+  | "in_progress"
+  | "completed"
+  | "needs_attention"
+  | "blocked";
+
+export type TenantIdentityRecord = {
+  identityStatus: TenantIdentityStatus;
+  profile: {
+    completionStatus: TenantIdentityCompletionStatus;
+  };
+  application: {
+    reusable: boolean;
+    lastSubmittedAt: string | null;
+  };
+  documents: {
+    completionStatus: TenantIdentityCompletionStatus;
+    missingCategories: string[];
+  };
+  screening: {
+    status: TenantIdentityScreeningStatus;
+    lastCompletedAt: string | null;
+  };
+  leases: {
+    activeCount: number;
+    historicalCount: number;
+    lastSignedAt: string | null;
+  };
+  verification: {
+    level: TenantIdentityVerificationLevel;
+  };
+  readinessLabel: string;
+  readinessDescription: string;
+};
+
+export type TenantIdentitySummary = Pick<
+  TenantIdentityRecord,
+  "identityStatus" | "readinessLabel" | "readinessDescription"
+> & {
+  verification: TenantIdentityRecord["verification"];
+};
+
 function asString(value: unknown): string | null {
   const next = String(value || "").trim();
   return next || null;
@@ -157,6 +203,23 @@ async function queryFirst(
   }
 }
 
+async function queryMany(
+  collectionName: string,
+  field: string,
+  value: string | null,
+  operator: "==" | "array-contains" = "==",
+  limitCount = 25
+) {
+  const normalized = operator === "array-contains" ? value : asString(value);
+  if (!normalized) return [];
+  try {
+    const snap = await db.collection(collectionName).where(field, operator, normalized).limit(limitCount).get();
+    return snap.docs.map((doc: any) => ({ id: doc.id, data: (doc.data() as any) || {} }));
+  } catch {
+    return [];
+  }
+}
+
 async function loadWorkspaceDocuments(context: TenancyContext) {
   const property = await loadDocument("properties", context.propertyId);
 
@@ -230,6 +293,334 @@ function titleCaseWords(value: string): string {
   return value
     .replace(/[_-]+/g, " ")
     .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function normalizeIdentityCompletionStatus(status: TenantVisibleStatus): TenantIdentityCompletionStatus {
+  switch (status) {
+    case "verified":
+      return "complete";
+    case "pending":
+      return "in_progress";
+    case "needs_review":
+      return "needs_attention";
+    case "missing":
+    default:
+      return "missing";
+  }
+}
+
+function uniq(values: Array<string | null | undefined>): string[] {
+  return Array.from(new Set(values.map((value) => asString(value)).filter((value): value is string => Boolean(value))));
+}
+
+function deriveReusableApplicationState(reuse: TenantApplicationReuseProjection): boolean {
+  const applicantReady = Boolean(
+    reuse.applicant.firstName && reuse.applicant.lastName && reuse.applicant.email && reuse.applicant.phone
+  );
+  const addressReady = Boolean(
+    reuse.currentAddress?.line1 &&
+      reuse.currentAddress?.city &&
+      reuse.currentAddress?.provinceState &&
+      reuse.currentAddress?.postalCode
+  );
+  const employmentReady = Boolean(
+    reuse.employment?.employerName &&
+      reuse.employment?.jobTitle &&
+      reuse.employment?.incomeAmountCents != null &&
+      reuse.employment?.monthsAtJob != null
+  );
+
+  return applicantReady && addressReady && employmentReady;
+}
+
+function deriveScreeningStatusFromVisibleStatus(status: TenantVisibleStatus): TenantIdentityScreeningStatus {
+  switch (status) {
+    case "verified":
+      return "completed";
+    case "pending":
+      return "in_progress";
+    case "needs_review":
+      return "needs_attention";
+    case "missing":
+    default:
+      return "not_started";
+  }
+}
+
+async function loadTenantLeaseHistorySignals(context: TenancyContext, userEmail?: string | null) {
+  let leases = context.tenantId ? await queryMany("leases", "tenantId", context.tenantId) : [];
+  if (!leases.length && userEmail) {
+    leases = await queryMany("leases", "tenantEmail", normalizeEmail(userEmail));
+  }
+
+  let activeCount = 0;
+  let historicalCount = 0;
+  let lastSignedAt: string | null = null;
+
+  leases.forEach((lease) => {
+    const status = String(lease.data?.status || "").trim().toLowerCase();
+    if (status === "active") {
+      activeCount += 1;
+    } else {
+      historicalCount += 1;
+    }
+    const signedAt =
+      toIso(lease.data?.tenantSignature?.signedAt) ||
+      toIso(lease.data?.tenantSignedAt) ||
+      toIso(lease.data?.tenantSignatureCompletedAt);
+    if (signedAt && (!lastSignedAt || Date.parse(signedAt) > Date.parse(lastSignedAt))) {
+      lastSignedAt = signedAt;
+    }
+  });
+
+  return {
+    activeCount,
+    historicalCount,
+    lastSignedAt,
+  };
+}
+
+function deriveTenantIdentityVerificationLevel(input: {
+  applicationReusable: boolean;
+  documentStatus: TenantIdentityCompletionStatus;
+  screeningStatus: TenantIdentityScreeningStatus;
+  leaseSignals: {
+    activeCount: number;
+    historicalCount: number;
+    lastSignedAt: string | null;
+  };
+}): TenantIdentityVerificationLevel {
+  const hasLeaseEvidence =
+    input.leaseSignals.activeCount > 0 || input.leaseSignals.historicalCount > 0 || Boolean(input.leaseSignals.lastSignedAt);
+
+  if (input.screeningStatus === "completed" && input.documentStatus === "complete" && hasLeaseEvidence) {
+    return "strong";
+  }
+
+  if (
+    input.applicationReusable ||
+    input.documentStatus === "complete" ||
+    input.documentStatus === "in_progress" ||
+    input.screeningStatus === "completed" ||
+    hasLeaseEvidence
+  ) {
+    return "partial";
+  }
+
+  return "none";
+}
+
+function deriveTenantIdentityStatus(input: {
+  profileStatus: TenantIdentityCompletionStatus;
+  applicationReusable: boolean;
+  documentStatus: TenantIdentityCompletionStatus;
+  screeningStatus: TenantIdentityScreeningStatus;
+  verificationLevel: TenantIdentityVerificationLevel;
+}): TenantIdentityStatus {
+  if (input.verificationLevel === "strong") {
+    return "verified";
+  }
+
+  if (
+    input.profileStatus === "complete" &&
+    input.applicationReusable &&
+    input.documentStatus !== "missing" &&
+    input.screeningStatus !== "needs_attention" &&
+    input.screeningStatus !== "blocked"
+  ) {
+    return "ready";
+  }
+
+  if (
+    input.profileStatus !== "missing" ||
+    input.applicationReusable ||
+    input.documentStatus !== "missing" ||
+    input.screeningStatus !== "not_started"
+  ) {
+    return "incomplete";
+  }
+
+  return "limited";
+}
+
+function deriveTenantIdentityReadinessCopy(
+  status: TenantIdentityStatus,
+  verificationLevel: TenantIdentityVerificationLevel
+) {
+  switch (status) {
+    case "verified":
+      return {
+        readinessLabel: "Well established",
+        readinessDescription:
+          verificationLevel === "strong"
+            ? "Your rental identity includes completed verification signals and visible lease history."
+            : "Your rental identity is established and ready for ongoing rental workflows.",
+      };
+    case "ready":
+      return {
+        readinessLabel: "Ready to apply",
+        readinessDescription:
+          "Your core profile, reusable application details, and supporting records are ready for most rental workflows.",
+      };
+    case "incomplete":
+      return {
+        readinessLabel: "Almost ready",
+        readinessDescription:
+          "A few important identity details are still missing, but your rental record is already taking shape.",
+      };
+    case "limited":
+    default:
+      return {
+        readinessLabel: "Getting started",
+        readinessDescription:
+          "Add your core profile and supporting records to build a stronger reusable rental identity.",
+      };
+  }
+}
+
+function toLandlordSafeTenantIdentitySummary(
+  record: TenantIdentityRecord
+): TenantIdentitySummary {
+  return {
+    identityStatus: record.identityStatus,
+    verification: record.verification,
+    readinessLabel: record.readinessLabel,
+    readinessDescription: record.readinessDescription,
+  };
+}
+
+function deriveTenantIdentityRecordFromSignals(input: {
+  profileStatus: TenantIdentityCompletionStatus;
+  applicationReusable: boolean;
+  lastSubmittedAt: string | null;
+  documentStatus: TenantIdentityCompletionStatus;
+  missingCategories: string[];
+  screeningStatus: TenantIdentityScreeningStatus;
+  screeningCompletedAt: string | null;
+  leaseSignals: {
+    activeCount: number;
+    historicalCount: number;
+    lastSignedAt: string | null;
+  };
+}): TenantIdentityRecord {
+  const verificationLevel = deriveTenantIdentityVerificationLevel({
+    applicationReusable: input.applicationReusable,
+    documentStatus: input.documentStatus,
+    screeningStatus: input.screeningStatus,
+    leaseSignals: input.leaseSignals,
+  });
+  const identityStatus = deriveTenantIdentityStatus({
+    profileStatus: input.profileStatus,
+    applicationReusable: input.applicationReusable,
+    documentStatus: input.documentStatus,
+    screeningStatus: input.screeningStatus,
+    verificationLevel,
+  });
+  const copy = deriveTenantIdentityReadinessCopy(identityStatus, verificationLevel);
+
+  return {
+    identityStatus,
+    profile: {
+      completionStatus: input.profileStatus,
+    },
+    application: {
+      reusable: input.applicationReusable,
+      lastSubmittedAt: input.lastSubmittedAt,
+    },
+    documents: {
+      completionStatus: input.documentStatus,
+      missingCategories: input.missingCategories,
+    },
+    screening: {
+      status: input.screeningStatus,
+      lastCompletedAt: input.screeningCompletedAt,
+    },
+    leases: input.leaseSignals,
+    verification: {
+      level: verificationLevel,
+    },
+    readinessLabel: copy.readinessLabel,
+    readinessDescription: copy.readinessDescription,
+  };
+}
+
+function deriveProfileCompletionStatusFromApplication(application: any): TenantIdentityCompletionStatus {
+  const hasApplicantName = Boolean(asString(application?.applicant?.firstName) || asString(application?.firstName));
+  const hasApplicantEmail = Boolean(
+    normalizeEmail(application?.applicant?.email) ||
+      normalizeEmail(application?.applicantEmail) ||
+      normalizeEmail(application?.email)
+  );
+  const hasTypedSignature = Boolean(asString(application?.applicantProfile?.signature?.typedName));
+
+  if (hasApplicantName && hasApplicantEmail && hasTypedSignature) {
+    return "complete";
+  }
+  if (hasApplicantName || hasApplicantEmail || hasTypedSignature) {
+    return "in_progress";
+  }
+  return "missing";
+}
+
+function deriveApplicationReusableFromApplication(application: any): boolean {
+  const currentAddress = application?.applicantProfile?.currentAddress || {};
+  const employment = application?.applicantProfile?.employment || {};
+
+  return Boolean(
+    (asString(application?.applicant?.firstName) || asString(application?.firstName)) &&
+      (asString(application?.applicant?.lastName) || asString(application?.lastName)) &&
+      (normalizeEmail(application?.applicant?.email) ||
+        normalizeEmail(application?.applicantEmail) ||
+        normalizeEmail(application?.email)) &&
+      asString(currentAddress?.line1) &&
+      asString(currentAddress?.city) &&
+      asString(currentAddress?.provinceState) &&
+      asString(currentAddress?.postalCode) &&
+      asString(employment?.employerName) &&
+      asString(employment?.jobTitle) &&
+      asNumber(employment?.incomeAmountCents) != null
+  );
+}
+
+function deriveDocumentSignalsFromApplication(application: any) {
+  const documentCount = Array.isArray(application?.documentRefs)
+    ? application.documentRefs.length
+    : Array.isArray(application?.documents)
+    ? application.documents.length
+    : 0;
+
+  if (documentCount > 0) {
+    return {
+      completionStatus: "complete" as TenantIdentityCompletionStatus,
+      missingCategories: [] as string[],
+    };
+  }
+
+  return {
+    completionStatus: "missing" as TenantIdentityCompletionStatus,
+    missingCategories: ["Supporting documents"],
+  };
+}
+
+function deriveScreeningSignalsFromApplication(application: any) {
+  const rawStatus = String(application?.screeningStatus || application?.screening?.status || "").trim().toLowerCase();
+  const completedAt =
+    toIso(application?.screening?.completedAt) ||
+    toIso(application?.screeningCompletedAt) ||
+    toIso(application?.screeningResultCompletedAt);
+
+  let status: TenantIdentityScreeningStatus = "not_started";
+  if (["complete", "completed", "verified"].includes(rawStatus)) {
+    status = "completed";
+  } else if (["manual_review", "manual_review_required", "failed", "ineligible"].includes(rawStatus)) {
+    status = "needs_attention";
+  } else if (["blocked"].includes(rawStatus)) {
+    status = "blocked";
+  } else if (rawStatus) {
+    status = "in_progress";
+  }
+
+  return { status, completedAt };
 }
 
 function normalizeChecklist(input: any, nextActions: string[]): TenantProfileProjection["identity"]["documentChecklist"] {
@@ -504,4 +895,97 @@ export async function loadTenantApplicationReuseProjection(params: {
         }
       : null,
   };
+}
+
+export async function loadTenantIdentityRecord(params: {
+  context: TenancyContext;
+  userId: string;
+  userEmail?: string | null;
+}): Promise<TenantIdentityRecord> {
+  const { context, userEmail } = params;
+  const [profileProjection, reuseProjection, leaseSignals] = await Promise.all([
+    loadTenantProfileProjection(params),
+    loadTenantApplicationReuseProjection({ context, userEmail }),
+    loadTenantLeaseHistorySignals(context, userEmail),
+  ]);
+
+  const profileStatus = profileProjection.profile.displayName &&
+    profileProjection.profile.email &&
+    profileProjection.profile.phone
+      ? "complete"
+      : profileProjection.profile.displayName || profileProjection.profile.email || profileProjection.profile.phone
+      ? "in_progress"
+      : "missing";
+
+  const documentStatuses = profileProjection.identity.documentChecklist.map((entry) => entry.status);
+  const documentStatus =
+    documentStatuses.includes("needs_review")
+      ? "needs_attention"
+      : documentStatuses.includes("missing")
+      ? "missing"
+      : documentStatuses.includes("pending")
+      ? "in_progress"
+      : profileProjection.identity.documentChecklist.length
+      ? "complete"
+      : "missing";
+
+  const missingCategories = uniq(
+    profileProjection.identity.documentChecklist
+      .filter((entry) => entry.status === "missing")
+      .map((entry) => entry.label)
+  );
+
+  const applicationReusable = deriveReusableApplicationState(reuseProjection);
+  const screeningStatus = deriveScreeningStatusFromVisibleStatus(
+    profileProjection.identity.identityVerification.status
+  );
+
+  return deriveTenantIdentityRecordFromSignals({
+    profileStatus,
+    applicationReusable,
+    lastSubmittedAt:
+      profileProjection.profile.application?.status === "submitted"
+        ? profileProjection.profile.application?.updatedAt || profileProjection.profile.application?.createdAt || null
+        : null,
+    documentStatus,
+    missingCategories,
+    screeningStatus,
+    screeningCompletedAt:
+      screeningStatus === "completed"
+        ? profileProjection.identity.identityVerification.updatedAt
+        : null,
+    leaseSignals,
+  });
+}
+
+export async function loadLandlordSafeTenantIdentitySummary(params: {
+  applicationId: string;
+  application: any;
+}): Promise<TenantIdentitySummary> {
+  const profileStatus = deriveProfileCompletionStatusFromApplication(params.application);
+  const applicationReusable = deriveApplicationReusableFromApplication(params.application);
+  const documentSignals = deriveDocumentSignalsFromApplication(params.application);
+  const screeningSignals = deriveScreeningSignalsFromApplication(params.application);
+
+  const leaseSignals = {
+    activeCount: 0,
+    historicalCount: 0,
+    lastSignedAt: null,
+  };
+
+  const record = deriveTenantIdentityRecordFromSignals({
+    profileStatus,
+    applicationReusable,
+    lastSubmittedAt:
+      toIso(params.application?.submittedAt) ||
+      toIso(params.application?.updatedAt) ||
+      toIso(params.application?.createdAt),
+    documentStatus: documentSignals.completionStatus,
+    missingCategories: documentSignals.missingCategories,
+    screeningStatus: screeningSignals.status,
+    screeningCompletedAt: screeningSignals.completedAt,
+    leaseSignals,
+  });
+
+  return toLandlordSafeTenantIdentitySummary(record);
 }

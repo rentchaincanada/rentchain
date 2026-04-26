@@ -441,6 +441,17 @@ describe("tenantPortalRoutes foundation", () => {
     });
     expect(res.body?.data?.lease?.tenantSignature?.drawnDataUrl).toBeUndefined();
     expect(res.body?.data?.lease?.leasePdfStatus).toBe("available");
+    expect(res.body?.data?.tenantIdentityRecord).toEqual(
+      expect.objectContaining({
+        identityStatus: expect.stringMatching(/incomplete|ready|verified|limited/),
+        verification: expect.objectContaining({
+          level: expect.stringMatching(/none|partial|strong/),
+        }),
+        readinessLabel: expect.any(String),
+        readinessDescription: expect.any(String),
+      })
+    );
+    expect(Array.isArray(res.body?.data?.tenantIdentityRecord?.documents?.missingCategories)).toBe(true);
     expect(res.body?.data?.maintenance?.[0]?.title).toBe("Leaky tap");
     expect(res.body?.data?.maintenance?.[0]?.assignedContractorName).toBe("North Shore Plumbing");
     expect(res.body?.data?.maintenance?.[0]?.contractorStatus).toBe("assigned");
@@ -449,6 +460,8 @@ describe("tenantPortalRoutes foundation", () => {
     expect(res.body?.data?.maintenance?.[0]?.tenantConfirmationStatus).toBeNull();
     expect(res.body?.data?.maintenance?.[0]?.statusHistory?.[0]?.message).toBe("Submitted from tenant workspace.");
     expect(res.body?.data?.maintenance?.[0]?.internalCost).toBeUndefined();
+    expect(res.body?.data?.tenantIdentityRecord?.documents?.documentChecklist).toBeUndefined();
+    expect(res.body?.data?.tenantIdentityRecord?.screening?.provider).toBeUndefined();
 
     const eventDocs = Array.from(ensureCollection("event_log").values());
     expect(eventDocs.some((event) => event.event_type === "tenant_workspace_viewed")).toBe(true);

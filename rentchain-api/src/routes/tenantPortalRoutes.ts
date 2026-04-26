@@ -15,7 +15,7 @@ import {
 } from "../services/tenantPortal/tenantProjectionService";
 import { recordTenantEvent } from "../services/tenantPortal/tenantEventLogService";
 import { redeemTenancyInvite } from "../services/tenantPortal/tenantInviteService";
-import { loadTenantProfileProjection } from "../services/tenantPortal/tenantProfileService";
+import { loadTenantIdentityRecord, loadTenantProfileProjection } from "../services/tenantPortal/tenantProfileService";
 import {
   loadTenantCommunicationsWorkspace,
   markTenantCommunicationsRead,
@@ -2896,7 +2896,14 @@ async function handleTenantWorkspaceSummary(req: any, res: any) {
   const context = await resolveWorkspaceContextOrRespond(req, res);
   if (!context) return;
 
-  const workspace = await loadTenantWorkspaceData(context);
+  const [workspace, tenantIdentityRecord] = await Promise.all([
+    loadTenantWorkspaceData(context),
+    loadTenantIdentityRecord({
+      context,
+      userId: String(req.user?.id || "").trim(),
+      userEmail: req.user?.email,
+    }),
+  ]);
   await recordTenantEvent({
     eventType: "tenant_workspace_viewed",
     entityType: "tenant_workspace",
@@ -2922,6 +2929,7 @@ async function handleTenantWorkspaceSummary(req: any, res: any) {
       application: workspace.application,
       lease: workspace.lease,
       maintenance: workspace.maintenance,
+      tenantIdentityRecord,
     },
   });
 }
