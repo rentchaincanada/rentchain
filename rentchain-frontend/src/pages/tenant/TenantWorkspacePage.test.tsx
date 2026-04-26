@@ -107,6 +107,9 @@ describe("tenant workspace frontend shell", () => {
       sections: [],
       nextSteps: ["Upload government id"],
       updatedAt: "2026-01-02T00:00:00.000Z",
+      reminderTiming: "due_now",
+      reminderTimingLabel: "Due now",
+      reminderTimingDescription: "A current checklist step is ready for your attention now.",
     });
     tenantScreeningApi.listTenantScreenings.mockResolvedValue({
       ok: true,
@@ -388,6 +391,7 @@ describe("tenant workspace frontend shell", () => {
     expect(screen.getAllByText(/1 active access grant/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/1 document in your vault, 1 ready to share, and 0 still needing attention/i)).toBeInTheDocument();
     expect(screen.getByText(/Documents updated/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/No action needed/i).length).toBeGreaterThan(0);
     expect(screen.getByRole("link", { name: /Open document vault/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Open access/i })).toBeInTheDocument();
   });
@@ -520,6 +524,9 @@ describe("tenant workspace frontend shell", () => {
       ],
       nextSteps: ["Upload government id"],
       updatedAt: "2026-01-02T00:00:00.000Z",
+      reminderTiming: "due_now",
+      reminderTimingLabel: "Due now",
+      reminderTimingDescription: "A current checklist step is ready for your attention now.",
     });
 
     render(
@@ -532,6 +539,8 @@ describe("tenant workspace frontend shell", () => {
     expect(screen.getByText(/Your application is in progress/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Continue your application/i })).toBeInTheDocument();
     expect(screen.getAllByText(/62%/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/^Due now$/i)).toBeInTheDocument();
+    expect(screen.getByText(/ready for your attention now/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Upload government id/i).length).toBeGreaterThan(0);
   });
 

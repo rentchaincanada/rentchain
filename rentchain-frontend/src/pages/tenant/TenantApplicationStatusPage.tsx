@@ -65,6 +65,25 @@ function sectionSummary(status: TenantApplicationCompletionStatus) {
   return "You’ve started this section, but it still needs a few more updates.";
 }
 
+function reminderTimingTone(
+  timing?: "due_now" | "due_soon" | "scheduled_later" | "overdue" | "blocked" | "not_applicable" | null
+) {
+  switch (timing) {
+    case "due_now":
+      return { color: "#92400e", background: "rgba(245,158,11,0.14)" };
+    case "due_soon":
+      return { color: "#1d4ed8", background: "rgba(59,130,246,0.14)" };
+    case "scheduled_later":
+      return { color: "#475569", background: "rgba(148,163,184,0.16)" };
+    case "overdue":
+      return { color: "#991b1b", background: "rgba(239,68,68,0.12)" };
+    case "blocked":
+      return { color: "#92400e", background: "rgba(251,191,36,0.18)" };
+    default:
+      return { color: "#475569", background: "#eef2f7" };
+  }
+}
+
 const CompletionProgressCard: React.FC<{ progressPercent: number; status: TenantApplicationCompletionStatus }> = ({
   progressPercent,
   status,
@@ -1433,6 +1452,23 @@ export default function TenantApplicationStatusPage() {
       {data.nextSteps.length ? (
         <TenantInfoCard heading="Next Steps" accent="#0891b2">
           <div style={{ display: "grid", gap: 8 }}>
+            {data.reminderTimingLabel ? (
+              <div
+                style={{
+                  justifySelf: "start",
+                  padding: "6px 10px",
+                  borderRadius: 999,
+                  fontWeight: 700,
+                  fontSize: 12,
+                  ...reminderTimingTone(data.reminderTiming),
+                }}
+              >
+                {data.reminderTimingLabel}
+              </div>
+            ) : null}
+            {data.reminderTimingDescription ? (
+              <div style={{ color: textTokens.secondary }}>{data.reminderTimingDescription}</div>
+            ) : null}
             {data.nextSteps.map((step) => (
               <div key={step} style={{ color: textTokens.secondary }}>
                 {step}
@@ -1442,6 +1478,23 @@ export default function TenantApplicationStatusPage() {
         </TenantInfoCard>
       ) : (
         <TenantInfoCard heading="Next Steps" accent="#0891b2">
+          {data.reminderTimingLabel ? (
+            <div
+              style={{
+                justifySelf: "start",
+                padding: "6px 10px",
+                borderRadius: 999,
+                fontWeight: 700,
+                fontSize: 12,
+                ...reminderTimingTone(data.reminderTiming),
+              }}
+            >
+              {data.reminderTimingLabel}
+            </div>
+          ) : null}
+          {data.reminderTimingDescription ? (
+            <div style={{ color: textTokens.secondary }}>{data.reminderTimingDescription}</div>
+          ) : null}
           <div style={{ color: textTokens.muted }}>
             No extra actions are required right now. Keep an eye on your feed for updates.
           </div>

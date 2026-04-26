@@ -22,7 +22,60 @@ export type TenantScreeningInboxItemView = {
   activityAt: number | null;
   consentedAt: number | null;
   consentLabel: string;
+  reminderTiming: "due_now" | "due_soon" | "scheduled_later" | "overdue" | "blocked" | "not_applicable";
+  reminderTimingLabel: string;
+  reminderTimingDescription: string;
 };
+
+function deriveScreeningReminderTiming(item: TenantScreeningRequest, status: TenantScreeningInboxStatus) {
+  const requestedAt = item.requestedAt || null;
+  const ageDays =
+    typeof requestedAt === "number" && requestedAt > 0
+      ? Math.floor((Date.now() - requestedAt) / (24 * 60 * 60 * 1000))
+      : null;
+
+  switch (status) {
+    case "consent_required":
+      if ((ageDays ?? 0) >= 7) {
+        return {
+          reminderTiming: "overdue" as const,
+          reminderTimingLabel: "Overdue",
+          reminderTimingDescription: "This screening request has been waiting for consent for a while and may hold up the next review step.",
+        };
+      }
+      return {
+        reminderTiming: "due_now" as const,
+        reminderTimingLabel: "Due now",
+        reminderTimingDescription: "Your consent can be completed now so screening can move forward.",
+      };
+    case "blocked":
+      return {
+        reminderTiming: "blocked" as const,
+        reminderTimingLabel: "Blocked",
+        reminderTimingDescription: "This screening step is waiting on another requirement before it can proceed.",
+      };
+    case "consent_confirmed":
+      return {
+        reminderTiming: "due_soon" as const,
+        reminderTimingLabel: "Due soon",
+        reminderTimingDescription: "Your consent is recorded. Keep this request in view while the next screening step is prepared.",
+      };
+    case "screening_in_progress":
+    case "manual_review":
+      return {
+        reminderTiming: "scheduled_later" as const,
+        reminderTimingLabel: "Scheduled for later",
+        reminderTimingDescription: "This screening request is in motion and does not need any immediate tenant action.",
+      };
+    case "completed":
+    default:
+      return {
+        reminderTiming: "not_applicable" as const,
+        reminderTimingLabel: "No action needed",
+        reminderTimingDescription: "This screening request does not need anything else from you right now.",
+      };
+  }
+}
 
 function resolveProviderLabel(item: TenantScreeningRequest) {
   if (item.consent?.providerLabel) return item.consent.providerLabel;
@@ -150,6 +203,7 @@ function latestActivityAt(item: TenantScreeningRequest) {
 export function buildTenantScreeningInboxItemView(item: TenantScreeningRequest): TenantScreeningInboxItemView {
   const status = normalizeTenantScreeningStatus(item);
   const resolvedNextAction = item.tenantNextAction || nextAction(status);
+  const timing = deriveScreeningReminderTiming(item, status);
   return {
     id: item.id,
     status,
@@ -165,6 +219,7 @@ export function buildTenantScreeningInboxItemView(item: TenantScreeningRequest):
     activityAt: latestActivityAt(item),
     consentedAt: item.consent?.acceptedAt || item.consentedAt || null,
     consentLabel: consentLabel(item, status),
+    ...timing,
   };
 }
 

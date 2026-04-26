@@ -47,6 +47,16 @@ function asString(value: unknown, max = 240) {
   return String(value || "").trim().slice(0, max);
 }
 
+type ReminderTiming =
+  | "due_now"
+  | "due_soon"
+  | "scheduled_later"
+  | "overdue"
+  | "blocked"
+  | "not_applicable";
+
+type ReminderPriority = "low" | "medium" | "high";
+
 function resolveFrontendOriginInput(req: any) {
   return (
     req?.headers?.["x-frontend-origin"] ||
@@ -95,6 +105,68 @@ function resolveDecisionBlockedReason(decision: any) {
   }
   if (decision?.automationState === "blocked") return "unknown_state_fail_closed";
   return null;
+}
+
+function deriveDecisionReminderMetadata(decision: any) {
+  const executionState = resolveDecisionExecutionState(decision);
+  const blockedReason = resolveDecisionBlockedReason(decision);
+  const actionLabel = asString(decision?.actionLabel || decision?.recommendedAction, 240) || null;
+
+  if (executionState === "already_executed" || decision?.state === "executed") {
+    return {
+      reminderTiming: "not_applicable" as ReminderTiming,
+      reminderTimingLabel: "No action needed",
+      reminderTimingDescription: "This decision has already been handled and does not need another reminder.",
+      reminderPriority: "low" as ReminderPriority,
+      reminderBlockedReason: null,
+      reminderNextActionLabel: null,
+    };
+  }
+
+  if (decision?.state === "snoozed") {
+    return {
+      reminderTiming: "scheduled_later" as ReminderTiming,
+      reminderTimingLabel: "Scheduled for later",
+      reminderTimingDescription: "This decision is intentionally snoozed for later follow-up.",
+      reminderPriority: "low" as ReminderPriority,
+      reminderBlockedReason: null,
+      reminderNextActionLabel: actionLabel,
+    };
+  }
+
+  if (executionState === "unsafe_duplicate" || executionState === "blocked") {
+    return {
+      reminderTiming: "blocked" as ReminderTiming,
+      reminderTimingLabel: "Blocked",
+      reminderTimingDescription:
+        executionState === "unsafe_duplicate"
+          ? "Another matching action already appears active, so this reminder is safely blocked."
+          : "This decision cannot move forward until its required inputs are ready.",
+      reminderPriority: decision?.priority === "high" ? "high" : "medium",
+      reminderBlockedReason: blockedReason,
+      reminderNextActionLabel: actionLabel,
+    };
+  }
+
+  if (executionState === "executable" && decision?.state === "reviewed") {
+    return {
+      reminderTiming: "due_soon" as ReminderTiming,
+      reminderTimingLabel: "Due soon",
+      reminderTimingDescription: "This decision remains ready and can be revisited soon when you are ready to continue.",
+      reminderPriority: decision?.priority === "high" ? "high" : "medium",
+      reminderBlockedReason: null,
+      reminderNextActionLabel: actionLabel,
+    };
+  }
+
+  return {
+    reminderTiming: "due_now" as ReminderTiming,
+    reminderTimingLabel: "Due now",
+    reminderTimingDescription: "This decision is ready for landlord review or action now.",
+    reminderPriority: decision?.priority === "high" ? "high" : decision?.priority === "low" ? "low" : "medium",
+    reminderBlockedReason: null,
+    reminderNextActionLabel: actionLabel,
+  };
 }
 
 function controlledAutomationAuditMetadata(params: {
@@ -177,7 +249,21 @@ router.get("/landlord/analytics", requireAuth, requireLandlord, async (req: any,
       propertyId: req.query?.propertyId,
     });
 
-    return res.json({ ok: true, ...snapshot });
+    const decisions = Array.isArray(snapshot?.decisions?.items)
+      ? snapshot.decisions.items.map((decision: any) => ({
+          ...decision,
+          ...deriveDecisionReminderMetadata(decision),
+        }))
+      : [];
+
+    return res.json({
+      ok: true,
+      ...snapshot,
+      decisions: {
+        ...(snapshot?.decisions || {}),
+        items: decisions,
+      },
+    });
   } catch (err: any) {
     console.error("[landlord-analytics] fetch failed", err?.message || err);
     return res.status(500).json({ ok: false, error: "LANDLORD_ANALYTICS_FETCH_FAILED" });

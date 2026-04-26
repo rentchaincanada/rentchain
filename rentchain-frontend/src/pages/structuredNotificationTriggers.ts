@@ -22,7 +22,48 @@ export type StructuredNotificationItem = {
   timestamp: number;
   actionRequired: boolean;
   targetLink: string | null;
+  reminderTiming?: "due_now" | "due_soon" | "scheduled_later" | "overdue" | "blocked" | "not_applicable";
+  reminderTimingLabel?: string;
+  reminderTimingDescription?: string;
 };
+
+function deriveStructuredNotificationTiming(input: {
+  type: StructuredNotificationTriggerType;
+  timestamp: number;
+}): Pick<StructuredNotificationItem, "reminderTiming" | "reminderTimingLabel" | "reminderTimingDescription"> {
+  const ageDays = Math.floor((Date.now() - input.timestamp) / (24 * 60 * 60 * 1000));
+  switch (input.type) {
+    case "follow_up_requested":
+      if (ageDays >= 14) {
+        return {
+          reminderTiming: "overdue",
+          reminderTimingLabel: "Overdue",
+          reminderTimingDescription: "This follow-up has been waiting for attention for a while and may delay the next review step.",
+        };
+      }
+      return {
+        reminderTiming: "due_now",
+        reminderTimingLabel: "Due now",
+        reminderTimingDescription: "This follow-up is ready for attention now.",
+      };
+    case "ready_for_rereview":
+      return {
+        reminderTiming: "due_soon",
+        reminderTimingLabel: "Due soon",
+        reminderTimingDescription: "Your updates look ready for the next review step soon.",
+      };
+    case "follow_up_addressed":
+    case "readiness_improved":
+    case "documents_updated":
+    case "access_changed":
+    default:
+      return {
+        reminderTiming: "not_applicable",
+        reminderTimingLabel: "No action needed",
+        reminderTimingDescription: "This update is informational and does not need any action right now.",
+      };
+  }
+}
 
 const CATEGORY_TARGETS: Record<SharePackageCategoryKey, string> = {
   profile_details: "/tenant/profile",
@@ -60,12 +101,32 @@ function pushItem(
   items.push({
     ...item,
     timestamp,
+    ...deriveStructuredNotificationTiming({
+      type: item.type,
+      timestamp,
+    }),
   });
 }
 
 function compareNotifications(left: StructuredNotificationItem, right: StructuredNotificationItem): number {
-  if (left.actionRequired !== right.actionRequired) {
-    return left.actionRequired ? -1 : 1;
+  const rank = (value: StructuredNotificationItem["reminderTiming"]) => {
+    switch (value) {
+      case "due_now":
+        return 0;
+      case "overdue":
+        return 1;
+      case "due_soon":
+        return 2;
+      case "blocked":
+        return 3;
+      case "scheduled_later":
+        return 4;
+      default:
+        return 5;
+    }
+  };
+  if (rank(left.reminderTiming) !== rank(right.reminderTiming)) {
+    return rank(left.reminderTiming) - rank(right.reminderTiming);
   }
   return right.timestamp - left.timestamp;
 }

@@ -100,6 +100,8 @@ describe("TenantScreeningInboxPage", () => {
     expect(screen.getByText(/Requested for 123 Main St - Unit 4/i)).toBeInTheDocument();
     expect(screen.getByText(hasExactText("Requested by Harbour Homes Ltd."))).toBeInTheDocument();
     expect(screen.getAllByText(/Consent required/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Overdue/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/waiting for consent for a while/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Authorize screening/i })).toBeDisabled();
   });
 
@@ -125,6 +127,7 @@ describe("TenantScreeningInboxPage", () => {
 
     expect(await screen.findByText(/^Screening cannot proceed yet$/i)).toBeInTheDocument();
     expect(screen.getByText(/landlord may still need to complete screening setup/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Blocked/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/^Wait for landlord$/i)).toBeInTheDocument();
   });
 

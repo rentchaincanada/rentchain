@@ -72,6 +72,15 @@ const executionOutcomeTone: Record<
   },
 };
 
+const reminderTone = {
+  due_now: { bg: "rgba(245, 158, 11, 0.14)", text: "#92400e" },
+  due_soon: { bg: "rgba(59, 130, 246, 0.14)", text: "#1d4ed8" },
+  scheduled_later: { bg: "rgba(148, 163, 184, 0.16)", text: "#475569" },
+  overdue: { bg: "rgba(239, 68, 68, 0.12)", text: "#991b1b" },
+  blocked: { bg: "rgba(251, 191, 36, 0.18)", text: "#92400e" },
+  not_applicable: { bg: "#eef2f7", text: "#475569" },
+} as const;
+
 type Props = {
   decisions: LandlordAgentDecision[];
   title?: string;
@@ -278,6 +287,21 @@ function ActionDecisionCard(props: {
         </div>
       ) : null}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        {decision.reminderTiming && decision.reminderTimingLabel ? (
+          <div
+            style={{
+              justifySelf: "start",
+              padding: "4px 9px",
+              borderRadius: 999,
+              background: reminderTone[decision.reminderTiming].bg,
+              color: reminderTone[decision.reminderTiming].text,
+              fontWeight: 700,
+              fontSize: "0.78rem",
+            }}
+          >
+            {decision.reminderTimingLabel}
+          </div>
+        ) : null}
         {decision.automationState !== "manual_only" ? (
           <div
             style={{
@@ -295,6 +319,9 @@ function ActionDecisionCard(props: {
         ) : null}
       </div>
       {support ? <div style={{ color: "#64748b", fontSize: "0.88rem" }}>{support}</div> : null}
+      {decision.reminderTimingDescription ? (
+        <div style={{ color: "#64748b", fontSize: "0.84rem" }}>{decision.reminderTimingDescription}</div>
+      ) : null}
       {decision.automationState !== "manual_only" && decision.automationReason ? (
         <div style={{ color: "#64748b", fontSize: "0.84rem" }}>{decision.automationReason}</div>
       ) : null}

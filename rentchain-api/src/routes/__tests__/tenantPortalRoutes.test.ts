@@ -467,6 +467,9 @@ describe("tenantPortalRoutes foundation", () => {
     expect(res.body?.data?.sections?.flatMap((section: any) => section.items || [])).not.toEqual(
       expect.arrayContaining([expect.objectContaining({ sin: expect.anything() })])
     );
+    expect(res.body?.data?.reminderTiming).toMatch(/due_now|due_soon|scheduled_later|overdue|blocked|not_applicable/);
+    expect(typeof res.body?.data?.reminderTimingLabel).toBe("string");
+    expect(typeof res.body?.data?.reminderTimingDescription).toBe("string");
     const documentItem = res.body?.data?.sections
       ?.flatMap((section: any) => section.items || [])
       ?.find((item: any) => item.key === "upload_id");
@@ -1111,6 +1114,8 @@ describe("tenantPortalRoutes foundation", () => {
     expect(res.status).toBe(200);
     expect(res.body?.data?.status).toMatch(/not_started|in_progress|pending|needs_review/);
     expect(Array.isArray(res.body?.data?.sections)).toBe(true);
+    expect(res.body?.data?.reminderTiming).toMatch(/due_now|overdue/);
+    expect(res.body?.data?.reminderTimingLabel).toMatch(/Due now|Overdue/);
     const readinessSection = res.body?.data?.sections?.find((section: any) => section.key === "readiness");
     expect(readinessSection).toBeTruthy();
   });
