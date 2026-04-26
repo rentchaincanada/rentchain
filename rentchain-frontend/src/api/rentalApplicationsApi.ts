@@ -508,6 +508,20 @@ export async function submitRentalApplicationDecisionAction(
   };
 }
 
+export async function sendApplicationLinkReminder(
+  id: string
+): Promise<{ sentAt: number | null; partialProgress: RentalApplicationPartialProgressSummary | null }> {
+  const res: any = await apiFetch(`/rental-applications/in-progress/${encodeURIComponent(id)}/send-reminder`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: {},
+  });
+  return {
+    sentAt: typeof res?.data?.sentAt === "number" ? res.data.sentAt : null,
+    partialProgress: (res?.data?.partialProgress as RentalApplicationPartialProgressSummary) || null,
+  };
+}
+
 export async function fetchScreeningQuote(
   id: string,
   params?: {
