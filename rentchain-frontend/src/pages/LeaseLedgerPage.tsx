@@ -44,6 +44,21 @@ function formatDate(value: string | null | undefined) {
   return parsed.toLocaleDateString();
 }
 
+function executionNextActionLabel(value: string | null | undefined) {
+  switch (String(value || "").trim().toLowerCase()) {
+    case "tenant_signature":
+      return "Tenant signature";
+    case "landlord_signature":
+      return "Landlord signature";
+    case "review_signed_lease":
+      return "Review signed lease";
+    case "none":
+      return "No action needed";
+    default:
+      return "Complete lease details";
+  }
+}
+
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -338,6 +353,28 @@ export default function LeaseLedgerPage() {
           <strong>{dollars(totals.balanceCents)}</strong>
         </div>
       </div>
+
+      {lease?.leaseExecution ? (
+        <div style={{ border: "1px solid #e2e8f0", borderRadius: 10, padding: 12, background: "#fff", display: "grid", gap: 8 }}>
+          <div style={{ fontSize: 12, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.04em" }}>Lease execution</div>
+          <div style={{ fontWeight: 800 }}>{lease.leaseExecution.executionLabel}</div>
+          <div style={{ color: "#475569" }}>{lease.leaseExecution.executionDescription}</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 8 }}>
+            <div>
+              <div style={{ fontSize: 12, color: "#64748b" }}>Tenant signature</div>
+              <strong>{lease.leaseExecution.tenantSignatureStatus.replace(/_/g, " ")}</strong>
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: "#64748b" }}>Landlord signature</div>
+              <strong>{lease.leaseExecution.landlordSignatureStatus.replace(/_/g, " ")}</strong>
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: "#64748b" }}>Next action</div>
+              <strong>{executionNextActionLabel(lease.leaseExecution.requiredNextAction)}</strong>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {error ? <div style={{ color: "#b91c1c" }}>{error}</div> : null}
 

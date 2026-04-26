@@ -60,6 +60,28 @@ export interface LandlordActiveLease extends Lease {
   leasePdfStatus?: "available" | "pending" | "not_available";
   leasePdfLabel?: string | null;
   leasePdfDescription?: string | null;
+  leaseExecution?: {
+    executionStatus:
+      | "draft"
+      | "ready_for_tenant_signature"
+      | "tenant_signed"
+      | "ready_for_landlord_signature"
+      | "landlord_signed"
+      | "fully_executed"
+      | "blocked";
+    executionLabel: string;
+    executionDescription: string;
+    requiredNextAction:
+      | "complete_lease_details"
+      | "tenant_signature"
+      | "landlord_signature"
+      | "review_signed_lease"
+      | "none";
+    tenantSignatureStatus: "not_required" | "needed" | "completed" | "blocked";
+    landlordSignatureStatus: "not_required" | "needed" | "completed" | "blocked";
+    pdfStatus: "not_ready" | "ready" | "generated" | "blocked";
+    completedAt: string | null;
+  } | null;
   hiddenFromActiveLists?: boolean;
   cleanupReason?: string | null;
   cleanupBatch?: string | null;

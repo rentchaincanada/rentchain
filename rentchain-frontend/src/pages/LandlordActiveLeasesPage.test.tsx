@@ -41,6 +41,16 @@ describe("LandlordActiveLeasesPage", () => {
           tenantName: "Jane Tenant",
           tenantEmail: "jane@example.com",
           documentUrl: "https://example.com/lease.pdf",
+          leaseExecution: {
+            executionStatus: "fully_executed",
+            executionLabel: "Lease fully executed",
+            executionDescription: "The visible lease record indicates the current execution flow is complete.",
+            requiredNextAction: "none",
+            tenantSignatureStatus: "completed",
+            landlordSignatureStatus: "completed",
+            pdfStatus: "generated",
+            completedAt: "2026-01-01T00:00:00.000Z",
+          },
         },
       ],
     });
@@ -83,6 +93,7 @@ describe("LandlordActiveLeasesPage", () => {
     );
 
     expect(await screen.findByText("Harbour View")).toBeInTheDocument();
+    expect(screen.getByText("Lease fully executed")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "View" })).toHaveAttribute("href", "/leases/lease-1/ledger");
     expect(screen.getByRole("link", { name: "Email" })).toHaveAttribute(
       "href",

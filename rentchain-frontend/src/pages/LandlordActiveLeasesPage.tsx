@@ -122,6 +122,21 @@ function statusBadge(status: string | null | undefined) {
   );
 }
 
+function executionNextActionLabel(value: string | null | undefined) {
+  switch (String(value || "").trim().toLowerCase()) {
+    case "tenant_signature":
+      return "Tenant signature needed";
+    case "landlord_signature":
+      return "Landlord signature needed";
+    case "review_signed_lease":
+      return "Review signed lease";
+    case "none":
+      return "No action needed";
+    default:
+      return "Complete lease details";
+  }
+}
+
 export default function LandlordActiveLeasesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const view = searchParams.get("view") === "archived" ? "archived" : "active";
@@ -434,6 +449,16 @@ export default function LandlordActiveLeasesPage() {
                     </td>
                     <td style={{ padding: 12 }}>
                       <div>{statusBadge(lease.status)}</div>
+                      {lease.leaseExecution ? (
+                        <div style={{ display: "grid", gap: 4, marginTop: 6 }}>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: "#0f172a" }}>
+                            {lease.leaseExecution.executionLabel}
+                          </div>
+                          <div style={{ color: "#64748b", fontSize: 12 }}>
+                            {executionNextActionLabel(lease.leaseExecution.requiredNextAction)}
+                          </div>
+                        </div>
+                      ) : null}
                       {lease.archivedAt ? (
                         <div style={{ color: "#64748b", fontSize: 12, marginTop: 4 }}>
                           Archived {formatDate(lease.archivedAt)}

@@ -1,3 +1,5 @@
+import { deriveLeaseExecution, type LeaseExecution } from "../leaseExecution/deriveLeaseExecution";
+
 type TenantPropertyProjection = {
   propertyId: string;
   rc_prop_id: string | null;
@@ -32,6 +34,7 @@ type TenantLeaseProjection = {
   leasePdfStatus: "available" | "pending" | "not_available";
   leasePdfLabel: string;
   leasePdfDescription: string;
+  leaseExecution: LeaseExecution;
 };
 
 type TenantApplicationProjection = {
@@ -212,11 +215,12 @@ export type TenantSafeLeaseReadinessMetadata = Pick<
   | "leasePdfStatus"
   | "leasePdfLabel"
   | "leasePdfDescription"
+  | "leaseExecution"
 >;
 
 export function deriveTenantSafeLeaseReadinessMetadata(
   data: any,
-  options?: { documentUrl?: string | null }
+  options?: { documentUrl?: string | null; leaseId?: string | null }
 ): TenantSafeLeaseReadinessMetadata {
   const documentUrl = asString(options?.documentUrl) ?? asString(data?.documentUrl) ?? asString(data?.approvedDocumentUrl) ?? asString(data?.documentRef);
   const normalizedLeaseStatus = normalizeStatus(data?.status);
@@ -315,6 +319,17 @@ export function deriveTenantSafeLeaseReadinessMetadata(
     leasePdfStatus,
     leasePdfLabel,
     leasePdfDescription,
+    leaseExecution: deriveLeaseExecution({
+      leaseId: asString(options?.leaseId) || asString(data?.leaseId) || asString(data?.id),
+      documentUrl,
+      startDate: asString(data?.startDate) || asString(data?.leaseStart),
+      monthlyRent:
+        asNumber(data?.monthlyRent) ??
+        asNumber(data?.rentAmount) ??
+        (typeof data?.rentCents === "number" ? Math.round(data.rentCents) / 100 : null),
+      status: asString(data?.status),
+      raw: data,
+    }),
   };
 }
 
@@ -353,7 +368,7 @@ export function projectTenantLease(recordId: string, data: any): TenantLeaseProj
       (typeof data?.rentCents === "number" ? Math.round(data.rentCents) / 100 : null),
     status: asString(data?.status),
     documentUrl,
-    ...deriveTenantSafeLeaseReadinessMetadata(data, { documentUrl }),
+    ...deriveTenantSafeLeaseReadinessMetadata(data, { documentUrl, leaseId: recordId }),
   };
 }
 

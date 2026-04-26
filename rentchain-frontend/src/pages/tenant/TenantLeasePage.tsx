@@ -1,5 +1,5 @@
 import React from "react";
-import { getTenantLeaseWorkspace } from "../../api/tenantPortal";
+import { getTenantLeaseWorkspace, signTenantLease } from "../../api/tenantPortal";
 import {
   TenantEmptyState,
   TenantErrorState,
@@ -15,6 +15,7 @@ import {
 export default function TenantLeasePage() {
   const [data, setData] = React.useState<Awaited<ReturnType<typeof getTenantLeaseWorkspace>>>(null);
   const [loading, setLoading] = React.useState(true);
+  const [signing, setSigning] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
   const load = React.useCallback(async () => {
@@ -33,6 +34,58 @@ export default function TenantLeasePage() {
   React.useEffect(() => {
     void load();
   }, [load]);
+
+  async function handleTenantSign() {
+    if (!data?.leaseId) return;
+    setSigning(true);
+    setError(null);
+    try {
+      setData(await signTenantLease(data.leaseId));
+    } catch (err: any) {
+      setError(err?.payload?.error || err?.message || "Unable to record your lease signature.");
+    } finally {
+      setSigning(false);
+    }
+  }
+
+  const execution = data?.leaseExecution || null;
+  const timelineRows = execution
+    ? [
+        {
+          label: "Lease details",
+          value:
+            execution.executionStatus === "blocked"
+              ? "Needs attention"
+              : "Ready",
+        },
+        {
+          label: "Tenant signature",
+          value:
+            execution.tenantSignatureStatus === "completed"
+              ? "Completed"
+              : execution.tenantSignatureStatus === "needed"
+              ? "Needed"
+              : execution.tenantSignatureStatus === "blocked"
+              ? "Blocked"
+              : "Not required",
+        },
+        {
+          label: "Landlord signature",
+          value:
+            execution.landlordSignatureStatus === "completed"
+              ? "Completed"
+              : execution.landlordSignatureStatus === "needed"
+              ? "Needed"
+              : execution.landlordSignatureStatus === "blocked"
+              ? "Blocked"
+              : "Not required",
+        },
+        {
+          label: "Fully executed",
+          value: execution.executionStatus === "fully_executed" ? "Completed" : "Pending",
+        },
+      ]
+    : [];
 
   return (
     <TenantSurfaceShell
@@ -108,6 +161,36 @@ export default function TenantLeasePage() {
               ) : null}
             </div>
           </TenantInfoCard>
+
+          {execution ? (
+            <TenantInfoCard heading="Lease Execution" accent="#0f172a">
+              <div style={{ display: "grid", gap: 12 }}>
+                <div style={{ display: "grid", gap: 6 }}>
+                  <div style={{ fontWeight: 800 }}>{execution.executionLabel}</div>
+                  <div style={{ color: "var(--text-muted, #64748b)" }}>{execution.executionDescription}</div>
+                </div>
+
+                <TenantKeyValueGrid rows={timelineRows} />
+
+                {execution.completedAt ? (
+                  <div style={{ color: "var(--text-muted, #64748b)" }}>
+                    Completed at {formatDate(execution.completedAt)}
+                  </div>
+                ) : null}
+
+                {execution.requiredNextAction === "tenant_signature" && data?.leaseId ? (
+                  <div style={{ display: "grid", gap: 8 }}>
+                    <button type="button" onClick={() => void handleTenantSign()} disabled={signing}>
+                      {signing ? "Recording signature..." : "Confirm tenant signature"}
+                    </button>
+                    <div style={{ color: "var(--text-muted, #64748b)" }}>
+                      This records tenant signature metadata for the current lease workflow without storing any drawn signature image.
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            </TenantInfoCard>
+          ) : null}
         </>
       ) : null}
     </TenantSurfaceShell>

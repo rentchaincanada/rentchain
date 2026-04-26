@@ -50,6 +50,28 @@ export type TenantWorkspaceLease = {
   leasePdfStatus?: "available" | "pending" | "not_available";
   leasePdfLabel?: string | null;
   leasePdfDescription?: string | null;
+  leaseExecution?: {
+    executionStatus:
+      | "draft"
+      | "ready_for_tenant_signature"
+      | "tenant_signed"
+      | "ready_for_landlord_signature"
+      | "landlord_signed"
+      | "fully_executed"
+      | "blocked";
+    executionLabel: string;
+    executionDescription: string;
+    requiredNextAction:
+      | "complete_lease_details"
+      | "tenant_signature"
+      | "landlord_signature"
+      | "review_signed_lease"
+      | "none";
+    tenantSignatureStatus: "not_required" | "needed" | "completed" | "blocked";
+    landlordSignatureStatus: "not_required" | "needed" | "completed" | "blocked";
+    pdfStatus: "not_ready" | "ready" | "generated" | "blocked";
+    completedAt: string | null;
+  } | null;
   depositCents?: number | null;
   depositRequired?: boolean | null;
   depositReceived?: boolean | null;
@@ -209,6 +231,18 @@ export async function getTenantApplicationStatus(): Promise<TenantWorkspaceAppli
 
 export async function getTenantLeaseWorkspace(): Promise<TenantWorkspaceLease | null> {
   const res = await tenantApiFetch<{ ok: boolean; data: TenantWorkspaceLease | null }>("/tenant/lease");
+  return res?.data ?? null;
+}
+
+export async function signTenantLease(leaseId: string): Promise<TenantWorkspaceLease | null> {
+  const res = await tenantApiFetch<{ ok: boolean; data: TenantWorkspaceLease | null }>(
+    `/tenant/leases/${encodeURIComponent(leaseId)}/sign`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    }
+  );
   return res?.data ?? null;
 }
 

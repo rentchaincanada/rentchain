@@ -182,6 +182,11 @@ describe("leaseRoutes GET /active", () => {
           signatureDisplayName: "Jane Tenant",
         },
         leasePdfStatus: "available",
+        leaseExecution: expect.objectContaining({
+          executionStatus: "fully_executed",
+          executionLabel: "Lease fully executed",
+          requiredNextAction: "none",
+        }),
       })
     );
     expect(res.body?.leases?.[0]?.tenantSignature?.drawnDataUrl).toBeUndefined();
