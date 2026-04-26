@@ -210,6 +210,26 @@ export type TenantIdentityRecord = {
   readinessDescription: string;
 };
 
+export type TenantCredibilitySignals = {
+  signals: Array<{
+    key:
+      | "profile_complete"
+      | "application_reusable"
+      | "documents_available"
+      | "screening_completed"
+      | "lease_history_present";
+    label: string;
+    description: string;
+    status: "not_available" | "available" | "verified" | "incomplete";
+  }>;
+  summary: {
+    completenessLevel: "low" | "medium" | "high";
+    verificationLevel: "none" | "partial" | "strong";
+    summaryLabel: string;
+    summaryDescription: string;
+  };
+};
+
 export type TenantWorkspaceSummary = {
   context: TenantWorkspaceContext;
   property: TenantWorkspaceProperty | null;
@@ -217,6 +237,7 @@ export type TenantWorkspaceSummary = {
   lease: TenantWorkspaceLease | null;
   maintenance: TenantWorkspaceMaintenance[];
   tenantIdentityRecord?: TenantIdentityRecord | null;
+  tenantCredibilitySignals?: TenantCredibilitySignals | null;
 };
 
 export async function getTenantWorkspace(): Promise<TenantWorkspaceSummary> {

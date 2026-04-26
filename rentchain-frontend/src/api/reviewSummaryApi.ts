@@ -78,6 +78,12 @@ export type ApplicationReviewSummary = ReviewSummaryCore & {
     readinessDescription: string;
   } | null;
   trustContext?: LandlordTrustContext | null;
+  tenantCredibilitySummary?: {
+    completenessLevel: "low" | "medium" | "high";
+    verificationLevel: "none" | "partial" | "strong";
+    summaryLabel: string;
+    summaryDescription: string;
+  } | null;
 };
 
 export class ReviewSummaryApiError extends Error {
@@ -124,6 +130,8 @@ export async function fetchReviewSummary(applicationId: string): Promise<Applica
     risk: ((res?.risk || null) as RiskAgentReviewSnapshot) || null,
     tenantIdentitySummary: (res?.tenantIdentitySummary || null) as ApplicationReviewSummary["tenantIdentitySummary"],
     trustContext: (res?.trustContext || null) as ApplicationReviewSummary["trustContext"],
+    tenantCredibilitySummary:
+      (res?.tenantCredibilitySummary || null) as ApplicationReviewSummary["tenantCredibilitySummary"],
   };
 }
 

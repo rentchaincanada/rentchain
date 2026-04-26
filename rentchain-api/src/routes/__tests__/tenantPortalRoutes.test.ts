@@ -462,6 +462,23 @@ describe("tenantPortalRoutes foundation", () => {
     expect(res.body?.data?.maintenance?.[0]?.internalCost).toBeUndefined();
     expect(res.body?.data?.tenantIdentityRecord?.documents?.documentChecklist).toBeUndefined();
     expect(res.body?.data?.tenantIdentityRecord?.screening?.provider).toBeUndefined();
+    expect(res.body?.data?.tenantCredibilitySignals).toEqual(
+      expect.objectContaining({
+        signals: expect.arrayContaining([
+          expect.objectContaining({ key: "profile_complete" }),
+          expect.objectContaining({ key: "application_reusable" }),
+          expect.objectContaining({ key: "documents_available" }),
+          expect.objectContaining({ key: "screening_completed" }),
+          expect.objectContaining({ key: "lease_history_present" }),
+        ]),
+        summary: expect.objectContaining({
+          completenessLevel: expect.stringMatching(/low|medium|high/),
+          verificationLevel: expect.stringMatching(/none|partial|strong/),
+          summaryLabel: expect.any(String),
+          summaryDescription: expect.any(String),
+        }),
+      })
+    );
 
     const eventDocs = Array.from(ensureCollection("event_log").values());
     expect(eventDocs.some((event) => event.event_type === "tenant_workspace_viewed")).toBe(true);

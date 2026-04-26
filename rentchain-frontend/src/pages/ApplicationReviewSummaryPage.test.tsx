@@ -125,6 +125,12 @@ describe("ApplicationReviewSummaryPage", () => {
         recommendedNextAction: "review_application",
         decisionSupportLevel: "medium",
       },
+      tenantCredibilitySummary: {
+        completenessLevel: "high",
+        verificationLevel: "partial",
+        summaryLabel: "Credibility established",
+        summaryDescription: "Most credibility signals are available in the current record.",
+      },
     } as any);
 
     renderPage();
@@ -182,6 +188,9 @@ describe("ApplicationReviewSummaryPage", () => {
     expect(await screen.findByText("Landlord Decision Panel")).toBeInTheDocument();
     expect(await screen.findByText("Identity verification completed")).toBeInTheDocument();
     expect(await screen.findByText("Trust guidance")).toBeInTheDocument();
+    expect(await screen.findByText("Credibility summary")).toBeInTheDocument();
+    expect(await screen.findByText("Credibility established")).toBeInTheDocument();
+    expect(await screen.findByText("Most credibility signals are available in the current record.")).toBeInTheDocument();
     expect((await screen.findAllByText("Ready for review")).length).toBeGreaterThan(0);
     expect(await screen.findByText("Application information is mostly complete.")).toBeInTheDocument();
     expect(await screen.findByText("Employment or income details are still incomplete.")).toBeInTheDocument();

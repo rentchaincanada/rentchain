@@ -261,6 +261,7 @@ export default function TenantWorkspacePage() {
     lease: data?.lease,
   });
   const tenantIdentityRecord = data?.tenantIdentityRecord || null;
+  const tenantCredibilitySignals = data?.tenantCredibilitySignals || null;
   const communicationsView = buildTenantCommunicationsWorkspaceState(communications);
   const screeningSummary = buildTenantScreeningDashboardSummary(screenings);
   const notificationItems = filterStructuredNotificationsByPreferences(
@@ -469,6 +470,39 @@ export default function TenantWorkspacePage() {
         ) : (
           <div style={{ color: textTokens.secondary }}>
             Your rental identity summary will appear here once enough tenant-safe records are available.
+          </div>
+        )}
+      </TenantInfoCard>
+
+      <TenantInfoCard heading="Credibility signals" accent="#0f766e">
+        {tenantCredibilitySignals ? (
+          <div style={{ display: "grid", gap: spacing.sm }}>
+            <div style={{ display: "grid", gap: 4 }}>
+              <div style={{ fontSize: "1.02rem", fontWeight: 800, color: textTokens.primary }}>
+                {tenantCredibilitySignals.summary.summaryLabel}
+              </div>
+              <div style={{ color: textTokens.secondary, lineHeight: 1.6 }}>
+                {tenantCredibilitySignals.summary.summaryDescription}
+              </div>
+            </div>
+
+            <TenantKeyValueGrid
+              rows={tenantCredibilitySignals.signals.map((signal) => ({
+                label: signal.label,
+                value:
+                  signal.status === "verified"
+                    ? "Verified"
+                    : signal.status === "available"
+                    ? "Available"
+                    : signal.status === "incomplete"
+                    ? "Incomplete"
+                    : "Not available",
+              }))}
+            />
+          </div>
+        ) : (
+          <div style={{ color: textTokens.secondary }}>
+            Credibility signals will appear here once enough tenant-safe identity signals are available.
           </div>
         )}
       </TenantInfoCard>
