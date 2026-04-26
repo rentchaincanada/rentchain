@@ -122,7 +122,6 @@ describe("PublicApplyPage", () => {
     firstRender.unmount();
 
     renderPage();
-
     expect(await screen.findByText("Resume your application")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Continue where you left off" })).toBeInTheDocument();
     expect(await screen.findByTestId("viewing-request-form")).toBeInTheDocument();
