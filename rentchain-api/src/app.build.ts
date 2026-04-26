@@ -95,6 +95,7 @@ import accessRoutes from "./routes/accessRoutes";
 import complianceRoutes from "./routes/complianceRoutes";
 import internalReportsRoutes from "./routes/internalReportsRoutes";
 import identityOracleInternalRoutes from "./routes/identityOracleInternalRoutes";
+import applicationReminderInternalRoutes from "./routes/applicationReminderInternalRoutes";
 import statusRoutes from "./routes/statusRoutes";
 import expensesRoutes from "./routes/expensesRoutes";
 import financialTransactionsRoutes from "./routes/financialTransactionsRoutes";
@@ -225,6 +226,7 @@ app.use("/api/access", routeSource("accessRoutes.ts"), accessRoutes);
 app.use("/api/capabilities", routeSource("capabilitiesRoutes.ts"), capabilitiesRoutes);
 app.use("/api/internal", routeSource("internalReportsRoutes.ts"), internalReportsRoutes);
 app.use("/api/internal", routeSource("identityOracleInternalRoutes.ts"), identityOracleInternalRoutes);
+app.use("/api/internal", routeSource("applicationReminderInternalRoutes.ts"), applicationReminderInternalRoutes);
 app.use("/api/status", routeSource("statusRoutes.ts"), statusRoutes);
 
 // Auth decode (non-blocking if header missing)
