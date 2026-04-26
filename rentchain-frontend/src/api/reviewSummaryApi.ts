@@ -84,6 +84,12 @@ export type ApplicationReviewSummary = ReviewSummaryCore & {
     summaryLabel: string;
     summaryDescription: string;
   } | null;
+  portableIdentitySummary?: {
+    portabilityStatus: "not_ready" | "ready" | "limited";
+    portabilityLabel: string;
+    portabilityDescription: string;
+    reusableAcrossApplications: boolean;
+  } | null;
 };
 
 export class ReviewSummaryApiError extends Error {
@@ -132,6 +138,8 @@ export async function fetchReviewSummary(applicationId: string): Promise<Applica
     trustContext: (res?.trustContext || null) as ApplicationReviewSummary["trustContext"],
     tenantCredibilitySummary:
       (res?.tenantCredibilitySummary || null) as ApplicationReviewSummary["tenantCredibilitySummary"],
+    portableIdentitySummary:
+      (res?.portableIdentitySummary || null) as ApplicationReviewSummary["portableIdentitySummary"],
   };
 }
 

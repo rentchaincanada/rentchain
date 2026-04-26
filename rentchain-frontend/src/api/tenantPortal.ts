@@ -246,6 +246,24 @@ export type IdentityTimeline = {
   }>;
 };
 
+export type PortableIdentity = {
+  portabilityStatus: "not_ready" | "ready" | "limited";
+  portabilityLabel: string;
+  portabilityDescription: string;
+  reusableAcrossApplications: boolean;
+  identityReference: {
+    referenceType: "tenant_identity";
+    referenceStatus: "active" | "limited";
+  };
+  readiness: {
+    identityReady: boolean;
+    applicationReusable: boolean;
+    credibilityReady: boolean;
+    sharingEnabled: boolean;
+  };
+  nextAction: "complete_identity" | "enable_sharing" | "review_reusability" | "none";
+};
+
 export type TenantWorkspaceSummary = {
   context: TenantWorkspaceContext;
   property: TenantWorkspaceProperty | null;
@@ -254,6 +272,7 @@ export type TenantWorkspaceSummary = {
   maintenance: TenantWorkspaceMaintenance[];
   tenantIdentityRecord?: TenantIdentityRecord | null;
   tenantCredibilitySignals?: TenantCredibilitySignals | null;
+  portableIdentity?: PortableIdentity | null;
   identityTimeline?: IdentityTimeline | null;
 };
 

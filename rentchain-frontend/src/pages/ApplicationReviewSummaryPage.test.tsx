@@ -131,6 +131,12 @@ describe("ApplicationReviewSummaryPage", () => {
         summaryLabel: "Credibility established",
         summaryDescription: "Most credibility signals are available in the current record.",
       },
+      portableIdentitySummary: {
+        portabilityStatus: "ready",
+        portabilityLabel: "Ready to reuse",
+        portabilityDescription: "Your rental identity is organized for reuse across application contexts.",
+        reusableAcrossApplications: true,
+      },
     } as any);
 
     renderPage();
@@ -189,8 +195,11 @@ describe("ApplicationReviewSummaryPage", () => {
     expect(await screen.findByText("Identity verification completed")).toBeInTheDocument();
     expect(await screen.findByText("Trust guidance")).toBeInTheDocument();
     expect(await screen.findByText("Credibility summary")).toBeInTheDocument();
+    expect(await screen.findByText("Portability summary")).toBeInTheDocument();
     expect(await screen.findByText("Credibility established")).toBeInTheDocument();
     expect(await screen.findByText("Most credibility signals are available in the current record.")).toBeInTheDocument();
+    expect(await screen.findByText("Ready to reuse")).toBeInTheDocument();
+    expect(await screen.findByText("Reusable across applications")).toBeInTheDocument();
     expect((await screen.findAllByText("Ready for review")).length).toBeGreaterThan(0);
     expect(await screen.findByText("Application information is mostly complete.")).toBeInTheDocument();
     expect(await screen.findByText("Employment or income details are still incomplete.")).toBeInTheDocument();

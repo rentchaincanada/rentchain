@@ -322,13 +322,25 @@ describe("rentalApplications review summary risk surface", () => {
         summaryDescription: expect.any(String),
       })
     );
+    expect(res.body?.portableIdentitySummary).toEqual(
+      expect.objectContaining({
+        portabilityStatus: expect.stringMatching(/not_ready|ready|limited/),
+        portabilityLabel: expect.any(String),
+        portabilityDescription: expect.any(String),
+        reusableAcrossApplications: expect.any(Boolean),
+      })
+    );
     expect(res.body?.tenantIdentitySummary?.documents).toBeUndefined();
     expect(res.body?.tenantIdentitySummary?.screening).toBeUndefined();
     expect(res.body?.tenantCredibilitySummary?.signals).toBeUndefined();
+    expect(res.body?.portableIdentitySummary?.readiness).toBeUndefined();
+    expect(res.body?.portableIdentitySummary?.identityReference).toBeUndefined();
     expect(JSON.stringify(res.body?.tenantCredibilitySummary || {})).not.toContain("transunion");
     expect(JSON.stringify(res.body?.tenantCredibilitySummary || {})).not.toContain("ref-1");
     expect(JSON.stringify(res.body?.trustContext || {})).not.toContain("transunion");
     expect(JSON.stringify(res.body?.trustContext || {})).not.toContain("ref-1");
+    expect(JSON.stringify(res.body?.portableIdentitySummary || {})).not.toContain("token");
+    expect(JSON.stringify(res.body?.portableIdentitySummary || {})).not.toContain("approval");
   });
 
   it("returns a safe null risk state when no snapshot exists", async () => {

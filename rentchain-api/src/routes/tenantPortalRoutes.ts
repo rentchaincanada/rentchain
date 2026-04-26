@@ -19,6 +19,7 @@ import { redeemTenancyInvite } from "../services/tenantPortal/tenantInviteServic
 import { loadTenantIdentityRecord, loadTenantProfileProjection } from "../services/tenantPortal/tenantProfileService";
 import { deriveTenantCredibilitySignals } from "../services/tenantCredibility/deriveTenantCredibilitySignals";
 import { deriveIdentityTimeline } from "../services/identityTimeline/deriveIdentityTimeline";
+import { deriveIdentityPortability } from "../services/identityPortability/deriveIdentityPortability";
 import {
   loadTenantCommunicationsWorkspace,
   markTenantCommunicationsRead,
@@ -2922,6 +2923,17 @@ async function handleTenantWorkspaceSummary(req: any, res: any) {
     tenantIdentityRecord,
     leaseExecution: workspace.lease?.leaseExecution || null,
   });
+  const { portableIdentity } = deriveIdentityPortability({
+    tenantIdentityRecord,
+    credibilitySummary: tenantCredibilitySignals.summary,
+    shareAvailability: {
+      // Tenant-side capability signal only. This does not imply any active share link exists.
+      sharingEnabled: Boolean(context.tenantId || req.user?.tenantId || req.user?.id),
+    },
+    timelineAvailability: {
+      hasIdentityTimeline: Array.isArray(identityTimeline?.events) && identityTimeline.events.length > 0,
+    },
+  });
   await recordTenantEvent({
     eventType: "tenant_workspace_viewed",
     entityType: "tenant_workspace",
@@ -2949,6 +2961,7 @@ async function handleTenantWorkspaceSummary(req: any, res: any) {
       maintenance: workspace.maintenance,
       tenantIdentityRecord,
       tenantCredibilitySignals,
+      portableIdentity,
       identityTimeline,
     },
   });
