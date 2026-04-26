@@ -1708,6 +1708,20 @@ function ApplicationReviewSummaryPageBody() {
             </Card>
           ) : null}
 
+          {summary.tenantCredibilitySummary ? (
+            <Card style={{ display: "grid", gap: 8 }}>
+              <div style={{ fontWeight: 700 }}>Credibility summary</div>
+              <div style={{ fontSize: 13, color: text.subtle }}>
+                {summary.tenantCredibilitySummary.summaryDescription}
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
+                {kv("Summary", summary.tenantCredibilitySummary.summaryLabel)}
+                {kv("Completeness level", summary.tenantCredibilitySummary.completenessLevel)}
+                {kv("Verification level", summary.tenantCredibilitySummary.verificationLevel)}
+              </div>
+            </Card>
+          ) : null}
+
           <Card style={{ display: "grid", gap: 8 }}>
             <div style={{ fontWeight: 700 }}>Applicant Overview</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>

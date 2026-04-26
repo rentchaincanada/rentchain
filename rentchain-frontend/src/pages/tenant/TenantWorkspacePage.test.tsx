@@ -195,6 +195,21 @@ describe("tenant workspace frontend shell", () => {
         readinessLabel: "Ready to apply",
         readinessDescription: "Your core profile, reusable application details, and supporting records are ready for most rental workflows.",
       },
+      tenantCredibilitySignals: {
+        signals: [
+          { key: "profile_complete", label: "Profile complete", description: "desc", status: "verified" },
+          { key: "application_reusable", label: "Application reusable", description: "desc", status: "available" },
+          { key: "documents_available", label: "Documents available", description: "desc", status: "incomplete" },
+          { key: "screening_completed", label: "Screening completed", description: "desc", status: "available" },
+          { key: "lease_history_present", label: "Lease history present", description: "desc", status: "verified" },
+        ],
+        summary: {
+          completenessLevel: "high",
+          verificationLevel: "partial",
+          summaryLabel: "Credibility established",
+          summaryDescription: "Most credibility signals are available in your current record.",
+        },
+      },
     });
     tenantAttachmentsApi.getTenantAttachments.mockResolvedValue({
       ok: true,
@@ -404,6 +419,21 @@ describe("tenant workspace frontend shell", () => {
         readinessLabel: "Ready to apply",
         readinessDescription: "Your core profile, reusable application details, and supporting records are ready for most rental workflows.",
       },
+      tenantCredibilitySignals: {
+        signals: [
+          { key: "profile_complete", label: "Profile complete", description: "desc", status: "verified" },
+          { key: "application_reusable", label: "Application reusable", description: "desc", status: "available" },
+          { key: "documents_available", label: "Documents available", description: "desc", status: "incomplete" },
+          { key: "screening_completed", label: "Screening completed", description: "desc", status: "available" },
+          { key: "lease_history_present", label: "Lease history present", description: "desc", status: "verified" },
+        ],
+        summary: {
+          completenessLevel: "high",
+          verificationLevel: "partial",
+          summaryLabel: "Credibility established",
+          summaryDescription: "Most credibility signals are available in your current record.",
+        },
+      },
     });
 
     render(
@@ -420,6 +450,13 @@ describe("tenant workspace frontend shell", () => {
     expect(screen.getByText(/Recent workflow updates/i)).toBeInTheDocument();
     expect(await screen.findByText(/Profile completion/i)).toBeInTheDocument();
     expect(screen.getByText(/^Your Rental Identity$/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Credibility signals$/i)).toBeInTheDocument();
+    expect(screen.getByText(/Credibility established/i)).toBeInTheDocument();
+    expect(screen.getByText(/Profile complete/i)).toBeInTheDocument();
+    expect(screen.getByText(/Application reusable/i)).toBeInTheDocument();
+    expect(screen.getByText(/Documents available/i)).toBeInTheDocument();
+    expect(screen.getByText(/Screening completed/i)).toBeInTheDocument();
+    expect(screen.getByText(/Lease history present/i)).toBeInTheDocument();
     expect(screen.getByText(/Ready to apply/i)).toBeInTheDocument();
     expect(screen.getByText(/Missing pieces/i)).toBeInTheDocument();
     expect(screen.getByText(/Income documents/i)).toBeInTheDocument();

@@ -314,8 +314,19 @@ describe("rentalApplications review summary risk surface", () => {
         "Identity profile has stronger supporting signals.",
       ])
     );
+    expect(res.body?.tenantCredibilitySummary).toEqual(
+      expect.objectContaining({
+        completenessLevel: expect.stringMatching(/low|medium|high/),
+        verificationLevel: expect.stringMatching(/none|partial|strong/),
+        summaryLabel: expect.any(String),
+        summaryDescription: expect.any(String),
+      })
+    );
     expect(res.body?.tenantIdentitySummary?.documents).toBeUndefined();
     expect(res.body?.tenantIdentitySummary?.screening).toBeUndefined();
+    expect(res.body?.tenantCredibilitySummary?.signals).toBeUndefined();
+    expect(JSON.stringify(res.body?.tenantCredibilitySummary || {})).not.toContain("transunion");
+    expect(JSON.stringify(res.body?.tenantCredibilitySummary || {})).not.toContain("ref-1");
     expect(JSON.stringify(res.body?.trustContext || {})).not.toContain("transunion");
     expect(JSON.stringify(res.body?.trustContext || {})).not.toContain("ref-1");
   });

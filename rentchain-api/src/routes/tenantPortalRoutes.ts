@@ -17,6 +17,7 @@ import { deriveLeaseExecution } from "../services/leaseExecution/deriveLeaseExec
 import { recordTenantEvent } from "../services/tenantPortal/tenantEventLogService";
 import { redeemTenancyInvite } from "../services/tenantPortal/tenantInviteService";
 import { loadTenantIdentityRecord, loadTenantProfileProjection } from "../services/tenantPortal/tenantProfileService";
+import { deriveTenantCredibilitySignals } from "../services/tenantCredibility/deriveTenantCredibilitySignals";
 import {
   loadTenantCommunicationsWorkspace,
   markTenantCommunicationsRead,
@@ -2910,6 +2911,10 @@ async function handleTenantWorkspaceSummary(req: any, res: any) {
       userEmail: req.user?.email,
     }),
   ]);
+  const { tenantCredibilitySignals } = deriveTenantCredibilitySignals({
+    tenantIdentityRecord,
+    leaseExecution: workspace.lease?.leaseExecution || null,
+  });
   await recordTenantEvent({
     eventType: "tenant_workspace_viewed",
     entityType: "tenant_workspace",
@@ -2936,6 +2941,7 @@ async function handleTenantWorkspaceSummary(req: any, res: any) {
       lease: workspace.lease,
       maintenance: workspace.maintenance,
       tenantIdentityRecord,
+      tenantCredibilitySignals,
     },
   });
 }
