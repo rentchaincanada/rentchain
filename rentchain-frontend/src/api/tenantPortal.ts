@@ -159,12 +159,42 @@ export type TenantWorkspaceMaintenance = {
   }>;
 };
 
+export type TenantIdentityRecord = {
+  identityStatus: "incomplete" | "ready" | "verified" | "limited";
+  profile: {
+    completionStatus: "complete" | "in_progress" | "missing" | "needs_attention";
+  };
+  application: {
+    reusable: boolean;
+    lastSubmittedAt: string | null;
+  };
+  documents: {
+    completionStatus: "complete" | "in_progress" | "missing" | "needs_attention";
+    missingCategories: string[];
+  };
+  screening: {
+    status: "not_started" | "in_progress" | "completed" | "needs_attention" | "blocked";
+    lastCompletedAt: string | null;
+  };
+  leases: {
+    activeCount: number;
+    historicalCount: number;
+    lastSignedAt: string | null;
+  };
+  verification: {
+    level: "none" | "partial" | "strong";
+  };
+  readinessLabel: string;
+  readinessDescription: string;
+};
+
 export type TenantWorkspaceSummary = {
   context: TenantWorkspaceContext;
   property: TenantWorkspaceProperty | null;
   application: TenantWorkspaceApplication | null;
   lease: TenantWorkspaceLease | null;
   maintenance: TenantWorkspaceMaintenance[];
+  tenantIdentityRecord?: TenantIdentityRecord | null;
 };
 
 export async function getTenantWorkspace(): Promise<TenantWorkspaceSummary> {

@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 type StoredDoc = { id: string; data: any };
 
-const { dbMock, resetDb, upsertDoc, getLatestApplicationRiskMock } = vi.hoisted(() => {
+const { dbMock, resetDb, upsertDoc, getLatestApplicationRiskMock, loadLandlordSafeTenantIdentitySummaryMock } = vi.hoisted(() => {
   const collections = new Map<string, Map<string, StoredDoc>>();
 
   function ensureCollection(name: string) {
@@ -55,6 +55,7 @@ const { dbMock, resetDb, upsertDoc, getLatestApplicationRiskMock } = vi.hoisted(
       ensureCollection(collectionName).set(id, { id, data });
     },
     getLatestApplicationRiskMock: vi.fn(),
+    loadLandlordSafeTenantIdentitySummaryMock: vi.fn(),
   };
 });
 
@@ -229,6 +230,10 @@ vi.mock("../../services/riskAgent/riskAgentService", () => ({
   getLatestApplicationRisk: getLatestApplicationRiskMock,
 }));
 
+vi.mock("../../services/tenantPortal/tenantProfileService", () => ({
+  loadLandlordSafeTenantIdentitySummary: loadLandlordSafeTenantIdentitySummaryMock,
+}));
+
 async function createApp() {
   const router = (await import("../rentalApplicationsRoutes")).default;
   const app = express();
@@ -240,6 +245,13 @@ async function createApp() {
 describe("rentalApplications review summary risk surface", () => {
   beforeEach(() => {
     resetDb();
+    loadLandlordSafeTenantIdentitySummaryMock.mockReset();
+    loadLandlordSafeTenantIdentitySummaryMock.mockResolvedValue({
+      identityStatus: "ready",
+      verification: { level: "partial" },
+      readinessLabel: "Ready to apply",
+      readinessDescription: "Your core profile and supporting records are ready for most rental workflows.",
+    });
     upsertDoc("rentalApplications", "app-1", {
       id: "app-1",
       landlordId: "landlord-1",
@@ -282,6 +294,14 @@ describe("rentalApplications review summary risk surface", () => {
         grade: "B",
       })
     );
+    expect(res.body?.tenantIdentitySummary).toEqual({
+      identityStatus: "ready",
+      verification: { level: "partial" },
+      readinessLabel: "Ready to apply",
+      readinessDescription: "Your core profile and supporting records are ready for most rental workflows.",
+    });
+    expect(res.body?.tenantIdentitySummary?.documents).toBeUndefined();
+    expect(res.body?.tenantIdentitySummary?.screening).toBeUndefined();
   });
 
   it("returns a safe null risk state when no snapshot exists", async () => {

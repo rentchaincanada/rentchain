@@ -62,6 +62,7 @@ import {
   normalizeApplicationLinkPartialProgress,
   sendApplicationLinkReminder,
 } from "../services/applicationReminderService";
+import { loadLandlordSafeTenantIdentitySummary } from "../services/tenantPortal/tenantProfileService";
 import {
   buildQuoteId,
   buildScreeningMonetizationPatch,
@@ -4095,13 +4096,16 @@ router.get("/rental-applications/:id/review-summary", async (req: any, res) => {
       });
     }
     const summary = buildReviewSummary(id, access.data);
+    const [risk, tenantIdentitySummary] = await Promise.all([
+      getLatestApplicationRisk({ applicationId: id }),
+      loadLandlordSafeTenantIdentitySummary({ applicationId: id, application: access.data }),
+    ]);
     const decisionSummary = buildApplicationDecisionSummary({
       applicationId: id,
       application: access.data,
       reviewSummary: summary,
     });
-    const risk = await getLatestApplicationRisk({ applicationId: id });
-    return res.json({ ok: true, summary, decisionSummary, risk });
+    return res.json({ ok: true, summary, decisionSummary, risk, tenantIdentitySummary });
   } catch (err: any) {
     console.error("[review_summary] failed", err?.message || err);
     return res.status(500).json({

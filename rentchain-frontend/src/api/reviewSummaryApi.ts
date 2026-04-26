@@ -52,6 +52,14 @@ type ReviewSummaryCore = {
 export type ApplicationReviewSummary = ReviewSummaryCore & {
   decisionSummary?: ApplicationDecisionSummary | null;
   risk?: RiskAgentReviewSnapshot;
+  tenantIdentitySummary?: {
+    identityStatus: "incomplete" | "ready" | "verified" | "limited";
+    verification: {
+      level: "none" | "partial" | "strong";
+    };
+    readinessLabel: string;
+    readinessDescription: string;
+  } | null;
 };
 
 export class ReviewSummaryApiError extends Error {
@@ -96,6 +104,7 @@ export async function fetchReviewSummary(applicationId: string): Promise<Applica
       (res?.risk || null) as RiskAgentReviewSnapshot
     ),
     risk: ((res?.risk || null) as RiskAgentReviewSnapshot) || null,
+    tenantIdentitySummary: (res?.tenantIdentitySummary || null) as ApplicationReviewSummary["tenantIdentitySummary"],
   };
 }
 

@@ -34,6 +34,52 @@ import { buildTenantStructuredNotificationTriggers } from "../structuredNotifica
 import { filterStructuredNotificationsByPreferences } from "../notificationChannelRouting";
 import { buildTenantScreeningDashboardSummary } from "./tenantScreeningInboxView";
 
+function prettyIdentityCompletionStatus(
+  value: "complete" | "in_progress" | "missing" | "needs_attention" | null | undefined
+) {
+  switch (value) {
+    case "complete":
+      return "Complete";
+    case "in_progress":
+      return "In progress";
+    case "needs_attention":
+      return "Needs attention";
+    case "missing":
+    default:
+      return "Missing";
+  }
+}
+
+function prettyVerificationLevel(value: "none" | "partial" | "strong" | null | undefined) {
+  switch (value) {
+    case "strong":
+      return "Strong";
+    case "partial":
+      return "Partial";
+    case "none":
+    default:
+      return "None";
+  }
+}
+
+function prettyScreeningIdentityStatus(
+  value: "not_started" | "in_progress" | "completed" | "needs_attention" | "blocked" | null | undefined
+) {
+  switch (value) {
+    case "completed":
+      return "Completed";
+    case "in_progress":
+      return "In progress";
+    case "needs_attention":
+      return "Needs attention";
+    case "blocked":
+      return "Blocked";
+    case "not_started":
+    default:
+      return "Not started";
+  }
+}
+
 export default function TenantWorkspacePage() {
   const [data, setData] = React.useState<Awaited<ReturnType<typeof getTenantWorkspace>> | null>(null);
   const [access, setAccess] = React.useState<TenantAccessWorkspace | null>(null);
@@ -164,6 +210,7 @@ export default function TenantWorkspacePage() {
     context: data?.context,
     lease: data?.lease,
   });
+  const tenantIdentityRecord = data?.tenantIdentityRecord || null;
   const communicationsView = buildTenantCommunicationsWorkspaceState(communications);
   const screeningSummary = buildTenantScreeningDashboardSummary(screenings);
   const notificationItems = filterStructuredNotificationsByPreferences(
@@ -321,6 +368,60 @@ export default function TenantWorkspacePage() {
           </div>
         </TenantInfoCard>
       )}
+
+      <TenantInfoCard heading="Your Rental Identity" accent="#0f766e">
+        {tenantIdentityRecord ? (
+          <div style={{ display: "grid", gap: spacing.sm }}>
+            <div style={{ display: "grid", gap: 4 }}>
+              <div style={{ fontSize: "1.05rem", fontWeight: 800, color: textTokens.primary }}>
+                {tenantIdentityRecord.readinessLabel}
+              </div>
+              <div style={{ color: textTokens.secondary, lineHeight: 1.6 }}>
+                {tenantIdentityRecord.readinessDescription}
+              </div>
+            </div>
+
+            <TenantKeyValueGrid
+              rows={[
+                { label: "Identity status", value: prettyStatus(tenantIdentityRecord.identityStatus) },
+                { label: "Verification level", value: prettyVerificationLevel(tenantIdentityRecord.verification.level) },
+                { label: "Profile", value: prettyIdentityCompletionStatus(tenantIdentityRecord.profile.completionStatus) },
+                { label: "Application reuse", value: tenantIdentityRecord.application.reusable ? "Ready" : "Still building" },
+                { label: "Documents", value: prettyIdentityCompletionStatus(tenantIdentityRecord.documents.completionStatus) },
+                { label: "Screening", value: prettyScreeningIdentityStatus(tenantIdentityRecord.screening.status) },
+                {
+                  label: "Lease history",
+                  value:
+                    tenantIdentityRecord.leases.activeCount > 0 || tenantIdentityRecord.leases.historicalCount > 0
+                      ? `${tenantIdentityRecord.leases.activeCount} active / ${tenantIdentityRecord.leases.historicalCount} historical`
+                      : "No lease history yet",
+                },
+              ]}
+            />
+
+            {tenantIdentityRecord.documents.missingCategories.length ? (
+              <div
+                style={{
+                  border: "1px solid rgba(15,23,42,0.08)",
+                  borderRadius: 12,
+                  padding: "12px 14px",
+                  display: "grid",
+                  gap: 6,
+                }}
+              >
+                <div style={{ fontWeight: 700, color: textTokens.primary }}>Missing pieces</div>
+                <div style={{ color: textTokens.secondary }}>
+                  {tenantIdentityRecord.documents.missingCategories.join(", ")}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <div style={{ color: textTokens.secondary }}>
+            Your rental identity summary will appear here once enough tenant-safe records are available.
+          </div>
+        )}
+      </TenantInfoCard>
 
       <div
         style={{
