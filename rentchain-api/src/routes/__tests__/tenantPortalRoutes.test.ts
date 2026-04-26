@@ -53,6 +53,14 @@ function queryCollection(name: string, filters: Array<{ field: string; op: strin
 
 const dbMock = {
   collection: (name: string) => ({
+    get: async () => {
+      const docs = Array.from(ensureCollection(name).entries()).map(([id, data]) => ({
+        id,
+        exists: true,
+        data: () => clone(data),
+      }));
+      return { docs, empty: docs.length === 0, size: docs.length };
+    },
     doc: (id?: string) => {
       const docId = id || `doc_${ensureCollection(name).size + 1}`;
       return {
@@ -411,6 +419,54 @@ describe("tenantPortalRoutes foundation", () => {
   });
 
   it("returns safe projected workspace data and writes compact events", async () => {
+    ensureCollection("canonicalEvents").set("event-application-created", {
+      id: "event-application-created",
+      version: "v1",
+      type: "application.created",
+      domain: "application",
+      action: "created",
+      actor: { type: "tenant", id: "tenant-1" },
+      resource: { type: "rental_application", id: "app-1" },
+      occurredAt: "2026-01-01T09:00:00.000Z",
+      recordedAt: "2026-01-01T09:00:00.000Z",
+      visibility: "tenant",
+      summary: "Application created",
+    });
+    ensureCollection("canonicalEvents").set("event-screening-consent", {
+      id: "event-screening-consent",
+      version: "v1",
+      type: "screening_consent_confirmed",
+      domain: "screening",
+      action: "screening_consent_confirmed",
+      actor: { type: "tenant", id: "tenant-1" },
+      resource: { type: "screening_request", id: "screening-1", parentType: "rental_application", parentId: "app-1" },
+      occurredAt: "2026-01-03T09:00:00.000Z",
+      recordedAt: "2026-01-03T09:00:00.000Z",
+      visibility: "tenant",
+      summary: "Tenant screening consent confirmed",
+      metadata: {
+        tenantId: "tenant-1",
+        applicationId: "app-1",
+        providerLabel: "TransUnion",
+      },
+    });
+    ensureCollection("canonicalEvents").set("event-lease-signed", {
+      id: "event-lease-signed",
+      version: "v1",
+      type: "lease.tenant_signed",
+      domain: "lease",
+      action: "tenant_signed",
+      actor: { type: "tenant", id: "tenant-1", displayName: "Taylor Tenant" },
+      resource: { type: "lease", id: "lease-1" },
+      occurredAt: "2026-02-01T10:00:00.000Z",
+      recordedAt: "2026-02-01T10:00:00.000Z",
+      visibility: "tenant",
+      summary: "Tenant signed lease",
+      metadata: {
+        tenantId: "tenant-1",
+      },
+    });
+
     const router = (await import("../tenantPortalRoutes")).default;
     const res = await invokeRouter(router, {
       method: "GET",
@@ -479,6 +535,18 @@ describe("tenantPortalRoutes foundation", () => {
         }),
       })
     );
+    expect(res.body?.data?.identityTimeline).toEqual({
+      events: [
+        {
+          type: "lease.tenant_signed",
+          label: "Lease signed",
+          description: "Tenant lease signing was recorded.",
+          occurredAt: "2026-02-01T10:00:00.000Z",
+        },
+      ],
+    });
+    expect(res.body?.data?.identityTimeline?.events?.[0]?.id).toBeUndefined();
+    expect(res.body?.data?.identityTimeline?.events?.[0]?.metadata).toBeUndefined();
 
     const eventDocs = Array.from(ensureCollection("event_log").values());
     expect(eventDocs.some((event) => event.event_type === "tenant_workspace_viewed")).toBe(true);

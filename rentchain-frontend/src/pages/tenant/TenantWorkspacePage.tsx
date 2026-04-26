@@ -262,6 +262,7 @@ export default function TenantWorkspacePage() {
   });
   const tenantIdentityRecord = data?.tenantIdentityRecord || null;
   const tenantCredibilitySignals = data?.tenantCredibilitySignals || null;
+  const identityTimeline = data?.identityTimeline?.events || [];
   const communicationsView = buildTenantCommunicationsWorkspaceState(communications);
   const screeningSummary = buildTenantScreeningDashboardSummary(screenings);
   const notificationItems = filterStructuredNotificationsByPreferences(
@@ -503,6 +504,35 @@ export default function TenantWorkspacePage() {
         ) : (
           <div style={{ color: textTokens.secondary }}>
             Credibility signals will appear here once enough tenant-safe identity signals are available.
+          </div>
+        )}
+      </TenantInfoCard>
+
+      <TenantInfoCard heading="Activity timeline" accent="#0891b2">
+        {identityTimeline.length ? (
+          <div style={{ display: "grid", gap: spacing.sm }}>
+            {identityTimeline.map((event) => (
+              <div
+                key={`${event.type}:${event.occurredAt}`}
+                style={{
+                  border: "1px solid rgba(15,23,42,0.08)",
+                  borderRadius: 12,
+                  padding: "12px 14px",
+                  display: "grid",
+                  gap: 6,
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", gap: spacing.sm, flexWrap: "wrap" }}>
+                  <div style={{ fontWeight: 700, color: textTokens.primary }}>{event.label}</div>
+                  <div style={{ color: textTokens.secondary }}>{formatDate(event.occurredAt)}</div>
+                </div>
+                <div style={{ color: textTokens.secondary, lineHeight: 1.6 }}>{event.description}</div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={{ color: textTokens.secondary }}>
+            Identity-related activity will appear here as your application, screening, and lease workflow progress.
           </div>
         )}
       </TenantInfoCard>
