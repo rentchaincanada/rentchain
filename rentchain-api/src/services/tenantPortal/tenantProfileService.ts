@@ -40,6 +40,42 @@ export type TenantProfileProjection = {
   };
 };
 
+export type TenantApplicationReuseProjection = {
+  applicant: {
+    firstName: string | null;
+    lastName: string | null;
+    email: string | null;
+    phone: string | null;
+  };
+  currentAddress: {
+    line1: string | null;
+    line2: string | null;
+    city: string | null;
+    provinceState: string | null;
+    postalCode: string | null;
+    country: string | null;
+  } | null;
+  timeAtCurrentAddressMonths: number | null;
+  currentRentAmountCents: number | null;
+  employment: {
+    employerName: string | null;
+    jobTitle: string | null;
+    incomeAmountCents: number | null;
+    incomeFrequency: "monthly" | "annual" | null;
+    monthsAtJob: number | null;
+  } | null;
+  workReference: {
+    name: string | null;
+    phone: string | null;
+  } | null;
+  nextOfKin: {
+    name: string | null;
+    relationship: string | null;
+    phone: string | null;
+    address: string | null;
+  } | null;
+};
+
 function asString(value: unknown): string | null {
   const next = String(value || "").trim();
   return next || null;
@@ -48,6 +84,15 @@ function asString(value: unknown): string | null {
 function normalizeEmail(value: unknown): string | null {
   const next = String(value || "").trim().toLowerCase();
   return next || null;
+}
+
+function asNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
 }
 
 function toMillis(value: any): number | null {
@@ -65,6 +110,21 @@ function toMillis(value: any): number | null {
 function toIso(value: any): string | null {
   const millis = toMillis(value);
   return millis ? new Date(millis).toISOString() : null;
+}
+
+function splitNameParts(value: string | null) {
+  const normalized = asString(value);
+  if (!normalized) {
+    return { firstName: null, lastName: null };
+  }
+  const parts = normalized.split(/\s+/).filter(Boolean);
+  if (parts.length <= 1) {
+    return { firstName: parts[0] || null, lastName: null };
+  }
+  return {
+    firstName: parts[0] || null,
+    lastName: parts.slice(1).join(" ") || null,
+  };
 }
 
 async function loadDocument(collectionName: string, docId: string | null) {
@@ -131,6 +191,26 @@ async function loadWorkspaceDocuments(context: TenancyContext) {
   }
 
   return { property, application, lease, tenant };
+}
+
+async function loadApplicationReuseSource(params: { context: TenancyContext; userEmail?: string | null }) {
+  const { context, userEmail } = params;
+  const workspace = await loadWorkspaceDocuments(context);
+
+  let application = workspace.application;
+  if (!application && userEmail) {
+    const byApplicantEmail = await queryFirst("applications", "applicantEmail", normalizeEmail(userEmail));
+    application = byApplicantEmail || application;
+  }
+  if (!application && userEmail) {
+    const byEmail = await queryFirst("applications", "email", normalizeEmail(userEmail));
+    application = byEmail || application;
+  }
+
+  return {
+    tenant: workspace.tenant,
+    application,
+  };
 }
 
 function normalizeAuthorityLabel(authority: TenancyContext["authority"]): string {
@@ -346,5 +426,82 @@ export async function loadTenantProfileProjection(params: {
       documentChecklist: identity.checklist,
       nextSteps: identity.nextActions.slice(0, 6),
     },
+  };
+}
+
+export async function loadTenantApplicationReuseProjection(params: {
+  context: TenancyContext;
+  userEmail?: string | null;
+}): Promise<TenantApplicationReuseProjection> {
+  const { tenant, application } = await loadApplicationReuseSource(params);
+  const profile = application?.data?.applicantProfile || {};
+  const employment = profile?.employment || {};
+  const workReference = profile?.workReference || {};
+  const nextOfKin = application?.data?.nextOfKin || null;
+  const candidateName =
+    asString(tenant?.data?.fullName) ||
+    asString(application?.data?.firstName && application?.data?.lastName
+      ? `${application.data.firstName} ${application.data.lastName}`
+      : null) ||
+    asString(application?.data?.applicantFullName) ||
+    asString(application?.data?.applicantName) ||
+    asString(application?.data?.fullName);
+  const name = splitNameParts(candidateName);
+
+  return {
+    applicant: {
+      firstName: asString(application?.data?.firstName) || name.firstName,
+      lastName: asString(application?.data?.lastName) || name.lastName,
+      email:
+        normalizeEmail(application?.data?.applicantEmail) ||
+        normalizeEmail(application?.data?.email) ||
+        normalizeEmail(tenant?.data?.email) ||
+        normalizeEmail(params.userEmail) ||
+        null,
+      phone:
+        asString(application?.data?.applicantPhone) ||
+        asString(application?.data?.phone) ||
+        asString(tenant?.data?.phone),
+    },
+    currentAddress: profile?.currentAddress
+      ? {
+          line1: asString(profile.currentAddress?.line1),
+          line2: asString(profile.currentAddress?.line2),
+          city: asString(profile.currentAddress?.city),
+          provinceState: asString(profile.currentAddress?.provinceState),
+          postalCode: asString(profile.currentAddress?.postalCode),
+          country: asString(profile.currentAddress?.country) || "CA",
+        }
+      : null,
+    timeAtCurrentAddressMonths: asNumber(profile?.timeAtCurrentAddressMonths),
+    currentRentAmountCents: asNumber(profile?.currentRentAmountCents),
+    employment:
+      profile?.employment
+        ? {
+            employerName: asString(employment?.employerName),
+            jobTitle: asString(employment?.jobTitle),
+            incomeAmountCents: asNumber(employment?.incomeAmountCents),
+            incomeFrequency:
+              employment?.incomeFrequency === "monthly" || employment?.incomeFrequency === "annual"
+                ? employment.incomeFrequency
+                : null,
+            monthsAtJob: asNumber(employment?.monthsAtJob),
+          }
+        : null,
+    workReference:
+      profile?.workReference
+        ? {
+            name: asString(workReference?.name),
+            phone: asString(workReference?.phone),
+          }
+        : null,
+    nextOfKin: nextOfKin
+      ? {
+          name: asString(nextOfKin?.name),
+          relationship: asString(nextOfKin?.relationship),
+          phone: asString(nextOfKin?.phone),
+          address: asString(nextOfKin?.address),
+        }
+      : null,
   };
 }

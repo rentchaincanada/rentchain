@@ -141,6 +141,9 @@ describe("tenant profile route", () => {
     ensureCollection("applications").set("app-1", {
       applicantEmail: "tenant@example.com",
       applicantName: "Taylor Tenant",
+      firstName: "Taylor",
+      lastName: "Tenant",
+      phone: "9025551234",
       propertyId: "prop-1",
       status: "submitted",
       missingSteps: ["upload_id"],
@@ -149,6 +152,57 @@ describe("tenant profile route", () => {
       updatedAt: "2026-01-03T00:00:00.000Z",
       sin: "123-45-6789",
       documentRefs: ["doc-1"],
+      applicantProfile: {
+        currentAddress: {
+          line1: "55 Brunswick St",
+          line2: "Apt 7",
+          city: "Halifax",
+          provinceState: "NS",
+          postalCode: "B3J2G5",
+          country: "CA",
+        },
+        timeAtCurrentAddressMonths: 26,
+        currentRentAmountCents: 185000,
+        employment: {
+          employerName: "Harbour Design",
+          jobTitle: "Designer",
+          incomeAmountCents: 520000,
+          incomeFrequency: "monthly",
+          monthsAtJob: 18,
+        },
+        workReference: {
+          name: "Morgan Manager",
+          phone: "9025550199",
+        },
+        signature: {
+          type: "typed",
+          typedName: "Taylor Tenant",
+        },
+        applicantNotes: "private note",
+      },
+      nextOfKin: {
+        name: "Jamie Tenant",
+        relationship: "Sibling",
+        phone: "9025550175",
+        address: "99 Willow St",
+      },
+      consent: {
+        creditConsent: true,
+      },
+      applicationConsent: {
+        accepted: true,
+      },
+      screeningSummary: {
+        score: 700,
+      },
+      coApplicant: {
+        firstName: "Hidden",
+        lastName: "Person",
+      },
+      currentLeaseStatus: {
+        landlordAware: "no",
+        reasonForMoving: "private",
+      },
     });
     ensureCollection("leases").set("lease-1", {
       tenantId: "tenant-1",
@@ -185,6 +239,12 @@ describe("tenant profile route", () => {
     expect(res.status).toBe(401);
   });
 
+  it("rejects unauthorized tenant application reuse access", async () => {
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, { method: "GET", url: "/application-reuse" });
+    expect(res.status).toBe(401);
+  });
+
   it("returns only safe projected tenant profile fields", async () => {
     const router = (await import("../tenantPortalRoutes")).default;
     const res = await invokeRouter(router, {
@@ -213,5 +273,107 @@ describe("tenant profile route", () => {
     expect(res.body?.data?.identity?.documentChecklist?.[0]?.code).toBe("upload_id");
     expect(JSON.stringify(res.body)).not.toContain("rawPayloadRef");
     expect(JSON.stringify(res.body)).not.toContain("internalRiskScore");
+  });
+
+  it("returns only whitelisted tenant application reuse fields", async () => {
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/application-reuse",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+          leaseId: "lease-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.data).toEqual({
+      applicant: {
+        firstName: "Taylor",
+        lastName: "Tenant",
+        email: "tenant@example.com",
+        phone: "9025551234",
+      },
+      currentAddress: {
+        line1: "55 Brunswick St",
+        line2: "Apt 7",
+        city: "Halifax",
+        provinceState: "NS",
+        postalCode: "B3J2G5",
+        country: "CA",
+      },
+      timeAtCurrentAddressMonths: 26,
+      currentRentAmountCents: 185000,
+      employment: {
+        employerName: "Harbour Design",
+        jobTitle: "Designer",
+        incomeAmountCents: 520000,
+        incomeFrequency: "monthly",
+        monthsAtJob: 18,
+      },
+      workReference: {
+        name: "Morgan Manager",
+        phone: "9025550199",
+      },
+      nextOfKin: {
+        name: "Jamie Tenant",
+        relationship: "Sibling",
+        phone: "9025550175",
+        address: "99 Willow St",
+      },
+    });
+    expect(JSON.stringify(res.body)).not.toContain("applicantNotes");
+    expect(JSON.stringify(res.body)).not.toContain("signature");
+    expect(JSON.stringify(res.body)).not.toContain("consent");
+    expect(JSON.stringify(res.body)).not.toContain("screeningSummary");
+    expect(JSON.stringify(res.body)).not.toContain("coApplicant");
+    expect(JSON.stringify(res.body)).not.toContain("reasonForMoving");
+    expect(JSON.stringify(res.body)).not.toContain("documentRefs");
+    expect(JSON.stringify(res.body)).not.toContain("sin");
+  });
+
+  it("returns a safe empty tenant application reuse payload when no reusable profile exists", async () => {
+    ensureCollection("applications").clear();
+    ensureCollection("tenants").set("tenant-1", {
+      fullName: "Taylor Tenant",
+      email: "tenant@example.com",
+      phone: "902-555-0100",
+    });
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/application-reuse",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+          leaseId: "lease-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.data).toEqual({
+      applicant: {
+        firstName: "Taylor",
+        lastName: "Tenant",
+        email: "tenant@example.com",
+        phone: "902-555-0100",
+      },
+      currentAddress: null,
+      timeAtCurrentAddressMonths: null,
+      currentRentAmountCents: null,
+      employment: null,
+      workReference: null,
+      nextOfKin: null,
+    });
   });
 });
