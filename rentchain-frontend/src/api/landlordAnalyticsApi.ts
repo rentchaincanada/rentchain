@@ -63,6 +63,13 @@ export type LandlordDecisionBlockedReason =
   | "automation_disabled"
   | "duplicate_prevented"
   | "unknown_state_fail_closed";
+export type ReminderTiming =
+  | "due_now"
+  | "due_soon"
+  | "scheduled_later"
+  | "overdue"
+  | "blocked"
+  | "not_applicable";
 
 export type LandlordDecisionExecutionSummary = {
   lastExecutedAt: string | null;
@@ -170,6 +177,12 @@ export type LandlordAgentDecision = {
   executionOutcomeStatus: "none" | "succeeded" | "failed";
   executionOutcomeAt: string | null;
   executionOutcomeReason: string | null;
+  reminderTiming?: ReminderTiming;
+  reminderTimingLabel?: string | null;
+  reminderTimingDescription?: string | null;
+  reminderPriority?: "low" | "medium" | "high" | null;
+  reminderBlockedReason?: LandlordDecisionBlockedReason | null | string;
+  reminderNextActionLabel?: string | null;
 };
 
 export type AnalyticsDeltaValue = {

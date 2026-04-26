@@ -585,6 +585,9 @@ describe("landlordAnalyticsRoutes", () => {
     expect(response.body.ok).toBe(true);
     expect(response.body.summary.occupiedUnits).toBe(4);
     expect(response.body.decisions.items[0].decisionType).toBe("reduce_vacancy_risk");
+    expect(response.body.decisions.items[0].reminderTiming).toBe("blocked");
+    expect(response.body.decisions.items[0].reminderTimingLabel).toBe("Blocked");
+    expect(response.body.decisions.items[0].reminderBlockedReason).toBe("automation_disabled");
     expect(response.body.predictive.metrics[0].key).toBe("projected_vacancy_risk");
     expect(response.body.comparisons.deltas.summary.occupiedUnits.direction).toBe("better");
   });

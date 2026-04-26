@@ -176,6 +176,12 @@ describe("AgentDecisionPanel", () => {
               executionOutcomeStatus: "none",
               executionOutcomeAt: null,
               executionOutcomeReason: null,
+              reminderTiming: "blocked",
+              reminderTimingLabel: "Blocked",
+              reminderTimingDescription: "This decision cannot move forward until its required inputs are ready.",
+              reminderPriority: "medium",
+              reminderBlockedReason: "automation_disabled",
+              reminderNextActionLabel: "Open vacancy readiness",
               href: "/analytics?propertyId=prop-2",
               state: "pending",
               reviewedAt: null,
@@ -194,7 +200,8 @@ describe("AgentDecisionPanel", () => {
     expect(screen.getByText(/Vacancy pressure is concentrated in Beta/i)).toBeInTheDocument();
     expect(screen.getByText(/high priority/i)).toBeInTheDocument();
     expect(screen.getByText(/Workflow: Vacancy readiness/i)).toBeInTheDocument();
-    expect(screen.getByText(/Action required/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Blocked$/i)).toBeInTheDocument();
+    expect(screen.getByText(/cannot move forward until its required inputs are ready/i)).toBeInTheDocument();
     expect(screen.getByText(/Execution controls/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Automation preview/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Human confirmation required/i).length).toBeGreaterThan(0);

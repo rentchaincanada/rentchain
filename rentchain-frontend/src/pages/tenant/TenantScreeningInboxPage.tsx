@@ -34,6 +34,23 @@ function badgeColors(status: ReturnType<typeof buildTenantScreeningInboxItemView
   }
 }
 
+function timingBadgeColors(timing: ReturnType<typeof buildTenantScreeningInboxItemView>["reminderTiming"]) {
+  switch (timing) {
+    case "due_now":
+      return { background: "rgba(245,158,11,0.14)", color: "#92400e" };
+    case "due_soon":
+      return { background: "rgba(59,130,246,0.14)", color: "#1d4ed8" };
+    case "scheduled_later":
+      return { background: "rgba(148,163,184,0.16)", color: "#475569" };
+    case "overdue":
+      return { background: "rgba(239,68,68,0.12)", color: "#991b1b" };
+    case "blocked":
+      return { background: "rgba(251,191,36,0.18)", color: "#92400e" };
+    default:
+      return { background: "rgba(226,232,240,0.8)", color: "#475569" };
+  }
+}
+
 export default function TenantScreeningInboxPage() {
   const [items, setItems] = React.useState<TenantScreeningRequest[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -136,6 +153,7 @@ export default function TenantScreeningInboxPage() {
         {items.map((item) => {
           const view = buildTenantScreeningInboxItemView(item);
           const badge = badgeColors(view.status);
+          const timingBadge = timingBadgeColors(view.reminderTiming);
           const showConsentCard = view.nextAction === "authorize_screening" || view.status === "consent_confirmed";
           return (
             <TenantInfoCard key={item.id} heading={view.propertyContext} accent={badge.color}>
@@ -149,18 +167,33 @@ export default function TenantScreeningInboxPage() {
                   </div>
                   <div style={{ color: textTokens.secondary }}>{view.description}</div>
                 </div>
-                <div
-                  style={{
-                    alignSelf: "start",
-                    padding: "6px 10px",
-                    borderRadius: 999,
-                    background: badge.background,
-                    color: badge.color,
-                    fontWeight: 700,
-                    fontSize: "0.85rem",
-                  }}
-                >
-                  {view.statusLabel}
+                <div style={{ display: "grid", gap: 8, justifyItems: "end" }}>
+                  <div
+                    style={{
+                      alignSelf: "start",
+                      padding: "6px 10px",
+                      borderRadius: 999,
+                      background: badge.background,
+                      color: badge.color,
+                      fontWeight: 700,
+                      fontSize: "0.85rem",
+                    }}
+                  >
+                    {view.statusLabel}
+                  </div>
+                  <div
+                    style={{
+                      alignSelf: "start",
+                      padding: "6px 10px",
+                      borderRadius: 999,
+                      background: timingBadge.background,
+                      color: timingBadge.color,
+                      fontWeight: 700,
+                      fontSize: "0.8rem",
+                    }}
+                  >
+                    {view.reminderTimingLabel}
+                  </div>
                 </div>
               </div>
 
@@ -168,6 +201,7 @@ export default function TenantScreeningInboxPage() {
                 rows={[
                   { label: "Consent", value: view.consentLabel },
                   { label: "Provider", value: view.providerLabel },
+                  { label: "Timing", value: view.reminderTimingLabel },
                   { label: "Requested", value: formatDate(view.requestedAt) },
                   { label: "Last update", value: formatDate(view.activityAt) },
                 ]}
@@ -187,6 +221,7 @@ export default function TenantScreeningInboxPage() {
                 <div style={{ color: textTokens.secondary }}>
                   {view.nextActionLabel}
                 </div>
+                <div style={{ color: textTokens.muted }}>{view.reminderTimingDescription}</div>
                 {view.consentedAt && !showConsentCard ? (
                   <div style={{ color: textTokens.muted }}>
                     Consent confirmed on {formatDate(view.consentedAt)}.

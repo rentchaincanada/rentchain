@@ -109,6 +109,16 @@ type CompletionStatus =
   | "not_started"
   | "in_progress";
 
+type ReminderTiming =
+  | "due_now"
+  | "due_soon"
+  | "scheduled_later"
+  | "overdue"
+  | "blocked"
+  | "not_applicable";
+
+type ReminderPriority = "low" | "medium" | "high";
+
 type TenantCompletionItem = {
   key: string;
   label: string;
@@ -123,6 +133,15 @@ type TenantCompletionSection = {
   label: string;
   status: CompletionStatus;
   items: TenantCompletionItem[];
+};
+
+type ReminderMetadata = {
+  reminderTiming: ReminderTiming;
+  reminderTimingLabel: string;
+  reminderTimingDescription: string;
+  reminderPriority: ReminderPriority;
+  reminderBlockedReason: string | null;
+  reminderNextActionLabel: string | null;
 };
 
 type TenantDocumentStatus =
@@ -2759,16 +2778,117 @@ function buildCompletionSections(params: {
       ? "not_started"
       : "in_progress";
 
+  const updatedAt =
+    profile?.identity?.identityVerification?.updatedAt ||
+    profileSummary?.application?.updatedAt ||
+    profileSummary?.lease?.startDate ||
+    null;
+
+  const reminderMetadata = deriveCompletionReminderMetadata({
+    status,
+    progressPercent,
+    actionableItems,
+    updatedAt,
+  });
+
   return {
     status,
     progressPercent,
     sections,
     nextSteps,
-    updatedAt:
-      profile?.identity?.identityVerification?.updatedAt ||
-      profileSummary?.application?.updatedAt ||
-      profileSummary?.lease?.startDate ||
-      null,
+    updatedAt,
+    ...reminderMetadata,
+  };
+}
+
+function deriveCompletionReminderMetadata(params: {
+  status: CompletionStatus;
+  progressPercent: number;
+  actionableItems: TenantCompletionItem[];
+  updatedAt: string | number | null;
+}): ReminderMetadata {
+  const updatedAtMs = toMillis(params.updatedAt);
+  const ageDays =
+    typeof updatedAtMs === "number" && updatedAtMs > 0
+      ? Math.floor((Date.now() - updatedAtMs) / (24 * 60 * 60 * 1000))
+      : null;
+  const primaryAction = params.actionableItems[0] || null;
+  const onlyLeaseReadiness =
+    params.actionableItems.length > 0 && params.actionableItems.every((item) => item.key === "lease_readiness");
+
+  if (params.status === "completed") {
+    return {
+      reminderTiming: "not_applicable",
+      reminderTimingLabel: "No action needed",
+      reminderTimingDescription: "Your current tenant application checklist does not need any tenant action right now.",
+      reminderPriority: "low",
+      reminderBlockedReason: null,
+      reminderNextActionLabel: null,
+    };
+  }
+
+  if (params.status === "needs_review") {
+    return {
+      reminderTiming: "blocked",
+      reminderTimingLabel: "Blocked",
+      reminderTimingDescription: "Your latest updates are waiting on review before the next step can continue.",
+      reminderPriority: "medium",
+      reminderBlockedReason: "waiting_on_review",
+      reminderNextActionLabel: primaryAction?.actionLabel || "Review your checklist",
+    };
+  }
+
+  if (onlyLeaseReadiness) {
+    return {
+      reminderTiming: "scheduled_later",
+      reminderTimingLabel: "Scheduled for later",
+      reminderTimingDescription: "Your application steps look complete for now. Watch for lease updates when your review progresses.",
+      reminderPriority: "low",
+      reminderBlockedReason: null,
+      reminderNextActionLabel: primaryAction?.actionLabel || "Open feed",
+    };
+  }
+
+  if (params.status === "not_started") {
+    return {
+      reminderTiming: "due_now",
+      reminderTimingLabel: "Due now",
+      reminderTimingDescription: "Your application checklist is ready to begin whenever you are ready to continue.",
+      reminderPriority: "high",
+      reminderBlockedReason: null,
+      reminderNextActionLabel: primaryAction?.actionLabel || "Continue application",
+    };
+  }
+
+  if ((ageDays ?? 0) >= 14 && params.actionableItems.length > 0) {
+    return {
+      reminderTiming: "overdue",
+      reminderTimingLabel: "Overdue",
+      reminderTimingDescription: "Some application checklist items have been waiting for attention for a while and may delay the next review step.",
+      reminderPriority: "high",
+      reminderBlockedReason: null,
+      reminderNextActionLabel: primaryAction?.actionLabel || "Continue application",
+    };
+  }
+
+  if (params.progressPercent >= 70 && params.actionableItems.length > 0) {
+    return {
+      reminderTiming: "due_soon",
+      reminderTimingLabel: "Due soon",
+      reminderTimingDescription: "You are close to completing the current checklist. A few remaining items should be reviewed soon.",
+      reminderPriority: "medium",
+      reminderBlockedReason: null,
+      reminderNextActionLabel: primaryAction?.actionLabel || "Review checklist",
+    };
+  }
+
+  return {
+    reminderTiming: "due_now",
+    reminderTimingLabel: "Due now",
+    reminderTimingDescription: "A current checklist step is ready for your attention now.",
+    reminderPriority: params.progressPercent > 0 ? "medium" : "high",
+    reminderBlockedReason: null,
+    reminderNextActionLabel: primaryAction?.actionLabel || "Continue application",
   };
 }
 
