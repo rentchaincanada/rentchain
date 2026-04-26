@@ -49,6 +49,23 @@ type ReviewSummaryCore = {
   insights: string[];
 };
 
+export type LandlordTrustContext = {
+  trustReadiness: "limited" | "emerging" | "ready" | "strong";
+  trustLabel: string;
+  trustDescription: string;
+  positiveSignals: string[];
+  missingSignals: string[];
+  cautionSignals: string[];
+  recommendedNextAction:
+    | "review_application"
+    | "request_missing_info"
+    | "review_screening_status"
+    | "review_documents"
+    | "prepare_lease"
+    | "no_action";
+  decisionSupportLevel: "low" | "medium" | "high";
+};
+
 export type ApplicationReviewSummary = ReviewSummaryCore & {
   decisionSummary?: ApplicationDecisionSummary | null;
   risk?: RiskAgentReviewSnapshot;
@@ -60,6 +77,7 @@ export type ApplicationReviewSummary = ReviewSummaryCore & {
     readinessLabel: string;
     readinessDescription: string;
   } | null;
+  trustContext?: LandlordTrustContext | null;
 };
 
 export class ReviewSummaryApiError extends Error {
@@ -105,6 +123,7 @@ export async function fetchReviewSummary(applicationId: string): Promise<Applica
     ),
     risk: ((res?.risk || null) as RiskAgentReviewSnapshot) || null,
     tenantIdentitySummary: (res?.tenantIdentitySummary || null) as ApplicationReviewSummary["tenantIdentitySummary"],
+    trustContext: (res?.trustContext || null) as ApplicationReviewSummary["trustContext"],
   };
 }
 

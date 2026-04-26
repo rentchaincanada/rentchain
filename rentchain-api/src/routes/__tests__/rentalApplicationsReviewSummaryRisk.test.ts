@@ -199,7 +199,7 @@ vi.mock("../../lib/reviewSummary", () => ({
     employment: {},
     reference: {},
     compliance: {},
-    screening: {},
+    screening: { status: "completed", provider: "transunion", referenceId: "ref-1" },
     derived: { incomeToRentRatio: null, completeness: { score: 0.8, label: "High" }, flags: [] },
     insights: [],
   })),
@@ -232,6 +232,7 @@ vi.mock("../../services/riskAgent/riskAgentService", () => ({
 
 vi.mock("../../services/tenantPortal/tenantProfileService", () => ({
   loadLandlordSafeTenantIdentitySummary: loadLandlordSafeTenantIdentitySummaryMock,
+  deriveLandlordSafeApplicationReusableFromApplication: vi.fn(() => true),
 }));
 
 async function createApp() {
@@ -300,8 +301,23 @@ describe("rentalApplications review summary risk surface", () => {
       readinessLabel: "Ready to apply",
       readinessDescription: "Your core profile and supporting records are ready for most rental workflows.",
     });
+    expect(res.body?.trustContext).toEqual(
+      expect.objectContaining({
+        trustReadiness: "ready",
+        trustLabel: "Ready for review",
+        recommendedNextAction: "review_application",
+      })
+    );
+    expect(res.body?.trustContext?.positiveSignals).toEqual(
+      expect.arrayContaining([
+        "Identity profile is organized for landlord review.",
+        "Identity profile has stronger supporting signals.",
+      ])
+    );
     expect(res.body?.tenantIdentitySummary?.documents).toBeUndefined();
     expect(res.body?.tenantIdentitySummary?.screening).toBeUndefined();
+    expect(JSON.stringify(res.body?.trustContext || {})).not.toContain("transunion");
+    expect(JSON.stringify(res.body?.trustContext || {})).not.toContain("ref-1");
   });
 
   it("returns a safe null risk state when no snapshot exists", async () => {

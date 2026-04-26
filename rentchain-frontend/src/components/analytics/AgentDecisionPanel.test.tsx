@@ -182,6 +182,16 @@ describe("AgentDecisionPanel", () => {
               reminderPriority: "medium",
               reminderBlockedReason: "automation_disabled",
               reminderNextActionLabel: "Open vacancy readiness",
+              trustContext: {
+                trustReadiness: "emerging",
+                trustLabel: "Emerging supporting signals",
+                trustDescription: "Some useful identity and application signals are available, but the file still benefits from a closer landlord review.",
+                positiveSignals: ["Application information is mostly complete."],
+                missingSignals: ["Employment or income details are still incomplete."],
+                cautionSignals: ["Screening is not complete yet in the current normalized status view."],
+                recommendedNextAction: "review_application",
+                decisionSupportLevel: "medium",
+              },
               href: "/analytics?propertyId=prop-2",
               state: "pending",
               reviewedAt: null,
@@ -207,6 +217,10 @@ describe("AgentDecisionPanel", () => {
     expect(screen.getAllByText(/Human confirmation required/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Execution disabled for this state/i)).toBeInTheDocument();
     expect(screen.getByText(/This decision is in a lifecycle state that does not allow execution/i)).toBeInTheDocument();
+    expect(screen.getByText(/Trust guidance/i)).toBeInTheDocument();
+    expect(screen.getByText(/Emerging supporting signals/i)).toBeInTheDocument();
+    expect(screen.getByText(/Employment or income details are still incomplete./i)).toBeInTheDocument();
+    expect(screen.getByText(/Recommended next action: Review application/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Open vacancy readiness/i })).toHaveAttribute("href", "/analytics?propertyId=prop-2");
     expect(screen.getByText(/Vacancy is elevated/i)).toBeInTheDocument();
     expect(screen.queryByText(/Automation blocked/i)).not.toBeInTheDocument();

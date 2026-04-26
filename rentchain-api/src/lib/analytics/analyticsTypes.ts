@@ -10,6 +10,7 @@ import type {
   ScreeningCheckoutExecutionInputMissingField,
 } from "../screeningCheckoutReadiness";
 import type { ScreeningReconciliationStatus } from "../reconciliation/reconciliationTypes";
+import type { LandlordTrustContext } from "../trust/deriveLandlordTrustContext";
 
 export type AdminAnalyticsPeriod = "30d" | "90d" | "365d" | "month_to_date";
 export type AdminAnalyticsGranularity = "daily" | "weekly" | "monthly";
@@ -381,6 +382,7 @@ export type LandlordAgentDecision = {
   executionOutcomeStatus: LandlordDecisionExecutionOutcomeStatus;
   executionOutcomeAt: string | null;
   executionOutcomeReason: string | null;
+  trustContext?: LandlordTrustContext | null;
 };
 
 export type LandlordAgentDecisions = {

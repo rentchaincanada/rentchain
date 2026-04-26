@@ -144,6 +144,95 @@ function sectionHeadingStyle() {
   } as const;
 }
 
+function trustActionLabel(
+  value:
+    | "review_application"
+    | "request_missing_info"
+    | "review_screening_status"
+    | "review_documents"
+    | "prepare_lease"
+    | "no_action"
+) {
+  switch (value) {
+    case "prepare_lease":
+      return "Prepare lease";
+    case "review_documents":
+      return "Review supporting records";
+    case "review_screening_status":
+      return "Review screening status";
+    case "request_missing_info":
+      return "Request missing information";
+    case "no_action":
+      return "No action needed";
+    case "review_application":
+    default:
+      return "Review application";
+  }
+}
+
+function TrustContextBlock({ decision }: { decision: LandlordAgentDecision }) {
+  if (!decision.trustContext) return null;
+
+  const { trustContext } = decision;
+  return (
+    <div
+      style={{
+        display: "grid",
+        gap: 8,
+        padding: 12,
+        borderRadius: 12,
+        border: "1px solid #e2e8f0",
+        background: "#f8fafc",
+      }}
+    >
+      <div style={{ display: "grid", gap: 4 }}>
+        <div style={{ color: "#0f172a", fontSize: "0.94rem", fontWeight: 700 }}>Trust guidance</div>
+        <div style={{ color: "#334155", fontSize: "0.84rem", fontWeight: 700 }}>{trustContext.trustLabel}</div>
+        <div style={{ color: "#475569", fontSize: "0.82rem" }}>{trustContext.trustDescription}</div>
+      </div>
+      {trustContext.positiveSignals.length ? (
+        <div style={{ display: "grid", gap: 2 }}>
+          <div style={{ color: "#64748b", fontSize: "0.78rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+            Positive signals
+          </div>
+          {trustContext.positiveSignals.map((item) => (
+            <div key={`positive-${item}`} style={{ color: "#334155", fontSize: "0.82rem" }}>
+              {item}
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {trustContext.missingSignals.length ? (
+        <div style={{ display: "grid", gap: 2 }}>
+          <div style={{ color: "#64748b", fontSize: "0.78rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+            Missing signals
+          </div>
+          {trustContext.missingSignals.map((item) => (
+            <div key={`missing-${item}`} style={{ color: "#334155", fontSize: "0.82rem" }}>
+              {item}
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {trustContext.cautionSignals.length ? (
+        <div style={{ display: "grid", gap: 2 }}>
+          <div style={{ color: "#64748b", fontSize: "0.78rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+            Caution signals
+          </div>
+          {trustContext.cautionSignals.map((item) => (
+            <div key={`caution-${item}`} style={{ color: "#334155", fontSize: "0.82rem" }}>
+              {item}
+            </div>
+          ))}
+        </div>
+      ) : null}
+      <div style={{ color: "#475569", fontSize: "0.82rem" }}>
+        Recommended next action: {trustActionLabel(trustContext.recommendedNextAction)}
+      </div>
+    </div>
+  );
+}
+
 const HISTORY_VISIBILITY_STORAGE_KEY = "landlordDecisionHistoryVisibilityV2";
 
 function readPersistedHistoryVisibility() {
@@ -325,6 +414,7 @@ function ActionDecisionCard(props: {
       {decision.automationState !== "manual_only" && decision.automationReason ? (
         <div style={{ color: "#64748b", fontSize: "0.84rem" }}>{decision.automationReason}</div>
       ) : null}
+      <TrustContextBlock decision={decision} />
       <div
         aria-label="Execution controls"
         style={{
@@ -668,6 +758,7 @@ function ExecutedDecisionCard(props: {
           Workflow: {categoryLabel}
         </div>
       ) : null}
+      <TrustContextBlock decision={decision} />
       <div
         aria-label="Execution controls"
         style={{

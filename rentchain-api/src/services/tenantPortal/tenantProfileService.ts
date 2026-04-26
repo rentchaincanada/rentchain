@@ -562,7 +562,7 @@ function deriveProfileCompletionStatusFromApplication(application: any): TenantI
   return "missing";
 }
 
-function deriveApplicationReusableFromApplication(application: any): boolean {
+export function deriveLandlordSafeApplicationReusableFromApplication(application: any): boolean {
   const currentAddress = application?.applicantProfile?.currentAddress || {};
   const employment = application?.applicantProfile?.employment || {};
 
@@ -963,7 +963,7 @@ export async function loadLandlordSafeTenantIdentitySummary(params: {
   application: any;
 }): Promise<TenantIdentitySummary> {
   const profileStatus = deriveProfileCompletionStatusFromApplication(params.application);
-  const applicationReusable = deriveApplicationReusableFromApplication(params.application);
+  const applicationReusable = deriveLandlordSafeApplicationReusableFromApplication(params.application);
   const documentSignals = deriveDocumentSignalsFromApplication(params.application);
   const screeningSignals = deriveScreeningSignalsFromApplication(params.application);
 

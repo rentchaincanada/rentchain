@@ -224,6 +224,45 @@ function depositPaymentTone(state: "not_requested" | "requested" | "pending" | "
   return { color: "#64748b", background: "#e2e8f0", label: "Not requested" };
 }
 
+function trustReadinessTone(state: "limited" | "emerging" | "ready" | "strong") {
+  if (state === "strong") {
+    return { color: "#166534", background: "#dcfce7", label: "Strong supporting context" };
+  }
+  if (state === "ready") {
+    return { color: "#0f766e", background: "#ccfbf1", label: "Ready for review" };
+  }
+  if (state === "emerging") {
+    return { color: "#1d4ed8", background: "#dbeafe", label: "Emerging supporting signals" };
+  }
+  return { color: "#9a3412", background: "#ffedd5", label: "Limited supporting signals" };
+}
+
+function trustActionLabel(
+  value:
+    | "review_application"
+    | "request_missing_info"
+    | "review_screening_status"
+    | "review_documents"
+    | "prepare_lease"
+    | "no_action"
+) {
+  switch (value) {
+    case "prepare_lease":
+      return "Prepare lease";
+    case "review_documents":
+      return "Review supporting records";
+    case "review_screening_status":
+      return "Review screening status";
+    case "request_missing_info":
+      return "Request missing information";
+    case "no_action":
+      return "No action needed";
+    case "review_application":
+    default:
+      return "Review application";
+  }
+}
+
 type SummaryLoadError = {
   message: string;
   status?: number;
@@ -1573,6 +1612,99 @@ function ApplicationReviewSummaryPageBody() {
                 emptyLabel="Recent workflow-triggered review updates will appear here as the package changes."
                 items={structuredNotifications}
               />
+            </Card>
+          ) : null}
+
+          {summary.trustContext ? (
+            <Card style={{ display: "grid", gap: 10 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                <div>
+                  <div style={{ fontWeight: 700 }}>Trust guidance</div>
+                  <div style={{ fontSize: 13, color: text.subtle, marginTop: 4 }}>
+                    {summary.trustContext.trustDescription}
+                  </div>
+                </div>
+                <div
+                  style={{
+                    padding: "6px 10px",
+                    borderRadius: 999,
+                    fontWeight: 700,
+                    color: trustReadinessTone(summary.trustContext.trustReadiness).color,
+                    background: trustReadinessTone(summary.trustContext.trustReadiness).background,
+                  }}
+                >
+                  {summary.trustContext.trustLabel}
+                </div>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
+                <div
+                  style={{
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: 10,
+                    padding: 10,
+                    display: "grid",
+                    gap: 6,
+                  }}
+                >
+                  <div style={{ fontWeight: 700, color: text.main }}>Positive signals</div>
+                  {summary.trustContext.positiveSignals.length ? (
+                    summary.trustContext.positiveSignals.map((item) => (
+                      <div key={item} style={{ fontSize: 13, color: text.subtle }}>
+                        {item}
+                      </div>
+                    ))
+                  ) : (
+                    <div style={{ fontSize: 13, color: text.subtle }}>No additional positive signals are surfaced yet.</div>
+                  )}
+                </div>
+
+                <div
+                  style={{
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: 10,
+                    padding: 10,
+                    display: "grid",
+                    gap: 6,
+                  }}
+                >
+                  <div style={{ fontWeight: 700, color: text.main }}>Missing signals</div>
+                  {summary.trustContext.missingSignals.length ? (
+                    summary.trustContext.missingSignals.map((item) => (
+                      <div key={item} style={{ fontSize: 13, color: text.subtle }}>
+                        {item}
+                      </div>
+                    ))
+                  ) : (
+                    <div style={{ fontSize: 13, color: text.subtle }}>No major missing signals are currently surfaced.</div>
+                  )}
+                </div>
+
+                <div
+                  style={{
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: 10,
+                    padding: 10,
+                    display: "grid",
+                    gap: 6,
+                  }}
+                >
+                  <div style={{ fontWeight: 700, color: text.main }}>Caution signals</div>
+                  {summary.trustContext.cautionSignals.length ? (
+                    summary.trustContext.cautionSignals.map((item) => (
+                      <div key={item} style={{ fontSize: 13, color: text.subtle }}>
+                        {item}
+                      </div>
+                    ))
+                  ) : (
+                    <div style={{ fontSize: 13, color: text.subtle }}>No caution signals are currently surfaced.</div>
+                  )}
+                </div>
+              </div>
+
+              <div style={{ fontSize: 12, color: text.subtle }}>
+                Recommended next action: {trustActionLabel(summary.trustContext.recommendedNextAction)}. This guidance is descriptive only and does not approve, decline, or automate a landlord decision.
+              </div>
             </Card>
           ) : null}
 
