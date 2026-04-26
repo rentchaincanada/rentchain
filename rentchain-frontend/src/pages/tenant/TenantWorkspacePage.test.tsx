@@ -12,6 +12,7 @@ import { TenantNav } from "../../components/layout/TenantNav";
 const tenantPortalApi = vi.hoisted(() => ({
   getTenantWorkspace: vi.fn(),
   getTenantLeaseWorkspace: vi.fn(),
+  signTenantLease: vi.fn(),
   listTenantWorkspaceMaintenance: vi.fn(),
   redeemTenantWorkspaceInvite: vi.fn(),
 }));
@@ -645,6 +646,16 @@ describe("tenant workspace frontend shell", () => {
       leasePdfStatus: "available",
       leasePdfLabel: "Lease document available",
       leasePdfDescription: "A tenant-safe lease document is available in this workspace.",
+      leaseExecution: {
+        executionStatus: "fully_executed",
+        executionLabel: "Lease fully executed",
+        executionDescription: "The visible lease record indicates the current execution flow is complete.",
+        requiredNextAction: "none",
+        tenantSignatureStatus: "completed",
+        landlordSignatureStatus: "completed",
+        pdfStatus: "generated",
+        completedAt: "2026-02-02T12:00:00.000Z",
+      },
     });
 
     render(
@@ -657,9 +668,79 @@ describe("tenant workspace frontend shell", () => {
     expect(screen.getByText(/\$1,800/i)).toBeInTheDocument();
     expect(screen.getByText(/^Lease signing complete$/i)).toBeInTheDocument();
     expect(screen.getByText(/^Lease document available$/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Lease fully executed$/i)).toBeInTheDocument();
     expect(screen.getByText(/^Drawn signature$/i)).toBeInTheDocument();
     expect(screen.getByText(/^Taylor Tenant$/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Open lease document/i })).toBeInTheDocument();
+  });
+
+  it("shows the tenant lease sign action only when backend execution metadata requires it", async () => {
+    tenantPortalApi.getTenantLeaseWorkspace.mockResolvedValue({
+      leaseId: "lease-2",
+      startDate: "2026-03-01",
+      endDate: "2027-02-28",
+      monthlyRent: 1900,
+      status: "ready_for_signature",
+      documentUrl: "https://example.com/sign.pdf",
+      signatureStatus: "awaiting_tenant_signature",
+      signatureReadinessLabel: "Awaiting tenant signature",
+      signatureReadinessDescription: "A tenant-safe lease document is available, and the next visible signing step belongs to the tenant.",
+      tenantSignature: null,
+      leasePdfStatus: "available",
+      leasePdfLabel: "Lease document available",
+      leasePdfDescription: "A tenant-safe lease document is available in this workspace.",
+      leaseExecution: {
+        executionStatus: "ready_for_tenant_signature",
+        executionLabel: "Waiting for tenant signature",
+        executionDescription: "The lease document is ready and the next execution step belongs to the tenant.",
+        requiredNextAction: "tenant_signature",
+        tenantSignatureStatus: "needed",
+        landlordSignatureStatus: "blocked",
+        pdfStatus: "generated",
+        completedAt: null,
+      },
+    });
+    tenantPortalApi.signTenantLease.mockResolvedValue({
+      leaseId: "lease-2",
+      startDate: "2026-03-01",
+      endDate: "2027-02-28",
+      monthlyRent: 1900,
+      status: "ready_for_signature",
+      documentUrl: "https://example.com/sign.pdf",
+      signatureStatus: "signed",
+      signatureReadinessLabel: "Lease signing complete",
+      signatureReadinessDescription: "The visible lease record shows the current signing stage as complete.",
+      tenantSignature: {
+        signedAt: "2026-03-02T12:00:00.000Z",
+        signatureMethod: "typed",
+        signatureDisplayName: "Taylor Tenant",
+      },
+      leasePdfStatus: "available",
+      leasePdfLabel: "Lease document available",
+      leasePdfDescription: "A tenant-safe lease document is available in this workspace.",
+      leaseExecution: {
+        executionStatus: "tenant_signed",
+        executionLabel: "Tenant signature completed",
+        executionDescription: "Tenant signature is recorded. The next supported execution step depends on landlord follow-through.",
+        requiredNextAction: "landlord_signature",
+        tenantSignatureStatus: "completed",
+        landlordSignatureStatus: "needed",
+        pdfStatus: "generated",
+        completedAt: null,
+      },
+    });
+
+    render(
+      <MemoryRouter>
+        <TenantLeasePage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole("button", { name: /Confirm tenant signature/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Confirm tenant signature/i }));
+
+    await waitFor(() => expect(tenantPortalApi.signTenantLease).toHaveBeenCalledWith("lease-2"));
+    expect(await screen.findByText(/^Tenant signature completed$/i)).toBeInTheDocument();
   });
 
   it("renders maintenance page with safe projected data", async () => {

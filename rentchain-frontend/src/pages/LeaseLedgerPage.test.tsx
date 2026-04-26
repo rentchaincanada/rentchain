@@ -68,6 +68,16 @@ describe("LeaseLedgerPage", () => {
         unitNumber: "101",
         tenantName: "Jane Tenant",
         status: "renewal_pending",
+        leaseExecution: {
+          executionStatus: "ready_for_landlord_signature",
+          executionLabel: "Waiting for landlord signature",
+          executionDescription: "Tenant signing appears complete and the next visible execution step belongs to the landlord.",
+          requiredNextAction: "landlord_signature",
+          tenantSignatureStatus: "completed",
+          landlordSignatureStatus: "needed",
+          pdfStatus: "generated",
+          completedAt: null,
+        },
       },
     });
     mocks.getLeaseNotes.mockResolvedValue({
@@ -94,6 +104,7 @@ describe("LeaseLedgerPage", () => {
 
     expect(await screen.findByText("Harbour View · Unit 101")).toBeInTheDocument();
     expect(screen.getByText(/Renewal pending/i)).toBeInTheDocument();
+    expect(screen.getByText("Waiting for landlord signature")).toBeInTheDocument();
     expect(screen.getByText("Call tenant next week")).toBeInTheDocument();
   });
 

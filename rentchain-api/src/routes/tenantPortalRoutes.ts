@@ -13,6 +13,7 @@ import {
   projectTenantMaintenance,
   projectTenantProperty,
 } from "../services/tenantPortal/tenantProjectionService";
+import { deriveLeaseExecution } from "../services/leaseExecution/deriveLeaseExecution";
 import { recordTenantEvent } from "../services/tenantPortal/tenantEventLogService";
 import { redeemTenancyInvite } from "../services/tenantPortal/tenantInviteService";
 import { loadTenantIdentityRecord, loadTenantProfileProjection } from "../services/tenantPortal/tenantProfileService";
@@ -3479,6 +3480,129 @@ router.get("/lease", requireTenantWorkspaceIdentity, async (req: any, res) => {
   return res.json({ ok: true, data: workspace.lease });
 });
 
+router.post("/leases/:leaseId/sign", requireTenantWorkspaceIdentity, async (req: any, res) => {
+  const context = await resolveWorkspaceContextOrRespond(req, res);
+  if (!context) return;
+  if (context.authority !== "active_tenant" || !context.tenantId) {
+    return res.status(403).json({ ok: false, error: "TENANT_CONTEXT_REQUIRED" });
+  }
+
+  const leaseId = String(req.params?.leaseId || "").trim();
+  if (!leaseId) {
+    return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+  }
+  if (context.leaseId && String(context.leaseId).trim() !== leaseId) {
+    return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+  }
+
+  try {
+    const leaseRef = db.collection("leases").doc(leaseId);
+    const leaseSnap = await leaseRef.get();
+    if (!leaseSnap.exists) {
+      return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+    }
+
+    const leaseData = (leaseSnap.data() as any) || {};
+    const leaseTenantId = String(
+      leaseData?.tenantId || leaseData?.primaryTenantId || leaseData?.tenantIds?.[0] || ""
+    ).trim();
+    const leaseTenantIds = Array.isArray(leaseData?.tenantIds)
+      ? leaseData.tenantIds.map((value: any) => String(value || "").trim()).filter(Boolean)
+      : [];
+    if (
+      leaseTenantId !== context.tenantId &&
+      !leaseTenantIds.includes(String(context.tenantId || "").trim())
+    ) {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const alreadySignedAt =
+      String(leaseData?.tenantSignature?.signedAt || "").trim() ||
+      String(leaseData?.tenantSignedAt || leaseData?.tenantSignatureCompletedAt || "").trim();
+    if (alreadySignedAt) {
+      return res.status(200).json({ ok: true, data: projectTenantLease(leaseId, leaseData) });
+    }
+
+    const currentExecution = deriveLeaseExecution({
+      leaseId,
+      documentUrl:
+        String(leaseData?.documentUrl || leaseData?.approvedDocumentUrl || leaseData?.documentRef || "").trim() || null,
+      startDate: String(leaseData?.startDate || leaseData?.leaseStart || "").trim() || null,
+      monthlyRent:
+        typeof leaseData?.monthlyRent === "number"
+          ? leaseData.monthlyRent
+          : typeof leaseData?.rentAmount === "number"
+          ? leaseData.rentAmount
+          : typeof leaseData?.rentCents === "number"
+          ? Math.round(leaseData.rentCents) / 100
+          : null,
+      status: String(leaseData?.status || "").trim() || null,
+      raw: leaseData,
+    });
+    if (currentExecution.requiredNextAction !== "tenant_signature") {
+      return res.status(400).json({ ok: false, error: "TENANT_LEASE_SIGN_NOT_AVAILABLE" });
+    }
+
+    const tenantSnap = await db.collection("tenants").doc(String(context.tenantId)).get().catch(() => null);
+    const tenantData = tenantSnap?.exists ? ((tenantSnap.data() as any) || {}) : {};
+    const signatureDisplayName =
+      String(
+        req.body?.signatureDisplayName ||
+          tenantData?.fullName ||
+          tenantData?.name ||
+          req.user?.displayName ||
+          req.user?.email ||
+          ""
+      ).trim() || "Tenant";
+    const signatureMethod = req.body?.signatureMethod === "drawn" ? "drawn" : "typed";
+    const nowIso = new Date().toISOString();
+
+    await leaseRef.set(
+      {
+        tenantSignedAt: nowIso,
+        tenantSignatureMethod: signatureMethod,
+        tenantSignatureDisplayName: signatureDisplayName,
+        updatedAt: nowIso,
+      },
+      { merge: true }
+    );
+
+    await writeCanonicalEvent({
+      domain: "lease",
+      action: "tenant_signed",
+      status: "tenant_signed",
+      actor: {
+        type: "tenant",
+        role: "tenant",
+        id: String(context.tenantId),
+        displayName: signatureDisplayName,
+      },
+      resource: {
+        type: "lease",
+        id: leaseId,
+      },
+      occurredAt: nowIso,
+      visibility: "internal",
+      summary: "Tenant signature metadata recorded for lease execution",
+      metadata: {
+        previousStatus: String(leaseData?.status || "").trim() || null,
+        nextStatus: "tenant_signed",
+      },
+    });
+
+    const refreshedSnap = await leaseRef.get();
+    const refreshed = refreshedSnap.exists ? ((refreshedSnap.data() as any) || {}) : leaseData;
+    return res.status(200).json({ ok: true, data: projectTenantLease(leaseId, refreshed) });
+  } catch (err) {
+    console.error("[tenant/leases/:leaseId/sign] failed", {
+      tenantId: context.tenantId,
+      leaseId,
+      err,
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_LEASE_SIGN_FAILED" });
+  }
+});
+
 router.get("/maintenance-requests", requireTenantWorkspaceIdentity, async (req: any, res) => {
   const context = await resolveWorkspaceContextOrRespond(req, res);
   if (!context) return;
@@ -5151,6 +5275,14 @@ router.get("/lease", requireTenant, async (req: any, res) => {
         leasePdfStatus: "not_available",
         leasePdfLabel: "Lease document unavailable",
         leasePdfDescription: "No tenant-safe lease document is available in this workspace yet.",
+        leaseExecution: deriveLeaseExecution({
+          leaseId,
+          documentUrl: null,
+          startDate: null,
+          monthlyRent: null,
+          status: null,
+          raw: {},
+        }),
       }),
       propertyId,
       propertyName,

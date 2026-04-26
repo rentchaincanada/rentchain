@@ -298,7 +298,7 @@ async function enrichLeaseRow(raw: any) {
     tenantName,
     tenantEmail,
     documentUrl,
-    ...deriveTenantSafeLeaseReadinessMetadata(raw, { documentUrl }),
+    ...deriveTenantSafeLeaseReadinessMetadata(raw, { documentUrl, leaseId: lease.id }),
     archivedAt: raw?.archivedAt || null,
     archivedByUserId: raw?.archivedByUserId || null,
     isArchived: Boolean(raw?.archivedAt),

@@ -33,6 +33,28 @@ export interface TenantLease {
   leasePdfStatus?: "available" | "pending" | "not_available";
   leasePdfLabel?: string | null;
   leasePdfDescription?: string | null;
+  leaseExecution?: {
+    executionStatus:
+      | "draft"
+      | "ready_for_tenant_signature"
+      | "tenant_signed"
+      | "ready_for_landlord_signature"
+      | "landlord_signed"
+      | "fully_executed"
+      | "blocked";
+    executionLabel: string;
+    executionDescription: string;
+    requiredNextAction:
+      | "complete_lease_details"
+      | "tenant_signature"
+      | "landlord_signature"
+      | "review_signed_lease"
+      | "none";
+    tenantSignatureStatus: "not_required" | "needed" | "completed" | "blocked";
+    landlordSignatureStatus: "not_required" | "needed" | "completed" | "blocked";
+    pdfStatus: "not_ready" | "ready" | "generated" | "blocked";
+    completedAt: string | null;
+  } | null;
 }
 
 export interface TenantPayment {
@@ -100,6 +122,18 @@ export async function getTenantLease(): Promise<TenantLease> {
   const res = await apiFetch<any>("/tenant/lease");
   if (res?.lease && typeof res.lease === "object") {
     return res.lease as TenantLease;
+  }
+  return res as TenantLease;
+}
+
+export async function signTenantLease(leaseId: string): Promise<TenantLease> {
+  const res = await apiFetch<any>(`/tenant/leases/${encodeURIComponent(leaseId)}/sign`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: "{}",
+  });
+  if (res?.data && typeof res.data === "object") {
+    return res.data as TenantLease;
   }
   return res as TenantLease;
 }

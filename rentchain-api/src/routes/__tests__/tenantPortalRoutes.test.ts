@@ -493,7 +493,112 @@ describe("tenantPortalRoutes foundation", () => {
     });
     expect(res.body?.data?.tenantSignature?.drawnDataUrl).toBeUndefined();
     expect(res.body?.data?.leasePdfStatus).toBe("available");
+    expect(res.body?.data?.leaseExecution).toEqual(
+      expect.objectContaining({
+        executionStatus: "fully_executed",
+        executionLabel: "Lease fully executed",
+        requiredNextAction: "none",
+      })
+    );
     expect(res.body?.lease?.tenantSignature?.drawnDataUrl).toBeUndefined();
+  });
+
+  it("records tenant lease signing metadata without storing raw signature data and stays idempotent", async () => {
+    ensureCollection("leases").set("lease-1", {
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+      status: "ready_for_signature",
+      startDate: "2026-03-01",
+      endDate: "2027-02-28",
+      monthlyRent: 1900,
+      documentUrl: "https://example.com/sign-me.pdf",
+      tenantSignature: null,
+      tenantSignedAt: null,
+    });
+    ensureCollection("tenants").set("tenant-1", {
+      email: "tenant@example.com",
+      fullName: "Taylor Tenant",
+      phone: "902-555-0100",
+      propertyId: "prop-1",
+      currentLeaseId: "lease-1",
+    });
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const headers = {
+      "x-test-user": JSON.stringify({
+        id: "user-1",
+        email: "tenant@example.com",
+        role: "tenant",
+        tenantId: "tenant-1",
+        leaseId: "lease-sign-1",
+      }),
+    };
+
+    const first = await invokeRouter(router, {
+      method: "POST",
+      url: "/leases/lease-1/sign",
+      headers,
+    });
+    const second = await invokeRouter(router, {
+      method: "POST",
+      url: "/leases/lease-1/sign",
+      headers,
+    });
+
+    expect(first.status).toBe(200);
+    expect(first.body?.data?.tenantSignature).toEqual(
+      expect.objectContaining({
+        signatureMethod: "typed",
+        signatureDisplayName: "Taylor Tenant",
+      })
+    );
+    expect(first.body?.data?.tenantSignature?.drawnDataUrl).toBeUndefined();
+    expect(first.body?.data?.leaseExecution).toEqual(
+      expect.objectContaining({
+        executionStatus: "tenant_signed",
+        requiredNextAction: "landlord_signature",
+      })
+    );
+
+    expect(second.status).toBe(200);
+    const canonicalEvents = Array.from(ensureCollection("canonicalEvents").values());
+    expect(canonicalEvents.filter((event) => event.action === "tenant_signed")).toHaveLength(1);
+
+    const storedLease = ensureCollection("leases").get("lease-1");
+    expect(storedLease?.tenantSignedAt).toBeTruthy();
+    expect(storedLease?.tenantSignatureMethod).toBe("typed");
+    expect(storedLease?.tenantSignatureDisplayName).toBe("Taylor Tenant");
+    expect(storedLease?.tenantSignature?.drawnDataUrl).toBeUndefined();
+  });
+
+  it("forbids tenant lease signing for an unrelated lease", async () => {
+    ensureCollection("leases").set("lease-other", {
+      tenantId: "tenant-2",
+      propertyId: "prop-1",
+      status: "ready_for_signature",
+      startDate: "2026-03-01",
+      endDate: "2027-02-28",
+      monthlyRent: 1900,
+      documentUrl: "https://example.com/sign-me.pdf",
+    });
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/leases/lease-other/sign",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+          leaseId: "lease-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(403);
+    expect(res.body?.error).toBe("FORBIDDEN");
   });
 
   it("creates a tenant share package without persisting a raw token", async () => {
