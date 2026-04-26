@@ -1,5 +1,17 @@
 import { apiJson, getAuthToken, resolveApiUrl } from "@/lib/apiClient";
 import { getFirebaseIdToken } from "@/lib/firebaseAuthToken";
+import { apiFetch } from "./http";
+
+type TenantListResponse = TenantApiModel[] | { tenants?: TenantApiModel[] };
+type TenanciesResponse = TenancyApiModel[] | { tenancies?: TenancyApiModel[] };
+type UpdateTenancyResponse = TenancyApiModel | { tenancy?: TenancyApiModel };
+type UpdateTenantResponse = TenantApiModel | { tenant?: TenantApiModel };
+type ApiErrorShape = Error & { payload?: unknown; status?: number };
+
+function extractErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String(error || "");
+}
 
 export type TenancyMoveOutReason =
   | "LEASE_TERM_END"
@@ -24,10 +36,17 @@ export interface TenantApiModel {
   id: string;
   name?: string;
   fullName?: string;
+  email?: string | null;
+  phone?: string | null;
   unit?: string;
+  unitId?: string | null;
+  unitLabel?: string | null;
   propertyName?: string;
+  propertyId?: string | null;
+  currentLeaseId?: string | null;
   status?: string;
   balance?: number;
+  hiddenFromActiveLists?: boolean;
   tenancies?: TenancyApiModel[];
 }
 
@@ -36,12 +55,12 @@ export interface TenantApiModel {
  */
 export async function fetchTenants(): Promise<TenantApiModel[]> {
   try {
-    const data = await apiJson<any>("/tenants");
+    const data = await apiJson<TenantListResponse>("/tenants");
     if (Array.isArray(data)) return data as TenantApiModel[];
     if (Array.isArray(data?.tenants)) return data.tenants as TenantApiModel[];
     return [];
-  } catch (err: any) {
-    const msg = String(err?.message || "");
+  } catch (err: unknown) {
+    const msg = extractErrorMessage(err);
     if (msg.includes("404")) {
       return [];
     }
@@ -73,16 +92,20 @@ export async function downloadTenantReport(tenantId: string): Promise<{ filename
 
   const contentType = response.headers.get("content-type") || "";
   if (!response.ok) {
-    const payload = contentType.includes("application/json")
+    const payload: unknown = contentType.includes("application/json")
       ? await response.json().catch(() => null)
       : await response.text().catch(() => "");
+    const payloadRecord =
+      payload && typeof payload === "object" ? (payload as Record<string, unknown>) : null;
     const message =
-      (payload && (payload.message || payload.error || payload.code)) ||
+      payloadRecord?.message ||
+      payloadRecord?.error ||
+      payloadRecord?.code ||
       (typeof payload === "string" ? payload : "") ||
       `Tenant report download failed (${response.status})`;
-    const err = new Error(String(message));
-    (err as any).payload = payload;
-    (err as any).status = response.status;
+    const err: ApiErrorShape = new Error(String(message));
+    err.payload = payload;
+    err.status = response.status;
     throw err;
   }
 
@@ -95,7 +118,7 @@ export async function downloadTenantReport(tenantId: string): Promise<{ filename
 }
 
 export async function fetchTenantTenancies(tenantId: string): Promise<TenancyApiModel[]> {
-  const data = await apiJson<any>(`/tenants/${encodeURIComponent(tenantId)}/tenancies`);
+  const data = await apiJson<TenanciesResponse>(`/tenants/${encodeURIComponent(tenantId)}/tenancies`);
   if (Array.isArray(data)) return data as TenancyApiModel[];
   if (Array.isArray(data?.tenancies)) return data.tenancies as TenancyApiModel[];
   return [];
@@ -111,12 +134,28 @@ export async function updateTenancy(
     status: "active" | "inactive";
   }>
 ): Promise<TenancyApiModel> {
-  const data = await apiJson<any>(`/tenancies/${encodeURIComponent(tenancyId)}`, {
+  const data = await apiJson<UpdateTenancyResponse>(`/tenancies/${encodeURIComponent(tenancyId)}`, {
     method: "PATCH",
     body: JSON.stringify(payload),
   });
   if (data?.tenancy) return data.tenancy as TenancyApiModel;
   return data as TenancyApiModel;
+}
+
+export async function updateTenantRecord(
+  tenantId: string,
+  payload: Partial<{
+    fullName: string;
+    email: string | null;
+    phone: string | null;
+  }>
+): Promise<TenantApiModel> {
+  const data = await apiJson<UpdateTenantResponse>(`/tenants/${encodeURIComponent(tenantId)}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+  if (data?.tenant) return data.tenant as TenantApiModel;
+  return data as TenantApiModel;
 }
 
 export async function impersonateTenant(tenantId: string): Promise<{ ok: boolean; token: string; tenantId: string; exp?: number }> {

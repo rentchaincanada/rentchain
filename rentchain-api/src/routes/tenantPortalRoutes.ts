@@ -22,6 +22,13 @@ import {
   sendTenantCommunicationMessage,
 } from "../services/tenantPortal/tenantCommunicationsService";
 import { listTenantNotificationFeed } from "../services/tenantPortal/tenantNotificationsService";
+import { serializeEvidenceForAudience } from "../lib/workOrderEvidence";
+import {
+  applyNotificationUpdate,
+  buildTenantSafeWorkOrderNotifications,
+} from "../lib/maintenanceNotifications";
+import { writeCanonicalEvent } from "../lib/events/buildEvent";
+import { adaptTenantSafeScreeningState } from "../services/screening/tenantScreeningStatusAdapter";
 
 const router = Router();
 router.use(authenticateJwt);
@@ -395,8 +402,17 @@ type ScreeningConsentRecord = {
   id: string;
   requestId: string;
   tenantId: string;
+  applicantId?: string | null;
+  rentalApplicationId?: string | null;
+  landlordId?: string | null;
+  propertyId?: string | null;
+  providerKey?: ScreeningProviderKey | null;
+  providerLabel?: string | null;
+  consentVersion?: string | null;
+  consentTextSummary?: string | null;
   viewedAt: number | null;
   acceptedAt: number | null;
+  acceptedBy?: string | null;
   providerDisclosure: string | null;
   disclosureVersion: string | null;
 };
@@ -748,8 +764,17 @@ async function getLatestConsent(requestId: string): Promise<ScreeningConsentReco
     id: item.id,
     requestId,
     tenantId: cleanString(item.tenantId, 160) || "",
+    applicantId: cleanString(item.applicantId, 160),
+    rentalApplicationId: cleanString(item.rentalApplicationId, 160),
+    landlordId: cleanString(item.landlordId, 160),
+    propertyId: cleanString(item.propertyId, 160),
+    providerKey: ((cleanString(item.providerKey, 80) || "") as ScreeningProviderKey | "") || null,
+    providerLabel: cleanString(item.providerLabel, 120),
+    consentVersion: cleanString(item.consentVersion, 80),
+    consentTextSummary: cleanString(item.consentTextSummary, 600),
     viewedAt: Number(item.viewedAt || 0) || null,
     acceptedAt: Number(item.acceptedAt || 0) || null,
+    acceptedBy: cleanString(item.acceptedBy, 160),
     providerDisclosure: cleanString(item.providerDisclosure, 200),
     disclosureVersion: cleanString(item.disclosureVersion, 80),
   };
@@ -963,6 +988,151 @@ function screeningSummaryText(request: ScreeningRequestRecord, session: Screenin
   if (session?.handoffType === "redirect") return "Your screening partner handoff is ready. Continue when you are ready.";
   if (request.status === "consent_pending") return "Consent is required before screening can begin.";
   return "Screening is queued and ready for the next step.";
+}
+
+function getScreeningProviderLabel(providerKey: ScreeningProviderKey | null | undefined): string {
+  if (providerKey === "transunion_redirect") return "TransUnion";
+  if (providerKey === "equifax") return "Equifax";
+  if (providerKey === "manual") return "Manual review";
+  return "Selected screening provider";
+}
+
+function isSafeRequesterLabel(value: any): value is string {
+  if (typeof value !== "string") return false;
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  if (trimmed.includes("@")) return false;
+  return true;
+}
+
+function pickSafeRequesterLabel(source: any, candidates: string[]) {
+  for (const key of candidates) {
+    const value = source?.[key];
+    if (isSafeRequesterLabel(value)) {
+      return String(value).trim();
+    }
+  }
+  return null;
+}
+
+async function resolveTenantSafeRequesterLabel(landlordId: string | null | undefined): Promise<string | null> {
+  const normalizedLandlordId = cleanString(landlordId, 160);
+  if (!normalizedLandlordId) return null;
+
+  try {
+    const landlordSnap = await db.collection("landlords").doc(normalizedLandlordId).get();
+    if (landlordSnap.exists) {
+      const landlord = (landlordSnap.data() as any) || {};
+      const landlordLabel = pickSafeRequesterLabel(landlord, [
+        "businessName",
+        "displayName",
+        "companyName",
+        "company",
+        "name",
+        "fullName",
+      ]);
+      if (landlordLabel) return landlordLabel;
+    }
+  } catch {}
+
+  try {
+    const accountSnap = await db.collection("accounts").doc(normalizedLandlordId).get();
+    if (accountSnap.exists) {
+      const account = (accountSnap.data() as any) || {};
+      const accountLabel = pickSafeRequesterLabel(account, [
+        "displayName",
+        "businessName",
+        "companyName",
+        "accountName",
+        "organizationName",
+        "company",
+      ]);
+      if (accountLabel) return accountLabel;
+    }
+  } catch {}
+
+  try {
+    const userSnap = await db.collection("users").doc(normalizedLandlordId).get();
+    if (userSnap.exists) {
+      const user = (userSnap.data() as any) || {};
+      const userLabel = pickSafeRequesterLabel(user, [
+        "displayName",
+        "businessName",
+        "companyName",
+        "company",
+        "name",
+        "fullName",
+      ]);
+      if (userLabel) return userLabel;
+    }
+  } catch {}
+
+  return null;
+}
+
+function buildScreeningConsentSummary(input: {
+  providerKey: ScreeningProviderKey | null | undefined;
+  propertyLabel?: string | null;
+  unitLabel?: string | null;
+}) {
+  const providerLabel = getScreeningProviderLabel(input.providerKey);
+  const locationLabel = [input.propertyLabel, input.unitLabel].filter(Boolean).join(" - ");
+  const locationSegment = locationLabel ? ` for ${locationLabel}` : "";
+  return `The landlord requested tenant screening${locationSegment}. A third-party screening provider may be used, including ${providerLabel} when applicable. RentChain records consent and workflow status for audit and application review purposes.`;
+}
+
+async function writeScreeningConsentCanonicalEvent(input: {
+  request: ScreeningRequestRecord;
+  consent: ScreeningConsentRecord;
+  actorId: string;
+}) {
+  const providerKey = input.consent.providerKey || input.request.providerSelection || null;
+  const providerLabel = input.consent.providerLabel || getScreeningProviderLabel(providerKey);
+  await writeCanonicalEvent({
+    type: "screening_consent_confirmed",
+    domain: "screening",
+    action: "screening_consent_confirmed",
+    status: "confirmed",
+    actor: {
+      type: "tenant",
+      id: input.actorId,
+      role: "tenant",
+    },
+    resource: {
+      type: "screening_request",
+      id: input.request.id,
+      parentType: input.request.rentalApplicationId
+        ? "rental_application"
+        : input.request.landlordId
+        ? "landlord"
+        : "tenant",
+      parentId:
+        input.request.rentalApplicationId ||
+        input.request.landlordId ||
+        input.request.applicantTenantId ||
+        null,
+    },
+    visibility: "internal",
+    occurredAt: input.consent.acceptedAt || Date.now(),
+    summary: "Tenant screening consent confirmed",
+    metadata: {
+      requestId: input.request.id,
+      consentId: input.consent.id,
+      tenantId: input.request.applicantTenantId || input.consent.tenantId || null,
+      applicantId: input.request.applicantUserId || input.consent.applicantId || null,
+      applicationId:
+        input.request.rentalApplicationId || input.consent.rentalApplicationId || null,
+      landlordId: input.request.landlordId || input.consent.landlordId || null,
+      propertyId: input.request.propertyId || input.consent.propertyId || null,
+      providerKey,
+      providerLabel,
+      consentVersion:
+        input.consent.consentVersion || input.consent.disclosureVersion || null,
+      acceptedBy: input.consent.acceptedBy || input.actorId,
+      consentTextSummary: input.consent.consentTextSummary || null,
+    },
+    tags: ["screening-consent", `provider:${providerKey || "pending"}`],
+  });
 }
 
 async function getTenantConversationIds(tenantId: string): Promise<string[]> {
@@ -1327,16 +1497,24 @@ const screeningAdapters: Record<ScreeningProviderKey, ScreeningProviderAdapter> 
     },
   },
 };
-
 function shapeScreeningResponse(input: {
   request: ScreeningRequestRecord;
   consent: ScreeningConsentRecord | null;
   session: ScreeningSessionRecord | null;
   result: ScreeningResultRecord | null;
   auditTrail?: any[];
+  requesterDisplayLabel?: string | null;
 }) {
   const { request, consent, session, result } = input;
   const returnState = resolveReturnState(request, session, result);
+  const tenantSafeState = adaptTenantSafeScreeningState({
+    requestStatus: request.status,
+    nextAction: request.nextAction,
+    consentAcceptedAt: request.consentedAt || consent?.acceptedAt || null,
+    sessionStatus: session?.status || null,
+    resultStatus: result?.status || request.normalizedResultStatus,
+    providerSessionStatus: session?.providerSessionStatus || result?.providerStatusMapped || null,
+  });
   return {
     id: request.id,
     rentalApplicationId: request.rentalApplicationId,
@@ -1347,17 +1525,34 @@ function shapeScreeningResponse(input: {
     startedAt: request.startedAt || session?.createdAt || null,
     completedAt: request.completedAt || result?.updatedAt || null,
     provider: session?.providerKey || request.providerSelection || null,
+    providerLabel: getScreeningProviderLabel(session?.providerKey || request.providerSelection || null),
     packageType: request.packageType,
     payerType: request.payerType,
     propertyLabel: request.propertyLabel,
     unitLabel: request.unitLabel,
     applicantName: request.applicantName,
+    requesterDisplayLabel: input.requesterDisplayLabel || null,
     nextAction: request.nextAction || null,
+    tenantStatus: tenantSafeState.tenantStatus,
+    tenantStatusLabel: tenantSafeState.tenantStatusLabel,
+    tenantStatusDescription: tenantSafeState.tenantStatusDescription,
+    tenantNextAction: tenantSafeState.tenantNextAction,
     consent: consent
       ? {
           id: consent.id,
+          requestId: consent.requestId,
+          tenantId: consent.tenantId,
+          applicantId: consent.applicantId || null,
+          rentalApplicationId: consent.rentalApplicationId || null,
+          landlordId: consent.landlordId || null,
+          propertyId: consent.propertyId || null,
+          providerKey: consent.providerKey || null,
+          providerLabel: consent.providerLabel || null,
+          consentVersion: consent.consentVersion || consent.disclosureVersion || null,
+          consentTextSummary: consent.consentTextSummary || null,
           viewedAt: consent.viewedAt,
           acceptedAt: consent.acceptedAt,
+          acceptedBy: consent.acceptedBy || null,
           providerDisclosure: consent.providerDisclosure,
           disclosureVersion: consent.disclosureVersion,
         }
@@ -1432,6 +1627,20 @@ function shapeScreeningResponse(input: {
         }))
       : [],
   };
+}
+
+async function shapeTenantScreeningResponse(input: {
+  request: ScreeningRequestRecord;
+  consent: ScreeningConsentRecord | null;
+  session: ScreeningSessionRecord | null;
+  result: ScreeningResultRecord | null;
+  auditTrail?: any[];
+}) {
+  const requesterDisplayLabel = await resolveTenantSafeRequesterLabel(input.request.landlordId);
+  return shapeScreeningResponse({
+    ...input,
+    requesterDisplayLabel,
+  });
 }
 
 async function createScreeningSessionSafely(input: {
@@ -1839,11 +2048,62 @@ async function buildTenantMaintenanceUpdateItems(tenantId: string): Promise<Tena
 }
 
 function requireTenantWorkspaceIdentity(req: any, res: any, next: any) {
+  const role = String(req.user?.role || "").trim().toLowerCase();
   const userId = String(req.user?.id || "").trim();
-  if (!userId) {
+  const tenantId = String(req.user?.tenantId || "").trim();
+  if (!userId || role !== "tenant" || !tenantId) {
     return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
   }
   return next();
+}
+
+const TENANT_NOTIFICATION_PREFERENCE_KEYS = [
+  "follow_up_requested",
+  "ready_for_rereview",
+  "application_updated",
+  "access_changed",
+  "documents_updated",
+] as const;
+
+type TenantNotificationPreferenceKey = (typeof TENANT_NOTIFICATION_PREFERENCE_KEYS)[number];
+
+type TenantNotificationPreferences = {
+  inApp: Record<TenantNotificationPreferenceKey, boolean>;
+  updatedAt: number | null;
+};
+
+function defaultTenantNotificationPreferences(): TenantNotificationPreferences {
+  return {
+    inApp: {
+      follow_up_requested: true,
+      ready_for_rereview: true,
+      application_updated: true,
+      access_changed: true,
+      documents_updated: true,
+    },
+    updatedAt: null,
+  };
+}
+
+function normalizeTenantNotificationPreferences(input: any): TenantNotificationPreferences {
+  const defaults = defaultTenantNotificationPreferences();
+  const source = input?.inApp && typeof input.inApp === "object" ? input.inApp : {};
+  const inApp = { ...defaults.inApp };
+  for (const key of TENANT_NOTIFICATION_PREFERENCE_KEYS) {
+    if (typeof source[key] === "boolean") {
+      inApp[key] = source[key];
+    }
+  }
+  return {
+    inApp,
+    updatedAt: typeof input?.updatedAt === "number" && Number.isFinite(input.updatedAt) ? input.updatedAt : null,
+  };
+}
+
+async function loadTenantNotificationPreferences(userId: string): Promise<TenantNotificationPreferences> {
+  const userSnap = await db.collection("users").doc(userId).get();
+  const data = userSnap.exists ? userSnap.data() : null;
+  return normalizeTenantNotificationPreferences(data?.tenantNotificationPreferences);
 }
 
 async function resolveWorkspaceContextOrRespond(req: any, res: any) {
@@ -1856,8 +2116,21 @@ async function resolveWorkspaceContextOrRespond(req: any, res: any) {
 
   if (context.ok) return context;
 
-  const status = context.reason === "unauthenticated" ? 401 : 403;
-  res.status(status).json({ ok: false, error: context.reason === "ambiguous_authority" ? "AMBIGUOUS_TENANCY_CONTEXT" : "FORBIDDEN" });
+  if (context.reason === "unauthenticated") {
+    res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    return null;
+  }
+
+  if (context.reason === "no_authority") {
+    res.status(409).json({
+      ok: false,
+      error: "TENANT_NOT_INITIALIZED",
+      status: "tenant_not_initialized",
+    });
+    return null;
+  }
+
+  res.status(403).json({ ok: false, error: "AMBIGUOUS_TENANCY_CONTEXT" });
   return null;
 }
 
@@ -2536,6 +2809,72 @@ async function handleTenantWorkspaceSummary(req: any, res: any) {
 router.get("/workspace", requireTenantWorkspaceIdentity, handleTenantWorkspaceSummary);
 router.get("/me", requireTenantWorkspaceIdentity, handleTenantWorkspaceSummary);
 
+router.get("/notification-preferences", requireTenantWorkspaceIdentity, async (req: any, res) => {
+  const userId = String(req.user?.id || "").trim();
+  if (!userId) {
+    return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+  }
+
+  try {
+    const preferences = await loadTenantNotificationPreferences(userId);
+    return res.json({ ok: true, data: preferences });
+  } catch (err: any) {
+    console.error("[tenant/notification-preferences] failed", {
+      userId: req.user?.id,
+      message: err?.message || "failed",
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_NOTIFICATION_PREFERENCES_FAILED" });
+  }
+});
+
+router.patch("/notification-preferences", requireTenantWorkspaceIdentity, async (req: any, res) => {
+  const userId = String(req.user?.id || "").trim();
+  if (!userId) {
+    return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+  }
+
+  const requested = req.body?.inApp;
+  if (!requested || typeof requested !== "object") {
+    return res.status(400).json({ ok: false, error: "TENANT_NOTIFICATION_PREFERENCES_INVALID" });
+  }
+
+  const hasRequestedField = TENANT_NOTIFICATION_PREFERENCE_KEYS.some((key) => typeof requested[key] === "boolean");
+  if (!hasRequestedField) {
+    return res.status(400).json({ ok: false, error: "TENANT_NOTIFICATION_PREFERENCES_INVALID" });
+  }
+
+  try {
+    const current = await loadTenantNotificationPreferences(userId);
+    const next: TenantNotificationPreferences = {
+      inApp: { ...current.inApp },
+      updatedAt: Date.now(),
+    };
+
+    for (const key of TENANT_NOTIFICATION_PREFERENCE_KEYS) {
+      if (typeof requested[key] === "boolean") {
+        next.inApp[key] = requested[key];
+      }
+    }
+
+    await db.collection("users").doc(userId).set(
+      {
+        tenantNotificationPreferences: {
+          inApp: next.inApp,
+          updatedAt: next.updatedAt,
+        },
+      },
+    );
+
+    return res.json({ ok: true, data: next });
+  } catch (err: any) {
+    console.error("[tenant/notification-preferences:patch] failed", {
+      userId: req.user?.id,
+      message: err?.message || "failed",
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_NOTIFICATION_PREFERENCES_UPDATE_FAILED" });
+  }
+});
+
 router.get("/profile", requireTenantWorkspaceIdentity, async (req: any, res) => {
   const context = await resolveWorkspaceContextOrRespond(req, res);
   if (!context) return;
@@ -2995,8 +3334,76 @@ router.post("/maintenance-requests", requireTenantWorkspaceIdentity, async (req:
       priority: data.priority,
     },
   });
+  let emailed = false;
+  let emailError: string | null = null;
+  try {
+    const maintenanceNotifyEmail = String(process.env.MAINTENANCE_NOTIFY_EMAIL || "").trim();
+    const adminEmails = getAdminEmails().filter((email) => emailRegex.test(email));
+    let landlordEmail: string | null = null;
+    if (data.landlordId) {
+      const userDoc = await loadDocument("users", data.landlordId);
+      landlordEmail = String(userDoc?.data?.email || "").trim() || null;
+      if (!landlordEmail) {
+        const landlordDoc = await loadDocument("landlords", data.landlordId);
+        landlordEmail = String(landlordDoc?.data?.email || "").trim() || null;
+      }
+    }
 
-  return res.status(201).json({ ok: true, data: projectTenantMaintenance(ref.id, data) });
+    const recipients: string[] = [];
+    if (maintenanceNotifyEmail && emailRegex.test(maintenanceNotifyEmail)) {
+      recipients.push(maintenanceNotifyEmail);
+    } else if (landlordEmail && emailRegex.test(landlordEmail)) {
+      recipients.push(landlordEmail);
+    } else if (adminEmails.length) {
+      recipients.push(...adminEmails);
+    }
+
+    const from =
+      process.env.EMAIL_FROM ||
+      process.env.SENDGRID_FROM_EMAIL ||
+      process.env.SENDGRID_FROM ||
+      process.env.FROM_EMAIL;
+    if (!recipients.length) {
+      emailError = "MISSING_RECIPIENT_EMAIL";
+    } else if (!getEnvFlags().emailConfigured || !from) {
+      emailError = "EMAIL_NOT_CONFIGURED";
+    } else {
+      const tenantDoc = await loadDocument("tenants", context.tenantId);
+      const tenantName =
+        String(tenantDoc?.data?.fullName || tenantDoc?.data?.name || req.user?.name || req.user?.email || "").trim() || "Unknown";
+      const tenantEmail = String(tenantDoc?.data?.email || req.user?.email || "").trim() || null;
+      const propertyName = String(property?.name || property?.addressLine1 || context.propertyId || "").trim() || "Property";
+      const baseUrl = (process.env.PUBLIC_APP_URL || process.env.VITE_PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "");
+      const requestLink = `${baseUrl}/maintenance`;
+      await sendEmail({
+        to: recipients,
+        from,
+        replyTo: from,
+        subject: `New maintenance request: ${title}`,
+        text: buildEmailText({
+          intro: `A tenant submitted a new maintenance request.\nTenant: ${tenantName}${tenantEmail ? ` (${tenantEmail})` : ""}\nProperty: ${propertyName}\nCategory: ${data.category}\nPriority: ${data.priority}\nRequest ID: ${ref.id}\n\n${description}`,
+          ctaText: "Open maintenance",
+          ctaUrl: requestLink,
+        }),
+        html: buildEmailHtml({
+          title: "New maintenance request",
+          intro: `Tenant: ${tenantName}${tenantEmail ? ` (${tenantEmail})` : ""}. Property: ${propertyName}. Category: ${data.category}. Priority: ${data.priority}. Request ID: ${ref.id}.`,
+          ctaText: "Open maintenance",
+          ctaUrl: requestLink,
+        }),
+      });
+      emailed = true;
+    }
+  } catch (err: any) {
+    emailError = err?.message || "SEND_FAILED";
+    console.error("[tenant/workspace-maintenance] email send failed", {
+      requestId: ref.id,
+      landlordId: data.landlordId,
+      message: err?.message || "send_failed",
+    });
+  }
+
+  return res.status(201).json({ ok: true, data: projectTenantMaintenance(ref.id, data), emailed, emailError });
 });
 
 router.post("/invite/redeem", requireTenantWorkspaceIdentity, async (req: any, res) => {
@@ -3449,7 +3856,7 @@ router.get("/screening", requireTenant, async (req: any, res) => {
           getLatestSession(item.id),
           getLatestResult(item.id),
         ]);
-        return shapeScreeningResponse({ request, consent, session, result });
+        return shapeTenantScreeningResponse({ request, consent, session, result });
       })
     );
 
@@ -3500,9 +3907,9 @@ router.get("/screening/:requestId/status", requireTenant, async (req: any, res) 
       });
     }
 
-    return res.json({
+      return res.json({
       ok: true,
-      screeningRequest: shapeScreeningResponse({ request, consent, session, result, auditTrail }),
+      screeningRequest: await shapeTenantScreeningResponse({ request, consent, session, result, auditTrail }),
     });
   } catch (err: any) {
     console.error("[tenant/screening/:requestId/status] failed", {
@@ -3535,6 +3942,18 @@ router.post("/screening/:requestId/consent", requireTenant, async (req: any, res
       return res.status(400).json({ ok: false, error: "CONSENT_ACTION_REQUIRED" });
     }
 
+    if (accepted && existingConsent?.acceptedAt) {
+      return res.json({
+        ok: true,
+        screeningRequest: await shapeTenantScreeningResponse({
+          request,
+          consent: existingConsent,
+          session: await getLatestSession(requestId),
+          result: await getLatestResult(requestId),
+        }),
+      });
+    }
+
     const now = Date.now();
     const consentRef =
       existingConsent && !existingConsent.acceptedAt
@@ -3544,15 +3963,33 @@ router.post("/screening/:requestId/consent", requireTenant, async (req: any, res
       cleanString(req.body?.providerDisclosure, 200) ||
       (request.providerSelection ? `This screening may be completed using ${request.providerSelection}.` : "This screening may be completed by a secure screening provider selected at runtime.");
     const disclosureVersion = cleanString(req.body?.disclosureVersion, 80) || "screening-consent-v1";
+    const providerKey = request.providerSelection || null;
+    const providerLabel = getScreeningProviderLabel(providerKey);
+    const consentSummary =
+      cleanString(req.body?.consentSummary, 600) ||
+      buildScreeningConsentSummary({
+        providerKey,
+        propertyLabel: request.propertyLabel,
+        unitLabel: request.unitLabel,
+      });
 
     await consentRef.set(
       {
         id: consentRef.id,
         requestId,
         tenantId,
+        applicantId: request.applicantUserId || request.applicantTenantId || null,
+        rentalApplicationId: request.rentalApplicationId || null,
+        landlordId: request.landlordId || null,
+        propertyId: request.propertyId || null,
+        providerKey,
+        providerLabel,
+        consentVersion: disclosureVersion,
+        consentTextSummary: consentSummary,
         applicantName: request.applicantName || null,
         viewedAt: existingConsent?.viewedAt || now,
         acceptedAt: accepted ? now : existingConsent?.acceptedAt || null,
+        acceptedBy: accepted ? actorId : existingConsent?.acceptedBy || null,
         providerDisclosure,
         disclosureVersion,
         ipAddress: cleanString(req.ip, 120),
@@ -3589,14 +4026,23 @@ router.post("/screening/:requestId/consent", requireTenant, async (req: any, res
       metadata: {
         consentId: consentRef.id,
         disclosureVersion,
+        providerKey,
+        providerLabel,
       },
     });
 
     const refreshedRequest = await getScreeningRequestById(requestId);
     const refreshedConsent = await getLatestConsent(requestId);
+    if (accepted && refreshedConsent) {
+      await writeScreeningConsentCanonicalEvent({
+        request,
+        consent: refreshedConsent,
+        actorId,
+      });
+    }
     return res.json({
       ok: true,
-      screeningRequest: shapeScreeningResponse({
+      screeningRequest: await shapeTenantScreeningResponse({
         request: refreshedRequest || request,
         consent: refreshedConsent,
         session: await getLatestSession(requestId),
@@ -3730,7 +4176,7 @@ router.post("/screening/:requestId/start", requireTenant, async (req: any, res) 
     const refreshedRequest = await getScreeningRequestById(requestId);
     return res.json({
       ok: true,
-      screeningRequest: shapeScreeningResponse({
+      screeningRequest: await shapeTenantScreeningResponse({
         request: refreshedRequest || started.request,
         consent: started.consent,
         session: await getLatestSession(requestId),
@@ -3755,7 +4201,11 @@ router.post("/screening/:requestId/start", requireTenant, async (req: any, res) 
         : code === "SCREENING_STILL_IN_PROGRESS"
         ? 409
         : 500;
-    return res.status(status).json({ ok: false, error: status === 500 ? "TENANT_SCREENING_START_FAILED" : code });
+    return res.status(status).json({
+      ok: false,
+      error: status === 500 ? "TENANT_SCREENING_START_FAILED" : code,
+      blockReason: code === "CONSENT_REQUIRED" ? "missing_tenant_consent" : null,
+    });
   }
 });
 
@@ -3771,7 +4221,7 @@ router.post("/screening/:requestId/retry", requireTenant, async (req: any, res) 
     if (!request) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
     if (!request.applicantTenantId || request.applicantTenantId !== tenantId) {
       return res.status(403).json({ ok: false, error: "FORBIDDEN" });
-    }
+}
     await writeScreeningAuditEvent({
       requestId,
       eventType: "retry_requested",
@@ -3792,7 +4242,7 @@ router.post("/screening/:requestId/retry", requireTenant, async (req: any, res) 
     });
     return res.json({
       ok: true,
-      screeningRequest: shapeScreeningResponse({
+      screeningRequest: await shapeTenantScreeningResponse({
         request: refreshedRequest || request,
         consent: await getLatestConsent(requestId),
         session: await getLatestSession(requestId),
@@ -3952,7 +4402,7 @@ router.post("/screening/provider/transunion/callback", async (req: any, res) => 
       return res.json({
         ok: true,
         duplicate: true,
-        screeningRequest: shapeScreeningResponse({
+        screeningRequest: await shapeTenantScreeningResponse({
           request,
           consent: await getLatestConsent(request.id),
           session,
@@ -4130,7 +4580,7 @@ router.post("/screening/provider/transunion/callback", async (req: any, res) => 
     return res.json({
       ok: true,
       duplicate: false,
-      screeningRequest: shapeScreeningResponse({
+      screeningRequest: await shapeTenantScreeningResponse({
         request: refreshedRequest || request,
         consent: await getLatestConsent(request.id),
         session: refreshedSession || session,
@@ -4815,13 +5265,7 @@ router.get("/maintenance-requests", requireTenant, async (req: any, res) => {
     const items = snap.docs.map((d) => {
       const data = (d.data() as any) || {};
       return {
-        id: d.id,
-        status: data.status ?? "NEW",
-        priority: data.priority ?? "NORMAL",
-        category: data.category ?? "GENERAL",
-        title: data.title ?? "",
-        createdAt: toMillis(data.createdAt),
-        updatedAt: toMillis(data.updatedAt),
+        ...projectTenantMaintenance(d.id, data),
       };
     });
     items.sort((a, b) => (Number(b.updatedAt || 0) || 0) - (Number(a.updatedAt || 0) || 0));
@@ -4843,13 +5287,7 @@ router.get("/maintenance", requireTenant, async (req: any, res) => {
     const items = snap.docs.map((d) => {
       const data = (d.data() as any) || {};
       return {
-        id: d.id,
-        status: data.status ?? "NEW",
-        priority: data.priority ?? "NORMAL",
-        category: data.category ?? "GENERAL",
-        title: data.title ?? "",
-        createdAt: toMillis(data.createdAt),
-        updatedAt: toMillis(data.updatedAt),
+        ...projectTenantMaintenance(d.id, data),
       };
     });
     items.sort((a, b) => (Number(b.updatedAt || 0) || 0) - (Number(a.updatedAt || 0) || 0));
@@ -4862,6 +5300,141 @@ router.get("/maintenance", requireTenant, async (req: any, res) => {
     return res.status(500).json({ ok: false, error: "TENANT_MAINTENANCE_LIST_FAILED" });
   }
 });
+
+function projectTenantSafeReworkReview(value: any) {
+  if (!value || typeof value !== "object") return null;
+  return {
+    status:
+      value.status === "pending_review" ||
+      value.status === "landlord_approved" ||
+      value.status === "tenant_pending_signoff" ||
+      value.status === "closed" ||
+      value.status === "follow_up_required"
+        ? value.status
+        : null,
+    reviewedAt: toMillis(value.reviewedAt),
+    tenantSignoffStatus:
+      value.tenantSignoffStatus === "pending" ||
+      value.tenantSignoffStatus === "accepted" ||
+      value.tenantSignoffStatus === "declined"
+        ? value.tenantSignoffStatus
+        : null,
+    tenantSignedOffAt: toMillis(value.tenantSignedOffAt),
+    tenantDeclinedAt: toMillis(value.tenantDeclinedAt),
+    tenantDeclineReason: String(value.tenantDeclineReason || "").trim() || null,
+    closureOutcome:
+      value.closureOutcome === "resolved" ||
+      value.closureOutcome === "partial" ||
+      value.closureOutcome === "needs_more_followup"
+        ? value.closureOutcome
+        : null,
+    closedAt: toMillis(value.closedAt),
+  };
+}
+
+function projectTenantSafeReworkCycle(value: any) {
+  if (!value || typeof value !== "object") return null;
+  return {
+    cycleNumber: Number(value.cycleNumber || 1),
+    status:
+      value.status === "not_started" ||
+      value.status === "assigned" ||
+      value.status === "in_progress" ||
+      value.status === "completed" ||
+      value.status === "cancelled"
+        ? value.status
+        : "not_started",
+    createdAt: toMillis(value.createdAt),
+    assignedAt: toMillis(value.assignedAt),
+    startedAt: toMillis(value.startedAt),
+    completedAt: toMillis(value.completedAt),
+    completionSummary: String(value.completionSummary || "").trim() || null,
+    schedule:
+      value.schedule && typeof value.schedule === "object"
+        ? {
+            scheduledFor: toMillis(value.schedule.scheduledFor),
+            timeWindowStart: toMillis(value.schedule.timeWindowStart),
+            timeWindowEnd: toMillis(value.schedule.timeWindowEnd),
+            status:
+              value.schedule.status === "not_scheduled" ||
+              value.schedule.status === "scheduled" ||
+              value.schedule.status === "contractor_confirmed" ||
+              value.schedule.status === "tenant_pending" ||
+              value.schedule.status === "confirmed" ||
+              value.schedule.status === "reschedule_requested" ||
+              value.schedule.status === "cancelled"
+                ? value.schedule.status
+                : null,
+            requiresTenantAccess:
+              typeof value.schedule.requiresTenantAccess === "boolean" ? value.schedule.requiresTenantAccess : null,
+            tenantAccessStatus:
+              value.schedule.tenantAccessStatus === "pending" ||
+              value.schedule.tenantAccessStatus === "confirmed" ||
+              value.schedule.tenantAccessStatus === "denied" ||
+              value.schedule.tenantAccessStatus === "not_required"
+                ? value.schedule.tenantAccessStatus
+                : null,
+            tenantAccessNote: String(value.schedule.tenantAccessNote || "").trim() || null,
+          }
+        : null,
+  };
+}
+
+function projectTenantSafeReworkHistory(value: any) {
+  return Array.isArray(value)
+    ? value.map((entry: any) => ({
+        cycleNumber: Number(entry?.cycleNumber || 1),
+        startedAt: toMillis(entry?.startedAt),
+        completedAt: toMillis(entry?.completedAt),
+        outcome:
+          entry?.outcome === "resolved" || entry?.outcome === "failed" || entry?.outcome === "partial"
+            ? entry.outcome
+            : null,
+        notes: String(entry?.notes || "").trim() || null,
+      }))
+    : [];
+}
+
+async function buildTenantMaintenanceDetailResponse(docId: string, maintenanceData: any, workOrderData: any, workOrderExists: boolean) {
+  return {
+    ...projectTenantMaintenance(docId, maintenanceData || {}),
+    evidence: workOrderExists ? await serializeEvidenceForAudience(workOrderData?.evidence, "tenant") : [],
+    reopenedAt: toMillis(workOrderData?.reopenedAt),
+    reopenedByActorId: String(workOrderData?.reopenedByActorId || "").trim() || null,
+    reopenedByActorRole:
+      workOrderData?.reopenedByActorRole === "tenant" ||
+      workOrderData?.reopenedByActorRole === "landlord" ||
+      workOrderData?.reopenedByActorRole === "admin"
+        ? workOrderData.reopenedByActorRole
+        : null,
+    reopenReason: String(workOrderData?.reopenReason || "").trim() || null,
+    resolutionStatus:
+      workOrderData?.resolutionStatus === "completed_pending_review" ||
+      workOrderData?.resolutionStatus === "landlord_approved" ||
+      workOrderData?.resolutionStatus === "tenant_pending_signoff" ||
+      workOrderData?.resolutionStatus === "resolved" ||
+      workOrderData?.resolutionStatus === "follow_up_required"
+        ? workOrderData.resolutionStatus
+        : null,
+    landlordApprovedAt: toMillis(workOrderData?.landlordApprovedAt),
+    tenantSignoffStatus:
+      workOrderData?.tenantSignoffStatus === "pending" ||
+      workOrderData?.tenantSignoffStatus === "accepted" ||
+      workOrderData?.tenantSignoffStatus === "declined"
+        ? workOrderData.tenantSignoffStatus
+        : null,
+    tenantSignedOffAt: toMillis(workOrderData?.tenantSignedOffAt),
+    tenantDeclinedAt: toMillis(workOrderData?.tenantDeclinedAt),
+    tenantDeclineReason: String(workOrderData?.tenantDeclineReason || "").trim() || null,
+    followUpRequired: typeof workOrderData?.followUpRequired === "boolean" ? workOrderData.followUpRequired : null,
+    followUpReason: String(workOrderData?.followUpReason || "").trim() || null,
+    finalResolvedAt: toMillis(workOrderData?.finalResolvedAt),
+    notifications: buildTenantSafeWorkOrderNotifications(workOrderData),
+    reworkCycle: projectTenantSafeReworkCycle(workOrderData?.reworkCycle),
+    reworkHistory: projectTenantSafeReworkHistory(workOrderData?.reworkHistory),
+    reworkReview: projectTenantSafeReworkReview(workOrderData?.reworkReview),
+  };
+}
 
 router.get("/maintenance-requests/:id", requireTenant, async (req: any, res) => {
   try {
@@ -4877,22 +5450,9 @@ router.get("/maintenance-requests/:id", requireTenant, async (req: any, res) => 
     if (data.tenantId && data.tenantId !== tenantId) {
       return res.status(403).json({ ok: false, error: "FORBIDDEN" });
     }
-    const payload = {
-      id: doc.id,
-      landlordId: data.landlordId ?? null,
-      tenantId: data.tenantId ?? null,
-      propertyId: data.propertyId ?? null,
-      unitId: data.unitId ?? null,
-      category: data.category ?? "GENERAL",
-      priority: data.priority ?? "NORMAL",
-      title: data.title ?? "",
-      description: data.description ?? "",
-      status: data.status ?? "NEW",
-      tenantContact: data.tenantContact ?? null,
-      createdAt: toMillis(data.createdAt),
-      updatedAt: toMillis(data.updatedAt),
-      lastUpdatedBy: data.lastUpdatedBy ?? "TENANT",
-    };
+    const workOrderSnap = await db.collection("workOrders").doc(`maintenance_${doc.id}`).get();
+    const workOrderData = workOrderSnap.exists ? ((workOrderSnap.data() as any) || {}) : {};
+    const payload = await buildTenantMaintenanceDetailResponse(doc.id, data, workOrderData, workOrderSnap.exists);
     return res.json({ ok: true, data: payload });
   } catch (err) {
     console.error("[tenant/maintenance-requests/:id] read failed", {
@@ -4904,5 +5464,755 @@ router.get("/maintenance-requests/:id", requireTenant, async (req: any, res) => 
   }
 });
 
-export default router;
+router.post("/maintenance/:id/reopen", requireTenant, async (req: any, res) => {
+  try {
+    const tenantId = String(req.user?.tenantId || "").trim();
+    const id = String(req.params?.id || "").trim();
+    if (!tenantId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    if (!id) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
 
+    const reason = String(req.body?.reason || "").trim().slice(0, 2000);
+    if (!reason) {
+      return res.status(400).json({ ok: false, error: "REOPEN_REASON_REQUIRED" });
+    }
+
+    const docRef = db.collection("maintenanceRequests").doc(id);
+    const snap = await docRef.get();
+    if (!snap.exists) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+
+    const data = (snap.data() as any) || {};
+    if (String(data.tenantId || "").trim() !== tenantId) {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const workOrderRef = db.collection("workOrders").doc(`maintenance_${id}`);
+    const workOrderSnap = await workOrderRef.get();
+    if (!workOrderSnap.exists) {
+      return res.status(404).json({ ok: false, error: "WORK_ORDER_NOT_FOUND" });
+    }
+
+    const workOrder = (workOrderSnap.data() as any) || {};
+    if (String(workOrder.status || "").trim().toLowerCase() !== "completed") {
+      return res.status(400).json({ ok: false, error: "REOPEN_NOT_AVAILABLE" });
+    }
+    if (String(workOrder.resolutionStatus || "").trim().toLowerCase() === "tenant_pending_signoff") {
+      return res.status(400).json({ ok: false, error: "TENANT_SIGNOFF_REQUIRED" });
+    }
+    if (String(workOrder?.reworkReview?.status || "").trim().toLowerCase() === "tenant_pending_signoff") {
+      return res.status(400).json({ ok: false, error: "REWORK_SIGNOFF_REQUIRED" });
+    }
+    if (
+      String(workOrder.resolutionStatus || "").trim().toLowerCase() === "follow_up_required" ||
+      workOrder.followUpRequired === true
+    ) {
+      return res.status(400).json({ ok: false, error: "FOLLOW_UP_ALREADY_ACTIVE" });
+    }
+
+    const hasClosedOrResolvedState =
+      typeof toMillis(workOrder.finalResolvedAt) === "number" ||
+      String(workOrder.resolutionStatus || "").trim().toLowerCase() === "resolved" ||
+      String(workOrder.tenantSignoffStatus || "").trim().toLowerCase() === "accepted" ||
+      String(workOrder?.reworkReview?.status || "").trim().toLowerCase() === "closed";
+    if (!hasClosedOrResolvedState) {
+      return res.status(400).json({ ok: false, error: "REOPEN_NOT_AVAILABLE" });
+    }
+
+    const now = Date.now();
+    const historyMessage = `Tenant reopened the request: ${reason}`;
+    const contractorLastUpdate = `Tenant reported the issue still needs attention: ${reason}`;
+
+    await workOrderRef.set(
+      {
+        tenantSignoffStatus: "declined",
+        tenantSignedOffAt: null,
+        tenantDeclinedAt: now,
+        tenantDeclineReason: reason,
+        resolutionStatus: "follow_up_required",
+        followUpRequired: true,
+        followUpReason: reason,
+        finalResolvedAt: null,
+        reopenedAt: now,
+        reopenedByActorId: tenantId,
+        reopenedByActorRole: "tenant",
+        reopenReason: reason,
+        updatedAtMs: now,
+        lastExecutionUpdateAt: now,
+      },
+      { merge: true }
+    );
+    const refreshedReopenWorkOrder = await workOrderRef.get();
+    const refreshedReopenWorkOrderData = (refreshedReopenWorkOrder.data() as any) || {};
+    const reopenNotifications = await applyNotificationUpdate(workOrderRef, refreshedReopenWorkOrderData, now);
+
+    await Promise.all([
+      docRef.set(
+        {
+          updatedAt: now,
+          lastUpdatedBy: "TENANT",
+          contractorLastUpdate,
+          tenantSignoffStatus: "declined",
+          tenantSignedOffAt: null,
+          tenantDeclinedAt: now,
+          tenantDeclineReason: reason,
+          resolutionStatus: "follow_up_required",
+          followUpRequired: true,
+          followUpReason: reason,
+          finalResolvedAt: null,
+          reopenedAt: now,
+          reopenedByActorId: tenantId,
+          reopenedByActorRole: "tenant",
+          reopenReason: reason,
+          notifications: buildTenantSafeWorkOrderNotifications({
+            ...refreshedReopenWorkOrderData,
+            notifications: reopenNotifications,
+          }),
+          statusHistory: FieldValue.arrayUnion({
+            status: String(data.status || "completed"),
+            actorRole: "tenant",
+            actorId: tenantId,
+            message: historyMessage,
+            createdAt: now,
+          }),
+        },
+        { merge: true }
+      ),
+      db.collection("workOrderUpdates").doc().set({
+        workOrderId: workOrderRef.id,
+        actorRole: "tenant",
+        actorId: tenantId,
+        updateType: "reopened",
+        message: historyMessage,
+        createdAtMs: now,
+      }),
+    ]);
+
+    const [refreshed, refreshedWorkOrder] = await Promise.all([docRef.get(), workOrderRef.get()]);
+    const refreshedWorkOrderData = refreshedWorkOrder.exists ? ((refreshedWorkOrder.data() as any) || {}) : {};
+    return res.json({
+      ok: true,
+      data: await buildTenantMaintenanceDetailResponse(refreshed.id, refreshed.data() || {}, refreshedWorkOrderData, refreshedWorkOrder.exists),
+    });
+  } catch (err) {
+    console.error("[tenant/maintenance/:id/reopen] update failed", {
+      tenantId: req.user?.tenantId,
+      id: req.params?.id,
+      err,
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_MAINT_REQUEST_REOPEN_FAILED" });
+  }
+});
+
+router.post("/maintenance/:id/signoff", requireTenant, async (req: any, res) => {
+  try {
+    const tenantId = String(req.user?.tenantId || "").trim();
+    const id = String(req.params?.id || "").trim();
+    if (!tenantId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    if (!id) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+
+    const docRef = db.collection("maintenanceRequests").doc(id);
+    const snap = await docRef.get();
+    if (!snap.exists) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+
+    const data = (snap.data() as any) || {};
+    if (String(data.tenantId || "").trim() !== tenantId) {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const workOrderRef = db.collection("workOrders").doc(`maintenance_${id}`);
+    const workOrderSnap = await workOrderRef.get();
+    if (!workOrderSnap.exists) {
+      return res.status(404).json({ ok: false, error: "WORK_ORDER_NOT_FOUND" });
+    }
+
+    const workOrder = (workOrderSnap.data() as any) || {};
+    if (String(workOrder.status || "").trim().toLowerCase() !== "completed") {
+      return res.status(400).json({ ok: false, error: "WORK_ORDER_NOT_COMPLETED" });
+    }
+    if (String(workOrder?.reworkReview?.status || "").trim().toLowerCase() === "tenant_pending_signoff") {
+      return res.status(400).json({ ok: false, error: "REWORK_SIGNOFF_REQUIRED" });
+    }
+    if (String(workOrder.resolutionStatus || "").trim().toLowerCase() !== "tenant_pending_signoff") {
+      return res.status(400).json({ ok: false, error: "TENANT_SIGNOFF_NOT_AVAILABLE" });
+    }
+
+    const decision = req.body?.decision === "resolved" || req.body?.decision === "not_resolved" ? req.body.decision : null;
+    if (!decision) {
+      return res.status(400).json({ ok: false, error: "INVALID_SIGNOFF_DECISION" });
+    }
+    const reason = String(req.body?.reason || "").trim().slice(0, 2000);
+    if (decision === "not_resolved" && !reason) {
+      return res.status(400).json({ ok: false, error: "TENANT_DECLINE_REASON_REQUIRED" });
+    }
+
+    const now = Date.now();
+    const workOrderUpdate: Record<string, unknown> = {
+      updatedAtMs: now,
+      lastExecutionUpdateAt: now,
+    };
+    const maintenanceUpdate: Record<string, unknown> = {
+      updatedAt: now,
+      lastUpdatedBy: "TENANT",
+    };
+    let historyMessage = "";
+    let contractorLastUpdate = "";
+
+    if (decision === "resolved") {
+      Object.assign(workOrderUpdate, {
+        tenantSignoffStatus: "accepted",
+        tenantSignedOffAt: now,
+        tenantDeclinedAt: null,
+        tenantDeclineReason: null,
+        resolutionStatus: "resolved",
+        followUpRequired: false,
+        followUpReason: null,
+        finalResolvedAt: now,
+      });
+      Object.assign(maintenanceUpdate, {
+        tenantSignoffStatus: "accepted",
+        tenantSignedOffAt: now,
+        tenantDeclinedAt: null,
+        tenantDeclineReason: null,
+        resolutionStatus: "resolved",
+        followUpRequired: false,
+        followUpReason: null,
+        finalResolvedAt: now,
+      });
+      historyMessage = "Tenant confirmed that the maintenance issue is resolved.";
+      contractorLastUpdate = "Tenant confirmed that the maintenance issue is resolved.";
+    } else {
+      Object.assign(workOrderUpdate, {
+        tenantSignoffStatus: "declined",
+        tenantSignedOffAt: null,
+        tenantDeclinedAt: now,
+        tenantDeclineReason: reason,
+        resolutionStatus: "follow_up_required",
+        followUpRequired: true,
+        followUpReason: reason,
+        finalResolvedAt: null,
+      });
+      Object.assign(maintenanceUpdate, {
+        tenantSignoffStatus: "declined",
+        tenantSignedOffAt: null,
+        tenantDeclinedAt: now,
+        tenantDeclineReason: reason,
+        resolutionStatus: "follow_up_required",
+        followUpRequired: true,
+        followUpReason: reason,
+        finalResolvedAt: null,
+      });
+      historyMessage = `Tenant reported the issue is not resolved: ${reason}`;
+      contractorLastUpdate = `Tenant requested follow-up: ${reason}`;
+    }
+
+    await workOrderRef.set(workOrderUpdate, { merge: true });
+    const refreshedWorkOrderAfterSignoff = await workOrderRef.get();
+    const refreshedWorkOrderAfterSignoffData = (refreshedWorkOrderAfterSignoff.data() as any) || {};
+    const notifications = await applyNotificationUpdate(workOrderRef, refreshedWorkOrderAfterSignoffData, now);
+
+    await Promise.all([
+      docRef.set(
+        {
+          ...maintenanceUpdate,
+          notifications: buildTenantSafeWorkOrderNotifications({
+            ...refreshedWorkOrderAfterSignoffData,
+            notifications,
+          }),
+          contractorLastUpdate,
+          statusHistory: FieldValue.arrayUnion({
+            status: String(data.status || "completed"),
+            actorRole: "tenant",
+            actorId: tenantId,
+            message: historyMessage,
+            createdAt: now,
+          }),
+        },
+        { merge: true }
+      ),
+      db.collection("workOrderUpdates").doc().set({
+        workOrderId: workOrderRef.id,
+        actorRole: "tenant",
+        actorId: tenantId,
+        updateType: "confirmed",
+        message: historyMessage,
+        createdAtMs: now,
+      }),
+    ]);
+
+    const [refreshed, refreshedWorkOrder] = await Promise.all([docRef.get(), workOrderRef.get()]);
+    const refreshedWorkOrderData = refreshedWorkOrder.exists ? ((refreshedWorkOrder.data() as any) || {}) : {};
+    return res.json({
+      ok: true,
+      data: await buildTenantMaintenanceDetailResponse(refreshed.id, refreshed.data() || {}, refreshedWorkOrderData, refreshedWorkOrder.exists),
+    });
+  } catch (err) {
+    console.error("[tenant/maintenance/:id/signoff] update failed", {
+      tenantId: req.user?.tenantId,
+      id: req.params?.id,
+      err,
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_MAINT_REQUEST_SIGNOFF_FAILED" });
+  }
+});
+
+router.post("/maintenance/:id/rework-signoff", requireTenant, async (req: any, res) => {
+  try {
+    const tenantId = String(req.user?.tenantId || "").trim();
+    const id = String(req.params?.id || "").trim();
+    if (!tenantId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    if (!id) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+
+    const docRef = db.collection("maintenanceRequests").doc(id);
+    const snap = await docRef.get();
+    if (!snap.exists) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+    const data = (snap.data() as any) || {};
+    if (String(data.tenantId || "").trim() !== tenantId) {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const workOrderRef = db.collection("workOrders").doc(`maintenance_${id}`);
+    const workOrderSnap = await workOrderRef.get();
+    if (!workOrderSnap.exists) return res.status(404).json({ ok: false, error: "WORK_ORDER_NOT_FOUND" });
+    const workOrder = (workOrderSnap.data() as any) || {};
+    if (String(workOrder.status || "").trim().toLowerCase() !== "completed") {
+      return res.status(400).json({ ok: false, error: "WORK_ORDER_NOT_COMPLETED" });
+    }
+    if (String(workOrder?.reworkReview?.status || "").trim().toLowerCase() !== "tenant_pending_signoff") {
+      return res.status(400).json({ ok: false, error: "REWORK_SIGNOFF_NOT_AVAILABLE" });
+    }
+
+    const decision = req.body?.decision === "resolved" || req.body?.decision === "not_resolved" ? req.body.decision : null;
+    if (!decision) return res.status(400).json({ ok: false, error: "INVALID_REWORK_SIGNOFF_DECISION" });
+
+    const reason = String(req.body?.reason || "").trim().slice(0, 2000);
+    if (decision === "not_resolved" && !reason) {
+      return res.status(400).json({ ok: false, error: "TENANT_DECLINE_REASON_REQUIRED" });
+    }
+
+    const now = Date.now();
+    const historyMessage =
+      decision === "resolved"
+        ? "Tenant confirmed that the rework return visit resolved the issue."
+        : `Tenant reported the rework return visit is still not resolved: ${reason}`;
+
+    const reworkReviewUpdate =
+      decision === "resolved"
+        ? {
+            ...(workOrder.reworkReview || {}),
+            status: "closed",
+            tenantSignoffStatus: "accepted",
+            tenantSignedOffAt: now,
+            tenantDeclinedAt: null,
+            tenantDeclineReason: null,
+            closureOutcome: "resolved",
+            closedAt: now,
+          }
+        : {
+            ...(workOrder.reworkReview || {}),
+            status: "follow_up_required",
+            tenantSignoffStatus: "declined",
+            tenantSignedOffAt: null,
+            tenantDeclinedAt: now,
+            tenantDeclineReason: reason,
+            closureOutcome: "needs_more_followup",
+            closedAt: null,
+          };
+
+    await workOrderRef.set(
+      {
+        reworkReview: reworkReviewUpdate,
+        resolutionStatus: decision === "resolved" ? "resolved" : "follow_up_required",
+        followUpRequired: decision !== "resolved",
+        followUpReason: decision === "resolved" ? null : reason,
+        finalResolvedAt: decision === "resolved" ? now : null,
+        updatedAtMs: now,
+        lastExecutionUpdateAt: now,
+      },
+      { merge: true }
+    );
+    const refreshedReworkSignoffWorkOrder = await workOrderRef.get();
+    const refreshedReworkSignoffWorkOrderData = (refreshedReworkSignoffWorkOrder.data() as any) || {};
+    const reworkNotifications = await applyNotificationUpdate(workOrderRef, refreshedReworkSignoffWorkOrderData, now);
+
+    await Promise.all([
+      docRef.set(
+        {
+          contractorLastUpdate: historyMessage,
+          updatedAt: now,
+          lastUpdatedBy: "TENANT",
+          notifications: buildTenantSafeWorkOrderNotifications({
+            ...refreshedReworkSignoffWorkOrderData,
+            notifications: reworkNotifications,
+          }),
+          statusHistory: FieldValue.arrayUnion({
+            status: String(data.status || "completed"),
+            actorRole: "tenant",
+            actorId: tenantId,
+            message: historyMessage,
+            createdAt: now,
+          }),
+        },
+        { merge: true }
+      ),
+      db.collection("workOrderUpdates").doc().set({
+        workOrderId: workOrderRef.id,
+        actorRole: "tenant",
+        actorId: tenantId,
+        updateType: "confirmed",
+        message: historyMessage,
+        createdAtMs: now,
+      }),
+    ]);
+
+    const [refreshed, refreshedWorkOrder] = await Promise.all([docRef.get(), workOrderRef.get()]);
+    const refreshedWorkOrderData = refreshedWorkOrder.exists ? ((refreshedWorkOrder.data() as any) || {}) : {};
+    return res.json({
+      ok: true,
+      data: await buildTenantMaintenanceDetailResponse(refreshed.id, refreshed.data() || {}, refreshedWorkOrderData, refreshedWorkOrder.exists),
+    });
+  } catch (err) {
+    console.error("[tenant/maintenance/:id/rework-signoff] update failed", {
+      tenantId: req.user?.tenantId,
+      id: req.params?.id,
+      err,
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_REWORK_SIGNOFF_FAILED" });
+  }
+});
+
+router.post("/maintenance/:id/rework-signoff", requireTenant, async (req: any, res) => {
+  try {
+    const tenantId = String(req.user?.tenantId || "").trim();
+    const id = String(req.params?.id || "").trim();
+    if (!tenantId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    if (!id) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+
+    const docRef = db.collection("maintenanceRequests").doc(id);
+    const snap = await docRef.get();
+    if (!snap.exists) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+    const data = (snap.data() as any) || {};
+    if (String(data.tenantId || "").trim() !== tenantId) {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const workOrderRef = db.collection("workOrders").doc(`maintenance_${id}`);
+    const workOrderSnap = await workOrderRef.get();
+    if (!workOrderSnap.exists) return res.status(404).json({ ok: false, error: "WORK_ORDER_NOT_FOUND" });
+    const workOrder = (workOrderSnap.data() as any) || {};
+    if (String(workOrder.status || "").trim().toLowerCase() !== "completed") {
+      return res.status(400).json({ ok: false, error: "WORK_ORDER_NOT_COMPLETED" });
+    }
+    if (String(workOrder?.reworkReview?.status || "").trim().toLowerCase() !== "tenant_pending_signoff") {
+      return res.status(400).json({ ok: false, error: "REWORK_SIGNOFF_NOT_AVAILABLE" });
+    }
+
+    const decision = req.body?.decision === "resolved" || req.body?.decision === "not_resolved" ? req.body.decision : null;
+    if (!decision) return res.status(400).json({ ok: false, error: "INVALID_REWORK_SIGNOFF_DECISION" });
+
+    const reason = String(req.body?.reason || "").trim().slice(0, 2000);
+    if (decision === "not_resolved" && !reason) {
+      return res.status(400).json({ ok: false, error: "TENANT_DECLINE_REASON_REQUIRED" });
+    }
+
+    const now = Date.now();
+    const historyMessage =
+      decision === "resolved"
+        ? "Tenant confirmed that the rework return visit resolved the issue."
+        : `Tenant reported the rework return visit is still not resolved: ${reason}`;
+
+    const reworkReviewUpdate =
+      decision === "resolved"
+        ? {
+            ...(workOrder.reworkReview || {}),
+            status: "closed",
+            tenantSignoffStatus: "accepted",
+            tenantSignedOffAt: now,
+            tenantDeclinedAt: null,
+            tenantDeclineReason: null,
+            closureOutcome: "resolved",
+            closedAt: now,
+          }
+        : {
+            ...(workOrder.reworkReview || {}),
+            status: "follow_up_required",
+            tenantSignoffStatus: "declined",
+            tenantSignedOffAt: null,
+            tenantDeclinedAt: now,
+            tenantDeclineReason: reason,
+            closureOutcome: "needs_more_followup",
+            closedAt: null,
+          };
+
+    await workOrderRef.set(
+      {
+        reworkReview: reworkReviewUpdate,
+        resolutionStatus: decision === "resolved" ? "resolved" : "follow_up_required",
+        followUpRequired: decision !== "resolved",
+        followUpReason: decision === "resolved" ? null : reason,
+        finalResolvedAt: decision === "resolved" ? now : null,
+        updatedAtMs: now,
+        lastExecutionUpdateAt: now,
+      },
+      { merge: true }
+    );
+    const refreshedReworkSignoffWorkOrder = await workOrderRef.get();
+    const refreshedReworkSignoffWorkOrderData = (refreshedReworkSignoffWorkOrder.data() as any) || {};
+    const reworkNotifications = await applyNotificationUpdate(workOrderRef, refreshedReworkSignoffWorkOrderData, now);
+
+    await Promise.all([
+      docRef.set(
+        {
+          contractorLastUpdate: historyMessage,
+          updatedAt: now,
+          lastUpdatedBy: "TENANT",
+          notifications: buildTenantSafeWorkOrderNotifications({
+            ...refreshedReworkSignoffWorkOrderData,
+            notifications: reworkNotifications,
+          }),
+          statusHistory: FieldValue.arrayUnion({
+            status: String(data.status || "completed"),
+            actorRole: "tenant",
+            actorId: tenantId,
+            message: historyMessage,
+            createdAt: now,
+          }),
+        },
+        { merge: true }
+      ),
+      db.collection("workOrderUpdates").doc().set({
+        workOrderId: workOrderRef.id,
+        actorRole: "tenant",
+        actorId: tenantId,
+        updateType: "confirmed",
+        message: historyMessage,
+        createdAtMs: now,
+      }),
+    ]);
+
+    const [refreshed, refreshedWorkOrder] = await Promise.all([docRef.get(), workOrderRef.get()]);
+    const refreshedWorkOrderData = refreshedWorkOrder.exists ? ((refreshedWorkOrder.data() as any) || {}) : {};
+    return res.json({
+      ok: true,
+      data: await buildTenantMaintenanceDetailResponse(refreshed.id, refreshed.data() || {}, refreshedWorkOrderData, refreshedWorkOrder.exists),
+    });
+  } catch (err) {
+    console.error("[tenant/maintenance/:id/rework-signoff] update failed", {
+      tenantId: req.user?.tenantId,
+      id: req.params?.id,
+      err,
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_REWORK_SIGNOFF_FAILED" });
+  }
+});
+
+router.post("/maintenance/:id/confirm-rework-access", requireTenant, async (req: any, res) => {
+  try {
+    const tenantId = String(req.user?.tenantId || "").trim();
+    const id = String(req.params?.id || "").trim();
+    if (!tenantId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    if (!id) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+
+    const docRef = db.collection("maintenanceRequests").doc(id);
+    const snap = await docRef.get();
+    if (!snap.exists) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+    const data = (snap.data() as any) || {};
+    if (String(data.tenantId || "").trim() !== tenantId) {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const workOrderRef = db.collection("workOrders").doc(`maintenance_${id}`);
+    const workOrderSnap = await workOrderRef.get();
+    if (!workOrderSnap.exists) return res.status(404).json({ ok: false, error: "WORK_ORDER_NOT_FOUND" });
+    const workOrder = (workOrderSnap.data() as any) || {};
+    const reworkCycle = workOrder?.reworkCycle || null;
+    const schedule = reworkCycle?.schedule || null;
+    if (!reworkCycle || !schedule) return res.status(400).json({ ok: false, error: "REWORK_SCHEDULE_NOT_AVAILABLE" });
+    if (schedule.requiresTenantAccess !== true) {
+      return res.status(400).json({ ok: false, error: "REWORK_ACCESS_CONFIRMATION_NOT_REQUIRED" });
+    }
+
+    const decision = req.body?.decision === "confirm" || req.body?.decision === "deny" ? req.body.decision : null;
+    if (!decision) return res.status(400).json({ ok: false, error: "INVALID_REWORK_ACCESS_DECISION" });
+
+    const note = String(req.body?.note || "").trim().slice(0, 2000) || null;
+    const now = Date.now();
+    const nextSchedule = {
+      ...schedule,
+      tenantAccessStatus: decision === "confirm" ? "confirmed" : "denied",
+      tenantAccessNote: note,
+      status:
+        decision === "deny"
+          ? "reschedule_requested"
+          : schedule.contractorScheduleStatus === "confirmed"
+          ? "confirmed"
+          : "tenant_pending",
+      lastUpdatedAt: now,
+    };
+
+    const historyMessage =
+      decision === "confirm"
+        ? "Tenant confirmed access for the rework return visit."
+        : `Tenant denied access for the rework return visit.${note ? ` ${note}` : ""}`;
+
+    await workOrderRef.set(
+      {
+        reworkCycle: {
+          ...reworkCycle,
+          schedule: nextSchedule,
+        },
+        updatedAtMs: now,
+      },
+      { merge: true }
+    );
+    const refreshedAccessWorkOrder = await workOrderRef.get();
+    const refreshedAccessWorkOrderData = (refreshedAccessWorkOrder.data() as any) || {};
+    const accessNotifications = await applyNotificationUpdate(workOrderRef, refreshedAccessWorkOrderData, now);
+
+    await Promise.all([
+      docRef.set(
+        {
+          contractorLastUpdate: historyMessage,
+          updatedAt: now,
+          lastUpdatedBy: "TENANT",
+          notifications: buildTenantSafeWorkOrderNotifications({
+            ...refreshedAccessWorkOrderData,
+            notifications: accessNotifications,
+          }),
+          statusHistory: FieldValue.arrayUnion({
+            status: String(data.status || "assigned"),
+            actorRole: "tenant",
+            actorId: tenantId,
+            message: historyMessage,
+            createdAt: now,
+          }),
+        },
+        { merge: true }
+      ),
+      db.collection("workOrderUpdates").doc().set({
+        workOrderId: workOrderRef.id,
+        actorRole: "tenant",
+        actorId: tenantId,
+        updateType: "confirmed",
+        message: historyMessage,
+        createdAtMs: now,
+      }),
+    ]);
+
+    const [refreshed, refreshedWorkOrder] = await Promise.all([docRef.get(), workOrderRef.get()]);
+    const refreshedWorkOrderData = refreshedWorkOrder.exists ? ((refreshedWorkOrder.data() as any) || {}) : {};
+    return res.json({
+      ok: true,
+      data: await buildTenantMaintenanceDetailResponse(refreshed.id, refreshed.data() || {}, refreshedWorkOrderData, refreshedWorkOrder.exists),
+    });
+  } catch (err) {
+    console.error("[tenant/maintenance/:id/confirm-rework-access] update failed", {
+      tenantId: req.user?.tenantId,
+      id: req.params?.id,
+      err,
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_REWORK_ACCESS_CONFIRMATION_FAILED" });
+  }
+});
+
+router.post("/maintenance-requests/:id/confirmation", requireTenant, async (req: any, res) => {
+  try {
+    const tenantId = String(req.user?.tenantId || "").trim();
+    const id = String(req.params?.id || "").trim();
+    if (!tenantId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    if (!id) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+
+    const docRef = db.collection("maintenanceRequests").doc(id);
+    const snap = await docRef.get();
+    if (!snap.exists) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+
+    const data = (snap.data() as any) || {};
+    if (String(data.tenantId || "").trim() !== tenantId) {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const confirmationStatus =
+      req.body?.confirmationStatus === undefined
+        ? undefined
+        : req.body?.confirmationStatus === "confirmed" || req.body?.confirmationStatus === "needs_schedule_change"
+        ? req.body.confirmationStatus
+        : null;
+    if (req.body?.confirmationStatus !== undefined && confirmationStatus === null) {
+      return res.status(400).json({ ok: false, error: "INVALID_CONFIRMATION_STATUS" });
+    }
+
+    const acknowledgeAccess = req.body?.acknowledgeAccess === true;
+    const serviceWindowStartAt = toMillis(data.serviceWindowStartAt);
+    const accessRequired = data.accessRequired === true;
+    if (confirmationStatus && !serviceWindowStartAt) {
+      return res.status(400).json({ ok: false, error: "SERVICE_WINDOW_REQUIRED" });
+    }
+    if (acknowledgeAccess && !accessRequired) {
+      return res.status(400).json({ ok: false, error: "ACCESS_ACKNOWLEDGEMENT_NOT_REQUIRED" });
+    }
+    if (confirmationStatus === undefined && !acknowledgeAccess) {
+      return res.status(400).json({ ok: false, error: "NO_CONFIRMATION_UPDATE" });
+    }
+
+    const now = Date.now();
+    const update: Record<string, unknown> = {
+      updatedAt: now,
+      lastUpdatedBy: "TENANT",
+    };
+    if (confirmationStatus !== undefined) {
+      update.tenantConfirmationStatus = confirmationStatus;
+      update.tenantConfirmationUpdatedAt = now;
+    }
+    if (acknowledgeAccess) {
+      update.accessAcknowledgedAt = now;
+    }
+
+    await docRef.set(update, { merge: true });
+
+    const historyEntries: Array<{ status: string; actorRole: string; actorId: string; message: string; createdAt: number }> = [];
+    if (confirmationStatus === "confirmed") {
+      historyEntries.push({
+        status: String(data.status || "scheduled"),
+        actorRole: "tenant",
+        actorId: tenantId,
+        message: "Tenant confirmed the scheduled service window.",
+        createdAt: now,
+      });
+    } else if (confirmationStatus === "needs_schedule_change") {
+      historyEntries.push({
+        status: String(data.status || "scheduled"),
+        actorRole: "tenant",
+        actorId: tenantId,
+        message: "Tenant requested a schedule change.",
+        createdAt: now,
+      });
+    }
+    if (acknowledgeAccess) {
+      historyEntries.push({
+        status: String(data.status || "scheduled"),
+        actorRole: "tenant",
+        actorId: tenantId,
+        message: "Tenant acknowledged the access requirement.",
+        createdAt: now,
+      });
+    }
+    if (historyEntries.length) {
+      await docRef.set({ statusHistory: FieldValue.arrayUnion(...historyEntries) }, { merge: true });
+    }
+
+    const refreshed = await docRef.get();
+    return res.json({
+      ok: true,
+      data: {
+        ...projectTenantMaintenance(refreshed.id, refreshed.data() || {}),
+      },
+    });
+  } catch (err) {
+    console.error("[tenant/maintenance-requests/:id/confirmation] update failed", {
+      tenantId: req.user?.tenantId,
+      id: req.params?.id,
+      err,
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_MAINT_REQUEST_CONFIRMATION_FAILED" });
+  }
+});
+
+export default router;

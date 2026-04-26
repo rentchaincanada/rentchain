@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { updateUnit } from "../../api/unitsApi";
+import { updateUnit, uploadUnitLeaseDocument } from "../../api/unitsApi";
 import { Button } from "../ui/Ui";
 
 type Props = {
@@ -18,6 +18,8 @@ export function UnitEditModal({ open, unit, onClose, onSaved }: Props) {
   const [status, setStatus] = useState("vacant");
   const [occupantName, setOccupantName] = useState("");
   const [leaseEndDate, setLeaseEndDate] = useState("");
+  const [leaseDocumentFile, setLeaseDocumentFile] = useState<File | null>(null);
+  const [existingLeaseDocument, setExistingLeaseDocument] = useState<any | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -49,6 +51,8 @@ export function UnitEditModal({ open, unit, onClose, onSaved }: Props) {
     setStatus(unit.status || "vacant");
     setOccupantName(String(unit.occupantName || ""));
     setLeaseEndDate(String(unit.leaseEndDate || ""));
+    setLeaseDocumentFile(null);
+    setExistingLeaseDocument(unit.leaseDocument || null);
     setError(null);
   }, [unit]);
 
@@ -72,7 +76,11 @@ export function UnitEditModal({ open, unit, onClose, onSaved }: Props) {
       payload.occupantName = payload.status === "occupied" ? occupantName.trim() || null : null;
       payload.leaseEndDate = payload.status === "occupied" ? leaseEndDate || null : null;
       const resp: any = await updateUnit(String(unit.id), payload);
-      const updated = resp?.unit || { ...unit, ...payload };
+      let updated = resp?.unit || { ...unit, ...payload };
+      if (payload.status === "occupied" && leaseDocumentFile) {
+        const uploadedResp: any = await uploadUnitLeaseDocument(String(unit.id), leaseDocumentFile);
+        updated = uploadedResp?.unit || { ...updated, leaseDocument: uploadedResp?.leaseDocument || null };
+      }
       onSaved(updated);
       onClose();
     } catch (e: any) {
@@ -218,6 +226,35 @@ export function UnitEditModal({ open, unit, onClose, onSaved }: Props) {
                 type="date"
                 style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #d1d5db" }}
               />
+            </label>
+
+            <label style={{ display: "grid", gap: 6, fontSize: 13 }}>
+              Lease document (optional)
+              <input
+                type="file"
+                accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/jpeg,image/png"
+                onChange={(e) => setLeaseDocumentFile(e.target.files?.[0] || null)}
+                style={{ padding: "8px 0", fontSize: 13 }}
+              />
+              <div style={{ color: "#64748b", fontSize: 12 }}>
+                Attach the current lease file for reference while you finish full lease setup later.
+              </div>
+              {leaseDocumentFile ? (
+                <div style={{ color: "#0f172a", fontSize: 12, fontWeight: 600 }}>
+                  Selected: {leaseDocumentFile.name}
+                </div>
+              ) : existingLeaseDocument?.fileName ? (
+                <div style={{ color: "#0f172a", fontSize: 12 }}>
+                  Attached:{" "}
+                  {existingLeaseDocument?.url ? (
+                    <a href={existingLeaseDocument.url} target="_blank" rel="noreferrer">
+                      {existingLeaseDocument.fileName}
+                    </a>
+                  ) : (
+                    existingLeaseDocument.fileName
+                  )}
+                </div>
+              ) : null}
             </label>
           </>
         ) : null}

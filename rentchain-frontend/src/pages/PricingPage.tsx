@@ -5,17 +5,18 @@ import { Card, Section, Button } from "../components/ui/Ui";
 import { spacing, text } from "../styles/tokens";
 import { useAuth } from "../context/useAuth";
 import { useCapabilities } from "../hooks/useCapabilities";
-import { startCheckout } from "../billing/startCheckout";
 import { createBillingPortalSession, fetchBillingPricing, type BillingPlanPricing } from "../api/billingApi";
 import {
   CANONICAL_TIER_MATRIX,
   DEFAULT_PLANS,
   PLAN_ORDER,
+  TIER_POSITIONING_COPY,
   TIER_MATRIX_AREAS,
   type PricingInterval,
   type PricingPlanKey,
 } from "../constants/pricingPlans";
 import { track } from "@/lib/analytics";
+import { normalizePlan } from "@/lib/plan";
 
 type PlanKey = PricingPlanKey;
 
@@ -34,11 +35,41 @@ const PLAN_FEATURES: Record<PlanKey, string[]> = Object.fromEntries(
   DEFAULT_PLANS.map((plan) => [plan.key, plan.features])
 ) as Record<PlanKey, string[]>;
 
-const PLAN_AUDIENCE_COPY: Record<PlanKey, string> = {
-  free: "For landlords getting started with one property and wanting to try the basics.",
-  starter: "For landlords running the day-to-day work across active rentals.",
-  pro: "For growing operators who want stronger visibility and cleaner control.",
-  elite: "For portfolios that need deeper oversight, reporting, and decision support.",
+const PLAN_CALLOUT_COPY: Partial<
+  Record<
+    PlanKey,
+    {
+      title: string;
+      description: string;
+      bullets: string[];
+      proofLine?: string;
+    }
+  >
+> = {
+  pro: {
+    title: "Built for operational control",
+    description:
+      "Pro is designed for landlords and teams who need the day-to-day workflow to stay organized, reviewable, and easier to report on.",
+    bullets: [
+      "Keep exports and reporting ready for month-end and stakeholder reviews",
+      "Make screening, compliance, and recordkeeping easier to follow through",
+      "Give team workflows clearer structure as more people and properties get involved",
+    ],
+    proofLine:
+      "Best when workflow volume is growing and you want cleaner operational control before moving into portfolio intelligence.",
+  },
+  elite: {
+    title: "Built for insight-led oversight",
+    description:
+      "Elite is for portfolio operators who want more than operational control. It adds intelligence, deeper visibility, and portfolio-level context for decisions.",
+    bullets: [
+      "See portfolio trends and advanced analytics in one place",
+      "Use AI summaries and audit visibility to review the bigger picture faster",
+      "Support leadership and oversight decisions with stronger portfolio context",
+    ],
+    proofLine:
+      "Best when the question is no longer just what happened, but what needs attention across the portfolio.",
+  },
 };
 
 function pricingCardShadow(plan: PlanKey, hovered: boolean) {
@@ -48,16 +79,12 @@ function pricingCardShadow(plan: PlanKey, hovered: boolean) {
   return hovered ? "0 16px 32px rgba(15,23,42,0.10)" : "0 10px 24px rgba(15,23,42,0.06)";
 }
 
-function normalizePlan(input?: string | null): PlanKey {
-  const raw = String(input || "").trim().toLowerCase();
-  if (raw === "starter" || raw === "core") return "starter";
-  if (raw === "pro") return "pro";
-  if (raw === "elite" || raw === "business" || raw === "enterprise") return "elite";
-  return "free";
-}
-
-function ctaLabel(plan: Exclude<PlanKey, "free">) {
-  return CANONICAL_TIER_MATRIX[plan].ctaLabel;
+function buildBillingUpgradePath(target: Exclude<PlanKey, "free">, interval: PricingInterval) {
+  const params = new URLSearchParams({
+    upgradePlan: target,
+    upgradeInterval: interval === "yearly" ? "year" : "month",
+  });
+  return `/billing?${params.toString()}`;
 }
 
 const PricingPage: React.FC = () => {
@@ -70,6 +97,7 @@ const PricingPage: React.FC = () => {
   const [hoveredPlan, setHoveredPlan] = React.useState<PlanKey | null>(null);
   const [isMobile, setIsMobile] = React.useState(false);
   const [isCompactDesktop, setIsCompactDesktop] = React.useState(false);
+  const trackedInitialInterval = React.useRef(false);
   const safeTrack = (eventName: string, props: Record<string, unknown>) => {
     try {
       track(eventName, props);
@@ -102,6 +130,29 @@ const PricingPage: React.FC = () => {
       compactDesktopMedia.removeListener?.(update);
     };
   }, []);
+
+  React.useEffect(() => {
+    safeTrack("pricing_page_viewed", {
+      surface: "workspace_pricing",
+      currentPlan,
+      interval,
+      route: typeof window !== "undefined" ? window.location.pathname : undefined,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  React.useEffect(() => {
+    if (!trackedInitialInterval.current) {
+      trackedInitialInterval.current = true;
+      return;
+    }
+    safeTrack("pricing_interval_changed", {
+      surface: "workspace_pricing",
+      currentPlan,
+      interval,
+      route: typeof window !== "undefined" ? window.location.pathname : undefined,
+    });
+  }, [currentPlan, interval]);
 
   React.useEffect(() => {
     let active = true;
@@ -144,6 +195,18 @@ const PricingPage: React.FC = () => {
     if (target === "pro") {
       safeTrack("pricing_timeline_cta_clicked", { surface: "in_app" });
     }
+    const action =
+      PLAN_ORDER.indexOf(currentPlan) >= PLAN_ORDER.indexOf(target)
+        ? "manage_existing_plan"
+        : "open_billing_hub";
+    safeTrack("pricing_plan_cta_clicked", {
+      surface: "workspace_pricing",
+      currentPlan,
+      targetPlan: target,
+      interval,
+      action,
+      route: typeof window !== "undefined" ? window.location.pathname : undefined,
+    });
     if (PLAN_ORDER.indexOf(currentPlan) >= PLAN_ORDER.indexOf(target)) {
       try {
         const portal = await createBillingPortalSession();
@@ -158,13 +221,19 @@ const PricingPage: React.FC = () => {
       return;
     }
 
-    void startCheckout({
-      tier: target,
-      interval: "monthly",
-      featureKey: "pricing",
-      source: "workspace_pricing",
-      redirectTo: "/billing",
-    });
+    navigate(buildBillingUpgradePath(target, interval));
+  };
+
+  const planCtaLabel = (target: Exclude<PlanKey, "free">) => {
+    if (PLAN_ORDER.indexOf(currentPlan) >= PLAN_ORDER.indexOf(target)) return "Manage plan";
+    return `See ${CANONICAL_TIER_MATRIX[target].label} in billing`;
+  };
+
+  const planCtaSupport = (target: Exclude<PlanKey, "free">) => {
+    if (PLAN_ORDER.indexOf(currentPlan) >= PLAN_ORDER.indexOf(target)) {
+      return "Open billing to manage your current subscription details.";
+    }
+    return `Billing will show the ${CANONICAL_TIER_MATRIX[target].label} plan details before secure checkout opens, so you can understand the fit before deciding.`;
   };
 
   return (
@@ -192,6 +261,12 @@ const PricingPage: React.FC = () => {
           </p>
           <p style={{ marginTop: spacing.xs, color: text.muted, maxWidth: 760, lineHeight: 1.65 }}>
             Plan prices below match the live checkout pricing when billing is available.
+          </p>
+          <p style={{ marginTop: spacing.xs, color: text.secondary, maxWidth: 760, lineHeight: 1.65, fontWeight: 600 }}>
+            Starter gives you the workflow foundation, Pro adds operational control and reporting, and Elite adds portfolio intelligence and oversight.
+          </p>
+          <p style={{ marginTop: spacing.xs, color: text.secondary, maxWidth: 760, lineHeight: 1.65 }}>
+            You do not need to pick a paid plan before you understand the workflow. Use pricing to see what opens next after the basics are already working for you.
           </p>
         </Card>
 
@@ -273,29 +348,38 @@ const PricingPage: React.FC = () => {
                 <div style={{ fontWeight: 800, fontSize: 20, lineHeight: 1.15, ...wrappingTextStyle }}>
                   {CANONICAL_TIER_MATRIX[plan].label}
                 </div>
-                {plan === "pro" ? (
+                {plan !== "free" ? (
                   <span
                     style={{
-                      border: "1px solid rgba(37,99,235,0.4)",
+                      border:
+                        plan === "pro" || plan === "elite"
+                          ? "1px solid rgba(37,99,235,0.4)"
+                          : "1px solid rgba(15,23,42,0.18)",
                       borderRadius: 999,
                       padding: "4px 12px",
                       fontSize: 11,
                       fontWeight: 700,
-                      color: "#1d4ed8",
-                      background: "linear-gradient(180deg, rgba(37,99,235,0.14), rgba(37,99,235,0.08))",
+                      color: plan === "pro" || plan === "elite" ? "#1d4ed8" : text.primary,
+                      background:
+                        plan === "pro" || plan === "elite"
+                          ? "linear-gradient(180deg, rgba(37,99,235,0.14), rgba(37,99,235,0.08))"
+                          : "rgba(15,23,42,0.06)",
                       maxWidth: "100%",
                       overflowWrap: "anywhere",
                       letterSpacing: 0.2,
-                      boxShadow: "0 8px 20px rgba(37,99,235,0.12)",
+                      boxShadow:
+                        plan === "pro" || plan === "elite" ? "0 8px 20px rgba(37,99,235,0.12)" : "none",
                     }}
                   >
-                    Most Popular for growing landlords
+                    {TIER_POSITIONING_COPY[plan].badge}
                   </span>
                 ) : null}
               </div>
               <div style={{ fontSize: 26, fontWeight: 800, lineHeight: 1.05, ...wrappingTextStyle }}>{renderPrice(plan)}</div>
               <div style={{ color: text.muted, fontSize: 14, lineHeight: 1.65, minHeight: 68, ...wrappingTextStyle }}>
-                {PLAN_AUDIENCE_COPY[plan]}
+                {plan === "free"
+                  ? "For landlords getting started with one property and wanting to try the basics."
+                  : TIER_POSITIONING_COPY[plan].audience}
               </div>
               <ul
                 style={{
@@ -315,7 +399,7 @@ const PricingPage: React.FC = () => {
                   </li>
                 ))}
               </ul>
-              {plan === "starter" ? (
+              {plan !== "free" ? (
                 <div
                   style={{
                     color: text.muted,
@@ -330,10 +414,10 @@ const PricingPage: React.FC = () => {
                     ...wrappingTextStyle,
                   }}
                 >
-                  Free is there to help you get started. Starter is where RentChain becomes a real day-to-day operating tool for active rentals.
+                  {TIER_POSITIONING_COPY[plan].support}
                 </div>
               ) : null}
-              {plan === "pro" ? (
+              {plan === "pro" || plan === "elite" ? (
                 <div
                   style={{
                     border: "1px solid rgba(37,99,235,0.28)",
@@ -346,7 +430,12 @@ const PricingPage: React.FC = () => {
                     flex: "0 0 auto",
                   }}
                 >
-                  <div style={{ fontWeight: 800, lineHeight: 1.25, ...wrappingTextStyle }}>Built for landlords handling more moving parts</div>
+                  <div style={{ fontWeight: 800, lineHeight: 1.25, ...wrappingTextStyle }}>
+                    {PLAN_CALLOUT_COPY[plan]?.title}
+                  </div>
+                  <div style={{ color: text.muted, fontSize: 13, lineHeight: 1.6, ...wrappingTextStyle }}>
+                    {PLAN_CALLOUT_COPY[plan]?.description}
+                  </div>
                   <ul
                     style={{
                       margin: 0,
@@ -358,14 +447,17 @@ const PricingPage: React.FC = () => {
                       gap: 6,
                     }}
                   >
-                    <li style={{ overflowWrap: "anywhere" }}>Keep property records cleaner as the portfolio grows</li>
-                    <li style={{ overflowWrap: "anywhere" }}>Share clearer reports with partners, owners, or accountants</li>
-                    <li style={{ overflowWrap: "anywhere" }}>Get stronger visibility into screening and compliance work</li>
-                    <li style={{ overflowWrap: "anywhere" }}>Spend less time piecing together month-end information</li>
+                    {(PLAN_CALLOUT_COPY[plan]?.bullets || []).map((bullet) => (
+                      <li key={`${plan}-${bullet}`} style={{ overflowWrap: "anywhere" }}>
+                        {bullet}
+                      </li>
+                    ))}
                   </ul>
-                  <div style={{ color: text.muted, fontSize: 12, lineHeight: 1.55, ...wrappingTextStyle }}>
-                    A strong fit when simple tools are no longer enough, but you still want RentChain to feel calm and easy to run.
-                  </div>
+                  {PLAN_CALLOUT_COPY[plan]?.proofLine ? (
+                    <div style={{ color: text.muted, fontSize: 12, lineHeight: 1.55, ...wrappingTextStyle }}>
+                      {PLAN_CALLOUT_COPY[plan]?.proofLine}
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
               {plan !== "free" ? (
@@ -390,12 +482,17 @@ const PricingPage: React.FC = () => {
               <div style={{ marginTop: isMobile ? spacing.sm : "auto", paddingTop: 8, width: "100%" }}>
                 {plan === "free" ? (
                   <Button type="button" variant="secondary" onClick={() => navigate("/dashboard")} style={{ width: "100%" }}>
-                    Start Free
+                    Start your rental workflow
                   </Button>
                 ) : (
-                  <Button type="button" onClick={() => void handleUpgrade(plan)} style={{ width: "100%" }}>
-                    {ctaLabel(plan)}
-                  </Button>
+                  <div style={{ display: "grid", gap: 8 }}>
+                    <Button type="button" onClick={() => void handleUpgrade(plan)} style={{ width: "100%" }}>
+                      {planCtaLabel(plan)}
+                    </Button>
+                    <div style={{ color: text.muted, fontSize: 12, lineHeight: 1.55, ...wrappingTextStyle }}>
+                      {planCtaSupport(plan)}
+                    </div>
+                  </div>
                 )}
               </div>
             </Card>

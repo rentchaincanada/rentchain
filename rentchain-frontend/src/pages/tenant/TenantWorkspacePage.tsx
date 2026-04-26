@@ -4,6 +4,10 @@ import { getTenantWorkspace } from "../../api/tenantPortal";
 import { getTenantAccess, type TenantAccessWorkspace } from "../../api/tenantAccess";
 import { getTenantAttachments } from "../../api/tenantAttachmentsApi";
 import { getTenantProfile } from "../../api/tenantProfile";
+import { getTenantApplicationCompletion } from "../../api/tenantApplicationCompletion";
+import { getTenantNotificationPreferences } from "../../api/tenantNotificationPreferences";
+import { getTenantCommunicationsWorkspace } from "../../api/tenantCommunicationsApi";
+import { listTenantScreenings, type TenantScreeningRequest } from "../../api/tenantScreeningApi";
 import {
   TenantEmptyState,
   TenantErrorState,
@@ -20,12 +24,25 @@ import { spacing, text as textTokens } from "../../styles/tokens";
 import TenantProfileCompletionCard from "./TenantProfileCompletionCard";
 import { buildTenantProfileCompletion } from "./tenantProfileCompletion";
 import { buildTenantDocumentVaultView } from "./tenantDocumentVault";
+import { buildTenantApplicationReuseView } from "./tenantApplicationReuse";
+import { buildTenantWorkspaceModeView } from "./tenantWorkspaceMode";
+import { buildActiveTenancyWorkspaceState } from "./activeTenancyWorkspaceState";
+import { buildTenantCommunicationsWorkspaceState } from "./tenantCommunicationsWorkspaceState";
+import TenantWorkspaceModeBanner from "./TenantWorkspaceModeBanner";
+import StructuredNotificationList from "../StructuredNotificationList";
+import { buildTenantStructuredNotificationTriggers } from "../structuredNotificationTriggers";
+import { filterStructuredNotificationsByPreferences } from "../notificationChannelRouting";
+import { buildTenantScreeningDashboardSummary } from "./tenantScreeningInboxView";
 
 export default function TenantWorkspacePage() {
   const [data, setData] = React.useState<Awaited<ReturnType<typeof getTenantWorkspace>> | null>(null);
   const [access, setAccess] = React.useState<TenantAccessWorkspace | null>(null);
   const [attachments, setAttachments] = React.useState<Awaited<ReturnType<typeof getTenantAttachments>> | null>(null);
   const [profileData, setProfileData] = React.useState<Awaited<ReturnType<typeof getTenantProfile>> | null>(null);
+  const [completion, setCompletion] = React.useState<Awaited<ReturnType<typeof getTenantApplicationCompletion>> | null>(null);
+  const [notificationPreferences, setNotificationPreferences] = React.useState<Awaited<ReturnType<typeof getTenantNotificationPreferences>> | null>(null);
+  const [communications, setCommunications] = React.useState<Awaited<ReturnType<typeof getTenantCommunicationsWorkspace>> | null>(null);
+  const [screenings, setScreenings] = React.useState<TenantScreeningRequest[]>([]);
   const [profileLoading, setProfileLoading] = React.useState(true);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -34,10 +51,14 @@ export default function TenantWorkspacePage() {
     setLoading(true);
     setError(null);
     try {
-      const [workspaceResult, accessResult, attachmentsResult] = await Promise.allSettled([
+      const [workspaceResult, accessResult, attachmentsResult, completionResult, preferencesResult, communicationsResult, screeningsResult] = await Promise.allSettled([
         getTenantWorkspace(),
         getTenantAccess(),
         getTenantAttachments(),
+        getTenantApplicationCompletion(),
+        getTenantNotificationPreferences(),
+        getTenantCommunicationsWorkspace(),
+        listTenantScreenings(),
       ]);
 
       if (workspaceResult.status === "rejected") {
@@ -47,10 +68,22 @@ export default function TenantWorkspacePage() {
       setData(workspaceResult.value);
       setAccess(accessResult.status === "fulfilled" ? accessResult.value : null);
       setAttachments(attachmentsResult.status === "fulfilled" ? attachmentsResult.value : null);
+      setCompletion(completionResult.status === "fulfilled" ? completionResult.value : null);
+      setNotificationPreferences(preferencesResult.status === "fulfilled" ? preferencesResult.value : null);
+      setCommunications(communicationsResult.status === "fulfilled" ? communicationsResult.value : null);
+      setScreenings(
+        screeningsResult.status === "fulfilled" && Array.isArray((screeningsResult.value as any)?.items)
+          ? (screeningsResult.value as any).items
+          : [],
+      );
     } catch (err: any) {
       setData(null);
       setAccess(null);
       setAttachments(null);
+      setCompletion(null);
+      setNotificationPreferences(null);
+      setCommunications(null);
+      setScreenings([]);
       setError(err?.payload?.error || err?.message || "Unable to load your tenant workspace.");
     } finally {
       setLoading(false);
@@ -120,6 +153,29 @@ export default function TenantWorkspacePage() {
     updatedAt: attachments?.updatedAt,
     access,
   });
+  const reuse = buildTenantApplicationReuseView({
+    completion,
+    profile: profileData,
+    attachments,
+    access,
+  });
+  const modeView = buildTenantWorkspaceModeView(data?.context);
+  const activeTenancy = buildActiveTenancyWorkspaceState({
+    context: data?.context,
+    lease: data?.lease,
+  });
+  const communicationsView = buildTenantCommunicationsWorkspaceState(communications);
+  const screeningSummary = buildTenantScreeningDashboardSummary(screenings);
+  const notificationItems = filterStructuredNotificationsByPreferences(
+    buildTenantStructuredNotificationTriggers({
+      packageCategories: reuse.packageCategories,
+      completion,
+      profile: profileData,
+      attachments,
+      access,
+    }),
+    notificationPreferences
+  );
 
   return (
     <TenantSurfaceShell
@@ -143,6 +199,86 @@ export default function TenantWorkspacePage() {
         </Link>
       }
     >
+      <TenantWorkspaceModeBanner view={modeView} />
+
+      <TenantInfoCard heading="Active tenancy" accent="#7c3aed">
+        <div style={{ display: "grid", gap: spacing.sm }}>
+          <div style={{ display: "grid", gap: 4 }}>
+            <div style={{ fontSize: "1.05rem", fontWeight: 800, color: textTokens.primary }}>
+              {activeTenancy.title}
+            </div>
+            <div style={{ color: textTokens.secondary, lineHeight: 1.6 }}>
+              {activeTenancy.explanation}
+            </div>
+          </div>
+
+          <TenantKeyValueGrid
+            rows={[
+              { label: "Status", value: activeTenancy.label },
+              { label: "Lease reference", value: data?.lease?.leaseId || "Not visible yet" },
+              { label: "Lease status", value: prettyStatus(data?.lease?.status) },
+              { label: "Monthly rent", value: formatMoney(data?.lease?.monthlyRent) },
+            ]}
+          />
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+              gap: spacing.sm,
+            }}
+          >
+            <div
+              style={{
+                border: "1px solid rgba(15,23,42,0.08)",
+                borderRadius: 12,
+                padding: "12px 14px",
+                display: "grid",
+                gap: 8,
+              }}
+            >
+              <div style={{ fontWeight: 700, color: textTokens.primary }}>Tenancy summary</div>
+              {activeTenancy.summaryItems.map((item, index) => (
+                <div key={`${item}-${index}`} style={{ color: textTokens.secondary }}>
+                  {item}
+                </div>
+              ))}
+            </div>
+
+            <div
+              style={{
+                border: "1px solid rgba(15,23,42,0.08)",
+                borderRadius: 12,
+                padding: "12px 14px",
+                display: "grid",
+                gap: 8,
+              }}
+            >
+              <div style={{ fontWeight: 700, color: textTokens.primary }}>
+                {activeTenancy.needsAttention.length ? "Needs attention" : "Next steps"}
+              </div>
+              {(activeTenancy.needsAttention.length ? activeTenancy.needsAttention : activeTenancy.nextActions).map((item, index) => (
+                <div key={`${item}-${index}`} style={{ color: textTokens.secondary }}>
+                  {item}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
+            <Link to="/tenant/lease" style={{ fontWeight: 700 }}>
+              Open lease details
+            </Link>
+            <Link to="/tenant/attachments" style={{ fontWeight: 700 }}>
+              Open documents
+            </Link>
+            <Link to="/tenant/payments" style={{ fontWeight: 700 }}>
+              Open payments
+            </Link>
+          </div>
+        </div>
+      </TenantInfoCard>
+
       <TenantInfoCard heading="Dashboard Summary" accent="#0f766e">
         <TenantKeyValueGrid
           rows={[
@@ -152,6 +288,14 @@ export default function TenantWorkspacePage() {
             { label: "Lease", value: prettyStatus(data?.lease?.status) },
             { label: "Maintenance", value: `${maintenanceCount} request${maintenanceCount === 1 ? "" : "s"}` },
           ]}
+        />
+      </TenantInfoCard>
+
+      <TenantInfoCard heading="Recent activity / notifications" accent="#0891b2">
+        <StructuredNotificationList
+          heading="Recent workflow updates"
+          emptyLabel="Workflow-triggered notifications will appear here as your application, documents, access, and follow-up state change."
+          items={notificationItems}
         />
       </TenantInfoCard>
 
@@ -244,6 +388,51 @@ export default function TenantWorkspacePage() {
             <Link to="/tenant/attachments">Open document vault</Link>
           </div>
         </TenantInfoCard>
+
+        <TenantInfoCard heading="Communications" accent="#0f766e">
+          <div style={{ display: "grid", gap: spacing.sm }}>
+            <div style={{ color: textTokens.secondary }}>
+              <strong>{communicationsView.label}</strong> — {communicationsView.description}
+            </div>
+            {communicationsView.threadSummaries.length ? (
+              <>
+                <div style={{ color: textTokens.secondary }}>
+                  Latest update: {communicationsView.threadSummaries[0].latestPreview}
+                </div>
+                <div style={{ color: textTokens.muted }}>
+                  {communicationsView.threadSummaries[0].needsReply
+                    ? "A landlord message appears to need your reply."
+                    : "Your current tenancy conversation is visible from here."}
+                </div>
+              </>
+            ) : (
+              <div style={{ color: textTokens.muted }}>
+                Your inbox will appear here once tenancy communication starts.
+              </div>
+            )}
+            <Link to="/tenant/messages">Open communications inbox</Link>
+          </div>
+        </TenantInfoCard>
+
+        {screenings.length ? (
+          <TenantInfoCard heading="Screening Requests" accent="#1d4ed8">
+            <div style={{ display: "grid", gap: spacing.sm }}>
+              <div style={{ color: textTokens.secondary }}>
+                {screeningSummary.pendingConsentCount > 0
+                  ? `Screening consent requested for ${screeningSummary.pendingConsentCount} application${screeningSummary.pendingConsentCount === 1 ? "" : "s"}.`
+                  : `${screeningSummary.total} screening request${screeningSummary.total === 1 ? "" : "s"} currently visible in your tenant workspace.`}
+              </div>
+              <div style={{ color: textTokens.muted }}>
+                {screeningSummary.pendingConsentCount > 0
+                  ? "Review the request and record your authorization when you are ready."
+                  : screeningSummary.latest?.description || "Review the latest screening workflow status for your applications."}
+              </div>
+              <Link to="/tenant/screening" style={{ fontWeight: 700 }}>
+                {screeningSummary.pendingConsentCount > 0 ? "Review request" : "Open screening requests"}
+              </Link>
+            </div>
+          </TenantInfoCard>
+        ) : null}
       </div>
 
       {nextActions.length ? (

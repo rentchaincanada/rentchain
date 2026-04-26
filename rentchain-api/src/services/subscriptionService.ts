@@ -9,12 +9,13 @@ export { SubscriptionPlan, PLAN_ORDER, planAtLeast };
 
 export function resolvePlanFromRequest(req: Request): SubscriptionPlan {
   const header = (req.headers["x-demo-plan"] as string | undefined)?.toLowerCase();
-  const envDefault =
-    (process.env.DEFAULT_PLAN as SubscriptionPlan | undefined) || "screening";
-
-  const candidate = (header || envDefault) as SubscriptionPlan;
-  if (PLAN_ORDER.includes(candidate)) return candidate;
-  return "screening";
+  const envDefault = (process.env.DEFAULT_PLAN as string | undefined) || "free";
+  const candidate = String(header || envDefault || "").trim().toLowerCase();
+  if (PLAN_ORDER.includes(candidate as SubscriptionPlan)) return candidate as SubscriptionPlan;
+  if (candidate === "screening") return "free";
+  if (candidate === "core") return "starter";
+  if (candidate === "business" || candidate === "enterprise") return "elite";
+  return "free";
 }
 
 /**

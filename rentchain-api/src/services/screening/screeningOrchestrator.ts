@@ -1,6 +1,9 @@
 import { db } from "../../config/firebase";
 import type { ScreeningResultSummary } from "./providers/types";
 import { writeScreeningEvent } from "./screeningEvents";
+import { writeCanonicalEvent } from "../../lib/events/buildEvent";
+import { buildScreeningMonetizationPatch } from "./screeningMonetizationService";
+import { writeTransUnionUsageEvent } from "./transUnionUsageEvents";
 
 type ScreeningStatus =
   | "unpaid"
@@ -43,6 +46,14 @@ export async function beginScreening(
       screeningStartedAt: now,
       screeningProvider: "manual",
       screeningLastUpdatedAt: now,
+      screeningMonetization: buildScreeningMonetizationPatch({
+        current: data?.screeningMonetization,
+        eligibility: "eligible",
+        paymentStatus: "paid",
+        fulfillmentStatus: "ordered",
+        lastErrorCode: null,
+        lastErrorMessage: null,
+      }),
     },
     { merge: true }
   );
@@ -101,6 +112,14 @@ export async function markScreeningComplete(
       screeningResultId: resultRef.id,
       screeningResultSummary: summary,
       screeningLastUpdatedAt: now,
+      screeningMonetization: buildScreeningMonetizationPatch({
+        current: data?.screeningMonetization,
+        eligibility: "eligible",
+        paymentStatus: "paid",
+        fulfillmentStatus: "completed",
+        lastErrorCode: null,
+        lastErrorMessage: null,
+      }),
     },
     { merge: true }
   );
@@ -113,6 +132,43 @@ export async function markScreeningComplete(
     meta: { status: "complete" },
     actor: String(actorUser?.role || "").toLowerCase() === "admin" ? "admin" : "system",
   });
+  await writeCanonicalEvent({
+    domain: "screening",
+    action: "completed",
+    status: "complete",
+    actor: {
+      type: String(actorUser?.role || "").toLowerCase() === "admin" ? "admin" : "system",
+      role: String(actorUser?.role || "").trim() || "system",
+      id: String(actorUser?.id || "").trim() || null,
+    },
+    resource: {
+      type: "rental_application",
+      id: applicationId,
+    },
+    occurredAt: now,
+    visibility: "internal",
+    summary: "Screening completed",
+    metadata: {
+      landlordId: data?.landlordId || null,
+      resultId: resultRef.id,
+      provider: data?.screeningProvider || "manual",
+    },
+  });
+  await writeTransUnionUsageEvent({
+    eventType: "screening_completed",
+    landlordId: data?.landlordId || null,
+    userId: String(actorUser?.id || "").trim() || null,
+    actorRole: String(actorUser?.role || "system").trim().toLowerCase(),
+    applicationId,
+    propertyId: data?.propertyId || null,
+    sourceSurface: "screening_orchestrator",
+    status: summary.overall === "review" ? "manual_review" : summary.overall === "fail" ? "failed" : "completed",
+    metadata: {
+      resultId: resultRef.id,
+      provider: data?.screeningProvider || "manual",
+      overall: summary.overall,
+    },
+  }).catch(() => undefined);
 
   return { ok: true, resultId: resultRef.id, idempotent: false };
 }
@@ -141,6 +197,14 @@ export async function markScreeningFailed(
       screeningFailureCode: failure.code,
       screeningFailureDetail: failure.detail || null,
       screeningLastUpdatedAt: now,
+      screeningMonetization: buildScreeningMonetizationPatch({
+        current: data?.screeningMonetization,
+        eligibility: "eligible",
+        paymentStatus: "failed",
+        fulfillmentStatus: "blocked",
+        lastErrorCode: "SCREENING_MONETIZATION_BLOCKED",
+        lastErrorMessage: failure.detail || failure.code,
+      }),
     },
     { merge: true }
   );

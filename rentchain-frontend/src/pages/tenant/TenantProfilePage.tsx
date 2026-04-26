@@ -41,6 +41,8 @@ export default function TenantProfilePage() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<Awaited<ReturnType<typeof getTenantAttachments>> | null>(null);
+  const displayNameRef = React.useRef<HTMLInputElement | null>(null);
+  const phoneRef = React.useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -108,11 +110,27 @@ export default function TenantProfilePage() {
       });
       setSaveMessage("Profile details updated.");
     } catch (err: any) {
-      setSaveError(err?.payload?.error || err?.message || "Unable to save profile changes.");
+      const code = String(err?.payload?.error || err?.message || "").trim().toUpperCase();
+      if (code === "TENANT_PROFILE_FIELDS_REQUIRED") {
+        setSaveError("Add at least one profile detail before saving.");
+      } else {
+        setSaveError(err?.payload?.error || err?.message || "Unable to save profile changes.");
+      }
     } finally {
       setSaving(false);
     }
   };
+
+  const focusMissingEditableField = React.useCallback(() => {
+    const firstMissingEditableField = !data?.profile?.phone
+      ? phoneRef.current
+      : !data?.profile?.displayName
+      ? displayNameRef.current
+      : displayNameRef.current;
+    if (!firstMissingEditableField) return;
+    firstMissingEditableField.scrollIntoView({ behavior: "smooth", block: "center" });
+    firstMissingEditableField.focus();
+  }, [data?.profile?.displayName, data?.profile?.phone]);
 
   if (loading) {
     return (
@@ -189,7 +207,14 @@ export default function TenantProfilePage() {
             ]}
           />
         </TenantInfoCard>
-        {completion ? <TenantProfileCompletionCard completion={completion} actionLabel="Keep your profile organized" /> : null}
+        {completion ? (
+          <TenantProfileCompletionCard
+            completion={completion}
+            actionLabel="Update missing details"
+            actionPath={null}
+            onAction={focusMissingEditableField}
+          />
+        ) : null}
       </div>
 
       <TenantInfoCard heading="Contact details" accent="#0f766e">
@@ -208,6 +233,7 @@ export default function TenantProfilePage() {
                 value={formValues.displayName}
                 onChange={handleChange("displayName")}
                 maxLength={120}
+                ref={displayNameRef}
                 style={{
                   border: "1px solid rgba(15,23,42,0.12)",
                   borderRadius: 10,
@@ -224,6 +250,7 @@ export default function TenantProfilePage() {
                 value={formValues.phone}
                 onChange={handleChange("phone")}
                 maxLength={40}
+                ref={phoneRef}
                 style={{
                   border: "1px solid rgba(15,23,42,0.12)",
                   borderRadius: 10,

@@ -1,5 +1,6 @@
 import { apiFetch, apiJson } from "@/lib/apiClient";
 import { apiGetJson } from "./http";
+import { normalizePlan, normalizePaidPlan, type Plan, type PaidPlan } from "@/lib/plan";
 
 export type BillingRecord = {
   id: string;
@@ -15,7 +16,9 @@ export type BillingRecord = {
   receiptUrl?: string | null;
   createdAt: string;
   screeningTier?: "basic" | "verify" | "verify_ai";
+  screeningPackage?: "basic" | "standard" | "premium";
   addons?: string[];
+  paymentResponsibility?: "landlord" | "tenant";
 };
 
 export async function fetchBillingHistory(): Promise<BillingRecord[]> {
@@ -33,20 +36,28 @@ export async function fetchBillingHistory(): Promise<BillingRecord[]> {
 }
 
 export interface SubscriptionStatus {
-  planId: "free" | "starter" | "pro" | "elite";
+  tier: Plan | null;
+  planId: Plan | null;
   status: "active" | "past_due" | "canceled";
+  interval?: "month" | "year" | null;
+  renewalDate?: string | null;
+  isActive?: boolean;
 }
 
 export async function fetchSubscriptionStatus(): Promise<SubscriptionStatus> {
   try {
-    const res = await apiGetJson<any>("/billing/subscription-status", { allowStatuses: [404, 501] });
-    if (!res.ok) {
-      return { planId: "free", status: "canceled" } as SubscriptionStatus;
-    }
-    const data = res.data;
-    return (data?.subscription ?? data) as SubscriptionStatus;
+    const payload = await apiFetch("/billing/subscription-status", { method: "GET" });
+    const data = ((payload as any)?.subscription ?? payload) as any;
+    const tierValue = data?.tier ?? data?.planId;
+    const tier = tierValue == null || String(tierValue).trim() === "" ? null : normalizePlan(tierValue);
+    return {
+      ...data,
+      tier,
+      planId: tier,
+      status: data?.status === "past_due" ? "past_due" : data?.status === "active" ? "active" : "canceled",
+    };
   } catch {
-    return { planId: "free", status: "canceled" } as SubscriptionStatus;
+    return { tier: null, planId: null, status: "canceled" } as SubscriptionStatus;
   }
 }
 
@@ -60,6 +71,30 @@ export async function createCheckoutSession(): Promise<{ checkoutUrl: string }> 
 export async function createBillingPortalSession(): Promise<{ url: string }> {
   const data = await apiJson<any>("/billing/portal", { method: "POST" });
   return { url: data?.url ?? "" };
+}
+
+export type CheckoutSessionStatus = {
+  ok: boolean;
+  sessionId?: string;
+  status?: string | null;
+  payment_status?: "paid" | "unpaid" | "no_payment_required" | null;
+  customer?: string | null;
+  plan?: PaidPlan | null;
+  interval?: "monthly" | "yearly" | null;
+  subscription_status?: string | null;
+  current_period_end?: number | null;
+  plan_updated?: boolean;
+};
+
+export async function fetchCheckoutSessionStatus(sessionId: string): Promise<CheckoutSessionStatus> {
+  const data = await apiJson<any>(`/billing/session-status?session_id=${encodeURIComponent(sessionId)}`, {
+    method: "GET",
+  });
+  return {
+    ...data,
+    plan: data?.plan ? normalizePaidPlan(data.plan) : null,
+    interval: data?.interval === "yearly" ? "yearly" : data?.interval === "monthly" ? "monthly" : null,
+  };
 }
 
 export async function simulateCreditPull(
@@ -90,7 +125,7 @@ export async function simulateCreditPull(
 }
 
 export type BillingPlanPricing = {
-  key: "starter" | "pro" | "elite";
+  key: PaidPlan;
   label: string;
   currency: string;
   monthlyAmountCents: number;
@@ -126,7 +161,19 @@ export async function fetchBillingPricing(): Promise<BillingPricingResponse | nu
   try {
     const res = await apiFetch<any>("/billing/pricing", { method: "GET" });
     if (!res?.ok) return null;
-    return res as BillingPricingResponse;
+    const payload = res as BillingPricingResponse;
+    return {
+      ...payload,
+      plans: Array.isArray(payload?.plans)
+        ? payload.plans
+            .map((plan) => {
+              const key = normalizePaidPlan(plan?.key);
+              if (!key) return null;
+              return { ...plan, key };
+            })
+            .filter((plan): plan is BillingPlanPricing => Boolean(plan))
+        : [],
+    };
   } catch {
     return null;
   }

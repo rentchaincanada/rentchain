@@ -1,8 +1,15 @@
 import React from "react";
-import { Link } from "react-router-dom";
-import { redeemTenantWorkspaceInvite } from "../../api/tenantPortal";
+import { Link, useLocation } from "react-router-dom";
+import {
+  getTenantWorkspace,
+  redeemTenantWorkspaceInvite,
+  type TenantWorkspaceContext,
+} from "../../api/tenantPortal";
 import { TenantInfoCard, TenantSurfaceShell } from "./TenantWorkspaceShared";
 import { colors, radius, spacing, text as textTokens } from "../../styles/tokens";
+import { buildTenantApplicationEntryPath } from "./tenantApplicationFlow";
+import { buildTenantWorkspaceModeView } from "./tenantWorkspaceMode";
+import TenantWorkspaceModeBanner from "./TenantWorkspaceModeBanner";
 
 function mapInviteError(input: string | null) {
   const normalized = String(input || "").trim().toLowerCase();
@@ -15,8 +22,26 @@ function mapInviteError(input: string | null) {
   return "We couldn't redeem that invite right now.";
 }
 
+function getInviteErrorMessage(error: unknown) {
+  if (typeof error === "object" && error !== null) {
+    const payload = "payload" in error ? (error as { payload?: { error?: unknown } }).payload : undefined;
+    const message = "message" in error ? (error as { message?: unknown }).message : null;
+    return mapInviteError(
+      typeof payload?.error === "string" ? payload.error : typeof message === "string" ? message : null
+    );
+  }
+
+  return mapInviteError(typeof error === "string" ? error : null);
+}
+
 export default function TenantInviteRedeemPage() {
-  const [token, setToken] = React.useState("");
+  const location = useLocation();
+  const [workspace, setWorkspace] = React.useState<Awaited<ReturnType<typeof getTenantWorkspace>> | null>(null);
+  const prefilledToken = React.useMemo(
+    () => String(new URLSearchParams(location.search).get("token") || "").trim(),
+    [location.search]
+  );
+  const [token, setToken] = React.useState(prefilledToken);
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [success, setSuccess] = React.useState<{
@@ -41,18 +66,61 @@ export default function TenantInviteRedeemPage() {
       const result = await redeemTenantWorkspaceInvite(token.trim());
       setSuccess(result);
       setToken("");
-    } catch (err: any) {
-      setError(mapInviteError(err?.payload?.error || err?.message || null));
+    } catch (err: unknown) {
+      setError(getInviteErrorMessage(err));
     } finally {
       setSubmitting(false);
     }
   };
+
+  React.useEffect(() => {
+    setToken(prefilledToken);
+  }, [prefilledToken]);
+
+  React.useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    let cancelled = false;
+    void getTenantWorkspace()
+      .then((next) => {
+        if (!cancelled) {
+          setWorkspace(next);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setWorkspace(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const nextApplicationPath = success
+    ? buildTenantApplicationEntryPath({ entry: "invite", token: success.applicationId || success.inviteId || prefilledToken })
+    : buildTenantApplicationEntryPath({ entry: "invite", token: prefilledToken });
+  const modeContext: TenantWorkspaceContext = workspace?.context || {
+    authority: "invite",
+    propertyId: null,
+    rc_prop_id: null,
+    applicationId: null,
+    leaseId: null,
+    tenantId: null,
+    unitId: null,
+    invitedEmail: null,
+  };
+  const modeView = buildTenantWorkspaceModeView(modeContext);
 
   return (
     <TenantSurfaceShell
       title="Redeem Invite"
       subtitle="Redeem a one-time tenancy invite from inside your authenticated tenant workspace. Invite redemption stays server-scoped and follows the backend token lifecycle rules."
     >
+      <TenantWorkspaceModeBanner view={modeView} />
+
       <TenantInfoCard heading="Invite Redemption" accent="#0f766e">
         <form onSubmit={submit} style={{ display: "grid", gap: spacing.md }}>
           <label style={{ display: "grid", gap: 8 }}>
@@ -101,7 +169,8 @@ export default function TenantInviteRedeemPage() {
               <div>Status: {success.status || "redeemed"}</div>
               {success.propertyId ? <div>Property: {success.propertyId}</div> : null}
               {success.applicationId ? <div>Application: {success.applicationId}</div> : null}
-              <div>
+              <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
+                <Link to={nextApplicationPath}>Continue to application readiness</Link>
                 <Link to="/tenant">Return to workspace</Link>
               </div>
             </div>

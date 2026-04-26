@@ -1,58 +1,59 @@
 import React from "react";
 import { Button } from "../ui/Ui";
-import { useUpgrade } from "@/context/UpgradeContext";
 import { useAuth } from "@/context/useAuth";
 import { getUpgradeCopy } from "@/billing/upgradeCopy";
-import { resolveRequiredPlan } from "@/lib/upgradePrompt";
+import { dispatchUpgradePrompt, resolveRequiredPlan } from "@/lib/upgradePrompt";
+import { track } from "@/lib/analytics";
 
 type Props = {
   featureKey: string;
   label?: string;
   source?: string;
+  presentation?: "locked" | "teaser" | "inline";
   variant?: "primary" | "secondary" | "ghost";
   size?: "sm" | "md";
-  title?: string;
-  description?: string;
 };
-
-function toReason(featureKey: string): "screening" | "exports" | "automation" {
-  const key = String(featureKey || "").toLowerCase();
-  if (key.includes("export") || key.includes("pdf") || key.includes("review_summary")) return "exports";
-  if (key.includes("screen")) return "screening";
-  return "automation";
-}
 
 export function UpgradeCTA({
   featureKey,
   label,
   source,
+  presentation,
   variant = "primary",
   size = "md",
-  title,
-  description,
 }: Props) {
-  const { openUpgrade } = useUpgrade();
   const { user } = useAuth();
   const copy = getUpgradeCopy(featureKey);
-  const requiredPlan = resolveRequiredPlan(featureKey) || copy.requiredPlanLabel || "Pro";
+  const requiredPlan = resolveRequiredPlan(featureKey, user?.plan) || "pro";
+  const safeSource = source || featureKey;
+  const redirectTo =
+    typeof window !== "undefined"
+      ? `${window.location.pathname}${window.location.search}`
+      : "/dashboard";
 
   return (
     <Button
       type="button"
       variant={variant}
       style={size === "sm" ? { padding: "6px 10px", fontSize: 12 } : undefined}
-      onClick={() =>
-        openUpgrade({
-          reason: toReason(featureKey),
-          plan: user?.plan || "free",
-          ctaLabel: label || copy.primaryCta,
-          copy: {
-            title: title || copy.title,
-            body: description || copy.subtitle,
-          },
-        })
-      }
-      data-upgrade-source={source || featureKey}
+      onClick={() => {
+        track("upgrade_cta_clicked", {
+          featureKey,
+          currentPlan: user?.plan || "free",
+          requiredPlan,
+          source: safeSource,
+          presentation,
+          route: typeof window !== "undefined" ? window.location.pathname : undefined,
+        });
+        dispatchUpgradePrompt({
+          featureKey,
+          currentPlan: user?.plan || "free",
+          requiredPlan,
+          source: safeSource,
+          redirectTo,
+        });
+      }}
+      data-upgrade-source={safeSource}
     >
       {label || copy.primaryCta}
     </Button>

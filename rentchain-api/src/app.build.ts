@@ -6,6 +6,7 @@ import { routeSource } from "./middleware/routeSource";
 import { notFoundHandler, errorHandler } from "./middleware/errorHandler";
 import { corsOptions } from "./lib/cors";
 import { getPricingHealth } from "./config/planMatrix";
+import { resolveCanonicalPlan } from "./services/entitlements/planCapabilities";
 
 import publicRoutes from "./routes/publicRoutes";
 import authRoutes from "./routes/authRoutes";
@@ -86,6 +87,7 @@ import screeningJobsAdminRoutes from "./routes/screeningJobsAdminRoutes";
 import adminRoutes from "./routes/adminRoutes";
 import adminRegistryRoutes from "./routes/adminRegistryRoutes";
 import adminScreeningResultsRoutes from "./routes/adminScreeningResultsRoutes";
+import adminScreeningUsageRoutes from "./routes/adminScreeningUsageRoutes";
 import screeningReportRoutes from "./routes/screeningReportRoutes";
 import telemetryRoutes from "./routes/telemetryRoutes";
 import invitesRoutes from "./routes/invitesRoutes";
@@ -93,9 +95,33 @@ import accessRoutes from "./routes/accessRoutes";
 import complianceRoutes from "./routes/complianceRoutes";
 import internalReportsRoutes from "./routes/internalReportsRoutes";
 import identityOracleInternalRoutes from "./routes/identityOracleInternalRoutes";
+import applicationReminderInternalRoutes from "./routes/applicationReminderInternalRoutes";
 import statusRoutes from "./routes/statusRoutes";
 import expensesRoutes from "./routes/expensesRoutes";
+import financialTransactionsRoutes from "./routes/financialTransactionsRoutes";
 import workOrdersRoutes from "./routes/workOrdersRoutes";
+import timelineRoutes from "./routes/timelineRoutes";
+import insightRoutes from "./routes/insightRoutes";
+import screeningReconciliationRoutes from "./routes/screeningReconciliationRoutes";
+import supportConsoleRoutes from "./routes/supportConsoleRoutes";
+import adminTriageRoutes from "./routes/adminTriageRoutes";
+import adminResolutionRoutes from "./routes/adminResolutionRoutes";
+import adminSlaRoutes from "./routes/adminSlaRoutes";
+import adminAlertingRoutes from "./routes/adminAlertingRoutes";
+import adminAssignmentRoutes from "./routes/adminAssignmentRoutes";
+import adminNotificationRoutes from "./routes/adminNotificationRoutes";
+import portfolioScoreRoutes from "./routes/portfolioScoreRoutes";
+import portfolioScoreHistoryRoutes from "./routes/portfolioScoreHistoryRoutes";
+import landlordPortfolioHealthRoutes from "./routes/landlordPortfolioHealthRoutes";
+import landlordAnalyticsRoutes from "./routes/landlordAnalyticsRoutes";
+import landlordAnalyticsAlertsRoutes from "./routes/landlordAnalyticsAlertsRoutes";
+import landlordAnalyticsBenchmarkingRoutes from "./routes/landlordAnalyticsBenchmarkingRoutes";
+import landlordPortfolioScoreRoutes from "./routes/landlordPortfolioScoreRoutes";
+import landlordPortfolioScoreSharingRoutes from "./routes/landlordPortfolioScoreSharingRoutes";
+import publicPortfolioScoreRoutes from "./routes/publicPortfolioScoreRoutes";
+import landlordActionRecommendationRoutes from "./routes/landlordActionRecommendationRoutes";
+import tenantFeedbackRoutes from "./routes/tenantFeedbackRoutes";
+import marketplaceContractorRoutes from "./routes/marketplaceContractorRoutes";
 import transunionRoutes from "./services/integrations/transunion/transunionRoutes";
 import viewingRoutes from "./routes/viewingRoutes";
 import screeningOpsRoutes from "./routes/screeningOpsRoutes";
@@ -188,6 +214,7 @@ app.use("/api", routeSource("paymentsRoutes.ts"), paymentsRoutes);
 // Public + Auth (MUST be before authenticateJwt)
 app.use("/api", routeSource("publicRoutes.ts"), publicRoutes);
 app.use("/api/public", routeSource("publicRoutes.ts"), publicRoutes);
+app.use("/api", routeSource("publicPortfolioScoreRoutes.ts"), publicPortfolioScoreRoutes);
 app.use("/api/public", routeSource("landlordInvitesPublicRoutes.ts"), landlordInvitesPublicRoutes);
 app.use("/api/public", routeSource("landlordInquiryRoutes.ts"), landlordInquiryPublicRoutes);
 app.use("/api/public", tenantHistorySharePublicRouter);
@@ -199,14 +226,60 @@ app.use("/api/access", routeSource("accessRoutes.ts"), accessRoutes);
 app.use("/api/capabilities", routeSource("capabilitiesRoutes.ts"), capabilitiesRoutes);
 app.use("/api/internal", routeSource("internalReportsRoutes.ts"), internalReportsRoutes);
 app.use("/api/internal", routeSource("identityOracleInternalRoutes.ts"), identityOracleInternalRoutes);
+app.use("/api/internal", routeSource("applicationReminderInternalRoutes.ts"), applicationReminderInternalRoutes);
 app.use("/api/status", routeSource("statusRoutes.ts"), statusRoutes);
 
 // Auth decode (non-blocking if header missing)
 app.use(authenticateJwt);
+app.use("/api/events", routeSource("eventsRoutes.ts"), eventsRoutes);
 app.use("/api", routeSource("expensesRoutes.ts"), expensesRoutes);
 console.log("[route-mount] expensesRoutes mounted at /api");
+app.use("/api", routeSource("financialTransactionsRoutes.ts"), financialTransactionsRoutes);
+console.log("[route-mount] financialTransactionsRoutes mounted at /api");
 app.use("/api", routeSource("workOrdersRoutes.ts"), workOrdersRoutes);
 console.log("[route-mount] workOrdersRoutes mounted at /api");
+app.use("/api", routeSource("timelineRoutes.ts"), timelineRoutes);
+console.log("[route-mount] timelineRoutes mounted at /api");
+app.use("/api", routeSource("insightRoutes.ts"), insightRoutes);
+console.log("[route-mount] insightRoutes mounted at /api");
+app.use("/api", routeSource("screeningReconciliationRoutes.ts"), screeningReconciliationRoutes);
+console.log("[route-mount] screeningReconciliationRoutes mounted at /api");
+app.use("/api/admin", routeSource("supportConsoleRoutes.ts"), supportConsoleRoutes);
+console.log("[route-mount] supportConsoleRoutes mounted at /api/admin");
+app.use("/api/admin", routeSource("adminTriageRoutes.ts"), adminTriageRoutes);
+console.log("[route-mount] adminTriageRoutes mounted at /api/admin");
+app.use("/api/admin", routeSource("adminResolutionRoutes.ts"), adminResolutionRoutes);
+console.log("[route-mount] adminResolutionRoutes mounted at /api/admin");
+app.use("/api/admin", routeSource("adminSlaRoutes.ts"), adminSlaRoutes);
+console.log("[route-mount] adminSlaRoutes mounted at /api/admin");
+app.use("/api/admin", routeSource("adminAlertingRoutes.ts"), adminAlertingRoutes);
+console.log("[route-mount] adminAlertingRoutes mounted at /api/admin");
+app.use("/api/admin", routeSource("adminAssignmentRoutes.ts"), adminAssignmentRoutes);
+console.log("[route-mount] adminAssignmentRoutes mounted at /api/admin");
+app.use("/api/admin", routeSource("adminNotificationRoutes.ts"), adminNotificationRoutes);
+console.log("[route-mount] adminNotificationRoutes mounted at /api/admin");
+app.use("/api/admin", routeSource("portfolioScoreRoutes.ts"), portfolioScoreRoutes);
+console.log("[route-mount] portfolioScoreRoutes mounted at /api/admin");
+app.use("/api/admin", routeSource("portfolioScoreHistoryRoutes.ts"), portfolioScoreHistoryRoutes);
+console.log("[route-mount] portfolioScoreHistoryRoutes mounted at /api/admin");
+app.use("/api", routeSource("landlordPortfolioHealthRoutes.ts"), landlordPortfolioHealthRoutes);
+console.log("[route-mount] landlordPortfolioHealthRoutes mounted at /api");
+app.use("/api", routeSource("landlordAnalyticsRoutes.ts"), landlordAnalyticsRoutes);
+console.log("[route-mount] landlordAnalyticsRoutes mounted at /api");
+app.use("/api", routeSource("landlordAnalyticsAlertsRoutes.ts"), landlordAnalyticsAlertsRoutes);
+console.log("[route-mount] landlordAnalyticsAlertsRoutes mounted at /api");
+app.use("/api", routeSource("landlordAnalyticsBenchmarkingRoutes.ts"), landlordAnalyticsBenchmarkingRoutes);
+console.log("[route-mount] landlordAnalyticsBenchmarkingRoutes mounted at /api");
+app.use("/api", routeSource("landlordPortfolioScoreRoutes.ts"), landlordPortfolioScoreRoutes);
+console.log("[route-mount] landlordPortfolioScoreRoutes mounted at /api");
+app.use("/api", routeSource("landlordPortfolioScoreSharingRoutes.ts"), landlordPortfolioScoreSharingRoutes);
+console.log("[route-mount] landlordPortfolioScoreSharingRoutes mounted at /api");
+app.use("/api", routeSource("landlordActionRecommendationRoutes.ts"), landlordActionRecommendationRoutes);
+console.log("[route-mount] landlordActionRecommendationRoutes mounted at /api");
+app.use("/api", routeSource("tenantFeedbackRoutes.ts"), tenantFeedbackRoutes);
+console.log("[route-mount] tenantFeedbackRoutes mounted at /api");
+app.use("/api", routeSource("marketplaceContractorRoutes.ts"), marketplaceContractorRoutes);
+console.log("[route-mount] marketplaceContractorRoutes mounted at /api");
 
 // Current user info
 app.get("/api/me", async (req: any, res: any, next: any) => {
@@ -219,7 +292,14 @@ app.get("/api/me", async (req: any, res: any, next: any) => {
   if (!req.user) {
     return res.status(401).json({ ok: false, error: "unauthenticated" });
   }
-  return res.json({ ok: true, user: req.user });
+  const user =
+    req.user && typeof req.user === "object"
+      ? {
+          ...req.user,
+          ...(req.user.plan != null ? { plan: resolveCanonicalPlan(req.user.plan) } : {}),
+        }
+      : req.user;
+  return res.json({ ok: true, user });
 });
 
 // Core prefixed APIs must mount before broad /api routers.
@@ -290,13 +370,13 @@ app.use("/api/admin", routeSource("adminIntegrityRoutes.ts"), adminIntegrityRout
 app.use("/api/admin", routeSource("adminSavedFiltersRoutes.ts"), adminSavedFiltersRoutes);
 app.use("/api/admin", routeSource("adminAuditRoutes.ts"), adminAuditRoutes);
 app.use("/api/admin", routeSource("adminScreeningResultsRoutes.ts"), adminScreeningResultsRoutes);
+app.use("/api/admin", routeSource("adminScreeningUsageRoutes.ts"), adminScreeningUsageRoutes);
 app.use("/api/admin/demo", routeSource("adminDemoRoutes.ts"), adminDemoRoutes);
 app.use("/api", stubsRoutes);
 app.use("/api", routeSource("screeningReportRoutes.ts"), screeningReportRoutes);
 
 // Core APIs
 app.use("/api", tenantOnboardRoutes);
-app.use("/api/events", eventsRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/landlord", landlordMicroLiveRoutes);
 app.get("/api/__probe/tenants-mount", (_req, res) =>

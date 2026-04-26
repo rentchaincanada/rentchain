@@ -19,11 +19,13 @@ import { upgradeStarterButtonStyle } from "../../lib/upgradeButtonStyles";
 import { useAuth } from "@/context/useAuth";
 import { CredibilityInsightsCard } from "./CredibilityInsightsCard";
 import { MoveInReadinessPanel } from "./MoveInReadinessPanel";
+import { TenantActivityPanel } from "./TenantActivityPanel";
 import { FeatureGate } from "@/components/billing/FeatureGate";
 import { LockedFeature } from "@/components/billing/LockedFeature";
 
 interface TenantDetailPanelProps {
   tenantId: string | null;
+  activityRefreshKey?: number;
 }
 
 const riskBgMap: Record<string, string> = {
@@ -64,7 +66,7 @@ function formatNoticeResponse(value?: string | null, noResponse?: boolean) {
   return normalized.replace(/_/g, " ").replace(/\b\w/g, (match) => match.toUpperCase());
 }
 
-export const TenantDetailPanel: React.FC<TenantDetailPanelProps> = ({ tenantId }) => {
+export const TenantDetailPanel: React.FC<TenantDetailPanelProps> = ({ tenantId, activityRefreshKey = 0 }) => {
   const { bundle, loading, error } = useTenantDetail(tenantId ?? null);
 
   if (!tenantId) {
@@ -100,15 +102,16 @@ export const TenantDetailPanel: React.FC<TenantDetailPanelProps> = ({ tenantId }
     );
   }
 
-  return <TenantDetailLayout bundle={bundle as any} tenantId={tenantId} />;
+  return <TenantDetailLayout bundle={bundle as any} tenantId={tenantId} activityRefreshKey={activityRefreshKey} />;
 };
 
 interface LayoutProps {
   bundle: any;
   tenantId: string;
+  activityRefreshKey: number;
 }
 
-const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
+const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityRefreshKey }) => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { showToast } = useToast();
@@ -688,6 +691,7 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId }) => {
           <LedgerTimeline items={ledgerItems || []} compact />
         )}
       </div>
+      <TenantActivityPanel tenantId={tenantId} refreshKey={activityRefreshKey} />
         </>
       )}
 

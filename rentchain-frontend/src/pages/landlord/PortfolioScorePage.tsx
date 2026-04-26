@@ -1,0 +1,165 @@
+import React from "react";
+import { fetchLandlordPortfolioScore, type PortfolioScoreExternalV1 } from "../../api/landlordPortfolioScoreApi";
+import {
+  fetchPortfolioScoreSharing,
+  rotatePortfolioScoreSharingToken,
+  updatePortfolioScoreSharing,
+  type PortfolioScoreShareRecordV1,
+  type PortfolioScoreVisibility,
+} from "../../api/landlordPortfolioScoreSharingApi";
+import { MacShell } from "../../components/layout/MacShell";
+import { Card, Section } from "../../components/ui/Ui";
+import { useToast } from "../../components/ui/ToastProvider";
+import { useEntitlements } from "@/hooks/useEntitlements";
+import { LockedFeature } from "@/components/billing/LockedFeature";
+import { FeatureTeaser } from "@/components/billing/FeatureTeaser";
+import { resolveRequiredPlanLabel } from "@/lib/upgradePrompt";
+import PortfolioScoreHeader from "../../components/portfolioScoreExternal/PortfolioScoreHeader";
+import PortfolioScoreComponentList from "../../components/portfolioScoreExternal/PortfolioScoreComponentList";
+import PortfolioScoreTrustPanel from "../../components/portfolioScoreExternal/PortfolioScoreTrustPanel";
+import PortfolioScoreVisibilityCard from "../../components/portfolioScoreSharing/PortfolioScoreVisibilityCard";
+import PortfolioScoreShareControls from "../../components/portfolioScoreSharing/PortfolioScoreShareControls";
+
+export default function PortfolioScorePage() {
+  const { showToast } = useToast();
+  const {
+    loading: entitlementLoading,
+    canViewPortfolioScore,
+    canViewActionRecommendations,
+  } = useEntitlements();
+  const [portfolioScore, setPortfolioScore] = React.useState<PortfolioScoreExternalV1 | null>(null);
+  const [sharing, setSharing] = React.useState<PortfolioScoreShareRecordV1 | null>(null);
+  const [shareUrl, setShareUrl] = React.useState<string | null>(null);
+  const [loading, setLoading] = React.useState(true);
+  const [updatingSharing, setUpdatingSharing] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (entitlementLoading || !canViewPortfolioScore) return;
+
+    let mounted = true;
+    (async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const [scoreResponse, sharingResponse] = await Promise.all([
+          fetchLandlordPortfolioScore(),
+          fetchPortfolioScoreSharing(),
+        ]);
+        if (!mounted) return;
+        setPortfolioScore(scoreResponse.portfolioScore);
+        setSharing(sharingResponse.sharing);
+        setShareUrl(
+          sharingResponse.shareUrl ? `${window.location.origin}${sharingResponse.shareUrl}` : null
+        );
+      } catch (err: any) {
+        if (!mounted) return;
+        const message = err?.message || "Failed to load portfolio score";
+        setError(message);
+        showToast({
+          message: "Failed to load portfolio score",
+          description: message,
+          variant: "error",
+        });
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [canViewPortfolioScore, entitlementLoading, showToast]);
+
+  const scorePlanLabel = resolveRequiredPlanLabel("portfolio_score") || "Pro";
+  const recommendationsPlanLabel =
+    resolveRequiredPlanLabel("portfolio_action_recommendations") || "Elite";
+
+  const handleChangeVisibility = async (visibility: PortfolioScoreVisibility) => {
+    try {
+      setUpdatingSharing(true);
+      const response = await updatePortfolioScoreSharing({ visibility });
+      setSharing(response.sharing);
+      setShareUrl(response.shareUrl ? `${window.location.origin}${response.shareUrl}` : null);
+    } catch (err: any) {
+      showToast({
+        message: "Failed to update sharing",
+        description: err?.message || "Unable to update Portfolio Score™ sharing controls.",
+        variant: "error",
+      });
+    } finally {
+      setUpdatingSharing(false);
+    }
+  };
+
+  const handleRotate = async () => {
+    try {
+      setUpdatingSharing(true);
+      const response = await rotatePortfolioScoreSharingToken();
+      setSharing(response.sharing);
+      setShareUrl(response.shareUrl ? `${window.location.origin}${response.shareUrl}` : null);
+    } catch (err: any) {
+      showToast({
+        message: "Failed to rotate sharing link",
+        description: err?.message || "Unable to rotate Portfolio Score™ share link.",
+        variant: "error",
+      });
+    } finally {
+      setUpdatingSharing(false);
+    }
+  };
+
+  return (
+    <MacShell title="Portfolio score">
+      <div style={{ display: "grid", gap: 16 }}>
+        <Section>
+          <div style={{ display: "grid", gap: 6 }}>
+            <h1 style={{ margin: 0, fontSize: "1.5rem" }}>Portfolio Score™</h1>
+            <div style={{ color: "#475569", maxWidth: 820 }}>
+              A structured view of how consistently your portfolio operations are performing over time.
+            </div>
+          </div>
+        </Section>
+
+        {entitlementLoading ? <Card>Loading portfolio score…</Card> : null}
+        {!entitlementLoading && !canViewPortfolioScore ? (
+          <LockedFeature
+            featureKey="portfolio_score"
+            title={`Unlock Portfolio Score™ on ${scorePlanLabel}`}
+            description="Portfolio Score™ adds a structured score, grade, and component-level view so you can track operational consistency more clearly."
+            hint="Your portfolio health summary remains available while Portfolio Score™ stays on a higher tier."
+            ctaLabel={`Upgrade to ${scorePlanLabel}`}
+          />
+        ) : null}
+        {!entitlementLoading && canViewPortfolioScore && loading ? <Card>Loading portfolio score…</Card> : null}
+        {!entitlementLoading && canViewPortfolioScore && !loading && error ? (
+          <Card style={{ color: "#b91c1c" }}>Failed to load portfolio score: {error}</Card>
+        ) : null}
+
+        {!entitlementLoading && canViewPortfolioScore && !loading && !error && portfolioScore ? (
+          <>
+            <PortfolioScoreHeader portfolioScore={portfolioScore} />
+            <PortfolioScoreVisibilityCard sharing={sharing} />
+            <PortfolioScoreShareControls
+              sharing={sharing}
+              shareUrl={shareUrl}
+              updating={updatingSharing}
+              onChangeVisibility={handleChangeVisibility}
+              onRotate={handleRotate}
+            />
+            <PortfolioScoreComponentList components={portfolioScore.components} />
+            <PortfolioScoreTrustPanel trust={portfolioScore.trust} />
+            {!canViewActionRecommendations ? (
+              <FeatureTeaser
+                featureKey="portfolio_action_recommendations"
+                eyebrow={`${recommendationsPlanLabel} intelligence`}
+                title={`Unlock recommended actions on ${recommendationsPlanLabel}`}
+                description="Add prioritized landlord-safe next steps so your Portfolio Score™ turns into clearer daily operational guidance."
+                ctaLabel={`Upgrade to ${recommendationsPlanLabel}`}
+              />
+            ) : null}
+          </>
+        ) : null}
+      </div>
+    </MacShell>
+  );
+}

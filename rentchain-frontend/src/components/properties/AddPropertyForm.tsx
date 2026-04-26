@@ -9,6 +9,8 @@ import { colors, radius, text } from "../../styles/tokens";
 import { setOnboardingStep } from "../../api/onboardingApi";
 import { useToast } from "@/components/ui/ToastProvider";
 import { PROVINCE_OPTIONS } from "@/lib/provinces";
+import { track } from "../../lib/analytics";
+import { useAuth } from "../../context/useAuth";
 import "../../styles/propertiesMobile.css";
 
 interface AddPropertyFormProps {
@@ -39,6 +41,7 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
   onCreated,
   onExistingPropertyId,
 }) => {
+  const { user } = useAuth();
   const [name, setName] = useState("");
   const [pid, setPid] = useState("");
   const [addressLine1, setAddressLine1] = useState("");
@@ -56,6 +59,7 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
   const [successText, setSuccessText] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(true);
   const [complianceExpanded, setComplianceExpanded] = useState(false);
+  const [unitsExpanded, setUnitsExpanded] = useState(false);
   const { showToast } = useToast();
   const inputStyle: React.CSSProperties = {
     padding: "8px 10px",
@@ -244,7 +248,13 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
         });
       }
       const { property } = await createProperty(payload);
-      setSuccessText("Property created and units captured successfully.");
+      track("activation_property_created", {
+        surface: "properties_page",
+        source: "add_property_form",
+        plan: user?.plan || "free",
+        route: typeof window !== "undefined" ? window.location.pathname : undefined,
+      });
+      setSuccessText("Your first property is set up. Add a unit or invite a tenant next when you are ready.");
       if (onCreated) {
         onCreated(property);
       }
@@ -329,6 +339,24 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
         >
           <div
             style={{
+              borderRadius: 12,
+              border: "1px solid #dbe4f0",
+              background: "#f8fbff",
+              padding: 12,
+              display: "grid",
+              gap: 6,
+            }}
+          >
+            <div style={{ fontSize: "0.92rem", fontWeight: 700, color: "#0f172a" }}>
+              Only three details are required to get started
+            </div>
+            <div style={{ fontSize: "0.84rem", color: "#475569", lineHeight: 1.5 }}>
+              Enter the street address, city, and total units. You can add amenities, unit details,
+              and compliance information after your first property is set up.
+            </div>
+          </div>
+          <div
+            style={{
               display: "grid",
               gridTemplateColumns: "minmax(0, 1.4fr) minmax(0, 1.2fr)",
               columnGap: 20,
@@ -343,8 +371,12 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
+            placeholder="Maple Street Apartments"
             style={{ width: "100%", padding: 8, borderRadius: 8, border: "1px solid #374151" }}
           />
+          <div style={{ marginTop: 4, fontSize: "0.76rem", color: "#6b7280" }}>
+            Use a simple name you will recognize later. You can leave this blank for now.
+          </div>
         </div>
         <div>
           <label style={{ display: "block", fontSize: "0.8rem", marginBottom: 4 }}>
@@ -354,6 +386,7 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
             type="text"
             value={city}
             onChange={(e) => setCity(e.target.value)}
+            placeholder="Halifax"
             required
             style={{ width: "100%", padding: 8, borderRadius: 8, border: "1px solid #374151" }}
           />
@@ -382,6 +415,7 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
             type="text"
             value={postalCode}
             onChange={(e) => setPostalCode(e.target.value)}
+            placeholder="B3J 2K9"
             style={{ width: "100%", padding: 8, borderRadius: 8, border: "1px solid #374151" }}
           />
         </div>
@@ -404,9 +438,13 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
             type="text"
             value={addressLine1}
             onChange={(e) => setAddressLine1(e.target.value)}
+            placeholder="123 Main Street"
             required
             style={{ width: "100%", padding: 8, borderRadius: 8, border: "1px solid #374151" }}
           />
+          <div style={{ marginTop: 4, fontSize: "0.76rem", color: "#6b7280" }}>
+            Start with the main street address for the property.
+          </div>
         </div>
         <div style={{ gridColumn: "1 / span 2" }}>
           <label style={{ display: "block", fontSize: "0.8rem", marginBottom: 4 }}>
@@ -416,6 +454,7 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
             type="text"
             value={addressLine2}
             onChange={(e) => setAddressLine2(e.target.value)}
+            placeholder="Suite, building, or other optional detail"
             style={{ width: "100%", padding: 8, borderRadius: 8, border: "1px solid #374151" }}
           />
         </div>
@@ -485,6 +524,9 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
           }
           style={{ width: "160px", padding: 8, borderRadius: 8, border: "1px solid #374151" }}
         />
+        <div style={{ marginTop: 4, fontSize: "0.76rem", color: "#6b7280" }}>
+          Enter the number of rentable units. RentChain will create simple numbered units for you.
+        </div>
       </div>
 
       <div>
@@ -510,220 +552,246 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
           gap: 8,
         }}
       >
-        <div
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 8,
-          }}
-        >
-          <div style={{ fontSize: "0.85rem", fontWeight: 600 }}>
-            Units &amp; Rents
-          </div>
-          <div style={{ fontSize: "0.78rem", color: "#9ca3af" }}>
-            Optional: skip to auto-create numbered units from your total count.
-          </div>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              fontSize: "0.78rem",
-            }}
-          >
-            <label
-              style={{
-                padding: "4px 8px",
-                borderRadius: 999,
-                border: "1px solid #4b5563",
-                cursor: "pointer",
-              }}
-            >
-              Import units from CSV
-              <input
-                type="file"
-                accept=".csv,text/csv"
-                onChange={handleCsvUpload}
-                style={{ display: "none" }}
-              />
-            </label>
-            <a className="rc-add-property-csv-link" href="/site/legal#templates">
-              CSV template
-            </a>
-            <span style={{ color: "#9ca3af" }}>
-              Expected headers: unitNumber, rent, bedrooms, bathrooms, sqft
-            </span>
-          </div>
-        </div>
-
-        <div
-          style={{
-            overflowX: "auto",
-          }}
-        >
-          <table
-            className="rc-add-property-units-table"
-            style={{
-              width: "100%",
-              borderCollapse: "collapse",
-              marginTop: 8,
-            }}
-          >
-            <thead>
-              <tr style={{ fontSize: "0.78rem", textAlign: "left", color: "#9ca3af" }}>
-                <th style={{ padding: "4px 6px" }}>Unit #</th>
-                <th style={{ padding: "4px 6px" }}>Rent *</th>
-                <th style={{ padding: "4px 6px" }}>Beds</th>
-                <th style={{ padding: "4px 6px" }}>Baths</th>
-                <th style={{ padding: "4px 6px" }}>Sqft</th>
-                <th style={{ padding: "4px 6px" }} />
-              </tr>
-            </thead>
-            <tbody>
-              {units.map((u) => (
-                <tr key={u.id}>
-                  <td style={{ padding: "4px 6px" }}>
-                    <input
-                      type="text"
-                      value={u.unitNumber}
-                      onChange={(e) =>
-                        handleUnitChange(u.id, "unitNumber", e.target.value)
-                      }
-                      placeholder="101"
-                      style={{
-                        width: "100%",
-                        padding: 6,
-                        borderRadius: 6,
-                        border: "1px solid #374151",
-                        fontSize: "0.8rem",
-                      }}
-                    />
-                  </td>
-                  <td style={{ padding: "4px 6px" }}>
-                    <input
-                      type="number"
-                      min={0}
-                      value={u.rent ?? ""}
-                      onChange={(e) =>
-                        handleUnitChange(u.id, "rent", e.target.value)
-                      }
-                      onFocus={() => {
-                        if (
-                          typeof window !== "undefined" &&
-                          window.matchMedia("(max-width: 768px)").matches &&
-                          String(u.rent ?? "") === "0"
-                        ) {
-                          handleUnitChange(u.id, "rent", "");
-                        }
-                      }}
-                      placeholder="1800"
-                      style={{
-                        width: "100%",
-                        padding: 6,
-                        borderRadius: 6,
-                        border: "1px solid #374151",
-                        fontSize: "0.8rem",
-                      }}
-                    />
-                  </td>
-                  <td style={{ padding: "4px 6px" }}>
-                    <input
-                      type="number"
-                      min={0}
-                      value={u.bedrooms ?? ""}
-                      onChange={(e) =>
-                        handleUnitChange(u.id, "bedrooms", e.target.value)
-                      }
-                      placeholder="2"
-                      style={{
-                        width: "100%",
-                        padding: 6,
-                        borderRadius: 6,
-                        border: "1px solid #374151",
-                        fontSize: "0.8rem",
-                      }}
-                    />
-                  </td>
-                  <td style={{ padding: "4px 6px" }}>
-                    <input
-                      type="number"
-                      min={0}
-                      value={u.bathrooms ?? ""}
-                      onChange={(e) =>
-                        handleUnitChange(u.id, "bathrooms", e.target.value)
-                      }
-                      placeholder="1"
-                      style={{
-                        width: "100%",
-                        padding: 6,
-                        borderRadius: 6,
-                        border: "1px solid #374151",
-                        fontSize: "0.8rem",
-                      }}
-                    />
-                  </td>
-                  <td style={{ padding: "4px 6px" }}>
-                    <input
-                      type="number"
-                      min={0}
-                      value={u.sqft ?? ""}
-                      onChange={(e) => handleUnitChange(u.id, "sqft", e.target.value)}
-                      placeholder="750"
-                      style={{
-                        width: "100%",
-                        padding: 6,
-                        borderRadius: 6,
-                        border: "1px solid #374151",
-                        fontSize: "0.8rem",
-                      }}
-                    />
-                  </td>
-                  <td style={{ padding: "4px 6px", textAlign: "right" }}>
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveUnitRow(u.id)}
-                      className="rc-remove-unit-row"
-                      style={{
-                        fontSize: "0.75rem",
-                        padding: "4px 8px",
-                        borderRadius: 999,
-                        border: "1px solid #cbd5e1",
-                        background: "rgba(248,250,252,0.92)",
-                        color: "#1f2937",
-                        cursor: "pointer",
-                        fontWeight: 600,
-                      }}
-                    >
-                      Remove
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
         <button
           type="button"
-          onClick={handleAddUnitRow}
-          className="rc-add-unit-row"
+          onClick={() => setUnitsExpanded((current) => !current)}
           style={{
-            marginTop: 8,
-            fontSize: "0.8rem",
-            padding: "6px 12px",
-            borderRadius: 999,
-            border: "1px dashed #2563eb",
-            background: "rgba(219,234,254,0.7)",
-            color: "#1d4ed8",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 10,
+            width: "100%",
+            border: "none",
+            background: "transparent",
+            padding: 0,
             cursor: "pointer",
-            alignSelf: "flex-start",
-            fontWeight: 700,
+            color: "#0f172a",
           }}
         >
-          + Add unit row
+          <span style={{ fontSize: "0.9rem", fontWeight: 700 }}>Units &amp; Rents (Optional)</span>
+          <span style={{ fontSize: "0.8rem", color: "#475569" }}>
+            {unitsExpanded ? "Hide details" : "Add details now"}
+          </span>
         </button>
+        <div style={{ fontSize: "0.8rem", color: "#6b7280", lineHeight: 1.5 }}>
+          Skip this for now if you just want to get your first property live. RentChain will create
+          simple numbered units from your total count.
+        </div>
+        {unitsExpanded ? (
+          <>
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 8,
+              }}
+            >
+              <div style={{ fontSize: "0.78rem", color: "#9ca3af" }}>
+                Add unit numbers and rents now if you already have them.
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  fontSize: "0.78rem",
+                }}
+              >
+                <label
+                  style={{
+                    padding: "4px 8px",
+                    borderRadius: 999,
+                    border: "1px solid #4b5563",
+                    cursor: "pointer",
+                  }}
+                >
+                  Import units from CSV
+                  <input
+                    type="file"
+                    accept=".csv,text/csv"
+                    onChange={handleCsvUpload}
+                    style={{ display: "none" }}
+                  />
+                </label>
+                <a className="rc-add-property-csv-link" href="/site/legal#templates">
+                  CSV template
+                </a>
+                <span style={{ color: "#9ca3af" }}>
+                  Expected headers: unitNumber, rent, bedrooms, bathrooms, sqft
+                </span>
+              </div>
+            </div>
+
+            <div
+              style={{
+                overflowX: "auto",
+              }}
+            >
+              <table
+                className="rc-add-property-units-table"
+                style={{
+                  width: "100%",
+                  borderCollapse: "collapse",
+                  marginTop: 8,
+                }}
+              >
+                <thead>
+                  <tr style={{ fontSize: "0.78rem", textAlign: "left", color: "#9ca3af" }}>
+                    <th style={{ padding: "4px 6px" }}>Unit #</th>
+                    <th style={{ padding: "4px 6px" }}>Rent *</th>
+                    <th style={{ padding: "4px 6px" }}>Beds</th>
+                    <th style={{ padding: "4px 6px" }}>Baths</th>
+                    <th style={{ padding: "4px 6px" }}>Sqft</th>
+                    <th style={{ padding: "4px 6px" }} />
+                  </tr>
+                </thead>
+                <tbody>
+                  {units.map((u) => (
+                    <tr key={u.id}>
+                      <td style={{ padding: "4px 6px" }}>
+                        <input
+                          type="text"
+                          value={u.unitNumber}
+                          onChange={(e) =>
+                            handleUnitChange(u.id, "unitNumber", e.target.value)
+                          }
+                          placeholder="101"
+                          style={{
+                            width: "100%",
+                            padding: 6,
+                            borderRadius: 6,
+                            border: "1px solid #374151",
+                            fontSize: "0.8rem",
+                          }}
+                        />
+                      </td>
+                      <td style={{ padding: "4px 6px" }}>
+                        <input
+                          type="number"
+                          min={0}
+                          value={u.rent ?? ""}
+                          onChange={(e) =>
+                            handleUnitChange(u.id, "rent", e.target.value)
+                          }
+                          onFocus={() => {
+                            if (
+                              typeof window !== "undefined" &&
+                              window.matchMedia("(max-width: 768px)").matches &&
+                              String(u.rent ?? "") === "0"
+                            ) {
+                              handleUnitChange(u.id, "rent", "");
+                            }
+                          }}
+                          placeholder="1800"
+                          style={{
+                            width: "100%",
+                            padding: 6,
+                            borderRadius: 6,
+                            border: "1px solid #374151",
+                            fontSize: "0.8rem",
+                          }}
+                        />
+                      </td>
+                      <td style={{ padding: "4px 6px" }}>
+                        <input
+                          type="number"
+                          min={0}
+                          value={u.bedrooms ?? ""}
+                          onChange={(e) =>
+                            handleUnitChange(u.id, "bedrooms", e.target.value)
+                          }
+                          placeholder="2"
+                          style={{
+                            width: "100%",
+                            padding: 6,
+                            borderRadius: 6,
+                            border: "1px solid #374151",
+                            fontSize: "0.8rem",
+                          }}
+                        />
+                      </td>
+                      <td style={{ padding: "4px 6px" }}>
+                        <input
+                          type="number"
+                          min={0}
+                          value={u.bathrooms ?? ""}
+                          onChange={(e) =>
+                            handleUnitChange(u.id, "bathrooms", e.target.value)
+                          }
+                          placeholder="1"
+                          style={{
+                            width: "100%",
+                            padding: 6,
+                            borderRadius: 6,
+                            border: "1px solid #374151",
+                            fontSize: "0.8rem",
+                          }}
+                        />
+                      </td>
+                      <td style={{ padding: "4px 6px" }}>
+                        <input
+                          type="number"
+                          min={0}
+                          value={u.sqft ?? ""}
+                          onChange={(e) => handleUnitChange(u.id, "sqft", e.target.value)}
+                          placeholder="750"
+                          style={{
+                            width: "100%",
+                            padding: 6,
+                            borderRadius: 6,
+                            border: "1px solid #374151",
+                            fontSize: "0.8rem",
+                          }}
+                        />
+                      </td>
+                      <td style={{ padding: "4px 6px", textAlign: "right" }}>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveUnitRow(u.id)}
+                          className="rc-remove-unit-row"
+                          style={{
+                            fontSize: "0.75rem",
+                            padding: "4px 8px",
+                            borderRadius: 999,
+                            border: "1px solid #cbd5e1",
+                            background: "rgba(248,250,252,0.92)",
+                            color: "#1f2937",
+                            cursor: "pointer",
+                            fontWeight: 600,
+                          }}
+                        >
+                          Remove
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleAddUnitRow}
+              className="rc-add-unit-row"
+              style={{
+                marginTop: 8,
+                fontSize: "0.8rem",
+                padding: "6px 12px",
+                borderRadius: 999,
+                border: "1px dashed #2563eb",
+                background: "rgba(219,234,254,0.7)",
+                color: "#1d4ed8",
+                cursor: "pointer",
+                alignSelf: "flex-start",
+                fontWeight: 700,
+              }}
+            >
+              + Add unit row
+            </button>
+          </>
+        ) : null}
       </div>
 
       {errorText && (
@@ -751,7 +819,7 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
           opacity: isSubmitting ? 0.7 : 1,
         }}
       >
-        {isSubmitting ? "Saving..." : "Add property"}
+        {isSubmitting ? "Saving..." : "Create property"}
       </button>
     </form>
       )}

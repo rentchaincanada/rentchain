@@ -5,14 +5,15 @@ import { spacing, text } from "../../styles/tokens";
 import { MarketingLayout } from "./MarketingLayout";
 import { useAuth } from "../../context/useAuth";
 import { useCapabilities } from "../../hooks/useCapabilities";
-import { startCheckout } from "../../billing/startCheckout";
 import {
   CANONICAL_TIER_MATRIX,
   DEFAULT_PLANS,
   PLAN_ORDER,
+  TIER_POSITIONING_COPY,
   type PricingInterval,
   type PricingPlanKey,
 } from "../../constants/pricingPlans";
+import { normalizePlan } from "../../lib/plan";
 import { useLanguage } from "../../context/LanguageContext";
 import { marketingCopy } from "../../content/marketingCopy";
 import { track } from "../../lib/analytics";
@@ -33,14 +34,6 @@ const wrappingTextStyle: React.CSSProperties = {
   wordBreak: "break-word",
 };
 
-function normalizePlan(input?: string | null): PlanKey {
-  const raw = String(input || "").trim().toLowerCase();
-  if (raw === "starter" || raw === "core") return "starter";
-  if (raw === "pro") return "pro";
-  if (raw === "elite" || raw === "business" || raw === "enterprise") return "elite";
-  return "free";
-}
-
 function isAtOrAbove(plan: PlanKey, target: PlanKey) {
   return PLAN_ORDER.indexOf(plan) >= PLAN_ORDER.indexOf(target);
 }
@@ -56,16 +49,13 @@ function pricingCardShadow(plan: PlanKey, hovered: boolean) {
   return hovered ? "0 16px 32px rgba(15,23,42,0.10)" : "0 10px 24px rgba(15,23,42,0.06)";
 }
 
-const PLAN_AUDIENCE_COPY: Record<PlanKey, string> = {
-  free: "For landlords getting started and wanting to try the basics with one property.",
-  starter: "For landlords running day-to-day rental operations across active units.",
-  pro: "For growing operators who want stronger tools, clearer visibility, and more control.",
-  elite: "For portfolios that need deeper oversight, reporting, and portfolio-level visibility.",
-};
-
-const PLAN_SUPPORT_COPY: Partial<Record<PlanKey, string>> = {
-  starter: "Free helps you get started. Starter is where RentChain becomes your everyday operating system for rental work.",
-};
+function buildBillingUpgradePath(target: Exclude<PlanKey, "free">, interval: PricingInterval) {
+  const params = new URLSearchParams({
+    upgradePlan: target,
+    upgradeInterval: interval === "yearly" ? "year" : "month",
+  });
+  return `/billing?${params.toString()}`;
+}
 
 const PLAN_CALLOUT_COPY: Partial<
   Record<
@@ -79,25 +69,28 @@ const PLAN_CALLOUT_COPY: Partial<
   >
 > = {
   pro: {
-    title: "Built for landlords handling more moving parts",
+    title: "Built for operational control",
     description:
-      "Pro gives growing landlords better visibility, stronger follow-through, and cleaner records as the business gets busier.",
+      "Pro is designed for landlords and teams who need the day-to-day workflow to stay organized, reviewable, and easier to report on.",
     bullets: [
-      "Keep property, tenant, and screening work easier to review",
-      "Stay on top of filing and compliance tasks when they matter",
-      "Share clearer reports with partners, owners, or accountants",
+      "Keep exports and reporting ready for month-end and stakeholder reviews",
+      "Make screening, compliance, and recordkeeping easier to follow through",
+      "Give team workflows clearer structure as more people and properties get involved",
     ],
-    proofLine: "A strong fit when simple tools are no longer enough but full portfolio overhead still feels excessive.",
+    proofLine:
+      "Best when workflow volume is growing and you want cleaner operational control before moving into portfolio intelligence.",
   },
   elite: {
-    title: "For teams that need deeper oversight",
+    title: "Built for insight-led oversight",
     description:
-      "Elite is for portfolio operators who want a higher level view of what is happening across properties, records, and workflows.",
+      "Elite is for portfolio operators who want more than operational control. It adds intelligence, deeper visibility, and portfolio-level context for decisions.",
     bullets: [
-      "See more across the portfolio instead of property by property",
-      "Keep leadership reporting and oversight cleaner",
-      "Support more complex rental operations with stronger visibility",
+      "See portfolio trends and advanced analytics in one place",
+      "Use AI summaries and audit visibility to review the bigger picture faster",
+      "Support leadership and oversight decisions with stronger portfolio context",
     ],
+    proofLine:
+      "Best when the question is no longer just what happened, but what needs attention across the portfolio.",
   },
 };
 
@@ -114,6 +107,7 @@ const PricingPage: React.FC = () => {
   const [isCompactDesktop, setIsCompactDesktop] = React.useState(false);
   const [pricingByPlan, setPricingByPlan] = React.useState<Partial<Record<BillingPlanPricing["key"], BillingPlanPricing>>>({});
   const [hoveredPlan, setHoveredPlan] = React.useState<PlanKey | null>(null);
+  const trackedInitialInterval = React.useRef(false);
   const safeTrack = (eventName: string, props: Record<string, unknown>) => {
     try {
       track(eventName, props);
@@ -163,6 +157,29 @@ const PricingPage: React.FC = () => {
       };
     }
   }, []);
+
+  React.useEffect(() => {
+    safeTrack("pricing_page_viewed", {
+      surface: "marketing_pricing",
+      currentPlan,
+      interval,
+      route: typeof window !== "undefined" ? window.location.pathname : undefined,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  React.useEffect(() => {
+    if (!trackedInitialInterval.current) {
+      trackedInitialInterval.current = true;
+      return;
+    }
+    safeTrack("pricing_interval_changed", {
+      surface: "marketing_pricing",
+      currentPlan,
+      interval,
+      route: typeof window !== "undefined" ? window.location.pathname : undefined,
+    });
+  }, [currentPlan, interval]);
 
   React.useEffect(() => {
     let active = true;
@@ -221,6 +238,19 @@ const PricingPage: React.FC = () => {
     if (plan === "pro") {
       safeTrack("pricing_timeline_cta_clicked", { surface: "marketing" });
     }
+    const action = !isAuthed
+      ? "login_redirect"
+      : isAtOrAbove(currentPlan, plan)
+        ? "manage_existing_plan"
+        : "open_billing_hub";
+    safeTrack("pricing_plan_cta_clicked", {
+      surface: "marketing_pricing",
+      currentPlan,
+      targetPlan: plan,
+      interval,
+      action,
+      route: typeof window !== "undefined" ? window.location.pathname : undefined,
+    });
     if (!isAuthed) {
       navigate("/login?next=/site/pricing");
       return;
@@ -229,13 +259,19 @@ const PricingPage: React.FC = () => {
       navigate("/billing");
       return;
     }
-    void startCheckout({
-      tier: plan,
-      interval: "monthly",
-      featureKey: "pricing",
-      source: "marketing_pricing",
-      redirectTo: "/billing",
-    });
+    navigate(buildBillingUpgradePath(plan, interval));
+  };
+
+  const planCtaLabel = (plan: Exclude<PlanKey, "free">) => {
+    if (!isAuthed) return `Start with ${copy.pricing.tierLabels[plan]}`;
+    if (isAuthed && isAtOrAbove(currentPlan, plan)) return "Manage plan";
+    return `See ${copy.pricing.tierLabels[plan]} in billing`;
+  };
+
+  const planCtaSupport = (plan: Exclude<PlanKey, "free">) => {
+    if (!isAuthed) return "Start inside the product first, then review this plan in billing only when you want more support.";
+    if (isAtOrAbove(currentPlan, plan)) return "Open billing to manage your current subscription details.";
+    return `Billing will show the ${copy.pricing.tierLabels[plan]} plan details before secure checkout opens, so you can understand the fit before deciding.`;
   };
 
   return (
@@ -269,6 +305,12 @@ const PricingPage: React.FC = () => {
           </p>
           <p style={{ margin: `${spacing.xs} 0 0`, color: text.muted, fontSize: "0.92rem" }}>
             Start on Free to try the basics, move to Starter for daily rental work, step up to Pro for stronger control, and use Elite for deeper portfolio oversight.
+          </p>
+          <p style={{ margin: `${spacing.xs} 0 0`, color: text.secondary, fontSize: "0.92rem", fontWeight: 600 }}>
+            Starter gives you the workflow foundation, Pro adds operational control and reporting, and Elite adds portfolio intelligence and oversight.
+          </p>
+          <p style={{ margin: `${spacing.xs} 0 0`, color: text.secondary, fontSize: "0.92rem" }}>
+            You can start and explore before committing to a paid plan. Pricing is here to show what opens next once the workflow is working for you.
           </p>
         </div>
 
@@ -362,29 +404,33 @@ const PricingPage: React.FC = () => {
                 <div style={{ fontSize: 21, fontWeight: 800, lineHeight: 1.15, ...wrappingTextStyle }}>
                   {copy.pricing.tierLabels[plan]}
                 </div>
-                {copy.pricing.tierBadges[plan] ? (
+                {plan !== "free" ? (
                   <span
                     style={{
                       border:
-                        plan === "pro" ? "1px solid rgba(37,99,235,0.4)" : "1px solid rgba(15,23,42,0.18)",
+                        plan === "pro" || plan === "elite"
+                          ? "1px solid rgba(37,99,235,0.4)"
+                          : "1px solid rgba(15,23,42,0.18)",
                       borderRadius: 999,
                       padding: "4px 12px",
                       fontSize: "0.74rem",
                       fontWeight: 700,
-                      color: plan === "pro" ? "#1d4ed8" : text.primary,
+                      color: plan === "pro" || plan === "elite" ? "#1d4ed8" : text.primary,
                       background:
-                        plan === "pro"
+                        plan === "pro" || plan === "elite"
                           ? "linear-gradient(180deg, rgba(37,99,235,0.14), rgba(37,99,235,0.08))"
                           : "rgba(15,23,42,0.06)",
                       ...wrappingTextStyle,
                     }}
                   >
-                    {copy.pricing.tierBadges[plan]}
+                    {TIER_POSITIONING_COPY[plan].badge}
                   </span>
                 ) : null}
               </div>
               <div style={{ color: text.muted, fontSize: "0.94rem", lineHeight: 1.65, minHeight: isMobile ? "auto" : 62, ...wrappingTextStyle }}>
-                {PLAN_AUDIENCE_COPY[plan]}
+                {plan === "free"
+                  ? "For landlords getting started and wanting to try the basics with one property."
+                  : TIER_POSITIONING_COPY[plan].audience}
               </div>
               <div style={{ fontSize: 28, fontWeight: 800, lineHeight: 1.05, ...wrappingTextStyle }}>{renderPrice(plan)}</div>
               <ul
@@ -441,14 +487,14 @@ const PricingPage: React.FC = () => {
                       </li>
                     ))}
                   </ul>
-                  {plan === "pro" ? (
+                  {PLAN_CALLOUT_COPY[plan]?.proofLine ? (
                     <div style={{ color: text.muted, fontSize: "0.82rem", lineHeight: 1.55, ...wrappingTextStyle }}>
-                      {PLAN_CALLOUT_COPY[plan]?.proofLine || copy.pricing.timelineSection.proofLine}
+                      {PLAN_CALLOUT_COPY[plan]?.proofLine}
                     </div>
                   ) : null}
                 </div>
               ) : null}
-              {plan === "starter" && PLAN_SUPPORT_COPY[plan] ? (
+              {plan !== "free" ? (
                 <div
                   style={{
                     color: text.muted,
@@ -461,7 +507,7 @@ const PricingPage: React.FC = () => {
                     ...wrappingTextStyle,
                   }}
                 >
-                  {PLAN_SUPPORT_COPY[plan]}
+                  {TIER_POSITIONING_COPY[plan].support}
                 </div>
               ) : null}
               <div style={{ marginTop: isMobile ? spacing.sm : "auto", paddingTop: spacing.sm, width: "100%" }}>
@@ -470,9 +516,14 @@ const PricingPage: React.FC = () => {
                     {copy.pricing.ctaStartFree}
                   </Button>
                 ) : (
-                  <Button type="button" onClick={() => handleUpgrade(plan)} style={{ width: "100%" }}>
-                    {copy.pricing.ctaByTier?.[plan] || copy.pricing.ctaUpgrade}
-                  </Button>
+                  <div style={{ display: "grid", gap: 8, width: "100%" }}>
+                    <Button type="button" onClick={() => handleUpgrade(plan)} style={{ width: "100%" }}>
+                      {planCtaLabel(plan)}
+                    </Button>
+                    <div style={{ color: text.muted, fontSize: "0.82rem", lineHeight: 1.55, ...wrappingTextStyle }}>
+                      {planCtaSupport(plan)}
+                    </div>
+                  </div>
                 )}
               </div>
             </Card>

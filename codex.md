@@ -88,3 +88,22 @@ gcloud run deploy
 ## Strict Rule
 
 Only read sub-docs when specifically prompted for that domain.
+
+## Mission Promotion Pipeline
+
+- Only execute CURRENT_MISSION.md or explicit mission
+- Do not infer future roadmap
+- Do not expand scope
+- Treat repo as execution-only
+
+## Merge gate policy
+
+- Only execute CURRENT_MISSION.md or explicit mission
+- Do not infer future roadmap
+- Do not expand scope
+- Treat repo as execution-only
+
+## Merge safety note
+
+- Do not treat `merge-gate` as a substitute for required delivery checks.
+- Follow the required check policy in `CODEX_RULES.md`.

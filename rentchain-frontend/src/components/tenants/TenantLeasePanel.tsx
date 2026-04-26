@@ -486,7 +486,7 @@ export const TenantLeasePanel: React.FC<TenantLeasePanelProps> = ({ tenantId }) 
               background: "rgba(255,255,255,0.01)",
             }}
           >
-            <div style={{ color: "#9ca3af", fontSize: 12, marginBottom: 6 }}>
+            <div style={{ color: "#475569", fontSize: 12, marginBottom: 6, fontWeight: 600 }}>
               Lease History
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -500,7 +500,7 @@ export const TenantLeasePanel: React.FC<TenantLeasePanelProps> = ({ tenantId }) 
                     display: "flex",
                     justifyContent: "space-between",
                     alignItems: "center",
-                    color: "#e5e7eb",
+                    color: "#0f172a",
                     fontSize: 13,
                   }}
                 >
@@ -508,7 +508,7 @@ export const TenantLeasePanel: React.FC<TenantLeasePanelProps> = ({ tenantId }) 
                     <div style={{ fontWeight: 600 }}>
                       {lease.propertyId} - Unit {lease.unitNumber}
                     </div>
-                    <div style={{ color: "#9ca3af", fontSize: 12 }}>
+                    <div style={{ color: "#475569", fontSize: 12 }}>
                       {formatDate(lease.startDate)} → {formatDate(lease.endDate)}
                     </div>
                   </div>
@@ -526,7 +526,7 @@ export const TenantLeasePanel: React.FC<TenantLeasePanelProps> = ({ tenantId }) 
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      <div style={{ fontWeight: 600, color: "#e5e7eb", fontSize: "1rem" }}>
+      <div style={{ fontWeight: 700, color: "#0f172a", fontSize: "1rem" }}>
         Lease Info
       </div>
       {content}

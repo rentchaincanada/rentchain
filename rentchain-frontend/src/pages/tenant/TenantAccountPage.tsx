@@ -1,9 +1,19 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { tenantApiFetch } from "../../api/tenantApiFetch";
+import {
+  getTenantNotificationPreferences,
+  updateTenantNotificationPreferences,
+  type TenantNotificationPreferences,
+} from "../../api/tenantNotificationPreferences";
 import { Card } from "../../components/ui/Ui";
 import { logoutTenant } from "../../lib/logoutTenant";
 import { colors, spacing, text as textTokens } from "../../styles/tokens";
+import {
+  DEFAULT_NOTIFICATION_CHANNEL_PREFERENCES,
+  NOTIFICATION_PREFERENCE_CATEGORIES,
+  normalizeNotificationChannelPreferences,
+} from "../notificationChannelRouting";
 
 type TenantMeResponse = {
   ok: boolean;
@@ -29,8 +39,13 @@ const sectionTitleStyle: React.CSSProperties = {
 
 export default function TenantAccountPage() {
   const [data, setData] = useState<TenantMeResponse["data"] | null>(null);
+  const [preferences, setPreferences] = useState<TenantNotificationPreferences | null>(null);
+  const [draftPreferences, setDraftPreferences] = useState(DEFAULT_NOTIFICATION_CHANNEL_PREFERENCES);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [preferencesLoading, setPreferencesLoading] = useState(true);
+  const [preferencesError, setPreferencesError] = useState<string | null>(null);
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
 
   useEffect(() => {
     let cancelled = false;
@@ -51,6 +66,51 @@ export default function TenantAccountPage() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadPreferences = async () => {
+      setPreferencesLoading(true);
+      setPreferencesError(null);
+      try {
+        const next = await getTenantNotificationPreferences();
+        if (!cancelled) {
+          setPreferences(next);
+          setDraftPreferences(normalizeNotificationChannelPreferences(next));
+        }
+      } catch (err: any) {
+        if (!cancelled) {
+          setPreferences(null);
+          setDraftPreferences(normalizeNotificationChannelPreferences(null));
+          setPreferencesError(err?.message || "Unable to load notification preferences.");
+        }
+      } finally {
+        if (!cancelled) {
+          setPreferencesLoading(false);
+        }
+      }
+    };
+    void loadPreferences();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const hasPreferenceChanges = JSON.stringify(draftPreferences) !== JSON.stringify(normalizeNotificationChannelPreferences(preferences));
+
+  async function savePreferences() {
+    setSaveState("saving");
+    setPreferencesError(null);
+    try {
+      const next = await updateTenantNotificationPreferences({ inApp: draftPreferences.inApp });
+      setPreferences(next);
+      setDraftPreferences(normalizeNotificationChannelPreferences(next));
+      setSaveState("saved");
+    } catch (err: any) {
+      setSaveState("error");
+      setPreferencesError(err?.message || "Unable to save notification preferences.");
+    }
+  }
 
   return (
     <Card elevated style={{ padding: spacing.lg, display: "grid", gap: spacing.md }}>
@@ -119,9 +179,86 @@ export default function TenantAccountPage() {
           </section>
 
           <section>
-            <div style={sectionTitleStyle}>Coming soon</div>
-            <div style={{ color: textTokens.muted }}>
-              Notification preferences and contact preferences will appear here.
+            <div style={sectionTitleStyle}>Notification preferences</div>
+            <div style={{ color: textTokens.muted, marginBottom: spacing.sm }}>
+              Choose which important workflow updates should appear in your in-app notification views.
+            </div>
+            <div
+              style={{
+                border: `1px solid ${colors.border}`,
+                borderRadius: 12,
+                padding: spacing.md,
+                display: "grid",
+                gap: spacing.sm,
+                background: colors.panel,
+              }}
+            >
+              <div style={{ color: textTokens.muted }}>
+                Supported channels: <strong style={{ color: textTokens.primary }}>In-app notifications</strong>
+              </div>
+              <div style={{ color: textTokens.muted }}>
+                Email updates are not enabled in this workspace yet, so this version only shows channels that currently exist.
+              </div>
+              {preferencesError ? <div style={{ color: colors.danger }}>{preferencesError}</div> : null}
+              {preferencesLoading ? (
+                <div style={{ color: textTokens.muted }}>Loading notification preferences…</div>
+              ) : (
+                <>
+                  {NOTIFICATION_PREFERENCE_CATEGORIES.map((item) => (
+                    <label
+                      key={item.key}
+                      style={{
+                        display: "grid",
+                        gap: 4,
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: 12,
+                        padding: spacing.sm,
+                        background: colors.card,
+                        cursor: "pointer",
+                      }}
+                    >
+                      <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <input
+                          type="checkbox"
+                          checked={draftPreferences.inApp[item.key]}
+                          onChange={(event) => {
+                            setDraftPreferences((current) => ({
+                              inApp: {
+                                ...current.inApp,
+                                [item.key]: event.target.checked,
+                              },
+                            }));
+                            setSaveState("idle");
+                          }}
+                        />
+                        <span style={{ fontWeight: 700, color: textTokens.primary }}>{item.label}</span>
+                      </span>
+                      <span style={{ color: textTokens.muted, paddingLeft: 30 }}>{item.description}</span>
+                    </label>
+                  ))}
+                  <div style={{ display: "flex", alignItems: "center", gap: spacing.sm, flexWrap: "wrap" }}>
+                    <button
+                      type="button"
+                      onClick={() => void savePreferences()}
+                      disabled={!hasPreferenceChanges || saveState === "saving"}
+                      style={{
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: 10,
+                        background: hasPreferenceChanges ? colors.card : colors.panel,
+                        color: textTokens.primary,
+                        padding: "8px 12px",
+                        cursor: hasPreferenceChanges && saveState !== "saving" ? "pointer" : "default",
+                        fontWeight: 600,
+                      }}
+                    >
+                      {saveState === "saving" ? "Saving…" : "Save preferences"}
+                    </button>
+                    {saveState === "saved" ? (
+                      <div style={{ color: "#166534", fontWeight: 600 }}>Preferences saved.</div>
+                    ) : null}
+                  </div>
+                </>
+              )}
             </div>
           </section>
         </>

@@ -5,6 +5,165 @@ import { rateLimitPublicApply } from "../middleware/rateLimit";
 
 const router = Router();
 
+const PARTIAL_PROGRESS_STATUSES = ["not_started", "started", "in_progress", "ready_to_submit", "submitted"] as const;
+const PARTIAL_PROGRESS_STEPS = [
+  "personal_info",
+  "residential_history",
+  "employment",
+  "references_assets",
+  "consent",
+] as const;
+const PARTIAL_PROGRESS_SECTIONS = PARTIAL_PROGRESS_STEPS;
+const PARTIAL_PROGRESS_VIEWING_CHOICES = ["already_viewed", "request_viewing"] as const;
+const PARTIAL_PROGRESS_REMINDER_DELAY_MS = 24 * 60 * 60 * 1000;
+
+type PartialProgressStatus = (typeof PARTIAL_PROGRESS_STATUSES)[number];
+type PartialProgressStep = (typeof PARTIAL_PROGRESS_STEPS)[number];
+type PartialProgressSection = (typeof PARTIAL_PROGRESS_SECTIONS)[number];
+type PartialProgressViewingChoice = (typeof PARTIAL_PROGRESS_VIEWING_CHOICES)[number];
+type SafePartialProgressInput = {
+  status: PartialProgressStatus;
+  completionPercent: number;
+  currentStep: PartialProgressStep | null;
+  completedSections: string[];
+  missingSections: string[];
+  hasCoApplicant: boolean;
+  viewingChoice: PartialProgressViewingChoice | null;
+};
+type StoredPartialProgress = SafePartialProgressInput & {
+  startedAt: number | null;
+  lastActivityAt: number | null;
+  submittedAt: number | null;
+  reminderEligibleAt: number | null;
+  reminderSentAt: number | null;
+};
+
+function normalizeStringArray(value: unknown, allowed: readonly string[]) {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  return value
+    .map((entry) => String(entry || "").trim())
+    .filter((entry) => allowed.includes(entry) && !seen.has(entry) && (seen.add(entry), true));
+}
+
+function sanitizePartialProgressInput(input: any) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    return { ok: false as const, error: "INVALID_PARTIAL_PROGRESS" };
+  }
+
+  const allowedKeys = new Set([
+    "status",
+    "completionPercent",
+    "currentStep",
+    "completedSections",
+    "missingSections",
+    "hasCoApplicant",
+    "viewingChoice",
+  ]);
+  const incomingKeys = Object.keys(input || {});
+  const unexpected = incomingKeys.filter((key) => !allowedKeys.has(key));
+  if (unexpected.length) {
+    return {
+      ok: false as const,
+      error: "INVALID_PARTIAL_PROGRESS_FIELDS",
+      fields: unexpected,
+    };
+  }
+
+  const statusRaw = String(input.status || "").trim();
+  const currentStepRaw = String(input.currentStep || "").trim();
+  const viewingChoiceRaw = String(input.viewingChoice || "").trim();
+  const completionPercentRaw = Number(input.completionPercent);
+
+  const status = PARTIAL_PROGRESS_STATUSES.includes(statusRaw as PartialProgressStatus)
+    ? (statusRaw as PartialProgressStatus)
+    : null;
+  const currentStep = PARTIAL_PROGRESS_STEPS.includes(currentStepRaw as PartialProgressStep)
+    ? (currentStepRaw as PartialProgressStep)
+    : null;
+  const viewingChoice = PARTIAL_PROGRESS_VIEWING_CHOICES.includes(viewingChoiceRaw as PartialProgressViewingChoice)
+    ? (viewingChoiceRaw as PartialProgressViewingChoice)
+    : null;
+  const completionPercent = Number.isFinite(completionPercentRaw)
+    ? Math.min(100, Math.max(0, Math.round(completionPercentRaw)))
+    : 0;
+  const completedSections = normalizeStringArray(input.completedSections, PARTIAL_PROGRESS_SECTIONS);
+  const missingSections = normalizeStringArray(input.missingSections, PARTIAL_PROGRESS_SECTIONS);
+  const hasCoApplicant = input.hasCoApplicant === true;
+
+  return {
+    ok: true as const,
+    value: {
+      status: status || (completionPercent >= 100 ? "ready_to_submit" : completionPercent > 0 ? "in_progress" : "not_started"),
+      completionPercent,
+      currentStep,
+      completedSections,
+      missingSections,
+      hasCoApplicant,
+      viewingChoice,
+    },
+  };
+}
+
+function normalizeStoredPartialProgress(input: any): StoredPartialProgress {
+  const sanitized = sanitizePartialProgressInput({
+    status: input?.status,
+    completionPercent: input?.completionPercent,
+    currentStep: input?.currentStep,
+    completedSections: input?.completedSections,
+    missingSections: input?.missingSections,
+    hasCoApplicant: input?.hasCoApplicant,
+    viewingChoice: input?.viewingChoice,
+  });
+  if (!sanitized.ok) {
+    return {
+      status: "not_started",
+      completionPercent: 0,
+      currentStep: null,
+      completedSections: [],
+      missingSections: [],
+      hasCoApplicant: false,
+      viewingChoice: null,
+      startedAt: null,
+      lastActivityAt: null,
+      submittedAt: null,
+      reminderEligibleAt: null,
+      reminderSentAt: null,
+    };
+  }
+
+  return {
+    ...sanitized.value,
+    startedAt: typeof input?.startedAt === "number" ? input.startedAt : null,
+    lastActivityAt: typeof input?.lastActivityAt === "number" ? input.lastActivityAt : null,
+    submittedAt: typeof input?.submittedAt === "number" ? input.submittedAt : null,
+    reminderEligibleAt: typeof input?.reminderEligibleAt === "number" ? input.reminderEligibleAt : null,
+    reminderSentAt: typeof input?.reminderSentAt === "number" ? input.reminderSentAt : null,
+  };
+}
+
+function buildPartialProgressPatch(existing: any, safeInput: SafePartialProgressInput, now: number): StoredPartialProgress {
+  const current = normalizeStoredPartialProgress(existing);
+  const isStartedStatus = safeInput.status !== "not_started";
+  const startedAt = current.startedAt || (isStartedStatus ? now : null);
+  const submittedAt =
+    safeInput.status === "submitted" ? current.submittedAt || now : current.submittedAt || null;
+  return {
+    status: safeInput.status,
+    completionPercent: safeInput.status === "submitted" ? 100 : safeInput.completionPercent,
+    currentStep: safeInput.status === "submitted" ? null : safeInput.currentStep,
+    completedSections: safeInput.completedSections,
+    missingSections: safeInput.status === "submitted" ? [] : safeInput.missingSections,
+    hasCoApplicant: safeInput.hasCoApplicant,
+    viewingChoice: safeInput.viewingChoice,
+    startedAt,
+    lastActivityAt: now,
+    submittedAt,
+    reminderEligibleAt: startedAt ? startedAt + PARTIAL_PROGRESS_REMINDER_DELAY_MS : null,
+    reminderSentAt: current.reminderSentAt || null,
+  };
+}
+
 async function findLinkByToken(token: string) {
   const tokenHash = createHash("sha256").update(token).digest("hex");
   const snap = await db.collection("applicationLinks").where("tokenHash", "==", tokenHash).limit(1).get();
@@ -85,12 +244,53 @@ router.get("/application-links/:token", async (req: any, res) => {
         unitId: link.unitId || null,
         expiresAt: link.expiresAt ?? null,
         landlordBrandName: null,
+        partialProgress: normalizeStoredPartialProgress(link.partialProgress),
       },
       context: { propertyName, unitLabel },
     });
   } catch (err: any) {
     console.error("[public application-links] lookup failed", err?.message || err);
     return res.status(500).json({ ok: false, error: "Failed to load application link" });
+  }
+});
+
+router.patch("/application-links/:token/progress", async (req: any, res) => {
+  res.setHeader("x-route-source", "publicApplicationLinksRoutes");
+  try {
+    const token = String(req.params?.token || "").trim();
+    if (!token) return res.status(400).json({ ok: false, error: "Missing token" });
+
+    const link = await findLinkByToken(token);
+    const now = Date.now();
+    const isExpired = link?.expiresAt && now > Number(link.expiresAt);
+    if (!link || link.status !== "ACTIVE" || isExpired) {
+      if (link?.id && isExpired && link.status === "ACTIVE") {
+        try {
+          await db.collection("applicationLinks").doc(link.id).set({ status: "EXPIRED" }, { merge: true });
+        } catch {
+          // ignore
+        }
+      }
+      return res.status(404).json({ ok: false, error: "APPLICATION_LINK_NOT_FOUND" });
+    }
+
+    const body = typeof req.body === "string" ? safeParse(req.body) : req.body || {};
+    const partialProgressInput = sanitizePartialProgressInput(body?.partialProgress);
+    if (!partialProgressInput.ok) {
+      return res.status(400).json({
+        ok: false,
+        error: partialProgressInput.error,
+        fields: "fields" in partialProgressInput ? partialProgressInput.fields : undefined,
+      });
+    }
+
+    const nextPartialProgress = buildPartialProgressPatch(link.partialProgress, partialProgressInput.value, now);
+    await db.collection("applicationLinks").doc(link.id).set({ partialProgress: nextPartialProgress }, { merge: true });
+
+    return res.json({ ok: true, data: { partialProgress: nextPartialProgress } });
+  } catch (err: any) {
+    console.error("[public application-links] progress update failed", err?.message || err);
+    return res.status(500).json({ ok: false, error: "APPLICATION_LINK_PROGRESS_UPDATE_FAILED" });
   }
 });
 
@@ -196,11 +396,12 @@ router.post("/rental-applications", rateLimitPublicApply, async (req: any, res) 
     const sig = applicantProfile?.signature;
     if (!sig) {
       missingProfile.push("signature");
-    } else if (sig.type === "drawn") {
-      if (!sig.drawnDataUrl) missingProfile.push("signature.drawnDataUrl");
-    } else if (sig.type === "typed") {
-      if (!sig.typedName) missingProfile.push("signature.typedName");
-      if (!sig.typedAcknowledge) missingProfile.push("signature.typedAcknowledge");
+    } else {
+      const signatureType = String(sig.type || "").trim();
+      const typedName = String(sig.typedName || "").trim();
+      if (signatureType !== "typed" && signatureType !== "drawn") missingProfile.push("signature.type");
+      if (!typedName) missingProfile.push("signature.typedName");
+      if (sig.typedAcknowledge !== true) missingProfile.push("signature.typedAcknowledge");
     }
     if (!applicationConsent?.accepted || !applicationConsent?.acceptedAt) {
       missingProfile.push("applicationConsent");
@@ -291,6 +492,23 @@ router.post("/rental-applications", rateLimitPublicApply, async (req: any, res) 
     };
 
     await appRef.set(payload, { merge: true });
+    await db.collection("applicationLinks").doc(link.id).set(
+      {
+        partialProgress: buildPartialProgressPatch(link.partialProgress, {
+          status: "submitted",
+          completionPercent: 100,
+          currentStep: null,
+          completedSections: [...PARTIAL_PROGRESS_SECTIONS],
+          missingSections: [],
+          hasCoApplicant: Boolean(body?.coApplicant),
+          viewingChoice:
+            body?.viewingChoice === "already_viewed" || body?.viewingChoice === "request_viewing"
+              ? body.viewingChoice
+              : normalizeStoredPartialProgress(link.partialProgress).viewingChoice,
+        }, createdAt),
+      },
+      { merge: true }
+    );
 
     return res.json({ ok: true, data: { applicationId } });
   } catch (err: any) {

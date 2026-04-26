@@ -7,6 +7,8 @@ const mocks = vi.hoisted(() => ({
   fetchPropertiesMock: vi.fn(),
   fetchCountsMock: vi.fn(),
   useToastMock: vi.fn(),
+  useAuthMock: vi.fn(),
+  useCapabilitiesMock: vi.fn(),
 }));
 
 vi.mock("../api/propertiesApi", () => ({
@@ -18,7 +20,25 @@ vi.mock("../components/layout/MacShell", () => ({
 }));
 
 vi.mock("../components/properties/AddPropertyForm", () => ({
-  AddPropertyForm: () => <div>Add form</div>,
+  AddPropertyForm: ({ onCreated }: any) => (
+    <div>
+      <div>Add form</div>
+      {onCreated ? (
+        <button
+          type="button"
+          onClick={() =>
+            onCreated({
+              id: "prop-created",
+              name: "Created Property",
+              portfolioStatus: "active",
+            })
+          }
+        >
+          Complete property setup
+        </button>
+      ) : null}
+    </div>
+  ),
 }));
 
 vi.mock("../components/property/PropertyActivityPanel", () => ({
@@ -71,6 +91,14 @@ vi.mock("../components/ui/ToastProvider", () => ({
   useToast: mocks.useToastMock,
 }));
 
+vi.mock("../context/useAuth", () => ({
+  useAuth: mocks.useAuthMock,
+}));
+
+vi.mock("../hooks/useCapabilities", () => ({
+  useCapabilities: mocks.useCapabilitiesMock,
+}));
+
 vi.mock("../lib/analytics", () => ({
   track: vi.fn(),
 }));
@@ -85,6 +113,14 @@ describe("PropertiesPage", () => {
     }));
     mocks.fetchCountsMock.mockResolvedValue({ counts: {} });
     mocks.useToastMock.mockReturnValue({ showToast: vi.fn() });
+    mocks.useAuthMock.mockReturnValue({
+      user: { id: "user-1", plan: "free", role: "landlord" },
+    });
+    mocks.useCapabilitiesMock.mockReturnValue({
+      caps: { plan: "free" },
+      features: { tenant_invites: false },
+      loading: false,
+    });
   });
 
   it("renders active and archived property filters", async () => {
@@ -105,5 +141,71 @@ describe("PropertiesPage", () => {
     });
 
     expect(screen.getByText("Archived properties are hidden from active portfolio views but preserved for records and history.")).toBeInTheDocument();
+  });
+
+  it("shows a guided first-property empty state for new users", async () => {
+    mocks.fetchPropertiesMock.mockResolvedValue({ items: [] });
+
+    render(
+      <MemoryRouter>
+        <PropertiesPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Start your rental workflow")).toBeInTheDocument();
+    expect(
+      screen.getByText("Add your first property to begin managing tenants, leases, and maintenance in one place.")
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add your first property" })).toBeInTheDocument();
+    expect(screen.getByText("Start here: add your first property")).toBeInTheDocument();
+  });
+
+  it("shows a free-safe next step after property creation", async () => {
+    mocks.fetchPropertiesMock.mockResolvedValue({ items: [] });
+
+    render(
+      <MemoryRouter>
+        <PropertiesPage />
+      </MemoryRouter>
+    );
+
+    const setupButtons = await screen.findAllByRole("button", {
+      name: "Complete property setup",
+    });
+    fireEvent.click(setupButtons[0]);
+
+    expect(await screen.findByText("Your first property is set up")).toBeInTheDocument();
+    expect(screen.getByText("Step 1 complete")).toBeInTheDocument();
+    expect(screen.getByText("Step 2 next")).toBeInTheDocument();
+    expect(screen.getByText("Add your first unit")).toBeInTheDocument();
+    expect(screen.getByText("Step 3 later")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add a unit" })).toBeInTheDocument();
+    expect(screen.getByText("Move into the application workflow")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Send application" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Invite a tenant" })).not.toBeInTheDocument();
+  });
+
+  it("keeps the later step free-safe when tenant invite capability is missing from features", async () => {
+    mocks.fetchPropertiesMock.mockResolvedValue({ items: [] });
+    mocks.useCapabilitiesMock.mockReturnValue({
+      caps: { plan: "free" },
+      features: {},
+      loading: false,
+    });
+
+    render(
+      <MemoryRouter>
+        <PropertiesPage />
+      </MemoryRouter>
+    );
+
+    const setupButtons = await screen.findAllByRole("button", {
+      name: "Complete property setup",
+    });
+    fireEvent.click(setupButtons[0]);
+
+    expect(await screen.findByText("Move into the application workflow")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Send application" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Invite a tenant" })).not.toBeInTheDocument();
   });
 });

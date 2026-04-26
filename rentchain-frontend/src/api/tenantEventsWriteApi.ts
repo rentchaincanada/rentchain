@@ -2,6 +2,7 @@ import { apiFetch } from "./http";
 import { getAuthToken } from "../lib/authToken";
 
 export type TenantEventType =
+  | "NOTE_ADDED"
   | "LEASE_STARTED"
   | "RENT_PAID"
   | "RENT_LATE"
@@ -32,6 +33,8 @@ export async function createTenantEvent(input: CreateTenantEventInput) {
 
   const defaultTitleFromType = (type: string): string => {
     switch (type) {
+      case "NOTE_ADDED":
+        return "Note added";
       case "RENT_PAID":
       case "PAYMENT_RECORDED":
         return "Payment recorded";

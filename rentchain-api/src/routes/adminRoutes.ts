@@ -7,6 +7,11 @@ import { getStripeClient, isStripeConfigured } from "../services/stripeService";
 import { getPlanConfig, resolvePlanFromPriceId, type BillingPlanKey } from "../config/planMatrix";
 import { getTuReferralMetricsForMonth } from "../services/metrics/tuReferralReport";
 import { getPublicStatusPayload } from "../services/statusService";
+import { loadAdminSubscriptionConversionFunnel } from "../services/admin/adminSubscriptionConversionView";
+import { loadAdminSubscriptionConversionInsights } from "../services/admin/adminSubscriptionConversionInsights";
+import { loadAdminActivationSummary } from "../services/admin/adminActivationSummary";
+import { loadAdminAnalyticsSnapshot } from "../services/admin/adminAnalyticsSnapshot";
+import { loadAdminSubscriptionConversionValidation } from "../services/admin/adminSubscriptionConversionValidation";
 import {
   createStatusIncident,
   resolveStatusIncident,
@@ -827,6 +832,84 @@ router.get("/events/summary", requireAdmin, async (req, res) => {
   } catch (err: any) {
     console.error("[admin] events summary failed", err?.message || err);
     return res.status(500).json({ ok: false, error: "EVENTS_SUMMARY_FAILED" });
+  }
+});
+
+router.get("/analytics/conversion-funnel", requireAdmin, async (req, res) => {
+  try {
+    const days = req.query?.days;
+    const payload = await loadAdminSubscriptionConversionFunnel({ days: typeof days === "string" ? days : undefined });
+    return res.json({
+      ok: true,
+      ...payload,
+    });
+  } catch (err: any) {
+    console.error("[admin] conversion funnel failed", err?.message || err);
+    return res.status(500).json({ ok: false, error: "CONVERSION_FUNNEL_FAILED" });
+  }
+});
+
+router.get("/analytics/conversion-insights", requireAdmin, async (req, res) => {
+  try {
+    const days = req.query?.days;
+    const payload = await loadAdminSubscriptionConversionInsights({
+      days: typeof days === "string" ? days : undefined,
+    });
+    return res.json({
+      ok: true,
+      ...payload,
+    });
+  } catch (err: any) {
+    console.error("[admin] conversion insights failed", err?.message || err);
+    return res.status(500).json({ ok: false, error: "CONVERSION_INSIGHTS_FAILED" });
+  }
+});
+
+router.get("/analytics/activation-summary", requireAdmin, async (req, res) => {
+  try {
+    const days = req.query?.days;
+    const payload = await loadAdminActivationSummary({
+      days: typeof days === "string" ? days : undefined,
+    });
+    return res.json({
+      ok: true,
+      ...payload,
+    });
+  } catch (err: any) {
+    console.error("[admin] activation summary failed", err?.message || err);
+    return res.status(500).json({ ok: false, error: "ACTIVATION_SUMMARY_FAILED" });
+  }
+});
+
+router.get("/analytics/snapshot", requireAdmin, async (req, res) => {
+  try {
+    const payload = await loadAdminAnalyticsSnapshot({
+      period: typeof req.query?.period === "string" ? req.query.period : undefined,
+      granularity: typeof req.query?.granularity === "string" ? req.query.granularity : undefined,
+    });
+    return res.json({
+      ok: true,
+      ...payload,
+    });
+  } catch (err: any) {
+    console.error("[admin] analytics snapshot failed", err?.message || err);
+    return res.status(500).json({ ok: false, error: "ANALYTICS_SNAPSHOT_FAILED" });
+  }
+});
+
+router.get("/analytics/conversion-validation", requireAdmin, async (req, res) => {
+  try {
+    const days = req.query?.days;
+    const payload = await loadAdminSubscriptionConversionValidation({
+      days: typeof days === "string" ? days : undefined,
+    });
+    return res.json({
+      ok: true,
+      ...payload,
+    });
+  } catch (err: any) {
+    console.error("[admin] conversion validation failed", err?.message || err);
+    return res.status(500).json({ ok: false, error: "CONVERSION_VALIDATION_FAILED" });
   }
 });
 

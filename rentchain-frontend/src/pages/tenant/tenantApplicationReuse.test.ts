@@ -141,6 +141,17 @@ describe("buildTenantApplicationReuseView", () => {
     });
 
     expect(result.metrics.map((item) => item.value)).toEqual(["62%", "1/3", "1", expect.any(String)]);
+    expect(result.packageCategories.map((item) => item.label)).toEqual([
+      "Profile details",
+      "Rental history",
+      "Documents & records",
+      "Consent / identity status",
+      "Application readiness",
+    ]);
+    expect(result.packageCategories[2]).toMatchObject({
+      label: "Documents & records",
+      status: "ready",
+    });
     expect(result.reusableProfileItems[0]).toMatchObject({
       label: "Profile basics",
       status: "needs_attention",

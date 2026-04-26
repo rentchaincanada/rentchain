@@ -1,10 +1,25 @@
 import React, { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { getTenantMaintenance, type MaintenanceWorkflowItem } from "../../api/maintenanceWorkflowApi";
-import { Card, Section } from "../../components/ui/Ui";
+import {
+  getTenantMaintenance,
+  updateTenantMaintenanceConfirmation,
+  updateTenantMaintenanceReopen,
+  updateTenantMaintenanceReworkAccess,
+  updateTenantMaintenanceReworkSignoff,
+  updateTenantMaintenanceSignoff,
+  type MaintenanceWorkflowItem,
+} from "../../api/maintenanceWorkflowApi";
+import { Button, Card, Section } from "../../components/ui/Ui";
 import { clearTenantToken, getTenantToken } from "../../lib/tenantAuth";
 import { colors, radius, spacing, text as textTokens } from "../../styles/tokens";
 import { TenantSurfaceShell, prettyStatus } from "./TenantWorkspaceShared";
+import { buildMaintenanceLifecycleView } from "../maintenanceWorkspaceState";
+import { buildMaintenanceAssignmentRoutingView } from "../maintenanceAssignmentRoutingState";
+import { buildMaintenanceConfirmationAccessView } from "../maintenanceConfirmationAccessState";
+import { buildMaintenanceReopenEscalationView } from "../maintenanceReopenEscalationState";
+import { buildMaintenanceServiceExecutionView } from "../maintenanceServiceExecutionState";
+import { buildMaintenanceResolutionVerificationView } from "../maintenanceResolutionVerificationState";
+import { buildMaintenanceSchedulingAccessView } from "../maintenanceSchedulingAccessState";
 
 function fmtDate(ts?: number | null) {
   if (!ts) return "—";
@@ -13,15 +28,77 @@ function fmtDate(ts?: number | null) {
   return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric" }).format(d);
 }
 
+function resolutionStatusLabel(value?: MaintenanceWorkflowItem["resolutionStatus"]) {
+  switch (value) {
+    case "completed_pending_review":
+      return "Completed and waiting for landlord review.";
+    case "landlord_approved":
+      return "Landlord approved the completed work.";
+    case "tenant_pending_signoff":
+      return "Your review is needed before this request is fully resolved.";
+    case "resolved":
+      return "This request has been marked resolved.";
+    case "follow_up_required":
+      return "This request needs follow-up before it can be fully resolved.";
+    default:
+      return "No resolution decision has been recorded yet.";
+  }
+}
+
+function reworkReviewStatusLabel(
+  value?: "pending_review" | "landlord_approved" | "tenant_pending_signoff" | "closed" | "follow_up_required" | null
+) {
+  switch (value) {
+    case "pending_review":
+      return "The return visit is complete and waiting for landlord review.";
+    case "landlord_approved":
+      return "The landlord reviewed the return visit and is preparing final closure.";
+    case "tenant_pending_signoff":
+      return "Your review is needed before the follow-up work can be closed.";
+    case "closed":
+      return "The follow-up work has been closed.";
+    case "follow_up_required":
+      return "The follow-up work still needs more attention.";
+    default:
+      return "No second-pass review has been recorded yet.";
+  }
+}
+
+function tenantNotificationMessages(item?: MaintenanceWorkflowItem | null) {
+  const messages: string[] = [];
+  if (item?.notifications?.tenant?.requiresAccessConfirmation) {
+    messages.push("Confirm access for return visit");
+  }
+  if (item?.notifications?.tenant?.requiresSignoff) {
+    messages.push("Review completed work");
+  }
+  if (item?.notifications?.tenant?.requiresReworkAwareness) {
+    messages.push("Rework in progress");
+  }
+  return messages;
+}
+
 export default function TenantMaintenanceRequestDetailPage() {
   const { id } = useParams();
   const [data, setData] = useState<MaintenanceWorkflowItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [savingAction, setSavingAction] = useState(false);
+  const [signoffReason, setSignoffReason] = useState("");
+  const [reopenReason, setReopenReason] = useState("");
+  const [reworkAccessNote, setReworkAccessNote] = useState("");
   const [sessionExpired, setSessionExpired] = useState(false);
   const [hasToken, setHasToken] = useState<boolean>(() =>
     typeof window === "undefined" ? true : !!getTenantToken()
   );
+  const lifecycleView = data ? buildMaintenanceLifecycleView(data, "tenant") : null;
+  const assignmentView = data ? buildMaintenanceAssignmentRoutingView(data, "tenant") : null;
+  const schedulingView = data ? buildMaintenanceSchedulingAccessView(data, "tenant") : null;
+  const confirmationView = data ? buildMaintenanceConfirmationAccessView(data, "tenant") : null;
+  const executionView = data ? buildMaintenanceServiceExecutionView(data, "tenant") : null;
+  const resolutionView = data ? buildMaintenanceResolutionVerificationView(data, "tenant") : null;
+  const reopenView = data ? buildMaintenanceReopenEscalationView(data, "tenant") : null;
+  const notificationMessages = tenantNotificationMessages(data);
 
   useEffect(() => {
     const token = getTenantToken();
@@ -98,6 +175,115 @@ export default function TenantMaintenanceRequestDetailPage() {
     );
   }
 
+  const applyConfirmationUpdate = async (payload: {
+    confirmationStatus?: "confirmed" | "needs_schedule_change";
+    acknowledgeAccess?: boolean;
+  }) => {
+    if (!id) return;
+    setSavingAction(true);
+    setError(null);
+    try {
+      const res = await updateTenantMaintenanceConfirmation(id, payload);
+      setData((res as any)?.item || (res as any)?.data || null);
+    } catch (err: any) {
+      const msg = err?.payload?.error || err?.message || "Unable to update the maintenance confirmation.";
+      setError(String(msg));
+    } finally {
+      setSavingAction(false);
+    }
+  };
+
+  const applyResolutionSignoff = async (decision: "resolved" | "not_resolved") => {
+    if (!id) return;
+    if (decision === "not_resolved" && !signoffReason.trim()) {
+      setError("Add a reason before requesting follow-up.");
+      return;
+    }
+    setSavingAction(true);
+    setError(null);
+    try {
+      const res = await updateTenantMaintenanceSignoff(id, {
+        decision,
+        reason: decision === "not_resolved" ? signoffReason.trim() : undefined,
+      });
+      setData((res as any)?.item || (res as any)?.data || null);
+      if (decision === "resolved") {
+        setSignoffReason("");
+      }
+    } catch (err: any) {
+      const msg = err?.payload?.error || err?.message || "Unable to update the maintenance resolution.";
+      setError(String(msg));
+    } finally {
+      setSavingAction(false);
+    }
+  };
+
+  const applyReworkResolutionSignoff = async (decision: "resolved" | "not_resolved") => {
+    if (!id) return;
+    if (decision === "not_resolved" && !signoffReason.trim()) {
+      setError("Add a reason before asking for more follow-up work.");
+      return;
+    }
+    setSavingAction(true);
+    setError(null);
+    try {
+      const res = await updateTenantMaintenanceReworkSignoff(id, {
+        decision,
+        reason: decision === "not_resolved" ? signoffReason.trim() : undefined,
+      });
+      setData((res as any)?.item || (res as any)?.data || null);
+      if (decision === "resolved") {
+        setSignoffReason("");
+      }
+    } catch (err: any) {
+      const msg = err?.payload?.error || err?.message || "Unable to update the rework review.";
+      setError(String(msg));
+    } finally {
+      setSavingAction(false);
+    }
+  };
+
+  const applyTenantReopen = async () => {
+    if (!id) return;
+    if (!reopenReason.trim()) {
+      setError("Add a note before reopening this request.");
+      return;
+    }
+    setSavingAction(true);
+    setError(null);
+    try {
+      const res = await updateTenantMaintenanceReopen(id, {
+        reason: reopenReason.trim(),
+      });
+      setData((res as any)?.item || (res as any)?.data || null);
+      setReopenReason("");
+    } catch (err: any) {
+      const msg = err?.payload?.error || err?.message || "Unable to reopen this maintenance request.";
+      setError(String(msg));
+    } finally {
+      setSavingAction(false);
+    }
+  };
+
+  const applyReworkAccessDecision = async (decision: "confirm" | "deny") => {
+    if (!id) return;
+    setSavingAction(true);
+    setError(null);
+    try {
+      const res = await updateTenantMaintenanceReworkAccess(id, {
+        decision,
+        note: reworkAccessNote.trim() || undefined,
+      });
+      setData((res as any)?.item || (res as any)?.data || null);
+      if (decision === "confirm") setReworkAccessNote("");
+    } catch (err: any) {
+      const msg = err?.payload?.error || err?.message || "Unable to update the rework access confirmation.";
+      setError(String(msg));
+    } finally {
+      setSavingAction(false);
+    }
+  };
+
   return (
     <TenantSurfaceShell
       title="Maintenance Request"
@@ -164,7 +350,7 @@ export default function TenantMaintenanceRequestDetailPage() {
                 <span>Status: {prettyStatus(data.status)}</span>
                 <span>Priority: {prettyStatus(data.priority)}</span>
                 <span>Category: {prettyStatus(data.category)}</span>
-                {data.assignedContractorName ? <span>Contractor: {data.assignedContractorName}</span> : null}
+                {assignmentView ? <span>Handling: {assignmentView.tenantVisibleLabel}</span> : null}
               </div>
               <div style={{ color: textTokens.muted, fontSize: "0.95rem" }}>
                 Created {fmtDate(data.createdAt)} • Updated {fmtDate(data.updatedAt)}
@@ -172,6 +358,568 @@ export default function TenantMaintenanceRequestDetailPage() {
               <div style={{ color: textTokens.primary, fontSize: "1rem", lineHeight: 1.5, whiteSpace: "pre-wrap" }}>
                 {data.description}
               </div>
+              {lifecycleView ? (
+                <div
+                  style={{
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: radius.md,
+                    padding: "12px 14px",
+                    background: colors.panel,
+                    display: "grid",
+                    gap: 8,
+                  }}
+                >
+                  <div style={{ fontWeight: 800, color: textTokens.primary }}>What this status means</div>
+                  <div style={{ color: textTokens.secondary }}>{lifecycleView.summary}</div>
+                  <div style={{ color: textTokens.primary, fontWeight: 700 }}>What happens next</div>
+                  {lifecycleView.nextSteps.map((step) => (
+                    <div key={step} style={{ color: textTokens.secondary }}>
+                      {step}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              {assignmentView ? (
+                <div
+                  style={{
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: radius.md,
+                    padding: "12px 14px",
+                    background: colors.panel,
+                    display: "grid",
+                    gap: 8,
+                  }}
+                >
+                  <div style={{ fontWeight: 800, color: textTokens.primary }}>Handling status</div>
+                  <div style={{ color: textTokens.secondary }}>{assignmentView.summary}</div>
+                  <div style={{ color: textTokens.primary, fontWeight: 700 }}>What happens next</div>
+                  {assignmentView.nextActions.map((step) => (
+                    <div key={step} style={{ color: textTokens.secondary }}>
+                      {step}
+                    </div>
+                  ))}
+                  {assignmentView.blockers.length ? (
+                    <>
+                      <div style={{ color: textTokens.primary, fontWeight: 700 }}>Needs attention</div>
+                      {assignmentView.blockers.map((item) => (
+                        <div key={item} style={{ color: textTokens.secondary }}>
+                          {item}
+                        </div>
+                      ))}
+                    </>
+                  ) : null}
+                </div>
+              ) : null}
+              {schedulingView ? (
+                <div
+                  style={{
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: radius.md,
+                    padding: "12px 14px",
+                    background: colors.panel,
+                    display: "grid",
+                    gap: 8,
+                  }}
+                >
+                  <div style={{ fontWeight: 800, color: textTokens.primary }}>Scheduling / access</div>
+                  <div style={{ color: textTokens.secondary }}>{schedulingView.summary}</div>
+                  <div style={{ color: textTokens.primary, fontWeight: 700 }}>Upcoming service window</div>
+                  <div style={{ color: textTokens.secondary }}>{schedulingView.serviceWindowSummary}</div>
+                  <div style={{ color: textTokens.primary, fontWeight: 700 }}>Access</div>
+                  <div style={{ color: textTokens.secondary }}>{schedulingView.accessLabel}</div>
+                  <div style={{ color: textTokens.primary, fontWeight: 700 }}>What happens next</div>
+                  {schedulingView.nextActions.map((step) => (
+                    <div key={step} style={{ color: textTokens.secondary }}>
+                      {step}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              {confirmationView ? (
+                <div
+                  style={{
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: radius.md,
+                    padding: "12px 14px",
+                    background: colors.panel,
+                    display: "grid",
+                    gap: 8,
+                  }}
+                >
+                  <div style={{ fontWeight: 800, color: textTokens.primary }}>Confirmation / access</div>
+                  <div style={{ color: textTokens.secondary }}>{confirmationView.summary}</div>
+                  <div style={{ color: textTokens.primary, fontWeight: 700 }}>Service readiness</div>
+                  <div style={{ color: textTokens.secondary }}>{confirmationView.readinessLabel}</div>
+                  <div style={{ color: textTokens.primary, fontWeight: 700 }}>Access</div>
+                  <div style={{ color: textTokens.secondary }}>{confirmationView.accessLabel}</div>
+                  {confirmationView.blockers.length ? (
+                    <>
+                      <div style={{ color: textTokens.primary, fontWeight: 700 }}>Needs attention</div>
+                      {confirmationView.blockers.map((item) => (
+                        <div key={item} style={{ color: textTokens.secondary }}>
+                          {item}
+                        </div>
+                      ))}
+                    </>
+                  ) : null}
+                  <div style={{ color: textTokens.primary, fontWeight: 700 }}>Next step</div>
+                  {confirmationView.nextActions.map((step) => (
+                    <div key={step} style={{ color: textTokens.secondary }}>
+                      {step}
+                    </div>
+                  ))}
+                  {data?.status === "scheduled" && schedulingView?.serviceWindowSummary !== "No service window has been confirmed yet." ? (
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 4 }}>
+                      <Button
+                        variant="secondary"
+                        onClick={() => void applyConfirmationUpdate({ confirmationStatus: "confirmed" })}
+                        disabled={savingAction || confirmationView.confirmationState === "confirmed"}
+                      >
+                        {savingAction ? "Saving..." : "Confirm service window"}
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        onClick={() => void applyConfirmationUpdate({ confirmationStatus: "needs_schedule_change" })}
+                        disabled={savingAction || confirmationView.confirmationState === "needs_schedule_change"}
+                      >
+                        {savingAction ? "Saving..." : "Request schedule change"}
+                      </Button>
+                      {data.accessRequired === true ? (
+                        <Button
+                          variant="secondary"
+                          onClick={() => void applyConfirmationUpdate({ acknowledgeAccess: true })}
+                          disabled={savingAction || confirmationView.accessState === "access_acknowledged"}
+                        >
+                          {savingAction ? "Saving..." : "Acknowledge access"}
+                        </Button>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+              {executionView ? (
+                <div
+                  style={{
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: radius.md,
+                    padding: "12px 14px",
+                    background: colors.panel,
+                    display: "grid",
+                    gap: 8,
+                  }}
+                >
+                  <div style={{ fontWeight: 800, color: textTokens.primary }}>Execution / completion</div>
+                  <div style={{ color: textTokens.secondary }}>{executionView.summary}</div>
+                  <div style={{ color: textTokens.primary, fontWeight: 700 }}>Current service state</div>
+                  <div style={{ color: textTokens.secondary }}>{executionView.tenantVisibleLabel}</div>
+                  <div style={{ color: textTokens.primary, fontWeight: 700 }}>Completion state</div>
+                  <div style={{ color: textTokens.secondary }}>{executionView.completionLabel}</div>
+                  {data.completionSummary ? (
+                    <>
+                      <div style={{ color: textTokens.primary, fontWeight: 700 }}>Completion note</div>
+                      <div style={{ color: textTokens.secondary }}>{data.completionSummary}</div>
+                    </>
+                  ) : null}
+                  {executionView.timelineEvents.length ? (
+                    <>
+                      <div style={{ color: textTokens.primary, fontWeight: 700 }}>Recent service updates</div>
+                      {executionView.timelineEvents.map((event) => (
+                        <div key={event.key} style={{ color: textTokens.secondary }}>
+                          {event.label} • {fmtDate(event.timestamp)}
+                        </div>
+                      ))}
+                    </>
+                  ) : null}
+                  {executionView.blockers.length ? (
+                    <>
+                      <div style={{ color: textTokens.primary, fontWeight: 700 }}>Needs attention</div>
+                      {executionView.blockers.map((item) => (
+                        <div key={item} style={{ color: textTokens.secondary }}>
+                          {item}
+                        </div>
+                      ))}
+                    </>
+                  ) : null}
+                  <div style={{ color: textTokens.primary, fontWeight: 700 }}>Next step</div>
+                  {executionView.nextActions.map((step) => (
+                    <div key={step} style={{ color: textTokens.secondary }}>
+                      {step}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              {notificationMessages.length ? (
+                <div
+                  style={{
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: radius.md,
+                    padding: "12px 14px",
+                    background: "#fffbeb",
+                    display: "grid",
+                    gap: 8,
+                  }}
+                >
+                  <div style={{ fontWeight: 800, color: textTokens.primary }}>Action needed</div>
+                  {notificationMessages.map((message) => (
+                    <div key={message} style={{ color: textTokens.secondary }}>
+                      {message}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              {data.reworkCycle || data.reworkHistory?.length ? (
+                <div
+                  style={{
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: radius.md,
+                    padding: "12px 14px",
+                    background: colors.panel,
+                    display: "grid",
+                    gap: 8,
+                  }}
+                >
+                  <div style={{ fontWeight: 800, color: textTokens.primary }}>Follow-up / rework</div>
+                  <div style={{ color: textTokens.secondary }}>
+                    {data.reworkCycle
+                      ? `Rework #${data.reworkCycle.cycleNumber} is ${data.reworkCycle.status.replaceAll("_", " ")}.`
+                      : "A follow-up cycle has been recorded for this request."}
+                  </div>
+                  {data.reworkCycle?.completionSummary ? (
+                    <>
+                      <div style={{ color: textTokens.primary, fontWeight: 700 }}>Latest rework completion summary</div>
+                      <div style={{ color: textTokens.secondary }}>{data.reworkCycle.completionSummary}</div>
+                    </>
+                  ) : null}
+                  <div style={{ color: textTokens.primary, fontWeight: 700 }}>What happens next</div>
+                  <div style={{ color: textTokens.secondary }}>
+                    {data.reworkReview?.status === "tenant_pending_signoff"
+                      ? "The return visit is complete. Review the updated work and let your landlord know whether the issue is now fully resolved."
+                      : data.reworkCycle?.status === "completed"
+                      ? "The updated work is back with your landlord for review before final signoff."
+                      : data.reworkCycle
+                      ? "Your maintenance request is in an active follow-up cycle. RentChain will keep the original history while this second pass is completed."
+                      : "Previous follow-up cycles stay attached to this request for a full maintenance record."}
+                  </div>
+                  {data.reworkReview ? (
+                    <>
+                      <div style={{ color: textTokens.primary, fontWeight: 700 }}>Second-pass review</div>
+                      <div style={{ color: textTokens.secondary }}>{reworkReviewStatusLabel(data.reworkReview.status)}</div>
+                      {data.reworkReview.closedAt ? (
+                        <div style={{ color: textTokens.secondary }}>Closed {fmtDate(data.reworkReview.closedAt)}.</div>
+                      ) : null}
+                      {data.reworkReview.tenantDeclineReason ? (
+                        <div style={{ color: textTokens.secondary }}>Your latest note: {data.reworkReview.tenantDeclineReason}</div>
+                      ) : null}
+                    </>
+                  ) : null}
+                  {data.reworkHistory?.length ? (
+                    <>
+                      <div style={{ color: textTokens.primary, fontWeight: 700 }}>Previous rework cycles</div>
+                      {data.reworkHistory.map((entry) => (
+                        <div key={entry.cycleNumber} style={{ color: textTokens.secondary }}>
+                          Rework #{entry.cycleNumber}: {entry.outcome || "recorded"} on {fmtDate(entry.completedAt)}
+                          {entry.notes ? ` — ${entry.notes}` : ""}
+                        </div>
+                      ))}
+                    </>
+                  ) : null}
+                  {data.reworkCycle?.schedule ? (
+                    <>
+                      <div style={{ color: textTokens.primary, fontWeight: 700 }}>Return visit coordination</div>
+                      <div style={{ color: textTokens.secondary }}>
+                        Status: {String(data.reworkCycle.schedule.status || "not_scheduled").replaceAll("_", " ")}
+                      </div>
+                      <div style={{ color: textTokens.secondary }}>
+                        Visit time: {fmtDate(data.reworkCycle.schedule.scheduledFor || data.reworkCycle.schedule.timeWindowStart)}
+                        {data.reworkCycle.schedule.timeWindowEnd
+                          ? ` to ${fmtDate(data.reworkCycle.schedule.timeWindowEnd)}`
+                          : ""}
+                      </div>
+                      <div style={{ color: textTokens.secondary }}>
+                        Access: {data.reworkCycle.schedule.requiresTenantAccess ? "required" : "not required"} • Your status:{" "}
+                        {String(data.reworkCycle.schedule.tenantAccessStatus || "pending").replaceAll("_", " ")}
+                      </div>
+                      {data.reworkCycle.schedule.tenantAccessNote ? (
+                        <div style={{ color: textTokens.secondary }}>{data.reworkCycle.schedule.tenantAccessNote}</div>
+                      ) : null}
+                      {data.reworkCycle.schedule.requiresTenantAccess &&
+                      data.reworkCycle.schedule.tenantAccessStatus !== "confirmed" &&
+                      data.reworkCycle.schedule.status !== "confirmed" ? (
+                        <>
+                          <textarea
+                            value={reworkAccessNote}
+                            onChange={(e) => setReworkAccessNote(e.target.value)}
+                            placeholder="Add an optional note about access for the return visit"
+                            rows={3}
+                            style={{
+                              width: "100%",
+                              padding: "10px",
+                              borderRadius: radius.md,
+                              border: `1px solid ${colors.border}`,
+                              background: colors.panel,
+                              color: textTokens.primary,
+                              resize: "vertical",
+                            }}
+                          />
+                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                            <Button variant="secondary" onClick={() => void applyReworkAccessDecision("confirm")} disabled={savingAction}>
+                              {savingAction ? "Saving..." : "Confirm return visit access"}
+                            </Button>
+                            <Button variant="secondary" onClick={() => void applyReworkAccessDecision("deny")} disabled={savingAction}>
+                              {savingAction ? "Saving..." : "Deny access / request reschedule"}
+                            </Button>
+                          </div>
+                        </>
+                      ) : null}
+                    </>
+                  ) : null}
+                  {data.reworkReview?.status === "tenant_pending_signoff" ? (
+                    <>
+                      <div style={{ color: textTokens.primary, fontWeight: 700 }}>Review the return visit</div>
+                      <div style={{ color: textTokens.secondary }}>
+                        Confirm whether the follow-up work fixed the issue, or ask for more follow-up if it still needs attention.
+                      </div>
+                      <textarea
+                        value={signoffReason}
+                        onChange={(e) => setSignoffReason(e.target.value)}
+                        placeholder="If more follow-up is needed, explain what is still incomplete or not working"
+                        rows={3}
+                        style={{
+                          width: "100%",
+                          borderRadius: 8,
+                          border: `1px solid ${colors.border}`,
+                          padding: 10,
+                          resize: "vertical",
+                        }}
+                      />
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <Button variant="secondary" disabled={savingAction} onClick={() => void applyReworkResolutionSignoff("resolved")}>
+                          {savingAction ? "Saving..." : "Mark follow-up resolved"}
+                        </Button>
+                        <Button variant="ghost" disabled={savingAction} onClick={() => void applyReworkResolutionSignoff("not_resolved")}>
+                          {savingAction ? "Saving..." : "Request more follow-up"}
+                        </Button>
+                      </div>
+                    </>
+                  ) : null}
+                </div>
+              ) : null}
+              {resolutionView ? (
+                <div
+                  style={{
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: radius.md,
+                    padding: "12px 14px",
+                    background: colors.panel,
+                    display: "grid",
+                    gap: 8,
+                  }}
+                >
+                  <div style={{ fontWeight: 800, color: textTokens.primary }}>Resolution / closure</div>
+                  <div style={{ color: textTokens.secondary }}>{resolutionView.summary}</div>
+                  <div style={{ color: textTokens.primary, fontWeight: 700 }}>Resolution status</div>
+                  <div style={{ color: textTokens.secondary }}>{resolutionView.verificationLabel}</div>
+                  <div style={{ color: textTokens.primary, fontWeight: 700 }}>Closure state</div>
+                  <div style={{ color: textTokens.secondary }}>{resolutionView.closureLabel}</div>
+                  <div style={{ color: textTokens.primary, fontWeight: 700 }}>Current detail</div>
+                  <div style={{ color: textTokens.secondary }}>{resolutionStatusLabel(data.resolutionStatus)}</div>
+                  {data.landlordApprovedAt ? (
+                    <div style={{ color: textTokens.secondary }}>Landlord reviewed the completed work on {fmtDate(data.landlordApprovedAt)}.</div>
+                  ) : null}
+                  {data.finalResolvedAt ? (
+                    <div style={{ color: textTokens.secondary }}>Request closed on {fmtDate(data.finalResolvedAt)}.</div>
+                  ) : null}
+                  {data.followUpReason ? (
+                    <>
+                      <div style={{ color: textTokens.primary, fontWeight: 700 }}>Follow-up reason</div>
+                      <div style={{ color: textTokens.secondary }}>{data.followUpReason}</div>
+                    </>
+                  ) : null}
+                  {data.tenantDeclineReason ? (
+                    <>
+                      <div style={{ color: textTokens.primary, fontWeight: 700 }}>Your latest note</div>
+                      <div style={{ color: textTokens.secondary }}>{data.tenantDeclineReason}</div>
+                    </>
+                  ) : null}
+                  {resolutionView.timelineEvents.length ? (
+                    <>
+                      <div style={{ color: textTokens.primary, fontWeight: 700 }}>Recent closure updates</div>
+                      {resolutionView.timelineEvents.map((event) => (
+                        <div key={event.key} style={{ color: textTokens.secondary }}>
+                          {event.label} • {fmtDate(event.timestamp)}
+                        </div>
+                      ))}
+                    </>
+                  ) : null}
+                  {resolutionView.blockers.length ? (
+                    <>
+                      <div style={{ color: textTokens.primary, fontWeight: 700 }}>Needs attention</div>
+                      {resolutionView.blockers.map((item) => (
+                        <div key={item} style={{ color: textTokens.secondary }}>
+                          {item}
+                        </div>
+                      ))}
+                    </>
+                  ) : null}
+                  <div style={{ color: textTokens.primary, fontWeight: 700 }}>Next step</div>
+                  {resolutionView.nextActions.map((step) => (
+                    <div key={step} style={{ color: textTokens.secondary }}>
+                      {step}
+                    </div>
+                  ))}
+                  {data.status === "completed" &&
+                  data.resolutionStatus === "tenant_pending_signoff" &&
+                  data.reworkReview?.status !== "tenant_pending_signoff" ? (
+                    <>
+                      <textarea
+                        value={signoffReason}
+                        onChange={(e) => setSignoffReason(e.target.value)}
+                        placeholder="If the issue still needs attention, explain what is incomplete or still not working"
+                        rows={3}
+                        style={{
+                          width: "100%",
+                          borderRadius: 8,
+                          border: `1px solid ${colors.border}`,
+                          padding: 10,
+                          resize: "vertical",
+                        }}
+                      />
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <Button variant="secondary" disabled={savingAction} onClick={() => void applyResolutionSignoff("resolved")}>
+                          {savingAction ? "Saving..." : "Confirm issue resolved"}
+                        </Button>
+                        <Button variant="ghost" disabled={savingAction} onClick={() => void applyResolutionSignoff("not_resolved")}>
+                          {savingAction ? "Saving..." : "Still needs attention"}
+                        </Button>
+                      </div>
+                    </>
+                  ) : null}
+                </div>
+              ) : null}
+              {reopenView ? (
+                <div
+                  style={{
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: radius.md,
+                    padding: "12px 14px",
+                    background: colors.panel,
+                    display: "grid",
+                    gap: 8,
+                  }}
+                >
+                  <div style={{ fontWeight: 800, color: textTokens.primary }}>Reopen / follow-up</div>
+                  <div style={{ color: textTokens.secondary }}>{reopenView.summary}</div>
+                  <div style={{ color: textTokens.primary, fontWeight: 700 }}>Recovery state</div>
+                  <div style={{ color: textTokens.secondary }}>{reopenView.tenantVisibleLabel}</div>
+                  <div style={{ color: textTokens.primary, fontWeight: 700 }}>Escalation state</div>
+                  <div style={{ color: textTokens.secondary }}>{reopenView.escalationLabel}</div>
+                  {data.reopenReason ? (
+                    <>
+                      <div style={{ color: textTokens.primary, fontWeight: 700 }}>Reopen note</div>
+                      <div style={{ color: textTokens.secondary }}>{data.reopenReason}</div>
+                    </>
+                  ) : null}
+                  {reopenView.timelineEvents.length ? (
+                    <>
+                      <div style={{ color: textTokens.primary, fontWeight: 700 }}>Recent recovery updates</div>
+                      {reopenView.timelineEvents.map((event) => (
+                        <div key={event.key} style={{ color: textTokens.secondary }}>
+                          {event.label} • {fmtDate(event.timestamp)}
+                        </div>
+                      ))}
+                    </>
+                  ) : null}
+                  {reopenView.blockers.length ? (
+                    <>
+                      <div style={{ color: textTokens.primary, fontWeight: 700 }}>Needs attention</div>
+                      {reopenView.blockers.map((item) => (
+                        <div key={item} style={{ color: textTokens.secondary }}>
+                          {item}
+                        </div>
+                      ))}
+                    </>
+                  ) : null}
+                  <div style={{ color: textTokens.primary, fontWeight: 700 }}>Next step</div>
+                  {reopenView.nextActions.map((step) => (
+                    <div key={step} style={{ color: textTokens.secondary }}>
+                      {step}
+                    </div>
+                  ))}
+                  {reopenView.canTenantReopen ? (
+                    <>
+                      <div style={{ color: textTokens.primary, fontWeight: 700 }}>Issue came back?</div>
+                      <div style={{ color: textTokens.secondary }}>
+                        If the problem returned after closure, you can reopen this request instead of starting a new one.
+                      </div>
+                      <textarea
+                        value={reopenReason}
+                        onChange={(e) => setReopenReason(e.target.value)}
+                        placeholder="Explain what still needs attention or what returned after closure"
+                        rows={3}
+                        style={{
+                          width: "100%",
+                          borderRadius: 8,
+                          border: `1px solid ${colors.border}`,
+                          padding: 10,
+                          resize: "vertical",
+                        }}
+                      />
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <Button variant="ghost" disabled={savingAction} onClick={() => void applyTenantReopen()}>
+                          {savingAction ? "Saving..." : "Reopen request"}
+                        </Button>
+                      </div>
+                    </>
+                  ) : null}
+                </div>
+              ) : null}
+              {Array.isArray(data.evidence) && data.evidence.length ? (
+                <div
+                  style={{
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: radius.md,
+                    padding: "12px 14px",
+                    background: colors.panel,
+                    display: "grid",
+                    gap: 8,
+                  }}
+                >
+                  <div style={{ fontWeight: 800, color: textTokens.primary }}>Completion photos</div>
+                  <div style={{ color: textTokens.secondary }}>
+                    These are the tenant-safe photos shared with this maintenance update.
+                  </div>
+                  <div style={{ display: "grid", gap: 10 }}>
+                    {data.evidence.map((item) => (
+                      <div
+                        key={item.id}
+                        style={{
+                          border: `1px solid ${colors.border}`,
+                          borderRadius: radius.md,
+                          padding: "10px",
+                          background: "#fff",
+                          display: "grid",
+                          gap: 8,
+                        }}
+                      >
+                        {item.url ? (
+                          <img
+                            src={item.url}
+                            alt={item.caption || "Maintenance evidence photo"}
+                            style={{ width: "100%", maxHeight: 240, objectFit: "cover", borderRadius: radius.md }}
+                          />
+                        ) : null}
+                        <div style={{ color: textTokens.primary, fontWeight: 700 }}>
+                          {String(item.evidenceType || "completion").replace(/_/g, " ")}
+                        </div>
+                        <div style={{ color: textTokens.muted, fontSize: "0.85rem" }}>
+                          Shared {fmtDate(item.uploadedAt)}
+                        </div>
+                        {item.caption ? <div style={{ color: textTokens.secondary }}>{item.caption}</div> : null}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
               <div style={{ display: "grid", gap: 8, marginTop: spacing.xs }}>
                 <div style={{ fontWeight: 700, color: textTokens.primary }}>Status timeline</div>
                 {Array.isArray(data.statusHistory) && data.statusHistory.length > 0 ? (

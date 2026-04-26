@@ -14,6 +14,7 @@ export type { ApplicationDecisionSummary };
 
 export type RentalApplicationStatus =
   | "DRAFT"
+  | "IN_PROGRESS"
   | "SUBMITTED"
   | "IN_REVIEW"
   | "APPROVED"
@@ -21,14 +22,38 @@ export type RentalApplicationStatus =
   | "CONDITIONAL_COSIGNER"
   | "CONDITIONAL_DEPOSIT";
 
+export type RentalApplicationListSource = "rental_application" | "application_link";
+
+export type RentalApplicationPartialProgressSummary = {
+  status: "not_started" | "started" | "in_progress" | "ready_to_submit" | "submitted";
+  completionPercent: number;
+  currentStep: string | null;
+  completedSections: string[];
+  missingSections: string[];
+  hasCoApplicant: boolean;
+  viewingChoice: "already_viewed" | "request_viewing" | null;
+  startedAt: number | null;
+  lastActivityAt: number | null;
+  submittedAt: number | null;
+  reminderEligibleAt: number | null;
+  reminderSentAt: number | null;
+};
+
+export type RentalApplicationDecisionAction = "request_info" | "approve" | "reject";
+export type RequestInfoChecklistItem = "upload_id" | "phone_number" | "employer_contact" | "references";
+
 export type RentalApplicationSummary = {
   id: string;
+  source?: RentalApplicationListSource;
   applicantName: string;
   email: string | null;
   propertyId: string | null;
   unitId: string | null;
   status: RentalApplicationStatus;
   submittedAt: number | null;
+  lastActivityAt?: number | null;
+  completionPercent?: number | null;
+  partialProgress?: RentalApplicationPartialProgressSummary | null;
 };
 
 export type ScreeningPipelineStatus =
@@ -309,6 +334,22 @@ export type RentalApplication = {
   screeningLastEligibilityReasonCode?: string | null;
   screeningLastEligibilityCheckedAt?: number | null;
   landlordNote?: string | null;
+  landlordInfoRequest?: {
+    requestedItems: RequestInfoChecklistItem[];
+    customMessage?: string | null;
+    requestedAt?: number | null;
+    requestedBy?: string | null;
+  } | null;
+  lastLandlordAction?: {
+    type: RentalApplicationDecisionAction;
+    actedAt?: number | null;
+    actedBy?: string | null;
+    actorRole?: string | null;
+    emailSentAt?: number | null;
+    paymentEmail?: string | null;
+    note?: string | null;
+    requestedItems?: RequestInfoChecklistItem[];
+  } | null;
 };
 
 export type ScreeningQuote = {
@@ -320,6 +361,20 @@ export type ScreeningQuote = {
   expeditedAddOnCents?: number;
   totalAmountCents: number;
   eligible: boolean;
+};
+
+export type ScreeningMonetizationSummary = {
+  eligibility: string;
+  quoteStatus: string;
+  paymentStatus: string;
+  fulfillmentStatus: string;
+  canGenerateQuote: boolean;
+  canStartCheckout: boolean;
+  canRetryCheckout: boolean;
+  alreadyPaid: boolean;
+  blockingReason?: string | null;
+  amount?: number | null;
+  currency?: string | null;
 };
 
 export type ScreeningRunResult = {
@@ -415,16 +470,77 @@ export async function updateRentalApplicationStatus(
   return res?.data as RentalApplication;
 }
 
+export async function submitRentalApplicationDecisionAction(
+  id: string,
+  payload: {
+    action: RentalApplicationDecisionAction;
+    note?: string | null;
+    customMessage?: string | null;
+    requestedItems?: RequestInfoChecklistItem[];
+  }
+): Promise<{
+  application: RentalApplication;
+  action: {
+    type: RentalApplicationDecisionAction;
+    status: RentalApplicationStatus;
+    emailSent: boolean;
+    paymentEmail?: string | null;
+  };
+}> {
+  const res: any = await apiFetch(`/rental-applications/${encodeURIComponent(id)}/decision-action`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      action: payload.action,
+      note: payload.note,
+      customMessage: payload.customMessage,
+      requestedItems: payload.requestedItems || [],
+    }),
+  });
+  return {
+    application: res?.data as RentalApplication,
+    action: res?.action as {
+      type: RentalApplicationDecisionAction;
+      status: RentalApplicationStatus;
+      emailSent: boolean;
+      paymentEmail?: string | null;
+    },
+  };
+}
+
+export async function sendApplicationLinkReminder(
+  id: string
+): Promise<{ sentAt: number | null; partialProgress: RentalApplicationPartialProgressSummary | null }> {
+  const res: any = await apiFetch(`/rental-applications/in-progress/${encodeURIComponent(id)}/send-reminder`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: {},
+  });
+  return {
+    sentAt: typeof res?.data?.sentAt === "number" ? res.data.sentAt : null,
+    partialProgress: (res?.data?.partialProgress as RentalApplicationPartialProgressSummary) || null,
+  };
+}
+
 export async function fetchScreeningQuote(
   id: string,
   params?: {
     screeningTier?: "basic" | "verify" | "verify_ai";
+    screeningPackage?: "basic" | "standard" | "premium";
     addons?: string[];
     totalAmount?: number;
     serviceLevel?: "SELF_SERVE" | "VERIFIED" | "VERIFIED_AI";
     scoreAddOn?: boolean;
+    paymentResponsibility?: "landlord" | "tenant";
   }
-): Promise<{ ok: boolean; data?: ScreeningQuote; error?: string; detail?: string }> {
+): Promise<{
+  ok: boolean;
+  data?: ScreeningQuote;
+  error?: string;
+  errorCode?: string;
+  detail?: string;
+  screeningMonetizationSummary?: ScreeningMonetizationSummary;
+}> {
   const primaryStart = nowMs();
   const res: any = await apiFetch(`/rental-applications/${encodeURIComponent(id)}/screening/quote`, {
     method: "POST",
@@ -432,7 +548,14 @@ export async function fetchScreeningQuote(
     body: JSON.stringify(params || {}),
   });
   const primaryDurationMs = Math.round(nowMs() - primaryStart);
-  const typed = res as { ok: boolean; data?: ScreeningQuote; error?: string; detail?: string };
+  const typed = res as {
+    ok: boolean;
+    data?: ScreeningQuote;
+    error?: string;
+    errorCode?: string;
+    detail?: string;
+    screeningMonetizationSummary?: ScreeningMonetizationSummary;
+  };
 
   void runShadowTask({
     name: "quote",
@@ -445,10 +568,12 @@ export async function fetchScreeningQuote(
       const shadowResult = await adapter.quoteScreening({
         applicationId: id,
         screeningTier: params?.screeningTier,
+        screeningPackage: params?.screeningPackage,
         addons: params?.addons,
         totalAmount: params?.totalAmount,
         serviceLevel: params?.serviceLevel,
         scoreAddOn: params?.scoreAddOn,
+        paymentResponsibility: params?.paymentResponsibility,
       });
       return {
         result: shadowResult,
@@ -527,10 +652,12 @@ export async function runScreening(
   id: string,
   params: {
     screeningTier?: "basic" | "verify" | "verify_ai";
+    screeningPackage?: "basic" | "standard" | "premium";
     addons?: string[];
     totalAmount?: number;
     scoreAddOn: boolean;
     serviceLevel: "SELF_SERVE" | "VERIFIED" | "VERIFIED_AI";
+    paymentResponsibility?: "landlord" | "tenant";
   }
 ): Promise<{ ok: boolean; data?: ScreeningRunResult; error?: string; detail?: string }> {
   const res: any = await apiFetch(`/rental-applications/${encodeURIComponent(id)}/screening/run`, {
@@ -548,10 +675,12 @@ export async function createScreeningOrder(params: {
   tenantEmail?: string | null;
   tenantName?: string | null;
   screeningTier?: "basic" | "verify" | "verify_ai";
+  screeningPackage?: "basic" | "standard" | "premium";
   addons?: string[];
   totalAmount?: number;
   scoreAddOn: boolean;
   serviceLevel: "SELF_SERVE" | "VERIFIED" | "VERIFIED_AI";
+  paymentResponsibility?: "landlord" | "tenant";
   consent?: {
     given: boolean;
     timestamp: string;
@@ -560,7 +689,16 @@ export async function createScreeningOrder(params: {
   returnTo?: string;
   successPath?: string;
   cancelPath?: string;
-}): Promise<{ ok: boolean; checkoutUrl?: string; orderId?: string; tenantInviteUrl?: string; error?: string; detail?: string }> {
+}): Promise<{
+  ok: boolean;
+  checkoutUrl?: string;
+  orderId?: string;
+  tenantInviteUrl?: string;
+  error?: string;
+  errorCode?: string;
+  detail?: string;
+  screeningMonetizationSummary?: ScreeningMonetizationSummary;
+}> {
   const primaryStart = nowMs();
   const res: any = await apiFetch(`/screening/orders`, {
     method: "POST",
@@ -568,7 +706,16 @@ export async function createScreeningOrder(params: {
     body: JSON.stringify(params),
   });
   const primaryDurationMs = Math.round(nowMs() - primaryStart);
-  const typed = res as { ok: boolean; checkoutUrl?: string; orderId?: string; tenantInviteUrl?: string; error?: string; detail?: string };
+  const typed = res as {
+    ok: boolean;
+    checkoutUrl?: string;
+    orderId?: string;
+    tenantInviteUrl?: string;
+    error?: string;
+    errorCode?: string;
+    detail?: string;
+    screeningMonetizationSummary?: ScreeningMonetizationSummary;
+  };
   const appId = String(params.applicationId || "");
   const seed = `checkout:${appId || params.propertyId || "unknown"}`;
 
@@ -583,10 +730,12 @@ export async function createScreeningOrder(params: {
       const shadowResult = await adapter.createCheckout({
         applicationId: appId,
         screeningTier: params.screeningTier,
+        screeningPackage: params.screeningPackage,
         addons: params.addons,
         totalAmount: params.totalAmount,
         scoreAddOn: params.scoreAddOn,
         serviceLevel: params.serviceLevel,
+        paymentResponsibility: params.paymentResponsibility,
         consent: params.consent,
       });
       return {
@@ -665,17 +814,28 @@ export async function createScreeningCheckout(
   id: string,
   params: {
     screeningTier?: "basic" | "verify" | "verify_ai";
+    screeningPackage?: "basic" | "standard" | "premium";
     addons?: string[];
     totalAmount?: number;
     scoreAddOn: boolean;
     serviceLevel: "SELF_SERVE" | "VERIFIED" | "VERIFIED_AI";
+    paymentResponsibility?: "landlord" | "tenant";
     consent?: {
       given: boolean;
       timestamp: string;
       version: string;
     };
   }
-): Promise<{ ok: boolean; checkoutUrl?: string; orderId?: string; tenantInviteUrl?: string; error?: string; detail?: string }> {
+): Promise<{
+  ok: boolean;
+  checkoutUrl?: string;
+  orderId?: string;
+  tenantInviteUrl?: string;
+  error?: string;
+  errorCode?: string;
+  detail?: string;
+  screeningMonetizationSummary?: ScreeningMonetizationSummary;
+}> {
   return createScreeningOrder({ applicationId: id, ...params });
 }
 

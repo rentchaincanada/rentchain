@@ -10,6 +10,8 @@ Every mission must follow this loop:
 
 Do not skip steps.
 
+Mission execution follows the Mission Promotion Pipeline: only the active mission is executed; future roadmap remains private.
+
 ---
 
 ## 1. Explore
@@ -88,3 +90,6 @@ If verification cannot be completed:
 - say so clearly
 - explain what blocked it
 - do not claim completion
+
+Merge-gate must only fail on actual failed required checks, not on pending checks.
+Merge safety depends on the real required PR delivery checks; `merge-gate` remains supplemental.

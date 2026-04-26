@@ -39,6 +39,14 @@ export type TenantWorkspaceLease = {
   monthlyRent: number | null;
   status: string | null;
   documentUrl: string | null;
+  depositCents?: number | null;
+  depositRequired?: boolean | null;
+  depositReceived?: boolean | null;
+  depositReceivedAt?: string | null;
+  paymentMethod?: string | null;
+  paymentStatus?: string | null;
+  paymentRequestedAt?: string | null;
+  paymentCompletedAt?: string | null;
 };
 
 export type TenantWorkspaceMaintenance = {
@@ -49,8 +57,95 @@ export type TenantWorkspaceMaintenance = {
   priority: string | null;
   title: string | null;
   summary: string | null;
+  assignedContractorName?: string | null;
+  contractorStatus?: string | null;
+  serviceStartedAt?: number | null;
+  serviceCompletedAt?: number | null;
+  lastExecutionUpdateAt?: number | null;
+  completionSummary?: string | null;
+  completionOutcome?: "completed" | "partially_completed" | "follow_up_required" | null;
+  completionConfirmedByLandlordAt?: number | null;
+  reopenedAt?: number | null;
+  reopenedByActorId?: string | null;
+  reopenedByActorRole?: "tenant" | "landlord" | "admin" | null;
+  reopenReason?: string | null;
+  serviceWindowStartAt?: number | null;
+  serviceWindowEndAt?: number | null;
+  accessRequired?: boolean | null;
+  tenantConfirmationStatus?: "confirmed" | "needs_schedule_change" | null;
+  tenantConfirmationUpdatedAt?: number | null;
+  accessAcknowledgedAt?: number | null;
+  resolutionStatus?: "completed_pending_review" | "landlord_approved" | "tenant_pending_signoff" | "resolved" | "follow_up_required" | null;
+  landlordApprovedAt?: number | null;
+  tenantSignoffStatus?: "pending" | "accepted" | "declined" | null;
+  tenantSignedOffAt?: number | null;
+  tenantDeclinedAt?: number | null;
+  tenantDeclineReason?: string | null;
+  followUpRequired?: boolean | null;
+  followUpReason?: string | null;
+  finalResolvedAt?: number | null;
+  reworkCycle?: {
+    cycleNumber: number;
+    status: "not_started" | "assigned" | "in_progress" | "completed" | "cancelled";
+    createdAt?: number | null;
+    assignedAt?: number | null;
+    startedAt?: number | null;
+    completedAt?: number | null;
+    completionSummary?: string | null;
+    schedule?: {
+      scheduledFor?: number | null;
+      timeWindowStart?: number | null;
+      timeWindowEnd?: number | null;
+      status?: "not_scheduled" | "scheduled" | "contractor_confirmed" | "tenant_pending" | "confirmed" | "reschedule_requested" | "cancelled" | null;
+      requiresTenantAccess?: boolean | null;
+      tenantAccessStatus?: "pending" | "confirmed" | "denied" | "not_required" | null;
+      tenantAccessNote?: string | null;
+    } | null;
+  } | null;
+  reworkHistory?: Array<{
+    cycleNumber: number;
+    startedAt?: number | null;
+    completedAt?: number | null;
+    outcome?: "resolved" | "failed" | "partial" | null;
+    notes?: string | null;
+  }>;
+  reworkReview?: {
+    status?: "pending_review" | "landlord_approved" | "tenant_pending_signoff" | "closed" | "follow_up_required" | null;
+    reviewedAt?: number | null;
+    tenantSignoffStatus?: "pending" | "accepted" | "declined" | null;
+    tenantSignedOffAt?: number | null;
+    tenantDeclinedAt?: number | null;
+    tenantDeclineReason?: string | null;
+    closureOutcome?: "resolved" | "partial" | "needs_more_followup" | null;
+    closedAt?: number | null;
+  } | null;
+  notifications?: {
+    tenant: {
+      requiresAccessConfirmation: boolean;
+      requiresSignoff: boolean;
+      requiresReworkAwareness: boolean;
+    };
+  };
+  evidence?: Array<{
+    id: string;
+    url: string | null;
+    filename?: string | null;
+    contentType?: string | null;
+    uploadedAt?: number | null;
+    uploadedByActorRole?: string | null;
+    evidenceType?: string | null;
+    caption?: string | null;
+    visibility?: "tenant_safe";
+  }>;
   createdAt: number | null;
   updatedAt: number | null;
+  statusHistory?: Array<{
+    status: string | null;
+    actorRole: string | null;
+    actorId?: string | null;
+    message: string | null;
+    createdAt: number | null;
+  }>;
 };
 
 export type TenantWorkspaceSummary = {
@@ -96,6 +191,90 @@ export async function createTenantWorkspaceMaintenance(payload: {
 }) {
   const res = await tenantApiFetch<{ ok: boolean; data: TenantWorkspaceMaintenance }>(
     "/tenant/maintenance-requests",
+    {
+      method: "POST",
+      body: payload,
+    }
+  );
+  return res?.data;
+}
+
+export async function updateTenantWorkspaceMaintenanceConfirmation(
+  id: string,
+  payload: {
+    confirmationStatus?: "confirmed" | "needs_schedule_change";
+    acknowledgeAccess?: boolean;
+  }
+) {
+  const res = await tenantApiFetch<{ ok: boolean; data: TenantWorkspaceMaintenance }>(
+    `/tenant/maintenance-requests/${encodeURIComponent(id)}/confirmation`,
+    {
+      method: "POST",
+      body: payload,
+    }
+  );
+  return res?.data;
+}
+
+export async function updateTenantWorkspaceMaintenanceSignoff(
+  id: string,
+  payload: {
+    decision: "resolved" | "not_resolved";
+    reason?: string;
+  }
+) {
+  const res = await tenantApiFetch<{ ok: boolean; data: TenantWorkspaceMaintenance }>(
+    `/tenant/maintenance/${encodeURIComponent(id)}/signoff`,
+    {
+      method: "POST",
+      body: payload,
+    }
+  );
+  return res?.data;
+}
+
+export async function updateTenantWorkspaceMaintenanceReopen(
+  id: string,
+  payload: {
+    reason: string;
+  }
+) {
+  const res = await tenantApiFetch<{ ok: boolean; data: TenantWorkspaceMaintenance }>(
+    `/tenant/maintenance/${encodeURIComponent(id)}/reopen`,
+    {
+      method: "POST",
+      body: payload,
+    }
+  );
+  return res?.data;
+}
+
+export async function updateTenantWorkspaceReworkAccess(
+  id: string,
+  payload: {
+    decision: "confirm" | "deny";
+    note?: string;
+  }
+) {
+  const res = await tenantApiFetch<{ ok: boolean; data: TenantWorkspaceMaintenance }>(
+    `/tenant/maintenance/${encodeURIComponent(id)}/confirm-rework-access`,
+    {
+      method: "POST",
+      body: payload,
+    }
+  );
+  return res?.data;
+}
+
+export async function updateTenantWorkspaceReworkSignoff(
+  id: string,
+  payload: {
+    decision: "resolved" | "not_resolved";
+    reason?: string;
+  }
+) {
+  const res = await tenantApiFetch<{ ok: boolean; data: TenantWorkspaceMaintenance }>(
+    `/tenant/maintenance/${encodeURIComponent(id)}/rework-signoff`,
     {
       method: "POST",
       body: payload,

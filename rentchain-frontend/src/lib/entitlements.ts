@@ -1,8 +1,9 @@
 import { apiFetch } from "@/lib/apiClient";
+import { normalizePlan, type Plan } from "@/lib/plan";
 
 export type CapabilitiesResponse = {
   ok?: boolean;
-  plan?: string;
+  plan?: Plan | string;
   features: Record<string, boolean>;
   ts?: number;
 };
@@ -31,8 +32,13 @@ export const DEFAULT_CAPABILITIES: CapabilitiesResponse = {
     exports_basic: false,
     exports_advanced: false,
     compliance_reports: false,
+    marketplace_directory: false,
+    marketplace_contractor_assignment: false,
+    portfolio_health_summary: true,
+    portfolio_score: false,
     portfolio_dashboard: false,
     portfolio_analytics: false,
+    portfolio_action_recommendations: false,
     ai_summaries: false,
     tenantPdfReport: false,
   },
@@ -45,9 +51,12 @@ export function getCachedCapabilities(): CapabilitiesResponse | null {
 }
 
 export function setCachedCapabilities(next: CapabilitiesResponse) {
-  cachedCapabilities = next;
+  cachedCapabilities = {
+    ...next,
+    plan: normalizePlan(next?.plan),
+  };
   if (typeof window !== "undefined") {
-    window.dispatchEvent(new CustomEvent("capabilities:updated", { detail: next }));
+    window.dispatchEvent(new CustomEvent("capabilities:updated", { detail: cachedCapabilities }));
   }
 }
 
@@ -68,7 +77,7 @@ export async function refreshEntitlements(
     if (caps && typeof caps === "object") {
       setCachedCapabilities({
         ok: caps.ok,
-        plan: caps.plan,
+        plan: normalizePlan(caps.plan),
         features: caps.features || {},
         ts: caps.ts,
       });

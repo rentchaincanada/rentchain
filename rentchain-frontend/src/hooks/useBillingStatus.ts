@@ -2,8 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { fetchSubscriptionStatus } from "@/api/billingApi";
 import { useCapabilities } from "@/hooks/useCapabilities";
 import { useAuth } from "@/context/useAuth";
+import { normalizePlan, planLabel, type Plan } from "@/lib/plan";
 
-type PlanTier = "free" | "starter" | "pro" | "elite";
+type PlanTier = Plan;
 type BillingInterval = "month" | "year" | null;
 
 type BillingStatus = {
@@ -14,6 +15,7 @@ type BillingStatus = {
 };
 
 type SubscriptionDetail = {
+  tier: PlanTier | null;
   interval: BillingInterval;
   renewalDate: string | null;
 };
@@ -25,15 +27,8 @@ const DEFAULT_STATUS: BillingStatus = {
   isLoading: true,
 };
 
-const planFromString = (raw?: string | null): PlanTier | null => {
-  const value = String(raw || "").trim().toLowerCase();
-  if (!value) return null;
-  if (value === "pro" || value === "professional") return "pro";
-  if (value === "elite" || value === "business" || value === "enterprise") return "elite";
-  if (value === "starter" || value === "core") return "starter";
-  if (value === "screening" || value === "free") return "free";
-  return null;
-};
+const planFromString = (raw?: string | null): PlanTier | null =>
+  raw == null || String(raw).trim() === "" ? null : normalizePlan(raw);
 
 const intervalFromString = (raw?: string | null): BillingInterval => {
   const value = String(raw || "").trim().toLowerCase();
@@ -52,6 +47,7 @@ export function useBillingStatus(): BillingStatus {
   const { caps, loading: capsLoading } = useCapabilities();
   const { user } = useAuth();
   const [subscription, setSubscription] = useState<SubscriptionDetail>({
+    tier: null,
     interval: null,
     renewalDate: null,
   });
@@ -62,17 +58,18 @@ export function useBillingStatus(): BillingStatus {
     fetchSubscriptionStatus()
       .then((raw: any) => {
         if (!active) return;
+        const tier = planFromString(raw?.tier ?? raw?.planId ?? null);
         const interval = intervalFromString(
           raw?.interval || raw?.billingInterval || raw?.period || null
         );
         const renewalDate = parseDate(
           raw?.renewalDate || raw?.currentPeriodEnd || raw?.nextBillingAt || null
         );
-        setSubscription({ interval, renewalDate });
+        setSubscription({ tier, interval, renewalDate });
       })
       .catch(() => {
         if (!active) return;
-        setSubscription({ interval: null, renewalDate: null });
+        setSubscription({ tier: null, interval: null, renewalDate: null });
       })
       .finally(() => {
         if (active) setSubscriptionLoading(false);
@@ -95,6 +92,7 @@ export function useBillingStatus(): BillingStatus {
     }
 
     const tier =
+      subscription.tier ||
       planFromString(caps?.plan) ||
       planFromString(user?.plan) ||
       planFromString((user as any)?.subscriptionPlan) ||
@@ -109,6 +107,7 @@ export function useBillingStatus(): BillingStatus {
   }, [
     caps?.plan,
     capsLoading,
+    subscription.tier,
     subscription.interval,
     subscription.renewalDate,
     subscriptionLoading,
@@ -119,9 +118,5 @@ export function useBillingStatus(): BillingStatus {
 }
 
 export function billingTierLabel(tier?: string | null): string {
-  const normalized = planFromString(tier) || "free";
-  if (normalized === "free") return "Free";
-  if (normalized === "starter") return "Starter";
-  if (normalized === "pro") return "Pro";
-  return "Elite";
+  return planLabel(planFromString(tier) || "free");
 }

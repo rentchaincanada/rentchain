@@ -1,15 +1,22 @@
 import React, { useEffect, useState } from "react";
 import { fetchAccountLimits, type AccountLimits } from "../api/accountApi";
 
-let lastApiError: any = null;
-export function setLastApiError(err: any) {
-  lastApiError = err;
+const lastApiError: unknown = null;
+
+function formatApiError(err: unknown) {
+  if (typeof err === "object" && err !== null && "message" in err && typeof err.message === "string") {
+    return err.message;
+  }
+  return String(err);
 }
 
 export const DebugPanel: React.FC = () => {
   const [limits, setLimits] = useState<AccountLimits | null>(null);
 
   useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
     fetchAccountLimits().then(setLimits).catch(() => setLimits(null));
   }, []);
 
@@ -39,40 +46,17 @@ export const DebugPanel: React.FC = () => {
         <div>Loading limits…</div>
         {lastApiError ? (
           <div style={{ marginTop: 8, color: "#fca5a5" }}>
-            Last API error: {String(lastApiError?.message || lastApiError)}
+            Last API error: {formatApiError(lastApiError)}
           </div>
         ) : null}
       </div>
     );
   }
 
-  if (!limitsData) {
-    return (
-      <div
-        style={{
-          position: "fixed",
-          bottom: 10,
-          right: 10,
-          padding: "10px 12px",
-          borderRadius: 10,
-          background: "rgba(15,23,42,0.9)",
-          color: "#e2e8f0",
-          fontSize: 12,
-          zIndex: 5000,
-          border: "1px solid rgba(148,163,184,0.4)",
-          maxWidth: 320,
-        }}
-      >
-        Debug (dev): Loading limits…
-      </div>
-    );
-  }
-
-  const normalizedLimits: any = (limitsData as any).limits ? (limitsData as any).limits : limitsData;
-  const usage = (limitsData as any).usage || {};
-  const capabilities = (limitsData as any).capabilities || (limitsData as any).entitlements || {};
-  const plan = (limitsData as any).plan || "starter";
-  const integrity = (limitsData as any)?.integrity;
+  const usage = limitsData.usage || {};
+  const capabilities = limitsData.capabilities || {};
+  const plan = limitsData.plan || "starter";
+  const integrity = limitsData.integrity;
   const integrityTooltip =
     integrity?.ok === false
       ? `Before: ${integrity.before?.properties ?? "?"} props, ${integrity.before?.units ?? "?"} units, ${
@@ -118,7 +102,7 @@ export const DebugPanel: React.FC = () => {
       </div>
       {lastApiError ? (
         <div style={{ marginTop: 8, color: "#fca5a5" }}>
-          Last API error: {String(lastApiError?.message || lastApiError)}
+          Last API error: {formatApiError(lastApiError)}
         </div>
       ) : null}
     </div>

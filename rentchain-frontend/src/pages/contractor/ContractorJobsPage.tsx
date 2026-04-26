@@ -3,10 +3,17 @@ import { useNavigate, useParams } from "react-router-dom";
 import { Button, Card, Input, Section } from "../../components/ui/Ui";
 import { ResponsiveMasterDetail } from "../../components/layout/ResponsiveMasterDetail";
 import {
+  confirmContractorMaintenanceReworkSchedule,
   listContractorMaintenanceJobs,
   patchContractorMaintenanceJobStatus,
+  patchContractorMaintenanceReworkStatus,
+  resubmitContractorMaintenanceCost,
+  submitContractorMaintenanceCost,
+  uploadContractorMaintenanceCostAttachment,
+  uploadContractorMaintenanceEvidence,
   type MaintenanceWorkflowItem,
   type MaintenanceWorkflowStatus,
+  type WorkOrderEvidenceType,
 } from "../../api/maintenanceWorkflowApi";
 import { colors, radius, spacing, text } from "../../styles/tokens";
 
@@ -15,18 +22,79 @@ function fmtDate(ts?: number | null) {
   return new Date(ts).toLocaleString();
 }
 
+function formatMoney(cents?: number | null, currency?: string | null) {
+  if (!cents) return "-";
+  return `${(cents / 100).toFixed(2)} ${currency || "CAD"}`;
+}
+
+function toLocalInputValue(ts?: number | null) {
+  if (!ts) return "";
+  const date = new Date(ts);
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(
+    date.getMinutes()
+  )}`;
+}
+
+function fromLocalInputValue(value: string) {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.getTime();
+}
+
+function evidenceTypeLabel(value?: WorkOrderEvidenceType | null) {
+  switch (value) {
+    case "before":
+      return "Before";
+    case "during":
+      return "During";
+    case "after":
+      return "After";
+    case "completion":
+      return "Completion";
+    default:
+      return "Other";
+  }
+}
+
+function isActiveReworkCycle(item?: MaintenanceWorkflowItem | null) {
+  return Boolean(
+    item?.reworkCycle &&
+      item.reworkCycle.status !== "completed" &&
+      item.reworkCycle.status !== "cancelled"
+  );
+}
+
+function reworkScheduleStatusLabel(value?: string | null) {
+  switch (value) {
+    case "tenant_pending":
+      return "Awaiting tenant confirmation";
+    case "confirmed":
+      return "Confirmed";
+    case "reschedule_requested":
+      return "Reschedule requested";
+    case "scheduled":
+      return "Awaiting contractor confirmation";
+    default:
+      return "Not scheduled";
+  }
+}
+
 function findScheduledDate(item: MaintenanceWorkflowItem) {
+  if (typeof item.scheduledFor === "number") return item.scheduledFor;
   const history = Array.isArray(item.statusHistory) ? item.statusHistory : [];
   const scheduledEntry = [...history]
     .filter((entry) => entry.status === "scheduled")
     .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0))[0];
-  return scheduledEntry?.createdAt || null;
+  return scheduledEntry?.createdAt || item.serviceWindowStartAt || null;
 }
 
 function statusLabel(status?: MaintenanceWorkflowStatus | string | null) {
   switch (status) {
     case "in_progress":
       return "in progress";
+    case "blocked":
+      return "blocked";
     case "submitted":
     case "reviewed":
     case "assigned":
@@ -39,12 +107,24 @@ function statusLabel(status?: MaintenanceWorkflowStatus | string | null) {
   }
 }
 
+function contractorNotificationMessages(item?: MaintenanceWorkflowItem | null) {
+  const messages: string[] = [];
+  if (item?.notifications?.contractor?.requiresScheduleConfirmation) {
+    messages.push("Confirm return visit");
+  }
+  if (item?.notifications?.contractor?.requiresExecutionStart) {
+    messages.push("Start assigned rework");
+  }
+  return messages;
+}
+
 function normalizeJob(item: any): MaintenanceWorkflowItem | null {
   const id = String(item?.id || "").trim();
   const title = String(item?.title || "").trim();
   const description = String(item?.description || "").trim();
   if (!id || !title || !description) return null;
-  const status = statusLabel(item?.status) as MaintenanceWorkflowStatus;
+  const rawStatus = String(item?.status || "").trim().toLowerCase();
+  const status = (rawStatus === "in progress" ? "in_progress" : rawStatus || "assigned") as MaintenanceWorkflowStatus;
   return {
     ...item,
     id,
@@ -63,6 +143,30 @@ function normalizeJob(item: any): MaintenanceWorkflowItem | null {
     landlordNote: item?.landlordNote ? String(item.landlordNote) : null,
     contractorStatus: item?.contractorStatus ? String(item.contractorStatus) : null,
     contractorLastUpdate: item?.contractorLastUpdate ? String(item.contractorLastUpdate) : null,
+    scheduledFor: typeof item?.scheduledFor === "number" ? item.scheduledFor : null,
+    serviceStartedAt: typeof item?.serviceStartedAt === "number" ? item.serviceStartedAt : null,
+    serviceCompletedAt: typeof item?.serviceCompletedAt === "number" ? item.serviceCompletedAt : null,
+    executionBlockedReason: item?.executionBlockedReason ? String(item.executionBlockedReason) : null,
+    completionSummary: item?.completionSummary ? String(item.completionSummary) : null,
+    completionOutcome:
+      item?.completionOutcome === "completed" ||
+      item?.completionOutcome === "partially_completed" ||
+      item?.completionOutcome === "follow_up_required"
+        ? item.completionOutcome
+        : null,
+    resolutionStatus:
+      item?.resolutionStatus === "completed_pending_review" ||
+      item?.resolutionStatus === "landlord_approved" ||
+      item?.resolutionStatus === "tenant_pending_signoff" ||
+      item?.resolutionStatus === "resolved" ||
+      item?.resolutionStatus === "follow_up_required"
+        ? item.resolutionStatus
+        : null,
+    cost: item?.cost && typeof item.cost === "object" ? item.cost : null,
+    costLineItems: Array.isArray(item?.costLineItems) ? item.costLineItems : [],
+    costAttachments: Array.isArray(item?.costAttachments) ? item.costAttachments : [],
+    reworkCycle: item?.reworkCycle || null,
+    reworkHistory: Array.isArray(item?.reworkHistory) ? item.reworkHistory : [],
     createdAt: Number(item?.createdAt || 0),
     updatedAt: Number(item?.updatedAt || 0),
     statusHistory: Array.isArray(item?.statusHistory) ? item.statusHistory : [],
@@ -78,7 +182,20 @@ export default function ContractorJobsPage() {
   const [selectedId, setSelectedId] = React.useState(routeId || "");
   const [search, setSearch] = React.useState("");
   const [note, setNote] = React.useState("");
+  const [scheduledForInput, setScheduledForInput] = React.useState("");
+  const [completionSummary, setCompletionSummary] = React.useState("");
+  const [completionOutcome, setCompletionOutcome] = React.useState<"completed" | "partially_completed" | "follow_up_required">("completed");
   const [saving, setSaving] = React.useState(false);
+  const [evidenceFile, setEvidenceFile] = React.useState<File | null>(null);
+  const [evidenceType, setEvidenceType] =
+    React.useState<Extract<WorkOrderEvidenceType, "before" | "during" | "after" | "completion" | "other">>("during");
+  const [evidenceCaption, setEvidenceCaption] = React.useState("");
+  const [uploadingEvidence, setUploadingEvidence] = React.useState(false);
+  const [costActualInput, setCostActualInput] = React.useState("");
+  const [costCurrency, setCostCurrency] = React.useState("CAD");
+  const [costLineItemsJson, setCostLineItemsJson] = React.useState("");
+  const [costAttachmentFile, setCostAttachmentFile] = React.useState<File | null>(null);
+  const [savingCost, setSavingCost] = React.useState(false);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -130,6 +247,37 @@ export default function ContractorJobsPage() {
     }
   }, [filtered, routeId, selected]);
 
+  React.useEffect(() => {
+    if (!selected) {
+      setScheduledForInput("");
+      setCompletionSummary("");
+      setCompletionOutcome("completed");
+      setNote("");
+      setEvidenceFile(null);
+      setEvidenceCaption("");
+      setEvidenceType("during");
+      setCostActualInput("");
+      setCostCurrency("CAD");
+      setCostLineItemsJson("");
+      setCostAttachmentFile(null);
+      return;
+    }
+    setScheduledForInput(toLocalInputValue(selected.scheduledFor || findScheduledDate(selected)));
+    setCompletionSummary(String(selected.reworkCycle?.completionSummary || selected.completionSummary || ""));
+    setCompletionOutcome(
+      selected.completionOutcome === "partially_completed" || selected.completionOutcome === "follow_up_required"
+        ? selected.completionOutcome
+        : "completed"
+    );
+    setNote(String(selected.executionBlockedReason || selected.contractorLastUpdate || ""));
+    setCostActualInput(
+      typeof selected.cost?.actualCostCents === "number" ? String((selected.cost.actualCostCents / 100).toFixed(2)) : ""
+    );
+    setCostCurrency(String(selected.cost?.currency || "CAD"));
+    setCostLineItemsJson(selected.costLineItems?.length ? JSON.stringify(selected.costLineItems, null, 2) : "");
+    setCostAttachmentFile(null);
+  }, [selected]);
+
   const selectJob = (item: MaintenanceWorkflowItem | null) => {
     if (!item) {
       setSelectedId("");
@@ -141,16 +289,38 @@ export default function ContractorJobsPage() {
   };
 
   const updateStatus = React.useCallback(
-    async (status: "assigned" | "scheduled" | "in_progress" | "completed", fallbackMessage: string) => {
+    async (
+      status: "assigned" | "scheduled" | "blocked" | "in_progress" | "completed",
+      fallbackMessage: string
+    ) => {
       if (!selected) return;
+      const scheduledFor = fromLocalInputValue(scheduledForInput);
+      if (status === "scheduled" && scheduledForInput && !scheduledFor) {
+        setError("Enter a valid scheduled service time.");
+        return;
+      }
+      if (status === "blocked" && !note.trim()) {
+        setError("A blocked job needs a reason.");
+        return;
+      }
+      if (status === "completed" && !completionSummary.trim()) {
+        setError("Add a completion summary before finishing the job.");
+        return;
+      }
       setSaving(true);
       setError(null);
       try {
         await patchContractorMaintenanceJobStatus(selected.id, {
           status,
           message: note.trim() || fallbackMessage,
+          scheduledFor: status === "scheduled" ? scheduledFor : undefined,
+          blockedReason: status === "blocked" ? note.trim() : undefined,
+          completionSummary: status === "completed" ? completionSummary.trim() : undefined,
+          completionOutcome: status === "completed" ? completionOutcome : undefined,
         });
-        setNote("");
+        if (status === "completed") {
+          setCompletionSummary("");
+        }
         await load();
       } catch (err: any) {
         setError(String(err?.message || "Failed to update job"));
@@ -158,12 +328,178 @@ export default function ContractorJobsPage() {
         setSaving(false);
       }
     },
+    [completionOutcome, completionSummary, load, note, scheduledForInput, selected]
+  );
+
+  const uploadEvidence = React.useCallback(async () => {
+    if (!selected) return;
+    if (!evidenceFile) {
+      setError("Choose an image before uploading evidence.");
+      return;
+    }
+    setUploadingEvidence(true);
+    setError(null);
+    try {
+      await uploadContractorMaintenanceEvidence(selected.id, {
+        file: evidenceFile,
+        evidenceType,
+        caption: evidenceCaption.trim() || undefined,
+      });
+      setEvidenceFile(null);
+      setEvidenceCaption("");
+      setEvidenceType("during");
+      await load();
+    } catch (err: any) {
+      setError(String(err?.message || "Failed to upload evidence"));
+    } finally {
+      setUploadingEvidence(false);
+    }
+  }, [evidenceCaption, evidenceFile, evidenceType, load, selected]);
+
+  const submitCost = React.useCallback(async () => {
+    if (!selected) return;
+    const normalizedAmount = Number(costActualInput);
+    if (!Number.isFinite(normalizedAmount) || normalizedAmount <= 0) {
+      setError("Add a valid total cost before submitting cost details.");
+      return;
+    }
+
+    let lineItems: Array<{ id?: string; label: string; amountCents: number; category?: "labor" | "materials" | "inspection" | "other" }> =
+      [];
+    if (costLineItemsJson.trim()) {
+      try {
+        const parsed = JSON.parse(costLineItemsJson);
+        lineItems = Array.isArray(parsed) ? parsed : [];
+      } catch {
+        setError("Cost line items must be valid JSON.");
+        return;
+      }
+    }
+
+    setSavingCost(true);
+    setError(null);
+    try {
+      const submitFn =
+        selected.cost?.reviewStatus === "rejected" || selected.cost?.reviewStatus === "revision_requested"
+          ? resubmitContractorMaintenanceCost
+          : submitContractorMaintenanceCost;
+      await submitFn(selected.id, {
+        actualCostCents: Math.round(normalizedAmount * 100),
+        currency: costCurrency.trim() || "CAD",
+        lineItems,
+      });
+      await load();
+    } catch (err: any) {
+      setError(
+        String(
+          err?.message ||
+            (selected.cost?.reviewStatus === "rejected" || selected.cost?.reviewStatus === "revision_requested"
+              ? "Failed to resubmit cost details"
+              : "Failed to submit cost details")
+        )
+      );
+    } finally {
+      setSavingCost(false);
+    }
+  }, [costActualInput, costCurrency, costLineItemsJson, load, selected]);
+
+  const uploadCostAttachment = React.useCallback(async () => {
+    if (!selected) return;
+    if (!costAttachmentFile) {
+      setError("Choose an invoice or receipt before uploading.");
+      return;
+    }
+    setSavingCost(true);
+    setError(null);
+    try {
+      await uploadContractorMaintenanceCostAttachment(selected.id, { file: costAttachmentFile });
+      setCostAttachmentFile(null);
+      await load();
+    } catch (err: any) {
+      setError(String(err?.message || "Failed to upload cost attachment"));
+    } finally {
+      setSavingCost(false);
+    }
+  }, [costAttachmentFile, load, selected]);
+
+  const confirmReworkSchedule = React.useCallback(
+    async (decision: "confirm" | "unavailable") => {
+      if (!selected || !selected.reworkCycle) return;
+      setSaving(true);
+      setError(null);
+      try {
+        await confirmContractorMaintenanceReworkSchedule(selected.id, {
+          decision,
+          note: note.trim() || undefined,
+        });
+        await load();
+      } catch (err: any) {
+        setError(String(err?.message || "Failed to update the rework schedule"));
+      } finally {
+        setSaving(false);
+      }
+    },
     [load, note, selected]
+  );
+
+  const updateReworkStatus = React.useCallback(
+    async (status: "in_progress" | "completed") => {
+      if (!selected || !selected.reworkCycle) return;
+      if (status === "completed" && !completionSummary.trim()) {
+        setError("Add a completion summary before finishing the rework.");
+        return;
+      }
+      setSaving(true);
+      setError(null);
+      try {
+        await patchContractorMaintenanceReworkStatus(selected.id, {
+          status,
+          completionSummary: status === "completed" ? completionSummary.trim() : undefined,
+        });
+        if (status === "completed") setCompletionSummary("");
+        await load();
+      } catch (err: any) {
+        setError(String(err?.message || "Failed to update rework"));
+      } finally {
+        setSaving(false);
+      }
+    },
+    [completionSummary, load, selected]
   );
 
   const actions = React.useMemo(() => {
     if (!selected) return [] as Array<{ label: string; onClick: () => Promise<void> }>;
     const next: Array<{ label: string; onClick: () => Promise<void> }> = [];
+    if (isActiveReworkCycle(selected)) {
+      if (
+        selected.reworkCycle?.schedule &&
+        selected.reworkCycle.schedule.status !== "confirmed" &&
+        selected.reworkCycle.schedule.status !== "reschedule_requested" &&
+        selected.reworkCycle.schedule.contractorScheduleStatus !== "confirmed"
+      ) {
+        next.push({
+          label: "Confirm return visit",
+          onClick: () => confirmReworkSchedule("confirm"),
+        });
+        next.push({
+          label: "Mark unavailable",
+          onClick: () => confirmReworkSchedule("unavailable"),
+        });
+      }
+      if (selected.reworkCycle?.status === "assigned" || selected.reworkCycle?.status === "not_started") {
+        next.push({
+          label: "Start rework",
+          onClick: () => updateReworkStatus("in_progress"),
+        });
+      }
+      if (selected.reworkCycle?.status === "assigned" || selected.reworkCycle?.status === "in_progress") {
+        next.push({
+          label: "Complete rework",
+          onClick: () => updateReworkStatus("completed"),
+        });
+      }
+      return next;
+    }
     if (selected.status === "assigned" && selected.contractorStatus !== "assigned") {
       next.push({
         label: "Accept job",
@@ -172,24 +508,30 @@ export default function ContractorJobsPage() {
     }
     if (selected.status === "assigned") {
       next.push({
-        label: "Mark scheduled",
+        label: "Schedule service",
         onClick: () => updateStatus("scheduled", "Contractor scheduled the visit."),
       });
     }
-    if (selected.status === "scheduled") {
+    if (["assigned", "scheduled", "blocked"].includes(selected.status)) {
       next.push({
-        label: "Mark in progress",
+        label: "Start work",
         onClick: () => updateStatus("in_progress", "Contractor started the work."),
       });
     }
-    if (selected.status === "in_progress") {
+    if (["scheduled", "in_progress"].includes(selected.status)) {
+      next.push({
+        label: "Mark blocked",
+        onClick: () => updateStatus("blocked", "Contractor reported a blocked visit."),
+      });
+    }
+    if (["scheduled", "blocked", "in_progress"].includes(selected.status)) {
       next.push({
         label: "Mark completed",
         onClick: () => updateStatus("completed", "Contractor completed the work."),
       });
     }
     return next;
-  }, [selected, updateStatus]);
+  }, [confirmReworkSchedule, selected, updateReworkStatus, updateStatus]);
 
   return (
     <div style={{ display: "grid", gap: spacing.lg }}>
@@ -291,6 +633,11 @@ export default function ContractorJobsPage() {
                         {selected.tenantName || selected.tenantId} • {selected.propertyLabel || selected.propertyId || "No property"}
                         {selected.unitLabel ? ` • ${selected.unitLabel}` : ""}
                       </div>
+                      {selected.reworkCycle ? (
+                        <div style={{ color: text.secondary, marginTop: 6, fontSize: 13 }}>
+                          Rework #{selected.reworkCycle.cycleNumber} • {selected.reworkCycle.status.replaceAll("_", " ")}
+                        </div>
+                      ) : null}
                     </div>
                     <div style={{ color: text.primary, fontWeight: 700 }}>{statusLabel(selected?.status)}</div>
                   </div>
@@ -301,12 +648,22 @@ export default function ContractorJobsPage() {
                       <div style={{ color: text.primary, fontWeight: 700, marginTop: 6 }}>{selected.priority}</div>
                     </div>
                     <div>
-                      <div style={{ color: text.muted, fontSize: 12 }}>Scheduled date</div>
+                      <div style={{ color: text.muted, fontSize: 12 }}>Scheduled service</div>
                       <div style={{ color: text.primary, fontWeight: 700, marginTop: 6 }}>{fmtDate(findScheduledDate(selected))}</div>
                     </div>
                     <div>
                       <div style={{ color: text.muted, fontSize: 12 }}>Last update</div>
                       <div style={{ color: text.primary, fontWeight: 700, marginTop: 6 }}>{fmtDate(selected.updatedAt)}</div>
+                    </div>
+                    <div>
+                      <div style={{ color: text.muted, fontSize: 12 }}>Started</div>
+                      <div style={{ color: text.primary, fontWeight: 700, marginTop: 6 }}>{fmtDate(selected.serviceStartedAt)}</div>
+                    </div>
+                    <div>
+                      <div style={{ color: text.muted, fontSize: 12 }}>Completed</div>
+                      <div style={{ color: text.primary, fontWeight: 700, marginTop: 6 }}>
+                        {fmtDate(selected.serviceCompletedAt)}
+                      </div>
                     </div>
                   </div>
 
@@ -321,14 +678,363 @@ export default function ContractorJobsPage() {
                       <strong>Landlord notes:</strong> {selected.landlordNote}
                     </div>
                   ) : null}
+                  {contractorNotificationMessages(selected).length ? (
+                    <div
+                      style={{
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: radius.md,
+                        padding: "12px 14px",
+                        background: "#fffbeb",
+                        display: "grid",
+                        gap: 8,
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, color: text.primary }}>Action required</div>
+                      {contractorNotificationMessages(selected).map((message) => (
+                        <div key={message} style={{ color: text.secondary }}>
+                          {message}
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                  {selected.reworkCycle ? (
+                    <div
+                      style={{
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: radius.md,
+                        padding: "12px 14px",
+                        background: colors.panel,
+                        display: "grid",
+                        gap: 8,
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, color: text.primary }}>Rework cycle</div>
+                      <div style={{ color: text.secondary }}>
+                        Rework #{selected.reworkCycle.cycleNumber} is {selected.reworkCycle.status.replaceAll("_", " ")}.
+                      </div>
+                      <div style={{ color: text.secondary }}>
+                        Created {fmtDate(selected.reworkCycle.createdAt)} • Assigned {fmtDate(selected.reworkCycle.assignedAt)}
+                      </div>
+                      {selected.reworkCycle.completionSummary ? (
+                        <div style={{ color: text.secondary }}>
+                          Latest rework completion summary: {selected.reworkCycle.completionSummary}
+                        </div>
+                      ) : null}
+                      {selected.reworkCycle.schedule ? (
+                        <div style={{ color: text.secondary }}>
+                          Return visit: {reworkScheduleStatusLabel(selected.reworkCycle.schedule.status)} • Access{" "}
+                          {selected.reworkCycle.schedule.requiresTenantAccess ? "required" : "not required"} •{" "}
+                          {fmtDate(selected.reworkCycle.schedule.scheduledFor || selected.reworkCycle.schedule.timeWindowStart)}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
 
-                  <label style={{ display: "grid", gap: 6 }}>
-                    <span style={{ color: text.muted, fontSize: 12 }}>Update note</span>
+                  <div
+                    style={{
+                      border: `1px solid ${colors.border}`,
+                      borderRadius: radius.md,
+                      padding: "12px 14px",
+                      background: colors.panel,
+                      display: "grid",
+                      gap: 8,
+                    }}
+                  >
+                    <div style={{ fontWeight: 700, color: text.primary }}>Execution details</div>
+                    <div style={{ color: text.secondary }}>
+                      {selected.reworkCycle?.completionSummary
+                        ? `Rework summary: ${selected.reworkCycle.completionSummary}`
+                        : selected.executionBlockedReason
+                        ? `Blocked reason: ${selected.executionBlockedReason}`
+                        : selected.completionSummary
+                        ? `Completion summary: ${selected.completionSummary}`
+                        : selected.contractorLastUpdate || "Use the actions below to keep service progress current."}
+                    </div>
+                    <label style={{ display: "grid", gap: 4 }}>
+                      <span style={{ color: text.muted, fontSize: 12 }}>Scheduled service time</span>
+                      <input
+                        type="datetime-local"
+                        value={scheduledForInput}
+                        onChange={(e) => setScheduledForInput(e.target.value)}
+                        style={{
+                          padding: "9px 10px",
+                          borderRadius: radius.md,
+                          border: `1px solid ${colors.border}`,
+                          background: colors.panel,
+                          color: text.primary,
+                        }}
+                      />
+                    </label>
+                    <label style={{ display: "grid", gap: 6 }}>
+                      <span style={{ color: text.muted, fontSize: 12 }}>
+                        {selected.status === "completed" ? "Completion update" : "Execution note / blocked reason"}
+                      </span>
+                      <textarea
+                        rows={3}
+                        value={note}
+                        onChange={(e) => setNote(e.target.value)}
+                        placeholder="Add schedule details, a blocked reason, or a progress note"
+                        style={{
+                          width: "100%",
+                          padding: "10px",
+                          borderRadius: radius.md,
+                          border: `1px solid ${colors.border}`,
+                          background: colors.panel,
+                          color: text.primary,
+                          resize: "vertical",
+                        }}
+                      />
+                    </label>
+                    <label style={{ display: "grid", gap: 6 }}>
+                      <span style={{ color: text.muted, fontSize: 12 }}>Completion summary</span>
+                      <textarea
+                        rows={3}
+                        value={completionSummary}
+                        onChange={(e) => setCompletionSummary(e.target.value)}
+                        placeholder="Summarize what work was completed"
+                        style={{
+                          width: "100%",
+                          padding: "10px",
+                          borderRadius: radius.md,
+                          border: `1px solid ${colors.border}`,
+                          background: colors.panel,
+                          color: text.primary,
+                          resize: "vertical",
+                        }}
+                      />
+                    </label>
+                    <label style={{ display: "grid", gap: 4 }}>
+                      <span style={{ color: text.muted, fontSize: 12 }}>Completion outcome</span>
+                      <select
+                        value={completionOutcome}
+                        onChange={(e) =>
+                          setCompletionOutcome(e.target.value as "completed" | "partially_completed" | "follow_up_required")
+                        }
+                        style={{
+                          padding: "9px 10px",
+                          borderRadius: radius.md,
+                          border: `1px solid ${colors.border}`,
+                          background: colors.panel,
+                          color: text.primary,
+                        }}
+                      >
+                        <option value="completed">Completed</option>
+                        <option value="partially_completed">Partially completed</option>
+                        <option value="follow_up_required">Follow-up required</option>
+                      </select>
+                    </label>
+                  </div>
+
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {actions.map((action) => (
+                      <Button key={action.label} onClick={() => void action.onClick()} disabled={saving}>
+                        {saving ? "Saving..." : action.label}
+                      </Button>
+                    ))}
+                  </div>
+
+                  <div
+                    style={{
+                      border: `1px solid ${colors.border}`,
+                      borderRadius: radius.md,
+                      padding: "12px 14px",
+                      background: colors.panel,
+                      display: "grid",
+                      gap: 8,
+                    }}
+                  >
+                    <div style={{ fontWeight: 700, color: text.primary }}>Cost submission</div>
+                    <div style={{ color: text.secondary }}>
+                      Submit actual cost and receipts once the visit is completed so the landlord can review the final amount.
+                    </div>
+                    <div style={{ color: text.secondary, fontSize: 13 }}>
+                      Current cost: {formatMoney(selected.cost?.actualCostCents, selected.cost?.currency)} • Review{" "}
+                      {selected.cost?.reviewStatus?.replaceAll("_", " ") || "not submitted"}
+                    </div>
+                    {selected.cost?.reviewNote ? (
+                      <div style={{ color: text.secondary, fontSize: 13 }}>
+                        Landlord note: {selected.cost.reviewNote}
+                      </div>
+                    ) : null}
+                    {selected.cost?.latestRevisionNumber ? (
+                      <div style={{ color: text.secondary, fontSize: 13 }}>
+                        Revision #{selected.cost.latestRevisionNumber}
+                      </div>
+                    ) : null}
+                    <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
+                      <label style={{ display: "grid", gap: 4 }}>
+                        <span style={{ color: text.muted, fontSize: 12 }}>Actual cost</span>
+                        <input
+                          aria-label="Actual cost"
+                          value={costActualInput}
+                          onChange={(e) => setCostActualInput(e.target.value)}
+                          placeholder="245.00"
+                          style={{
+                            padding: "9px 10px",
+                            borderRadius: radius.md,
+                            border: `1px solid ${colors.border}`,
+                            background: colors.panel,
+                            color: text.primary,
+                          }}
+                        />
+                      </label>
+                      <label style={{ display: "grid", gap: 4 }}>
+                        <span style={{ color: text.muted, fontSize: 12 }}>Currency</span>
+                        <input
+                          aria-label="Cost currency"
+                          value={costCurrency}
+                          onChange={(e) => setCostCurrency(e.target.value.toUpperCase())}
+                          placeholder="CAD"
+                          style={{
+                            padding: "9px 10px",
+                            borderRadius: radius.md,
+                            border: `1px solid ${colors.border}`,
+                            background: colors.panel,
+                            color: text.primary,
+                          }}
+                        />
+                      </label>
+                    </div>
+                    <label style={{ display: "grid", gap: 4 }}>
+                      <span style={{ color: text.muted, fontSize: 12 }}>Line items JSON</span>
+                      <textarea
+                        aria-label="Cost line items"
+                        rows={3}
+                        value={costLineItemsJson}
+                        onChange={(e) => setCostLineItemsJson(e.target.value)}
+                        placeholder='[{"label":"Labor","amountCents":15000,"category":"labor"}]'
+                        style={{
+                          width: "100%",
+                          padding: "10px",
+                          borderRadius: radius.md,
+                          border: `1px solid ${colors.border}`,
+                          background: colors.panel,
+                          color: text.primary,
+                          resize: "vertical",
+                        }}
+                      />
+                    </label>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <Button disabled={savingCost} onClick={() => void submitCost()}>
+                        {savingCost
+                          ? "Saving..."
+                          : selected.cost?.reviewStatus === "rejected" || selected.cost?.reviewStatus === "revision_requested"
+                          ? "Resubmit cost"
+                          : "Submit cost"}
+                      </Button>
+                    </div>
+                    {selected.costReviewHistory?.length ? (
+                      <div style={{ display: "grid", gap: 8 }}>
+                        {selected.costReviewHistory.map((entry) => (
+                          <div
+                            key={entry.id}
+                            style={{
+                              border: `1px solid ${colors.border}`,
+                              borderRadius: radius.md,
+                              padding: "8px 10px",
+                              background: colors.card,
+                            }}
+                          >
+                            <div style={{ color: text.primary, fontWeight: 700 }}>
+                              Revision #{entry.revisionNumber} • {formatMoney(entry.actualCostCents, entry.currency)}
+                            </div>
+                            <div style={{ color: text.muted, fontSize: 12 }}>
+                              {entry.reviewStatus.replaceAll("_", " ")} • {fmtDate(entry.submittedAt)}
+                            </div>
+                            {entry.reviewNote ? (
+                              <div style={{ color: text.secondary, fontSize: 12, marginTop: 4 }}>{entry.reviewNote}</div>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                    <input
+                      aria-label="Cost attachment file"
+                      type="file"
+                      accept="application/pdf,image/png,image/jpeg,image/webp"
+                      onChange={(e) => setCostAttachmentFile(e.target.files?.[0] || null)}
+                    />
+                    <div>
+                      <Button variant="secondary" disabled={savingCost} onClick={() => void uploadCostAttachment()}>
+                        {savingCost ? "Uploading..." : "Upload invoice or receipt"}
+                      </Button>
+                    </div>
+                    {selected.costAttachments?.length ? (
+                      <div style={{ display: "grid", gap: 8 }}>
+                        {selected.costAttachments.map((attachment) => (
+                          <div
+                            key={attachment.id}
+                            style={{
+                              border: `1px solid ${colors.border}`,
+                              borderRadius: radius.md,
+                              padding: "8px 10px",
+                              background: colors.card,
+                            }}
+                          >
+                            <div style={{ color: text.primary, fontWeight: 700 }}>
+                              {attachment.fileName || "Cost attachment"}
+                            </div>
+                            <div style={{ color: text.muted, fontSize: 12 }}>
+                              {attachment.visibility === "landlord_only" ? "Landlord only" : "Internal"} • {fmtDate(attachment.uploadedAt)}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={{ color: text.muted }}>No receipts or invoices uploaded yet.</div>
+                    )}
+                  </div>
+
+                  <div
+                    style={{
+                      border: `1px solid ${colors.border}`,
+                      borderRadius: radius.md,
+                      padding: "12px 14px",
+                      background: colors.panel,
+                      display: "grid",
+                      gap: 8,
+                    }}
+                  >
+                    <div style={{ fontWeight: 700, color: text.primary }}>Evidence photos</div>
+                    <div style={{ color: text.secondary }}>
+                      Add before, during, after, or completion photos so the landlord can review visual proof with the job.
+                    </div>
+                    <input
+                      aria-label="Evidence file"
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      onChange={(e) => setEvidenceFile(e.target.files?.[0] || null)}
+                    />
+                    <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
+                      <select
+                        aria-label="Evidence type"
+                        value={evidenceType}
+                        onChange={(e) =>
+                          setEvidenceType(
+                            e.target.value as Extract<WorkOrderEvidenceType, "before" | "during" | "after" | "completion" | "other">
+                          )
+                        }
+                        style={{
+                          padding: "9px 10px",
+                          borderRadius: radius.md,
+                          border: `1px solid ${colors.border}`,
+                          background: colors.panel,
+                          color: text.primary,
+                        }}
+                      >
+                        <option value="before">Before</option>
+                        <option value="during">During</option>
+                        <option value="after">After</option>
+                        <option value="completion">Completion</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </div>
                     <textarea
-                      rows={3}
-                      value={note}
-                      onChange={(e) => setNote(e.target.value)}
-                      placeholder="Add schedule details or a progress note"
+                      aria-label="Evidence caption"
+                      rows={2}
+                      value={evidenceCaption}
+                      onChange={(e) => setEvidenceCaption(e.target.value)}
+                      placeholder="Add a short caption for this photo"
                       style={{
                         width: "100%",
                         padding: "10px",
@@ -339,14 +1045,43 @@ export default function ContractorJobsPage() {
                         resize: "vertical",
                       }}
                     />
-                  </label>
-
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    {actions.map((action) => (
-                      <Button key={action.label} onClick={() => void action.onClick()} disabled={saving}>
-                        {saving ? "Saving..." : action.label}
+                    <div>
+                      <Button disabled={uploadingEvidence} onClick={() => void uploadEvidence()}>
+                        {uploadingEvidence ? "Uploading..." : "Upload evidence"}
                       </Button>
-                    ))}
+                    </div>
+                    {selected.evidence?.length ? (
+                      <div style={{ display: "grid", gap: 8 }}>
+                        {selected.evidence.map((item) => (
+                          <div
+                            key={item.id}
+                            style={{
+                              border: `1px solid ${colors.border}`,
+                              borderRadius: radius.md,
+                              padding: "8px 10px",
+                              background: colors.card,
+                              display: "grid",
+                              gap: 6,
+                            }}
+                          >
+                            {item.url ? (
+                              <img
+                                src={item.url}
+                                alt={item.caption || `${evidenceTypeLabel(item.evidenceType)} evidence`}
+                                style={{ width: "100%", maxHeight: 220, objectFit: "cover", borderRadius: radius.md }}
+                              />
+                            ) : null}
+                            <div style={{ color: text.primary, fontWeight: 700 }}>{evidenceTypeLabel(item.evidenceType)}</div>
+                            <div style={{ color: text.muted, fontSize: 12 }}>
+                              {item.visibility === "tenant_safe" ? "Tenant-safe" : "Landlord + contractor"} • {fmtDate(item.uploadedAt)}
+                            </div>
+                            {item.caption ? <div style={{ color: text.secondary }}>{item.caption}</div> : null}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div style={{ color: text.muted }}>No evidence photos uploaded yet.</div>
+                    )}
                   </div>
 
                   <div style={{ display: "grid", gap: 8 }}>

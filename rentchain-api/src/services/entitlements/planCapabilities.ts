@@ -1,6 +1,6 @@
 export type Plan = "free" | "starter" | "pro" | "elite";
 
-const PLAN_ORDER: Plan[] = ["free", "starter", "pro", "elite"];
+export const CANONICAL_PLAN_ORDER: Plan[] = ["free", "starter", "pro", "elite"];
 
 const PLAN_ADDITIONS: Record<Plan, string[]> = {
   free: [
@@ -11,6 +11,7 @@ const PLAN_ADDITIONS: Record<Plan, string[]> = {
     "screening",
     "screening_pay_per_use",
     "screening_history",
+    "portfolio_health_summary",
     "unitsTable",
     "properties.create",
     "units.create",
@@ -34,7 +35,9 @@ const PLAN_ADDITIONS: Record<Plan, string[]> = {
     "pdf_export",
     "review_summary",
     "compliance_reports",
+    "marketplace_directory",
     "portfolio_dashboard",
+    "portfolio_score",
     "team.invites",
     "exports",
     "registry_filing_access",
@@ -44,7 +47,9 @@ const PLAN_ADDITIONS: Record<Plan, string[]> = {
     "ai_summaries",
     "exports_advanced",
     "audit_logs",
+    "marketplace_contractor_assignment",
     "portfolio_analytics",
+    "portfolio_action_recommendations",
   ],
 };
 
@@ -63,11 +68,11 @@ export function resolveCanonicalPlan(input?: string | null): Plan {
 
 export function capabilitiesForPlan(planInput?: string | null): string[] {
   const plan = resolveCanonicalPlan(planInput);
-  const maxIndex = PLAN_ORDER.indexOf(plan);
+  const maxIndex = CANONICAL_PLAN_ORDER.indexOf(plan);
   const set = new Set<string>();
 
   for (let i = 0; i <= maxIndex; i += 1) {
-    for (const capability of PLAN_ADDITIONS[PLAN_ORDER[i]]) {
+    for (const capability of PLAN_ADDITIONS[CANONICAL_PLAN_ORDER[i]]) {
       set.add(capability);
     }
   }
@@ -77,4 +82,25 @@ export function capabilitiesForPlan(planInput?: string | null): string[] {
 
 export function allCanonicalCapabilities(): string[] {
   return capabilitiesForPlan("elite");
+}
+
+export function canonicalPlanLabel(planInput?: string | null): "Free" | "Starter" | "Pro" | "Elite" {
+  const plan = resolveCanonicalPlan(planInput);
+  if (plan === "starter") return "Starter";
+  if (plan === "pro") return "Pro";
+  if (plan === "elite") return "Elite";
+  return "Free";
+}
+
+export function requiredPlanForCapability(capabilityInput?: string | null): Plan | null {
+  const capability = String(capabilityInput || "").trim().toLowerCase();
+  if (!capability) return null;
+
+  for (const plan of CANONICAL_PLAN_ORDER) {
+    if (PLAN_ADDITIONS[plan].includes(capability)) {
+      return plan;
+    }
+  }
+
+  return null;
 }

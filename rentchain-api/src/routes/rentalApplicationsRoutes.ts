@@ -6,6 +6,16 @@ import { attachAccount } from "../middleware/attachAccount";
 import { getStripeClient, isStripeConfigured } from "../services/stripeService";
 import { requireCapability } from "../services/capabilityGuard";
 import { getScreeningPricing } from "../billing/screeningPricing";
+import {
+  PACKAGE_TO_LEGACY_TIER,
+  SCREENING_ADDONS_V2,
+  SCREENING_PACKAGES_V2,
+} from "../lib/screeningMonetizationV2/screeningPackages";
+import {
+  calculateScreeningPrice,
+  isScreeningAddonKey,
+  isScreeningPackageKey,
+} from "../lib/screeningMonetizationV2/calculateScreeningPrice";
 import { finalizeStripePayment } from "../services/stripeFinalize";
 import { applyScreeningResultsFromOrder } from "../services/stripeScreeningProcessor";
 import { buildScreeningStatusPayload } from "../services/screening/screeningPayload";
@@ -32,9 +42,38 @@ import { createSignedUrl, putPdfObject } from "../storage/pdfStore";
 import { buildReviewSummary, buildReviewSummaryPdf } from "../lib/reviewSummary";
 import { buildApplicationDecisionSummary } from "../services/risk/applicationDecisionSummary";
 import { getLatestApplicationRisk } from "../services/riskAgent/riskAgentService";
+import { recordRiskDecisionAudit } from "../services/riskAgent/riskDecisionAuditService";
 import { rateLimitScreeningIp, rateLimitScreeningUser } from "../middleware/rateLimit";
 import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
 import { sendEmail } from "../services/emailService";
+import { recordScreeningPaymentInitiated } from "../services/screeningPaymentTransactionService";
+import {
+  executeScreeningCheckout,
+  logMockProviderCheckout,
+  shouldUseMockScreeningCheckoutOverride,
+} from "../services/screeningCheckoutExecutionService";
+import { writeCanonicalEvent } from "../lib/events/buildEvent";
+import { writeTransUnionUsageEvent } from "../services/screening/transUnionUsageEvents";
+import { executeAutomation } from "../lib/automation/automationExecutor";
+import { buildScreeningPolicyRequest } from "../lib/policy/policyAdapters";
+import { evaluatePolicy, toAutopilotPolicySummary, writePolicyEvaluatedEvent } from "../lib/policy/policyEvaluator";
+import {
+  getApplicationLinkReminderEligibility,
+  normalizeApplicationLinkPartialProgress,
+  sendApplicationLinkReminder,
+} from "../services/applicationReminderService";
+import {
+  buildQuoteId,
+  buildScreeningMonetizationPatch,
+  buildScreeningMonetizationSummary,
+  normalizeScreeningMonetizationState,
+} from "../services/screening/screeningMonetizationService";
+import {
+  SCREENING_CONSENT_VERSION,
+  evaluateScreeningApplicationEligibility,
+  resolveScreeningConsentPayload,
+  validateScreeningConsentPayload,
+} from "../lib/screeningCheckoutReadiness";
 
 const router = Router();
 
@@ -48,9 +87,15 @@ const ALLOWED_STATUS = [
   "CONDITIONAL_DEPOSIT",
 ];
 
-const ELIGIBLE_STATUS = ["SUBMITTED", "IN_REVIEW"];
+const APPLICATION_DECISION_ACTIONS = ["request_info", "approve", "reject"] as const;
 const SERVICE_LEVELS = ["SELF_SERVE", "VERIFIED", "VERIFIED_AI"] as const;
-const CONSENT_VERSION = "v1.0";
+const CONSENT_VERSION = SCREENING_CONSENT_VERSION;
+const INFO_REQUEST_ITEM_LABELS: Record<string, string> = {
+  upload_id: "Upload ID",
+  phone_number: "Phone number",
+  employer_contact: "Employer contact",
+  references: "References",
+};
 
 const ALLOWED_REDIRECT_ORIGINS = ["https://www.rentchain.ai", "https://rentchain.ai", "http://localhost:5173"];
 const REVIEW_SUMMARY_TEMPLATE_PATH = "src/lib/reviewSummary.ts";
@@ -96,6 +141,164 @@ function resolveFrontendOrigin(req: any) {
   return normalizeOrigin(base) || null;
 }
 
+function getPublicAppBaseUrl() {
+  const raw = String(process.env.PUBLIC_APP_URL || process.env.FRONTEND_ORIGIN || "https://www.rentchain.ai").trim();
+  return raw.replace(/\/$/, "");
+}
+
+function normalizeRequestInfoItems(value: any): string[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const items: string[] = [];
+  for (const item of value) {
+    const normalized = String(item || "").trim().toLowerCase();
+    if (!normalized || !INFO_REQUEST_ITEM_LABELS[normalized] || seen.has(normalized)) continue;
+    seen.add(normalized);
+    items.push(normalized);
+  }
+  return items;
+}
+
+async function resolveLandlordContactEmail(landlordId: string, fallbackEmail?: string | null) {
+  const normalizedLandlordId = String(landlordId || "").trim();
+  const fallback = String(fallbackEmail || "").trim();
+  if (!normalizedLandlordId) return fallback || null;
+  try {
+    const snap = await db.collection("landlords").doc(normalizedLandlordId).get();
+    if (!snap.exists) return fallback || null;
+    const data = snap.data() as any;
+    return String(data?.email || fallback || "").trim() || null;
+  } catch {
+    return fallback || null;
+  }
+}
+
+async function sendRentalApplicationDecisionEmail(params: {
+  action: (typeof APPLICATION_DECISION_ACTIONS)[number];
+  application: any;
+  landlordEmail: string | null;
+  requestInfoItems?: string[];
+  customMessage?: string | null;
+}) {
+  const applicantEmail = String(params.application?.applicant?.email || "").trim();
+  if (!applicantEmail) {
+    throw new Error("APPLICANT_EMAIL_MISSING");
+  }
+
+  const applicantFirstName = String(params.application?.applicant?.firstName || "").trim() || "there";
+  const applicantLastName = String(params.application?.applicant?.lastName || "").trim();
+  const applicantName = `${applicantFirstName} ${applicantLastName}`.trim();
+  const propertyLabel = String(params.application?.propertyName || params.application?.propertyId || "the property").trim();
+  const publicAppBaseUrl = getPublicAppBaseUrl();
+  const ctaUrl = params.landlordEmail ? `mailto:${encodeURIComponent(params.landlordEmail)}` : `${publicAppBaseUrl}/login`;
+  const replyTo = params.landlordEmail || undefined;
+  const from = process.env.EMAIL_FROM || process.env.FROM_EMAIL;
+  const customMessage = String(params.customMessage || "").trim();
+
+  if (!from) {
+    throw new Error("EMAIL_FROM missing");
+  }
+
+  if (params.action === "approve") {
+    const paymentEmail = String(params.landlordEmail || "").trim();
+    if (!paymentEmail) {
+      throw new Error("LANDLORD_PAYMENT_EMAIL_MISSING");
+    }
+    const intro = `Hi ${applicantFirstName}, your rental application for ${propertyLabel} has been approved. To hold the unit, please send an e-transfer for one half of one month's rent to ${paymentEmail}.`;
+    const bullets = [
+      `Send the e-transfer to ${paymentEmail}.`,
+      "Include your full name and the property or unit reference in the transfer note.",
+      "Reply to this email if you need to confirm the next leasing steps.",
+    ];
+    await sendEmail({
+      to: applicantEmail,
+      from,
+      replyTo,
+      subject: `Your RentChain application is approved`,
+      text: buildEmailText({
+        intro,
+        bullets,
+        ctaText: "Reply to confirm next steps",
+        ctaUrl,
+        footerNote: "This approval was sent by your landlord through RentChain.",
+      }),
+      html: buildEmailHtml({
+        title: "Application approved",
+        intro,
+        bullets,
+        ctaText: "Reply to confirm next steps",
+        ctaUrl,
+        footerNote: "This approval was sent by your landlord through RentChain.",
+        preheader: "Your landlord approved the application and shared the next payment step.",
+      }),
+    });
+    return { ok: true, paymentEmail };
+  }
+
+  if (params.action === "reject") {
+    const intro = `Hi ${applicantFirstName}, thank you for your interest in ${propertyLabel}. After review, the landlord has decided not to move forward with this application.`;
+    const bullets = [
+      "Your application has been closed in RentChain.",
+      "This message is intended to keep the decision clear and timely.",
+    ];
+    await sendEmail({
+      to: applicantEmail,
+      from,
+      replyTo,
+      subject: `Update on your RentChain rental application`,
+      text: buildEmailText({
+        intro,
+        bullets,
+        ctaText: "View RentChain",
+        ctaUrl: `${publicAppBaseUrl}/login`,
+        footerNote: "Thank you again for applying.",
+      }),
+      html: buildEmailHtml({
+        title: "Application update",
+        intro,
+        bullets,
+        ctaText: "View RentChain",
+        ctaUrl: `${publicAppBaseUrl}/login`,
+        footerNote: "Thank you again for applying.",
+        preheader: "Your landlord has shared the outcome of the application review.",
+      }),
+    });
+    return { ok: true, paymentEmail: null };
+  }
+
+  const items = normalizeRequestInfoItems(params.requestInfoItems);
+  const labeledItems = items.map((item) => INFO_REQUEST_ITEM_LABELS[item]);
+  const bullets = labeledItems.length
+    ? labeledItems.map((item) => `Please send: ${item}.`)
+    : ["Please reply with the additional information your landlord requested."];
+  if (customMessage) {
+    bullets.push(`Landlord note: ${customMessage}`);
+  }
+  await sendEmail({
+    to: applicantEmail,
+    from,
+    replyTo,
+    subject: `More information requested for your RentChain application`,
+    text: buildEmailText({
+      intro: `Hi ${applicantName || applicantFirstName}, your landlord needs a little more information before finishing the review for ${propertyLabel}.`,
+      bullets,
+      ctaText: params.landlordEmail ? "Reply to your landlord" : "Open RentChain",
+      ctaUrl,
+      footerNote: "This request was sent after an explicit landlord review action in RentChain.",
+    }),
+    html: buildEmailHtml({
+      title: "More information requested",
+      intro: `Hi ${applicantName || applicantFirstName}, your landlord needs a little more information before finishing the review for ${propertyLabel}.`,
+      bullets,
+      ctaText: params.landlordEmail ? "Reply to your landlord" : "Open RentChain",
+      ctaUrl,
+      footerNote: "This request was sent after an explicit landlord review action in RentChain.",
+      preheader: "Your landlord requested a few follow-up items before finishing the review.",
+    }),
+  });
+  return { ok: true, paymentEmail: null };
+}
+
 function buildRedirectUrl(params: {
   input?: string;
   fallbackPath: string;
@@ -136,11 +339,29 @@ function buildRedirectUrl(params: {
   return url.toString();
 }
 
+function isAutomationRequested(body: any) {
+  return Boolean(body?.automationEnabled || body?.automation?.enabled);
+}
+
 function applicantName(app: any): string {
   const first = String(app?.firstName || "").trim();
   const last = String(app?.lastName || "").trim();
   return `${first} ${last}`.trim() || "Applicant";
 }
+
+type RentalApplicationListItem = {
+  id: string;
+  source: "rental_application" | "application_link";
+  applicantName: string;
+  email: string | null;
+  propertyId: string | null;
+  unitId: string | null;
+  status: string;
+  submittedAt: number | null;
+  lastActivityAt: number | null;
+  completionPercent: number;
+  partialProgress: ReturnType<typeof normalizeApplicationLinkPartialProgress> | null;
+};
 
 function seededNumber(input: string) {
   const hash = createHash("sha256").update(input).digest("hex");
@@ -228,6 +449,37 @@ async function getLatestOrderByApplicationId(applicationId: string) {
     const bTs = Number(bData?.updatedAt || bData?.createdAt || 0);
     return bTs - aTs;
   });
+  return docs[0] || null;
+}
+
+async function getLatestOrderByManualCheckout(params: {
+  landlordId: string;
+  propertyId: string;
+  unitId?: string | null;
+  tenantEmail?: string | null;
+}) {
+  const snap = await db
+    .collection("screeningOrders")
+    .where("landlordId", "==", params.landlordId)
+    .limit(50)
+    .get();
+  const targetUnitId = String(params.unitId || "").trim();
+  const targetTenantEmail = String(params.tenantEmail || "").trim().toLowerCase();
+  const docs = snap.docs
+    .filter((doc) => {
+      const data = doc.data() as any;
+      if (String(data?.propertyId || "").trim() !== params.propertyId) return false;
+      if (String(data?.unitId || "").trim() !== targetUnitId) return false;
+      if (targetTenantEmail && String(data?.tenantEmail || "").trim().toLowerCase() !== targetTenantEmail) return false;
+      return true;
+    })
+    .sort((a, b) => {
+      const aData = a.data() as any;
+      const bData = b.data() as any;
+      const aTs = Number(aData?.updatedAt || aData?.createdAt || 0);
+      const bTs = Number(bData?.updatedAt || bData?.createdAt || 0);
+      return bTs - aTs;
+    });
   return docs[0] || null;
 }
 
@@ -368,39 +620,7 @@ function buildAiVerification(applicationId: string, seed: number) {
 }
 
 function evaluateEligibility(application: any) {
-  const status = String(application?.status || "").toUpperCase();
-  if (!ELIGIBLE_STATUS.includes(status)) {
-    return {
-      eligible: false,
-      detail: "Application must be submitted before screening.",
-      reasonCode: "APPLICATION_STATUS_NOT_READY",
-    };
-  }
-  const consent = application?.consent || {};
-  if (!consent?.creditConsent || !consent?.referenceConsent) {
-    return {
-      eligible: false,
-      detail: "Consent for credit and references is required.",
-      reasonCode: "MISSING_CONSENT",
-    };
-  }
-  const dob = String(application?.applicant?.dob || "").trim();
-  const sin = String(
-    application?.applicant?.sinLast4 ||
-      application?.applicant?.sin ||
-      application?.applicantProfile?.sinLast4 ||
-      application?.applicantProfile?.sin ||
-      ""
-  ).trim();
-  const currentAddress = String(application?.residentialHistory?.[0]?.address || "").trim();
-  if ((!dob && !sin) || !currentAddress) {
-    return {
-      eligible: false,
-      detail: "DOB (or SIN) and current address are required.",
-      reasonCode: "MISSING_TENANT_PROFILE",
-    };
-  }
-  return { eligible: true, detail: null, reasonCode: "ELIGIBLE" };
+  return evaluateScreeningApplicationEligibility(application);
 }
 
 function isScreeningAlreadyPaid(application: any) {
@@ -432,32 +652,11 @@ async function loadAuthorizedApplication(req: any, applicationId: string) {
 }
 
 function resolveConsentPayload(body: any, application?: any) {
-  const payload = body && typeof body === "object" ? body : {};
-  const nestedConsent = payload?.consent && typeof payload.consent === "object" ? payload.consent : {};
-  const consent = Object.keys(nestedConsent).length ? nestedConsent : payload;
-  const appConsent = application?.consent || {};
-  const timestamp = String(consent?.timestamp || appConsent?.acceptedAt || "").trim();
-  const version = String(consent?.version || appConsent?.version || CONSENT_VERSION).trim();
-  const textHash = consent?.textHash
-    ? String(consent.textHash).trim()
-    : appConsent?.textHash
-    ? String(appConsent.textHash).trim()
-    : null;
-  return {
-    given: Boolean(
-      consent?.given || (appConsent?.creditConsent === true && appConsent?.referenceConsent === true)
-    ),
-    timestamp,
-    version,
-    textHash,
-  };
+  return resolveScreeningConsentPayload(body, application);
 }
 
 function validateConsent(consent: ReturnType<typeof resolveConsentPayload>) {
-  if (!consent.given) return { ok: false, error: "consent_required" };
-  if (!consent.timestamp) return { ok: false, error: "consent_missing_timestamp" };
-  if (consent.version !== CONSENT_VERSION) return { ok: false, error: "consent_version_mismatch" };
-  return { ok: true };
+  return validateScreeningConsentPayload(consent);
 }
 
 function resolveServiceLevel(raw?: string | null) {
@@ -473,6 +672,12 @@ function resolveScreeningTier(raw?: string | null): "basic" | "verify" | "verify
   return "basic";
 }
 
+function resolveScreeningPackage(raw?: string | null): "basic" | "standard" | "premium" | null {
+  const val = String(raw || "").trim().toLowerCase();
+  if (isScreeningPackageKey(val)) return val;
+  return null;
+}
+
 function normalizeAddons(raw: any): string[] {
   if (!raw) return [];
   if (Array.isArray(raw)) return raw.map((v) => String(v || "").trim().toLowerCase()).filter(Boolean);
@@ -485,9 +690,25 @@ function normalizeAddons(raw: any): string[] {
   return [];
 }
 
+function normalizeScreeningV2Addons(raw: any) {
+  return normalizeAddons(raw).filter((value) => isScreeningAddonKey(value));
+}
+
+function resolvePaymentResponsibility(raw?: string | null): "landlord" | "tenant" {
+  return String(raw || "").trim().toLowerCase() === "tenant" ? "tenant" : "landlord";
+}
+
 function resolvePricingInput(body: any) {
-  const screeningTier = resolveScreeningTier(body?.screeningTier);
-  const addons = normalizeAddons(body?.addons);
+  const requestedPackage = resolveScreeningPackage(body?.screeningPackage || body?.package);
+  const v2Addons = normalizeScreeningV2Addons(body?.addons);
+  const screeningTier = resolveScreeningTier(
+    body?.screeningTier || (requestedPackage ? PACKAGE_TO_LEGACY_TIER[requestedPackage] : undefined)
+  );
+  const screeningPackage = requestedPackage || (screeningTier === "verify" ? "standard" : screeningTier === "verify_ai" ? "premium" : "basic");
+  const legacyAddons = normalizeAddons(body?.addons).filter(
+    (value) => value === "credit_score" || value === "expedited"
+  );
+  const addons = [...v2Addons, ...legacyAddons];
   const serviceLevel = resolveServiceLevel(
     body?.serviceLevel ||
       (screeningTier === "basic"
@@ -498,8 +719,33 @@ function resolvePricingInput(body: any) {
   );
   const scoreAddOn = addons.includes("credit_score") || body?.scoreAddOn === true;
   const expeditedAddOn = addons.includes("expedited");
-  const pricing = getScreeningPricing({ screeningTier, addons, currency: "CAD" });
-  return { screeningTier, addons, serviceLevel, scoreAddOn, expeditedAddOn, pricing };
+  const paymentResponsibility = resolvePaymentResponsibility(body?.paymentResponsibility || body?.payer);
+  const pricing = getScreeningPricing({
+    screeningTier,
+    packageKey: screeningPackage,
+    addons,
+    currency: "CAD",
+  });
+  const packagePricing = calculateScreeningPrice({
+    packageKey: screeningPackage,
+    addons: v2Addons,
+    currency: "CAD",
+  });
+  return {
+    screeningTier,
+    screeningPackage,
+    addons,
+    v2Addons,
+    serviceLevel,
+    scoreAddOn,
+    expeditedAddOn,
+    paymentResponsibility,
+    pricing: {
+      ...pricing,
+      packageAmountCents: packagePricing.packageAmountCents,
+      addonAmountCents: packagePricing.addonAmountCents,
+    },
+  };
 }
 
 function buildQuotePayload(pricing: any) {
@@ -516,6 +762,61 @@ function buildQuotePayload(pricing: any) {
       eligible: true,
     },
   };
+}
+
+function buildScreeningLineItems(params: {
+  currency: string;
+  screeningPackage: string;
+  addons: string[];
+  pricing: any;
+}) {
+  const currency = String(params.currency || "cad").toLowerCase();
+  const packageConfig =
+    SCREENING_PACKAGES_V2[params.screeningPackage as keyof typeof SCREENING_PACKAGES_V2] ||
+    SCREENING_PACKAGES_V2.basic;
+  const items: any[] = [
+    {
+      price_data: {
+        currency,
+        product_data: { name: `${packageConfig.label} screening package` },
+        unit_amount: params.pricing.baseAmountCents,
+      },
+      quantity: 1,
+    },
+  ];
+  for (const addonKey of params.addons) {
+    if (!isScreeningAddonKey(addonKey)) continue;
+    const addon = SCREENING_ADDONS_V2[addonKey];
+    items.push({
+      price_data: {
+        currency,
+        product_data: { name: addon.label },
+        unit_amount: addon.price,
+      },
+      quantity: 1,
+    });
+  }
+  if (params.pricing.scoreAddOnCents) {
+    items.push({
+      price_data: {
+        currency,
+        product_data: { name: "Credit score add-on" },
+        unit_amount: params.pricing.scoreAddOnCents,
+      },
+      quantity: 1,
+    });
+  }
+  if (params.pricing.expeditedAddOnCents) {
+    items.push({
+      price_data: {
+        currency,
+        product_data: { name: "Expedited processing add-on" },
+        unit_amount: params.pricing.expeditedAddOnCents,
+      },
+      quantity: 1,
+    });
+  }
+  return items;
 }
 
 function isTransUnionReferralMode() {
@@ -633,36 +934,6 @@ function logCutoverBlocked(params: {
   });
 }
 
-function shouldUseMockCheckoutOverride(params: {
-  role: string;
-  seedKey: string;
-}) {
-  const allowMock = process.env.ALLOW_MOCK_PROVIDER_CHECKOUT === "true";
-  if (!allowMock) return false;
-  if (params.role !== "admin") return false;
-  return isAllowlistedSeed(params.seedKey, parseAllowlist());
-}
-
-function logMockProviderCheckout(params: { name: "checkout" | "run"; seedKey: string }) {
-  logCutoverEvent({
-    eventType: "bureau_cutover",
-    name: params.name,
-    seedHash: hashSeedKey(params.seedKey || ""),
-    selectedRoute: "adapter",
-    responseSource: "adapter",
-    fallbackUsed: false,
-    adapter: { ok: true, status: 200 },
-    legacy: { ok: false },
-    diff: { isMatch: true, fields: [] },
-    meta: {
-      env: process.env.NODE_ENV || "development",
-      ts: new Date().toISOString(),
-      revision: process.env.K_REVISION || process.env.GIT_SHA || undefined,
-      providerMode: "mock",
-    },
-  });
-}
-
 async function createManualApplicationFromOrderBody(opts: {
   landlordId: string;
   propertyId: string;
@@ -742,6 +1013,27 @@ async function createManualApplicationFromOrderBody(opts: {
   };
 
   await appRef.set(record, { merge: false });
+  await writeCanonicalEvent({
+    domain: "application",
+    action: "created",
+    actor: {
+      type: "landlord",
+      role: "landlord",
+      id: opts.landlordId,
+    },
+    resource: {
+      type: "rental_application",
+      id: appRef.id,
+    },
+    occurredAt: now,
+    visibility: "internal",
+    summary: "Manual rental application created for screening",
+    metadata: {
+      propertyId: opts.propertyId,
+      unitId: opts.unitId || null,
+      source: "manual_screening",
+    },
+  });
   return { ok: true as const, applicationId: appRef.id, data: record };
 }
 
@@ -781,24 +1073,149 @@ router.get("/rental-applications", async (req: any, res) => {
         .get();
     }
 
-    const items = snap.docs.map((doc) => {
+    const items: RentalApplicationListItem[] = snap.docs.map((doc) => {
       const data = doc.data() as any;
       return {
         id: doc.id,
+        source: "rental_application" as const,
         applicantName: applicantName(data?.applicant),
         email: data?.applicant?.email || null,
         propertyId: data?.propertyId || null,
         unitId: data?.unitId || null,
         status: data?.status || "SUBMITTED",
         submittedAt: data?.submittedAt || null,
+        lastActivityAt: data?.submittedAt || data?.updatedAt || null,
+        completionPercent: 100,
+        partialProgress: null,
       };
     });
 
-    items.sort((a, b) => Number(b.submittedAt || 0) - Number(a.submittedAt || 0));
+    const shouldIncludePartialLinks = !status || status === "IN_PROGRESS";
+    if (shouldIncludePartialLinks) {
+      let linksQuery: FirebaseFirestore.Query = db
+        .collection("applicationLinks")
+        .where("landlordId", "==", landlordId);
+      if (propertyId) {
+        linksQuery = linksQuery.where("propertyId", "==", propertyId);
+      }
+
+      let linksSnap: FirebaseFirestore.QuerySnapshot;
+      try {
+        linksSnap = await linksQuery.limit(200).get();
+      } catch (_err) {
+        linksSnap = await db
+          .collection("applicationLinks")
+          .where("landlordId", "==", landlordId)
+          .limit(200)
+          .get();
+      }
+
+      const partialItems = linksSnap.docs
+        .map((doc) => {
+          const data = doc.data() as any;
+          const partialProgress = normalizeApplicationLinkPartialProgress(data?.partialProgress);
+          return {
+            id: doc.id,
+            source: "application_link" as const,
+            applicantName: "In-progress applicant",
+            email: null,
+            propertyId: data?.propertyId || null,
+            unitId: data?.unitId || null,
+            status: "IN_PROGRESS" as const,
+            submittedAt: null,
+            lastActivityAt: partialProgress.lastActivityAt || partialProgress.startedAt || data?.createdAt || null,
+            completionPercent: partialProgress.completionPercent,
+            partialProgress,
+          };
+        })
+        .filter((item) =>
+          item.partialProgress.status === "started" ||
+          item.partialProgress.status === "in_progress" ||
+          item.partialProgress.status === "ready_to_submit"
+        );
+
+      items.push(...partialItems);
+    }
+
+    items.sort(
+      (a, b) =>
+        Number(b.submittedAt || b.lastActivityAt || 0) - Number(a.submittedAt || a.lastActivityAt || 0)
+    );
     return res.json({ ok: true, data: items });
   } catch (err: any) {
     console.error("[rental-applications] list failed", err?.message || err);
     return res.status(500).json({ ok: false, error: "RENTAL_APPLICATIONS_LIST_FAILED" });
+  }
+});
+
+router.post("/rental-applications/in-progress/:id/send-reminder", async (req: any, res) => {
+  try {
+    const role = String(req.user?.role || "").toLowerCase();
+    if (role !== "landlord" && role !== "admin") {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const landlordId = req.user?.landlordId || req.user?.id || null;
+    if (!landlordId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+
+    const id = String(req.params?.id || "").trim();
+    if (!id) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+
+    const linkRef = db.collection("applicationLinks").doc(id);
+    const initialSnap = await linkRef.get();
+    if (!initialSnap.exists) {
+      return res.status(404).json({ ok: false, error: "APPLICATION_LINK_NOT_FOUND" });
+    }
+
+    const initialLink = { id: initialSnap.id, ...(initialSnap.data() as any) };
+    if (String(initialLink?.landlordId || "") !== String(landlordId)) {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const now = Date.now();
+    const initialEligibility = getApplicationLinkReminderEligibility(initialLink, now);
+    if (!initialEligibility.isEligible) {
+      return res.status(400).json({
+        ok: false,
+        error: "APPLICATION_REMINDER_NOT_ELIGIBLE",
+        message: "This in-progress application is not eligible for a reminder.",
+      });
+    }
+
+    const freshSnap = await linkRef.get();
+    if (!freshSnap.exists) {
+      return res.status(404).json({ ok: false, error: "APPLICATION_LINK_NOT_FOUND" });
+    }
+
+    const link = { id: freshSnap.id, ...(freshSnap.data() as any) };
+    if (String(link?.landlordId || "") !== String(landlordId)) {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const eligibility = getApplicationLinkReminderEligibility(link, now);
+    if (!eligibility.isEligible) {
+      return res.status(400).json({
+        ok: false,
+        error: "APPLICATION_REMINDER_NOT_ELIGIBLE",
+        message: "This in-progress application is not eligible for a reminder.",
+      });
+    }
+    const result = await sendApplicationLinkReminder(link.id, { actorType: "landlord" });
+    if (!result.ok) {
+      return res.status(500).json({ ok: false, error: "APPLICATION_REMINDER_SEND_FAILED" });
+    }
+
+    return res.json({
+      ok: true,
+      data: {
+        id: result.data.id,
+        sentAt: result.data.sentAt,
+        partialProgress: result.data.partialProgress,
+      },
+    });
+  } catch (err: any) {
+    console.error("[rental-applications] send reminder failed", err?.message || err);
+    return res.status(500).json({ ok: false, error: "APPLICATION_REMINDER_SEND_FAILED" });
   }
 });
 
@@ -969,6 +1386,114 @@ router.patch("/rental-applications/:id", async (req: any, res) => {
   }
 });
 
+router.post("/rental-applications/:id/decision-action", async (req: any, res) => {
+  try {
+    const role = String(req.user?.role || "").toLowerCase();
+    if (role !== "landlord" && role !== "admin") {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+    const actorUserId = String(req.user?.id || "").trim() || null;
+    const actorEmail = String(req.user?.email || "").trim() || null;
+    const fallbackLandlordId = String(req.user?.landlordId || req.user?.id || "").trim() || null;
+    if (!fallbackLandlordId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+
+    const id = String(req.params?.id || "").trim();
+    if (!id) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+
+    const action = String(req.body?.action || "").trim().toLowerCase();
+    if (!APPLICATION_DECISION_ACTIONS.includes(action as (typeof APPLICATION_DECISION_ACTIONS)[number])) {
+      return res.status(400).json({ ok: false, error: "INVALID_ACTION" });
+    }
+
+    const snap = await db.collection("rentalApplications").doc(id).get();
+    if (!snap.exists) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+    const data = snap.data() as any;
+    const applicationLandlordId = String(data?.landlordId || fallbackLandlordId || "").trim() || null;
+    if (applicationLandlordId && role !== "admin" && applicationLandlordId !== fallbackLandlordId) {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const requestedItems = normalizeRequestInfoItems(req.body?.requestedItems);
+    const note = String(req.body?.note || req.body?.customMessage || "").trim().slice(0, 5000) || null;
+    const landlordEmail = await resolveLandlordContactEmail(applicationLandlordId || fallbackLandlordId, actorEmail);
+
+    if (action === "request_info" && requestedItems.length === 0 && !note) {
+      return res.status(400).json({ ok: false, error: "REQUEST_INFO_EMPTY" });
+    }
+
+    const emailResult = await sendRentalApplicationDecisionEmail({
+      action: action as (typeof APPLICATION_DECISION_ACTIONS)[number],
+      application: data,
+      landlordEmail,
+      requestInfoItems: requestedItems,
+      customMessage: note,
+    });
+
+    const now = Date.now();
+    const nextStatus =
+      action === "approve" ? "APPROVED" : action === "reject" ? "DECLINED" : "IN_REVIEW";
+    const updates: any = {
+      updatedAt: now,
+      status: nextStatus,
+      landlordNote: note,
+      lastLandlordAction: {
+        type: action,
+        actedAt: now,
+        actedBy: actorUserId,
+        actorRole: role,
+        emailSentAt: now,
+        paymentEmail: emailResult?.paymentEmail || null,
+        note,
+        requestedItems: action === "request_info" ? requestedItems : [],
+      },
+    };
+
+    if (action === "request_info") {
+      updates.landlordInfoRequest = {
+        requestedItems,
+        customMessage: note,
+        requestedAt: now,
+        requestedBy: actorUserId,
+      };
+    } else {
+      updates.landlordInfoRequest = null;
+    }
+
+    await db.collection("rentalApplications").doc(id).set(updates, { merge: true });
+
+    await recordRiskDecisionAudit({
+      applicationId: id,
+      landlordId: applicationLandlordId || fallbackLandlordId,
+      userId: actorUserId,
+      role,
+      decision: action as "approve" | "reject" | "request_info",
+      notes: note,
+    });
+
+    const refreshed = await db.collection("rentalApplications").doc(id).get();
+    return res.json({
+      ok: true,
+      data: { id: refreshed.id, ...(refreshed.data() as any) },
+      action: {
+        type: action,
+        status: nextStatus,
+        emailSent: true,
+        paymentEmail: emailResult?.paymentEmail || null,
+      },
+    });
+  } catch (err: any) {
+    const message = String(err?.message || "RENTAL_APPLICATION_ACTION_FAILED");
+    const status =
+      message === "LANDLORD_PAYMENT_EMAIL_MISSING" || message === "APPLICANT_EMAIL_MISSING" || message === "EMAIL_FROM missing"
+        ? 400
+        : 500;
+    if (status >= 500) {
+      console.error("[rental-applications] decision action failed", err?.message || err);
+    }
+    return res.status(status).json({ ok: false, error: message });
+  }
+});
+
 router.post(
   "/rental-applications/:id/screening/quote",
   attachAccount,
@@ -989,8 +1514,47 @@ router.post(
       if (data?.landlordId && data.landlordId !== landlordId) {
         return res.status(403).json({ ok: false, error: "FORBIDDEN" });
       }
+      const latestOrderDoc = await getLatestOrderByApplicationId(id);
+      const latestOrder = latestOrderDoc?.data?.() || null;
       const seedKey = [id, data?.landlordId || landlordId].filter(Boolean).join(":");
       const eligibility = evaluateEligibility(data);
+      const body = typeof req.body === "string" ? safeParse(req.body) : req.body || {};
+      const consent = resolveConsentPayload(body, data);
+      const consentCheck = validateConsent(consent);
+      const policyRequest = buildScreeningPolicyRequest({
+        action: "generate_quote",
+        actorRole: role,
+        actorUserId: String(req.user?.id || req.user?.landlordId || "").trim() || null,
+        applicationId: id,
+        eligibility,
+        application: data,
+        consentComplete: consentCheck.ok,
+        providerReady: true,
+      });
+      const policyResult = evaluatePolicy(policyRequest);
+      const autopilotPolicy = toAutopilotPolicySummary(policyResult);
+      await writePolicyEvaluatedEvent({
+        request: policyRequest,
+        result: policyResult,
+        actorType: role === "admin" ? "admin" : "landlord",
+        metadata: {
+          landlordId: data?.landlordId || landlordId,
+          propertyId: data?.propertyId || null,
+          unitId: data?.unitId || null,
+        },
+      });
+      const currentMonetizationState = normalizeScreeningMonetizationState({
+        application: data,
+        latestOrder,
+        eligibility:
+          !eligibility.eligible && eligibility.reasonCode === "MISSING_CONSENT"
+            ? "ineligible"
+            : eligibility.eligible
+            ? "eligible"
+            : "ineligible",
+        amount: null,
+      });
+      const currentMonetizationSummary = buildScreeningMonetizationSummary(currentMonetizationState);
       await writeScreeningEvent({
         applicationId: id,
         landlordId: data?.landlordId || null,
@@ -1005,28 +1569,101 @@ router.post(
           return res.status(400).json({
             ok: false,
             error: "consent_required",
+            errorCode: "SCREENING_MONETIZATION_BLOCKED",
             detail: eligibility.detail,
+            autopilotPolicy,
+            screeningMonetizationSummary: {
+              ...currentMonetizationSummary,
+              blockingReason: "SCREENING_MONETIZATION_BLOCKED",
+            },
           });
         }
         logCutoverBlocked({ name: "quote", seedKey, skippedReason: "NOT_ELIGIBLE" });
-        return res.json({ ok: false, error: "NOT_ELIGIBLE", detail: eligibility.detail });
+        return res.json({
+          ok: false,
+          error: "NOT_ELIGIBLE",
+          errorCode: "SCREENING_MONETIZATION_BLOCKED",
+          detail: eligibility.detail,
+          autopilotPolicy,
+          screeningMonetizationSummary: {
+            ...currentMonetizationSummary,
+            blockingReason: "SCREENING_MONETIZATION_BLOCKED",
+          },
+        });
       }
 
-      const body = typeof req.body === "string" ? safeParse(req.body) : req.body || {};
-      const consent = resolveConsentPayload(body, data);
-      const consentCheck = validateConsent(consent);
       if (!consentCheck.ok) {
         logCutoverBlocked({ name: "quote", seedKey, skippedReason: "consent_required" });
         return res.status(400).json({
           ok: false,
           error: "consent_required",
+          errorCode: "SCREENING_MONETIZATION_BLOCKED",
           detail: consentCheck.error,
+          autopilotPolicy,
+          screeningMonetizationSummary: {
+            ...currentMonetizationSummary,
+            blockingReason: "SCREENING_MONETIZATION_BLOCKED",
+          },
+        });
+      }
+
+      if (currentMonetizationSummary.alreadyPaid) {
+        return res.status(409).json({
+          ok: false,
+          error: "screening_already_paid",
+          errorCode: "SCREENING_ALREADY_PAID",
+          autopilotPolicy,
+          screeningMonetizationSummary: currentMonetizationSummary,
+        });
+      }
+      if (currentMonetizationSummary.blockingReason === "SCREENING_ORDER_ALREADY_CREATED") {
+        return res.status(409).json({
+          ok: false,
+          error: "screening_order_already_created",
+          errorCode: "SCREENING_ORDER_ALREADY_CREATED",
+          autopilotPolicy,
+          screeningMonetizationSummary: currentMonetizationSummary,
+        });
+      }
+      if (currentMonetizationSummary.blockingReason === "SCREENING_CHECKOUT_ALREADY_EXISTS") {
+        return res.status(409).json({
+          ok: false,
+          error: "screening_checkout_already_exists",
+          errorCode: "SCREENING_CHECKOUT_ALREADY_EXISTS",
+          autopilotPolicy,
+          screeningMonetizationSummary: currentMonetizationSummary,
         });
       }
       if (isTransUnionReferralMode()) {
-        return res.json(buildReferralQuotePayload());
+        const state = normalizeScreeningMonetizationState({
+          application: data,
+          latestOrder,
+          eligibility: "eligible",
+          amount: 0,
+          currency: "CAD",
+        });
+        return res.json({
+          ...buildReferralQuotePayload(),
+          autopilotPolicy,
+          screeningMonetizationSummary: buildScreeningMonetizationSummary(state),
+        });
       }
       const { pricing } = resolvePricingInput(body);
+      const quoteId = buildQuoteId({ applicationId: id });
+      const monetizationPatch = buildScreeningMonetizationPatch({
+        current: data?.screeningMonetization,
+        eligibility: "eligible",
+        quoteStatus: "generated",
+        paymentStatus:
+          currentMonetizationState.paymentStatus === "failed" ? "failed" : currentMonetizationState.paymentStatus,
+        fulfillmentStatus: "ready",
+        quoteId,
+        quoteGeneratedAt: Date.now(),
+        amount: pricing.totalAmountCents,
+        currency: pricing.currency,
+        lastErrorCode: null,
+        lastErrorMessage: null,
+      });
       const quoteResult = await runPrimaryWithFallback({
         name: "quote",
         seedKey,
@@ -1036,8 +1673,133 @@ router.post(
         runAdapter: async () => buildQuotePayload(pricing),
         compare: compareQuoteResponses,
       });
+      await db.collection("rentalApplications").doc(id).set(
+        {
+          screeningMonetization: monetizationPatch,
+          updatedAt: Date.now(),
+        },
+        { merge: true }
+      );
+      await writeCanonicalEvent({
+        domain: "screening",
+        action: "quote_generated",
+        actor: {
+          type: role === "admin" ? "admin" : "landlord",
+          role,
+          id: String(req.user?.id || req.user?.landlordId || "").trim() || null,
+        },
+        resource: {
+          type: "rental_application",
+          id,
+        },
+        occurredAt: Date.now(),
+        visibility: "internal",
+        summary: "Screening quote generated",
+        metadata: {
+          landlordId: data?.landlordId || landlordId,
+          propertyId: data?.propertyId || null,
+          unitId: data?.unitId || null,
+        },
+      });
+      const quoteResponse = {
+        ...quoteResult,
+        autopilotPolicy,
+        screeningMonetizationSummary: buildScreeningMonetizationSummary(
+          normalizeScreeningMonetizationState({
+            application: { ...data, screeningMonetization: monetizationPatch },
+            latestOrder,
+            eligibility: "eligible",
+            amount: pricing.totalAmountCents,
+            currency: pricing.currency,
+          })
+        ),
+      };
+      if (!isAutomationRequested(body)) {
+        return res.json(quoteResponse);
+      }
 
-      return res.json(quoteResult);
+      const providerHealth = await getScreeningProviderHealth();
+      const startCheckoutPolicyRequest = buildScreeningPolicyRequest({
+        action: "start_checkout",
+        actorRole: role,
+        actorUserId: String(req.user?.id || req.user?.landlordId || "").trim() || null,
+        applicationId: id,
+        eligibility,
+        application: data,
+        consentComplete: consentCheck.ok,
+        providerReady:
+          isTransUnionReferralMode() ||
+          process.env.NODE_ENV !== "production" ||
+          (providerHealth.configured && providerHealth.preflightOk),
+      });
+      const startCheckoutPolicyResult = evaluatePolicy(startCheckoutPolicyRequest);
+      await writePolicyEvaluatedEvent({
+        request: startCheckoutPolicyRequest,
+        result: startCheckoutPolicyResult,
+        actorType: role === "admin" ? "admin" : "landlord",
+        metadata: {
+          landlordId: data?.landlordId || landlordId,
+          propertyId: data?.propertyId || null,
+          unitId: data?.unitId || null,
+          initiatedFrom: "screening_quote",
+        },
+      });
+      const automation = await executeAutomation({
+        action: "screening.auto_start_checkout",
+        policyResult: startCheckoutPolicyResult,
+        actor: {
+          type: role === "admin" ? "admin" : "landlord",
+          id: String(req.user?.id || req.user?.landlordId || "").trim() || null,
+          role,
+        },
+        resource: {
+          type: "rental_application",
+          id,
+        },
+        visibility: "internal",
+        metadata: {
+          domain: "screening",
+          initiatedFrom: "quote",
+          landlordId: data?.landlordId || landlordId,
+          propertyId: data?.propertyId || null,
+          unitId: data?.unitId || null,
+          policyAction: "start_checkout",
+        },
+        context: {
+          quoteExists: true,
+          existingCheckout: false,
+          alreadyPaid: false,
+          execute: async () => {
+            const execution = await executeScreeningCheckout({
+              role,
+              actorId: String(req.user?.id || req.user?.landlordId || "").trim() || null,
+              landlordId: String(landlordId),
+              applicationId: id,
+              application: { ...data, screeningMonetization: monetizationPatch },
+              body,
+              consent,
+              providerHealth,
+              autopilotPolicy,
+              frontendOrigin: resolveFrontendOrigin(req),
+              logBase: { route: "screening_quote_automation", applicationId: id },
+            });
+            if (execution.status !== 200) {
+              const executionPayload = execution.payload as any;
+              const error = new Error(String(executionPayload?.error || "AUTOMATION_EXECUTION_FAILED"));
+              (error as any).code =
+                executionPayload?.errorCode || executionPayload?.error || "AUTOMATION_EXECUTION_FAILED";
+              throw error;
+            }
+            return execution.payload;
+          },
+        },
+      });
+
+      return res.json({
+        ...quoteResponse,
+        ...(automation.data && typeof automation.data === "object" ? automation.data : {}),
+        automationResult: automation.automationResult,
+      });
     } catch (err: any) {
       console.error("[rental-applications] screening quote failed", err?.message || err);
       return res.status(500).json({ ok: false, error: "SCREENING_QUOTE_FAILED" });
@@ -1069,6 +1831,11 @@ router.post(
       if (role !== "admin" && data?.landlordId && data.landlordId !== landlordId) {
         return res.status(401).json({ ok: false, error: "unauthorized" });
       }
+      const latestOrderDoc = await getLatestOrderByApplicationId(id);
+      const latestOrder = latestOrderDoc?.data?.() || null;
+      const body = typeof req.body === "string" ? safeParse(req.body) : req.body || {};
+      const consent = resolveConsentPayload(body, data);
+      const consentCheck = validateConsent(consent);
       await runAdapterPrimaryProbe({
         name: "checkout",
         seedKey: [id, data?.landlordId || landlordId].filter(Boolean).join(":"),
@@ -1076,6 +1843,12 @@ router.post(
       });
 
       if (isScreeningAlreadyPaid(data)) {
+        const monetizationState = normalizeScreeningMonetizationState({
+          application: data,
+          latestOrder,
+          eligibility: "eligible",
+        });
+        const screeningMonetizationSummary = buildScreeningMonetizationSummary(monetizationState);
         await writeScreeningEvent({
           applicationId: id,
           landlordId: data?.landlordId || null,
@@ -1084,7 +1857,34 @@ router.post(
           meta: { status: "already_paid" },
           actor: role === "admin" ? "admin" : "landlord",
         });
-        return res.status(400).json({ ok: false, error: "screening_already_paid" });
+        await writeCanonicalEvent({
+          domain: "screening",
+          action: "blocked",
+          status: "already_paid",
+          actor: {
+            type: role === "admin" ? "admin" : "landlord",
+            role,
+            id: String(req.user?.id || req.user?.landlordId || "").trim() || null,
+          },
+          resource: {
+            type: "rental_application",
+            id,
+          },
+          occurredAt: Date.now(),
+          visibility: "internal",
+          summary: "Screening checkout blocked because the application is already paid",
+          metadata: {
+            reasonCode: "already_paid",
+            propertyId: data?.propertyId || null,
+            unitId: data?.unitId || null,
+          },
+        });
+        return res.status(400).json({
+          ok: false,
+          error: "screening_already_paid",
+          errorCode: "SCREENING_ALREADY_PAID",
+          screeningMonetizationSummary,
+        });
       }
 
       const eligibility = evaluateEligibility(data);
@@ -1105,18 +1905,101 @@ router.post(
         },
         { merge: true }
       );
+      const providerHealth = await getScreeningProviderHealth();
+      const referralMode = isTransUnionReferralMode();
+      const allowMockOverride = shouldUseMockScreeningCheckoutOverride({ role, seedKey: id });
+      const providerReady =
+        referralMode ||
+        allowMockOverride ||
+        process.env.NODE_ENV !== "production" ||
+        (providerHealth.configured && providerHealth.preflightOk);
+      const policyRequest = buildScreeningPolicyRequest({
+        action: "start_checkout",
+        actorRole: role,
+        actorUserId: String(req.user?.id || req.user?.landlordId || "").trim() || null,
+        applicationId: id,
+        eligibility,
+        application: data,
+        consentComplete: consentCheck.ok,
+        providerReady,
+      });
+      const policyResult = evaluatePolicy(policyRequest);
+      const autopilotPolicy = toAutopilotPolicySummary(policyResult);
+      await writePolicyEvaluatedEvent({
+        request: policyRequest,
+        result: policyResult,
+        actorType: role === "admin" ? "admin" : "landlord",
+        metadata: {
+          landlordId: data?.landlordId || landlordId,
+          propertyId: data?.propertyId || null,
+          unitId: data?.unitId || null,
+        },
+      });
+      const currentMonetizationState = normalizeScreeningMonetizationState({
+        application: data,
+        latestOrder,
+        eligibility:
+          providerReady === false
+            ? "provider_unavailable"
+            : !eligibility.eligible
+            ? "ineligible"
+            : "eligible",
+      });
+      const currentMonetizationSummary = buildScreeningMonetizationSummary(currentMonetizationState);
       if (!eligibility.eligible) {
+        const blockedPatch = buildScreeningMonetizationPatch({
+          current: data?.screeningMonetization,
+          eligibility: "ineligible",
+          fulfillmentStatus: "blocked",
+          lastErrorCode: "SCREENING_MONETIZATION_BLOCKED",
+          lastErrorMessage: eligibility.detail || "not_eligible",
+        });
+        await db.collection("rentalApplications").doc(id).set({ screeningMonetization: blockedPatch }, { merge: true });
         return res.status(400).json({
           ok: false,
           error: "not_eligible",
+          errorCode: "SCREENING_MONETIZATION_BLOCKED",
           detail: eligibility.detail,
           reasonCode: eligibility.reasonCode,
+          autopilotPolicy,
+          screeningMonetizationSummary: {
+            ...currentMonetizationSummary,
+            blockingReason: "SCREENING_MONETIZATION_BLOCKED",
+          },
         });
       }
-
-      const providerHealth = await getScreeningProviderHealth();
-      const referralMode = isTransUnionReferralMode();
-      const allowMockOverride = shouldUseMockCheckoutOverride({ role, seedKey: id });
+      if (currentMonetizationSummary.blockingReason === "SCREENING_CHECKOUT_ALREADY_EXISTS") {
+        return res.status(409).json({
+          ok: false,
+          error: "screening_checkout_already_exists",
+          errorCode: "SCREENING_CHECKOUT_ALREADY_EXISTS",
+          autopilotPolicy,
+          screeningMonetizationSummary: currentMonetizationSummary,
+        });
+      }
+      if (
+        currentMonetizationSummary.blockingReason === "SCREENING_ORDER_ALREADY_CREATED" ||
+        currentMonetizationSummary.alreadyPaid
+      ) {
+        return res.status(409).json({
+          ok: false,
+          error: currentMonetizationSummary.alreadyPaid ? "screening_already_paid" : "screening_order_already_created",
+          errorCode: currentMonetizationSummary.alreadyPaid
+            ? "SCREENING_ALREADY_PAID"
+            : "SCREENING_ORDER_ALREADY_CREATED",
+          autopilotPolicy,
+          screeningMonetizationSummary: currentMonetizationSummary,
+        });
+      }
+      if (currentMonetizationSummary.blockingReason === "SCREENING_QUOTE_EXPIRED") {
+        return res.status(409).json({
+          ok: false,
+          error: "screening_quote_expired",
+          errorCode: "SCREENING_QUOTE_EXPIRED",
+          autopilotPolicy,
+          screeningMonetizationSummary: currentMonetizationSummary,
+        });
+      }
       if (
         process.env.NODE_ENV === "production" &&
         !referralMode &&
@@ -1132,10 +2015,64 @@ router.post(
           meta: { status: "provider_unavailable", reasonCode: providerHealth.preflightDetail || "not_ready" },
           actor: role === "admin" ? "admin" : "landlord",
         });
+        await writeCanonicalEvent({
+          domain: "screening",
+          action: "blocked",
+          status: "provider_unavailable",
+          actor: {
+            type: role === "admin" ? "admin" : "landlord",
+            role,
+            id: String(req.user?.id || req.user?.landlordId || "").trim() || null,
+          },
+          resource: {
+            type: "rental_application",
+            id,
+          },
+          occurredAt: Date.now(),
+          visibility: "internal",
+          summary: "Screening checkout blocked because the provider is unavailable",
+          metadata: {
+            reasonCode: providerHealth.preflightDetail || "not_ready",
+            propertyId: data?.propertyId || null,
+            unitId: data?.unitId || null,
+          },
+        });
+        await db.collection("rentalApplications").doc(id).set(
+          {
+            screeningMonetization: buildScreeningMonetizationPatch({
+              current: data?.screeningMonetization,
+              eligibility: "provider_unavailable",
+              fulfillmentStatus: "blocked",
+              providerHealthStatus: "provider_unavailable",
+              lastErrorCode: "SCREENING_PROVIDER_UNAVAILABLE",
+              lastErrorMessage: providerHealth.preflightDetail || "provider_not_ready",
+            }),
+          },
+          { merge: true }
+        );
         return res.status(503).json({
           ok: false,
           error: "screening_unavailable",
+          errorCode: "SCREENING_PROVIDER_UNAVAILABLE",
           detail: "provider_not_ready",
+          autopilotPolicy,
+          screeningMonetizationSummary: buildScreeningMonetizationSummary(
+            normalizeScreeningMonetizationState({
+              application: {
+                ...data,
+                screeningMonetization: buildScreeningMonetizationPatch({
+                  current: data?.screeningMonetization,
+                  eligibility: "provider_unavailable",
+                  fulfillmentStatus: "blocked",
+                  providerHealthStatus: "provider_unavailable",
+                  lastErrorCode: "SCREENING_PROVIDER_UNAVAILABLE",
+                  lastErrorMessage: providerHealth.preflightDetail || "provider_not_ready",
+                }),
+              },
+              latestOrder,
+              eligibility: "provider_unavailable",
+            })
+          ),
           ...(role === "admin" ? { preflightDetail: providerHealth.preflightDetail || null } : {}),
         });
       }
@@ -1158,6 +2095,17 @@ router.post(
           await assertTransUnionConnectedForScreening(String(data?.landlordId || landlordId));
         } catch (error: any) {
           if (error?.statusCode === 409 && error?.code === "transunion_not_connected") {
+            await writeTransUnionUsageEvent({
+              eventType: "screening_blocked",
+              landlordId: String(data?.landlordId || landlordId),
+              userId: String(req.user?.id || req.user?.landlordId || "").trim() || null,
+              actorRole: role,
+              applicationId: id,
+              propertyId: data?.propertyId || null,
+              sourceSurface: "applications_page",
+              blockReason: "missing_provider_connection",
+              status: "blocked",
+            }).catch(() => undefined);
             return res.status(409).json({
               error: "transunion_not_connected",
               message: "Connect your TransUnion membership before starting screening.",
@@ -1167,14 +2115,54 @@ router.post(
         }
       }
 
-      const body = typeof req.body === "string" ? safeParse(req.body) : req.body || {};
-      const consent = resolveConsentPayload(body, data);
-      const consentCheck = validateConsent(consent);
       if (!consentCheck.ok) {
-        return res.status(400).json({ ok: false, error: "consent_required", detail: consentCheck.error });
+        await writeTransUnionUsageEvent({
+          eventType: "screening_blocked",
+          landlordId: String(data?.landlordId || landlordId),
+          userId: String(req.user?.id || req.user?.landlordId || "").trim() || null,
+          actorRole: role,
+          applicationId: id,
+          propertyId: data?.propertyId || null,
+          sourceSurface: "applications_page",
+          blockReason: "missing_consent",
+          status: "blocked",
+        }).catch(() => undefined);
+        return res.status(400).json({
+          ok: false,
+          error: "consent_required",
+          errorCode: "SCREENING_MONETIZATION_BLOCKED",
+          detail: consentCheck.error,
+          autopilotPolicy,
+          screeningMonetizationSummary: {
+            ...currentMonetizationSummary,
+            blockingReason: "SCREENING_MONETIZATION_BLOCKED",
+          },
+        });
       }
-      const { screeningTier, addons, serviceLevel, scoreAddOn, expeditedAddOn, pricing } =
-        resolvePricingInput(body);
+      await writeTransUnionUsageEvent({
+        eventType: "screening_consent_confirmed",
+        landlordId: String(data?.landlordId || landlordId),
+        userId: String(req.user?.id || req.user?.landlordId || "").trim() || null,
+        actorRole: role,
+        applicationId: id,
+        propertyId: data?.propertyId || null,
+        sourceSurface: "applications_page",
+        status: "confirmed",
+        metadata: {
+          consentVersion: consent.version || null,
+        },
+      }).catch(() => undefined);
+      const {
+        screeningTier,
+        screeningPackage,
+        addons,
+        v2Addons,
+        serviceLevel,
+        scoreAddOn,
+        expeditedAddOn,
+        paymentResponsibility,
+        pricing,
+      } = resolvePricingInput(body);
       const rawReturnTo = String(body?.returnTo || "/dashboard");
       const returnTo = rawReturnTo.startsWith("/") ? rawReturnTo : "/dashboard";
       const frontendOrigin = resolveFrontendOrigin(req);
@@ -1226,8 +2214,11 @@ router.post(
           finalizedAt: null,
           lastStripeEventId: null,
           amountTotalCents: 0,
+          screeningPackage,
           screeningTier,
-          addons,
+          addons: v2Addons,
+          legacyAddons: addons.filter((value) => value === "credit_score" || value === "expedited"),
+          paymentResponsibility,
           scoreAddOn: false,
           scoreAddOnCents: 0,
           expeditedAddOn: false,
@@ -1272,6 +2263,18 @@ router.post(
               provider: "transunion_referral",
               orderId,
             },
+            screeningMonetization: buildScreeningMonetizationPatch({
+              current: data?.screeningMonetization,
+              eligibility: "eligible",
+              paymentStatus: "checkout_created",
+              fulfillmentStatus: "ordered",
+              checkoutSessionId: orderId,
+              checkoutCreatedAt: now,
+              amount: 0,
+              currency: "CAD",
+              lastErrorCode: null,
+              lastErrorMessage: null,
+            }),
             updatedAt: now,
           },
           { merge: true }
@@ -1297,218 +2300,45 @@ router.post(
           applicationId: id,
           redirectUrl: referralUrl,
           checkoutUrl: referralUrl,
+          autopilotPolicy,
+          screeningMonetizationSummary: buildScreeningMonetizationSummary(
+            normalizeScreeningMonetizationState({
+              application: {
+                ...data,
+                screeningMonetization: buildScreeningMonetizationPatch({
+                  current: data?.screeningMonetization,
+                  eligibility: "eligible",
+                  paymentStatus: "checkout_created",
+                  fulfillmentStatus: "ordered",
+                  checkoutSessionId: orderId,
+                  checkoutCreatedAt: now,
+                  amount: 0,
+                  currency: "CAD",
+                }),
+              },
+              latestOrder: { ...orderPayload, stripeCheckoutSessionId: orderId },
+              eligibility: "eligible",
+              amount: 0,
+              currency: "CAD",
+            })
+          ),
         });
       }
 
-      let stripe: any;
-      try {
-        stripe = getStripeClient();
-      } catch (err: any) {
-        if (err?.code === "stripe_not_configured" || err?.message === "stripe_not_configured") {
-          return res.status(400).json({ ok: false, error: "stripe_not_configured" });
-        }
-        throw err;
-      }
-
-      const now = Date.now();
-      const orderRef = db.collection("screeningOrders").doc();
-      const orderId = orderRef.id;
-      const aiVerification = serviceLevel === "VERIFIED_AI";
-        const orderPayload: any = {
-          id: orderId,
-          referenceId: buildReferenceId(orderId),
-          landlordId,
-          applicationId: id,
-          propertyId: data?.propertyId || null,
-          unitId: data?.unitId || null,
-          createdAt: now,
-          amountCents: pricing.baseAmountCents,
-          currency: "CAD",
-          status: "unpaid",
-          paymentStatus: "unpaid",
-          finalized: false,
-          finalizedAt: null,
-          lastStripeEventId: null,
-          amountTotalCents: pricing.totalAmountCents,
-          screeningTier,
-          addons,
-          scoreAddOn,
-          scoreAddOnCents: pricing.scoreAddOnCents,
-          expeditedAddOn,
-          expeditedAddOnCents: pricing.expeditedAddOnCents,
-          provider: providerHealth.provider,
-          inquiryType: "soft",
-          providerRequestId: null,
-          paidAt: null,
-          error: null,
-          serviceLevel,
-          aiVerification,
-          aiPriceCents: aiVerification ? pricing.aiAddOnCents : 0,
-          totalAmountCents: pricing.totalAmountCents,
-          reviewerStatus: "QUEUED",
-          stripeSessionId: null,
-          stripeCheckoutSessionId: null,
-          stripePaymentIntentId: null,
-          stripeChargeId: null,
-        consentGiven: true,
-        consentTimestamp: consent.timestamp,
-        consentVersion: consent.version,
-        consentTextHash: consent.textHash,
-      };
-
-      await orderRef.set(orderPayload, { merge: true });
-
-      const currency = String(orderPayload.currency || "CAD").toLowerCase();
-      const lineItems: any[] = [
-        {
-          price_data: {
-            currency,
-            product_data: { name: "Rental screening" },
-            unit_amount: pricing.baseAmountCents,
-          },
-          quantity: 1,
-        },
-      ];
-      if (pricing.verifiedAddOnCents) {
-        lineItems.push({
-          price_data: {
-            currency,
-            product_data: { name: "Verified screening add-on" },
-            unit_amount: pricing.verifiedAddOnCents,
-          },
-          quantity: 1,
-        });
-      }
-      if (pricing.aiAddOnCents) {
-        lineItems.push({
-          price_data: {
-            currency,
-            product_data: { name: "AI verification add-on" },
-            unit_amount: pricing.aiAddOnCents,
-          },
-          quantity: 1,
-        });
-      }
-      if (pricing.scoreAddOnCents) {
-        lineItems.push({
-          price_data: {
-            currency,
-            product_data: { name: "Credit score add-on" },
-            unit_amount: pricing.scoreAddOnCents,
-          },
-          quantity: 1,
-        });
-      }
-      if (pricing.expeditedAddOnCents) {
-        lineItems.push({
-          price_data: {
-            currency,
-            product_data: { name: "Expedited processing add-on" },
-            unit_amount: pricing.expeditedAddOnCents,
-          },
-          quantity: 1,
-        });
-      }
-
-      // Ensure Stripe-safe integers
-      const safeInt = (n: unknown) => {
-        const x = Number(n);
-        if (!Number.isFinite(x)) return 0;
-        return Math.round(x);
-      };
-
-      // (Optional) sanity clamp: avoid negative or zero charges accidentally
-      const normalizeLineItems = (items: any[]) =>
-        items.map((it) => ({
-          ...it,
-          price_data: {
-            ...it.price_data,
-            unit_amount: Math.max(0, safeInt(it.price_data?.unit_amount)),
-            currency: String(it.price_data?.currency || currency).toLowerCase(),
-          },
-        }));
-
-      const normalizedLineItems = normalizeLineItems(lineItems);
-
-      const session = await stripe.checkout.sessions.create({
-        mode: "payment",
-        line_items: normalizedLineItems,
-
-        // Use this to correlate in Stripe dashboard & API searches
-        client_reference_id: orderId,
-
-        success_url: successUrl,
-        cancel_url: cancelUrl,
-
-        // Keep lightweight order context here (shows up on the Session)
-        metadata: {
-          orderId,
-          applicationId: id,
-          landlordId,
-          serviceLevel,
-          scoreAddOn: String(scoreAddOn),
-          screeningTier,
-          addons: addons.join(","),
-          totalAmountCents: String(pricing.totalAmountCents),
-        },
-
-        // Recommended: also stamp the PaymentIntent so webhook handling is simpler
-        payment_intent_data: {
-          metadata: {
-            orderId,
-            applicationId: id,
-            landlordId,
-            serviceLevel,
-            scoreAddOn: String(scoreAddOn),
-            screeningTier,
-            addons: addons.join(","),
-            totalAmountCents: String(pricing.totalAmountCents),
-          },
-        },
+      const execution = await executeScreeningCheckout({
+        role,
+        actorId: String(req.user?.id || req.user?.landlordId || "").trim() || null,
+        landlordId: String(landlordId),
+        applicationId: id,
+        application: data,
+        body,
+        consent,
+        providerHealth,
+        autopilotPolicy,
+        frontendOrigin: resolveFrontendOrigin(req),
+        logBase,
       });
-
-      await orderRef.set(
-        { stripeSessionId: session.id, stripeCheckoutSessionId: session.id, updatedAt: Date.now() },
-        { merge: true }
-      );
-
-      await db.collection("rentalApplications").doc(id).set(
-        {
-          screening: {
-            requested: true,
-            requestedAt: now,
-            status: "PENDING",
-            provider: "STUB",
-            orderId,
-            amountCents: pricing.baseAmountCents,
-            currency: "CAD",
-            paidAt: null,
-            screeningTier,
-            addons,
-            scoreAddOn,
-            scoreAddOnCents: pricing.scoreAddOnCents,
-            expeditedAddOn,
-            expeditedAddOnCents: pricing.expeditedAddOnCents,
-            totalAmountCents: pricing.totalAmountCents,
-            serviceLevel,
-            aiVerification,
-            consentGiven: true,
-            consentTimestamp: consent.timestamp,
-            consentVersion: consent.version,
-            consentTextHash: consent.textHash,
-            ai: null,
-            result: null,
-          },
-          updatedAt: now,
-        },
-        { merge: true }
-      );
-
-      console.log("[screening_checkout] create_session_ok", {
-        ...logBase,
-        event: "create_session_ok",
-      });
-      return res.json({ ok: true, checkoutUrl: session.url });
+      return res.status(execution.status).json(execution.payload);
     } catch (err: any) {
       console.error("[screening_checkout] create_session_fail", {
         ...logBase,
@@ -1543,7 +2373,9 @@ router.post(
       let applicationId = existingApplicationId;
       const propertyIdInput = String(body?.propertyId || "").trim();
       const unitIdInput = String(body?.unitId || "").trim();
+      const tenantEmailInput = String(body?.tenantEmail || "").trim().toLowerCase();
       let data: any = null;
+      let autopilotPolicy: ReturnType<typeof toAutopilotPolicySummary> | null = null;
 
       if (!applicationId && !propertyIdInput) {
         return res.status(400).json({ ok: false, error: "missing_property" });
@@ -1559,13 +2391,50 @@ router.post(
 
         const eligibility = evaluateEligibility(data);
         if (!eligibility.eligible) {
+          const latestOrderDoc = await getLatestOrderByApplicationId(applicationId);
+          const screeningMonetizationSummary = buildScreeningMonetizationSummary(
+            normalizeScreeningMonetizationState({
+              application: data,
+              latestOrder: latestOrderDoc?.data?.() || null,
+              eligibility: "ineligible",
+            })
+          );
           return res.status(400).json({
             ok: false,
             error: "not_eligible",
+            errorCode: "SCREENING_MONETIZATION_BLOCKED",
             detail: eligibility.detail,
             reasonCode: eligibility.reasonCode,
+            screeningMonetizationSummary: {
+              ...screeningMonetizationSummary,
+              blockingReason: "SCREENING_MONETIZATION_BLOCKED",
+            },
           });
         }
+        const consent = resolveConsentPayload(body, data);
+        const consentCheck = validateConsent(consent);
+        const policyRequest = buildScreeningPolicyRequest({
+          action: "start_checkout",
+          actorRole: role,
+          actorUserId: String(req.user?.id || req.user?.landlordId || "").trim() || null,
+          applicationId,
+          eligibility,
+          application: data,
+          consentComplete: consentCheck.ok,
+          providerReady: true,
+        });
+        const policyResult = evaluatePolicy(policyRequest);
+        autopilotPolicy = toAutopilotPolicySummary(policyResult);
+        await writePolicyEvaluatedEvent({
+          request: policyRequest,
+          result: policyResult,
+          actorType: role === "admin" ? "admin" : "landlord",
+          metadata: {
+            landlordId: data?.landlordId || landlordId,
+            propertyId: data?.propertyId || propertyIdInput || null,
+            unitId: data?.unitId || unitIdInput || null,
+          },
+        });
       } else {
         const manualApp = await createManualApplicationFromOrderBody({
           landlordId: String(landlordId),
@@ -1603,14 +2472,58 @@ router.post(
           return res.status(400).json({
             ok: false,
             error: "consent_required",
+            errorCode: "SCREENING_MONETIZATION_BLOCKED",
             detail: consentCheck.error,
+            autopilotPolicy,
           });
         }
+      }
+      const latestOrderDoc = applicationId
+        ? await getLatestOrderByApplicationId(applicationId)
+        : await getLatestOrderByManualCheckout({
+            landlordId: String(landlordId),
+            propertyId: data?.propertyId || propertyIdInput,
+            unitId: data?.unitId || unitIdInput || null,
+            tenantEmail: tenantEmailInput || data?.applicant?.email || null,
+          });
+      const latestOrder = latestOrderDoc?.data?.() || null;
+      const existingMonetizationState = normalizeScreeningMonetizationState({
+        application: data,
+        latestOrder,
+        eligibility: "eligible",
+      });
+      const existingMonetizationSummary = buildScreeningMonetizationSummary(existingMonetizationState);
+      if (existingMonetizationSummary.alreadyPaid) {
+        return res.status(409).json({
+          ok: false,
+          error: "screening_already_paid",
+          errorCode: "SCREENING_ALREADY_PAID",
+          autopilotPolicy,
+          screeningMonetizationSummary: existingMonetizationSummary,
+        });
+      }
+      if (existingMonetizationSummary.blockingReason === "SCREENING_ORDER_ALREADY_CREATED") {
+        return res.status(409).json({
+          ok: false,
+          error: "screening_order_already_created",
+          errorCode: "SCREENING_ORDER_ALREADY_CREATED",
+          autopilotPolicy,
+          screeningMonetizationSummary: existingMonetizationSummary,
+        });
+      }
+      if (existingMonetizationSummary.blockingReason === "SCREENING_CHECKOUT_ALREADY_EXISTS") {
+        return res.status(409).json({
+          ok: false,
+          error: "screening_checkout_already_exists",
+          errorCode: "SCREENING_CHECKOUT_ALREADY_EXISTS",
+          autopilotPolicy,
+          screeningMonetizationSummary: existingMonetizationSummary,
+        });
       }
 
       const providerHealth = await getScreeningProviderHealth();
       const referralMode = isTransUnionReferralMode();
-      const allowMockOverride = shouldUseMockCheckoutOverride({ role, seedKey: applicationId });
+      const allowMockOverride = shouldUseMockScreeningCheckoutOverride({ role, seedKey: applicationId });
       if (
         process.env.NODE_ENV === "production" &&
         !referralMode &&
@@ -1629,7 +2542,16 @@ router.post(
         return res.status(503).json({
           ok: false,
           error: "screening_unavailable",
+          errorCode: "SCREENING_PROVIDER_UNAVAILABLE",
           detail: "provider_not_ready",
+          autopilotPolicy,
+          screeningMonetizationSummary: buildScreeningMonetizationSummary(
+            normalizeScreeningMonetizationState({
+              application: data,
+              latestOrder,
+              eligibility: "provider_unavailable",
+            })
+          ),
           ...(role === "admin" ? { preflightDetail: providerHealth.preflightDetail || null } : {}),
         });
       }
@@ -1642,8 +2564,17 @@ router.post(
         logMockProviderCheckout({ name: "checkout", seedKey: applicationId });
       }
 
-      const { screeningTier, addons, serviceLevel, scoreAddOn, expeditedAddOn, pricing } =
-        resolvePricingInput(body);
+      const {
+        screeningTier,
+        screeningPackage,
+        addons,
+        v2Addons,
+        serviceLevel,
+        scoreAddOn,
+        expeditedAddOn,
+        paymentResponsibility,
+        pricing,
+      } = resolvePricingInput(body);
 
       if (isTransUnionReferralMode()) {
         const now = Date.now();
@@ -1676,8 +2607,11 @@ router.post(
           finalizedAt: null,
           lastStripeEventId: null,
           amountTotalCents: 0,
+          screeningPackage,
           screeningTier,
-          addons,
+          addons: v2Addons,
+          legacyAddons: addons.filter((value) => value === "credit_score" || value === "expedited"),
+          paymentResponsibility,
           scoreAddOn: false,
           scoreAddOnCents: 0,
           expeditedAddOn: false,
@@ -1729,6 +2663,21 @@ router.post(
                 provider: "transunion_referral",
                 orderId,
               },
+              screeningMonetization: buildScreeningMonetizationPatch({
+                current: data?.screeningMonetization,
+                eligibility: "eligible",
+                paymentStatus: "checkout_created",
+                fulfillmentStatus: "ordered",
+                package: screeningPackage,
+                addons: v2Addons,
+                paymentResponsibility,
+                checkoutSessionId: orderId,
+                checkoutCreatedAt: now,
+                amount: 0,
+                currency: "CAD",
+                lastErrorCode: null,
+                lastErrorMessage: null,
+              }),
               updatedAt: now,
             },
             { merge: true }
@@ -1755,6 +2704,34 @@ router.post(
           applicationId: applicationId || null,
           redirectUrl: referralUrl,
           checkoutUrl: referralUrl,
+          autopilotPolicy,
+          screeningMonetizationSummary: buildScreeningMonetizationSummary(
+            normalizeScreeningMonetizationState({
+              application:
+                applicationId && data
+                  ? {
+                      ...data,
+                      screeningMonetization: buildScreeningMonetizationPatch({
+                        current: data?.screeningMonetization,
+                        eligibility: "eligible",
+                        paymentStatus: "checkout_created",
+                        fulfillmentStatus: "ordered",
+                        package: screeningPackage,
+                        addons: v2Addons,
+                        paymentResponsibility,
+                        checkoutSessionId: orderId,
+                        checkoutCreatedAt: now,
+                        amount: 0,
+                        currency: "CAD",
+                      }),
+                    }
+                  : data,
+              latestOrder: { ...orderPayload, stripeCheckoutSessionId: orderId },
+              eligibility: "eligible",
+              amount: 0,
+              currency: "CAD",
+            })
+          ),
         });
       }
 
@@ -1823,8 +2800,11 @@ router.post(
         finalizedAt: null,
         lastStripeEventId: null,
         amountTotalCents: pricing.totalAmountCents,
+        screeningPackage,
         screeningTier,
-        addons,
+        addons: v2Addons,
+        legacyAddons: addons.filter((value) => value === "credit_score" || value === "expedited"),
+        paymentResponsibility,
         scoreAddOn,
         scoreAddOnCents: pricing.scoreAddOnCents,
         expeditedAddOn,
@@ -1856,72 +2836,13 @@ router.post(
 
       await orderRef.set(orderPayload, { merge: true });
 
-      if (applicationId) {
-        await db.collection("rentalApplications").doc(applicationId).set(
-          {
-            screening: {
-              consentGiven: true,
-              consentTimestamp: consent.timestamp,
-              consentVersion: consent.version,
-              consentTextHash: consent.textHash,
-            },
-            updatedAt: now,
-          },
-          { merge: true }
-        );
-      }
-
       const currency = String(orderPayload.currency || "CAD").toLowerCase();
-      const lineItems: any[] = [
-        {
-          price_data: {
-            currency,
-            product_data: { name: "Rental screening" },
-            unit_amount: pricing.baseAmountCents,
-          },
-          quantity: 1,
-        },
-      ];
-      if (pricing.verifiedAddOnCents) {
-        lineItems.push({
-          price_data: {
-            currency,
-            product_data: { name: "Verified screening add-on" },
-            unit_amount: pricing.verifiedAddOnCents,
-          },
-          quantity: 1,
-        });
-      }
-      if (pricing.aiAddOnCents) {
-        lineItems.push({
-          price_data: {
-            currency,
-            product_data: { name: "AI verification add-on" },
-            unit_amount: pricing.aiAddOnCents,
-          },
-          quantity: 1,
-        });
-      }
-      if (pricing.scoreAddOnCents) {
-        lineItems.push({
-          price_data: {
-            currency,
-            product_data: { name: "Credit score add-on" },
-            unit_amount: pricing.scoreAddOnCents,
-          },
-          quantity: 1,
-        });
-      }
-      if (pricing.expeditedAddOnCents) {
-        lineItems.push({
-          price_data: {
-            currency,
-            product_data: { name: "Expedited processing add-on" },
-            unit_amount: pricing.expeditedAddOnCents,
-          },
-          quantity: 1,
-        });
-      }
+      const lineItems = buildScreeningLineItems({
+        currency,
+        screeningPackage,
+        addons: v2Addons,
+        pricing,
+      });
 
       const session = await stripe.checkout.sessions.create({
         mode: "payment",
@@ -1934,9 +2855,11 @@ router.post(
           applicationId,
           landlordId,
           serviceLevel,
+          screeningPackage,
+          paymentResponsibility,
           scoreAddOn: String(scoreAddOn),
           screeningTier,
-          addons: addons.join(","),
+          addons: v2Addons.join(","),
           totalAmountCents: String(pricing.totalAmountCents),
         },
         payment_intent_data: {
@@ -1945,9 +2868,11 @@ router.post(
             applicationId,
             landlordId,
             serviceLevel,
+            screeningPackage,
+            paymentResponsibility,
             scoreAddOn: String(scoreAddOn),
             screeningTier,
-            addons: addons.join(","),
+            addons: v2Addons.join(","),
             totalAmountCents: String(pricing.totalAmountCents),
           },
         },
@@ -1957,6 +2882,36 @@ router.post(
         { stripeSessionId: session.id, stripeCheckoutSessionId: session.id, updatedAt: Date.now() },
         { merge: true }
       );
+
+      if (applicationId) {
+        await db.collection("rentalApplications").doc(applicationId).set(
+          {
+            screening: {
+              consentGiven: true,
+              consentTimestamp: consent.timestamp,
+              consentVersion: consent.version,
+              consentTextHash: consent.textHash,
+            },
+            screeningMonetization: buildScreeningMonetizationPatch({
+              current: data?.screeningMonetization,
+              eligibility: "eligible",
+              paymentStatus: "checkout_created",
+              fulfillmentStatus: "ready",
+              package: screeningPackage,
+              addons: v2Addons,
+              paymentResponsibility,
+              checkoutSessionId: session.id,
+              checkoutCreatedAt: now,
+              amount: pricing.totalAmountCents,
+              currency: "CAD",
+              lastErrorCode: null,
+              lastErrorMessage: null,
+            }),
+            updatedAt: now,
+          },
+          { merge: true }
+        );
+      }
 
       if (tenantEmail) {
         const apiKey = String(process.env.SENDGRID_API_KEY || "").trim();
@@ -1993,7 +2948,40 @@ router.post(
         }
       }
 
-      return res.json({ ok: true, orderId, checkoutUrl: session.url, tenantInviteUrl });
+      return res.json({
+        ok: true,
+        orderId,
+        checkoutUrl: session.url,
+        tenantInviteUrl,
+        autopilotPolicy,
+        screeningMonetizationSummary: buildScreeningMonetizationSummary(
+          normalizeScreeningMonetizationState({
+            application:
+              applicationId && data
+                ? {
+                    ...data,
+                    screeningMonetization: buildScreeningMonetizationPatch({
+                      current: data?.screeningMonetization,
+                      eligibility: "eligible",
+                      paymentStatus: "checkout_created",
+                      fulfillmentStatus: "ready",
+                      package: screeningPackage,
+                      addons: v2Addons,
+                      paymentResponsibility,
+                      checkoutSessionId: session.id,
+                      checkoutCreatedAt: now,
+                      amount: pricing.totalAmountCents,
+                      currency: "CAD",
+                    }),
+                  }
+                : data,
+            latestOrder: { ...orderPayload, stripeCheckoutSessionId: session.id },
+            eligibility: "eligible",
+            amount: pricing.totalAmountCents,
+            currency: "CAD",
+          })
+        ),
+      });
     } catch (err: any) {
       console.error("[screening_orders] failed", {
         ...logBase,
@@ -2027,6 +3015,8 @@ router.get(
       return res.status(403).json({ ok: false, error: "forbidden" });
     }
 
+    const appSnap = data?.applicationId ? await db.collection("rentalApplications").doc(String(data.applicationId)).get() : null;
+    const application = appSnap?.exists ? appSnap.data() : null;
     return res.json({
       ok: true,
       data: {
@@ -2047,6 +3037,12 @@ router.get(
         failureDetail: data?.failureDetail || null,
         stripeIdentitySessionId: data?.stripeIdentitySessionId || null,
         updatedAt: data?.updatedAt || null,
+        screeningMonetizationSummary: buildScreeningMonetizationSummary(
+          normalizeScreeningMonetizationState({
+            application,
+            latestOrder: data,
+          })
+        ),
       },
     });
   }
@@ -2128,11 +3124,13 @@ router.get(
     }
 
     if (!orderDoc) {
+      let authorizedApplicationData: any = null;
       if (applicationId) {
         const access = await loadAuthorizedApplication(req, applicationId);
         if (!access.ok) {
           return res.status(access.status).json({ ok: false, error: access.error });
         }
+        authorizedApplicationData = access.data;
       }
       return res.json({
         ok: true,
@@ -2146,6 +3144,11 @@ router.get(
           stripePaymentIntentId: null,
           stripeCheckoutSessionId: null,
           lastUpdatedAt: null,
+          screeningMonetizationSummary: buildScreeningMonetizationSummary(
+            normalizeScreeningMonetizationState({
+              application: authorizedApplicationData,
+            })
+          ),
         },
       });
     }
@@ -2154,7 +3157,19 @@ router.get(
     if (role !== "admin" && data?.landlordId && data.landlordId !== landlordId) {
       return res.status(403).json({ ok: false, error: "forbidden" });
     }
-    return res.json({ ok: true, data: normalizeOrderView(orderDoc.id, data) });
+    const appSnap = data?.applicationId ? await db.collection("rentalApplications").doc(String(data.applicationId)).get() : null;
+    return res.json({
+      ok: true,
+      data: {
+        ...normalizeOrderView(orderDoc.id, data),
+        screeningMonetizationSummary: buildScreeningMonetizationSummary(
+          normalizeScreeningMonetizationState({
+            application: appSnap?.exists ? appSnap.data() : null,
+            latestOrder: data,
+          })
+        ),
+      },
+    });
   }
 );
 
@@ -2199,6 +3214,9 @@ router.post(
           stripePaymentIntentId: null,
           stripeCheckoutSessionId: null,
           lastUpdatedAt: null,
+          screeningMonetizationSummary: buildScreeningMonetizationSummary(
+            normalizeScreeningMonetizationState({})
+          ),
         },
       });
     }
@@ -2210,12 +3228,40 @@ router.post(
 
     const currentStatus = normalizeOrderStatus(order);
     if (currentStatus === "paid") {
-      return res.json({ ok: true, data: normalizeOrderView(orderDoc.id, order) });
+      const appSnap = order?.applicationId
+        ? await db.collection("rentalApplications").doc(String(order.applicationId)).get()
+        : null;
+      return res.json({
+        ok: true,
+        data: {
+          ...normalizeOrderView(orderDoc.id, order),
+          screeningMonetizationSummary: buildScreeningMonetizationSummary(
+            normalizeScreeningMonetizationState({
+              application: appSnap?.exists ? appSnap.data() : null,
+              latestOrder: order,
+            })
+          ),
+        },
+      });
     }
     const now = Date.now();
     const lastReconcileAt = Number(order?.lastReconcileAt || 0);
     if (lastReconcileAt > 0 && now - lastReconcileAt < 20_000) {
-      return res.json({ ok: true, data: normalizeOrderView(orderDoc.id, order) });
+      const appSnap = order?.applicationId
+        ? await db.collection("rentalApplications").doc(String(order.applicationId)).get()
+        : null;
+      return res.json({
+        ok: true,
+        data: {
+          ...normalizeOrderView(orderDoc.id, order),
+          screeningMonetizationSummary: buildScreeningMonetizationSummary(
+            normalizeScreeningMonetizationState({
+              application: appSnap?.exists ? appSnap.data() : null,
+              latestOrder: order,
+            })
+          ),
+        },
+      });
     }
     await db.collection("screeningOrders").doc(orderDoc.id).set({ lastReconcileAt: now }, { merge: true });
 
@@ -2308,7 +3354,21 @@ router.post(
 
     const refreshed = await db.collection("screeningOrders").doc(orderDoc.id).get();
     const refreshedData = (refreshed.data() as any) || order;
-    return res.json({ ok: true, data: normalizeOrderView(orderDoc.id, refreshedData) });
+    const appSnap = refreshedData?.applicationId
+      ? await db.collection("rentalApplications").doc(String(refreshedData.applicationId)).get()
+      : null;
+    return res.json({
+      ok: true,
+      data: {
+        ...normalizeOrderView(orderDoc.id, refreshedData),
+        screeningMonetizationSummary: buildScreeningMonetizationSummary(
+          normalizeScreeningMonetizationState({
+            application: appSnap?.exists ? appSnap.data() : null,
+            latestOrder: refreshedData,
+          })
+        ),
+      },
+    });
   }
 );
 
@@ -2439,7 +3499,7 @@ router.post(
 
       const providerHealth = await getScreeningProviderHealth();
       const referralMode = isTransUnionReferralMode();
-      const allowMockOverride = shouldUseMockCheckoutOverride({ role, seedKey: id });
+      const allowMockOverride = shouldUseMockScreeningCheckoutOverride({ role, seedKey: id });
       if (
         process.env.NODE_ENV === "production" &&
         !referralMode &&

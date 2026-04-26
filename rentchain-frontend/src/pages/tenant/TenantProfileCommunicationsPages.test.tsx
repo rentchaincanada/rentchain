@@ -41,6 +41,10 @@ describe("tenant profile and communications pages", () => {
   beforeEach(() => {
     cleanup();
     vi.clearAllMocks();
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: vi.fn(),
+    });
     tenantPortalApi.getTenantWorkspace.mockResolvedValue({
       context: {
         authority: "active_tenant",
@@ -101,6 +105,7 @@ describe("tenant profile and communications pages", () => {
     );
 
     expect(await screen.findByText(/RentChain Tenant Space/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Screening Requests/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Profile/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Access/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /History/i })).toBeInTheDocument();
@@ -257,6 +262,93 @@ describe("tenant profile and communications pages", () => {
     expect(screen.getByDisplayValue("Taylor Updated")).toBeInTheDocument();
   });
 
+  it("tenant profile page supports phone-only save and refreshes completion guidance", async () => {
+    tenantProfileApi.getTenantProfile.mockResolvedValue({
+      context: { authority: "active_tenant" },
+      profile: {
+        displayName: "Taylor Tenant",
+        email: "tenant@example.com",
+        phone: "",
+        authorityLabel: "Active tenant",
+        property: null,
+        application: null,
+        lease: null,
+      },
+      identity: {
+        overallStatus: "pending",
+        identityVerification: {
+          status: "pending",
+          label: "Pending",
+          note: "Verification is still in progress.",
+          updatedAt: "2026-01-05T00:00:00.000Z",
+        },
+        documentChecklist: [],
+        nextSteps: [],
+      },
+      actions: {
+        editableFields: ["displayName", "phone"],
+        documentEntry: {
+          available: false,
+          path: null,
+          label: "Open documents",
+          note: null,
+        },
+      },
+    });
+    tenantProfileApi.updateTenantProfile.mockResolvedValue({
+      context: { authority: "active_tenant" },
+      profile: {
+        displayName: "Taylor Tenant",
+        email: "tenant@example.com",
+        phone: "902-555-0999",
+        authorityLabel: "Active tenant",
+        property: null,
+        application: null,
+        lease: null,
+      },
+      identity: {
+        overallStatus: "verified",
+        identityVerification: {
+          status: "verified",
+          label: "Verified",
+          note: "All set.",
+          updatedAt: "2026-01-05T00:00:00.000Z",
+        },
+        documentChecklist: [],
+        nextSteps: [],
+      },
+      actions: {
+        editableFields: ["displayName", "phone"],
+        documentEntry: {
+          available: false,
+          path: null,
+          label: "Open documents",
+          note: null,
+        },
+      },
+    });
+
+    render(
+      <MemoryRouter>
+        <TenantProfilePage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole("button", { name: /Update missing details/i })).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("textbox", { name: /Phone/i }), {
+      target: { value: "902-555-0999" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Save profile changes/i }));
+
+    expect(tenantProfileApi.updateTenantProfile).toHaveBeenCalledWith({
+      displayName: "Taylor Tenant",
+      phone: "902-555-0999",
+    });
+    expect(await screen.findByText(/Profile details updated/i)).toBeInTheDocument();
+    expect(screen.getByDisplayValue("902-555-0999")).toBeInTheDocument();
+    expect(screen.queryByText(/Add a phone number so your profile stays current/i)).not.toBeInTheDocument();
+  });
+
   it("tenant profile page handles validation failure safely", async () => {
     tenantProfileApi.getTenantProfile.mockResolvedValue({
       context: { authority: "active_tenant" },
@@ -290,7 +382,10 @@ describe("tenant profile and communications pages", () => {
         },
       },
     });
-    tenantProfileApi.updateTenantProfile.mockRejectedValue(new Error("TENANT_PROFILE_UPDATE_FAILED"));
+    tenantProfileApi.updateTenantProfile.mockRejectedValue({
+      payload: { error: "TENANT_PROFILE_FIELDS_REQUIRED" },
+      message: "TENANT_PROFILE_FIELDS_REQUIRED",
+    });
 
     render(
       <MemoryRouter>
@@ -300,7 +395,53 @@ describe("tenant profile and communications pages", () => {
 
     expect(await screen.findByDisplayValue("Taylor Tenant")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Save profile changes/i }));
-    expect(await screen.findByText(/TENANT_PROFILE_UPDATE_FAILED/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Add at least one profile detail before saving/i)).toBeInTheDocument();
+  });
+
+  it("tenant profile completion CTA focuses the missing phone field instead of self-routing", async () => {
+    tenantProfileApi.getTenantProfile.mockResolvedValue({
+      context: { authority: "active_tenant" },
+      profile: {
+        displayName: "Taylor Tenant",
+        email: "tenant@example.com",
+        phone: "",
+        authorityLabel: "Active tenant",
+        property: null,
+        application: null,
+        lease: null,
+      },
+      identity: {
+        overallStatus: "pending",
+        identityVerification: {
+          status: "pending",
+          label: "Pending",
+          note: "Verification is still in progress.",
+          updatedAt: "2026-01-05T00:00:00.000Z",
+        },
+        documentChecklist: [],
+        nextSteps: [],
+      },
+      actions: {
+        editableFields: ["displayName", "phone"],
+        documentEntry: {
+          available: false,
+          path: null,
+          label: "Open documents",
+          note: null,
+        },
+      },
+    });
+
+    render(
+      <MemoryRouter>
+        <TenantProfilePage />
+      </MemoryRouter>
+    );
+
+    const phoneInput = await screen.findByRole("textbox", { name: /Phone/i });
+    fireEvent.click(screen.getByRole("button", { name: /Update missing details/i }));
+
+    expect(document.activeElement).toBe(phoneInput);
   });
 
   it("communications page handles empty state and compose/send success", async () => {
@@ -332,6 +473,8 @@ describe("tenant profile and communications pages", () => {
       </MemoryRouter>
     );
 
+    expect(await screen.findByText(/Inbox summary/i)).toBeInTheDocument();
+    expect(screen.getByText(/Your inbox is ready when tenancy communication starts/i)).toBeInTheDocument();
     expect(await screen.findByText(/Once you or your landlord start a conversation/i)).toBeInTheDocument();
     fireEvent.change(screen.getByRole("textbox", { name: /Compose message/i }), {
       target: { value: "Hello there" },
@@ -347,11 +490,19 @@ describe("tenant profile and communications pages", () => {
       thread: {
         id: "thread-1",
         landlordLabel: "Landlord",
-        unreadCount: 0,
-        lastMessageAt: null,
+        unreadCount: 1,
+        lastMessageAt: "2026-01-06T00:00:00.000Z",
         propertyId: "prop-1",
         unitId: "unit-2",
-        messages: [],
+        messages: [
+          {
+            id: "msg-1",
+            senderRole: "landlord",
+            body: "Can you confirm the move-in time?",
+            createdAt: "2026-01-06T00:00:00.000Z",
+            createdAtMs: 1234,
+          },
+        ],
       },
     });
     tenantCommunicationsApi.markTenantCommunicationsRead.mockResolvedValue(undefined);
@@ -363,7 +514,9 @@ describe("tenant profile and communications pages", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText(/Once you or your landlord start a conversation/i)).toBeInTheDocument();
+    expect(await screen.findByText(/A tenancy message is waiting for your reply/i)).toBeInTheDocument();
+    expect(screen.getByText(/Reply needed/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Can you confirm the move-in time\?/i).length).toBeGreaterThan(0);
     fireEvent.change(screen.getByRole("textbox", { name: /Compose message/i }), {
       target: { value: "Hello there" },
     });
@@ -390,7 +543,8 @@ describe("tenant profile and communications pages", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText(/Notifications & Feed/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Recent Activity/i)).toBeInTheDocument();
+    expect(screen.getByText(/Timeline summary/i)).toBeInTheDocument();
     expect(screen.getByText(/Application status updated/i)).toBeInTheDocument();
   });
 

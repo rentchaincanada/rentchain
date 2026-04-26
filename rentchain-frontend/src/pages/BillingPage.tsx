@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Card, Section, Button } from "../components/ui/Ui";
 import {
   createBillingPortalSession,
@@ -16,7 +17,7 @@ import { apiFetch } from "@/lib/apiClient";
 import { track } from "@/lib/analytics";
 import { billingTierLabel, useBillingStatus } from "@/hooks/useBillingStatus";
 import { refreshEntitlements } from "@/lib/entitlements";
-import { CANONICAL_TIER_MATRIX } from "@/constants/pricingPlans";
+import { CANONICAL_TIER_MATRIX, TIER_POSITIONING_COPY } from "@/constants/pricingPlans";
 
 const formatAmount = (amountCents: number, currency: string) => {
   const amount = (amountCents || 0) / 100;
@@ -65,6 +66,28 @@ const renewalLabel = (renewalDate: string | null) => {
   return parsed.toLocaleDateString();
 };
 
+const checkoutCtaLabel = (tier: "starter" | "pro" | "elite") =>
+  `Continue to ${CANONICAL_TIER_MATRIX[tier].label} checkout`;
+
+function normalizeUpgradePlanParam(
+  value: string | null,
+  currentPlan: string
+): "starter" | "pro" | "elite" | null {
+  if (value !== "starter" && value !== "pro" && value !== "elite") return null;
+  const paidPlanOrder: Array<"starter" | "pro" | "elite"> = ["starter", "pro", "elite"];
+  if (currentPlan === "free") return value;
+  if (paidPlanOrder.indexOf(currentPlan as "starter" | "pro" | "elite") >= paidPlanOrder.indexOf(value)) {
+    return null;
+  }
+  return value;
+}
+
+function normalizeUpgradeIntervalParam(value: string | null): "month" | "year" | null {
+  if (value === "month") return "month";
+  if (value === "year") return "year";
+  return null;
+}
+
 const BillingPage: React.FC = () => {
   const [records, setRecords] = useState<BillingRecord[]>([]);
   const [loading, setLoading] = useState(false);
@@ -75,10 +98,17 @@ const BillingPage: React.FC = () => {
   const [pricingError, setPricingError] = useState(false);
   const [planActionLoading, setPlanActionLoading] = useState<string | null>(null);
   const [interval, setInterval] = useState<"month" | "year">("month");
+  const [searchParams] = useSearchParams();
   const { user, updateUser } = useAuth();
   const billingStatus = useBillingStatus();
-  const currentPlan = billingStatus.tier;
-  const isPaidPlan = currentPlan !== "free";
+  const currentPlan = billingStatus.isLoading ? null : billingStatus.tier;
+  const resolvedCurrentPlan = currentPlan || "free";
+  const isPaidPlan = resolvedCurrentPlan !== "free";
+  const requestedUpgradePlan = normalizeUpgradePlanParam(
+    searchParams.get("upgradePlan"),
+    resolvedCurrentPlan
+  );
+  const requestedUpgradeInterval = normalizeUpgradeIntervalParam(searchParams.get("upgradeInterval"));
 
   const getErrorMessage = (error: unknown, fallback: string) => {
     if (error instanceof Error && error.message) return error.message;
@@ -104,7 +134,11 @@ const BillingPage: React.FC = () => {
   };
 
   useEffect(() => {
-    track("billing_page_opened", { tier: currentPlan });
+    track("billing_page_opened", {
+      currentPlan: resolvedCurrentPlan,
+      surface: "billing_page",
+      route: typeof window !== "undefined" ? window.location.pathname : undefined,
+    });
     void refreshEntitlements(updateUser);
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -132,12 +166,23 @@ const BillingPage: React.FC = () => {
     };
   }, []);
 
+  useEffect(() => {
+    if (!requestedUpgradeInterval) return;
+    setInterval(requestedUpgradeInterval);
+  }, [requestedUpgradeInterval]);
+
   const pricingUnavailable = !pricingLoading && pricingError;
 
   const handlePlanAction = async (planKey: "starter" | "pro" | "elite") => {
     if (pricingUnavailable) return;
-    if (planKey === currentPlan) return;
-    track("billing_upgrade_clicked", { toTier: planKey, interval });
+    if (planKey === resolvedCurrentPlan) return;
+    track("billing_upgrade_clicked", {
+      currentPlan: resolvedCurrentPlan,
+      targetPlan: planKey,
+      interval,
+      surface: "billing_page",
+      route: typeof window !== "undefined" ? window.location.pathname : undefined,
+    });
 
     try {
       setPlanActionLoading(planKey);
@@ -164,7 +209,11 @@ const BillingPage: React.FC = () => {
   };
 
   const handlePortal = async () => {
-    track("billing_manage_subscription_clicked", { tier: currentPlan });
+    track("billing_manage_subscription_clicked", {
+      currentPlan: resolvedCurrentPlan,
+      surface: "billing_page",
+      route: typeof window !== "undefined" ? window.location.pathname : undefined,
+    });
     try {
       setPortalLoading(true);
       const res = await createBillingPortalSession();
@@ -180,14 +229,62 @@ const BillingPage: React.FC = () => {
   };
 
   const nextUpgradeTier =
-    currentPlan === "free" ? "starter" : currentPlan === "starter" ? "pro" : currentPlan === "pro" ? "elite" : null;
+    requestedUpgradePlan ||
+    (resolvedCurrentPlan === "free"
+      ? "starter"
+      : resolvedCurrentPlan === "starter"
+        ? "pro"
+        : resolvedCurrentPlan === "pro"
+          ? "elite"
+          : null);
+  const recommendedUpgradeTier = nextUpgradeTier;
+  const starterUpgradeLabel = checkoutCtaLabel(requestedUpgradePlan || "starter");
   const nextUpgradeLabel = nextUpgradeTier
     ? interval === "year"
-      ? `${CANONICAL_TIER_MATRIX[nextUpgradeTier].ctaLabel} (Yearly)`
-      : `${CANONICAL_TIER_MATRIX[nextUpgradeTier].ctaLabel} (Monthly)`
+      ? `${checkoutCtaLabel(nextUpgradeTier)} (Yearly)`
+      : `${checkoutCtaLabel(nextUpgradeTier)} (Monthly)`
     : null;
   const nextUpgradeHelp = nextUpgradeTier
     ? `You'll be taken to checkout for the ${interval === "year" ? "Yearly" : "Monthly"} ${CANONICAL_TIER_MATRIX[nextUpgradeTier].label} plan.`
+    : null;
+  const selectedPlanLabel = requestedUpgradePlan ? CANONICAL_TIER_MATRIX[requestedUpgradePlan].label : null;
+  const recommendedPlanLabel = recommendedUpgradeTier
+    ? CANONICAL_TIER_MATRIX[recommendedUpgradeTier].label
+    : null;
+  const recommendedUpgradeReason =
+    resolvedCurrentPlan === "free"
+      ? TIER_POSITIONING_COPY.starter.nextStepReason || null
+      : resolvedCurrentPlan === "starter"
+        ? TIER_POSITIONING_COPY.pro.nextStepReason || null
+        : resolvedCurrentPlan === "pro"
+          ? TIER_POSITIONING_COPY.elite.nextStepReason || null
+          : null;
+  const recommendationTrustCopy = requestedUpgradePlan
+    ? `You're continuing the ${CANONICAL_TIER_MATRIX[requestedUpgradePlan].label} plan you selected on Pricing, so Billing keeps that choice visible before checkout.`
+    : recommendedUpgradeTier
+      ? `This suggestion follows your current plan and the shared plan ladder, so the next step is clear without changing your current subscription first.`
+      : null;
+  const checkoutReassuranceCopy = nextUpgradeTier
+    ? `After you click, secure checkout opens so you can review the ${interval === "year" ? "Yearly" : "Monthly"} ${CANONICAL_TIER_MATRIX[nextUpgradeTier].label} plan, confirm billing details, and choose whether to complete the upgrade.`
+    : null;
+  const billingMomentumCopy =
+    resolvedCurrentPlan === "free"
+      ? "Upgrading helps you keep your tenant, application, and property work in one place as your workflow gets more active."
+      : resolvedCurrentPlan === "starter"
+        ? "Upgrading keeps the workflow you already started in RentChain, while adding the reporting and control layer that reduces manual follow-up."
+        : resolvedCurrentPlan === "pro"
+          ? "Upgrading keeps your operational workflow intact, while adding the portfolio visibility and intelligence layer that helps you make stronger decisions."
+          : null;
+  const limitationCopy =
+    resolvedCurrentPlan === "free"
+      ? "Staying on Free keeps setup usable, but the richer operating workflow stays limited once you need messaging, tenant coordination, and ongoing rental follow-through."
+      : resolvedCurrentPlan === "starter"
+        ? "Staying on Starter keeps the core workflow running, but exports, deeper reporting, and stronger portfolio coordination stay limited."
+        : resolvedCurrentPlan === "pro"
+          ? "Staying on Pro keeps strong operational tooling, but portfolio-level intelligence, advanced oversight, and the clearest trend visibility stay limited."
+          : null;
+  const recommendationOutcomeCopy = recommendedUpgradeTier
+    ? `This plan helps you keep building in RentChain without switching tools, while adding the next layer of ${TIER_POSITIONING_COPY[recommendedUpgradeTier].badge.toLowerCase()} to the workflow you already started.`
     : null;
 
   return (
@@ -203,8 +300,30 @@ const BillingPage: React.FC = () => {
       <Card elevated>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: spacing.sm }}>
           <div>
-            <h1 style={{ margin: 0, fontSize: "1.3rem", fontWeight: 700 }}>Billing & Receipts</h1>
-            <div style={{ color: text.muted, fontSize: "0.95rem" }}>Current plan, upgrade options, subscription details, and screening receipts.</div>
+            <h1 style={{ margin: 0, fontSize: "1.3rem", fontWeight: 700 }}>Billing, plans, and upgrade review</h1>
+            <div style={{ color: text.muted, fontSize: "0.95rem" }}>
+              Review your current plan, compare the next upgrade options, and open checkout only when you're ready to confirm.
+            </div>
+            {requestedUpgradePlan ? (
+              <div style={{ color: text.muted, fontSize: "0.9rem", marginTop: 6 }}>
+                Pricing selection saved: {CANONICAL_TIER_MATRIX[requestedUpgradePlan].label} on the {interval === "year" ? "Yearly" : "Monthly"} plan.
+              </div>
+            ) : null}
+            {recommendedPlanLabel ? (
+              <div style={{ color: text.secondary, fontSize: "0.92rem", marginTop: 6, fontWeight: 600 }}>
+                Recommended next plan: {recommendedPlanLabel}
+                {requestedUpgradePlan ? " from your pricing selection." : "."}
+              </div>
+            ) : null}
+            <div style={{ color: text.muted, fontSize: "0.9rem", marginTop: 6 }}>
+              Starter gives you the workflow foundation, Pro adds operational control and reporting, and Elite adds portfolio intelligence and oversight.
+            </div>
+            {billingMomentumCopy ? (
+              <div style={{ color: text.secondary, fontSize: "0.88rem", marginTop: 6 }}>{billingMomentumCopy}</div>
+            ) : null}
+            <div style={{ color: text.secondary, fontSize: "0.88rem", marginTop: 6 }}>
+              Opening checkout does not change your plan by itself. It takes you to a secure review step where you can confirm the upgrade first.
+            </div>
           </div>
           <div className="rc-wrap-row">
             <Button type="button" variant="secondary" onClick={load} disabled={loading}>
@@ -218,10 +337,14 @@ const BillingPage: React.FC = () => {
               <Button
                 type="button"
                 variant="primary"
-                onClick={() => void handlePlanAction("starter")}
-                disabled={planActionLoading === "starter" || pricingUnavailable}
+                onClick={() => void handlePlanAction(requestedUpgradePlan || "starter")}
+                disabled={
+                  billingStatus.isLoading ||
+                  planActionLoading === (requestedUpgradePlan || "starter") ||
+                  pricingUnavailable
+                }
               >
-                {planActionLoading === "starter" ? "Opening..." : "Upgrade plan"}
+                {planActionLoading === (requestedUpgradePlan || "starter") ? "Opening..." : starterUpgradeLabel}
               </Button>
             )}
           </div>
@@ -229,23 +352,102 @@ const BillingPage: React.FC = () => {
       </Card>
 
       <Card id="plan">
-        <div style={{ display: "grid", gap: spacing.xs }}>
-          <div style={{ fontWeight: 700, fontSize: "1.05rem" }}>Current plan</div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: spacing.sm }}>
-            <div>
-              <div style={{ color: text.muted, fontSize: 12 }}>Tier</div>
-              <div style={{ fontWeight: 700 }}>{billingTierLabel(currentPlan)}</div>
+        <div style={{ display: "grid", gap: spacing.md }}>
+          <div style={{ display: "grid", gap: spacing.sm, gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))" }}>
+            <div
+              style={{
+                border: "1px solid rgba(148,163,184,0.25)",
+                borderRadius: 16,
+                padding: 16,
+                background: "rgba(148,163,184,0.06)",
+                display: "grid",
+                gap: spacing.xs,
+              }}
+            >
+              <div style={{ fontWeight: 700, fontSize: "1.05rem" }}>Current plan</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: spacing.sm }}>
+                <div>
+                  <div style={{ color: text.muted, fontSize: 12 }}>Tier</div>
+                  <div style={{ fontWeight: 700 }}>
+                    {billingStatus.isLoading ? "Loading..." : billingTierLabel(resolvedCurrentPlan)}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ color: text.muted, fontSize: 12 }}>Billing interval</div>
+                  <div style={{ fontWeight: 700 }}>{intervalLabel(billingStatus.interval)}</div>
+                </div>
+                <div>
+                  <div style={{ color: text.muted, fontSize: 12 }}>Renewal date</div>
+                  <div style={{ fontWeight: 700 }}>{renewalLabel(billingStatus.renewalDate)}</div>
+                </div>
+              </div>
+              {resolvedCurrentPlan === "free" ? (
+                <div style={{ marginTop: spacing.xs, color: text.muted, fontSize: 14 }}>
+                  Free includes guided setup and pay-per-use screening. Upgrade when you want richer rental operations, communication, exports, and reporting.
+                </div>
+              ) : null}
+              {resolvedCurrentPlan === "starter" ? (
+                <div style={{ marginTop: spacing.xs, color: text.muted, fontSize: 14 }}>
+                  Starter keeps the day-to-day workflow connected. Pro adds the operational control layer with stronger exports, reporting, screening summaries, compliance review, and team workflows.
+                </div>
+              ) : null}
+              {resolvedCurrentPlan === "pro" ? (
+                <div style={{ marginTop: spacing.xs, color: text.muted, fontSize: 14 }}>
+                  Pro focuses on operational control and reporting. Elite adds the portfolio intelligence layer with advanced analytics, AI summaries, and audit visibility.
+                </div>
+              ) : null}
             </div>
-            <div>
-              <div style={{ color: text.muted, fontSize: 12 }}>Billing interval</div>
-              <div style={{ fontWeight: 700 }}>{intervalLabel(billingStatus.interval)}</div>
-            </div>
-            <div>
-              <div style={{ color: text.muted, fontSize: 12 }}>Renewal date</div>
-              <div style={{ fontWeight: 700 }}>{renewalLabel(billingStatus.renewalDate)}</div>
-            </div>
+
+            {recommendedUpgradeTier ? (
+              <div
+                style={{
+                  border: "1px solid rgba(14,116,144,0.28)",
+                  borderRadius: 16,
+                  padding: 16,
+                  background: "rgba(14,116,144,0.08)",
+                  display: "grid",
+                  gap: spacing.xs,
+                }}
+              >
+                <div style={{ color: "#0f766e", fontSize: 12, fontWeight: 800 }}>
+                  {requestedUpgradePlan ? "Selected from pricing" : "Recommended next plan"}
+                </div>
+                <div style={{ fontWeight: 800, fontSize: "1.05rem" }}>
+                  {recommendedPlanLabel}
+                  {selectedPlanLabel && requestedUpgradePlan === recommendedUpgradeTier ? " checkout path" : ""}
+                </div>
+                {recommendedUpgradeReason ? (
+                  <div style={{ color: text.muted, fontSize: 14 }}>{recommendedUpgradeReason}</div>
+                ) : null}
+                {recommendationOutcomeCopy ? (
+                  <div style={{ color: text.muted, fontSize: 13, lineHeight: 1.5 }}>{recommendationOutcomeCopy}</div>
+                ) : null}
+                {recommendationTrustCopy ? (
+                  <div style={{ color: text.secondary, fontSize: 13, lineHeight: 1.5 }}>{recommendationTrustCopy}</div>
+                ) : null}
+                {limitationCopy ? (
+                  <div style={{ color: text.secondary, fontSize: 12, lineHeight: 1.5 }}>{limitationCopy}</div>
+                ) : null}
+                {nextUpgradeHelp ? (
+                  <div style={{ color: text.secondary, fontSize: 13, fontWeight: 600 }}>{nextUpgradeHelp}</div>
+                ) : null}
+                <div className="rc-wrap-row" style={{ marginTop: spacing.xs }}>
+                  <Button
+                    type="button"
+                    onClick={() => void handlePlanAction(recommendedUpgradeTier)}
+                    disabled={billingStatus.isLoading || planActionLoading === recommendedUpgradeTier || pricingUnavailable}
+                  >
+                    {nextUpgradeLabel}
+                  </Button>
+                </div>
+                {checkoutReassuranceCopy ? (
+                  <div style={{ color: text.muted, fontSize: 12, lineHeight: 1.5 }}>{checkoutReassuranceCopy}</div>
+                ) : null}
+              </div>
+            ) : null}
           </div>
-          <div className="rc-wrap-row" style={{ marginTop: spacing.sm }}>
+
+          <div className="rc-wrap-row" style={{ marginTop: spacing.xs }}>
             {isPaidPlan ? (
               <Button type="button" variant="secondary" onClick={handlePortal} disabled={portalLoading}>
                 {portalLoading ? "Opening..." : "Manage subscription"}
@@ -254,42 +456,17 @@ const BillingPage: React.FC = () => {
               <Button
                 type="button"
                 variant="secondary"
-                onClick={() => void handlePlanAction("starter")}
-                disabled={planActionLoading === "starter" || pricingUnavailable}
+                onClick={() => void handlePlanAction(requestedUpgradePlan || "starter")}
+                disabled={
+                  billingStatus.isLoading ||
+                  planActionLoading === (requestedUpgradePlan || "starter") ||
+                  pricingUnavailable
+                }
               >
-                {planActionLoading === "starter" ? "Opening..." : "Upgrade plan"}
+                {planActionLoading === (requestedUpgradePlan || "starter") ? "Opening..." : starterUpgradeLabel}
               </Button>
             )}
-            {nextUpgradeTier ? (
-              <Button
-                type="button"
-                onClick={() => void handlePlanAction(nextUpgradeTier)}
-                disabled={planActionLoading === nextUpgradeTier || pricingUnavailable}
-              >
-                {nextUpgradeLabel}
-              </Button>
-            ) : null}
           </div>
-          {currentPlan === "free" ? (
-            <div style={{ marginTop: spacing.xs, color: text.muted }}>
-              Free includes guided setup and pay-per-use screening. Upgrade when you want richer rental operations, communication, exports, and reporting.
-            </div>
-          ) : null}
-          {currentPlan === "starter" ? (
-            <div style={{ marginTop: spacing.xs, color: text.muted, fontSize: 14 }}>
-              Starter includes messaging, leases, maintenance, and work orders. Pro adds exports, screening summaries, compliance reports, and team workflows.
-            </div>
-          ) : null}
-          {currentPlan === "pro" ? (
-            <div style={{ marginTop: spacing.xs, color: text.muted, fontSize: 14 }}>
-              Pro includes exports, reporting, and team workflows. Elite adds advanced analytics, AI summaries, and audit visibility.
-            </div>
-          ) : null}
-          {nextUpgradeHelp ? (
-            <div style={{ marginTop: spacing.xs, color: text.muted, fontSize: 14 }}>
-              {nextUpgradeHelp}
-            </div>
-          ) : null}
         </div>
       </Card>
 
@@ -307,6 +484,8 @@ const BillingPage: React.FC = () => {
             }
           }}
           currentPlan={currentPlan}
+          selectedPlan={requestedUpgradePlan}
+          recommendedPlan={recommendedUpgradeTier}
           role={user?.actorRole || user?.role || null}
           mode="billing"
           planActionLoading={planActionLoading}

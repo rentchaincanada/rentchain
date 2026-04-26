@@ -1,4 +1,4 @@
-import { apiFetch } from "@/lib/apiClient";
+import { apiFetch } from "./apiFetch";
 import { isTelemetryEnabled } from "@/lib/telemetry";
 
 export async function logTelemetryEvent(

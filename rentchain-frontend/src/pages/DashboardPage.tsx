@@ -36,6 +36,7 @@ import { UpgradeNudgeInlineCard } from "@/features/upgradeNudges/UpgradeNudgeInl
 import { canUseTimeline, normalizeTimelinePlan } from "@/features/automation/timeline/timelineEntitlements";
 import { getLandlordActivation, type LandlordActivationSummary } from "@/api/activationApi";
 import { LandlordActivationFlowCard } from "@/components/activation/LandlordActivationFlowCard";
+import { clearPostUpgradeState, getPostUpgradeContent, getPostUpgradeState } from "@/lib/postUpgrade";
 
 const StarterOnboardingPanel = React.lazy(
   () => import("../components/dashboard/StarterOnboardingPanel")
@@ -149,6 +150,7 @@ const DashboardPage: React.FC = () => {
   const [activationLoading, setActivationLoading] = React.useState(false);
   const [activationError, setActivationError] = React.useState<string | null>(null);
   const [showWelcomeModal, setShowWelcomeModal] = React.useState(false);
+  const [postUpgradePlan, setPostUpgradePlan] = React.useState<"starter" | "pro" | "elite" | null>(null);
   const onboarding = useOnboardingState();
   const prevDerivedRef = React.useRef({
     propertyAdded: false,
@@ -258,6 +260,19 @@ const DashboardPage: React.FC = () => {
     if (!meLoaded || !isLandlord) return;
     void loadActivation();
   }, [isLandlord, loadActivation, meLoaded]);
+
+  React.useEffect(() => {
+    const state = getPostUpgradeState();
+    if (!state?.plan) return;
+    setPostUpgradePlan(state.plan);
+  }, []);
+
+  const dismissPostUpgradeBanner = React.useCallback(() => {
+    clearPostUpgradeState();
+    setPostUpgradePlan(null);
+  }, []);
+
+  const postUpgradeContent = postUpgradePlan ? getPostUpgradeContent(postUpgradePlan) : null;
 
   React.useEffect(() => {
     if (typeof window === "undefined" || !meLoaded || !isLandlord || !user?.id) return;
@@ -579,7 +594,10 @@ const DashboardPage: React.FC = () => {
         {dataReady ? <KpiStrip kpis={kpis} loading={loading} /> : null}
         {dataReady ? (
           <div style={{ marginTop: spacing.md }}>
-            <PortfolioCredibilitySummaryCard summary={data?.portfolioCredibilitySummary ?? null} />
+            <PortfolioCredibilitySummaryCard
+              summary={data?.portfolioCredibilitySummary ?? null}
+              activeLeasesHref="/leases"
+            />
           </div>
         ) : null}
         {dataReady &&
@@ -636,7 +654,11 @@ const DashboardPage: React.FC = () => {
               } catch {
                 // telemetry must never interrupt UX
               }
-              void openUpgradeFlow({ navigate, fallbackPath: "/pricing" });
+              void openUpgradeFlow({
+                navigate,
+                fallbackPath: "/pricing",
+                currentPlan: planNormalized,
+              });
             }}
             onDismiss={() => {
               try {
@@ -666,6 +688,34 @@ const DashboardPage: React.FC = () => {
               Learn more
             </button>
           </div>
+        ) : null}
+        {dataReady && postUpgradeContent ? (
+          <Card
+            style={{
+              border: "1px solid rgba(16,185,129,0.28)",
+              background: "linear-gradient(135deg, rgba(16,185,129,0.08), rgba(59,130,246,0.06))",
+              display: "grid",
+              gap: spacing.sm,
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", gap: spacing.md, flexWrap: "wrap" }}>
+              <div style={{ display: "grid", gap: 6 }}>
+                <div style={{ fontWeight: 800, fontSize: 16 }}>{postUpgradeContent.title}</div>
+                <div style={{ color: text.muted, fontSize: 14 }}>{postUpgradeContent.dashboardBanner}</div>
+              </div>
+              <Button variant="ghost" onClick={dismissPostUpgradeBanner}>
+                Dismiss
+              </Button>
+            </div>
+            <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
+              <Button onClick={() => navigate(postUpgradeContent.primaryAction.to)}>
+                {postUpgradeContent.primaryAction.label}
+              </Button>
+              <Button variant="secondary" onClick={() => navigate(postUpgradeContent.secondaryAction.to)}>
+                {postUpgradeContent.secondaryAction.label}
+              </Button>
+            </div>
+          </Card>
         ) : null}
 
         {dataReady ? (

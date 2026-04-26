@@ -1,0 +1,58 @@
+Generated at: 2026-04-22T01:56:00+00:00
+Run ID: manual-automation-hooks-v1
+
+1. Current system structure relevant to this mission
+
+- Branch: `feat/automation-hooks-v1`
+- Canonical backend extension point remains the landlord analytics snapshot decision pipeline:
+  `rentchain-api/src/lib/analytics/deriveAgentDecisions.ts`
+  -> `rentchain-api/src/lib/analytics/analyticsTypes.ts`
+  -> existing landlord analytics snapshot consumers
+- Canonical frontend decision surfaces remain:
+  `rentchain-frontend/src/components/analytics/AgentDecisionPanel.tsx`
+  `rentchain-frontend/src/pages/landlord/ActionRecommendationsPage.tsx`
+  `rentchain-frontend/src/pages/landlord/LandlordAnalyticsPage.tsx`
+
+2. Duplicated logic or drift locations
+
+- Decision hook metadata must stay server-owned so frontend surfaces do not invent separate action mappings.
+- Existing `recommendedAction` copy and `href` navigation already existed; this mission adds structured hook metadata alongside them rather than replacing decision derivation.
+- Frontend display mapping is intentionally limited to rendering server-provided `actionLabel`, `destination`, and `workflowCategory`.
+
+3. Canonical path to standardize around
+
+- Standardize all landlord decision hooks around the analytics snapshot decision contract.
+- No new backend route was introduced.
+- No autonomous action execution, scheduling, or mutation path was introduced.
+
+4. Exact files modified
+
+- `.conversation_engine/latest_audit.txt`
+- `rentchain-api/src/lib/analytics/analyticsTypes.ts`
+- `rentchain-api/src/lib/analytics/deriveAgentDecisions.ts`
+- `rentchain-api/src/lib/analytics/__tests__/deriveAgentDecisions.test.ts`
+- `rentchain-api/src/lib/analytics/__tests__/deriveLandlordAnalyticsSnapshot.test.ts`
+- `rentchain-api/src/services/landlord/__tests__/landlordAnalyticsSnapshot.test.ts`
+- `rentchain-api/src/routes/__tests__/landlordAnalyticsRoutes.test.ts`
+- `rentchain-frontend/src/api/landlordAnalyticsApi.ts`
+- `rentchain-frontend/src/components/analytics/AgentDecisionPanel.tsx`
+- `rentchain-frontend/src/components/analytics/AgentDecisionPanel.test.tsx`
+- `rentchain-frontend/src/pages/landlord/ActionRecommendationsPage.test.tsx`
+- `rentchain-frontend/src/pages/landlord/LandlordAnalyticsPage.test.tsx`
+
+5. Risks
+
+- Hook metadata must remain deterministic by decision type and resolved property scope to avoid a second workflow system.
+- Frontend surfaces must not infer automation behavior from `automationEligible`; this mission keeps it explicitly `false`.
+- Future workflow expansion should build on these stable keys instead of adding new parallel action contracts.
+
+6. Verification summary
+
+- Backend tests passed:
+  `npm test -- --run src/lib/analytics/__tests__/deriveAgentDecisions.test.ts src/lib/analytics/__tests__/deriveLandlordAnalyticsSnapshot.test.ts src/services/landlord/__tests__/landlordAnalyticsSnapshot.test.ts src/routes/__tests__/landlordAnalyticsRoutes.test.ts`
+- Backend build passed:
+  `npm run build`
+- Frontend tests passed:
+  `npm test -- --run src/components/analytics/AgentDecisionPanel.test.tsx src/pages/landlord/ActionRecommendationsPage.test.tsx src/pages/landlord/LandlordAnalyticsPage.test.tsx`
+- Frontend build passed:
+  `npm run build`

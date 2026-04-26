@@ -49,6 +49,21 @@ export default function TenantMaintenanceRequestNewPage() {
       subtitle="Submit a tenant-safe maintenance request through the workspace foundation route."
     >
       <div style={{ display: "grid", gap: spacing.md }}>
+      <div
+        style={{
+          border: `1px solid ${colors.border}`,
+          borderRadius: radius.md,
+          background: colors.panel,
+          padding: "12px 14px",
+          display: "grid",
+          gap: 8,
+        }}
+      >
+        <div style={{ fontWeight: 800, color: textTokens.primary }}>How this works</div>
+        <div style={{ color: textTokens.secondary }}>1. Submit the issue with enough detail to help triage the problem.</div>
+        <div style={{ color: textTokens.secondary }}>2. Your landlord reviews the request and moves it into the service workflow.</div>
+        <div style={{ color: textTokens.secondary }}>3. You can track updates from the maintenance workspace after submission.</div>
+      </div>
 
       {error ? (
         <div

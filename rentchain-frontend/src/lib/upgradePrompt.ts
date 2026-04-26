@@ -1,3 +1,5 @@
+import { CANONICAL_PLAN_ORDER, normalizePlan, planLabel } from "@/lib/plan";
+
 export type UpgradePromptDetail = {
   featureKey: string;
   currentPlan?: string;
@@ -6,14 +8,13 @@ export type UpgradePromptDetail = {
   redirectTo?: string;
 };
 
-const PLAN_ORDER = ["free", "starter", "pro", "elite"] as const;
-
 const FEATURE_REQUIRED_PLAN: Record<string, string> = {
   applications_manual: "free",
   tenants_manual: "free",
   screening: "free",
   screening_pay_per_use: "free",
   screening_history: "free",
+  screening_workflow: "starter",
   unitstable: "free",
   units: "free",
   properties: "free",
@@ -31,6 +32,11 @@ const FEATURE_REQUIRED_PLAN: Record<string, string> = {
   ledger_verified: "pro",
   ledger: "starter",
   "team.invites": "pro",
+  marketplace_directory: "pro",
+  marketplace_contractor_assignment: "elite",
+  portfolio_health_summary: "free",
+  portfolio_score: "pro",
+  portfolio_action_recommendations: "elite",
   portfolio_dashboard: "pro",
   review_summary: "pro",
   pdf_export: "pro",
@@ -49,11 +55,7 @@ const FEATURE_REQUIRED_PLAN: Record<string, string> = {
 export function normalizePlanName(input?: any): string | undefined {
   const raw = String(input ?? "").trim().toLowerCase();
   if (!raw) return undefined;
-  if (PLAN_ORDER.includes(raw as (typeof PLAN_ORDER)[number])) return raw;
-  if (raw === "screening") return "free";
-  if (raw === "core") return "starter";
-  if (raw === "business" || raw === "enterprise") return "elite";
-  return undefined;
+  return normalizePlan(raw);
 }
 
 export function resolveRequiredPlan(featureKey?: string, currentPlan?: string): string | undefined {
@@ -63,9 +65,15 @@ export function resolveRequiredPlan(featureKey?: string, currentPlan?: string): 
   if (required) return required;
   const current = normalizePlanName(currentPlan);
   if (!current) return "pro";
-  const idx = PLAN_ORDER.indexOf(current as (typeof PLAN_ORDER)[number]);
-  if (idx >= 0 && idx < PLAN_ORDER.length - 1) return PLAN_ORDER[idx + 1];
+  const idx = CANONICAL_PLAN_ORDER.indexOf(current as (typeof CANONICAL_PLAN_ORDER)[number]);
+  if (idx >= 0 && idx < CANONICAL_PLAN_ORDER.length - 1) return CANONICAL_PLAN_ORDER[idx + 1];
   return current || "pro";
+}
+
+export function resolveRequiredPlanLabel(featureKey?: string, currentPlan?: string): string | undefined {
+  const requiredPlan = resolveRequiredPlan(featureKey, currentPlan);
+  if (!requiredPlan) return undefined;
+  return planLabel(normalizePlan(requiredPlan));
 }
 
 function extractPlanFromPayload(payload: any): string | undefined {
@@ -143,10 +151,33 @@ export function getUpgradePromptDetail(payload: any, status?: number): UpgradePr
   return { featureKey: resolvedFeatureKey, currentPlan, requiredPlan, source, redirectTo };
 }
 
+export function normalizeUpgradePromptDetail(detail: UpgradePromptDetail | null | undefined): UpgradePromptDetail | null {
+  if (!detail) return null;
+
+  const featureKey = normalizeFeatureKey(detail);
+  if (!featureKey) return null;
+
+  const currentPlan = normalizePlanName(detail.currentPlan);
+  const requiredPlan =
+    normalizePlanName(detail.requiredPlan) || resolveRequiredPlan(featureKey, currentPlan);
+  const source = String(detail.source || "").trim() || undefined;
+  const redirectTo = String(detail.redirectTo || "").trim() || undefined;
+
+  return {
+    featureKey,
+    currentPlan,
+    requiredPlan,
+    source,
+    redirectTo,
+  };
+}
+
 export function dispatchUpgradePrompt(detail: UpgradePromptDetail) {
   if (typeof window === "undefined") return;
+  const normalizedDetail = normalizeUpgradePromptDetail(detail);
+  if (!normalizedDetail) return;
   try {
-    window.dispatchEvent(new CustomEvent("upgrade:prompt", { detail }));
+    window.dispatchEvent(new CustomEvent("upgrade:prompt", { detail: normalizedDetail }));
   } catch {
     // ignore dispatch errors
   }

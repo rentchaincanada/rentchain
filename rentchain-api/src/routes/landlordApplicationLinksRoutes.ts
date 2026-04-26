@@ -32,7 +32,7 @@ router.post("/", authenticateJwt, async (req: any, res) => {
     const unitId = unitIdRaw === null || unitIdRaw === undefined ? "" : String(unitIdRaw).trim();
     const expiresInDaysRaw = Number(req.body?.expiresInDays ?? 14);
     const applicantEmailRaw = req.body?.applicantEmail;
-    const applicantEmail = typeof applicantEmailRaw === "string" ? applicantEmailRaw.trim() : "";
+    const applicantEmail = typeof applicantEmailRaw === "string" ? applicantEmailRaw.trim().toLowerCase() : "";
 
     if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
 
@@ -79,14 +79,33 @@ router.post("/", authenticateJwt, async (req: any, res) => {
       : 14;
     const expiresAt = now + expiresInDays * 24 * 60 * 60 * 1000;
 
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const hasValidEmail = !!(applicantEmail && emailRegex.test(applicantEmail));
+
     const ref = await db.collection("applicationLinks").add({
       landlordId,
       propertyId,
       unitId: unitId || null,
+      applicantEmail: hasValidEmail ? applicantEmail : null,
+      applicantName: null,
       createdAt: now,
       expiresAt,
       status: "ACTIVE",
       tokenHash,
+      partialProgress: {
+        status: "not_started",
+        completionPercent: 0,
+        currentStep: null,
+        completedSections: [],
+        missingSections: [],
+        hasCoApplicant: false,
+        viewingChoice: null,
+        startedAt: null,
+        lastActivityAt: null,
+        submittedAt: null,
+        reminderEligibleAt: null,
+        reminderSentAt: null,
+      },
     });
 
     const baseUrl = (process.env.PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "");
@@ -94,8 +113,6 @@ router.post("/", authenticateJwt, async (req: any, res) => {
 
     let emailed = false;
     let emailError: string | undefined;
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    const hasValidEmail = !!(applicantEmail && emailRegex.test(applicantEmail));
 
     if (applicantEmail && !hasValidEmail) {
       emailError = "INVALID_APPLICANT_EMAIL";

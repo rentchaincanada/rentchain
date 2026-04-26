@@ -1,21 +1,24 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ApplicationsPage from "./ApplicationsPage";
 
 const mocks = vi.hoisted(() => ({
   fetchProperties: vi.fn(),
   fetchRentalApplications: vi.fn(),
   fetchRentalApplication: vi.fn(),
+  sendApplicationLinkReminder: vi.fn(),
   fetchApplicationDecisionSummary: vi.fn(),
   evaluateApplicationRiskSnapshot: vi.fn(),
-  recordApplicationRiskDecision: vi.fn(),
+  submitRentalApplicationDecisionAction: vi.fn(),
   fetchScreeningQuote: vi.fn(),
   fetchScreeningResult: vi.fn(),
   fetchScreeningReceipt: vi.fn(),
   fetchScreeningEvents: vi.fn(),
   fetchViewingRequests: vi.fn(),
+  fetchLandlordApplicationFunnel: vi.fn(),
   getTransUnionIntegration: vi.fn(),
+  trackTransUnionUsageEvent: vi.fn(),
   showToast: vi.fn(),
   openUpgrade: vi.fn(),
   entitlementsMock: vi.fn(),
@@ -29,9 +32,10 @@ vi.mock("../api/propertiesApi", () => ({
 vi.mock("@/api/rentalApplicationsApi", () => ({
   fetchRentalApplications: mocks.fetchRentalApplications,
   fetchRentalApplication: mocks.fetchRentalApplication,
+  sendApplicationLinkReminder: mocks.sendApplicationLinkReminder,
   fetchApplicationDecisionSummary: mocks.fetchApplicationDecisionSummary,
   evaluateApplicationRiskSnapshot: mocks.evaluateApplicationRiskSnapshot,
-  recordApplicationRiskDecision: mocks.recordApplicationRiskDecision,
+  submitRentalApplicationDecisionAction: mocks.submitRentalApplicationDecisionAction,
   updateRentalApplicationStatus: vi.fn(),
   fetchScreeningQuote: mocks.fetchScreeningQuote,
   createScreeningCheckout: vi.fn(),
@@ -44,6 +48,10 @@ vi.mock("@/api/rentalApplicationsApi", () => ({
   adminMarkScreeningFailed: vi.fn(),
   adminRecomputeScreening: vi.fn(),
   exportScreeningReport: vi.fn(),
+}));
+
+vi.mock("@/api/landlordAnalyticsApi", () => ({
+  fetchLandlordApplicationFunnel: mocks.fetchLandlordApplicationFunnel,
 }));
 
 vi.mock("../components/ui/ToastProvider", () => ({
@@ -86,6 +94,7 @@ vi.mock("@/api/integrationsApi", () => ({
   disconnectTransUnion: vi.fn(),
   getTransUnionIntegration: mocks.getTransUnionIntegration,
   requestTransUnionOnboarding: vi.fn(),
+  trackTransUnionUsageEvent: mocks.trackTransUnionUsageEvent,
   updateTransUnionCredentials: vi.fn(),
 }));
 
@@ -147,11 +156,34 @@ vi.mock("../components/billing/SamplePdfModal", () => ({
 }));
 
 vi.mock("@/components/applications/ApplicationDecisionSummaryCard", () => ({
-  ApplicationDecisionSummaryCard: () => <div>Decision Summary</div>,
+  ApplicationDecisionSummaryCard: ({ onDecision, submittingDecision }: any) => (
+    <div>
+      <button type="button" onClick={() => onDecision?.("request_info", "Need paystub")} disabled={submittingDecision}>
+        Trigger Request More Info
+      </button>
+      <button type="button" onClick={() => onDecision?.("approve", "Looks good")} disabled={submittingDecision}>
+        Trigger Approve
+      </button>
+      <button type="button" onClick={() => onDecision?.("reject", "Not a fit")} disabled={submittingDecision}>
+        Trigger Reject
+      </button>
+    </div>
+  ),
 }));
 
 vi.mock("@/components/integrations/TransUnionConnectionCard", () => ({
-  TransUnionConnectionCard: () => <div>TransUnion Connection</div>,
+  TransUnionConnectionCard: (props: any) => (
+    <div>
+      <div>TransUnion Connection</div>
+      <div>{props.readyToScreen ? "Ready to screen now" : "Choose an applicant first"}</div>
+      <button type="button" onClick={() => props.onStartScreening?.()}>
+        Connection Primary Action
+      </button>
+      <button type="button" onClick={() => props.onChooseApplicant?.()}>
+        Choose Applicant
+      </button>
+    </div>
+  ),
 }));
 
 vi.mock("@/components/integrations/GetTransUnionAccessModal", () => ({
@@ -210,8 +242,13 @@ vi.mock("@/lib/analytics", () => ({
   track: vi.fn(),
 }));
 
+afterEach(() => {
+  cleanup();
+});
+
 describe("ApplicationsPage", () => {
   beforeEach(() => {
+    const now = Date.now();
     vi.spyOn(console, "debug").mockImplementation(() => {});
     mocks.entitlementsMock.mockReturnValue({
       loading: false,
@@ -236,19 +273,87 @@ describe("ApplicationsPage", () => {
     mocks.fetchProperties.mockResolvedValue({
       items: [{ id: "prop-1", name: "Harbour View" }],
     });
-    mocks.fetchRentalApplications.mockResolvedValue([]);
-    mocks.fetchRentalApplication.mockResolvedValue(null);
+    mocks.fetchRentalApplications.mockResolvedValue([
+      {
+        id: "app-1",
+        applicantName: "Jamie Stone",
+        email: "jamie@example.com",
+        propertyId: "prop-1",
+        unitId: "unit-1",
+        status: "SUBMITTED",
+        submittedAt: Date.now(),
+      },
+    ]);
+    mocks.fetchRentalApplication.mockResolvedValue({
+      id: "app-1",
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      applicationLinkId: "link-1",
+      createdAt: Date.now(),
+      submittedAt: Date.now(),
+      updatedAt: Date.now(),
+      status: "SUBMITTED",
+      applicant: { firstName: "Jamie", lastName: "Stone", email: "jamie@example.com" },
+      residentialHistory: [],
+      employment: { applicant: {} },
+      consent: { creditConsent: true, referenceConsent: true, dataSharingConsent: true, acceptedAt: Date.now() },
+      screening: { requested: false },
+      landlordNote: null,
+    });
     mocks.fetchApplicationDecisionSummary.mockResolvedValue(null);
+    mocks.sendApplicationLinkReminder.mockResolvedValue({
+      sentAt: now,
+      partialProgress: {
+        status: "in_progress",
+        completionPercent: 62,
+        currentStep: "employment",
+        completedSections: ["personal_info", "residential_history"],
+        missingSections: ["employment", "references_assets", "consent"],
+        hasCoApplicant: false,
+        viewingChoice: "already_viewed",
+        startedAt: now - 1_000,
+        lastActivityAt: now - 500,
+        submittedAt: null,
+        reminderEligibleAt: now - 60_000,
+        reminderSentAt: now,
+      },
+    });
+    mocks.submitRentalApplicationDecisionAction.mockReset();
     mocks.fetchScreeningQuote.mockResolvedValue({ ok: false, detail: "Screening not eligible." });
     mocks.fetchScreeningResult.mockResolvedValue({ ok: false });
     mocks.fetchScreeningReceipt.mockResolvedValue({ ok: false });
     mocks.fetchScreeningEvents.mockResolvedValue([]);
     mocks.fetchViewingRequests.mockResolvedValue([]);
+    mocks.fetchLandlordApplicationFunnel.mockResolvedValue({
+      counts: {
+        started: 2,
+        inProgress: 3,
+        readyToSubmit: 1,
+        submitted: 4,
+        totalStarted: 10,
+      },
+      conversion: {
+        completionRate: 0.4,
+        averageCompletionPercent: 64.2,
+      },
+      dropOff: {
+        byCurrentStep: [{ step: "employment", count: 2 }],
+        byMissingSection: [{ section: "employment", count: 3 }],
+      },
+      reminders: {
+        remindedCount: 2,
+        completedAfterReminderCount: 1,
+        completionRateAfterReminder: 0.5,
+        medianHoursToCompleteAfterReminder: 8,
+      },
+    });
     mocks.getTransUnionIntegration.mockResolvedValue({
       provider: "transunion",
       status: "not_connected",
       version: 1,
     });
+    mocks.trackTransUnionUsageEvent.mockResolvedValue({ ok: true });
     mocks.showToast.mockReset();
     mocks.openUpgrade.mockReset();
   });
@@ -268,26 +373,561 @@ describe("ApplicationsPage", () => {
 
     expect(screen.getByRole("button", { name: "Send screening invite" })).toBeInTheDocument();
     expect(screen.getByText("TransUnion Connection")).toBeInTheDocument();
+    expect(screen.getByText("Application Funnel")).toBeInTheDocument();
+    expect(screen.getByText("40%")).toBeInTheDocument();
   });
 
-  it("shows Starter-aligned screening upgrade copy instead of the old Pro gate", async () => {
+  it("renders the application funnel card with counts and a simple drop-off hint", async () => {
     render(
       <MemoryRouter>
         <ApplicationsPage />
       </MemoryRouter>
     );
 
-    const button = await screen.findByRole("button", { name: "Send screening invite" });
+    expect(await screen.findByText("Application Funnel")).toBeInTheDocument();
+    expect(screen.getByText("Started")).toBeInTheDocument();
+    expect(screen.getByText("In progress")).toBeInTheDocument();
+    expect(screen.getByText("Completed")).toBeInTheDocument();
+    expect(screen.getByText("Conversion")).toBeInTheDocument();
+    expect(screen.getByText("40%")).toBeInTheDocument();
+    expect(screen.getByText("Most applicants currently stop in Employment.")).toBeInTheDocument();
+  });
+
+  it("shows an empty funnel state gracefully", async () => {
+    mocks.fetchLandlordApplicationFunnel.mockResolvedValueOnce({
+      counts: {
+        started: 0,
+        inProgress: 0,
+        readyToSubmit: 0,
+        submitted: 0,
+        totalStarted: 0,
+      },
+      conversion: {
+        completionRate: 0,
+        averageCompletionPercent: 0,
+      },
+      dropOff: {
+        byCurrentStep: [],
+        byMissingSection: [],
+      },
+      reminders: {
+        remindedCount: 0,
+        completedAfterReminderCount: 0,
+        completionRateAfterReminder: null,
+        medianHoursToCompleteAfterReminder: null,
+      },
+    });
+
+    render(
+      <MemoryRouter>
+        <ApplicationsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("No meaningful drop-off pattern yet.")).toBeInTheDocument();
+  });
+
+  it("shows a safe funnel error state without breaking the applications list", async () => {
+    mocks.fetchLandlordApplicationFunnel.mockRejectedValueOnce(new Error("Funnel unavailable"));
+
+    render(
+      <MemoryRouter>
+        <ApplicationsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Funnel unavailable")).toBeInTheDocument();
+    expect(screen.getByText("Jamie Stone")).toBeInTheDocument();
+  });
+
+  it("guides connected landlords back to the application list instead of showing a dead-end screening toast", async () => {
+    mocks.entitlementsMock.mockReturnValue({
+      loading: false,
+      plan: "starter",
+      role: "landlord",
+      isAdmin: false,
+      capabilities: {},
+      hasCapability: () => true,
+      requiredPlanFor: () => "starter",
+      canScreen: true,
+      canViewScreeningHistory: true,
+      canExportPdf: false,
+      hasMoveInReadiness: false,
+      canUseWorkOrders: false,
+      canViewReviewSummary: false,
+    });
+    mocks.getTransUnionIntegration.mockResolvedValue({
+      provider: "transunion",
+      status: "connected",
+      version: 1,
+    });
+
+    render(
+      <MemoryRouter>
+        <ApplicationsPage />
+      </MemoryRouter>
+    );
+
+    await screen.findAllByRole("heading", { name: "Applications" });
+    expect(screen.getAllByText("Choose an applicant first").length).toBeGreaterThan(0);
+    fireEvent.click(screen.getAllByRole("button", { name: "Connection Primary Action" })[0]);
+
+    expect(mocks.showToast).not.toHaveBeenCalledWith(
+      expect.objectContaining({ message: "Select an application to start screening." })
+    );
+    expect(screen.getAllByText("Choose an applicant first").length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: "Choose Applicant" }).length).toBeGreaterThan(0);
+  });
+
+  it("shows Starter-aligned screening upgrade copy instead of the old Pro gate", async () => {
+    const dispatchSpy = vi.spyOn(window, "dispatchEvent");
+
+    render(
+      <MemoryRouter>
+        <ApplicationsPage />
+      </MemoryRouter>
+    );
+
+    const [button] = await screen.findAllByRole("button", { name: "Send screening invite" });
     button.click();
 
-    expect(mocks.openUpgrade).toHaveBeenCalledWith(
+    expect(dispatchSpy).toHaveBeenCalled();
+    const event = dispatchSpy.mock.calls.at(-1)?.[0] as CustomEvent;
+    expect(event.type).toBe("upgrade:prompt");
+    expect(event.detail).toMatchObject({
+      featureKey: "screening_workflow",
+      currentPlan: "free",
+      requiredPlan: "starter",
+      source: "applications_page_screening",
+    });
+  });
+
+  it("opens a request-more-info modal and sends the actionable request", async () => {
+    mocks.submitRentalApplicationDecisionAction.mockResolvedValue({
+      application: {
+        id: "app-1",
+        landlordId: "landlord-1",
+        propertyId: "prop-1",
+        unitId: "unit-1",
+        applicationLinkId: "link-1",
+        createdAt: Date.now(),
+        submittedAt: Date.now(),
+        updatedAt: Date.now(),
+        status: "IN_REVIEW",
+        applicant: { firstName: "Jamie", lastName: "Stone", email: "jamie@example.com" },
+        residentialHistory: [],
+        employment: { applicant: {} },
+        consent: { creditConsent: true, referenceConsent: true, dataSharingConsent: true, acceptedAt: Date.now() },
+        screening: { requested: false },
+        landlordNote: "Need paystub",
+      },
+      action: { type: "request_info", status: "IN_REVIEW", emailSent: true },
+    });
+
+    render(
+      <MemoryRouter>
+        <ApplicationsPage />
+      </MemoryRouter>
+    );
+
+    await screen.findAllByText("Jamie Stone");
+    fireEvent.click(screen.getAllByText("Jamie Stone")[0]);
+    fireEvent.click(await screen.findByRole("button", { name: "Trigger Request More Info" }));
+
+    expect(await screen.findByRole("dialog", { name: /request more information/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText("Upload ID"));
+    fireEvent.click(screen.getByRole("button", { name: /send request/i }));
+
+    await waitFor(() => {
+      expect(mocks.submitRentalApplicationDecisionAction).toHaveBeenCalledWith("app-1", {
+        action: "request_info",
+        requestedItems: ["upload_id"],
+        customMessage: "Need paystub",
+      });
+    });
+  });
+
+  it("sends approve and reject actions through the canonical action route", async () => {
+    mocks.submitRentalApplicationDecisionAction.mockResolvedValue({
+      application: {
+        id: "app-1",
+        landlordId: "landlord-1",
+        propertyId: "prop-1",
+        unitId: "unit-1",
+        applicationLinkId: "link-1",
+        createdAt: Date.now(),
+        submittedAt: Date.now(),
+        updatedAt: Date.now(),
+        status: "APPROVED",
+        applicant: { firstName: "Jamie", lastName: "Stone", email: "jamie@example.com" },
+        residentialHistory: [],
+        employment: { applicant: {} },
+        consent: { creditConsent: true, referenceConsent: true, dataSharingConsent: true, acceptedAt: Date.now() },
+        screening: { requested: false },
+        landlordNote: "Looks good",
+      },
+      action: { type: "approve", status: "APPROVED", emailSent: true, paymentEmail: "owner@example.com" },
+    });
+
+    render(
+      <MemoryRouter>
+        <ApplicationsPage />
+      </MemoryRouter>
+    );
+
+    await screen.findAllByText("Jamie Stone");
+    fireEvent.click(screen.getAllByText("Jamie Stone")[0]);
+    fireEvent.click(await screen.findByRole("button", { name: "Trigger Approve" }));
+
+    await waitFor(() => {
+      expect(mocks.submitRentalApplicationDecisionAction).toHaveBeenCalledWith("app-1", {
+        action: "approve",
+        note: "Looks good",
+      });
+    });
+
+    mocks.submitRentalApplicationDecisionAction.mockResolvedValueOnce({
+      application: {
+        id: "app-1",
+        landlordId: "landlord-1",
+        propertyId: "prop-1",
+        unitId: "unit-1",
+        applicationLinkId: "link-1",
+        createdAt: Date.now(),
+        submittedAt: Date.now(),
+        updatedAt: Date.now(),
+        status: "DECLINED",
+        applicant: { firstName: "Jamie", lastName: "Stone", email: "jamie@example.com" },
+        residentialHistory: [],
+        employment: { applicant: {} },
+        consent: { creditConsent: true, referenceConsent: true, dataSharingConsent: true, acceptedAt: Date.now() },
+        screening: { requested: false },
+        landlordNote: "Not a fit",
+      },
+      action: { type: "reject", status: "DECLINED", emailSent: true },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Trigger Reject" }));
+
+    await waitFor(() => {
+      expect(mocks.submitRentalApplicationDecisionAction).toHaveBeenCalledWith("app-1", {
+        action: "reject",
+        note: "Not a fit",
+      });
+    });
+  });
+
+  it("renders in-progress application link rows safely without opening submitted application detail", async () => {
+    mocks.fetchRentalApplications.mockResolvedValue([
+      {
+        id: "link-1",
+        source: "application_link",
+        applicantName: "In-progress applicant",
+        email: null,
+        propertyId: "prop-1",
+        unitId: "unit-1",
+        status: "IN_PROGRESS",
+        submittedAt: null,
+        lastActivityAt: 1_710_000_000_000,
+        completionPercent: 62,
+        partialProgress: {
+          status: "in_progress",
+          completionPercent: 62,
+          currentStep: "employment",
+          completedSections: ["personal_info", "residential_history"],
+          missingSections: ["employment", "references_assets", "consent"],
+          hasCoApplicant: false,
+          viewingChoice: "already_viewed",
+          startedAt: 1_709_999_000_000,
+          lastActivityAt: 1_710_000_000_000,
+          submittedAt: null,
+          reminderEligibleAt: 1_710_086_400_000,
+          reminderSentAt: null,
+        },
+      },
+    ]);
+
+    render(
+      <MemoryRouter>
+        <ApplicationsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("In-progress applicant")).toBeInTheDocument();
+    expect(screen.getByText("62% complete")).toBeInTheDocument();
+    expect(screen.getByText(/Partial application only/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Screen tenant" })).not.toBeInTheDocument();
+    mocks.fetchRentalApplication.mockClear();
+
+    fireEvent.click(screen.getByText("In-progress applicant"));
+
+    expect(mocks.fetchRentalApplication).not.toHaveBeenCalled();
+  });
+
+  it("shows Send reminder for eligible in-progress rows and updates the row after success", async () => {
+    const now = Date.now();
+    mocks.fetchRentalApplications.mockResolvedValue([
+      {
+        id: "link-1",
+        source: "application_link",
+        applicantName: "In-progress applicant",
+        email: null,
+        propertyId: "prop-1",
+        unitId: "unit-1",
+        status: "IN_PROGRESS",
+        submittedAt: null,
+        lastActivityAt: now - 60_000,
+        completionPercent: 62,
+        partialProgress: {
+          status: "in_progress",
+          completionPercent: 62,
+          currentStep: "employment",
+          completedSections: ["personal_info", "residential_history"],
+          missingSections: ["employment", "references_assets", "consent"],
+          hasCoApplicant: false,
+          viewingChoice: "already_viewed",
+          startedAt: now - 120_000,
+          lastActivityAt: now - 60_000,
+          submittedAt: null,
+          reminderEligibleAt: now - 60_000,
+          reminderSentAt: null,
+        },
+      },
+    ]);
+
+    render(
+      <MemoryRouter>
+        <ApplicationsPage />
+      </MemoryRouter>
+    );
+
+    const button = await screen.findByRole("button", { name: "Send reminder" });
+    expect(screen.getByText("Ready to remind")).toBeInTheDocument();
+    fireEvent.click(button);
+
+    await waitFor(() => {
+      expect(mocks.sendApplicationLinkReminder).toHaveBeenCalledWith("link-1");
+    });
+    expect(mocks.showToast).toHaveBeenCalledWith(
       expect.objectContaining({
-        ctaLabel: "Upgrade to Starter",
-        copy: expect.objectContaining({
-          title: "Upgrade to Starter",
-          body: "Starter includes applicant screening inside RentChain. Upgrade to continue.",
-        }),
+        message: "Reminder sent",
+        variant: "success",
       })
     );
+    expect(await screen.findByText("Recently reminded")).toBeInTheDocument();
+  });
+
+  it("shows recently reminded state and hides the send button inside the cooldown window", async () => {
+    const now = Date.now();
+    mocks.fetchRentalApplications.mockResolvedValue([
+      {
+        id: "link-1",
+        source: "application_link",
+        applicantName: "In-progress applicant",
+        email: null,
+        propertyId: "prop-1",
+        unitId: "unit-1",
+        status: "IN_PROGRESS",
+        submittedAt: null,
+        lastActivityAt: now - 60_000,
+        completionPercent: 62,
+        partialProgress: {
+          status: "in_progress",
+          completionPercent: 62,
+          currentStep: "employment",
+          completedSections: ["personal_info", "residential_history"],
+          missingSections: ["employment", "references_assets", "consent"],
+          hasCoApplicant: false,
+          viewingChoice: "already_viewed",
+          startedAt: now - 120_000,
+          lastActivityAt: now - 60_000,
+          submittedAt: null,
+          reminderEligibleAt: now - 60_000,
+          reminderSentAt: now - 60_000,
+        },
+      },
+    ]);
+
+    render(
+      <MemoryRouter>
+        <ApplicationsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Recently reminded")).toBeInTheDocument();
+    expect(screen.getByText(/Reminder sent/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Send reminder" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Send again" })).not.toBeInTheDocument();
+  });
+
+  it("shows a safe error toast when sending a reminder fails", async () => {
+    const now = Date.now();
+    mocks.fetchRentalApplications.mockResolvedValue([
+      {
+        id: "link-1",
+        source: "application_link",
+        applicantName: "In-progress applicant",
+        email: null,
+        propertyId: "prop-1",
+        unitId: "unit-1",
+        status: "IN_PROGRESS",
+        submittedAt: null,
+        lastActivityAt: now - 60_000,
+        completionPercent: 62,
+        partialProgress: {
+          status: "in_progress",
+          completionPercent: 62,
+          currentStep: "employment",
+          completedSections: ["personal_info", "residential_history"],
+          missingSections: ["employment", "references_assets", "consent"],
+          hasCoApplicant: false,
+          viewingChoice: "already_viewed",
+          startedAt: now - 120_000,
+          lastActivityAt: now - 60_000,
+          submittedAt: null,
+          reminderEligibleAt: now - 60_000,
+          reminderSentAt: null,
+        },
+      },
+    ]);
+    mocks.sendApplicationLinkReminder.mockRejectedValueOnce(new Error("Reminder could not be sent"));
+
+    render(
+      <MemoryRouter>
+        <ApplicationsPage />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Send reminder" }));
+
+    await waitFor(() => {
+      expect(mocks.showToast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: "Reminder could not be sent",
+          variant: "error",
+        })
+      );
+    });
+  });
+
+  it("shows Send again when the reminder cooldown has elapsed", async () => {
+    const now = Date.now();
+    mocks.fetchRentalApplications.mockResolvedValue([
+      {
+        id: "link-1",
+        source: "application_link",
+        applicantName: "In-progress applicant",
+        email: null,
+        propertyId: "prop-1",
+        unitId: "unit-1",
+        status: "IN_PROGRESS",
+        submittedAt: null,
+        lastActivityAt: now - 60_000,
+        completionPercent: 62,
+        partialProgress: {
+          status: "in_progress",
+          completionPercent: 62,
+          currentStep: "employment",
+          completedSections: ["personal_info", "residential_history"],
+          missingSections: ["employment", "references_assets", "consent"],
+          hasCoApplicant: false,
+          viewingChoice: "already_viewed",
+          startedAt: now - 120_000,
+          lastActivityAt: now - 60_000,
+          submittedAt: null,
+          reminderEligibleAt: now - 60_000,
+          reminderSentAt: now - 25 * 60 * 60 * 1000,
+        },
+      },
+    ]);
+
+    render(
+      <MemoryRouter>
+        <ApplicationsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Ready to remind")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Send again" })).toBeInTheDocument();
+  });
+
+  it("renders the high priority follow-up label for high completion with recent activity", async () => {
+    const now = Date.now();
+    mocks.fetchRentalApplications.mockResolvedValue([
+      {
+        id: "link-1",
+        source: "application_link",
+        applicantName: "In-progress applicant",
+        email: null,
+        propertyId: "prop-1",
+        unitId: "unit-1",
+        status: "IN_PROGRESS",
+        submittedAt: null,
+        lastActivityAt: now - 2 * 24 * 60 * 60 * 1000,
+        completionPercent: 75,
+        partialProgress: {
+          status: "in_progress",
+          completionPercent: 75,
+          currentStep: "consent",
+          completedSections: ["personal_info", "residential_history", "employment"],
+          missingSections: ["references_assets", "consent"],
+          hasCoApplicant: false,
+          viewingChoice: "already_viewed",
+          startedAt: now - 3 * 24 * 60 * 60 * 1000,
+          lastActivityAt: now - 2 * 24 * 60 * 60 * 1000,
+          submittedAt: null,
+          reminderEligibleAt: now - 60_000,
+          reminderSentAt: null,
+        },
+      },
+    ]);
+
+    render(
+      <MemoryRouter>
+        <ApplicationsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("High priority")).toBeInTheDocument();
+  });
+
+  it("renders the needs follow-up label for stale low-completion drafts", async () => {
+    const now = Date.now();
+    mocks.fetchRentalApplications.mockResolvedValue([
+      {
+        id: "link-1",
+        source: "application_link",
+        applicantName: "In-progress applicant",
+        email: null,
+        propertyId: "prop-1",
+        unitId: "unit-1",
+        status: "IN_PROGRESS",
+        submittedAt: null,
+        lastActivityAt: now - 8 * 24 * 60 * 60 * 1000,
+        completionPercent: 25,
+        partialProgress: {
+          status: "started",
+          completionPercent: 25,
+          currentStep: "personal_info",
+          completedSections: [],
+          missingSections: ["personal_info", "residential_history", "employment", "references_assets", "consent"],
+          hasCoApplicant: false,
+          viewingChoice: null,
+          startedAt: now - 9 * 24 * 60 * 60 * 1000,
+          lastActivityAt: now - 8 * 24 * 60 * 60 * 1000,
+          submittedAt: null,
+          reminderEligibleAt: now - 60_000,
+          reminderSentAt: null,
+        },
+      },
+    ]);
+
+    render(
+      <MemoryRouter>
+        <ApplicationsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Needs follow-up")).toBeInTheDocument();
   });
 });

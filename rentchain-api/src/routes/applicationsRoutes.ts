@@ -26,6 +26,7 @@ import {
   getApplicationEvents,
 } from "../services/applicationEventsService";
 import { db } from "../config/firebase";
+import { writeCanonicalEvent } from "../lib/events/buildEvent";
 
 const router = Router();
 
@@ -1243,6 +1244,27 @@ function handleApplicationFormSubmit(req: Request, res: Response) {
       actor: "tenant",
       metadata: { propertyId: newApp.propertyId },
     });
+    await writeCanonicalEvent({
+      domain: "application",
+      action: "created",
+      actor: {
+        type: "tenant",
+        role: "tenant",
+        id: newApp.email || null,
+      },
+      resource: {
+        type: "application",
+        id: newApp.id,
+      },
+      occurredAt: createdAt,
+      visibility: "internal",
+      summary: "Application created by tenant",
+      metadata: {
+        propertyId: newApp.propertyId,
+        unitId: newApp.unitId || null,
+        source: "online_application_submit",
+      },
+    });
 
     return res.status(201).json(newApp);
   } catch (err: any) {
@@ -1419,7 +1441,7 @@ router.patch("/applications/:id/references", (req, res) => {
   }
 });
 
-function handleSubmitApplication(req: Request, res: Response) {
+async function handleSubmitApplication(req: Request, res: Response) {
   try {
     const { id } = req.params;
     const application = getApplicationById(id);
@@ -1450,6 +1472,25 @@ function handleSubmitApplication(req: Request, res: Response) {
       type: "submitted",
       message: "Application submitted",
       actor: "tenant",
+    });
+    await writeCanonicalEvent({
+      domain: "application",
+      action: "submitted",
+      actor: {
+        type: "tenant",
+        role: "tenant",
+        id: application.applicantEmail || application.email || null,
+      },
+      resource: {
+        type: "application",
+        id: application.id,
+      },
+      occurredAt: submittedAt,
+      visibility: "internal",
+      summary: "Application submitted",
+      metadata: {
+        status: updated.status,
+      },
     });
 
     return res.status(200).json(updated);

@@ -8,6 +8,13 @@ import { useToast } from "../ui/ToastProvider";
 import { useEntitlements } from "@/hooks/useEntitlements";
 import { useUpgrade } from "../../context/UpgradeContext";
 import { track } from "../../lib/analytics";
+import {
+  calculateScreeningDisplayPrice,
+  formatPriceCents,
+  getScreeningPackageOption,
+  SCREENING_ADDON_OPTIONS,
+  SCREENING_PACKAGE_OPTIONS,
+} from "./screeningMonetizationOptions";
 
 type PropertyOption = { id: string; name: string };
 type UnitOption = { id: string; label: string };
@@ -32,18 +39,18 @@ export function SendScreeningInviteModal({
   const [loadingUnits, setLoadingUnits] = useState(false);
   const [tenantEmail, setTenantEmail] = useState("");
   const [tenantName, setTenantName] = useState("");
-  const [tier, setTier] = useState<"basic" | "verify" | "verify_ai">("basic");
+  const [screeningPackage, setScreeningPackage] = useState<"basic" | "standard" | "premium">("basic");
+  const [addons, setAddons] = useState<Array<"income_verification" | "fraud_detection" | "enhanced_background">>(
+    []
+  );
+  const [paymentResponsibility, setPaymentResponsibility] = useState<"landlord" | "tenant">("landlord");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const canScreen = entitlements.canScreen;
-
-  const packageOptions = useMemo(
-    () => [
-      { value: "basic", label: "Basic Screening", price: "$19.99" },
-      { value: "verify", label: "Verify", price: "$29.99" },
-      { value: "verify_ai", label: "Verify + AI", price: "$39.99" },
-    ],
-    []
+  const selectedPackage = useMemo(() => getScreeningPackageOption(screeningPackage), [screeningPackage]);
+  const totalPriceCents = useMemo(
+    () => calculateScreeningDisplayPrice({ packageKey: screeningPackage, addons }),
+    [screeningPackage, addons]
   );
 
   useEffect(() => {
@@ -118,7 +125,9 @@ export function SendScreeningInviteModal({
       setUnitId("");
       setTenantEmail("");
       setTenantName("");
-      setTier("basic");
+      setScreeningPackage("basic");
+      setAddons([]);
+      setPaymentResponsibility("landlord");
       setError(null);
       setSubmitting(false);
     }
@@ -160,20 +169,45 @@ export function SendScreeningInviteModal({
         unitId: unitId || null,
         tenantEmail: tenantEmail.trim(),
         tenantName: tenantName.trim() || null,
-        screeningTier: tier,
-        addons: [],
+        screeningTier: selectedPackage.legacyTier,
+        screeningPackage,
+        addons,
         totalAmount: undefined,
         scoreAddOn: false,
-        serviceLevel: tier === "basic" ? "SELF_SERVE" : tier === "verify" ? "VERIFIED" : "VERIFIED_AI",
+        serviceLevel:
+          selectedPackage.legacyTier === "basic"
+            ? "SELF_SERVE"
+            : selectedPackage.legacyTier === "verify"
+            ? "VERIFIED"
+            : "VERIFIED_AI",
+        paymentResponsibility,
         returnTo,
       });
       if (!res.ok || !res.checkoutUrl) {
+        const normalized = String(
+          res.errorCode || res.screeningMonetizationSummary?.blockingReason || res.error || ""
+        ).toLowerCase();
+        if (normalized === "screening_checkout_already_exists") {
+          throw new Error("A screening checkout already exists for this tenant. Review the existing order before retrying.");
+        }
+        if (normalized === "screening_already_paid" || normalized === "screening_order_already_created") {
+          throw new Error("Screening is already paid or in progress for this tenant.");
+        }
+        if (normalized === "screening_provider_unavailable") {
+          throw new Error("Screening is temporarily unavailable. Please try again shortly.");
+        }
+        if (normalized === "screening_quote_expired") {
+          throw new Error("The screening quote expired. Re-open the flow and try again.");
+        }
         throw new Error(res.detail || res.error || "Unable to start checkout");
       }
       if (res.tenantInviteUrl) {
         showToast({
-          message: "Invite queued",
-          description: "We’ll email the tenant after payment.",
+          message: paymentResponsibility === "tenant" ? "Tenant payment link ready" : "Invite queued",
+          description:
+            paymentResponsibility === "tenant"
+              ? "The order is set to tenant-pay and the invite link is ready to share."
+              : "We’ll email the tenant after payment.",
           variant: "success",
         });
       }
@@ -325,33 +359,134 @@ export function SendScreeningInviteModal({
         <div style={{ display: "grid", gap: 8 }}>
           <div style={{ fontSize: 13, color: text.muted }}>Package</div>
           <div style={{ display: "grid", gap: 8 }}>
-            {packageOptions.map((opt) => (
+            {SCREENING_PACKAGE_OPTIONS.map((opt) => (
               <label
-                key={opt.value}
+                key={opt.key}
                 style={{
                   display: "flex",
-                  alignItems: "center",
+                  alignItems: "flex-start",
                   justifyContent: "space-between",
                   padding: "8px 10px",
                   borderRadius: radius.md,
-                  border: `1px solid ${tier === opt.value ? colors.accent : colors.border}`,
-                  background: tier === opt.value ? "rgba(37,99,235,0.08)" : "#fff",
+                  border: `1px solid ${screeningPackage === opt.key ? colors.accent : colors.border}`,
+                  background: screeningPackage === opt.key ? "rgba(37,99,235,0.08)" : "#fff",
                   cursor: "pointer",
                   fontSize: 14,
                 }}
               >
-                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
                   <input
                     type="radio"
-                    checked={tier === opt.value}
-                    onChange={() => setTier(opt.value as any)}
+                    checked={screeningPackage === opt.key}
+                    onChange={() => setScreeningPackage(opt.key)}
                   />
-                  <span style={{ fontWeight: 700 }}>{opt.label}</span>
+                  <div style={{ display: "grid", gap: 4 }}>
+                    <span style={{ fontWeight: 700 }}>{opt.label}</span>
+                    <span style={{ color: text.subtle, fontSize: 12 }}>{opt.description}</span>
+                  </div>
                 </div>
-                <span style={{ color: text.muted }}>{opt.price}</span>
+                <span style={{ color: text.muted }}>{formatPriceCents(opt.priceCents)}</span>
               </label>
             ))}
           </div>
+        </div>
+
+        <div style={{ display: "grid", gap: 8 }}>
+          <div style={{ fontSize: 13, color: text.muted }}>Add-ons</div>
+          <div style={{ display: "grid", gap: 8 }}>
+            {SCREENING_ADDON_OPTIONS.map((addon) => {
+              const checked = addons.includes(addon.key);
+              return (
+                <label
+                  key={addon.key}
+                  style={{
+                    display: "flex",
+                    alignItems: "flex-start",
+                    justifyContent: "space-between",
+                    padding: "8px 10px",
+                    borderRadius: radius.md,
+                    border: `1px solid ${checked ? colors.accent : colors.border}`,
+                    background: checked ? "rgba(37,99,235,0.06)" : "#fff",
+                    cursor: "pointer",
+                    fontSize: 14,
+                  }}
+                >
+                  <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() =>
+                        setAddons((current) =>
+                          checked ? current.filter((item) => item !== addon.key) : [...current, addon.key]
+                        )
+                      }
+                    />
+                    <div style={{ display: "grid", gap: 4 }}>
+                      <span style={{ fontWeight: 700 }}>{addon.label}</span>
+                      <span style={{ color: text.subtle, fontSize: 12 }}>{addon.description}</span>
+                    </div>
+                  </div>
+                  <span style={{ color: text.muted }}>{formatPriceCents(addon.priceCents)}</span>
+                </label>
+              );
+            })}
+          </div>
+        </div>
+
+        <div style={{ display: "grid", gap: 8 }}>
+          <div style={{ fontSize: 13, color: text.muted }}>Who pays</div>
+          <div style={{ display: "grid", gap: 8 }}>
+            {[
+              { key: "landlord", label: "Landlord pays", summary: "You complete checkout now." },
+              { key: "tenant", label: "Tenant pays", summary: "Store the payer model for this screening order." },
+            ].map((option) => (
+              <label
+                key={option.key}
+                style={{
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: 8,
+                  padding: "8px 10px",
+                  borderRadius: radius.md,
+                  border: `1px solid ${paymentResponsibility === option.key ? colors.accent : colors.border}`,
+                  background: paymentResponsibility === option.key ? "rgba(37,99,235,0.06)" : "#fff",
+                  cursor: "pointer",
+                  fontSize: 14,
+                }}
+              >
+                <input
+                  type="radio"
+                  checked={paymentResponsibility === option.key}
+                  onChange={() => setPaymentResponsibility(option.key as "landlord" | "tenant")}
+                />
+                <div style={{ display: "grid", gap: 4 }}>
+                  <span style={{ fontWeight: 700 }}>{option.label}</span>
+                  <span style={{ color: text.subtle, fontSize: 12 }}>{option.summary}</span>
+                </div>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            padding: "10px 12px",
+            borderRadius: radius.md,
+            border: `1px solid ${colors.border}`,
+            background: "rgba(15,23,42,0.02)",
+          }}
+        >
+          <div style={{ display: "grid", gap: 4 }}>
+            <div style={{ fontWeight: 700 }}>Total</div>
+            <div style={{ color: text.subtle, fontSize: 12 }}>
+              {selectedPackage.label} package
+              {addons.length > 0 ? ` + ${addons.length} add-on${addons.length > 1 ? "s" : ""}` : ""}
+            </div>
+          </div>
+          <div style={{ fontWeight: 800, fontSize: 18 }}>{formatPriceCents(totalPriceCents)}</div>
         </div>
 
         {error ? <div style={{ color: "#b91c1c", fontSize: 13 }}>{error}</div> : null}

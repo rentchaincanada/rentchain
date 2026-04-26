@@ -2,16 +2,17 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PropertyDetailPanel } from "./PropertyDetailPanel";
-import { AuthProvider } from "@/context/AuthContext";
 
 const mocks = vi.hoisted(() => ({
   updateProperty: vi.fn(),
+  archiveProperty: vi.fn(),
   getLeasesForProperty: vi.fn(),
   getPropertyMonthlyPayments: vi.fn(),
   fetchUnitsForProperty: vi.fn(),
   useCapabilities: vi.fn(),
   useEntitlements: vi.fn(),
   showToast: vi.fn(),
+  dispatchUpgradePrompt: vi.fn(),
 }));
 
 vi.mock("../../api/propertiesApi", async () => {
@@ -19,7 +20,7 @@ vi.mock("../../api/propertiesApi", async () => {
   return {
     ...actual,
     updateProperty: mocks.updateProperty,
-    archiveProperty: vi.fn(),
+    archiveProperty: mocks.archiveProperty,
     publishProperty: vi.fn(),
     unarchiveProperty: vi.fn(),
   };
@@ -57,8 +58,25 @@ vi.mock("@/hooks/useEntitlements", () => ({
   useEntitlements: () => mocks.useEntitlements(),
 }));
 
+vi.mock("@/lib/upgradePrompt", () => ({
+  dispatchUpgradePrompt: (...args: any[]) => mocks.dispatchUpgradePrompt(...args),
+  resolveRequiredPlanLabel: (featureKey: string, currentPlan: string) => {
+    if (featureKey === "applications" && currentPlan === "free") return "Starter";
+    if (featureKey === "units" && currentPlan === "free") return "Starter";
+    return "Starter";
+  },
+}));
+
 vi.mock("@/context/UpgradeContext", () => ({
   useUpgrade: () => ({ openUpgrade: vi.fn() }),
+}));
+
+vi.mock("@/components/properties/PropertyRegistryStatusCard", () => ({
+  PropertyRegistryStatusCard: () => null,
+}));
+
+vi.mock("@/components/properties/HalifaxRegistrySubmissionAssistant", () => ({
+  HalifaxRegistrySubmissionAssistant: () => null,
 }));
 
 vi.mock("./UnitsCsvPreviewModal", () => ({
@@ -86,10 +104,14 @@ describe("PropertyDetailPanel", () => {
     mocks.updateProperty.mockResolvedValue({
       property: { id: "prop-1" },
     });
+    mocks.archiveProperty.mockResolvedValue({
+      property: { id: "prop-1", portfolioStatus: "archived" },
+    });
     mocks.getLeasesForProperty.mockResolvedValue({ leases: [], credibilitySummary: null });
     mocks.getPropertyMonthlyPayments.mockResolvedValue({ payments: [], total: 0 });
     mocks.fetchUnitsForProperty.mockResolvedValue([]);
     mocks.showToast.mockReset();
+    mocks.dispatchUpgradePrompt.mockReset();
     mocks.useCapabilities.mockReturnValue({
       caps: { plan: "starter" },
       features: { applications: true, unitsTable: true },
@@ -103,28 +125,26 @@ describe("PropertyDetailPanel", () => {
 
   it("opens a working property edit modal and saves changes", async () => {
     const onRefresh = vi.fn();
-render(
-  <AuthProvider>
-    <MemoryRouter>
-      <PropertyDetailPanel
-        property={{
-          id: "prop-1",
-          name: "Harbour View",
-          addressLine1: "12 Wharf Street",
-          city: "Halifax",
-          province: "NS",
-          postalCode: "B3H 1A1",
-          country: "Canada",
-          totalUnits: 1,
-          amenities: [],
-          units: [],
-          createdAt: new Date().toISOString(),
-        }}
-        onRefresh={onRefresh}
-      />
-    </MemoryRouter>
-  </AuthProvider>
-);
+    render(
+      <MemoryRouter>
+        <PropertyDetailPanel
+          property={{
+            id: "prop-1",
+            name: "Harbour View",
+            addressLine1: "12 Wharf Street",
+            city: "Halifax",
+            province: "NS",
+            postalCode: "B3H 1A1",
+            country: "Canada",
+            totalUnits: 1,
+            amenities: [],
+            units: [],
+            createdAt: new Date().toISOString(),
+          }}
+          onRefresh={onRefresh}
+        />
+      </MemoryRouter>
+    );
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
 
     expect(await screen.findByRole("dialog", { name: "Edit property details" })).toBeInTheDocument();
@@ -155,5 +175,189 @@ render(
       );
     });
     expect(onRefresh).toHaveBeenCalled();
+  });
+
+  it("shows a local upgrade card when the blocked send-application action is clicked on free tier", async () => {
+    mocks.fetchUnitsForProperty.mockResolvedValue([
+      {
+        id: "unit-1",
+        unitNumber: "101",
+        status: "vacant",
+      },
+    ]);
+    mocks.useCapabilities.mockReturnValue({
+      caps: { plan: "free" },
+      features: { applications: false, unitsTable: true },
+      loading: false,
+    });
+    mocks.useEntitlements.mockReturnValue({
+      plan: "free",
+      hasCapability: () => false,
+    });
+
+    render(
+      <MemoryRouter>
+        <PropertyDetailPanel
+          property={{
+            id: "prop-1",
+            name: "Harbour View",
+            addressLine1: "12 Wharf Street",
+            city: "Halifax",
+            province: "NS",
+            postalCode: "B3H 1A1",
+            country: "Canada",
+            totalUnits: 1,
+            amenities: [],
+            units: [],
+            createdAt: new Date().toISOString(),
+          }}
+          onRefresh={vi.fn()}
+        />
+      </MemoryRouter>
+    );
+
+    const blockedButtons = await screen.findAllByRole("button", {
+      name: /upgrade to starter to send application for unit 101/i,
+    });
+    fireEvent.click(blockedButtons[0]);
+
+    const upgradeHeadings = await screen.findAllByText("Send application is locked on Free");
+    expect(upgradeHeadings.length).toBeGreaterThan(0);
+
+    const upgradeCtas = screen.getAllByRole("button", { name: "See Starter upgrade options" });
+    expect(upgradeCtas.length).toBeGreaterThan(0);
+    expect(mocks.dispatchUpgradePrompt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        featureKey: "applications",
+        source: "property_detail_panel_units",
+      })
+    );
+  });
+
+  it("derives occupancy and occupied rent from canonical unit state when no active lease exists yet", async () => {
+    mocks.fetchUnitsForProperty.mockResolvedValue([
+      {
+        id: "unit-1",
+        unitNumber: "101",
+        status: "occupied",
+        occupantName: "Jane Tenant",
+        rent: 1800,
+      },
+      {
+        id: "unit-2",
+        unitNumber: "102",
+        status: "vacant",
+        rent: 1700,
+      },
+    ]);
+
+    render(
+      <MemoryRouter>
+        <PropertyDetailPanel
+          property={{
+            id: "prop-1",
+            name: "Harbour View",
+            addressLine1: "12 Wharf Street",
+            city: "Halifax",
+            province: "NS",
+            postalCode: "B3H 1A1",
+            country: "Canada",
+            totalUnits: 2,
+            amenities: [],
+            units: [],
+            createdAt: new Date().toISOString(),
+          }}
+          onRefresh={vi.fn()}
+        />
+      </MemoryRouter>
+    );
+
+    expect((await screen.findAllByText("Occupied")).length).toBeGreaterThan(0);
+    expect(screen.getByText("50%")).toBeInTheDocument();
+    expect(screen.getAllByText("$1,800").length).toBeGreaterThan(0);
+  });
+
+  it("renders safely when lease-backed occupancy falls back from active leases", async () => {
+    mocks.fetchUnitsForProperty.mockResolvedValue([
+      {
+        id: "unit-1",
+        unitNumber: "101",
+        rent: 1850,
+      },
+    ]);
+    mocks.getLeasesForProperty.mockResolvedValue({
+      leases: [
+        {
+          id: "lease-1",
+          tenantId: "tenant-1",
+          propertyId: "prop-1",
+          unitId: "unit-1",
+          unitNumber: "101",
+          monthlyRent: 1850,
+          startDate: "2026-01-01",
+          endDate: "2026-12-31",
+          status: "active",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+      credibilitySummary: null,
+    });
+
+    render(
+      <MemoryRouter>
+        <PropertyDetailPanel
+          property={{
+            id: "prop-1",
+            name: "Harbour View",
+            addressLine1: "12 Wharf Street",
+            city: "Halifax",
+            province: "NS",
+            postalCode: "B3H 1A1",
+            country: "Canada",
+            totalUnits: 1,
+            amenities: [],
+            units: [],
+            createdAt: new Date().toISOString(),
+          }}
+          onRefresh={vi.fn()}
+        />
+      </MemoryRouter>
+    );
+
+    expect((await screen.findAllByText("Occupied")).length).toBeGreaterThan(0);
+  });
+
+  it("uses the updated archive confirmation copy before archiving", async () => {
+    const confirmMock = vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    render(
+      <MemoryRouter>
+        <PropertyDetailPanel
+          property={{
+            id: "prop-1",
+            name: "Harbour View",
+            addressLine1: "12 Wharf Street",
+            city: "Halifax",
+            province: "NS",
+            postalCode: "B3H 1A1",
+            country: "Canada",
+            totalUnits: 1,
+            amenities: [],
+            units: [],
+            createdAt: new Date().toISOString(),
+          }}
+          onRefresh={vi.fn()}
+        />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getAllByRole("button", { name: /archive property/i })[0]);
+
+    expect(confirmMock).toHaveBeenCalledWith(
+      "Are you sure you want to archive this property? You can reactivate this property later."
+    );
+    await waitFor(() => expect(mocks.archiveProperty).toHaveBeenCalledWith("prop-1"));
+    confirmMock.mockRestore();
   });
 });

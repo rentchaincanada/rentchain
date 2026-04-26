@@ -4,11 +4,14 @@ import { requireLandlord } from "../middleware/requireLandlord";
 import { requireAuth } from "../middleware/requireAuth";
 import { db, FieldValue } from "../config/firebase";
 import { requireCapability } from "../services/capabilityGuard";
+import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
+import { sendEmail } from "../services/emailService";
 
 const router = Router();
 router.use(authenticateJwt);
 
 type Role = "landlord" | "tenant";
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function toMillis(v: any): number | null {
   if (!v) return null;
@@ -35,6 +38,111 @@ function normalizeConversation(doc: any) {
     lastReadAtTenant: toMillis(data.lastReadAtTenant) || null,
     createdAt: toMillis(data.createdAt) || null,
   };
+}
+
+function uniqueEmails(values: Array<string | null | undefined>) {
+  return Array.from(
+    new Set(
+      values
+        .map((value) => String(value || "").trim().toLowerCase())
+        .filter((value) => emailRegex.test(value))
+    )
+  );
+}
+
+function stringOrNull(value: any) {
+  const next = String(value || "").trim();
+  return next || null;
+}
+
+async function lookupUserEmail(userId: string | null) {
+  const id = stringOrNull(userId);
+  if (!id) return null;
+  try {
+    const userSnap = await db.collection("users").doc(id).get();
+    if (userSnap.exists) {
+      return stringOrNull((userSnap.data() as any)?.email);
+    }
+  } catch {
+    // ignore lookup failures
+  }
+  return null;
+}
+
+async function lookupLandlordEmail(landlordId: string | null) {
+  const direct = await lookupUserEmail(landlordId);
+  if (direct) return direct;
+  const id = stringOrNull(landlordId);
+  if (!id) return null;
+  try {
+    const landlordSnap = await db.collection("landlords").doc(id).get();
+    if (landlordSnap.exists) {
+      return stringOrNull((landlordSnap.data() as any)?.email);
+    }
+  } catch {
+    // ignore lookup failures
+  }
+  return null;
+}
+
+async function lookupTenantEmail(tenantId: string | null) {
+  const id = stringOrNull(tenantId);
+  if (!id) return null;
+  try {
+    const tenantSnap = await db.collection("tenants").doc(id).get();
+    if (tenantSnap.exists) {
+      return stringOrNull((tenantSnap.data() as any)?.email);
+    }
+  } catch {
+    // ignore lookup failures
+  }
+  return null;
+}
+
+async function sendConversationMessageEmail(params: {
+  conversation: any;
+  senderRole: Role;
+  body: string;
+}) {
+  const from =
+    process.env.EMAIL_FROM ||
+    process.env.SENDGRID_FROM_EMAIL ||
+    process.env.SENDGRID_FROM ||
+    process.env.FROM_EMAIL;
+  if (!from) return;
+
+  const recipientEmail =
+    params.senderRole === "landlord"
+      ? await lookupTenantEmail(params.conversation.tenantId)
+      : await lookupLandlordEmail(params.conversation.landlordId);
+  if (!recipientEmail || !emailRegex.test(recipientEmail)) return;
+
+  const baseUrl = (process.env.PUBLIC_APP_URL || process.env.VITE_PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "");
+  const threadPath = params.senderRole === "landlord" ? "/tenant/messages" : "/messages";
+  const subjectPrefix = params.senderRole === "landlord" ? "New message from your landlord" : "New tenant message";
+  const contextBits = [
+    stringOrNull(params.conversation.propertyId),
+    stringOrNull(params.conversation.unitId),
+  ].filter(Boolean);
+  const preview = params.body.length > 280 ? `${params.body.slice(0, 280)}...` : params.body;
+
+  await sendEmail({
+    to: uniqueEmails([recipientEmail]),
+    from,
+    replyTo: from,
+    subject: contextBits.length ? `${subjectPrefix} (${contextBits.join(" • ")})` : subjectPrefix,
+    text: buildEmailText({
+      intro: `${subjectPrefix}.\n\n${preview}`,
+      ctaText: "Open messages",
+      ctaUrl: `${baseUrl}${threadPath}`,
+    }),
+    html: buildEmailHtml({
+      title: subjectPrefix,
+      intro: preview,
+      ctaText: "Open messages",
+      ctaUrl: `${baseUrl}${threadPath}`,
+    }),
+  });
 }
 
 async function addMessage(params: {
@@ -147,6 +255,15 @@ router.post("/landlord/messages/conversations/:id", requireLandlord, async (req:
     if (convo.landlordId !== landlordId) return res.status(403).json({ ok: false, error: "Forbidden" });
 
     const msg = await addMessage({ conversationId: id, senderRole: "landlord", body });
+    try {
+      await sendConversationMessageEmail({ conversation: convo, senderRole: "landlord", body });
+    } catch (err: any) {
+      console.error("[messages] landlord email send failed", {
+        conversationId: id,
+        landlordId,
+        message: err?.message || "send_failed",
+      });
+    }
     return res.status(201).json({ ok: true, message: msg });
   } catch (err: any) {
     console.error("[messages] landlord send error", err);
@@ -276,6 +393,15 @@ router.post("/tenant/messages/conversation/:id", requireTenant, async (req: any,
     }
 
     const msg = await addMessage({ conversationId: id, senderRole: "tenant", body });
+    try {
+      await sendConversationMessageEmail({ conversation: convo, senderRole: "tenant", body });
+    } catch (err: any) {
+      console.error("[messages] tenant email send failed", {
+        conversationId: id,
+        tenantId: ctx.tenantId,
+        message: err?.message || "send_failed",
+      });
+    }
     return res.status(201).json({ ok: true, message: msg });
   } catch (err: any) {
     console.error("[messages] tenant send error", err);

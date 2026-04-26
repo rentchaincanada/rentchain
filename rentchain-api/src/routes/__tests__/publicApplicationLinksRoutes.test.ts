@@ -1,5 +1,3 @@
-import express from "express";
-import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 type StoredDoc = { id: string; data: any };
@@ -75,10 +73,51 @@ vi.mock("../../middleware/rateLimit", () => ({
 
 async function createApp() {
   const router = (await import("../publicApplicationLinksRoutes")).default;
-  const app = express();
-  app.use(express.json());
-  app.use("/public", router);
-  return app;
+  return router;
+}
+
+async function invokeRouter(router: any, options: { method: string; url: string; body?: any; headers?: Record<string, string> }) {
+  return await new Promise<{ status: number; body: any }>((resolve, reject) => {
+    const req: any = {
+      method: options.method,
+      url: options.url,
+      originalUrl: options.url,
+      path: options.url,
+      body: options.body ?? {},
+      headers: options.headers ?? {},
+      get(name: string) {
+        return this.headers[String(name).toLowerCase()];
+      },
+      header(name: string) {
+        return this.get(name);
+      },
+      params: {},
+      query: {},
+      ip: "127.0.0.1",
+    };
+    const res: any = {
+      statusCode: 200,
+      headers: {} as Record<string, string>,
+      setHeader(name: string, value: string) {
+        this.headers[name.toLowerCase()] = value;
+      },
+      status(code: number) {
+        this.statusCode = code;
+        return this;
+      },
+      json(payload: any) {
+        resolve({ status: this.statusCode, body: payload });
+        return this;
+      },
+      send(payload: any) {
+        resolve({ status: this.statusCode, body: payload });
+        return this;
+      },
+    };
+    router.handle(req, res, (error: any) => {
+      if (error) reject(error);
+    });
+  });
 }
 
 function buildBody(overrides: Record<string, any> = {}) {
@@ -148,8 +187,11 @@ describe("publicApplicationLinksRoutes", () => {
   });
 
   it("persists currentLeaseStatus on application create", async () => {
-    const app = await createApp();
-    const res = await request(app).post("/public/rental-applications").send(
+    const router = await createApp();
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/rental-applications",
+      body:
       buildBody({
         currentLeaseStatus: {
           hasActiveLease: true,
@@ -157,8 +199,8 @@ describe("publicApplicationLinksRoutes", () => {
           landlordAware: "no",
           reasonForMoving: "Need more space",
         },
-      })
-    );
+      }),
+    });
 
     expect(res.status).toBe(200);
     const rentalApplications = savedDocs.get("rentalApplications");
@@ -172,12 +214,225 @@ describe("publicApplicationLinksRoutes", () => {
   });
 
   it("accepts older applications that omit currentLeaseStatus", async () => {
-    const app = await createApp();
-    const res = await request(app).post("/public/rental-applications").send(buildBody());
+    const router = await createApp();
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/rental-applications",
+      body: buildBody(),
+    });
 
     expect(res.status).toBe(200);
     const rentalApplications = savedDocs.get("rentalApplications");
     const stored = Array.from(rentalApplications?.values() || [])[0]?.data;
     expect(stored.currentLeaseStatus).toBeNull();
+  });
+
+  it("stores only safe partial progress metadata", async () => {
+    const router = await createApp();
+    const res = await invokeRouter(router, {
+      method: "PATCH",
+      url: "/application-links/public-token/progress",
+      body: {
+        partialProgress: {
+          status: "in_progress",
+          completionPercent: 62,
+          currentStep: "employment",
+          completedSections: ["personal_info", "residential_history"],
+          missingSections: ["employment", "references_assets", "consent"],
+          hasCoApplicant: false,
+          viewingChoice: "already_viewed",
+        },
+      },
+    });
+
+    expect(res.status).toBe(200);
+    const stored = savedDocs.get("applicationLinks")?.get("link-1")?.data;
+    expect(stored.partialProgress).toMatchObject({
+      status: "in_progress",
+      completionPercent: 62,
+      currentStep: "employment",
+      completedSections: ["personal_info", "residential_history"],
+      missingSections: ["employment", "references_assets", "consent"],
+      hasCoApplicant: false,
+      viewingChoice: "already_viewed",
+    });
+    expect(stored.partialProgress.startedAt).toBeTypeOf("number");
+    expect(stored.partialProgress.lastActivityAt).toBeTypeOf("number");
+    expect(stored.partialProgress.reminderEligibleAt).toBeTypeOf("number");
+    expect(stored.partialProgress.applicant).toBeUndefined();
+  });
+
+  it("rejects unsafe partial progress fields", async () => {
+    const router = await createApp();
+    const res = await invokeRouter(router, {
+      method: "PATCH",
+      url: "/application-links/public-token/progress",
+      body: {
+        partialProgress: {
+          status: "in_progress",
+          completionPercent: 40,
+          currentStep: "employment",
+          completedSections: ["personal_info"],
+          missingSections: ["employment"],
+          hasCoApplicant: false,
+          viewingChoice: "already_viewed",
+          applicant: { firstName: "Jordan" },
+        },
+      },
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body?.error).toBe("INVALID_PARTIAL_PROGRESS_FIELDS");
+  });
+
+  it("marks the application link partial progress as submitted on final submit", async () => {
+    const router = await createApp();
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/rental-applications",
+      body: buildBody(),
+    });
+
+    expect(res.status).toBe(200);
+    const stored = savedDocs.get("applicationLinks")?.get("link-1")?.data;
+    expect(stored.partialProgress).toMatchObject({
+      status: "submitted",
+      completionPercent: 100,
+      currentStep: null,
+      missingSections: [],
+      hasCoApplicant: false,
+    });
+    expect(stored.partialProgress.submittedAt).toBeTypeOf("number");
+  });
+
+  it("accepts typed-only signatures", async () => {
+    const router = await createApp();
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/rental-applications",
+      body: buildBody(),
+    });
+
+    expect(res.status).toBe(200);
+  });
+
+  it("accepts drawn signatures", async () => {
+    const router = await createApp();
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/rental-applications",
+      body: buildBody({
+        applicantProfile: {
+          currentAddress: {
+            line1: "123 King St",
+            city: "Halifax",
+            provinceState: "NS",
+            postalCode: "B3H1A1",
+          },
+          timeAtCurrentAddressMonths: 18,
+          currentRentAmountCents: 180000,
+          employment: {
+            employerName: "Harbour Labs",
+            jobTitle: "Designer",
+            incomeAmountCents: 720000,
+            incomeFrequency: "monthly",
+            monthsAtJob: 12,
+          },
+          workReference: {
+            name: "Taylor Grant",
+            phone: "5555550100",
+          },
+          signature: {
+            type: "drawn",
+            drawnDataUrl: "data:image/png;base64,abc123",
+            typedName: "Jordan Lee",
+            typedAcknowledge: true,
+            signedAt: "2026-03-18T10:00:00.000Z",
+          },
+        },
+      }),
+    });
+
+    expect(res.status).toBe(200);
+  });
+
+  it("rejects signatures with a missing typed name", async () => {
+    const router = await createApp();
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/rental-applications",
+      body: buildBody({
+        applicantProfile: {
+          currentAddress: {
+            line1: "123 King St",
+            city: "Halifax",
+            provinceState: "NS",
+            postalCode: "B3H1A1",
+          },
+          timeAtCurrentAddressMonths: 18,
+          currentRentAmountCents: 180000,
+          employment: {
+            employerName: "Harbour Labs",
+            jobTitle: "Designer",
+            incomeAmountCents: 720000,
+            incomeFrequency: "monthly",
+            monthsAtJob: 12,
+          },
+          workReference: {
+            name: "Taylor Grant",
+            phone: "5555550100",
+          },
+          signature: {
+            type: "typed",
+            typedName: "",
+            typedAcknowledge: true,
+            signedAt: "2026-03-18T10:00:00.000Z",
+          },
+        },
+      }),
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body?.fields).toContain("signature.typedName");
+  });
+
+  it("rejects signatures with a missing typed acknowledgement", async () => {
+    const router = await createApp();
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/rental-applications",
+      body: buildBody({
+        applicantProfile: {
+          currentAddress: {
+            line1: "123 King St",
+            city: "Halifax",
+            provinceState: "NS",
+            postalCode: "B3H1A1",
+          },
+          timeAtCurrentAddressMonths: 18,
+          currentRentAmountCents: 180000,
+          employment: {
+            employerName: "Harbour Labs",
+            jobTitle: "Designer",
+            incomeAmountCents: 720000,
+            incomeFrequency: "monthly",
+            monthsAtJob: 12,
+          },
+          workReference: {
+            name: "Taylor Grant",
+            phone: "5555550100",
+          },
+          signature: {
+            type: "typed",
+            typedName: "Jordan Lee",
+            typedAcknowledge: false,
+            signedAt: "2026-03-18T10:00:00.000Z",
+          },
+        },
+      }),
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body?.fields).toContain("signature.typedAcknowledge");
   });
 });

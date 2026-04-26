@@ -346,7 +346,23 @@ function copyChecklistToClipboard(checklist: { steps: string[]; notes: string[];
     checklist.notes.length ? "Notes:" : null,
     ...checklist.notes,
   ].filter(Boolean);
-  return navigator.clipboard.writeText(lines.join("\n"));
+  return writeToClipboard(lines.join("\n"));
+}
+
+function writeToClipboard(value: string) {
+  if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) {
+    return Promise.reject(new Error("clipboard_unavailable"));
+  }
+  return navigator.clipboard.writeText(value);
+}
+
+function canSafelyUpdateBrowserState() {
+  return typeof window !== "undefined" && typeof document !== "undefined";
+}
+
+function scheduleCopyStateReset(setCopyState: React.Dispatch<React.SetStateAction<"idle" | "copied" | "failed">>) {
+  if (typeof window === "undefined") return null;
+  return window.setTimeout(() => setCopyState("idle"), 1800);
 }
 
 type Props = {
@@ -375,28 +391,50 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
   const viewedPromptKeysRef = React.useRef<Set<string>>(new Set());
   const lastPlanRef = React.useRef<string | null>(null);
   const conversionTrackedRef = React.useRef(false);
+  const isMountedRef = React.useRef(true);
+  const copyResetTimeoutRef = React.useRef<number | null>(null);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (typeof window !== "undefined" && copyResetTimeoutRef.current != null) {
+        window.clearTimeout(copyResetTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const propertyId = property?.id || null;
 
   const loadData = useCallback(async () => {
     if (!propertyId) {
-      setData(null);
-      setSubmissionData(null);
+      if (isMountedRef.current) {
+        setData(null);
+        setSubmissionData(null);
+      }
       return;
     }
     try {
-      setLoading(true);
-      setError(null);
+      if (isMountedRef.current) {
+        setLoading(true);
+        setError(null);
+      }
       const [statusResult, submissionResult] = await Promise.all([
         fetchPropertyRegistryStatus(propertyId),
         fetchPropertyRegistrySubmission(propertyId),
       ]);
-      setData(statusResult);
-      setSubmissionData(submissionResult);
+      if (isMountedRef.current) {
+        setData(statusResult);
+        setSubmissionData(submissionResult);
+      }
     } catch (err: any) {
-      setError(err?.message || "Failed to load registry status");
+      if (isMountedRef.current) {
+        setError(err?.message || "Failed to load registry status");
+      }
     } finally {
-      setLoading(false);
+      if (isMountedRef.current) {
+        setLoading(false);
+      }
     }
   }, [propertyId]);
 
@@ -411,12 +449,17 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
         active = false;
       };
     }
+    if (!canSafelyUpdateBrowserState()) {
+      return () => {
+        active = false;
+      };
+    }
     void fetchBillingPricing()
       .then((next) => {
-        if (active) setPricing(next);
+        if (active && canSafelyUpdateBrowserState()) setPricing(next);
       })
       .catch(() => {
-        if (active) setPricing(null);
+        if (active && canSafelyUpdateBrowserState()) setPricing(null);
       });
     return () => {
       active = false;
@@ -427,9 +470,9 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
     const pid = data?.pidPrompt.registryPid;
     if (!pid) return;
     try {
-      await navigator.clipboard.writeText(pid);
+      await writeToClipboard(pid);
       setCopyState("copied");
-      window.setTimeout(() => setCopyState("idle"), 1800);
+      copyResetTimeoutRef.current = scheduleCopyStateReset(setCopyState);
     } catch {
       setCopyState("failed");
     }
@@ -441,7 +484,7 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
     try {
       await copyChecklistToClipboard(checklist);
       setCopyState("copied");
-      window.setTimeout(() => setCopyState("idle"), 1800);
+      copyResetTimeoutRef.current = scheduleCopyStateReset(setCopyState);
     } catch {
       setCopyState("failed");
     }
@@ -1518,7 +1561,9 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
                       type="button"
                       variant="secondary"
                       onClick={() => {
-                        window.location.assign(`/admin/registry/properties/${encodeURIComponent(String(property?.id || ""))}`);
+                        if (typeof window !== "undefined") {
+                          window.location.assign(`/admin/registry/properties/${encodeURIComponent(String(property?.id || ""))}`);
+                        }
                       }}
                     >
                       Open registry review

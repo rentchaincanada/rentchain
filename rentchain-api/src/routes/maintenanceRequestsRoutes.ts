@@ -1,9 +1,34 @@
 import { Router } from "express";
+import multer from "multer";
 import { db, FieldValue } from "../config/firebase";
 import { authenticateJwt } from "../middleware/authMiddleware";
 import { verifyAuthToken } from "../auth/jwt";
 import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
 import { sendEmail } from "../services/emailService";
+import { uploadBufferToGcs } from "../lib/gcs";
+import {
+  buildEvidenceStoragePath,
+  makeEvidenceId,
+  normalizeEvidenceType,
+  serializeEvidenceForAudience,
+  type WorkOrderEvidenceItem,
+} from "../lib/workOrderEvidence";
+import {
+  buildCostAttachmentStoragePath,
+  normalizeCostCurrency,
+  normalizeCostReviewHistory,
+  normalizeExpenseLink,
+  normalizeCostLineItems,
+  normalizeWorkOrderCost,
+  serializeCostAttachmentsForAudience,
+  type WorkOrderCostAttachment,
+} from "../lib/maintenanceCost";
+import {
+  applyNotificationUpdate,
+  buildTenantSafeWorkOrderNotifications,
+  computeWorkOrderNotifications,
+} from "../lib/maintenanceNotifications";
+import { writeCanonicalEvent } from "../lib/events/buildEvent";
 
 const router = Router();
 
@@ -30,6 +55,7 @@ const WORKFLOW_STATUSES = [
   "reviewed",
   "assigned",
   "scheduled",
+  "blocked",
   "in_progress",
   "completed",
   "cancelled",
@@ -59,8 +85,9 @@ const WORKFLOW_TRANSITIONS: Record<(typeof WORKFLOW_STATUSES)[number], Array<(ty
   submitted: ["reviewed", "assigned", "cancelled"],
   reviewed: ["assigned", "completed", "cancelled"],
   assigned: ["scheduled", "completed", "cancelled"],
-  scheduled: ["in_progress", "completed", "cancelled"],
-  in_progress: ["completed", "cancelled"],
+  scheduled: ["in_progress", "blocked", "completed", "cancelled"],
+  blocked: ["scheduled", "in_progress", "completed", "cancelled"],
+  in_progress: ["blocked", "completed", "cancelled"],
   completed: [],
   cancelled: [],
 };
@@ -72,11 +99,33 @@ const LEGACY_TO_WORKFLOW_STATUS: Record<string, (typeof WORKFLOW_STATUSES)[numbe
   RESOLVED: "completed",
   CLOSED: "completed",
 };
+const MAX_EVIDENCE_BYTES = 10 * 1024 * 1024;
+const evidenceUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_EVIDENCE_BYTES },
+});
+const ALLOWED_EVIDENCE_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+const MAX_COST_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+const costAttachmentUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_COST_ATTACHMENT_BYTES },
+});
+const ALLOWED_COST_ATTACHMENT_MIME_TYPES = new Set([
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+]);
 
 router.use(authenticateJwt);
 
 function roleOf(req: any): string {
   return String(req.user?.actorRole || req.user?.role || "").trim().toLowerCase();
+}
+
+function optionalString(value: unknown, max = 1000): string | null {
+  const next = String(value || "").trim().slice(0, max);
+  return next || null;
 }
 
 function landlordIdOf(req: any): string | null {
@@ -256,6 +305,37 @@ function cleanString(value: any, max = 200): string | null {
   return text.slice(0, max);
 }
 
+function isAllowedEvidenceFile(file: Express.Multer.File | undefined) {
+  if (!file?.buffer || !file.originalname) return false;
+  return ALLOWED_EVIDENCE_MIME_TYPES.has(String(file.mimetype || "").toLowerCase());
+}
+
+function isAllowedCostAttachmentFile(file: Express.Multer.File | undefined) {
+  if (!file?.buffer || !file.originalname) return false;
+  return ALLOWED_COST_ATTACHMENT_MIME_TYPES.has(String(file.mimetype || "").toLowerCase());
+}
+
+function normalizeOptionalBoolean(value: any): boolean | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null || value === "") return null;
+  if (typeof value === "boolean") return value;
+  if (value === "true") return true;
+  if (value === "false") return false;
+  return null;
+}
+
+function toMillis(value: any): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = Date.parse(value);
+    return Number.isNaN(parsed) ? null : parsed;
+  }
+  if (typeof value?.toMillis === "function") return value.toMillis();
+  if (typeof value?.seconds === "number") return value.seconds * 1000;
+  return null;
+}
+
 function normalizeScreeningList(value: any, maxItems = 8, maxLength = 80): string[] {
   if (!Array.isArray(value)) return [];
   return value
@@ -390,6 +470,130 @@ async function appendStatusHistory(
     );
 }
 
+type WorkOrderExecutionUpdateType =
+  | "status_changed"
+  | "scheduled"
+  | "started"
+  | "blocked"
+  | "photo"
+  | "invoice"
+  | "completed"
+  | "confirmed"
+  | "reopened";
+
+type WorkOrderCompletionOutcome = "completed" | "partially_completed" | "follow_up_required";
+
+function normalizeCompletionOutcome(value: any): WorkOrderCompletionOutcome | null {
+  const next = String(value || "").trim().toLowerCase();
+  if (next === "completed" || next === "partially_completed" || next === "follow_up_required") {
+    return next;
+  }
+  return null;
+}
+
+function normalizeResolutionStatus(
+  value: any
+): "completed_pending_review" | "landlord_approved" | "tenant_pending_signoff" | "resolved" | "follow_up_required" | null {
+  const next = String(value || "").trim().toLowerCase();
+  if (
+    next === "completed_pending_review" ||
+    next === "landlord_approved" ||
+    next === "tenant_pending_signoff" ||
+    next === "resolved" ||
+    next === "follow_up_required"
+  ) {
+    return next;
+  }
+  return null;
+}
+
+function normalizeTenantSignoffStatus(value: any): "pending" | "accepted" | "declined" | null {
+  const next = String(value || "").trim().toLowerCase();
+  if (next === "pending" || next === "accepted" || next === "declined") return next;
+  return null;
+}
+
+function normalizeReworkCycleStatus(value: any): "not_started" | "assigned" | "in_progress" | "completed" | "cancelled" | null {
+  const next = String(value || "").trim().toLowerCase();
+  if (
+    next === "not_started" ||
+    next === "assigned" ||
+    next === "in_progress" ||
+    next === "completed" ||
+    next === "cancelled"
+  ) {
+    return next;
+  }
+  return null;
+}
+
+function normalizeReworkScheduleStatus(
+  value: any
+): "not_scheduled" | "scheduled" | "contractor_confirmed" | "tenant_pending" | "confirmed" | "reschedule_requested" | "cancelled" | null {
+  const next = String(value || "").trim().toLowerCase();
+  if (
+    next === "not_scheduled" ||
+    next === "scheduled" ||
+    next === "contractor_confirmed" ||
+    next === "tenant_pending" ||
+    next === "confirmed" ||
+    next === "reschedule_requested" ||
+    next === "cancelled"
+  ) {
+    return next;
+  }
+  return null;
+}
+
+function normalizeReworkTenantAccessStatus(value: any): "pending" | "confirmed" | "denied" | "not_required" | null {
+  const next = String(value || "").trim().toLowerCase();
+  if (next === "pending" || next === "confirmed" || next === "denied" || next === "not_required") return next;
+  return null;
+}
+
+function normalizeReworkContractorScheduleStatus(value: any): "pending" | "confirmed" | "unavailable" | null {
+  const next = String(value || "").trim().toLowerCase();
+  if (next === "pending" || next === "confirmed" || next === "unavailable") return next;
+  return null;
+}
+
+async function appendWorkOrderUpdate(
+  workOrderId: string,
+  payload: {
+    actorRole: "tenant" | "landlord" | "contractor" | "admin";
+    actorId: string | null;
+    updateType: WorkOrderExecutionUpdateType;
+    message?: string | null;
+  }
+) {
+  if (!workOrderId) return;
+  const ref = db.collection("workOrderUpdates").doc();
+  const createdAtMs = Date.now();
+  await ref.set({
+    id: ref.id,
+    workOrderId,
+    actorRole: payload.actorRole,
+    actorId: payload.actorId || null,
+    updateType: payload.updateType,
+    message: String(payload.message || "").trim().slice(0, 5000),
+    attachmentUrl: null,
+    createdAtMs,
+  });
+}
+
+function makeCostHistoryEntryId() {
+  return `cost_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function getCurrentCostRevisionNumber(workOrder: any) {
+  const current = Number(workOrder?.cost?.latestRevisionNumber || 0);
+  const historyMax = normalizeCostReviewHistory(workOrder?.costReviewHistory).reduce(
+    (max, entry) => Math.max(max, Number(entry.revisionNumber || 0)),
+    0
+  );
+  return Math.max(current, historyMax, 0);
+}
+
 async function lookupEmailFromDoc(docPath: [string, string][]): Promise<string | null> {
   for (const [collection, id] of docPath) {
     if (!id) continue;
@@ -506,6 +710,68 @@ async function upsertMaintenanceWorkOrder(input: {
   category: string | null;
   priority: string | null;
   status: string | null;
+  serviceWindowStartAt?: number | null;
+  serviceWindowEndAt?: number | null;
+  accessRequired?: boolean | null;
+  scheduledFor?: number | null;
+  serviceStartedAt?: number | null;
+  serviceCompletedAt?: number | null;
+  lastExecutionUpdateAt?: number | null;
+  executionBlockedReason?: string | null;
+  completionSummary?: string | null;
+  completionOutcome?: WorkOrderCompletionOutcome | null;
+  completedByActorRole?: "contractor" | "landlord" | "admin" | null;
+  completedByActorId?: string | null;
+  completionConfirmedByLandlordAt?: number | null;
+  completionConfirmedByLandlordBy?: string | null;
+  resolutionStatus?: "completed_pending_review" | "landlord_approved" | "tenant_pending_signoff" | "resolved" | "follow_up_required" | null;
+  landlordApprovedAt?: number | null;
+  landlordApprovedBy?: string | null;
+  tenantSignoffStatus?: "pending" | "accepted" | "declined" | null;
+  tenantSignedOffAt?: number | null;
+  tenantDeclinedAt?: number | null;
+  tenantDeclineReason?: string | null;
+  followUpRequired?: boolean | null;
+  followUpReason?: string | null;
+  finalResolvedAt?: number | null;
+  reworkCycle?: {
+    cycleNumber: number;
+    status: "not_started" | "assigned" | "in_progress" | "completed" | "cancelled";
+    createdAt: number;
+    createdBy: string;
+    assignedContractorId?: string | null;
+    assignedAt?: number | null;
+    startedAt?: number | null;
+    completedAt?: number | null;
+    completionSummary?: string | null;
+    evidenceSnapshot?: string[] | null;
+    schedule?: {
+      scheduledFor?: number | null;
+      timeWindowStart?: number | null;
+      timeWindowEnd?: number | null;
+      status?: "not_scheduled" | "scheduled" | "contractor_confirmed" | "tenant_pending" | "confirmed" | "reschedule_requested" | "cancelled";
+      requiresTenantAccess?: boolean | null;
+      tenantAccessStatus?: "pending" | "confirmed" | "denied" | "not_required" | null;
+      contractorScheduleStatus?: "pending" | "confirmed" | "unavailable" | null;
+      scheduledBy?: string | null;
+      scheduledAt?: number | null;
+      rescheduleReason?: string | null;
+      tenantAccessNote?: string | null;
+      contractorAvailabilityNote?: string | null;
+      lastUpdatedAt?: number | null;
+    } | null;
+  } | null;
+  reworkHistory?: Array<{
+    cycleNumber: number;
+    startedAt?: number | null;
+    completedAt?: number | null;
+    outcome?: "resolved" | "failed" | "partial" | null;
+    notes?: string | null;
+  }> | null;
+  reopenedAt?: number | null;
+  reopenedByActorId?: string | null;
+  reopenedByActorRole?: "landlord" | "admin" | null;
+  reopenReason?: string | null;
 }) {
   const workOrderId = `maintenance_${input.maintenanceRequestId}`;
   const ref = db.collection("workOrders").doc(workOrderId);
@@ -513,7 +779,7 @@ async function upsertMaintenanceWorkOrder(input: {
   const existingData = existing.exists ? ((existing.data() as any) || {}) : {};
   const createdAtMs = Number(existingData.createdAtMs || existingData.createdAt || Date.now()) || Date.now();
   const now = Date.now();
-  const payload = {
+  const payload: Record<string, any> = {
     id: workOrderId,
     maintenanceRequestId: input.maintenanceRequestId,
     landlordId: input.landlordId || null,
@@ -527,12 +793,273 @@ async function upsertMaintenanceWorkOrder(input: {
     category: String(input.category || "").trim() || "GENERAL",
     priority: String(input.priority || "").trim() || "normal",
     status: String(input.status || "assigned").trim() || "assigned",
+    serviceWindowStartAt:
+      input.serviceWindowStartAt !== undefined
+        ? typeof input.serviceWindowStartAt === "number"
+          ? input.serviceWindowStartAt
+          : null
+        : toMillis(existingData.serviceWindowStartAt),
+    serviceWindowEndAt:
+      input.serviceWindowEndAt !== undefined
+        ? typeof input.serviceWindowEndAt === "number"
+          ? input.serviceWindowEndAt
+          : null
+        : toMillis(existingData.serviceWindowEndAt),
+    accessRequired:
+      input.accessRequired !== undefined
+        ? typeof input.accessRequired === "boolean"
+          ? input.accessRequired
+          : null
+        : typeof existingData.accessRequired === "boolean"
+        ? existingData.accessRequired
+        : null,
+    scheduledFor:
+      input.scheduledFor !== undefined
+        ? typeof input.scheduledFor === "number"
+          ? input.scheduledFor
+          : null
+        : toMillis(existingData.scheduledFor),
+    serviceStartedAt:
+      input.serviceStartedAt !== undefined
+        ? typeof input.serviceStartedAt === "number"
+          ? input.serviceStartedAt
+          : null
+        : toMillis(existingData.serviceStartedAt),
+    serviceCompletedAt:
+      input.serviceCompletedAt !== undefined
+        ? typeof input.serviceCompletedAt === "number"
+          ? input.serviceCompletedAt
+          : null
+        : toMillis(existingData.serviceCompletedAt),
+    lastExecutionUpdateAt:
+      input.lastExecutionUpdateAt !== undefined
+        ? typeof input.lastExecutionUpdateAt === "number"
+          ? input.lastExecutionUpdateAt
+          : null
+        : toMillis(existingData.lastExecutionUpdateAt),
+    executionBlockedReason:
+      input.executionBlockedReason !== undefined
+        ? String(input.executionBlockedReason || "").trim() || null
+        : String(existingData.executionBlockedReason || "").trim() || null,
+    completionSummary:
+      input.completionSummary !== undefined
+        ? String(input.completionSummary || "").trim() || null
+        : String(existingData.completionSummary || "").trim() || null,
+    completionOutcome:
+      input.completionOutcome !== undefined
+        ? input.completionOutcome || null
+        : normalizeCompletionOutcome(existingData.completionOutcome),
+    completedByActorRole:
+      input.completedByActorRole !== undefined
+        ? input.completedByActorRole || null
+        : String(existingData.completedByActorRole || "").trim() || null,
+    completedByActorId:
+      input.completedByActorId !== undefined
+        ? String(input.completedByActorId || "").trim() || null
+        : String(existingData.completedByActorId || "").trim() || null,
+    completionConfirmedByLandlordAt:
+      input.completionConfirmedByLandlordAt !== undefined
+        ? typeof input.completionConfirmedByLandlordAt === "number"
+          ? input.completionConfirmedByLandlordAt
+          : null
+        : toMillis(existingData.completionConfirmedByLandlordAt),
+    completionConfirmedByLandlordBy:
+      input.completionConfirmedByLandlordBy !== undefined
+        ? String(input.completionConfirmedByLandlordBy || "").trim() || null
+        : String(existingData.completionConfirmedByLandlordBy || "").trim() || null,
+    resolutionStatus:
+      input.resolutionStatus !== undefined ? input.resolutionStatus || null : normalizeResolutionStatus(existingData.resolutionStatus),
+    landlordApprovedAt:
+      input.landlordApprovedAt !== undefined
+        ? typeof input.landlordApprovedAt === "number"
+          ? input.landlordApprovedAt
+          : null
+        : toMillis(existingData.landlordApprovedAt),
+    landlordApprovedBy:
+      input.landlordApprovedBy !== undefined
+        ? String(input.landlordApprovedBy || "").trim() || null
+        : String(existingData.landlordApprovedBy || "").trim() || null,
+    tenantSignoffStatus:
+      input.tenantSignoffStatus !== undefined
+        ? input.tenantSignoffStatus || null
+        : normalizeTenantSignoffStatus(existingData.tenantSignoffStatus),
+    tenantSignedOffAt:
+      input.tenantSignedOffAt !== undefined
+        ? typeof input.tenantSignedOffAt === "number"
+          ? input.tenantSignedOffAt
+          : null
+        : toMillis(existingData.tenantSignedOffAt),
+    tenantDeclinedAt:
+      input.tenantDeclinedAt !== undefined
+        ? typeof input.tenantDeclinedAt === "number"
+          ? input.tenantDeclinedAt
+          : null
+        : toMillis(existingData.tenantDeclinedAt),
+    tenantDeclineReason:
+      input.tenantDeclineReason !== undefined
+        ? String(input.tenantDeclineReason || "").trim() || null
+        : String(existingData.tenantDeclineReason || "").trim() || null,
+    followUpRequired:
+      input.followUpRequired !== undefined
+        ? typeof input.followUpRequired === "boolean"
+          ? input.followUpRequired
+          : null
+        : typeof existingData.followUpRequired === "boolean"
+        ? existingData.followUpRequired
+        : null,
+    followUpReason:
+      input.followUpReason !== undefined
+        ? String(input.followUpReason || "").trim() || null
+        : String(existingData.followUpReason || "").trim() || null,
+    finalResolvedAt:
+      input.finalResolvedAt !== undefined
+        ? typeof input.finalResolvedAt === "number"
+          ? input.finalResolvedAt
+          : null
+        : toMillis(existingData.finalResolvedAt),
+    reworkCycle:
+      input.reworkCycle !== undefined
+        ? input.reworkCycle
+          ? {
+              cycleNumber: Number(input.reworkCycle.cycleNumber || 1),
+              status: normalizeReworkCycleStatus(input.reworkCycle.status) || "not_started",
+              createdAt: typeof input.reworkCycle.createdAt === "number" ? input.reworkCycle.createdAt : now,
+              createdBy: String(input.reworkCycle.createdBy || "").trim() || "system",
+              assignedContractorId: String(input.reworkCycle.assignedContractorId || "").trim() || null,
+              assignedAt: typeof input.reworkCycle.assignedAt === "number" ? input.reworkCycle.assignedAt : null,
+              startedAt: typeof input.reworkCycle.startedAt === "number" ? input.reworkCycle.startedAt : null,
+              completedAt: typeof input.reworkCycle.completedAt === "number" ? input.reworkCycle.completedAt : null,
+              completionSummary: String(input.reworkCycle.completionSummary || "").trim() || null,
+              evidenceSnapshot: Array.isArray(input.reworkCycle.evidenceSnapshot)
+                ? input.reworkCycle.evidenceSnapshot.map((entry) => String(entry || "").trim()).filter(Boolean)
+                : null,
+              schedule: input.reworkCycle.schedule
+                ? {
+                    scheduledFor:
+                      typeof input.reworkCycle.schedule.scheduledFor === "number" ? input.reworkCycle.schedule.scheduledFor : null,
+                    timeWindowStart:
+                      typeof input.reworkCycle.schedule.timeWindowStart === "number"
+                        ? input.reworkCycle.schedule.timeWindowStart
+                        : null,
+                    timeWindowEnd:
+                      typeof input.reworkCycle.schedule.timeWindowEnd === "number" ? input.reworkCycle.schedule.timeWindowEnd : null,
+                    status: normalizeReworkScheduleStatus(input.reworkCycle.schedule.status) || "not_scheduled",
+                    requiresTenantAccess:
+                      typeof input.reworkCycle.schedule.requiresTenantAccess === "boolean"
+                        ? input.reworkCycle.schedule.requiresTenantAccess
+                        : null,
+                    tenantAccessStatus:
+                      normalizeReworkTenantAccessStatus(input.reworkCycle.schedule.tenantAccessStatus) || null,
+                    contractorScheduleStatus:
+                      normalizeReworkContractorScheduleStatus(input.reworkCycle.schedule.contractorScheduleStatus) || null,
+                    scheduledBy: String(input.reworkCycle.schedule.scheduledBy || "").trim() || null,
+                    scheduledAt:
+                      typeof input.reworkCycle.schedule.scheduledAt === "number" ? input.reworkCycle.schedule.scheduledAt : null,
+                    rescheduleReason: String(input.reworkCycle.schedule.rescheduleReason || "").trim() || null,
+                    tenantAccessNote: String(input.reworkCycle.schedule.tenantAccessNote || "").trim() || null,
+                    contractorAvailabilityNote:
+                      String(input.reworkCycle.schedule.contractorAvailabilityNote || "").trim() || null,
+                    lastUpdatedAt:
+                      typeof input.reworkCycle.schedule.lastUpdatedAt === "number"
+                        ? input.reworkCycle.schedule.lastUpdatedAt
+                        : null,
+                  }
+                : null,
+            }
+          : null
+        : existingData.reworkCycle
+        ? {
+            cycleNumber: Number(existingData.reworkCycle.cycleNumber || 1),
+            status: normalizeReworkCycleStatus(existingData.reworkCycle.status) || "not_started",
+            createdAt: toMillis(existingData.reworkCycle.createdAt) || now,
+            createdBy: String(existingData.reworkCycle.createdBy || "").trim() || "system",
+            assignedContractorId: String(existingData.reworkCycle.assignedContractorId || "").trim() || null,
+            assignedAt: toMillis(existingData.reworkCycle.assignedAt),
+            startedAt: toMillis(existingData.reworkCycle.startedAt),
+            completedAt: toMillis(existingData.reworkCycle.completedAt),
+            completionSummary: String(existingData.reworkCycle.completionSummary || "").trim() || null,
+            evidenceSnapshot: Array.isArray(existingData.reworkCycle.evidenceSnapshot)
+              ? existingData.reworkCycle.evidenceSnapshot.map((entry: any) => String(entry || "").trim()).filter(Boolean)
+              : null,
+            schedule: existingData.reworkCycle.schedule
+              ? {
+                  scheduledFor: toMillis(existingData.reworkCycle.schedule.scheduledFor),
+                  timeWindowStart: toMillis(existingData.reworkCycle.schedule.timeWindowStart),
+                  timeWindowEnd: toMillis(existingData.reworkCycle.schedule.timeWindowEnd),
+                  status: normalizeReworkScheduleStatus(existingData.reworkCycle.schedule.status) || "not_scheduled",
+                  requiresTenantAccess:
+                    typeof existingData.reworkCycle.schedule.requiresTenantAccess === "boolean"
+                      ? existingData.reworkCycle.schedule.requiresTenantAccess
+                      : null,
+                  tenantAccessStatus:
+                    normalizeReworkTenantAccessStatus(existingData.reworkCycle.schedule.tenantAccessStatus) || null,
+                  contractorScheduleStatus:
+                    normalizeReworkContractorScheduleStatus(existingData.reworkCycle.schedule.contractorScheduleStatus) || null,
+                  scheduledBy: String(existingData.reworkCycle.schedule.scheduledBy || "").trim() || null,
+                  scheduledAt: toMillis(existingData.reworkCycle.schedule.scheduledAt),
+                  rescheduleReason: String(existingData.reworkCycle.schedule.rescheduleReason || "").trim() || null,
+                  tenantAccessNote: String(existingData.reworkCycle.schedule.tenantAccessNote || "").trim() || null,
+                  contractorAvailabilityNote:
+                    String(existingData.reworkCycle.schedule.contractorAvailabilityNote || "").trim() || null,
+                  lastUpdatedAt: toMillis(existingData.reworkCycle.schedule.lastUpdatedAt),
+                }
+              : null,
+          }
+        : null,
+    reworkHistory:
+      input.reworkHistory !== undefined
+        ? Array.isArray(input.reworkHistory)
+          ? input.reworkHistory.map((entry) => ({
+              cycleNumber: Number(entry?.cycleNumber || 1),
+              startedAt: typeof entry?.startedAt === "number" ? entry.startedAt : null,
+              completedAt: typeof entry?.completedAt === "number" ? entry.completedAt : null,
+              outcome:
+                entry?.outcome === "resolved" || entry?.outcome === "failed" || entry?.outcome === "partial"
+                  ? entry.outcome
+                  : null,
+              notes: String(entry?.notes || "").trim() || null,
+            }))
+          : null
+        : Array.isArray(existingData.reworkHistory)
+        ? existingData.reworkHistory.map((entry: any) => ({
+            cycleNumber: Number(entry?.cycleNumber || 1),
+            startedAt: toMillis(entry?.startedAt),
+            completedAt: toMillis(entry?.completedAt),
+            outcome:
+              entry?.outcome === "resolved" || entry?.outcome === "failed" || entry?.outcome === "partial"
+                ? entry.outcome
+                : null,
+            notes: String(entry?.notes || "").trim() || null,
+          }))
+        : null,
+    reopenedAt:
+      input.reopenedAt !== undefined
+        ? typeof input.reopenedAt === "number"
+          ? input.reopenedAt
+          : null
+        : toMillis(existingData.reopenedAt),
+    reopenedByActorId:
+      input.reopenedByActorId !== undefined
+        ? String(input.reopenedByActorId || "").trim() || null
+        : String(existingData.reopenedByActorId || "").trim() || null,
+    reopenedByActorRole:
+      input.reopenedByActorRole !== undefined
+        ? input.reopenedByActorRole || null
+        : String(existingData.reopenedByActorRole || "").trim() || null,
+    reopenReason:
+      input.reopenReason !== undefined
+        ? String(input.reopenReason || "").trim() || null
+        : String(existingData.reopenReason || "").trim() || null,
     visibility: "private",
     createdAt: createdAtMs,
     updatedAt: now,
     createdAtMs,
     updatedAtMs: now,
   };
+  payload.notifications = computeWorkOrderNotifications({
+    ...existingData,
+    ...payload,
+  });
   await ref.set(payload, { merge: true });
   console.info("[maintenance-v2] work-order upserted", {
     maintenanceRequestId: input.maintenanceRequestId,
@@ -544,7 +1071,7 @@ async function upsertMaintenanceWorkOrder(input: {
   return { workOrderId, payload };
 }
 
-function shapeContractorJobFromSources(workOrder: any, maintenance: any) {
+async function shapeContractorJobFromSources(workOrder: any, maintenance: any) {
   const maintenanceId =
     String(workOrder?.maintenanceRequestId || maintenance?.id || "").trim() || String(workOrder?.id || "").trim();
   const status = normalizeWorkflowStatus(workOrder?.status || maintenance?.status) || "assigned";
@@ -571,6 +1098,31 @@ function shapeContractorJobFromSources(workOrder: any, maintenance: any) {
       String(maintenance?.contractorStatus || workOrder?.contractorStatus || status).trim() || status,
     contractorLastUpdate:
       String(maintenance?.contractorLastUpdate || workOrder?.contractorLastUpdate || "").trim() || null,
+    scheduledFor: toMillis(workOrder?.scheduledFor) ?? null,
+    serviceStartedAt: toMillis(workOrder?.serviceStartedAt) ?? null,
+    serviceCompletedAt: toMillis(workOrder?.serviceCompletedAt) ?? null,
+    lastExecutionUpdateAt: toMillis(workOrder?.lastExecutionUpdateAt) ?? null,
+    executionBlockedReason: String(workOrder?.executionBlockedReason || "").trim() || null,
+    completionSummary: String(workOrder?.completionSummary || "").trim() || null,
+    completionOutcome: normalizeCompletionOutcome(workOrder?.completionOutcome),
+    completionConfirmedByLandlordAt: toMillis(workOrder?.completionConfirmedByLandlordAt) ?? null,
+    completionConfirmedByLandlordBy: String(workOrder?.completionConfirmedByLandlordBy || "").trim() || null,
+    completedByActorRole: String(workOrder?.completedByActorRole || "").trim() || null,
+    completedByActorId: String(workOrder?.completedByActorId || "").trim() || null,
+    reopenedAt: toMillis(workOrder?.reopenedAt) ?? null,
+    reopenedByActorId: String(workOrder?.reopenedByActorId || "").trim() || null,
+    reopenedByActorRole: String(workOrder?.reopenedByActorRole || "").trim() || null,
+    reopenReason: String(workOrder?.reopenReason || "").trim() || null,
+    serviceWindowStartAt:
+      toMillis(maintenance?.serviceWindowStartAt) ?? toMillis(workOrder?.serviceWindowStartAt) ?? null,
+    serviceWindowEndAt:
+      toMillis(maintenance?.serviceWindowEndAt) ?? toMillis(workOrder?.serviceWindowEndAt) ?? null,
+    accessRequired:
+      typeof maintenance?.accessRequired === "boolean"
+        ? maintenance.accessRequired
+        : typeof workOrder?.accessRequired === "boolean"
+        ? workOrder.accessRequired
+        : null,
     tenantName: String(maintenance?.tenantName || "").trim() || null,
     propertyLabel: String(maintenance?.propertyLabel || "").trim() || null,
     unitLabel: String(maintenance?.unitLabel || "").trim() || null,
@@ -581,7 +1133,17 @@ function shapeContractorJobFromSources(workOrder: any, maintenance: any) {
     updatedAt:
       Number(maintenance?.updatedAt || workOrder?.updatedAt || workOrder?.updatedAtMs || Date.now()) || Date.now(),
     statusHistory: Array.isArray(maintenance?.statusHistory) ? maintenance.statusHistory : [],
+    evidence: await serializeEvidenceForAudience(workOrder?.evidence, "contractor"),
+    cost: normalizeWorkOrderCost(workOrder?.cost),
+    costLineItems: normalizeCostLineItems(workOrder?.costLineItems),
+    costAttachments: await serializeCostAttachmentsForAudience(workOrder?.costAttachments, "contractor"),
+    costReviewHistory: normalizeCostReviewHistory(workOrder?.costReviewHistory),
+    expenseLink: normalizeExpenseLink(workOrder?.expenseLink),
   };
+}
+
+function formatCostForMessage(costCents: number, currency: string) {
+  return `${(costCents / 100).toFixed(2)} ${currency}`;
 }
 
 router.get("/maintenance-requests", async (req: any, res) => {
@@ -815,6 +1377,31 @@ router.post("/tenant/maintenance", async (req: any, res) => {
       messages: [],
     };
     await ref.set(data);
+    await writeCanonicalEvent({
+      domain: "maintenance",
+      action: "request_created",
+      status: "submitted",
+      actor: {
+        type: "tenant",
+        role: "tenant",
+        id: tenantId,
+        displayName: tenantName,
+      },
+      resource: {
+        type: "maintenance_request",
+        id: ref.id,
+      },
+      occurredAt: now,
+      visibility: "landlord",
+      summary: "Maintenance request submitted",
+      metadata: {
+        landlordId,
+        propertyId,
+        unitId,
+        category,
+        priority,
+      },
+    });
 
     if (landlordId) {
       const landlordEmail = await lookupEmailFromDoc([
@@ -932,20 +1519,64 @@ router.patch("/landlord/maintenance/:id", async (req: any, res) => {
     if (req.body?.status !== undefined && !nextStatus) {
       return res.status(400).json({ ok: false, error: "INVALID_STATUS" });
     }
-    if (nextStatus && !canTransitionWorkflowStatus(currentStatus, nextStatus)) {
+    const requestedWindowStartAt = req.body?.serviceWindowStartAt === undefined ? undefined : toMillis(req.body?.serviceWindowStartAt);
+    const requestedWindowEndAt = req.body?.serviceWindowEndAt === undefined ? undefined : toMillis(req.body?.serviceWindowEndAt);
+    const requestedAccessRequired = normalizeOptionalBoolean(req.body?.accessRequired);
+    const requestedCompletionSummary =
+      req.body?.completionSummary === undefined ? undefined : String(req.body?.completionSummary || "").trim().slice(0, 2000);
+    const requestedCompletionOutcome =
+      req.body?.completionOutcome === undefined ? undefined : normalizeCompletionOutcome(req.body?.completionOutcome);
+    if (req.body?.serviceWindowStartAt !== undefined && requestedWindowStartAt === null && req.body?.serviceWindowStartAt !== null) {
+      return res.status(400).json({ ok: false, error: "INVALID_SERVICE_WINDOW_START" });
+    }
+    if (req.body?.serviceWindowEndAt !== undefined && requestedWindowEndAt === null && req.body?.serviceWindowEndAt !== null) {
+      return res.status(400).json({ ok: false, error: "INVALID_SERVICE_WINDOW_END" });
+    }
+    if (
+      typeof requestedWindowStartAt === "number" &&
+      typeof requestedWindowEndAt === "number" &&
+      requestedWindowEndAt < requestedWindowStartAt
+    ) {
+      return res.status(400).json({ ok: false, error: "INVALID_SERVICE_WINDOW_RANGE" });
+    }
+    if (requestedCompletionSummary !== undefined && !(currentStatus === "completed" || nextStatus === "completed")) {
+      return res.status(400).json({ ok: false, error: "INVALID_COMPLETION_UPDATE" });
+    }
+    if (requestedCompletionOutcome !== undefined && !(currentStatus === "completed" || nextStatus === "completed")) {
+      return res.status(400).json({ ok: false, error: "INVALID_COMPLETION_UPDATE" });
+    }
+
+    let effectiveNextStatus = nextStatus;
+    if (!effectiveNextStatus && typeof requestedWindowStartAt === "number" && currentStatus === "assigned") {
+      effectiveNextStatus = "scheduled";
+    }
+
+    if (effectiveNextStatus && !canTransitionWorkflowStatus(currentStatus, effectiveNextStatus)) {
       return res.status(400).json({
         ok: false,
         error: "INVALID_STATUS_TRANSITION",
         currentStatus,
-        nextStatus,
+        nextStatus: effectiveNextStatus,
       });
     }
 
+    if (effectiveNextStatus === "completed" && !requestedCompletionSummary && !String(current.completionSummary || "").trim()) {
+      return res.status(400).json({ ok: false, error: "COMPLETION_SUMMARY_REQUIRED" });
+    }
+
+    const now = Date.now();
+    const completionSummary =
+      requestedCompletionSummary !== undefined ? requestedCompletionSummary || null : String(current.completionSummary || "").trim() || null;
+    const completionOutcome =
+      requestedCompletionOutcome !== undefined
+        ? requestedCompletionOutcome || "completed"
+        : normalizeCompletionOutcome(current.completionOutcome) || "completed";
+
     const update: any = {
-      updatedAt: Date.now(),
+      updatedAt: now,
       lastUpdatedBy: "LANDLORD",
     };
-    if (nextStatus) update.status = nextStatus;
+    if (effectiveNextStatus) update.status = effectiveNextStatus;
     if (req.body?.priority !== undefined) {
       const rawPriority = String(req.body.priority || "").trim().toLowerCase();
       update.priority = ["low", "normal", "urgent"].includes(rawPriority) ? rawPriority : current.priority || "normal";
@@ -953,13 +1584,128 @@ router.patch("/landlord/maintenance/:id", async (req: any, res) => {
     if (req.body?.landlordNote !== undefined) {
       update.landlordNote = req.body.landlordNote === null ? null : String(req.body.landlordNote || "").trim().slice(0, 5000);
     }
+    if (req.body?.serviceWindowStartAt !== undefined) {
+      update.serviceWindowStartAt = requestedWindowStartAt;
+    }
+    if (req.body?.serviceWindowEndAt !== undefined) {
+      update.serviceWindowEndAt = requestedWindowEndAt;
+    }
+    if (requestedAccessRequired !== undefined) {
+      update.accessRequired = requestedAccessRequired;
+    }
+    if (effectiveNextStatus === "in_progress") {
+      update.serviceStartedAt = toMillis(current.serviceStartedAt) ?? now;
+      update.lastExecutionUpdateAt = now;
+      update.executionBlockedReason = null;
+    }
+    if (requestedCompletionSummary !== undefined || effectiveNextStatus === "completed") {
+      update.completionSummary = completionSummary;
+    }
+    if (requestedCompletionOutcome !== undefined || effectiveNextStatus === "completed") {
+      update.completionOutcome = completionOutcome;
+    }
+    if (effectiveNextStatus === "completed") {
+      update.serviceStartedAt = toMillis(current.serviceStartedAt) ?? now;
+      update.serviceCompletedAt = now;
+      update.lastExecutionUpdateAt = now;
+      update.executionBlockedReason = null;
+      update.completedByActorRole = role === "admin" ? "admin" : "landlord";
+      update.completedByActorId = actorId;
+      update.completionConfirmedByLandlordAt = now;
+      update.completionConfirmedByLandlordBy = actorId;
+      update.resolutionStatus = "completed_pending_review";
+      update.landlordApprovedAt = null;
+      update.landlordApprovedBy = null;
+      update.tenantSignoffStatus = null;
+      update.tenantSignedOffAt = null;
+      update.tenantDeclinedAt = null;
+      update.tenantDeclineReason = null;
+      update.followUpRequired = false;
+      update.followUpReason = null;
+      update.finalResolvedAt = null;
+      update.reopenedAt = null;
+      update.reopenedByActorId = null;
+      update.reopenedByActorRole = null;
+      update.reopenReason = null;
+    }
+    if (req.body?.serviceWindowStartAt !== undefined || req.body?.serviceWindowEndAt !== undefined) {
+      update.tenantConfirmationStatus = null;
+      update.tenantConfirmationUpdatedAt = null;
+      update.accessAcknowledgedAt = null;
+    } else if (requestedAccessRequired !== undefined) {
+      update.accessAcknowledgedAt = null;
+    }
     await ref.set(update, { merge: true });
-    if (nextStatus && nextStatus !== currentStatus) {
+    if (effectiveNextStatus && effectiveNextStatus !== currentStatus) {
       await appendStatusHistory(id, {
-        status: nextStatus,
+        status: effectiveNextStatus,
         actorRole: role === "admin" ? "admin" : "landlord",
         actorId,
-        message: String(req.body?.message || `Status changed to ${nextStatus}`).slice(0, 500),
+        message: String(req.body?.message || `Status changed to ${effectiveNextStatus}`).slice(0, 500),
+      });
+    }
+
+    if (req.body?.serviceWindowStartAt !== undefined || req.body?.serviceWindowEndAt !== undefined) {
+      const windowMessage =
+        typeof requestedWindowStartAt === "number"
+          ? "Service window updated."
+          : "Scheduled service window cleared.";
+      await appendStatusHistory(id, {
+        status: effectiveNextStatus || currentStatus,
+        actorRole: role === "admin" ? "admin" : "landlord",
+        actorId,
+        message: windowMessage,
+      });
+    }
+    if (requestedAccessRequired !== undefined) {
+      await appendStatusHistory(id, {
+        status: effectiveNextStatus || currentStatus,
+        actorRole: role === "admin" ? "admin" : "landlord",
+        actorId,
+        message:
+          requestedAccessRequired === true
+            ? "Access coordination marked as required."
+            : requestedAccessRequired === false
+            ? "Access coordination marked as not required."
+            : "Access coordination requirement cleared.",
+      });
+    }
+    if (req.body?.serviceWindowStartAt !== undefined || req.body?.serviceWindowEndAt !== undefined) {
+      await appendStatusHistory(id, {
+        status: effectiveNextStatus || currentStatus,
+        actorRole: role === "admin" ? "admin" : "landlord",
+        actorId,
+        message: "Tenant confirmation was reset because the service window changed.",
+      });
+    } else if (requestedAccessRequired !== undefined) {
+      await appendStatusHistory(id, {
+        status: effectiveNextStatus || currentStatus,
+        actorRole: role === "admin" ? "admin" : "landlord",
+        actorId,
+        message: "Tenant access acknowledgement was reset because the access requirement changed.",
+      });
+    }
+    if (effectiveNextStatus === "in_progress" && currentStatus !== "in_progress") {
+      await appendStatusHistory(id, {
+        status: effectiveNextStatus,
+        actorRole: role === "admin" ? "admin" : "landlord",
+        actorId,
+        message: String(req.body?.message || "Service started.").slice(0, 500),
+      });
+    }
+    if (effectiveNextStatus === "completed") {
+      await appendStatusHistory(id, {
+        status: effectiveNextStatus,
+        actorRole: role === "admin" ? "admin" : "landlord",
+        actorId,
+        message: `Service completed${completionSummary ? `: ${completionSummary}` : "."}`.slice(0, 500),
+      });
+    } else if (requestedCompletionSummary !== undefined && completionSummary !== String(current.completionSummary || "").trim()) {
+      await appendStatusHistory(id, {
+        status: effectiveNextStatus || currentStatus,
+        actorRole: role === "admin" ? "admin" : "landlord",
+        actorId,
+        message: "Completion updated.",
       });
     }
 
@@ -979,7 +1725,36 @@ router.patch("/landlord/maintenance/:id", async (req: any, res) => {
         description: String(refreshed.description || "").trim() || null,
         category: String(refreshed.category || "").trim() || null,
         priority: String(refreshed.priority || "").trim() || null,
-        status: String(refreshed.status || nextStatus || currentStatus).trim() || currentStatus,
+        status: String(refreshed.status || effectiveNextStatus || currentStatus).trim() || currentStatus,
+        serviceWindowStartAt: toMillis(refreshed.serviceWindowStartAt),
+        serviceWindowEndAt: toMillis(refreshed.serviceWindowEndAt),
+        accessRequired: typeof refreshed.accessRequired === "boolean" ? refreshed.accessRequired : null,
+        scheduledFor: toMillis(refreshed.serviceWindowStartAt) ?? toMillis(refreshed.scheduledFor),
+        serviceStartedAt: toMillis(refreshed.serviceStartedAt),
+        serviceCompletedAt: toMillis(refreshed.serviceCompletedAt),
+        lastExecutionUpdateAt: toMillis(refreshed.lastExecutionUpdateAt),
+        executionBlockedReason: String(refreshed.executionBlockedReason || "").trim() || null,
+        completionSummary: String(refreshed.completionSummary || "").trim() || null,
+        completionOutcome: normalizeCompletionOutcome(refreshed.completionOutcome),
+        completedByActorRole:
+          refreshed.completedByActorRole === "contractor" ||
+          refreshed.completedByActorRole === "landlord" ||
+          refreshed.completedByActorRole === "admin"
+            ? refreshed.completedByActorRole
+            : null,
+        completedByActorId: String(refreshed.completedByActorId || "").trim() || null,
+        completionConfirmedByLandlordAt: toMillis(refreshed.completionConfirmedByLandlordAt),
+        completionConfirmedByLandlordBy: String(refreshed.completionConfirmedByLandlordBy || "").trim() || null,
+        resolutionStatus: normalizeResolutionStatus(refreshed.resolutionStatus),
+        landlordApprovedAt: toMillis(refreshed.landlordApprovedAt),
+        landlordApprovedBy: String(refreshed.landlordApprovedBy || "").trim() || null,
+        tenantSignoffStatus: normalizeTenantSignoffStatus(refreshed.tenantSignoffStatus),
+        tenantSignedOffAt: toMillis(refreshed.tenantSignedOffAt),
+        tenantDeclinedAt: toMillis(refreshed.tenantDeclinedAt),
+        tenantDeclineReason: String(refreshed.tenantDeclineReason || "").trim() || null,
+        followUpRequired: typeof refreshed.followUpRequired === "boolean" ? refreshed.followUpRequired : null,
+        followUpReason: String(refreshed.followUpReason || "").trim() || null,
+        finalResolvedAt: toMillis(refreshed.finalResolvedAt),
       });
       workOrderId = workOrder.workOrderId;
     }
@@ -988,11 +1763,11 @@ router.patch("/landlord/maintenance/:id", async (req: any, res) => {
       ["users", String(refreshed.tenantId || "")],
     ]);
     let tenantNotification = null;
-    if (nextStatus && nextStatus !== currentStatus) {
+    if (effectiveNextStatus && effectiveNextStatus !== currentStatus) {
       tenantNotification = await sendMaintenanceStatusEmail({
         to: tenantEmail,
         subject: `Maintenance request updated: ${String(refreshed.title || "Request")}`,
-        intro: `Your maintenance request status changed to ${nextStatus}.`,
+        intro: `Your maintenance request status changed to ${effectiveNextStatus}.`,
         requestId: id,
         workOrderId,
         event: "landlord_maintenance_status_notify_tenant",
@@ -1230,6 +2005,24 @@ router.post("/landlord/maintenance/:id/assign", async (req: any, res) => {
         category: String(current.category || "").trim() || "GENERAL",
         priority: String(current.priority || "").trim() || "normal",
         status: "assigned",
+        serviceWindowStartAt: toMillis(current.serviceWindowStartAt),
+        serviceWindowEndAt: toMillis(current.serviceWindowEndAt),
+        accessRequired: typeof current.accessRequired === "boolean" ? current.accessRequired : null,
+        scheduledFor: toMillis(current.serviceWindowStartAt),
+        serviceStartedAt: null,
+        serviceCompletedAt: null,
+        lastExecutionUpdateAt: null,
+        executionBlockedReason: null,
+        completionSummary: null,
+        completionOutcome: null,
+        completedByActorRole: null,
+        completedByActorId: null,
+        completionConfirmedByLandlordAt: null,
+        completionConfirmedByLandlordBy: null,
+        reopenedAt: null,
+        reopenedByActorId: null,
+        reopenedByActorRole: null,
+        reopenReason: null,
         visibility: "private",
         createdAt: Number(current.createdAt || now) || now,
         updatedAt: now,
@@ -1273,6 +2066,33 @@ router.post("/landlord/maintenance/:id/assign", async (req: any, res) => {
         workOrderAssignedContractorId,
       });
     }
+    await writeCanonicalEvent({
+      domain: "maintenance",
+      action: "assigned",
+      status: "assigned",
+      actor: {
+        type: role === "admin" ? "admin" : "landlord",
+        role: role === "admin" ? "admin" : "landlord",
+        id: actorId,
+      },
+      resource: {
+        type: "maintenance_request",
+        id,
+      },
+      occurredAt: now,
+      visibility: "landlord",
+      summary: contractorName
+        ? `Maintenance request assigned to ${contractorName}`
+        : "Maintenance request assigned to contractor",
+      metadata: {
+        landlordId,
+        propertyId: refreshed.propertyId || null,
+        unitId: refreshed.unitId || null,
+        workOrderId,
+        assignedContractorId: resolvedContractorId,
+        assignedContractorName: contractorName,
+      },
+    });
 
     const tenantEmail = await lookupEmailFromDoc([
       ["tenants", String(refreshed.tenantId || "")],
@@ -1351,9 +2171,13 @@ router.get("/contractor/jobs", async (req: any, res) => {
       maintenanceDocs.filter((item): item is any => Boolean(item)).map((item) => [String(item.id), item])
     );
 
-    let items = workOrders
-      .map((workOrder) => shapeContractorJobFromSources(workOrder, maintenanceMap.get(String(workOrder.maintenanceRequestId || "").trim()) || null))
-      .filter((item) => Boolean(item?.id) && Boolean(item?.title) && Boolean(item?.description));
+    let items = (
+      await Promise.all(
+        workOrders.map((workOrder) =>
+          shapeContractorJobFromSources(workOrder, maintenanceMap.get(String(workOrder.maintenanceRequestId || "").trim()) || null)
+        )
+      )
+    ).filter((item) => Boolean(item?.id) && Boolean(item?.title) && Boolean(item?.description));
     if (statusFilter) {
       items = items.filter((item) => normalizeWorkflowStatus(item.status) === statusFilter);
     }
@@ -1390,7 +2214,7 @@ router.patch("/contractor/jobs/:id/status", async (req: any, res) => {
     if (!id) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
 
     const nextStatus = normalizeWorkflowStatus(req.body?.status);
-    if (!nextStatus || !["assigned", "scheduled", "in_progress", "completed"].includes(nextStatus)) {
+    if (!nextStatus || !["assigned", "scheduled", "blocked", "in_progress", "completed"].includes(nextStatus)) {
       return res.status(400).json({ ok: false, error: "INVALID_STATUS" });
     }
 
@@ -1414,25 +2238,67 @@ router.patch("/contractor/jobs/:id/status", async (req: any, res) => {
       });
     }
 
-    const note = String(req.body?.message || "").trim().slice(0, 500);
-    await ref.set(
-      {
-        status: nextStatus,
-        contractorStatus: nextStatus,
-        contractorLastUpdate: note || null,
-        updatedAt: Date.now(),
-        lastUpdatedBy: "CONTRACTOR",
-      },
-      { merge: true }
-    );
-    await appendStatusHistory(id, {
-      status: nextStatus,
-      actorRole: access.role === "admin" ? "admin" : "contractor",
-      actorId,
-      message:
-        note ||
-        (isAcknowledgement ? "Contractor accepted the assigned job" : `Contractor updated status to ${nextStatus}`),
-    });
+    const now = Date.now();
+    const note = String(req.body?.message || req.body?.note || "").trim().slice(0, 500);
+    const blockedReason = String(req.body?.blockedReason || req.body?.executionBlockedReason || note || "")
+      .trim()
+      .slice(0, 500);
+    const completionSummary = String(req.body?.completionSummary || "").trim().slice(0, 2000);
+    const completionOutcome = normalizeCompletionOutcome(req.body?.completionOutcome) || "completed";
+    const requestedScheduledFor =
+      req.body?.scheduledFor === undefined ? undefined : toMillis(req.body?.scheduledFor);
+
+    if (req.body?.scheduledFor !== undefined && requestedScheduledFor === null && req.body?.scheduledFor !== null) {
+      return res.status(400).json({ ok: false, error: "INVALID_SCHEDULED_FOR" });
+    }
+    if (nextStatus === "blocked" && !blockedReason) {
+      return res.status(400).json({ ok: false, error: "BLOCKED_REASON_REQUIRED" });
+    }
+    if (nextStatus === "completed" && !completionSummary) {
+      return res.status(400).json({ ok: false, error: "COMPLETION_SUMMARY_REQUIRED" });
+    }
+
+    const existingWorkOrderRef = db.collection("workOrders").doc(`maintenance_${id}`);
+    const existingWorkOrderSnap = await existingWorkOrderRef.get();
+    const existingWorkOrder = existingWorkOrderSnap.exists ? ((existingWorkOrderSnap.data() as any) || {}) : {};
+
+    const scheduledFor =
+      nextStatus === "scheduled"
+        ? requestedScheduledFor === undefined
+          ? toMillis(existingWorkOrder.scheduledFor) ??
+            toMillis(item.scheduledFor) ??
+            toMillis(item.serviceWindowStartAt) ??
+            now
+          : requestedScheduledFor
+        : undefined;
+    const serviceStartedAt =
+      nextStatus === "in_progress"
+        ? toMillis(existingWorkOrder.serviceStartedAt) ?? toMillis(item.serviceStartedAt) ?? now
+        : undefined;
+    const serviceCompletedAt = nextStatus === "completed" ? now : undefined;
+    const contractorMessage =
+      nextStatus === "scheduled"
+        ? note || "Contractor scheduled the service visit."
+        : nextStatus === "in_progress"
+        ? note || "Contractor started the work."
+        : nextStatus === "blocked"
+        ? blockedReason
+        : nextStatus === "completed"
+        ? completionSummary
+        : note || (isAcknowledgement ? "Contractor accepted the assigned job." : `Contractor updated status to ${nextStatus}.`);
+    const historyMessage =
+      nextStatus === "scheduled"
+        ? scheduledFor
+          ? `Contractor scheduled service for ${new Date(scheduledFor).toLocaleString()}.`
+          : contractorMessage
+        : nextStatus === "in_progress"
+        ? contractorMessage
+        : nextStatus === "blocked"
+        ? `Service is blocked: ${blockedReason}`
+        : nextStatus === "completed"
+        ? `Service completed: ${completionSummary}`
+        : contractorMessage;
+
     const workOrder = await upsertMaintenanceWorkOrder({
       maintenanceRequestId: id,
       landlordId: String(item.landlordId || "").trim() || null,
@@ -1446,10 +2312,114 @@ router.patch("/contractor/jobs/:id/status", async (req: any, res) => {
       category: String(item.category || "").trim() || null,
       priority: String(item.priority || "").trim() || null,
       status: nextStatus,
+      serviceWindowStartAt: toMillis(item.serviceWindowStartAt),
+      serviceWindowEndAt: toMillis(item.serviceWindowEndAt),
+      accessRequired: typeof item.accessRequired === "boolean" ? item.accessRequired : null,
+      scheduledFor,
+      serviceStartedAt,
+      serviceCompletedAt,
+      lastExecutionUpdateAt: now,
+      executionBlockedReason: nextStatus === "blocked" ? blockedReason : null,
+      completionSummary: nextStatus === "completed" ? completionSummary : undefined,
+      completionOutcome: nextStatus === "completed" ? completionOutcome : undefined,
+      completedByActorRole: nextStatus === "completed" ? (access.role === "admin" ? "admin" : "contractor") : undefined,
+      completedByActorId: nextStatus === "completed" ? actorId : undefined,
+      completionConfirmedByLandlordAt: nextStatus === "completed" ? null : undefined,
+      completionConfirmedByLandlordBy: nextStatus === "completed" ? null : undefined,
+      resolutionStatus: nextStatus === "completed" ? "completed_pending_review" : undefined,
+      landlordApprovedAt: nextStatus === "completed" ? null : undefined,
+      landlordApprovedBy: nextStatus === "completed" ? null : undefined,
+      tenantSignoffStatus: nextStatus === "completed" ? null : undefined,
+      tenantSignedOffAt: nextStatus === "completed" ? null : undefined,
+      tenantDeclinedAt: nextStatus === "completed" ? null : undefined,
+      tenantDeclineReason: nextStatus === "completed" ? null : undefined,
+      followUpRequired: nextStatus === "completed" ? false : undefined,
+      followUpReason: nextStatus === "completed" ? null : undefined,
+      finalResolvedAt: nextStatus === "completed" ? null : undefined,
+      reopenedAt: nextStatus === "completed" ? null : undefined,
+      reopenedByActorId: nextStatus === "completed" ? null : undefined,
+      reopenedByActorRole: nextStatus === "completed" ? null : undefined,
+      reopenReason: nextStatus === "completed" ? null : undefined,
+    });
+
+    const maintenancePatch: Record<string, unknown> = {
+      status: nextStatus,
+      contractorStatus: nextStatus,
+      contractorLastUpdate: contractorMessage || null,
+      updatedAt: now,
+      lastUpdatedBy: "CONTRACTOR",
+      scheduledFor: workOrder.payload.scheduledFor ?? null,
+      serviceCompletedAt: workOrder.payload.serviceCompletedAt ?? null,
+    };
+    if (nextStatus === "completed") {
+      maintenancePatch.completionSummary = completionSummary;
+      maintenancePatch.completionOutcome = completionOutcome;
+      maintenancePatch.resolutionStatus = "completed_pending_review";
+      maintenancePatch.landlordApprovedAt = null;
+      maintenancePatch.landlordApprovedBy = null;
+      maintenancePatch.tenantSignoffStatus = null;
+      maintenancePatch.tenantSignedOffAt = null;
+      maintenancePatch.tenantDeclinedAt = null;
+      maintenancePatch.tenantDeclineReason = null;
+      maintenancePatch.followUpRequired = false;
+      maintenancePatch.followUpReason = null;
+      maintenancePatch.finalResolvedAt = null;
+    } else if (nextStatus === "blocked") {
+      maintenancePatch.completionSummary = null;
+      maintenancePatch.completionOutcome = null;
+    }
+    await ref.set(maintenancePatch, { merge: true });
+
+    await appendStatusHistory(id, {
+      status: nextStatus,
+      actorRole: access.role === "admin" ? "admin" : "contractor",
+      actorId,
+      message: historyMessage,
+    });
+    await appendWorkOrderUpdate(workOrder.workOrderId, {
+      actorRole: access.role === "admin" ? "admin" : "contractor",
+      actorId,
+      updateType:
+        nextStatus === "scheduled"
+          ? "scheduled"
+          : nextStatus === "in_progress"
+          ? "started"
+          : nextStatus === "blocked"
+          ? "blocked"
+          : nextStatus === "completed"
+          ? "completed"
+          : "status_changed",
+      message: historyMessage,
     });
 
     const refreshedSnap = await ref.get();
     const refreshed = { id: refreshedSnap.id, ...(refreshedSnap.data() as any) };
+    if (nextStatus === "completed") {
+      await writeCanonicalEvent({
+        domain: "maintenance",
+        action: "completed",
+        status: "completed",
+        actor: {
+          type: access.role === "admin" ? "admin" : "contractor",
+          role: access.role === "admin" ? "admin" : "contractor",
+          id: actorId,
+        },
+        resource: {
+          type: "maintenance_request",
+          id,
+        },
+        occurredAt: now,
+        visibility: "landlord",
+        summary: "Maintenance request marked completed",
+        metadata: {
+          landlordId: refreshed.landlordId || null,
+          propertyId: refreshed.propertyId || null,
+          unitId: refreshed.unitId || null,
+          workOrderId: workOrder.workOrderId,
+          completionOutcome,
+        },
+      });
+    }
 
     let notifications = null;
     if (!isAcknowledgement) {
@@ -1495,6 +2465,756 @@ router.patch("/contractor/jobs/:id/status", async (req: any, res) => {
     });
     return res.status(500).json({ ok: false, error: "CONTRACTOR_MAINTENANCE_PATCH_FAILED" });
   }
+});
+
+router.patch("/contractor/jobs/:id/rework-status", async (req: any, res) => {
+  try {
+    const access = await resolveContractorAccess(req);
+    if (access.role !== "contractor" && access.role !== "admin") {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const contractorId = access.contractorId;
+    const actorId = String(req.user?.id || "").trim() || contractorId;
+    const id = String(req.params?.id || "").trim();
+    if (!contractorId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    if (!id) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+
+    const ref = db.collection("maintenanceRequests").doc(id);
+    const snap = await ref.get();
+    if (!snap.exists) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+    const item = { id: snap.id, ...(snap.data() as any) };
+
+    const workOrderRef = db.collection("workOrders").doc(`maintenance_${id}`);
+    const workOrderSnap = await workOrderRef.get();
+    if (!workOrderSnap.exists) return res.status(404).json({ ok: false, error: "WORK_ORDER_NOT_FOUND" });
+    const workOrder = (workOrderSnap.data() as any) || {};
+    const reworkCycle = workOrder?.reworkCycle || null;
+    if (!reworkCycle) return res.status(400).json({ ok: false, error: "REWORK_CYCLE_NOT_ACTIVE" });
+
+    const assignedContractorId = String(reworkCycle?.assignedContractorId || "").trim();
+    if (!assignedContractorId || assignedContractorId !== contractorId) {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const nextStatus =
+      req.body?.status === "in_progress" || req.body?.status === "completed" ? req.body.status : null;
+    if (!nextStatus) {
+      return res.status(400).json({ ok: false, error: "INVALID_REWORK_STATUS" });
+    }
+
+    const currentReworkStatus = normalizeReworkCycleStatus(reworkCycle?.status) || "assigned";
+    const currentScheduleStatus = normalizeReworkScheduleStatus(reworkCycle?.schedule?.status);
+    if (
+      (nextStatus === "in_progress" && !["assigned", "not_started"].includes(currentReworkStatus)) ||
+      (nextStatus === "completed" && !["in_progress", "assigned"].includes(currentReworkStatus))
+    ) {
+      return res.status(400).json({ ok: false, error: "INVALID_REWORK_STATUS_TRANSITION" });
+    }
+    if (
+      nextStatus === "in_progress" &&
+      currentScheduleStatus &&
+      currentScheduleStatus !== "confirmed" &&
+      currentScheduleStatus !== "not_scheduled"
+    ) {
+      return res.status(400).json({ ok: false, error: "REWORK_SCHEDULE_NOT_CONFIRMED" });
+    }
+
+    const completionSummary = String(req.body?.completionSummary || "").trim().slice(0, 2000);
+    if (nextStatus === "completed" && !completionSummary) {
+      return res.status(400).json({ ok: false, error: "COMPLETION_SUMMARY_REQUIRED" });
+    }
+
+    const now = Date.now();
+    const updatedReworkCycle = {
+      ...reworkCycle,
+      status: nextStatus,
+      startedAt:
+        nextStatus === "in_progress"
+          ? typeof reworkCycle?.startedAt === "number"
+            ? reworkCycle.startedAt
+            : now
+          : typeof reworkCycle?.startedAt === "number"
+          ? reworkCycle.startedAt
+          : null,
+      completedAt: nextStatus === "completed" ? now : typeof reworkCycle?.completedAt === "number" ? reworkCycle.completedAt : null,
+      completionSummary:
+        nextStatus === "completed"
+          ? completionSummary
+          : String(reworkCycle?.completionSummary || "").trim() || null,
+      evidenceSnapshot:
+        nextStatus === "completed" && Array.isArray(workOrder?.evidence)
+          ? workOrder.evidence.map((entry: any) => String(entry?.id || "").trim()).filter(Boolean)
+          : Array.isArray(reworkCycle?.evidenceSnapshot)
+          ? reworkCycle.evidenceSnapshot.map((entry: any) => String(entry || "").trim()).filter(Boolean)
+          : null,
+    };
+
+    const nextReworkHistory =
+      nextStatus === "completed"
+        ? [
+            ...(Array.isArray(workOrder?.reworkHistory)
+              ? workOrder.reworkHistory.filter(
+                  (entry: any) => Number(entry?.cycleNumber || 0) !== Number(reworkCycle?.cycleNumber || 1)
+                )
+              : []),
+            {
+              cycleNumber: Number(reworkCycle?.cycleNumber || 1),
+              startedAt:
+                typeof updatedReworkCycle?.startedAt === "number"
+                  ? updatedReworkCycle.startedAt
+                  : typeof reworkCycle?.startedAt === "number"
+                  ? reworkCycle.startedAt
+                  : null,
+              completedAt: now,
+              outcome: "resolved",
+              notes: completionSummary || null,
+            },
+          ]
+        : workOrder?.reworkHistory || [];
+
+    await workOrderRef.set(
+      {
+        status: nextStatus === "completed" ? "completed" : "in_progress",
+        assignedContractorId: contractorId,
+        reworkCycle: updatedReworkCycle,
+        reworkHistory: nextReworkHistory,
+        reworkReview:
+          nextStatus === "completed"
+            ? {
+                status: "pending_review",
+                reviewedAt: null,
+                reviewedBy: null,
+                landlordReviewNote: null,
+                tenantSignoffStatus: null,
+                tenantSignedOffAt: null,
+                tenantDeclinedAt: null,
+                tenantDeclineReason: null,
+                closureOutcome: null,
+                closedAt: null,
+              }
+            : workOrder?.reworkReview || null,
+        resolutionStatus: nextStatus === "completed" ? "completed_pending_review" : workOrder?.resolutionStatus || "completed_pending_review",
+        followUpRequired: nextStatus === "completed" ? false : workOrder?.followUpRequired ?? false,
+        followUpReason: nextStatus === "completed" ? null : workOrder?.followUpReason || null,
+        updatedAtMs: now,
+        lastExecutionUpdateAt: now,
+      },
+      { merge: true }
+    );
+
+    const refreshedWorkOrderSnap = await workOrderRef.get();
+    const refreshedWorkOrderData = (refreshedWorkOrderSnap.data() as any) || {};
+    const notifications = await applyNotificationUpdate(workOrderRef, refreshedWorkOrderData, now);
+
+    await ref.set(
+      {
+        status: nextStatus === "completed" ? "completed" : "in_progress",
+        contractorStatus: nextStatus === "completed" ? "completed" : "in_progress",
+        contractorLastUpdate:
+          nextStatus === "completed"
+            ? `Rework cycle #${Number(reworkCycle?.cycleNumber || 1)} completed.`
+            : `Rework cycle #${Number(reworkCycle?.cycleNumber || 1)} started.`,
+        updatedAt: now,
+        lastUpdatedBy: "CONTRACTOR",
+        notifications: buildTenantSafeWorkOrderNotifications({ ...refreshedWorkOrderData, notifications }),
+      },
+      { merge: true }
+    );
+
+    const message =
+      nextStatus === "completed"
+        ? `Rework cycle #${Number(reworkCycle?.cycleNumber || 1)} completed: ${completionSummary}`
+        : `Rework cycle #${Number(reworkCycle?.cycleNumber || 1)} started.`;
+
+    await appendStatusHistory(id, {
+      status: nextStatus === "completed" ? "completed" : "in_progress",
+      actorRole: access.role === "admin" ? "admin" : "contractor",
+      actorId,
+      message,
+    });
+    await appendWorkOrderUpdate(workOrderRef.id, {
+      actorRole: access.role === "admin" ? "admin" : "contractor",
+      actorId,
+      updateType: nextStatus === "completed" ? "completed" : "started",
+      message,
+    });
+
+    const refreshedMaintenance = await ref.get();
+    const refreshedWorkOrder = await workOrderRef.get();
+    const refreshed = await shapeContractorJobFromSources(
+      { id: refreshedWorkOrder.id, ...(refreshedWorkOrder.data() as any) },
+      { id: refreshedMaintenance.id, ...(refreshedMaintenance.data() as any) }
+    );
+    return res.json({ ok: true, item: refreshed, data: refreshed });
+  } catch (err: any) {
+    console.error("[maintenance-v2] contractor rework status failed", { message: err?.message || "failed" });
+    return res.status(500).json({ ok: false, error: "CONTRACTOR_REWORK_STATUS_FAILED" });
+  }
+});
+
+router.post("/contractor/jobs/:id/confirm-rework-schedule", async (req: any, res) => {
+  try {
+    const access = await resolveContractorAccess(req);
+    if (access.role !== "contractor" && access.role !== "admin") {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const contractorId = access.contractorId;
+    const actorId = String(req.user?.id || "").trim() || contractorId;
+    const id = String(req.params?.id || "").trim();
+    if (!contractorId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    if (!id) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+
+    const ref = db.collection("maintenanceRequests").doc(id);
+    const snap = await ref.get();
+    if (!snap.exists) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+    const item = (snap.data() as any) || {};
+
+    const workOrderRef = db.collection("workOrders").doc(`maintenance_${id}`);
+    const workOrderSnap = await workOrderRef.get();
+    if (!workOrderSnap.exists) return res.status(404).json({ ok: false, error: "WORK_ORDER_NOT_FOUND" });
+    const workOrder = (workOrderSnap.data() as any) || {};
+    const reworkCycle = workOrder?.reworkCycle || null;
+    if (!reworkCycle) return res.status(400).json({ ok: false, error: "REWORK_CYCLE_NOT_ACTIVE" });
+
+    const assignedContractorId = String(reworkCycle?.assignedContractorId || "").trim();
+    if (!assignedContractorId || assignedContractorId !== contractorId) {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const schedule = reworkCycle?.schedule || null;
+    if (!schedule) return res.status(400).json({ ok: false, error: "REWORK_SCHEDULE_NOT_SET" });
+
+    const decision = req.body?.decision === "confirm" || req.body?.decision === "unavailable" ? req.body.decision : null;
+    if (!decision) return res.status(400).json({ ok: false, error: "INVALID_REWORK_SCHEDULE_DECISION" });
+
+    const note = String(req.body?.note || "").trim().slice(0, 2000) || null;
+    const now = Date.now();
+    const nextSchedule = {
+      ...schedule,
+      contractorScheduleStatus: decision === "confirm" ? "confirmed" : "unavailable",
+      contractorAvailabilityNote: decision === "unavailable" ? note : null,
+      status:
+        decision === "unavailable"
+          ? "reschedule_requested"
+          : schedule.requiresTenantAccess && schedule.tenantAccessStatus !== "confirmed" && schedule.tenantAccessStatus !== "not_required"
+          ? "tenant_pending"
+          : "confirmed",
+      lastUpdatedAt: now,
+    };
+
+    await workOrderRef.set(
+      {
+        reworkCycle: {
+          ...reworkCycle,
+          schedule: nextSchedule,
+        },
+        updatedAtMs: now,
+      },
+      { merge: true }
+    );
+
+    const refreshedWorkOrderSnap = await workOrderRef.get();
+    const refreshedWorkOrderData = (refreshedWorkOrderSnap.data() as any) || {};
+    const notifications = await applyNotificationUpdate(workOrderRef, refreshedWorkOrderData, now);
+
+    const contractorLastUpdate =
+      decision === "confirm"
+        ? `Contractor confirmed the rework return visit.`
+        : `Contractor is unavailable for the rework return visit.${note ? ` ${note}` : ""}`;
+    await ref.set(
+      {
+        contractorLastUpdate,
+        updatedAt: now,
+        lastUpdatedBy: "CONTRACTOR",
+        notifications: buildTenantSafeWorkOrderNotifications({ ...refreshedWorkOrderData, notifications }),
+      },
+      { merge: true }
+    );
+
+    await appendStatusHistory(id, {
+      status: String(item.status || "assigned"),
+      actorRole: access.role === "admin" ? "admin" : "contractor",
+      actorId,
+      message: contractorLastUpdate,
+    });
+    await appendWorkOrderUpdate(workOrderRef.id, {
+      actorRole: access.role === "admin" ? "admin" : "contractor",
+      actorId,
+      updateType: "confirmed",
+      message: contractorLastUpdate,
+    });
+
+    const refreshedMaintenance = await ref.get();
+    const refreshedWorkOrder = await workOrderRef.get();
+    const refreshed = await shapeContractorJobFromSources(
+      { id: refreshedWorkOrder.id, ...(refreshedWorkOrder.data() as any) },
+      { id: refreshedMaintenance.id, ...(refreshedMaintenance.data() as any) }
+    );
+    return res.json({ ok: true, item: refreshed, data: refreshed });
+  } catch (err: any) {
+    console.error("[maintenance-v2] contractor confirm rework schedule failed", { message: err?.message || "failed" });
+    return res.status(500).json({ ok: false, error: "CONTRACTOR_CONFIRM_REWORK_SCHEDULE_FAILED" });
+  }
+});
+
+router.post("/contractor/jobs/:id/submit-cost", async (req: any, res) => {
+  try {
+    const access = await resolveContractorAccess(req);
+    if (access.role !== "contractor" && access.role !== "admin") {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const contractorId = access.contractorId;
+    const actorId = (String(req.user?.id || "").trim() || contractorId || "").trim();
+    const id = String(req.params?.id || "").trim();
+    if (!contractorId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    if (!id) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+
+    const maintenanceRef = db.collection("maintenanceRequests").doc(id);
+    const maintenanceSnap = await maintenanceRef.get();
+    if (!maintenanceSnap.exists) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+    const maintenance = { id: maintenanceSnap.id, ...(maintenanceSnap.data() as any) };
+    if (String(maintenance.assignedContractorId || "").trim() !== contractorId) {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const workOrderRef = db.collection("workOrders").doc(`maintenance_${id}`);
+    const workOrderSnap = await workOrderRef.get();
+    if (!workOrderSnap.exists) return res.status(404).json({ ok: false, error: "WORK_ORDER_NOT_FOUND" });
+    const workOrder = (workOrderSnap.data() as any) || {};
+    if (String(workOrder.status || "").trim().toLowerCase() !== "completed") {
+      return res.status(400).json({ ok: false, error: "WORK_ORDER_NOT_COMPLETED" });
+    }
+
+    const actualCostCents = typeof req.body?.actualCostCents === "number" ? Math.round(req.body.actualCostCents) : Number(req.body?.actualCostCents);
+    if (!Number.isFinite(actualCostCents) || actualCostCents <= 0) {
+      return res.status(400).json({ ok: false, error: "INVALID_COST_AMOUNT" });
+    }
+    const currency = normalizeCostCurrency(req.body?.currency) || "CAD";
+    const lineItems = normalizeCostLineItems(req.body?.lineItems);
+    const now = Date.now();
+    const revisionNumber = getCurrentCostRevisionNumber(workOrder) + 1;
+    const history = normalizeCostReviewHistory(workOrder?.costReviewHistory);
+
+    await workOrderRef.set(
+      {
+        cost: {
+          ...(normalizeWorkOrderCost(workOrder?.cost) || {}),
+          actualCostCents,
+          currency,
+          submittedByRole: access.role === "admin" ? "admin" : "contractor",
+          submittedById: actorId,
+          submittedAt: now,
+          reviewedBy: null,
+          reviewedAt: null,
+          reviewStatus: "pending_review",
+          reviewNote: null,
+          revisionRequestedAt: null,
+          revisionRequestedBy: null,
+          latestRevisionNumber: revisionNumber,
+          linkedExpenseId: null,
+          linkedExpenseStatus: "not_linked",
+        },
+        costLineItems: lineItems,
+        costReviewHistory: [
+          {
+            id: makeCostHistoryEntryId(),
+            revisionNumber,
+            submittedAt: now,
+            submittedByRole: access.role === "admin" ? "admin" : "contractor",
+            submittedById: actorId,
+            actualCostCents,
+            currency,
+            reviewStatus: "pending_review",
+            reviewedAt: null,
+            reviewedBy: null,
+            reviewNote: null,
+            linkedExpenseId: null,
+          },
+          ...history,
+        ],
+        expenseLink: {
+          expenseId: null,
+          linkedAt: null,
+          linkedBy: null,
+          status: "not_linked",
+        },
+        linkedExpenseId: null,
+        updatedAtMs: now,
+        lastExecutionUpdateAt: now,
+      },
+      { merge: true }
+    );
+
+    await appendWorkOrderUpdate(workOrderRef.id, {
+      actorRole: access.role === "admin" ? "admin" : "contractor",
+      actorId,
+      updateType: "invoice",
+      message: `Submitted cost details totaling ${formatCostForMessage(actualCostCents, currency)}.`,
+    });
+
+    const refreshedWorkOrderSnap = await workOrderRef.get();
+    const refreshedJob = await shapeContractorJobFromSources(
+      { id: refreshedWorkOrderSnap.id, ...(refreshedWorkOrderSnap.data() || {}) },
+      maintenance
+    );
+    return res.json({ ok: true, item: refreshedJob, data: refreshedJob });
+  } catch (err: any) {
+    console.error("[maintenance-v2] contractor submit cost failed", { message: err?.message || "failed" });
+    return res.status(500).json({ ok: false, error: "CONTRACTOR_COST_SUBMIT_FAILED" });
+  }
+});
+
+router.post("/contractor/jobs/:id/resubmit-cost", async (req: any, res) => {
+  try {
+    const access = await resolveContractorAccess(req);
+    if (access.role !== "contractor" && access.role !== "admin") {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const contractorId = access.contractorId;
+    const actorId = (String(req.user?.id || "").trim() || contractorId || "").trim();
+    const id = String(req.params?.id || "").trim();
+    if (!contractorId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    if (!id) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+
+    const maintenanceRef = db.collection("maintenanceRequests").doc(id);
+    const maintenanceSnap = await maintenanceRef.get();
+    if (!maintenanceSnap.exists) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+    const maintenance = { id: maintenanceSnap.id, ...(maintenanceSnap.data() as any) };
+    if (String(maintenance.assignedContractorId || "").trim() !== contractorId) {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const workOrderRef = db.collection("workOrders").doc(`maintenance_${id}`);
+    const workOrderSnap = await workOrderRef.get();
+    if (!workOrderSnap.exists) return res.status(404).json({ ok: false, error: "WORK_ORDER_NOT_FOUND" });
+    const workOrder = (workOrderSnap.data() as any) || {};
+    if (String(workOrder.status || "").trim().toLowerCase() !== "completed") {
+      return res.status(400).json({ ok: false, error: "WORK_ORDER_NOT_COMPLETED" });
+    }
+
+    const currentCost = normalizeWorkOrderCost(workOrder?.cost);
+    if (currentCost?.reviewStatus !== "rejected" && currentCost?.reviewStatus !== "revision_requested") {
+      return res.status(400).json({ ok: false, error: "COST_RESUBMISSION_NOT_ALLOWED" });
+    }
+
+    const actualCostCents = typeof req.body?.actualCostCents === "number" ? Math.round(req.body.actualCostCents) : Number(req.body?.actualCostCents);
+    if (!Number.isFinite(actualCostCents) || actualCostCents <= 0) {
+      return res.status(400).json({ ok: false, error: "INVALID_COST_AMOUNT" });
+    }
+    const currency = normalizeCostCurrency(req.body?.currency) || "CAD";
+    const lineItems = normalizeCostLineItems(req.body?.lineItems);
+    const now = Date.now();
+    const revisionNumber = getCurrentCostRevisionNumber(workOrder) + 1;
+    const history = normalizeCostReviewHistory(workOrder?.costReviewHistory);
+
+    await workOrderRef.set(
+      {
+        cost: {
+          ...(currentCost || {}),
+          actualCostCents,
+          currency,
+          submittedByRole: access.role === "admin" ? "admin" : "contractor",
+          submittedById: actorId,
+          submittedAt: now,
+          reviewedBy: null,
+          reviewedAt: null,
+          reviewStatus: "pending_review",
+          reviewNote: null,
+          revisionRequestedAt: null,
+          revisionRequestedBy: null,
+          latestRevisionNumber: revisionNumber,
+          linkedExpenseId: null,
+          linkedExpenseStatus: "not_linked",
+        },
+        costLineItems: lineItems,
+        costReviewHistory: [
+          {
+            id: makeCostHistoryEntryId(),
+            revisionNumber,
+            submittedAt: now,
+            submittedByRole: access.role === "admin" ? "admin" : "contractor",
+            submittedById: actorId,
+            actualCostCents,
+            currency,
+            reviewStatus: "pending_review",
+            reviewedAt: null,
+            reviewedBy: null,
+            reviewNote: null,
+            linkedExpenseId: null,
+          },
+          ...history,
+        ],
+        expenseLink: {
+          expenseId: null,
+          linkedAt: null,
+          linkedBy: null,
+          status: "not_linked",
+        },
+        linkedExpenseId: null,
+        updatedAtMs: now,
+        lastExecutionUpdateAt: now,
+      },
+      { merge: true }
+    );
+
+    await appendWorkOrderUpdate(workOrderRef.id, {
+      actorRole: access.role === "admin" ? "admin" : "contractor",
+      actorId,
+      updateType: "invoice",
+      message: `Resubmitted cost details totaling ${formatCostForMessage(actualCostCents, currency)}.`,
+    });
+
+    const refreshedWorkOrderSnap = await workOrderRef.get();
+    const refreshedJob = await shapeContractorJobFromSources(
+      { id: refreshedWorkOrderSnap.id, ...(refreshedWorkOrderSnap.data() || {}) },
+      maintenance
+    );
+    return res.json({ ok: true, item: refreshedJob, data: refreshedJob });
+  } catch (err: any) {
+    console.error("[maintenance-v2] contractor resubmit cost failed", { message: err?.message || "failed" });
+    return res.status(500).json({ ok: false, error: "CONTRACTOR_COST_RESUBMIT_FAILED" });
+  }
+});
+
+router.post("/contractor/jobs/:id/cost-attachment", async (req: any, res) => {
+  costAttachmentUpload.single("file")(req, res, async (uploadErr: any) => {
+    try {
+      if (uploadErr) {
+        const message = String(uploadErr?.message || "");
+        if (String(uploadErr?.code || "") === "LIMIT_FILE_SIZE") {
+          return res.status(400).json({ ok: false, error: "FILE_TOO_LARGE", maxBytes: MAX_COST_ATTACHMENT_BYTES });
+        }
+        return res.status(400).json({ ok: false, error: "UPLOAD_FAILED", detail: message || "upload_failed" });
+      }
+
+      const access = await resolveContractorAccess(req);
+      if (access.role !== "contractor" && access.role !== "admin") {
+        return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+      }
+      const contractorId = access.contractorId;
+      const actorId = (String(req.user?.id || "").trim() || contractorId || "").trim();
+      const id = String(req.params?.id || "").trim();
+      if (!contractorId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+      if (!id) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+
+      const maintenanceRef = db.collection("maintenanceRequests").doc(id);
+      const maintenanceSnap = await maintenanceRef.get();
+      if (!maintenanceSnap.exists) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+      const maintenance = { id: maintenanceSnap.id, ...(maintenanceSnap.data() as any) };
+      if (String(maintenance.assignedContractorId || "").trim() !== contractorId) {
+        return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+      }
+
+      const workOrderRef = db.collection("workOrders").doc(`maintenance_${id}`);
+      const workOrderSnap = await workOrderRef.get();
+      if (!workOrderSnap.exists) return res.status(404).json({ ok: false, error: "WORK_ORDER_NOT_FOUND" });
+      const workOrder = (workOrderSnap.data() as any) || {};
+
+      const file = req.file as Express.Multer.File | undefined;
+      if (!file?.buffer || !file.originalname) {
+        return res.status(400).json({ ok: false, error: "FILE_REQUIRED" });
+      }
+      if (!isAllowedCostAttachmentFile(file)) {
+        return res.status(400).json({ ok: false, error: "UNSUPPORTED_FILE_TYPE" });
+      }
+
+      const now = Date.now();
+      const attachmentId = makeEvidenceId();
+      const storagePath = buildCostAttachmentStoragePath({
+        workOrderId: workOrderRef.id,
+        attachmentId,
+        filename: file.originalname,
+      });
+
+      await uploadBufferToGcs({
+        path: storagePath,
+        contentType: String(file.mimetype || "application/octet-stream"),
+        buffer: file.buffer,
+        metadata: {
+          workOrderId: workOrderRef.id,
+          maintenanceRequestId: id,
+          uploadedAtMs: String(now),
+          actorRole: access.role === "admin" ? "admin" : "contractor",
+          actorId,
+          visibility: "landlord_only",
+        },
+      });
+
+      const nextAttachments: WorkOrderCostAttachment[] = [
+        ...(Array.isArray(workOrder.costAttachments) ? workOrder.costAttachments : []),
+        {
+          id: attachmentId,
+          storagePath,
+          fileName: String(file.originalname || "").trim() || null,
+          contentType: String(file.mimetype || "").trim() || null,
+          uploadedAt: now,
+          uploadedByRole: access.role === "admin" ? "admin" : "contractor",
+          uploadedById: actorId,
+          visibility: "landlord_only",
+        },
+      ];
+
+      await workOrderRef.set(
+        {
+          costAttachments: nextAttachments,
+          updatedAtMs: now,
+          lastExecutionUpdateAt: now,
+        },
+        { merge: true }
+      );
+
+      await appendWorkOrderUpdate(workOrderRef.id, {
+        actorRole: access.role === "admin" ? "admin" : "contractor",
+        actorId,
+        updateType: "invoice",
+        message: "Uploaded a cost attachment.",
+      });
+
+      const refreshedWorkOrderSnap = await workOrderRef.get();
+      const refreshedJob = await shapeContractorJobFromSources(
+        { id: refreshedWorkOrderSnap.id, ...(refreshedWorkOrderSnap.data() || {}) },
+        maintenance
+      );
+      return res.status(201).json({ ok: true, item: refreshedJob, data: refreshedJob });
+    } catch (err: any) {
+      console.error("[maintenance-v2] contractor cost attachment upload failed", {
+        message: err?.message || "failed",
+      });
+      return res.status(500).json({ ok: false, error: "CONTRACTOR_COST_ATTACHMENT_UPLOAD_FAILED" });
+    }
+  });
+});
+
+router.post("/contractor/jobs/:id/evidence", async (req: any, res) => {
+  evidenceUpload.single("file")(req, res, async (uploadErr: any) => {
+    try {
+      if (uploadErr) {
+        const message = String(uploadErr?.message || "");
+        if (String(uploadErr?.code || "") === "LIMIT_FILE_SIZE") {
+          return res.status(400).json({ ok: false, error: "FILE_TOO_LARGE", maxBytes: MAX_EVIDENCE_BYTES });
+        }
+        return res.status(400).json({ ok: false, error: "UPLOAD_FAILED", detail: message || "upload_failed" });
+      }
+
+      const access = await resolveContractorAccess(req);
+      if (access.role !== "contractor" && access.role !== "admin") {
+        return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+      }
+      const contractorId = access.contractorId;
+      const id = String(req.params?.id || "").trim();
+      if (!contractorId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+      const actorId = String(req.user?.id || "").trim() || contractorId;
+      if (!id) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+
+      const maintenanceRef = db.collection("maintenanceRequests").doc(id);
+      const maintenanceSnap = await maintenanceRef.get();
+      if (!maintenanceSnap.exists) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+      const maintenance = { id: maintenanceSnap.id, ...(maintenanceSnap.data() as any) };
+      if (String(maintenance.assignedContractorId || "") !== contractorId) {
+        return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+      }
+
+      const file = req.file as Express.Multer.File | undefined;
+      if (!file?.buffer || !file.originalname) {
+        return res.status(400).json({ ok: false, error: "FILE_REQUIRED" });
+      }
+      if (!isAllowedEvidenceFile(file)) {
+        return res.status(400).json({ ok: false, error: "UNSUPPORTED_FILE_TYPE" });
+      }
+
+      const evidenceType = normalizeEvidenceType(req.body?.evidenceType);
+      if (!evidenceType || !["before", "during", "after", "completion", "other"].includes(evidenceType)) {
+        return res.status(400).json({ ok: false, error: "INVALID_EVIDENCE_TYPE" });
+      }
+
+      const now = Date.now();
+      const workOrder = await upsertMaintenanceWorkOrder({
+        maintenanceRequestId: id,
+        landlordId: String(maintenance.landlordId || "").trim() || null,
+        propertyId: String(maintenance.propertyId || "").trim() || null,
+        unitId: String(maintenance.unitId || "").trim() || null,
+        tenantId: String(maintenance.tenantId || "").trim() || null,
+        assignedContractorId: contractorId,
+        assignedContractorName: String(maintenance.assignedContractorName || "").trim() || null,
+        title: String(maintenance.title || "").trim() || null,
+        description: String(maintenance.description || "").trim() || null,
+        category: String(maintenance.category || "").trim() || null,
+        priority: String(maintenance.priority || "").trim() || null,
+        status: normalizeWorkflowStatus(maintenance.status) || "assigned",
+        serviceWindowStartAt: toMillis(maintenance.serviceWindowStartAt),
+        serviceWindowEndAt: toMillis(maintenance.serviceWindowEndAt),
+        accessRequired: typeof maintenance.accessRequired === "boolean" ? maintenance.accessRequired : null,
+      });
+
+      const evidenceId = makeEvidenceId();
+      const storagePath = buildEvidenceStoragePath({
+        workOrderId: workOrder.workOrderId,
+        evidenceId,
+        filename: file.originalname,
+      });
+      await uploadBufferToGcs({
+        path: storagePath,
+        contentType: String(file.mimetype || "application/octet-stream"),
+        buffer: file.buffer,
+        metadata: {
+          workOrderId: workOrder.workOrderId,
+          maintenanceRequestId: id,
+          evidenceType,
+          visibility: "landlord_contractor",
+          uploadedAtMs: String(now),
+          actorRole: access.role === "admin" ? "admin" : "contractor",
+          actorId,
+        },
+      });
+
+      const workOrderRef = db.collection("workOrders").doc(workOrder.workOrderId);
+      const currentWorkOrderSnap = await workOrderRef.get();
+      const currentWorkOrder = currentWorkOrderSnap.exists ? ((currentWorkOrderSnap.data() as any) || {}) : {};
+      const evidenceItem: WorkOrderEvidenceItem = {
+        id: evidenceId,
+        storagePath,
+        filename: String(file.originalname || "").trim() || null,
+        contentType: String(file.mimetype || "").trim() || null,
+        uploadedAt: now,
+        uploadedByActorRole: access.role === "admin" ? "admin" : "contractor",
+        uploadedByActorId: actorId,
+        evidenceType,
+        caption: String(req.body?.caption || "").trim().slice(0, 500) || null,
+        visibility: "landlord_contractor",
+      };
+      await workOrderRef.set(
+        {
+          evidence: [...(Array.isArray(currentWorkOrder.evidence) ? currentWorkOrder.evidence : []), evidenceItem],
+          updatedAtMs: now,
+          lastExecutionUpdateAt: now,
+        },
+        { merge: true }
+      );
+
+      await appendWorkOrderUpdate(workOrder.workOrderId, {
+        actorRole: access.role === "admin" ? "admin" : "contractor",
+        actorId,
+        updateType: "photo",
+        message: `Uploaded ${evidenceType} evidence photo${evidenceItem.caption ? `: ${evidenceItem.caption}` : ""}`,
+      });
+
+      const refreshedWorkOrderSnap = await workOrderRef.get();
+      const refreshedJob = await shapeContractorJobFromSources(
+        { id: refreshedWorkOrderSnap.id, ...(refreshedWorkOrderSnap.data() || {}) },
+        maintenance
+      );
+      return res.status(201).json({ ok: true, item: refreshedJob, data: refreshedJob, workOrderId: workOrder.workOrderId });
+    } catch (err: any) {
+      console.error("[maintenance-v2] contractor evidence upload failed", {
+        message: err?.message || "failed",
+      });
+      return res.status(500).json({ ok: false, error: "CONTRACTOR_EVIDENCE_UPLOAD_FAILED" });
+    }
+  });
 });
 
 router.post("/rental-applications/:id/screening/request", async (req: any, res) => {

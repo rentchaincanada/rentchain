@@ -32,12 +32,21 @@ const tenantProfileApi = vi.hoisted(() => ({
   getTenantProfile: vi.fn(),
 }));
 
+const tenantNotificationPreferencesApi = vi.hoisted(() => ({
+  getTenantNotificationPreferences: vi.fn(),
+}));
+
 const maintenanceWorkflowApi = vi.hoisted(() => ({
   listTenantMaintenance: vi.fn(),
 }));
 
 const tenantCommunicationsApi = vi.hoisted(() => ({
   getTenantCommunicationSummary: vi.fn(),
+  getTenantCommunicationsWorkspace: vi.fn(),
+}));
+
+const tenantScreeningApi = vi.hoisted(() => ({
+  listTenantScreenings: vi.fn(),
 }));
 
 vi.mock("../../api/tenantPortal", () => tenantPortalApi);
@@ -45,7 +54,15 @@ vi.mock("../../api/tenantApplicationCompletion", () => tenantApplicationCompleti
 vi.mock("../../api/tenantAccess", () => tenantAccessApi);
 vi.mock("../../api/tenantAttachmentsApi", () => tenantAttachmentsApi);
 vi.mock("../../api/tenantProfile", () => tenantProfileApi);
+vi.mock("../../api/tenantNotificationPreferences", () => tenantNotificationPreferencesApi);
 vi.mock("../../api/tenantCommunicationsApi", () => tenantCommunicationsApi);
+vi.mock("../../api/tenantScreeningApi", async () => {
+  const actual = await vi.importActual<any>("../../api/tenantScreeningApi");
+  return {
+    ...actual,
+    listTenantScreenings: tenantScreeningApi.listTenantScreenings,
+  };
+});
 vi.mock("../../api/maintenanceWorkflowApi", async () => {
   const actual = await vi.importActual<any>("../../api/maintenanceWorkflowApi");
   return {
@@ -61,7 +78,71 @@ describe("tenant workspace frontend shell", () => {
     tenantCommunicationsApi.getTenantCommunicationSummary.mockResolvedValue({
       unreadMessages: 1,
       unreadNotices: 2,
-      unreadScreeningUpdates: 0,
+      unreadScreeningUpdates: 1,
+    });
+    tenantCommunicationsApi.getTenantCommunicationsWorkspace.mockResolvedValue({
+      canSend: true,
+      canSendReason: null,
+      thread: {
+        id: "thread-1",
+        landlordLabel: "Landlord",
+        propertyId: "prop-1",
+        unitId: "unit-1",
+        unreadCount: 1,
+        lastMessageAt: "2026-04-10T00:00:00.000Z",
+        messages: [
+          {
+            id: "msg-1",
+            senderRole: "landlord",
+            body: "Please confirm the final move-in details.",
+            createdAt: "2026-04-10T00:00:00.000Z",
+            createdAtMs: 1,
+          },
+        ],
+      },
+    });
+    tenantApplicationCompletionApi.getTenantApplicationCompletion.mockResolvedValue({
+      status: "in_progress",
+      progressPercent: 62,
+      sections: [],
+      nextSteps: ["Upload government id"],
+      updatedAt: "2026-01-02T00:00:00.000Z",
+    });
+    tenantScreeningApi.listTenantScreenings.mockResolvedValue({
+      ok: true,
+      items: [
+        {
+          id: "screening-1",
+          rentalApplicationId: "app-1",
+          status: "consent_pending",
+          normalizedResultStatus: "pending",
+          requestedAt: 1710000000000,
+          consentedAt: null,
+          startedAt: null,
+          completedAt: null,
+          provider: "transunion_redirect",
+          providerLabel: "TransUnion",
+          packageType: "basic",
+          payerType: "landlord",
+          propertyLabel: "123 Main St",
+          unitLabel: "Unit 4",
+          applicantName: "Taylor Tenant",
+          nextAction: "awaiting_applicant_consent",
+          consent: null,
+          session: null,
+          result: null,
+          returnFlow: null,
+          summary: {
+            status: "consent_pending",
+            provider: "transunion_redirect",
+            requestedDate: 1710000000000,
+            package: "basic",
+            summaryResult: "Consent is required before screening can begin.",
+            nextActions: ["Provide consent"],
+          },
+          auditTrail: [],
+        },
+      ],
     });
     tenantAccessApi.getTenantAccess.mockResolvedValue({
       summary: {
@@ -195,6 +276,16 @@ describe("tenant workspace frontend shell", () => {
         },
       },
     });
+    tenantNotificationPreferencesApi.getTenantNotificationPreferences.mockResolvedValue({
+      inApp: {
+        follow_up_requested: true,
+        ready_for_rereview: true,
+        application_updated: true,
+        access_changed: true,
+        documents_updated: true,
+      },
+      updatedAt: 1710000000000,
+    });
   });
 
   it("tenant shell renders expected navigation safely", async () => {
@@ -208,6 +299,7 @@ describe("tenant workspace frontend shell", () => {
 
     expect(await screen.findByText(/RentChain Tenant Space/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Dashboard/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Screening Requests/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Access/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Documents/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /History/i })).toBeInTheDocument();
@@ -274,20 +366,139 @@ describe("tenant workspace frontend shell", () => {
     );
 
     expect(await screen.findByText(/^Tenant Dashboard$/i)).toBeInTheDocument();
+    expect((await screen.findAllByText(/Your tenancy is active/i)).length).toBeGreaterThan(0);
+    expect(screen.getByText(/What to do next/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Continue to your dashboard/i })).toBeInTheDocument();
+    expect(await screen.findByText(/Recent activity \/ notifications/i)).toBeInTheDocument();
+    expect(screen.getByText(/Recent workflow updates/i)).toBeInTheDocument();
     expect(await screen.findByText(/Profile completion/i)).toBeInTheDocument();
     expect(screen.getByText(/Add missing details to keep your rental profile organized/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /View your profile/i })).toBeInTheDocument();
     expect(screen.queryByText(/^Applicant$/i)).not.toBeInTheDocument();
-    expect(screen.getByText(/Active tenancy/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Active tenancy/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/A lease reference is visible in your tenant workspace/i)).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: /Open payments/i }).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Needs reply/i)).toBeInTheDocument();
+    expect(screen.getByText(/Please confirm the final move-in details/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Open communications inbox/i })).toBeInTheDocument();
+    expect(screen.getByText(/Screening consent requested for 1 application/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Review request/i })).toBeInTheDocument();
     expect(screen.getByText(/123 Main St, Unit 4, Halifax, NS/i)).toBeInTheDocument();
     expect(screen.getByText(/finish_profile/i)).toBeInTheDocument();
-    expect(screen.getByText(/1 active access grant/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/1 active access grant/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/1 document in your vault, 1 ready to share, and 0 still needing attention/i)).toBeInTheDocument();
+    expect(screen.getByText(/Documents updated/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Open document vault/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Open access/i })).toBeInTheDocument();
   });
 
+  it("shows an active-tenancy transition state when tenant access is active but the lease is not active yet", async () => {
+    tenantPortalApi.getTenantWorkspace.mockResolvedValue({
+      context: {
+        authority: "active_tenant",
+        propertyId: "prop-1",
+        rc_prop_id: "rc-prop-1",
+        applicationId: "app-1",
+        leaseId: "lease-1",
+        tenantId: "tenant-1",
+        unitId: "unit-1",
+        invitedEmail: "tenant@example.com",
+      },
+      property: null,
+      application: null,
+      lease: {
+        leaseId: "lease-1",
+        startDate: "2026-02-01",
+        endDate: "2027-01-31",
+        monthlyRent: 1800,
+        status: "signed",
+        documentUrl: null,
+      },
+      maintenance: [],
+    });
+
+    render(
+      <MemoryRouter>
+        <TenantWorkspacePage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/transitioning into active tenancy/i)).toBeInTheDocument();
+    expect(screen.getByText(/Transitioning to active tenancy/i)).toBeInTheDocument();
+  });
+
+  it("filters muted in-app document notifications from tenant views", async () => {
+    tenantNotificationPreferencesApi.getTenantNotificationPreferences.mockResolvedValue({
+      inApp: {
+        follow_up_requested: true,
+        ready_for_rereview: true,
+        application_updated: true,
+        access_changed: true,
+        documents_updated: false,
+      },
+      updatedAt: 1710000000000,
+    });
+
+    render(
+      <MemoryRouter>
+        <TenantWorkspacePage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Recent workflow updates/i)).toBeInTheDocument();
+    expect(screen.queryByText(/^Documents updated$/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/^Access changed$/i)).toBeInTheDocument();
+  });
+
   it("renders application completion page with safe grouped checklist fields", async () => {
+    tenantProfileApi.getTenantProfile.mockResolvedValue({
+      context: {
+        authority: "applicant",
+        propertyId: "prop-1",
+        rc_prop_id: "rc-prop-1",
+        applicationId: "app-1",
+        leaseId: null,
+        tenantId: null,
+        unitId: "unit-1",
+        invitedEmail: "tenant@example.com",
+      },
+      profile: {
+        displayName: "Taylor Tenant",
+        email: "tenant@example.com",
+        phone: "902-555-0100",
+        authorityLabel: "Applicant",
+        property: null,
+        application: {
+          applicationId: "app-1",
+          status: "in_progress",
+          missingSteps: [],
+          nextActions: [],
+          createdAt: null,
+          updatedAt: null,
+        },
+        lease: null,
+      },
+      identity: {
+        overallStatus: "pending",
+        identityVerification: {
+          status: "pending",
+          label: "Pending",
+          note: "Verification is still in progress.",
+          updatedAt: "2026-01-05T00:00:00.000Z",
+        },
+        documentChecklist: [],
+        nextSteps: [],
+      },
+      actions: {
+        editableFields: ["displayName", "phone"],
+        documentEntry: {
+          available: true,
+          path: "/tenant/attachments",
+          label: "Review requested documents",
+          note: "1 document-related step still needs attention.",
+        },
+      },
+    });
     tenantApplicationCompletionApi.getTenantApplicationCompletion.mockResolvedValue({
       status: "in_progress",
       progressPercent: 62,
@@ -318,6 +529,8 @@ describe("tenant workspace frontend shell", () => {
     );
 
     expect(await screen.findAllByText(/Application Readiness/i)).not.toHaveLength(0);
+    expect(screen.getByText(/Your application is in progress/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Continue your application/i })).toBeInTheDocument();
     expect(screen.getAllByText(/62%/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Upload government id/i).length).toBeGreaterThan(0);
   });
@@ -369,6 +582,22 @@ describe("tenant workspace frontend shell", () => {
   });
 
   it("invite redemption page handles success state", async () => {
+    tenantPortalApi.getTenantWorkspace.mockResolvedValue({
+      context: {
+        authority: "invite",
+        propertyId: "prop-1",
+        rc_prop_id: "rc-prop-1",
+        applicationId: null,
+        leaseId: null,
+        tenantId: null,
+        unitId: "unit-1",
+        invitedEmail: "tenant@example.com",
+      },
+      property: null,
+      application: null,
+      lease: null,
+      maintenance: [],
+    });
     tenantPortalApi.redeemTenantWorkspaceInvite.mockResolvedValue({
       inviteId: "invite-1",
       propertyId: "prop-1",
@@ -383,12 +612,18 @@ describe("tenant workspace frontend shell", () => {
       </MemoryRouter>
     );
 
+    expect(await screen.findByText(/You are completing your invite/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Complete your invite/i })).toBeInTheDocument();
     fireEvent.change(screen.getByRole("textbox", { name: /Invite token/i }), {
       target: { value: "token-123" },
     });
     fireEvent.click(screen.getByRole("button", { name: /Redeem invite/i }));
 
     expect(await screen.findByText(/Invite redeemed/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Continue to application readiness/i })).toHaveAttribute(
+      "href",
+      "/tenant/application?entry=invite&inviteToken=app-1"
+    );
   });
 
   it("invite redemption page handles expired or reused states", async () => {
@@ -409,6 +644,16 @@ describe("tenant workspace frontend shell", () => {
     fireEvent.click(screen.getByRole("button", { name: /Redeem invite/i }));
 
     expect(await screen.findByText(/This invite has expired/i)).toBeInTheDocument();
+  });
+
+  it("invite redemption page prefills token from the route query", async () => {
+    render(
+      <MemoryRouter initialEntries={["/tenant/invite/redeem?token=token-123"]}>
+        <TenantInviteRedeemPage />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole("textbox", { name: /Invite token/i })).toHaveValue("token-123");
   });
 
   it("unauthorized workspace response renders safe denial state", async () => {

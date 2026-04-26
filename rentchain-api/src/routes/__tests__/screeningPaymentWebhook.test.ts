@@ -1,24 +1,59 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { store, dbMock } = vi.hoisted(() => {
-  const store = new Map<string, any>();
+const { store, dbMock, ensureCollection } = vi.hoisted(() => {
+  const store = new Map<string, Map<string, any>>();
+  let autoId = 0;
+
+  function ensureCollection(name: string) {
+    if (!store.has(name)) store.set(name, new Map());
+    return store.get(name)!;
+  }
+
+  function docRef(collectionName: string, docId: string) {
+    return {
+      id: docId,
+      path: `${collectionName}/${docId}`,
+      get: async () => ({
+        exists: ensureCollection(collectionName).has(docId),
+        data: () => ensureCollection(collectionName).get(docId),
+      }),
+      set: async (payload: Record<string, unknown>, options?: { merge?: boolean }) => {
+        const col = ensureCollection(collectionName);
+        const existing = col.get(docId) || {};
+        col.set(docId, options?.merge ? { ...existing, ...payload } : payload);
+      },
+    };
+  }
 
   const dbMock = {
-    collection: vi.fn(() => ({
-      doc: (id: string) => ({
-        get: async () => ({
-          exists: store.has(id),
-          data: () => store.get(id),
+    collection: vi.fn((name: string) => ({
+      doc: (id?: string) => docRef(name, id || `auto_${++autoId}`),
+      where: (field: string, op: string, value: any) => ({
+        limit: (count: number) => ({
+          get: async () => {
+            const docs = Array.from(ensureCollection(name).entries())
+              .filter(([, data]) => (op === "==" ? data?.[field] === value : true))
+              .slice(0, count)
+              .map(([id, data]) => ({
+                id,
+                ref: docRef(name, id),
+                data: () => data,
+              }));
+            return { empty: docs.length === 0, docs };
+          },
         }),
-        set: async (payload: Record<string, unknown>) => {
-          const existing = store.get(id) || {};
-          store.set(id, { ...existing, ...payload });
-        },
       }),
     })),
+    runTransaction: async (fn: any) => {
+      const tx = {
+        get: async (ref: any) => ref.get(),
+        set: (ref: any, payload: any, options?: { merge?: boolean }) => ref.set(payload, options),
+      };
+      return fn(tx);
+    },
   };
 
-  return { store, dbMock };
+  return { store, dbMock, ensureCollection };
 });
 
 vi.mock("../../config/firebase", () => ({
@@ -44,7 +79,7 @@ describe("screening payment webhook updates", () => {
   });
 
   it("marks screening paid once and is idempotent on repeat delivery", async () => {
-    store.set("app_1", { screeningStatus: "unpaid" });
+    ensureCollection("rentalApplications").set("app_1", { screeningStatus: "unpaid" });
 
     const session = {
       id: "sess_1",
@@ -60,9 +95,9 @@ describe("screening payment webhook updates", () => {
     });
 
     expect(first.status).toBe("paid_set");
-    expect(store.get("app_1")?.screeningStatus).toBe("processing");
-    expect(typeof store.get("app_1")?.screeningStartedAt).toBe("number");
-    expect(store.get("app_1")?.screeningSessionId).toBe("sess_1");
+    expect(ensureCollection("rentalApplications").get("app_1")?.screeningStatus).toBe("processing");
+    expect(typeof ensureCollection("rentalApplications").get("app_1")?.screeningStartedAt).toBe("number");
+    expect(ensureCollection("rentalApplications").get("app_1")?.screeningSessionId).toBe("sess_1");
 
     const second = await webhookTesting.handleScreeningPaidFromSession({
       session,
@@ -90,6 +125,69 @@ describe("screening payment webhook updates", () => {
 
     expect(result.status).toBe("ignored");
     expect(result.missingApplicationId).toBe(true);
+  });
+
+  it("marks screening payment failed once and records a failed ledger event", async () => {
+    ensureCollection("screeningOrders").set("order_1", {
+      id: "order_1",
+      applicationId: "app_1",
+      landlordId: "landlord_1",
+      propertyId: "prop_1",
+      unitId: "unit_1",
+      status: "unpaid",
+      paymentStatus: "unpaid",
+      finalized: false,
+      amountTotalCents: 4900,
+      currency: "cad",
+      stripePaymentIntentId: "pi_fail_1",
+    });
+    ensureCollection("rentalApplications").set("app_1", {
+      id: "app_1",
+      landlordId: "landlord_1",
+      screening: {},
+    });
+
+    const first = await webhookTesting.handleScreeningPaymentFailure({
+      eventId: "evt_fail_1",
+      eventType: "payment_intent.payment_failed",
+      paymentIntentId: "pi_fail_1",
+      applicationId: "app_1",
+      landlordId: "landlord_1",
+      amountTotalCents: 4900,
+      currency: "cad",
+      failureCode: "card_declined",
+      failureMessage: "Card declined",
+      occurredAt: 1700000000000,
+    });
+
+    expect(first.ok).toBe(true);
+    expect(first.alreadyProcessed).toBe(false);
+    expect(ensureCollection("screeningOrders").get("order_1")?.status).toBe("failed");
+    expect(ensureCollection("screeningOrders").get("order_1")?.paymentStatus).toBe("failed");
+    expect(ensureCollection("rentalApplications").get("app_1")?.screening?.status).toBe("failed");
+    expect(ensureCollection("financialTransactions").get("payment_failed_evt_fail_1")).toEqual(
+      expect.objectContaining({
+        type: "payment_failed",
+        status: "failed",
+        applicationId: "app_1",
+      })
+    );
+
+    const second = await webhookTesting.handleScreeningPaymentFailure({
+      eventId: "evt_fail_1",
+      eventType: "payment_intent.payment_failed",
+      paymentIntentId: "pi_fail_1",
+      applicationId: "app_1",
+      landlordId: "landlord_1",
+      amountTotalCents: 4900,
+      currency: "cad",
+      failureCode: "card_declined",
+      failureMessage: "Card declined",
+      occurredAt: 1700000000001,
+    });
+
+    expect(second.ok).toBe(true);
+    expect(second.alreadyProcessed).toBe(true);
   });
 });
 

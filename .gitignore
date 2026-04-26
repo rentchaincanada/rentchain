@@ -68,3 +68,22 @@ override.tf.json
 # Local test artifacts
 playwright-report/
 test-results/
+
+# Local conversation engine artifacts
+.conversation_engine/
+
+# Local conversation engine artifacts
+.conversation_engine/
+
+# Optional local scratch files for manual paste workflows
+/tmp/codex_audit_*.txt
+/tmp/chatgpt_review_*.txt
+/tmp/codex_impl_*.txt
+/tmp/chatgpt_patch_*.txt
+
+__pycache__/
+*.pyc
+*.pyo
+docs/reports/transunion-usage-summary-v1.md
+docs/reports/
+docs/reports/

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Card, Section, Input, Button, Pill } from "../components/ui/Ui";
 import { spacing, colors, text, radius } from "../styles/tokens";
@@ -8,7 +8,8 @@ import {
   fetchRentalApplication,
   fetchApplicationDecisionSummary,
   evaluateApplicationRiskSnapshot,
-  recordApplicationRiskDecision,
+  submitRentalApplicationDecisionAction,
+  sendApplicationLinkReminder,
   updateRentalApplicationStatus,
   fetchScreeningQuote,
   createScreeningCheckout,
@@ -22,8 +23,10 @@ import {
   adminRecomputeScreening,
   exportScreeningReport,
   type RentalApplication,
+  type RentalApplicationDecisionAction,
   type RentalApplicationStatus,
   type RentalApplicationSummary,
+  type RequestInfoChecklistItem,
   type ScreeningQuote,
   type ScreeningPipeline,
   type ScreeningResult,
@@ -35,7 +38,6 @@ import { useToast } from "../components/ui/ToastProvider";
 import { useEntitlements } from "@/hooks/useEntitlements";
 import { track } from "@/lib/analytics";
 import { useAuth } from "../context/useAuth";
-import { useUpgrade } from "../context/UpgradeContext";
 import { ResponsiveMasterDetail } from "@/components/layout/ResponsiveMasterDetail";
 import { useOnboardingState } from "../hooks/useOnboardingState";
 import { useUnitsForProperty } from "../hooks/useUnitsForProperty";
@@ -68,9 +70,11 @@ import {
   getTransUnionIntegration,
   requestTransUnionOnboarding,
   updateTransUnionCredentials,
+  trackTransUnionUsageEvent,
   type TransUnionCredentialsPayload,
   type TransUnionIntegration,
 } from "@/api/integrationsApi";
+import { fetchLandlordApplicationFunnel, type LandlordApplicationFunnelAnalytics } from "@/api/landlordAnalyticsApi";
 import { TransUnionConnectionCard } from "@/components/integrations/TransUnionConnectionCard";
 import { GetTransUnionAccessModal } from "@/components/integrations/GetTransUnionAccessModal";
 import { ConnectTransUnionModal } from "@/components/integrations/ConnectTransUnionModal";
@@ -104,7 +108,7 @@ import { ScreeningDetailDrawer } from "@/components/screening/ScreeningDetailDra
 import { FeatureGate } from "@/components/billing/FeatureGate";
 import { FeatureTeaser } from "@/components/billing/FeatureTeaser";
 import { UpgradeCTA } from "@/components/billing/UpgradeCTA";
-import { dispatchUpgradePrompt } from "@/lib/upgradePrompt";
+import { dispatchUpgradePrompt, resolveRequiredPlanLabel } from "@/lib/upgradePrompt";
 const statusOptions: RentalApplicationStatus[] = [
   "SUBMITTED",
   "IN_REVIEW",
@@ -148,6 +152,13 @@ const SCREENING_REASON_LABELS: Record<string, string> = {
   SCREENING_ALREADY_PAID: "Screening has already been paid for.",
   LANDLORD_NOT_AUTHORIZED: "You don’t have access to start screening for this application.",
 };
+
+const REQUEST_INFO_OPTIONS: Array<{ value: RequestInfoChecklistItem; label: string }> = [
+  { value: "upload_id", label: "Upload ID" },
+  { value: "phone_number", label: "Phone number" },
+  { value: "employer_contact", label: "Employer contact" },
+  { value: "references", label: "References" },
+];
 
 const formatScreeningStatus = (value?: string | null) => {
   if (!value) return "unknown";
@@ -206,6 +217,14 @@ const formatScreeningEventLabel = (value: ScreeningEvent["type"]) => {
   }
 };
 
+const APPLICATION_SECTION_LABELS: Record<string, string> = {
+  personal_info: "Personal information",
+  residential_history: "Residential history",
+  employment: "Employment",
+  references_assets: "References and assets",
+  consent: "Consent",
+};
+
 const mapRecommendation = (
   overall?: string | null,
   priority?: string | null
@@ -255,6 +274,7 @@ const normalizeTransUnionConfigError = (error: unknown) => {
 const ApplicationsPage: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const upgradeParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const { showToast } = useToast();
   const [applications, setApplications] = useState<RentalApplicationSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -262,6 +282,9 @@ const ApplicationsPage: React.FC = () => {
   const [decisionSummary, setDecisionSummary] = useState<ApplicationDecisionSummary | null>(null);
   const [evaluatingRisk, setEvaluatingRisk] = useState(false);
   const [savingDecision, setSavingDecision] = useState(false);
+  const [requestInfoOpen, setRequestInfoOpen] = useState(false);
+  const [requestInfoItems, setRequestInfoItems] = useState<RequestInfoChecklistItem[]>([]);
+  const [requestInfoMessage, setRequestInfoMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -279,7 +302,6 @@ const ApplicationsPage: React.FC = () => {
   const features = entitlements.capabilities;
   const loadingCaps = entitlements.loading;
   const { user } = useAuth();
-  const { openUpgrade } = useUpgrade();
   const [screeningQuote, setScreeningQuote] = useState<ScreeningQuote | null>(null);
   const [screeningQuoteDetail, setScreeningQuoteDetail] = useState<string | null>(null);
   const [screeningLoading, setScreeningLoading] = useState(false);
@@ -312,6 +334,7 @@ const ApplicationsPage: React.FC = () => {
   const [screeningEventsRefreshedAt, setScreeningEventsRefreshedAt] = useState<number | null>(null);
   const [screeningHistory, setScreeningHistory] = useState<ScreeningHistoryRecord[]>([]);
   const [screeningHistoryLoading, setScreeningHistoryLoading] = useState(false);
+  const applicationsListRef = useRef<HTMLDivElement | null>(null);
   const [screeningDetailOpen, setScreeningDetailOpen] = useState(false);
   const [selectedScreeningId, setSelectedScreeningId] = useState<string | null>(null);
   const [selectedScreeningDetail, setSelectedScreeningDetail] = useState<ScreeningHistoryDetail | null>(null);
@@ -342,6 +365,10 @@ const ApplicationsPage: React.FC = () => {
   const [transUnionAccessOpen, setTransUnionAccessOpen] = useState(false);
   const [transUnionConnectOpen, setTransUnionConnectOpen] = useState(false);
   const [transUnionUpdateOpen, setTransUnionUpdateOpen] = useState(false);
+  const APPLICATION_REMINDER_RESEND_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+  const APPLICATION_HIGH_PRIORITY_ACTIVITY_MS = 3 * 24 * 60 * 60 * 1000;
+  const APPLICATION_FOLLOW_UP_STALE_MS = 7 * 24 * 60 * 60 * 1000;
+  const transUnionOptionViewedRef = useRef(false);
   const [manualScreeningStatus, setManualScreeningStatus] = useState<ScreeningStatusView | null>(null);
   const [manualScreeningLoading, setManualScreeningLoading] = useState(false);
   const [manualScreeningSubmitting, setManualScreeningSubmitting] = useState(false);
@@ -350,6 +377,10 @@ const ApplicationsPage: React.FC = () => {
   const [viewingActionLoading, setViewingActionLoading] = useState(false);
   const [viewingError, setViewingError] = useState<string | null>(null);
   const [selectedViewingId, setSelectedViewingId] = useState<string | null>(null);
+  const [sendingReminderId, setSendingReminderId] = useState<string | null>(null);
+  const [funnel, setFunnel] = useState<LandlordApplicationFunnelAnalytics | null>(null);
+  const [funnelLoading, setFunnelLoading] = useState(false);
+  const [funnelError, setFunnelError] = useState<string | null>(null);
   const screeningSectionRef = React.useRef<HTMLDivElement | null>(null);
   const uiLocale = getUiLocale();
   const screeningComingSoonText = screeningComingSoonLabel(uiLocale);
@@ -429,6 +460,11 @@ const ApplicationsPage: React.FC = () => {
     return `Status: ${formatScreeningStatus(raw)}`;
   })();
   const currentPlan = entitlements.plan || "free";
+  const applicationsRequiredPlanLabel = resolveRequiredPlanLabel("applications", currentPlan) || "Starter";
+  const applicationsUpgradeRedirect =
+    typeof window !== "undefined"
+      ? `${window.location.pathname}${window.location.search}`
+      : "/applications";
   const canRunScreening =
     entitlements.canScreen || currentPlan === "starter" || currentPlan === "pro" || currentPlan === "elite";
   const canCreateApplicationLinks =
@@ -437,6 +473,8 @@ const ApplicationsPage: React.FC = () => {
     currentPlan === "starter" ||
     currentPlan === "pro" ||
     currentPlan === "elite";
+  const upgradeConfirmed = upgradeParams.get("upgradeConfirmed") === "1";
+  const upgradeHighlight = upgradeParams.get("highlight");
   const canViewScreeningHistory = entitlements.canViewScreeningHistory;
   const canExportPdf = entitlements.canExportPdf;
   const canViewReviewSummary = entitlements.canViewReviewSummary;
@@ -448,6 +486,18 @@ const ApplicationsPage: React.FC = () => {
   const selectedViewingRequest = useMemo(
     () => viewingRequests.find((request) => request.id === selectedViewingId) || null,
     [viewingRequests, selectedViewingId]
+  );
+
+  const promptApplicationsUpgrade = useCallback(
+    (source: string, currentPlanOverride?: string | null) => {
+      dispatchUpgradePrompt({
+        featureKey: "applications",
+        currentPlan: currentPlanOverride || caps?.plan || currentPlan,
+        source,
+        redirectTo: applicationsUpgradeRedirect,
+      });
+    },
+    [applicationsUpgradeRedirect, caps?.plan, currentPlan]
   );
 
   const loadTransUnionIntegration = useCallback(async () => {
@@ -586,25 +636,21 @@ const ApplicationsPage: React.FC = () => {
 
   const openProUpgrade = useCallback(
     (featureName: "screening" | "exports") => {
-      const requiredTier = featureName === "screening" ? "starter" : "pro";
-      track("gating_blocked", { featureName, requiredTier, userTier: currentPlan });
-      openUpgrade({
-        reason: featureName,
-        plan: currentPlan,
-        ctaLabel: requiredTier === "starter" ? "Upgrade to Starter" : "Upgrade to Pro",
-        copy:
-          featureName === "screening"
-            ? {
-                title: "Upgrade to Starter",
-                body: "Starter includes applicant screening inside RentChain. Upgrade to continue.",
-              }
-            : {
-                title: "Upgrade to Pro",
-                body: "Verified exports are available on Pro plans. Upgrade to continue.",
-              },
+      const featureKey = featureName === "screening" ? "screening_workflow" : "pdf_export";
+      const requiredPlanLabel = resolveRequiredPlanLabel(featureKey, currentPlan) || "Pro";
+      track("gating_blocked", {
+        featureName,
+        requiredTier: requiredPlanLabel.toLowerCase(),
+        userTier: currentPlan,
+      });
+      dispatchUpgradePrompt({
+        featureKey,
+        currentPlan,
+        source: `applications_page_${featureName}`,
+        redirectTo: applicationsUpgradeRedirect,
       });
     },
-    [currentPlan, openUpgrade]
+    [applicationsUpgradeRedirect, currentPlan]
   );
 
   const openScreeningReport = useCallback(
@@ -704,18 +750,38 @@ const ApplicationsPage: React.FC = () => {
     async (decision: LandlordDecisionAction, notes: string) => {
       const id = String(detail?.id || "").trim();
       if (!id) return;
+      if (decision === "request_info") {
+        setRequestInfoItems([]);
+        setRequestInfoMessage(notes);
+        setRequestInfoOpen(true);
+        return;
+      }
       setSavingDecision(true);
       try {
-        await recordApplicationRiskDecision(id, { decision, notes });
+        const result = await submitRentalApplicationDecisionAction(id, {
+          action: decision as RentalApplicationDecisionAction,
+          note: notes,
+        });
+        setDetail(result.application);
+        setApplications((prev) =>
+          prev.map((application) =>
+            application.id === result.application.id
+              ? { ...application, status: result.application.status }
+              : application
+          )
+        );
         showToast({
-          message: "Decision note saved",
-          description: "Your landlord decision was captured without changing application status.",
+          message: decision === "approve" ? "Application approved" : "Application rejected",
+          description:
+            decision === "approve"
+              ? "The applicant was notified and the application status was updated."
+              : "The applicant was notified and the application status was updated.",
           variant: "success",
         });
       } catch (err: any) {
         showToast({
-          message: "Decision note failed",
-          description: err?.message || "Unable to save the landlord decision note.",
+          message: "Decision action failed",
+          description: err?.message || "Unable to complete the landlord action.",
           variant: "error",
         });
       } finally {
@@ -724,6 +790,55 @@ const ApplicationsPage: React.FC = () => {
     },
     [detail?.id, showToast]
   );
+
+  const toggleRequestInfoItem = useCallback((item: RequestInfoChecklistItem) => {
+    setRequestInfoItems((current) => (current.includes(item) ? current.filter((value) => value !== item) : [...current, item]));
+  }, []);
+
+  const handleSubmitRequestInfo = useCallback(async () => {
+    const id = String(detail?.id || "").trim();
+    if (!id) return;
+    if (!requestInfoItems.length && !requestInfoMessage.trim()) {
+      showToast({
+        message: "Select at least one follow-up item",
+        description: "Choose a checklist item or add a custom request before sending the email.",
+        variant: "error",
+      });
+      return;
+    }
+    setSavingDecision(true);
+    try {
+      const result = await submitRentalApplicationDecisionAction(id, {
+        action: "request_info",
+        requestedItems: requestInfoItems,
+        customMessage: requestInfoMessage.trim() || null,
+      });
+      setDetail(result.application);
+      setApplications((prev) =>
+        prev.map((application) =>
+          application.id === result.application.id
+            ? { ...application, status: result.application.status }
+            : application
+        )
+      );
+      setRequestInfoOpen(false);
+      setRequestInfoItems([]);
+      setRequestInfoMessage("");
+      showToast({
+        message: "More information requested",
+        description: "The applicant was emailed and the application remains in review.",
+        variant: "success",
+      });
+    } catch (err: any) {
+      showToast({
+        message: "Request failed",
+        description: err?.message || "Unable to send the information request.",
+        variant: "error",
+      });
+    } finally {
+      setSavingDecision(false);
+    }
+  }, [detail?.id, requestInfoItems, requestInfoMessage, showToast]);
 
   useEffect(() => {
     let alive = true;
@@ -849,6 +964,32 @@ const ApplicationsPage: React.FC = () => {
   }, [propertyFilter, statusFilter, selectedId]);
 
   useEffect(() => {
+    let alive = true;
+    const load = async () => {
+      setFunnelLoading(true);
+      setFunnelError(null);
+      try {
+        const data = await fetchLandlordApplicationFunnel({
+          propertyId: propertyFilter || null,
+        });
+        if (!alive) return;
+        setFunnel(data);
+      } catch (err: any) {
+        if (!alive) return;
+        setFunnel(null);
+        setFunnelError(err?.message || "Failed to load application funnel.");
+      } finally {
+        if (!alive) return;
+        setFunnelLoading(false);
+      }
+    };
+    void load();
+    return () => {
+      alive = false;
+    };
+  }, [propertyFilter]);
+
+  useEffect(() => {
     const params = new URLSearchParams(location.search);
     const requestedId = params.get("applicationId");
     if (!requestedId) return;
@@ -882,16 +1023,7 @@ const ApplicationsPage: React.FC = () => {
     const params = new URLSearchParams(location.search);
     if (params.get("openSendApplication") !== "1") return;
     if (!canCreateApplicationLinks) {
-      const redirectTo =
-        typeof window !== "undefined"
-          ? `${window.location.pathname}${window.location.search}`
-          : "/applications";
-      dispatchUpgradePrompt({
-        featureKey: "applications",
-        currentPlan: caps?.plan,
-        source: "applications_page",
-        redirectTo,
-      });
+      promptApplicationsUpgrade("applications_page");
       params.delete("openSendApplication");
       params.delete("autoSelectProperty");
       navigate({ pathname: location.pathname, search: params.toString() }, { replace: true });
@@ -943,7 +1075,7 @@ const ApplicationsPage: React.FC = () => {
     propertiesReady,
     showToast,
     canCreateApplicationLinks,
-    caps?.plan,
+    promptApplicationsUpgrade,
   ]);
 
   useEffect(() => {
@@ -1080,7 +1212,11 @@ const ApplicationsPage: React.FC = () => {
     });
   }, [applications, search]);
 
-  const handleSelectApplication = (applicationId: string) => {
+  const handleSelectApplication = (application: RentalApplicationSummary) => {
+    if (application.source === "application_link") {
+      return;
+    }
+    const applicationId = application.id;
     setSelectedId(applicationId);
     navigate(`/applications?applicationId=${applicationId}`);
   };
@@ -1158,16 +1294,7 @@ const ApplicationsPage: React.FC = () => {
 
   const handleCreateApplication = (autoSelectProperty: boolean = false) => {
     if (!canCreateApplicationLinks) {
-      const redirectTo =
-        typeof window !== "undefined"
-          ? `${window.location.pathname}${window.location.search}`
-          : "/applications";
-      dispatchUpgradePrompt({
-        featureKey: "applications",
-        currentPlan: caps?.plan,
-        source: "applications_page",
-        redirectTo,
-      });
+      promptApplicationsUpgrade("applications_page");
       return;
     }
     if (!propertiesLoaded) {
@@ -1200,11 +1327,38 @@ const ApplicationsPage: React.FC = () => {
 
   const handleRowScreen = (applicationId: string) => {
     if (!SCREENING_ENABLED) return;
-    handleSelectApplication(applicationId);
+    const application = applications.find((entry) => entry.id === applicationId);
+    if (!application || application.source === "application_link") return;
+    handleSelectApplication(application);
     window.setTimeout(() => {
       screeningSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 150);
   };
+
+  const guideToApplicationsForScreening = useCallback(() => {
+    const listNode = applicationsListRef.current;
+    if (listNode && typeof listNode.scrollIntoView === "function") {
+      listNode.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, []);
+
+  const emitTransUnionUsageEvent = useCallback(
+    (eventType: "tu_option_viewed" | "tu_get_access_clicked" | "tu_have_credentials_clicked", sourceSurface: string) => {
+      void trackTransUnionUsageEvent({
+        eventType,
+        sourceSurface,
+        applicationId: detail?.id || null,
+        propertyId: detail?.propertyId || null,
+      }).catch(() => undefined);
+    },
+    [detail?.id, detail?.propertyId]
+  );
+
+  useEffect(() => {
+    if (transUnionLoading || transUnionOptionViewedRef.current) return;
+    transUnionOptionViewedRef.current = true;
+    emitTransUnionUsageEvent("tu_option_viewed", "applications_page");
+  }, [emitTransUnionUsageEvent, transUnionLoading]);
 
   const submitTransUnionOnboardingRequest = useCallback(async () => {
     setTransUnionSubmitting(true);
@@ -1282,6 +1436,12 @@ const ApplicationsPage: React.FC = () => {
       setTransUnionSubmitting(false);
     }
   }, [showToast]);
+
+  useEffect(() => {
+    setRequestInfoOpen(false);
+    setRequestInfoItems([]);
+    setRequestInfoMessage("");
+  }, [selectedId]);
 
   const handleExportReport = async (copyOnly: boolean) => {
     if (!detail?.id) return;
@@ -1375,6 +1535,121 @@ const ApplicationsPage: React.FC = () => {
       showToast({ message: "Failed to update status", description: err?.message || "", variant: "error" });
     }
   };
+
+  const canSendPartialReminder = useCallback((application: RentalApplicationSummary) => {
+    if (application.source !== "application_link") return false;
+    const partialProgress = application.partialProgress;
+    if (!partialProgress) return false;
+    if (partialProgress.submittedAt) return false;
+    if (
+      partialProgress.status !== "started" &&
+      partialProgress.status !== "in_progress" &&
+      partialProgress.status !== "ready_to_submit"
+    ) {
+      return false;
+    }
+    const reminderWindowOpen =
+      typeof partialProgress.reminderEligibleAt === "number" &&
+      partialProgress.reminderEligibleAt <= Date.now();
+    if (!reminderWindowOpen) return false;
+    return (
+      partialProgress.reminderSentAt == null ||
+      partialProgress.reminderSentAt <= Date.now() - APPLICATION_REMINDER_RESEND_COOLDOWN_MS
+    );
+  }, []);
+
+  const getPartialReminderState = useCallback((application: RentalApplicationSummary) => {
+    const partialProgress = application.partialProgress;
+    if (application.source !== "application_link" || !partialProgress) {
+      return {
+        ready: false,
+        recentlyReminded: false,
+        reminderSentAt: null as number | null,
+        actionLabel: "Send reminder",
+      };
+    }
+    const reminderSentAt = partialProgress.reminderSentAt;
+    const recentlyReminded =
+      typeof reminderSentAt === "number" &&
+      reminderSentAt > Date.now() - APPLICATION_REMINDER_RESEND_COOLDOWN_MS;
+    const ready = canSendPartialReminder(application);
+    return {
+      ready,
+      recentlyReminded,
+      reminderSentAt,
+      actionLabel: reminderSentAt ? "Send again" : "Send reminder",
+    };
+  }, [canSendPartialReminder]);
+
+  const getPartialPriorityLabel = useCallback((application: RentalApplicationSummary) => {
+    const completionPercent = typeof application.completionPercent === "number" ? application.completionPercent : 0;
+    const lastActivityAt = typeof application.lastActivityAt === "number" ? application.lastActivityAt : null;
+    const now = Date.now();
+    if (
+      completionPercent >= 70 &&
+      typeof lastActivityAt === "number" &&
+      lastActivityAt >= now - APPLICATION_HIGH_PRIORITY_ACTIVITY_MS
+    ) {
+      return "High priority";
+    }
+    if (
+      completionPercent < 40 &&
+      typeof lastActivityAt === "number" &&
+      lastActivityAt <= now - APPLICATION_FOLLOW_UP_STALE_MS
+    ) {
+      return "Needs follow-up";
+    }
+    return null;
+  }, []);
+
+  const funnelSummary = useMemo(() => {
+    if (!funnel) return null;
+    const inProgressCount = funnel.counts.inProgress + funnel.counts.readyToSubmit;
+    const conversionPercent = Math.round((funnel.conversion.completionRate || 0) * 100);
+    const topStep = funnel.dropOff.byCurrentStep[0]?.step || null;
+    const topMissing = funnel.dropOff.byMissingSection[0]?.section || null;
+    const dropOffHint = topStep
+      ? `Most applicants currently stop in ${APPLICATION_SECTION_LABELS[topStep] || topStep.replace(/_/g, " ")}.`
+      : topMissing
+      ? `Common unfinished section: ${APPLICATION_SECTION_LABELS[topMissing] || topMissing.replace(/_/g, " ")}.`
+      : null;
+    return {
+      started: funnel.counts.started,
+      inProgress: inProgressCount,
+      completed: funnel.counts.submitted,
+      conversionPercent,
+      dropOffHint,
+    };
+  }, [funnel]);
+
+  const handleSendReminder = useCallback(
+    async (application: RentalApplicationSummary) => {
+      if (application.source !== "application_link") return;
+      setSendingReminderId(application.id);
+      try {
+        const res = await sendApplicationLinkReminder(application.id);
+        setApplications((prev) =>
+          prev.map((entry) =>
+            entry.id === application.id
+              ? {
+                  ...entry,
+                  partialProgress: res.partialProgress || entry.partialProgress || null,
+                }
+              : entry
+          )
+        );
+        showToast({ message: "Reminder sent", variant: "success" });
+      } catch (err: any) {
+        showToast({
+          message: err?.message || "Unable to send reminder.",
+          variant: "error",
+        });
+      } finally {
+        setSendingReminderId(null);
+      }
+    },
+    [showToast]
+  );
 
   const runScreeningRequest = async () => {
     if (!detail) return;
@@ -1700,17 +1975,57 @@ const ApplicationsPage: React.FC = () => {
               setScreeningInviteOpen(true);
             }}
             disabled={!propertiesReady || !SCREENING_ENABLED}
+            style={
+              upgradeConfirmed && upgradeHighlight === "screening"
+                ? { border: "1px solid rgba(16,185,129,0.4)", boxShadow: "0 0 0 3px rgba(16,185,129,0.14)" }
+                : undefined
+            }
           >
             {propertiesLoaded ? (SCREENING_ENABLED ? "Send screening invite" : screeningComingSoonText) : "Loading properties…"}
           </Button>
         </div>
+        {upgradeConfirmed ? (
+          <div
+            style={{
+              marginTop: 12,
+              padding: "10px 12px",
+              borderRadius: 12,
+              border: "1px solid rgba(16,185,129,0.28)",
+              background: "rgba(16,185,129,0.08)",
+              color: text.primary,
+              fontSize: 13,
+              fontWeight: 600,
+            }}
+          >
+            {upgradeHighlight === "screening"
+              ? "Upgrade confirmed. Screening workflows are now active on this page."
+              : "Upgrade confirmed. Secure application links are now active on this page."}
+          </div>
+        ) : null}
       </Card>
 
       <TransUnionConnectionCard
         integration={transUnionIntegration}
         loading={transUnionLoading}
-        onGetAccess={() => setTransUnionAccessOpen(true)}
-        onConnectExisting={() => setTransUnionConnectOpen(true)}
+        readyToScreen={Boolean(detail)}
+        selectedApplicationLabel={
+          detail ? `${detail.applicant.firstName} ${detail.applicant.lastName}`.trim() : null
+        }
+        onChooseApplicant={guideToApplicationsForScreening}
+        screeningsCompletedCount={
+          detail
+            ? screeningHistory.filter((item) => item.status === "completed").length
+            : null
+        }
+        lastScreeningDate={detail ? screeningHistory[0]?.screenedAt || screeningHistory[0]?.requestedAt || null : null}
+        onGetAccess={() => {
+          emitTransUnionUsageEvent("tu_get_access_clicked", "applications_page");
+          setTransUnionAccessOpen(true);
+        }}
+        onConnectExisting={() => {
+          emitTransUnionUsageEvent("tu_have_credentials_clicked", "applications_page");
+          setTransUnionConnectOpen(true);
+        }}
         onEnterDetails={() => setTransUnionConnectOpen(true)}
         onViewInstructions={() => setTransUnionAccessOpen(true)}
         onUpdateCredentials={() => setTransUnionUpdateOpen(true)}
@@ -1718,7 +2033,7 @@ const ApplicationsPage: React.FC = () => {
         onStartScreening={
           detail
             ? () => handleRowScreen(detail.id)
-            : () => showToast({ message: "Select an application to start screening.", variant: "warning" })
+            : guideToApplicationsForScreening
         }
       />
 
@@ -1806,6 +2121,68 @@ const ApplicationsPage: React.FC = () => {
       </Card>
 
       <Card elevated className="rc-applications-grid">
+        <Card
+          style={{
+            marginBottom: spacing.md,
+            border: `1px solid ${colors.border}`,
+            display: "grid",
+            gap: spacing.sm,
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", gap: spacing.sm, alignItems: "center", flexWrap: "wrap" }}>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.08em", color: text.subtle }}>
+                Application Funnel
+              </div>
+              <div style={{ color: text.muted, marginTop: 4 }}>
+                Track how many applicants have started, progressed, and completed the application flow.
+              </div>
+            </div>
+            {funnelLoading ? <div style={{ color: text.subtle, fontSize: 12 }}>Loading…</div> : null}
+          </div>
+          {funnelError ? (
+            <div style={{ color: colors.danger, fontSize: 13 }}>{funnelError}</div>
+          ) : funnelSummary ? (
+            <>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+                  gap: spacing.sm,
+                }}
+              >
+                {[
+                  { label: "Started", value: funnelSummary.started },
+                  { label: "In progress", value: funnelSummary.inProgress },
+                  { label: "Completed", value: funnelSummary.completed },
+                  { label: "Conversion", value: `${funnelSummary.conversionPercent}%` },
+                ].map((item) => (
+                  <div
+                    key={item.label}
+                    style={{
+                      border: `1px solid ${colors.border}`,
+                      borderRadius: radius.md,
+                      padding: "10px 12px",
+                      background: colors.card,
+                      display: "grid",
+                      gap: 4,
+                    }}
+                  >
+                    <div style={{ fontSize: 12, color: text.subtle, fontWeight: 700 }}>{item.label}</div>
+                    <div style={{ fontSize: 20, color: text.primary, fontWeight: 800 }}>{item.value}</div>
+                  </div>
+                ))}
+              </div>
+              {funnelSummary.dropOffHint ? (
+                <div style={{ color: text.muted, fontSize: 13 }}>{funnelSummary.dropOffHint}</div>
+              ) : (
+                <div style={{ color: text.subtle, fontSize: 13 }}>No meaningful drop-off pattern yet.</div>
+              )}
+            </>
+          ) : (
+            <div style={{ color: text.subtle, fontSize: 13 }}>No application funnel data yet.</div>
+          )}
+        </Card>
         <ResponsiveMasterDetail
           title={undefined}
           searchSlot={
@@ -1847,7 +2224,7 @@ const ApplicationsPage: React.FC = () => {
           }
           masterTitle="Applications"
           master={
-            <div className="rc-applications-list">
+            <div className="rc-applications-list" ref={applicationsListRef}>
               {loading ? (
                 <div style={{ color: text.muted }}>Loading applications...</div>
               ) : error ? (
@@ -1871,60 +2248,217 @@ const ApplicationsPage: React.FC = () => {
                   </Button>
                 </div>
               ) : (
-                <div className="rc-applications-list-scroll">
-                  {filtered.map((app) => (
-                    <button
-                      key={app.id}
-                      type="button"
-                      className="rc-applications-list-item"
-                      onClick={() => handleSelectApplication(app.id)}
+                <div style={{ display: "grid", gap: spacing.sm }}>
+                  {isTransUnionConnected && !detail ? (
+                    <Card
                       style={{
-                        textAlign: "left",
-                        border: `1px solid ${app.id === selectedId ? colors.accent : colors.border}`,
-                        background: app.id === selectedId ? "rgba(37,99,235,0.08)" : colors.card,
-                        borderRadius: radius.md,
-                        padding: "12px 12px",
-                        cursor: "pointer",
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: 4,
-                        minWidth: 0,
+                        border: `1px solid ${colors.accent}`,
+                        background: colors.accentSoft,
+                        display: "grid",
+                        gap: spacing.xs,
                       }}
                     >
-                      <div style={{ fontWeight: 700, color: text.primary, fontSize: 15, overflowWrap: "anywhere" }}>
-                        {app.applicantName || "Applicant"}
+                      <div style={{ fontWeight: 700, fontSize: "0.98rem" }}>
+                        Ready to start your first screening
                       </div>
-                      <div style={{ color: text.muted, fontSize: 12, overflowWrap: "anywhere" }}>
-                        {app.email || "No email"}
+                      <div style={{ color: text.muted, lineHeight: 1.6 }}>
+                        Your TransUnion connection is active. Next step: choose an applicant from this
+                        list, then open screening from that application.
                       </div>
-                      <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-                        <Pill>{app.status}</Pill>
+                      <div style={{ color: text.subtle, fontSize: "0.9rem" }}>
+                        Start with the most review-ready applicant to reach your first completed
+                        screening faster.
                       </div>
-                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleRowScreen(app.id);
-                          }}
-                          style={{
-                            padding: "6px 10px",
-                            borderRadius: 999,
-                            border: `1px solid ${colors.border}`,
-                            background: colors.accentSoft,
-                            color: text.primary,
-                            fontSize: 12,
-                            fontWeight: 700,
-                            cursor: SCREENING_ENABLED ? "pointer" : "not-allowed",
-                            opacity: SCREENING_ENABLED ? 1 : 0.7,
-                          }}
-                          disabled={!SCREENING_ENABLED}
-                        >
-                          {SCREENING_ENABLED ? "Screen tenant" : screeningComingSoonText}
-                        </button>
+                    </Card>
+                  ) : null}
+                <div className="rc-applications-list-scroll">
+                  {filtered.map((app) => {
+                    const isPartial = app.source === "application_link";
+                    const partialReminderState = isPartial ? getPartialReminderState(app) : null;
+                    const partialPriorityLabel = isPartial ? getPartialPriorityLabel(app) : null;
+                    return (
+                      <div
+                        key={app.id}
+                        role={isPartial ? undefined : "button"}
+                        tabIndex={isPartial ? undefined : 0}
+                        className="rc-applications-list-item"
+                        aria-pressed={app.id === selectedId}
+                        onClick={() => {
+                          if (!isPartial) handleSelectApplication(app);
+                        }}
+                        onKeyDown={(e) => {
+                          if (isPartial) return;
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            handleSelectApplication(app);
+                          }
+                        }}
+                        style={{
+                          textAlign: "left",
+                          border: `1px solid ${app.id === selectedId ? colors.accent : colors.border}`,
+                          background: isPartial
+                            ? "rgba(148,163,184,0.08)"
+                            : app.id === selectedId
+                            ? "rgba(37,99,235,0.08)"
+                            : colors.card,
+                          borderRadius: radius.md,
+                          padding: "12px 12px",
+                          cursor: isPartial ? "default" : "pointer",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: 4,
+                          minWidth: 0,
+                        }}
+                      >
+                        <div style={{ fontWeight: 700, color: text.primary, fontSize: 15, overflowWrap: "anywhere" }}>
+                          {app.applicantName || "Applicant"}
+                        </div>
+                        <div style={{ color: text.muted, fontSize: 12, overflowWrap: "anywhere" }}>
+                          {app.email || "No email"}
+                        </div>
+                        <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                          <Pill>{app.status}</Pill>
+                          {isPartial && typeof app.completionPercent === "number" ? (
+                            <span style={{ color: text.subtle, fontSize: 12 }}>{app.completionPercent}% complete</span>
+                          ) : null}
+                          {isPartial && partialPriorityLabel ? (
+                            <span
+                              style={{
+                                color: partialPriorityLabel === "High priority" ? "#065f46" : "#9a3412",
+                                background:
+                                  partialPriorityLabel === "High priority"
+                                    ? "rgba(16,185,129,0.12)"
+                                    : "rgba(249,115,22,0.12)",
+                                borderRadius: 999,
+                                padding: "2px 8px",
+                                fontSize: 11,
+                                fontWeight: 700,
+                              }}
+                            >
+                              {partialPriorityLabel}
+                            </span>
+                          ) : null}
+                        </div>
+                        {isPartial ? (
+                          <>
+                            <div style={{ color: text.muted, fontSize: 12 }}>
+                              {app.lastActivityAt
+                                ? `Last activity ${new Date(app.lastActivityAt).toLocaleString()}`
+                                : "Draft progress has started but is not yet submitted."}
+                            </div>
+                            <div style={{ color: text.subtle, fontSize: 12 }}>
+                              Partial application only. Full application details appear after submission.
+                            </div>
+                            {partialReminderState?.reminderSentAt ? (
+                              <div style={{ display: "grid", gap: 4 }}>
+                                <div style={{ color: text.subtle, fontSize: 12 }}>
+                                  Reminder sent {new Date(partialReminderState.reminderSentAt).toLocaleString()}
+                                </div>
+                                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                                  <span
+                                    style={{
+                                      color: partialReminderState.ready ? "#065f46" : text.subtle,
+                                      background: partialReminderState.ready
+                                        ? "rgba(16,185,129,0.12)"
+                                        : "rgba(148,163,184,0.12)",
+                                      borderRadius: 999,
+                                      padding: "2px 8px",
+                                      fontSize: 11,
+                                      fontWeight: 700,
+                                    }}
+                                  >
+                                    {partialReminderState.ready ? "Ready to remind" : "Recently reminded"}
+                                  </span>
+                                  {partialReminderState.ready ? (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        void handleSendReminder(app);
+                                      }}
+                                      style={{
+                                        padding: "6px 10px",
+                                        borderRadius: 999,
+                                        border: `1px solid ${colors.border}`,
+                                        background: colors.accentSoft,
+                                        color: text.primary,
+                                        fontSize: 12,
+                                        fontWeight: 700,
+                                        cursor: sendingReminderId === app.id ? "wait" : "pointer",
+                                      }}
+                                      disabled={sendingReminderId === app.id}
+                                    >
+                                      {sendingReminderId === app.id ? "Sending…" : partialReminderState.actionLabel}
+                                    </button>
+                                  ) : null}
+                                </div>
+                              </div>
+                            ) : partialReminderState?.ready ? (
+                              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                                <span
+                                  style={{
+                                    color: "#065f46",
+                                    background: "rgba(16,185,129,0.12)",
+                                    borderRadius: 999,
+                                    padding: "2px 8px",
+                                    fontSize: 11,
+                                    fontWeight: 700,
+                                  }}
+                                >
+                                  Ready to remind
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    void handleSendReminder(app);
+                                  }}
+                                  style={{
+                                    padding: "6px 10px",
+                                    borderRadius: 999,
+                                    border: `1px solid ${colors.border}`,
+                                    background: colors.accentSoft,
+                                    color: text.primary,
+                                    fontSize: 12,
+                                    fontWeight: 700,
+                                    cursor: sendingReminderId === app.id ? "wait" : "pointer",
+                                  }}
+                                  disabled={sendingReminderId === app.id}
+                                >
+                                  {sendingReminderId === app.id ? "Sending…" : partialReminderState.actionLabel}
+                                </button>
+                              </div>
+                            ) : null}
+                          </>
+                        ) : (
+                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleRowScreen(app.id);
+                              }}
+                              style={{
+                                padding: "6px 10px",
+                                borderRadius: 999,
+                                border: `1px solid ${colors.border}`,
+                                background: colors.accentSoft,
+                                color: text.primary,
+                                fontSize: 12,
+                                fontWeight: 700,
+                                cursor: SCREENING_ENABLED ? "pointer" : "not-allowed",
+                                opacity: SCREENING_ENABLED ? 1 : 0.7,
+                              }}
+                              disabled={!SCREENING_ENABLED}
+                            >
+                              {SCREENING_ENABLED ? "Screen tenant" : screeningComingSoonText}
+                            </button>
+                          </div>
+                        )}
                       </div>
-                    </button>
-                  ))}
+                    );
+                  })}
+                </div>
                 </div>
               )}
             </div>
@@ -1936,13 +2470,14 @@ const ApplicationsPage: React.FC = () => {
                 onChange={(e) => {
                   const next = e.target.value;
                   if (!next) return;
-                  handleSelectApplication(next);
+                  const application = filtered.find((entry) => entry.id === next);
+                  if (application) handleSelectApplication(application);
                 }}
                 className="rc-full-width-mobile"
               >
                 <option value="">Select application</option>
                 {filtered.map((app) => (
-                  <option key={app.id} value={app.id}>
+                  <option key={app.id} value={app.id} disabled={app.source === "application_link"}>
                     {app.applicantName || "Applicant"}
                   </option>
                 ))}
@@ -1984,6 +2519,84 @@ const ApplicationsPage: React.FC = () => {
                 onDecision={saveLandlordDecision}
                 submittingDecision={savingDecision}
               />
+              {requestInfoOpen ? (
+                <Card
+                  role="dialog"
+                  aria-modal="true"
+                  aria-label="Request more information"
+                  style={{
+                    border: `1px solid ${colors.accent}`,
+                    background: "rgba(239,246,255,0.98)",
+                    display: "grid",
+                    gap: spacing.md,
+                  }}
+                >
+                  <div style={{ display: "grid", gap: 4 }}>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: text.primary }}>Request More Info</div>
+                    <div style={{ color: text.muted, fontSize: 13, lineHeight: 1.6 }}>
+                      Choose the missing items to request and add an optional note for the applicant email.
+                    </div>
+                  </div>
+                  <div style={{ display: "grid", gap: 10 }}>
+                    {REQUEST_INFO_OPTIONS.map((option) => (
+                      <label
+                        key={option.value}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 10,
+                          color: text.primary,
+                          fontSize: 14,
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={requestInfoItems.includes(option.value)}
+                          onChange={() => toggleRequestInfoItem(option.value)}
+                        />
+                        <span>{option.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <div style={{ display: "grid", gap: 6 }}>
+                    <div style={{ color: text.muted, fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                      Optional note
+                    </div>
+                    <textarea
+                      value={requestInfoMessage}
+                      onChange={(event) => setRequestInfoMessage(event.target.value)}
+                      placeholder="Add any extra context for the applicant."
+                      rows={4}
+                      style={{
+                        width: "100%",
+                        boxSizing: "border-box",
+                        resize: "vertical",
+                        padding: "10px 12px",
+                        borderRadius: radius.md,
+                        border: `1px solid ${colors.border}`,
+                        background: colors.card,
+                        color: text.primary,
+                      }}
+                    />
+                  </div>
+                  <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap" }}>
+                    <Button
+                      variant="secondary"
+                      onClick={() => {
+                        setRequestInfoOpen(false);
+                        setRequestInfoItems([]);
+                        setRequestInfoMessage("");
+                      }}
+                      disabled={savingDecision}
+                    >
+                      Cancel
+                    </Button>
+                    <Button onClick={() => void handleSubmitRequestInfo()} disabled={savingDecision}>
+                      {savingDecision ? "Sending..." : "Send request"}
+                    </Button>
+                  </div>
+                </Card>
+              ) : null}
               <div ref={screeningSectionRef}>
                 <Card>
                   <div className="rc-applications-card-header" style={{ marginBottom: 8 }}>
@@ -2833,18 +3446,9 @@ const ApplicationsPage: React.FC = () => {
           setModalUnitId(nextId);
         }}
         allowGeneration={canCreateApplicationLinks}
-        lockedMessage="Starter unlocks secure application links so applicants can complete their application inside RentChain."
+        lockedMessage={`${applicationsRequiredPlanLabel} unlocks secure application links so applicants can complete their application inside RentChain.`}
         onUpgradeRequired={() => {
-          const redirectTo =
-            typeof window !== "undefined"
-              ? `${window.location.pathname}${window.location.search}`
-              : "/applications";
-          dispatchUpgradePrompt({
-            featureKey: "applications",
-            currentPlan: caps?.plan,
-            source: "applications_page",
-            redirectTo,
-          });
+          promptApplicationsUpgrade("applications_page");
         }}
         unit={null}
         onClose={() => setSendAppOpen(false)}
@@ -3016,8 +3620,12 @@ const ApplicationsPage: React.FC = () => {
         submitting={transUnionSubmitting}
         integration={transUnionIntegration}
         onGetAccess={() => {
+          emitTransUnionUsageEvent("tu_get_access_clicked", "connect_modal");
           setTransUnionConnectOpen(false);
           setTransUnionAccessOpen(true);
+        }}
+        onChooseExistingCredentials={() => {
+          emitTransUnionUsageEvent("tu_have_credentials_clicked", "connect_modal");
         }}
         onContinue={() => {
           if (detail?.id) {

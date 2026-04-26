@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/apiClient";
+import { normalizePlan } from "@/lib/plan";
 import {
   DEFAULT_CAPABILITIES,
   getCachedCapabilities,
@@ -25,11 +26,11 @@ export function useCapabilities() {
         const res = await apiFetch("/capabilities");
         if (!alive) return;
         const next = res as Capabilities;
-        setCaps(next);
+        setCaps({ ...next, plan: normalizePlan(next?.plan) });
         if (next && typeof next === "object") {
           setCachedCapabilities({
             ok: next.ok,
-            plan: next.plan,
+            plan: normalizePlan(next.plan),
             features: next.features || {},
             ts: next.ts,
           });
@@ -47,7 +48,7 @@ export function useCapabilities() {
       if (!alive) return;
       const detail = (evt as CustomEvent<CapabilitiesResponse>).detail;
       if (detail && typeof detail === "object") {
-        setCaps({ ok: Boolean(detail.ok), ...detail });
+        setCaps({ ok: Boolean(detail.ok), ...detail, plan: normalizePlan(detail.plan) });
       }
     };
     if (typeof window !== "undefined") {

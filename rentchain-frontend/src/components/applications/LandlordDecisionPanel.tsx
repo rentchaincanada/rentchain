@@ -168,7 +168,7 @@ export const LandlordDecisionPanel: React.FC<LandlordDecisionPanelProps> = ({
       <div style={{ display: "grid", gap: 4 }}>
         <div style={{ color: text.primary, fontWeight: 800, fontSize: 16 }}>Landlord Decision Panel</div>
         <div style={{ color: text.muted, fontSize: 12, lineHeight: 1.55 }}>
-          Use the latest Risk Agent snapshot to decide whether to approve, reject, or request more information. This panel never changes application status automatically.
+          Use the latest Risk Agent snapshot to decide whether to approve, reject, or request more information. These actions stay landlord-triggered and only update the application after you confirm them.
         </div>
       </div>
 

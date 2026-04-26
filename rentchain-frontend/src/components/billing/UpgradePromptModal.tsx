@@ -2,7 +2,10 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getUpgradeCopy } from "@/billing/upgradeCopy";
 import { normalizePlanLabel } from "@/billing/planLabel";
+import { normalizePaidPlan } from "@/lib/plan";
+import { resolveRequiredPlan } from "@/lib/upgradePrompt";
 import { startCheckout } from "@/billing/startCheckout";
+import { track } from "@/lib/analytics";
 
 export function UpgradePromptModal({
   open,
@@ -24,29 +27,44 @@ export function UpgradePromptModal({
   if (!open) return null;
 
   const copy = useMemo(() => getUpgradeCopy(featureKey), [featureKey]);
-  const requiredPlanKey = requiredPlan;
-  const requiredLabel = copy.requiredPlanLabel || normalizePlanLabel(requiredPlan || "");
-  const currentLabel = normalizePlanLabel(currentPlan || "");
-  const primaryLabel =
-    copy.primaryCta || (requiredLabel ? `Upgrade to ${requiredLabel}` : "Upgrade now");
+  const requiredPlanKey = requiredPlan || resolveRequiredPlan(featureKey, currentPlan) || "pro";
+  const requiredLabel = normalizePlanLabel(requiredPlanKey);
+  const currentLabel = normalizePlanLabel(currentPlan || "free");
+  const primaryLabel = requiredLabel
+    ? `Continue to ${requiredLabel} checkout`
+    : "Continue to checkout";
   const secondaryLabel = copy.secondaryCta || "Not now";
   const title = copy.title;
   const subtitle = copy.subtitle;
   const bullets = copy.bullets?.slice(0, 3) || [];
+  const sourceContext =
+    source === "locked_feature"
+      ? `This upgrade prompt opened because this feature is locked on your current plan.`
+      : source === "feature_teaser"
+        ? `This upgrade prompt opened from a feature preview so you can review the upgrade before leaving the page.`
+        : null;
 
   const primaryRef = useRef<HTMLButtonElement | null>(null);
   const modalRef = useRef<HTMLDivElement | null>(null);
   const [interval, setInterval] = useState<"monthly" | "yearly">("monthly");
   const navigate = useNavigate();
+  const requiredTier = normalizePaidPlan(requiredPlanKey) || "pro";
+  const trackPayload = useMemo(
+    () => ({
+      featureKey,
+      currentPlan: currentPlan || "free",
+      requiredPlan: requiredPlanKey,
+      source: source || "unknown",
+      route: typeof window !== "undefined" ? window.location.pathname : undefined,
+      presentation: "modal",
+    }),
+    [currentPlan, featureKey, requiredPlanKey, source]
+  );
 
-  const resolveTier = (input?: string) => {
-    const raw = String(input || "").trim().toLowerCase();
-    if (raw === "starter" || raw === "core") return "starter";
-    if (raw === "pro") return "pro";
-    if (raw === "business" || raw === "elite" || raw === "enterprise") return "elite";
-    return "pro";
-  };
-  const requiredTier = resolveTier(requiredPlanKey);
+  const handleDismiss = React.useCallback(() => {
+    track("upgrade_prompt_dismissed", trackPayload);
+    onClose();
+  }, [onClose, trackPayload]);
 
   useEffect(() => {
     if (!open) return;
@@ -59,7 +77,7 @@ export function UpgradePromptModal({
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
-        onClose();
+        handleDismiss();
         return;
       }
       if (e.key !== "Tab") return;
@@ -93,12 +111,12 @@ export function UpgradePromptModal({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [open, onClose]);
+  }, [handleDismiss, open]);
 
   return (
     <>
       <div
-        onClick={onClose}
+        onClick={handleDismiss}
         style={{
           position: "fixed",
           inset: 0,
@@ -137,13 +155,23 @@ export function UpgradePromptModal({
                 display: "grid",
                 placeItems: "center",
                 color: "#1d4ed8",
-              fontWeight: 900,
-              fontSize: 18,
-            }}
+                fontWeight: 900,
+                fontSize: 18,
+              }}
           >
-              ^
             </div>
             <div>
+              <div
+                style={{
+                  fontSize: 11,
+                  fontWeight: 900,
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase",
+                  color: "#1d4ed8",
+                }}
+              >
+                {requiredLabel ? `${requiredLabel} plan` : "Upgrade"}
+              </div>
               <div style={{ fontWeight: 900, fontSize: 20 }}>{title}</div>
               <div style={{ marginTop: 4, fontSize: 14, opacity: 0.82 }}>{subtitle}</div>
             </div>
@@ -181,6 +209,9 @@ export function UpgradePromptModal({
 
           {copy.trustNote ? (
             <div style={{ fontSize: 12, color: "rgba(71,85,105,0.9)" }}>{copy.trustNote}</div>
+          ) : null}
+          {sourceContext ? (
+            <div style={{ fontSize: 12, color: "rgba(71,85,105,0.9)" }}>{sourceContext}</div>
           ) : null}
 
           <div className="rc-wrap-row">
@@ -227,7 +258,12 @@ export function UpgradePromptModal({
           <div style={{ display: "grid", gap: 10 }}>
             <button
               ref={primaryRef}
-              onClick={() =>
+              onClick={() => {
+                track("upgrade_prompt_checkout_clicked", {
+                  ...trackPayload,
+                  interval,
+                  targetPlan: requiredTier,
+                });
                 startCheckout({
                   tier: requiredTier,
                   interval,
@@ -235,8 +271,8 @@ export function UpgradePromptModal({
                   featureKey,
                   source,
                   redirectTo,
-                })
-              }
+                });
+              }}
               style={{
                 padding: "12px 16px",
                 borderRadius: 14,
@@ -253,7 +289,7 @@ export function UpgradePromptModal({
             </button>
             <div className="rc-wrap-row" style={{ justifyContent: "space-between" }}>
               <button
-                onClick={onClose}
+                onClick={handleDismiss}
                 style={{
                   padding: "10px 14px",
                   borderRadius: 12,
@@ -281,7 +317,7 @@ export function UpgradePromptModal({
                   cursor: "pointer",
                 }}
               >
-                Learn more
+                Compare plans first
               </button>
             </div>
           </div>

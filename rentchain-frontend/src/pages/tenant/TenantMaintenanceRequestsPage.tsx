@@ -3,6 +3,13 @@ import { Link } from "react-router-dom";
 import { Button } from "../../components/ui/Ui";
 import { listTenantMaintenance, type MaintenanceWorkflowItem } from "../../api/maintenanceWorkflowApi";
 import { colors, spacing, text as textTokens } from "../../styles/tokens";
+import { buildMaintenanceWorkspaceState } from "../maintenanceWorkspaceState";
+import { buildMaintenanceAssignmentRoutingView } from "../maintenanceAssignmentRoutingState";
+import { buildMaintenanceConfirmationAccessView } from "../maintenanceConfirmationAccessState";
+import { buildMaintenanceReopenEscalationView } from "../maintenanceReopenEscalationState";
+import { buildMaintenanceServiceExecutionView } from "../maintenanceServiceExecutionState";
+import { buildMaintenanceResolutionVerificationView } from "../maintenanceResolutionVerificationState";
+import { buildMaintenanceSchedulingAccessView } from "../maintenanceSchedulingAccessState";
 import {
   TenantEmptyState,
   TenantErrorState,
@@ -17,6 +24,20 @@ function fmtDate(ts?: number | null) {
   const d = new Date(ts);
   if (Number.isNaN(d.getTime())) return "—";
   return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+}
+
+function tenantNotificationMessages(item: MaintenanceWorkflowItem) {
+  const messages: string[] = [];
+  if (item.notifications?.tenant?.requiresAccessConfirmation) {
+    messages.push("Confirm access for return visit");
+  }
+  if (item.notifications?.tenant?.requiresSignoff) {
+    messages.push("Review completed work");
+  }
+  if (item.notifications?.tenant?.requiresReworkAwareness) {
+    messages.push("Rework in progress");
+  }
+  return messages;
 }
 
 export default function TenantMaintenanceRequestsPage() {
@@ -42,6 +63,8 @@ export default function TenantMaintenanceRequestsPage() {
   React.useEffect(() => {
     void load();
   }, [load]);
+
+  const workspaceView = React.useMemo(() => buildMaintenanceWorkspaceState(items, "tenant"), [items]);
 
   return (
     <TenantSurfaceShell
@@ -80,19 +103,196 @@ export default function TenantMaintenanceRequestsPage() {
         />
       ) : (
         <div style={{ display: "grid", gap: spacing.md }}>
+          <TenantInfoCard heading="Maintenance workflow" accent="#1d4ed8">
+            <div style={{ display: "grid", gap: spacing.sm }}>
+              <div style={{ color: textTokens.primary, fontWeight: 800 }}>{workspaceView.summaryTitle}</div>
+              <div style={{ color: textTokens.secondary }}>{workspaceView.summaryDescription}</div>
+              <div
+                style={{
+                  display: "grid",
+                  gap: 10,
+                  gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+                }}
+              >
+                {[
+                  { label: "Submitted", value: workspaceView.counts.submitted },
+                  { label: "Acknowledged", value: workspaceView.counts.acknowledged },
+                  { label: "In progress", value: workspaceView.counts.in_progress },
+                  { label: "Completed", value: workspaceView.counts.completed },
+                  { label: "Needs attention", value: workspaceView.counts.needs_attention },
+                ].map((item) => (
+                  <div
+                    key={item.label}
+                    style={{
+                      border: `1px solid ${colors.border}`,
+                      borderRadius: 12,
+                      padding: "12px 14px",
+                      background: colors.panel,
+                      display: "grid",
+                      gap: 4,
+                    }}
+                  >
+                    <div style={{ color: textTokens.muted, fontSize: "0.8rem", textTransform: "uppercase" }}>{item.label}</div>
+                    <div style={{ color: textTokens.primary, fontWeight: 800, fontSize: "1.3rem" }}>{item.value}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: "grid", gap: 6 }}>
+                <div style={{ color: textTokens.primary, fontWeight: 700 }}>What happens next</div>
+                {workspaceView.nextSteps.map((step) => (
+                  <div key={step} style={{ color: textTokens.secondary }}>
+                    {step}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </TenantInfoCard>
           {items.map((item) => (
-            <TenantInfoCard key={item.id} heading={item.title || "Maintenance request"} accent="#b45309">
-              <div style={{ color: textTokens.muted, fontSize: "0.92rem" }}>
-                {prettyStatus(item.status)} • {prettyStatus(item.priority)} • {prettyStatus(item.category)}
-              </div>
-              <div style={{ color: textTokens.secondary, fontSize: "0.9rem" }}>
-                Created {fmtDate(item.createdAt)} • Last update {fmtDate(item.updatedAt)}
-                {item.assignedContractorName ? ` • Contractor: ${item.assignedContractorName}` : ""}
-              </div>
-              <div>
-                <Link to={`/tenant/maintenance/${item.id}`}>Open request</Link>
-              </div>
-            </TenantInfoCard>
+            (() => {
+              const requestView = workspaceView.requestViews.find((entry) => entry.id === item.id);
+              const assignmentView = buildMaintenanceAssignmentRoutingView(item, "tenant");
+              const schedulingView = buildMaintenanceSchedulingAccessView(item, "tenant");
+              const confirmationView = buildMaintenanceConfirmationAccessView(item, "tenant");
+              const executionView = buildMaintenanceServiceExecutionView(item, "tenant");
+              const resolutionView = buildMaintenanceResolutionVerificationView(item, "tenant");
+              const reopenView = buildMaintenanceReopenEscalationView(item, "tenant");
+              const notificationMessages = tenantNotificationMessages(item);
+              return (
+                <TenantInfoCard
+                  key={item.id}
+                  heading={item.title || "Maintenance request"}
+                  accent={requestView?.needsAttention ? "#dc2626" : "#b45309"}
+                >
+                                   <div style={{ color: textTokens.muted, fontSize: "0.92rem" }}>
+                    {requestView?.lifecycleLabel || prettyStatus(item.status)} • {prettyStatus(item.priority)} •{" "}
+                    {prettyStatus(item.category)}
+                  </div>
+                  <div style={{ color: textTokens.secondary, lineHeight: 1.5 }}>
+                    {requestView?.summary || "This request is visible in your tenant maintenance workspace."}
+                  </div>
+                  <div style={{ color: textTokens.secondary, fontSize: "0.9rem" }}>
+                    Created {fmtDate(item.createdAt)} • Last update {fmtDate(item.updatedAt)}
+                    {` • Handling: ${assignmentView.tenantVisibleLabel}`}
+                  </div>
+                  <div style={{ color: textTokens.secondary }}>{assignmentView.summary}</div>
+                  {notificationMessages.length ? (
+                    <div
+                      style={{
+                        border: "1px solid rgba(180, 83, 9, 0.25)",
+                        borderRadius: 12,
+                        padding: "12px 14px",
+                        display: "grid",
+                        gap: 6,
+                        background: "#fffbeb",
+                      }}
+                    >
+                      <div style={{ color: textTokens.primary, fontWeight: 700 }}>Action needed</div>
+                      {notificationMessages.map((message) => (
+                        <div key={message} style={{ color: textTokens.secondary }}>
+                          {message}
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                  <div
+                    style={{
+                      border: "1px solid rgba(15,23,42,0.08)",
+                      borderRadius: 12,
+                      padding: "12px 14px",
+                      display: "grid",
+                      gap: 8,
+                    }}
+                  >
+                    <div style={{ color: textTokens.primary, fontWeight: 700 }}>Scheduling / access</div>
+                    <div style={{ color: textTokens.secondary }}>{schedulingView.summary}</div>
+                    <div style={{ color: textTokens.secondary }}>
+                      {`${schedulingView.tenantVisibleLabel} • ${schedulingView.accessLabel}`}
+                    </div>
+                    <div style={{ color: textTokens.secondary }}>
+                      Upcoming service window: {schedulingView.serviceWindowSummary}
+                    </div>
+                  </div>
+                  <div
+                    style={{
+                      border: "1px solid rgba(15,23,42,0.08)",
+                      borderRadius: 12,
+                      padding: "12px 14px",
+                      display: "grid",
+                      gap: 8,
+                    }}
+                  >
+                    <div style={{ color: textTokens.primary, fontWeight: 700 }}>Confirmation / access</div>
+                    <div style={{ color: textTokens.secondary }}>{confirmationView.summary}</div>
+                    <div style={{ color: textTokens.secondary }}>
+                      {`${confirmationView.tenantVisibleState} • ${confirmationView.accessLabel}`}
+                    </div>
+                  </div>
+                  <div
+                    style={{
+                      border: "1px solid rgba(15,23,42,0.08)",
+                      borderRadius: 12,
+                      padding: "12px 14px",
+                      display: "grid",
+                      gap: 8,
+                    }}
+                  >
+                    <div style={{ color: textTokens.primary, fontWeight: 700 }}>Execution / completion</div>
+                    <div style={{ color: textTokens.secondary }}>{executionView.summary}</div>
+                    <div style={{ color: textTokens.secondary }}>
+                      {`${executionView.tenantVisibleLabel} • ${executionView.completionLabel}`}
+                    </div>
+                    {item.completionSummary ? (
+                      <div style={{ color: textTokens.secondary }}>Completion note: {item.completionSummary}</div>
+                    ) : null}
+                  </div>
+                  <div
+                    style={{
+                      border: "1px solid rgba(15,23,42,0.08)",
+                      borderRadius: 12,
+                      padding: "12px 14px",
+                      display: "grid",
+                      gap: 8,
+                    }}
+                  >
+                    <div style={{ color: textTokens.primary, fontWeight: 700 }}>Resolution / closure</div>
+                    <div style={{ color: textTokens.secondary }}>{resolutionView.summary}</div>
+                    <div style={{ color: textTokens.secondary }}>
+                      {`${resolutionView.tenantVisibleLabel} • ${resolutionView.closureLabel}`}
+                    </div>
+                    {item.followUpReason ? (
+                      <div style={{ color: textTokens.secondary }}>Follow-up note: {item.followUpReason}</div>
+                    ) : null}
+                  </div>
+                  <div
+                    style={{
+                      border: "1px solid rgba(15,23,42,0.08)",
+                      borderRadius: 12,
+                      padding: "12px 14px",
+                      display: "grid",
+                      gap: 8,
+                    }}
+                  >
+                    <div style={{ color: textTokens.primary, fontWeight: 700 }}>Reopen / follow-up</div>
+                    <div style={{ color: textTokens.secondary }}>{reopenView.summary}</div>
+                    <div style={{ color: textTokens.secondary }}>
+                      {`${reopenView.tenantVisibleLabel} • ${reopenView.escalationLabel}`}
+                    </div>
+                    {item.reopenReason ? (
+                      <div style={{ color: textTokens.secondary }}>Reopen note: {item.reopenReason}</div>
+                    ) : null}
+                  </div>
+                  {requestView?.nextSteps.length ? (
+                    <div style={{ display: "grid", gap: 4 }}>
+                      <div style={{ color: textTokens.primary, fontWeight: 700 }}>Next step</div>
+                      <div style={{ color: textTokens.secondary }}>{requestView.nextSteps[0]}</div>
+                    </div>
+                  ) : null}
+                  <div>
+                    <Link to={`/tenant/maintenance/${item.id}`}>Open request</Link>
+                  </div>
+                </TenantInfoCard>
+              );
+            })()
           ))}
         </div>
       )}

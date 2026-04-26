@@ -17,6 +17,23 @@ import {
   ReviewSummaryApiError,
 } from "../api/reviewSummaryApi";
 import { useToast } from "../components/ui/ToastProvider";
+import { buildLandlordIntakeAlignmentView } from "./applicationReviewIntakeAlignment";
+import { buildLandlordReviewGuidance } from "./landlordReviewGuidance";
+import { buildTenantLandlordInteractionLoop } from "./tenantLandlordInteractionLoop";
+import { buildLandlordStructuredActivityTimeline } from "./structuredActivityTimeline";
+import { buildFollowUpResolutionState } from "./followUpResolutionState";
+import { buildLandlordDecisionWorkspace } from "./landlordDecisionWorkspace";
+import { buildLandlordDecisionOutcome } from "./landlordDecisionOutcome";
+import { buildLeaseFlowTransitionState } from "./leaseFlowTransitionState";
+import { buildLeasePreparationWorkspaceState } from "./leasePreparationWorkspaceState";
+import { buildMoveInReadinessWorkspaceState } from "./moveInReadinessWorkspaceState";
+import { buildLeaseExecutionReadinessState } from "./leaseExecutionReadinessState";
+import { buildLeaseExecutionWorkspace } from "./leaseExecutionWorkspace";
+import { buildLeaseSigningWorkspaceState } from "./leaseSigningWorkspaceState";
+import { buildDepositPaymentFlowState } from "./depositPaymentFlowState";
+import StructuredNotificationList from "./StructuredNotificationList";
+import { buildLandlordStructuredNotificationTriggers } from "./structuredNotificationTriggers";
+import { resolveRequiredPlanLabel } from "@/lib/upgradePrompt";
 
 function money(cents: number | null): string {
   if (cents == null || !Number.isFinite(cents)) return "Not provided";
@@ -51,6 +68,160 @@ function kv(label: string, value: string) {
       <div style={{ fontWeight: 600, color: text.main }}>{value || "Not provided"}</div>
     </div>
   );
+}
+
+function intakeTone(state: "ready_for_review" | "needs_follow_up") {
+  return state === "ready_for_review"
+    ? { color: "#166534", background: "#dcfce7", label: "Ready for review" }
+    : { color: "#9a3412", background: "#ffedd5", label: "Needs follow-up" };
+}
+
+function followUpTone(state: "follow_up_needed" | "partly_addressed" | "ready_for_rereview") {
+  if (state === "ready_for_rereview") {
+    return { color: "#166534", background: "#dcfce7", label: "Ready for re-review" };
+  }
+  if (state === "partly_addressed") {
+    return { color: "#1d4ed8", background: "#dbeafe", label: "Partly addressed" };
+  }
+  return { color: "#9a3412", background: "#ffedd5", label: "Follow-up needed" };
+}
+
+function decisionTone(state: "needs_follow_up" | "hold_for_later" | "ready_for_decision") {
+  if (state === "ready_for_decision") {
+    return { color: "#166534", background: "#dcfce7", label: "Ready for decision" };
+  }
+  if (state === "hold_for_later") {
+    return { color: "#1d4ed8", background: "#dbeafe", label: "Hold for later" };
+  }
+  return { color: "#9a3412", background: "#ffedd5", label: "Needs follow-up" };
+}
+
+function decisionOutcomeTone(state: "ready_for_next_step" | "hold_for_later" | "not_proceeding") {
+  if (state === "ready_for_next_step") {
+    return { color: "#166534", background: "#dcfce7", label: "Ready for next step" };
+  }
+  if (state === "not_proceeding") {
+    return { color: "#7f1d1d", background: "#fee2e2", label: "Not proceeding" };
+  }
+  return { color: "#1d4ed8", background: "#dbeafe", label: "Hold for later" };
+}
+
+function leaseTransitionTone(
+  state: "not_ready_for_lease" | "ready_for_lease_step" | "lease_step_started" | "awaiting_next_action"
+) {
+  if (state === "lease_step_started") {
+    return { color: "#0f766e", background: "#ccfbf1", label: "Lease step started" };
+  }
+  if (state === "ready_for_lease_step") {
+    return { color: "#166534", background: "#dcfce7", label: "Ready for lease step" };
+  }
+  if (state === "awaiting_next_action") {
+    return { color: "#1d4ed8", background: "#dbeafe", label: "Awaiting next action" };
+  }
+  return { color: "#9a3412", background: "#ffedd5", label: "Not ready for lease step" };
+}
+
+function leasePreparationTone(
+  state: "not_started" | "preparing_lease" | "needs_attention" | "ready_for_execution" | "awaiting_next_action"
+) {
+  if (state === "ready_for_execution") {
+    return { color: "#166534", background: "#dcfce7", label: "Ready for execution" };
+  }
+  if (state === "preparing_lease") {
+    return { color: "#0f766e", background: "#ccfbf1", label: "Preparing lease" };
+  }
+  if (state === "awaiting_next_action") {
+    return { color: "#1d4ed8", background: "#dbeafe", label: "Awaiting next action" };
+  }
+  if (state === "needs_attention") {
+    return { color: "#9a3412", background: "#ffedd5", label: "Needs attention" };
+  }
+  return { color: "#64748b", background: "#e2e8f0", label: "Not started" };
+}
+
+function moveInReadinessTone(
+  state:
+    | "not_started"
+    | "in_progress"
+    | "needs_attention"
+    | "ready_for_move_in"
+    | "awaiting_next_action"
+) {
+  if (state === "ready_for_move_in") {
+    return { color: "#166534", background: "#dcfce7", label: "Ready for move-in" };
+  }
+  if (state === "in_progress") {
+    return { color: "#0f766e", background: "#ccfbf1", label: "Preparing for move-in" };
+  }
+  if (state === "needs_attention") {
+    return { color: "#9a3412", background: "#ffedd5", label: "Needs attention" };
+  }
+  if (state === "awaiting_next_action") {
+    return { color: "#1d4ed8", background: "#dbeafe", label: "Awaiting next action" };
+  }
+  return { color: "#64748b", background: "#e2e8f0", label: "Not started" };
+}
+
+function leaseExecutionReadinessTone(
+  state:
+    | "not_ready_for_execution"
+    | "ready_for_execution"
+    | "execution_in_progress"
+    | "awaiting_execution_action"
+) {
+  if (state === "execution_in_progress") {
+    return { color: "#0f766e", background: "#ccfbf1", label: "Execution in progress" };
+  }
+  if (state === "ready_for_execution") {
+    return { color: "#166534", background: "#dcfce7", label: "Ready for execution" };
+  }
+  if (state === "awaiting_execution_action") {
+    return { color: "#1d4ed8", background: "#dbeafe", label: "Awaiting execution action" };
+  }
+  return { color: "#64748b", background: "#e2e8f0", label: "Not ready for execution" };
+}
+
+function leaseSigningTone(
+  state:
+    | "not_ready_for_signing"
+    | "ready_for_signing"
+    | "signing_in_progress"
+    | "awaiting_tenant_signature"
+    | "awaiting_landlord_signature"
+    | "signed_or_completed"
+) {
+  if (state === "signed_or_completed") {
+    return { color: "#166534", background: "#dcfce7", label: "Signed" };
+  }
+  if (state === "awaiting_tenant_signature") {
+    return { color: "#1d4ed8", background: "#dbeafe", label: "Awaiting tenant signature" };
+  }
+  if (state === "awaiting_landlord_signature") {
+    return { color: "#7c3aed", background: "#ede9fe", label: "Awaiting landlord signature" };
+  }
+  if (state === "signing_in_progress") {
+    return { color: "#0f766e", background: "#ccfbf1", label: "Signing in progress" };
+  }
+  if (state === "ready_for_signing") {
+    return { color: "#166534", background: "#dcfce7", label: "Ready for signing" };
+  }
+  return { color: "#64748b", background: "#e2e8f0", label: "Not ready for signing" };
+}
+
+function depositPaymentTone(state: "not_requested" | "requested" | "pending" | "paid" | "needs_attention") {
+  if (state === "paid") {
+    return { color: "#166534", background: "#dcfce7", label: "Payment completed" };
+  }
+  if (state === "pending") {
+    return { color: "#0f766e", background: "#ccfbf1", label: "Payment in progress" };
+  }
+  if (state === "requested") {
+    return { color: "#1d4ed8", background: "#dbeafe", label: "Payment requested" };
+  }
+  if (state === "needs_attention") {
+    return { color: "#9a3412", background: "#ffedd5", label: "Needs attention" };
+  }
+  return { color: "#64748b", background: "#e2e8f0", label: "Not requested" };
 }
 
 type SummaryLoadError = {
@@ -214,15 +385,141 @@ function ApplicationReviewSummaryPageBody() {
     }
   };
 
+  const intakeView = useMemo(() => (summary ? buildLandlordIntakeAlignmentView(summary) : null), [summary]);
+
+  const guidanceView = useMemo(() => (intakeView ? buildLandlordReviewGuidance(intakeView) : null), [intakeView]);
+
+  const interactionLoop = useMemo(
+    () =>
+      intakeView
+        ? buildTenantLandlordInteractionLoop({
+            audience: "landlord",
+            packageCategories: intakeView.packageCategories,
+          })
+        : null,
+    [intakeView]
+  );
+
+  const resolutionView = useMemo(
+    () => (intakeView ? buildFollowUpResolutionState(intakeView.packageCategories) : null),
+    [intakeView]
+  );
+  const structuredNotifications = useMemo(
+    () =>
+      summary && intakeView
+        ? buildLandlordStructuredNotificationTriggers(summary, intakeView.packageCategories)
+        : [],
+    [summary, intakeView]
+  );
+  const decisionWorkspace = useMemo(
+    () =>
+      summary && intakeView
+        ? buildLandlordDecisionWorkspace({
+            summary,
+            packageCategories: intakeView.packageCategories,
+          })
+        : null,
+    [summary, intakeView]
+  );
+  const decisionOutcome = useMemo(
+    () =>
+      decisionWorkspace && resolutionView
+        ? buildLandlordDecisionOutcome({
+            decisionStatus: summary?.decisionSummary?.status || null,
+            decisionWorkspace,
+            followUpOverallState: resolutionView.overallState,
+            remainingCategories: resolutionView.remainingCategoriesNeedingAttention,
+          })
+        : null,
+    [decisionWorkspace, resolutionView, summary]
+  );
+  const leaseTransition = useMemo(
+    () =>
+      decisionOutcome
+        ? buildLeaseFlowTransitionState({
+            audience: "landlord",
+            decisionOutcome,
+          })
+        : null,
+    [decisionOutcome]
+  );
+  const leasePreparation = useMemo(
+    () =>
+      decisionOutcome && leaseTransition && intakeView
+        ? buildLeasePreparationWorkspaceState({
+            audience: "landlord",
+            decisionOutcome,
+            leaseTransition,
+            packageCategories: intakeView.packageCategories,
+          })
+        : null,
+    [decisionOutcome, intakeView, leaseTransition]
+  );
+  const moveInReadiness = useMemo(
+    () =>
+      decisionOutcome && leaseTransition && leasePreparation && intakeView
+        ? buildMoveInReadinessWorkspaceState({
+            audience: "landlord",
+            decisionOutcome,
+            leaseTransition,
+            leasePreparation,
+            packageCategories: intakeView.packageCategories,
+          })
+        : null,
+    [decisionOutcome, intakeView, leasePreparation, leaseTransition]
+  );
+  const executionWorkspace = useMemo(
+    () =>
+      decisionOutcome && leasePreparation && moveInReadiness && intakeView
+        ? buildLeaseExecutionWorkspace({
+            audience: "landlord",
+            executionReadiness: buildLeaseExecutionReadinessState({
+              audience: "landlord",
+              decisionOutcome,
+              leasePreparation,
+              moveInReadiness,
+              packageCategories: intakeView.packageCategories,
+            }),
+          })
+        : null,
+    [decisionOutcome, intakeView, leasePreparation, moveInReadiness]
+  );
+  const signingWorkspace = useMemo(
+    () =>
+      executionWorkspace
+        ? buildLeaseSigningWorkspaceState({
+            audience: "landlord",
+            executionWorkspace,
+          })
+        : null,
+    [executionWorkspace]
+  );
+  const paymentWorkspace = useMemo(
+    () =>
+      signingWorkspace
+        ? buildDepositPaymentFlowState({
+            audience: "landlord",
+            signingWorkspace,
+          })
+        : null,
+    [signingWorkspace]
+  );
+
+  const recentActivity = useMemo(
+    () => (summary ? buildLandlordStructuredActivityTimeline(summary).slice(0, 4) : []),
+    [summary]
+  );
+  const reviewSummaryRequiredPlanLabel = resolveRequiredPlanLabel("review_summary", entitlements.plan) || "Pro";
+
   return (
     <div style={{ padding: 16, display: "grid", gap: 12 }}>
       {!entitlements.canViewReviewSummary ? (
         <LockedFeature
           featureKey="review_summary"
-          title="Screening decision summaries are available on Pro"
+          title={`Screening decision summaries are available on ${reviewSummaryRequiredPlanLabel}`}
           description="Keep application risk signals, screening recommendation, and landlord-ready review notes in one place once your plan includes review summaries."
-          hint="This page stays stable, but the richer decision-support view unlocks on Pro."
-          ctaLabel="Upgrade to Pro"
+          hint={`This page stays stable, but the richer decision-support view unlocks on ${reviewSummaryRequiredPlanLabel}.`}
+          ctaLabel={`Upgrade to ${reviewSummaryRequiredPlanLabel}`}
         />
       ) : null}
       {entitlements.canViewReviewSummary ? (
@@ -271,6 +568,1014 @@ function ApplicationReviewSummaryPageBody() {
 
       {!loading && !error && summary ? (
         <>
+          {intakeView ? (
+            <Card style={{ display: "grid", gap: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                <div>
+                  <div style={{ fontWeight: 700 }}>Intake Summary</div>
+                  <div style={{ fontSize: 13, color: text.subtle, marginTop: 4 }}>
+                    {intakeView.detail}
+                  </div>
+                </div>
+                <div
+                  style={{
+                    padding: "6px 10px",
+                    borderRadius: 999,
+                    fontWeight: 700,
+                    color: intakeTone(intakeView.state).color,
+                    background: intakeTone(intakeView.state).background,
+                  }}
+                >
+                  {intakeTone(intakeView.state).label}
+                </div>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8 }}>
+                {intakeView.metrics.map((metric) => (
+                  <div
+                    key={metric.label}
+                    style={{
+                      border: `1px solid ${colors.border}`,
+                      borderRadius: 10,
+                      background: "#fff",
+                      padding: 12,
+                      display: "grid",
+                      gap: 4,
+                    }}
+                  >
+                    <div style={{ fontSize: 24, fontWeight: 800, color: metric.accent }}>{metric.value}</div>
+                    <div style={{ fontWeight: 600, color: text.main }}>{metric.label}</div>
+                    <div style={{ fontSize: 12, color: text.subtle }}>{metric.hint}</div>
+                  </div>
+                ))}
+              </div>
+
+              <Card style={{ display: "grid", gap: 8 }}>
+                <div style={{ fontWeight: 700 }}>Shared package categories</div>
+                <div style={{ fontSize: 12, color: text.subtle }}>
+                  These categories match the tenant-facing package language and only reflect records available in the current authorized review summary.
+                </div>
+                {intakeView.packageCategories.map((item) => {
+                  const tone =
+                    item.status === "ready"
+                      ? { color: "#166534", background: "#dcfce7", label: "Available to review" }
+                      : item.status === "partial"
+                      ? { color: "#1d4ed8", background: "#dbeafe", label: "Partly available" }
+                      : { color: "#9a3412", background: "#ffedd5", label: "Missing" };
+                  return (
+                    <div
+                      key={item.key}
+                      style={{
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: 10,
+                        padding: 10,
+                        display: "grid",
+                        gap: 6,
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                        <div style={{ fontWeight: 600, color: text.main }}>{item.label}</div>
+                        <div
+                          style={{
+                            padding: "4px 8px",
+                            borderRadius: 999,
+                            fontSize: 12,
+                            fontWeight: 700,
+                            color: tone.color,
+                            background: tone.background,
+                          }}
+                        >
+                          {tone.label}
+                        </div>
+                      </div>
+                      <div style={{ fontSize: 13, color: text.subtle }}>{item.detail}</div>
+                    </div>
+                  );
+                })}
+              </Card>
+
+              <Card style={{ display: "grid", gap: 8 }}>
+                <div style={{ fontWeight: 700 }}>Missing items</div>
+                <div style={{ fontSize: 12, color: text.subtle }}>
+                  Missing categories stay high-level so this view does not imply access to anything the tenant has not shared.
+                </div>
+                {intakeView.missingItems.length ? (
+                  intakeView.missingItems.map((item) => (
+                    <div
+                      key={item.label}
+                      style={{
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: 10,
+                        padding: 10,
+                        display: "grid",
+                        gap: 6,
+                      }}
+                    >
+                      <div style={{ fontWeight: 600, color: text.main }}>{item.label}</div>
+                      <div style={{ fontSize: 13, color: text.subtle }}>{item.detail}</div>
+                    </div>
+                  ))
+                ) : (
+                  <div style={{ fontSize: 13, color: text.subtle }}>
+                    No major intake gaps are surfaced in the current review summary.
+                  </div>
+                )}
+                <div style={{ fontSize: 12, color: text.subtle }}>
+                  Shared with tenant permission and current server-authorized review access.
+                </div>
+              </Card>
+
+              <Card style={{ display: "grid", gap: 8 }}>
+                <div style={{ fontWeight: 700 }}>Recent activity</div>
+                <div style={{ fontSize: 12, color: text.subtle }}>
+                  Recent review-state updates are shown here using the same authorized summary and current package state.
+                </div>
+                {recentActivity.length ? (
+                  recentActivity.map((item) => (
+                    <div
+                      key={item.id}
+                      style={{
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: 10,
+                        padding: 10,
+                        display: "grid",
+                        gap: 6,
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                        <div style={{ fontWeight: 600, color: text.main }}>{item.title}</div>
+                        <div
+                          style={{
+                            padding: "4px 8px",
+                            borderRadius: 999,
+                            fontSize: 12,
+                            fontWeight: 700,
+                            color: item.actionRequired ? "#9a3412" : "#1d4ed8",
+                            background: item.actionRequired ? "#ffedd5" : "#dbeafe",
+                          }}
+                        >
+                          {item.actionRequired ? "Needs attention" : "Updated"}
+                        </div>
+                      </div>
+                      <div style={{ fontSize: 13, color: text.subtle }}>{item.description}</div>
+                      <div style={{ fontSize: 12, color: text.subtle }}>
+                        {(item.actorLabel ? `${item.actorLabel} • ` : "") + dateOr(item.occurredAt)}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div style={{ fontSize: 13, color: text.subtle }}>
+                    No recent review activity is available from the current summary yet.
+                  </div>
+                )}
+              </Card>
+            </Card>
+          ) : null}
+
+          {guidanceView && interactionLoop && resolutionView ? (
+            <Card style={{ display: "grid", gap: 10 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                <div>
+                  <div style={{ fontWeight: 700 }}>Follow-up resolution</div>
+                  <div style={{ fontSize: 13, color: text.subtle, marginTop: 4 }}>
+                    {guidanceView.explanation}
+                  </div>
+                </div>
+                <div
+                  style={{
+                    padding: "6px 10px",
+                    borderRadius: 999,
+                    fontWeight: 700,
+                    color: followUpTone(guidanceView.state).color,
+                    background: followUpTone(guidanceView.state).background,
+                  }}
+                >
+                  {followUpTone(guidanceView.state).label}
+                </div>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 8 }}>
+                <div
+                  style={{
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: 10,
+                    padding: 10,
+                    display: "grid",
+                    gap: 6,
+                  }}
+                >
+                  <div style={{ fontWeight: 700, color: text.main }}>Still needs follow-up</div>
+                  {resolutionView.openFollowUpCategories.length ? (
+                    resolutionView.openFollowUpCategories.map((item) => (
+                      <div key={item.key} style={{ fontSize: 13, color: text.subtle }}>
+                        <strong style={{ color: text.main }}>{item.label}:</strong> {item.detail}
+                      </div>
+                    ))
+                  ) : (
+                    <div style={{ fontSize: 13, color: text.subtle }}>
+                      No categories still need follow-up from the current authorized package.
+                    </div>
+                  )}
+                </div>
+
+                <div
+                  style={{
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: 10,
+                    padding: 10,
+                    display: "grid",
+                    gap: 6,
+                  }}
+                >
+                  <div style={{ fontWeight: 700, color: text.main }}>Now appears addressed</div>
+                  {resolutionView.addressedCategories.length ? (
+                    resolutionView.addressedCategories.map((item) => (
+                      <div key={item.key} style={{ fontSize: 13, color: text.subtle }}>
+                        <strong style={{ color: text.main }}>{item.label}:</strong> {item.detail}
+                      </div>
+                    ))
+                  ) : (
+                    <div style={{ fontSize: 13, color: text.subtle }}>
+                      No addressed categories are visible yet from the current authorized package.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div style={{ display: "grid", gap: 8 }}>
+                <div style={{ fontWeight: 700 }}>Structured follow-up loop</div>
+                <div style={{ fontSize: 13, color: text.subtle }}>{interactionLoop.detail}</div>
+                {resolutionView.openFollowUpCategories.length ? (
+                  <div style={{ fontSize: 13, color: text.subtle }}>
+                    Follow-up stays organized by aligned package categories so the tenant and landlord are looking at the same high-level areas.
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 13, color: text.subtle }}>
+                    The currently visible follow-up categories now appear addressed, so this package is ready for re-review.
+                  </div>
+                )}
+              </div>
+
+              <div style={{ display: "grid", gap: 8 }}>
+                <div style={{ fontWeight: 700 }}>Next steps</div>
+                {interactionLoop.nextSteps.map((step) => (
+                  <div
+                    key={step}
+                    style={{
+                      border: `1px solid ${colors.border}`,
+                      borderRadius: 10,
+                      padding: 10,
+                      fontSize: 13,
+                      color: text.subtle,
+                    }}
+                  >
+                    {step}
+                  </div>
+                ))}
+              </div>
+            </Card>
+          ) : null}
+
+          {decisionWorkspace ? (
+            <Card style={{ display: "grid", gap: 10 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                <div>
+                  <div style={{ fontWeight: 700 }}>Decision workspace</div>
+                  <div style={{ fontSize: 13, color: text.subtle, marginTop: 4 }}>
+                    {decisionWorkspace.explanation}
+                  </div>
+                </div>
+                <div
+                  style={{
+                    padding: "6px 10px",
+                    borderRadius: 999,
+                    fontWeight: 700,
+                    color: decisionTone(decisionWorkspace.decisionState).color,
+                    background: decisionTone(decisionWorkspace.decisionState).background,
+                  }}
+                >
+                  {decisionTone(decisionWorkspace.decisionState).label}
+                </div>
+              </div>
+
+              <div
+                style={{
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: 10,
+                  padding: 10,
+                  display: "grid",
+                  gap: 6,
+                }}
+              >
+                <div style={{ fontWeight: 700, color: text.main }}>Decision status</div>
+                <div style={{ fontSize: 13, color: text.subtle }}>
+                  {decisionWorkspace.statusLabel}
+                </div>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 8 }}>
+                <div
+                  style={{
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: 10,
+                    padding: 10,
+                    display: "grid",
+                    gap: 6,
+                  }}
+                >
+                  <div style={{ fontWeight: 700, color: text.main }}>What is still missing</div>
+                  {decisionWorkspace.blockers.length ? (
+                    decisionWorkspace.blockers.map((item, index) => (
+                      <div key={`${item}-${index}`} style={{ fontSize: 13, color: text.subtle }}>
+                        {item}
+                      </div>
+                    ))
+                  ) : (
+                    <div style={{ fontSize: 13, color: text.subtle }}>
+                      No decision blockers are currently surfaced in this read-first workspace.
+                    </div>
+                  )}
+                </div>
+
+                <div
+                  style={{
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: 10,
+                    padding: 10,
+                    display: "grid",
+                    gap: 6,
+                  }}
+                >
+                  <div style={{ fontWeight: 700, color: text.main }}>Next steps</div>
+                  {decisionWorkspace.nextSteps.map((step, index) => (
+                    <div key={`${step}-${index}`} style={{ fontSize: 13, color: text.subtle }}>
+                      {step}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ fontSize: 12, color: text.subtle }}>
+                This workspace helps organize the next landlord step after review. It does not automate approval, decline, or lease actions.
+              </div>
+
+              {decisionOutcome ? (
+                <div
+                  style={{
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: 10,
+                    padding: 10,
+                    display: "grid",
+                    gap: 10,
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                    <div>
+                      <div style={{ fontWeight: 700, color: text.main }}>Decision outcome</div>
+                      <div style={{ fontSize: 13, color: text.subtle, marginTop: 4 }}>
+                        {decisionOutcome.description}
+                      </div>
+                    </div>
+                    <div
+                      style={{
+                        padding: "6px 10px",
+                        borderRadius: 999,
+                        fontWeight: 700,
+                        color: decisionOutcomeTone(decisionOutcome.outcomeState).color,
+                        background: decisionOutcomeTone(decisionOutcome.outcomeState).background,
+                      }}
+                    >
+                      {decisionOutcomeTone(decisionOutcome.outcomeState).label}
+                    </div>
+                  </div>
+
+                  <div style={{ fontSize: 12, color: text.subtle }}>
+                    {decisionOutcome.sourceLabel}
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 8 }}>
+                    <div
+                      style={{
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: 10,
+                        padding: 10,
+                        display: "grid",
+                        gap: 6,
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, color: text.main }}>Outcome blockers</div>
+                      {decisionOutcome.blockers.length ? (
+                        decisionOutcome.blockers.map((item, index) => (
+                          <div key={`${item}-${index}`} style={{ fontSize: 13, color: text.subtle }}>
+                            {item}
+                          </div>
+                        ))
+                      ) : (
+                        <div style={{ fontSize: 13, color: text.subtle }}>
+                          No current blockers are surfaced for this structured outcome view.
+                        </div>
+                      )}
+                    </div>
+
+                    <div
+                      style={{
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: 10,
+                        padding: 10,
+                        display: "grid",
+                        gap: 6,
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, color: text.main }}>Outcome next steps</div>
+                      {decisionOutcome.landlordNextSteps.map((step, index) => (
+                        <div key={`${step}-${index}`} style={{ fontSize: 13, color: text.subtle }}>
+                          {step}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              {leaseTransition ? (
+                <div
+                  style={{
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: 10,
+                    padding: 10,
+                    display: "grid",
+                    gap: 10,
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                    <div>
+                      <div style={{ fontWeight: 700, color: text.main }}>Lease step</div>
+                      <div style={{ fontSize: 13, color: text.subtle, marginTop: 4 }}>
+                        {leaseTransition.explanation}
+                      </div>
+                    </div>
+                    <div
+                      style={{
+                        padding: "6px 10px",
+                        borderRadius: 999,
+                        fontWeight: 700,
+                        color: leaseTransitionTone(leaseTransition.transitionState).color,
+                        background: leaseTransitionTone(leaseTransition.transitionState).background,
+                      }}
+                    >
+                      {leaseTransitionTone(leaseTransition.transitionState).label}
+                    </div>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 8 }}>
+                    <div
+                      style={{
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: 10,
+                        padding: 10,
+                        display: "grid",
+                        gap: 6,
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, color: text.main }}>Lease blockers</div>
+                      {leaseTransition.blockers.length ? (
+                        leaseTransition.blockers.map((item, index) => (
+                          <div key={`${item}-${index}`} style={{ fontSize: 13, color: text.subtle }}>
+                            {item}
+                          </div>
+                        ))
+                      ) : (
+                        <div style={{ fontSize: 13, color: text.subtle }}>
+                          No lease-step blockers are currently surfaced in this read-first transition view.
+                        </div>
+                      )}
+                    </div>
+
+                    <div
+                      style={{
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: 10,
+                        padding: 10,
+                        display: "grid",
+                        gap: 6,
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, color: text.main }}>Next action</div>
+                      {leaseTransition.nextActions.map((step, index) => (
+                        <div key={`${step}-${index}`} style={{ fontSize: 13, color: text.subtle }}>
+                          {step}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              {leasePreparation ? (
+                <div
+                  style={{
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: 10,
+                    padding: 10,
+                    display: "grid",
+                    gap: 10,
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                    <div>
+                      <div style={{ fontWeight: 700, color: text.main }}>Lease preparation</div>
+                      <div style={{ fontSize: 13, color: text.subtle, marginTop: 4 }}>
+                        {leasePreparation.explanation}
+                      </div>
+                    </div>
+                    <div
+                      style={{
+                        padding: "6px 10px",
+                        borderRadius: 999,
+                        fontWeight: 700,
+                        color: leasePreparationTone(leasePreparation.preparationState).color,
+                        background: leasePreparationTone(leasePreparation.preparationState).background,
+                      }}
+                    >
+                      {leasePreparationTone(leasePreparation.preparationState).label}
+                    </div>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
+                    <div
+                      style={{
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: 10,
+                        padding: 10,
+                        display: "grid",
+                        gap: 6,
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, color: text.main }}>Completed items</div>
+                      {leasePreparation.completedItems.length ? (
+                        leasePreparation.completedItems.map((item) => (
+                          <div key={item.key} style={{ fontSize: 13, color: text.subtle }}>
+                            <strong style={{ color: text.main }}>{item.label}:</strong> {item.detail}
+                          </div>
+                        ))
+                      ) : (
+                        <div style={{ fontSize: 13, color: text.subtle }}>
+                          No completed lease-preparation items are surfaced from this review-summary view yet.
+                        </div>
+                      )}
+                    </div>
+
+                    <div
+                      style={{
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: 10,
+                        padding: 10,
+                        display: "grid",
+                        gap: 6,
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, color: text.main }}>Outstanding items</div>
+                      {leasePreparation.outstandingItems.length ? (
+                        leasePreparation.outstandingItems.map((item) => (
+                          <div key={item.key} style={{ fontSize: 13, color: text.subtle }}>
+                            <strong style={{ color: text.main }}>{item.label}:</strong> {item.detail}
+                          </div>
+                        ))
+                      ) : (
+                        <div style={{ fontSize: 13, color: text.subtle }}>
+                          No outstanding lease-preparation items are currently surfaced from the visible review state.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
+                    <div
+                      style={{
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: 10,
+                        padding: 10,
+                        display: "grid",
+                        gap: 6,
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, color: text.main }}>Preparation blockers</div>
+                      {leasePreparation.blockers.length ? (
+                        leasePreparation.blockers.map((item, index) => (
+                          <div key={`${item}-${index}`} style={{ fontSize: 13, color: text.subtle }}>
+                            {item}
+                          </div>
+                        ))
+                      ) : (
+                        <div style={{ fontSize: 13, color: text.subtle }}>
+                          No current blockers are surfaced in this read-first preparation workspace.
+                        </div>
+                      )}
+                    </div>
+
+                    <div
+                      style={{
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: 10,
+                        padding: 10,
+                        display: "grid",
+                        gap: 6,
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, color: text.main }}>Next steps</div>
+                      {leasePreparation.nextActions.map((step, index) => (
+                        <div key={`${step}-${index}`} style={{ fontSize: 13, color: text.subtle }}>
+                          {step}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              {moveInReadiness ? (
+                <div
+                  style={{
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: 10,
+                    padding: 10,
+                    display: "grid",
+                    gap: 10,
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                    <div>
+                      <div style={{ fontWeight: 700, color: text.main }}>Move-in readiness</div>
+                      <div style={{ fontSize: 13, color: text.subtle, marginTop: 4 }}>
+                        {moveInReadiness.explanation}
+                      </div>
+                    </div>
+                    <div
+                      style={{
+                        padding: "6px 10px",
+                        borderRadius: 999,
+                        fontWeight: 700,
+                        color: moveInReadinessTone(moveInReadiness.readinessState).color,
+                        background: moveInReadinessTone(moveInReadiness.readinessState).background,
+                      }}
+                    >
+                      {moveInReadinessTone(moveInReadiness.readinessState).label}
+                    </div>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
+                    <div
+                      style={{
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: 10,
+                        padding: 10,
+                        display: "grid",
+                        gap: 6,
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, color: text.main }}>Completed items</div>
+                      {moveInReadiness.completedItems.length ? (
+                        moveInReadiness.completedItems.map((item) => (
+                          <div key={item.key} style={{ fontSize: 13, color: text.subtle }}>
+                            <strong style={{ color: text.main }}>{item.label}:</strong> {item.detail}
+                          </div>
+                        ))
+                      ) : (
+                        <div style={{ fontSize: 13, color: text.subtle }}>
+                          No completed move-in readiness items are surfaced from this review-summary view yet.
+                        </div>
+                      )}
+                    </div>
+
+                    <div
+                      style={{
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: 10,
+                        padding: 10,
+                        display: "grid",
+                        gap: 6,
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, color: text.main }}>Outstanding items</div>
+                      {moveInReadiness.outstandingItems.length ? (
+                        moveInReadiness.outstandingItems.map((item) => (
+                          <div key={item.key} style={{ fontSize: 13, color: text.subtle }}>
+                            <strong style={{ color: text.main }}>{item.label}:</strong> {item.detail}
+                          </div>
+                        ))
+                      ) : (
+                        <div style={{ fontSize: 13, color: text.subtle }}>
+                          No outstanding move-in readiness items are currently surfaced from the visible review state.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
+                    <div
+                      style={{
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: 10,
+                        padding: 10,
+                        display: "grid",
+                        gap: 6,
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, color: text.main }}>Readiness blockers</div>
+                      {moveInReadiness.blockers.length ? (
+                        moveInReadiness.blockers.map((item, index) => (
+                          <div key={`${item}-${index}`} style={{ fontSize: 13, color: text.subtle }}>
+                            {item}
+                          </div>
+                        ))
+                      ) : (
+                        <div style={{ fontSize: 13, color: text.subtle }}>
+                          No current blockers are surfaced in this read-first move-in readiness workspace.
+                        </div>
+                      )}
+                    </div>
+
+                    <div
+                      style={{
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: 10,
+                        padding: 10,
+                        display: "grid",
+                        gap: 6,
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, color: text.main }}>Next steps</div>
+                      {moveInReadiness.nextActions.map((step, index) => (
+                        <div key={`${step}-${index}`} style={{ fontSize: 13, color: text.subtle }}>
+                          {step}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              {executionWorkspace ? (
+                <div
+                  style={{
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: 10,
+                    padding: 10,
+                    display: "grid",
+                    gap: 10,
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                    <div>
+                      <div style={{ fontWeight: 700, color: text.main }}>Lease execution workspace</div>
+                      <div style={{ fontSize: 13, color: text.subtle, marginTop: 4 }}>
+                        {executionWorkspace.explanation}
+                      </div>
+                    </div>
+                    <div
+                      style={{
+                        padding: "6px 10px",
+                        borderRadius: 999,
+                        fontWeight: 700,
+                        color: leaseExecutionReadinessTone(executionWorkspace.executionState).color,
+                        background: leaseExecutionReadinessTone(executionWorkspace.executionState).background,
+                      }}
+                    >
+                      {leaseExecutionReadinessTone(executionWorkspace.executionState).label}
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      border: `1px solid ${colors.border}`,
+                      borderRadius: 10,
+                      padding: 10,
+                      display: "grid",
+                      gap: 6,
+                    }}
+                  >
+                    <div style={{ fontWeight: 700, color: text.main }}>Execution status</div>
+                    <div style={{ fontSize: 13, color: text.subtle }}>{executionWorkspace.label}</div>
+                  </div>
+
+                  <div style={{ display: "grid", gap: 12 }}>
+                    <div style={{ fontWeight: 700, color: text.main }}>Blockers</div>
+                    {executionWorkspace.blockers.length ? (
+                      executionWorkspace.blockers.map((item, index) => (
+                        <div key={`${item}-${index}`} style={{ fontSize: 13, color: text.subtle }}>
+                          {item}
+                        </div>
+                      ))
+                    ) : (
+                      <div style={{ fontSize: 13, color: text.subtle }}>
+                        No current blockers are surfaced in this execution handoff view.
+                      </div>
+                    )}
+
+                    <div style={{ fontWeight: 700, color: text.main }}>Next step</div>
+                    {executionWorkspace.nextSteps.map((step, index) => (
+                      <div key={`${step}-${index}`} style={{ fontSize: 13, color: text.subtle }}>
+                        {step}
+                      </div>
+                    ))}
+
+                    <div style={{ fontSize: 12, color: text.subtle }}>
+                      This workspace defines the handoff from structured readiness into the real-world execution process. It does not imply signing, payment, or completion has already happened.
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              {signingWorkspace ? (
+                <div
+                  style={{
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: 10,
+                    padding: 10,
+                    display: "grid",
+                    gap: 10,
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                    <div>
+                      <div style={{ fontWeight: 700, color: text.main }}>Lease signing</div>
+                      <div style={{ fontSize: 13, color: text.subtle, marginTop: 4 }}>
+                        {signingWorkspace.explanation}
+                      </div>
+                    </div>
+                    <div
+                      style={{
+                        padding: "6px 10px",
+                        borderRadius: 999,
+                        fontWeight: 700,
+                        color: leaseSigningTone(signingWorkspace.signingState).color,
+                        background: leaseSigningTone(signingWorkspace.signingState).background,
+                      }}
+                    >
+                      {leaseSigningTone(signingWorkspace.signingState).label}
+                    </div>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
+                    <div
+                      style={{
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: 10,
+                        padding: 10,
+                        display: "grid",
+                        gap: 6,
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, color: text.main }}>Signing status</div>
+                      <div style={{ fontSize: 13, color: text.subtle }}>{signingWorkspace.label}</div>
+                    </div>
+
+                    <div
+                      style={{
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: 10,
+                        padding: 10,
+                        display: "grid",
+                        gap: 6,
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, color: text.main }}>Next actor</div>
+                      <div style={{ fontSize: 13, color: text.subtle }}>{signingWorkspace.currentActorLabel}</div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: "grid", gap: 12 }}>
+                    <div style={{ fontWeight: 700, color: text.main }}>Blockers</div>
+                    {signingWorkspace.blockers.length ? (
+                      signingWorkspace.blockers.map((item, index) => (
+                        <div key={`${item}-${index}`} style={{ fontSize: 13, color: text.subtle }}>
+                          {item}
+                        </div>
+                      ))
+                    ) : (
+                      <div style={{ fontSize: 13, color: text.subtle }}>
+                        No current signing blockers are surfaced from this review-summary view.
+                      </div>
+                    )}
+                    <div style={{ fontWeight: 700, color: text.main }}>Next steps</div>
+                    {signingWorkspace.nextActions.map((step, index) => (
+                      <div key={`${step}-${index}`} style={{ fontSize: 13, color: text.subtle }}>
+                        {step}
+                      </div>
+                    ))}
+
+                    <div style={{ fontSize: 12, color: text.subtle }}>
+                      This signing workspace is a structured status view only. It does not claim provider-backed e-signing or legal completion unless the current authorized lease state truly shows it.
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              {paymentWorkspace ? (
+                <div
+                  style={{
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: 10,
+                    padding: 10,
+                    display: "grid",
+                    gap: 10,
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                    <div>
+                      <div style={{ fontWeight: 700, color: text.main }}>Deposit / first payment</div>
+                      <div style={{ fontSize: 13, color: text.subtle, marginTop: 4 }}>
+                        {paymentWorkspace.explanation}
+                      </div>
+                    </div>
+                    <div
+                      style={{
+                        padding: "6px 10px",
+                        borderRadius: 999,
+                        fontWeight: 700,
+                        color: depositPaymentTone(paymentWorkspace.paymentState).color,
+                        background: depositPaymentTone(paymentWorkspace.paymentState).background,
+                      }}
+                    >
+                      {depositPaymentTone(paymentWorkspace.paymentState).label}
+                    </div>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
+                    <div
+                      style={{
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: 10,
+                        padding: 10,
+                        display: "grid",
+                        gap: 6,
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, color: text.main }}>Payment status</div>
+                      <div style={{ fontSize: 13, color: text.subtle }}>{paymentWorkspace.label}</div>
+                    </div>
+
+                    <div
+                      style={{
+                        border: `1px solid ${colors.border}`,
+                        borderRadius: 10,
+                        padding: 10,
+                        display: "grid",
+                        gap: 6,
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, color: text.main }}>Next actor</div>
+                      <div style={{ fontSize: 13, color: text.subtle }}>{paymentWorkspace.currentActorLabel}</div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: "grid", gap: 12 }}>
+                    {paymentWorkspace.amountLabel ? (
+                      <>
+                        <div style={{ fontWeight: 700, color: text.main }}>Requested payment</div>
+                        <div style={{ fontSize: 13, color: text.subtle }}>{paymentWorkspace.amountLabel}</div>
+                      </>
+                    ) : null}
+
+                    <div style={{ fontWeight: 700, color: text.main }}>Blockers</div>
+                    {paymentWorkspace.blockers.length ? (
+                      paymentWorkspace.blockers.map((item, index) => (
+                        <div key={`${item}-${index}`} style={{ fontSize: 13, color: text.subtle }}>
+                          {item}
+                        </div>
+                      ))
+                    ) : (
+                      <div style={{ fontSize: 13, color: text.subtle }}>
+                        No current payment blockers are surfaced from this review-summary view.
+                      </div>
+                    )}
+
+                    <div style={{ fontWeight: 700, color: text.main }}>Next steps</div>
+                    {paymentWorkspace.nextActions.map((step, index) => (
+                      <div key={`${step}-${index}`} style={{ fontSize: 13, color: text.subtle }}>
+                        {step}
+                      </div>
+                    ))}
+
+                    <div style={{ fontSize: 12, color: text.subtle }}>
+                      This payment workspace is a structured request and status view only. It does not imply RentChain is holding funds or operating as the payment processor.
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </Card>
+          ) : null}
+
+          {structuredNotifications.length ? (
+            <Card style={{ display: "grid", gap: 8 }}>
+              <StructuredNotificationList
+                heading="Recent updates"
+                emptyLabel="Recent workflow-triggered review updates will appear here as the package changes."
+                items={structuredNotifications}
+              />
+            </Card>
+          ) : null}
+
           <Card style={{ display: "grid", gap: 8 }}>
             <div style={{ fontWeight: 700 }}>Applicant Overview</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>

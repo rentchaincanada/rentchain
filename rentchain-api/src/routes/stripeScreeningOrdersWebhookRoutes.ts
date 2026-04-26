@@ -4,11 +4,18 @@ import { db } from "../config/firebase";
 import { getStripeClient } from "../services/stripeService";
 import { STRIPE_WEBHOOK_SECRET } from "../config/screeningConfig";
 import { stripeNotConfiguredResponse, isStripeNotConfiguredError } from "../lib/stripeNotConfigured";
-import { resolvePlanFromPriceId } from "../config/planMatrix";
 import { finalizeStripePayment } from "../services/stripeFinalize";
 import { applyScreeningResultsFromOrder } from "../services/stripeScreeningProcessor";
 import { beginScreening } from "../services/screening/screeningOrchestrator";
 import { writeScreeningEvent } from "../services/screening/screeningEvents";
+import { recordScreeningPaymentFailed } from "../services/screeningPaymentTransactionService";
+import { writeCanonicalEvent } from "../lib/events/buildEvent";
+import { buildScreeningMonetizationPatch } from "../services/screening/screeningMonetizationService";
+import {
+  deriveBillingIntervalFromSubscription,
+  deriveBillingTierFromSubscription,
+  updateLandlordSubscriptionState,
+} from "../services/billingSubscriptionSyncService";
 
 interface StripeWebhookRequest extends Request {
   rawBody?: Buffer;
@@ -36,38 +43,6 @@ async function resolveLandlordIdFromCustomer(
     });
     return null;
   }
-}
-
-async function updateLandlordSubscription(params: {
-  landlordId: string;
-  tier: BillingTier | "free";
-  stripeCustomerId?: string | null;
-  stripeSubscriptionId?: string | null;
-  subscriptionStatus?: string | null;
-  currentPeriodEnd?: number | null;
-}) {
-  const {
-    landlordId,
-    tier,
-    stripeCustomerId,
-    stripeSubscriptionId,
-    subscriptionStatus,
-    currentPeriodEnd,
-  } = params;
-  await db
-    .collection("landlords")
-    .doc(landlordId)
-    .set(
-      {
-        plan: tier,
-        stripeCustomerId: stripeCustomerId || null,
-        stripeSubscriptionId: stripeSubscriptionId || null,
-        subscriptionStatus: subscriptionStatus || null,
-        currentPeriodEnd: currentPeriodEnd ?? null,
-        subscriptionUpdatedAt: Date.now(),
-      },
-      { merge: true }
-    );
 }
 
 async function markApplicationScreeningPaid(params: {
@@ -128,6 +103,16 @@ async function markApplicationScreeningPaid(params: {
       screeningSessionId: sessionId,
       screeningPaymentIntentId: String(paymentIntentId || ""),
       screeningLastUpdatedAt: paidAt,
+      screeningMonetization: buildScreeningMonetizationPatch({
+        current: data?.screeningMonetization,
+        eligibility: "eligible",
+        paymentStatus: "paid",
+        fulfillmentStatus: "ordered",
+        checkoutSessionId: sessionId,
+        paidAt,
+        lastErrorCode: null,
+        lastErrorMessage: null,
+      }),
     },
     { merge: true }
   );
@@ -139,6 +124,29 @@ async function markApplicationScreeningPaid(params: {
     at: paidAt,
     meta: { stripeEventId: eventId, sessionId },
     actor: "system",
+  });
+  await writeCanonicalEvent({
+    domain: "screening",
+    action: "paid",
+    status: "paid",
+    actor: {
+      type: "system",
+      role: "system",
+      id: null,
+    },
+    resource: {
+      type: "rental_application",
+      id: applicationId,
+    },
+    occurredAt: paidAt,
+    visibility: "internal",
+    summary: "Screening payment confirmed",
+    metadata: {
+      landlordId: data?.landlordId || null,
+      stripeEventId: eventId,
+      stripeCheckoutSessionId: sessionId,
+      stripePaymentIntentId: paymentIntentId || null,
+    },
   });
 
   console.log("[stripe_webhook]", {
@@ -197,6 +205,243 @@ async function handleScreeningPaidFromSession(params: {
   return { status, missingApplicationId: false };
 }
 
+function normalizeString(value: unknown, max = 2000): string {
+  return String(value || "").trim().slice(0, max);
+}
+
+function normalizeOptionalString(value: unknown, max = 2000): string | undefined {
+  const next = normalizeString(value, max);
+  return next || undefined;
+}
+
+function normalizeFailureReason(value: unknown): { code?: string; message?: string } {
+  if (!value || typeof value !== "object") return {};
+  const item = value as any;
+  return {
+    code: normalizeOptionalString(item.code, 120),
+    message: normalizeOptionalString(item.message || item.reason, 500),
+  };
+}
+
+async function resolveOrderRefFromStripePayment(params: {
+  orderId?: string;
+  sessionId?: string;
+  paymentIntentId?: string;
+}) {
+  const orderId = normalizeOptionalString(params.orderId, 120);
+  if (orderId) return db.collection("screeningOrders").doc(orderId);
+
+  const sessionId = normalizeOptionalString(params.sessionId, 120);
+  if (sessionId) {
+    const snap = await db.collection("screeningOrders").where("stripeSessionId", "==", sessionId).limit(1).get();
+    if (!snap.empty) return snap.docs[0].ref;
+  }
+
+  const paymentIntentId = normalizeOptionalString(params.paymentIntentId, 120);
+  if (paymentIntentId) {
+    const snap = await db.collection("screeningOrders").where("stripePaymentIntentId", "==", paymentIntentId).limit(1).get();
+    if (!snap.empty) return snap.docs[0].ref;
+  }
+
+  return null;
+}
+
+async function handleScreeningPaymentFailure(params: {
+  eventId: string;
+  eventType: string;
+  orderId?: string;
+  sessionId?: string;
+  paymentIntentId?: string;
+  stripeChargeId?: string;
+  applicationId?: string;
+  landlordId?: string;
+  amountTotalCents?: number;
+  currency?: string;
+  failureCode?: string;
+  failureMessage?: string;
+  occurredAt: number;
+}): Promise<{ ok: boolean; alreadyProcessed: boolean; alreadyFinalized: boolean; orderIdResolved?: string }> {
+  const eventId = normalizeString(params.eventId, 120);
+  const eventRef = db.collection("stripeEvents").doc(eventId);
+  const orderRef = await resolveOrderRefFromStripePayment({
+    orderId: params.orderId,
+    sessionId: params.sessionId,
+    paymentIntentId: params.paymentIntentId,
+  });
+
+  if (!orderRef) {
+    await eventRef.set(
+      {
+        createdAt: params.occurredAt,
+        type: params.eventType,
+        resolved: false,
+        outcome: "failed",
+        orderId: normalizeOptionalString(params.orderId, 120) || null,
+        sessionId: normalizeOptionalString(params.sessionId, 120) || null,
+        paymentIntentId: normalizeOptionalString(params.paymentIntentId, 120) || null,
+      },
+      { merge: true }
+    );
+    return { ok: false, alreadyProcessed: false, alreadyFinalized: false };
+  }
+
+  const result = await db.runTransaction(async (tx) => {
+    const existingEvent = await tx.get(eventRef);
+    if (existingEvent.exists) {
+      return { ok: true, alreadyProcessed: true, alreadyFinalized: true, orderIdResolved: orderRef.id };
+    }
+
+    const orderSnap = await tx.get(orderRef);
+    if (!orderSnap.exists) {
+      tx.set(
+        eventRef,
+        {
+          createdAt: params.occurredAt,
+          type: params.eventType,
+          resolved: false,
+          outcome: "failed",
+          orderRef: orderRef.path,
+        },
+        { merge: true }
+      );
+      return { ok: false, alreadyProcessed: false, alreadyFinalized: false };
+    }
+
+    const order = orderSnap.data() as any;
+    const canonicalStatus = String(order?.status || "").toLowerCase();
+    const mirroredPaymentStatus = String(order?.paymentStatus || "").toLowerCase();
+    const alreadyFinalized =
+      Boolean(order?.finalized) || canonicalStatus === "paid" || mirroredPaymentStatus === "paid";
+    const applicationId = normalizeOptionalString(params.applicationId, 120) || normalizeOptionalString(order?.applicationId, 120);
+    const appRef = applicationId ? db.collection("rentalApplications").doc(applicationId) : null;
+    const appSnap = appRef ? await tx.get(appRef) : null;
+
+    tx.set(
+      eventRef,
+      {
+        createdAt: params.occurredAt,
+        type: params.eventType,
+        resolved: true,
+        outcome: "failed",
+        orderRef: orderRef.path,
+        orderId: orderRef.id,
+        sessionId: normalizeOptionalString(params.sessionId, 120) || normalizeOptionalString(order?.stripeSessionId, 120) || null,
+        stripeCheckoutSessionId:
+          normalizeOptionalString(params.sessionId, 120) ||
+          normalizeOptionalString(order?.stripeCheckoutSessionId, 120) ||
+          normalizeOptionalString(order?.stripeSessionId, 120) ||
+          null,
+        paymentIntentId:
+          normalizeOptionalString(params.paymentIntentId, 120) || normalizeOptionalString(order?.stripePaymentIntentId, 120) || null,
+        stripeChargeId: normalizeOptionalString(params.stripeChargeId, 120) || normalizeOptionalString(order?.stripeChargeId, 120) || null,
+      },
+      { merge: true }
+    );
+
+    if (alreadyFinalized) {
+      tx.set(
+        orderRef,
+        {
+          lastStripeEventId: eventId,
+          updatedAt: params.occurredAt,
+        },
+        { merge: true }
+      );
+      return { ok: true, alreadyProcessed: false, alreadyFinalized: true, orderIdResolved: orderRef.id };
+    }
+
+    tx.set(
+      orderRef,
+      {
+        status: "failed",
+        paymentStatus: "failed",
+        finalized: false,
+        lastStripeEventId: eventId,
+        stripeSessionId: normalizeOptionalString(params.sessionId, 120) || normalizeOptionalString(order?.stripeSessionId, 120) || null,
+        stripeCheckoutSessionId:
+          normalizeOptionalString(params.sessionId, 120) ||
+          normalizeOptionalString(order?.stripeCheckoutSessionId, 120) ||
+          normalizeOptionalString(order?.stripeSessionId, 120) ||
+          null,
+        stripePaymentIntentId:
+          normalizeOptionalString(params.paymentIntentId, 120) || normalizeOptionalString(order?.stripePaymentIntentId, 120) || null,
+        stripeChargeId: normalizeOptionalString(params.stripeChargeId, 120) || normalizeOptionalString(order?.stripeChargeId, 120) || null,
+        amountTotalCents:
+          typeof params.amountTotalCents === "number" ? Math.round(params.amountTotalCents) : order?.amountTotalCents || order?.totalAmountCents || null,
+        currency: normalizeOptionalString(params.currency, 8)?.toLowerCase() || order?.currency || null,
+        error: {
+          code: normalizeOptionalString(params.failureCode, 120) || null,
+          message: normalizeOptionalString(params.failureMessage, 500) || null,
+        },
+        updatedAt: params.occurredAt,
+      },
+      { merge: true }
+    );
+
+    if (appRef && appSnap?.exists) {
+      tx.set(
+        appRef,
+        {
+          screening: {
+            ...((appSnap.data() as any)?.screening || {}),
+            status: "failed",
+            failedAt: params.occurredAt,
+            orderId: orderRef.id,
+            errorCode: normalizeOptionalString(params.failureCode, 120) || null,
+          },
+          screeningMonetization: buildScreeningMonetizationPatch({
+            current: (appSnap.data() as any)?.screeningMonetization,
+            eligibility: "eligible",
+            paymentStatus: "failed",
+            fulfillmentStatus: "blocked",
+            checkoutSessionId:
+              normalizeOptionalString(params.sessionId, 120) ||
+              normalizeOptionalString(order?.stripeCheckoutSessionId, 120) ||
+              normalizeOptionalString(order?.stripeSessionId, 120) ||
+              null,
+            lastErrorCode: "SCREENING_MONETIZATION_BLOCKED",
+            lastErrorMessage: normalizeOptionalString(params.failureMessage, 500) || null,
+          }),
+          updatedAt: params.occurredAt,
+        },
+        { merge: true }
+      );
+    }
+
+    return { ok: true, alreadyProcessed: false, alreadyFinalized: false, orderIdResolved: orderRef.id };
+  });
+
+  if (result.ok && !result.alreadyProcessed && !result.alreadyFinalized) {
+    try {
+      const orderSnap = await db.collection("screeningOrders").doc(result.orderIdResolved || orderRef.id).get();
+      const order = orderSnap.data() as any;
+      await recordScreeningPaymentFailed({
+        landlordId: normalizeOptionalString(params.landlordId, 120) || normalizeOptionalString(order?.landlordId, 120) || "",
+        propertyId: normalizeOptionalString(order?.propertyId, 120) || null,
+        unitId: normalizeOptionalString(order?.unitId, 120) || null,
+        applicationId: normalizeOptionalString(params.applicationId, 120) || normalizeOptionalString(order?.applicationId, 120) || null,
+        screeningOrderId: result.orderIdResolved || orderRef.id,
+        amountCents:
+          typeof params.amountTotalCents === "number" ? Math.round(params.amountTotalCents) : Number(order?.amountTotalCents || order?.totalAmountCents || 0),
+        currency: normalizeOptionalString(params.currency, 8) || order?.currency || "cad",
+        stripeCheckoutSessionId:
+          normalizeOptionalString(params.sessionId, 120) || normalizeOptionalString(order?.stripeCheckoutSessionId, 120) || null,
+        stripePaymentIntentId: normalizeOptionalString(params.paymentIntentId, 120) || normalizeOptionalString(order?.stripePaymentIntentId, 120) || null,
+        stripeChargeId: normalizeOptionalString(params.stripeChargeId, 120) || normalizeOptionalString(order?.stripeChargeId, 120) || null,
+        stripeEventId: eventId,
+        eventType: params.eventType,
+        failureCode: params.failureCode,
+        failureMessage: params.failureMessage,
+        recordedAt: params.occurredAt,
+      });
+    } catch (err: any) {
+      console.warn("[stripe-webhook-orders] failed to record failed transaction", err?.message || err);
+    }
+  }
+
+  return result;
+}
+
 export const stripeWebhookHandler = async (req: StripeWebhookRequest, res: Response) => {
   let stripe: Stripe;
   try {
@@ -246,8 +491,8 @@ export const stripeWebhookHandler = async (req: StripeWebhookRequest, res: Respo
         typeof subscription.customer === "string"
           ? subscription.customer
           : subscription.customer?.id || null;
-      const priceId = subscription.items?.data?.[0]?.price?.id || null;
-      const tier = resolvePlanFromPriceId(priceId);
+      const tier = deriveBillingTierFromSubscription(subscription);
+      const interval = deriveBillingIntervalFromSubscription(subscription);
       const subscriptionStatus = subscription.status || "unknown";
       const currentPeriodEnd =
         typeof (subscription as any).current_period_end === "number"
@@ -257,7 +502,7 @@ export const stripeWebhookHandler = async (req: StripeWebhookRequest, res: Respo
       if (!tier && event.type !== "customer.subscription.deleted") {
         console.warn("[stripe-webhook-subscription] unknown price id", {
           eventId: event.id,
-          priceId,
+          subscriptionId: subscription.id,
         });
         return res.json({ received: true, ignored: true });
       }
@@ -274,12 +519,13 @@ export const stripeWebhookHandler = async (req: StripeWebhookRequest, res: Respo
       }
 
       const resolvedTier = event.type === "customer.subscription.deleted" ? "free" : tier || "free";
-      await updateLandlordSubscription({
+      await updateLandlordSubscriptionState({
         landlordId,
         tier: resolvedTier,
         stripeCustomerId: customerId,
         stripeSubscriptionId: subscription.id,
         subscriptionStatus,
+        subscriptionInterval: resolvedTier === "free" ? null : interval,
         currentPeriodEnd,
       });
       console.log("[stripe-webhook-subscription] updated landlord", {
@@ -454,6 +700,89 @@ export const stripeWebhookHandler = async (req: StripeWebhookRequest, res: Respo
     }
   }
 
+  if (event.type === "checkout.session.async_payment_failed" || event.type === "payment_intent.payment_failed") {
+    try {
+      let orderId: string | undefined;
+      let sessionId: string | undefined;
+      let paymentIntentId: string | undefined;
+      let stripeChargeId: string | undefined;
+      let amountTotalCents: number | undefined;
+      let currency: string | undefined;
+      let landlordId: string | undefined;
+      let applicationId: string | undefined;
+      let failureCode: string | undefined;
+      let failureMessage: string | undefined;
+
+      if (event.type === "payment_intent.payment_failed") {
+        const pi = event.data.object as Stripe.PaymentIntent;
+        orderId = pi.metadata?.orderId;
+        applicationId = pi.metadata?.applicationId;
+        landlordId = pi.metadata?.landlordId;
+        paymentIntentId = pi.id;
+        stripeChargeId = typeof pi.latest_charge === "string" ? pi.latest_charge : undefined;
+        amountTotalCents = typeof pi.amount === "number" ? pi.amount : undefined;
+        currency = pi.currency || undefined;
+        const failure = normalizeFailureReason(pi.last_payment_error);
+        failureCode = failure.code;
+        failureMessage = failure.message;
+
+        if (!orderId) {
+          try {
+            const sessions = await stripe.checkout.sessions.list({
+              payment_intent: pi.id,
+              limit: 1,
+            });
+            const s = sessions.data?.[0];
+            if (s) {
+              sessionId = s.id;
+              orderId =
+                (s.client_reference_id as string | null) ||
+                (s.metadata?.orderId as string | undefined) ||
+                undefined;
+              applicationId = applicationId || (s.metadata?.applicationId as string | undefined) || undefined;
+              landlordId = landlordId || (s.metadata?.landlordId as string | undefined) || undefined;
+            }
+          } catch {
+            // Non-blocking: if lookup fails we still attempt direct order resolution below.
+          }
+        }
+      } else {
+        const session = event.data.object as Stripe.Checkout.Session;
+        orderId =
+          (session.client_reference_id as string | null) ||
+          (session.metadata?.orderId as string | undefined);
+        applicationId = session.metadata?.applicationId || session.metadata?.rentalApplicationId;
+        landlordId = session.metadata?.landlordId;
+        sessionId = session.id;
+        paymentIntentId = typeof session.payment_intent === "string" ? session.payment_intent : undefined;
+        amountTotalCents = typeof session.amount_total === "number" ? session.amount_total : undefined;
+        currency = session.currency || undefined;
+        failureCode = normalizeOptionalString((session as any)?.last_payment_error?.code, 120);
+        failureMessage =
+          normalizeOptionalString((session as any)?.last_payment_error?.message, 500) ||
+          normalizeOptionalString((session as any)?.status, 120);
+      }
+
+      await handleScreeningPaymentFailure({
+        eventId: event.id,
+        eventType: event.type,
+        orderId,
+        sessionId,
+        paymentIntentId,
+        stripeChargeId,
+        applicationId,
+        landlordId,
+        amountTotalCents,
+        currency,
+        failureCode,
+        failureMessage,
+        occurredAt: typeof event.created === "number" ? event.created * 1000 : Date.now(),
+      });
+    } catch (err: any) {
+      console.error("[stripe-webhook-orders] failure handler failed", err?.stack || err);
+    }
+  }
+
   return res.status(200).json({ received: true });
 };
 
@@ -464,4 +793,5 @@ export default router;
 export const __testing = {
   markApplicationScreeningPaid,
   handleScreeningPaidFromSession,
+  handleScreeningPaymentFailure,
 };

@@ -23,7 +23,12 @@ describe("useEntitlements", () => {
         pdf_export: true,
         move_in_readiness: true,
         work_orders: true,
+        marketplace_directory: true,
+        marketplace_contractor_assignment: true,
         review_summary: true,
+        portfolio_health_summary: true,
+        portfolio_score: true,
+        portfolio_action_recommendations: true,
       },
       loading: false,
     } as any);
@@ -39,7 +44,12 @@ describe("useEntitlements", () => {
     expect(result.current.canExportPdf).toBe(true);
     expect(result.current.hasMoveInReadiness).toBe(true);
     expect(result.current.canUseWorkOrders).toBe(true);
+    expect(result.current.canViewMarketplaceDirectory).toBe(true);
+    expect(result.current.canUseMarketplaceContractorAssignment).toBe(true);
     expect(result.current.canViewReviewSummary).toBe(true);
+    expect(result.current.canViewPortfolioHealthSummary).toBe(true);
+    expect(result.current.canViewPortfolioScore).toBe(true);
+    expect(result.current.canViewActionRecommendations).toBe(true);
   });
 
   it("uses safe fallbacks when only legacy capability keys are present", async () => {
@@ -53,6 +63,9 @@ describe("useEntitlements", () => {
         tenant_invites: true,
         maintenance: true,
         exports_basic: false,
+        portfolio_health_summary: true,
+        marketplace_directory: false,
+        marketplace_contractor_assignment: false,
       },
       loading: false,
     } as any);
@@ -66,8 +79,13 @@ describe("useEntitlements", () => {
     expect(result.current.canViewScreeningHistory).toBe(true);
     expect(result.current.hasMoveInReadiness).toBe(true);
     expect(result.current.canUseWorkOrders).toBe(true);
+    expect(result.current.canViewMarketplaceDirectory).toBe(false);
+    expect(result.current.canUseMarketplaceContractorAssignment).toBe(false);
     expect(result.current.canExportPdf).toBe(false);
     expect(result.current.canViewReviewSummary).toBe(false);
+    expect(result.current.canViewPortfolioHealthSummary).toBe(true);
+    expect(result.current.canViewPortfolioScore).toBe(false);
+    expect(result.current.canViewActionRecommendations).toBe(false);
   });
 
   it("keeps Starter screening available even when the capability payload is behind the intended product policy", async () => {
@@ -90,5 +108,10 @@ describe("useEntitlements", () => {
 
     expect(result.current.canScreen).toBe(true);
     expect(result.current.canViewScreeningHistory).toBe(false);
+    expect(result.current.canViewMarketplaceDirectory).toBe(false);
+    expect(result.current.canUseMarketplaceContractorAssignment).toBe(false);
+    expect(result.current.canViewPortfolioHealthSummary).toBe(false);
+    expect(result.current.canViewPortfolioScore).toBe(false);
+    expect(result.current.canViewActionRecommendations).toBe(false);
   });
 });

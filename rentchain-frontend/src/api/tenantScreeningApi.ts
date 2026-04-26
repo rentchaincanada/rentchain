@@ -37,6 +37,21 @@ export type TenantScreeningSessionStatus =
   | "failed"
   | "expired";
 
+export type TenantSafeScreeningStatus =
+  | "consent_required"
+  | "consent_confirmed"
+  | "screening_in_progress"
+  | "completed"
+  | "manual_review"
+  | "blocked"
+  | "unavailable";
+
+export type TenantSafeScreeningNextAction =
+  | "authorize_screening"
+  | "wait_for_landlord"
+  | "view_status"
+  | "no_action_needed";
+
 export type TenantScreeningRequest = {
   id: string;
   rentalApplicationId: string | null;
@@ -47,16 +62,33 @@ export type TenantScreeningRequest = {
   startedAt: number | null;
   completedAt: number | null;
   provider: string | null;
+  providerLabel?: string | null;
   packageType: string | null;
   payerType: string | null;
   propertyLabel: string | null;
   unitLabel: string | null;
   applicantName: string | null;
+  requesterDisplayLabel?: string | null;
   nextAction: string | null;
+  tenantStatus?: TenantSafeScreeningStatus | null;
+  tenantStatusLabel?: string | null;
+  tenantStatusDescription?: string | null;
+  tenantNextAction?: TenantSafeScreeningNextAction | null;
   consent: {
     id: string;
+    requestId?: string;
+    tenantId?: string | null;
+    applicantId?: string | null;
+    rentalApplicationId?: string | null;
+    landlordId?: string | null;
+    propertyId?: string | null;
+    providerKey?: string | null;
+    providerLabel?: string | null;
+    consentVersion?: string | null;
+    consentTextSummary?: string | null;
     viewedAt: number | null;
     acceptedAt: number | null;
+    acceptedBy?: string | null;
     providerDisclosure: string | null;
     disclosureVersion: string | null;
   } | null;
@@ -132,7 +164,7 @@ export async function getTenantScreeningStatus(requestId: string) {
 
 export async function markTenantScreeningViewed(
   requestId: string,
-  input?: { providerDisclosure?: string; disclosureVersion?: string }
+  input?: { providerDisclosure?: string; disclosureVersion?: string; consentSummary?: string }
 ) {
   return tenantApiFetch<{ ok: boolean; screeningRequest: TenantScreeningRequest }>(
     `/tenant/screening/${encodeURIComponent(requestId)}/consent`,
@@ -142,6 +174,7 @@ export async function markTenantScreeningViewed(
         viewed: true,
         providerDisclosure: input?.providerDisclosure,
         disclosureVersion: input?.disclosureVersion,
+        consentSummary: input?.consentSummary,
       },
     }
   );
@@ -149,7 +182,7 @@ export async function markTenantScreeningViewed(
 
 export async function acceptTenantScreeningConsent(
   requestId: string,
-  input?: { providerDisclosure?: string; disclosureVersion?: string }
+  input?: { providerDisclosure?: string; disclosureVersion?: string; consentSummary?: string }
 ) {
   return tenantApiFetch<{ ok: boolean; screeningRequest: TenantScreeningRequest }>(
     `/tenant/screening/${encodeURIComponent(requestId)}/consent`,
@@ -159,6 +192,7 @@ export async function acceptTenantScreeningConsent(
         accepted: true,
         providerDisclosure: input?.providerDisclosure,
         disclosureVersion: input?.disclosureVersion,
+        consentSummary: input?.consentSummary,
       },
     }
   );

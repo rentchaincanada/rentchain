@@ -8,10 +8,22 @@ import { FRONTEND_URL } from "../config/screeningConfig";
 import {
   getPlanMatrix,
   getStripeEnv,
+  isCanonicalFreePlan,
+  resolvePaidBillingPlan,
   resolvePlanPriceId,
   type BillingPlanKey,
 } from "../config/planMatrix";
 import { getScreeningPricing } from "../billing/screeningPricing";
+import { resolveLandlordAndTier } from "../lib/landlordResolver";
+import {
+  deriveBillingIntervalFromCheckoutSession,
+  deriveBillingTierFromCheckoutSession,
+  isVerifiedPaidSession,
+  normalizeBillingInterval,
+  updateLandlordSubscriptionState,
+  type BillingInterval as SyncedBillingInterval,
+  type BillingTier as SyncedBillingTier,
+} from "../services/billingSubscriptionSyncService";
 
 const router = express.Router();
 
@@ -23,22 +35,22 @@ type SubscriptionStatusTier = "free" | "starter" | "pro" | "elite";
 type SubscriptionStatusInterval = "month" | "year" | null;
 
 function normalizeSubscriptionStatusTier(input: any): SubscriptionStatusTier {
-  const raw = String(input || "").trim().toLowerCase();
-  if (raw === "pro" || raw === "professional") return "pro";
-  if (raw === "elite" || raw === "business" || raw === "enterprise") return "elite";
-  if (raw === "starter" || raw === "core") return "starter";
-  return "free";
+  return resolvePaidBillingPlan(input) || "free";
 }
 
-function sendSubscriptionStatus(req: any, res: any) {
-  const tier = normalizeSubscriptionStatusTier(req.user?.plan);
+async function sendSubscriptionStatus(req: any, res: any) {
+  const resolved = await resolveLandlordAndTier(req.user);
+  const tier = normalizeSubscriptionStatusTier(resolved?.tier || req.user?.plan);
   const interval: SubscriptionStatusInterval = null;
   const renewalDate: string | null = null;
   const isActive = tier !== "free";
+  const status = isActive ? "active" : "canceled";
 
   return res.status(200).json({
     ok: true,
     tier,
+    planId: tier,
+    status,
     interval,
     renewalDate,
     isActive,
@@ -91,22 +103,17 @@ router.get("/pricing", (_req, res) => {
 
 type BillingTier = BillingPlanKey;
 type BillingInterval = "monthly" | "yearly";
+type StripeSessionPaymentStatus = "paid" | "unpaid" | "no_payment_required" | null;
 
 function normalizeTier(input: any): BillingTier | "free" | null {
-  const raw = String(input || "").trim().toLowerCase();
+  const raw = String(input || "").trim();
   if (!raw) return null;
-  if (raw === "free" || raw === "screening") return "free";
-  if (raw === "starter" || raw === "core") return "starter";
-  if (raw === "pro") return "pro";
-  if (raw === "business" || raw === "elite" || raw === "enterprise") return "elite";
-  return null;
+  if (isCanonicalFreePlan(raw)) return "free";
+  return resolvePaidBillingPlan(raw);
 }
 
 function normalizeInterval(input: any): BillingInterval {
-  const raw = String(input || "").trim().toLowerCase();
-  if (raw === "year" || raw === "yearly" || raw === "annual" || raw === "annually") return "yearly";
-  if (raw === "month" || raw === "monthly") return "monthly";
-  return "monthly";
+  return normalizeBillingInterval(input) || "monthly";
 }
 
 function resolvePriceId(tier: BillingTier, interval: BillingInterval) {
@@ -137,6 +144,223 @@ function appendBillingCanceled(path: string): string {
   if (path.includes("?")) return `${path}&billing=canceled=1`;
   return `${path}?billing=canceled=1`;
 }
+
+function isStripeConnectionError(err: any): boolean {
+  const name = String(err?.name || "").trim();
+  const type = String(err?.type || "").trim();
+  const code = String(err?.code || "").trim();
+  const message = String(err?.message || "").trim();
+  return (
+    name === "StripeConnectionError" ||
+    type === "StripeConnectionError" ||
+    code === "StripeConnectionError" ||
+    /connection to stripe/i.test(message)
+  );
+}
+
+function resolveStripeKeyMode(): "live" | "test" | "unknown" {
+  const key = String(process.env.STRIPE_SECRET_KEY || "").trim();
+  if (key.startsWith("sk_live_")) return "live";
+  if (key.startsWith("sk_test_")) return "test";
+  return "unknown";
+}
+
+function asOptionalString(value: unknown): string | null {
+  if (value == null) return null;
+  const normalized = String(value).trim();
+  return normalized ? normalized : null;
+}
+
+function sanitizeHeaders(headers: unknown): Record<string, string> | null {
+  if (!headers || typeof headers !== "object" || Array.isArray(headers)) return null;
+  const redacted = new Set(["authorization", "proxy-authorization", "cookie", "set-cookie", "x-api-key"]);
+  const result: Record<string, string> = {};
+  for (const [rawKey, rawValue] of Object.entries(headers as Record<string, unknown>)) {
+    const key = String(rawKey || "").trim().toLowerCase();
+    if (!key || redacted.has(key)) continue;
+    const value = asOptionalString(rawValue);
+    if (value) result[key] = value;
+  }
+  return Object.keys(result).length ? result : null;
+}
+
+function getErrorChain(err: any): any[] {
+  const chain: any[] = [];
+  const seen = new Set<any>();
+  let current = err;
+
+  while (current && typeof current === "object" && !seen.has(current) && chain.length < 4) {
+    chain.push(current);
+    seen.add(current);
+    current = current.cause;
+  }
+
+  return chain;
+}
+
+function classifyTransportFailure(parts: Array<string | null | undefined>): string {
+  const haystack = parts
+    .filter(Boolean)
+    .map((part) => String(part).toLowerCase())
+    .join(" ");
+
+  if (
+    /etimedout|timeout|timed out|esockettimedout/.test(haystack)
+  ) {
+    return "timeout";
+  }
+  if (
+    /enotfound|eai_again|getaddrinfo|dns/.test(haystack)
+  ) {
+    return "dns_resolution_failure";
+  }
+  if (
+    /tls|ssl|certificate|cert_|self signed|unable to verify/.test(haystack)
+  ) {
+    return "tls_failure";
+  }
+  if (
+    /econnreset|socket hang up|econnrefused|ehostunreach|enetunreach|epipe|socket/.test(haystack)
+  ) {
+    return "socket_failure";
+  }
+
+  return "unknown_transport_failure";
+}
+
+function extractStripeTransportDiagnostics(err: any) {
+  const chain = getErrorChain(err);
+  const raw = err?.raw && typeof err.raw === "object" ? err.raw : null;
+  const transportSource = chain.find(
+    (entry) =>
+      entry &&
+      typeof entry === "object" &&
+      (entry.errno != null ||
+        entry.syscall != null ||
+        entry.hostname != null ||
+        entry.host != null ||
+        entry.address != null ||
+        entry.port != null ||
+        entry.code != null)
+  );
+
+  const primaryMessage = asOptionalString(err?.message);
+  const causeMessage = asOptionalString(err?.cause?.message);
+  const detail = asOptionalString(err?.detail) || asOptionalString(raw?.detail);
+  const errno = asOptionalString(transportSource?.errno) || asOptionalString(err?.errno) || asOptionalString(raw?.errno);
+  const syscall =
+    asOptionalString(transportSource?.syscall) || asOptionalString(err?.syscall) || asOptionalString(raw?.syscall);
+  const hostname =
+    asOptionalString(transportSource?.hostname) || asOptionalString(err?.hostname) || asOptionalString(raw?.hostname);
+  const host = asOptionalString(transportSource?.host) || asOptionalString(err?.host) || asOptionalString(raw?.host);
+  const address =
+    asOptionalString(transportSource?.address) || asOptionalString(err?.address) || asOptionalString(raw?.address);
+  const port =
+    asOptionalString(transportSource?.port) || asOptionalString(err?.port) || asOptionalString(raw?.port);
+  const nestedCode =
+    asOptionalString(transportSource?.code) ||
+    asOptionalString(err?.cause?.code) ||
+    asOptionalString(raw?.code);
+  const nestedType =
+    asOptionalString(transportSource?.name) ||
+    asOptionalString(err?.cause?.name) ||
+    asOptionalString(raw?.type);
+  const stackPreview = asOptionalString(err?.stack)?.split("\n").slice(0, 3).join("\n") || null;
+  const transportFailureClass = classifyTransportFailure([
+    err?.code,
+    err?.type,
+    err?.name,
+    primaryMessage,
+    causeMessage,
+    detail,
+    errno,
+    syscall,
+    hostname,
+    host,
+    nestedCode,
+    nestedType,
+  ]);
+
+  return {
+    transportFailureClass,
+    detail,
+    errno,
+    syscall,
+    hostname,
+    host,
+    address,
+    port,
+    causeMessage,
+    nestedCode,
+    nestedType,
+    rawType: asOptionalString(raw?.type),
+    rawCode: asOptionalString(raw?.code),
+    stackPreview,
+    causeChain: chain.slice(1).map((entry) => ({
+      name: asOptionalString(entry?.name),
+      code: asOptionalString(entry?.code),
+      errno: asOptionalString(entry?.errno),
+      syscall: asOptionalString(entry?.syscall),
+      message: asOptionalString(entry?.message),
+    })),
+  };
+}
+
+function logStripeFailure(scope: string, err: any, extra: Record<string, unknown> = {}) {
+  const diagnostics = extractStripeTransportDiagnostics(err);
+  console.error(`[billing/${scope}] Stripe request failed`, {
+    route: extra.route || null,
+    operation: extra.operation || null,
+    message: err?.message,
+    name: err?.name,
+    type: err?.type,
+    code: err?.code,
+    statusCode: err?.statusCode,
+    requestId: err?.requestId || err?.raw?.requestId || null,
+    requestLogUrl: err?.request_log_url || err?.raw?.request_log_url || null,
+    numRetries: err?.numRetries ?? err?.raw?.numRetries ?? null,
+    headers: sanitizeHeaders(err?.headers || err?.raw?.headers || null),
+    stripeEnv: getStripeEnv(),
+    stripeKeyMode: resolveStripeKeyMode(),
+    ...diagnostics,
+    ...extra,
+  });
+}
+
+function sendStripeRouteError(
+  res: any,
+  context: {
+    scope: "checkout" | "portal";
+    route: string;
+    operation: string;
+  },
+  err: any
+) {
+  if (isStripeNotConfiguredError(err)) {
+    return res.status(400).json(stripeNotConfiguredResponse());
+  }
+
+  if (isStripeConnectionError(err)) {
+    logStripeFailure(context.scope, err, {
+      route: context.route,
+      operation: context.operation,
+    });
+    return res.status(503).json({
+      ok: false,
+      error: context.scope === "checkout" ? "checkout_temporarily_unavailable" : "billing_portal_temporarily_unavailable",
+    });
+  }
+
+  logStripeFailure(context.scope, err, {
+    route: context.route,
+    operation: context.operation,
+  });
+  return res.status(500).json({
+    ok: false,
+    error: context.scope === "checkout" ? "checkout_failed" : "billing_portal_failed",
+  });
+}
+
 router.use((req, res, next) => {
   res.setHeader("x-billing-routes", "present");
   next();
@@ -170,48 +394,39 @@ router.get(
 );
 
 async function handleCheckout(req: any, res: any) {
-  const landlordId = req.user?.landlordId || req.user?.id;
-  const userId = req.user?.id || null;
-  if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
-
-  const { tier, interval, plan, requiredPlan, planKey, featureKey, source, redirectTo } =
-    req.body || {};
-  const resolvedTier = normalizeTier(tier || plan || requiredPlan || planKey);
-  if (!resolvedTier) {
-    return res.status(400).json({ ok: false, error: "missing_tier" });
-  }
-  if (resolvedTier === "free") {
-    return res.status(400).json({ ok: false, error: "invalid_tier" });
-  }
-  const resolvedInterval = normalizeInterval(interval);
-
-  const resolved = resolvePriceId(resolvedTier, resolvedInterval);
-  if (!resolved.priceId) {
-    console.error("[billing/checkout] price not configured or invalid", { envKey: resolved.envKey });
-    const statusCode = process.env.NODE_ENV === "production" ? 503 : 400;
-    return res.status(statusCode).json({
-      ok: false,
-      error: "price_not_configured",
-      detail: `${resolved.envKey} must be Stripe price id price_...`,
-    });
-  }
-
-  let stripe: any;
   try {
-    stripe = getStripeClient();
-  } catch (err) {
-    if (isStripeNotConfiguredError(err)) {
-      return res.status(400).json(stripeNotConfiguredResponse());
+    const landlordId = req.user?.landlordId || req.user?.id;
+    const userId = req.user?.id || null;
+    if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+
+    const { tier, interval, plan, requiredPlan, planKey, featureKey, source, redirectTo } =
+      req.body || {};
+    const resolvedTier = normalizeTier(tier || plan || requiredPlan || planKey);
+    if (!resolvedTier) {
+      return res.status(400).json({ ok: false, error: "missing_tier" });
     }
-    throw err;
-  }
+    if (resolvedTier === "free") {
+      return res.status(400).json({ ok: false, error: "invalid_tier" });
+    }
+    const resolvedInterval = normalizeInterval(interval);
 
-  const featureKeyValue = String(featureKey || "unknown").trim().slice(0, 80);
-  const sourceValue = String(source || "unknown").trim().slice(0, 80);
-  const redirectToValue = sanitizeRedirectTo(redirectTo);
-  const frontendUrl = resolveFrontendBase();
+    const resolved = resolvePriceId(resolvedTier, resolvedInterval);
+    if (!resolved.priceId) {
+      console.error("[billing/checkout] price not configured or invalid", { envKey: resolved.envKey });
+      const statusCode = process.env.NODE_ENV === "production" ? 503 : 400;
+      return res.status(statusCode).json({
+        ok: false,
+        error: "price_not_configured",
+        detail: `${resolved.envKey} must be Stripe price id price_...`,
+      });
+    }
 
-  try {
+    const stripe = getStripeClient();
+    const featureKeyValue = String(featureKey || "unknown").trim().slice(0, 80);
+    const sourceValue = String(source || "unknown").trim().slice(0, 80);
+    const redirectToValue = sanitizeRedirectTo(redirectTo);
+    const frontendUrl = resolveFrontendBase();
+
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       payment_method_types: ["card"],
@@ -242,10 +457,15 @@ async function handleCheckout(req: any, res: any) {
 
     return res.status(200).json({ ok: true, url: session.url });
   } catch (err: any) {
-    console.error("[billing/checkout] Failed to create Checkout Session", {
-      message: err?.message,
-    });
-    return res.status(500).json({ ok: false, error: "checkout_failed" });
+    return sendStripeRouteError(
+      res,
+      {
+        scope: "checkout",
+        route: String(req.originalUrl || req.path || "/api/billing/checkout"),
+        operation: "checkout.sessions.create",
+      },
+      err
+    );
   }
 }
 
@@ -253,47 +473,134 @@ router.post("/checkout", requireAuth, handleCheckout);
 router.post("/subscribe", requireAuth, handleCheckout);
 router.post("/upgrade", requireAuth, handleCheckout);
 
-router.post("/portal", requireAuth, async (req: any, res) => {
-  const landlordId = req.user?.landlordId || req.user?.id;
-  if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+router.get("/session-status", requireAuth, async (req: any, res) => {
+  const sessionId = String(req.query?.session_id || "").trim();
+  if (!sessionId) {
+    return res.status(400).json({ ok: false, error: "missing_session_id" });
+  }
 
-  let stripe: any;
   try {
-    stripe = getStripeClient();
-  } catch (err) {
+    const stripe = getStripeClient();
+    const session = await stripe.checkout.sessions.retrieve(sessionId, {
+      expand: ["subscription"],
+    });
+
+    const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
+    const metadataLandlordId = String(session.metadata?.landlordId || "").trim();
+    if (!landlordId) {
+      return res.status(401).json({ ok: false, error: "Unauthorized" });
+    }
+    if (!metadataLandlordId || metadataLandlordId !== landlordId) {
+      return res.status(403).json({ ok: false, error: "forbidden" });
+    }
+
+    const subscription =
+      session.subscription && typeof session.subscription === "object" ? session.subscription : null;
+    const resolvedPlan = deriveBillingTierFromCheckoutSession(session);
+    const resolvedInterval = deriveBillingIntervalFromCheckoutSession(session);
+    const paymentStatus = (asOptionalString(session.payment_status) as StripeSessionPaymentStatus) || null;
+    const sessionStatus = asOptionalString(session.status) || "unknown";
+    const subscriptionStatus = asOptionalString(subscription?.status) || null;
+    const currentPeriodEnd =
+      typeof (subscription as any)?.current_period_end === "number"
+        ? (subscription as any).current_period_end * 1000
+        : null;
+    const stripeCustomerId =
+      typeof session.customer === "string" ? session.customer : asOptionalString((session.customer as any)?.id);
+    const stripeSubscriptionId =
+      typeof session.subscription === "string"
+        ? session.subscription
+        : asOptionalString((session.subscription as any)?.id);
+    const shouldActivatePlan = Boolean(resolvedPlan) && isVerifiedPaidSession(sessionStatus, paymentStatus);
+
+    if (shouldActivatePlan) {
+      await updateLandlordSubscriptionState({
+        landlordId,
+        tier: resolvedPlan as SyncedBillingTier,
+        stripeCustomerId,
+        stripeSubscriptionId,
+        stripeCheckoutSessionId: session.id,
+        subscriptionStatus: subscriptionStatus || null,
+        subscriptionInterval: (resolvedInterval as SyncedBillingInterval | null) || null,
+        currentPeriodEnd,
+      });
+    }
+
+    return res.status(200).json({
+      ok: true,
+      sessionId: session.id,
+      status: sessionStatus,
+      payment_status: paymentStatus,
+      customer: stripeCustomerId,
+      plan: resolvedPlan,
+      interval: resolvedInterval,
+      subscription_status: subscriptionStatus,
+      current_period_end: currentPeriodEnd,
+      plan_updated: shouldActivatePlan,
+    });
+  } catch (err: any) {
     if (isStripeNotConfiguredError(err)) {
       return res.status(400).json(stripeNotConfiguredResponse());
     }
-    throw err;
+    if (Number(err?.statusCode) === 404) {
+      return res.status(404).json({ ok: false, error: "session_not_found" });
+    }
+    return sendStripeRouteError(
+      res,
+      {
+        scope: "checkout",
+        route: String(req.originalUrl || req.path || "/api/billing/session-status"),
+        operation: "checkout.sessions.retrieve",
+      },
+      err
+    );
   }
+});
 
-  const landlordRef = db.collection("landlords").doc(String(landlordId));
-  const landlordSnap = await landlordRef.get();
-  if (!landlordSnap.exists) {
-    return res.status(404).json({ ok: false, error: "landlord_not_found" });
-  }
-  const landlord = landlordSnap.data() as any;
+router.post("/portal", requireAuth, async (req: any, res) => {
+  try {
+    const landlordId = req.user?.landlordId || req.user?.id;
+    if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
 
-  let stripeCustomerId = String(landlord?.stripeCustomerId || "").trim();
-  if (!stripeCustomerId) {
-    const email = String(landlord?.email || req.user?.email || "").trim() || undefined;
-    const name = String(landlord?.name || landlord?.companyName || "").trim() || undefined;
-    const customer = await stripe.customers.create({
-      email,
-      name,
-      metadata: { landlordId: String(landlordId) },
+    const stripe = getStripeClient();
+    const landlordRef = db.collection("landlords").doc(String(landlordId));
+    const landlordSnap = await landlordRef.get();
+    if (!landlordSnap.exists) {
+      return res.status(404).json({ ok: false, error: "landlord_not_found" });
+    }
+    const landlord = landlordSnap.data() as any;
+
+    let stripeCustomerId = String(landlord?.stripeCustomerId || "").trim();
+    if (!stripeCustomerId) {
+      const email = String(landlord?.email || req.user?.email || "").trim() || undefined;
+      const name = String(landlord?.name || landlord?.companyName || "").trim() || undefined;
+      const customer = await stripe.customers.create({
+        email,
+        name,
+        metadata: { landlordId: String(landlordId) },
+      });
+      stripeCustomerId = customer.id;
+      await landlordRef.set({ stripeCustomerId }, { merge: true });
+    }
+
+    const frontendUrl = resolveFrontendBase();
+    const session = await stripe.billingPortal.sessions.create({
+      customer: stripeCustomerId,
+      return_url: `${frontendUrl}/billing`,
     });
-    stripeCustomerId = customer.id;
-    await landlordRef.set({ stripeCustomerId }, { merge: true });
+
+    return res.status(200).json({ ok: true, url: session.url });
+  } catch (err: any) {
+    return sendStripeRouteError(
+      res,
+      {
+        scope: "portal",
+        route: String(req.originalUrl || req.path || "/api/billing/portal"),
+        operation: "billingPortal.sessions.create",
+      },
+      err
+    );
   }
-
-  const frontendUrl = resolveFrontendBase();
-  const session = await stripe.billingPortal.sessions.create({
-    customer: stripeCustomerId,
-    return_url: `${frontendUrl}/billing`,
-  });
-
-  return res.status(200).json({ ok: true, url: session.url });
 });
 
 export default router;

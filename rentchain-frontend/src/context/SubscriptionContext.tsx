@@ -8,8 +8,9 @@ import React, {
 } from "react";
 import { fetchMe } from "../api/meApi";
 import { getAuthToken } from "../lib/authToken";
+import { isPlanAtLeast, normalizePlan, type Plan } from "../lib/plan";
 
-export type SubscriptionPlan = "screening" | "starter" | "core" | "pro" | "elite";
+export type SubscriptionPlan = Plan;
 
 type SubscriptionFeatures = {
   plan: SubscriptionPlan;
@@ -49,22 +50,14 @@ function computeFeatures(plan: SubscriptionPlan): SubscriptionFeatures {
     SubscriptionPlan,
     { properties: number; units: number }
   > = {
-    screening: { properties: Infinity, units: Infinity },
+    free: { properties: Infinity, units: Infinity },
     starter: { properties: Infinity, units: Infinity },
-    core: { properties: Infinity, units: Infinity },
     pro: { properties: Infinity, units: Infinity },
     elite: { properties: Infinity, units: Infinity },
   };
 
-  const caps = capsByPlan[plan] || capsByPlan.starter;
-  const planRank: Record<SubscriptionPlan, number> = {
-    screening: 0,
-    starter: 1,
-    core: 1,
-    pro: 2,
-    elite: 3,
-  };
-  const atLeast = (min: SubscriptionPlan) => planRank[plan] >= planRank[min];
+  const caps = capsByPlan[plan] || capsByPlan.free;
+  const atLeast = (min: SubscriptionPlan) => isPlanAtLeast(plan, min);
 
   return {
     plan,
@@ -90,7 +83,7 @@ function computeFeatures(plan: SubscriptionPlan): SubscriptionFeatures {
 
 export function SubscriptionProvider({
   children,
-  initialPlan = "screening",
+  initialPlan = "free",
 }: {
   children: ReactNode;
   initialPlan?: SubscriptionPlan;
@@ -109,13 +102,13 @@ export function SubscriptionProvider({
       .then((me) => {
         const user = (me as any)?.user && typeof (me as any).user === "object" ? (me as any).user : me;
         const p = user?.plan;
-        if (p === "screening" || p === "starter" || p === "core" || p === "pro" || p === "elite") {
-          setPlan(p);
+        if (p != null) {
+          setPlan(normalizePlan(p));
           return;
         }
 
         if (user?.role === "landlord") {
-          setPlan("screening");
+          setPlan("free");
         }
       })
       .catch(() => {

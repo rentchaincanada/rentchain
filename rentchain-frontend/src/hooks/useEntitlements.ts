@@ -1,7 +1,8 @@
 import { useMemo } from "react";
 import { useAuth } from "@/context/useAuth";
 import { useCapabilities } from "@/hooks/useCapabilities";
-import { normalizePlanName, resolveRequiredPlan } from "@/lib/upgradePrompt";
+import { normalizePlan } from "@/lib/plan";
+import { resolveRequiredPlan } from "@/lib/upgradePrompt";
 
 function hasFeature(features: Record<string, boolean>, keys: string[]) {
   return keys.some((key) => Boolean(features[key]));
@@ -15,7 +16,7 @@ export function useEntitlements() {
     const role = String(user?.actorRole || user?.role || "").toLowerCase();
     const isAdmin = role === "admin";
     const featureMap = features || {};
-    const plan = normalizePlanName(caps?.plan || user?.plan || null) || "free";
+    const plan = normalizePlan(caps?.plan || user?.plan || null);
     const hasPaidScreeningPlan = plan === "starter" || plan === "pro" || plan === "elite";
 
     const canScreen =
@@ -25,7 +26,21 @@ export function useEntitlements() {
     const canExportPdf = isAdmin || hasFeature(featureMap, ["pdf_export", "exports_basic", "tenantPdfReport"]);
     const hasMoveInReadiness = isAdmin || hasFeature(featureMap, ["move_in_readiness", "tenant_invites"]);
     const canUseWorkOrders = isAdmin || hasFeature(featureMap, ["work_orders", "maintenance"]);
+    const canViewMarketplaceDirectory = isAdmin || hasFeature(featureMap, ["marketplace_directory"]);
+    const canUseMarketplaceContractorAssignment =
+      isAdmin || hasFeature(featureMap, ["marketplace_contractor_assignment"]);
     const canViewReviewSummary = isAdmin || hasFeature(featureMap, ["review_summary", "pdf_export", "exports_basic"]);
+    const canViewPortfolioHealthSummary = isAdmin || hasFeature(featureMap, ["portfolio_health_summary"]);
+    const canViewPortfolioScore = isAdmin || hasFeature(featureMap, [
+      "portfolio_score",
+      "portfolio_dashboard",
+      "portfolio_analytics",
+    ]);
+    const canViewActionRecommendations = isAdmin || hasFeature(featureMap, [
+      "portfolio_action_recommendations",
+      "ai_summaries",
+      "portfolio_analytics",
+    ]);
 
     return {
       loading,
@@ -40,7 +55,12 @@ export function useEntitlements() {
       canExportPdf,
       hasMoveInReadiness,
       canUseWorkOrders,
+      canViewMarketplaceDirectory,
+      canUseMarketplaceContractorAssignment,
       canViewReviewSummary,
+      canViewPortfolioHealthSummary,
+      canViewPortfolioScore,
+      canViewActionRecommendations,
     };
   }, [caps?.plan, features, loading, user?.actorRole, user?.plan, user?.role]);
 }
