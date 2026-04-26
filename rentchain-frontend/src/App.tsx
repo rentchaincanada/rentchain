@@ -115,6 +115,7 @@ const PortfolioHealthSummaryPage = lazy(() => import("./pages/landlord/Portfolio
 const LandlordAnalyticsPage = lazy(() => import("./pages/landlord/LandlordAnalyticsPage"));
 const LandlordPortfolioScorePage = lazy(() => import("./pages/landlord/PortfolioScorePage"));
 const SharedPortfolioScorePage = lazy(() => import("./pages/public/SharedPortfolioScorePage"));
+const TenantSharePackagePage = lazy(() => import("./pages/public/TenantSharePackagePage"));
 const ActionRecommendationsPage = lazy(() => import("./pages/landlord/ActionRecommendationsPage"));
 const InvitesPage = lazy(() => import("./pages/landlord/InvitesPage"));
 const MessagesPage = lazy(() => import("./pages/MessagesPage"));
@@ -1257,6 +1258,7 @@ function App() {
         ))}
         <Route path="/apply/:token" element={<PublicApplyPage />} />
         <Route path="/verify/:token" element={<VerifyScreeningPage />} />
+        <Route path="/share/:token" element={suspensePage(<TenantSharePackagePage />)} />
 
         <Route path="*" element={<NotFoundPage />} />
       </Routes>

@@ -496,6 +496,100 @@ describe("tenantPortalRoutes foundation", () => {
     expect(res.body?.lease?.tenantSignature?.drawnDataUrl).toBeUndefined();
   });
 
+  it("creates a tenant share package without persisting a raw token", async () => {
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/share-packages",
+      body: { expiresInDays: 7 },
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.data?.shareUrl).toMatch(/\/share\//);
+    const shareDocs = Array.from(ensureCollection("tenantSharePackages").values());
+    expect(shareDocs).toHaveLength(1);
+    expect(shareDocs[0]?.tenantId).toBe("tenant-1");
+    expect(shareDocs[0]?.tokenHash).toBeTruthy();
+    expect(shareDocs[0]?.token).toBeUndefined();
+  });
+
+  it("lists only active tenant share packages", async () => {
+    ensureCollection("tenantSharePackages").set("share-1", {
+      id: "share-1",
+      tenantId: "tenant-1",
+      tokenHash: "hash-1",
+      createdAt: 100,
+      expiresAt: Date.now() + 10_000,
+      status: "active",
+    });
+    ensureCollection("tenantSharePackages").set("share-2", {
+      id: "share-2",
+      tenantId: "tenant-1",
+      tokenHash: "hash-2",
+      createdAt: 90,
+      expiresAt: Date.now() - 10_000,
+      status: "active",
+    });
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/share-packages",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.data).toEqual([
+      expect.objectContaining({
+        id: "share-1",
+        status: "active",
+      }),
+    ]);
+  });
+
+  it("revokes a tenant share package immediately", async () => {
+    ensureCollection("tenantSharePackages").set("share-1", {
+      id: "share-1",
+      tenantId: "tenant-1",
+      tokenHash: "hash-1",
+      createdAt: 100,
+      expiresAt: Date.now() + 10_000,
+      status: "active",
+    });
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "DELETE",
+      url: "/share-packages/share-1",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(ensureCollection("tenantSharePackages").get("share-1")?.status).toBe("revoked");
+  });
+
   it("returns a grouped tenant-safe application completion checklist", async () => {
     const router = (await import("../tenantPortalRoutes")).default;
     const res = await invokeRouter(router, {

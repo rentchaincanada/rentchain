@@ -29,6 +29,11 @@ import {
 } from "../lib/maintenanceNotifications";
 import { writeCanonicalEvent } from "../lib/events/buildEvent";
 import { adaptTenantSafeScreeningState } from "../services/screening/tenantScreeningStatusAdapter";
+import {
+  createTenantSharePackage,
+  listTenantSharePackages,
+  revokeTenantSharePackage,
+} from "../services/tenantPortal/tenantSharePackageService";
 
 const router = Router();
 router.use(authenticateJwt);
@@ -2936,6 +2941,77 @@ async function handleTenantWorkspaceSummary(req: any, res: any) {
 
 router.get("/workspace", requireTenantWorkspaceIdentity, handleTenantWorkspaceSummary);
 router.get("/me", requireTenantWorkspaceIdentity, handleTenantWorkspaceSummary);
+
+router.post("/share-packages", requireTenantWorkspaceIdentity, async (req: any, res) => {
+  const context = await resolveWorkspaceContextOrRespond(req, res);
+  if (!context) return;
+
+  const tenantId = String(req.user?.tenantId || context.tenantId || "").trim();
+  if (!tenantId) {
+    return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+  }
+
+  try {
+    const created = await createTenantSharePackage({
+      tenantId,
+      expiresInDays: req.body?.expiresInDays,
+    });
+    return res.json({ ok: true, data: created });
+  } catch (err: any) {
+    console.error("[tenant/share-packages:create] failed", {
+      tenantId,
+      message: err?.message || "failed",
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_SHARE_PACKAGE_CREATE_FAILED" });
+  }
+});
+
+router.get("/share-packages", requireTenantWorkspaceIdentity, async (req: any, res) => {
+  const context = await resolveWorkspaceContextOrRespond(req, res);
+  if (!context) return;
+
+  const tenantId = String(req.user?.tenantId || context.tenantId || "").trim();
+  if (!tenantId) {
+    return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+  }
+
+  try {
+    const items = await listTenantSharePackages({ tenantId });
+    return res.json({ ok: true, data: items });
+  } catch (err: any) {
+    console.error("[tenant/share-packages:list] failed", {
+      tenantId,
+      message: err?.message || "failed",
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_SHARE_PACKAGE_LIST_FAILED" });
+  }
+});
+
+router.delete("/share-packages/:id", requireTenantWorkspaceIdentity, async (req: any, res) => {
+  const context = await resolveWorkspaceContextOrRespond(req, res);
+  if (!context) return;
+
+  const tenantId = String(req.user?.tenantId || context.tenantId || "").trim();
+  const sharePackageId = String(req.params?.id || "").trim();
+  if (!tenantId || !sharePackageId) {
+    return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+  }
+
+  try {
+    const revoked = await revokeTenantSharePackage({ tenantId, sharePackageId });
+    if (!revoked) {
+      return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+    }
+    return res.json({ ok: true, data: { id: sharePackageId, status: "revoked" } });
+  } catch (err: any) {
+    console.error("[tenant/share-packages:revoke] failed", {
+      tenantId,
+      sharePackageId,
+      message: err?.message || "failed",
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_SHARE_PACKAGE_REVOKE_FAILED" });
+  }
+});
 
 router.get("/notification-preferences", requireTenantWorkspaceIdentity, async (req: any, res) => {
   const userId = String(req.user?.id || "").trim();
