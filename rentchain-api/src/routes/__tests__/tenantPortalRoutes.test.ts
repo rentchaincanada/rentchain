@@ -535,6 +535,24 @@ describe("tenantPortalRoutes foundation", () => {
         }),
       })
     );
+    expect(res.body?.data?.portableIdentity).toEqual(
+      expect.objectContaining({
+        portabilityStatus: expect.stringMatching(/not_ready|ready|limited/),
+        portabilityLabel: expect.any(String),
+        portabilityDescription: expect.any(String),
+        reusableAcrossApplications: expect.any(Boolean),
+        identityReference: {
+          referenceType: "tenant_identity",
+          referenceStatus: expect.stringMatching(/active|limited/),
+        },
+        readiness: expect.objectContaining({
+          identityReady: expect.any(Boolean),
+          applicationReusable: expect.any(Boolean),
+          credibilityReady: expect.any(Boolean),
+          sharingEnabled: expect.any(Boolean),
+        }),
+      })
+    );
     expect(res.body?.data?.identityTimeline).toEqual({
       events: [
         {
@@ -547,6 +565,8 @@ describe("tenantPortalRoutes foundation", () => {
     });
     expect(res.body?.data?.identityTimeline?.events?.[0]?.id).toBeUndefined();
     expect(res.body?.data?.identityTimeline?.events?.[0]?.metadata).toBeUndefined();
+    expect(JSON.stringify(res.body?.data?.portableIdentity || {})).not.toContain("token");
+    expect(JSON.stringify(res.body?.data?.portableIdentity || {})).not.toContain("drawnDataUrl");
 
     const eventDocs = Array.from(ensureCollection("event_log").values());
     expect(eventDocs.some((event) => event.event_type === "tenant_workspace_viewed")).toBe(true);

@@ -298,6 +298,7 @@ export default function TenantWorkspacePage() {
   });
   const tenantIdentityRecord = data?.tenantIdentityRecord || null;
   const tenantCredibilitySignals = data?.tenantCredibilitySignals || null;
+  const portableIdentity = data?.portableIdentity || null;
   const identityTimeline = data?.identityTimeline?.events || [];
   const communicationsView = buildTenantCommunicationsWorkspaceState(communications);
   const screeningSummary = buildTenantScreeningDashboardSummary(screenings);
@@ -540,6 +541,63 @@ export default function TenantWorkspacePage() {
         ) : (
           <div style={{ color: textTokens.secondary }}>
             Credibility signals will appear here once enough tenant-safe identity signals are available.
+          </div>
+        )}
+      </TenantInfoCard>
+
+      <TenantInfoCard heading="Portable Rental Identity" accent="#1d4ed8">
+        {portableIdentity ? (
+          <div style={{ display: "grid", gap: spacing.sm }}>
+            <div style={{ display: "grid", gap: 4 }}>
+              <div style={{ fontSize: "1.02rem", fontWeight: 800, color: textTokens.primary }}>
+                {portableIdentity.portabilityLabel}
+              </div>
+              <div style={{ color: textTokens.secondary, lineHeight: 1.6 }}>
+                {portableIdentity.portabilityDescription}
+              </div>
+            </div>
+
+            <TenantKeyValueGrid
+              rows={[
+                {
+                  label: "Identity ready",
+                  value: portableIdentity.readiness.identityReady ? "Ready" : "Needs attention",
+                },
+                {
+                  label: "Application reusable",
+                  value: portableIdentity.readiness.applicationReusable ? "Ready" : "Still building",
+                },
+                {
+                  label: "Credibility ready",
+                  value: portableIdentity.readiness.credibilityReady ? "Ready" : "Still building",
+                },
+                {
+                  label: "Sharing controls available",
+                  value: portableIdentity.readiness.sharingEnabled ? "Available" : "Not available",
+                },
+                {
+                  label: "Reusable across applications",
+                  value: portableIdentity.reusableAcrossApplications ? "Yes" : "Not yet",
+                },
+              ]}
+            />
+
+            <div style={{ color: textTokens.secondary }}>
+              Next step:{" "}
+              <strong>
+                {portableIdentity.nextAction === "complete_identity"
+                  ? "Complete identity details"
+                  : portableIdentity.nextAction === "enable_sharing"
+                  ? "Review sharing controls"
+                  : portableIdentity.nextAction === "review_reusability"
+                  ? "Review reusability details"
+                  : "No immediate follow-up"}
+              </strong>
+            </div>
+          </div>
+        ) : (
+          <div style={{ color: textTokens.secondary }}>
+            Portable identity status will appear here once enough tenant-safe identity signals are available.
           </div>
         )}
       </TenantInfoCard>

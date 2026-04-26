@@ -211,6 +211,24 @@ describe("tenant workspace frontend shell", () => {
           summaryDescription: "Most credibility signals are available in your current record.",
         },
       },
+      portableIdentity: {
+        portabilityStatus: "ready",
+        portabilityLabel: "Ready to reuse",
+        portabilityDescription:
+          "Your rental identity is organized for reuse across application contexts, and sharing controls are available when you need them.",
+        reusableAcrossApplications: true,
+        identityReference: {
+          referenceType: "tenant_identity",
+          referenceStatus: "active",
+        },
+        readiness: {
+          identityReady: true,
+          applicationReusable: true,
+          credibilityReady: true,
+          sharingEnabled: true,
+        },
+        nextAction: "none",
+      },
       identityTimeline: {
         events: [
           {
@@ -479,6 +497,24 @@ describe("tenant workspace frontend shell", () => {
           summaryDescription: "Most credibility signals are available in your current record.",
         },
       },
+      portableIdentity: {
+        portabilityStatus: "ready",
+        portabilityLabel: "Ready to reuse",
+        portabilityDescription:
+          "Your rental identity is organized for reuse across application contexts, and sharing controls are available when you need them.",
+        reusableAcrossApplications: true,
+        identityReference: {
+          referenceType: "tenant_identity",
+          referenceStatus: "active",
+        },
+        readiness: {
+          identityReady: true,
+          applicationReusable: true,
+          credibilityReady: true,
+          sharingEnabled: true,
+        },
+        nextAction: "none",
+      },
       identityTimeline: {
         events: [
           {
@@ -506,10 +542,14 @@ describe("tenant workspace frontend shell", () => {
     expect(await screen.findByText(/Profile completion/i)).toBeInTheDocument();
     expect(screen.getByText(/^Your Rental Identity$/i)).toBeInTheDocument();
     expect(screen.getByText(/^Credibility signals$/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Portable Rental Identity$/i)).toBeInTheDocument();
     expect(screen.getByText(/^Activity timeline$/i)).toBeInTheDocument();
+    expect(screen.getByText("Identity ready")).toBeInTheDocument();
+    expect(screen.getByText("Sharing controls available")).toBeInTheDocument();
+    expect(screen.getByText("Reusable across applications")).toBeInTheDocument();
     expect(screen.getByText(/Credibility established/i)).toBeInTheDocument();
     expect(screen.getByText(/Profile complete/i)).toBeInTheDocument();
-    expect(screen.getByText(/Application reusable/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Application reusable/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Documents available/i)).toBeInTheDocument();
     expect(screen.getByText(/Screening completed/i)).toBeInTheDocument();
     expect(screen.getByText(/Lease history present/i)).toBeInTheDocument();

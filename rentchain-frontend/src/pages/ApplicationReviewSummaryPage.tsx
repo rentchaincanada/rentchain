@@ -1722,6 +1722,22 @@ function ApplicationReviewSummaryPageBody() {
             </Card>
           ) : null}
 
+          {summary.portableIdentitySummary ? (
+            <Card style={{ display: "grid", gap: 8 }}>
+              <div style={{ fontWeight: 700 }}>Portability summary</div>
+              <div style={{ fontSize: 13, color: text.subtle }}>
+                {summary.portableIdentitySummary.portabilityDescription}
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
+                {kv("Status", summary.portableIdentitySummary.portabilityLabel)}
+                {kv(
+                  "Reusable across applications",
+                  summary.portableIdentitySummary.reusableAcrossApplications ? "Yes" : "Not yet"
+                )}
+              </div>
+            </Card>
+          ) : null}
+
           <Card style={{ display: "grid", gap: 8 }}>
             <div style={{ fontWeight: 700 }}>Applicant Overview</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>

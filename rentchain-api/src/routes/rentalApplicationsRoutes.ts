@@ -68,6 +68,7 @@ import {
 } from "../services/tenantPortal/tenantProfileService";
 import { deriveLandlordTrustContext } from "../lib/trust/deriveLandlordTrustContext";
 import { deriveTenantCredibilitySignals } from "../services/tenantCredibility/deriveTenantCredibilitySignals";
+import { deriveIdentityPortability } from "../services/identityPortability/deriveIdentityPortability";
 import {
   buildQuoteId,
   buildScreeningMonetizationPatch,
@@ -4156,6 +4157,51 @@ router.get("/rental-applications/:id/review-summary", async (req: any, res) => {
       screeningStatus: summary?.screening?.status,
       applicationReusable: landlordSafeReusableApplication,
     });
+    const { portableIdentitySummary } = deriveIdentityPortability({
+      tenantIdentityRecord: tenantIdentitySummary
+        ? {
+            identityStatus: tenantIdentitySummary.identityStatus,
+            verification: tenantIdentitySummary.verification,
+            readinessLabel: tenantIdentitySummary.readinessLabel,
+            readinessDescription: tenantIdentitySummary.readinessDescription,
+            profile: {
+              completionStatus:
+                tenantIdentitySummary.identityStatus === "ready" ||
+                tenantIdentitySummary.identityStatus === "verified"
+                  ? "complete"
+                  : tenantIdentitySummary.identityStatus === "incomplete"
+                  ? "in_progress"
+                  : "missing",
+            },
+            application: {
+              reusable: landlordSafeReusableApplication,
+              lastSubmittedAt: null,
+            },
+            documents: {
+              completionStatus:
+                tenantIdentitySummary.verification.level === "strong"
+                  ? "complete"
+                  : tenantIdentitySummary.verification.level === "partial"
+                  ? "in_progress"
+                  : "missing",
+              missingCategories: [],
+            },
+            screening: {
+              status:
+                tenantIdentitySummary.verification.level === "strong"
+                  ? "completed"
+                  : tenantIdentitySummary.verification.level === "partial"
+                  ? "in_progress"
+                  : "not_started",
+              lastCompletedAt: null,
+            },
+            leases: { activeCount: 0, historicalCount: 0, lastSignedAt: null },
+          }
+        : null,
+      credibilitySummary: tenantCredibilitySummary,
+      shareAvailability: { sharingEnabled: false },
+      timelineAvailability: null,
+    });
     const decisionSummary = buildApplicationDecisionSummary({
       applicationId: id,
       application: access.data,
@@ -4169,6 +4215,7 @@ router.get("/rental-applications/:id/review-summary", async (req: any, res) => {
       tenantIdentitySummary,
       trustContext,
       tenantCredibilitySummary,
+      portableIdentitySummary,
     });
   } catch (err: any) {
     console.error("[review_summary] failed", err?.message || err);
