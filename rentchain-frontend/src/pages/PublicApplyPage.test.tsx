@@ -21,6 +21,7 @@ vi.mock("@/api/publicApplications", async () => {
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.restoreAllMocks();
   cleanup();
 });
 
@@ -57,8 +58,45 @@ async function completeResidentialBase() {
   fireEvent.change(screen.getByLabelText("Current rent amount (monthly) *"), { target: { value: "1800" } });
 }
 
+async function completeEmploymentStep() {
+  fireEvent.change(await screen.findByLabelText("Employer *"), { target: { value: "North Wharf Ltd." } });
+  fireEvent.change(screen.getByLabelText("Job title *"), { target: { value: "Designer" } });
+  fireEvent.change(screen.getByLabelText("Gross income *"), { target: { value: "5200" } });
+  fireEvent.change(screen.getByLabelText("Length (months) *"), { target: { value: "24" } });
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+}
+
+async function completeReferencesStep() {
+  fireEvent.change(await screen.findByLabelText("Reference name *"), { target: { value: "Casey Lead" } });
+  fireEvent.change(screen.getByLabelText("Reference phone *"), { target: { value: "9025550100" } });
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+}
+
+async function reachConsentStep() {
+  await completeStepZero();
+  await completeResidentialBase();
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  await completeEmploymentStep();
+  await completeReferencesStep();
+  expect(await screen.findByText("Consent & signatures")).toBeInTheDocument();
+}
+
 describe("PublicApplyPage", () => {
   beforeEach(() => {
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+      beginPath: vi.fn(),
+      closePath: vi.fn(),
+      moveTo: vi.fn(),
+      lineTo: vi.fn(),
+      stroke: vi.fn(),
+      clearRect: vi.fn(),
+      drawImage: vi.fn(),
+      lineCap: "round",
+      lineJoin: "round",
+      lineWidth: 2,
+      strokeStyle: "#0f172a",
+    } as any);
+    vi.spyOn(HTMLCanvasElement.prototype, "toDataURL").mockReturnValue("data:image/png;base64,signature");
     fetchPublicApplicationLink.mockReset();
     submitPublicApplication.mockReset();
     updatePublicApplicationProgress.mockReset();
@@ -147,6 +185,24 @@ describe("PublicApplyPage", () => {
     fireEvent.change(screen.getByLabelText("Date of birth *"), { target: { value: "1990-01-01" } });
 
     expect(completionPercent()).toBeGreaterThan(startingPercent);
+  });
+
+  it("renders the signature canvas and lets applicants clear it", async () => {
+    renderPage();
+    await reachConsentStep();
+
+    const canvas = screen.getByTestId("signature-canvas");
+    expect(canvas).toBeInTheDocument();
+
+    fireEvent.mouseDown(canvas, { clientX: 10, clientY: 10 });
+    fireEvent.mouseMove(canvas, { clientX: 60, clientY: 24 });
+    fireEvent.mouseUp(canvas);
+
+    expect(screen.getByText("Signature captured.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear signature" }));
+
+    expect(screen.getByText("Typed full name works as a fallback if you prefer not to draw.")).toBeInTheDocument();
   });
 
   it("lets applicants continue past the employment step even when employment details are incomplete", async () => {
@@ -281,6 +337,97 @@ describe("PublicApplyPage", () => {
 
     expect(await screen.findByText("Employment details are required.")).toBeInTheDocument();
     expect(screen.getByText("Employment & income")).toBeInTheDocument();
+  });
+
+  it("submits with a typed-only signature when no drawn signature is provided", async () => {
+    renderPage();
+    await reachConsentStep();
+
+    fireEvent.click(screen.getByLabelText(/I consent to a credit\/consumer report\./i));
+    fireEvent.click(screen.getByLabelText(/I consent to contacting references and past landlords\./i));
+    fireEvent.click(screen.getByLabelText(/I consent to data sharing for the tenant database\./i));
+    fireEvent.change(screen.getByLabelText("Applicant full name (typed) *"), { target: { value: "Jordan Lee" } });
+    fireEvent.change(screen.getByLabelText("Type your full name *"), { target: { value: "Jordan Lee" } });
+    fireEvent.click(screen.getByLabelText(/I agree this is my legal signature\./i));
+    fireEvent.click(screen.getByLabelText(/I confirm the information provided is accurate and I authorize/i));
+    fireEvent.click(screen.getByRole("button", { name: "Submit application" }));
+
+    await screen.findByText("Application submitted");
+    expect(submitPublicApplication).toHaveBeenCalledWith(
+      expect.objectContaining({
+        applicantProfile: expect.objectContaining({
+          signature: expect.objectContaining({
+            type: "typed",
+            drawnDataUrl: undefined,
+            typedName: "Jordan Lee",
+            typedAcknowledge: true,
+          }),
+        }),
+      })
+    );
+  });
+
+  it("submits drawn signatures with type set to drawn", async () => {
+    renderPage();
+    await reachConsentStep();
+
+    const canvas = screen.getByTestId("signature-canvas");
+    fireEvent.mouseDown(canvas, { clientX: 12, clientY: 10 });
+    fireEvent.mouseMove(canvas, { clientX: 44, clientY: 18 });
+    fireEvent.mouseUp(canvas);
+
+    fireEvent.click(screen.getByLabelText(/I consent to a credit\/consumer report\./i));
+    fireEvent.click(screen.getByLabelText(/I consent to contacting references and past landlords\./i));
+    fireEvent.click(screen.getByLabelText(/I consent to data sharing for the tenant database\./i));
+    fireEvent.change(screen.getByLabelText("Applicant full name (typed) *"), { target: { value: "Jordan Lee" } });
+    fireEvent.change(screen.getByLabelText("Type your full name *"), { target: { value: "Jordan Lee" } });
+    fireEvent.click(screen.getByLabelText(/I agree this is my legal signature\./i));
+    fireEvent.click(screen.getByLabelText(/I confirm the information provided is accurate and I authorize/i));
+    fireEvent.click(screen.getByRole("button", { name: "Submit application" }));
+
+    await screen.findByText("Application submitted");
+    expect(submitPublicApplication).toHaveBeenCalledWith(
+      expect.objectContaining({
+        applicantProfile: expect.objectContaining({
+          signature: expect.objectContaining({
+            type: "drawn",
+            drawnDataUrl: "data:image/png;base64,signature",
+            typedName: "Jordan Lee",
+            typedAcknowledge: true,
+          }),
+        }),
+      })
+    );
+  });
+
+  it("blocks final submit when the typed signature name is missing", async () => {
+    renderPage();
+    await reachConsentStep();
+
+    fireEvent.click(screen.getByLabelText(/I consent to a credit\/consumer report\./i));
+    fireEvent.click(screen.getByLabelText(/I consent to contacting references and past landlords\./i));
+    fireEvent.click(screen.getByLabelText(/I consent to data sharing for the tenant database\./i));
+    fireEvent.change(screen.getByLabelText("Applicant full name (typed) *"), { target: { value: "Jordan Lee" } });
+    fireEvent.click(screen.getByLabelText(/I agree this is my legal signature\./i));
+    fireEvent.click(screen.getByLabelText(/I confirm the information provided is accurate and I authorize/i));
+    expect(screen.getByRole("button", { name: "Submit application" })).toBeDisabled();
+    expect(screen.getByText("Signature typed name")).toBeInTheDocument();
+    expect(submitPublicApplication).not.toHaveBeenCalled();
+  });
+
+  it("blocks final submit when the signature acknowledgement is missing", async () => {
+    renderPage();
+    await reachConsentStep();
+
+    fireEvent.click(screen.getByLabelText(/I consent to a credit\/consumer report\./i));
+    fireEvent.click(screen.getByLabelText(/I consent to contacting references and past landlords\./i));
+    fireEvent.click(screen.getByLabelText(/I consent to data sharing for the tenant database\./i));
+    fireEvent.change(screen.getByLabelText("Applicant full name (typed) *"), { target: { value: "Jordan Lee" } });
+    fireEvent.change(screen.getByLabelText("Type your full name *"), { target: { value: "Jordan Lee" } });
+    fireEvent.click(screen.getByLabelText(/I confirm the information provided is accurate and I authorize/i));
+    expect(screen.getByRole("button", { name: "Submit application" })).toBeDisabled();
+    expect(screen.getByText("Legal signature acknowledgement")).toBeInTheDocument();
+    expect(submitPublicApplication).not.toHaveBeenCalled();
   });
 
   it("keeps co-applicant employment required before final submit when co-applicant is enabled", async () => {

@@ -304,4 +304,135 @@ describe("publicApplicationLinksRoutes", () => {
     });
     expect(stored.partialProgress.submittedAt).toBeTypeOf("number");
   });
+
+  it("accepts typed-only signatures", async () => {
+    const router = await createApp();
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/rental-applications",
+      body: buildBody(),
+    });
+
+    expect(res.status).toBe(200);
+  });
+
+  it("accepts drawn signatures", async () => {
+    const router = await createApp();
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/rental-applications",
+      body: buildBody({
+        applicantProfile: {
+          currentAddress: {
+            line1: "123 King St",
+            city: "Halifax",
+            provinceState: "NS",
+            postalCode: "B3H1A1",
+          },
+          timeAtCurrentAddressMonths: 18,
+          currentRentAmountCents: 180000,
+          employment: {
+            employerName: "Harbour Labs",
+            jobTitle: "Designer",
+            incomeAmountCents: 720000,
+            incomeFrequency: "monthly",
+            monthsAtJob: 12,
+          },
+          workReference: {
+            name: "Taylor Grant",
+            phone: "5555550100",
+          },
+          signature: {
+            type: "drawn",
+            drawnDataUrl: "data:image/png;base64,abc123",
+            typedName: "Jordan Lee",
+            typedAcknowledge: true,
+            signedAt: "2026-03-18T10:00:00.000Z",
+          },
+        },
+      }),
+    });
+
+    expect(res.status).toBe(200);
+  });
+
+  it("rejects signatures with a missing typed name", async () => {
+    const router = await createApp();
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/rental-applications",
+      body: buildBody({
+        applicantProfile: {
+          currentAddress: {
+            line1: "123 King St",
+            city: "Halifax",
+            provinceState: "NS",
+            postalCode: "B3H1A1",
+          },
+          timeAtCurrentAddressMonths: 18,
+          currentRentAmountCents: 180000,
+          employment: {
+            employerName: "Harbour Labs",
+            jobTitle: "Designer",
+            incomeAmountCents: 720000,
+            incomeFrequency: "monthly",
+            monthsAtJob: 12,
+          },
+          workReference: {
+            name: "Taylor Grant",
+            phone: "5555550100",
+          },
+          signature: {
+            type: "typed",
+            typedName: "",
+            typedAcknowledge: true,
+            signedAt: "2026-03-18T10:00:00.000Z",
+          },
+        },
+      }),
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body?.fields).toContain("signature.typedName");
+  });
+
+  it("rejects signatures with a missing typed acknowledgement", async () => {
+    const router = await createApp();
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/rental-applications",
+      body: buildBody({
+        applicantProfile: {
+          currentAddress: {
+            line1: "123 King St",
+            city: "Halifax",
+            provinceState: "NS",
+            postalCode: "B3H1A1",
+          },
+          timeAtCurrentAddressMonths: 18,
+          currentRentAmountCents: 180000,
+          employment: {
+            employerName: "Harbour Labs",
+            jobTitle: "Designer",
+            incomeAmountCents: 720000,
+            incomeFrequency: "monthly",
+            monthsAtJob: 12,
+          },
+          workReference: {
+            name: "Taylor Grant",
+            phone: "5555550100",
+          },
+          signature: {
+            type: "typed",
+            typedName: "Jordan Lee",
+            typedAcknowledge: false,
+            signedAt: "2026-03-18T10:00:00.000Z",
+          },
+        },
+      }),
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body?.fields).toContain("signature.typedAcknowledge");
+  });
 });

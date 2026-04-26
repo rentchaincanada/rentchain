@@ -99,6 +99,7 @@ type PublicApplicationDraft = {
   nextOfKin: RentalApplicationPayload["nextOfKin"];
   coNextOfKin: RentalApplicationPayload["coNextOfKin"];
   consent: RentalApplicationPayload["consent"];
+  drawnDataUrl: string | null;
   signatureTypedName: string;
   signatureTypedAck: boolean;
   applicationConsentAccepted: boolean;
@@ -169,6 +170,7 @@ function hasDraftContent(draft: PublicApplicationDraft) {
       draft.consent.creditConsent ||
       draft.consent.referenceConsent ||
       draft.consent.dataSharingConsent ||
+      Boolean(draft.drawnDataUrl) ||
       (draft.signatureTypedName || "").trim() ||
       draft.signatureTypedAck ||
       draft.applicationConsentAccepted
@@ -295,6 +297,10 @@ export default function PublicApplyPage() {
     applicantNameTyped: "",
     coApplicantNameTyped: "",
   });
+  const signatureCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const signatureDrawingRef = useRef(false);
+  const signatureLastPointRef = useRef<{ x: number; y: number } | null>(null);
+  const [drawnDataUrl, setDrawnDataUrl] = useState<string | null>(null);
   const [signatureTypedName, setSignatureTypedName] = useState("");
   const [signatureTypedAck, setSignatureTypedAck] = useState(false);
   const [applicationConsentAccepted, setApplicationConsentAccepted] = useState(false);
@@ -387,6 +393,7 @@ export default function PublicApplyPage() {
           setNextOfKin(draft.nextOfKin || { name: "", relationship: "", phone: "", address: "" });
           setCoNextOfKin(draft.coNextOfKin || { name: "", relationship: "", phone: "", address: "" });
           setConsent(draft.consent || consent);
+          setDrawnDataUrl(draft.drawnDataUrl || null);
           setSignatureTypedName(draft.signatureTypedName || "");
           setSignatureTypedAck(Boolean(draft.signatureTypedAck));
           setApplicationConsentAccepted(Boolean(draft.applicationConsentAccepted));
@@ -394,6 +401,7 @@ export default function PublicApplyPage() {
         } else {
           setRestoredDraftStep(null);
           setShowResumeBanner(false);
+          setDrawnDataUrl(null);
         }
       } catch (e: any) {
         if (!alive) return;
@@ -431,6 +439,7 @@ export default function PublicApplyPage() {
       nextOfKin,
       coNextOfKin,
       consent,
+      drawnDataUrl,
       signatureTypedName,
       signatureTypedAck,
       applicationConsentAccepted,
@@ -461,6 +470,7 @@ export default function PublicApplyPage() {
     nextOfKin,
     coNextOfKin,
     consent,
+    drawnDataUrl,
     signatureTypedName,
     signatureTypedAck,
     applicationConsentAccepted,
@@ -512,6 +522,7 @@ export default function PublicApplyPage() {
       nextOfKin,
       coNextOfKin,
       consent,
+      drawnDataUrl,
       signatureTypedName,
       signatureTypedAck,
       applicationConsentAccepted,
@@ -542,6 +553,7 @@ export default function PublicApplyPage() {
     nextOfKin,
     coNextOfKin,
     consent,
+    drawnDataUrl,
     signatureTypedName,
     signatureTypedAck,
     applicationConsentAccepted,
@@ -601,6 +613,95 @@ export default function PublicApplyPage() {
   const updateVehicle = (index: number, patch: Partial<VehicleEntry>) => {
     setVehicles((prev) => prev.map((h, i) => (i === index ? { ...h, ...patch } : h)));
   };
+
+  const initializeSignatureCanvas = () => {
+    const canvas = signatureCanvasRef.current;
+    const context = canvas?.getContext("2d");
+    if (!canvas || !context) return null;
+    context.lineCap = "round";
+    context.lineJoin = "round";
+    context.lineWidth = 2;
+    context.strokeStyle = "#0f172a";
+    return { canvas, context };
+  };
+
+  const getSignaturePoint = (event: any) => {
+    const canvas = signatureCanvasRef.current;
+    if (!canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    const source =
+      event?.touches?.[0] ||
+      event?.changedTouches?.[0] ||
+      event;
+    if (!source) return null;
+    const scaleX = rect.width ? canvas.width / rect.width : 1;
+    const scaleY = rect.height ? canvas.height / rect.height : 1;
+    return {
+      x: (source.clientX - rect.left) * scaleX,
+      y: (source.clientY - rect.top) * scaleY,
+    };
+  };
+
+  const startSignatureStroke = (event: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    const initialized = initializeSignatureCanvas();
+    const point = getSignaturePoint(event);
+    if (!initialized || !point) return;
+    if ("cancelable" in event && event.cancelable) event.preventDefault();
+    initialized.context.beginPath();
+    initialized.context.moveTo(point.x, point.y);
+    signatureDrawingRef.current = true;
+    signatureLastPointRef.current = point;
+  };
+
+  const moveSignatureStroke = (event: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    if (!signatureDrawingRef.current) return;
+    const initialized = initializeSignatureCanvas();
+    const point = getSignaturePoint(event);
+    if (!initialized || !point) return;
+    if ("cancelable" in event && event.cancelable) event.preventDefault();
+    initialized.context.lineTo(point.x, point.y);
+    initialized.context.stroke();
+    signatureLastPointRef.current = point;
+  };
+
+  const finishSignatureStroke = () => {
+    if (!signatureDrawingRef.current) return;
+    const initialized = initializeSignatureCanvas();
+    signatureDrawingRef.current = false;
+    signatureLastPointRef.current = null;
+    initialized?.context.closePath();
+    if (!initialized) return;
+    try {
+      setDrawnDataUrl(initialized.canvas.toDataURL("image/png"));
+    } catch {
+      setDrawnDataUrl(null);
+    }
+  };
+
+  const clearSignature = () => {
+    const initialized = initializeSignatureCanvas();
+    if (initialized) {
+      initialized.context.clearRect(0, 0, initialized.canvas.width, initialized.canvas.height);
+    }
+    signatureDrawingRef.current = false;
+    signatureLastPointRef.current = null;
+    setDrawnDataUrl(null);
+  };
+
+  useEffect(() => {
+    const initialized = initializeSignatureCanvas();
+    if (!initialized) return;
+    initialized.context.clearRect(0, 0, initialized.canvas.width, initialized.canvas.height);
+    if (!drawnDataUrl) return;
+    const image = new Image();
+    image.onload = () => {
+      const nextInitialized = initializeSignatureCanvas();
+      if (!nextInitialized) return;
+      nextInitialized.context.clearRect(0, 0, nextInitialized.canvas.width, nextInitialized.canvas.height);
+      nextInitialized.context.drawImage(image, 0, 0, nextInitialized.canvas.width, nextInitialized.canvas.height);
+    };
+    image.src = drawnDataUrl;
+  }, [drawnDataUrl]);
 
   const employmentStepComplete =
     Boolean((employment.applicant.employer || "").trim()) &&
@@ -1100,7 +1201,8 @@ export default function PublicApplyPage() {
             phone: sanitizeDigits(workReferencePhone, 15),
           },
           signature: {
-            type: "typed",
+            type: drawnDataUrl ? "drawn" : "typed",
+            drawnDataUrl: drawnDataUrl || undefined,
             typedName: signatureTypedName.trim(),
             typedAcknowledge: signatureTypedAck,
             signedAt: new Date().toISOString(),
@@ -2111,6 +2213,43 @@ export default function PublicApplyPage() {
             </div>
             <div style={{ borderTop: "1px solid #e5e7eb", paddingTop: 10, display: "grid", gap: 8 }}>
               <div style={{ fontWeight: 600 }}>Signature *</div>
+              <div style={{ color: "#475569", fontSize: "0.92rem", lineHeight: 1.5 }}>
+                Draw your signature if you&apos;d like. Your typed full name is still required before submission.
+              </div>
+              <div style={{ display: "grid", gap: 8 }}>
+                <canvas
+                  ref={signatureCanvasRef}
+                  aria-label="Draw your signature"
+                  data-testid="signature-canvas"
+                  width={640}
+                  height={180}
+                  onMouseDown={startSignatureStroke}
+                  onMouseMove={moveSignatureStroke}
+                  onMouseUp={finishSignatureStroke}
+                  onMouseLeave={finishSignatureStroke}
+                  onTouchStart={startSignatureStroke}
+                  onTouchMove={moveSignatureStroke}
+                  onTouchEnd={finishSignatureStroke}
+                  onTouchCancel={finishSignatureStroke}
+                  style={{
+                    width: "100%",
+                    maxWidth: "100%",
+                    minHeight: 180,
+                    border: "1px solid #cbd5e1",
+                    borderRadius: 10,
+                    background: "#fff",
+                    touchAction: "none",
+                  }}
+                />
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                  <button type="button" onClick={clearSignature}>
+                    Clear signature
+                  </button>
+                  <div style={{ color: "#64748b", fontSize: "0.85rem" }}>
+                    {drawnDataUrl ? "Signature captured." : "Typed full name works as a fallback if you prefer not to draw."}
+                  </div>
+                </div>
+              </div>
               <label style={labelStyle}>
                 {req("Type your full name")}
                 <input ref={registerFieldRef("signature.typedName")} value={signatureTypedName} onChange={(e) => setSignatureTypedName(e.target.value)} />
