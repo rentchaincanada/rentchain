@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const loadLandlordAnalyticsSnapshot = vi.fn();
+const loadLandlordApplicationFunnel = vi.fn();
 const saveReviewedLandlordDecisionState = vi.fn();
 const saveSnoozedLandlordDecisionState = vi.fn();
 const saveDismissedLandlordDecisionState = vi.fn();
@@ -52,6 +53,10 @@ vi.mock("../../middleware/requireLandlord", () => ({
 
 vi.mock("../../services/landlord/landlordAnalyticsSnapshot", () => ({
   loadLandlordAnalyticsSnapshot,
+}));
+
+vi.mock("../../services/landlord/landlordApplicationFunnel", () => ({
+  loadLandlordApplicationFunnel,
 }));
 
 vi.mock("../../services/landlord/landlordDecisionStates", () => ({
@@ -538,6 +543,29 @@ describe("landlordAnalyticsRoutes", () => {
         to: "2026-04-20T00:00:00.000Z",
       },
     });
+    loadLandlordApplicationFunnel.mockResolvedValue({
+      counts: {
+        started: 1,
+        inProgress: 2,
+        readyToSubmit: 1,
+        submitted: 3,
+        totalStarted: 7,
+      },
+      conversion: {
+        completionRate: 0.4286,
+        averageCompletionPercent: 63.4,
+      },
+      dropOff: {
+        byCurrentStep: [{ step: "employment", count: 2 }],
+        byMissingSection: [{ section: "employment", count: 2 }],
+      },
+      reminders: {
+        remindedCount: 2,
+        completedAfterReminderCount: 1,
+        completionRateAfterReminder: 0.5,
+        medianHoursToCompleteAfterReminder: 6.5,
+      },
+    });
   });
 
   it("returns landlord-scoped analytics without allowing scope override", async () => {
@@ -559,6 +587,36 @@ describe("landlordAnalyticsRoutes", () => {
     expect(response.body.decisions.items[0].decisionType).toBe("reduce_vacancy_risk");
     expect(response.body.predictive.metrics[0].key).toBe("projected_vacancy_risk");
     expect(response.body.comparisons.deltas.summary.occupiedUnits.direction).toBe("better");
+  });
+
+  it("returns landlord-scoped application funnel analytics without allowing scope override", async () => {
+    const router = (await import("../landlordAnalyticsRoutes")).default;
+    const response = await invokeRouter(router, {
+      method: "GET",
+      url: "/landlord/analytics/applications/funnel?propertyId=prop-123&landlordId=other-landlord",
+      user: { id: "landlord-1", role: "landlord" },
+    });
+
+    expect(response.status).toBe(200);
+    expect(loadLandlordApplicationFunnel).toHaveBeenCalledWith({
+      landlordId: "landlord-1",
+      propertyId: "prop-123",
+    });
+    expect(response.body).toMatchObject({
+      ok: true,
+      data: {
+        counts: {
+          started: 1,
+          inProgress: 2,
+          readyToSubmit: 1,
+          submitted: 3,
+          totalStarted: 7,
+        },
+        conversion: {
+          completionRate: 0.4286,
+        },
+      },
+    });
   });
 
   it("marks a visible landlord decision as reviewed and emits a canonical event", async () => {

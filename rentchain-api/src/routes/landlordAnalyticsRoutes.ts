@@ -39,6 +39,7 @@ import {
   resolveScreeningConsentPayload,
   validateScreeningConsentPayload,
 } from "../lib/screeningCheckoutReadiness";
+import { loadLandlordApplicationFunnel } from "../services/landlord/landlordApplicationFunnel";
 
 const router = Router();
 
@@ -180,6 +181,25 @@ router.get("/landlord/analytics", requireAuth, requireLandlord, async (req: any,
   } catch (err: any) {
     console.error("[landlord-analytics] fetch failed", err?.message || err);
     return res.status(500).json({ ok: false, error: "LANDLORD_ANALYTICS_FETCH_FAILED" });
+  }
+});
+
+router.get("/landlord/analytics/applications/funnel", requireAuth, requireLandlord, async (req: any, res) => {
+  try {
+    const landlordId = asString(req.user?.landlordId || req.user?.id, 240);
+    if (!landlordId) {
+      return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    }
+
+    const data = await loadLandlordApplicationFunnel({
+      landlordId,
+      propertyId: req.query?.propertyId,
+    });
+
+    return res.json({ ok: true, data });
+  } catch (err: any) {
+    console.error("[landlord-analytics] application funnel failed", err?.message || err);
+    return res.status(500).json({ ok: false, error: "LANDLORD_APPLICATION_FUNNEL_FETCH_FAILED" });
   }
 });
 

@@ -343,6 +343,30 @@ export type LandlordDecisionHistoryResponse = {
   events: TimelineItem[];
 };
 
+export type LandlordApplicationFunnelAnalytics = {
+  counts: {
+    started: number;
+    inProgress: number;
+    readyToSubmit: number;
+    submitted: number;
+    totalStarted: number;
+  };
+  conversion: {
+    completionRate: number;
+    averageCompletionPercent: number;
+  };
+  dropOff: {
+    byCurrentStep: Array<{ step: string; count: number }>;
+    byMissingSection: Array<{ section: string; count: number }>;
+  };
+  reminders: {
+    remindedCount: number;
+    completedAfterReminderCount: number;
+    completionRateAfterReminder: number | null;
+    medianHoursToCompleteAfterReminder: number | null;
+  };
+};
+
 export async function fetchLandlordAnalyticsSnapshot(params?: {
   period?: AnalyticsPeriod;
   propertyId?: string | null;
@@ -352,6 +376,18 @@ export async function fetchLandlordAnalyticsSnapshot(params?: {
   if (params?.propertyId) search.set("propertyId", params.propertyId);
   const suffix = search.toString() ? `?${search.toString()}` : "";
   return await apiFetch<LandlordAnalyticsSnapshot>(`/landlord/analytics${suffix}`);
+}
+
+export async function fetchLandlordApplicationFunnel(params?: {
+  propertyId?: string | null;
+}): Promise<LandlordApplicationFunnelAnalytics> {
+  const search = new URLSearchParams();
+  if (params?.propertyId) search.set("propertyId", params.propertyId);
+  const suffix = search.toString() ? `?${search.toString()}` : "";
+  const response = await apiFetch<{ ok: true; data: LandlordApplicationFunnelAnalytics }>(
+    `/landlord/analytics/applications/funnel${suffix}`
+  );
+  return response.data;
 }
 
 export async function markLandlordDecisionReviewed(params: {

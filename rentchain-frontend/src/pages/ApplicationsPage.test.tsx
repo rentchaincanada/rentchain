@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   fetchScreeningReceipt: vi.fn(),
   fetchScreeningEvents: vi.fn(),
   fetchViewingRequests: vi.fn(),
+  fetchLandlordApplicationFunnel: vi.fn(),
   getTransUnionIntegration: vi.fn(),
   trackTransUnionUsageEvent: vi.fn(),
   showToast: vi.fn(),
@@ -47,6 +48,10 @@ vi.mock("@/api/rentalApplicationsApi", () => ({
   adminMarkScreeningFailed: vi.fn(),
   adminRecomputeScreening: vi.fn(),
   exportScreeningReport: vi.fn(),
+}));
+
+vi.mock("@/api/landlordAnalyticsApi", () => ({
+  fetchLandlordApplicationFunnel: mocks.fetchLandlordApplicationFunnel,
 }));
 
 vi.mock("../components/ui/ToastProvider", () => ({
@@ -320,6 +325,29 @@ describe("ApplicationsPage", () => {
     mocks.fetchScreeningReceipt.mockResolvedValue({ ok: false });
     mocks.fetchScreeningEvents.mockResolvedValue([]);
     mocks.fetchViewingRequests.mockResolvedValue([]);
+    mocks.fetchLandlordApplicationFunnel.mockResolvedValue({
+      counts: {
+        started: 2,
+        inProgress: 3,
+        readyToSubmit: 1,
+        submitted: 4,
+        totalStarted: 10,
+      },
+      conversion: {
+        completionRate: 0.4,
+        averageCompletionPercent: 64.2,
+      },
+      dropOff: {
+        byCurrentStep: [{ step: "employment", count: 2 }],
+        byMissingSection: [{ section: "employment", count: 3 }],
+      },
+      reminders: {
+        remindedCount: 2,
+        completedAfterReminderCount: 1,
+        completionRateAfterReminder: 0.5,
+        medianHoursToCompleteAfterReminder: 8,
+      },
+    });
     mocks.getTransUnionIntegration.mockResolvedValue({
       provider: "transunion",
       status: "not_connected",
@@ -345,6 +373,71 @@ describe("ApplicationsPage", () => {
 
     expect(screen.getByRole("button", { name: "Send screening invite" })).toBeInTheDocument();
     expect(screen.getByText("TransUnion Connection")).toBeInTheDocument();
+    expect(screen.getByText("Application Funnel")).toBeInTheDocument();
+    expect(screen.getByText("40%")).toBeInTheDocument();
+  });
+
+  it("renders the application funnel card with counts and a simple drop-off hint", async () => {
+    render(
+      <MemoryRouter>
+        <ApplicationsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Application Funnel")).toBeInTheDocument();
+    expect(screen.getByText("Started")).toBeInTheDocument();
+    expect(screen.getByText("In progress")).toBeInTheDocument();
+    expect(screen.getByText("Completed")).toBeInTheDocument();
+    expect(screen.getByText("Conversion")).toBeInTheDocument();
+    expect(screen.getByText("40%")).toBeInTheDocument();
+    expect(screen.getByText("Most applicants currently stop in Employment.")).toBeInTheDocument();
+  });
+
+  it("shows an empty funnel state gracefully", async () => {
+    mocks.fetchLandlordApplicationFunnel.mockResolvedValueOnce({
+      counts: {
+        started: 0,
+        inProgress: 0,
+        readyToSubmit: 0,
+        submitted: 0,
+        totalStarted: 0,
+      },
+      conversion: {
+        completionRate: 0,
+        averageCompletionPercent: 0,
+      },
+      dropOff: {
+        byCurrentStep: [],
+        byMissingSection: [],
+      },
+      reminders: {
+        remindedCount: 0,
+        completedAfterReminderCount: 0,
+        completionRateAfterReminder: null,
+        medianHoursToCompleteAfterReminder: null,
+      },
+    });
+
+    render(
+      <MemoryRouter>
+        <ApplicationsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("No meaningful drop-off pattern yet.")).toBeInTheDocument();
+  });
+
+  it("shows a safe funnel error state without breaking the applications list", async () => {
+    mocks.fetchLandlordApplicationFunnel.mockRejectedValueOnce(new Error("Funnel unavailable"));
+
+    render(
+      <MemoryRouter>
+        <ApplicationsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Funnel unavailable")).toBeInTheDocument();
+    expect(screen.getByText("Jamie Stone")).toBeInTheDocument();
   });
 
   it("guides connected landlords back to the application list instead of showing a dead-end screening toast", async () => {
