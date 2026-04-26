@@ -1,3 +1,6 @@
+import { db } from "../../config/firebase";
+import { buildEmailHtml, buildEmailText } from "../../email/templates/baseEmailTemplate";
+import { sendEmail } from "../emailService";
 import {
   createViewingRequestDoc,
   getViewingRequestDoc,
@@ -24,6 +27,125 @@ type ViewingErrorCode =
   | "invalid_slot_selection";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function uniqueEmails(values: Array<string | null | undefined>) {
+  return Array.from(
+    new Set(
+      values
+        .map((value) => String(value || "").trim().toLowerCase())
+        .filter((value) => EMAIL_REGEX.test(value))
+    )
+  );
+}
+
+async function resolveViewingRecipients(params: {
+  landlordId: string;
+  propertyId: string | null;
+}) {
+  const recipients = new Set<string>();
+  let propertyLabel: string | null = null;
+  const propertyId = optionalString(params.propertyId);
+
+  if (propertyId) {
+    try {
+      const propertySnap = await db.collection("properties").doc(propertyId).get();
+      if (propertySnap.exists) {
+        const property = (propertySnap.data() as any) || {};
+        propertyLabel = optionalString(property?.name) || optionalString(property?.addressLine1);
+        const managerEmail = optionalString(property?.managerEmail);
+        if (managerEmail && EMAIL_REGEX.test(managerEmail)) recipients.add(managerEmail.toLowerCase());
+        const managerIds = Array.isArray(property?.managerUserIds)
+          ? property.managerUserIds.map((value: any) => String(value || "").trim()).filter(Boolean)
+          : [];
+        await Promise.all(
+          managerIds.map(async (managerId: string) => {
+            try {
+              const userSnap = await db.collection("users").doc(managerId).get();
+              if (!userSnap.exists) return;
+              const email = optionalString((userSnap.data() as any)?.email);
+              if (email && EMAIL_REGEX.test(email)) recipients.add(email.toLowerCase());
+            } catch {
+              // ignore recipient lookup failure
+            }
+          })
+        );
+      }
+    } catch {
+      // ignore property lookup failure
+    }
+  }
+
+  try {
+    const userSnap = await db.collection("users").doc(params.landlordId).get();
+    if (userSnap.exists) {
+      const email = optionalString((userSnap.data() as any)?.email);
+      if (email && EMAIL_REGEX.test(email)) recipients.add(email.toLowerCase());
+    }
+  } catch {
+    // ignore recipient lookup failure
+  }
+
+  if (recipients.size === 0) {
+    try {
+      const landlordSnap = await db.collection("landlords").doc(params.landlordId).get();
+      if (landlordSnap.exists) {
+        const email = optionalString((landlordSnap.data() as any)?.email);
+        if (email && EMAIL_REGEX.test(email)) recipients.add(email.toLowerCase());
+      }
+    } catch {
+      // ignore recipient lookup failure
+    }
+  }
+
+  return {
+    propertyLabel,
+    recipients: Array.from(recipients),
+  };
+}
+
+async function notifyViewingRequestCreated(viewingRequest: ViewingRequestDoc) {
+  const { recipients, propertyLabel } = await resolveViewingRecipients({
+    landlordId: viewingRequest.landlordId,
+    propertyId: viewingRequest.propertyId,
+  });
+  if (!recipients.length) return;
+
+  const from =
+    process.env.EMAIL_FROM ||
+    process.env.SENDGRID_FROM_EMAIL ||
+    process.env.SENDGRID_FROM ||
+    process.env.FROM_EMAIL;
+  if (!from) return;
+
+  const baseUrl = (process.env.PUBLIC_APP_URL || process.env.VITE_PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "");
+  const unitLabel = optionalString(viewingRequest.unitId) ? `Unit ${viewingRequest.unitId}` : null;
+  const propertySummary = [propertyLabel || optionalString(viewingRequest.propertyId), unitLabel].filter(Boolean).join(" • ");
+  const requestLink = `${baseUrl}/viewings`;
+  const introLines = [
+    `${viewingRequest.applicantName} (${viewingRequest.applicantEmail}) requested a viewing${propertySummary ? ` for ${propertySummary}` : ""}.`,
+  ];
+  if (viewingRequest.requestedMessage) {
+    introLines.push(`Message: ${viewingRequest.requestedMessage}`);
+  }
+
+  await sendEmail({
+    to: uniqueEmails(recipients),
+    from,
+    replyTo: from,
+    subject: `New viewing request${propertySummary ? ` for ${propertySummary}` : ""}`,
+    text: buildEmailText({
+      intro: introLines.join("\n\n"),
+      ctaText: "Open viewings",
+      ctaUrl: requestLink,
+    }),
+    html: buildEmailHtml({
+      title: "New viewing request",
+      intro: introLines.join(" "),
+      ctaText: "Open viewings",
+      ctaUrl: requestLink,
+    }),
+  });
+}
 
 export class ViewingServiceError extends Error {
   statusCode: number;
@@ -172,7 +294,17 @@ export async function createViewingRequest(input: CreateViewingRequestInput): Pr
     updatedByUserId: null,
   };
 
-  return createViewingRequestDoc(viewingRequest);
+  const saved = await createViewingRequestDoc(viewingRequest);
+  try {
+    await notifyViewingRequestCreated(saved);
+  } catch (error: any) {
+    console.error("[viewings] viewing request email failed", {
+      viewingRequestId: saved.id,
+      landlordId: saved.landlordId,
+      message: error?.message || "send_failed",
+    });
+  }
+  return saved;
 }
 
 export async function listViewingRequestsForLandlord(

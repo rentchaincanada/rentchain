@@ -1,4 +1,6 @@
 import { db, FieldValue } from "../../config/firebase";
+import { buildEmailHtml, buildEmailText } from "../../email/templates/baseEmailTemplate";
+import { sendEmail } from "../emailService";
 import type { TenancyContext } from "./tenancyContextService";
 import { recordTenantEvent } from "./tenantEventLogService";
 
@@ -28,6 +30,8 @@ function asString(value: unknown): string | null {
   const next = String(value || "").trim();
   return next || null;
 }
+
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function toMillis(value: any): number | null {
   if (!value) return null;
@@ -60,6 +64,30 @@ async function loadPropertyLandlord(propertyId: string | null) {
   } catch {
     return null;
   }
+}
+
+async function loadLandlordEmail(landlordId: string | null) {
+  const id = asString(landlordId);
+  if (!id) return null;
+  try {
+    const userSnap = await db.collection("users").doc(id).get();
+    if (userSnap.exists) {
+      const email = asString((userSnap.data() as any)?.email);
+      if (email && emailRegex.test(email)) return email;
+    }
+  } catch {
+    // ignore lookup failures
+  }
+  try {
+    const landlordSnap = await db.collection("landlords").doc(id).get();
+    if (landlordSnap.exists) {
+      const email = asString((landlordSnap.data() as any)?.email);
+      if (email && emailRegex.test(email)) return email;
+    }
+  } catch {
+    // ignore lookup failures
+  }
+  return null;
 }
 
 function buildConversationId(params: {
@@ -216,6 +244,42 @@ export async function sendTenantCommunicationMessage(params: {
       length: body.length,
     },
   });
+
+  try {
+    const recipientEmail = await loadLandlordEmail(landlordId);
+    const from =
+      process.env.EMAIL_FROM ||
+      process.env.SENDGRID_FROM_EMAIL ||
+      process.env.SENDGRID_FROM ||
+      process.env.FROM_EMAIL;
+    if (recipientEmail && from && emailRegex.test(recipientEmail)) {
+      const baseUrl = (process.env.PUBLIC_APP_URL || process.env.VITE_PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "");
+      const preview = body.length > 280 ? `${body.slice(0, 280)}...` : body;
+      await sendEmail({
+        to: recipientEmail,
+        from,
+        replyTo: from,
+        subject: "New tenant message",
+        text: buildEmailText({
+          intro: preview,
+          ctaText: "Open messages",
+          ctaUrl: `${baseUrl}/messages`,
+        }),
+        html: buildEmailHtml({
+          title: "New tenant message",
+          intro: preview,
+          ctaText: "Open messages",
+          ctaUrl: `${baseUrl}/messages`,
+        }),
+      });
+    }
+  } catch (error: any) {
+    console.error("[tenant-communications] email send failed", {
+      landlordId,
+      conversationId,
+      message: error?.message || "send_failed",
+    });
+  }
 
   return {
     ok: true as const,

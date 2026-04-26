@@ -69,6 +69,73 @@ function sanitizeDigits(value: string, maxLen: number) {
   return value.replace(/\D/g, "").slice(0, maxLen);
 }
 
+type PublicApplicationDraft = {
+  step: number;
+  viewingChoice: "viewed" | "needs_viewing" | null;
+  applicant: Partial<RentalApplicationPayload["applicant"]>;
+  coApplicantEnabled: boolean;
+  coApplicant: Partial<NonNullable<RentalApplicationPayload["coApplicant"]>>;
+  otherResidents: ResidentEntry[];
+  residentialHistory: HistoryEntry[];
+  profileAddress: {
+    line1: string;
+    line2: string;
+    city: string;
+    provinceState: string;
+    postalCode: string;
+    country: string;
+  };
+  timeAtAddressMonths: string;
+  currentRentAmount: string;
+  currentLeaseStatus: CurrentLeaseStatusFormState;
+  employment: RentalApplicationPayload["employment"];
+  references: RentalApplicationPayload["references"];
+  workReferenceName: string;
+  workReferencePhone: string;
+  loans: LoanEntry[];
+  vehicles: VehicleEntry[];
+  nextOfKin: RentalApplicationPayload["nextOfKin"];
+  coNextOfKin: RentalApplicationPayload["coNextOfKin"];
+  consent: RentalApplicationPayload["consent"];
+  signatureTypedName: string;
+  signatureTypedAck: boolean;
+  applicationConsentAccepted: boolean;
+  applicantNotes: string;
+};
+
+function draftStorageKey(token: string) {
+  return `public-application-draft:${token}`;
+}
+
+function loadDraft(token: string): PublicApplicationDraft | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(draftStorageKey(token));
+    if (!raw) return null;
+    return JSON.parse(raw) as PublicApplicationDraft;
+  } catch {
+    return null;
+  }
+}
+
+function saveDraft(token: string, draft: PublicApplicationDraft) {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(draftStorageKey(token), JSON.stringify(draft));
+  } catch {
+    // ignore storage failures
+  }
+}
+
+function clearDraft(token: string) {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.removeItem(draftStorageKey(token));
+  } catch {
+    // ignore storage failures
+  }
+}
+
 function isValidDob(value: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
@@ -81,6 +148,7 @@ export default function PublicApplyPage() {
   const { token } = useParams<ApplyParams>();
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
   const [applicationId, setApplicationId] = useState<string | null>(null);
@@ -223,19 +291,59 @@ export default function PublicApplyPage() {
     let alive = true;
     async function load() {
       if (!token) {
-        setError("Missing application link token.");
+        setLoadError("Missing application link token.");
         setLoading(false);
         return;
       }
+      setLoadError(null);
       setError(null);
       try {
         const res = await fetchPublicApplicationLink(token);
         if (!alive) return;
         setContext(res.context || {});
         setLinkData(res.data || {});
+        const draft = loadDraft(token);
+        if (draft) {
+          setStep(Math.max(0, Math.min(steps.length - 1, Number(draft.step) || 0)));
+          setViewingChoice(draft.viewingChoice ?? null);
+          setApplicant(draft.applicant || {});
+          setCoApplicantEnabled(Boolean(draft.coApplicantEnabled));
+          setCoApplicant(draft.coApplicant || {});
+          setOtherResidents(Array.isArray(draft.otherResidents) && draft.otherResidents.length ? draft.otherResidents : [{ name: "", relationship: "", age: null }]);
+          setResidentialHistory(Array.isArray(draft.residentialHistory) && draft.residentialHistory.length ? draft.residentialHistory : [emptyHistory(), emptyHistory(), emptyHistory()]);
+          setProfileAddress(draft.profileAddress || {
+            line1: "",
+            line2: "",
+            city: "",
+            provinceState: "",
+            postalCode: "",
+            country: "CA",
+          });
+          setTimeAtAddressMonths(draft.timeAtAddressMonths || "");
+          setCurrentRentAmount(draft.currentRentAmount || "");
+          setCurrentLeaseStatus(draft.currentLeaseStatus || {
+            hasActiveLease: null,
+            leaseEndDate: null,
+            landlordAware: null,
+            reasonForMoving: null,
+          });
+          setEmployment(draft.employment || employment);
+          setReferences(draft.references || references);
+          setWorkReferenceName(draft.workReferenceName || "");
+          setWorkReferencePhone(draft.workReferencePhone || "");
+          setLoans(Array.isArray(draft.loans) && draft.loans.length ? draft.loans : [{ institution: "", address: "", monthlyPaymentCents: null, balanceCents: null }]);
+          setVehicles(Array.isArray(draft.vehicles) && draft.vehicles.length ? draft.vehicles : [{ makeModel: "", year: "", color: "", plate: "", province: "" }]);
+          setNextOfKin(draft.nextOfKin || { name: "", relationship: "", phone: "", address: "" });
+          setCoNextOfKin(draft.coNextOfKin || { name: "", relationship: "", phone: "", address: "" });
+          setConsent(draft.consent || consent);
+          setSignatureTypedName(draft.signatureTypedName || "");
+          setSignatureTypedAck(Boolean(draft.signatureTypedAck));
+          setApplicationConsentAccepted(Boolean(draft.applicationConsentAccepted));
+          setApplicantNotes(draft.applicantNotes || "");
+        }
       } catch (e: any) {
         if (!alive) return;
-        setError(e?.message || "This application link is invalid or expired.");
+        setLoadError(e?.message || "This application link is invalid or expired.");
       } finally {
         if (alive) setLoading(false);
       }
@@ -245,6 +353,65 @@ export default function PublicApplyPage() {
       alive = false;
     };
   }, [token]);
+
+  useEffect(() => {
+    if (!token || loading || submitted || loadError) return;
+    saveDraft(token, {
+      step,
+      viewingChoice,
+      applicant,
+      coApplicantEnabled,
+      coApplicant,
+      otherResidents,
+      residentialHistory,
+      profileAddress,
+      timeAtAddressMonths,
+      currentRentAmount,
+      currentLeaseStatus,
+      employment,
+      references,
+      workReferenceName,
+      workReferencePhone,
+      loans,
+      vehicles,
+      nextOfKin,
+      coNextOfKin,
+      consent,
+      signatureTypedName,
+      signatureTypedAck,
+      applicationConsentAccepted,
+      applicantNotes,
+    });
+  }, [
+    token,
+    loading,
+    submitted,
+    loadError,
+    step,
+    viewingChoice,
+    applicant,
+    coApplicantEnabled,
+    coApplicant,
+    otherResidents,
+    residentialHistory,
+    profileAddress,
+    timeAtAddressMonths,
+    currentRentAmount,
+    currentLeaseStatus,
+    employment,
+    references,
+    workReferenceName,
+    workReferencePhone,
+    loans,
+    vehicles,
+    nextOfKin,
+    coNextOfKin,
+    consent,
+    signatureTypedName,
+    signatureTypedAck,
+    applicationConsentAccepted,
+    applicantNotes,
+  ]);
 
   const header = (
     <div style={{ marginBottom: 16 }}>
@@ -554,6 +721,7 @@ export default function PublicApplyPage() {
         formVersion: "v2",
       };
       const resp = await submitPublicApplication(payload);
+      clearDraft(token);
       setSubmitted(true);
       setApplicationId(resp.applicationId || null);
     } catch (e: any) {
@@ -572,12 +740,12 @@ export default function PublicApplyPage() {
     );
   }
 
-  if (error && !submitted) {
+  if (loadError && !submitted) {
     return (
       <div style={{ maxWidth: 760, margin: "40px auto", padding: "0 16px" }}>
         {header}
         <div style={{ border: "1px solid #fca5a5", background: "#fef2f2", padding: 12, borderRadius: 8 }}>
-          {error}
+          {loadError}
         </div>
       </div>
     );

@@ -3334,8 +3334,76 @@ router.post("/maintenance-requests", requireTenantWorkspaceIdentity, async (req:
       priority: data.priority,
     },
   });
+  let emailed = false;
+  let emailError: string | null = null;
+  try {
+    const maintenanceNotifyEmail = String(process.env.MAINTENANCE_NOTIFY_EMAIL || "").trim();
+    const adminEmails = getAdminEmails().filter((email) => emailRegex.test(email));
+    let landlordEmail: string | null = null;
+    if (data.landlordId) {
+      const userDoc = await loadDocument("users", data.landlordId);
+      landlordEmail = String(userDoc?.data?.email || "").trim() || null;
+      if (!landlordEmail) {
+        const landlordDoc = await loadDocument("landlords", data.landlordId);
+        landlordEmail = String(landlordDoc?.data?.email || "").trim() || null;
+      }
+    }
 
-  return res.status(201).json({ ok: true, data: projectTenantMaintenance(ref.id, data) });
+    const recipients: string[] = [];
+    if (maintenanceNotifyEmail && emailRegex.test(maintenanceNotifyEmail)) {
+      recipients.push(maintenanceNotifyEmail);
+    } else if (landlordEmail && emailRegex.test(landlordEmail)) {
+      recipients.push(landlordEmail);
+    } else if (adminEmails.length) {
+      recipients.push(...adminEmails);
+    }
+
+    const from =
+      process.env.EMAIL_FROM ||
+      process.env.SENDGRID_FROM_EMAIL ||
+      process.env.SENDGRID_FROM ||
+      process.env.FROM_EMAIL;
+    if (!recipients.length) {
+      emailError = "MISSING_RECIPIENT_EMAIL";
+    } else if (!getEnvFlags().emailConfigured || !from) {
+      emailError = "EMAIL_NOT_CONFIGURED";
+    } else {
+      const tenantDoc = await loadDocument("tenants", context.tenantId);
+      const tenantName =
+        String(tenantDoc?.data?.fullName || tenantDoc?.data?.name || req.user?.name || req.user?.email || "").trim() || "Unknown";
+      const tenantEmail = String(tenantDoc?.data?.email || req.user?.email || "").trim() || null;
+      const propertyName = String(property?.name || property?.addressLine1 || context.propertyId || "").trim() || "Property";
+      const baseUrl = (process.env.PUBLIC_APP_URL || process.env.VITE_PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "");
+      const requestLink = `${baseUrl}/maintenance`;
+      await sendEmail({
+        to: recipients,
+        from,
+        replyTo: from,
+        subject: `New maintenance request: ${title}`,
+        text: buildEmailText({
+          intro: `A tenant submitted a new maintenance request.\nTenant: ${tenantName}${tenantEmail ? ` (${tenantEmail})` : ""}\nProperty: ${propertyName}\nCategory: ${data.category}\nPriority: ${data.priority}\nRequest ID: ${ref.id}\n\n${description}`,
+          ctaText: "Open maintenance",
+          ctaUrl: requestLink,
+        }),
+        html: buildEmailHtml({
+          title: "New maintenance request",
+          intro: `Tenant: ${tenantName}${tenantEmail ? ` (${tenantEmail})` : ""}. Property: ${propertyName}. Category: ${data.category}. Priority: ${data.priority}. Request ID: ${ref.id}.`,
+          ctaText: "Open maintenance",
+          ctaUrl: requestLink,
+        }),
+      });
+      emailed = true;
+    }
+  } catch (err: any) {
+    emailError = err?.message || "SEND_FAILED";
+    console.error("[tenant/workspace-maintenance] email send failed", {
+      requestId: ref.id,
+      landlordId: data.landlordId,
+      message: err?.message || "send_failed",
+    });
+  }
+
+  return res.status(201).json({ ok: true, data: projectTenantMaintenance(ref.id, data), emailed, emailError });
 });
 
 router.post("/invite/redeem", requireTenantWorkspaceIdentity, async (req: any, res) => {
