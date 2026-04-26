@@ -31,6 +31,12 @@ function renderPage() {
   );
 }
 
+function completionPercent() {
+  const text = screen.getByText(/% complete/i).textContent || "";
+  const match = text.match(/(\d+)% complete/i);
+  return match ? Number(match[1]) : 0;
+}
+
 async function completeStepZero() {
   fireEvent.change(await screen.findByLabelText("First name *"), { target: { value: "Jordan" } });
   fireEvent.change(screen.getByLabelText("Last name *"), { target: { value: "Lee" } });
@@ -116,10 +122,37 @@ describe("PublicApplyPage", () => {
     firstRender.unmount();
 
     renderPage();
-
+    expect(await screen.findByText("Resume your application")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Continue where you left off" })).toBeInTheDocument();
     expect(await screen.findByTestId("viewing-request-form")).toBeInTheDocument();
     expect(screen.getByLabelText("First name *")).toHaveValue("Jordan");
     expect(screen.getByLabelText("Last name *")).toHaveValue("Lee");
+  });
+
+  it("updates the local completion progress as required fields are completed", async () => {
+    renderPage();
+    await screen.findByText("Before you continue");
+
+    const startingPercent = completionPercent();
+
+    fireEvent.change(screen.getByLabelText("First name *"), { target: { value: "Jordan" } });
+    fireEvent.change(screen.getByLabelText("Last name *"), { target: { value: "Lee" } });
+    fireEvent.change(screen.getByLabelText("Email *"), { target: { value: "jordan@example.com" } });
+    fireEvent.change(screen.getByLabelText("Date of birth *"), { target: { value: "1990-01-01" } });
+
+    expect(completionPercent()).toBeGreaterThan(startingPercent);
+  });
+
+  it("focuses the missing field when a missing-details item is clicked", async () => {
+    renderPage();
+    await screen.findByText("Before you continue");
+
+    fireEvent.click(screen.getByRole("button", { name: "Current address" }));
+
+    const addressField = await screen.findByLabelText("Current address (line 1) *");
+    await waitFor(() => {
+      expect(addressField).toHaveFocus();
+    });
   });
 
   it("requires co-applicant employment details before continuing", async () => {
