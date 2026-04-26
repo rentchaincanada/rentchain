@@ -210,6 +210,28 @@ describe("tenant workspace frontend shell", () => {
           summaryDescription: "Most credibility signals are available in your current record.",
         },
       },
+      identityTimeline: {
+        events: [
+          {
+            type: "application.created",
+            label: "Application created",
+            description: "A rental application record was started.",
+            occurredAt: "2026-01-01T00:00:00.000Z",
+          },
+          {
+            type: "screening_consent_confirmed",
+            label: "Screening authorized",
+            description: "Screening consent was recorded for this application.",
+            occurredAt: "2026-01-03T00:00:00.000Z",
+          },
+          {
+            type: "lease.tenant_signed",
+            label: "Lease signed",
+            description: "Tenant lease signing was recorded.",
+            occurredAt: "2026-02-01T10:00:00.000Z",
+          },
+        ],
+      },
     });
     tenantAttachmentsApi.getTenantAttachments.mockResolvedValue({
       ok: true,
@@ -434,6 +456,16 @@ describe("tenant workspace frontend shell", () => {
           summaryDescription: "Most credibility signals are available in your current record.",
         },
       },
+      identityTimeline: {
+        events: [
+          {
+            type: "application.created",
+            label: "Application created",
+            description: "A rental application record was started.",
+            occurredAt: "2026-01-01T00:00:00.000Z",
+          },
+        ],
+      },
     });
 
     render(
@@ -451,6 +483,7 @@ describe("tenant workspace frontend shell", () => {
     expect(await screen.findByText(/Profile completion/i)).toBeInTheDocument();
     expect(screen.getByText(/^Your Rental Identity$/i)).toBeInTheDocument();
     expect(screen.getByText(/^Credibility signals$/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Activity timeline$/i)).toBeInTheDocument();
     expect(screen.getByText(/Credibility established/i)).toBeInTheDocument();
     expect(screen.getByText(/Profile complete/i)).toBeInTheDocument();
     expect(screen.getByText(/Application reusable/i)).toBeInTheDocument();
@@ -458,6 +491,8 @@ describe("tenant workspace frontend shell", () => {
     expect(screen.getByText(/Screening completed/i)).toBeInTheDocument();
     expect(screen.getByText(/Lease history present/i)).toBeInTheDocument();
     expect(screen.getByText(/Ready to apply/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Application created$/i)).toBeInTheDocument();
+    expect(screen.getByText(/A rental application record was started\./i)).toBeInTheDocument();
     expect(screen.getByText(/Missing pieces/i)).toBeInTheDocument();
     expect(screen.getByText(/Income documents/i)).toBeInTheDocument();
     expect(screen.getByText(/Share Your Rental Profile/i)).toBeInTheDocument();
@@ -480,6 +515,41 @@ describe("tenant workspace frontend shell", () => {
     expect(screen.getAllByText(/No action needed/i).length).toBeGreaterThan(0);
     expect(screen.getByRole("link", { name: /Open document vault/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Open access/i })).toBeInTheDocument();
+  });
+
+  it("renders a safe empty activity timeline", async () => {
+    tenantPortalApi.getTenantWorkspace.mockResolvedValue({
+      context: {
+        authority: "active_tenant",
+        propertyId: "prop-1",
+        rc_prop_id: "rc-prop-1",
+        applicationId: "app-1",
+        leaseId: "lease-1",
+        tenantId: "tenant-1",
+        unitId: "unit-1",
+        invitedEmail: "tenant@example.com",
+      },
+      property: null,
+      application: null,
+      lease: null,
+      maintenance: [],
+      tenantIdentityRecord: null,
+      tenantCredibilitySignals: null,
+      identityTimeline: { events: [] },
+    });
+
+    render(
+      <MemoryRouter>
+        <TenantWorkspacePage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/^Activity timeline$/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /Identity-related activity will appear here as your application, screening, and lease workflow progress\./i
+      )
+    ).toBeInTheDocument();
   });
 
   it("lets tenants generate, copy, and revoke share links", async () => {

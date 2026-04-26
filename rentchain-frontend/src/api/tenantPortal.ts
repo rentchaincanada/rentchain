@@ -230,6 +230,22 @@ export type TenantCredibilitySignals = {
   };
 };
 
+export type IdentityTimeline = {
+  events: Array<{
+    type:
+      | "application.created"
+      | "application.submitted"
+      | "screening_consent_confirmed"
+      | "screening.completed"
+      | "lease.created"
+      | "lease.activated"
+      | "lease.tenant_signed";
+    label: string;
+    description: string;
+    occurredAt: string;
+  }>;
+};
+
 export type TenantWorkspaceSummary = {
   context: TenantWorkspaceContext;
   property: TenantWorkspaceProperty | null;
@@ -238,6 +254,7 @@ export type TenantWorkspaceSummary = {
   maintenance: TenantWorkspaceMaintenance[];
   tenantIdentityRecord?: TenantIdentityRecord | null;
   tenantCredibilitySignals?: TenantCredibilitySignals | null;
+  identityTimeline?: IdentityTimeline | null;
 };
 
 export async function getTenantWorkspace(): Promise<TenantWorkspaceSummary> {

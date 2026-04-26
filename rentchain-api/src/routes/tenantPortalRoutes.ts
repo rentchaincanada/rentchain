@@ -18,6 +18,7 @@ import { recordTenantEvent } from "../services/tenantPortal/tenantEventLogServic
 import { redeemTenancyInvite } from "../services/tenantPortal/tenantInviteService";
 import { loadTenantIdentityRecord, loadTenantProfileProjection } from "../services/tenantPortal/tenantProfileService";
 import { deriveTenantCredibilitySignals } from "../services/tenantCredibility/deriveTenantCredibilitySignals";
+import { deriveIdentityTimeline } from "../services/identityTimeline/deriveIdentityTimeline";
 import {
   loadTenantCommunicationsWorkspace,
   markTenantCommunicationsRead,
@@ -2903,12 +2904,17 @@ async function handleTenantWorkspaceSummary(req: any, res: any) {
   const context = await resolveWorkspaceContextOrRespond(req, res);
   if (!context) return;
 
-  const [workspace, tenantIdentityRecord] = await Promise.all([
+  const [workspace, tenantIdentityRecord, identityTimeline] = await Promise.all([
     loadTenantWorkspaceData(context),
     loadTenantIdentityRecord({
       context,
       userId: String(req.user?.id || "").trim(),
       userEmail: req.user?.email,
+    }),
+    deriveIdentityTimeline({
+      tenantId: String(req.user?.tenantId || context.tenantId || "").trim(),
+      applicationId: context.applicationId,
+      leaseId: context.leaseId,
     }),
   ]);
   const { tenantCredibilitySignals } = deriveTenantCredibilitySignals({
@@ -2942,6 +2948,7 @@ async function handleTenantWorkspaceSummary(req: any, res: any) {
       maintenance: workspace.maintenance,
       tenantIdentityRecord,
       tenantCredibilitySignals,
+      identityTimeline,
     },
   });
 }
