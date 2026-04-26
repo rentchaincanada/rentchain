@@ -558,7 +558,7 @@ describe("rentalApplications decision actions", () => {
     expect(sendEmailMock).not.toHaveBeenCalled();
   });
 
-  it("blocks duplicate reminders after reminderSentAt is set", async () => {
+  it("blocks reminder resend inside the 24h cooldown window", async () => {
     upsertDoc("applicationLinks", "link-42", {
       landlordId: "landlord-1",
       propertyId: "prop-1",
@@ -577,7 +577,7 @@ describe("rentalApplications decision actions", () => {
         lastActivityAt: 1700003600000,
         submittedAt: null,
         reminderEligibleAt: 1700000000000,
-        reminderSentAt: 1700004000000,
+        reminderSentAt: Date.now(),
       },
     });
 
@@ -592,6 +592,46 @@ describe("rentalApplications decision actions", () => {
     expect(res.status).toBe(400);
     expect(res.body?.error).toBe("APPLICATION_REMINDER_NOT_ELIGIBLE");
     expect(sendEmailMock).not.toHaveBeenCalled();
+  });
+
+  it("allows reminder resend after the 24h cooldown has elapsed", async () => {
+    upsertDoc("applicationLinks", "link-42", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      applicantEmail: "applicant@example.com",
+      expiresAt: 4102444800000,
+      status: "ACTIVE",
+      tokenHash: "old-hash",
+      partialProgress: {
+        status: "in_progress",
+        completionPercent: 62,
+        currentStep: "employment",
+        completedSections: [],
+        missingSections: ["employment"],
+        hasCoApplicant: false,
+        viewingChoice: "already_viewed",
+        startedAt: 1700000000000,
+        lastActivityAt: 1700003600000,
+        submittedAt: null,
+        reminderEligibleAt: 1700000000000,
+        reminderSentAt: Date.now() - 25 * 60 * 60 * 1000,
+      },
+    });
+
+    const router = await createRouter();
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/rental-applications/in-progress/link-42/send-reminder",
+      headers: { authorization: "Bearer landlord" },
+      body: {},
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.ok).toBe(true);
+    expect(sendEmailMock).toHaveBeenCalledTimes(1);
+    const stored = await dbMock.collection("applicationLinks").doc("link-42").get();
+    expect(stored.data()?.partialProgress?.reminderSentAt).toEqual(expect.any(Number));
+    expect(stored.data()?.tokenHash).not.toBe("old-hash");
   });
 
   it("blocks reminders when applicantEmail is missing", async () => {

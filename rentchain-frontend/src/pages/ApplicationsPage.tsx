@@ -356,6 +356,9 @@ const ApplicationsPage: React.FC = () => {
   const [transUnionAccessOpen, setTransUnionAccessOpen] = useState(false);
   const [transUnionConnectOpen, setTransUnionConnectOpen] = useState(false);
   const [transUnionUpdateOpen, setTransUnionUpdateOpen] = useState(false);
+  const APPLICATION_REMINDER_RESEND_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+  const APPLICATION_HIGH_PRIORITY_ACTIVITY_MS = 3 * 24 * 60 * 60 * 1000;
+  const APPLICATION_FOLLOW_UP_STALE_MS = 7 * 24 * 60 * 60 * 1000;
   const transUnionOptionViewedRef = useRef(false);
   const [manualScreeningStatus, setManualScreeningStatus] = useState<ScreeningStatusView | null>(null);
   const [manualScreeningLoading, setManualScreeningLoading] = useState(false);
@@ -1499,7 +1502,6 @@ const ApplicationsPage: React.FC = () => {
     if (application.source !== "application_link") return false;
     const partialProgress = application.partialProgress;
     if (!partialProgress) return false;
-    if (partialProgress.reminderSentAt) return false;
     if (partialProgress.submittedAt) return false;
     if (
       partialProgress.status !== "started" &&
@@ -1508,10 +1510,58 @@ const ApplicationsPage: React.FC = () => {
     ) {
       return false;
     }
-    return (
+    const reminderWindowOpen =
       typeof partialProgress.reminderEligibleAt === "number" &&
-      partialProgress.reminderEligibleAt <= Date.now()
+      partialProgress.reminderEligibleAt <= Date.now();
+    if (!reminderWindowOpen) return false;
+    return (
+      partialProgress.reminderSentAt == null ||
+      partialProgress.reminderSentAt <= Date.now() - APPLICATION_REMINDER_RESEND_COOLDOWN_MS
     );
+  }, []);
+
+  const getPartialReminderState = useCallback((application: RentalApplicationSummary) => {
+    const partialProgress = application.partialProgress;
+    if (application.source !== "application_link" || !partialProgress) {
+      return {
+        ready: false,
+        recentlyReminded: false,
+        reminderSentAt: null as number | null,
+        actionLabel: "Send reminder",
+      };
+    }
+    const reminderSentAt = partialProgress.reminderSentAt;
+    const recentlyReminded =
+      typeof reminderSentAt === "number" &&
+      reminderSentAt > Date.now() - APPLICATION_REMINDER_RESEND_COOLDOWN_MS;
+    const ready = canSendPartialReminder(application);
+    return {
+      ready,
+      recentlyReminded,
+      reminderSentAt,
+      actionLabel: reminderSentAt ? "Send again" : "Send reminder",
+    };
+  }, [canSendPartialReminder]);
+
+  const getPartialPriorityLabel = useCallback((application: RentalApplicationSummary) => {
+    const completionPercent = typeof application.completionPercent === "number" ? application.completionPercent : 0;
+    const lastActivityAt = typeof application.lastActivityAt === "number" ? application.lastActivityAt : null;
+    const now = Date.now();
+    if (
+      completionPercent >= 70 &&
+      typeof lastActivityAt === "number" &&
+      lastActivityAt >= now - APPLICATION_HIGH_PRIORITY_ACTIVITY_MS
+    ) {
+      return "High priority";
+    }
+    if (
+      completionPercent < 40 &&
+      typeof lastActivityAt === "number" &&
+      lastActivityAt <= now - APPLICATION_FOLLOW_UP_STALE_MS
+    ) {
+      return "Needs follow-up";
+    }
+    return null;
   }, []);
 
   const handleSendReminder = useCallback(
@@ -2104,6 +2154,8 @@ const ApplicationsPage: React.FC = () => {
                 <div className="rc-applications-list-scroll">
                   {filtered.map((app) => {
                     const isPartial = app.source === "application_link";
+                    const partialReminderState = isPartial ? getPartialReminderState(app) : null;
+                    const partialPriorityLabel = isPartial ? getPartialPriorityLabel(app) : null;
                     return (
                       <div
                         key={app.id}
@@ -2149,6 +2201,23 @@ const ApplicationsPage: React.FC = () => {
                           {isPartial && typeof app.completionPercent === "number" ? (
                             <span style={{ color: text.subtle, fontSize: 12 }}>{app.completionPercent}% complete</span>
                           ) : null}
+                          {isPartial && partialPriorityLabel ? (
+                            <span
+                              style={{
+                                color: partialPriorityLabel === "High priority" ? "#065f46" : "#9a3412",
+                                background:
+                                  partialPriorityLabel === "High priority"
+                                    ? "rgba(16,185,129,0.12)"
+                                    : "rgba(249,115,22,0.12)",
+                                borderRadius: 999,
+                                padding: "2px 8px",
+                                fontSize: 11,
+                                fontWeight: 700,
+                              }}
+                            >
+                              {partialPriorityLabel}
+                            </span>
+                          ) : null}
                         </div>
                         {isPartial ? (
                           <>
@@ -2160,12 +2229,64 @@ const ApplicationsPage: React.FC = () => {
                             <div style={{ color: text.subtle, fontSize: 12 }}>
                               Partial application only. Full application details appear after submission.
                             </div>
-                            {app.partialProgress?.reminderSentAt ? (
-                              <div style={{ color: text.subtle, fontSize: 12 }}>
-                                Reminder sent {new Date(app.partialProgress.reminderSentAt).toLocaleString()}
+                            {partialReminderState?.reminderSentAt ? (
+                              <div style={{ display: "grid", gap: 4 }}>
+                                <div style={{ color: text.subtle, fontSize: 12 }}>
+                                  Reminder sent {new Date(partialReminderState.reminderSentAt).toLocaleString()}
+                                </div>
+                                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                                  <span
+                                    style={{
+                                      color: partialReminderState.ready ? "#065f46" : text.subtle,
+                                      background: partialReminderState.ready
+                                        ? "rgba(16,185,129,0.12)"
+                                        : "rgba(148,163,184,0.12)",
+                                      borderRadius: 999,
+                                      padding: "2px 8px",
+                                      fontSize: 11,
+                                      fontWeight: 700,
+                                    }}
+                                  >
+                                    {partialReminderState.ready ? "Ready to remind" : "Recently reminded"}
+                                  </span>
+                                  {partialReminderState.ready ? (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        void handleSendReminder(app);
+                                      }}
+                                      style={{
+                                        padding: "6px 10px",
+                                        borderRadius: 999,
+                                        border: `1px solid ${colors.border}`,
+                                        background: colors.accentSoft,
+                                        color: text.primary,
+                                        fontSize: 12,
+                                        fontWeight: 700,
+                                        cursor: sendingReminderId === app.id ? "wait" : "pointer",
+                                      }}
+                                      disabled={sendingReminderId === app.id}
+                                    >
+                                      {sendingReminderId === app.id ? "Sending…" : partialReminderState.actionLabel}
+                                    </button>
+                                  ) : null}
+                                </div>
                               </div>
-                            ) : canSendPartialReminder(app) ? (
+                            ) : partialReminderState?.ready ? (
                               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                                <span
+                                  style={{
+                                    color: "#065f46",
+                                    background: "rgba(16,185,129,0.12)",
+                                    borderRadius: 999,
+                                    padding: "2px 8px",
+                                    fontSize: 11,
+                                    fontWeight: 700,
+                                  }}
+                                >
+                                  Ready to remind
+                                </span>
                                 <button
                                   type="button"
                                   onClick={(e) => {
@@ -2184,7 +2305,7 @@ const ApplicationsPage: React.FC = () => {
                                   }}
                                   disabled={sendingReminderId === app.id}
                                 >
-                                  {sendingReminderId === app.id ? "Sending…" : "Send reminder"}
+                                  {sendingReminderId === app.id ? "Sending…" : partialReminderState.actionLabel}
                                 </button>
                               </div>
                             ) : null}

@@ -4,6 +4,7 @@ import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemp
 import { sendEmail } from "./emailService";
 
 const APPLICATION_LINK_REMINDER_STATUSES = new Set(["started", "in_progress", "ready_to_submit"]);
+export const APPLICATION_REMINDER_RESEND_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 const APPLICATION_LINK_SECTION_LABELS: Record<string, string> = {
   personal_info: "Personal information",
   residential_history: "Residential history",
@@ -77,6 +78,8 @@ export function getApplicationLinkReminderEligibility(link: any, now: number) {
   const partialProgress = normalizeApplicationLinkPartialProgress(link?.partialProgress);
   const expiresAt = typeof link?.expiresAt === "number" ? link.expiresAt : Number(link?.expiresAt || 0) || null;
   const applicantEmail = String(link?.applicantEmail || "").trim().toLowerCase();
+  const cooldownElapsed =
+    partialProgress.reminderSentAt == null || partialProgress.reminderSentAt <= now - APPLICATION_REMINDER_RESEND_COOLDOWN_MS;
   const isEligible =
     String(link?.status || "").trim().toUpperCase() === "ACTIVE" &&
     (!expiresAt || expiresAt > now) &&
@@ -84,13 +87,14 @@ export function getApplicationLinkReminderEligibility(link: any, now: number) {
     partialProgress.submittedAt == null &&
     partialProgress.reminderEligibleAt != null &&
     partialProgress.reminderEligibleAt <= now &&
-    partialProgress.reminderSentAt == null &&
+    cooldownElapsed &&
     Boolean(applicantEmail);
 
   return {
     isEligible,
     partialProgress,
     applicantEmail,
+    cooldownElapsed,
   };
 }
 
