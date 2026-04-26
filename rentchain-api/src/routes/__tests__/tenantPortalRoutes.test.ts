@@ -709,6 +709,12 @@ describe("tenantPortalRoutes foundation", () => {
     expect(shareDocs[0]?.tenantId).toBe("tenant-1");
     expect(shareDocs[0]?.tokenHash).toBeTruthy();
     expect(shareDocs[0]?.token).toBeUndefined();
+    expect(shareDocs[0]?.permissions).toEqual({
+      identitySummary: true,
+      credibilitySummary: false,
+      applicationSummary: false,
+      documents: "none",
+    });
   });
 
   it("lists only active tenant share packages", async () => {
@@ -748,6 +754,8 @@ describe("tenantPortalRoutes foundation", () => {
       expect.objectContaining({
         id: "share-1",
         status: "active",
+        requestedItems: [],
+        approvedItems: [],
       }),
     ]);
   });
@@ -778,6 +786,56 @@ describe("tenantPortalRoutes foundation", () => {
 
     expect(res.status).toBe(200);
     expect(ensureCollection("tenantSharePackages").get("share-1")?.status).toBe("revoked");
+  });
+
+  it("lets a tenant approve requested share expansions only for their own link", async () => {
+    ensureCollection("tenantSharePackages").set("share-1", {
+      id: "share-1",
+      tenantId: "tenant-1",
+      tokenHash: "hash-1",
+      createdAt: 100,
+      expiresAt: Date.now() + 10_000,
+      status: "active",
+      permissions: {
+        identitySummary: true,
+        credibilitySummary: false,
+        applicationSummary: false,
+        documents: "none",
+      },
+      requestedItems: ["credibility_summary", "documents_summary"],
+      approvedItems: [],
+    });
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/share-packages/share-1/respond",
+      body: {
+        approvedItems: ["credibility_summary", "application_summary", "documents_summary"],
+      },
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(ensureCollection("tenantSharePackages").get("share-1")).toEqual(
+      expect.objectContaining({
+        requestedItems: [],
+        approvedItems: ["credibility_summary", "documents_summary"],
+        permissions: {
+          identitySummary: true,
+          credibilitySummary: true,
+          applicationSummary: false,
+          documents: "approved_only",
+        },
+      })
+    );
   });
 
   it("returns a grouped tenant-safe application completion checklist", async () => {

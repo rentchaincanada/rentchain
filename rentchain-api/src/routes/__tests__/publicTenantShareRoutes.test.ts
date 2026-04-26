@@ -1,12 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const readTenantSharePackageByToken = vi.fn();
+const requestTenantSharePackageItems = vi.fn();
 
 vi.mock("../../services/tenantPortal/tenantSharePackageService", () => ({
   readTenantSharePackageByToken,
+  requestTenantSharePackageItems,
 }));
 
-async function invokeRouter(router: any, options: { method: string; url: string }) {
+async function invokeRouter(router: any, options: { method: string; url: string; body?: any }) {
   return await new Promise<{ status: number; body: any }>((resolve, reject) => {
     const path = options.url;
     const token = path.split("/").pop() || "";
@@ -17,6 +19,7 @@ async function invokeRouter(router: any, options: { method: string; url: string 
       path,
       params: { token },
       query: {},
+      body: options.body || {},
       headers: {},
     };
     const res: any = {
@@ -53,11 +56,10 @@ describe("publicTenantShareRoutes", () => {
         readinessLabel: "Ready to apply",
         readinessDescription: "Your core profile and supporting records are ready for most rental workflows.",
       },
-      profile: { completionStatus: "complete" },
-      application: { reusable: true },
-      documents: { completionStatus: "in_progress" },
-      screening: { status: "in_progress" },
-      leases: { summary: { activeCount: 1, historicalCount: 0 } },
+      availability: {
+        canRequestMore: true,
+        availableSections: ["identity"],
+      },
       generatedAt: "2026-04-26T00:00:00.000Z",
     });
 
@@ -69,8 +71,7 @@ describe("publicTenantShareRoutes", () => {
 
     expect(res.status).toBe(200);
     expect(res.body?.data?.identity?.identityStatus).toBe("ready");
-    expect(res.body?.data?.documents?.missingCategories).toBeUndefined();
-    expect(res.body?.data?.screening?.provider).toBeUndefined();
+    expect(res.body?.data?.documents).toBeUndefined();
   });
 
   it("fails closed with 404 when the share package is unavailable", async () => {
@@ -83,5 +84,27 @@ describe("publicTenantShareRoutes", () => {
 
     expect(res.status).toBe(404);
     expect(res.body?.error).toBe("NOT_FOUND");
+  });
+
+  it("stores a sanitized additional-information request without granting access", async () => {
+    requestTenantSharePackageItems.mockResolvedValue({
+      requestedItems: ["credibility_summary", "documents_summary"],
+    });
+
+    const router = (await import("../publicTenantShareRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/share/share-token-1/request",
+      body: {
+        requestedItems: ["credibility_summary", "unknown_key", "documents_summary"],
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(requestTenantSharePackageItems).toHaveBeenCalledWith({
+      token: "share-token-1",
+      requestedItems: ["credibility_summary", "unknown_key", "documents_summary"],
+    });
+    expect(res.body?.data?.requestedItems).toEqual(["credibility_summary", "documents_summary"]);
   });
 });

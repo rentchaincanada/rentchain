@@ -5,6 +5,18 @@ export type TenantSharePackageLink = {
   createdAt: number;
   expiresAt: number;
   status: "active";
+  permissions: {
+    identitySummary: boolean;
+    credibilitySummary: boolean;
+    applicationSummary: boolean;
+    documents: "none" | "summary" | "approved_only";
+  };
+  requestedItems: Array<
+    "identity_summary" | "credibility_summary" | "application_summary" | "documents_summary"
+  >;
+  approvedItems: Array<
+    "identity_summary" | "credibility_summary" | "application_summary" | "documents_summary"
+  >;
 };
 
 export type TenantSharePackageCreated = TenantSharePackageLink & {
@@ -28,4 +40,18 @@ export async function revokeTenantSharePackage(id: string): Promise<void> {
   await tenantApiFetch(`/tenant/share-packages/${encodeURIComponent(id)}`, {
     method: "DELETE",
   });
+}
+
+export async function respondToTenantSharePackage(
+  id: string,
+  approvedItems: Array<"identity_summary" | "credibility_summary" | "application_summary" | "documents_summary">
+): Promise<TenantSharePackageLink> {
+  const res = await tenantApiFetch<{ ok: boolean; data: TenantSharePackageLink }>(
+    `/tenant/share-packages/${encodeURIComponent(id)}/respond`,
+    {
+      method: "POST",
+      body: { approvedItems },
+    }
+  );
+  return res.data;
 }

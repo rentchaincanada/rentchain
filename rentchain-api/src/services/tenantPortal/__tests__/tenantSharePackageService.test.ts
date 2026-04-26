@@ -101,9 +101,17 @@ describe("tenantSharePackageService", () => {
     const docs = Array.from(ensureCollection("tenantSharePackages").values());
     expect(docs).toHaveLength(2);
     expect(docs.every((entry) => entry.tokenHash && !entry.token)).toBe(true);
+    expect(docs[0]?.permissions).toEqual({
+      identitySummary: true,
+      credibilitySummary: false,
+      applicationSummary: false,
+      documents: "none",
+    });
+    expect(docs[0]?.requestedItems).toEqual([]);
+    expect(docs[0]?.approvedItems).toEqual([]);
   });
 
-  it("derives a safe public payload at read time", async () => {
+  it("derives a safe public payload at read time with identity only by default", async () => {
     const service = await import("../tenantSharePackageService");
     const created = await service.createTenantSharePackage({ tenantId: "tenant-1" });
     const token = created.shareUrl.split("/share/")[1];
@@ -116,13 +124,75 @@ describe("tenantSharePackageService", () => {
           identityStatus: "verified",
           verification: { level: "strong" },
         }),
-        documents: { completionStatus: "complete" },
-        screening: { status: "completed" },
+        availability: expect.objectContaining({
+          canRequestMore: true,
+          availableSections: ["identity"],
+        }),
       })
     );
-    expect((payload as any)?.documents?.missingCategories).toBeUndefined();
-    expect((payload as any)?.screening?.provider).toBeUndefined();
-    expect((payload as any)?.leases?.summary?.lastSignedAt).toBeUndefined();
+    expect((payload as any)?.documents).toBeUndefined();
+    expect((payload as any)?.application).toBeUndefined();
+    expect((payload as any)?.credibilitySummary).toBeUndefined();
+  });
+
+  it("stores sanitized request items and applies tenant-approved expansions only", async () => {
+    const service = await import("../tenantSharePackageService");
+    const created = await service.createTenantSharePackage({ tenantId: "tenant-1" });
+    const token = created.shareUrl.split("/share/")[1];
+
+    const requested = await service.requestTenantSharePackageItems({
+      token,
+      requestedItems: ["documents_summary", "unknown_key", "credibility_summary", "documents_summary"],
+    });
+    expect(requested).toEqual({
+      requestedItems: ["documents_summary", "credibility_summary"],
+    });
+
+    const responded = await service.respondToTenantSharePackage({
+      tenantId: "tenant-1",
+      sharePackageId: created.id,
+      approvedItems: ["credibility_summary", "documents_summary", "application_summary"],
+    });
+    expect(responded).toEqual(
+      expect.objectContaining({
+        approvedItems: ["credibility_summary", "documents_summary"],
+        requestedItems: [],
+        permissions: {
+          identitySummary: true,
+          credibilitySummary: true,
+          applicationSummary: false,
+          documents: "approved_only",
+        },
+      })
+    );
+
+    const payload = await service.readTenantSharePackageByToken(token);
+    expect(payload?.identity).toBeTruthy();
+    expect(payload?.credibilitySummary).toEqual(
+      expect.objectContaining({
+        completenessLevel: expect.stringMatching(/low|medium|high/),
+      })
+    );
+    expect(payload?.documents).toEqual({ completionStatus: "complete" });
+    expect(payload?.application).toBeUndefined();
+  });
+
+  it("only lets the owning tenant respond to a share request", async () => {
+    const service = await import("../tenantSharePackageService");
+    const created = await service.createTenantSharePackage({ tenantId: "tenant-1" });
+    const token = created.shareUrl.split("/share/")[1];
+    await service.requestTenantSharePackageItems({
+      token,
+      requestedItems: ["application_summary"],
+    });
+
+    await expect(
+      service.respondToTenantSharePackage({
+        tenantId: "tenant-2",
+        sharePackageId: created.id,
+        approvedItems: ["application_summary"],
+      })
+    ).resolves.toBe(false);
   });
 
   it("returns null for revoked or expired share packages", async () => {

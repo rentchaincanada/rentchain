@@ -12,6 +12,7 @@ import {
   createTenantSharePackage,
   listTenantSharePackages,
   revokeTenantSharePackage,
+  respondToTenantSharePackage,
   type TenantSharePackageLink,
 } from "../../api/tenantSharePackages";
 import {
@@ -83,6 +84,22 @@ function prettyScreeningIdentityStatus(
     case "not_started":
     default:
       return "Not started";
+  }
+}
+
+function prettyShareRequestItem(
+  value: "identity_summary" | "credibility_summary" | "application_summary" | "documents_summary"
+) {
+  switch (value) {
+    case "credibility_summary":
+      return "Credibility summary";
+    case "application_summary":
+      return "Application summary";
+    case "documents_summary":
+      return "Documents summary";
+    case "identity_summary":
+    default:
+      return "Identity summary";
   }
 }
 
@@ -214,6 +231,25 @@ export default function TenantWorkspacePage() {
       setShareBusy(false);
     }
   }, []);
+
+  const handleRespondToShareRequest = React.useCallback(
+    async (
+      id: string,
+      approvedItems: Array<"identity_summary" | "credibility_summary" | "application_summary" | "documents_summary">
+    ) => {
+      try {
+        setShareBusy(true);
+        setShareError(null);
+        const updated = await respondToTenantSharePackage(id, approvedItems);
+        setSharePackages((current) => current.map((entry) => (entry.id === id ? updated : entry)));
+      } catch (err: any) {
+        setShareError(err?.payload?.error || err?.message || "Unable to update this share request right now.");
+      } finally {
+        setShareBusy(false);
+      }
+    },
+    []
+  );
 
   if (loading) {
     return (
@@ -537,10 +573,10 @@ export default function TenantWorkspacePage() {
         )}
       </TenantInfoCard>
 
-      <TenantInfoCard heading="Share Your Rental Profile" accent="#1d4ed8">
+      <TenantInfoCard heading="Manage Shared Access" accent="#1d4ed8">
         <div style={{ display: "grid", gap: spacing.sm }}>
           <div style={{ color: textTokens.secondary, lineHeight: 1.6 }}>
-            Generate a privacy-safe share link with your rental identity summary. The public view stays read-only and never exposes raw documents, screening provider details, or signature data.
+            Generate a privacy-safe share link, review any additional access requests, and approve only the extra summaries you want to share. Public access stays read-only and never exposes raw documents, screening provider details, or signature data.
           </div>
 
           <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
@@ -581,6 +617,44 @@ export default function TenantWorkspacePage() {
                   <div style={{ color: textTokens.secondary }}>
                     Created {formatDate(entry.createdAt)} • Expires {formatDate(entry.expiresAt)}
                   </div>
+                  <div style={{ color: textTokens.secondary }}>
+                    Approved:{" "}
+                    {entry.approvedItems.length
+                      ? entry.approvedItems.map((item) => prettyShareRequestItem(item)).join(", ")
+                      : "Identity summary only"}
+                  </div>
+                  {entry.requestedItems.length ? (
+                    <div
+                      style={{
+                        border: "1px solid rgba(15,23,42,0.08)",
+                        borderRadius: 12,
+                        padding: "10px 12px",
+                        display: "grid",
+                        gap: 8,
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, color: textTokens.primary }}>Pending request</div>
+                      <div style={{ color: textTokens.secondary }}>
+                        {entry.requestedItems.map((item) => prettyShareRequestItem(item)).join(", ")}
+                      </div>
+                      <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
+                        <button
+                          type="button"
+                          onClick={() => void handleRespondToShareRequest(entry.id, entry.requestedItems)}
+                          disabled={shareBusy}
+                        >
+                          Approve requested access
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleRespondToShareRequest(entry.id, [])}
+                          disabled={shareBusy}
+                        >
+                          Deny request
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
                   <div>
                     <button type="button" onClick={() => void handleRevokeShareLink(entry.id)} disabled={shareBusy}>
                       Revoke link

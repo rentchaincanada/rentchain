@@ -35,6 +35,7 @@ import { adaptTenantSafeScreeningState } from "../services/screening/tenantScree
 import {
   createTenantSharePackage,
   listTenantSharePackages,
+  respondToTenantSharePackage,
   revokeTenantSharePackage,
 } from "../services/tenantPortal/tenantSharePackageService";
 
@@ -3024,6 +3025,36 @@ router.delete("/share-packages/:id", requireTenantWorkspaceIdentity, async (req:
       message: err?.message || "failed",
     });
     return res.status(500).json({ ok: false, error: "TENANT_SHARE_PACKAGE_REVOKE_FAILED" });
+  }
+});
+
+router.post("/share-packages/:id/respond", requireTenantWorkspaceIdentity, async (req: any, res) => {
+  const context = await resolveWorkspaceContextOrRespond(req, res);
+  if (!context) return;
+
+  const tenantId = String(req.user?.tenantId || context.tenantId || "").trim();
+  const sharePackageId = String(req.params?.id || "").trim();
+  if (!tenantId || !sharePackageId) {
+    return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+  }
+
+  try {
+    const updated = await respondToTenantSharePackage({
+      tenantId,
+      sharePackageId,
+      approvedItems: req.body?.approvedItems,
+    });
+    if (!updated) {
+      return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+    }
+    return res.json({ ok: true, data: updated });
+  } catch (err: any) {
+    console.error("[tenant/share-packages:respond] failed", {
+      tenantId,
+      sharePackageId,
+      message: err?.message || "failed",
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_SHARE_PACKAGE_RESPOND_FAILED" });
   }
 });
 
