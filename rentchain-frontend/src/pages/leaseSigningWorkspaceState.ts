@@ -59,6 +59,10 @@ function actorLabel(actor: LeaseSigningWorkspaceActor): string {
   return "Not surfaced yet";
 }
 
+function hasBackendLeaseSignatureTiming(lease: TenantWorkspaceLease | null | undefined): boolean {
+  return Boolean(String(lease?.signatureStatus || "").trim());
+}
+
 export function buildLeaseSigningWorkspaceState(input: {
   audience: "landlord" | "tenant";
   executionWorkspace: LeaseExecutionWorkspaceView;
@@ -68,6 +72,104 @@ export function buildLeaseSigningWorkspaceState(input: {
   const leaseVisible = hasLeaseProjection(lease);
   const leaseDocumentVisible = hasLeaseDocument(lease);
   const normalizedLeaseStatus = normalizeStatus(lease?.status);
+  const backendSignatureStatus = normalizeStatus(lease?.signatureStatus);
+  const backendSignatureLabel = String(lease?.signatureReadinessLabel || "").trim() || null;
+  const backendSignatureDescription = String(lease?.signatureReadinessDescription || "").trim() || null;
+
+  if (hasBackendLeaseSignatureTiming(lease)) {
+    if (backendSignatureStatus === "signed") {
+      return {
+        signingState: "signed_or_completed",
+        label: backendSignatureLabel || stateLabel("signed_or_completed"),
+        summary: "Lease signing",
+        explanation:
+          backendSignatureDescription ||
+          "The visible lease record shows the current signing stage as complete.",
+        currentActor: null,
+        currentActorLabel: actorLabel(null),
+        blockers: [],
+        nextActions:
+          input.audience === "landlord"
+            ? [
+                "Use the existing lease and move-in tools for any remaining operational follow-through.",
+                "Keep this signing workspace as the high-level record of how the file moved past the first signing stage.",
+              ]
+            : [
+                "Review your lease details and watch for any next tenant-visible move-in instructions.",
+                "Use the lease page if you need to revisit the current signed document.",
+              ],
+        timelineEvent: {
+          title: "Lease signing completed",
+          description:
+            backendSignatureDescription ||
+            "The visible lease status now indicates the first signing step is complete in the authorized workspace.",
+          actionRequired: false,
+        },
+      };
+    }
+
+    if (backendSignatureStatus === "awaiting_landlord_signature") {
+      return {
+        signingState: "awaiting_landlord_signature",
+        label: backendSignatureLabel || stateLabel("awaiting_landlord_signature"),
+        summary: "Lease signing",
+        explanation:
+          backendSignatureDescription ||
+          "Tenant review appears complete and landlord signature is the next visible signing step.",
+        currentActor: "landlord",
+        currentActorLabel: actorLabel("landlord"),
+        blockers: [],
+        nextActions:
+          input.audience === "landlord"
+            ? [
+                "Review the current lease details and complete the landlord-side signing step in the existing lease workflow when appropriate.",
+                "Keep this workspace as the neutral status view rather than treating it as a legal-signing tool.",
+              ]
+            : [
+                "Your lease review appears complete for now.",
+                "Watch for the landlord-side signing step to finish in the existing workflow.",
+              ],
+        timelineEvent: {
+          title: "Awaiting landlord signature",
+          description:
+            backendSignatureDescription ||
+            "The visible lease status indicates tenant review appears complete and landlord signature is the next visible step.",
+          actionRequired: input.audience === "landlord",
+        },
+      };
+    }
+
+    if (backendSignatureStatus === "awaiting_tenant_signature") {
+      return {
+        signingState: "awaiting_tenant_signature",
+        label: backendSignatureLabel || stateLabel("awaiting_tenant_signature"),
+        summary: "Lease signing",
+        explanation:
+          backendSignatureDescription ||
+          "A visible lease document is available and the next visible signing step belongs to the tenant.",
+        currentActor: "tenant",
+        currentActorLabel: actorLabel("tenant"),
+        blockers: [],
+        nextActions:
+          input.audience === "landlord"
+            ? [
+                "Wait for the tenant-side signing step to complete in the current lease workflow.",
+                "Use this workspace to explain who is expected to act next without implying provider-backed e-sign automation.",
+              ]
+            : [
+                "Review the current lease details carefully before taking the next tenant-visible signing step.",
+                "Use the existing lease page for the current document and any tenant-safe follow-through.",
+              ],
+        timelineEvent: {
+          title: "Awaiting tenant signature",
+          description:
+            backendSignatureDescription ||
+            "A visible lease document and current status indicate the next signing step belongs to the tenant.",
+          actionRequired: input.audience === "tenant",
+        },
+      };
+    }
+  }
 
   if (["signed", "active", "current"].includes(normalizedLeaseStatus)) {
     return {

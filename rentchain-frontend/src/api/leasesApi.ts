@@ -49,6 +49,17 @@ export interface LandlordActiveLease extends Lease {
   tenantName?: string | null;
   tenantEmail?: string | null;
   documentUrl?: string | null;
+  signatureStatus?: "not_started" | "awaiting_tenant_signature" | "awaiting_landlord_signature" | "signed" | "unavailable";
+  signatureReadinessLabel?: string | null;
+  signatureReadinessDescription?: string | null;
+  tenantSignature?: {
+    signedAt: string | null;
+    signatureMethod: "typed" | "drawn" | null;
+    signatureDisplayName: string | null;
+  } | null;
+  leasePdfStatus?: "available" | "pending" | "not_available";
+  leasePdfLabel?: string | null;
+  leasePdfDescription?: string | null;
   hiddenFromActiveLists?: boolean;
   cleanupReason?: string | null;
   cleanupBatch?: string | null;

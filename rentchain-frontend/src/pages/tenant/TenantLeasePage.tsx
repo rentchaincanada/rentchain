@@ -61,6 +61,14 @@ export default function TenantLeasePage() {
           </TenantInfoCard>
 
           <TenantInfoCard heading="Lease Document" accent="#0f766e">
+            {data.leasePdfLabel ? (
+              <div style={{ display: "grid", gap: 6 }}>
+                <div style={{ fontWeight: 800 }}>{data.leasePdfLabel}</div>
+                {data.leasePdfDescription ? (
+                  <div style={{ color: "var(--text-muted, #64748b)" }}>{data.leasePdfDescription}</div>
+                ) : null}
+              </div>
+            ) : null}
             {data.documentUrl ? (
               <a href={data.documentUrl} target="_blank" rel="noreferrer">
                 Open lease document
@@ -70,6 +78,35 @@ export default function TenantLeasePage() {
                 No approved lease document link is available in this workspace yet.
               </div>
             )}
+          </TenantInfoCard>
+
+          <TenantInfoCard heading="Lease Signing" accent="#7c3aed">
+            <div style={{ display: "grid", gap: 12 }}>
+              <div style={{ display: "grid", gap: 6 }}>
+                <div style={{ fontWeight: 800 }}>{data.signatureReadinessLabel || "Lease signing unavailable"}</div>
+                <div style={{ color: "var(--text-muted, #64748b)" }}>
+                  {data.signatureReadinessDescription || "Lease signing details are not available in this workspace yet."}
+                </div>
+              </div>
+
+              {data.tenantSignature ? (
+                <TenantKeyValueGrid
+                  rows={[
+                    { label: "Signed at", value: formatDate(data.tenantSignature.signedAt) },
+                    {
+                      label: "Signature method",
+                      value:
+                        data.tenantSignature.signatureMethod === "drawn"
+                          ? "Drawn signature"
+                          : data.tenantSignature.signatureMethod === "typed"
+                          ? "Typed signature"
+                          : "—",
+                    },
+                    { label: "Signed by", value: data.tenantSignature.signatureDisplayName || "—" },
+                  ]}
+                />
+              ) : null}
+            </div>
           </TenantInfoCard>
         </>
       ) : null}

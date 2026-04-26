@@ -5035,29 +5035,49 @@ router.get("/lease", requireTenant, async (req: any, res) => {
       }
     }
 
-    const rentAmount =
-      typeof leaseRecord?.monthlyRent === "number"
-        ? leaseRecord.monthlyRent
-        : typeof tenantData?.monthlyRent === "number"
-        ? tenantData.monthlyRent
-        : typeof tenantData?.rentCents === "number"
-        ? tenantData.rentCents / 100
-        : null;
+    const projectedLease = leaseId
+      ? projectTenantLease(leaseId, {
+          ...(leaseRecord || {}),
+          startDate: leaseRecord?.startDate || leaseRecord?.leaseStart || tenantData?.leaseStart || tenantData?.leaseStartDate || null,
+          endDate: leaseRecord?.endDate || tenantData?.leaseEnd || null,
+          monthlyRent:
+            typeof leaseRecord?.monthlyRent === "number"
+              ? leaseRecord.monthlyRent
+              : typeof tenantData?.monthlyRent === "number"
+              ? tenantData.monthlyRent
+              : typeof tenantData?.rentCents === "number"
+              ? tenantData.rentCents / 100
+              : null,
+          status: leaseRecord?.status || tenantData?.leaseStatus || tenantData?.status || null,
+        })
+      : null;
 
     const lease = {
-      leaseId,
+      ...(projectedLease || {
+        leaseId,
+        startDate: null,
+        endDate: null,
+        monthlyRent: null,
+        status: null,
+        documentUrl: null,
+        signatureStatus: "unavailable",
+        signatureReadinessLabel: "Lease signing unavailable",
+        signatureReadinessDescription: "Lease signing details are not available in this workspace yet.",
+        tenantSignature: null,
+        leasePdfStatus: "not_available",
+        leasePdfLabel: "Lease document unavailable",
+        leasePdfDescription: "No tenant-safe lease document is available in this workspace yet.",
+      }),
       propertyId,
       propertyName,
       unitId,
       unitNumber,
-      rentAmount,
-      leaseStart:
-        leaseRecord?.startDate || leaseRecord?.leaseStart || tenantData?.leaseStart || tenantData?.leaseStartDate || null,
-      leaseEnd: leaseRecord?.endDate || tenantData?.leaseEnd || null,
-      status: leaseRecord?.status || tenantData?.leaseStatus || tenantData?.status || null,
+      rentAmount: projectedLease?.monthlyRent ?? null,
+      leaseStart: projectedLease?.startDate ?? null,
+      leaseEnd: projectedLease?.endDate ?? null,
     };
 
-    return res.json({ ok: true, lease, ...lease });
+    return res.json({ ok: true, data: lease, lease, ...lease });
   } catch (err) {
     console.error("[tenantPortalRoutes] /tenant/lease error", err);
     return res.status(500).json({ ok: false, error: "TENANT_LEASE_FAILED" });
