@@ -9,6 +9,12 @@ import { getTenantNotificationPreferences } from "../../api/tenantNotificationPr
 import { getTenantCommunicationsWorkspace } from "../../api/tenantCommunicationsApi";
 import { listTenantScreenings, type TenantScreeningRequest } from "../../api/tenantScreeningApi";
 import {
+  createTenantSharePackage,
+  listTenantSharePackages,
+  revokeTenantSharePackage,
+  type TenantSharePackageLink,
+} from "../../api/tenantSharePackages";
+import {
   TenantEmptyState,
   TenantErrorState,
   TenantInfoCard,
@@ -89,6 +95,10 @@ export default function TenantWorkspacePage() {
   const [notificationPreferences, setNotificationPreferences] = React.useState<Awaited<ReturnType<typeof getTenantNotificationPreferences>> | null>(null);
   const [communications, setCommunications] = React.useState<Awaited<ReturnType<typeof getTenantCommunicationsWorkspace>> | null>(null);
   const [screenings, setScreenings] = React.useState<TenantScreeningRequest[]>([]);
+  const [sharePackages, setSharePackages] = React.useState<TenantSharePackageLink[]>([]);
+  const [freshShareUrl, setFreshShareUrl] = React.useState<string | null>(null);
+  const [shareBusy, setShareBusy] = React.useState(false);
+  const [shareError, setShareError] = React.useState<string | null>(null);
   const [profileLoading, setProfileLoading] = React.useState(true);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -97,7 +107,7 @@ export default function TenantWorkspacePage() {
     setLoading(true);
     setError(null);
     try {
-      const [workspaceResult, accessResult, attachmentsResult, completionResult, preferencesResult, communicationsResult, screeningsResult] = await Promise.allSettled([
+      const [workspaceResult, accessResult, attachmentsResult, completionResult, preferencesResult, communicationsResult, screeningsResult, sharePackagesResult] = await Promise.allSettled([
         getTenantWorkspace(),
         getTenantAccess(),
         getTenantAttachments(),
@@ -105,6 +115,7 @@ export default function TenantWorkspacePage() {
         getTenantNotificationPreferences(),
         getTenantCommunicationsWorkspace(),
         listTenantScreenings(),
+        listTenantSharePackages(),
       ]);
 
       if (workspaceResult.status === "rejected") {
@@ -122,6 +133,7 @@ export default function TenantWorkspacePage() {
           ? (screeningsResult.value as any).items
           : [],
       );
+      setSharePackages(sharePackagesResult.status === "fulfilled" ? sharePackagesResult.value : []);
     } catch (err: any) {
       setData(null);
       setAccess(null);
@@ -130,6 +142,7 @@ export default function TenantWorkspacePage() {
       setNotificationPreferences(null);
       setCommunications(null);
       setScreenings([]);
+      setSharePackages([]);
       setError(err?.payload?.error || err?.message || "Unable to load your tenant workspace.");
     } finally {
       setLoading(false);
@@ -163,6 +176,43 @@ export default function TenantWorkspacePage() {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  const handleGenerateShareLink = React.useCallback(async () => {
+    try {
+      setShareBusy(true);
+      setShareError(null);
+      const created = await createTenantSharePackage();
+      setFreshShareUrl(created.shareUrl);
+      const next = await listTenantSharePackages();
+      setSharePackages(next);
+    } catch (err: any) {
+      setShareError(err?.payload?.error || err?.message || "Unable to create a share link right now.");
+    } finally {
+      setShareBusy(false);
+    }
+  }, []);
+
+  const handleCopyShareLink = React.useCallback(async () => {
+    if (!freshShareUrl) return;
+    try {
+      await navigator.clipboard.writeText(freshShareUrl);
+    } catch {
+      setShareError("Copy is unavailable in this browser right now.");
+    }
+  }, [freshShareUrl]);
+
+  const handleRevokeShareLink = React.useCallback(async (id: string) => {
+    try {
+      setShareBusy(true);
+      setShareError(null);
+      await revokeTenantSharePackage(id);
+      setSharePackages((current) => current.filter((entry) => entry.id !== id));
+    } catch (err: any) {
+      setShareError(err?.payload?.error || err?.message || "Unable to revoke this share link right now.");
+    } finally {
+      setShareBusy(false);
+    }
   }, []);
 
   if (loading) {
@@ -421,6 +471,66 @@ export default function TenantWorkspacePage() {
             Your rental identity summary will appear here once enough tenant-safe records are available.
           </div>
         )}
+      </TenantInfoCard>
+
+      <TenantInfoCard heading="Share Your Rental Profile" accent="#1d4ed8">
+        <div style={{ display: "grid", gap: spacing.sm }}>
+          <div style={{ color: textTokens.secondary, lineHeight: 1.6 }}>
+            Generate a privacy-safe share link with your rental identity summary. The public view stays read-only and never exposes raw documents, screening provider details, or signature data.
+          </div>
+
+          <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
+            <button type="button" onClick={() => void handleGenerateShareLink()} disabled={shareBusy}>
+              {shareBusy ? "Generating..." : "Generate share link"}
+            </button>
+            {freshShareUrl ? (
+              <button type="button" onClick={() => void handleCopyShareLink()}>
+                Copy latest link
+              </button>
+            ) : null}
+          </div>
+
+          {freshShareUrl ? (
+            <div style={{ color: textTokens.secondary }} data-testid="fresh-share-url">
+              Latest link: {freshShareUrl}
+            </div>
+          ) : null}
+
+          {shareError ? (
+            <div style={{ color: "#b91c1c" }}>{shareError}</div>
+          ) : null}
+
+          <div style={{ display: "grid", gap: 8 }}>
+            <div style={{ fontWeight: 700, color: textTokens.primary }}>Active share links</div>
+            {sharePackages.length ? (
+              sharePackages.map((entry) => (
+                <div
+                  key={entry.id}
+                  style={{
+                    border: "1px solid rgba(15,23,42,0.08)",
+                    borderRadius: 12,
+                    padding: "12px 14px",
+                    display: "grid",
+                    gap: 8,
+                  }}
+                >
+                  <div style={{ color: textTokens.secondary }}>
+                    Created {formatDate(entry.createdAt)} • Expires {formatDate(entry.expiresAt)}
+                  </div>
+                  <div>
+                    <button type="button" onClick={() => void handleRevokeShareLink(entry.id)} disabled={shareBusy}>
+                      Revoke link
+                    </button>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div style={{ color: textTokens.secondary }}>
+                No active share links yet.
+              </div>
+            )}
+          </div>
+        </div>
       </TenantInfoCard>
 
       <div

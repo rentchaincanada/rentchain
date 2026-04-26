@@ -119,6 +119,7 @@ import landlordAnalyticsBenchmarkingRoutes from "./routes/landlordAnalyticsBench
 import landlordPortfolioScoreRoutes from "./routes/landlordPortfolioScoreRoutes";
 import landlordPortfolioScoreSharingRoutes from "./routes/landlordPortfolioScoreSharingRoutes";
 import publicPortfolioScoreRoutes from "./routes/publicPortfolioScoreRoutes";
+import publicTenantShareRoutes from "./routes/publicTenantShareRoutes";
 import landlordActionRecommendationRoutes from "./routes/landlordActionRecommendationRoutes";
 import tenantFeedbackRoutes from "./routes/tenantFeedbackRoutes";
 import marketplaceContractorRoutes from "./routes/marketplaceContractorRoutes";
@@ -215,6 +216,7 @@ app.use("/api", routeSource("paymentsRoutes.ts"), paymentsRoutes);
 app.use("/api", routeSource("publicRoutes.ts"), publicRoutes);
 app.use("/api/public", routeSource("publicRoutes.ts"), publicRoutes);
 app.use("/api", routeSource("publicPortfolioScoreRoutes.ts"), publicPortfolioScoreRoutes);
+app.use("/api/public", routeSource("publicTenantShareRoutes.ts"), publicTenantShareRoutes);
 app.use("/api/public", routeSource("landlordInvitesPublicRoutes.ts"), landlordInvitesPublicRoutes);
 app.use("/api/public", routeSource("landlordInquiryRoutes.ts"), landlordInquiryPublicRoutes);
 app.use("/api/public", tenantHistorySharePublicRouter);

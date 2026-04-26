@@ -1,6 +1,6 @@
 import React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import TenantWorkspacePage from "./TenantWorkspacePage";
 import TenantApplicationStatusPage from "./TenantApplicationStatusPage";
@@ -49,6 +49,12 @@ const tenantScreeningApi = vi.hoisted(() => ({
   listTenantScreenings: vi.fn(),
 }));
 
+const tenantSharePackagesApi = vi.hoisted(() => ({
+  createTenantSharePackage: vi.fn(),
+  listTenantSharePackages: vi.fn(),
+  revokeTenantSharePackage: vi.fn(),
+}));
+
 vi.mock("../../api/tenantPortal", () => tenantPortalApi);
 vi.mock("../../api/tenantApplicationCompletion", () => tenantApplicationCompletionApi);
 vi.mock("../../api/tenantAccess", () => tenantAccessApi);
@@ -63,6 +69,7 @@ vi.mock("../../api/tenantScreeningApi", async () => {
     listTenantScreenings: tenantScreeningApi.listTenantScreenings,
   };
 });
+vi.mock("../../api/tenantSharePackages", () => tenantSharePackagesApi);
 vi.mock("../../api/maintenanceWorkflowApi", async () => {
   const actual = await vi.importActual<any>("../../api/maintenanceWorkflowApi");
   return {
@@ -300,6 +307,20 @@ describe("tenant workspace frontend shell", () => {
       },
       updatedAt: 1710000000000,
     });
+    tenantSharePackagesApi.listTenantSharePackages.mockResolvedValue([]);
+    tenantSharePackagesApi.createTenantSharePackage.mockResolvedValue({
+      id: "share-1",
+      createdAt: 1710000000000,
+      expiresAt: 1710600000000,
+      status: "active",
+      shareUrl: "https://app.example/share/share-token-1",
+    });
+    tenantSharePackagesApi.revokeTenantSharePackage.mockResolvedValue(undefined);
+    Object.assign(navigator, {
+      clipboard: {
+        writeText: vi.fn().mockResolvedValue(undefined),
+      },
+    });
   });
 
   it("tenant shell renders expected navigation safely", async () => {
@@ -397,10 +418,11 @@ describe("tenant workspace frontend shell", () => {
     expect(await screen.findByText(/Recent activity \/ notifications/i)).toBeInTheDocument();
     expect(screen.getByText(/Recent workflow updates/i)).toBeInTheDocument();
     expect(await screen.findByText(/Profile completion/i)).toBeInTheDocument();
-    expect(screen.getByText(/Your Rental Identity/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Your Rental Identity$/i)).toBeInTheDocument();
     expect(screen.getByText(/Ready to apply/i)).toBeInTheDocument();
     expect(screen.getByText(/Missing pieces/i)).toBeInTheDocument();
     expect(screen.getByText(/Income documents/i)).toBeInTheDocument();
+    expect(screen.getByText(/Share Your Rental Profile/i)).toBeInTheDocument();
     expect(screen.getByText(/Add missing details to keep your rental profile organized/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /View your profile/i })).toBeInTheDocument();
     expect(screen.queryByText(/^Applicant$/i)).not.toBeInTheDocument();
@@ -420,6 +442,40 @@ describe("tenant workspace frontend shell", () => {
     expect(screen.getAllByText(/No action needed/i).length).toBeGreaterThan(0);
     expect(screen.getByRole("link", { name: /Open document vault/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Open access/i })).toBeInTheDocument();
+  });
+
+  it("lets tenants generate, copy, and revoke share links", async () => {
+    tenantSharePackagesApi.listTenantSharePackages
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          id: "share-1",
+          createdAt: 1710000000000,
+          expiresAt: 1710600000000,
+          status: "active",
+        },
+      ]);
+
+    render(
+      <MemoryRouter>
+        <TenantWorkspacePage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Share Your Rental Profile/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Generate share link/i }));
+
+    expect(await screen.findByTestId("fresh-share-url")).toHaveTextContent("https://app.example/share/share-token-1");
+    expect(tenantSharePackagesApi.createTenantSharePackage).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole("button", { name: /Copy latest link/i }));
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith("https://app.example/share/share-token-1");
+
+    fireEvent.click(screen.getByRole("button", { name: /Revoke link/i }));
+    await waitFor(() => {
+      expect(tenantSharePackagesApi.revokeTenantSharePackage).toHaveBeenCalledWith("share-1");
+    });
   });
 
   it("shows an active-tenancy transition state when tenant access is active but the lease is not active yet", async () => {
