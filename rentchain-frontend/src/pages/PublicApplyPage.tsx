@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import {
   fetchPublicApplicationLink,
@@ -103,6 +103,13 @@ type PublicApplicationDraft = {
   applicantNotes: string;
 };
 
+type MissingFieldItem = {
+  key: string;
+  label: string;
+  step: number;
+  complete: boolean;
+};
+
 function draftStorageKey(token: string) {
   return `public-application-draft:${token}`;
 }
@@ -134,6 +141,36 @@ function clearDraft(token: string) {
   } catch {
     // ignore storage failures
   }
+}
+
+function hasDraftContent(draft: PublicApplicationDraft) {
+  return Boolean(
+    draft.viewingChoice ||
+      draft.step > 0 ||
+      draft.coApplicantEnabled ||
+      (draft.applicant.firstName || "").trim() ||
+      (draft.applicant.lastName || "").trim() ||
+      (draft.applicant.email || "").trim() ||
+      (draft.applicant.dob || "").trim() ||
+      (draft.coApplicant.firstName || "").trim() ||
+      (draft.coApplicant.lastName || "").trim() ||
+      (draft.coApplicant.email || "").trim() ||
+      (draft.coApplicant.dob || "").trim() ||
+      draft.profileAddress.line1.trim() ||
+      draft.profileAddress.city.trim() ||
+      draft.profileAddress.provinceState.trim() ||
+      draft.profileAddress.postalCode.trim() ||
+      draft.timeAtAddressMonths.trim() ||
+      draft.currentRentAmount.trim() ||
+      (draft.workReferenceName || "").trim() ||
+      (draft.workReferencePhone || "").trim() ||
+      draft.consent.creditConsent ||
+      draft.consent.referenceConsent ||
+      draft.consent.dataSharingConsent ||
+      (draft.signatureTypedName || "").trim() ||
+      draft.signatureTypedAck ||
+      draft.applicationConsentAccepted
+  );
 }
 
 function isValidDob(value: string) {
@@ -261,6 +298,15 @@ export default function PublicApplyPage() {
   const [applicationConsentAccepted, setApplicationConsentAccepted] = useState(false);
   const [applicantNotes, setApplicantNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [restoredDraftStep, setRestoredDraftStep] = useState<number | null>(null);
+  const [showResumeBanner, setShowResumeBanner] = useState(false);
+  const [pendingFocus, setPendingFocus] = useState<{ key: string | null; step: number } | null>(null);
+  const formAreaRef = useRef<HTMLDivElement | null>(null);
+  const fieldRefs = useRef<Record<string, HTMLElement | null>>({});
+
+  const registerFieldRef = (key: string) => (node: HTMLElement | null) => {
+    fieldRefs.current[key] = node;
+  };
 
   const updateApplicant = (value: Partial<RentalApplicationPayload["applicant"]>) => {
     setApplicant((prev) => {
@@ -304,7 +350,10 @@ export default function PublicApplyPage() {
         setLinkData(res.data || {});
         const draft = loadDraft(token);
         if (draft) {
-          setStep(Math.max(0, Math.min(steps.length - 1, Number(draft.step) || 0)));
+          const nextStep = Math.max(0, Math.min(steps.length - 1, Number(draft.step) || 0));
+          setStep(nextStep);
+          setRestoredDraftStep(nextStep);
+          setShowResumeBanner(hasDraftContent(draft));
           setViewingChoice(draft.viewingChoice ?? null);
           setApplicant(draft.applicant || {});
           setCoApplicantEnabled(Boolean(draft.coApplicantEnabled));
@@ -340,6 +389,9 @@ export default function PublicApplyPage() {
           setSignatureTypedAck(Boolean(draft.signatureTypedAck));
           setApplicationConsentAccepted(Boolean(draft.applicationConsentAccepted));
           setApplicantNotes(draft.applicantNotes || "");
+        } else {
+          setRestoredDraftStep(null);
+          setShowResumeBanner(false);
         }
       } catch (e: any) {
         if (!alive) return;
@@ -412,6 +464,28 @@ export default function PublicApplyPage() {
     applicationConsentAccepted,
     applicantNotes,
   ]);
+
+  useEffect(() => {
+    if (!pendingFocus || step !== pendingFocus.step) return;
+    const target = pendingFocus.key ? fieldRefs.current[pendingFocus.key] : formAreaRef.current;
+    window.requestAnimationFrame(() => {
+      const nextTarget = pendingFocus.key ? fieldRefs.current[pendingFocus.key] : formAreaRef.current;
+      if (nextTarget && "scrollIntoView" in nextTarget && typeof nextTarget.scrollIntoView === "function") {
+        nextTarget.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+      nextTarget?.focus?.();
+      setPendingFocus(null);
+    });
+    if (!target && pendingFocus.key) {
+      window.requestAnimationFrame(() => {
+        if (formAreaRef.current && typeof formAreaRef.current.scrollIntoView === "function") {
+          formAreaRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+        formAreaRef.current?.focus?.();
+        setPendingFocus(null);
+      });
+    }
+  }, [pendingFocus, step]);
 
   const header = (
     <div style={{ marginBottom: 16 }}>
@@ -496,6 +570,141 @@ export default function PublicApplyPage() {
       );
     }
     return true;
+  };
+
+  const missingFieldItems = useMemo<MissingFieldItem[]>(() => {
+    const items: MissingFieldItem[] = [
+      { key: "applicant.firstName", label: "Applicant first name", step: 0, complete: Boolean((applicant.firstName ?? "").trim()) },
+      { key: "applicant.lastName", label: "Applicant last name", step: 0, complete: Boolean((applicant.lastName ?? "").trim()) },
+      { key: "applicant.email", label: "Applicant email", step: 0, complete: Boolean((applicant.email ?? "").trim()) },
+      { key: "applicant.dob", label: "Applicant date of birth", step: 0, complete: Boolean((applicant.dob ?? "").trim()) && isValidDob((applicant.dob ?? "").trim()) },
+      { key: "residential.line1", label: "Current address", step: 1, complete: Boolean(profileAddress.line1.trim()) },
+      { key: "residential.city", label: "City", step: 1, complete: Boolean(profileAddress.city.trim()) },
+      { key: "residential.province", label: "Province", step: 1, complete: Boolean(profileAddress.provinceState.trim()) },
+      { key: "residential.postalCode", label: "Postal code", step: 1, complete: Boolean(profileAddress.postalCode.trim()) },
+      { key: "residential.timeAtAddressMonths", label: "Time at current address", step: 1, complete: Boolean(timeAtAddressMonths.trim()) },
+      { key: "residential.currentRentAmount", label: "Current rent amount", step: 1, complete: Boolean(currentRentAmount.trim()) },
+      {
+        key: "residential.leaseEndDate",
+        label: "Lease end date",
+        step: 1,
+        complete:
+          currentLeaseStatus.hasActiveLease !== true ||
+          (Boolean(currentLeaseStatus.leaseEndDate?.trim()) && isValidLeaseDate(currentLeaseStatus.leaseEndDate || "")),
+      },
+      { key: "employment.applicant.employer", label: "Applicant employer", step: 2, complete: Boolean((employment.applicant.employer || "").trim()) },
+      { key: "employment.applicant.jobTitle", label: "Applicant job title", step: 2, complete: Boolean((employment.applicant.jobTitle || "").trim()) },
+      {
+        key: "employment.applicant.income",
+        label: "Applicant gross income",
+        step: 2,
+        complete: Number(employment.applicant.monthlyIncomeCents || 0) > 0,
+      },
+      {
+        key: "employment.applicant.lengthMonths",
+        label: "Applicant time at current job",
+        step: 2,
+        complete: employment.applicant.lengthMonths != null,
+      },
+      { key: "references.workReferenceName", label: "Work reference name", step: 3, complete: Boolean(workReferenceName.trim()) },
+      { key: "references.workReferencePhone", label: "Work reference phone", step: 3, complete: Boolean(workReferencePhone.trim()) },
+      { key: "consent.creditConsent", label: "Credit consent", step: 4, complete: consent.creditConsent },
+      { key: "consent.referenceConsent", label: "Reference consent", step: 4, complete: consent.referenceConsent },
+      { key: "consent.dataSharingConsent", label: "Data sharing consent", step: 4, complete: consent.dataSharingConsent },
+      {
+        key: "consent.applicantNameTyped",
+        label: "Applicant typed full name",
+        step: 4,
+        complete: Boolean((consent.applicantNameTyped || "").trim()),
+      },
+      { key: "signature.typedName", label: "Signature typed name", step: 4, complete: Boolean(signatureTypedName.trim()) },
+      { key: "signature.typedAck", label: "Legal signature acknowledgement", step: 4, complete: signatureTypedAck },
+      {
+        key: "consent.applicationConsentAccepted",
+        label: "Application consent acknowledgement",
+        step: 4,
+        complete: applicationConsentAccepted,
+      },
+    ];
+
+    if (coApplicantEnabled) {
+      items.splice(
+        4,
+        0,
+        { key: "coApplicant.firstName", label: "Co-applicant first name", step: 0, complete: Boolean((coApplicant.firstName ?? "").trim()) },
+        { key: "coApplicant.lastName", label: "Co-applicant last name", step: 0, complete: Boolean((coApplicant.lastName ?? "").trim()) },
+        { key: "coApplicant.email", label: "Co-applicant email", step: 0, complete: Boolean((coApplicant.email ?? "").trim()) },
+        {
+          key: "coApplicant.dob",
+          label: "Co-applicant date of birth",
+          step: 0,
+          complete: Boolean((coApplicant.dob ?? "").trim()) && isValidDob((coApplicant.dob ?? "").trim()),
+        },
+      );
+      items.splice(
+        19,
+        0,
+        { key: "employment.coApplicant.employer", label: "Co-applicant employer", step: 2, complete: Boolean((employment.coApplicant?.employer || "").trim()) },
+        { key: "employment.coApplicant.jobTitle", label: "Co-applicant job title", step: 2, complete: Boolean((employment.coApplicant?.jobTitle || "").trim()) },
+        {
+          key: "employment.coApplicant.income",
+          label: "Co-applicant gross income",
+          step: 2,
+          complete: Number(employment.coApplicant?.monthlyIncomeCents || 0) > 0,
+        },
+        {
+          key: "employment.coApplicant.lengthMonths",
+          label: "Co-applicant time at current job",
+          step: 2,
+          complete: employment.coApplicant?.lengthMonths != null,
+        },
+      );
+      items.push({
+        key: "consent.coApplicantNameTyped",
+        label: "Co-applicant typed full name",
+        step: 4,
+        complete: Boolean((consent.coApplicantNameTyped || "").trim()),
+      });
+    }
+
+    return items;
+  }, [
+    applicant,
+    applicantNotes,
+    applicationConsentAccepted,
+    coApplicant,
+    coApplicantEnabled,
+    consent,
+    currentLeaseStatus,
+    currentRentAmount,
+    employment,
+    profileAddress,
+    signatureTypedAck,
+    signatureTypedName,
+    timeAtAddressMonths,
+    workReferenceName,
+    workReferencePhone,
+  ]);
+
+  const missingDetails = useMemo(() => missingFieldItems.filter((item) => !item.complete), [missingFieldItems]);
+  const completionPercent = useMemo(() => {
+    if (!missingFieldItems.length) return 100;
+    const completeCount = missingFieldItems.filter((item) => item.complete).length;
+    return Math.max(0, Math.min(100, Math.round((completeCount / missingFieldItems.length) * 100)));
+  }, [missingFieldItems]);
+  const stepsRemaining = useMemo(
+    () => new Set(missingDetails.map((item) => item.step)).size,
+    [missingDetails]
+  );
+
+  const focusField = (key: string | null, nextStep: number) => {
+    setShowResumeBanner(false);
+    setStep(nextStep);
+    setPendingFocus({ key, step: nextStep });
+  };
+
+  const handleResume = () => {
+    focusField(null, restoredDraftStep ?? step);
   };
 
   async function handleSubmit() {
@@ -774,6 +983,55 @@ export default function PublicApplyPage() {
     <div style={{ maxWidth: 760, margin: "40px auto", padding: "0 16px" }}>
       {header}
       {expiryNote ? <div style={{ fontSize: "0.85rem", opacity: 0.7 }}>{expiryNote}</div> : null}
+      {showResumeBanner ? (
+        <div
+          style={{
+            ...cardStyle,
+            marginTop: 16,
+            marginBottom: 16,
+            borderColor: "rgba(14,116,144,0.16)",
+            background: "linear-gradient(180deg, #f8fdff 0%, #ffffff 100%)",
+          }}
+        >
+          <div style={{ fontWeight: 700, fontSize: "1.05rem" }}>Resume your application</div>
+          <div style={{ color: "#475569", lineHeight: 1.6 }}>
+            We restored your saved draft. Continue from the last step you were working on.
+          </div>
+          <div>
+            <button type="button" onClick={handleResume} style={{ fontWeight: 700 }}>
+              Continue where you left off
+            </button>
+          </div>
+        </div>
+      ) : null}
+      <div
+        style={{
+          ...cardStyle,
+          marginBottom: 16,
+          gap: 10,
+          borderColor: "rgba(15,23,42,0.08)",
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+          <div style={{ fontWeight: 700, fontSize: "1.05rem" }}>{`You're ${completionPercent}% complete — just a few more details to finish`}</div>
+          <div style={{ color: "#475569", fontSize: "0.92rem" }}>
+            {stepsRemaining === 0 ? "All required steps are complete." : `${stepsRemaining} step${stepsRemaining === 1 ? "" : "s"} remaining`}
+          </div>
+        </div>
+        <div
+          aria-label="Application completion progress"
+          style={{ height: 10, borderRadius: 999, background: "#e2e8f0", overflow: "hidden" }}
+        >
+          <div
+            style={{
+              height: "100%",
+              width: `${completionPercent}%`,
+              background: "linear-gradient(90deg, #0f172a 0%, #0369a1 100%)",
+              transition: "width 160ms ease",
+            }}
+          />
+        </div>
+      </div>
       <div
         style={{
           ...cardStyle,
@@ -848,14 +1106,41 @@ export default function PublicApplyPage() {
         ))}
       </div>
 
-      <div style={cardStyle}>
+      {missingDetails.length ? (
+        <div style={{ ...cardStyle, marginBottom: 16, gap: 10 }}>
+          <div style={{ fontWeight: 700, fontSize: "1.02rem" }}>Missing details</div>
+          <div style={{ color: "#475569", lineHeight: 1.6 }}>
+            Finish the remaining required items to submit your application confidently.
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {missingDetails.map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => focusField(item.key, item.step)}
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: 999,
+                  border: "1px solid #cbd5e1",
+                  background: "#fff",
+                  cursor: "pointer",
+                }}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      <div style={cardStyle} ref={formAreaRef} tabIndex={-1} data-testid="public-application-form">
         {step === 0 ? (
           <>
             <div style={{ fontWeight: 700, fontSize: "1.05rem" }}>Personal information</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 12 }}>
               <label style={labelStyle}>
                 {req("First name")}
-                <input value={applicant.firstName ?? ""} onChange={(e) => updateApplicant({ firstName: e.target.value })} />
+                <input ref={registerFieldRef("applicant.firstName")} value={applicant.firstName ?? ""} onChange={(e) => updateApplicant({ firstName: e.target.value })} />
               </label>
               <label style={labelStyle}>
                 Middle initial
@@ -863,11 +1148,11 @@ export default function PublicApplyPage() {
               </label>
               <label style={labelStyle}>
                 {req("Last name")}
-                <input value={applicant.lastName ?? ""} onChange={(e) => updateApplicant({ lastName: e.target.value })} />
+                <input ref={registerFieldRef("applicant.lastName")} value={applicant.lastName ?? ""} onChange={(e) => updateApplicant({ lastName: e.target.value })} />
               </label>
               <label style={labelStyle}>
                 {req("Email")}
-                <input type="email" value={applicant.email ?? ""} onChange={(e) => updateApplicant({ email: e.target.value })} />
+                <input ref={registerFieldRef("applicant.email")} type="email" value={applicant.email ?? ""} onChange={(e) => updateApplicant({ email: e.target.value })} />
               </label>
               <label style={labelStyle}>
                 Phone (home)
@@ -891,7 +1176,7 @@ export default function PublicApplyPage() {
               </label>
               <label style={labelStyle}>
                 {req("Date of birth")}
-                <input type="date" value={applicant.dob || ""} onChange={(e) => updateApplicant({ dob: e.target.value })} />
+                <input ref={registerFieldRef("applicant.dob")} type="date" value={applicant.dob || ""} onChange={(e) => updateApplicant({ dob: e.target.value })} />
               </label>
               <label style={labelStyle}>
                 Marital status
@@ -919,7 +1204,7 @@ export default function PublicApplyPage() {
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 12 }}>
                   <label style={labelStyle}>
                     {req("First name")}
-                    <input value={coApplicant?.firstName || ""} onChange={(e) => updateCoApplicant({ firstName: e.target.value })} />
+                    <input ref={registerFieldRef("coApplicant.firstName")} value={coApplicant?.firstName || ""} onChange={(e) => updateCoApplicant({ firstName: e.target.value })} />
                   </label>
                   <label style={labelStyle}>
                     Middle initial
@@ -927,11 +1212,11 @@ export default function PublicApplyPage() {
                   </label>
                   <label style={labelStyle}>
                     {req("Last name")}
-                    <input value={coApplicant?.lastName || ""} onChange={(e) => updateCoApplicant({ lastName: e.target.value })} />
+                    <input ref={registerFieldRef("coApplicant.lastName")} value={coApplicant?.lastName || ""} onChange={(e) => updateCoApplicant({ lastName: e.target.value })} />
                   </label>
                   <label style={labelStyle}>
                     {req("Email")}
-                    <input type="email" value={coApplicant?.email || ""} onChange={(e) => updateCoApplicant({ email: e.target.value })} />
+                    <input ref={registerFieldRef("coApplicant.email")} type="email" value={coApplicant?.email || ""} onChange={(e) => updateCoApplicant({ email: e.target.value })} />
                   </label>
                   <label style={labelStyle}>
                     Phone (home)
@@ -955,7 +1240,7 @@ export default function PublicApplyPage() {
                   </label>
                   <label style={labelStyle}>
                     {req("Date of birth")}
-                    <input type="date" value={coApplicant?.dob || ""} onChange={(e) => updateCoApplicant({ dob: e.target.value })} />
+                    <input ref={registerFieldRef("coApplicant.dob")} type="date" value={coApplicant?.dob || ""} onChange={(e) => updateCoApplicant({ dob: e.target.value })} />
                   </label>
                 </div>
               </div>
@@ -971,6 +1256,7 @@ export default function PublicApplyPage() {
               <label style={labelStyle}>
                 {req("Current address (line 1)")}
                 <input
+                  ref={registerFieldRef("residential.line1")}
                   value={profileAddress.line1}
                   onChange={(e) => setProfileAddress({ ...profileAddress, line1: e.target.value })}
                 />
@@ -986,6 +1272,7 @@ export default function PublicApplyPage() {
                 <label style={labelStyle}>
                   {req("City")}
                   <input
+                    ref={registerFieldRef("residential.city")}
                     value={profileAddress.city}
                     onChange={(e) => setProfileAddress({ ...profileAddress, city: e.target.value })}
                   />
@@ -993,6 +1280,7 @@ export default function PublicApplyPage() {
                 <label style={labelStyle}>
                   {req("Province")}
                   <input
+                    ref={registerFieldRef("residential.province")}
                     value={profileAddress.provinceState}
                     onChange={(e) => setProfileAddress({ ...profileAddress, provinceState: e.target.value })}
                   />
@@ -1000,6 +1288,7 @@ export default function PublicApplyPage() {
                 <label style={labelStyle}>
                   {req("Postal code")}
                   <input
+                    ref={registerFieldRef("residential.postalCode")}
                     value={profileAddress.postalCode}
                     onChange={(e) => setProfileAddress({ ...profileAddress, postalCode: e.target.value.toUpperCase() })}
                   />
@@ -1009,6 +1298,7 @@ export default function PublicApplyPage() {
                 <label style={labelStyle}>
                   {req("Time at current address (months)")}
                   <input
+                    ref={registerFieldRef("residential.timeAtAddressMonths")}
                     inputMode="numeric"
                     value={timeAtAddressMonths}
                     onChange={(e) => setTimeAtAddressMonths(digitsOnly(e.target.value))}
@@ -1017,6 +1307,7 @@ export default function PublicApplyPage() {
                 <label style={labelStyle}>
                   {req("Current rent amount (monthly)")}
                   <input
+                    ref={registerFieldRef("residential.currentRentAmount")}
                     inputMode="numeric"
                     value={currentRentAmount}
                     onChange={(e) => setCurrentRentAmount(digitsOnly(e.target.value))}
@@ -1065,6 +1356,7 @@ export default function PublicApplyPage() {
                   <label style={labelStyle}>
                     {req("Lease end date")}
                     <input
+                      ref={registerFieldRef("residential.leaseEndDate")}
                       type="date"
                       value={currentLeaseStatus.leaseEndDate || ""}
                       onChange={(e) =>
@@ -1229,11 +1521,11 @@ export default function PublicApplyPage() {
               </label>
               <label style={labelStyle}>
                 {req("Employer")}
-                <input value={employment.applicant.employer || ""} onChange={(e) => setEmployment({ ...employment, applicant: { ...employment.applicant, employer: e.target.value } })} />
+                <input ref={registerFieldRef("employment.applicant.employer")} value={employment.applicant.employer || ""} onChange={(e) => setEmployment({ ...employment, applicant: { ...employment.applicant, employer: e.target.value } })} />
               </label>
               <label style={labelStyle}>
                 {req("Job title")}
-                <input value={employment.applicant.jobTitle || ""} onChange={(e) => setEmployment({ ...employment, applicant: { ...employment.applicant, jobTitle: e.target.value } })} />
+                <input ref={registerFieldRef("employment.applicant.jobTitle")} value={employment.applicant.jobTitle || ""} onChange={(e) => setEmployment({ ...employment, applicant: { ...employment.applicant, jobTitle: e.target.value } })} />
               </label>
               <label style={labelStyle}>
                 Supervisor
@@ -1257,6 +1549,7 @@ export default function PublicApplyPage() {
               <label style={labelStyle}>
                 {req("Gross income")}
                 <input
+                  ref={registerFieldRef("employment.applicant.income")}
                   inputMode="numeric"
                   value={employment.applicant.monthlyIncomeCents ? `${employment.applicant.monthlyIncomeCents / 100}` : ""}
                   onChange={(e) =>
@@ -1270,6 +1563,7 @@ export default function PublicApplyPage() {
               <label style={labelStyle}>
                 {req("Length (months)")}
                 <input
+                  ref={registerFieldRef("employment.applicant.lengthMonths")}
                   inputMode="numeric"
                   value={employment.applicant.lengthMonths ?? ""}
                   onChange={(e) =>
@@ -1310,11 +1604,11 @@ export default function PublicApplyPage() {
                   </label>
                   <label style={labelStyle}>
                     Employer
-                    <input value={employment.coApplicant?.employer || ""} onChange={(e) => setEmployment({ ...employment, coApplicant: { ...employment.coApplicant, employer: e.target.value } })} />
+                    <input ref={registerFieldRef("employment.coApplicant.employer")} value={employment.coApplicant?.employer || ""} onChange={(e) => setEmployment({ ...employment, coApplicant: { ...employment.coApplicant, employer: e.target.value } })} />
                   </label>
                   <label style={labelStyle}>
                     Job title
-                    <input value={employment.coApplicant?.jobTitle || ""} onChange={(e) => setEmployment({ ...employment, coApplicant: { ...employment.coApplicant, jobTitle: e.target.value } })} />
+                    <input ref={registerFieldRef("employment.coApplicant.jobTitle")} value={employment.coApplicant?.jobTitle || ""} onChange={(e) => setEmployment({ ...employment, coApplicant: { ...employment.coApplicant, jobTitle: e.target.value } })} />
                   </label>
                   <label style={labelStyle}>
                     Supervisor
@@ -1338,6 +1632,7 @@ export default function PublicApplyPage() {
                   <label style={labelStyle}>
                     Gross income
                     <input
+                      ref={registerFieldRef("employment.coApplicant.income")}
                       inputMode="numeric"
                       value={employment.coApplicant?.monthlyIncomeCents ? `${employment.coApplicant?.monthlyIncomeCents / 100}` : ""}
                       onChange={(e) =>
@@ -1354,6 +1649,7 @@ export default function PublicApplyPage() {
                   <label style={labelStyle}>
                     Length (months)
                     <input
+                      ref={registerFieldRef("employment.coApplicant.lengthMonths")}
                       inputMode="numeric"
                       value={employment.coApplicant?.lengthMonths ?? ""}
                       onChange={(e) =>
@@ -1384,11 +1680,12 @@ export default function PublicApplyPage() {
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 8 }}>
                 <label style={labelStyle}>
                   {req("Reference name")}
-                  <input value={workReferenceName} onChange={(e) => setWorkReferenceName(e.target.value)} />
+                  <input ref={registerFieldRef("references.workReferenceName")} value={workReferenceName} onChange={(e) => setWorkReferenceName(e.target.value)} />
                 </label>
                 <label style={labelStyle}>
                   {req("Reference phone")}
                   <input
+                    ref={registerFieldRef("references.workReferencePhone")}
                     type="tel"
                     inputMode="tel"
                     pattern="[0-9]*"
@@ -1588,26 +1885,26 @@ export default function PublicApplyPage() {
           <>
             <div style={{ fontWeight: 700, fontSize: "1.05rem" }}>Consent & signatures</div>
             <label style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-              <input type="checkbox" checked={consent.creditConsent} onChange={(e) => setConsent({ ...consent, creditConsent: e.target.checked })} />
+              <input ref={registerFieldRef("consent.creditConsent")} type="checkbox" checked={consent.creditConsent} onChange={(e) => setConsent({ ...consent, creditConsent: e.target.checked })} />
               <span>{req("I consent to a credit/consumer report.")}</span>
             </label>
             <label style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-              <input type="checkbox" checked={consent.referenceConsent} onChange={(e) => setConsent({ ...consent, referenceConsent: e.target.checked })} />
+              <input ref={registerFieldRef("consent.referenceConsent")} type="checkbox" checked={consent.referenceConsent} onChange={(e) => setConsent({ ...consent, referenceConsent: e.target.checked })} />
               <span>{req("I consent to contacting references and past landlords.")}</span>
             </label>
             <label style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-              <input type="checkbox" checked={consent.dataSharingConsent} onChange={(e) => setConsent({ ...consent, dataSharingConsent: e.target.checked })} />
+              <input ref={registerFieldRef("consent.dataSharingConsent")} type="checkbox" checked={consent.dataSharingConsent} onChange={(e) => setConsent({ ...consent, dataSharingConsent: e.target.checked })} />
               <span>{req("I consent to data sharing for the tenant database.")}</span>
             </label>
             <div style={{ display: "grid", gap: 8 }}>
               <label style={labelStyle}>
                 {req("Applicant full name (typed)")}
-                <input value={consent.applicantNameTyped || ""} onChange={(e) => setConsent({ ...consent, applicantNameTyped: e.target.value })} />
+                <input ref={registerFieldRef("consent.applicantNameTyped")} value={consent.applicantNameTyped || ""} onChange={(e) => setConsent({ ...consent, applicantNameTyped: e.target.value })} />
               </label>
               {coApplicantEnabled ? (
                 <label style={labelStyle}>
                   {req("Co-applicant full name (typed)")}
-                  <input value={consent.coApplicantNameTyped || ""} onChange={(e) => setConsent({ ...consent, coApplicantNameTyped: e.target.value })} />
+                  <input ref={registerFieldRef("consent.coApplicantNameTyped")} value={consent.coApplicantNameTyped || ""} onChange={(e) => setConsent({ ...consent, coApplicantNameTyped: e.target.value })} />
                 </label>
               ) : null}
             </div>
@@ -1615,16 +1912,16 @@ export default function PublicApplyPage() {
               <div style={{ fontWeight: 600 }}>Signature *</div>
               <label style={labelStyle}>
                 {req("Type your full name")}
-                <input value={signatureTypedName} onChange={(e) => setSignatureTypedName(e.target.value)} />
+                <input ref={registerFieldRef("signature.typedName")} value={signatureTypedName} onChange={(e) => setSignatureTypedName(e.target.value)} />
               </label>
               <label style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-                <input type="checkbox" checked={signatureTypedAck} onChange={(e) => setSignatureTypedAck(e.target.checked)} />
+                <input ref={registerFieldRef("signature.typedAck")} type="checkbox" checked={signatureTypedAck} onChange={(e) => setSignatureTypedAck(e.target.checked)} />
                 <span>{req("I agree this is my legal signature.")}</span>
               </label>
             </div>
             <div style={{ borderTop: "1px solid #e5e7eb", paddingTop: 10, display: "grid", gap: 8 }}>
               <label style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-                <input type="checkbox" checked={applicationConsentAccepted} onChange={(e) => setApplicationConsentAccepted(e.target.checked)} />
+                <input ref={registerFieldRef("consent.applicationConsentAccepted")} type="checkbox" checked={applicationConsentAccepted} onChange={(e) => setApplicationConsentAccepted(e.target.checked)} />
                 <span>
                   {req("I confirm the information provided is accurate and I authorize the landlord/manager to use it to evaluate my rental application.")}
                 </span>
