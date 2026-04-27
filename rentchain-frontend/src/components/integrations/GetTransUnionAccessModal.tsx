@@ -2,6 +2,31 @@ import React from "react";
 import { Button, Card } from "../ui/Ui";
 import { colors, radius, shadows, spacing, text } from "@/styles/tokens";
 
+const CHHAVI_EMAIL = "Chhavi.kumar@transunion.com";
+const CHHAVI_PHONE = "289-208-7386";
+const CUSTOMER_SUPPORT_PHONE = "1-800-565-2280";
+const TECH_SUPPORT_PHONE = "(877) 559-5585 Option 4";
+const TECH_SUPPORT_EMAIL = "clientsupport@transunion.com";
+const MAILTO_SUBJECT = "TransUnion Credentialing Request for RentChain Screening";
+const MAILTO_BODY = [
+  "Hello Chhavi,",
+  "",
+  "I would like to start the credentialing process for TransUnion tenant screening so I can connect my business account in RentChain.",
+  "",
+  "Business name:",
+  "Primary contact name:",
+  "Primary contact email:",
+  "Primary contact phone:",
+  "",
+  "Please let me know the next steps and any information required for credentialing.",
+  "",
+  "Thank you,",
+].join("\n");
+const CHHAVI_MAILTO = `mailto:${CHHAVI_EMAIL}?subject=${encodeURIComponent(MAILTO_SUBJECT)}&body=${encodeURIComponent(
+  MAILTO_BODY
+)}`;
+const CHHAVI_TEL = `tel:${CHHAVI_PHONE.replace(/[^\d+]/g, "")}`;
+
 type Props = {
   open: boolean;
   submitting?: boolean;
@@ -95,10 +120,70 @@ export function GetTransUnionAccessModal({
         >
           <div style={{ fontWeight: 700, color: text.primary, marginBottom: 8 }}>How credentialing works</div>
           <ol style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 6 }}>
-            <li>Request TransUnion credentialing for your business.</li>
-            <li>Wait for your member code and passcode to be issued.</li>
-            <li>Return to RentChain and connect your account.</li>
+            <li>Contact TransUnion.</li>
+            <li>Get credentialed for your business.</li>
+            <li>Receive your member code and passcode.</li>
+            <li>Return to RentChain and connect your credentials.</li>
           </ol>
+        </div>
+        <div
+          style={{
+            border: `1px solid ${colors.border}`,
+            borderRadius: radius.md,
+            padding: spacing.sm,
+            background: "#fff",
+            display: "grid",
+            gap: 8,
+          }}
+        >
+          <div style={{ fontWeight: 700, color: text.primary }}>TransUnion contact</div>
+          <div style={{ color: text.primary, lineHeight: 1.6 }}>
+            <div>Chhavi Kumar</div>
+            <div>Account Executive, Inside Sales</div>
+            <div>{CHHAVI_EMAIL}</div>
+            <div>{CHHAVI_PHONE}</div>
+            <div>Customer Support: {CUSTOMER_SUPPORT_PHONE}</div>
+            <div>Tech Support: {TECH_SUPPORT_PHONE}</div>
+            <div>{TECH_SUPPORT_EMAIL}</div>
+          </div>
+          <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
+            <a
+              href={CHHAVI_MAILTO}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: "10px 14px",
+                borderRadius: radius.pill,
+                border: `1px solid ${colors.border}`,
+                background: colors.accentSoft,
+                color: text.primary,
+                textDecoration: "none",
+                fontWeight: 600,
+                fontSize: "0.95rem",
+              }}
+            >
+              Email Chhavi Kumar
+            </a>
+            <a
+              href={CHHAVI_TEL}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: "10px 14px",
+                borderRadius: radius.pill,
+                border: `1px solid ${colors.border}`,
+                background: "transparent",
+                color: text.primary,
+                textDecoration: "none",
+                fontWeight: 600,
+                fontSize: "0.95rem",
+              }}
+            >
+              Call Chhavi Kumar
+            </a>
+          </div>
         </div>
         <div
           style={{

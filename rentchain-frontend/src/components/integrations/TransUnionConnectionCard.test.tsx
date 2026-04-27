@@ -28,7 +28,9 @@ describe("TransUnionConnectionCard", () => {
     );
 
     expect(screen.getByText("TransUnion Connection")).toBeInTheDocument();
-    expect(screen.getByText(/Use your TransUnion membership to enable tenant screening/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Start with TransUnion credentialing if you do not have a member code and passcode yet/i)
+    ).toBeInTheDocument();
     expect(screen.getAllByText("Not connected")).toHaveLength(2);
     expect(screen.getByText("Connect or get access")).toBeInTheDocument();
     expect(screen.getByText("Ready to screen")).toBeInTheDocument();
@@ -52,7 +54,8 @@ describe("TransUnionConnectionCard", () => {
     expect(
       screen.getByText(/Your TransUnion credentialing is in progress/i)
     ).toBeInTheDocument();
-    expect(screen.getByText(/Next step: finish credentialing/i)).toBeInTheDocument();
+    expect(screen.getByText(/Contact TransUnion directly, complete credentialing/i)).toBeInTheDocument();
+    expect(screen.getByText(/Next step: finish credentialing with TransUnion/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Enter Membership Details" })).toBeInTheDocument();
   });
 
@@ -106,7 +109,7 @@ describe("TransUnionConnectionCard", () => {
       />
     );
 
-    expect(screen.getByText(/next step is to choose an applicant/i)).toBeInTheDocument();
+    expect(screen.getByText(/choose an applicant in RentChain to start the screening workflow/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Choose an Applicant" }));
     expect(onChooseApplicant).toHaveBeenCalledTimes(1);
   });
