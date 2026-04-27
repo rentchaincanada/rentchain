@@ -761,7 +761,10 @@ describe("tenantPortalRoutes foundation", () => {
       credibilitySummary: false,
       applicationSummary: false,
       documents: "none",
+      leaseSummary: false,
+      paymentReadinessSummary: false,
     });
+    expect(shareDocs[0]?.verificationRequests).toEqual([]);
   });
 
   it("lists only active tenant share packages", async () => {
@@ -803,6 +806,7 @@ describe("tenantPortalRoutes foundation", () => {
         status: "active",
         requestedItems: [],
         approvedItems: [],
+        verificationRequests: [],
       }),
     ]);
   });
@@ -880,7 +884,86 @@ describe("tenantPortalRoutes foundation", () => {
           credibilitySummary: true,
           applicationSummary: false,
           documents: "approved_only",
+          leaseSummary: false,
+          paymentReadinessSummary: false,
         },
+      })
+    );
+  });
+
+  it("lets a tenant approve and revoke verification requests only on their own share link", async () => {
+    ensureCollection("tenantSharePackages").set("share-1", {
+      id: "share-1",
+      tenantId: "tenant-1",
+      tokenHash: "hash-1",
+      createdAt: 100,
+      expiresAt: Date.now() + 10_000,
+      status: "active",
+      verificationRequests: [
+        {
+          requestId: "req-1",
+          requestedByType: "landlord",
+          requestedScopes: ["lease_summary", "payment_readiness_summary"],
+          status: "requested",
+          createdAt: Date.now(),
+        },
+      ],
+    });
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const approveRes = await invokeRouter(router, {
+      method: "POST",
+      url: "/share-packages/share-1/verification-requests/req-1/respond",
+      body: {
+        approvedScopes: ["payment_readiness_summary"],
+      },
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+
+    expect(approveRes.status).toBe(200);
+    expect(ensureCollection("tenantSharePackages").get("share-1")).toEqual(
+      expect.objectContaining({
+        approvedItems: ["payment_readiness_summary"],
+        verificationRequests: expect.arrayContaining([
+          expect.objectContaining({
+            requestId: "req-1",
+            status: "approved",
+            requestedScopes: ["payment_readiness_summary"],
+          }),
+        ]),
+      })
+    );
+
+    const revokeRes = await invokeRouter(router, {
+      method: "POST",
+      url: "/share-packages/share-1/verification-requests/req-1/revoke",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+
+    expect(revokeRes.status).toBe(200);
+    expect(ensureCollection("tenantSharePackages").get("share-1")).toEqual(
+      expect.objectContaining({
+        approvedItems: [],
+        verificationRequests: expect.arrayContaining([
+          expect.objectContaining({
+            requestId: "req-1",
+            status: "revoked",
+          }),
+        ]),
       })
     );
   });
