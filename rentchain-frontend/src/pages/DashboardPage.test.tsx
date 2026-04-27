@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   listTenantInvitesMock: vi.fn(),
   listReferralsMock: vi.fn(),
   getLandlordActivationMock: vi.fn(),
+  fetchLandlordTransUnionOnboardingAnalyticsMock: vi.fn(),
   useOnboardingStateMock: vi.fn(),
   useUpgradeMock: vi.fn(),
   navigateMock: vi.fn(),
@@ -61,6 +62,10 @@ vi.mock("../api/referralsApi", () => ({
 
 vi.mock("@/api/activationApi", () => ({
   getLandlordActivation: mocks.getLandlordActivationMock,
+}));
+
+vi.mock("@/api/landlordAnalyticsApi", () => ({
+  fetchLandlordTransUnionOnboardingAnalytics: mocks.fetchLandlordTransUnionOnboardingAnalyticsMock,
 }));
 
 vi.mock("../hooks/useOnboardingState", () => ({
@@ -137,6 +142,17 @@ describe("DashboardPage", () => {
           actionPath: "/properties",
         },
       ],
+    });
+    mocks.fetchLandlordTransUnionOnboardingAnalyticsMock.mockResolvedValue({
+      totals: {
+        viewed: 3,
+        started: 2,
+        emailClicked: 1,
+        phoneClicked: 0,
+        alreadyCredentialedClicked: 0,
+        connected: 1,
+      },
+      conversionRate: 0.5,
     });
     mocks.useOnboardingStateMock.mockReturnValue({
       loading: false,
@@ -291,5 +307,8 @@ describe("DashboardPage", () => {
     expect(await screen.findByText("Get TransUnion access")).toBeInTheDocument();
     screen.getAllByRole("button", { name: "Open" })[0].click();
     expect(assignMock).toHaveBeenCalledWith("/applications?openTransUnionAccess=1");
+    expect(await screen.findByText("TransUnion Setup Funnel")).toBeInTheDocument();
+    expect(screen.getByText("Started → Connected 50%")).toBeInTheDocument();
+    expect(screen.getByText("1 onboarding start still need credential connection.")).toBeInTheDocument();
   });
 });

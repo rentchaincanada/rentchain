@@ -4,12 +4,16 @@ import { GetTransUnionAccessModal } from "./GetTransUnionAccessModal";
 
 describe("GetTransUnionAccessModal", () => {
   it("renders the TransUnion contact block with direct email and call actions", () => {
+    const onEmailClick = vi.fn();
+    const onPhoneClick = vi.fn();
     render(
       <GetTransUnionAccessModal
         open
         onClose={vi.fn()}
         onMarkInProgress={vi.fn()}
         onEnterCredentials={vi.fn()}
+        onEmailClick={onEmailClick}
+        onPhoneClick={onPhoneClick}
       />
     );
 
@@ -35,24 +39,31 @@ describe("GetTransUnionAccessModal", () => {
         "I%20would%20like%20to%20start%20the%20credentialing%20process%20for%20TransUnion%20tenant%20screening"
       )
     );
+    fireEvent.click(emailLink);
+    expect(onEmailClick).toHaveBeenCalledTimes(1);
 
     const callLink = screen.getByRole("link", { name: "Call Chhavi Kumar" });
     expect(callLink).toHaveAttribute("href", "tel:2892087386");
+    fireEvent.click(callLink);
+    expect(onPhoneClick).toHaveBeenCalledTimes(1);
   });
 
   it("keeps the already credentialed path in the existing connect flow", () => {
     const onEnterCredentials = vi.fn();
+    const onAlreadyCredentialedClick = vi.fn();
     render(
       <GetTransUnionAccessModal
         open
         onClose={vi.fn()}
         onMarkInProgress={vi.fn()}
         onEnterCredentials={onEnterCredentials}
+        onAlreadyCredentialedClick={onAlreadyCredentialedClick}
       />
     );
 
     const buttons = screen.getAllByRole("button", { name: "Already Credentialed?" });
     fireEvent.click(buttons[buttons.length - 1]);
+    expect(onAlreadyCredentialedClick).toHaveBeenCalledTimes(1);
     expect(onEnterCredentials).toHaveBeenCalledTimes(1);
   });
 });

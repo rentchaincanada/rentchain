@@ -29,6 +29,7 @@ const executeScreeningCheckout = vi.fn();
 const isTransUnionReferralMode = vi.fn();
 const shouldUseMockScreeningCheckoutOverride = vi.fn();
 const deriveLandlordInbox = vi.fn();
+const loadLandlordTransUnionOnboardingAnalytics = vi.fn();
 
 vi.mock("../../middleware/requireAuth", () => ({
   requireAuth: (req: any, res: any, next: any) => {
@@ -58,6 +59,10 @@ vi.mock("../../services/landlord/landlordAnalyticsSnapshot", () => ({
 
 vi.mock("../../services/landlordInbox/deriveLandlordInbox", () => ({
   deriveLandlordInbox,
+}));
+
+vi.mock("../../services/landlord/loadLandlordTransUnionOnboardingAnalytics", () => ({
+  loadLandlordTransUnionOnboardingAnalytics,
 }));
 
 vi.mock("../../services/landlord/landlordApplicationFunnel", () => ({
@@ -182,6 +187,17 @@ async function invokeRouter(
 describe("landlordAnalyticsRoutes", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    loadLandlordTransUnionOnboardingAnalytics.mockResolvedValue({
+      totals: {
+        viewed: 4,
+        started: 2,
+        emailClicked: 1,
+        phoneClicked: 1,
+        alreadyCredentialedClicked: 1,
+        connected: 1,
+      },
+      conversionRate: 0.5,
+    });
     saveReviewedLandlordDecisionState.mockResolvedValue({
       id: "landlord-1__reduce_vacancy_risk:prop-123",
       landlordId: "landlord-1",
@@ -1880,5 +1896,32 @@ describe("landlordAnalyticsRoutes", () => {
       user: null,
     });
     expect(unauthorized.status).toBe(401);
+  });
+
+  it("returns landlord TransUnion onboarding analytics", async () => {
+    const router = (await import("../landlordAnalyticsRoutes")).default;
+
+    const response = await invokeRouter(router, {
+      method: "GET",
+      url: "/landlord/analytics/transunion-onboarding",
+      user: { id: "landlord-1", role: "landlord" },
+    });
+
+    expect(response.status).toBe(200);
+    expect(loadLandlordTransUnionOnboardingAnalytics).toHaveBeenCalledWith("landlord-1");
+    expect(response.body).toEqual({
+      ok: true,
+      data: {
+        totals: {
+          viewed: 4,
+          started: 2,
+          emailClicked: 1,
+          phoneClicked: 1,
+          alreadyCredentialedClicked: 1,
+          connected: 1,
+        },
+        conversionRate: 0.5,
+      },
+    });
   });
 });

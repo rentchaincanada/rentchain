@@ -41,6 +41,7 @@ import {
   validateScreeningConsentPayload,
 } from "../lib/screeningCheckoutReadiness";
 import { loadLandlordApplicationFunnel } from "../services/landlord/landlordApplicationFunnel";
+import { loadLandlordTransUnionOnboardingAnalytics } from "../services/landlord/loadLandlordTransUnionOnboardingAnalytics";
 
 const router = Router();
 
@@ -316,6 +317,21 @@ router.get("/landlord/analytics/applications/funnel", requireAuth, requireLandlo
   } catch (err: any) {
     console.error("[landlord-analytics] application funnel failed", err?.message || err);
     return res.status(500).json({ ok: false, error: "LANDLORD_APPLICATION_FUNNEL_FETCH_FAILED" });
+  }
+});
+
+router.get("/landlord/analytics/transunion-onboarding", requireAuth, requireLandlord, async (req: any, res) => {
+  try {
+    const landlordId = asString(req.user?.landlordId || req.user?.id, 240);
+    if (!landlordId) {
+      return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    }
+
+    const data = await loadLandlordTransUnionOnboardingAnalytics(landlordId);
+    return res.json({ ok: true, data });
+  } catch (err: any) {
+    console.error("[landlord-analytics] transunion onboarding failed", err?.message || err);
+    return res.status(500).json({ ok: false, error: "LANDLORD_TRANSUNION_ONBOARDING_FETCH_FAILED" });
   }
 });
 
