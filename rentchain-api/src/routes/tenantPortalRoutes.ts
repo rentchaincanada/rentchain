@@ -20,6 +20,7 @@ import { loadTenantIdentityRecord, loadTenantProfileProjection } from "../servic
 import { deriveTenantCredibilitySignals } from "../services/tenantCredibility/deriveTenantCredibilitySignals";
 import { deriveIdentityTimeline } from "../services/identityTimeline/deriveIdentityTimeline";
 import { deriveIdentityPortability } from "../services/identityPortability/deriveIdentityPortability";
+import { derivePaymentReadiness } from "../services/paymentReadiness/derivePaymentReadiness";
 import {
   loadTenantCommunicationsWorkspace,
   markTenantCommunicationsRead,
@@ -5317,6 +5318,15 @@ router.get("/lease", requireTenant, async (req: any, res) => {
         })
       : null;
 
+    const fallbackLeaseExecution = deriveLeaseExecution({
+      leaseId,
+      documentUrl: null,
+      startDate: null,
+      monthlyRent: null,
+      status: null,
+      raw: {},
+    });
+
     const lease = {
       ...(projectedLease || {
         leaseId,
@@ -5332,13 +5342,17 @@ router.get("/lease", requireTenant, async (req: any, res) => {
         leasePdfStatus: "not_available",
         leasePdfLabel: "Lease document unavailable",
         leasePdfDescription: "No tenant-safe lease document is available in this workspace yet.",
-        leaseExecution: deriveLeaseExecution({
+        leaseExecution: fallbackLeaseExecution,
+        paymentReadiness: derivePaymentReadiness({
           leaseId,
-          documentUrl: null,
-          startDate: null,
           monthlyRent: null,
-          status: null,
-          raw: {},
+          startDate: null,
+          endDate: null,
+          dueDay: null,
+          tenantId,
+          propertyId,
+          unitId,
+          leaseExecution: fallbackLeaseExecution,
         }),
       }),
       propertyId,

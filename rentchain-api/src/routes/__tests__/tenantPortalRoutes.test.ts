@@ -193,10 +193,12 @@ describe("tenantPortalRoutes foundation", () => {
     ensureCollection("leases").set("lease-1", {
       tenantId: "tenant-1",
       propertyId: "prop-1",
+      unitId: "unit-1",
       status: "active",
       startDate: "2026-02-01",
       endDate: "2027-01-31",
       monthlyRent: 1800,
+      dueDay: 1,
       documentUrl: "https://example.com/lease.pdf",
       tenantSignature: {
         signedAt: "2026-02-01T10:00:00.000Z",
@@ -497,6 +499,18 @@ describe("tenantPortalRoutes foundation", () => {
     });
     expect(res.body?.data?.lease?.tenantSignature?.drawnDataUrl).toBeUndefined();
     expect(res.body?.data?.lease?.leasePdfStatus).toBe("available");
+    expect(res.body?.data?.lease?.paymentReadiness).toEqual(
+      expect.objectContaining({
+        readinessStatus: "ready_to_configure",
+        readinessLabel: "Rent terms ready for future setup",
+        requiredNextAction: "confirm_payment_setup_later",
+        paymentSetup: {
+          processorConnected: false,
+          moneyMovementEnabled: false,
+          storedPaymentMethod: false,
+        },
+      })
+    );
     expect(res.body?.data?.tenantIdentityRecord).toEqual(
       expect.objectContaining({
         identityStatus: expect.stringMatching(/incomplete|ready|verified|limited/),
@@ -605,7 +619,20 @@ describe("tenantPortalRoutes foundation", () => {
         requiredNextAction: "none",
       })
     );
+    expect(res.body?.data?.paymentReadiness).toEqual(
+      expect.objectContaining({
+        readinessStatus: "ready_to_configure",
+        readinessLabel: "Rent terms ready for future setup",
+        requiredNextAction: "confirm_payment_setup_later",
+        paymentSetup: {
+          processorConnected: false,
+          moneyMovementEnabled: false,
+          storedPaymentMethod: false,
+        },
+      })
+    );
     expect(res.body?.lease?.tenantSignature?.drawnDataUrl).toBeUndefined();
+    expect(res.body?.data?.paymentMethod).toBeUndefined();
   });
 
   it("records tenant lease signing metadata without storing raw signature data and stays idempotent", async () => {

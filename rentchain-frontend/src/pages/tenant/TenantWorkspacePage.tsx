@@ -427,6 +427,63 @@ export default function TenantWorkspacePage() {
         />
       </TenantInfoCard>
 
+      <TenantInfoCard heading="Payment readiness" accent="#1d4ed8">
+        {data?.lease?.paymentReadiness ? (
+          <div style={{ display: "grid", gap: spacing.sm }}>
+            <div style={{ display: "grid", gap: 4 }}>
+              <div style={{ fontSize: "1.02rem", fontWeight: 800, color: textTokens.primary }}>
+                {data.lease.paymentReadiness.readinessLabel}
+              </div>
+              <div style={{ color: textTokens.secondary, lineHeight: 1.6 }}>
+                {data.lease.paymentReadiness.readinessDescription}
+              </div>
+            </div>
+
+            <TenantKeyValueGrid
+              rows={[
+                {
+                  label: "Rent amount",
+                  value: data.lease.paymentReadiness.rentTerms.rentAmountAvailable ? "Available" : "Needed",
+                },
+                {
+                  label: "Due day",
+                  value: data.lease.paymentReadiness.rentTerms.dueDateAvailable ? "Available" : "Needed",
+                },
+                {
+                  label: "Lease dates",
+                  value: data.lease.paymentReadiness.rentTerms.leaseDatesAvailable ? "Available" : "Needed",
+                },
+                {
+                  label: "Tenant linked",
+                  value: data.lease.paymentReadiness.rentTerms.tenantLinked ? "Linked" : "Needs review",
+                },
+                {
+                  label: "Lease executed",
+                  value: data.lease.paymentReadiness.rentTerms.leaseExecuted ? "Complete" : "In progress",
+                },
+              ]}
+            />
+
+            <div style={{ color: textTokens.secondary }}>
+              Next step:{" "}
+              <strong>
+                {data.lease.paymentReadiness.requiredNextAction === "complete_lease_details"
+                  ? "Complete lease details"
+                  : data.lease.paymentReadiness.requiredNextAction === "review_rent_terms"
+                  ? "Review rent terms"
+                  : data.lease.paymentReadiness.requiredNextAction === "confirm_payment_setup_later"
+                  ? "Confirm payment setup later"
+                  : "No immediate follow-up"}
+              </strong>
+            </div>
+          </div>
+        ) : (
+          <div style={{ color: textTokens.secondary }}>
+            Payment readiness will appear here when your current lease exposes enough rent-term detail for future setup planning.
+          </div>
+        )}
+      </TenantInfoCard>
+
       <TenantInfoCard heading="Recent activity / notifications" accent="#0891b2">
         <StructuredNotificationList
           heading="Recent workflow updates"

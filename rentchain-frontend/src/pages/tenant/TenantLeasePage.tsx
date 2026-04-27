@@ -49,6 +49,7 @@ export default function TenantLeasePage() {
   }
 
   const execution = data?.leaseExecution || null;
+  const paymentReadiness = data?.paymentReadiness || null;
   const timelineRows = execution
     ? [
         {
@@ -112,6 +113,41 @@ export default function TenantLeasePage() {
               ]}
             />
           </TenantInfoCard>
+
+          {paymentReadiness ? (
+            <TenantInfoCard heading="Payment readiness" accent="#1d4ed8">
+              <div style={{ display: "grid", gap: 12 }}>
+                <div style={{ display: "grid", gap: 6 }}>
+                  <div style={{ fontWeight: 800 }}>{paymentReadiness.readinessLabel}</div>
+                  <div style={{ color: "var(--text-muted, #64748b)" }}>{paymentReadiness.readinessDescription}</div>
+                </div>
+                <TenantKeyValueGrid
+                  rows={[
+                    {
+                      label: "Rent amount",
+                      value: paymentReadiness.rentTerms.rentAmountAvailable ? "Available" : "Needed",
+                    },
+                    {
+                      label: "Due day",
+                      value: paymentReadiness.rentTerms.dueDateAvailable ? "Available" : "Needed",
+                    },
+                    {
+                      label: "Lease dates",
+                      value: paymentReadiness.rentTerms.leaseDatesAvailable ? "Available" : "Needed",
+                    },
+                    {
+                      label: "Tenant linked",
+                      value: paymentReadiness.rentTerms.tenantLinked ? "Linked" : "Needs review",
+                    },
+                    {
+                      label: "Lease executed",
+                      value: paymentReadiness.rentTerms.leaseExecuted ? "Complete" : "In progress",
+                    },
+                  ]}
+                />
+              </div>
+            </TenantInfoCard>
+          ) : null}
 
           <TenantInfoCard heading="Lease Document" accent="#0f766e">
             {data.leasePdfLabel ? (

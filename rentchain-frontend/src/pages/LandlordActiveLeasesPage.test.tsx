@@ -51,6 +51,25 @@ describe("LandlordActiveLeasesPage", () => {
             pdfStatus: "generated",
             completedAt: "2026-01-01T00:00:00.000Z",
           },
+          paymentReadiness: {
+            readinessStatus: "ready_to_configure",
+            readinessLabel: "Rent terms ready for future setup",
+            readinessDescription:
+              "The current lease shows the core rent terms and tenancy linkage needed for a future payment setup workflow, without enabling any payment activity today.",
+            requiredNextAction: "confirm_payment_setup_later",
+            rentTerms: {
+              rentAmountAvailable: true,
+              dueDateAvailable: true,
+              leaseDatesAvailable: true,
+              tenantLinked: true,
+              leaseExecuted: true,
+            },
+            paymentSetup: {
+              processorConnected: false,
+              moneyMovementEnabled: false,
+              storedPaymentMethod: false,
+            },
+          },
         },
       ],
     });
@@ -95,6 +114,7 @@ describe("LandlordActiveLeasesPage", () => {
     expect((await screen.findAllByText("Harbour View")).length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "Print / Save PDF" })).toBeInTheDocument();
     expect(screen.getAllByText("Lease fully executed").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Rent terms ready for future setup/i).length).toBeGreaterThan(0);
     expect(screen.getByRole("link", { name: "View" })).toHaveAttribute("href", "/leases/lease-1/ledger");
     expect(screen.getByRole("link", { name: "Email" })).toHaveAttribute(
       "href",

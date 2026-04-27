@@ -82,6 +82,24 @@ export interface LandlordActiveLease extends Lease {
     pdfStatus: "not_ready" | "ready" | "generated" | "blocked";
     completedAt: string | null;
   } | null;
+  paymentReadiness?: {
+    readinessStatus: "not_ready" | "ready_to_configure" | "blocked";
+    readinessLabel: string;
+    readinessDescription: string;
+    requiredNextAction: "complete_lease_details" | "review_rent_terms" | "confirm_payment_setup_later" | "none";
+    rentTerms: {
+      rentAmountAvailable: boolean;
+      dueDateAvailable: boolean;
+      leaseDatesAvailable: boolean;
+      tenantLinked: boolean;
+      leaseExecuted: boolean;
+    };
+    paymentSetup: {
+      processorConnected: false;
+      moneyMovementEnabled: false;
+      storedPaymentMethod: false;
+    };
+  } | null;
   hiddenFromActiveLists?: boolean;
   cleanupReason?: string | null;
   cleanupBatch?: string | null;
