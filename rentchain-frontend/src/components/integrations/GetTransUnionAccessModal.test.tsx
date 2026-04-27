@@ -1,9 +1,37 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GetTransUnionAccessModal } from "./GetTransUnionAccessModal";
 
 describe("GetTransUnionAccessModal", () => {
-  it("renders the TransUnion contact block with direct email and call actions", () => {
+  const assignMock = vi.fn();
+  const writeTextMock = vi.fn();
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    assignMock.mockReset();
+    writeTextMock.mockReset();
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: {
+        ...window.location,
+        assign: assignMock,
+      },
+    });
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: writeTextMock,
+      },
+    });
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.runOnlyPendingTimers();
+    vi.useRealTimers();
+  });
+
+  it("renders one encoded mailto action and opens it once", () => {
     const onEmailClick = vi.fn();
     const onPhoneClick = vi.fn();
     render(
@@ -41,11 +69,70 @@ describe("GetTransUnionAccessModal", () => {
     );
     fireEvent.click(emailLink);
     expect(onEmailClick).toHaveBeenCalledTimes(1);
+    expect(assignMock).toHaveBeenCalledTimes(1);
+    expect(assignMock).toHaveBeenCalledWith(expect.stringContaining("mailto:Chhavi.kumar@transunion.com"));
+    expect(screen.getByRole("status")).toHaveTextContent("Email opened — send from your mail app");
 
     const callLink = screen.getByRole("link", { name: "Call Chhavi Kumar" });
     expect(callLink).toHaveAttribute("href", "tel:2892087386");
     fireEvent.click(callLink);
     expect(onPhoneClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("debounces rapid email clicks so tracking and opening happen once", () => {
+    const onEmailClick = vi.fn();
+
+    render(
+      <GetTransUnionAccessModal
+        open
+        onClose={vi.fn()}
+        onMarkInProgress={vi.fn()}
+        onEnterCredentials={vi.fn()}
+        onEmailClick={onEmailClick}
+      />
+    );
+
+    const emailLink = screen.getByRole("link", { name: "Email Chhavi Kumar" });
+    fireEvent.click(emailLink);
+    fireEvent.click(emailLink);
+
+    expect(onEmailClick).toHaveBeenCalledTimes(1);
+    expect(assignMock).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      vi.advanceTimersByTime(1500);
+    });
+
+    const resetLink = screen.getByRole("link", { name: "Email Chhavi Kumar" });
+    fireEvent.click(resetLink);
+    expect(onEmailClick).toHaveBeenCalledTimes(2);
+    expect(assignMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("copies the email template as a fallback", async () => {
+    writeTextMock.mockResolvedValue(undefined);
+
+    render(
+      <GetTransUnionAccessModal
+        open
+        onClose={vi.fn()}
+        onMarkInProgress={vi.fn()}
+        onEnterCredentials={vi.fn()}
+      />
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Copy email template" }));
+    });
+    
+    expect(writeTextMock).toHaveBeenCalledTimes(1);
+    expect(String(writeTextMock.mock.calls[0][0])).toContain("To: Chhavi.kumar@transunion.com");
+    expect(String(writeTextMock.mock.calls[0][0])).toContain(
+      "Subject: TransUnion Credentialing Request for RentChain Screening"
+    );
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Email template copied — paste it into your mail app"
+    );
   });
 
   it("keeps the already credentialed path in the existing connect flow", () => {
