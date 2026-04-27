@@ -124,7 +124,7 @@ describe("GetTransUnionAccessModal", () => {
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Copy email template" }));
     });
-    
+
     expect(writeTextMock).toHaveBeenCalledTimes(1);
     expect(String(writeTextMock.mock.calls[0][0])).toContain("To: Chhavi.kumar@transunion.com");
     expect(String(writeTextMock.mock.calls[0][0])).toContain(
