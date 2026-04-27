@@ -373,10 +373,12 @@ const ApplicationsPage: React.FC = () => {
   const [transUnionAccessOpen, setTransUnionAccessOpen] = useState(false);
   const [transUnionConnectOpen, setTransUnionConnectOpen] = useState(false);
   const [transUnionUpdateOpen, setTransUnionUpdateOpen] = useState(false);
+  const [transUnionAccessSource, setTransUnionAccessSource] = useState("applications_page");
   const APPLICATION_REMINDER_RESEND_COOLDOWN_MS = 24 * 60 * 60 * 1000;
   const APPLICATION_HIGH_PRIORITY_ACTIVITY_MS = 3 * 24 * 60 * 60 * 1000;
   const APPLICATION_FOLLOW_UP_STALE_MS = 7 * 24 * 60 * 60 * 1000;
   const transUnionOptionViewedRef = useRef(false);
+  const transUnionOnboardingViewKeyRef = useRef<string | null>(null);
   const [manualScreeningStatus, setManualScreeningStatus] = useState<ScreeningStatusView | null>(null);
   const [manualScreeningLoading, setManualScreeningLoading] = useState(false);
   const [manualScreeningSubmitting, setManualScreeningSubmitting] = useState(false);
@@ -390,6 +392,10 @@ const ApplicationsPage: React.FC = () => {
   const [funnelLoading, setFunnelLoading] = useState(false);
   const [funnelError, setFunnelError] = useState<string | null>(null);
   const screeningSectionRef = React.useRef<HTMLDivElement | null>(null);
+  const openTransUnionAccess = useCallback((sourceSurface: string) => {
+    setTransUnionAccessSource(sourceSurface);
+    setTransUnionAccessOpen(true);
+  }, []);
   const uiLocale = getUiLocale();
   const screeningComingSoonText = screeningComingSoonLabel(uiLocale);
   const screeningComingSoonDetailText =
@@ -1020,12 +1026,12 @@ const ApplicationsPage: React.FC = () => {
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     if (params.get("openTransUnionAccess") === "1") {
-      setTransUnionAccessOpen(true);
+      openTransUnionAccess("applications_page");
     }
     if (params.get("openTransUnionConnect") === "1") {
       setTransUnionConnectOpen(true);
     }
-  }, [location.search]);
+  }, [location.search, openTransUnionAccess]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -1351,7 +1357,18 @@ const ApplicationsPage: React.FC = () => {
   }, []);
 
   const emitTransUnionUsageEvent = useCallback(
-    (eventType: "tu_option_viewed" | "tu_get_access_clicked" | "tu_have_credentials_clicked", sourceSurface: string) => {
+    (
+      eventType:
+        | "tu_option_viewed"
+        | "tu_get_access_clicked"
+        | "tu_have_credentials_clicked"
+        | "tu_onboarding_viewed"
+        | "tu_onboarding_started"
+        | "tu_email_clicked"
+        | "tu_phone_clicked"
+        | "tu_already_credentialed_clicked",
+      sourceSurface: string
+    ) => {
       void trackTransUnionUsageEvent({
         eventType,
         sourceSurface,
@@ -1368,8 +1385,20 @@ const ApplicationsPage: React.FC = () => {
     emitTransUnionUsageEvent("tu_option_viewed", "applications_page");
   }, [emitTransUnionUsageEvent, transUnionLoading]);
 
+  useEffect(() => {
+    if (!transUnionAccessOpen) {
+      transUnionOnboardingViewKeyRef.current = null;
+      return;
+    }
+    const viewKey = `${transUnionAccessSource}:${location.search}`;
+    if (transUnionOnboardingViewKeyRef.current === viewKey) return;
+    transUnionOnboardingViewKeyRef.current = viewKey;
+    emitTransUnionUsageEvent("tu_onboarding_viewed", transUnionAccessSource);
+  }, [emitTransUnionUsageEvent, location.search, transUnionAccessOpen, transUnionAccessSource]);
+
   const submitTransUnionOnboardingRequest = useCallback(async () => {
     setTransUnionSubmitting(true);
+    emitTransUnionUsageEvent("tu_onboarding_started", transUnionAccessSource);
     try {
       const data = await requestTransUnionOnboarding({
         businessName: transUnionIntegration.businessName,
@@ -1389,7 +1418,9 @@ const ApplicationsPage: React.FC = () => {
       setTransUnionSubmitting(false);
     }
   }, [
+    emitTransUnionUsageEvent,
     showToast,
+    transUnionAccessSource,
     transUnionIntegration.businessName,
     transUnionIntegration.contactEmail,
     transUnionIntegration.contactName,
@@ -2026,14 +2057,14 @@ const ApplicationsPage: React.FC = () => {
         lastScreeningDate={detail ? screeningHistory[0]?.screenedAt || screeningHistory[0]?.requestedAt || null : null}
         onGetAccess={() => {
           emitTransUnionUsageEvent("tu_get_access_clicked", "applications_page");
-          setTransUnionAccessOpen(true);
+          openTransUnionAccess("applications_page");
         }}
         onConnectExisting={() => {
           emitTransUnionUsageEvent("tu_have_credentials_clicked", "applications_page");
           setTransUnionConnectOpen(true);
         }}
         onEnterDetails={() => setTransUnionConnectOpen(true)}
-        onViewInstructions={() => setTransUnionAccessOpen(true)}
+        onViewInstructions={() => openTransUnionAccess("applications_page")}
         onUpdateCredentials={() => setTransUnionUpdateOpen(true)}
         onDisconnect={() => void handleTransUnionDisconnect()}
         onStartScreening={
@@ -2835,7 +2866,7 @@ const ApplicationsPage: React.FC = () => {
                       <Button type="button" onClick={() => setTransUnionConnectOpen(true)}>
                         Connect TransUnion to Continue
                       </Button>
-                      <Button type="button" variant="secondary" onClick={() => setTransUnionAccessOpen(true)}>
+                      <Button type="button" variant="secondary" onClick={() => openTransUnionAccess("applications_page")}>
                         Get TransUnion Access
                       </Button>
                     </div>
@@ -3616,6 +3647,11 @@ const ApplicationsPage: React.FC = () => {
           }
         }}
         onMarkInProgress={submitTransUnionOnboardingRequest}
+        onEmailClick={() => emitTransUnionUsageEvent("tu_email_clicked", transUnionAccessSource)}
+        onPhoneClick={() => emitTransUnionUsageEvent("tu_phone_clicked", transUnionAccessSource)}
+        onAlreadyCredentialedClick={() =>
+          emitTransUnionUsageEvent("tu_already_credentialed_clicked", transUnionAccessSource)
+        }
         onEnterCredentials={() => {
           setTransUnionAccessOpen(false);
           setTransUnionConnectOpen(true);
@@ -3628,7 +3664,7 @@ const ApplicationsPage: React.FC = () => {
         onGetAccess={() => {
           emitTransUnionUsageEvent("tu_get_access_clicked", "connect_modal");
           setTransUnionConnectOpen(false);
-          setTransUnionAccessOpen(true);
+          openTransUnionAccess("connect_modal");
         }}
         onChooseExistingCredentials={() => {
           emitTransUnionUsageEvent("tu_have_credentials_clicked", "connect_modal");

@@ -171,4 +171,15 @@ describe("transunionRoutes", () => {
     expect(stored?.passcodeCiphertext).toBeNull();
     expect(stored?.memberCodeMasked).toBeNull();
   });
+
+  it("accepts onboarding analytics usage event types without storing credentials", async () => {
+    const app = await createApp();
+    const res = await request(app).post("/api/integrations/transunion/usage-events").send({
+      eventType: "tu_onboarding_started",
+      sourceSurface: "applications_page",
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ ok: true });
+  });
 });

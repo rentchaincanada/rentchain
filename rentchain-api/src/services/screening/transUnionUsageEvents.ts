@@ -4,6 +4,12 @@ export const TRANSUNION_USAGE_EVENT_TYPES = [
   "tu_option_viewed",
   "tu_get_access_clicked",
   "tu_have_credentials_clicked",
+  "tu_onboarding_viewed",
+  "tu_onboarding_started",
+  "tu_email_clicked",
+  "tu_phone_clicked",
+  "tu_already_credentialed_clicked",
+  "tu_credentials_connected",
   "tu_credentials_submitted",
   "tu_connected",
   "tu_connection_failed",
@@ -39,6 +45,12 @@ const EVENT_SUMMARIES: Record<TransUnionUsageEventType, string> = {
   tu_option_viewed: "TransUnion option viewed",
   tu_get_access_clicked: "TransUnion get access clicked",
   tu_have_credentials_clicked: "TransUnion existing credentials clicked",
+  tu_onboarding_viewed: "TransUnion onboarding viewed",
+  tu_onboarding_started: "TransUnion onboarding started",
+  tu_email_clicked: "TransUnion onboarding email clicked",
+  tu_phone_clicked: "TransUnion onboarding phone clicked",
+  tu_already_credentialed_clicked: "TransUnion already credentialed clicked",
+  tu_credentials_connected: "TransUnion credentials connected",
   tu_credentials_submitted: "TransUnion credentials submitted",
   tu_connected: "TransUnion connected",
   tu_connection_failed: "TransUnion connection failed",
@@ -130,4 +142,3 @@ export async function writeTransUnionUsageEvent(
     tags: ["provider:transunion", "usage-reporting"],
   });
 }
-

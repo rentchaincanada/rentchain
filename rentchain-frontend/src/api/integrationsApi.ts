@@ -41,7 +41,12 @@ export type TransUnionCredentialsPayload = {
 export type TransUnionUsageEventType =
   | "tu_option_viewed"
   | "tu_get_access_clicked"
-  | "tu_have_credentials_clicked";
+  | "tu_have_credentials_clicked"
+  | "tu_onboarding_viewed"
+  | "tu_onboarding_started"
+  | "tu_email_clicked"
+  | "tu_phone_clicked"
+  | "tu_already_credentialed_clicked";
 
 export async function getTransUnionIntegration(): Promise<TransUnionIntegration> {
   return apiFetch<TransUnionIntegration>("/integrations/transunion");

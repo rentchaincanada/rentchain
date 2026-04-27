@@ -419,6 +419,18 @@ export type LandlordApplicationFunnelAnalytics = {
   };
 };
 
+export type LandlordTransUnionOnboardingAnalytics = {
+  totals: {
+    viewed: number;
+    started: number;
+    emailClicked: number;
+    phoneClicked: number;
+    alreadyCredentialedClicked: number;
+    connected: number;
+  };
+  conversionRate: number | null;
+};
+
 export async function fetchLandlordAnalyticsSnapshot(params?: {
   period?: AnalyticsPeriod;
   propertyId?: string | null;
@@ -450,6 +462,13 @@ export async function fetchLandlordApplicationFunnel(params?: {
   const suffix = search.toString() ? `?${search.toString()}` : "";
   const response = await apiFetch<{ ok: true; data: LandlordApplicationFunnelAnalytics }>(
     `/landlord/analytics/applications/funnel${suffix}`
+  );
+  return response.data;
+}
+
+export async function fetchLandlordTransUnionOnboardingAnalytics(): Promise<LandlordTransUnionOnboardingAnalytics> {
+  const response = await apiFetch<{ ok: true; data: LandlordTransUnionOnboardingAnalytics }>(
+    "/landlord/analytics/transunion-onboarding"
   );
   return response.data;
 }

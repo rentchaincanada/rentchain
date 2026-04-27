@@ -33,6 +33,9 @@ type Props = {
   onClose: () => void;
   onMarkInProgress: () => Promise<void> | void;
   onEnterCredentials?: () => void;
+  onEmailClick?: () => void;
+  onPhoneClick?: () => void;
+  onAlreadyCredentialedClick?: () => void;
 };
 
 export function GetTransUnionAccessModal({
@@ -41,6 +44,9 @@ export function GetTransUnionAccessModal({
   onClose,
   onMarkInProgress,
   onEnterCredentials,
+  onEmailClick,
+  onPhoneClick,
+  onAlreadyCredentialedClick,
 }: Props) {
   if (!open) return null;
 
@@ -149,6 +155,7 @@ export function GetTransUnionAccessModal({
           <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
             <a
               href={CHHAVI_MAILTO}
+              onClick={onEmailClick}
               style={{
                 display: "inline-flex",
                 alignItems: "center",
@@ -167,6 +174,7 @@ export function GetTransUnionAccessModal({
             </a>
             <a
               href={CHHAVI_TEL}
+              onClick={onPhoneClick}
               style={{
                 display: "inline-flex",
                 alignItems: "center",
@@ -228,7 +236,15 @@ export function GetTransUnionAccessModal({
         </div>
         <div style={{ display: "flex", justifyContent: "flex-end", gap: spacing.sm, flexWrap: "wrap" }}>
           {onEnterCredentials ? (
-            <Button type="button" variant="secondary" onClick={onEnterCredentials} disabled={submitting}>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                onAlreadyCredentialedClick?.();
+                onEnterCredentials();
+              }}
+              disabled={submitting}
+            >
               Already Credentialed?
             </Button>
           ) : null}

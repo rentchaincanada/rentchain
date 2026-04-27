@@ -86,6 +86,14 @@ export async function postTransUnionConnect(req: Request, res: Response) {
       sourceSurface: String((req.body as any)?.sourceSurface || "connect_modal"),
       status: "connected",
     });
+    await writeTransUnionUsageEvent({
+      eventType: "tu_credentials_connected",
+      landlordId,
+      userId,
+      actorRole: String((req as any).user?.role || "landlord").toLowerCase(),
+      sourceSurface: String((req.body as any)?.sourceSurface || "connect_modal"),
+      status: "connected",
+    });
     return res.status(200).json(data);
   } catch (error) {
     await writeTransUnionUsageEvent({
@@ -129,6 +137,14 @@ export async function postTransUnionUpdateCredentials(req: Request, res: Respons
       sourceSurface: String((req.body as any)?.sourceSurface || "update_credentials_modal"),
       status: "connected",
     });
+    await writeTransUnionUsageEvent({
+      eventType: "tu_credentials_connected",
+      landlordId,
+      userId,
+      actorRole: String((req as any).user?.role || "landlord").toLowerCase(),
+      sourceSurface: String((req.body as any)?.sourceSurface || "update_credentials_modal"),
+      status: "connected",
+    });
     return res.status(200).json(data);
   } catch (error) {
     await writeTransUnionUsageEvent({
@@ -161,6 +177,11 @@ export async function postTransUnionUsageEvent(req: Request, res: Response) {
     "tu_option_viewed",
     "tu_get_access_clicked",
     "tu_have_credentials_clicked",
+    "tu_onboarding_viewed",
+    "tu_onboarding_started",
+    "tu_email_clicked",
+    "tu_phone_clicked",
+    "tu_already_credentialed_clicked",
   ]);
   if (!allowed.has(eventType as any)) {
     return res.status(400).json({ ok: false, error: "invalid_event_type" });

@@ -35,6 +35,10 @@ import { openUpgradeFlow } from "@/billing/openUpgradeFlow";
 import { UpgradeNudgeInlineCard } from "@/features/upgradeNudges/UpgradeNudgeInlineCard";
 import { canUseTimeline, normalizeTimelinePlan } from "@/features/automation/timeline/timelineEntitlements";
 import { getLandlordActivation, type LandlordActivationSummary } from "@/api/activationApi";
+import {
+  fetchLandlordTransUnionOnboardingAnalytics,
+  type LandlordTransUnionOnboardingAnalytics,
+} from "@/api/landlordAnalyticsApi";
 import { LandlordActivationFlowCard } from "@/components/activation/LandlordActivationFlowCard";
 import { clearPostUpgradeState, getPostUpgradeContent, getPostUpgradeState } from "@/lib/postUpgrade";
 
@@ -149,6 +153,8 @@ const DashboardPage: React.FC = () => {
   const [activationSummary, setActivationSummary] = React.useState<LandlordActivationSummary | null>(null);
   const [activationLoading, setActivationLoading] = React.useState(false);
   const [activationError, setActivationError] = React.useState<string | null>(null);
+  const [transUnionFunnel, setTransUnionFunnel] = React.useState<LandlordTransUnionOnboardingAnalytics | null>(null);
+  const [transUnionFunnelLoading, setTransUnionFunnelLoading] = React.useState(false);
   const [showWelcomeModal, setShowWelcomeModal] = React.useState(false);
   const [postUpgradePlan, setPostUpgradePlan] = React.useState<"starter" | "pro" | "elite" | null>(null);
   const onboarding = useOnboardingState();
@@ -198,6 +204,31 @@ const DashboardPage: React.FC = () => {
   React.useEffect(() => {
     void loadDashboard();
   }, [loadDashboard]);
+
+  React.useEffect(() => {
+    if (!SCREENING_ENABLED || (!isLandlord && !isAdmin)) {
+      setTransUnionFunnel(null);
+      setTransUnionFunnelLoading(false);
+      return;
+    }
+
+    let alive = true;
+    (async () => {
+      try {
+        setTransUnionFunnelLoading(true);
+        const data = await fetchLandlordTransUnionOnboardingAnalytics();
+        if (alive) setTransUnionFunnel(data);
+      } catch {
+        if (alive) setTransUnionFunnel(null);
+      } finally {
+        if (alive) setTransUnionFunnelLoading(false);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [isAdmin, isLandlord]);
 
   React.useEffect(() => {
     let alive = true;
@@ -387,6 +418,18 @@ const DashboardPage: React.FC = () => {
     delinquentCount: data?.kpis?.delinquentCount ?? 0,
     screeningsCount: data?.kpis?.screeningsCount ?? 0,
   };
+  const transUnionStarted = transUnionFunnel?.totals.started ?? 0;
+  const transUnionConnected = transUnionFunnel?.totals.connected ?? 0;
+  const transUnionConversionLabel =
+    transUnionFunnel?.conversionRate == null ? "—" : `${Math.round(transUnionFunnel.conversionRate * 100)}%`;
+  const transUnionDropOffInsight =
+    transUnionStarted > transUnionConnected
+      ? `${transUnionStarted - transUnionConnected} onboarding start${
+          transUnionStarted - transUnionConnected === 1 ? "" : "s"
+        } still need credential connection.`
+      : transUnionStarted > 0
+        ? "No onboarding drop-off right now."
+        : "No onboarding starts recorded yet.";
   const events = Array.isArray(data?.events) ? data.events : [];
   const fallbackActions = React.useMemo(() => {
     const items: Array<{ id: string; title: string; severity: "info"; href: string }> = [];
@@ -909,6 +952,26 @@ const DashboardPage: React.FC = () => {
             ) : (
               <Button disabled>{screeningLabel}</Button>
             )}
+          </Card>
+        ) : null}
+
+        {dataReady && SCREENING_ENABLED ? (
+          <Card style={{ padding: spacing.md, border: `1px solid ${colors.border}` }}>
+            <div style={{ fontWeight: 700, marginBottom: 6 }}>TransUnion Setup Funnel</div>
+            <div style={{ color: text.muted, marginBottom: 12 }}>
+              {transUnionFunnelLoading
+                ? "Loading onboarding funnel..."
+                : `Started → Connected ${transUnionConversionLabel}`}
+            </div>
+            {!transUnionFunnelLoading ? (
+              <div style={{ display: "grid", gap: 6, color: text.primary, fontSize: 14 }}>
+                <div>Viewed: {transUnionFunnel?.totals.viewed ?? 0}</div>
+                <div>Started: {transUnionStarted}</div>
+                <div>Email clicked: {transUnionFunnel?.totals.emailClicked ?? 0}</div>
+                <div>Connected: {transUnionConnected}</div>
+                <div style={{ color: text.muted }}>{transUnionDropOffInsight}</div>
+              </div>
+            ) : null}
           </Card>
         ) : null}
 
