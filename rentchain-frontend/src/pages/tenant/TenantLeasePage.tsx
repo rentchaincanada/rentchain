@@ -1,5 +1,9 @@
 import React from "react";
-import { getTenantLeaseWorkspace, signTenantLease } from "../../api/tenantPortal";
+import {
+  createTenantLeasePaymentCheckout,
+  getTenantLeaseWorkspace,
+  signTenantLease,
+} from "../../api/tenantPortal";
 import {
   TenantEmptyState,
   TenantErrorState,
@@ -16,6 +20,7 @@ export default function TenantLeasePage() {
   const [data, setData] = React.useState<Awaited<ReturnType<typeof getTenantLeaseWorkspace>>>(null);
   const [loading, setLoading] = React.useState(true);
   const [signing, setSigning] = React.useState(false);
+  const [paying, setPaying] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
   const load = React.useCallback(async () => {
@@ -45,6 +50,24 @@ export default function TenantLeasePage() {
       setError(err?.payload?.error || err?.message || "Unable to record your lease signature.");
     } finally {
       setSigning(false);
+    }
+  }
+
+  async function handlePayRent() {
+    if (!data?.leaseId) return;
+    setPaying(true);
+    setError(null);
+    try {
+      const result = await createTenantLeasePaymentCheckout(data.leaseId);
+      if (result?.redirectUrl) {
+        window.location.assign(result.redirectUrl);
+        return;
+      }
+      setError("Unable to start rent payment checkout.");
+    } catch (err: any) {
+      setError(err?.payload?.detail || err?.payload?.error || err?.message || "Unable to start rent payment checkout.");
+    } finally {
+      setPaying(false);
     }
   }
 
@@ -145,6 +168,36 @@ export default function TenantLeasePage() {
                     },
                   ]}
                 />
+                {data.rentPaymentSummary ? (
+                  <div style={{ display: "grid", gap: 8 }}>
+                    <TenantKeyValueGrid
+                      rows={[
+                        {
+                          label: "Rent collection",
+                          value: data.rentPaymentSummary.paymentRail.enabled ? "Enabled" : "Not enabled",
+                        },
+                        {
+                          label: "Payment status",
+                          value: data.rentPaymentSummary.latestPayment
+                            ? String(data.rentPaymentSummary.latestPayment.status).replace(/_/g, " ")
+                            : "No payment started",
+                        },
+                      ]}
+                    />
+                    <div style={{ color: "var(--text-muted, #64748b)" }}>
+                      Payment processed by Stripe. RentChain does not store card or bank payment details.
+                    </div>
+                    {data.rentPaymentSummary.paymentRail.enabled &&
+                    paymentReadiness.readinessStatus === "ready_to_configure" &&
+                    !["checkout_created", "payment_pending", "paid"].includes(
+                      String(data.rentPaymentSummary.latestPayment?.status || "")
+                    ) ? (
+                      <button type="button" onClick={() => void handlePayRent()} disabled={paying}>
+                        {paying ? "Opening checkout..." : "Pay rent"}
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             </TenantInfoCard>
           ) : null}

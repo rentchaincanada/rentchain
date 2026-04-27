@@ -4,6 +4,9 @@ const getSignedDownloadUrlMock = vi.fn();
 const { sendEmailMock } = vi.hoisted(() => ({
   sendEmailMock: vi.fn(),
 }));
+const { stripeCheckoutCreateMock } = vi.hoisted(() => ({
+  stripeCheckoutCreateMock: vi.fn(),
+}));
 
 const collections = new Map<string, Map<string, any>>();
 
@@ -106,6 +109,17 @@ vi.mock("../../config/requiredEnv", () => ({
   getEnvFlags: () => ({ emailConfigured: true, emailProvider: "mailgun" }),
 }));
 
+vi.mock("../../services/stripeService", () => ({
+  isStripeConfigured: () => true,
+  getStripeClient: () => ({
+    checkout: {
+      sessions: {
+        create: stripeCheckoutCreateMock,
+      },
+    },
+  }),
+}));
+
 vi.mock("../../middleware/authMiddleware", () => ({
   authenticateJwt: (req: any, _res: any, next: any) => {
     const header = String(req.headers["x-test-user"] || "").trim();
@@ -165,6 +179,12 @@ describe("tenantPortalRoutes foundation", () => {
     collections.clear();
     sendEmailMock.mockReset();
     sendEmailMock.mockResolvedValue(undefined);
+    stripeCheckoutCreateMock.mockReset();
+    stripeCheckoutCreateMock.mockResolvedValue({
+      id: "cs_test_1",
+      url: "https://checkout.stripe.test/session/cs_test_1",
+      payment_intent: "pi_test_1",
+    });
     process.env.EMAIL_FROM = "noreply@example.com";
     process.env.GCS_UPLOAD_BUCKET = "test-bucket";
     getSignedDownloadUrlMock.mockReset();
@@ -631,8 +651,194 @@ describe("tenantPortalRoutes foundation", () => {
         },
       })
     );
+    expect(res.body?.data?.rentPaymentSummary).toEqual({
+      paymentRail: {
+        enabled: false,
+        enabledAt: null,
+        processor: null,
+        blockedReason: null,
+      },
+      latestPayment: null,
+    });
     expect(res.body?.lease?.tenantSignature?.drawnDataUrl).toBeUndefined();
     expect(res.body?.data?.paymentMethod).toBeUndefined();
+  });
+
+  it("creates a tenant rent payment checkout only for an eligible enabled lease", async () => {
+    ensureCollection("leases").set("lease-1", {
+      ...(ensureCollection("leases").get("lease-1") || {}),
+      landlordId: "landlord-1",
+      paymentRailEnabled: true,
+      paymentRailEnabledAt: "2026-04-27T10:00:00.000Z",
+      paymentRailProcessor: "stripe",
+    });
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/leases/lease-1/payments/checkout",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      ok: true,
+      data: {
+        rentPaymentId: expect.any(String),
+        status: "checkout_created",
+        redirectUrl: "https://checkout.stripe.test/session/cs_test_1",
+      },
+    });
+    expect(stripeCheckoutCreateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: "payment",
+        success_url: expect.stringContaining("/tenant/lease"),
+        cancel_url: expect.stringContaining("/tenant/lease"),
+        metadata: expect.objectContaining({
+          leaseId: "lease-1",
+          tenantId: "tenant-1",
+          landlordId: "landlord-1",
+          rentPaymentId: expect.any(String),
+        }),
+        payment_intent_data: expect.objectContaining({
+          metadata: expect.objectContaining({
+            leaseId: "lease-1",
+            tenantId: "tenant-1",
+            landlordId: "landlord-1",
+            rentPaymentId: expect.any(String),
+          }),
+        }),
+      })
+    );
+
+    const storedPayments = Array.from(ensureCollection("rentPayments").values());
+    expect(storedPayments).toHaveLength(1);
+    expect(storedPayments[0]).toEqual(
+      expect.objectContaining({
+        leaseId: "lease-1",
+        tenantId: "tenant-1",
+        landlordId: "landlord-1",
+        amountCents: 180000,
+        currency: "cad",
+        status: "checkout_created",
+        processor: "stripe",
+        processorCheckoutSessionId: "cs_test_1",
+        processorPaymentIntentId: "pi_test_1",
+      })
+    );
+    expect(JSON.stringify(storedPayments[0])).not.toContain("card");
+    expect(JSON.stringify(storedPayments[0])).not.toContain("bank");
+    expect(JSON.stringify(stripeCheckoutCreateMock.mock.calls[0][0]?.metadata || {})).not.toContain("@");
+  });
+
+  it("blocks duplicate tenant checkout creation when one is already pending", async () => {
+    ensureCollection("leases").set("lease-1", {
+      ...(ensureCollection("leases").get("lease-1") || {}),
+      landlordId: "landlord-1",
+      paymentRailEnabled: true,
+      paymentRailEnabledAt: "2026-04-27T10:00:00.000Z",
+      paymentRailProcessor: "stripe",
+    });
+    ensureCollection("rentPayments").set("rp-open", {
+      id: "rp-open",
+      leaseId: "lease-1",
+      tenantId: "tenant-1",
+      landlordId: "landlord-1",
+      amountCents: 180000,
+      currency: "cad",
+      status: "checkout_created",
+      processor: "stripe",
+      createdAt: "2026-04-27T10:01:00.000Z",
+      updatedAt: "2026-04-27T10:01:00.000Z",
+    });
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/leases/lease-1/payments/checkout",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({
+      ok: false,
+      error: "TENANT_RENT_PAYMENT_BLOCKED",
+      detail: "payment_already_pending",
+    });
+    expect(stripeCheckoutCreateMock).not.toHaveBeenCalled();
+  });
+
+  it("returns tenant-safe rent payment status for the current lease", async () => {
+    ensureCollection("leases").set("lease-1", {
+      ...(ensureCollection("leases").get("lease-1") || {}),
+      landlordId: "landlord-1",
+      paymentRailEnabled: true,
+      paymentRailEnabledAt: "2026-04-27T10:00:00.000Z",
+      paymentRailProcessor: "stripe",
+    });
+    ensureCollection("rentPayments").set("rp-1", {
+      id: "rp-1",
+      leaseId: "lease-1",
+      tenantId: "tenant-1",
+      landlordId: "landlord-1",
+      amountCents: 180000,
+      currency: "cad",
+      status: "paid",
+      processor: "stripe",
+      createdAt: "2026-04-27T10:05:00.000Z",
+      updatedAt: "2026-04-27T10:06:00.000Z",
+      paidAt: "2026-04-27T10:06:00.000Z",
+    });
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/leases/lease-1/payments",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      ok: true,
+      data: {
+        paymentRail: {
+          enabled: true,
+          enabledAt: "2026-04-27T10:00:00.000Z",
+          processor: "stripe",
+          blockedReason: null,
+        },
+        latestPayment: {
+          id: "rp-1",
+          amountCents: 180000,
+          currency: "cad",
+          status: "paid",
+          createdAt: "2026-04-27T10:05:00.000Z",
+          updatedAt: "2026-04-27T10:06:00.000Z",
+          paidAt: "2026-04-27T10:06:00.000Z",
+        },
+      },
+    });
   });
 
   it("records tenant lease signing metadata without storing raw signature data and stays idempotent", async () => {

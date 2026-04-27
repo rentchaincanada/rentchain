@@ -6,6 +6,7 @@ import LandlordActiveLeasesPage from "./LandlordActiveLeasesPage";
 const mocks = vi.hoisted(() => ({
   getActiveLeasesForLandlord: vi.fn(),
   getArchivedLeasesForLandlord: vi.fn(),
+  enableLeasePaymentRail: vi.fn(),
   getLeaseReconciliationCandidates: vi.fn(),
   convertUnitReferenceToLease: vi.fn(),
   archiveLeaseRecord: vi.fn(),
@@ -15,6 +16,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/api/leasesApi", () => ({
   getActiveLeasesForLandlord: mocks.getActiveLeasesForLandlord,
   getArchivedLeasesForLandlord: mocks.getArchivedLeasesForLandlord,
+  enableLeasePaymentRail: mocks.enableLeasePaymentRail,
   getLeaseReconciliationCandidates: mocks.getLeaseReconciliationCandidates,
   convertUnitReferenceToLease: mocks.convertUnitReferenceToLease,
   archiveLeaseRecord: mocks.archiveLeaseRecord,
@@ -70,6 +72,15 @@ describe("LandlordActiveLeasesPage", () => {
               storedPaymentMethod: false,
             },
           },
+          rentPaymentSummary: {
+            paymentRail: {
+              enabled: false,
+              enabledAt: null,
+              processor: null,
+              blockedReason: null,
+            },
+            latestPayment: null,
+          },
         },
       ],
     });
@@ -99,6 +110,16 @@ describe("LandlordActiveLeasesPage", () => {
       lease: { id: "lease-9" },
       tenant: { id: "tenant-9", fullName: "Recovered Tenant" },
     });
+    mocks.enableLeasePaymentRail.mockResolvedValue({
+      leaseId: "lease-1",
+      paymentRail: {
+        enabled: true,
+        enabledAt: "2026-04-27T10:00:00.000Z",
+        processor: "stripe",
+        eligibility: "eligible",
+        blockedReason: null,
+      },
+    });
     mocks.archiveLeaseRecord.mockResolvedValue({ ok: true, lease: { id: "lease-1" } });
     mocks.restoreLeaseRecord.mockResolvedValue({ ok: true, lease: { id: "lease-2" } });
     vi.spyOn(window, "confirm").mockReturnValue(true);
@@ -115,12 +136,15 @@ describe("LandlordActiveLeasesPage", () => {
     expect(screen.getByRole("button", { name: "Print / Save PDF" })).toBeInTheDocument();
     expect(screen.getAllByText("Lease fully executed").length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Rent terms ready for future setup/i).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: /Enable rent collection/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "View" })).toHaveAttribute("href", "/leases/lease-1/ledger");
     expect(screen.getByRole("link", { name: "Email" })).toHaveAttribute(
       "href",
       expect.stringContaining("mailto:jane%40example.com")
     );
     expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Enable rent collection/i }));
+    await waitFor(() => expect(mocks.enableLeasePaymentRail).toHaveBeenCalledWith("lease-1"));
     fireEvent.click(screen.getByRole("button", { name: "Archive lease" }));
     await waitFor(() => expect(mocks.archiveLeaseRecord).toHaveBeenCalledWith("lease-1"));
   });

@@ -1,5 +1,3 @@
-import express from "express";
-import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const getSignedDownloadUrlMock = vi.fn(async () => "https://signed.example.com/lease.pdf");
@@ -102,22 +100,54 @@ vi.mock("../../lib/gcsSignedUrl", () => ({
   getSignedDownloadUrl: getSignedDownloadUrlMock,
 }));
 
+vi.mock("../../services/stripeService", () => ({
+  isStripeConfigured: () => true,
+}));
+
 describe("leaseRoutes GET /active", () => {
   beforeEach(() => {
     resetFakeDb();
     getSignedDownloadUrlMock.mockClear();
   });
 
-  async function makeApp() {
-    const router = (await import("../leaseRoutes")).default;
-    const app = express();
-    app.use(express.json());
-    app.use((req: any, _res, next) => {
-      req.user = { id: "landlord-1", landlordId: "landlord-1", role: "landlord" };
-      next();
+  async function invokeRouter(router: any, options: {
+    method: string;
+    url: string;
+    body?: any;
+    headers?: Record<string, string>;
+  }) {
+    return await new Promise<{ status: number; body: any; headers: Record<string, any> }>((resolve, reject) => {
+      const headers: Record<string, any> = {};
+      const req: any = {
+        method: options.method,
+        url: options.url,
+        originalUrl: options.url,
+        path: options.url,
+        body: options.body ?? {},
+        headers: options.headers ?? {},
+      };
+      const res: any = {
+        statusCode: 200,
+        setHeader: (key: string, value: any) => {
+          headers[key.toLowerCase()] = value;
+        },
+        status(code: number) {
+          this.statusCode = code;
+          return this;
+        },
+        json(payload: any) {
+          resolve({ status: this.statusCode, body: payload, headers });
+          return this;
+        },
+        send(payload: any) {
+          resolve({ status: this.statusCode, body: payload, headers });
+          return this;
+        },
+      };
+      router.handle(req, res, (error: any) => {
+        if (error) reject(error);
+      });
     });
-    app.use(router);
-    return app;
   }
 
   it("returns landlord-scoped active leases with tenant and document details", async () => {
@@ -162,8 +192,8 @@ describe("leaseRoutes GET /active", () => {
       status: "ended",
     });
 
-    const app = await makeApp();
-    const res = await request(app).get("/active");
+    const router = (await import("../leaseRoutes")).default;
+    const res = await invokeRouter(router, { method: "GET", url: "/active" });
 
     expect(res.status).toBe(200);
     expect(res.body?.ok).toBe(true);
@@ -196,6 +226,15 @@ describe("leaseRoutes GET /active", () => {
             moneyMovementEnabled: false,
             storedPaymentMethod: false,
           },
+        }),
+        rentPaymentSummary: expect.objectContaining({
+          paymentRail: {
+            enabled: false,
+            enabledAt: null,
+            processor: null,
+            blockedReason: null,
+          },
+          latestPayment: null,
         }),
       })
     );
@@ -235,10 +274,150 @@ describe("leaseRoutes GET /active", () => {
       updatedAt: 3,
     });
 
-    const app = await makeApp();
-    const res = await request(app).get("/active");
+    const router = (await import("../leaseRoutes")).default;
+    const res = await invokeRouter(router, { method: "GET", url: "/active" });
 
     expect(res.status).toBe(200);
     expect(res.body?.leases.map((lease: { id: string }) => lease.id)).toEqual(["lease-visible"]);
+  });
+
+  it("enables rent collection for an owned eligible lease", async () => {
+    seedDoc("leases", "lease-1", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      tenantId: "tenant-1",
+      tenantIds: ["tenant-1"],
+      primaryTenantId: "tenant-1",
+      unitId: "unit-1",
+      unitNumber: "101",
+      monthlyRent: 1850,
+      dueDay: 1,
+      startDate: "2026-01-01",
+      endDate: "2026-12-31",
+      status: "active",
+    });
+
+    const router = (await import("../leaseRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/lease-1/payment-rails/enable",
+      body: {},
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      ok: true,
+      data: {
+        leaseId: "lease-1",
+        paymentRail: {
+          enabled: true,
+          enabledAt: expect.any(String),
+          processor: "stripe",
+          eligibility: "eligible",
+          blockedReason: null,
+        },
+      },
+    });
+
+    const storedLease = await fakeDb.collection("leases").doc("lease-1").get();
+    expect(storedLease.data()).toEqual(
+      expect.objectContaining({
+        paymentRailEnabled: true,
+        paymentRailEnabledAt: expect.any(String),
+        paymentRailProcessor: "stripe",
+      })
+    );
+  });
+
+  it("returns safe blocked detail for an ineligible lease payment rail", async () => {
+    seedDoc("leases", "lease-1", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      tenantId: "tenant-1",
+      tenantIds: ["tenant-1"],
+      primaryTenantId: "tenant-1",
+      unitId: "unit-1",
+      unitNumber: "101",
+      monthlyRent: 1850,
+      dueDay: null,
+      startDate: "2026-01-01",
+      endDate: "2026-12-31",
+      status: "active",
+    });
+
+    const router = (await import("../leaseRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/lease-1/payment-rails/enable",
+      body: {},
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({
+      ok: false,
+      error: "LEASE_PAYMENT_RAIL_INELIGIBLE",
+      detail: "payment_readiness_not_ready",
+    });
+  });
+
+  it("returns landlord payment status summary for a lease", async () => {
+    seedDoc("leases", "lease-1", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      tenantId: "tenant-1",
+      tenantIds: ["tenant-1"],
+      primaryTenantId: "tenant-1",
+      unitId: "unit-1",
+      unitNumber: "101",
+      monthlyRent: 1850,
+      dueDay: 1,
+      startDate: "2026-01-01",
+      endDate: "2026-12-31",
+      status: "active",
+      paymentRailEnabled: true,
+      paymentRailEnabledAt: "2026-04-27T10:00:00.000Z",
+      paymentRailProcessor: "stripe",
+    });
+    seedDoc("rentPayments", "rp-1", {
+      id: "rp-1",
+      leaseId: "lease-1",
+      tenantId: "tenant-1",
+      landlordId: "landlord-1",
+      amountCents: 185000,
+      currency: "cad",
+      status: "paid",
+      processor: "stripe",
+      createdAt: "2026-04-27T10:05:00.000Z",
+      updatedAt: "2026-04-27T10:06:00.000Z",
+      paidAt: "2026-04-27T10:06:00.000Z",
+    });
+
+    const router = (await import("../leaseRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/lease-1/payments",
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      ok: true,
+      data: {
+        paymentRail: {
+          enabled: true,
+          enabledAt: "2026-04-27T10:00:00.000Z",
+          processor: "stripe",
+          blockedReason: null,
+        },
+        latestPayment: {
+          id: "rp-1",
+          amountCents: 185000,
+          currency: "cad",
+          status: "paid",
+          createdAt: "2026-04-27T10:05:00.000Z",
+          updatedAt: "2026-04-27T10:06:00.000Z",
+          paidAt: "2026-04-27T10:06:00.000Z",
+        },
+      },
+    });
   });
 });

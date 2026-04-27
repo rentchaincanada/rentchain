@@ -82,6 +82,23 @@ export type TenantWorkspaceLease = {
   paymentStatus?: string | null;
   paymentRequestedAt?: string | null;
   paymentCompletedAt?: string | null;
+  rentPaymentSummary?: {
+    paymentRail: {
+      enabled: boolean;
+      enabledAt: string | null;
+      processor: "stripe" | null;
+      blockedReason: string | null;
+    };
+    latestPayment: {
+      id: string;
+      amountCents: number;
+      currency: "cad";
+      status: "setup_required" | "checkout_created" | "payment_pending" | "paid" | "failed" | "canceled" | "expired";
+      createdAt: string;
+      updatedAt: string;
+      paidAt: string | null;
+    } | null;
+  } | null;
 };
 
 export type PaymentReadiness = {
@@ -374,6 +391,43 @@ export async function getTenantApplicationStatus(): Promise<TenantWorkspaceAppli
 export async function getTenantLeaseWorkspace(): Promise<TenantWorkspaceLease | null> {
   const res = await tenantApiFetch<{ ok: boolean; data: TenantWorkspaceLease | null }>("/tenant/lease");
   return res?.data ?? null;
+}
+
+export async function createTenantLeasePaymentCheckout(
+  leaseId: string
+): Promise<{ rentPaymentId: string; status: "checkout_created"; redirectUrl: string }> {
+  const res = await tenantApiFetch<{ ok: boolean; data: { rentPaymentId: string; status: "checkout_created"; redirectUrl: string } }>(
+    `/tenant/leases/${encodeURIComponent(leaseId)}/payments/checkout`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    }
+  );
+  return res?.data;
+}
+
+export async function getTenantLeasePaymentStatus(
+  leaseId: string
+): Promise<{
+  paymentRail: {
+    enabled: boolean;
+    enabledAt: string | null;
+    processor: "stripe" | null;
+    blockedReason: string | null;
+  };
+  latestPayment: {
+    id: string;
+    amountCents: number;
+    currency: "cad";
+    status: "setup_required" | "checkout_created" | "payment_pending" | "paid" | "failed" | "canceled" | "expired";
+    createdAt: string;
+    updatedAt: string;
+    paidAt: string | null;
+  } | null;
+}> {
+  const res = await tenantApiFetch<{ ok: boolean; data: any }>(`/tenant/leases/${encodeURIComponent(leaseId)}/payments`);
+  return res?.data;
 }
 
 export async function signTenantLease(leaseId: string): Promise<TenantWorkspaceLease | null> {

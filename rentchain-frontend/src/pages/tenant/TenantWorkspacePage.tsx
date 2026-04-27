@@ -1,6 +1,10 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import { exportTenantIdentityPackage, getTenantWorkspace } from "../../api/tenantPortal";
+import {
+  createTenantLeasePaymentCheckout,
+  exportTenantIdentityPackage,
+  getTenantWorkspace,
+} from "../../api/tenantPortal";
 import { getTenantAccess, type TenantAccessWorkspace } from "../../api/tenantAccess";
 import { getTenantAttachments } from "../../api/tenantAttachmentsApi";
 import { getTenantProfile } from "../../api/tenantProfile";
@@ -115,6 +119,28 @@ function prettyShareRequestItem(
   }
 }
 
+function prettyRentPaymentStatus(
+  value: "setup_required" | "checkout_created" | "payment_pending" | "paid" | "failed" | "canceled" | "expired" | null | undefined
+) {
+  switch (value) {
+    case "checkout_created":
+      return "Checkout created";
+    case "payment_pending":
+      return "Payment pending";
+    case "paid":
+      return "Paid";
+    case "failed":
+      return "Failed";
+    case "canceled":
+      return "Canceled";
+    case "expired":
+      return "Expired";
+    case "setup_required":
+    default:
+      return "Setup required";
+  }
+}
+
 export default function TenantWorkspacePage() {
   const [data, setData] = React.useState<Awaited<ReturnType<typeof getTenantWorkspace>> | null>(null);
   const [institutionalPackage, setInstitutionalPackage] = React.useState<Awaited<ReturnType<typeof exportTenantIdentityPackage>> | null>(null);
@@ -132,6 +158,8 @@ export default function TenantWorkspacePage() {
   const [exportBusy, setExportBusy] = React.useState(false);
   const [exportError, setExportError] = React.useState<string | null>(null);
   const [showExportPreview, setShowExportPreview] = React.useState(false);
+  const [rentPaymentBusy, setRentPaymentBusy] = React.useState(false);
+  const [rentPaymentError, setRentPaymentError] = React.useState<string | null>(null);
   const [profileLoading, setProfileLoading] = React.useState(true);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -185,6 +213,24 @@ export default function TenantWorkspacePage() {
   React.useEffect(() => {
     void load();
   }, [load]);
+
+  async function handlePayRent() {
+    if (!data?.lease?.leaseId) return;
+    setRentPaymentBusy(true);
+    setRentPaymentError(null);
+    try {
+      const result = await createTenantLeasePaymentCheckout(data.lease.leaseId);
+      if (result?.redirectUrl) {
+        window.location.assign(result.redirectUrl);
+        return;
+      }
+      setRentPaymentError("Unable to start rent payment checkout.");
+    } catch (err: any) {
+      setRentPaymentError(err?.payload?.detail || err?.payload?.error || err?.message || "Unable to start rent payment checkout.");
+    } finally {
+      setRentPaymentBusy(false);
+    }
+  }
 
   React.useEffect(() => {
     let cancelled = false;
@@ -573,6 +619,49 @@ export default function TenantWorkspacePage() {
                   : "No immediate follow-up"}
               </strong>
             </div>
+
+            {data.lease.rentPaymentSummary ? (
+              <div
+                style={{
+                  display: "grid",
+                  gap: spacing.xs,
+                  padding: spacing.sm,
+                  border: "1px solid rgba(148,163,184,0.35)",
+                  borderRadius: 12,
+                }}
+              >
+                <div style={{ fontWeight: 700, color: textTokens.primary }}>Rent payment checkout</div>
+                <div style={{ color: textTokens.secondary }}>
+                  Payment processed by Stripe. RentChain does not store card or bank payment details.
+                </div>
+                <TenantKeyValueGrid
+                  rows={[
+                    {
+                      label: "Rent collection",
+                      value: data.lease.rentPaymentSummary.paymentRail.enabled ? "Enabled" : "Not enabled",
+                    },
+                    {
+                      label: "Payment status",
+                      value: data.lease.rentPaymentSummary.latestPayment
+                        ? prettyRentPaymentStatus(data.lease.rentPaymentSummary.latestPayment.status)
+                        : "No payment started",
+                    },
+                  ]}
+                />
+                {data.lease.rentPaymentSummary.paymentRail.enabled &&
+                data.lease.paymentReadiness.readinessStatus === "ready_to_configure" &&
+                !["checkout_created", "payment_pending", "paid"].includes(
+                  String(data.lease.rentPaymentSummary.latestPayment?.status || "")
+                ) ? (
+                  <div style={{ display: "grid", gap: spacing.xs }}>
+                    <button type="button" onClick={() => void handlePayRent()} disabled={rentPaymentBusy}>
+                      {rentPaymentBusy ? "Opening checkout..." : "Pay rent"}
+                    </button>
+                    {rentPaymentError ? <div style={{ color: "#b91c1c" }}>{rentPaymentError}</div> : null}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         ) : (
           <div style={{ color: textTokens.secondary }}>
