@@ -233,18 +233,67 @@ export default function LandlordAnalyticsPage() {
     <MacShell title="Analytics" showTopNav={false}>
       <div style={{ display: "grid", gap: 16 }}>
         <Section>
-          <div style={{ display: "grid", gap: 6 }}>
-            <h1 style={{ margin: 0, fontSize: "1.5rem" }}>Analytics</h1>
-            <div style={{ color: "#475569", maxWidth: 840 }}>
-              A calm view of portfolio health, application activity, leasing pressure, maintenance burden, and rent signals.
-            </div>
-            {routedEntryLabel ? (
-              <div style={{ color: "#0f766e", fontWeight: 600, fontSize: "0.92rem" }}>
-                Focused from decisions: {routedEntryLabel}
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "flex-start" }}>
+            <div style={{ display: "grid", gap: 6 }}>
+              <h1 style={{ margin: 0, fontSize: "1.5rem" }}>Analytics</h1>
+              <div style={{ color: "#475569", maxWidth: 840 }}>
+                A calm view of portfolio health, application activity, leasing pressure, maintenance burden, and rent signals.
               </div>
-            ) : null}
+              {routedEntryLabel ? (
+                <div style={{ color: "#0f766e", fontWeight: 600, fontSize: "0.92rem" }}>
+                  Focused from decisions: {routedEntryLabel}
+                </div>
+              ) : null}
+            </div>
+            <button
+              type="button"
+              className="no-print"
+              onClick={() => window.print()}
+              style={{ padding: "8px 10px", borderRadius: 12, border: "1px solid #E5E7EB", background: "#FFFFFF", fontWeight: 900, cursor: "pointer" }}
+            >
+              Print / Save PDF
+            </button>
           </div>
         </Section>
+
+        {snapshot ? (
+          <div className="print-only print-only-summary">
+            <div className="printHeader">
+              <div className="printTitle">Analytics summary</div>
+              <div className="printMeta">
+                <div>Period: {periodLabel(period)}</div>
+                <div>Property filter: {propertyId || "All properties"}</div>
+              </div>
+            </div>
+            <div className="printKpis">
+              {summaryItems.slice(0, 4).map((item) => (
+                <div key={item.label} className="printKpi">
+                  <div className="printKpiLabel">{item.label}</div>
+                  <div className="printKpiValue">{item.value}</div>
+                </div>
+              ))}
+            </div>
+            <div className="printH3">Decision queue</div>
+            <table className="printTable">
+              <thead>
+                <tr>
+                  <th>Title</th>
+                  <th>Priority</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {prioritizedDecisions.slice(0, 10).map((decision) => (
+                  <tr key={decision.id}>
+                    <td>{decision.title}</td>
+                    <td>{decision.priority}</td>
+                    <td>{decision.executionState}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
 
         {entitlementLoading ? <Card>Loading analytics access…</Card> : null}
         {!entitlementLoading && !canViewPortfolioHealthSummary ? (

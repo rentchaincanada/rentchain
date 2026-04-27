@@ -271,6 +271,14 @@ const normalizeTransUnionConfigError = (error: unknown) => {
   return error;
 };
 
+const buildApplicantLabel = (detail: RentalApplication | null) => {
+  if (!detail) return null;
+  const parts = [detail.applicant.firstName, detail.applicant.lastName]
+    .map((value) => String(value ?? "").trim())
+    .filter((value) => value && value.toLowerCase() !== "null" && value.toLowerCase() !== "undefined");
+  return parts.join(" ").trim() || null;
+};
+
 const ApplicationsPage: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -2008,9 +2016,7 @@ const ApplicationsPage: React.FC = () => {
         integration={transUnionIntegration}
         loading={transUnionLoading}
         readyToScreen={Boolean(detail)}
-        selectedApplicationLabel={
-          detail ? `${detail.applicant.firstName} ${detail.applicant.lastName}`.trim() : null
-        }
+        selectedApplicationLabel={buildApplicantLabel(detail)}
         onChooseApplicant={guideToApplicationsForScreening}
         screeningsCompletedCount={
           detail

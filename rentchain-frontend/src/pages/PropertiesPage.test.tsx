@@ -143,6 +143,18 @@ describe("PropertiesPage", () => {
     expect(screen.getByText("Archived properties are hidden from active portfolio views but preserved for records and history.")).toBeInTheDocument();
   });
 
+  it("shows a print action when a property is selected", async () => {
+    render(
+      <MemoryRouter>
+        <PropertiesPage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByRole("button", { name: "Print / Save PDF" }).length).toBeGreaterThan(0);
+    });
+  });
+
   it("shows a guided first-property empty state for new users", async () => {
     mocks.fetchPropertiesMock.mockResolvedValue({ items: [] });
 

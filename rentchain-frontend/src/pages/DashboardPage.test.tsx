@@ -173,4 +173,50 @@ describe("DashboardPage", () => {
     expect(await screen.findByText("Welcome to RentChain")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Start setup" })).toBeInTheDocument();
   });
+
+  it("links open actions and review items to the approved destinations", async () => {
+    mocks.fetchDashboardSummaryMock.mockResolvedValue({
+      kpis: {
+        propertiesCount: 1,
+        unitsCount: 2,
+        tenantsCount: 1,
+        openActionsCount: 3,
+        delinquentCount: 0,
+        screeningsCount: 0,
+      },
+      actions: [{ id: "a-1", title: "Invite a tenant", severity: "info", href: "/tenants" }],
+      events: [],
+      leaseNoticeSummary: {
+        expiringSoon: 0,
+        pendingResponse: 0,
+        renewed: 0,
+        quitting: 0,
+        noResponse: 0,
+      },
+      portfolioCredibilitySummary: {
+        propertyCount: 1,
+        activeLeaseCount: 5,
+        tenantScoreAverage: null,
+        tenantScoreGradeAverage: null,
+        leaseRiskAverage: null,
+        leaseRiskGradeAverage: null,
+        tenantsWithScoreCount: 0,
+        leasesWithRiskCount: 0,
+        lowConfidenceCount: 2,
+        missingCredibilityCount: 1,
+        healthStatus: "watch",
+      },
+    });
+
+    render(
+      <ToastProvider>
+        <MemoryRouter>
+          <DashboardPage />
+        </MemoryRouter>
+      </ToastProvider>
+    );
+
+    expect(await screen.findByRole("link", { name: "3" })).toHaveAttribute("href", "/dashboard#open-actions");
+    expect(screen.getByRole("link", { name: "2" })).toHaveAttribute("href", "/applications?status=review");
+  });
 });

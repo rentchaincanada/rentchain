@@ -358,6 +358,18 @@ describe("ApplicationsPage", () => {
     mocks.openUpgrade.mockReset();
   });
 
+  it("keeps the applications master-detail containers in the mobile-safe layout structure", async () => {
+    const { container } = render(
+      <MemoryRouter>
+        <ApplicationsPage />
+      </MemoryRouter>
+    );
+
+    await screen.findByText("Jamie Stone");
+    expect(container.querySelector(".rc-applications-list-scroll")).toBeTruthy();
+    expect(container.querySelector(".rc-applications-detail")).toBeTruthy();
+  });
+
   it("renders without crashing for a free-tier landlord", async () => {
     render(
       <MemoryRouter>

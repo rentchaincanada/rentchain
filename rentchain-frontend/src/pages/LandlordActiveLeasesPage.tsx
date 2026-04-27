@@ -240,11 +240,51 @@ export default function LandlordActiveLeasesPage() {
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
-      <div style={{ display: "grid", gap: 6 }}>
-        <div style={{ fontSize: 24, fontWeight: 800 }}>Lease operations</div>
-        <div style={{ color: "#475569", fontSize: 14 }}>
-          Keep canonical lease records visible, reconcile occupied units missing leases, and use the ledger and archive views safely.
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "flex-start" }}>
+        <div style={{ display: "grid", gap: 6 }}>
+          <div style={{ fontSize: 24, fontWeight: 800 }}>Lease operations</div>
+          <div style={{ color: "#475569", fontSize: 14 }}>
+            Keep canonical lease records visible, reconcile occupied units missing leases, and use the ledger and archive views safely.
+          </div>
         </div>
+        <button
+          type="button"
+          className="no-print"
+          onClick={() => window.print()}
+          style={{ padding: "8px 10px", borderRadius: 12, border: "1px solid #E5E7EB", background: "#FFFFFF", fontWeight: 900, cursor: "pointer" }}
+        >
+          Print / Save PDF
+        </button>
+      </div>
+
+      <div className="print-only print-only-summary">
+        <div className="printHeader">
+          <div className="printTitle">Lease operations summary</div>
+          <div className="printMeta">
+            <div>View: {view === "archived" ? "Archived leases" : "Active leases"}</div>
+            <div>Visible leases: {filteredLeases.length}</div>
+          </div>
+        </div>
+        <table className="printTable">
+          <thead>
+            <tr>
+              <th>Property</th>
+              <th>Unit</th>
+              <th>Tenant</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredLeases.map((lease) => (
+              <tr key={lease.id}>
+                <td>{lease.propertyName || "Property"}</td>
+                <td>{lease.unitNumber || "—"}</td>
+                <td>{lease.tenantName || "—"}</td>
+                <td>{prettyLeaseStatus(lease.status)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>

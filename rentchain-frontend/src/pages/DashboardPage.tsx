@@ -591,12 +591,19 @@ const DashboardPage: React.FC = () => {
           </Card>
         ) : null}
 
-        {dataReady ? <KpiStrip kpis={kpis} loading={loading} /> : null}
+        {dataReady ? (
+          <KpiStrip
+            kpis={kpis}
+            loading={loading}
+            links={{ openActionsCount: "/dashboard#open-actions" }}
+          />
+        ) : null}
         {dataReady ? (
           <div style={{ marginTop: spacing.md }}>
             <PortfolioCredibilitySummaryCard
               summary={data?.portfolioCredibilitySummary ?? null}
               activeLeasesHref="/leases"
+              reviewItemsHref="/applications?status=review"
             />
           </div>
         ) : null}
@@ -726,13 +733,15 @@ const DashboardPage: React.FC = () => {
               gap: spacing.md,
             }}
           >
-            <ActionRequiredPanel
-              items={actions}
-              loading={loading}
-              viewAllEnabled={false}
-              title="Action required"
-              emptyLabel="No pending actions. Add a property or invite a tenant to begin."
-            />
+            <div id="open-actions">
+              <ActionRequiredPanel
+                items={actions}
+                loading={loading}
+                viewAllEnabled={false}
+                title="Action required"
+                emptyLabel="No pending actions. Add a property or invite a tenant to begin."
+              />
+            </div>
             <Card style={{ padding: spacing.md, border: `1px solid ${colors.border}` }}>
               <div style={{ fontWeight: 700, marginBottom: spacing.sm }}>Quick actions</div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: spacing.sm }}>

@@ -108,6 +108,10 @@
 }
 
 @media (max-width: 768px) {
+  .rc-applications-grid {
+    overflow: visible;
+  }
+
   .rc-applications-header {
     position: sticky;
     top: 0;
@@ -135,10 +139,19 @@
 
   .rc-applications-list-scroll {
     overflow: visible;
+    max-height: none;
   }
 
   .rc-applications-card-header {
     align-items: flex-start;
+  }
+
+  .rc-applications-list-item {
+    align-items: flex-start;
+  }
+
+  .rc-applications-detail {
+    overflow-x: auto;
   }
 
   .rc-applications-screening-grid {

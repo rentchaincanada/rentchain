@@ -1,6 +1,14 @@
 import React from "react";
+import { Link } from "react-router-dom";
 import { Card } from "../ui/Ui";
 import { colors, spacing, text } from "../../styles/tokens";
+const itemsOrder = [
+  { key: "propertiesCount", label: "Properties" },
+  { key: "unitsCount", label: "Units" },
+  { key: "tenantsCount", label: "Tenants" },
+  { key: "openActionsCount", label: "Open Actions" },
+  { key: "delinquentCount", label: "Delinquencies" },
+] as const;
 
 type Props = {
   kpis?: {
@@ -11,17 +19,10 @@ type Props = {
     delinquentCount: number;
   } | null;
   loading?: boolean;
+  links?: Partial<Record<(typeof itemsOrder)[number]["key"], string>>;
 };
 
-const itemsOrder = [
-  { key: "propertiesCount", label: "Properties" },
-  { key: "unitsCount", label: "Units" },
-  { key: "tenantsCount", label: "Tenants" },
-  { key: "openActionsCount", label: "Open Actions" },
-  { key: "delinquentCount", label: "Delinquencies" },
-] as const;
-
-export function KpiStrip({ kpis, loading }: Props) {
+export function KpiStrip({ kpis, loading, links }: Props) {
   const [isMobile, setIsMobile] = React.useState(false);
 
   React.useEffect(() => {
@@ -70,6 +71,13 @@ export function KpiStrip({ kpis, loading }: Props) {
                   marginBottom: 8,
                 }}
               />
+            ) : links?.[item.key] ? (
+              <Link
+                to={String(links[item.key])}
+                style={{ fontSize: isMobile ? 18 : 20, fontWeight: 800, color: text.primary, textDecoration: "underline" }}
+              >
+                {Number(value).toLocaleString()}
+              </Link>
             ) : (
               <div style={{ fontSize: isMobile ? 18 : 20, fontWeight: 800 }}>
                 {Number(value).toLocaleString()}

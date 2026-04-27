@@ -4,7 +4,11 @@ export type Conversation = {
   id: string;
   landlordId?: string | null;
   tenantId?: string | null;
+  propertyId?: string | null;
   unitId?: string | null;
+  tenantDisplayName?: string | null;
+  propertyDisplayLabel?: string | null;
+  unitDisplayLabel?: string | null;
   lastMessageAt?: number | null;
   createdAt?: number | null;
   hasUnread?: boolean;
