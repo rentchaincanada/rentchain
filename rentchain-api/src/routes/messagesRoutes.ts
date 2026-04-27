@@ -32,12 +32,91 @@ function normalizeConversation(doc: any) {
     id,
     landlordId: data.landlordId || null,
     tenantId: data.tenantId || null,
+    propertyId: data.propertyId || null,
     unitId: data.unitId || null,
     lastMessageAt: toMillis(data.lastMessageAt) || null,
     lastReadAtLandlord: toMillis(data.lastReadAtLandlord) || null,
     lastReadAtTenant: toMillis(data.lastReadAtTenant) || null,
     createdAt: toMillis(data.createdAt) || null,
   };
+}
+
+function normalizeUnitLabel(value: any) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  return /^unit\b/i.test(raw) ? raw : `Unit ${raw}`;
+}
+
+function buildPropertyLabel(property: any) {
+  return stringOrNull(property?.name) || stringOrNull(property?.addressLine1) || null;
+}
+
+function buildTenantLabel(tenant: any) {
+  return stringOrNull(tenant?.fullName) || stringOrNull(tenant?.name) || null;
+}
+
+async function enrichConversationDisplay<T extends ReturnType<typeof normalizeConversation>>(conversations: T[]) {
+  const tenantIds = Array.from(
+    new Set(conversations.map((conversation) => stringOrNull(conversation.tenantId)).filter(Boolean))
+  ) as string[];
+  const propertyIds = Array.from(
+    new Set(conversations.map((conversation) => stringOrNull((conversation as any).propertyId)).filter(Boolean))
+  ) as string[];
+  const unitIds = Array.from(
+    new Set(conversations.map((conversation) => stringOrNull(conversation.unitId)).filter(Boolean))
+  ) as string[];
+
+  const [tenants, properties, units] = await Promise.all([
+    Promise.all(
+      tenantIds.map(async (tenantId) => {
+        const snap = await db.collection("tenants").doc(tenantId).get();
+        return [tenantId, snap.exists ? buildTenantLabel(snap.data() as any) : null] as const;
+      })
+    ),
+    Promise.all(
+      propertyIds.map(async (propertyId) => {
+        const snap = await db.collection("properties").doc(propertyId).get();
+        return [propertyId, snap.exists ? (snap.data() as any) : null] as const;
+      })
+    ),
+    Promise.all(
+      unitIds.map(async (unitId) => {
+        const snap = await db.collection("units").doc(unitId).get();
+        const raw = snap.exists ? (snap.data() as any) : null;
+        return [unitId, raw ? normalizeUnitLabel(raw?.unitNumber || raw?.unitLabel || raw?.label || raw?.name) : null] as const;
+      })
+    ),
+  ]);
+
+  const tenantNameById = new Map<string, string | null>(tenants);
+  const propertyById = new Map<string, any>(properties);
+  const unitLabelById = new Map<string, string | null>(units);
+
+  return conversations.map((conversation) => {
+    const propertyId = stringOrNull((conversation as any).propertyId);
+    const unitId = stringOrNull(conversation.unitId);
+    const property = propertyId ? propertyById.get(propertyId) : null;
+    const fallbackUnitFromProperty = Array.isArray(property?.units)
+      ? property.units.find((unit: any) => {
+          const candidateId = stringOrNull(unit?.id) || stringOrNull(unit?.unitId) || stringOrNull(unit?.uid);
+          return candidateId && unitId && candidateId === unitId;
+        })
+      : null;
+
+    return {
+      ...conversation,
+      tenantDisplayName: tenantNameById.get(String(conversation.tenantId || "").trim()) || null,
+      propertyDisplayLabel: buildPropertyLabel(property),
+      unitDisplayLabel:
+        (unitId ? unitLabelById.get(unitId) : null) ||
+        normalizeUnitLabel(
+          fallbackUnitFromProperty?.unitNumber ||
+            fallbackUnitFromProperty?.label ||
+            fallbackUnitFromProperty?.name
+        ) ||
+        null,
+    };
+  });
 }
 
 function uniqueEmails(values: Array<string | null | undefined>) {
@@ -196,7 +275,8 @@ router.get("/landlord/messages/conversations", requireLandlord, async (req: any,
       .limit(100)
       .get();
 
-    const items = snap.docs.map(normalizeConversation).map((c: any) => ({
+    const normalized = snap.docs.map(normalizeConversation);
+    const items = (await enrichConversationDisplay(normalized)).map((c: any) => ({
       ...c,
       hasUnread:
         c.lastMessageAt != null &&
@@ -221,7 +301,7 @@ router.get("/landlord/messages/conversations/:id", requireLandlord, async (req: 
   try {
     const convoSnap = await db.collection("conversations").doc(id).get();
     if (!convoSnap.exists) return res.status(404).json({ ok: false, error: "Conversation not found" });
-    const convo = normalizeConversation(convoSnap);
+    const convo = (await enrichConversationDisplay([normalizeConversation(convoSnap)]))[0];
     if (convo.landlordId !== landlordId) return res.status(403).json({ ok: false, error: "Forbidden" });
 
     const msgSnap = await db
@@ -251,7 +331,7 @@ router.post("/landlord/messages/conversations/:id", requireLandlord, async (req:
   try {
     const convoSnap = await db.collection("conversations").doc(id).get();
     if (!convoSnap.exists) return res.status(404).json({ ok: false, error: "Conversation not found" });
-    const convo = normalizeConversation(convoSnap);
+    const convo = (await enrichConversationDisplay([normalizeConversation(convoSnap)]))[0];
     if (convo.landlordId !== landlordId) return res.status(403).json({ ok: false, error: "Forbidden" });
 
     const msg = await addMessage({ conversationId: id, senderRole: "landlord", body });

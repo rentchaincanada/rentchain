@@ -19,6 +19,24 @@ const POLL_CONVERSATIONS_MS = 15000;
 const POLL_THREAD_MS = 12000;
 const MAX_CONVERSATIONS_BACKOFF_MS = 120000;
 
+function buildConversationTitle(conversation: Conversation | null) {
+  if (!conversation) return "Conversation";
+  const tenantName = String(conversation.tenantDisplayName || "").trim();
+  const propertyLabel = String(conversation.propertyDisplayLabel || "").trim();
+  const unitLabel = String(conversation.unitDisplayLabel || "").trim();
+  const locationLabel = [propertyLabel, unitLabel].filter(Boolean).join(" / ");
+  if (tenantName && locationLabel) return `${tenantName} • ${locationLabel}`;
+  if (tenantName) return tenantName;
+  if (locationLabel) return locationLabel;
+  return "Conversation";
+}
+
+function buildConversationMeta(conversation: Conversation) {
+  const propertyLabel = String(conversation.propertyDisplayLabel || "").trim();
+  const unitLabel = String(conversation.unitDisplayLabel || "").trim();
+  return [propertyLabel, unitLabel].filter(Boolean).join(" / ") || "Tenant conversation";
+}
+
 export default function MessagesPage() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -143,6 +161,7 @@ export default function MessagesPage() {
     () => conversations.find((c) => c.id === selectedId) || null,
     [conversations, selectedId]
   );
+  const selectedConversationTitle = buildConversationTitle(selectedConversation);
 
   return (
     <div className="rc-messages-page">
@@ -187,7 +206,7 @@ export default function MessagesPage() {
         <ResponsiveMasterDetail
           masterTitle="Conversations"
           hasSelection={Boolean(selectedId)}
-          selectedLabel={`Tenant ${selectedConversation?.tenantId || "unknown"}`}
+          selectedLabel={selectedConversationTitle}
           onClearSelection={() => {
             setSelectedId(null);
             navigate("/messages");
@@ -207,7 +226,7 @@ export default function MessagesPage() {
                 <option value="">Select conversation</option>
                 {conversations.map((c) => (
                   <option key={c.id} value={c.id}>
-                    Tenant {c.tenantId || "unknown"}
+                    {buildConversationTitle(c)}
                   </option>
                 ))}
               </select>
@@ -237,14 +256,14 @@ export default function MessagesPage() {
                     >
                       <div className="rc-messages-list-item-row">
                         <div className="rc-messages-list-item-title">
-                          Tenant {c.tenantId || "unknown"}
+                          {buildConversationTitle(c)}
                         </div>
                         {c.hasUnread ? (
                           <span className="rc-messages-unread-dot" />
                         ) : null}
                       </div>
                       <div className="rc-messages-list-item-meta">
-                        Unit {c.unitId || "n/a"}
+                        {buildConversationMeta(c)}
                       </div>
                     </button>
                   );
@@ -258,7 +277,7 @@ export default function MessagesPage() {
                 <>
                   <div className="rc-messages-thread-header">
                     <div className="rc-messages-thread-title">
-                      Conversation with tenant {selectedConversation.tenantId || "unknown"}
+                      {selectedConversationTitle}
                     </div>
                   </div>
                   <div className="rc-messages-thread-body">

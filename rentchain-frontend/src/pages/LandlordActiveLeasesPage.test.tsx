@@ -92,8 +92,9 @@ describe("LandlordActiveLeasesPage", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText("Harbour View")).toBeInTheDocument();
-    expect(screen.getByText("Lease fully executed")).toBeInTheDocument();
+    expect((await screen.findAllByText("Harbour View")).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Print / Save PDF" })).toBeInTheDocument();
+    expect(screen.getAllByText("Lease fully executed").length).toBeGreaterThan(0);
     expect(screen.getByRole("link", { name: "View" })).toHaveAttribute("href", "/leases/lease-1/ledger");
     expect(screen.getByRole("link", { name: "Email" })).toHaveAttribute(
       "href",
@@ -191,7 +192,7 @@ describe("LandlordActiveLeasesPage", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText("Archived Place")).toBeInTheDocument();
+    expect((await screen.findAllByText("Archived Place")).length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole("button", { name: "Restore" }));
     await waitFor(() => expect(mocks.restoreLeaseRecord).toHaveBeenCalledWith("lease-2"));
   });
@@ -246,8 +247,8 @@ describe("LandlordActiveLeasesPage", () => {
     expect(screen.queryByText("Jane Tenant")).not.toBeInTheDocument();
 
     fireEvent.change(search, { target: { value: "dockside" } });
-    expect(screen.getByText("Dockside Flats")).toBeInTheDocument();
-    expect(screen.queryByText("Harbour View")).not.toBeInTheDocument();
+    expect(screen.getAllByText("Dockside Flats").length).toBeGreaterThan(0);
+    expect(screen.queryAllByText("Harbour View")).toHaveLength(0);
 
     fireEvent.change(search, { target: { value: "no-match" } });
     expect(screen.getByText("No leases match your search.")).toBeInTheDocument();
@@ -293,8 +294,8 @@ describe("LandlordActiveLeasesPage", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText("Harbour View")).toBeInTheDocument();
-    expect(screen.queryByText("Property_test")).not.toBeInTheDocument();
-    expect(screen.queryByText("test2")).not.toBeInTheDocument();
+    expect((await screen.findAllByText("Harbour View")).length).toBeGreaterThan(0);
+    expect(screen.queryAllByText("Property_test")).toHaveLength(0);
+    expect(screen.queryAllByText("test2")).toHaveLength(0);
   });
 });

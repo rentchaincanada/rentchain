@@ -119,6 +119,19 @@ export function GetTransUnionAccessModal({
             border: `1px solid ${colors.border}`,
             borderRadius: radius.md,
             padding: spacing.sm,
+            background: colors.bg,
+            color: text.muted,
+            fontSize: "0.92rem",
+            lineHeight: 1.6,
+          }}
+        >
+          Connection details are not available yet. If the connection window does not open on mobile, try again or continue on desktop.
+        </div>
+        <div
+          style={{
+            border: `1px solid ${colors.border}`,
+            borderRadius: radius.md,
+            padding: spacing.sm,
             background: "rgba(15,118,110,0.06)",
             color: text.muted,
             fontSize: "0.92rem",

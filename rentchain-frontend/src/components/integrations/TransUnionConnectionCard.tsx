@@ -21,6 +21,13 @@ type Props = {
   lastScreeningDate?: string | number | null;
 };
 
+function safeLabel(value: unknown) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+  if (raw.toLowerCase() === "null" || raw.toLowerCase() === "undefined") return null;
+  return raw;
+}
+
 function ActionRow({
   actions,
 }: {
@@ -64,8 +71,11 @@ export function TransUnionConnectionCard({
   const completedCount = Number.isFinite(Number(screeningsCompletedCount))
     ? Number(screeningsCompletedCount)
     : null;
+  const safeSelectedApplicationLabel = safeLabel(selectedApplicationLabel);
   const formattedLastScreeningDate =
     lastScreeningDate == null
+      ? null
+      : Number.isNaN(new Date(lastScreeningDate).getTime())
       ? null
       : new Date(lastScreeningDate).toLocaleDateString();
 
@@ -91,7 +101,7 @@ export function TransUnionConnectionCard({
       ? "You already have an application in context, so you can move straight into screening."
       : "Choose an applicant from Applications first, then start screening from that application context.";
     nextStep = readyToScreen
-      ? `Next step: start screening${selectedApplicationLabel ? ` for ${selectedApplicationLabel}` : ""}.`
+      ? `Next step: start screening${safeSelectedApplicationLabel ? ` for ${safeSelectedApplicationLabel}` : ""}.`
       : "Next step: choose an applicant below, then start your first screening.";
     actions = [
       { label: "Update Credentials", onClick: onUpdateCredentials },

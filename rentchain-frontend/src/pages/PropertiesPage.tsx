@@ -867,6 +867,44 @@ const PropertiesPage: React.FC = () => {
                   <strong>Edit Units (stub)</strong>  wire this to your Units edit flow.
                 </div>
               ) : null}
+              {selectedProperty ? (
+                <>
+                  <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                    <Button
+                      type="button"
+                      className="no-print"
+                      onClick={() => window.print()}
+                    >
+                      Print / Save PDF
+                    </Button>
+                  </div>
+                  <div className="print-only print-only-summary">
+                    <div className="printHeader">
+                      <div className="printTitle">{selectedProperty.name || selectedProperty.addressLine1 || "Property summary"}</div>
+                      <div className="printMeta">
+                        <div>{[selectedProperty.addressLine1, selectedProperty.city].filter(Boolean).join(", ") || "Address not available"}</div>
+                        <div>Status: {selectedProperty.portfolioStatus || "active"}</div>
+                      </div>
+                    </div>
+                    <table className="printTable">
+                      <thead>
+                        <tr>
+                          <th>Unit</th>
+                          <th>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(Array.isArray((selectedProperty as any)?.units) ? (selectedProperty as any).units : []).map((unit: any, index: number) => (
+                          <tr key={String(unit?.id || unit?.unitId || unit?.uid || index)}>
+                            <td>{String(unit?.unitNumber || unit?.label || unit?.name || "—")}</td>
+                            <td>{String(unit?.status || unit?.occupancyStatus || "unknown")}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              ) : null}
               <PropertyDetailPanel
                 property={selectedProperty}
                 onRefresh={loadProperties}

@@ -156,6 +156,15 @@ describe("messagesRoutes notifications", () => {
     });
     ensureCollection("tenants").set("tenant-1", {
       email: "tenant@example.com",
+      fullName: "Taylor Tenant",
+    });
+    ensureCollection("properties").set("prop-1", {
+      name: "Harbour View",
+      units: [{ id: "unit-1", unitNumber: "2A" }],
+    });
+    ensureCollection("units").set("unit-1", {
+      propertyId: "prop-1",
+      unitNumber: "2A",
     });
     ensureCollection("users").set("landlord-1", {
       email: "landlord@example.com",
@@ -186,5 +195,23 @@ describe("messagesRoutes notifications", () => {
 
     expect(res.status).toBe(201);
     expect(sendEmailMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns landlord-safe conversation display labels", async () => {
+    const router = await createRouter();
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/landlord/messages/conversations",
+      headers: { "x-test-user": JSON.stringify({ id: "landlord-1", landlordId: "landlord-1", role: "landlord" }) },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.conversations?.[0]).toEqual(
+      expect.objectContaining({
+        tenantDisplayName: "Taylor Tenant",
+        propertyDisplayLabel: "Harbour View",
+        unitDisplayLabel: "Unit 2A",
+      })
+    );
   });
 });

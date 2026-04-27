@@ -119,8 +119,9 @@ describe("PortfolioHealthSummaryPage", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText(/stable overall, with a few areas to monitor/i)).toBeInTheDocument();
-    expect(screen.getByText(/Screening health/i)).toBeInTheDocument();
+    expect((await screen.findAllByText(/stable overall, with a few areas to monitor/i)).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Print / Save PDF" })).toBeInTheDocument();
+    expect(screen.getAllByText(/Screening health/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Resident feedback patterns/i)).toBeInTheDocument();
     expect(screen.getByText(/Workflow follow-through/i)).toBeInTheDocument();
   });

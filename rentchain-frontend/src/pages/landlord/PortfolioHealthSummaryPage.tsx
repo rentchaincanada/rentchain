@@ -212,13 +212,60 @@ export default function PortfolioHealthSummaryPage() {
     <MacShell title="Portfolio health">
       <div style={{ display: "grid", gap: 16 }}>
         <Section>
-          <div style={{ display: "grid", gap: 6 }}>
-            <h1 style={{ margin: 0, fontSize: "1.5rem" }}>Portfolio health</h1>
-            <div style={{ color: "#475569", maxWidth: 820 }}>
-              A high-level view of overall portfolio health, recent direction, and where follow-through may help most.
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "flex-start" }}>
+            <div style={{ display: "grid", gap: 6 }}>
+              <h1 style={{ margin: 0, fontSize: "1.5rem" }}>Portfolio health</h1>
+              <div style={{ color: "#475569", maxWidth: 820 }}>
+                A high-level view of overall portfolio health, recent direction, and where follow-through may help most.
+              </div>
             </div>
+            <button
+              type="button"
+              className="no-print"
+              onClick={() => window.print()}
+              style={{ padding: "8px 10px", borderRadius: 12, border: "1px solid #E5E7EB", background: "#FFFFFF", fontWeight: 900, cursor: "pointer" }}
+            >
+              Print / Save PDF
+            </button>
           </div>
         </Section>
+
+        {summary ? (
+          <div className="print-only print-only-summary">
+            <div className="printHeader">
+              <div className="printTitle">Portfolio health summary</div>
+              <div className="printMeta">
+                <div>Generated: {summary.generatedAt || "Current view"}</div>
+                <div>Status: {summary.overall?.status || "unknown"}</div>
+              </div>
+            </div>
+            <div className="printH3">Overview</div>
+            <div>{summary.overall?.headline || summary.overall?.summary || "Portfolio health summary is not available."}</div>
+            {summary.dimensions?.length ? (
+              <>
+                <div className="printH3">Dimensions</div>
+                <table className="printTable">
+                  <thead>
+                    <tr>
+                      <th>Area</th>
+                      <th>Status</th>
+                      <th>Summary</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {summary.dimensions.map((dimension) => (
+                      <tr key={dimension.key}>
+                        <td>{dimension.label}</td>
+                        <td>{dimension.status}</td>
+                        <td>{dimension.summary}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            ) : null}
+          </div>
+        ) : null}
 
         {entryMessage ? (
           <Card style={{ borderColor: "#99f6e4", background: "#f0fdfa", color: "#115e59" }}>{entryMessage}</Card>

@@ -5,8 +5,24 @@ import { db } from "../config/firebase";
 import { resolveLandlordAndTier } from "../lib/landlordResolver";
 import { computeNoResponseState, normalizeLeaseRecord } from "../services/leaseNoticeWorkflowService";
 import { computePortfolioCredibilitySummary } from "../services/risk/portfolioCredibilitySummary";
+import {
+  isTargetedHiddenLeaseId,
+  isTargetedHiddenTenantId,
+} from "../lib/testDataVisibilityTargets";
 
 const router = express.Router();
+
+function normalizePortfolioStatus(value: unknown): "active" | "archived" {
+  return String(value || "").trim().toLowerCase() === "archived" ? "archived" : "active";
+}
+
+function isVisibleActiveLease(raw: any) {
+  return raw?.hiddenFromActiveLists !== true && !isTargetedHiddenLeaseId(raw?.id);
+}
+
+function isVisibleActiveTenant(raw: any) {
+  return raw?.hiddenFromActiveLists !== true && !isTargetedHiddenTenantId(raw?.id);
+}
 
 // Set route source header for debugging
 router.use((req, res, next) => {
@@ -144,6 +160,12 @@ router.get("/summary", requireAuth, async (req: any, res) => {
   ]);
 
   const properties = propertiesSnap.docs.map((doc) => ({ id: doc.id, ...(doc.data() as any) }));
+  const activePropertyIds = new Set(
+    properties
+      .filter((property) => normalizePortfolioStatus(property?.portfolioStatus) === "active")
+      .map((property) => String(property?.id || "").trim())
+      .filter(Boolean)
+  );
   const unitsCount = properties.reduce((sum, property) => {
     const units = Array.isArray(property?.units) ? property.units.length : 0;
     return sum + units;
@@ -169,6 +191,13 @@ router.get("/summary", requireAuth, async (req: any, res) => {
           : null,
     };
   });
+  const activeTenantsCount = tenantsSnap.docs.reduce((count, doc) => {
+    const raw = { id: doc.id, ...(doc.data() as any) };
+    const propertyId = String(raw?.propertyId || "").trim();
+    if (!propertyId || !activePropertyIds.has(propertyId)) return count;
+    if (!isVisibleActiveTenant(raw)) return count;
+    return count + 1;
+  }, 0);
 
   const recentActivityRaw: Array<{
     id: string;
@@ -242,6 +271,7 @@ router.get("/summary", requireAuth, async (req: any, res) => {
   const leases = leasesSnap.docs
     .map((doc) => normalizeLeaseRecord(doc.id, doc.data() as any))
     .filter((lease) => currentLeaseStatuses.has(String(lease.status || "").toLowerCase()));
+  const visibleLeases = leases.filter(isVisibleActiveLease);
   const leaseNotices = leaseNoticesSnap.docs.map((doc) => ({ id: doc.id, ...(doc.data() as any) }));
   const latestNoticeByLeaseId = new Map<string, any>();
   for (const notice of leaseNotices.sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0))) {
@@ -251,7 +281,7 @@ router.get("/summary", requireAuth, async (req: any, res) => {
   }
   const soonWindowMs = 120 * 24 * 60 * 60 * 1000;
   const portfolioCredibilitySummary = computePortfolioCredibilitySummary({
-    leases: leases.map((lease) => ({
+    leases: visibleLeases.map((lease) => ({
       id: lease.id,
       propertyId: lease.propertyId,
       status: lease.status,
@@ -274,7 +304,7 @@ router.get("/summary", requireAuth, async (req: any, res) => {
   });
 
   const leaseNoticeSummary = {
-    expiringSoon: leases.filter((lease) => {
+    expiringSoon: visibleLeases.filter((lease) => {
       const dueAt = Number(lease.nextNoticeDueAt || 0);
       return dueAt > 0 && dueAt <= now + soonWindowMs;
     }).length,
@@ -285,7 +315,8 @@ router.get("/summary", requireAuth, async (req: any, res) => {
   };
   latestNoticeByLeaseId.forEach((notice, leaseId) => {
     const response = String(notice?.tenantResponse || "pending").trim().toLowerCase();
-    const lease = leases.find((row) => row.id === leaseId) || null;
+    const lease = visibleLeases.find((row) => row.id === leaseId) || null;
+    if (!lease) return;
     const noResponse = computeNoResponseState(notice);
     if (noResponse) {
       leaseNoticeSummary.noResponse += 1;
@@ -328,7 +359,7 @@ router.get("/summary", requireAuth, async (req: any, res) => {
         href: "/applications",
       });
     }
-    if (tenantsSnap.empty) {
+    if (activeTenantsCount === 0) {
       actions.push({
         id: "invite-tenant",
         title: "Invite a tenant",
@@ -350,7 +381,7 @@ router.get("/summary", requireAuth, async (req: any, res) => {
     kpis: {
       propertiesCount: propertiesSnap.size,
       unitsCount,
-      tenantsCount: tenantsSnap.size,
+      tenantsCount: activeTenantsCount,
       openActionsCount: actions.length,
       delinquentCount: 0,
       screeningsCount,

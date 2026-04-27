@@ -110,4 +110,27 @@ describe("TransUnionConnectionCard", () => {
     fireEvent.click(screen.getByRole("button", { name: "Choose an Applicant" }));
     expect(onChooseApplicant).toHaveBeenCalledTimes(1);
   });
+
+  it("does not render literal null text in the next-step copy", () => {
+    render(
+      <TransUnionConnectionCard
+        integration={buildIntegration({
+          status: "connected",
+          memberCodeMasked: "*******7788",
+        })}
+        onGetAccess={vi.fn()}
+        onConnectExisting={vi.fn()}
+        onEnterDetails={vi.fn()}
+        onViewInstructions={vi.fn()}
+        onUpdateCredentials={vi.fn()}
+        onDisconnect={vi.fn()}
+        onStartScreening={vi.fn()}
+        readyToScreen
+        selectedApplicationLabel={"null" as any}
+      />
+    );
+
+    expect(screen.queryByText(/null\/null/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/\bnull\b/i)).not.toBeInTheDocument();
+  });
 });

@@ -197,6 +197,9 @@ export function ConnectTransUnionModal({
             your business. Screening requests are initiated under your TransUnion credentials within
             RentChain.
           </p>
+          <p style={{ margin: 0, color: text.subtle, fontSize: "0.92rem" }}>
+            If connection details are not available yet, use the access flow first. If the connection window does not open on mobile, try again or continue on desktop.
+          </p>
         </div>
         <div style={{ display: "grid", gap: spacing.sm, minHeight: 0, flex: 1, overflowY: "auto" }}>
           <div

@@ -8,6 +8,7 @@ import type { PortfolioCredibilitySummary } from "@/types/portfolioCredibilitySu
 interface PortfolioCredibilitySummaryCardProps {
   summary?: PortfolioCredibilitySummary | null;
   activeLeasesHref?: string;
+  reviewItemsHref?: string;
 }
 
 function healthTone(status?: PortfolioCredibilitySummary["healthStatus"] | null) {
@@ -45,6 +46,7 @@ const MetricTile: React.FC<{ label: string; value: React.ReactNode; caption?: Re
 export const PortfolioCredibilitySummaryCard: React.FC<PortfolioCredibilitySummaryCardProps> = ({
   summary,
   activeLeasesHref,
+  reviewItemsHref,
 }) => {
   const [isMobile, setIsMobile] = React.useState(false);
 
@@ -94,7 +96,7 @@ export const PortfolioCredibilitySummaryCard: React.FC<PortfolioCredibilitySumma
   const tone = healthTone(summary.healthStatus);
 
   return (
-    <Card style={{ display: "grid", gap: spacing.md }}>
+    <Card style={{ display: "grid", gap: spacing.md, overflowX: isMobile ? "auto" : "visible" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: spacing.md, alignItems: "flex-start", flexWrap: "wrap" }}>
         <div style={{ display: "grid", gap: 6 }}>
           <div style={{ color: text.primary, fontSize: "1rem", fontWeight: 800 }}>Portfolio credibility summary</div>
@@ -147,7 +149,19 @@ export const PortfolioCredibilitySummaryCard: React.FC<PortfolioCredibilitySumma
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: metricsGridColumns, gap: spacing.md }}>
-        <MetricTile label="Review items" value={summary.lowConfidenceCount} caption="Low-confidence records to review" />
+        <MetricTile
+          label="Review items"
+          value={
+            reviewItemsHref ? (
+              <Link to={reviewItemsHref} style={{ color: text.primary, textDecoration: "underline" }}>
+                {summary.lowConfidenceCount}
+              </Link>
+            ) : (
+              summary.lowConfidenceCount
+            )
+          }
+          caption="Low-confidence records to review"
+        />
         <MetricTile label="Missing credibility" value={summary.missingCredibilityCount} caption="Records without current score or risk data" />
       </div>
     </Card>

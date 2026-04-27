@@ -19,6 +19,9 @@ describe("ConnectTransUnionModal", () => {
         "Connect your TransUnion membership by entering the member code and passcode issued to your business. Screening requests are initiated under your TransUnion credentials within RentChain."
       )
     ).toBeInTheDocument();
+    expect(
+      screen.getByText(/If connection details are not available yet, use the access flow first/i)
+    ).toBeInTheDocument();
     expect(screen.getByText("Need TransUnion access?")).toBeInTheDocument();
     expect(screen.getByText("Already credentialed?")).toBeInTheDocument();
     expect(screen.getByText("Choose path")).toBeInTheDocument();
