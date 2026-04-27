@@ -100,6 +100,23 @@ export interface LandlordActiveLease extends Lease {
       storedPaymentMethod: false;
     };
   } | null;
+  rentPaymentSummary?: {
+    paymentRail: {
+      enabled: boolean;
+      enabledAt: string | null;
+      processor: "stripe" | null;
+      blockedReason: string | null;
+    };
+    latestPayment: {
+      id: string;
+      amountCents: number;
+      currency: "cad";
+      status: "setup_required" | "checkout_created" | "payment_pending" | "paid" | "failed" | "canceled" | "expired";
+      createdAt: string;
+      updatedAt: string;
+      paidAt: string | null;
+    } | null;
+  } | null;
   hiddenFromActiveLists?: boolean;
   cleanupReason?: string | null;
   cleanupBatch?: string | null;
@@ -239,6 +256,49 @@ export async function restoreLeaseRecord(id: string): Promise<{ ok: true; lease:
     headers: { "Content-Type": "application/json" },
     body: "{}",
   });
+}
+
+export async function enableLeasePaymentRail(
+  id: string
+): Promise<{
+  ok: true;
+  data: {
+    leaseId: string;
+    paymentRail: {
+      enabled: true;
+      enabledAt: string;
+      processor: "stripe";
+      eligibility: "eligible";
+      blockedReason: null;
+    };
+  };
+}> {
+  return apiJson(`/leases/${encodeURIComponent(id)}/payment-rails/enable`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: "{}",
+  });
+}
+
+export async function getLeasePaymentStatus(id: string): Promise<{
+  paymentRail: {
+    enabled: boolean;
+    enabledAt: string | null;
+    processor: "stripe" | null;
+    blockedReason: string | null;
+  };
+  latestPayment: {
+    id: string;
+    amountCents: number;
+    currency: "cad";
+    status: "setup_required" | "checkout_created" | "payment_pending" | "paid" | "failed" | "canceled" | "expired";
+    createdAt: string;
+    updatedAt: string;
+    paidAt: string | null;
+  } | null;
+}> {
+  const res = await apiJson<{ ok: boolean; data: any }>(`/leases/${encodeURIComponent(id)}/payments`);
+  return res?.data;
 }
 
 export async function createLease(

@@ -12,6 +12,10 @@ import { recordScreeningPaymentFailed } from "../services/screeningPaymentTransa
 import { writeCanonicalEvent } from "../lib/events/buildEvent";
 import { buildScreeningMonetizationPatch } from "../services/screening/screeningMonetizationService";
 import {
+  extractRentPaymentMetadata,
+  updateRentPaymentFromWebhook,
+} from "../services/rentPayments/rentPaymentService";
+import {
   deriveBillingIntervalFromSubscription,
   deriveBillingTierFromSubscription,
   updateLandlordSubscriptionState,
@@ -543,9 +547,23 @@ export const stripeWebhookHandler = async (req: StripeWebhookRequest, res: Respo
   if (
     event.type === "checkout.session.completed" ||
     event.type === "checkout.session.async_payment_succeeded" ||
-    event.type === "payment_intent.succeeded"
+    event.type === "payment_intent.succeeded" ||
+    event.type === "checkout.session.expired"
   ) {
     try {
+      const rentPaymentEvent = extractRentPaymentMetadata(event);
+      if (rentPaymentEvent.rentPaymentId && rentPaymentEvent.nextStatus) {
+        await updateRentPaymentFromWebhook({
+          rentPaymentId: rentPaymentEvent.rentPaymentId,
+          nextStatus: rentPaymentEvent.nextStatus,
+          processorCheckoutSessionId: rentPaymentEvent.checkoutSessionId,
+          processorPaymentIntentId: rentPaymentEvent.paymentIntentId,
+          paidAt: rentPaymentEvent.paidAt,
+          eventId: event.id,
+        });
+        return res.status(200).json({ received: true });
+      }
+
       let orderId: string | undefined;
       let sessionId: string | undefined;
       let paymentIntentId: string | undefined;
@@ -702,6 +720,19 @@ export const stripeWebhookHandler = async (req: StripeWebhookRequest, res: Respo
 
   if (event.type === "checkout.session.async_payment_failed" || event.type === "payment_intent.payment_failed") {
     try {
+      const rentPaymentEvent = extractRentPaymentMetadata(event);
+      if (rentPaymentEvent.rentPaymentId && rentPaymentEvent.nextStatus) {
+        await updateRentPaymentFromWebhook({
+          rentPaymentId: rentPaymentEvent.rentPaymentId,
+          nextStatus: rentPaymentEvent.nextStatus,
+          processorCheckoutSessionId: rentPaymentEvent.checkoutSessionId,
+          processorPaymentIntentId: rentPaymentEvent.paymentIntentId,
+          paidAt: rentPaymentEvent.paidAt,
+          eventId: event.id,
+        });
+        return res.status(200).json({ received: true });
+      }
+
       let orderId: string | undefined;
       let sessionId: string | undefined;
       let paymentIntentId: string | undefined;

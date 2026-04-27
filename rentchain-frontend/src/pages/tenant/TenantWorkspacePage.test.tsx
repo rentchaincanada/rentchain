@@ -13,6 +13,7 @@ const tenantPortalApi = vi.hoisted(() => ({
   getTenantWorkspace: vi.fn(),
   getTenantLeaseWorkspace: vi.fn(),
   exportTenantIdentityPackage: vi.fn(),
+  createTenantLeasePaymentCheckout: vi.fn(),
   signTenantLease: vi.fn(),
   listTenantWorkspaceMaintenance: vi.fn(),
   redeemTenantWorkspaceInvite: vi.fn(),
@@ -298,6 +299,11 @@ describe("tenant workspace frontend shell", () => {
         consentRequired: true,
       },
     });
+    tenantPortalApi.createTenantLeasePaymentCheckout.mockResolvedValue({
+      rentPaymentId: "rp-1",
+      status: "checkout_created",
+      redirectUrl: "https://checkout.stripe.test/session/cs_test_1",
+    });
     tenantAttachmentsApi.getTenantAttachments.mockResolvedValue({
       ok: true,
       data: [
@@ -570,6 +576,15 @@ describe("tenant workspace frontend shell", () => {
             storedPaymentMethod: false,
           },
         },
+        rentPaymentSummary: {
+          paymentRail: {
+            enabled: true,
+            enabledAt: "2026-04-27T10:00:00.000Z",
+            processor: "stripe",
+            blockedReason: null,
+          },
+          latestPayment: null,
+        },
       },
       maintenance: [],
       tenantIdentityRecord: {
@@ -668,6 +683,8 @@ describe("tenant workspace frontend shell", () => {
     expect(screen.queryByText(/^Applicant$/i)).not.toBeInTheDocument();
     expect(screen.getAllByText(/Active tenancy/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/A lease reference is visible in your tenant workspace/i)).toBeInTheDocument();
+    expect(screen.getByText(/Payment processed by Stripe\. RentChain does not store card or bank payment details\./i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Pay rent/i })).toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: /Open payments/i }).length).toBeGreaterThan(0);
     expect(screen.getByText(/Needs reply/i)).toBeInTheDocument();
     expect(screen.getByText(/Please confirm the final move-in details/i)).toBeInTheDocument();
@@ -682,6 +699,74 @@ describe("tenant workspace frontend shell", () => {
     expect(screen.getAllByText(/No action needed/i).length).toBeGreaterThan(0);
     expect(screen.getByRole("link", { name: /Open document vault/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Open access/i })).toBeInTheDocument();
+  });
+
+  it("starts tenant checkout from the workspace when rent collection is enabled", async () => {
+    tenantPortalApi.getTenantWorkspace.mockResolvedValue({
+      context: {
+        authority: "active_tenant",
+        propertyId: "prop-1",
+        rc_prop_id: "rc-prop-1",
+        applicationId: "app-1",
+        leaseId: "lease-1",
+        tenantId: "tenant-1",
+        unitId: "unit-1",
+        invitedEmail: "tenant@example.com",
+      },
+      property: null,
+      application: null,
+      lease: {
+        leaseId: "lease-1",
+        startDate: "2026-02-01",
+        endDate: "2027-01-31",
+        monthlyRent: 1800,
+        status: "active",
+        documentUrl: null,
+        paymentReadiness: {
+          readinessStatus: "ready_to_configure",
+          readinessLabel: "Rent terms ready for future setup",
+          readinessDescription: "Ready.",
+          requiredNextAction: "confirm_payment_setup_later",
+          rentTerms: {
+            rentAmountAvailable: true,
+            dueDateAvailable: true,
+            leaseDatesAvailable: true,
+            tenantLinked: true,
+            leaseExecuted: true,
+          },
+          paymentSetup: {
+            processorConnected: false,
+            moneyMovementEnabled: false,
+            storedPaymentMethod: false,
+          },
+        },
+        rentPaymentSummary: {
+          paymentRail: {
+            enabled: true,
+            enabledAt: "2026-04-27T10:00:00.000Z",
+            processor: "stripe",
+            blockedReason: null,
+          },
+          latestPayment: null,
+        },
+      },
+      maintenance: [],
+      tenantIdentityRecord: null,
+      tenantCredibilitySignals: null,
+      identityTimeline: { events: [] },
+    });
+
+    render(
+      <MemoryRouter>
+        <TenantWorkspacePage />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /Pay rent/i }));
+
+    await waitFor(() => {
+      expect(tenantPortalApi.createTenantLeasePaymentCheckout).toHaveBeenCalledWith("lease-1");
+    });
   });
 
   it("renders a safe empty activity timeline", async () => {
@@ -1205,6 +1290,15 @@ describe("tenant workspace frontend shell", () => {
           storedPaymentMethod: false,
         },
       },
+      rentPaymentSummary: {
+        paymentRail: {
+          enabled: true,
+          enabledAt: "2026-04-27T10:00:00.000Z",
+          processor: "stripe",
+          blockedReason: null,
+        },
+        latestPayment: null,
+      },
     });
 
     render(
@@ -1219,6 +1313,8 @@ describe("tenant workspace frontend shell", () => {
     expect(screen.getByText(/^Lease document available$/i)).toBeInTheDocument();
     expect(screen.getByText(/^Lease fully executed$/i)).toBeInTheDocument();
     expect(screen.getByText(/Rent terms ready for future setup/i)).toBeInTheDocument();
+    expect(screen.getByText(/Payment processed by Stripe\. RentChain does not store card or bank payment details\./i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Pay rent/i })).toBeInTheDocument();
     expect(screen.getByText(/^Drawn signature$/i)).toBeInTheDocument();
     expect(screen.getByText(/^Taylor Tenant$/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Open lease document/i })).toBeInTheDocument();
@@ -1291,6 +1387,77 @@ describe("tenant workspace frontend shell", () => {
 
     await waitFor(() => expect(tenantPortalApi.signTenantLease).toHaveBeenCalledWith("lease-2"));
     expect(await screen.findByText(/^Tenant signature completed$/i)).toBeInTheDocument();
+  });
+
+  it("starts tenant checkout from the lease page when rent collection is enabled", async () => {
+    tenantPortalApi.getTenantLeaseWorkspace.mockResolvedValue({
+      leaseId: "lease-1",
+      startDate: "2026-02-01",
+      endDate: "2027-01-31",
+      monthlyRent: 1800,
+      status: "active",
+      documentUrl: "https://example.com/lease.pdf",
+      signatureStatus: "signed",
+      signatureReadinessLabel: "Lease signing complete",
+      signatureReadinessDescription: "Complete.",
+      tenantSignature: {
+        signedAt: "2026-02-01T10:00:00.000Z",
+        signatureMethod: "typed",
+        signatureDisplayName: "Taylor Tenant",
+      },
+      leasePdfStatus: "available",
+      leasePdfLabel: "Lease document available",
+      leasePdfDescription: "Available.",
+      leaseExecution: {
+        executionStatus: "fully_executed",
+        executionLabel: "Lease fully executed",
+        executionDescription: "Complete.",
+        requiredNextAction: "none",
+        tenantSignatureStatus: "completed",
+        landlordSignatureStatus: "completed",
+        pdfStatus: "generated",
+        completedAt: "2026-02-02T12:00:00.000Z",
+      },
+      paymentReadiness: {
+        readinessStatus: "ready_to_configure",
+        readinessLabel: "Rent terms ready for future setup",
+        readinessDescription: "Ready.",
+        requiredNextAction: "confirm_payment_setup_later",
+        rentTerms: {
+          rentAmountAvailable: true,
+          dueDateAvailable: true,
+          leaseDatesAvailable: true,
+          tenantLinked: true,
+          leaseExecuted: true,
+        },
+        paymentSetup: {
+          processorConnected: false,
+          moneyMovementEnabled: false,
+          storedPaymentMethod: false,
+        },
+      },
+      rentPaymentSummary: {
+        paymentRail: {
+          enabled: true,
+          enabledAt: "2026-04-27T10:00:00.000Z",
+          processor: "stripe",
+          blockedReason: null,
+        },
+        latestPayment: null,
+      },
+    });
+
+    render(
+      <MemoryRouter>
+        <TenantLeasePage />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /Pay rent/i }));
+
+    await waitFor(() => {
+      expect(tenantPortalApi.createTenantLeasePaymentCheckout).toHaveBeenCalledWith("lease-1");
+    });
   });
 
   it("renders maintenance page with safe projected data", async () => {

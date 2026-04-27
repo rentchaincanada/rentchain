@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import {
   archiveLeaseRecord,
   convertUnitReferenceToLease,
+  enableLeasePaymentRail,
   getActiveLeasesForLandlord,
   getArchivedLeasesForLandlord,
   getLeaseReconciliationCandidates,
@@ -149,6 +150,12 @@ function paymentReadinessChecklist(lease: LandlordActiveLease) {
   return missing.join(" · ");
 }
 
+function prettyRentPaymentStatus(status: string | null | undefined) {
+  const normalized = String(status || "").trim().toLowerCase();
+  if (!normalized) return "No payment started";
+  return normalized.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
 export default function LandlordActiveLeasesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const view = searchParams.get("view") === "archived" ? "archived" : "active";
@@ -159,6 +166,7 @@ export default function LandlordActiveLeasesPage() {
   const [searchQuery, setSearchQuery] = React.useState("");
   const [selectedCandidate, setSelectedCandidate] = React.useState<LeaseReconciliationCandidate | null>(null);
   const [convertSaving, setConvertSaving] = React.useState(false);
+  const [paymentRailBusyLeaseId, setPaymentRailBusyLeaseId] = React.useState<string | null>(null);
   const [occupantName, setOccupantName] = React.useState("");
   const [tenantEmail, setTenantEmail] = React.useState("");
   const [tenantPhone, setTenantPhone] = React.useState("");
@@ -218,6 +226,19 @@ export default function LandlordActiveLeasesPage() {
   async function handleRestore(lease: LandlordActiveLease) {
     await restoreLeaseRecord(lease.id);
     await load();
+  }
+
+  async function handleEnableRentCollection(lease: LandlordActiveLease) {
+    setPaymentRailBusyLeaseId(lease.id);
+    setError(null);
+    try {
+      await enableLeasePaymentRail(lease.id);
+      await load();
+    } catch (err: unknown) {
+      setError(errorMessage(err, "Failed to enable rent collection."));
+    } finally {
+      setPaymentRailBusyLeaseId(null);
+    }
   }
 
   async function handleConvert() {
@@ -528,6 +549,20 @@ export default function LandlordActiveLeasesPage() {
                           </div>
                         </div>
                       ) : null}
+                      {lease.rentPaymentSummary ? (
+                        <div style={{ display: "grid", gap: 4, marginTop: 6 }}>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: "#0f172a" }}>
+                            {lease.rentPaymentSummary.paymentRail.enabled ? "Rent collection enabled" : "Rent collection not enabled"}
+                          </div>
+                          <div style={{ color: "#64748b", fontSize: 12 }}>
+                            {lease.rentPaymentSummary.latestPayment
+                              ? prettyRentPaymentStatus(lease.rentPaymentSummary.latestPayment.status)
+                              : lease.rentPaymentSummary.paymentRail.blockedReason
+                              ? lease.rentPaymentSummary.paymentRail.blockedReason.replace(/_/g, " ")
+                              : "No payment started"}
+                          </div>
+                        </div>
+                      ) : null}
                     </td>
                     <td style={{ padding: 12 }}>{formatCurrency(lease.monthlyRent)}</td>
                     <td style={{ padding: 12 }}>
@@ -584,13 +619,26 @@ export default function LandlordActiveLeasesPage() {
                             Restore
                           </button>
                         ) : (
-                          <button
-                            type="button"
-                            onClick={() => void handleArchive(lease)}
-                            style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a" }}
-                          >
-                            Archive lease
-                          </button>
+                          <>
+                            {lease.rentPaymentSummary?.paymentRail.enabled !== true &&
+                            lease.paymentReadiness?.readinessStatus === "ready_to_configure" ? (
+                              <button
+                                type="button"
+                                onClick={() => void handleEnableRentCollection(lease)}
+                                disabled={paymentRailBusyLeaseId === lease.id}
+                                style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a" }}
+                              >
+                                {paymentRailBusyLeaseId === lease.id ? "Enabling..." : "Enable rent collection"}
+                              </button>
+                            ) : null}
+                            <button
+                              type="button"
+                              onClick={() => void handleArchive(lease)}
+                              style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a" }}
+                            >
+                              Archive lease
+                            </button>
+                          </>
                         )}
                       </div>
                     </td>

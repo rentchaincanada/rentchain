@@ -34,6 +34,12 @@ import {
 } from "../lib/testDataVisibilityTargets";
 import { deriveTenantSafeLeaseReadinessMetadata } from "../services/tenantPortal/tenantProjectionService";
 import { derivePaymentReadiness } from "../services/paymentReadiness/derivePaymentReadiness";
+import {
+  deriveRentPaymentEligibility,
+  enableRentCollectionForLease,
+  getRentPaymentSummaryForLease,
+} from "../services/rentPayments/rentPaymentService";
+import { isStripeConfigured } from "../services/stripeService";
 
 const router = Router();
 const LEDGER_COLLECTION = "ledgerEntries";
@@ -293,6 +299,29 @@ async function enrichLeaseRow(raw: any) {
   const tenantEmail =
     tenantSnap?.exists ? String(tenantSnap.data()?.email || "").trim() || null : null;
   const leaseReadiness = deriveTenantSafeLeaseReadinessMetadata(raw, { documentUrl, leaseId: lease.id });
+  const paymentReadiness = derivePaymentReadiness({
+    leaseId: lease.id,
+    monthlyRent: lease.monthlyRent,
+    startDate: lease.startDate,
+    endDate: lease.endDate,
+    dueDay: typeof raw?.dueDay === "number" ? raw.dueDay : null,
+    tenantId,
+    propertyId,
+    unitId: String(lease.unitId || lease.unitNumber || "").trim() || null,
+    leaseExecution: leaseReadiness.leaseExecution,
+  });
+  const eligibility = deriveRentPaymentEligibility({
+    lease,
+    paymentReadiness,
+    stripeConfigured: isStripeConfigured(),
+  });
+  const rentPaymentSummary = await getRentPaymentSummaryForLease({
+    leaseId: lease.id,
+    paymentRailEnabled: raw?.paymentRailEnabled === true,
+    paymentRailEnabledAt: raw?.paymentRailEnabledAt || null,
+    paymentRailProcessor: raw?.paymentRailProcessor || null,
+    blockedReason: eligibility.blockedReason,
+  });
 
   return {
     ...lease,
@@ -301,17 +330,8 @@ async function enrichLeaseRow(raw: any) {
     tenantEmail,
     documentUrl,
     ...leaseReadiness,
-    paymentReadiness: derivePaymentReadiness({
-      leaseId: lease.id,
-      monthlyRent: lease.monthlyRent,
-      startDate: lease.startDate,
-      endDate: lease.endDate,
-      dueDay: typeof raw?.dueDay === "number" ? raw.dueDay : null,
-      tenantId,
-      propertyId,
-      unitId: String(lease.unitId || lease.unitNumber || "").trim() || null,
-      leaseExecution: leaseReadiness.leaseExecution,
-    }),
+    paymentReadiness,
+    rentPaymentSummary,
     archivedAt: raw?.archivedAt || null,
     archivedByUserId: raw?.archivedByUserId || null,
     isArchived: Boolean(raw?.archivedAt),
@@ -1218,6 +1238,116 @@ router.post("/:leaseId/archive", requireLandlord, async (req: any, res: Response
   } catch (err) {
     console.error("[POST /api/leases/:leaseId/archive] error", err);
     return res.status(500).json({ ok: false, error: "Failed to archive lease" });
+  }
+});
+
+router.post("/:leaseId/payment-rails/enable", requireLandlord, async (req: any, res: Response) => {
+  try {
+    if (!(await enforceLeaseCapability(req, res))) return;
+    const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
+    const leaseId = String(req.params?.leaseId || "").trim();
+    if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+    if (!leaseId) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+
+    const result = await getLeaseEntityForLandlord(leaseId, landlordId);
+    if (!result.ok) {
+      return res.status(result.status).json({ ok: false, error: result.error });
+    }
+
+    const raw = result.lease as any;
+    const lease = normalizeLeaseRow(leaseId, raw);
+    const paymentReadiness = derivePaymentReadiness({
+      leaseId,
+      monthlyRent: lease.monthlyRent,
+      startDate: lease.startDate,
+      endDate: lease.endDate,
+      dueDay: typeof raw?.dueDay === "number" ? raw.dueDay : null,
+      tenantId: String(lease.primaryTenantId || lease.tenantId || lease.tenantIds?.[0] || "").trim() || null,
+      propertyId: lease.propertyId,
+      unitId: String(lease.unitId || lease.unitNumber || "").trim() || null,
+      leaseExecution: deriveTenantSafeLeaseReadinessMetadata(raw, { leaseId, documentUrl: null }).leaseExecution,
+    });
+    const eligibility = deriveRentPaymentEligibility({
+      lease,
+      paymentReadiness,
+      stripeConfigured: isStripeConfigured(),
+    });
+    if (!eligibility.eligible) {
+      return res.status(400).json({
+        ok: false,
+        error: "LEASE_PAYMENT_RAIL_INELIGIBLE",
+        detail: eligibility.blockedReason,
+      });
+    }
+
+    const tenantId = String(lease.primaryTenantId || lease.tenantId || lease.tenantIds?.[0] || "").trim();
+    const enabled = await enableRentCollectionForLease({
+      leaseId,
+      tenantId,
+      landlordId,
+      actorId: String(req.user?.id || landlordId),
+    });
+    return res.status(200).json({
+      ok: true,
+      data: {
+        leaseId,
+        paymentRail: {
+          enabled: enabled.enabled,
+          enabledAt: enabled.enabledAt,
+          processor: enabled.processor,
+          eligibility: "eligible",
+          blockedReason: null,
+        },
+      },
+    });
+  } catch (err) {
+    console.error("[POST /api/leases/:leaseId/payment-rails/enable] error", err);
+    return res.status(500).json({ ok: false, error: "LEASE_PAYMENT_RAIL_ENABLE_FAILED" });
+  }
+});
+
+router.get("/:leaseId/payments", requireLandlord, async (req: any, res: Response) => {
+  try {
+    if (!(await enforceLeaseCapability(req, res))) return;
+    const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
+    const leaseId = String(req.params?.leaseId || "").trim();
+    if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+    if (!leaseId) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+
+    const result = await getLeaseEntityForLandlord(leaseId, landlordId);
+    if (!result.ok) {
+      return res.status(result.status).json({ ok: false, error: result.error });
+    }
+
+    const raw = result.lease as any;
+    const lease = normalizeLeaseRow(leaseId, raw);
+    const paymentReadiness = derivePaymentReadiness({
+      leaseId,
+      monthlyRent: lease.monthlyRent,
+      startDate: lease.startDate,
+      endDate: lease.endDate,
+      dueDay: typeof raw?.dueDay === "number" ? raw.dueDay : null,
+      tenantId: String(lease.primaryTenantId || lease.tenantId || lease.tenantIds?.[0] || "").trim() || null,
+      propertyId: lease.propertyId,
+      unitId: String(lease.unitId || lease.unitNumber || "").trim() || null,
+      leaseExecution: deriveTenantSafeLeaseReadinessMetadata(raw, { leaseId, documentUrl: null }).leaseExecution,
+    });
+    const eligibility = deriveRentPaymentEligibility({
+      lease,
+      paymentReadiness,
+      stripeConfigured: isStripeConfigured(),
+    });
+    const data = await getRentPaymentSummaryForLease({
+      leaseId,
+      paymentRailEnabled: raw?.paymentRailEnabled === true,
+      paymentRailEnabledAt: raw?.paymentRailEnabledAt || null,
+      paymentRailProcessor: raw?.paymentRailProcessor || null,
+      blockedReason: eligibility.blockedReason,
+    });
+    return res.status(200).json({ ok: true, data });
+  } catch (err) {
+    console.error("[GET /api/leases/:leaseId/payments] error", err);
+    return res.status(500).json({ ok: false, error: "LEASE_PAYMENT_STATUS_FAILED" });
   }
 });
 

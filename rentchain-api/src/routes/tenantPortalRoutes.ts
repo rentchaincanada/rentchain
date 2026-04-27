@@ -23,6 +23,12 @@ import { deriveIdentityPortability } from "../services/identityPortability/deriv
 import { deriveInstitutionalIdentityPackage } from "../services/institutional/deriveInstitutionalIdentityPackage";
 import { derivePaymentReadiness } from "../services/paymentReadiness/derivePaymentReadiness";
 import {
+  createRentPaymentCheckout,
+  deriveRentPaymentEligibility,
+  getRentPaymentSummaryForLease,
+} from "../services/rentPayments/rentPaymentService";
+import { isStripeConfigured } from "../services/stripeService";
+import {
   loadTenantCommunicationsWorkspace,
   markTenantCommunicationsRead,
   sendTenantCommunicationMessage,
@@ -81,6 +87,11 @@ function toMillis(value: any): number | null {
   if (typeof value?.toMillis === "function") return value.toMillis();
   if (typeof value?.seconds === "number") return value.seconds * 1000;
   return null;
+}
+
+function asString(value: unknown): string | null {
+  const next = String(value || "").trim();
+  return next || null;
 }
 
 function makeCorrelationId(prefix: string): string {
@@ -2227,10 +2238,36 @@ async function loadTenantWorkspaceData(context: Awaited<ReturnType<typeof resolv
     }
   }
 
+  const lease = leaseDoc ? projectTenantLease(leaseDoc.id, leaseDoc.data) : null;
+  const rentPaymentSummary = lease
+    ? await getRentPaymentSummaryForLease({
+        leaseId: lease.leaseId,
+        paymentRailEnabled: leaseDoc?.data?.paymentRailEnabled === true,
+        paymentRailEnabledAt: leaseDoc?.data?.paymentRailEnabledAt || null,
+        paymentRailProcessor: leaseDoc?.data?.paymentRailProcessor || null,
+        blockedReason: deriveRentPaymentEligibility({
+          lease: {
+            id: lease.leaseId,
+            landlordId: asString(leaseDoc?.data?.landlordId),
+            tenantId: asString(leaseDoc?.data?.tenantId),
+            tenantIds: Array.isArray(leaseDoc?.data?.tenantIds) ? leaseDoc?.data?.tenantIds : [],
+            primaryTenantId: asString(leaseDoc?.data?.primaryTenantId),
+            propertyId: asString(leaseDoc?.data?.propertyId),
+            unitId: asString(leaseDoc?.data?.unitId),
+            unitNumber: asString(leaseDoc?.data?.unitNumber),
+            monthlyRent: lease.monthlyRent,
+            status: lease.status,
+          },
+          paymentReadiness: lease.paymentReadiness || null,
+          stripeConfigured: isStripeConfigured(),
+        }).blockedReason,
+      })
+    : null;
+
   return {
     property: propertyDoc ? projectTenantProperty(propertyDoc.id, propertyDoc.data) : null,
     application: applicationDoc ? projectTenantApplication(applicationDoc.id, applicationDoc.data) : null,
-    lease: leaseDoc ? projectTenantLease(leaseDoc.id, leaseDoc.data) : null,
+    lease: lease ? { ...lease, rentPaymentSummary } : null,
     maintenance: maintenanceItems
       .map((item) => projectTenantMaintenance(item.id, item.data))
       .sort((left, right) => Number(right.updatedAt || 0) - Number(left.updatedAt || 0)),
@@ -3660,6 +3697,160 @@ router.get("/lease", requireTenantWorkspaceIdentity, async (req: any, res) => {
   if (!context) return;
   const workspace = await loadTenantWorkspaceData(context);
   return res.json({ ok: true, data: workspace.lease });
+});
+
+router.post("/leases/:leaseId/payments/checkout", requireTenantWorkspaceIdentity, async (req: any, res: any) => {
+  const context = await resolveWorkspaceContextOrRespond(req, res);
+  if (!context) return;
+  if (context.authority !== "active_tenant" || !context.tenantId) {
+    return res.status(403).json({ ok: false, error: "TENANT_CONTEXT_REQUIRED" });
+  }
+
+  const leaseId = String(req.params?.leaseId || "").trim();
+  if (!leaseId) {
+    return res.status(404).json({ ok: false, error: "lease_not_found" });
+  }
+  if (context.leaseId && String(context.leaseId).trim() !== leaseId) {
+    return res.status(403).json({ ok: false, error: "lease_not_owned_by_tenant" });
+  }
+
+  try {
+    const leaseSnap = await db.collection("leases").doc(leaseId).get();
+    if (!leaseSnap.exists) {
+      return res.status(404).json({ ok: false, error: "lease_not_found" });
+    }
+    const leaseData = (leaseSnap.data() as any) || {};
+    const leaseTenantId = String(
+      leaseData?.tenantId || leaseData?.primaryTenantId || leaseData?.tenantIds?.[0] || ""
+    ).trim();
+    const leaseTenantIds = Array.isArray(leaseData?.tenantIds)
+      ? leaseData.tenantIds.map((value: any) => String(value || "").trim()).filter(Boolean)
+      : [];
+    if (
+      leaseTenantId !== String(context.tenantId || "").trim() &&
+      !leaseTenantIds.includes(String(context.tenantId || "").trim())
+    ) {
+      return res.status(403).json({ ok: false, error: "lease_not_owned_by_tenant" });
+    }
+    if (leaseData?.paymentRailEnabled !== true || String(leaseData?.paymentRailProcessor || "").trim() !== "stripe") {
+      return res.status(400).json({ ok: false, error: "TENANT_RENT_PAYMENT_BLOCKED", detail: "payment_rail_not_enabled" });
+    }
+
+    const projectedLease = projectTenantLease(leaseId, leaseData);
+    const eligibility = deriveRentPaymentEligibility({
+      lease: {
+        id: leaseId,
+        landlordId: asString(leaseData?.landlordId),
+        tenantId: leaseTenantId,
+        tenantIds: leaseTenantIds,
+        primaryTenantId: asString(leaseData?.primaryTenantId),
+        propertyId: asString(leaseData?.propertyId),
+        unitId: asString(leaseData?.unitId),
+        unitNumber: asString(leaseData?.unitNumber),
+        monthlyRent: projectedLease.monthlyRent,
+        status: projectedLease.status,
+      },
+      paymentReadiness: projectedLease.paymentReadiness || null,
+      stripeConfigured: isStripeConfigured(),
+    });
+    if (!eligibility.eligible) {
+      return res.status(400).json({ ok: false, error: "TENANT_RENT_PAYMENT_BLOCKED", detail: eligibility.blockedReason });
+    }
+
+    const created = await createRentPaymentCheckout({
+      lease: {
+        id: leaseId,
+        landlordId: asString(leaseData?.landlordId),
+        tenantId: leaseTenantId,
+        tenantIds: leaseTenantIds,
+        primaryTenantId: asString(leaseData?.primaryTenantId),
+        propertyId: asString(leaseData?.propertyId),
+        unitId: asString(leaseData?.unitId),
+        unitNumber: asString(leaseData?.unitNumber),
+        monthlyRent: projectedLease.monthlyRent,
+        status: projectedLease.status,
+      },
+      tenantId: String(context.tenantId || "").trim(),
+      successPath: "/tenant/lease",
+      cancelPath: "/tenant/lease",
+    });
+
+    if (!created.ok) {
+      return res.status(400).json({ ok: false, error: "TENANT_RENT_PAYMENT_BLOCKED", detail: created.error });
+    }
+
+    return res.json({
+      ok: true,
+      data: {
+        rentPaymentId: created.rentPaymentId,
+        status: created.status,
+        redirectUrl: created.redirectUrl,
+      },
+    });
+  } catch (err: any) {
+    console.error("[tenant/leases/:leaseId/payments/checkout] failed", {
+      tenantId: context.tenantId,
+      leaseId,
+      message: err?.message || "failed",
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_RENT_PAYMENT_CHECKOUT_FAILED" });
+  }
+});
+
+router.get("/leases/:leaseId/payments", requireTenantWorkspaceIdentity, async (req: any, res: any) => {
+  const context = await resolveWorkspaceContextOrRespond(req, res);
+  if (!context) return;
+  if (context.authority !== "active_tenant" || !context.tenantId) {
+    return res.status(403).json({ ok: false, error: "TENANT_CONTEXT_REQUIRED" });
+  }
+
+  const leaseId = String(req.params?.leaseId || "").trim();
+  if (!leaseId) {
+    return res.status(404).json({ ok: false, error: "lease_not_found" });
+  }
+  if (context.leaseId && String(context.leaseId).trim() !== leaseId) {
+    return res.status(403).json({ ok: false, error: "lease_not_owned_by_tenant" });
+  }
+
+  try {
+    const leaseSnap = await db.collection("leases").doc(leaseId).get();
+    if (!leaseSnap.exists) {
+      return res.status(404).json({ ok: false, error: "lease_not_found" });
+    }
+    const leaseData = (leaseSnap.data() as any) || {};
+    const projectedLease = projectTenantLease(leaseId, leaseData);
+    const eligibility = deriveRentPaymentEligibility({
+      lease: {
+        id: leaseId,
+        landlordId: asString(leaseData?.landlordId),
+        tenantId: asString(leaseData?.tenantId),
+        tenantIds: Array.isArray(leaseData?.tenantIds) ? leaseData.tenantIds : [],
+        primaryTenantId: asString(leaseData?.primaryTenantId),
+        propertyId: asString(leaseData?.propertyId),
+        unitId: asString(leaseData?.unitId),
+        unitNumber: asString(leaseData?.unitNumber),
+        monthlyRent: projectedLease.monthlyRent,
+        status: projectedLease.status,
+      },
+      paymentReadiness: projectedLease.paymentReadiness || null,
+      stripeConfigured: isStripeConfigured(),
+    });
+    const data = await getRentPaymentSummaryForLease({
+      leaseId,
+      paymentRailEnabled: leaseData?.paymentRailEnabled === true,
+      paymentRailEnabledAt: leaseData?.paymentRailEnabledAt || null,
+      paymentRailProcessor: leaseData?.paymentRailProcessor || null,
+      blockedReason: eligibility.blockedReason,
+    });
+    return res.json({ ok: true, data });
+  } catch (err: any) {
+    console.error("[tenant/leases/:leaseId/payments] failed", {
+      tenantId: context.tenantId,
+      leaseId,
+      message: err?.message || "failed",
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_RENT_PAYMENT_STATUS_FAILED" });
+  }
 });
 
 router.post("/leases/:leaseId/sign", requireTenantWorkspaceIdentity, async (req: any, res) => {
