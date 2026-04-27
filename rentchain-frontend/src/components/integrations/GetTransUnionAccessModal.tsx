@@ -26,6 +26,11 @@ const CHHAVI_MAILTO = `mailto:${CHHAVI_EMAIL}?subject=${encodeURIComponent(MAILT
   MAILTO_BODY
 )}`;
 const CHHAVI_TEL = `tel:${CHHAVI_PHONE.replace(/[^\d+]/g, "")}`;
+const EMAIL_TEMPLATE = `To: ${CHHAVI_EMAIL}
+Subject: ${MAILTO_SUBJECT}
+
+${MAILTO_BODY}`;
+const EMAIL_HANDOFF_COOLDOWN_MS = 1500;
 
 type Props = {
   open: boolean;
@@ -48,7 +53,42 @@ export function GetTransUnionAccessModal({
   onPhoneClick,
   onAlreadyCredentialedClick,
 }: Props) {
+  const [emailOpening, setEmailOpening] = React.useState(false);
+  const [emailStatus, setEmailStatus] = React.useState<string | null>(null);
+  const emailCooldownRef = React.useRef<number | null>(null);
+
+  React.useEffect(() => {
+    return () => {
+      if (emailCooldownRef.current != null) {
+        window.clearTimeout(emailCooldownRef.current);
+      }
+    };
+  }, []);
+
   if (!open) return null;
+
+  const handleEmailClick = (event: React.MouseEvent<HTMLAnchorElement>) => {
+    event.preventDefault();
+    if (emailOpening) return;
+
+    setEmailOpening(true);
+    setEmailStatus("Email opened — send from your mail app");
+    onEmailClick?.();
+    window.location.assign(CHHAVI_MAILTO);
+
+    emailCooldownRef.current = window.setTimeout(() => {
+      setEmailOpening(false);
+    }, EMAIL_HANDOFF_COOLDOWN_MS);
+  };
+
+  const handleCopyTemplate = async () => {
+    try {
+      await navigator.clipboard.writeText(EMAIL_TEMPLATE);
+      setEmailStatus("Email template copied — paste it into your mail app");
+    } catch {
+      setEmailStatus("Copy failed — use the email text shown here in your mail app");
+    }
+  };
 
   return (
     <div
@@ -155,7 +195,8 @@ export function GetTransUnionAccessModal({
           <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
             <a
               href={CHHAVI_MAILTO}
-              onClick={onEmailClick}
+              onClick={handleEmailClick}
+              aria-disabled={emailOpening}
               style={{
                 display: "inline-flex",
                 alignItems: "center",
@@ -163,11 +204,13 @@ export function GetTransUnionAccessModal({
                 padding: "10px 14px",
                 borderRadius: radius.pill,
                 border: `1px solid ${colors.border}`,
-                background: colors.accentSoft,
+                background: emailOpening ? colors.bg : colors.accentSoft,
                 color: text.primary,
                 textDecoration: "none",
                 fontWeight: 600,
                 fontSize: "0.95rem",
+                pointerEvents: emailOpening ? "none" : "auto",
+                opacity: emailOpening ? 0.7 : 1,
               }}
             >
               Email Chhavi Kumar
@@ -191,7 +234,19 @@ export function GetTransUnionAccessModal({
             >
               Call Chhavi Kumar
             </a>
+            <Button type="button" variant="secondary" onClick={() => void handleCopyTemplate()}>
+              Copy email template
+            </Button>
           </div>
+          {emailStatus ? (
+            <div
+              role="status"
+              aria-live="polite"
+              style={{ color: text.muted, fontSize: "0.9rem", lineHeight: 1.5 }}
+            >
+              {emailStatus}
+            </div>
+          ) : null}
         </div>
         <div
           style={{
