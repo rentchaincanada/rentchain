@@ -811,6 +811,33 @@ describe("tenantPortalRoutes foundation", () => {
     ]);
   });
 
+  it("builds a tenant-only institutional identity export safely", async () => {
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/identity/export",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.data?.identitySummary?.identityStatus).toBeTruthy();
+    expect(res.body?.data?.metadata?.consentRequired).toBe(true);
+    const payload = JSON.stringify(res.body?.data || {});
+    expect(payload).not.toContain("drawnDataUrl");
+    expect(payload).not.toContain("documentUrl");
+    expect(payload).not.toContain("paymentMethod");
+    expect(payload).not.toContain("share-token");
+    expect(payload).not.toContain("tenant-1");
+    expect(payload).not.toContain("prop-1");
+  });
+
   it("revokes a tenant share package immediately", async () => {
     ensureCollection("tenantSharePackages").set("share-1", {
       id: "share-1",

@@ -1,6 +1,6 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import { getTenantWorkspace } from "../../api/tenantPortal";
+import { exportTenantIdentityPackage, getTenantWorkspace } from "../../api/tenantPortal";
 import { getTenantAccess, type TenantAccessWorkspace } from "../../api/tenantAccess";
 import { getTenantAttachments } from "../../api/tenantAttachmentsApi";
 import { getTenantProfile } from "../../api/tenantProfile";
@@ -117,6 +117,7 @@ function prettyShareRequestItem(
 
 export default function TenantWorkspacePage() {
   const [data, setData] = React.useState<Awaited<ReturnType<typeof getTenantWorkspace>> | null>(null);
+  const [institutionalPackage, setInstitutionalPackage] = React.useState<Awaited<ReturnType<typeof exportTenantIdentityPackage>> | null>(null);
   const [access, setAccess] = React.useState<TenantAccessWorkspace | null>(null);
   const [attachments, setAttachments] = React.useState<Awaited<ReturnType<typeof getTenantAttachments>> | null>(null);
   const [profileData, setProfileData] = React.useState<Awaited<ReturnType<typeof getTenantProfile>> | null>(null);
@@ -128,6 +129,9 @@ export default function TenantWorkspacePage() {
   const [freshShareUrl, setFreshShareUrl] = React.useState<string | null>(null);
   const [shareBusy, setShareBusy] = React.useState(false);
   const [shareError, setShareError] = React.useState<string | null>(null);
+  const [exportBusy, setExportBusy] = React.useState(false);
+  const [exportError, setExportError] = React.useState<string | null>(null);
+  const [showExportPreview, setShowExportPreview] = React.useState(false);
   const [profileLoading, setProfileLoading] = React.useState(true);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -230,6 +234,39 @@ export default function TenantWorkspacePage() {
       setShareError("Copy is unavailable in this browser right now.");
     }
   }, [freshShareUrl]);
+
+  const handleExportRentalIdentity = React.useCallback(async () => {
+    try {
+      setExportBusy(true);
+      setExportError(null);
+      const next = await exportTenantIdentityPackage();
+      setInstitutionalPackage(next);
+      setShowExportPreview(true);
+    } catch (err: any) {
+      setExportError(err?.payload?.error || err?.message || "Unable to prepare this export right now.");
+    } finally {
+      setExportBusy(false);
+    }
+  }, []);
+
+  const handleDownloadExportJson = React.useCallback(() => {
+    if (!institutionalPackage) return;
+    try {
+      const blob = new Blob([JSON.stringify(institutionalPackage, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "rentchain-institutional-identity-package.json";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      setExportError("JSON download is unavailable in this browser right now.");
+    }
+  }, [institutionalPackage]);
 
   const handleRevokeShareLink = React.useCallback(async (id: string) => {
     try {
@@ -717,6 +754,86 @@ export default function TenantWorkspacePage() {
             Portable identity status will appear here once enough tenant-safe identity signals are available.
           </div>
         )}
+      </TenantInfoCard>
+
+      <TenantInfoCard heading="Institutional readiness" accent="#0f766e">
+        <div style={{ display: "grid", gap: spacing.sm }}>
+          <div style={{ color: textTokens.secondary, lineHeight: 1.6 }}>
+            Prepare a tenant-controlled export of your rental identity as a structured summary for offline record sharing or future institutional review. This does not send data anywhere or create an external integration.
+          </div>
+
+          <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
+            <button type="button" onClick={() => void handleExportRentalIdentity()} disabled={exportBusy}>
+              {exportBusy ? "Preparing export..." : "Export Rental Identity"}
+            </button>
+            {institutionalPackage ? (
+              <>
+                <button type="button" onClick={handleDownloadExportJson}>
+                  Download JSON
+                </button>
+                <button type="button" className="no-print" onClick={() => window.print()}>
+                  Print / Save PDF
+                </button>
+              </>
+            ) : null}
+          </div>
+
+          {exportError ? <div style={{ color: "#b91c1c" }}>{exportError}</div> : null}
+
+          {institutionalPackage ? (
+            <div style={{ display: "grid", gap: 8 }}>
+              <button
+                type="button"
+                onClick={() => setShowExportPreview((current) => !current)}
+                style={{ justifySelf: "start" }}
+              >
+                {showExportPreview ? "Hide preview" : "Show preview"}
+              </button>
+
+              {showExportPreview ? (
+                <div
+                  style={{
+                    border: "1px solid rgba(15,23,42,0.08)",
+                    borderRadius: 12,
+                    padding: "12px 14px",
+                    display: "grid",
+                    gap: 12,
+                  }}
+                >
+                  <div style={{ fontWeight: 700, color: textTokens.primary }}>Export preview</div>
+                  <TenantKeyValueGrid
+                    rows={[
+                      { label: "Identity status", value: prettyStatus(institutionalPackage.identitySummary.identityStatus) },
+                      { label: "Verification level", value: prettyVerificationLevel(institutionalPackage.identitySummary.verificationLevel) },
+                      { label: "Completeness", value: prettyStatus(institutionalPackage.identitySummary.completenessLevel) },
+                      { label: "Credibility", value: institutionalPackage.credibilitySummary.summaryLabel },
+                      { label: "Active lease", value: institutionalPackage.leaseSummary.activeLease ? "Yes" : "No" },
+                      { label: "Lease execution", value: prettyStatus(institutionalPackage.leaseSummary.leaseExecutionStatus) },
+                      { label: "Payment readiness", value: institutionalPackage.paymentReadinessSummary.readinessLabel },
+                      { label: "Audit events", value: String(institutionalPackage.auditSummary.totalEvents) },
+                      { label: "Consent required", value: institutionalPackage.metadata.consentRequired ? "Yes" : "No" },
+                    ]}
+                  />
+
+                  <div style={{ color: textTokens.secondary, lineHeight: 1.6 }}>
+                    {institutionalPackage.credibilitySummary.summaryDescription}
+                  </div>
+
+                  {institutionalPackage.auditSummary.recentActivity.length ? (
+                    <div style={{ display: "grid", gap: 6 }}>
+                      <div style={{ fontWeight: 700, color: textTokens.primary }}>Recent activity</div>
+                      {institutionalPackage.auditSummary.recentActivity.map((event) => (
+                        <div key={`${event.type}:${event.occurredAt}`} style={{ color: textTokens.secondary }}>
+                          {event.label} • {formatDate(event.occurredAt)}
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
       </TenantInfoCard>
 
       <TenantInfoCard heading="Activity timeline" accent="#0891b2">
