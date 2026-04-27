@@ -469,6 +469,25 @@ describe("tenant workspace frontend shell", () => {
         monthlyRent: 1800,
         status: "active",
         documentUrl: null,
+        paymentReadiness: {
+          readinessStatus: "ready_to_configure",
+          readinessLabel: "Rent terms ready for future setup",
+          readinessDescription:
+            "The current lease shows the core rent terms and tenancy linkage needed for a future payment setup workflow, without enabling any payment activity today.",
+          requiredNextAction: "confirm_payment_setup_later",
+          rentTerms: {
+            rentAmountAvailable: true,
+            dueDateAvailable: true,
+            leaseDatesAvailable: true,
+            tenantLinked: true,
+            leaseExecuted: false,
+          },
+          paymentSetup: {
+            processorConnected: false,
+            moneyMovementEnabled: false,
+            storedPaymentMethod: false,
+          },
+        },
       },
       maintenance: [],
       tenantIdentityRecord: {
@@ -543,6 +562,7 @@ describe("tenant workspace frontend shell", () => {
     expect(screen.getByText(/^Your Rental Identity$/i)).toBeInTheDocument();
     expect(screen.getByText(/^Credibility signals$/i)).toBeInTheDocument();
     expect(screen.getByText(/^Portable Rental Identity$/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Payment readiness$/i)).toBeInTheDocument();
     expect(screen.getByText(/^Activity timeline$/i)).toBeInTheDocument();
     expect(screen.getByText("Identity ready")).toBeInTheDocument();
     expect(screen.getByText("Sharing controls available")).toBeInTheDocument();
@@ -554,6 +574,8 @@ describe("tenant workspace frontend shell", () => {
     expect(screen.getByText(/Screening completed/i)).toBeInTheDocument();
     expect(screen.getByText(/Lease history present/i)).toBeInTheDocument();
     expect(screen.getByText(/Ready to apply/i)).toBeInTheDocument();
+    expect(screen.getByText(/Rent terms ready for future setup/i)).toBeInTheDocument();
+    expect(screen.getByText(/Confirm payment setup later/i)).toBeInTheDocument();
     expect(screen.getByText(/^Application created$/i)).toBeInTheDocument();
     expect(screen.getByText(/A rental application record was started\./i)).toBeInTheDocument();
     expect(screen.getByText(/Missing pieces/i)).toBeInTheDocument();
@@ -871,6 +893,25 @@ describe("tenant workspace frontend shell", () => {
         pdfStatus: "generated",
         completedAt: "2026-02-02T12:00:00.000Z",
       },
+      paymentReadiness: {
+        readinessStatus: "ready_to_configure",
+        readinessLabel: "Rent terms ready for future setup",
+        readinessDescription:
+          "The current lease shows the core rent terms and tenancy linkage needed for a future payment setup workflow, without enabling any payment activity today.",
+        requiredNextAction: "confirm_payment_setup_later",
+        rentTerms: {
+          rentAmountAvailable: true,
+          dueDateAvailable: true,
+          leaseDatesAvailable: true,
+          tenantLinked: true,
+          leaseExecuted: true,
+        },
+        paymentSetup: {
+          processorConnected: false,
+          moneyMovementEnabled: false,
+          storedPaymentMethod: false,
+        },
+      },
     });
 
     render(
@@ -884,6 +925,7 @@ describe("tenant workspace frontend shell", () => {
     expect(screen.getByText(/^Lease signing complete$/i)).toBeInTheDocument();
     expect(screen.getByText(/^Lease document available$/i)).toBeInTheDocument();
     expect(screen.getByText(/^Lease fully executed$/i)).toBeInTheDocument();
+    expect(screen.getByText(/Rent terms ready for future setup/i)).toBeInTheDocument();
     expect(screen.getByText(/^Drawn signature$/i)).toBeInTheDocument();
     expect(screen.getByText(/^Taylor Tenant$/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Open lease document/i })).toBeInTheDocument();

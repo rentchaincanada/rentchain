@@ -137,6 +137,7 @@ describe("leaseRoutes GET /active", () => {
       unitId: "unit-1",
       unitNumber: "101",
       monthlyRent: 1850,
+      dueDay: 1,
       startDate: "2026-01-01",
       endDate: "2026-12-31",
       status: "active",
@@ -187,9 +188,19 @@ describe("leaseRoutes GET /active", () => {
           executionLabel: "Lease fully executed",
           requiredNextAction: "none",
         }),
+        paymentReadiness: expect.objectContaining({
+          readinessStatus: "ready_to_configure",
+          readinessLabel: "Rent terms ready for future setup",
+          paymentSetup: {
+            processorConnected: false,
+            moneyMovementEnabled: false,
+            storedPaymentMethod: false,
+          },
+        }),
       })
     );
     expect(res.body?.leases?.[0]?.tenantSignature?.drawnDataUrl).toBeUndefined();
+    expect(res.body?.leases?.[0]?.paymentMethod).toBeUndefined();
   });
 
   it("excludes targeted synthetic cleanup leases from landlord active lists", async () => {

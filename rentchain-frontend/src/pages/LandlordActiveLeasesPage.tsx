@@ -137,6 +137,18 @@ function executionNextActionLabel(value: string | null | undefined) {
   }
 }
 
+function paymentReadinessChecklist(lease: LandlordActiveLease) {
+  const readiness = lease.paymentReadiness;
+  if (!readiness) return "Payment readiness unavailable";
+  const missing: string[] = [];
+  if (!readiness.rentTerms.rentAmountAvailable) missing.push("Rent amount missing");
+  if (!readiness.rentTerms.dueDateAvailable) missing.push("Due day missing");
+  if (!readiness.rentTerms.leaseDatesAvailable) missing.push("Lease dates missing");
+  if (!readiness.rentTerms.tenantLinked) missing.push("Tenant or unit linkage missing");
+  if (missing.length === 0) return readiness.readinessLabel;
+  return missing.join(" · ");
+}
+
 export default function LandlordActiveLeasesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const view = searchParams.get("view") === "archived" ? "archived" : "active";
@@ -272,6 +284,7 @@ export default function LandlordActiveLeasesPage() {
               <th>Unit</th>
               <th>Tenant</th>
               <th>Status</th>
+              <th>Payment readiness</th>
             </tr>
           </thead>
           <tbody>
@@ -281,6 +294,7 @@ export default function LandlordActiveLeasesPage() {
                 <td>{lease.unitNumber || "—"}</td>
                 <td>{lease.tenantName || "—"}</td>
                 <td>{prettyLeaseStatus(lease.status)}</td>
+                <td>{lease.paymentReadiness?.readinessLabel || "Payment readiness unavailable"}</td>
               </tr>
             ))}
           </tbody>
@@ -502,6 +516,16 @@ export default function LandlordActiveLeasesPage() {
                       {lease.archivedAt ? (
                         <div style={{ color: "#64748b", fontSize: 12, marginTop: 4 }}>
                           Archived {formatDate(lease.archivedAt)}
+                        </div>
+                      ) : null}
+                      {lease.paymentReadiness ? (
+                        <div style={{ display: "grid", gap: 4, marginTop: 6 }}>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: "#0f172a" }}>
+                            {lease.paymentReadiness.readinessLabel}
+                          </div>
+                          <div style={{ color: "#64748b", fontSize: 12 }}>
+                            {paymentReadinessChecklist(lease)}
+                          </div>
                         </div>
                       ) : null}
                     </td>

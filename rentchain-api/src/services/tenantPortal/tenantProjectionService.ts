@@ -1,4 +1,5 @@
 import { deriveLeaseExecution, type LeaseExecution } from "../leaseExecution/deriveLeaseExecution";
+import { derivePaymentReadiness, type PaymentReadiness } from "../paymentReadiness/derivePaymentReadiness";
 
 type TenantPropertyProjection = {
   propertyId: string;
@@ -16,6 +17,7 @@ type TenantLeaseProjection = {
   startDate: string | null;
   endDate: string | null;
   monthlyRent: number | null;
+  dueDay?: number | null;
   status: string | null;
   documentUrl: string | null;
   signatureStatus:
@@ -35,6 +37,7 @@ type TenantLeaseProjection = {
   leasePdfLabel: string;
   leasePdfDescription: string;
   leaseExecution: LeaseExecution;
+  paymentReadiness: PaymentReadiness;
 };
 
 type TenantApplicationProjection = {
@@ -357,18 +360,36 @@ export function projectTenantProperty(recordId: string, data: any): TenantProper
 export function projectTenantLease(recordId: string, data: any): TenantLeaseProjection {
   const documentUrl =
     asString(data?.documentUrl) || asString(data?.approvedDocumentUrl) || asString(data?.documentRef);
+  const startDate = asString(data?.startDate) || asString(data?.leaseStart);
+  const endDate = asString(data?.endDate) || asString(data?.leaseEnd);
+  const monthlyRent =
+    asNumber(data?.monthlyRent) ??
+    asNumber(data?.rentAmount) ??
+    (typeof data?.rentCents === "number" ? Math.round(data.rentCents) / 100 : null);
+  const dueDay = asNumber(data?.dueDay);
+  const leaseReadiness = deriveTenantSafeLeaseReadinessMetadata(data, { documentUrl, leaseId: recordId });
+  const leaseExecution = leaseReadiness.leaseExecution;
 
   return {
     leaseId: recordId,
-    startDate: asString(data?.startDate) || asString(data?.leaseStart),
-    endDate: asString(data?.endDate) || asString(data?.leaseEnd),
-    monthlyRent:
-      asNumber(data?.monthlyRent) ??
-      asNumber(data?.rentAmount) ??
-      (typeof data?.rentCents === "number" ? Math.round(data.rentCents) / 100 : null),
+    startDate,
+    endDate,
+    monthlyRent,
+    dueDay,
     status: asString(data?.status),
     documentUrl,
-    ...deriveTenantSafeLeaseReadinessMetadata(data, { documentUrl, leaseId: recordId }),
+    ...leaseReadiness,
+    paymentReadiness: derivePaymentReadiness({
+      leaseId: recordId,
+      monthlyRent,
+      startDate,
+      endDate,
+      dueDay,
+      tenantId: asString(data?.primaryTenantId) || asString(data?.tenantId) || asString(data?.tenantIds?.[0]),
+      propertyId: asString(data?.propertyId),
+      unitId: asString(data?.unitId) || asString(data?.unitNumber) || asString(data?.unit),
+      leaseExecution,
+    }),
   };
 }
 

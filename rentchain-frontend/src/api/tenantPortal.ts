@@ -37,6 +37,7 @@ export type TenantWorkspaceLease = {
   startDate: string | null;
   endDate: string | null;
   monthlyRent: number | null;
+  dueDay?: number | null;
   status: string | null;
   documentUrl: string | null;
   signatureStatus?: "not_started" | "awaiting_tenant_signature" | "awaiting_landlord_signature" | "signed" | "unavailable";
@@ -72,6 +73,7 @@ export type TenantWorkspaceLease = {
     pdfStatus: "not_ready" | "ready" | "generated" | "blocked";
     completedAt: string | null;
   } | null;
+  paymentReadiness?: PaymentReadiness | null;
   depositCents?: number | null;
   depositRequired?: boolean | null;
   depositReceived?: boolean | null;
@@ -80,6 +82,25 @@ export type TenantWorkspaceLease = {
   paymentStatus?: string | null;
   paymentRequestedAt?: string | null;
   paymentCompletedAt?: string | null;
+};
+
+export type PaymentReadiness = {
+  readinessStatus: "not_ready" | "ready_to_configure" | "blocked";
+  readinessLabel: string;
+  readinessDescription: string;
+  requiredNextAction: "complete_lease_details" | "review_rent_terms" | "confirm_payment_setup_later" | "none";
+  rentTerms: {
+    rentAmountAvailable: boolean;
+    dueDateAvailable: boolean;
+    leaseDatesAvailable: boolean;
+    tenantLinked: boolean;
+    leaseExecuted: boolean;
+  };
+  paymentSetup: {
+    processorConnected: false;
+    moneyMovementEnabled: false;
+    storedPaymentMethod: false;
+  };
 };
 
 export type TenantWorkspaceMaintenance = {

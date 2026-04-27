@@ -33,6 +33,7 @@ import {
   isTargetedHiddenTenantId,
 } from "../lib/testDataVisibilityTargets";
 import { deriveTenantSafeLeaseReadinessMetadata } from "../services/tenantPortal/tenantProjectionService";
+import { derivePaymentReadiness } from "../services/paymentReadiness/derivePaymentReadiness";
 
 const router = Router();
 const LEDGER_COLLECTION = "ledgerEntries";
@@ -291,6 +292,7 @@ async function enrichLeaseRow(raw: any) {
       : null;
   const tenantEmail =
     tenantSnap?.exists ? String(tenantSnap.data()?.email || "").trim() || null : null;
+  const leaseReadiness = deriveTenantSafeLeaseReadinessMetadata(raw, { documentUrl, leaseId: lease.id });
 
   return {
     ...lease,
@@ -298,7 +300,18 @@ async function enrichLeaseRow(raw: any) {
     tenantName,
     tenantEmail,
     documentUrl,
-    ...deriveTenantSafeLeaseReadinessMetadata(raw, { documentUrl, leaseId: lease.id }),
+    ...leaseReadiness,
+    paymentReadiness: derivePaymentReadiness({
+      leaseId: lease.id,
+      monthlyRent: lease.monthlyRent,
+      startDate: lease.startDate,
+      endDate: lease.endDate,
+      dueDay: typeof raw?.dueDay === "number" ? raw.dueDay : null,
+      tenantId,
+      propertyId,
+      unitId: String(lease.unitId || lease.unitNumber || "").trim() || null,
+      leaseExecution: leaseReadiness.leaseExecution,
+    }),
     archivedAt: raw?.archivedAt || null,
     archivedByUserId: raw?.archivedByUserId || null,
     isArchived: Boolean(raw?.archivedAt),
