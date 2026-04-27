@@ -12,6 +12,7 @@ import { TenantNav } from "../../components/layout/TenantNav";
 const tenantPortalApi = vi.hoisted(() => ({
   getTenantWorkspace: vi.fn(),
   getTenantLeaseWorkspace: vi.fn(),
+  exportTenantIdentityPackage: vi.fn(),
   signTenantLease: vi.fn(),
   listTenantWorkspaceMaintenance: vi.fn(),
   redeemTenantWorkspaceInvite: vi.fn(),
@@ -254,6 +255,49 @@ describe("tenant workspace frontend shell", () => {
         ],
       },
     });
+    tenantPortalApi.exportTenantIdentityPackage.mockResolvedValue({
+      identitySummary: {
+        identityStatus: "ready",
+        verificationLevel: "partial",
+        completenessLevel: "high",
+        readinessLabel: "Ready to apply",
+      },
+      credibilitySummary: {
+        completenessLevel: "high",
+        verificationLevel: "partial",
+        summaryLabel: "Credibility established",
+        summaryDescription: "Most credibility signals are available in your current record.",
+      },
+      leaseSummary: {
+        activeLease: true,
+        leaseExecutionStatus: "fully_executed",
+      },
+      paymentReadinessSummary: {
+        readinessStatus: "ready_to_configure",
+        readinessLabel: "Rent terms ready for future setup",
+        readinessDescription: "The current lease shows the core rent terms needed for future setup planning.",
+      },
+      auditSummary: {
+        totalEvents: 2,
+        recentActivity: [
+          {
+            type: "lease.activated",
+            label: "Lease activated",
+            occurredAt: "2026-02-01T00:00:00.000Z",
+          },
+        ],
+      },
+      portabilitySummary: {
+        portabilityStatus: "ready",
+        portabilityLabel: "Ready to reuse",
+        reusableAcrossApplications: true,
+      },
+      metadata: {
+        generatedAt: "2026-04-27T00:00:00.000Z",
+        dataScope: "tenant_controlled_institutional_readiness",
+        consentRequired: true,
+      },
+    });
     tenantAttachmentsApi.getTenantAttachments.mockResolvedValue({
       ok: true,
       data: [
@@ -436,6 +480,8 @@ describe("tenant workspace frontend shell", () => {
         writeText: vi.fn().mockResolvedValue(undefined),
       },
     });
+    global.URL.createObjectURL = vi.fn(() => "blob:institutional-export");
+    global.URL.revokeObjectURL = vi.fn();
   });
 
   it("tenant shell renders expected navigation safely", async () => {
@@ -730,6 +776,31 @@ describe("tenant workspace frontend shell", () => {
     await waitFor(() => {
       expect(tenantSharePackagesApi.revokeTenantSharePackage).toHaveBeenCalledWith("share-1");
     });
+  });
+
+  it("lets tenants preview and download an institutional identity export safely", async () => {
+    render(
+      <MemoryRouter>
+        <TenantWorkspacePage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Institutional readiness/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Export Rental Identity/i }));
+
+    await waitFor(() => {
+      expect(tenantPortalApi.exportTenantIdentityPackage).toHaveBeenCalledTimes(1);
+    });
+
+    expect(await screen.findByRole("button", { name: /Hide preview/i })).toBeInTheDocument();
+    expect(screen.getByText(/Export preview/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Credibility established/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Lease activated/i)).toBeInTheDocument();
+    expect(screen.queryByText(/drawnDataUrl/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/paymentMethod/i)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Download JSON/i }));
+    expect(global.URL.createObjectURL).toHaveBeenCalledTimes(1);
   });
 
   it("lets tenants approve a pending share access request", async () => {

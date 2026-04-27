@@ -285,6 +285,63 @@ export type PortableIdentity = {
   nextAction: "complete_identity" | "enable_sharing" | "review_reusability" | "none";
 };
 
+export type InstitutionalIdentityPackage = {
+  identitySummary: {
+    identityStatus: "incomplete" | "ready" | "verified" | "limited";
+    verificationLevel: "none" | "partial" | "strong";
+    completenessLevel: "low" | "medium" | "high";
+    readinessLabel: string;
+  };
+  credibilitySummary: {
+    completenessLevel: "low" | "medium" | "high";
+    verificationLevel: "none" | "partial" | "strong";
+    summaryLabel: string;
+    summaryDescription: string;
+  };
+  leaseSummary: {
+    activeLease: boolean;
+    leaseExecutionStatus:
+      | "draft"
+      | "ready_for_tenant_signature"
+      | "tenant_signed"
+      | "ready_for_landlord_signature"
+      | "landlord_signed"
+      | "fully_executed"
+      | "blocked"
+      | "not_available";
+  };
+  paymentReadinessSummary: {
+    readinessStatus: "not_ready" | "ready_to_configure" | "blocked" | "not_available";
+    readinessLabel: string;
+    readinessDescription: string;
+  };
+  auditSummary: {
+    totalEvents: number;
+    recentActivity: Array<{
+      type:
+        | "application.created"
+        | "application.submitted"
+        | "screening_consent_confirmed"
+        | "screening.completed"
+        | "lease.created"
+        | "lease.activated"
+        | "lease.tenant_signed";
+      label: string;
+      occurredAt: string;
+    }>;
+  };
+  portabilitySummary?: {
+    portabilityStatus: "not_ready" | "ready" | "limited";
+    portabilityLabel: string;
+    reusableAcrossApplications: boolean;
+  };
+  metadata: {
+    generatedAt: string;
+    dataScope: "tenant_controlled_institutional_readiness";
+    consentRequired: true;
+  };
+};
+
 export type TenantWorkspaceSummary = {
   context: TenantWorkspaceContext;
   property: TenantWorkspaceProperty | null;
@@ -299,6 +356,13 @@ export type TenantWorkspaceSummary = {
 
 export async function getTenantWorkspace(): Promise<TenantWorkspaceSummary> {
   const res = await tenantApiFetch<{ ok: boolean; data: TenantWorkspaceSummary }>("/tenant/workspace");
+  return res?.data;
+}
+
+export async function exportTenantIdentityPackage(): Promise<InstitutionalIdentityPackage> {
+  const res = await tenantApiFetch<{ ok: boolean; data: InstitutionalIdentityPackage }>("/tenant/identity/export", {
+    method: "POST",
+  });
   return res?.data;
 }
 

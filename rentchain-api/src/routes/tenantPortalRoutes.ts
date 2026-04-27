@@ -20,6 +20,7 @@ import { loadTenantIdentityRecord, loadTenantProfileProjection } from "../servic
 import { deriveTenantCredibilitySignals } from "../services/tenantCredibility/deriveTenantCredibilitySignals";
 import { deriveIdentityTimeline } from "../services/identityTimeline/deriveIdentityTimeline";
 import { deriveIdentityPortability } from "../services/identityPortability/deriveIdentityPortability";
+import { deriveInstitutionalIdentityPackage } from "../services/institutional/deriveInstitutionalIdentityPackage";
 import { derivePaymentReadiness } from "../services/paymentReadiness/derivePaymentReadiness";
 import {
   loadTenantCommunicationsWorkspace,
@@ -2972,6 +2973,54 @@ async function handleTenantWorkspaceSummary(req: any, res: any) {
 
 router.get("/workspace", requireTenantWorkspaceIdentity, handleTenantWorkspaceSummary);
 router.get("/me", requireTenantWorkspaceIdentity, handleTenantWorkspaceSummary);
+
+router.post("/identity/export", requireTenantWorkspaceIdentity, async (req: any, res: any) => {
+  const context = await resolveWorkspaceContextOrRespond(req, res);
+  if (!context) return;
+
+  const [workspace, tenantIdentityRecord, identityTimeline] = await Promise.all([
+    loadTenantWorkspaceData(context),
+    loadTenantIdentityRecord({
+      context,
+      userId: String(req.user?.id || "").trim(),
+      userEmail: req.user?.email,
+    }),
+    deriveIdentityTimeline({
+      tenantId: String(req.user?.tenantId || context.tenantId || "").trim(),
+      applicationId: context.applicationId,
+      leaseId: context.leaseId,
+    }),
+  ]);
+  const { tenantCredibilitySignals } = deriveTenantCredibilitySignals({
+    tenantIdentityRecord,
+    leaseExecution: workspace.lease?.leaseExecution || null,
+  });
+  const { portableIdentity } = deriveIdentityPortability({
+    tenantIdentityRecord,
+    credibilitySummary: tenantCredibilitySignals.summary,
+    shareAvailability: {
+      sharingEnabled: Boolean(context.tenantId || req.user?.tenantId || req.user?.id),
+    },
+    timelineAvailability: {
+      hasIdentityTimeline: Array.isArray(identityTimeline?.events) && identityTimeline.events.length > 0,
+    },
+  });
+
+  const institutionalIdentityPackage = deriveInstitutionalIdentityPackage({
+    tenantIdentityRecord,
+    credibilitySummary: tenantCredibilitySignals.summary,
+    leaseExecution: workspace.lease?.leaseExecution || null,
+    paymentReadiness: workspace.lease?.paymentReadiness || null,
+    identityTimeline,
+    portableIdentity,
+    leaseStatus: workspace.lease?.status || null,
+  });
+
+  return res.json({
+    ok: true,
+    data: institutionalIdentityPackage,
+  });
+});
 
 router.post("/share-packages", requireTenantWorkspaceIdentity, async (req: any, res) => {
   const context = await resolveWorkspaceContextOrRespond(req, res);
