@@ -1,9 +1,10 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import TenantSharePackagePage from "./TenantSharePackagePage";
 
 const publicTenantSharePackageApi = vi.hoisted(() => ({
+  createApplyWithRentChainContext: vi.fn(),
   fetchPublicTenantSharePackage: vi.fn(),
   requestPublicTenantSharePackageVerification: vi.fn(),
 }));
@@ -16,10 +17,16 @@ afterEach(() => {
 });
 
 function renderPage() {
+  function ApplyCapture() {
+    const location = useLocation();
+    return <div data-testid="apply-state">{JSON.stringify(location.state || {})}</div>;
+  }
+
   return render(
     <MemoryRouter initialEntries={["/share/token-123"]}>
       <Routes>
         <Route path="/share/:token" element={<TenantSharePackagePage />} />
+        <Route path="/apply" element={<ApplyCapture />} />
       </Routes>
     </MemoryRouter>
   );
@@ -28,6 +35,7 @@ function renderPage() {
 describe("TenantSharePackagePage", () => {
   beforeEach(() => {
     publicTenantSharePackageApi.fetchPublicTenantSharePackage.mockReset();
+    publicTenantSharePackageApi.createApplyWithRentChainContext.mockReset();
   });
 
   it("renders the shared tenant identity summary safely", async () => {
@@ -59,6 +67,7 @@ describe("TenantSharePackagePage", () => {
     expect(screen.getByText(/^Verification$/i)).toBeInTheDocument();
     expect(screen.getByText(/Identity exchange available/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Request verification/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Apply with RentChain/i })).toBeInTheDocument();
     expect(screen.queryByText(/TransUnion/i)).not.toBeInTheDocument();
   });
 
@@ -110,5 +119,59 @@ describe("TenantSharePackagePage", () => {
       ]);
     });
     expect(screen.getAllByText(/^Unavailable$/i).length).toBeGreaterThan(0);
+  });
+
+  it("routes into the applicant apply flow with visible prefill state", async () => {
+    publicTenantSharePackageApi.fetchPublicTenantSharePackage.mockResolvedValue({
+      identity: {
+        identityStatus: "ready",
+        verification: { level: "partial" },
+        readinessLabel: "Ready to apply",
+        readinessDescription: "Your core profile and supporting records are ready for most rental workflows.",
+      },
+      application: { reusable: true },
+      identityExchangeReference: {
+        referenceType: "tenant_identity_reference",
+        referenceStatus: "available",
+        referenceLabel: "Identity exchange available",
+        referenceDescription: "This rental identity can support summary-only exchange requests within the tenant-controlled sharing flow.",
+        portabilityStatus: "ready",
+      },
+      availability: {
+        canRequestMore: true,
+        availableSections: ["identity", "application"],
+      },
+      generatedAt: "2026-04-26T00:00:00.000Z",
+    });
+    publicTenantSharePackageApi.createApplyWithRentChainContext.mockResolvedValue({
+      applyWithRentChain: {
+        source: "share_token",
+        tokenValidated: true,
+        scopesApproved: ["identity_summary", "application_summary"],
+        identityReference: {
+          referenceStatus: "available",
+          portabilityStatus: "ready",
+        },
+        applicationContext: {
+          prefilled: true,
+          requiredRemaining: ["credit_consent"],
+          prefill: {
+            applicant: { firstName: "Jordan", lastName: "Lee", email: "jordan@example.com", phone: "5551112222" },
+            currentAddress: { line1: "123 King St", city: "Halifax", province: "NS", postalCode: "B3H1A1" },
+            employment: null,
+          },
+        },
+      },
+    });
+
+    renderPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: /Apply with RentChain/i }));
+
+    await waitFor(() => {
+      expect(publicTenantSharePackageApi.createApplyWithRentChainContext).toHaveBeenCalledWith("token-123");
+    });
+    expect(await screen.findByTestId("apply-state")).toHaveTextContent("Jordan");
+    expect(screen.getByTestId("apply-state")).toHaveTextContent("identity_summary");
   });
 });

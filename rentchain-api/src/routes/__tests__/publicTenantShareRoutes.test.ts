@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const readTenantSharePackageByToken = vi.fn();
+const readTenantShareApplyContextByToken = vi.fn();
 const requestTenantSharePackageItems = vi.fn();
 const createTenantShareVerificationRequest = vi.fn();
 
 vi.mock("../../services/tenantPortal/tenantSharePackageService", () => ({
   createTenantShareVerificationRequest,
+  readTenantShareApplyContextByToken,
   readTenantSharePackageByToken,
   requestTenantSharePackageItems,
 }));
@@ -134,5 +136,55 @@ describe("publicTenantShareRoutes", () => {
     });
     expect(res.body?.data?.status).toBe("requested");
     expect(res.body?.data?.requestId).toBeUndefined();
+  });
+
+  it("returns a safe apply-with-rentchain prefill context for a valid token", async () => {
+    readTenantShareApplyContextByToken.mockResolvedValue({
+      applyWithRentChain: {
+        source: "share_token",
+        tokenValidated: true,
+        scopesApproved: ["identity_summary", "application_summary"],
+        identityReference: {
+          referenceStatus: "available",
+          portabilityStatus: "ready",
+        },
+        applicationContext: {
+          prefilled: true,
+          requiredRemaining: ["credit_consent"],
+          prefill: {
+            applicant: {
+              firstName: "Jordan",
+              lastName: "Lee",
+              email: "jordan@example.com",
+              phone: "5551112222",
+            },
+            currentAddress: {
+              line1: "123 King St",
+              city: "Halifax",
+              province: "NS",
+              postalCode: "B3H1A1",
+            },
+            employment: {
+              employerName: "Harbour Labs",
+              jobTitle: "Designer",
+              incomeAmountCents: 720000,
+              incomeFrequency: "monthly",
+              monthsAtJob: 12,
+            },
+          },
+        },
+      },
+    });
+
+    const router = (await import("../publicTenantShareRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/share/share-token-1/apply",
+    });
+
+    expect(res.status).toBe(200);
+    expect(readTenantShareApplyContextByToken).toHaveBeenCalledWith("share-token-1");
+    expect(res.body?.data?.applyWithRentChain?.tokenValidated).toBe(true);
+    expect(res.body?.data?.applyWithRentChain?.applicationContext?.prefill?.applicant?.firstName).toBe("Jordan");
   });
 });

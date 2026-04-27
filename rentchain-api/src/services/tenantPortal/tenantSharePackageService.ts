@@ -1,9 +1,18 @@
 import crypto from "crypto";
 import { db } from "../../config/firebase";
-import { loadTenantIdentityRecord, type TenantIdentityRecord } from "./tenantProfileService";
+import {
+  loadTenantApplicationReuseProjection,
+  loadTenantIdentityRecord,
+  type TenantApplicationReuseProjection,
+  type TenantIdentityRecord,
+} from "./tenantProfileService";
 import { resolveTenancyContext } from "./tenancyContextService";
 import { deriveTenantCredibilitySignals } from "../tenantCredibility/deriveTenantCredibilitySignals";
 import { deriveIdentityPortability, type PortableIdentity } from "../identityPortability/deriveIdentityPortability";
+import {
+  deriveApplyWithRentChainContext,
+  type ApplyWithRentChainContext,
+} from "../identityPortability/deriveApplyWithRentChainContext";
 import { deriveIdentityTimeline } from "../identityTimeline/deriveIdentityTimeline";
 import { derivePaymentReadiness, type PaymentReadiness } from "../paymentReadiness/derivePaymentReadiness";
 import {
@@ -91,6 +100,10 @@ export type TenantSharePackagePublicPayload = {
     availableSections: TenantSharePackageAvailabilitySection[];
   };
   generatedAt: string;
+};
+
+export type TenantShareApplyPayload = {
+  applyWithRentChain: ApplyWithRentChainContext;
 };
 
 export type TenantSharePackageRecord = {
@@ -292,6 +305,7 @@ async function loadTenantShareRecordByToken(token: string): Promise<TenantShareP
 
 type ResolvedShareTenantContext = {
   identity: TenantIdentityRecord;
+  applicationReuse: TenantApplicationReuseProjection;
   portableIdentity: PortableIdentity;
   paymentReadiness: PaymentReadiness | null;
   identityExchangeReference: IdentityExchangeReference;
@@ -329,6 +343,10 @@ async function resolveShareTenantContext(params: {
     userEmail: email,
   });
   if (!identity) return null;
+  const applicationReuse = await loadTenantApplicationReuseProjection({
+    context,
+    userEmail: email,
+  });
 
   const leaseSnap = context.leaseId
     ? await db.collection("leases").doc(String(context.leaseId || "")).get().catch(() => null as any)
@@ -375,6 +393,7 @@ async function resolveShareTenantContext(params: {
 
   return {
     identity,
+    applicationReuse,
     portableIdentity,
     paymentReadiness,
     identityExchangeReference,
@@ -476,6 +495,21 @@ function buildPublicPayload(params: {
   }
 
   return payload;
+}
+
+function deriveApprovedScopeKeysFromPermissions(
+  permissions: TenantSharePermissions
+): TenantSharePermissionKey[] {
+  const approved: TenantSharePermissionKey[] = [];
+  if (permissions.identitySummary) approved.push("identity_summary");
+  if (permissions.credibilitySummary) approved.push("credibility_summary");
+  if (permissions.applicationSummary) approved.push("application_summary");
+  if (permissions.documents === "summary" || permissions.documents === "approved_only") {
+    approved.push("documents_summary");
+  }
+  if (permissions.leaseSummary) approved.push("lease_summary");
+  if (permissions.paymentReadinessSummary) approved.push("payment_readiness_summary");
+  return approved;
 }
 
 export async function createTenantSharePackage(params: {
@@ -810,4 +844,32 @@ export async function readTenantSharePackageByToken(
     leaseSummary: resolved.leaseSummary,
     paymentReadiness: resolved.paymentReadiness,
   });
+}
+
+export async function readTenantShareApplyContextByToken(
+  token: string
+): Promise<TenantShareApplyPayload | null> {
+  const normalized = asString(token);
+  if (!normalized) return null;
+
+  const record = await loadTenantShareRecordByToken(normalized);
+  if (!record) return null;
+  if (record.status !== "active") return null;
+  if (Number(record.expiresAt || 0) <= nowMs()) return null;
+
+  const resolved = await resolveShareTenantContext({
+    tenantId: record.tenantId,
+    sharingControlsReady: true,
+  });
+  if (!resolved) return null;
+
+  return {
+    applyWithRentChain: deriveApplyWithRentChainContext({
+      approvedScopeKeys: deriveApprovedScopeKeysFromPermissions(
+        record.permissions || derivePermissionsFromApprovedItems(record.approvedItems || [])
+      ),
+      identityExchangeReference: resolved.identityExchangeReference,
+      applicationReuse: resolved.applicationReuse,
+    }),
+  };
 }

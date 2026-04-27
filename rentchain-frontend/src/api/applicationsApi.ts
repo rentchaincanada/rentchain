@@ -205,6 +205,20 @@ export interface Application {
   applicantProfile?: ApplicantProfile | null;
   applicationConsent?: ApplicationConsent | null;
   formVersion?: string | null;
+  applicationSource?: "apply_with_rentchain" | null;
+  identityReference?: {
+    source: "rentchain";
+    referenceType: "tenant_identity_reference";
+    referenceStatus: "available" | "limited" | "not_ready";
+  } | null;
+  approvedScopeKeys?: Array<
+    | "identity_summary"
+    | "credibility_summary"
+    | "application_summary"
+    | "documents_summary"
+    | "lease_summary"
+    | "payment_readiness_summary"
+  > | null;
 }
 
 /**
@@ -270,6 +284,20 @@ export interface SubmitApplicationPayload {
   applicantProfile?: ApplicantProfile;
   applicationConsent?: ApplicationConsent;
   formVersion?: string;
+  applicationSource?: "apply_with_rentchain";
+  identityReference?: {
+    source: "rentchain";
+    referenceType: "tenant_identity_reference";
+    referenceStatus: "available" | "limited" | "not_ready";
+  };
+  approvedScopeKeys?: Array<
+    | "identity_summary"
+    | "credibility_summary"
+    | "application_summary"
+    | "documents_summary"
+    | "lease_summary"
+    | "payment_readiness_summary"
+  >;
 }
 
 export interface UpdateApplicationPayload {

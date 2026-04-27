@@ -49,6 +49,50 @@ export type PublicTenantSharePackage = {
   generatedAt: string;
 };
 
+export type ApplyWithRentChainResponse = {
+  applyWithRentChain: {
+    source: "share_token";
+    tokenValidated: true;
+    scopesApproved: Array<
+      | "identity_summary"
+      | "credibility_summary"
+      | "application_summary"
+      | "documents_summary"
+      | "lease_summary"
+      | "payment_readiness_summary"
+    >;
+    identityReference: {
+      referenceStatus: "available" | "limited" | "not_ready";
+      portabilityStatus: "ready" | "limited" | "not_ready";
+    };
+    applicationContext: {
+      prefilled: boolean;
+      requiredRemaining: string[];
+      prefill: {
+        applicant: {
+          firstName?: string | null;
+          lastName?: string | null;
+          email?: string | null;
+          phone?: string | null;
+        };
+        currentAddress?: {
+          line1?: string | null;
+          city?: string | null;
+          province?: string | null;
+          postalCode?: string | null;
+        } | null;
+        employment?: {
+          employerName?: string | null;
+          jobTitle?: string | null;
+          incomeAmountCents?: number | null;
+          incomeFrequency?: "monthly" | "annual" | null;
+          monthsAtJob?: number | null;
+        } | null;
+      };
+    };
+  };
+};
+
 export async function fetchPublicTenantSharePackage(token: string): Promise<PublicTenantSharePackage | null> {
   const res = await apiFetch<{ ok: boolean; data: PublicTenantSharePackage }>(
     `/public/share/${encodeURIComponent(token)}`,
@@ -95,4 +139,16 @@ export async function requestPublicTenantSharePackageVerification(
     }
   );
   return res.data;
+}
+
+export async function createApplyWithRentChainContext(token: string): Promise<ApplyWithRentChainResponse | null> {
+  const res = await apiFetch<{ ok: boolean; data: ApplyWithRentChainResponse }>(
+    `/public/share/${encodeURIComponent(token)}/apply`,
+    {
+      method: "POST",
+      allow404: true,
+      suppressToasts: true,
+    }
+  );
+  return res?.data ?? null;
 }

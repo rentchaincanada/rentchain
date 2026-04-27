@@ -1,6 +1,7 @@
 import React from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import {
+  createApplyWithRentChainContext,
   fetchPublicTenantSharePackage,
   requestPublicTenantSharePackageVerification,
 } from "../../api/publicTenantSharePackageApi";
@@ -13,11 +14,14 @@ function prettyStatus(value: string | null | undefined) {
 
 export default function TenantSharePackagePage() {
   const { token = "" } = useParams();
+  const navigate = useNavigate();
   const [data, setData] = React.useState<Awaited<ReturnType<typeof fetchPublicTenantSharePackage>> | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [requesting, setRequesting] = React.useState(false);
   const [requestError, setRequestError] = React.useState<string | null>(null);
+  const [applyLoading, setApplyLoading] = React.useState(false);
+  const [applyError, setApplyError] = React.useState<string | null>(null);
   const [requestedItems, setRequestedItems] = React.useState<
     Array<
       "credibility_summary" | "application_summary" | "documents_summary" | "lease_summary" | "payment_readiness_summary"
@@ -78,7 +82,34 @@ export default function TenantSharePackagePage() {
     }
   }, [requestedItems, token]);
 
+  const handleApplyWithRentChain = React.useCallback(async () => {
+    try {
+      setApplyLoading(true);
+      setApplyError(null);
+      const result = await createApplyWithRentChainContext(token);
+      if (!result?.applyWithRentChain) {
+        setApplyError("This shared rental profile is unavailable.");
+        return;
+      }
+      navigate("/apply", {
+        state: {
+          applyWithRentChain: result.applyWithRentChain,
+        },
+      });
+    } catch (err: any) {
+      setApplyError(err?.message || "Unable to prepare this application right now.");
+    } finally {
+      setApplyLoading(false);
+    }
+  }, [navigate, token]);
+
   const availableSections = new Set(data?.availability?.availableSections || []);
+  const canApplyWithRentChain = Boolean(
+    data?.identityExchangeReference &&
+      (data.identityExchangeReference.referenceStatus === "available" ||
+        data.identityExchangeReference.referenceStatus === "limited") &&
+      (availableSections.has("identity") || availableSections.has("application"))
+  );
 
   return (
     <div style={{ minHeight: "100vh", background: "linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%)", padding: 24 }}>
@@ -127,6 +158,21 @@ export default function TenantSharePackagePage() {
                 <div style={{ fontSize: "1.05rem", fontWeight: 800, color: "#0f172a" }}>Identity exchange</div>
                 <div style={{ color: "#0f172a", fontWeight: 700 }}>{data.identityExchangeReference.referenceLabel}</div>
                 <div style={{ color: "#475569", lineHeight: 1.6 }}>{data.identityExchangeReference.referenceDescription}</div>
+                {canApplyWithRentChain ? (
+                  <div style={{ display: "grid", gap: 8, justifyItems: "start" }}>
+                    <button
+                      type="button"
+                      onClick={() => void handleApplyWithRentChain()}
+                      disabled={applyLoading}
+                    >
+                      {applyLoading ? "Preparing application..." : "Apply with RentChain"}
+                    </button>
+                    <div style={{ color: "#475569", fontSize: "0.92rem" }}>
+                      Use the tenant-approved profile details already shared here to start an application faster.
+                    </div>
+                    {applyError ? <div style={{ color: "#b91c1c" }}>{applyError}</div> : null}
+                  </div>
+                ) : null}
               </div>
             ) : null}
 
