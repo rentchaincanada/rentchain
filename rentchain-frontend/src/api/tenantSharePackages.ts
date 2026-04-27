@@ -1,5 +1,28 @@
 import { tenantApiFetch } from "./tenantApiFetch";
 
+export type TenantShareVerificationRequestScope =
+  | "identity_summary"
+  | "credibility_summary"
+  | "application_summary"
+  | "documents_summary"
+  | "lease_summary"
+  | "payment_readiness_summary";
+
+export type IdentityExchangeReference = {
+  referenceType: "tenant_identity_reference";
+  referenceStatus: "available" | "limited" | "not_ready";
+  referenceLabel: string;
+  referenceDescription: string;
+  portabilityStatus: "ready" | "limited" | "not_ready";
+  exchangeReadiness: {
+    identityReady: boolean;
+    credibilityReady: boolean;
+    sharingControlsReady: boolean;
+    auditTimelineReady: boolean;
+    paymentReadinessAvailable: boolean;
+  };
+};
+
 export type TenantSharePackageLink = {
   id: string;
   createdAt: number;
@@ -10,13 +33,20 @@ export type TenantSharePackageLink = {
     credibilitySummary: boolean;
     applicationSummary: boolean;
     documents: "none" | "summary" | "approved_only";
+    leaseSummary: boolean;
+    paymentReadinessSummary: boolean;
   };
-  requestedItems: Array<
-    "identity_summary" | "credibility_summary" | "application_summary" | "documents_summary"
-  >;
-  approvedItems: Array<
-    "identity_summary" | "credibility_summary" | "application_summary" | "documents_summary"
-  >;
+  requestedItems: TenantShareVerificationRequestScope[];
+  approvedItems: TenantShareVerificationRequestScope[];
+  verificationRequests: Array<{
+    requestId: string;
+    requestedByType: "landlord" | "internal" | "future_institution";
+    requestedScopes: TenantShareVerificationRequestScope[];
+    status: "requested" | "approved" | "declined" | "revoked" | "expired";
+    createdAt: number;
+    expiresAt?: number;
+  }>;
+  identityExchangeReference: IdentityExchangeReference | null;
 };
 
 export type TenantSharePackageCreated = TenantSharePackageLink & {
@@ -44,13 +74,41 @@ export async function revokeTenantSharePackage(id: string): Promise<void> {
 
 export async function respondToTenantSharePackage(
   id: string,
-  approvedItems: Array<"identity_summary" | "credibility_summary" | "application_summary" | "documents_summary">
+  approvedItems: TenantShareVerificationRequestScope[]
 ): Promise<TenantSharePackageLink> {
   const res = await tenantApiFetch<{ ok: boolean; data: TenantSharePackageLink }>(
     `/tenant/share-packages/${encodeURIComponent(id)}/respond`,
     {
       method: "POST",
       body: { approvedItems },
+    }
+  );
+  return res.data;
+}
+
+export async function respondToTenantShareVerificationRequest(
+  sharePackageId: string,
+  requestId: string,
+  approvedScopes: TenantShareVerificationRequestScope[]
+): Promise<TenantSharePackageLink> {
+  const res = await tenantApiFetch<{ ok: boolean; data: TenantSharePackageLink }>(
+    `/tenant/share-packages/${encodeURIComponent(sharePackageId)}/verification-requests/${encodeURIComponent(requestId)}/respond`,
+    {
+      method: "POST",
+      body: { approvedScopes },
+    }
+  );
+  return res.data;
+}
+
+export async function revokeTenantShareVerificationRequest(
+  sharePackageId: string,
+  requestId: string
+): Promise<TenantSharePackageLink> {
+  const res = await tenantApiFetch<{ ok: boolean; data: TenantSharePackageLink }>(
+    `/tenant/share-packages/${encodeURIComponent(sharePackageId)}/verification-requests/${encodeURIComponent(requestId)}/revoke`,
+    {
+      method: "POST",
     }
   );
   return res.data;

@@ -5,7 +5,7 @@ import TenantSharePackagePage from "./TenantSharePackagePage";
 
 const publicTenantSharePackageApi = vi.hoisted(() => ({
   fetchPublicTenantSharePackage: vi.fn(),
-  requestPublicTenantSharePackageItems: vi.fn(),
+  requestPublicTenantSharePackageVerification: vi.fn(),
 }));
 
 vi.mock("../../api/publicTenantSharePackageApi", () => publicTenantSharePackageApi);
@@ -38,6 +38,13 @@ describe("TenantSharePackagePage", () => {
         readinessLabel: "Ready to apply",
         readinessDescription: "Your core profile and supporting records are ready for most rental workflows.",
       },
+      identityExchangeReference: {
+        referenceType: "tenant_identity_reference",
+        referenceStatus: "available",
+        referenceLabel: "Identity exchange available",
+        referenceDescription: "This rental identity can support summary-only exchange requests within the tenant-controlled sharing flow.",
+        portabilityStatus: "ready",
+      },
       availability: {
         canRequestMore: true,
         availableSections: ["identity"],
@@ -50,7 +57,8 @@ describe("TenantSharePackagePage", () => {
     expect(await screen.findByText(/Shared Rental Profile/i)).toBeInTheDocument();
     expect(screen.getByText(/Ready to apply/i)).toBeInTheDocument();
     expect(screen.getByText(/^Verification$/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Request additional information/i })).toBeInTheDocument();
+    expect(screen.getByText(/Identity exchange available/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Request verification/i })).toBeInTheDocument();
     expect(screen.queryByText(/TransUnion/i)).not.toBeInTheDocument();
   });
 
@@ -70,25 +78,35 @@ describe("TenantSharePackagePage", () => {
         readinessLabel: "Ready to apply",
         readinessDescription: "Your core profile and supporting records are ready for most rental workflows.",
       },
+      identityExchangeReference: {
+        referenceType: "tenant_identity_reference",
+        referenceStatus: "available",
+        referenceLabel: "Identity exchange available",
+        referenceDescription: "This rental identity can support summary-only exchange requests within the tenant-controlled sharing flow.",
+        portabilityStatus: "ready",
+      },
       availability: {
         canRequestMore: true,
         availableSections: ["identity"],
       },
       generatedAt: "2026-04-26T00:00:00.000Z",
     });
-    publicTenantSharePackageApi.requestPublicTenantSharePackageItems.mockResolvedValue({
-      requestedItems: ["credibility_summary"],
+    publicTenantSharePackageApi.requestPublicTenantSharePackageVerification.mockResolvedValue({
+      status: "requested",
+      requestedScopes: ["credibility_summary", "payment_readiness_summary"],
     });
 
     renderPage();
 
-    expect(await screen.findByRole("button", { name: /Request additional information/i })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /Request verification/i })).toBeInTheDocument();
     fireEvent.click(screen.getByLabelText(/Credibility summary/i));
-    fireEvent.click(screen.getByRole("button", { name: /Request additional information/i }));
+    fireEvent.click(screen.getByLabelText(/Payment readiness summary/i));
+    fireEvent.click(screen.getByRole("button", { name: /Request verification/i }));
 
     await waitFor(() => {
-      expect(publicTenantSharePackageApi.requestPublicTenantSharePackageItems).toHaveBeenCalledWith("token-123", [
+      expect(publicTenantSharePackageApi.requestPublicTenantSharePackageVerification).toHaveBeenCalledWith("token-123", [
         "credibility_summary",
+        "payment_readiness_summary",
       ]);
     });
     expect(screen.getAllByText(/^Unavailable$/i).length).toBeGreaterThan(0);

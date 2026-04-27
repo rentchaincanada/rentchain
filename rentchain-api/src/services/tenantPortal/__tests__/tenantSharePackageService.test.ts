@@ -10,6 +10,13 @@ function ensureCollection(name: string) {
 
 const dbMock = {
   collection: (name: string) => ({
+    async get() {
+      const docs = Array.from(ensureCollection(name).entries()).map(([id, data]) => ({
+        id,
+        data: () => data,
+      }));
+      return { docs, empty: docs.length === 0 };
+    },
     doc: (id?: string) => {
       const resolvedId = id || `generated-${++generatedId}`;
       return {
@@ -68,6 +75,16 @@ describe("tenantSharePackageService", () => {
     ensureCollection("tenants").set("tenant-1", {
       email: "tenant@example.com",
     });
+    ensureCollection("leases").set("lease-1", {
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      status: "active",
+      startDate: "2026-02-01",
+      endDate: "2027-01-31",
+      monthlyRent: 1800,
+      dueDay: 1,
+    });
     resolveTenancyContext.mockResolvedValue({
       ok: true,
       authority: "active_tenant",
@@ -106,9 +123,12 @@ describe("tenantSharePackageService", () => {
       credibilitySummary: false,
       applicationSummary: false,
       documents: "none",
+      leaseSummary: false,
+      paymentReadinessSummary: false,
     });
     expect(docs[0]?.requestedItems).toEqual([]);
     expect(docs[0]?.approvedItems).toEqual([]);
+    expect(docs[0]?.verificationRequests).toEqual([]);
   });
 
   it("derives a safe public payload at read time with identity only by default", async () => {
@@ -127,6 +147,9 @@ describe("tenantSharePackageService", () => {
         availability: expect.objectContaining({
           canRequestMore: true,
           availableSections: ["identity"],
+        }),
+        identityExchangeReference: expect.objectContaining({
+          referenceType: "tenant_identity_reference",
         }),
       })
     );
@@ -162,6 +185,8 @@ describe("tenantSharePackageService", () => {
           credibilitySummary: true,
           applicationSummary: false,
           documents: "approved_only",
+          leaseSummary: false,
+          paymentReadinessSummary: false,
         },
       })
     );
@@ -175,6 +200,95 @@ describe("tenantSharePackageService", () => {
     );
     expect(payload?.documents).toEqual({ completionStatus: "complete" });
     expect(payload?.application).toBeUndefined();
+  });
+
+  it("creates verification requests without granting access and only expands approved safe scopes", async () => {
+    const service = await import("../tenantSharePackageService");
+    const created = await service.createTenantSharePackage({ tenantId: "tenant-1" });
+    const token = created.shareUrl.split("/share/")[1];
+
+    const request = await service.createTenantShareVerificationRequest({
+      token,
+      requestedScopes: ["lease_summary", "payment_readiness_summary", "unknown_key"],
+      requestedByType: "landlord",
+    });
+
+    expect(request).toEqual({
+      status: "requested",
+      requestedScopes: ["lease_summary", "payment_readiness_summary"],
+    });
+
+    let payload = await service.readTenantSharePackageByToken(token);
+    expect(payload?.leaseSummary).toBeUndefined();
+    expect(payload?.paymentReadinessSummary).toBeUndefined();
+
+    const record = ensureCollection("tenantSharePackages").get(created.id);
+    const requestId = record?.verificationRequests?.[0]?.requestId;
+    const responded = await service.respondToTenantShareVerificationRequest({
+      tenantId: "tenant-1",
+      sharePackageId: created.id,
+      requestId,
+      approvedScopes: ["payment_readiness_summary"],
+    });
+
+    expect(responded).toEqual(
+      expect.objectContaining({
+        approvedItems: ["payment_readiness_summary"],
+        requestedItems: [],
+      })
+    );
+
+    payload = await service.readTenantSharePackageByToken(token);
+    expect(payload?.leaseSummary).toBeUndefined();
+    expect(payload?.paymentReadinessSummary).toEqual(
+      expect.objectContaining({
+        readinessStatus: expect.stringMatching(/not_ready|ready_to_configure|blocked/),
+      })
+    );
+  });
+
+  it("lets the tenant decline and revoke verification requests without exposing new access automatically", async () => {
+    const service = await import("../tenantSharePackageService");
+    const created = await service.createTenantSharePackage({ tenantId: "tenant-1" });
+    const token = created.shareUrl.split("/share/")[1];
+    await service.createTenantShareVerificationRequest({
+      token,
+      requestedScopes: ["lease_summary"],
+      requestedByType: "landlord",
+    });
+    let record = ensureCollection("tenantSharePackages").get(created.id);
+    let requestId = record?.verificationRequests?.[0]?.requestId;
+
+    const declined = await service.respondToTenantShareVerificationRequest({
+      tenantId: "tenant-1",
+      sharePackageId: created.id,
+      requestId,
+      approvedScopes: [],
+    });
+    expect(declined).toEqual(expect.objectContaining({ approvedItems: [] }));
+
+    await service.createTenantShareVerificationRequest({
+      token,
+      requestedScopes: ["lease_summary"],
+      requestedByType: "landlord",
+    });
+    record = ensureCollection("tenantSharePackages").get(created.id);
+    requestId = record?.verificationRequests?.find((entry: any) => entry.status === "requested")?.requestId;
+    const revoked = await service.revokeTenantShareVerificationRequest({
+      tenantId: "tenant-1",
+      sharePackageId: created.id,
+      requestId,
+    });
+    expect(revoked).toEqual(
+      expect.objectContaining({
+        verificationRequests: expect.arrayContaining([
+          expect.objectContaining({
+            requestId,
+            status: "revoked",
+          }),
+        ]),
+      })
+    );
   });
 
   it("only lets the owning tenant respond to a share request", async () => {

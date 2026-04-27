@@ -55,6 +55,8 @@ const tenantSharePackagesApi = vi.hoisted(() => ({
   listTenantSharePackages: vi.fn(),
   revokeTenantSharePackage: vi.fn(),
   respondToTenantSharePackage: vi.fn(),
+  respondToTenantShareVerificationRequest: vi.fn(),
+  revokeTenantShareVerificationRequest: vi.fn(),
 }));
 
 vi.mock("../../api/tenantPortal", () => tenantPortalApi);
@@ -375,9 +377,26 @@ describe("tenant workspace frontend shell", () => {
         credibilitySummary: false,
         applicationSummary: false,
         documents: "none",
+        leaseSummary: false,
+        paymentReadinessSummary: false,
       },
       requestedItems: [],
       approvedItems: [],
+      verificationRequests: [],
+      identityExchangeReference: {
+        referenceType: "tenant_identity_reference",
+        referenceStatus: "available",
+        referenceLabel: "Identity exchange available",
+        referenceDescription: "This rental identity can support summary-only exchange requests within the tenant-controlled sharing flow.",
+        portabilityStatus: "ready",
+        exchangeReadiness: {
+          identityReady: true,
+          credibilityReady: true,
+          sharingControlsReady: true,
+          auditTimelineReady: true,
+          paymentReadinessAvailable: false,
+        },
+      },
       shareUrl: "https://app.example/share/share-token-1",
     });
     tenantSharePackagesApi.revokeTenantSharePackage.mockResolvedValue(undefined);
@@ -391,9 +410,26 @@ describe("tenant workspace frontend shell", () => {
         credibilitySummary: true,
         applicationSummary: false,
         documents: "approved_only",
+        leaseSummary: false,
+        paymentReadinessSummary: false,
       },
       requestedItems: [],
       approvedItems: ["credibility_summary", "documents_summary"],
+      verificationRequests: [],
+      identityExchangeReference: {
+        referenceType: "tenant_identity_reference",
+        referenceStatus: "available",
+        referenceLabel: "Identity exchange available",
+        referenceDescription: "This rental identity can support summary-only exchange requests within the tenant-controlled sharing flow.",
+        portabilityStatus: "ready",
+        exchangeReadiness: {
+          identityReady: true,
+          credibilityReady: true,
+          sharingControlsReady: true,
+          auditTimelineReady: true,
+          paymentReadinessAvailable: false,
+        },
+      },
     });
     Object.assign(navigator, {
       clipboard: {
@@ -651,9 +687,26 @@ describe("tenant workspace frontend shell", () => {
             credibilitySummary: false,
             applicationSummary: false,
             documents: "none",
+            leaseSummary: false,
+            paymentReadinessSummary: false,
           },
           requestedItems: [],
           approvedItems: [],
+          verificationRequests: [],
+          identityExchangeReference: {
+            referenceType: "tenant_identity_reference",
+            referenceStatus: "available",
+            referenceLabel: "Identity exchange available",
+            referenceDescription: "This rental identity can support summary-only exchange requests within the tenant-controlled sharing flow.",
+            portabilityStatus: "ready",
+            exchangeReadiness: {
+              identityReady: true,
+              credibilityReady: true,
+              sharingControlsReady: true,
+              auditTimelineReady: true,
+              paymentReadinessAvailable: false,
+            },
+          },
         },
       ]);
 
@@ -691,9 +744,34 @@ describe("tenant workspace frontend shell", () => {
           credibilitySummary: false,
           applicationSummary: false,
           documents: "none",
+          leaseSummary: false,
+          paymentReadinessSummary: false,
         },
         requestedItems: ["credibility_summary", "documents_summary"],
         approvedItems: [],
+        verificationRequests: [
+          {
+            requestId: "req-1",
+            requestedByType: "landlord",
+            requestedScopes: ["lease_summary", "payment_readiness_summary"],
+            status: "requested",
+            createdAt: 1710000000000,
+          },
+        ],
+        identityExchangeReference: {
+          referenceType: "tenant_identity_reference",
+          referenceStatus: "available",
+          referenceLabel: "Identity exchange available",
+          referenceDescription: "This rental identity can support summary-only exchange requests within the tenant-controlled sharing flow.",
+          portabilityStatus: "ready",
+          exchangeReadiness: {
+            identityReady: true,
+            credibilityReady: true,
+            sharingControlsReady: true,
+            auditTimelineReady: true,
+            paymentReadinessAvailable: true,
+          },
+        },
       },
     ]);
 
@@ -714,6 +792,150 @@ describe("tenant workspace frontend shell", () => {
       ]);
     });
     expect(await screen.findByText(/Approved: Credibility summary, Documents summary/i)).toBeInTheDocument();
+    expect(screen.getByText(/Identity exchange available/i)).toBeInTheDocument();
+  });
+
+  it("lets tenants approve and revoke verification requests", async () => {
+    tenantSharePackagesApi.listTenantSharePackages.mockResolvedValue([
+      {
+        id: "share-1",
+        createdAt: 1710000000000,
+        expiresAt: 1710600000000,
+        status: "active",
+        permissions: {
+          identitySummary: true,
+          credibilitySummary: false,
+          applicationSummary: false,
+          documents: "none",
+          leaseSummary: false,
+          paymentReadinessSummary: false,
+        },
+        requestedItems: [],
+        approvedItems: [],
+        verificationRequests: [
+          {
+            requestId: "req-1",
+            requestedByType: "landlord",
+            requestedScopes: ["lease_summary", "payment_readiness_summary"],
+            status: "requested",
+            createdAt: 1710000000000,
+          },
+        ],
+        identityExchangeReference: {
+          referenceType: "tenant_identity_reference",
+          referenceStatus: "available",
+          referenceLabel: "Identity exchange available",
+          referenceDescription: "This rental identity can support summary-only exchange requests within the tenant-controlled sharing flow.",
+          portabilityStatus: "ready",
+          exchangeReadiness: {
+            identityReady: true,
+            credibilityReady: true,
+            sharingControlsReady: true,
+            auditTimelineReady: true,
+            paymentReadinessAvailable: true,
+          },
+        },
+      },
+    ]);
+    tenantSharePackagesApi.respondToTenantShareVerificationRequest.mockResolvedValue({
+      id: "share-1",
+      createdAt: 1710000000000,
+      expiresAt: 1710600000000,
+      status: "active",
+      permissions: {
+        identitySummary: true,
+        credibilitySummary: false,
+        applicationSummary: false,
+        documents: "none",
+        leaseSummary: false,
+        paymentReadinessSummary: true,
+      },
+      requestedItems: [],
+      approvedItems: ["payment_readiness_summary"],
+      verificationRequests: [
+        {
+          requestId: "req-1",
+          requestedByType: "landlord",
+          requestedScopes: ["payment_readiness_summary"],
+          status: "approved",
+          createdAt: 1710000000000,
+        },
+      ],
+      identityExchangeReference: {
+        referenceType: "tenant_identity_reference",
+        referenceStatus: "available",
+        referenceLabel: "Identity exchange available",
+        referenceDescription: "This rental identity can support summary-only exchange requests within the tenant-controlled sharing flow.",
+        portabilityStatus: "ready",
+        exchangeReadiness: {
+          identityReady: true,
+          credibilityReady: true,
+          sharingControlsReady: true,
+          auditTimelineReady: true,
+          paymentReadinessAvailable: true,
+        },
+      },
+    });
+    tenantSharePackagesApi.revokeTenantShareVerificationRequest.mockResolvedValue({
+      id: "share-1",
+      createdAt: 1710000000000,
+      expiresAt: 1710600000000,
+      status: "active",
+      permissions: {
+        identitySummary: true,
+        credibilitySummary: false,
+        applicationSummary: false,
+        documents: "none",
+        leaseSummary: false,
+        paymentReadinessSummary: false,
+      },
+      requestedItems: [],
+      approvedItems: [],
+      verificationRequests: [
+        {
+          requestId: "req-1",
+          requestedByType: "landlord",
+          requestedScopes: ["payment_readiness_summary"],
+          status: "revoked",
+          createdAt: 1710000000000,
+        },
+      ],
+      identityExchangeReference: {
+        referenceType: "tenant_identity_reference",
+        referenceStatus: "available",
+        referenceLabel: "Identity exchange available",
+        referenceDescription: "This rental identity can support summary-only exchange requests within the tenant-controlled sharing flow.",
+        portabilityStatus: "ready",
+        exchangeReadiness: {
+          identityReady: true,
+          credibilityReady: true,
+          sharingControlsReady: true,
+          auditTimelineReady: true,
+          paymentReadinessAvailable: true,
+        },
+      },
+    });
+
+    render(
+      <MemoryRouter>
+        <TenantWorkspacePage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole("button", { name: /Approve request/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Approve request/i }));
+    await waitFor(() => {
+      expect(tenantSharePackagesApi.respondToTenantShareVerificationRequest).toHaveBeenCalledWith("share-1", "req-1", [
+        "lease_summary",
+        "payment_readiness_summary",
+      ]);
+    });
+
+    expect(await screen.findByRole("button", { name: /Revoke request/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Revoke request/i }));
+    await waitFor(() => {
+      expect(tenantSharePackagesApi.revokeTenantShareVerificationRequest).toHaveBeenCalledWith("share-1", "req-1");
+    });
   });
 
   it("shows an active-tenancy transition state when tenant access is active but the lease is not active yet", async () => {

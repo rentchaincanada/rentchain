@@ -2,8 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const readTenantSharePackageByToken = vi.fn();
 const requestTenantSharePackageItems = vi.fn();
+const createTenantShareVerificationRequest = vi.fn();
 
 vi.mock("../../services/tenantPortal/tenantSharePackageService", () => ({
+  createTenantShareVerificationRequest,
   readTenantSharePackageByToken,
   requestTenantSharePackageItems,
 }));
@@ -11,7 +13,8 @@ vi.mock("../../services/tenantPortal/tenantSharePackageService", () => ({
 async function invokeRouter(router: any, options: { method: string; url: string; body?: any }) {
   return await new Promise<{ status: number; body: any }>((resolve, reject) => {
     const path = options.url;
-    const token = path.split("/").pop() || "";
+    const segments = path.split("/").filter(Boolean);
+    const token = segments[1] || "";
     const req: any = {
       method: options.method,
       url: path,
@@ -106,5 +109,30 @@ describe("publicTenantShareRoutes", () => {
       requestedItems: ["credibility_summary", "unknown_key", "documents_summary"],
     });
     expect(res.body?.data?.requestedItems).toEqual(["credibility_summary", "documents_summary"]);
+  });
+
+  it("creates a verification request through a valid share token without exposing request internals", async () => {
+    createTenantShareVerificationRequest.mockResolvedValue({
+      status: "requested",
+      requestedScopes: ["lease_summary", "payment_readiness_summary"],
+    });
+
+    const router = (await import("../publicTenantShareRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/share/share-token-1/verification-request",
+      body: {
+        requestedScopes: ["lease_summary", "payment_readiness_summary", "unknown_key"],
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(createTenantShareVerificationRequest).toHaveBeenCalledWith({
+      token: "share-token-1",
+      requestedScopes: ["lease_summary", "payment_readiness_summary", "unknown_key"],
+      requestedByType: "landlord",
+    });
+    expect(res.body?.data?.status).toBe("requested");
+    expect(res.body?.data?.requestId).toBeUndefined();
   });
 });

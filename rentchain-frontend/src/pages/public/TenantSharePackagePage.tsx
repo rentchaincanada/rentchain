@@ -2,7 +2,7 @@ import React from "react";
 import { useParams } from "react-router-dom";
 import {
   fetchPublicTenantSharePackage,
-  requestPublicTenantSharePackageItems,
+  requestPublicTenantSharePackageVerification,
 } from "../../api/publicTenantSharePackageApi";
 
 function prettyStatus(value: string | null | undefined) {
@@ -18,7 +18,11 @@ export default function TenantSharePackagePage() {
   const [error, setError] = React.useState<string | null>(null);
   const [requesting, setRequesting] = React.useState(false);
   const [requestError, setRequestError] = React.useState<string | null>(null);
-  const [requestedItems, setRequestedItems] = React.useState<Array<"credibility_summary" | "application_summary" | "documents_summary">>([]);
+  const [requestedItems, setRequestedItems] = React.useState<
+    Array<
+      "credibility_summary" | "application_summary" | "documents_summary" | "lease_summary" | "payment_readiness_summary"
+    >
+  >([]);
 
   React.useEffect(() => {
     let mounted = true;
@@ -47,7 +51,14 @@ export default function TenantSharePackagePage() {
   }, [token]);
 
   const toggleRequestItem = React.useCallback(
-    (item: "credibility_summary" | "application_summary" | "documents_summary") => {
+    (
+      item:
+        | "credibility_summary"
+        | "application_summary"
+        | "documents_summary"
+        | "lease_summary"
+        | "payment_readiness_summary"
+    ) => {
       setRequestedItems((current) =>
         current.includes(item) ? current.filter((entry) => entry !== item) : [...current, item]
       );
@@ -59,7 +70,7 @@ export default function TenantSharePackagePage() {
     try {
       setRequesting(true);
       setRequestError(null);
-      await requestPublicTenantSharePackageItems(token, requestedItems);
+      await requestPublicTenantSharePackageVerification(token, requestedItems);
     } catch (err: any) {
       setRequestError(err?.message || "Unable to save this request right now.");
     } finally {
@@ -111,6 +122,14 @@ export default function TenantSharePackagePage() {
               </div>
             ) : null}
 
+            {data.identityExchangeReference ? (
+              <div style={{ border: "1px solid rgba(15,23,42,0.08)", borderRadius: 16, background: "#fff", padding: 18, display: "grid", gap: 8 }}>
+                <div style={{ fontSize: "1.05rem", fontWeight: 800, color: "#0f172a" }}>Identity exchange</div>
+                <div style={{ color: "#0f172a", fontWeight: 700 }}>{data.identityExchangeReference.referenceLabel}</div>
+                <div style={{ color: "#475569", lineHeight: 1.6 }}>{data.identityExchangeReference.referenceDescription}</div>
+              </div>
+            ) : null}
+
             <div style={{ border: "1px solid rgba(15,23,42,0.08)", borderRadius: 16, background: "#fff", padding: 18, display: "grid", gap: 12 }}>
               <div style={{ fontWeight: 800, color: "#0f172a" }}>Available information</div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
@@ -118,6 +137,12 @@ export default function TenantSharePackagePage() {
                   ["Credibility summary", availableSections.has("credibilitySummary"), data.credibilitySummary?.summaryLabel || "Unavailable"],
                   ["Application summary", availableSections.has("application"), data.application?.reusable ? "Reusable application available" : "Unavailable"],
                   ["Documents summary", availableSections.has("documents"), data.documents ? prettyStatus(data.documents.completionStatus) : "Unavailable"],
+                  ["Lease summary", availableSections.has("leaseSummary"), data.leaseSummary?.status ? prettyStatus(data.leaseSummary.status) : "Unavailable"],
+                  [
+                    "Payment readiness summary",
+                    availableSections.has("paymentReadinessSummary"),
+                    data.paymentReadinessSummary?.readinessLabel || "Unavailable",
+                  ],
                 ].map(([label, available, value]) => (
                   <div key={String(label)} style={{ border: "1px solid rgba(15,23,42,0.08)", borderRadius: 12, padding: "12px 14px", display: "grid", gap: 4 }}>
                     <div style={{ color: "#64748b", fontSize: "0.85rem" }}>{label}</div>
@@ -127,6 +152,9 @@ export default function TenantSharePackagePage() {
               </div>
               {data.credibilitySummary ? (
                 <div style={{ color: "#475569", lineHeight: 1.6 }}>{data.credibilitySummary.summaryDescription}</div>
+              ) : null}
+              {data.paymentReadinessSummary ? (
+                <div style={{ color: "#475569", lineHeight: 1.6 }}>{data.paymentReadinessSummary.readinessDescription}</div>
               ) : null}
             </div>
 
@@ -159,9 +187,25 @@ export default function TenantSharePackagePage() {
                 />
                 Documents summary
               </label>
+              <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <input
+                  type="checkbox"
+                  checked={requestedItems.includes("lease_summary")}
+                  onChange={() => toggleRequestItem("lease_summary")}
+                />
+                Lease summary
+              </label>
+              <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <input
+                  type="checkbox"
+                  checked={requestedItems.includes("payment_readiness_summary")}
+                  onChange={() => toggleRequestItem("payment_readiness_summary")}
+                />
+                Payment readiness summary
+              </label>
               <div>
                 <button type="button" onClick={() => void handleRequest()} disabled={requesting || requestedItems.length === 0}>
-                  {requesting ? "Requesting..." : "Request additional information"}
+                  {requesting ? "Requesting..." : "Request verification"}
                 </button>
               </div>
               {requestError ? <div style={{ color: "#b91c1c" }}>{requestError}</div> : null}

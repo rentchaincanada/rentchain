@@ -37,7 +37,9 @@ import { adaptTenantSafeScreeningState } from "../services/screening/tenantScree
 import {
   createTenantSharePackage,
   listTenantSharePackages,
+  respondToTenantShareVerificationRequest,
   respondToTenantSharePackage,
+  revokeTenantShareVerificationRequest,
   revokeTenantSharePackage,
 } from "../services/tenantPortal/tenantSharePackageService";
 
@@ -3071,6 +3073,79 @@ router.post("/share-packages/:id/respond", requireTenantWorkspaceIdentity, async
     return res.status(500).json({ ok: false, error: "TENANT_SHARE_PACKAGE_RESPOND_FAILED" });
   }
 });
+
+router.post(
+  "/share-packages/:id/verification-requests/:requestId/respond",
+  requireTenantWorkspaceIdentity,
+  async (req: any, res) => {
+    const context = await resolveWorkspaceContextOrRespond(req, res);
+    if (!context) return;
+
+    const tenantId = String(req.user?.tenantId || context.tenantId || "").trim();
+    const sharePackageId = String(req.params?.id || "").trim();
+    const requestId = String(req.params?.requestId || "").trim();
+    if (!tenantId || !sharePackageId || !requestId) {
+      return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+    }
+
+    try {
+      const updated = await respondToTenantShareVerificationRequest({
+        tenantId,
+        sharePackageId,
+        requestId,
+        approvedScopes: req.body?.approvedScopes,
+      });
+      if (!updated) {
+        return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+      }
+      return res.json({ ok: true, data: updated });
+    } catch (err: any) {
+      console.error("[tenant/share-packages:verification-respond] failed", {
+        tenantId,
+        sharePackageId,
+        requestId,
+        message: err?.message || "failed",
+      });
+      return res.status(500).json({ ok: false, error: "TENANT_SHARE_VERIFICATION_RESPOND_FAILED" });
+    }
+  }
+);
+
+router.post(
+  "/share-packages/:id/verification-requests/:requestId/revoke",
+  requireTenantWorkspaceIdentity,
+  async (req: any, res) => {
+    const context = await resolveWorkspaceContextOrRespond(req, res);
+    if (!context) return;
+
+    const tenantId = String(req.user?.tenantId || context.tenantId || "").trim();
+    const sharePackageId = String(req.params?.id || "").trim();
+    const requestId = String(req.params?.requestId || "").trim();
+    if (!tenantId || !sharePackageId || !requestId) {
+      return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+    }
+
+    try {
+      const updated = await revokeTenantShareVerificationRequest({
+        tenantId,
+        sharePackageId,
+        requestId,
+      });
+      if (!updated) {
+        return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+      }
+      return res.json({ ok: true, data: updated });
+    } catch (err: any) {
+      console.error("[tenant/share-packages:verification-revoke] failed", {
+        tenantId,
+        sharePackageId,
+        requestId,
+        message: err?.message || "failed",
+      });
+      return res.status(500).json({ ok: false, error: "TENANT_SHARE_VERIFICATION_REVOKE_FAILED" });
+    }
+  }
+);
 
 router.get("/notification-preferences", requireTenantWorkspaceIdentity, async (req: any, res) => {
   const userId = String(req.user?.id || "").trim();

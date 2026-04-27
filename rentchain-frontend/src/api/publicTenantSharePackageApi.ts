@@ -21,9 +21,30 @@ export type PublicTenantSharePackage = {
   documents?: {
     completionStatus: "complete" | "in_progress" | "missing" | "needs_attention";
   };
+  leaseSummary?: {
+    status: string | null;
+    startDate: string | null;
+    endDate: string | null;
+    monthlyRent: number | null;
+  };
+  paymentReadinessSummary?: {
+    readinessStatus: "not_ready" | "ready_to_configure" | "blocked";
+    readinessLabel: string;
+    readinessDescription: string;
+    requiredNextAction: "complete_lease_details" | "review_rent_terms" | "confirm_payment_setup_later" | "none";
+  };
+  identityExchangeReference?: {
+    referenceType: "tenant_identity_reference";
+    referenceStatus: "available" | "limited" | "not_ready";
+    referenceLabel: string;
+    referenceDescription: string;
+    portabilityStatus: "ready" | "limited" | "not_ready";
+  };
   availability: {
     canRequestMore: boolean;
-    availableSections: Array<"identity" | "credibilitySummary" | "application" | "documents">;
+    availableSections: Array<
+      "identity" | "credibilitySummary" | "application" | "documents" | "leaseSummary" | "paymentReadinessSummary"
+    >;
   };
   generatedAt: string;
 };
@@ -49,6 +70,27 @@ export async function requestPublicTenantSharePackageItems(
     {
       method: "POST",
       body: { requestedItems },
+      suppressToasts: true,
+    }
+  );
+  return res.data;
+}
+
+export async function requestPublicTenantSharePackageVerification(
+  token: string,
+  requestedScopes: Array<
+    | "credibility_summary"
+    | "application_summary"
+    | "documents_summary"
+    | "lease_summary"
+    | "payment_readiness_summary"
+  >
+): Promise<{ status: "requested"; requestedScopes: typeof requestedScopes }> {
+  const res = await apiFetch<{ ok: boolean; data: { status: "requested"; requestedScopes: typeof requestedScopes } }>(
+    `/public/share/${encodeURIComponent(token)}/verification-request`,
+    {
+      method: "POST",
+      body: { requestedScopes },
       suppressToasts: true,
     }
   );

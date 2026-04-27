@@ -11,7 +11,9 @@ import { listTenantScreenings, type TenantScreeningRequest } from "../../api/ten
 import {
   createTenantSharePackage,
   listTenantSharePackages,
+  respondToTenantShareVerificationRequest,
   revokeTenantSharePackage,
+  revokeTenantShareVerificationRequest,
   respondToTenantSharePackage,
   type TenantSharePackageLink,
 } from "../../api/tenantSharePackages";
@@ -88,7 +90,13 @@ function prettyScreeningIdentityStatus(
 }
 
 function prettyShareRequestItem(
-  value: "identity_summary" | "credibility_summary" | "application_summary" | "documents_summary"
+  value:
+    | "identity_summary"
+    | "credibility_summary"
+    | "application_summary"
+    | "documents_summary"
+    | "lease_summary"
+    | "payment_readiness_summary"
 ) {
   switch (value) {
     case "credibility_summary":
@@ -97,6 +105,10 @@ function prettyShareRequestItem(
       return "Application summary";
     case "documents_summary":
       return "Documents summary";
+    case "lease_summary":
+      return "Lease summary";
+    case "payment_readiness_summary":
+      return "Payment readiness summary";
     case "identity_summary":
     default:
       return "Identity summary";
@@ -235,7 +247,14 @@ export default function TenantWorkspacePage() {
   const handleRespondToShareRequest = React.useCallback(
     async (
       id: string,
-      approvedItems: Array<"identity_summary" | "credibility_summary" | "application_summary" | "documents_summary">
+      approvedItems: Array<
+        | "identity_summary"
+        | "credibility_summary"
+        | "application_summary"
+        | "documents_summary"
+        | "lease_summary"
+        | "payment_readiness_summary"
+      >
     ) => {
       try {
         setShareBusy(true);
@@ -250,6 +269,46 @@ export default function TenantWorkspacePage() {
     },
     []
   );
+
+  const handleRespondToVerificationRequest = React.useCallback(
+    async (
+      sharePackageId: string,
+      requestId: string,
+      approvedScopes: Array<
+        | "identity_summary"
+        | "credibility_summary"
+        | "application_summary"
+        | "documents_summary"
+        | "lease_summary"
+        | "payment_readiness_summary"
+      >
+    ) => {
+      try {
+        setShareBusy(true);
+        setShareError(null);
+        const updated = await respondToTenantShareVerificationRequest(sharePackageId, requestId, approvedScopes);
+        setSharePackages((current) => current.map((entry) => (entry.id === sharePackageId ? updated : entry)));
+      } catch (err: any) {
+        setShareError(err?.payload?.error || err?.message || "Unable to update this verification request right now.");
+      } finally {
+        setShareBusy(false);
+      }
+    },
+    []
+  );
+
+  const handleRevokeVerificationRequest = React.useCallback(async (sharePackageId: string, requestId: string) => {
+    try {
+      setShareBusy(true);
+      setShareError(null);
+      const updated = await revokeTenantShareVerificationRequest(sharePackageId, requestId);
+      setSharePackages((current) => current.map((entry) => (entry.id === sharePackageId ? updated : entry)));
+    } catch (err: any) {
+      setShareError(err?.payload?.error || err?.message || "Unable to revoke this verification request right now.");
+    } finally {
+      setShareBusy(false);
+    }
+  }, []);
 
   if (loading) {
     return (
@@ -302,6 +361,7 @@ export default function TenantWorkspacePage() {
   const identityTimeline = data?.identityTimeline?.events || [];
   const communicationsView = buildTenantCommunicationsWorkspaceState(communications);
   const screeningSummary = buildTenantScreeningDashboardSummary(screenings);
+  const identityExchangeReference = sharePackages[0]?.identityExchangeReference || null;
   const notificationItems = filterStructuredNotificationsByPreferences(
     buildTenantStructuredNotificationTriggers({
       packageCategories: reuse.packageCategories,
@@ -694,6 +754,24 @@ export default function TenantWorkspacePage() {
             Generate a privacy-safe share link, review any additional access requests, and approve only the extra summaries you want to share. Public access stays read-only and never exposes raw documents, screening provider details, or signature data.
           </div>
 
+          {identityExchangeReference ? (
+            <div
+              style={{
+                border: "1px solid rgba(15,23,42,0.08)",
+                borderRadius: 12,
+                padding: "12px 14px",
+                display: "grid",
+                gap: 6,
+              }}
+            >
+              <div style={{ fontWeight: 700, color: textTokens.primary }}>Identity exchange</div>
+              <div style={{ color: textTokens.primary }}>{identityExchangeReference.referenceLabel}</div>
+              <div style={{ color: textTokens.secondary, lineHeight: 1.6 }}>
+                {identityExchangeReference.referenceDescription}
+              </div>
+            </div>
+          ) : null}
+
           <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
             <button type="button" onClick={() => void handleGenerateShareLink()} disabled={shareBusy}>
               {shareBusy ? "Generating..." : "Generate share link"}
@@ -738,6 +816,16 @@ export default function TenantWorkspacePage() {
                       ? entry.approvedItems.map((item) => prettyShareRequestItem(item)).join(", ")
                       : "Identity summary only"}
                   </div>
+                  {entry.verificationRequests.some((request) => request.status === "approved") ? (
+                    <div style={{ color: textTokens.secondary }}>
+                      Verification approvals:{" "}
+                      {entry.verificationRequests
+                        .filter((request) => request.status === "approved")
+                        .flatMap((request) => request.requestedScopes)
+                        .map((item) => prettyShareRequestItem(item))
+                        .join(", ")}
+                    </div>
+                  ) : null}
                   {entry.requestedItems.length ? (
                     <div
                       style={{
@@ -770,6 +858,71 @@ export default function TenantWorkspacePage() {
                       </div>
                     </div>
                   ) : null}
+                  {entry.verificationRequests
+                    .filter((request) => request.status === "requested")
+                    .map((request) => (
+                      <div
+                        key={request.requestId}
+                        style={{
+                          border: "1px solid rgba(15,23,42,0.08)",
+                          borderRadius: 12,
+                          padding: "10px 12px",
+                          display: "grid",
+                          gap: 8,
+                        }}
+                      >
+                        <div style={{ fontWeight: 700, color: textTokens.primary }}>Verification request</div>
+                        <div style={{ color: textTokens.secondary }}>
+                          {request.requestedScopes.map((item) => prettyShareRequestItem(item)).join(", ")}
+                        </div>
+                        <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void handleRespondToVerificationRequest(entry.id, request.requestId, request.requestedScopes)
+                            }
+                            disabled={shareBusy}
+                          >
+                            Approve request
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void handleRespondToVerificationRequest(entry.id, request.requestId, [])}
+                            disabled={shareBusy}
+                          >
+                            Decline request
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  {entry.verificationRequests
+                    .filter((request) => request.status === "approved")
+                    .map((request) => (
+                      <div
+                        key={`${request.requestId}-approved`}
+                        style={{
+                          border: "1px solid rgba(15,23,42,0.08)",
+                          borderRadius: 12,
+                          padding: "10px 12px",
+                          display: "grid",
+                          gap: 8,
+                        }}
+                      >
+                        <div style={{ fontWeight: 700, color: textTokens.primary }}>Approved verification request</div>
+                        <div style={{ color: textTokens.secondary }}>
+                          {request.requestedScopes.map((item) => prettyShareRequestItem(item)).join(", ")}
+                        </div>
+                        <div>
+                          <button
+                            type="button"
+                            onClick={() => void handleRevokeVerificationRequest(entry.id, request.requestId)}
+                            disabled={shareBusy}
+                          >
+                            Revoke request
+                          </button>
+                        </div>
+                      </div>
+                    ))}
                   <div>
                     <button type="button" onClick={() => void handleRevokeShareLink(entry.id)} disabled={shareBusy}>
                       Revoke link
