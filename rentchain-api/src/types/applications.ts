@@ -116,4 +116,18 @@ export interface Application {
   convertedTenantId?: string | null;
   screeningId?: string | null;
   updatedAt?: string | null;
+  applicationSource?: "apply_with_rentchain" | null;
+  identityReference?: {
+    source: "rentchain";
+    referenceType: "tenant_identity_reference";
+    referenceStatus: "available" | "limited" | "not_ready";
+  } | null;
+  approvedScopeKeys?: Array<
+    | "identity_summary"
+    | "credibility_summary"
+    | "application_summary"
+    | "documents_summary"
+    | "lease_summary"
+    | "payment_readiness_summary"
+  > | null;
 }

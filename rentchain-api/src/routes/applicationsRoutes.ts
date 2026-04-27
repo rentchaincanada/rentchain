@@ -133,6 +133,69 @@ interface NewApplicationPayload {
     acceptedAt: string;
     textHash?: string;
   };
+  applicationSource?: "apply_with_rentchain";
+  identityReference?: {
+    source?: "rentchain";
+    referenceType?: "tenant_identity_reference";
+    referenceStatus?: "available" | "limited" | "not_ready";
+  };
+  approvedScopeKeys?: Array<
+    | "identity_summary"
+    | "credibility_summary"
+    | "application_summary"
+    | "documents_summary"
+    | "lease_summary"
+    | "payment_readiness_summary"
+  >;
+}
+
+const APPLY_WITH_RENTCHAIN_SCOPE_KEYS = new Set([
+  "identity_summary",
+  "credibility_summary",
+  "application_summary",
+  "documents_summary",
+  "lease_summary",
+  "payment_readiness_summary",
+]);
+
+function sanitizeApplyWithRentChainMetadata(payload: NewApplicationPayload) {
+  const applicationSource = payload.applicationSource === "apply_with_rentchain" ? "apply_with_rentchain" : null;
+  if (!applicationSource) {
+    return {
+      applicationSource: null,
+      identityReference: null,
+      approvedScopeKeys: null,
+    };
+  }
+
+  const referenceStatus =
+    payload.identityReference?.referenceStatus === "available" ||
+    payload.identityReference?.referenceStatus === "limited" ||
+    payload.identityReference?.referenceStatus === "not_ready"
+      ? payload.identityReference.referenceStatus
+      : null;
+
+  const approvedScopeKeys = Array.isArray(payload.approvedScopeKeys)
+    ? Array.from(
+        new Set(
+          payload.approvedScopeKeys.filter((scope) =>
+            APPLY_WITH_RENTCHAIN_SCOPE_KEYS.has(String(scope || ""))
+          )
+        )
+      )
+    : [];
+
+  return {
+    applicationSource,
+    identityReference: referenceStatus
+      ? {
+          source: "rentchain" as const,
+          referenceType: "tenant_identity_reference" as const,
+          referenceStatus,
+        }
+      : null,
+    approvedScopeKeys,
+  };
 }
 
 async function streamApplicationPdf(app: Application, res: Response) {
@@ -955,9 +1018,10 @@ router.post(
  * POST /api/applications/submit
  * MVP endpoint for the online Apply wizard.
  */
-function handleApplicationFormSubmit(req: Request, res: Response) {
+async function handleApplicationFormSubmit(req: Request, res: Response) {
   try {
     const payload = req.body as NewApplicationPayload;
+    const applyWithRentChainMetadata = sanitizeApplyWithRentChainMetadata(payload);
 
     const applicant = payload.primaryApplicant;
     const missing: string[] = [];
@@ -1233,6 +1297,9 @@ function handleApplicationFormSubmit(req: Request, res: Response) {
       applicantProfile: profile || null,
       applicationConsent: consent || null,
       formVersion: payload.formVersion || "v2",
+      applicationSource: applyWithRentChainMetadata.applicationSource,
+      identityReference: applyWithRentChainMetadata.identityReference,
+      approvedScopeKeys: applyWithRentChainMetadata.approvedScopeKeys,
     };
 
     APPLICATIONS.unshift(newApp);
@@ -1262,7 +1329,7 @@ function handleApplicationFormSubmit(req: Request, res: Response) {
       metadata: {
         propertyId: newApp.propertyId,
         unitId: newApp.unitId || null,
-        source: "online_application_submit",
+        source: newApp.applicationSource || "online_application_submit",
       },
     });
 
