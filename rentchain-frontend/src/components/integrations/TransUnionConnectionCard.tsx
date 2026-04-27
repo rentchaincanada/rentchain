@@ -86,19 +86,21 @@ export function TransUnionConnectionCard({
 
   if (status === "pending_credentialing") {
     body =
-      "Your TransUnion credentialing is in progress. Once TransUnion issues your member code and passcode, return to RentChain to complete setup.";
-    helper = "This path is for landlords who still need external TransUnion approval before they can screen inside RentChain.";
-    nextStep = "Next step: finish credentialing, then enter your issued membership details here.";
+      "Your TransUnion credentialing is in progress. Contact TransUnion directly, complete credentialing, and return to RentChain once your member code and passcode are issued.";
+    helper =
+      "RentChain does not replace TransUnion onboarding. This path keeps the next step visible while you work directly with TransUnion.";
+    nextStep =
+      "Next step: finish credentialing with TransUnion, then return here and enter the issued membership details.";
     actions = [
       { label: "Enter Membership Details", onClick: onEnterDetails, variant: "primary" },
       { label: "View Instructions", onClick: onViewInstructions },
     ];
   } else if (status === "connected") {
     body = readyToScreen
-      ? "Your TransUnion membership is connected and you are ready to screen an applicant inside RentChain."
-      : "Your TransUnion membership is connected. Your next step is to choose an applicant so you can start the first screening.";
+      ? "Your TransUnion membership is connected and ready to use inside RentChain for applicant screening."
+      : "Your TransUnion membership is connected. Choose an applicant in RentChain to start the screening workflow.";
     helper = readyToScreen
-      ? "You already have an application in context, so you can move straight into screening."
+      ? "You already have an application in context, so the next step stays inside the screening workflow."
       : "Choose an applicant from Applications first, then start screening from that application context.";
     nextStep = readyToScreen
       ? `Next step: start screening${safeSelectedApplicationLabel ? ` for ${safeSelectedApplicationLabel}` : ""}.`
@@ -123,9 +125,10 @@ export function TransUnionConnectionCard({
     ];
   } else {
     body =
-      "Use your TransUnion membership to enable tenant screening in RentChain. If you are not credentialed yet, RentChain will guide you through that first.";
-    helper = "Choose the path that matches your current state so you can reach screening with fewer setup loops.";
-    nextStep = "Next step: either start TransUnion credentialing or connect your existing membership.";
+      "Start with TransUnion credentialing if you do not have a member code and passcode yet. Once TransUnion issues them, return to RentChain and connect your membership.";
+    helper =
+      "Use the guided access path first if your business still needs TransUnion approval. If you already have credentials, connect them directly here.";
+    nextStep = "Next step: get TransUnion access first, or connect your existing membership details.";
     actions = [
       { label: "Get TransUnion Access", onClick: onGetAccess, variant: "primary" },
       { label: "Connect Existing Membership", onClick: onConnectExisting },

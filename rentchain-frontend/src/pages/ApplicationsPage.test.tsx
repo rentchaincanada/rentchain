@@ -187,11 +187,11 @@ vi.mock("@/components/integrations/TransUnionConnectionCard", () => ({
 }));
 
 vi.mock("@/components/integrations/GetTransUnionAccessModal", () => ({
-  GetTransUnionAccessModal: () => null,
+  GetTransUnionAccessModal: ({ open }: any) => (open ? <div>Get TransUnion Access Modal</div> : null),
 }));
 
 vi.mock("@/components/integrations/ConnectTransUnionModal", () => ({
-  ConnectTransUnionModal: () => null,
+  ConnectTransUnionModal: ({ open }: any) => (open ? <div>Connect TransUnion Modal</div> : null),
 }));
 
 vi.mock("@/components/integrations/UpdateTransUnionCredentialsModal", () => ({
@@ -512,6 +512,16 @@ describe("ApplicationsPage", () => {
       requiredPlan: "starter",
       source: "applications_page_screening",
     });
+  });
+
+  it("opens the TransUnion access modal from the approved query-param path", async () => {
+    render(
+      <MemoryRouter initialEntries={["/applications?openTransUnionAccess=1"]}>
+        <ApplicationsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Get TransUnion Access Modal")).toBeInTheDocument();
   });
 
   it("opens a request-more-info modal and sends the actionable request", async () => {

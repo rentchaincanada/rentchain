@@ -16,7 +16,16 @@ const mocks = vi.hoisted(() => ({
   getLandlordActivationMock: vi.fn(),
   useOnboardingStateMock: vi.fn(),
   useUpgradeMock: vi.fn(),
+  navigateMock: vi.fn(),
 }));
+
+vi.mock("react-router-dom", async () => {
+  const actual = await vi.importActual<any>("react-router-dom");
+  return {
+    ...actual,
+    useNavigate: () => mocks.navigateMock,
+  };
+});
 
 vi.mock("../context/useAuth", () => ({
   useAuth: mocks.useAuthMock,
@@ -62,11 +71,19 @@ vi.mock("../context/UpgradeContext", () => ({
   useUpgrade: mocks.useUpgradeMock,
 }));
 
+vi.mock("../config/screening", () => ({
+  SCREENING_ENABLED: true,
+  getUiLocale: () => "en",
+  screeningComingSoonLabel: () => "Credit screening - coming soon.",
+}));
+
 afterEach(() => {
   cleanup();
 });
 
 describe("DashboardPage", () => {
+  const assignMock = vi.fn();
+
   beforeEach(() => {
     window.localStorage.removeItem("rentchain.landlordWelcome.pending.landlord-1");
     window.localStorage.removeItem("rentchain.landlordWelcome.seen.landlord-1");
@@ -140,6 +157,15 @@ describe("DashboardPage", () => {
     });
     mocks.useUpgradeMock.mockReturnValue({
       openUpgrade: vi.fn(),
+    });
+    mocks.navigateMock.mockReset();
+    assignMock.mockReset();
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: {
+        ...window.location,
+        assign: assignMock,
+      },
     });
   });
 
@@ -218,5 +244,52 @@ describe("DashboardPage", () => {
 
     expect(await screen.findByRole("link", { name: "3" })).toHaveAttribute("href", "/dashboard#open-actions");
     expect(screen.getByRole("link", { name: "2" })).toHaveAttribute("href", "/applications?status=review");
+  });
+
+  it("routes the screening setup CTA to the applications TransUnion onboarding path", async () => {
+    mocks.fetchDashboardSummaryMock.mockResolvedValue({
+      kpis: {
+        propertiesCount: 1,
+        unitsCount: 1,
+        tenantsCount: 1,
+        openActionsCount: 0,
+        delinquentCount: 0,
+        screeningsCount: 0,
+      },
+      actions: [],
+      events: [],
+      leaseNoticeSummary: {
+        expiringSoon: 0,
+        pendingResponse: 0,
+        renewed: 0,
+        quitting: 0,
+        noResponse: 0,
+      },
+      portfolioCredibilitySummary: {
+        propertyCount: 1,
+        activeLeaseCount: 0,
+        tenantScoreAverage: null,
+        tenantScoreGradeAverage: null,
+        leaseRiskAverage: null,
+        leaseRiskGradeAverage: null,
+        tenantsWithScoreCount: 0,
+        leasesWithRiskCount: 0,
+        lowConfidenceCount: 0,
+        missingCredibilityCount: 0,
+        healthStatus: "watch",
+      },
+    });
+
+    render(
+      <ToastProvider>
+        <MemoryRouter>
+          <DashboardPage />
+        </MemoryRouter>
+      </ToastProvider>
+    );
+
+    expect(await screen.findByText("Get TransUnion access")).toBeInTheDocument();
+    screen.getAllByRole("button", { name: "Open" })[0].click();
+    expect(assignMock).toHaveBeenCalledWith("/applications?openTransUnionAccess=1");
   });
 });
