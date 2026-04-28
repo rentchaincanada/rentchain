@@ -41,6 +41,7 @@ import { enqueueScreeningJob } from "../services/screeningJobs";
 import { createSignedUrl, putPdfObject } from "../storage/pdfStore";
 import { buildReviewSummary, buildReviewSummaryPdf } from "../lib/reviewSummary";
 import { buildApplicationDecisionSummary } from "../services/risk/applicationDecisionSummary";
+import { deriveNetworkReuseSummary } from "../services/networkReuse/deriveNetworkReuseSummary";
 import { getLatestApplicationRisk } from "../services/riskAgent/riskAgentService";
 import { recordRiskDecisionAudit } from "../services/riskAgent/riskDecisionAuditService";
 import { rateLimitScreeningIp, rateLimitScreeningUser } from "../middleware/rateLimit";
@@ -4207,6 +4208,13 @@ router.get("/rental-applications/:id/review-summary", async (req: any, res) => {
       application: access.data,
       reviewSummary: summary,
     });
+    const networkReuseSummary = deriveNetworkReuseSummary({
+      applicationSource:
+        access.data?.applicationSource === "apply_with_rentchain" ? "apply_with_rentchain" : null,
+      identityReference: access.data?.identityReference || null,
+      approvedScopeKeys: Array.isArray(access.data?.approvedScopeKeys) ? access.data.approvedScopeKeys : null,
+      portableIdentitySummary,
+    });
     return res.json({
       ok: true,
       summary,
@@ -4216,6 +4224,7 @@ router.get("/rental-applications/:id/review-summary", async (req: any, res) => {
       trustContext,
       tenantCredibilitySummary,
       portableIdentitySummary,
+      networkReuseSummary,
     });
   } catch (err: any) {
     console.error("[review_summary] failed", err?.message || err);

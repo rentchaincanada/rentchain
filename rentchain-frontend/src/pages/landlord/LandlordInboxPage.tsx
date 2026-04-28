@@ -45,6 +45,21 @@ function nextActionLabel(action: LandlordInboxItem["nextAction"]) {
   }
 }
 
+function networkReuseStatusLabel(value: NonNullable<LandlordInboxItem["networkReuseSummary"]>["reuseStatus"]) {
+  switch (value) {
+    case "available":
+      return "Reuse available";
+    case "limited":
+      return "Reuse limited";
+    default:
+      return "Reuse not available";
+  }
+}
+
+function networkReuseSourceLabel(value: NonNullable<LandlordInboxItem["networkReuseSummary"]>["source"]) {
+  return value === "apply_with_rentchain" ? "RentChain application" : "Share package";
+}
+
 function sectionLabel(status: LandlordInboxItem["status"]) {
   if (status === "action_required") return "Action required";
   if (status === "pending") return "Pending";
@@ -112,6 +127,12 @@ function InboxItemCard({ item }: { item: LandlordInboxItem }) {
         {item.credibilitySummary ? (
           <div style={{ color: "#64748b", fontSize: "0.82rem" }}>
             Credibility completeness: {item.credibilitySummary.completenessLevel}
+          </div>
+        ) : null}
+        {item.networkReuseSummary ? (
+          <div style={{ color: "#64748b", fontSize: "0.82rem" }}>
+            {networkReuseStatusLabel(item.networkReuseSummary.reuseStatus)} · Source:{" "}
+            {networkReuseSourceLabel(item.networkReuseSummary.source)}
           </div>
         ) : null}
       </div>

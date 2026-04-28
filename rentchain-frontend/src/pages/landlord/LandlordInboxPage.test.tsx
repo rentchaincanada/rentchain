@@ -55,11 +55,17 @@ describe("LandlordInboxPage", () => {
             readiness: "ready",
             verificationLevel: "partial",
           },
-          credibilitySummary: {
-            completenessLevel: "medium",
-          },
-          source: "review_summary",
+        credibilitySummary: {
+          completenessLevel: "medium",
         },
+        networkReuseSummary: {
+          reusable: true,
+          source: "apply_with_rentchain",
+          reuseStatus: "available",
+          consentRequired: true,
+        },
+        source: "review_summary",
+      },
       ],
       summary: {
         actionRequired: 1,
@@ -77,6 +83,7 @@ describe("LandlordInboxPage", () => {
     expect(await screen.findByRole("heading", { name: "Landlord inbox" })).toBeInTheDocument();
     expect(screen.getByText("Application ready for review")).toBeInTheDocument();
     expect(screen.getByText(/Credibility completeness: medium/i)).toBeInTheDocument();
+    expect(screen.getByText(/Reuse available · Source: RentChain application/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Review application" })).toHaveAttribute(
       "href",
       "/applications/app-1/review-summary"
