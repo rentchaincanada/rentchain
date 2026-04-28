@@ -366,6 +366,9 @@ describe("ApplicationsPage", () => {
     );
 
     await screen.findByText("Jamie Stone");
+    expect(container.querySelector(".rc-viewing-requests-layout")).toBeTruthy();
+    expect(container.querySelector(".rc-viewing-requests-list-pane")).toBeTruthy();
+    expect(container.querySelector(".rc-viewing-requests-detail-pane")).toBeTruthy();
     expect(container.querySelector(".rc-applications-list-scroll")).toBeTruthy();
     expect(container.querySelector(".rc-applications-detail")).toBeTruthy();
   });

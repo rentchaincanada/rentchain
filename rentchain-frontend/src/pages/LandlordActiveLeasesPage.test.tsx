@@ -29,6 +29,19 @@ describe("LandlordActiveLeasesPage", () => {
   });
 
   beforeEach(() => {
+    Object.defineProperty(window, "matchMedia", {
+      writable: true,
+      value: vi.fn().mockImplementation((query: string) => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    });
     mocks.getActiveLeasesForLandlord.mockResolvedValue({
       leases: [
         {
@@ -432,5 +445,30 @@ describe("LandlordActiveLeasesPage", () => {
     expect((await screen.findAllByText("Harbour View")).length).toBeGreaterThan(0);
     expect(screen.queryAllByText("Property_test")).toHaveLength(0);
     expect(screen.queryAllByText("test2")).toHaveLength(0);
+  });
+
+  it("renders mobile lease cards with the existing lease action surface on narrow screens", async () => {
+    vi.mocked(window.matchMedia).mockImplementation((query: string) => ({
+      matches: query === "(max-width: 768px)",
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+
+    render(
+      <MemoryRouter>
+        <LandlordActiveLeasesPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByTestId("lease-mobile-card")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "View" })).toHaveAttribute("href", "/leases/lease-1/ledger");
+    expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Archive lease" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Enable rent collection/i })).toBeInTheDocument();
   });
 });

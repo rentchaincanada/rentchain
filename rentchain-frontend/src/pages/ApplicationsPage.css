@@ -107,6 +107,17 @@
   flex-wrap: wrap;
 }
 
+.rc-viewing-requests-layout {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+}
+
+.rc-viewing-requests-list-pane,
+.rc-viewing-requests-detail-pane {
+  min-width: 0;
+}
+
 @media (max-width: 768px) {
   .rc-applications-grid {
     overflow: visible;
@@ -155,6 +166,10 @@
   }
 
   .rc-applications-screening-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .rc-viewing-requests-layout {
     grid-template-columns: 1fr;
   }
 }
