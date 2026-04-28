@@ -3065,18 +3065,24 @@ router.post("/identity/export", requireTenantWorkspaceIdentity, async (req: any,
       packageV1: institutionalIdentityPackage,
       latestPaymentStatus: workspace.lease?.rentPaymentSummary?.latestPayment?.status || null,
     });
-    schemaV2.validation = validateInstitutionalSchema(schemaV2);
+    const consentControls = {
+      sharingEnabled: Boolean(portableIdentity?.readiness?.sharingEnabled),
+      verificationRequestsAvailable: false,
+      approvedScopeCount: 0,
+    };
+    schemaV2.validation = validateInstitutionalSchema(schemaV2, {
+      consentControlsLimited:
+        consentControls.sharingEnabled &&
+        !consentControls.verificationRequestsAvailable &&
+        consentControls.approvedScopeCount === 0,
+    });
     schemaV2.complianceReadiness = deriveComplianceReadiness({
       validation: schemaV2.validation,
       identityTimeline: {
         totalEvents: schemaV2.audit.totalIdentityEvents,
         recentActivityAvailable: schemaV2.audit.recentActivityAvailable,
       },
-      consentControls: {
-        sharingEnabled: Boolean(portableIdentity?.readiness?.sharingEnabled),
-        verificationRequestsAvailable: false,
-        approvedScopeCount: 0,
-      },
+      consentControls,
       exportContext: {
         schemaVersion: "2.0",
         dataScope: schemaV2.schema.dataScope,

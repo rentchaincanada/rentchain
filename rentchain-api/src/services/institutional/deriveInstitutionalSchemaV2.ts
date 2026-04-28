@@ -41,7 +41,7 @@ export type InstitutionalExportV2 = {
     warnings: string[];
     missingRecommendedFields: string[];
   };
-  complianceReadiness?: ComplianceReadiness;
+  complianceReadiness: ComplianceReadiness;
   extensions: {
     reserved: Record<string, never>;
   };
@@ -147,6 +147,19 @@ export function deriveInstitutionalSchemaV2(input: DeriveInstitutionalSchemaV2In
       status: "valid",
       warnings: [],
       missingRecommendedFields: [],
+    },
+    complianceReadiness: {
+      readinessStatus: "partial",
+      readinessLabel: "Compliance readiness pending",
+      readinessDescription:
+        "Compliance readiness is attached during tenant-controlled schema export generation.",
+      checks: [],
+      exportTraceability: {
+        exportAvailable: false,
+        schemaVersion: "2.0",
+        exportStorage: "not_stored",
+        outboundTransfer: "none",
+      },
     },
     extensions: {
       reserved: {},

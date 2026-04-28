@@ -4,8 +4,13 @@ function hasString(value: unknown): boolean {
   return typeof value === "string" && value.trim().length > 0;
 }
 
+type InstitutionalValidationContext = {
+  consentControlsLimited?: boolean;
+};
+
 export function validateInstitutionalSchema(
-  input: InstitutionalExportV2
+  input: InstitutionalExportV2,
+  context: InstitutionalValidationContext = {}
 ): InstitutionalExportV2["validation"] {
   const warnings: string[] = [];
   const missingRecommendedFields: string[] = [];
@@ -43,6 +48,25 @@ export function validateInstitutionalSchema(
       warnings.push(`Recommended field unavailable: ${field}`);
     }
   });
+
+  if (input.identity?.portabilityStatus === "not_ready") {
+    warnings.push("Recommended signal limited: portability unavailable");
+  }
+
+  if (!input.audit?.auditTrailAvailable || input.audit?.totalIdentityEvents === 0) {
+    warnings.push("Recommended signal limited: identity trace unavailable");
+  }
+
+  if (
+    input.paymentReadiness?.latestPaymentStatus === "not_available" ||
+    (!input.paymentReadiness?.rentTermsReady && !input.paymentReadiness?.paymentRailAvailable)
+  ) {
+    warnings.push("Recommended signal limited: payment readiness unavailable");
+  }
+
+  if (context.consentControlsLimited) {
+    warnings.push("Recommended signal limited: consent controls limited");
+  }
 
   return {
     status: warnings.length ? "valid_with_warnings" : "valid",
