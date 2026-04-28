@@ -19,12 +19,32 @@ const POLL_CONVERSATIONS_MS = 15000;
 const POLL_THREAD_MS = 12000;
 const MAX_CONVERSATIONS_BACKOFF_MS = 120000;
 
+function displayTenantName(conversation: Conversation | null) {
+  const tenantName = String(conversation?.tenantDisplayName || "").trim();
+  return tenantName || "Tenant";
+}
+
+function displayConversationContext(conversation: Conversation | null) {
+  const propertyLabel = String(conversation?.propertyDisplayLabel || "").trim();
+  const unitLabel = String(conversation?.unitDisplayLabel || "").trim();
+  return [propertyLabel, unitLabel].filter(Boolean).join(" / ") || "Tenant conversation";
+}
+
+function buildTenantInitials(conversation: Conversation | null) {
+  const tenantName = displayTenantName(conversation);
+  const parts = tenantName
+    .split(/\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (!parts.length || tenantName === "Tenant") return "T";
+  if (parts.length === 1) return parts[0].slice(0, 1).toUpperCase();
+  return `${parts[0].slice(0, 1)}${parts[1].slice(0, 1)}`.toUpperCase();
+}
+
 function buildConversationTitle(conversation: Conversation | null) {
   if (!conversation) return "Conversation";
-  const tenantName = String(conversation.tenantDisplayName || "").trim();
-  const propertyLabel = String(conversation.propertyDisplayLabel || "").trim();
-  const unitLabel = String(conversation.unitDisplayLabel || "").trim();
-  const locationLabel = [propertyLabel, unitLabel].filter(Boolean).join(" / ");
+  const tenantName = displayTenantName(conversation);
+  const locationLabel = displayConversationContext(conversation);
   if (tenantName && locationLabel) return `${tenantName} • ${locationLabel}`;
   if (tenantName) return tenantName;
   if (locationLabel) return locationLabel;
@@ -32,9 +52,7 @@ function buildConversationTitle(conversation: Conversation | null) {
 }
 
 function buildConversationMeta(conversation: Conversation) {
-  const propertyLabel = String(conversation.propertyDisplayLabel || "").trim();
-  const unitLabel = String(conversation.unitDisplayLabel || "").trim();
-  return [propertyLabel, unitLabel].filter(Boolean).join(" / ") || "Tenant conversation";
+  return displayConversationContext(conversation);
 }
 
 export default function MessagesPage() {
@@ -254,16 +272,27 @@ export default function MessagesPage() {
                         background: isActive ? colors.accentSoft : colors.panel,
                       }}
                     >
-                      <div className="rc-messages-list-item-row">
-                        <div className="rc-messages-list-item-title">
-                          {buildConversationTitle(c)}
+                      <div className="rc-messages-list-item-body">
+                        <div
+                          className="rc-messages-avatar"
+                          aria-hidden="true"
+                          title={displayTenantName(c)}
+                        >
+                          {buildTenantInitials(c)}
                         </div>
-                        {c.hasUnread ? (
-                          <span className="rc-messages-unread-dot" />
-                        ) : null}
-                      </div>
-                      <div className="rc-messages-list-item-meta">
-                        {buildConversationMeta(c)}
+                        <div className="rc-messages-list-item-content">
+                          <div className="rc-messages-list-item-row">
+                            <div className="rc-messages-list-item-title">
+                              {displayTenantName(c)}
+                            </div>
+                            {c.hasUnread ? (
+                              <span className="rc-messages-unread-dot" />
+                            ) : null}
+                          </div>
+                          <div className="rc-messages-list-item-meta">
+                            {buildConversationMeta(c)}
+                          </div>
+                        </div>
                       </div>
                     </button>
                   );

@@ -74,8 +74,69 @@ describe("MessagesPage", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getAllByText("Taylor Tenant • Harbour View / Unit 2A").length).toBeGreaterThan(0);
+      expect(screen.getByText("Taylor Tenant")).toBeInTheDocument();
+      expect(screen.getByText("Harbour View / Unit 2A")).toBeInTheDocument();
+      expect(screen.getByText("TT")).toBeInTheDocument();
     });
     expect(screen.queryByText(/Tenant tenant-/i)).not.toBeInTheDocument();
+  });
+
+  it("shows unread state from existing conversation data", async () => {
+    mocks.fetchLandlordConversationsMock.mockResolvedValue([
+      {
+        id: "conv-1",
+        tenantDisplayName: "Taylor Tenant",
+        propertyDisplayLabel: "Harbour View",
+        unitDisplayLabel: "Unit 2A",
+        hasUnread: true,
+      },
+    ]);
+
+    const { container } = render(
+      <MemoryRouter>
+        <MessagesPage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(container.querySelector(".rc-messages-unread-dot")).not.toBeNull();
+    });
+  });
+
+  it("uses safe context fallbacks and deterministic initials for Taylor Tenant", async () => {
+    mocks.fetchLandlordConversationsMock.mockResolvedValue([
+      {
+        id: "conv-2",
+        tenantDisplayName: "Taylor Tenant",
+        tenantId: "tenant-raw-1",
+        propertyId: "prop-raw-1",
+        unitId: "unit-raw-1",
+      },
+    ]);
+    mocks.fetchLandlordConversationMessagesMock.mockResolvedValue({
+      conversation: {
+        id: "conv-2",
+        tenantDisplayName: "Taylor Tenant",
+        tenantId: "tenant-raw-1",
+        propertyId: "prop-raw-1",
+        unitId: "unit-raw-1",
+      },
+      messages: [],
+    });
+
+    render(
+      <MemoryRouter>
+        <MessagesPage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Taylor Tenant")[0]).toBeInTheDocument();
+      expect(screen.getByText("Tenant conversation")).toBeInTheDocument();
+    });
+    expect(screen.getAllByText("TT")[0]).toBeInTheDocument();
+    expect(screen.queryByText(/tenant-raw-1/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/prop-raw-1/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/unit-raw-1/i)).not.toBeInTheDocument();
   });
 });

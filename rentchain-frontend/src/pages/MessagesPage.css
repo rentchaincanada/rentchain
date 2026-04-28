@@ -43,6 +43,33 @@
   min-height: 44px;
 }
 
+.rc-messages-list-item-body {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+}
+
+.rc-messages-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(37, 99, 235, 0.12);
+  color: #1d4ed8;
+  font-size: 0.86rem;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.rc-messages-list-item-content {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
 .rc-messages-list-item-row {
   display: flex;
   justify-content: space-between;
@@ -54,11 +81,14 @@
   font-weight: 600;
   font-size: 0.98rem;
   color: #0f172a;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .rc-messages-list-item-meta {
   font-size: 0.8rem;
   color: #64748b;
+  overflow-wrap: anywhere;
 }
 
 .rc-messages-unread-dot {
