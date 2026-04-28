@@ -36,6 +36,18 @@ function hasLandlordScope(doc: any, landlordId: string) {
   return [doc?.landlordId, doc?.ownerId, doc?.userId].some((value) => asAnalyticsString(value, 240) === landlordId);
 }
 
+function normalizePortfolioStatus(value: unknown): "active" | "archived" {
+  return asAnalyticsString(value, 40).toLowerCase() === "archived" ? "archived" : "active";
+}
+
+function isVisibleAnalyticsProperty(doc: any) {
+  if (!doc) return false;
+  if (normalizePortfolioStatus(doc?.portfolioStatus) === "archived") return false;
+  if (Boolean(doc?.archivedAt)) return false;
+  if (doc?.hiddenFromActiveLists === true) return false;
+  return true;
+}
+
 function docPropertyId(doc: any) {
   return asAnalyticsString(doc?.propertyId || doc?.property?.id, 240);
 }
@@ -109,7 +121,9 @@ function buildDerivedInput(params: {
   financialTransactionsRaw: any[];
   screeningOrdersRaw: any[];
 }): AdminAnalyticsDerivedInput & { propertyId?: string | null } {
-  const scopedProperties = params.propertiesRaw.filter((doc) => hasLandlordScope(doc, params.landlordId));
+  const scopedProperties = params.propertiesRaw.filter(
+    (doc) => hasLandlordScope(doc, params.landlordId) && isVisibleAnalyticsProperty(doc)
+  );
   const initialPropertyIds = new Set(scopedProperties.map((doc) => asAnalyticsString(doc?.id, 240)).filter(Boolean));
   const propertyIdFilter = asAnalyticsString(params.propertyId, 240);
   const propertyFilterActive = Boolean(propertyIdFilter);

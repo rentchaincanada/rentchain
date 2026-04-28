@@ -179,4 +179,153 @@ describe("loadLandlordAnalyticsBenchmarking", () => {
     expect(result.comparisons).toHaveLength(1);
     expect(result.comparisons[0]?.propertyId).toBe("prop-2");
   });
+
+  it("excludes archived property data from summary counts, comparisons, and insights when the snapshot is already filtered", async () => {
+    loadLandlordAnalyticsSnapshot.mockResolvedValue({
+      summary: {
+        occupiedUnits: 2,
+        vacancyRate: 0,
+        activeApplications: 1,
+        applicationConversionRate: 0.5,
+        openWorkOrders: 1,
+        maintenanceCostCents: 10000,
+        estimatedScheduledRentCents: 300000,
+        leasesEndingSoon: 0,
+      },
+      applications: {
+        started: 2,
+        submitted: 2,
+        approved: 1,
+        rejected: 0,
+        declined: 0,
+        pendingReviewCount: 0,
+        conversionRate: 0.5,
+      },
+      leasing: {
+        totalProperties: 1,
+        totalUnits: 2,
+        occupiedUnits: 2,
+        vacantUnits: 0,
+        occupancyRate: 1,
+        leasesEndingIn30Days: 0,
+        leasesEndingIn60Days: 0,
+        leasesEndingIn90Days: 0,
+        turnoverCount: 0,
+      },
+      maintenance: {
+        openWorkOrders: 1,
+        completedWorkOrders: 1,
+        reopenedWorkOrders: 0,
+        maintenanceCostCents: 10000,
+        averageCostPerCompletedWorkOrderCents: 10000,
+        costConcentrationByProperty: [],
+      },
+      revenue: {
+        estimatedScheduledRentCents: 300000,
+        averageRentPerOccupiedUnitCents: 150000,
+      },
+      decisions: { items: [] },
+      insights: [
+        {
+          type: "maintenance_cost_increase",
+          severity: "medium",
+          title: "Costs rose",
+          message: "Visible property costs rose",
+          propertyId: "prop-1",
+        },
+      ],
+      comparisons: {
+        previousPeriod: {
+          summary: {
+            occupiedUnits: 2,
+            vacancyRate: 0,
+            activeApplications: 1,
+            applicationConversionRate: 0.5,
+            openWorkOrders: 1,
+            maintenanceCostCents: 8000,
+            estimatedScheduledRentCents: 300000,
+            leasesEndingSoon: 0,
+          },
+          applications: {
+            started: 2,
+            submitted: 2,
+            approved: 1,
+            rejected: 0,
+            declined: 0,
+            pendingReviewCount: 0,
+            conversionRate: 0.5,
+          },
+          leasing: {
+            totalProperties: 1,
+            totalUnits: 2,
+            occupiedUnits: 2,
+            vacantUnits: 0,
+            occupancyRate: 1,
+            leasesEndingIn30Days: 0,
+            leasesEndingIn60Days: 0,
+            leasesEndingIn90Days: 0,
+            turnoverCount: 0,
+          },
+          maintenance: {
+            openWorkOrders: 1,
+            completedWorkOrders: 1,
+            reopenedWorkOrders: 0,
+            maintenanceCostCents: 8000,
+            averageCostPerCompletedWorkOrderCents: 8000,
+            costConcentrationByProperty: [],
+          },
+          revenue: {
+            estimatedScheduledRentCents: 300000,
+            averageRentPerOccupiedUnitCents: 150000,
+          },
+        },
+        deltas: {
+          summary: {} as any,
+          applications: {} as any,
+          leasing: {} as any,
+          maintenance: {} as any,
+          revenue: {} as any,
+        },
+      },
+      properties: [{ id: "prop-1", name: "Visible Property" }],
+      propertyMetrics: [
+        {
+          propertyId: "prop-1",
+          propertyName: "Visible Property",
+          metrics: {
+            vacancyRate: 0,
+            occupancyRate: 1,
+            applicationVolume: 2,
+            applicationConversionRate: 0.5,
+            openWorkOrders: 1,
+            maintenanceCostCents: 10000,
+            maintenanceCostPerUnitCents: 5000,
+            leasesEndingSoon: 0,
+            estimatedScheduledRentCents: 300000,
+            estimatedRentPerOccupiedUnitCents: 150000,
+            totalUnits: 2,
+            occupiedUnits: 2,
+            vacantUnits: 0,
+          },
+        },
+      ],
+      filters: {
+        period: "90d",
+        propertyId: null,
+        from: "2026-01-20T00:00:00.000Z",
+        to: "2026-04-20T00:00:00.000Z",
+      },
+    });
+
+    const { loadLandlordAnalyticsBenchmarking } = await import("../landlordAnalyticsBenchmarking");
+    const result = await loadLandlordAnalyticsBenchmarking({
+      landlordId: "landlord-1",
+      period: "90d",
+    });
+
+    expect(result.summary.propertyCount).toBe(1);
+    expect(result.comparisons).toHaveLength(1);
+    expect(result.comparisons[0]?.propertyId).toBe("prop-1");
+    expect(JSON.stringify(result)).not.toContain("Property_test");
+  });
 });
