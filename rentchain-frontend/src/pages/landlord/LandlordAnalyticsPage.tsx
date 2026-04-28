@@ -31,6 +31,28 @@ import {
 } from "../../components/analytics/decisionExecutionAggregation";
 
 const EMPTY_DECISIONS: LandlordAnalyticsSnapshot["decisions"]["items"] = [];
+type AnalyticsWorkspaceTabId =
+  | "analytics-alerts"
+  | "portfolio-benchmarking"
+  | "decision-outcomes"
+  | "operator-queue"
+  | "recommended-next-actions"
+  | "actions-to-review"
+  | "predictive-metrics"
+  | "attention-worthy-insights"
+  | "portfolio-execution-summary";
+
+const ANALYTICS_WORKSPACE_TABS: Array<{ id: AnalyticsWorkspaceTabId; label: string }> = [
+  { id: "analytics-alerts", label: "Analytics alerts" },
+  { id: "portfolio-benchmarking", label: "Portfolio benchmarking" },
+  { id: "decision-outcomes", label: "Decision outcomes" },
+  { id: "operator-queue", label: "Operator queue" },
+  { id: "recommended-next-actions", label: "Recommended next actions" },
+  { id: "actions-to-review", label: "Actions to review" },
+  { id: "predictive-metrics", label: "Predictive metrics" },
+  { id: "attention-worthy-insights", label: "Attention-worthy insights" },
+  { id: "portfolio-execution-summary", label: "Portfolio-level execution state summary" },
+];
 
 function errorMessage(error: unknown) {
   if (error instanceof Error && error.message) return error.message;
@@ -68,6 +90,16 @@ function entryLabel(entry: string | null) {
   if (entry === "vacancy-readiness") return "Vacancy readiness";
   if (entry === "revenue-pressure") return "Revenue pressure";
   if (entry === "property-focus") return "Property focus";
+  return null;
+}
+
+function workspaceTabIntro(tab: AnalyticsWorkspaceTabId) {
+  if (tab === "actions-to-review") {
+    return "This workspace keeps the focus on reviewable recommendations without changing the underlying decision queue behavior.";
+  }
+  if (tab === "portfolio-execution-summary") {
+    return "This view summarizes how decisions are distributed across execution states so you can see what is ready, blocked, or already handled.";
+  }
   return null;
 }
 
@@ -152,6 +184,7 @@ export default function LandlordAnalyticsPage() {
   const [period, setPeriod] = React.useState<AnalyticsPeriod>("90d");
   const [propertyId, setPropertyId] = React.useState("");
   const [executionFilter, setExecutionFilter] = React.useState<DecisionExecutionFilter>("all");
+  const [activeTab, setActiveTab] = React.useState<AnalyticsWorkspaceTabId>("analytics-alerts");
   const urlParams = React.useMemo(() => new URLSearchParams(location.search), [location.search]);
   const routedPropertyId = urlParams.get("propertyId");
   const routedEntryLabel = entryLabel(urlParams.get("entry"));
@@ -181,6 +214,10 @@ export default function LandlordAnalyticsPage() {
     [decisions, executionFilter]
   );
   const prioritizedDecisions = React.useMemo(() => prioritizeDecisions(filteredDecisions), [filteredDecisions]);
+  const activeTabIntro = workspaceTabIntro(activeTab);
+  const activeTabLabel = ANALYTICS_WORKSPACE_TABS.find((tab) => tab.id === activeTab)?.label || "Analytics alerts";
+  const showPortfolioScoreTeaser = canViewPortfolioScore === false;
+  const showAdvancedAnalyticsTeaser = canViewPortfolioScore && !canViewAdvancedAnalytics;
 
   const summaryItems = snapshot
     ? [
@@ -301,6 +338,48 @@ export default function LandlordAnalyticsPage() {
         ) : null}
 
         {analyticsEnabled ? (
+          <div
+            role="tablist"
+            aria-label="Analytics workspace sections"
+            style={{
+              display: "flex",
+              gap: 8,
+              overflowX: "auto",
+              paddingBottom: 4,
+              scrollbarWidth: "thin",
+            }}
+          >
+            {ANALYTICS_WORKSPACE_TABS.map((tab) => {
+              const selected = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  id={`analytics-tab-${tab.id}`}
+                  type="button"
+                  role="tab"
+                  aria-selected={selected}
+                  aria-controls={`analytics-panel-${tab.id}`}
+                  onClick={() => setActiveTab(tab.id)}
+                  style={{
+                    borderRadius: 999,
+                    border: selected ? "1px solid #0f172a" : "1px solid #cbd5e1",
+                    background: selected ? "#0f172a" : "#fff",
+                    color: selected ? "#fff" : "#334155",
+                    fontWeight: 700,
+                    padding: "8px 12px",
+                    cursor: "pointer",
+                    whiteSpace: "nowrap",
+                    flex: "0 0 auto",
+                  }}
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+
+        {analyticsEnabled ? (
           <AnalyticsFiltersBar
             period={period}
             propertyId={propertyId}
@@ -318,25 +397,7 @@ export default function LandlordAnalyticsPage() {
 
         {analyticsEnabled && !loading && !error && snapshot ? (
           <>
-            <AnalyticsAlertsPanel alerts={alerts?.alerts || []} summary={alerts?.summary || null} />
             <AnalyticsKpiGrid items={summaryItems} periodLabel={periodLabel(period)} />
-            {canViewBenchmarking ? <PortfolioBenchmarkingPanel benchmarking={benchmarking} /> : null}
-            {canViewPortfolioScore && canViewAdvancedAnalytics ? (
-              <>
-                <DecisionOutcomeAnalyticsPanel analytics={snapshot.decisionOutcomeAnalytics} />
-                <DecisionQueueSummary
-                  decisions={decisions}
-                  filter={executionFilter}
-                  onFilterChange={setExecutionFilter}
-                />
-                <AgentDecisionPanel
-                  decisions={prioritizedDecisions}
-                  period={period}
-                  propertyId={propertyId}
-                />
-                <PredictiveMetricsPanel metrics={snapshot.predictive?.metrics || []} />
-              </>
-            ) : null}
 
             {canViewPortfolioScore ? (
               <div
@@ -486,7 +547,82 @@ export default function LandlordAnalyticsPage() {
               </div>
             ) : null}
 
-            {!canViewPortfolioScore ? (
+            <div
+              id={`analytics-panel-${activeTab}`}
+              role="tabpanel"
+              aria-labelledby={`analytics-tab-${activeTab}`}
+              aria-label={activeTabLabel}
+              style={{ display: "grid", gap: 12 }}
+            >
+              {activeTabIntro ? (
+                <Card style={{ color: "#475569" }}>{activeTabIntro}</Card>
+              ) : null}
+
+              {activeTab === "analytics-alerts" ? (
+                <AnalyticsAlertsPanel alerts={alerts?.alerts || []} summary={alerts?.summary || null} />
+              ) : null}
+
+              {activeTab === "portfolio-benchmarking" && canViewBenchmarking ? (
+                <PortfolioBenchmarkingPanel benchmarking={benchmarking} />
+              ) : null}
+
+              {activeTab === "decision-outcomes" && canViewPortfolioScore && canViewAdvancedAnalytics ? (
+                <DecisionOutcomeAnalyticsPanel analytics={snapshot.decisionOutcomeAnalytics} />
+              ) : null}
+
+              {(activeTab === "operator-queue" || activeTab === "portfolio-execution-summary") &&
+              canViewPortfolioScore &&
+              canViewAdvancedAnalytics ? (
+                <DecisionQueueSummary
+                  decisions={decisions}
+                  filter={executionFilter}
+                  onFilterChange={setExecutionFilter}
+                />
+              ) : null}
+
+              {(activeTab === "recommended-next-actions" || activeTab === "actions-to-review") &&
+              canViewPortfolioScore &&
+              canViewAdvancedAnalytics ? (
+                <AgentDecisionPanel
+                  decisions={prioritizedDecisions}
+                  period={period}
+                  propertyId={propertyId}
+                />
+              ) : null}
+
+              {activeTab === "predictive-metrics" && canViewPortfolioScore && canViewAdvancedAnalytics ? (
+                <PredictiveMetricsPanel metrics={snapshot.predictive?.metrics || []} />
+              ) : null}
+
+              {activeTab === "attention-worthy-insights" && canViewPortfolioScore && canViewAdvancedAnalytics ? (
+                <InsightCardsPanel insights={snapshot.insights} />
+              ) : null}
+
+              {activeTab !== "analytics-alerts" && !canViewPortfolioScore ? (
+                <FeatureTeaser
+                  featureKey="portfolio_score"
+                  eyebrow="Pro analytics"
+                  title="Unlock deeper analytics on Pro"
+                  description="Move from a summary overview into detailed application, leasing, maintenance, and revenue panels."
+                  ctaLabel="Upgrade to Pro"
+                />
+              ) : null}
+
+              {activeTab !== "analytics-alerts" &&
+              activeTab !== "portfolio-benchmarking" &&
+              canViewPortfolioScore &&
+              !canViewAdvancedAnalytics ? (
+                <FeatureTeaser
+                  featureKey="portfolio_analytics"
+                  eyebrow="Elite analytics"
+                  title="Unlock attention-worthy insights on Elite"
+                  description="Surface more actionable analytics signals across vacancies, maintenance burden, and application changes."
+                  ctaLabel="Upgrade to Elite"
+                />
+              ) : null}
+            </div>
+
+            {showPortfolioScoreTeaser ? (
               <FeatureTeaser
                 featureKey="portfolio_score"
                 eyebrow="Pro analytics"
@@ -496,7 +632,7 @@ export default function LandlordAnalyticsPage() {
               />
             ) : null}
 
-            {canViewPortfolioScore && !canViewAdvancedAnalytics ? (
+            {showAdvancedAnalyticsTeaser ? (
               <FeatureTeaser
                 featureKey="portfolio_analytics"
                 eyebrow="Elite analytics"
@@ -504,10 +640,6 @@ export default function LandlordAnalyticsPage() {
                 description="Surface more actionable analytics signals across vacancies, maintenance burden, and application changes."
                 ctaLabel="Upgrade to Elite"
               />
-            ) : null}
-
-            {canViewPortfolioScore && canViewAdvancedAnalytics ? (
-              <InsightCardsPanel insights={snapshot.insights} />
             ) : null}
 
             {!snapshot.properties.length &&
