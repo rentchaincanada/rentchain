@@ -89,6 +89,30 @@ function prettyInstitutionalSchemaStatus(value: "valid" | "valid_with_warnings" 
   }
 }
 
+function prettyComplianceReadinessStatus(value: "not_ready" | "partial" | "ready" | null | undefined) {
+  switch (value) {
+    case "ready":
+      return "Ready";
+    case "partial":
+      return "Partial";
+    case "not_ready":
+    default:
+      return "Not ready";
+  }
+}
+
+function prettyComplianceCheckStatus(value: "pass" | "warning" | "missing" | null | undefined) {
+  switch (value) {
+    case "pass":
+      return "Pass";
+    case "warning":
+      return "Warning";
+    case "missing":
+    default:
+      return "Missing";
+  }
+}
+
 function prettyScreeningIdentityStatus(
   value: "not_started" | "in_progress" | "completed" | "needs_attention" | "blocked" | null | undefined
 ) {
@@ -1077,6 +1101,41 @@ export default function TenantWorkspacePage() {
                         { label: "Missing recommended fields", value: String(institutionalPackage.validation.missingRecommendedFields.length) },
                       ]}
                     />
+                  </div>
+
+                  <div style={{ display: "grid", gap: 6 }}>
+                    <div style={{ fontWeight: 700, color: textTokens.primary }}>Compliance readiness</div>
+                    <TenantKeyValueGrid
+                      rows={[
+                        {
+                          label: "Readiness",
+                          value: prettyComplianceReadinessStatus(institutionalPackage.complianceReadiness.readinessStatus),
+                        },
+                        {
+                          label: "Export storage",
+                          value: prettyStatus(institutionalPackage.complianceReadiness.exportTraceability.exportStorage),
+                        },
+                        {
+                          label: "Outbound transfer",
+                          value: prettyStatus(institutionalPackage.complianceReadiness.exportTraceability.outboundTransfer),
+                        },
+                      ]}
+                    />
+                    <div style={{ color: textTokens.secondary, lineHeight: 1.6 }}>
+                      {institutionalPackage.complianceReadiness.readinessDescription}
+                    </div>
+                    <TenantKeyValueGrid
+                      rows={institutionalPackage.complianceReadiness.checks.map((check) => ({
+                        label: check.label,
+                        value: prettyComplianceCheckStatus(check.status),
+                      }))}
+                    />
+                    <div style={{ color: textTokens.secondary, lineHeight: 1.6 }}>
+                      Exports are generated on request and are not stored by RentChain.
+                    </div>
+                    <div style={{ color: textTokens.secondary, lineHeight: 1.6 }}>
+                      No data is sent automatically.
+                    </div>
                   </div>
                 </div>
               ) : null}

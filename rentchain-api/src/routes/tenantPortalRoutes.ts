@@ -23,6 +23,7 @@ import { deriveIdentityPortability } from "../services/identityPortability/deriv
 import { deriveInstitutionalIdentityPackage } from "../services/institutional/deriveInstitutionalIdentityPackage";
 import { deriveInstitutionalSchemaV2 } from "../services/institutional/deriveInstitutionalSchemaV2";
 import { validateInstitutionalSchema } from "../services/institutional/validateInstitutionalSchema";
+import { deriveComplianceReadiness } from "../services/compliance/deriveComplianceReadiness";
 import { derivePaymentReadiness } from "../services/paymentReadiness/derivePaymentReadiness";
 import {
   createRentPaymentCheckout,
@@ -3065,6 +3066,23 @@ router.post("/identity/export", requireTenantWorkspaceIdentity, async (req: any,
       latestPaymentStatus: workspace.lease?.rentPaymentSummary?.latestPayment?.status || null,
     });
     schemaV2.validation = validateInstitutionalSchema(schemaV2);
+    schemaV2.complianceReadiness = deriveComplianceReadiness({
+      validation: schemaV2.validation,
+      identityTimeline: {
+        totalEvents: schemaV2.audit.totalIdentityEvents,
+        recentActivityAvailable: schemaV2.audit.recentActivityAvailable,
+      },
+      consentControls: {
+        sharingEnabled: Boolean(portableIdentity?.readiness?.sharingEnabled),
+        verificationRequestsAvailable: false,
+        approvedScopeCount: 0,
+      },
+      exportContext: {
+        schemaVersion: "2.0",
+        dataScope: schemaV2.schema.dataScope,
+        consentRequired: schemaV2.schema.consentRequired,
+      },
+    });
     return res.json({
       ok: true,
       data: schemaV2,

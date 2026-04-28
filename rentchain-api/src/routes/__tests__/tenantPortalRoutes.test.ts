@@ -1167,6 +1167,13 @@ describe("tenantPortalRoutes foundation", () => {
     expect(res.status).toBe(200);
     expect(res.body?.data?.schema?.version).toBe("2.0");
     expect(res.body?.data?.validation?.status).toBeTruthy();
+    expect(res.body?.data?.complianceReadiness?.readinessStatus).toBeTruthy();
+    expect(res.body?.data?.complianceReadiness?.exportTraceability).toEqual({
+      exportAvailable: true,
+      schemaVersion: "2.0",
+      exportStorage: "not_stored",
+      outboundTransfer: "none",
+    });
     expect(res.body?.data?.audit?.recentActivityAvailable).toBe(false);
     expect(res.body?.data?.audit?.recentActivity).toBeUndefined();
     const payload = JSON.stringify(res.body?.data || {});
@@ -1176,6 +1183,7 @@ describe("tenantPortalRoutes foundation", () => {
     expect(payload).not.toContain("share-token");
     expect(payload).not.toContain("tenant-1");
     expect(payload).not.toContain("prop-1");
+    expect(payload).not.toContain("occurredAt");
   });
 
   it("rejects unsupported institutional schema versions narrowly", async () => {
