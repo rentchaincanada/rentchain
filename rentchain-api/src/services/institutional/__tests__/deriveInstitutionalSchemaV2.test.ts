@@ -54,6 +54,7 @@ describe("deriveInstitutionalSchemaV2", () => {
     expect(result.rentalHistory.leaseExecutionStatus).toBe("executed");
     expect(result.paymentReadiness.latestPaymentStatus).toBe("pending");
     expect(result.audit.recentActivityAvailable).toBe(true);
+    expect(result.complianceReadiness.exportTraceability.schemaVersion).toBe("2.0");
     expect((result.audit as any).recentActivity).toBeUndefined();
     expect(JSON.stringify(result)).not.toContain("paymentMethod");
     expect(JSON.stringify(result)).not.toContain("documentUrl");

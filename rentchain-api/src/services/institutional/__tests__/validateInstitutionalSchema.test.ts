@@ -66,6 +66,31 @@ describe("validateInstitutionalSchema", () => {
     expect(result.missingRecommendedFields).toContain("identity.portabilityStatus");
   });
 
+  it("adds safe summary warnings for portability, trace, payment readiness, and consent limits", () => {
+    const payload = buildValidExport();
+    payload.identity.portabilityStatus = "not_ready";
+    payload.audit.auditTrailAvailable = false;
+    payload.audit.totalIdentityEvents = 0;
+    payload.paymentReadiness = {
+      rentTermsReady: false,
+      paymentRailAvailable: false,
+      latestPaymentStatus: "not_available",
+    };
+
+    const result = validateInstitutionalSchema(payload, {
+      consentControlsLimited: true,
+    });
+
+    expect(result.status).toBe("valid_with_warnings");
+    expect(result.warnings).toContain("Recommended signal limited: portability unavailable");
+    expect(result.warnings).toContain("Recommended signal limited: identity trace unavailable");
+    expect(result.warnings).toContain("Recommended signal limited: payment readiness unavailable");
+    expect(result.warnings).toContain("Recommended signal limited: consent controls limited");
+    expect(JSON.stringify(result)).not.toContain("tokenHash");
+    expect(JSON.stringify(result)).not.toContain("requestId");
+    expect(JSON.stringify(result)).not.toContain("occurredAt");
+  });
+
   it("returns invalid when required fields are malformed", () => {
     const payload = buildValidExport();
     (payload.schema as any).name = "";
