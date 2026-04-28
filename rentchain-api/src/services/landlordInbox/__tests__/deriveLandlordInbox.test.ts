@@ -55,6 +55,13 @@ describe("deriveLandlordInbox", () => {
                   landlordId: "landlord-1",
                   propertyId: "prop-1",
                   status: "submitted",
+                  applicationSource: "apply_with_rentchain",
+                  identityReference: {
+                    source: "rentchain",
+                    referenceType: "tenant_identity_reference",
+                    referenceStatus: "available",
+                  },
+                  approvedScopeKeys: ["identity_summary"],
                 }),
               ]
             : [
@@ -133,6 +140,12 @@ describe("deriveLandlordInbox", () => {
         },
         credibilitySummary: {
           completenessLevel: "medium",
+        },
+        networkReuseSummary: {
+          reusable: true,
+          source: "apply_with_rentchain",
+          reuseStatus: "available",
+          consentRequired: true,
         },
         source: "review_summary",
       }),
@@ -218,6 +231,7 @@ describe("deriveLandlordInbox", () => {
         type: "lease",
         nextAction: "prepare_lease",
         nextActionHref: "/leases/lease-1/ledger",
+        networkReuseSummary: null,
         source: "lease_execution",
       }),
     ]);

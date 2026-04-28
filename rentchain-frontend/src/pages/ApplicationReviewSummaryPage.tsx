@@ -263,6 +263,21 @@ function trustActionLabel(
   }
 }
 
+function networkReuseStatusLabel(value: "available" | "limited" | "not_available" | null | undefined) {
+  switch (value) {
+    case "available":
+      return "Reuse available";
+    case "limited":
+      return "Reuse limited";
+    default:
+      return "Reuse not available";
+  }
+}
+
+function networkReuseSourceLabel(value: "share_package" | "apply_with_rentchain" | null | undefined) {
+  return value === "apply_with_rentchain" ? "RentChain application" : "Share package";
+}
+
 type SummaryLoadError = {
   message: string;
   status?: number;
@@ -1734,6 +1749,20 @@ function ApplicationReviewSummaryPageBody() {
                   "Reusable across applications",
                   summary.portableIdentitySummary.reusableAcrossApplications ? "Yes" : "Not yet"
                 )}
+              </div>
+            </Card>
+          ) : null}
+
+          {summary.networkReuseSummary ? (
+            <Card style={{ display: "grid", gap: 8 }}>
+              <div style={{ fontWeight: 700 }}>Network reuse</div>
+              <div style={{ fontSize: 13, color: text.subtle }}>
+                This application already carries tenant-approved RentChain reuse metadata. It is descriptive only and does not expand landlord permissions or visibility.
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
+                {kv("Status", networkReuseStatusLabel(summary.networkReuseSummary.reuseStatus))}
+                {kv("Source", networkReuseSourceLabel(summary.networkReuseSummary.source))}
+                {kv("Consent required", summary.networkReuseSummary.consentRequired ? "Yes" : "No")}
               </div>
             </Card>
           ) : null}

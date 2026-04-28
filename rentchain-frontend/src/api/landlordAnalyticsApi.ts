@@ -1,6 +1,7 @@
 import { apiFetch } from "./apiFetch";
 import type { TimelineItem } from "./timelineApi";
 import type { LandlordTrustContext } from "./reviewSummaryApi";
+import type { ApplicationReviewSummary } from "./reviewSummaryApi";
 
 export type AnalyticsPeriod = "30d" | "90d" | "365d" | "month_to_date";
 
@@ -186,6 +187,8 @@ export type LandlordAgentDecision = {
   reminderNextActionLabel?: string | null;
   trustContext?: LandlordTrustContext | null;
 };
+
+export type NetworkReuseSummary = NonNullable<ApplicationReviewSummary["networkReuseSummary"]>;
 
 export type AnalyticsDeltaValue = {
   current: number | null;
@@ -377,6 +380,7 @@ export type LandlordInboxItem = {
   credibilitySummary: {
     completenessLevel: "low" | "medium" | "high";
   } | null;
+  networkReuseSummary: NetworkReuseSummary | null;
   source: "review_summary" | "analytics_overlay" | "lease_execution";
 };
 

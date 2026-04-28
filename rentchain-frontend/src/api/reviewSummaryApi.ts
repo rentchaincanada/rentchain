@@ -90,6 +90,12 @@ export type ApplicationReviewSummary = ReviewSummaryCore & {
     portabilityDescription: string;
     reusableAcrossApplications: boolean;
   } | null;
+  networkReuseSummary?: {
+    reusable: boolean;
+    source: "share_package" | "apply_with_rentchain";
+    reuseStatus: "available" | "limited" | "not_available";
+    consentRequired: true;
+  } | null;
 };
 
 export class ReviewSummaryApiError extends Error {
@@ -140,6 +146,8 @@ export async function fetchReviewSummary(applicationId: string): Promise<Applica
       (res?.tenantCredibilitySummary || null) as ApplicationReviewSummary["tenantCredibilitySummary"],
     portableIdentitySummary:
       (res?.portableIdentitySummary || null) as ApplicationReviewSummary["portableIdentitySummary"],
+    networkReuseSummary:
+      (res?.networkReuseSummary || null) as ApplicationReviewSummary["networkReuseSummary"],
   };
 }
 

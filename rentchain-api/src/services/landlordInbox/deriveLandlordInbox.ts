@@ -3,6 +3,7 @@ import type { LandlordAgentDecision } from "../../lib/analytics/analyticsTypes";
 import { buildReviewSummary } from "../../lib/reviewSummary";
 import { deriveLandlordTrustContext } from "../../lib/trust/deriveLandlordTrustContext";
 import { deriveLeaseExecution } from "../leaseExecution/deriveLeaseExecution";
+import { deriveNetworkReuseSummary, type NetworkReuseSummary } from "../networkReuse/deriveNetworkReuseSummary";
 import {
   deriveTenantCredibilitySignals,
   type LandlordSafeTenantCredibilitySummary,
@@ -44,6 +45,7 @@ export type LandlordInboxItem = {
   credibilitySummary: {
     completenessLevel: "low" | "medium" | "high";
   } | null;
+  networkReuseSummary: NetworkReuseSummary | null;
   source: "review_summary" | "analytics_overlay" | "lease_execution";
 };
 
@@ -272,6 +274,7 @@ function buildFallbackItemFromDecision(decision: LandlordAgentDecision): Landlor
         }
       : null,
     credibilitySummary: null,
+    networkReuseSummary: null,
     source: "analytics_overlay",
   };
 }
@@ -388,6 +391,14 @@ export async function deriveLandlordInbox(
       credibilitySummary: {
         completenessLevel: tenantCredibilitySummary.completenessLevel,
       },
+      networkReuseSummary: deriveNetworkReuseSummary({
+        applicationSource:
+          application.applicationSource === "apply_with_rentchain" ? "apply_with_rentchain" : null,
+        identityReference: (application.identityReference as any) || null,
+        approvedScopeKeys: Array.isArray((application as any).approvedScopeKeys)
+          ? ((application as any).approvedScopeKeys as any[])
+          : null,
+      }),
       source: "review_summary",
     };
 
@@ -448,6 +459,7 @@ export async function deriveLandlordInbox(
       nextActionHref: `/leases/${encodeURIComponent(leaseId)}/ledger`,
       trustSummary: null,
       credibilitySummary: null,
+      networkReuseSummary: null,
       source: "lease_execution",
     });
   }

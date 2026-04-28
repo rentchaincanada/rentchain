@@ -257,6 +257,13 @@ describe("rentalApplications review summary risk surface", () => {
       id: "app-1",
       landlordId: "landlord-1",
       status: "SUBMITTED",
+      applicationSource: "apply_with_rentchain",
+      identityReference: {
+        source: "rentchain",
+        referenceType: "tenant_identity_reference",
+        referenceStatus: "available",
+      },
+      approvedScopeKeys: ["identity_summary", "application_summary"],
     });
   });
 
@@ -330,6 +337,12 @@ describe("rentalApplications review summary risk surface", () => {
         reusableAcrossApplications: expect.any(Boolean),
       })
     );
+    expect(res.body?.networkReuseSummary).toEqual({
+      reusable: true,
+      source: "apply_with_rentchain",
+      reuseStatus: "available",
+      consentRequired: true,
+    });
     expect(res.body?.tenantIdentitySummary?.documents).toBeUndefined();
     expect(res.body?.tenantIdentitySummary?.screening).toBeUndefined();
     expect(res.body?.tenantCredibilitySummary?.signals).toBeUndefined();
@@ -341,6 +354,9 @@ describe("rentalApplications review summary risk surface", () => {
     expect(JSON.stringify(res.body?.trustContext || {})).not.toContain("ref-1");
     expect(JSON.stringify(res.body?.portableIdentitySummary || {})).not.toContain("token");
     expect(JSON.stringify(res.body?.portableIdentitySummary || {})).not.toContain("approval");
+    expect(JSON.stringify(res.body?.networkReuseSummary || {})).not.toContain("identity_summary");
+    expect(JSON.stringify(res.body?.networkReuseSummary || {})).not.toContain("provider");
+    expect(JSON.stringify(res.body?.networkReuseSummary || {})).not.toContain("token");
   });
 
   it("returns a safe null risk state when no snapshot exists", async () => {
