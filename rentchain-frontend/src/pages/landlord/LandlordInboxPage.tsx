@@ -48,11 +48,11 @@ function nextActionLabel(action: LandlordInboxItem["nextAction"]) {
 function networkReuseStatusLabel(value: NonNullable<LandlordInboxItem["networkReuseSummary"]>["reuseStatus"]) {
   switch (value) {
     case "available":
-      return "Reuse available";
+      return "Reusable application available";
     case "limited":
-      return "Reuse limited";
+      return "Reusable application limited";
     default:
-      return "Reuse not available";
+      return "Reusable application not available";
   }
 }
 
@@ -61,9 +61,21 @@ function networkReuseSourceLabel(value: NonNullable<LandlordInboxItem["networkRe
 }
 
 function sectionLabel(status: LandlordInboxItem["status"]) {
-  if (status === "action_required") return "Action required";
-  if (status === "pending") return "Pending";
-  return "Completed";
+  if (status === "action_required") return "Needs attention";
+  if (status === "pending") return "Waiting on follow-up";
+  return "Recently completed";
+}
+
+function sectionHelperCopy(status: LandlordInboxItem["status"]) {
+  if (status === "action_required") return "Items here need landlord review or a next step.";
+  if (status === "pending") return "These items are in progress or waiting on follow-through.";
+  return "These items were recently resolved and no action is needed now.";
+}
+
+function emptyStateCopy(status: LandlordInboxItem["status"]) {
+  if (status === "action_required") return "No items need attention right now.";
+  if (status === "pending") return "Nothing is waiting on follow-up right now.";
+  return "No recent completed items are visible right now.";
 }
 
 function groupItems(items: LandlordInboxResponse["items"]) {
@@ -120,13 +132,13 @@ function InboxItemCard({ item }: { item: LandlordInboxItem }) {
               {item.trustSummary.readiness.replace(/_/g, " ")}
             </span>
             <span style={{ color: "#64748b", fontSize: "0.82rem" }}>
-              Verification: {item.trustSummary.verificationLevel.replace(/_/g, " ")}
+              Verification level: {item.trustSummary.verificationLevel.replace(/_/g, " ")}
             </span>
           </div>
         ) : null}
         {item.credibilitySummary ? (
           <div style={{ color: "#64748b", fontSize: "0.82rem" }}>
-            Credibility completeness: {item.credibilitySummary.completenessLevel}
+            Application completeness: {item.credibilitySummary.completenessLevel}
           </div>
         ) : null}
         {item.networkReuseSummary ? (
@@ -190,32 +202,35 @@ export default function LandlordInboxPage() {
           <div style={{ display: "grid", gap: 6 }}>
             <h1 style={{ margin: 0, fontSize: "1.5rem" }}>Landlord inbox</h1>
             <div style={{ color: "#475569", maxWidth: 860 }}>
-              A consolidated view of current landlord-safe application and lease follow-through, derived from existing review and workflow signals.
+              Review the applications, screening follow-up, and lease preparation items that need landlord attention today.
             </div>
           </div>
         </Section>
 
-        {loading ? <Card>Loading landlord inbox…</Card> : null}
-        {!loading && error ? <Card style={{ color: "#b91c1c" }}>Failed to load landlord inbox: {error}</Card> : null}
+        {loading ? <Card>Loading landlord follow-up items…</Card> : null}
+        {!loading && error ? <Card style={{ color: "#b91c1c" }}>We couldn't load the landlord inbox right now.</Card> : null}
 
         {!loading && !error && data ? (
           <>
             <Section style={{ display: "grid", gap: 8 }}>
-              <div style={{ fontWeight: 700 }}>Inbox summary</div>
+              <div style={{ fontWeight: 700 }}>Inbox overview</div>
               <div style={{ display: "flex", gap: 12, flexWrap: "wrap", color: "#475569" }}>
-                <span>Action required: {data.summary.actionRequired}</span>
-                <span>Pending: {data.summary.pending}</span>
-                <span>Completed: {data.summary.completed}</span>
+                <span>Needs attention: {data.summary.actionRequired}</span>
+                <span>Waiting: {data.summary.pending}</span>
+                <span>Done: {data.summary.completed}</span>
               </div>
             </Section>
 
             {(["action_required", "pending", "completed"] as const).map((status) => (
               <div key={status} style={{ display: "grid", gap: 12 }}>
-                <div style={{ fontWeight: 800, color: "#0f172a" }}>{sectionLabel(status)}</div>
+                <div style={{ display: "grid", gap: 4 }}>
+                  <div style={{ fontWeight: 800, color: "#0f172a" }}>{sectionLabel(status)}</div>
+                  <div style={{ color: "#64748b", fontSize: "0.9rem" }}>{sectionHelperCopy(status)}</div>
+                </div>
                 {groups[status].length ? (
                   groups[status].map((item) => <InboxItemCard key={item.id} item={item} />)
                 ) : (
-                  <Card style={{ color: "#64748b" }}>No {sectionLabel(status).toLowerCase()} items are visible right now.</Card>
+                  <Card style={{ color: "#64748b" }}>{emptyStateCopy(status)}</Card>
                 )}
               </div>
             ))}
