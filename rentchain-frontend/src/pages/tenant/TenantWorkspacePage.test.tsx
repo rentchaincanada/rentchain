@@ -14,6 +14,9 @@ const tenantPortalApi = vi.hoisted(() => ({
   getTenantLeaseWorkspace: vi.fn(),
   getTenantLeasePaymentStatus: vi.fn(),
   exportTenantIdentityPackage: vi.fn(),
+  createInstitutionalHandoffDraft: vi.fn(),
+  listInstitutionalHandoffDrafts: vi.fn(),
+  voidInstitutionalHandoffDraft: vi.fn(),
   createTenantLeasePaymentCheckout: vi.fn(),
   signTenantLease: vi.fn(),
   listTenantWorkspaceMaintenance: vi.fn(),
@@ -256,6 +259,53 @@ describe("tenant workspace frontend shell", () => {
           },
         ],
       },
+    });
+    tenantPortalApi.listInstitutionalHandoffDrafts.mockResolvedValue([]);
+    tenantPortalApi.createInstitutionalHandoffDraft.mockResolvedValue({
+      id: "handoff-1",
+      tenantId: "tenant-1",
+      institutionProfile: {
+        institutionType: "bank",
+        displayName: "Example Bank Sandbox",
+        integrationMode: "sandbox",
+        status: "draft_only",
+      },
+      schema: {
+        name: "rentchain.institutional_identity_package",
+        version: "2.0",
+      },
+      compliance: {
+        readinessStatus: "partial",
+        validationStatus: "valid_with_warnings",
+      },
+      handoffStatus: "ready_for_manual_review",
+      exportStorage: "metadata_only",
+      outboundTransfer: "none",
+      createdAt: "2026-04-28T00:00:00.000Z",
+      updatedAt: "2026-04-28T00:00:00.000Z",
+    });
+    tenantPortalApi.voidInstitutionalHandoffDraft.mockResolvedValue({
+      id: "handoff-1",
+      tenantId: "tenant-1",
+      institutionProfile: {
+        institutionType: "bank",
+        displayName: "Example Bank Sandbox",
+        integrationMode: "sandbox",
+        status: "draft_only",
+      },
+      schema: {
+        name: "rentchain.institutional_identity_package",
+        version: "2.0",
+      },
+      compliance: {
+        readinessStatus: "partial",
+        validationStatus: "valid_with_warnings",
+      },
+      handoffStatus: "voided",
+      exportStorage: "metadata_only",
+      outboundTransfer: "none",
+      createdAt: "2026-04-28T00:00:00.000Z",
+      updatedAt: "2026-04-28T00:05:00.000Z",
     });
     tenantPortalApi.exportTenantIdentityPackage.mockResolvedValue({
       schema: {
@@ -1084,6 +1134,48 @@ describe("tenant workspace frontend shell", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Download JSON/i }));
     expect(global.URL.createObjectURL).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets tenants prepare and void metadata-only institutional handoff drafts", async () => {
+    render(
+      <MemoryRouter>
+        <TenantWorkspacePage />
+      </MemoryRouter>
+    );
+
+    expect((await screen.findAllByText(/Institutional handoff drafts/i)).length).toBeGreaterThan(0);
+    expect(screen.getByText(/No data is sent automatically/i)).toBeInTheDocument();
+    expect(screen.getByText(/Institution connections are not enabled yet/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /send/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /submit to bank/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /connect institution/i })).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/Institution type/i), {
+      target: { value: "bank" },
+    });
+    fireEvent.change(screen.getByLabelText(/Display name \(optional\)/i), {
+      target: { value: "  Example Bank Sandbox  " },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Prepare institutional handoff/i }));
+
+    await waitFor(() => {
+      expect(tenantPortalApi.createInstitutionalHandoffDraft).toHaveBeenCalledWith({
+        institutionProfile: {
+          institutionType: "bank",
+          displayName: "  Example Bank Sandbox  ",
+          integrationMode: "sandbox",
+        },
+      });
+    });
+
+    expect(await screen.findByText(/Ready for manual review/i)).toBeInTheDocument();
+    expect(screen.getByText(/Example Bank Sandbox/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Void draft/i }));
+    await waitFor(() => {
+      expect(tenantPortalApi.voidInstitutionalHandoffDraft).toHaveBeenCalledWith("handoff-1");
+    });
+    expect(await screen.findByText(/Voided/i)).toBeInTheDocument();
   });
 
   it("lets tenants approve a pending share access request", async () => {

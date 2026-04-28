@@ -24,6 +24,12 @@ import { deriveInstitutionalIdentityPackage } from "../services/institutional/de
 import { deriveInstitutionalSchemaV2 } from "../services/institutional/deriveInstitutionalSchemaV2";
 import { validateInstitutionalSchema } from "../services/institutional/validateInstitutionalSchema";
 import { deriveComplianceReadiness } from "../services/compliance/deriveComplianceReadiness";
+import {
+  createInstitutionalHandoffDraft,
+  listInstitutionalHandoffsForTenant,
+  softVoidInstitutionalHandoff,
+  type InstitutionType,
+} from "../services/institutional/institutionalHandoffService";
 import { derivePaymentReadiness } from "../services/paymentReadiness/derivePaymentReadiness";
 import {
   createRentPaymentCheckout,
@@ -2277,6 +2283,80 @@ async function loadTenantWorkspaceData(context: Awaited<ReturnType<typeof resolv
   };
 }
 
+async function buildInstitutionalSchemaV2ExportForTenant(
+  req: any,
+  context: Awaited<ReturnType<typeof resolveTenancyContext>>
+) {
+  const [workspace, tenantIdentityRecord, identityTimeline] = await Promise.all([
+    loadTenantWorkspaceData(context),
+    loadTenantIdentityRecord({
+      context,
+      userId: String(req.user?.id || "").trim(),
+      userEmail: req.user?.email,
+    }),
+    deriveIdentityTimeline({
+      tenantId: String(req.user?.tenantId || context.tenantId || "").trim(),
+      applicationId: context.applicationId,
+      leaseId: context.leaseId,
+    }),
+  ]);
+  const { tenantCredibilitySignals } = deriveTenantCredibilitySignals({
+    tenantIdentityRecord,
+    leaseExecution: workspace.lease?.leaseExecution || null,
+  });
+  const { portableIdentity } = deriveIdentityPortability({
+    tenantIdentityRecord,
+    credibilitySummary: tenantCredibilitySignals.summary,
+    shareAvailability: {
+      sharingEnabled: Boolean(context.tenantId || req.user?.tenantId || req.user?.id),
+    },
+    timelineAvailability: {
+      hasIdentityTimeline: Array.isArray(identityTimeline?.events) && identityTimeline.events.length > 0,
+    },
+  });
+
+  const institutionalIdentityPackage = deriveInstitutionalIdentityPackage({
+    tenantIdentityRecord,
+    credibilitySummary: tenantCredibilitySignals.summary,
+    leaseExecution: workspace.lease?.leaseExecution || null,
+    paymentReadiness: workspace.lease?.paymentReadiness || null,
+    identityTimeline,
+    portableIdentity,
+    leaseStatus: workspace.lease?.status || null,
+  });
+
+  const schemaV2 = deriveInstitutionalSchemaV2({
+    packageV1: institutionalIdentityPackage,
+    latestPaymentStatus: workspace.lease?.rentPaymentSummary?.latestPayment?.status || null,
+  });
+  const consentControls = {
+    sharingEnabled: Boolean(portableIdentity?.readiness?.sharingEnabled),
+    verificationRequestsAvailable: false,
+    approvedScopeCount: 0,
+  };
+  schemaV2.validation = validateInstitutionalSchema(schemaV2, {
+    consentControlsLimited:
+      consentControls.sharingEnabled &&
+      !consentControls.verificationRequestsAvailable &&
+      consentControls.approvedScopeCount === 0,
+  });
+  schemaV2.complianceReadiness = deriveComplianceReadiness({
+    validation: schemaV2.validation,
+    identityTimeline: {
+      totalEvents: schemaV2.audit.totalIdentityEvents,
+      recentActivityAvailable: schemaV2.audit.recentActivityAvailable,
+    },
+    consentControls,
+    exportContext: {
+      schemaVersion: "2.0",
+      dataScope: schemaV2.schema.dataScope,
+      consentRequired: schemaV2.schema.consentRequired,
+    },
+  });
+
+  return schemaV2;
+}
+
 function completionWeight(status: CompletionStatus): number {
   switch (status) {
     case "completed":
@@ -3010,7 +3090,6 @@ async function handleTenantWorkspaceSummary(req: any, res: any) {
     },
   });
 }
-
 router.get("/workspace", requireTenantWorkspaceIdentity, handleTenantWorkspaceSummary);
 router.get("/me", requireTenantWorkspaceIdentity, handleTenantWorkspaceSummary);
 
@@ -3020,6 +3099,14 @@ router.post("/identity/export", requireTenantWorkspaceIdentity, async (req: any,
   const schemaVersion = String(req.body?.schemaVersion || "1.0").trim() || "1.0";
   if (!["1.0", "2.0"].includes(schemaVersion)) {
     return res.status(400).json({ ok: false, error: "UNSUPPORTED_SCHEMA_VERSION" });
+  }
+
+  if (schemaVersion === "2.0") {
+    const schemaV2 = await buildInstitutionalSchemaV2ExportForTenant(req, context);
+    return res.json({
+      ok: true,
+      data: schemaV2,
+    });
   }
 
   const [workspace, tenantIdentityRecord, identityTimeline] = await Promise.all([
@@ -3060,45 +3147,91 @@ router.post("/identity/export", requireTenantWorkspaceIdentity, async (req: any,
     leaseStatus: workspace.lease?.status || null,
   });
 
-  if (schemaVersion === "2.0") {
-    const schemaV2 = deriveInstitutionalSchemaV2({
-      packageV1: institutionalIdentityPackage,
-      latestPaymentStatus: workspace.lease?.rentPaymentSummary?.latestPayment?.status || null,
-    });
-    const consentControls = {
-      sharingEnabled: Boolean(portableIdentity?.readiness?.sharingEnabled),
-      verificationRequestsAvailable: false,
-      approvedScopeCount: 0,
-    };
-    schemaV2.validation = validateInstitutionalSchema(schemaV2, {
-      consentControlsLimited:
-        consentControls.sharingEnabled &&
-        !consentControls.verificationRequestsAvailable &&
-        consentControls.approvedScopeCount === 0,
-    });
-    schemaV2.complianceReadiness = deriveComplianceReadiness({
-      validation: schemaV2.validation,
-      identityTimeline: {
-        totalEvents: schemaV2.audit.totalIdentityEvents,
-        recentActivityAvailable: schemaV2.audit.recentActivityAvailable,
-      },
-      consentControls,
-      exportContext: {
-        schemaVersion: "2.0",
-        dataScope: schemaV2.schema.dataScope,
-        consentRequired: schemaV2.schema.consentRequired,
-      },
-    });
-    return res.json({
-      ok: true,
-      data: schemaV2,
-    });
-  }
-
   return res.json({
     ok: true,
     data: institutionalIdentityPackage,
   });
+});
+
+router.post("/institutional/handoffs", requireTenantWorkspaceIdentity, async (req: any, res: any) => {
+  const context = await resolveWorkspaceContextOrRespond(req, res);
+  if (!context) return;
+
+  const tenantId = String(req.user?.tenantId || context.tenantId || "").trim();
+  if (!tenantId) {
+    return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+  }
+
+  const institutionType = String(req.body?.institutionProfile?.institutionType || "").trim() as InstitutionType;
+  if (!["bank", "lender", "insurer", "regulator", "internal_review"].includes(institutionType)) {
+    return res.status(400).json({ ok: false, error: "INVALID_INSTITUTION_TYPE" });
+  }
+
+  const integrationMode = String(req.body?.institutionProfile?.integrationMode || "sandbox").trim();
+  if (!["sandbox", "manual_export"].includes(integrationMode)) {
+    return res.status(400).json({ ok: false, error: "INVALID_INTEGRATION_MODE" });
+  }
+
+  try {
+    const schemaV2 = await buildInstitutionalSchemaV2ExportForTenant(req, context);
+    const created = await createInstitutionalHandoffDraft({
+      tenantId,
+      institutionProfile: {
+        institutionType,
+        displayName: req.body?.institutionProfile?.displayName,
+        integrationMode: integrationMode as "sandbox" | "manual_export",
+      },
+      schema: {
+        name: schemaV2.schema.name,
+        version: schemaV2.schema.version,
+      },
+      compliance: {
+        readinessStatus: schemaV2.complianceReadiness.readinessStatus,
+        validationStatus: schemaV2.validation.status,
+      },
+    });
+    return res.json({ ok: true, data: created });
+  } catch (err: any) {
+    if (err?.message === "invalid_institution_display_name") {
+      return res.status(400).json({ ok: false, error: "INVALID_INSTITUTION_DISPLAY_NAME" });
+    }
+    return res.status(500).json({ ok: false, error: "INSTITUTIONAL_HANDOFF_CREATE_FAILED" });
+  }
+});
+
+router.get("/institutional/handoffs", requireTenantWorkspaceIdentity, async (req: any, res: any) => {
+  const context = await resolveWorkspaceContextOrRespond(req, res);
+  if (!context) return;
+
+  const tenantId = String(req.user?.tenantId || context.tenantId || "").trim();
+  if (!tenantId) {
+    return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+  }
+
+  const items = await listInstitutionalHandoffsForTenant(tenantId);
+  return res.json({
+    ok: true,
+    data: {
+      items,
+    },
+  });
+});
+
+router.delete("/institutional/handoffs/:handoffId", requireTenantWorkspaceIdentity, async (req: any, res: any) => {
+  const context = await resolveWorkspaceContextOrRespond(req, res);
+  if (!context) return;
+
+  const tenantId = String(req.user?.tenantId || context.tenantId || "").trim();
+  if (!tenantId) {
+    return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+  }
+
+  const updated = await softVoidInstitutionalHandoff(tenantId, req.params?.handoffId);
+  if (!updated) {
+    return res.status(404).json({ ok: false, error: "INSTITUTIONAL_HANDOFF_NOT_FOUND" });
+  }
+
+  return res.json({ ok: true, data: updated });
 });
 
 router.post("/share-packages", requireTenantWorkspaceIdentity, async (req: any, res) => {

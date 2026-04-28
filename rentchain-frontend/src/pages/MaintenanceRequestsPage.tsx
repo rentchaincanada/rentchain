@@ -356,7 +356,7 @@ export default function MaintenanceRequestsPage() {
       try {
         await patchLandlordMaintenance(selected.id, {
           status,
-          priority,
+          priority: selected.priority || priority,
           landlordNote,
           message,
         });
