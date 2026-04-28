@@ -103,10 +103,11 @@ describe("MessagesPage", () => {
     });
   });
 
-  it("uses safe fallback labels and deterministic initials when identity context is missing", async () => {
+  it("uses safe context fallbacks and deterministic initials for Taylor Tenant", async () => {
     mocks.fetchLandlordConversationsMock.mockResolvedValue([
       {
         id: "conv-2",
+        tenantDisplayName: "Taylor Tenant",
         tenantId: "tenant-raw-1",
         propertyId: "prop-raw-1",
         unitId: "unit-raw-1",
@@ -115,6 +116,7 @@ describe("MessagesPage", () => {
     mocks.fetchLandlordConversationMessagesMock.mockResolvedValue({
       conversation: {
         id: "conv-2",
+        tenantDisplayName: "Taylor Tenant",
         tenantId: "tenant-raw-1",
         propertyId: "prop-raw-1",
         unitId: "unit-raw-1",
@@ -129,10 +131,10 @@ describe("MessagesPage", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText("Tenant")).toBeInTheDocument();
+      expect(screen.getAllByText("Taylor Tenant")[0]).toBeInTheDocument();
       expect(screen.getByText("Tenant conversation")).toBeInTheDocument();
     });
-    expect(screen.getByText("T")).toBeInTheDocument();
+    expect(screen.getAllByText("TT")[0]).toBeInTheDocument();
     expect(screen.queryByText(/tenant-raw-1/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/prop-raw-1/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/unit-raw-1/i)).not.toBeInTheDocument();
