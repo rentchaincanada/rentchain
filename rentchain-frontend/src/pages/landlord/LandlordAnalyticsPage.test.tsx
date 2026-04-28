@@ -9,6 +9,7 @@ import LandlordAnalyticsPage from "./LandlordAnalyticsPage";
 
 const showToast = vi.fn();
 const macShellSpy = vi.fn();
+const printSummaryDocument = vi.fn();
 type EntitlementOverrides = Record<string, unknown>;
 type PendingRequest = Promise<never>;
 
@@ -38,6 +39,10 @@ vi.mock("../../components/ui/ToastProvider", () => ({
   useToast: () => ({ showToast }),
 }));
 
+vi.mock("../../utils/printSummary", () => ({
+  printSummaryDocument: (...args: unknown[]) => printSummaryDocument(...args),
+}));
+
 vi.mock("../../components/layout/MacShell", () => ({
   MacShell: ({ children, ...props }: { children: React.ReactNode }) => {
     macShellSpy(props);
@@ -62,6 +67,7 @@ vi.mock("@/components/billing/FeatureTeaser", () => ({
 beforeEach(() => {
   showToast.mockReset();
   macShellSpy.mockReset();
+  printSummaryDocument.mockReset();
   vi.clearAllMocks();
 });
 
@@ -555,6 +561,20 @@ describe("LandlordAnalyticsPage", () => {
     expect(screen.getByRole("region", { name: /Operator queue/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Action required · 1/i })).toBeInTheDocument();
     expect(screen.queryByText(/Beta carries the strongest vacancy pressure/i)).not.toBeInTheDocument();
+  });
+
+  it("routes print/save pdf through the shared print helper", async () => {
+    await mockEntitlements();
+    await mockApiResolved();
+
+    render(
+      <MemoryRouter>
+        <LandlordAnalyticsPage />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Print / Save PDF" }));
+    expect(printSummaryDocument).toHaveBeenCalledWith("summary");
   });
 
   it("renders analytics decisions in deterministic operator priority order", async () => {

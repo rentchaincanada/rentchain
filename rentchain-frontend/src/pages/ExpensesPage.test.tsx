@@ -4,6 +4,7 @@ import ExpensesPage from "./ExpensesPage";
 
 const mocks = vi.hoisted(() => ({
   listExpensesMock: vi.fn(),
+  exportExpensesMock: vi.fn(),
   fetchPropertiesMock: vi.fn(),
   useCapabilitiesMock: vi.fn(),
   previewExpenseImportMock: vi.fn(),
@@ -15,7 +16,7 @@ vi.mock("../api/expensesApi", async () => {
   return {
     ...actual,
     listExpenses: mocks.listExpensesMock,
-    exportExpenses: vi.fn(),
+    exportExpenses: mocks.exportExpensesMock,
     previewExpenseImport: mocks.previewExpenseImportMock,
     confirmExpenseImportRows: mocks.confirmExpenseImportRowsMock,
   };
@@ -49,6 +50,10 @@ describe("ExpensesPage", () => {
     ]);
     mocks.fetchPropertiesMock.mockResolvedValue({
       items: [{ id: "prop-1", name: "Alpha Property", portfolioStatus: "active" }],
+    });
+    mocks.exportExpensesMock.mockResolvedValue({
+      blob: new Blob(["csv"]),
+      filename: "expenses.csv",
     });
     mocks.previewExpenseImportMock.mockReset();
     mocks.confirmExpenseImportRowsMock.mockReset();
@@ -84,6 +89,32 @@ describe("ExpensesPage", () => {
     });
     expect(screen.getByRole("button", { name: "Export Spreadsheet" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Export PDF" })).toBeInTheDocument();
+  });
+
+  it("routes export buttons through the existing export api", async () => {
+    mocks.useCapabilitiesMock.mockReturnValue({
+      caps: { plan: "pro" },
+      features: { "expenses.import": true },
+      loading: false,
+    });
+
+    const createObjectURL = vi.fn(() => "blob:url");
+    const revokeObjectURL = vi.fn();
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    vi.stubGlobal("URL", { ...(window.URL || {}), createObjectURL, revokeObjectURL });
+
+    render(<ExpensesPage />);
+
+    fireEvent.click((await screen.findAllByRole("button", { name: "Export CSV" }))[0]);
+    await waitFor(() => expect(mocks.exportExpensesMock).toHaveBeenCalledWith("csv", expect.any(Object)));
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Export Spreadsheet" })[0]);
+    await waitFor(() => expect(mocks.exportExpensesMock).toHaveBeenCalledWith("xlsx", expect.any(Object)));
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Export PDF" })[0]);
+    await waitFor(() => expect(mocks.exportExpensesMock).toHaveBeenCalledWith("pdf", expect.any(Object)));
+
+    click.mockRestore();
   });
 
   it("renders preview rows and confirms reviewed imports on Pro plans", async () => {

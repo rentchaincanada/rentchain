@@ -7,6 +7,7 @@ import { spacing, text, colors } from "../styles/tokens";
 import { fetchProperties } from "../api/propertiesApi";
 import { fetchTenants } from "../api/tenantsApi";
 import { printSummaryDocument } from "../utils/printSummary";
+import { triggerBlobDownload } from "../utils/downloadBlob";
 
 const PaymentsPage: React.FC = () => {
   const { payments, loading, error } = usePayments();
@@ -71,12 +72,7 @@ const PaymentsPage: React.FC = () => {
     try {
       setExporting(format);
       const { blob, filename } = await exportPayments(format);
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = filename;
-      link.click();
-      window.URL.revokeObjectURL(url);
+      triggerBlobDownload(blob, filename);
     } catch (err) {
       console.error("[PaymentsPage] Failed to export payments:", err);
       window.alert(err instanceof Error ? `Failed to export payments: ${err.message}` : "Failed to export payments.");

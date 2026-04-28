@@ -1,6 +1,5 @@
 import { apiFetch } from "./apiFetch";
-import { apiUrl } from "./config";
-import { getAuthToken } from "../lib/authToken";
+import { downloadAuthenticatedExport } from "./exportDownload";
 
 export const EXPENSE_CATEGORIES = [
   "Repairs",
@@ -139,30 +138,11 @@ export async function importExpensesCsv(input: {
 }
 
 async function downloadExpenseExport(path: string) {
-  const token = getAuthToken();
-  const response = await fetch(apiUrl(path), {
-    method: "GET",
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-    credentials: "include",
+  return downloadAuthenticatedExport({
+    path,
+    fallbackFilename: "rentchain-expenses-export",
+    errorMessage: "Failed to export expenses",
   });
-  if (!response.ok) {
-    const text = await response.text().catch(() => "");
-    let message = text || "Failed to export expenses";
-    try {
-      const json = text ? JSON.parse(text) : null;
-      message = json?.message || json?.error || message;
-    } catch {
-      // ignore json parse errors
-    }
-    throw new Error(message);
-  }
-  const blob = await response.blob();
-  const disposition = response.headers.get("Content-Disposition") || "";
-  const match = disposition.match(/filename="?([^"]+)"?/i);
-  return {
-    blob,
-    filename: match?.[1] || "rentchain-expenses-export",
-  };
 }
 
 export async function exportExpenses(format: "csv" | "xlsx" | "pdf", filters?: ListExpensesFilters) {

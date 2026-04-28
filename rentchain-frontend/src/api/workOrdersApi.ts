@@ -1,6 +1,5 @@
 import { apiFetch } from "./apiFetch";
-import { apiUrl } from "./config";
-import { getAuthToken } from "../lib/authToken";
+import { downloadAuthenticatedExport } from "./exportDownload";
 
 export type WorkOrderPriority = "low" | "medium" | "high" | "urgent";
 export type WorkOrderStatus =
@@ -261,30 +260,11 @@ export async function listWorkOrders(status?: string): Promise<WorkOrderRecord[]
 }
 
 async function downloadWorkOrderExport(path: string) {
-  const token = getAuthToken();
-  const response = await fetch(apiUrl(path), {
-    method: "GET",
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-    credentials: "include",
+  return downloadAuthenticatedExport({
+    path,
+    fallbackFilename: "rentchain-work-orders-export",
+    errorMessage: "Failed to export work orders",
   });
-  if (!response.ok) {
-    const text = await response.text().catch(() => "");
-    let message = text || "Failed to export work orders";
-    try {
-      const json = text ? JSON.parse(text) : null;
-      message = json?.message || json?.error || message;
-    } catch {
-      // ignore
-    }
-    throw new Error(message);
-  }
-  const blob = await response.blob();
-  const disposition = response.headers.get("Content-Disposition") || "";
-  const match = disposition.match(/filename=\"?([^\"]+)\"?/i);
-  return {
-    blob,
-    filename: match?.[1] || "rentchain-work-orders-export",
-  };
 }
 
 export async function exportWorkOrders(format: "csv" | "xlsx") {

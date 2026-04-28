@@ -17,6 +17,7 @@ import { ExpenseImportReviewTable } from "../components/expenses/ExpenseImportRe
 import { ExpenseImportSummaryCard } from "../components/expenses/ExpenseImportSummaryCard";
 import { ExpenseImportUploadCard } from "../components/expenses/ExpenseImportUploadCard";
 import { useCapabilities } from "../hooks/useCapabilities";
+import { triggerBlobDownload } from "../utils/downloadBlob";
 
 function formatCents(cents: number): string {
   const amount = Number(cents || 0) / 100;
@@ -204,12 +205,7 @@ const ExpensesPage: React.FC = () => {
         dateTo: dateTo || undefined,
         includeArchivedProperties: true,
       });
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = filename;
-      link.click();
-      window.URL.revokeObjectURL(url);
+      triggerBlobDownload(blob, filename);
     } catch (err: any) {
       setError(String(err?.message || "Failed to export expenses."));
     } finally {
