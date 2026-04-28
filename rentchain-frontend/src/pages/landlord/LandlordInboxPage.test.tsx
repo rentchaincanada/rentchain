@@ -85,9 +85,21 @@ describe("LandlordInboxPage", () => {
     );
 
     expect(await screen.findByRole("heading", { name: "Landlord inbox" })).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Review the applications, screening follow-up, and lease preparation items that need landlord attention today."
+      )
+    ).toBeInTheDocument();
+    expect(screen.getByText("Inbox overview")).toBeInTheDocument();
+    expect(screen.getByText("Needs attention: 1")).toBeInTheDocument();
+    expect(screen.getByText("Waiting: 0")).toBeInTheDocument();
+    expect(screen.getByText("Done: 0")).toBeInTheDocument();
+    expect(screen.getByText("Needs attention")).toBeInTheDocument();
+    expect(screen.getByText("Items here need landlord review or a next step.")).toBeInTheDocument();
     expect(screen.getByText("Application ready for review")).toBeInTheDocument();
-    expect(screen.getByText(/Credibility completeness: medium/i)).toBeInTheDocument();
-    expect(screen.getByText(/Reuse available · Source: RentChain application/i)).toBeInTheDocument();
+    expect(screen.getByText(/Verification level: partial/i)).toBeInTheDocument();
+    expect(screen.getByText(/Application completeness: medium/i)).toBeInTheDocument();
+    expect(screen.getByText(/Reusable application available · Source: RentChain application/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Review application" })).toHaveAttribute(
       "href",
       "/applications/app-1/review-summary"
@@ -111,9 +123,15 @@ describe("LandlordInboxPage", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText(/Inbox summary/i, {}, { timeout: 3000 })).toBeInTheDocument();
-    expect(screen.getByText(/No action required items are visible right now/i)).toBeInTheDocument();
-    expect(screen.getByText(/No pending items are visible right now/i)).toBeInTheDocument();
-    expect(screen.getByText(/No completed items are visible right now/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Inbox overview/i, {}, { timeout: 3000 })).toBeInTheDocument();
+    expect(screen.getByText("Needs attention")).toBeInTheDocument();
+    expect(screen.getByText("Items here need landlord review or a next step.")).toBeInTheDocument();
+    expect(screen.getByText("Waiting on follow-up")).toBeInTheDocument();
+    expect(screen.getByText("These items are in progress or waiting on follow-through.")).toBeInTheDocument();
+    expect(screen.getByText("Recently completed")).toBeInTheDocument();
+    expect(screen.getByText("These items were recently resolved and no action is needed now.")).toBeInTheDocument();
+    expect(screen.getByText("No items need attention right now.")).toBeInTheDocument();
+    expect(screen.getByText("Nothing is waiting on follow-up right now.")).toBeInTheDocument();
+    expect(screen.getByText("No recent completed items are visible right now.")).toBeInTheDocument();
   });
 });
