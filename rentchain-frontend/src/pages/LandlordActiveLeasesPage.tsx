@@ -190,6 +190,25 @@ export default function LandlordActiveLeasesPage() {
   const [startDate, setStartDate] = React.useState(todayIso());
   const [endDate, setEndDate] = React.useState("");
   const [monthlyRent, setMonthlyRent] = React.useState("");
+  const [isNarrowLayout, setIsNarrowLayout] = React.useState(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
+    return window.matchMedia("(max-width: 768px)").matches;
+  });
+
+  React.useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+    const mediaQuery = window.matchMedia("(max-width: 768px)");
+    const updateLayout = (event?: MediaQueryListEvent) => {
+      setIsNarrowLayout(event ? event.matches : mediaQuery.matches);
+    };
+    updateLayout();
+    if (typeof mediaQuery.addEventListener === "function") {
+      mediaQuery.addEventListener("change", updateLayout);
+      return () => mediaQuery.removeEventListener("change", updateLayout);
+    }
+    mediaQuery.addListener(updateLayout);
+    return () => mediaQuery.removeListener(updateLayout);
+  }, []);
 
   const load = React.useCallback(async () => {
     try {
@@ -285,6 +304,111 @@ export default function LandlordActiveLeasesPage() {
     () => leases.filter((lease) => matchesLeaseSearch(lease, normalizedSearchQuery)),
     [leases, normalizedSearchQuery]
   );
+
+  function buildLeaseActionMeta(lease: LandlordActiveLease) {
+    const ledgerPath = `/leases/${encodeURIComponent(lease.id)}/ledger`;
+    const ledgerUrl =
+      typeof window !== "undefined"
+        ? `${window.location.origin}${ledgerPath}`
+        : ledgerPath;
+    const emailSubject = encodeURIComponent(`Lease for ${lease.propertyName} unit ${lease.unitNumber}`);
+    const emailBody = encodeURIComponent(
+      [
+        `Lease reference for ${lease.propertyName} unit ${lease.unitNumber}.`,
+        "",
+        `Monthly rent: ${formatCurrency(lease.monthlyRent)}`,
+        `Status: ${prettyLeaseStatus(lease.status)}`,
+        `Term: ${formatDate(lease.startDate)} to ${formatDate(lease.endDate)}`,
+        `View ledger: ${ledgerUrl}`,
+        lease.documentUrl ? `Lease document: ${lease.documentUrl}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n")
+    );
+    return {
+      ledgerPath,
+      emailHref: lease.tenantEmail
+        ? `mailto:${encodeURIComponent(lease.tenantEmail)}?subject=${emailSubject}&body=${emailBody}`
+        : null,
+    };
+  }
+
+  function renderLeaseActions(lease: LandlordActiveLease) {
+    const { ledgerPath, emailHref } = buildLeaseActionMeta(lease);
+    return (
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <Link to={ledgerPath} style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", textDecoration: "none", color: "#0f172a" }}>
+          View
+        </Link>
+        {emailHref ? (
+          <a
+            href={emailHref}
+            style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", textDecoration: "none", color: "#0f172a" }}
+          >
+            Email
+          </a>
+        ) : (
+          <button
+            type="button"
+            disabled
+            style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #e2e8f0", background: "#f8fafc", color: "#94a3b8" }}
+          >
+            Email
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => {
+            if (lease.documentUrl) {
+              const a = document.createElement("a");
+              a.href = lease.documentUrl;
+              a.target = "_blank";
+              a.rel = "noreferrer";
+              a.download = "";
+              document.body.appendChild(a);
+              a.click();
+              a.remove();
+              return;
+            }
+            downloadLeaseSummary(lease);
+          }}
+          style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a" }}
+        >
+          Save
+        </button>
+        {view === "archived" ? (
+          <button
+            type="button"
+            onClick={() => void handleRestore(lease)}
+            style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a" }}
+          >
+            Restore
+          </button>
+        ) : (
+          <>
+            {lease.rentPaymentSummary?.paymentRail.enabled !== true &&
+            lease.paymentReadiness?.readinessStatus === "ready_to_configure" ? (
+              <button
+                type="button"
+                onClick={() => void handleEnableRentCollection(lease)}
+                disabled={paymentRailBusyLeaseId === lease.id}
+                style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a" }}
+              >
+                {paymentRailBusyLeaseId === lease.id ? "Enabling..." : "Enable rent collection"}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => void handleArchive(lease)}
+              style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a" }}
+            >
+              Archive lease
+            </button>
+          </>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
@@ -489,7 +613,7 @@ export default function LandlordActiveLeasesPage() {
         </div>
       ) : null}
 
-      {!loading && !error && filteredLeases.length > 0 ? (
+      {!loading && !error && filteredLeases.length > 0 && !isNarrowLayout ? (
         <div style={{ overflowX: "auto", border: "1px solid #e2e8f0", borderRadius: 12, background: "#fff" }}>
           <table style={{ width: "100%", minWidth: 1040, borderCollapse: "collapse" }}>
             <thead>
@@ -503,29 +627,6 @@ export default function LandlordActiveLeasesPage() {
             </thead>
             <tbody>
               {filteredLeases.map((lease) => {
-                const ledgerPath = `/leases/${encodeURIComponent(lease.id)}/ledger`;
-                const ledgerUrl =
-                  typeof window !== "undefined"
-                    ? `${window.location.origin}${ledgerPath}`
-                    : ledgerPath;
-                const emailSubject = encodeURIComponent(`Lease for ${lease.propertyName} unit ${lease.unitNumber}`);
-                const emailBody = encodeURIComponent(
-                  [
-                    `Lease reference for ${lease.propertyName} unit ${lease.unitNumber}.`,
-                    "",
-                    `Monthly rent: ${formatCurrency(lease.monthlyRent)}`,
-                    `Status: ${prettyLeaseStatus(lease.status)}`,
-                    `Term: ${formatDate(lease.startDate)} to ${formatDate(lease.endDate)}`,
-                    `View ledger: ${ledgerUrl}`,
-                    lease.documentUrl ? `Lease document: ${lease.documentUrl}` : "",
-                  ]
-                    .filter(Boolean)
-                    .join("\n")
-                );
-                const emailHref = lease.tenantEmail
-                  ? `mailto:${encodeURIComponent(lease.tenantEmail)}?subject=${emailSubject}&body=${emailBody}`
-                  : null;
-
                 return (
                   <tr key={lease.id} style={{ borderTop: "1px solid #e2e8f0" }}>
                     <td style={{ padding: 12 }}>
@@ -592,84 +693,64 @@ export default function LandlordActiveLeasesPage() {
                       <div>{formatDate(lease.startDate)}</div>
                       <div style={{ color: "#64748b", fontSize: 12 }}>to {formatDate(lease.endDate)}</div>
                     </td>
-                    <td style={{ padding: 12 }}>
-                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                        <Link to={ledgerPath} style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", textDecoration: "none", color: "#0f172a" }}>
-                          View
-                        </Link>
-                        {emailHref ? (
-                          <a
-                            href={emailHref}
-                            style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", textDecoration: "none", color: "#0f172a" }}
-                          >
-                            Email
-                          </a>
-                        ) : (
-                          <button
-                            type="button"
-                            disabled
-                            style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #e2e8f0", background: "#f8fafc", color: "#94a3b8" }}
-                          >
-                            Email
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (lease.documentUrl) {
-                              const a = document.createElement("a");
-                              a.href = lease.documentUrl;
-                              a.target = "_blank";
-                              a.rel = "noreferrer";
-                              a.download = "";
-                              document.body.appendChild(a);
-                              a.click();
-                              a.remove();
-                              return;
-                            }
-                            downloadLeaseSummary(lease);
-                          }}
-                          style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a" }}
-                        >
-                          Save
-                        </button>
-                        {view === "archived" ? (
-                          <button
-                            type="button"
-                            onClick={() => void handleRestore(lease)}
-                            style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a" }}
-                          >
-                            Restore
-                          </button>
-                        ) : (
-                          <>
-                            {lease.rentPaymentSummary?.paymentRail.enabled !== true &&
-                            lease.paymentReadiness?.readinessStatus === "ready_to_configure" ? (
-                              <button
-                                type="button"
-                                onClick={() => void handleEnableRentCollection(lease)}
-                                disabled={paymentRailBusyLeaseId === lease.id}
-                                style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a" }}
-                              >
-                                {paymentRailBusyLeaseId === lease.id ? "Enabling..." : "Enable rent collection"}
-                              </button>
-                            ) : null}
-                            <button
-                              type="button"
-                              onClick={() => void handleArchive(lease)}
-                              style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a" }}
-                            >
-                              Archive lease
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </td>
+                    <td style={{ padding: 12 }}>{renderLeaseActions(lease)}</td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
+        </div>
+      ) : null}
+
+      {!loading && !error && filteredLeases.length > 0 && isNarrowLayout ? (
+        <div style={{ display: "grid", gap: 12 }}>
+          {filteredLeases.map((lease) => (
+            <div
+              key={lease.id}
+              data-testid="lease-mobile-card"
+              style={{
+                display: "grid",
+                gap: 12,
+                border: "1px solid #e2e8f0",
+                borderRadius: 12,
+                background: "#fff",
+                padding: 14,
+              }}
+            >
+              <div style={{ display: "grid", gap: 4 }}>
+                <div style={{ fontWeight: 800, color: "#0f172a" }}>{lease.propertyName || "Property"}</div>
+                <div style={{ color: "#475569", fontSize: 13 }}>
+                  Unit {lease.unitNumber || "—"} • {lease.tenantName || "Tenant not linked"}
+                </div>
+              </div>
+              <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}>
+                <div>
+                  <div style={{ color: "#64748b", fontSize: 12 }}>Status</div>
+                  <div style={{ marginTop: 6 }}>{statusBadge(lease.status)}</div>
+                </div>
+                <div>
+                  <div style={{ color: "#64748b", fontSize: 12 }}>Rent</div>
+                  <div style={{ color: "#0f172a", fontWeight: 700, marginTop: 6 }}>{formatCurrency(lease.monthlyRent)}</div>
+                </div>
+                <div>
+                  <div style={{ color: "#64748b", fontSize: 12 }}>Term</div>
+                  <div style={{ color: "#0f172a", marginTop: 6 }}>
+                    {formatDate(lease.startDate)} to {formatDate(lease.endDate)}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ color: "#64748b", fontSize: 12 }}>Payment readiness</div>
+                  <div style={{ color: "#0f172a", marginTop: 6 }}>
+                    {lease.paymentReadiness?.readinessLabel || "Payment readiness unavailable"}
+                  </div>
+                </div>
+              </div>
+              {lease.paymentReadiness ? (
+                <div style={{ color: "#64748b", fontSize: 12 }}>{paymentReadinessChecklist(lease)}</div>
+              ) : null}
+              {renderLeaseActions(lease)}
+            </div>
+          ))}
         </div>
       ) : null}
 
@@ -734,7 +815,7 @@ export default function LandlordActiveLeasesPage() {
                 onChange={(event) => setCoApplicantPhone(normalizePhoneInput(event.target.value))}
               />
             </label>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8 }}>
+            <div style={{ display: "grid", gridTemplateColumns: isNarrowLayout ? "1fr" : "repeat(3, minmax(0, 1fr))", gap: 8 }}>
               <label style={{ display: "grid", gap: 4 }}>
                 <span>Start date</span>
                 <input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />

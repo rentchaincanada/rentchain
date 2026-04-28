@@ -2085,13 +2085,14 @@ const ApplicationsPage: React.FC = () => {
           <div style={{ color: "#b91c1c", fontSize: 13 }}>{viewingError}</div>
         ) : null}
         <div
+          className="rc-viewing-requests-layout"
           style={{
             display: "grid",
             gap: spacing.md,
             gridTemplateColumns: "minmax(260px, 320px) minmax(0, 1fr)",
           }}
         >
-          <div>
+          <div className="rc-viewing-requests-list-pane">
             {viewingLoading ? (
               <div style={{ color: text.muted }}>Loading viewing requests...</div>
             ) : (
@@ -2102,58 +2103,60 @@ const ApplicationsPage: React.FC = () => {
               />
             )}
           </div>
-          <ViewingRequestDetail
-            request={selectedViewingRequest}
-            actionLoading={viewingActionLoading}
-            onProposeSlots={async (proposedSlots: ProposedViewingSlotPayload[]) => {
-              if (!selectedViewingRequest) return;
-              setViewingActionLoading(true);
-              try {
-                await proposeViewingSlots(selectedViewingRequest.id, { proposedSlots });
-                await refreshViewingRequest(selectedViewingRequest.id);
-              } catch (err: any) {
-                showToast({ message: err?.message || "Unable to save proposed slots.", variant: "error" });
-              } finally {
-                setViewingActionLoading(false);
-              }
-            }}
-            onSelectSlot={async (slotId: string) => {
-              if (!selectedViewingRequest) return;
-              setViewingActionLoading(true);
-              try {
-                await selectViewingSlot(selectedViewingRequest.id, { slotId });
-                await refreshViewingRequest(selectedViewingRequest.id);
-              } catch (err: any) {
-                showToast({ message: err?.message || "Unable to select viewing slot.", variant: "error" });
-              } finally {
-                setViewingActionLoading(false);
-              }
-            }}
-            onComplete={async () => {
-              if (!selectedViewingRequest) return;
-              setViewingActionLoading(true);
-              try {
-                await completeViewing(selectedViewingRequest.id);
-                await refreshViewingRequest(selectedViewingRequest.id);
-              } catch (err: any) {
-                showToast({ message: err?.message || "Unable to mark viewing complete.", variant: "error" });
-              } finally {
-                setViewingActionLoading(false);
-              }
-            }}
-            onCancel={async (cancelledReason: string | null) => {
-              if (!selectedViewingRequest) return;
-              setViewingActionLoading(true);
-              try {
-                await cancelViewing(selectedViewingRequest.id, { cancelledReason });
-                await refreshViewingRequest(selectedViewingRequest.id);
-              } catch (err: any) {
-                showToast({ message: err?.message || "Unable to cancel viewing.", variant: "error" });
-              } finally {
-                setViewingActionLoading(false);
-              }
-            }}
-          />
+          <div className="rc-viewing-requests-detail-pane">
+            <ViewingRequestDetail
+              request={selectedViewingRequest}
+              actionLoading={viewingActionLoading}
+              onProposeSlots={async (proposedSlots: ProposedViewingSlotPayload[]) => {
+                if (!selectedViewingRequest) return;
+                setViewingActionLoading(true);
+                try {
+                  await proposeViewingSlots(selectedViewingRequest.id, { proposedSlots });
+                  await refreshViewingRequest(selectedViewingRequest.id);
+                } catch (err: any) {
+                  showToast({ message: err?.message || "Unable to save proposed slots.", variant: "error" });
+                } finally {
+                  setViewingActionLoading(false);
+                }
+              }}
+              onSelectSlot={async (slotId: string) => {
+                if (!selectedViewingRequest) return;
+                setViewingActionLoading(true);
+                try {
+                  await selectViewingSlot(selectedViewingRequest.id, { slotId });
+                  await refreshViewingRequest(selectedViewingRequest.id);
+                } catch (err: any) {
+                  showToast({ message: err?.message || "Unable to select viewing slot.", variant: "error" });
+                } finally {
+                  setViewingActionLoading(false);
+                }
+              }}
+              onComplete={async () => {
+                if (!selectedViewingRequest) return;
+                setViewingActionLoading(true);
+                try {
+                  await completeViewing(selectedViewingRequest.id);
+                  await refreshViewingRequest(selectedViewingRequest.id);
+                } catch (err: any) {
+                  showToast({ message: err?.message || "Unable to mark viewing complete.", variant: "error" });
+                } finally {
+                  setViewingActionLoading(false);
+                }
+              }}
+              onCancel={async (cancelledReason: string | null) => {
+                if (!selectedViewingRequest) return;
+                setViewingActionLoading(true);
+                try {
+                  await cancelViewing(selectedViewingRequest.id, { cancelledReason });
+                  await refreshViewingRequest(selectedViewingRequest.id);
+                } catch (err: any) {
+                  showToast({ message: err?.message || "Unable to cancel viewing.", variant: "error" });
+                } finally {
+                  setViewingActionLoading(false);
+                }
+              }}
+            />
+          </div>
         </div>
       </Card>
 
