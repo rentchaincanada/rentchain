@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import {
   createTenantLeasePaymentCheckout,
   exportTenantIdentityPackage,
+  getTenantLeasePaymentStatus,
   getTenantWorkspace,
 } from "../../api/tenantPortal";
 import { getTenantAccess, type TenantAccessWorkspace } from "../../api/tenantAccess";
@@ -141,6 +142,21 @@ function prettyRentPaymentStatus(
   }
 }
 
+function formatPaymentExperienceStatus(value: "pending" | "paid" | "failed" | "canceled" | null | undefined) {
+  switch (value) {
+    case "pending":
+      return "Pending";
+    case "paid":
+      return "Paid";
+    case "failed":
+      return "Failed";
+    case "canceled":
+      return "Canceled";
+    default:
+      return "No payment yet";
+  }
+}
+
 export default function TenantWorkspacePage() {
   const [data, setData] = React.useState<Awaited<ReturnType<typeof getTenantWorkspace>> | null>(null);
   const [institutionalPackage, setInstitutionalPackage] = React.useState<Awaited<ReturnType<typeof exportTenantIdentityPackage>> | null>(null);
@@ -160,6 +176,9 @@ export default function TenantWorkspacePage() {
   const [showExportPreview, setShowExportPreview] = React.useState(false);
   const [rentPaymentBusy, setRentPaymentBusy] = React.useState(false);
   const [rentPaymentError, setRentPaymentError] = React.useState<string | null>(null);
+  const [rentPaymentDetails, setRentPaymentDetails] = React.useState<Awaited<
+    ReturnType<typeof getTenantLeasePaymentStatus>
+  > | null>(null);
   const [profileLoading, setProfileLoading] = React.useState(true);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -213,6 +232,26 @@ export default function TenantWorkspacePage() {
   React.useEffect(() => {
     void load();
   }, [load]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    const leaseId = String(data?.lease?.leaseId || "").trim();
+    if (!leaseId) {
+      setRentPaymentDetails(null);
+      return;
+    }
+    (async () => {
+      try {
+        const next = await getTenantLeasePaymentStatus(leaseId);
+        if (!cancelled) setRentPaymentDetails(next);
+      } catch {
+        if (!cancelled) setRentPaymentDetails(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [data?.lease?.leaseId]);
 
   async function handlePayRent() {
     if (!data?.lease?.leaseId) return;
@@ -620,7 +659,7 @@ export default function TenantWorkspacePage() {
               </strong>
             </div>
 
-            {data.lease.rentPaymentSummary ? (
+            {(rentPaymentDetails || data.lease.rentPaymentSummary) ? (
               <div
                 style={{
                   display: "grid",
@@ -638,24 +677,78 @@ export default function TenantWorkspacePage() {
                   rows={[
                     {
                       label: "Rent collection",
-                      value: data.lease.rentPaymentSummary.paymentRail.enabled ? "Enabled" : "Not enabled",
+                      value: (rentPaymentDetails || data.lease.rentPaymentSummary)?.paymentRail.enabled
+                        ? "Enabled"
+                        : "Not enabled",
                     },
                     {
-                      label: "Payment status",
-                      value: data.lease.rentPaymentSummary.latestPayment
-                        ? prettyRentPaymentStatus(data.lease.rentPaymentSummary.latestPayment.status)
-                        : "No payment started",
+                      label: "Latest status",
+                      value: formatPaymentExperienceStatus(
+                        (rentPaymentDetails || data.lease.rentPaymentSummary)?.paymentExperience?.latestStatus || null
+                      ),
                     },
                   ]}
                 />
-                {data.lease.rentPaymentSummary.paymentRail.enabled &&
+                {((rentPaymentDetails || data.lease.rentPaymentSummary)?.paymentExperience?.history || []).length ? (
+                  <div style={{ display: "grid", gap: spacing.xs }}>
+                    <div style={{ fontWeight: 700, color: textTokens.primary }}>Payment history</div>
+                    {((rentPaymentDetails || data.lease.rentPaymentSummary)?.paymentExperience?.history || [])
+                      .slice(0, 3)
+                      .map((entry) => (
+                        <div
+                          key={entry.id}
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            gap: spacing.sm,
+                            color: textTokens.secondary,
+                            fontSize: "0.92rem",
+                          }}
+                        >
+                          <span>{prettyRentPaymentStatus(entry.status)}</span>
+                          <span>{formatDate(entry.paidAt || entry.updatedAt || entry.createdAt)}</span>
+                          <span>{formatMoney(entry.amountCents / 100)}</span>
+                        </div>
+                      ))}
+                  </div>
+                ) : (
+                  <div style={{ color: textTokens.secondary }}>No payment history yet.</div>
+                )}
+                {(rentPaymentDetails || data.lease.rentPaymentSummary)?.paymentExperience?.receiptSummary?.available ? (
+                  <div style={{ display: "grid", gap: spacing.xs }}>
+                    <div style={{ fontWeight: 700, color: textTokens.primary }}>
+                      {(rentPaymentDetails || data.lease.rentPaymentSummary)?.paymentExperience?.receiptSummary.label}
+                    </div>
+                    <div style={{ color: textTokens.secondary }}>
+                      Lease {(rentPaymentDetails || data.lease.rentPaymentSummary)?.paymentExperience?.receiptSummary
+                        .leaseReference || "reference"} ·{" "}
+                      {formatMoney(
+                        ((rentPaymentDetails || data.lease.rentPaymentSummary)?.paymentExperience?.receiptSummary
+                          ?.amountCents || 0) / 100
+                      )}{" "}
+                      ·{" "}
+                      {formatDate(
+                        (rentPaymentDetails || data.lease.rentPaymentSummary)?.paymentExperience?.receiptSummary?.paidAt
+                      )}
+                    </div>
+                    <div>
+                      <button type="button" onClick={() => window.print()}>
+                        Print / Save payment summary
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+                {(rentPaymentDetails || data.lease.rentPaymentSummary)?.paymentRail.enabled &&
                 data.lease.paymentReadiness.readinessStatus === "ready_to_configure" &&
-                !["checkout_created", "payment_pending", "paid"].includes(
-                  String(data.lease.rentPaymentSummary.latestPayment?.status || "")
-                ) ? (
+                (rentPaymentDetails || data.lease.rentPaymentSummary)?.paymentExperience?.latestStatus !== "pending" &&
+                (rentPaymentDetails || data.lease.rentPaymentSummary)?.paymentExperience?.latestStatus !== "paid" ? (
                   <div style={{ display: "grid", gap: spacing.xs }}>
                     <button type="button" onClick={() => void handlePayRent()} disabled={rentPaymentBusy}>
-                      {rentPaymentBusy ? "Opening checkout..." : "Pay rent"}
+                      {rentPaymentBusy
+                        ? "Opening checkout..."
+                        : (rentPaymentDetails || data.lease.rentPaymentSummary)?.paymentExperience?.retryAvailable
+                        ? "Retry payment"
+                        : "Pay rent"}
                     </button>
                     {rentPaymentError ? <div style={{ color: "#b91c1c" }}>{rentPaymentError}</div> : null}
                   </div>

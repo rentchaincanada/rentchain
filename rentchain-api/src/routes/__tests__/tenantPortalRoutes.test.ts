@@ -659,9 +659,89 @@ describe("tenantPortalRoutes foundation", () => {
         blockedReason: null,
       },
       latestPayment: null,
+      paymentExperience: {
+        history: [],
+        latestStatus: null,
+        retryAvailable: false,
+        receiptSummary: {
+          available: false,
+          label: "No payment summary available yet",
+          amountCents: null,
+          paidAt: null,
+          leaseReference: null,
+        },
+      },
     });
     expect(res.body?.lease?.tenantSignature?.drawnDataUrl).toBeUndefined();
     expect(res.body?.data?.paymentMethod).toBeUndefined();
+  });
+
+  it("returns tenant lease payment history and retry availability from the lease payment status route", async () => {
+    ensureCollection("leases").set("lease-1", {
+      ...(ensureCollection("leases").get("lease-1") || {}),
+      landlordId: "landlord-1",
+      paymentRailEnabled: true,
+      paymentRailEnabledAt: "2026-04-27T10:00:00.000Z",
+      paymentRailProcessor: "stripe",
+    });
+    ensureCollection("rentPayments").set("rp-1", {
+      id: "rp-1",
+      leaseId: "lease-1",
+      tenantId: "tenant-1",
+      landlordId: "landlord-1",
+      amountCents: 180000,
+      currency: "cad",
+      status: "failed",
+      processor: "stripe",
+      processorCheckoutSessionId: "cs_1",
+      processorPaymentIntentId: "pi_1",
+      createdAt: "2026-04-28T10:00:00.000Z",
+      updatedAt: "2026-04-28T10:01:00.000Z",
+      paidAt: null,
+    });
+    ensureCollection("rentPayments").set("rp-2", {
+      id: "rp-2",
+      leaseId: "lease-1",
+      tenantId: "tenant-1",
+      landlordId: "landlord-1",
+      amountCents: 180000,
+      currency: "cad",
+      status: "paid",
+      processor: "stripe",
+      processorCheckoutSessionId: "cs_2",
+      processorPaymentIntentId: "pi_2",
+      createdAt: "2026-04-27T10:00:00.000Z",
+      updatedAt: "2026-04-27T10:02:00.000Z",
+      paidAt: "2026-04-27T10:02:00.000Z",
+    });
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/leases/lease-1/payments",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+          leaseId: "lease-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.data?.latestPayment?.id).toBe("rp-1");
+    expect(res.body?.data?.paymentExperience?.history).toHaveLength(2);
+    expect(res.body?.data?.paymentExperience?.latestStatus).toBe("failed");
+    expect(res.body?.data?.paymentExperience?.retryAvailable).toBe(true);
+    expect(res.body?.data?.paymentExperience?.receiptSummary).toEqual({
+      available: true,
+      label: "Payment summary available",
+      amountCents: 180000,
+      paidAt: "2026-04-27T10:02:00.000Z",
+      leaseReference: "lease-1",
+    });
   });
 
   it("creates a tenant rent payment checkout only for an eligible enabled lease", async () => {
@@ -836,6 +916,28 @@ describe("tenantPortalRoutes foundation", () => {
           createdAt: "2026-04-27T10:05:00.000Z",
           updatedAt: "2026-04-27T10:06:00.000Z",
           paidAt: "2026-04-27T10:06:00.000Z",
+        },
+        paymentExperience: {
+          history: [
+            {
+              id: "rp-1",
+              amountCents: 180000,
+              currency: "cad",
+              status: "paid",
+              createdAt: "2026-04-27T10:05:00.000Z",
+              updatedAt: "2026-04-27T10:06:00.000Z",
+              paidAt: "2026-04-27T10:06:00.000Z",
+            },
+          ],
+          latestStatus: "paid",
+          retryAvailable: false,
+          receiptSummary: {
+            available: true,
+            label: "Payment summary available",
+            amountCents: 180000,
+            paidAt: "2026-04-27T10:06:00.000Z",
+            leaseReference: "lease-1",
+          },
         },
       },
     });

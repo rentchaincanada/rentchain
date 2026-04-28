@@ -12,6 +12,7 @@ import { TenantNav } from "../../components/layout/TenantNav";
 const tenantPortalApi = vi.hoisted(() => ({
   getTenantWorkspace: vi.fn(),
   getTenantLeaseWorkspace: vi.fn(),
+  getTenantLeasePaymentStatus: vi.fn(),
   exportTenantIdentityPackage: vi.fn(),
   createTenantLeasePaymentCheckout: vi.fn(),
   signTenantLease: vi.fn(),
@@ -303,6 +304,27 @@ describe("tenant workspace frontend shell", () => {
       rentPaymentId: "rp-1",
       status: "checkout_created",
       redirectUrl: "https://checkout.stripe.test/session/cs_test_1",
+    });
+    tenantPortalApi.getTenantLeasePaymentStatus.mockResolvedValue({
+      paymentRail: {
+        enabled: true,
+        enabledAt: "2026-04-27T10:00:00.000Z",
+        processor: "stripe",
+        blockedReason: null,
+      },
+      latestPayment: null,
+      paymentExperience: {
+        history: [],
+        latestStatus: null,
+        retryAvailable: false,
+        receiptSummary: {
+          available: false,
+          label: "No payment summary available yet",
+          amountCents: null,
+          paidAt: null,
+          leaseReference: null,
+        },
+      },
     });
     tenantAttachmentsApi.getTenantAttachments.mockResolvedValue({
       ok: true,
@@ -767,6 +789,124 @@ describe("tenant workspace frontend shell", () => {
     await waitFor(() => {
       expect(tenantPortalApi.createTenantLeasePaymentCheckout).toHaveBeenCalledWith("lease-1");
     });
+  });
+
+  it("renders workspace payment history, retry state, and print-safe summary", async () => {
+    tenantPortalApi.getTenantWorkspace.mockResolvedValue({
+      context: {
+        authority: "active_tenant",
+        propertyId: "prop-1",
+        rc_prop_id: "rc-prop-1",
+        applicationId: "app-1",
+        leaseId: "lease-1",
+        tenantId: "tenant-1",
+        unitId: "unit-1",
+        invitedEmail: "tenant@example.com",
+      },
+      property: null,
+      application: null,
+      lease: {
+        leaseId: "lease-1",
+        startDate: "2026-02-01",
+        endDate: "2027-01-31",
+        monthlyRent: 1800,
+        status: "active",
+        documentUrl: null,
+        paymentReadiness: {
+          readinessStatus: "ready_to_configure",
+          readinessLabel: "Rent terms ready for future setup",
+          readinessDescription: "Ready.",
+          requiredNextAction: "confirm_payment_setup_later",
+          rentTerms: {
+            rentAmountAvailable: true,
+            dueDateAvailable: true,
+            leaseDatesAvailable: true,
+            tenantLinked: true,
+            leaseExecuted: true,
+          },
+          paymentSetup: {
+            processorConnected: false,
+            moneyMovementEnabled: false,
+            storedPaymentMethod: false,
+          },
+        },
+        rentPaymentSummary: {
+          paymentRail: {
+            enabled: true,
+            enabledAt: "2026-04-27T10:00:00.000Z",
+            processor: "stripe",
+            blockedReason: null,
+          },
+          latestPayment: null,
+        },
+      },
+      maintenance: [],
+      tenantIdentityRecord: null,
+      tenantCredibilitySignals: null,
+      identityTimeline: { events: [] },
+    });
+    tenantPortalApi.getTenantLeasePaymentStatus.mockResolvedValueOnce({
+      paymentRail: {
+        enabled: true,
+        enabledAt: "2026-04-27T10:00:00.000Z",
+        processor: "stripe",
+        blockedReason: null,
+      },
+      latestPayment: {
+        id: "rp-2",
+        amountCents: 180000,
+        currency: "cad",
+        status: "failed",
+        createdAt: "2026-04-20T00:00:00.000Z",
+        updatedAt: "2026-04-21T00:00:00.000Z",
+        paidAt: null,
+      },
+      paymentExperience: {
+        history: [
+          {
+            id: "rp-2",
+            amountCents: 180000,
+            currency: "cad",
+            status: "failed",
+            createdAt: "2026-04-20T00:00:00.000Z",
+            updatedAt: "2026-04-21T00:00:00.000Z",
+            paidAt: null,
+          },
+          {
+            id: "rp-1",
+            amountCents: 180000,
+            currency: "cad",
+            status: "paid",
+            createdAt: "2026-03-20T00:00:00.000Z",
+            updatedAt: "2026-03-20T00:00:00.000Z",
+            paidAt: "2026-03-20T00:00:00.000Z",
+          },
+        ],
+        latestStatus: "failed",
+        retryAvailable: true,
+        receiptSummary: {
+          available: true,
+          label: "Payment summary available",
+          amountCents: 180000,
+          paidAt: "2026-03-20T00:00:00.000Z",
+          leaseReference: "lease-1",
+        },
+      },
+    });
+    const printSpy = vi.spyOn(window, "print").mockImplementation(() => undefined);
+
+    render(
+      <MemoryRouter>
+        <TenantWorkspacePage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Payment history/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Retry payment/i })).toBeInTheDocument();
+    expect(screen.getByText(/Payment summary available/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Print \/ Save payment summary/i }));
+    expect(printSpy).toHaveBeenCalledTimes(1);
+    printSpy.mockRestore();
   });
 
   it("renders a safe empty activity timeline", async () => {
@@ -1458,6 +1598,126 @@ describe("tenant workspace frontend shell", () => {
     await waitFor(() => {
       expect(tenantPortalApi.createTenantLeasePaymentCheckout).toHaveBeenCalledWith("lease-1");
     });
+  });
+
+  it("renders tenant lease payment history, retry state, and print-safe summary", async () => {
+    tenantPortalApi.getTenantLeaseWorkspace.mockResolvedValue({
+      leaseId: "lease-1",
+      startDate: "2026-02-01",
+      endDate: "2027-01-31",
+      monthlyRent: 1800,
+      status: "active",
+      documentUrl: "https://example.com/lease.pdf",
+      signatureStatus: "signed",
+      signatureReadinessLabel: "Lease signing complete",
+      signatureReadinessDescription: "Complete.",
+      tenantSignature: {
+        signedAt: "2026-02-01T10:00:00.000Z",
+        signatureMethod: "typed",
+        signatureDisplayName: "Taylor Tenant",
+      },
+      leasePdfStatus: "available",
+      leasePdfLabel: "Lease document available",
+      leasePdfDescription: "Available.",
+      leaseExecution: {
+        executionStatus: "fully_executed",
+        executionLabel: "Lease fully executed",
+        executionDescription: "Complete.",
+        requiredNextAction: "none",
+        tenantSignatureStatus: "completed",
+        landlordSignatureStatus: "completed",
+        pdfStatus: "generated",
+        completedAt: "2026-02-02T12:00:00.000Z",
+      },
+      paymentReadiness: {
+        readinessStatus: "ready_to_configure",
+        readinessLabel: "Rent terms ready for future setup",
+        readinessDescription: "Ready.",
+        requiredNextAction: "confirm_payment_setup_later",
+        rentTerms: {
+          rentAmountAvailable: true,
+          dueDateAvailable: true,
+          leaseDatesAvailable: true,
+          tenantLinked: true,
+          leaseExecuted: true,
+        },
+        paymentSetup: {
+          processorConnected: false,
+          moneyMovementEnabled: false,
+          storedPaymentMethod: false,
+        },
+      },
+      rentPaymentSummary: {
+        paymentRail: {
+          enabled: true,
+          enabledAt: "2026-04-27T10:00:00.000Z",
+          processor: "stripe",
+          blockedReason: null,
+        },
+        latestPayment: null,
+      },
+    });
+    tenantPortalApi.getTenantLeasePaymentStatus.mockResolvedValueOnce({
+      paymentRail: {
+        enabled: true,
+        enabledAt: "2026-04-27T10:00:00.000Z",
+        processor: "stripe",
+        blockedReason: null,
+      },
+      latestPayment: {
+        id: "rp-2",
+        amountCents: 180000,
+        currency: "cad",
+        status: "expired",
+        createdAt: "2026-04-20T00:00:00.000Z",
+        updatedAt: "2026-04-21T00:00:00.000Z",
+        paidAt: null,
+      },
+      paymentExperience: {
+        history: [
+          {
+            id: "rp-2",
+            amountCents: 180000,
+            currency: "cad",
+            status: "expired",
+            createdAt: "2026-04-20T00:00:00.000Z",
+            updatedAt: "2026-04-21T00:00:00.000Z",
+            paidAt: null,
+          },
+          {
+            id: "rp-1",
+            amountCents: 180000,
+            currency: "cad",
+            status: "paid",
+            createdAt: "2026-03-20T00:00:00.000Z",
+            updatedAt: "2026-03-20T00:00:00.000Z",
+            paidAt: "2026-03-20T00:00:00.000Z",
+          },
+        ],
+        latestStatus: "canceled",
+        retryAvailable: true,
+        receiptSummary: {
+          available: true,
+          label: "Payment summary available",
+          amountCents: 180000,
+          paidAt: "2026-03-20T00:00:00.000Z",
+          leaseReference: "lease-1",
+        },
+      },
+    });
+    const printSpy = vi.spyOn(window, "print").mockImplementation(() => undefined);
+
+    render(
+      <MemoryRouter>
+        <TenantLeasePage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Payment history/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Retry payment/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Print \/ Save payment summary/i }));
+    expect(printSpy).toHaveBeenCalledTimes(1);
+    printSpy.mockRestore();
   });
 
   it("renders maintenance page with safe projected data", async () => {

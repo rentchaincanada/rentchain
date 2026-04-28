@@ -235,11 +235,84 @@ describe("leaseRoutes GET /active", () => {
             blockedReason: null,
           },
           latestPayment: null,
+          paymentExperience: {
+            history: [],
+            latestStatus: null,
+            retryAvailable: false,
+            receiptSummary: {
+              available: false,
+              label: "No payment summary available yet",
+              amountCents: null,
+              paidAt: null,
+              leaseReference: null,
+            },
+          },
         }),
       })
     );
     expect(res.body?.leases?.[0]?.tenantSignature?.drawnDataUrl).toBeUndefined();
     expect(res.body?.leases?.[0]?.paymentMethod).toBeUndefined();
+  });
+
+  it("returns landlord lease payment history and no landlord actions from the lease payment status route", async () => {
+    seedDoc("properties", "prop-1", { landlordId: "landlord-1", name: "Harbour View" });
+    seedDoc("leases", "lease-1", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      tenantId: "tenant-1",
+      primaryTenantId: "tenant-1",
+      unitId: "unit-1",
+      unitNumber: "101",
+      monthlyRent: 1850,
+      dueDay: 1,
+      startDate: "2026-01-01",
+      endDate: "2026-12-31",
+      status: "active",
+      paymentRailEnabled: true,
+      paymentRailEnabledAt: "2026-04-27T10:00:00.000Z",
+      paymentRailProcessor: "stripe",
+      createdAt: 1,
+      updatedAt: 2,
+    });
+    seedDoc("rentPayments", "rp-1", {
+      id: "rp-1",
+      leaseId: "lease-1",
+      tenantId: "tenant-1",
+      landlordId: "landlord-1",
+      amountCents: 185000,
+      currency: "cad",
+      status: "payment_pending",
+      processor: "stripe",
+      processorCheckoutSessionId: "cs_1",
+      processorPaymentIntentId: "pi_1",
+      createdAt: "2026-04-28T10:00:00.000Z",
+      updatedAt: "2026-04-28T10:01:00.000Z",
+      paidAt: null,
+    });
+    seedDoc("rentPayments", "rp-2", {
+      id: "rp-2",
+      leaseId: "lease-1",
+      tenantId: "tenant-1",
+      landlordId: "landlord-1",
+      amountCents: 185000,
+      currency: "cad",
+      status: "paid",
+      processor: "stripe",
+      processorCheckoutSessionId: "cs_2",
+      processorPaymentIntentId: "pi_2",
+      createdAt: "2026-04-27T10:00:00.000Z",
+      updatedAt: "2026-04-27T10:02:00.000Z",
+      paidAt: "2026-04-27T10:02:00.000Z",
+    });
+
+    const router = (await import("../leaseRoutes")).default;
+    const res = await invokeRouter(router, { method: "GET", url: "/lease-1/payments" });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.data?.paymentExperience?.history).toHaveLength(2);
+    expect(res.body?.data?.paymentExperience?.latestStatus).toBe("pending");
+    expect(res.body?.data?.paymentExperience?.retryAvailable).toBe(false);
+    expect(JSON.stringify(res.body?.data || {})).not.toContain("receipt_url");
   });
 
   it("excludes targeted synthetic cleanup leases from landlord active lists", async () => {
@@ -416,6 +489,28 @@ describe("leaseRoutes GET /active", () => {
           createdAt: "2026-04-27T10:05:00.000Z",
           updatedAt: "2026-04-27T10:06:00.000Z",
           paidAt: "2026-04-27T10:06:00.000Z",
+        },
+        paymentExperience: {
+          history: [
+            {
+              id: "rp-1",
+              amountCents: 185000,
+              currency: "cad",
+              status: "paid",
+              createdAt: "2026-04-27T10:05:00.000Z",
+              updatedAt: "2026-04-27T10:06:00.000Z",
+              paidAt: "2026-04-27T10:06:00.000Z",
+            },
+          ],
+          latestStatus: "paid",
+          retryAvailable: false,
+          receiptSummary: {
+            available: true,
+            label: "Payment summary available",
+            amountCents: 185000,
+            paidAt: "2026-04-27T10:06:00.000Z",
+            leaseReference: "lease-1",
+          },
         },
       },
     });
