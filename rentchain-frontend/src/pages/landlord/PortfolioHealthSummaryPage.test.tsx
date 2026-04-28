@@ -6,6 +6,7 @@ import type { LandlordPortfolioHealthSummaryV1 } from "../../api/landlordPortfol
 import PortfolioHealthSummaryPage from "./PortfolioHealthSummaryPage";
 
 const showToast = vi.fn();
+const macShellProps = vi.fn();
 
 vi.mock("../../api/landlordPortfolioHealthApi", () => ({
   fetchLandlordPortfolioHealth: vi.fn(),
@@ -25,7 +26,10 @@ vi.mock("../../components/ui/ToastProvider", () => ({
 }));
 
 vi.mock("../../components/layout/MacShell", () => ({
-  MacShell: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  MacShell: ({ children, ...props }: { children: React.ReactNode; showTopNav?: boolean }) => {
+    macShellProps(props);
+    return <div>{children}</div>;
+  },
 }));
 
 vi.mock("../../components/ui/Ui", () => ({
@@ -49,6 +53,7 @@ vi.mock("@/components/billing/FeatureTeaser", () => ({
 
 beforeEach(() => {
   showToast.mockReset();
+  macShellProps.mockReset();
   vi.clearAllMocks();
 });
 
@@ -124,6 +129,7 @@ describe("PortfolioHealthSummaryPage", () => {
     expect(screen.getAllByText(/Screening health/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Resident feedback patterns/i)).toBeInTheDocument();
     expect(screen.getByText(/Workflow follow-through/i)).toBeInTheDocument();
+    expect(macShellProps).toHaveBeenCalledWith(expect.objectContaining({ showTopNav: false }));
   });
 
   it("shows a compact decision-entry hint for lease renewal destinations", async () => {

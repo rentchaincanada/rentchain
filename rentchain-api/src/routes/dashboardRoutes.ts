@@ -356,7 +356,7 @@ router.get("/summary", requireAuth, async (req: any, res) => {
         id: "run-first-screening",
         title: "Run your first screening",
         severity: "info",
-        href: "/applications",
+        href: "/applications?openTransUnionAccess=1",
       });
     }
     if (activeTenantsCount === 0) {

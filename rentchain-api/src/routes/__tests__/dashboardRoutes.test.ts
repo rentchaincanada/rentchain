@@ -192,4 +192,30 @@ describe("dashboardRoutes GET /summary", () => {
       })
     );
   });
+
+  it("routes the first-screening action to the TransUnion setup entry point", async () => {
+    seedDoc("properties", "prop-active", {
+      landlordId: "landlord-1",
+      portfolioStatus: "active",
+      units: [{ id: "unit-1" }],
+    });
+    seedDoc("tenants", "tenant-active", {
+      landlordId: "landlord-1",
+      propertyId: "prop-active",
+      hiddenFromActiveLists: false,
+    });
+
+    const app = await makeApp();
+    const response = await invokeSummary(app);
+
+    expect(response.status).toBe(200);
+    expect(response.body?.data?.actions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "run-first-screening",
+          href: "/applications?openTransUnionAccess=1",
+        }),
+      ])
+    );
+  });
 });

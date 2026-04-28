@@ -209,7 +209,7 @@ export default function PortfolioHealthSummaryPage() {
   );
 
   return (
-    <MacShell title="Portfolio health">
+    <MacShell title="Portfolio health" showTopNav={false}>
       <div style={{ display: "grid", gap: 16 }}>
         <Section>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "flex-start" }}>

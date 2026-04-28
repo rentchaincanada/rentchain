@@ -304,11 +304,200 @@ describe("DashboardPage", () => {
       </ToastProvider>
     );
 
-    expect(await screen.findByText("Get TransUnion access")).toBeInTheDocument();
+    expect(await screen.findByText("TransUnion Setup Funnel")).toBeInTheDocument();
     screen.getAllByRole("button", { name: "Open" })[0].click();
     expect(assignMock).toHaveBeenCalledWith("/applications?openTransUnionAccess=1");
-    expect(await screen.findByText("TransUnion Setup Funnel")).toBeInTheDocument();
     expect(screen.getByText("Started → Connected 50%")).toBeInTheDocument();
     expect(screen.getByText("1 onboarding start still need credential connection.")).toBeInTheDocument();
+  });
+
+  it("routes the quick screening CTA to setup until TransUnion is connected, then to applications", async () => {
+    mocks.fetchDashboardSummaryMock.mockResolvedValue({
+      kpis: {
+        propertiesCount: 1,
+        unitsCount: 1,
+        tenantsCount: 1,
+        openActionsCount: 0,
+        delinquentCount: 0,
+        screeningsCount: 0,
+      },
+      actions: [],
+      events: [],
+      leaseNoticeSummary: {
+        expiringSoon: 0,
+        pendingResponse: 0,
+        renewed: 0,
+        quitting: 0,
+        noResponse: 0,
+      },
+      portfolioCredibilitySummary: {
+        propertyCount: 1,
+        activeLeaseCount: 0,
+        tenantScoreAverage: null,
+        tenantScoreGradeAverage: null,
+        leaseRiskAverage: null,
+        leaseRiskGradeAverage: null,
+        tenantsWithScoreCount: 0,
+        leasesWithRiskCount: 0,
+        lowConfidenceCount: 0,
+        missingCredibilityCount: 0,
+        healthStatus: "watch",
+      },
+    });
+    mocks.fetchLandlordTransUnionOnboardingAnalyticsMock.mockResolvedValueOnce({
+      totals: {
+        viewed: 3,
+        started: 2,
+        emailClicked: 1,
+        phoneClicked: 0,
+        alreadyCredentialedClicked: 0,
+        connected: 0,
+      },
+      conversionRate: 0,
+    });
+
+    render(
+      <ToastProvider>
+        <MemoryRouter>
+          <DashboardPage />
+        </MemoryRouter>
+      </ToastProvider>
+    );
+
+    expect(await screen.findAllByRole("button", { name: "Get TransUnion Access" })).not.toHaveLength(0);
+    screen.getAllByRole("button", { name: "Get TransUnion Access" })[0].click();
+    expect(mocks.navigateMock).toHaveBeenCalledWith("/applications?openTransUnionAccess=1");
+
+    mocks.navigateMock.mockReset();
+    cleanup();
+    mocks.fetchLandlordTransUnionOnboardingAnalyticsMock.mockResolvedValue({
+      totals: {
+        viewed: 3,
+        started: 2,
+        emailClicked: 1,
+        phoneClicked: 0,
+        alreadyCredentialedClicked: 0,
+        connected: 1,
+      },
+      conversionRate: 0.5,
+    });
+
+    render(
+      <ToastProvider>
+        <MemoryRouter>
+          <DashboardPage />
+        </MemoryRouter>
+      </ToastProvider>
+    );
+
+    expect(await screen.findAllByRole("button", { name: "Run screening" })).not.toHaveLength(0);
+    screen.getAllByRole("button", { name: "Run screening" })[0].click();
+    expect(mocks.navigateMock).toHaveBeenCalledWith("/applications");
+  });
+
+  it("links lease notice status tiles to the approved follow-through destinations", async () => {
+    mocks.fetchDashboardSummaryMock.mockResolvedValue({
+      kpis: {
+        propertiesCount: 1,
+        unitsCount: 2,
+        tenantsCount: 1,
+        openActionsCount: 0,
+        delinquentCount: 0,
+        screeningsCount: 1,
+      },
+      actions: [],
+      events: [],
+      leaseNoticeSummary: {
+        expiringSoon: 2,
+        pendingResponse: 1,
+        renewed: 3,
+        quitting: 4,
+        noResponse: 5,
+      },
+      portfolioCredibilitySummary: {
+        propertyCount: 1,
+        activeLeaseCount: 5,
+        tenantScoreAverage: null,
+        tenantScoreGradeAverage: null,
+        leaseRiskAverage: null,
+        leaseRiskGradeAverage: null,
+        tenantsWithScoreCount: 0,
+        leasesWithRiskCount: 0,
+        lowConfidenceCount: 0,
+        missingCredibilityCount: 0,
+        healthStatus: "watch",
+      },
+    });
+
+    render(
+      <ToastProvider>
+        <MemoryRouter>
+          <DashboardPage />
+        </MemoryRouter>
+      </ToastProvider>
+    );
+
+    expect(await screen.findByRole("link", { name: /Expiring soon/i })).toHaveAttribute(
+      "href",
+      "/portfolio-health?entry=lease-renewals"
+    );
+    expect(screen.getByRole("link", { name: /Pending response/i })).toHaveAttribute(
+      "href",
+      "/portfolio-health?entry=lease-renewals"
+    );
+    expect(screen.getByRole("link", { name: /No response/i })).toHaveAttribute(
+      "href",
+      "/portfolio-health?entry=lease-renewals"
+    );
+    expect(screen.getByRole("link", { name: /Renewed/i })).toHaveAttribute("href", "/leases?view=active");
+    expect(screen.getByRole("link", { name: /Quitting/i })).toHaveAttribute("href", "/leases?view=active");
+  });
+
+  it("renders a stable open actions hash target when the dashboard hash is present", async () => {
+    mocks.fetchDashboardSummaryMock.mockResolvedValue({
+      kpis: {
+        propertiesCount: 1,
+        unitsCount: 2,
+        tenantsCount: 1,
+        openActionsCount: 1,
+        delinquentCount: 0,
+        screeningsCount: 0,
+      },
+      actions: [{ id: "a-1", title: "Invite a tenant", severity: "info", href: "/tenants" }],
+      events: [],
+      leaseNoticeSummary: {
+        expiringSoon: 0,
+        pendingResponse: 0,
+        renewed: 0,
+        quitting: 0,
+        noResponse: 0,
+      },
+      portfolioCredibilitySummary: {
+        propertyCount: 1,
+        activeLeaseCount: 1,
+        tenantScoreAverage: null,
+        tenantScoreGradeAverage: null,
+        leaseRiskAverage: null,
+        leaseRiskGradeAverage: null,
+        tenantsWithScoreCount: 0,
+        leasesWithRiskCount: 0,
+        lowConfidenceCount: 0,
+        missingCredibilityCount: 0,
+        healthStatus: "watch",
+      },
+    });
+
+    render(
+      <ToastProvider>
+        <MemoryRouter initialEntries={[{ pathname: "/dashboard", hash: "#open-actions" }]}>
+          <DashboardPage />
+        </MemoryRouter>
+      </ToastProvider>
+    );
+
+    await screen.findByText("Action required");
+    const target = document.getElementById("open-actions");
+    expect(target).not.toBeNull();
+    expect(target).toHaveAttribute("tabindex", "-1");
   });
 });
