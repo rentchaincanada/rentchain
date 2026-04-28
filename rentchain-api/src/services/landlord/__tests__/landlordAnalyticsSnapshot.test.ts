@@ -254,6 +254,48 @@ describe("loadLandlordAnalyticsSnapshot", () => {
     expect(result.comparisons.deltas.summary.maintenanceCostCents.direction).toBe("flat");
   });
 
+  it("excludes archived and hidden properties from landlord-facing analytics properties and metrics", async () => {
+    const now = Date.UTC(2026, 3, 20, 12, 0, 0, 0);
+
+    seedDoc("properties", "prop-visible", {
+      landlordId: "landlord-1",
+      name: "Visible Property",
+      portfolioStatus: "active",
+      archivedAt: null,
+      hiddenFromActiveLists: false,
+    });
+    seedDoc("properties", "prop-archived", {
+      landlordId: "landlord-1",
+      name: "Property_test",
+      portfolioStatus: "archived",
+      archivedAt: "2026-04-01T00:00:00.000Z",
+      hiddenFromActiveLists: false,
+    });
+    seedDoc("properties", "prop-hidden", {
+      landlordId: "landlord-1",
+      name: "Hidden Property",
+      portfolioStatus: "active",
+      archivedAt: null,
+      hiddenFromActiveLists: true,
+    });
+
+    seedDoc("units", "unit-visible", { landlordId: "landlord-1", propertyId: "prop-visible", status: "occupied" });
+    seedDoc("units", "unit-archived", { landlordId: "landlord-1", propertyId: "prop-archived", status: "occupied" });
+    seedDoc("units", "unit-hidden", { landlordId: "landlord-1", propertyId: "prop-hidden", status: "occupied" });
+
+    const { loadLandlordAnalyticsSnapshot } = await import("../landlordAnalyticsSnapshot");
+    const result = await loadLandlordAnalyticsSnapshot({
+      landlordId: "landlord-1",
+      period: "90d",
+      now,
+    });
+
+    expect(result.properties).toEqual([{ id: "prop-visible", name: "Visible Property" }]);
+    expect(result.propertyMetrics.map((entry) => entry.propertyId)).toEqual(["prop-visible"]);
+    expect(result.propertyMetrics.map((entry) => entry.propertyName)).toEqual(["Visible Property"]);
+    expect(result.properties.some((property) => property.name === "Property_test")).toBe(false);
+  });
+
   it("promotes a complete mapped lease-renewal decision to ready automation state", async () => {
     const nowIso = "2026-04-20T12:00:00.000Z";
     seedDoc("properties", "prop-1", {
