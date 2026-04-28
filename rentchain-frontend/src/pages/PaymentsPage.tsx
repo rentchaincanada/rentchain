@@ -1,17 +1,89 @@
 // rentchain-frontend/src/pages/PaymentsPage.tsx
 import React, { useEffect, useState } from "react";
 import { usePayments } from "../hooks/usePayments";
-import { updatePayment, type PaymentRecord } from "@/api/paymentsApi";
+import { exportPayments, updatePayment, type PaymentRecord } from "@/api/paymentsApi";
 import { Card, Button } from "../components/ui/Ui";
 import { spacing, text, colors } from "../styles/tokens";
+import { fetchProperties } from "../api/propertiesApi";
+import { fetchTenants } from "../api/tenantsApi";
+import { printSummaryDocument } from "../utils/printSummary";
 
 const PaymentsPage: React.FC = () => {
   const { payments, loading, error } = usePayments();
   const [rows, setRows] = useState<PaymentRecord[]>([]);
+  const [exporting, setExporting] = useState<null | "csv" | "xlsx">(null);
+  const [labelMap, setLabelMap] = useState<{ tenants: Map<string, string>; properties: Map<string, string> }>({
+    tenants: new Map(),
+    properties: new Map(),
+  });
 
   useEffect(() => {
     setRows(payments);
   }, [payments]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadLabels() {
+      try {
+        const [tenantList, propertyRes] = await Promise.all([fetchTenants(), fetchProperties({ includeArchived: true })]);
+        if (cancelled) return;
+        const propertyItems = Array.isArray((propertyRes as any)?.items)
+          ? (propertyRes as any).items
+          : Array.isArray((propertyRes as any)?.properties)
+          ? (propertyRes as any).properties
+          : Array.isArray(propertyRes)
+          ? propertyRes
+          : [];
+        setLabelMap({
+          tenants: new Map(
+            tenantList.map((tenant) => [
+              String(tenant.id || ""),
+              String(tenant.fullName || tenant.name || tenant.unitLabel || "").trim(),
+            ])
+          ),
+          properties: new Map(
+            propertyItems.map((property: any) => [
+              String(property?.id || ""),
+              String(property?.name || property?.addressLine1 || property?.address || "").trim(),
+            ])
+          ),
+        });
+      } catch {
+        if (!cancelled) {
+          setLabelMap({ tenants: new Map(), properties: new Map() });
+        }
+      }
+    }
+
+    void loadLabels();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const getTenantLabel = (payment: PaymentRecord) =>
+    labelMap.tenants.get(String(payment.tenantId || "").trim()) || "Tenant";
+  const getPropertyLabel = (payment: PaymentRecord) =>
+    labelMap.properties.get(String(payment.propertyId || "").trim()) || "Property";
+
+  const triggerExport = async (format: "csv" | "xlsx") => {
+    try {
+      setExporting(format);
+      const { blob, filename } = await exportPayments(format);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      link.click();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("[PaymentsPage] Failed to export payments:", err);
+      window.alert(err instanceof Error ? `Failed to export payments: ${err.message}` : "Failed to export payments.");
+    } finally {
+      setExporting(null);
+    }
+  };
 
   const handleEditPayment = async (p: PaymentRecord) => {
     if (!p.id) return;
@@ -89,6 +161,15 @@ const PaymentsPage: React.FC = () => {
               All recorded payments across tenants and properties.
             </div>
           </div>
+          <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <Button variant="secondary" onClick={() => void triggerExport("csv")} disabled={exporting !== null}>
+              {exporting === "csv" ? "Exporting..." : "Export CSV"}
+            </Button>
+            <Button variant="secondary" onClick={() => void triggerExport("xlsx")} disabled={exporting !== null}>
+              {exporting === "xlsx" ? "Exporting..." : "Export Spreadsheet"}
+            </Button>
+            <Button variant="secondary" onClick={() => void printSummaryDocument("summary")}>Export PDF</Button>
+          </div>
         </div>
       </Card>
 
@@ -128,8 +209,8 @@ const PaymentsPage: React.FC = () => {
               <tbody>
                 {rows.map((p) => (
                   <tr key={p.id} style={{ borderBottom: `1px solid ${colors.border}` }}>
-                    <td style={{ padding: "0.5rem 0.4rem" }}>{p.tenantId ?? "—"}</td>
-                    <td style={{ padding: "0.5rem 0.4rem" }}>{p.propertyId ?? "—"}</td>
+                    <td style={{ padding: "0.5rem 0.4rem" }}>{getTenantLabel(p)}</td>
+                    <td style={{ padding: "0.5rem 0.4rem" }}>{getPropertyLabel(p)}</td>
                     <td
                       style={{
                         padding: "0.5rem 0.4rem",
@@ -176,6 +257,41 @@ const PaymentsPage: React.FC = () => {
           </div>
         )}
       </Card>
+
+      <div className="print-only print-only-summary">
+        <div className="printHeader">
+          <div className="printTitle">Payments summary</div>
+          <div className="printMeta">
+            <div>Generated: {new Date().toLocaleString()}</div>
+            <div>Rows: {rows.length}</div>
+          </div>
+        </div>
+        <div className="printH3">Recorded payments</div>
+        <table className="printTable">
+          <thead>
+            <tr>
+              <th>Tenant</th>
+              <th>Property</th>
+              <th>Amount</th>
+              <th>Paid date</th>
+              <th>Method</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((payment) => (
+              <tr key={payment.id}>
+                <td>{getTenantLabel(payment)}</td>
+                <td>{getPropertyLabel(payment)}</td>
+                <td>{payment.amount ? `$${Number(payment.amount).toLocaleString()}` : "$0"}</td>
+                <td>{payment.paidAt ? new Date(payment.paidAt).toLocaleDateString() : "-"}</td>
+                <td>{payment.method || "-"}</td>
+                <td>{String(payment.notes || "").trim() || "-"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 };

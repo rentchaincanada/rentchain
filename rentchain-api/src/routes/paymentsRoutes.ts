@@ -10,8 +10,94 @@ import { leaseService } from "../services/leaseService";
 import { recordPaymentEvent } from "../services/ledgerEventsService";
 import { requireAuth } from "../middleware/requireAuth";
 import { requirePermission } from "../middleware/requireAuthz";
+import { db } from "../config/firebase";
 
 const router = Router();
+
+const csvEscape = (value: unknown) => {
+  const text = String(value ?? "");
+  if (/[",\n]/.test(text)) {
+    return `"${text.replace(/"/g, '""')}"`;
+  }
+  return text;
+};
+
+const xmlEscape = (value: unknown) =>
+  String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+
+const roleForReq = (req: any) => String(req.user?.actorRole || req.user?.role || "").trim().toLowerCase();
+
+async function buildPaymentLabelMaps(payments: Payment[]) {
+  const tenantIds = Array.from(new Set(payments.map((payment) => String(payment.tenantId || "").trim()).filter(Boolean)));
+  const propertyIds = Array.from(new Set(payments.map((payment) => String(payment.propertyId || "").trim()).filter(Boolean)));
+
+  const [tenantSnaps, propertySnaps] = await Promise.all([
+    Promise.all(tenantIds.map((id) => db.collection("tenants").doc(id).get())),
+    Promise.all(propertyIds.map((id) => db.collection("properties").doc(id).get())),
+  ]);
+
+  const tenantLabels = new Map<string, string>();
+  tenantSnaps.forEach((snap) => {
+    if (!snap.exists) return;
+    const data = snap.data() as any;
+    const label =
+      String(data?.fullName || data?.name || data?.displayName || "").trim()
+      || [String(data?.firstName || "").trim(), String(data?.lastName || "").trim()].filter(Boolean).join(" ")
+      || "Tenant";
+    tenantLabels.set(snap.id, label);
+  });
+
+  const propertyLabels = new Map<string, string>();
+  propertySnaps.forEach((snap) => {
+    if (!snap.exists) return;
+    const data = snap.data() as any;
+    const label = String(data?.name || data?.addressLine1 || data?.address || "").trim() || "Property";
+    propertyLabels.set(snap.id, label);
+  });
+
+  return { tenantLabels, propertyLabels };
+}
+
+async function buildPaymentExportRows(payments: Payment[]) {
+  const { tenantLabels, propertyLabels } = await buildPaymentLabelMaps(payments);
+  return payments.map((payment) => ({
+    paidDate: String(payment.paidAt || "").trim(),
+    tenant: tenantLabels.get(String(payment.tenantId || "").trim()) || "Tenant",
+    property: propertyLabels.get(String(payment.propertyId || "").trim()) || "Property",
+    amount: Number(payment.amount || 0).toFixed(2),
+    method: String(payment.method || "").trim(),
+    notes: String(payment.notes || "").trim(),
+  }));
+}
+
+function renderPaymentSpreadsheetXml(rows: Array<Record<string, string>>) {
+  const headers = ["Paid Date", "Tenant", "Property", "Amount", "Method", "Notes"];
+  const rowXml = rows
+    .map((row) => {
+      const cells = [row.paidDate, row.tenant, row.property, row.amount, row.method, row.notes]
+        .map((value) => `<Cell><Data ss:Type="String">${xmlEscape(value)}</Data></Cell>`)
+        .join("");
+      return `<Row>${cells}</Row>`;
+    })
+    .join("");
+
+  return `<?xml version="1.0"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:o="urn:schemas-microsoft-com:office:office"
+ xmlns:x="urn:schemas-microsoft-com:office:excel"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+  <Worksheet ss:Name="Payments">
+    <Table>
+      <Row>${headers.map((header) => `<Cell><Data ss:Type="String">${xmlEscape(header)}</Data></Cell>`).join("")}</Row>
+      ${rowXml}
+    </Table>
+  </Worksheet>
+</Workbook>`;
+}
 
 const parseYearMonth = (req: Request): { year: number; month: number } | null => {
   const year = Number((req.query.year as string) ?? "");
@@ -35,6 +121,47 @@ router.get("/payments", (req: Request, res: Response) => {
   }
 
   res.json(results);
+});
+
+router.get("/payments/export.csv", requireAuth, async (req: any, res: Response) => {
+  try {
+    const role = roleForReq(req);
+    if (role !== "landlord" && role !== "admin") {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const rows = await buildPaymentExportRows(paymentsService.getAll());
+    const csv = [
+      ["paid_date", "tenant", "property", "amount", "method", "notes"].join(","),
+      ...rows.map((row) => [row.paidDate, row.tenant, row.property, row.amount, row.method, row.notes].map(csvEscape).join(",")),
+    ].join("\n");
+
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="rentchain-payments-${new Date().toISOString().slice(0, 10)}.csv"`);
+    return res.status(200).send(csv);
+  } catch (err) {
+    console.error("[paymentsRoutes] csv export failed", err);
+    return res.status(500).json({ ok: false, error: "PAYMENTS_EXPORT_FAILED" });
+  }
+});
+
+router.get("/payments/export.xlsx", requireAuth, async (req: any, res: Response) => {
+  try {
+    const role = roleForReq(req);
+    if (role !== "landlord" && role !== "admin") {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const rows = await buildPaymentExportRows(paymentsService.getAll());
+    const xml = renderPaymentSpreadsheetXml(rows);
+
+    res.setHeader("Content-Type", "application/vnd.ms-excel; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="rentchain-payments-${new Date().toISOString().slice(0, 10)}.xlsx"`);
+    return res.status(200).send(xml);
+  } catch (err) {
+    console.error("[paymentsRoutes] xlsx export failed", err);
+    return res.status(500).json({ ok: false, error: "PAYMENTS_EXPORT_FAILED" });
+  }
 });
 
 // POST /api/payments

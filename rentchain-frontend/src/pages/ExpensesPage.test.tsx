@@ -64,7 +64,9 @@ describe("ExpensesPage", () => {
     render(<ExpensesPage />);
 
     expect(await screen.findByText("Upgrade to Pro to import receipts, PDFs, CSVs, and spreadsheets with AI-assisted review.")).toBeInTheDocument();
-    expect(screen.getByText("Upgrade to Pro for CSV import and accountant-ready exports.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Export CSV" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Export Spreadsheet" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Export PDF" })).not.toBeInTheDocument();
     expect(screen.getAllByText("Alpha Property").length).toBeGreaterThan(0);
   });
 

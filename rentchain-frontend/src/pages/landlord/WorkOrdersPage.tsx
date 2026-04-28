@@ -15,6 +15,7 @@ import {
   assignWorkOrderRework,
   closeWorkOrderReworkDirectly,
   confirmWorkOrderCompletion,
+  exportWorkOrders,
   getWorkOrder,
   getContractorProfileById,
   linkWorkOrderCostToExpense,
@@ -39,6 +40,7 @@ import {
   type WorkOrderUpdateRecord,
 } from "../../api/workOrdersApi";
 import { type ExpenseCategory } from "../../api/expensesApi";
+import { printSummaryDocument } from "../../utils/printSummary";
 
 function formatDate(ms?: number | null) {
   if (!ms) return "-";
@@ -251,6 +253,7 @@ export default function WorkOrdersPage() {
   const [convertTarget, setConvertTarget] = React.useState<WorkOrderRecord | null>(null);
   const [convertVendor, setConvertVendor] = React.useState("");
   const [isMobile, setIsMobile] = React.useState(false);
+  const [exporting, setExporting] = React.useState<null | "csv" | "xlsx">(null);
   const [evidenceFile, setEvidenceFile] = React.useState<File | null>(null);
   const [evidenceType, setEvidenceType] = React.useState<WorkOrderEvidenceType>("inspection");
   const [evidenceCaption, setEvidenceCaption] = React.useState("");
@@ -328,6 +331,35 @@ export default function WorkOrdersPage() {
     const province = String(selectedProperty.province || "").trim();
     return [city, province].filter(Boolean).join(", ") || city || province || "";
   }, [selectedProperty]);
+
+  const getPropertyLabel = React.useCallback(
+    (item: WorkOrderRecord) => properties.find((property) => property.id === item.propertyId)?.name || "Property",
+    [properties]
+  );
+
+  const getAssignedContractorLabel = React.useCallback((item: WorkOrderRecord) => {
+    return (
+      String(item.contractorAssignment?.displayName || item.contractorAssignment?.businessName || "").trim() ||
+      (String(item.assignedContractorId || "").trim() ? "Assigned" : "-")
+    );
+  }, []);
+
+  const triggerExport = React.useCallback(async (format: "csv" | "xlsx") => {
+    try {
+      setExporting(format);
+      const { blob, filename } = await exportWorkOrders(format);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      link.click();
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      setError(String(err?.message || "Failed to export work orders"));
+    } finally {
+      setExporting(null);
+    }
+  }, []);
 
   const markCompleted = React.useCallback(
     async (item: WorkOrderRecord) => {
@@ -885,6 +917,15 @@ export default function WorkOrdersPage() {
           <div style={{ color: "#64748b", marginTop: 4 }}>Create, assign, and track landlord maintenance jobs.</div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
+          <Button variant="secondary" onClick={() => void triggerExport("csv")} disabled={exporting !== null}>
+            {exporting === "csv" ? "Exporting..." : "Export CSV"}
+          </Button>
+          <Button variant="secondary" onClick={() => void triggerExport("xlsx")} disabled={exporting !== null}>
+            {exporting === "xlsx" ? "Exporting..." : "Export Spreadsheet"}
+          </Button>
+          <Button variant="secondary" onClick={() => void printSummaryDocument("summary")}>
+            Export PDF
+          </Button>
           <Button variant="secondary" onClick={() => void load()}>
             Refresh
           </Button>
@@ -897,6 +938,94 @@ export default function WorkOrdersPage() {
       {error ? (
         <Card style={{ borderColor: "#ef4444", color: "#991b1b" }}>{error}</Card>
       ) : null}
+
+      <div className="print-only print-only-summary">
+        <div className="printHeader">
+          <div className="printTitle">Work orders summary</div>
+          <div className="printMeta">
+            <div>Generated: {new Date().toLocaleString()}</div>
+            <div>Rows: {items.length}</div>
+          </div>
+        </div>
+        <div className="printH3">Work orders</div>
+        <table className="printTable">
+          <thead>
+            <tr>
+              <th>Title</th>
+              <th>Property</th>
+              <th>Category</th>
+              <th>Priority</th>
+              <th>Status</th>
+              <th>Assigned contractor</th>
+              <th>Scheduled</th>
+              <th>Started</th>
+              <th>Completed</th>
+              <th>Comments</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((item) => (
+              <tr key={item.id}>
+                <td>{item.title}</td>
+                <td>{getPropertyLabel(item)}</td>
+                <td>{item.category || "-"}</td>
+                <td>{item.priority || "-"}</td>
+                <td>{item.status || "-"}</td>
+                <td>{getAssignedContractorLabel(item)}</td>
+                <td>{formatDate(item.scheduledFor)}</td>
+                <td>{formatDate(item.serviceStartedAt)}</td>
+                <td>{formatDate(item.serviceCompletedAt)}</td>
+                <td>{String(item.completionSummary || "").trim() || "-"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {selected ? (
+          <>
+            <div className="printH3">Selected work order</div>
+            <table className="printTable">
+              <tbody>
+                <tr><th>Title</th><td>{selected.title}</td></tr>
+                <tr><th>Property</th><td>{getPropertyLabel(selected)}</td></tr>
+                <tr><th>Category</th><td>{selected.category || "-"}</td></tr>
+                <tr><th>Priority</th><td>{selected.priority || "-"}</td></tr>
+                <tr><th>Status</th><td>{selected.status || "-"}</td></tr>
+                <tr><th>Assigned contractor</th><td>{getAssignedContractorLabel(selected)}</td></tr>
+                <tr><th>Scheduled for</th><td>{formatDate(selected.scheduledFor)}</td></tr>
+                <tr><th>Service started</th><td>{formatDate(selected.serviceStartedAt)}</td></tr>
+                <tr><th>Service completed</th><td>{formatDate(selected.serviceCompletedAt)}</td></tr>
+                <tr><th>Completion outcome</th><td>{completionOutcomeLabel(selected.completionOutcome)}</td></tr>
+                <tr><th>Resolution status</th><td>{resolutionStatusLabel(selected.resolutionStatus)}</td></tr>
+                <tr><th>Completion summary</th><td>{String(selected.completionSummary || "").trim() || "-"}</td></tr>
+                <tr><th>Blocked reason</th><td>{String(selected.executionBlockedReason || "").trim() || "-"}</td></tr>
+              </tbody>
+            </table>
+            {updates.length ? (
+              <>
+                <div className="printH3">Latest comments</div>
+                <table className="printTable">
+                  <thead>
+                    <tr>
+                      <th>When</th>
+                      <th>Type</th>
+                      <th>Comment</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {updates.map((update) => (
+                      <tr key={update.id}>
+                        <td>{formatDate(update.createdAtMs)}</td>
+                        <td>{update.updateType}</td>
+                        <td>{String(update.message || "").trim() || "-"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            ) : null}
+          </>
+        ) : null}
+      </div>
 
       <div style={{ display: "grid", gap: 12, gridTemplateColumns: "minmax(0,1fr)", alignItems: "start" }}>
         <Card>

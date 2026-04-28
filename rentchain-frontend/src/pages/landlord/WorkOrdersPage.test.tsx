@@ -29,10 +29,12 @@ const mocks = vi.hoisted(() => ({
   uploadWorkOrderCostAttachment: vi.fn(),
   updateWorkOrderEvidence: vi.fn(),
   addWorkOrderUpdate: vi.fn(),
+  exportWorkOrders: vi.fn(),
   getContractorProfileById: vi.fn(),
   fetchContractors: vi.fn(),
   assignContractorToWorkOrder: vi.fn(),
   fetchProperties: vi.fn(),
+  printSummaryDocument: vi.fn(),
 }));
 
 vi.mock("@/hooks/useEntitlements", () => ({
@@ -50,6 +52,7 @@ vi.mock("../../api/workOrdersApi", () => ({
   closeWorkOrderReworkDirectly: mocks.closeWorkOrderReworkDirectly,
   completeWorkOrder: vi.fn(),
   confirmWorkOrderCompletion: mocks.confirmWorkOrderCompletion,
+  exportWorkOrders: mocks.exportWorkOrders,
   getContractorProfileById: mocks.getContractorProfileById,
   getWorkOrder: mocks.getWorkOrder,
   linkWorkOrderCostToExpense: mocks.linkWorkOrderCostToExpense,
@@ -68,6 +71,10 @@ vi.mock("../../api/workOrdersApi", () => ({
   updateWorkOrderEvidence: mocks.updateWorkOrderEvidence,
   uploadWorkOrderCostAttachment: mocks.uploadWorkOrderCostAttachment,
   uploadWorkOrderEvidence: mocks.uploadWorkOrderEvidence,
+}));
+
+vi.mock("../../utils/printSummary", () => ({
+  printSummaryDocument: (...args: unknown[]) => mocks.printSummaryDocument(...args),
 }));
 
 vi.mock("../../api/marketplaceContractorApi", () => ({
@@ -139,10 +146,12 @@ describe("WorkOrdersPage", () => {
     mocks.uploadWorkOrderCostAttachment.mockReset();
     mocks.updateWorkOrderEvidence.mockReset();
     mocks.addWorkOrderUpdate.mockReset();
+    mocks.exportWorkOrders.mockReset();
     mocks.getContractorProfileById.mockReset();
     mocks.fetchContractors.mockReset();
     mocks.assignContractorToWorkOrder.mockReset();
     mocks.fetchProperties.mockReset();
+    mocks.printSummaryDocument.mockReset();
     mocks.fetchProperties.mockResolvedValue({ items: [] });
     mocks.fetchContractors.mockResolvedValue({ items: [] });
   });
@@ -285,7 +294,7 @@ describe("WorkOrdersPage", () => {
     expect(await screen.findByText(/Execution and completion/i)).toBeInTheDocument();
     expect(await screen.findByText(/Action required/i)).toBeInTheDocument();
     expect(screen.getByText(/Review completed rework/i)).toBeInTheDocument();
-    expect(screen.getByText(/Replaced igniter and restored heat/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Replaced igniter and restored heat/i).length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: /confirm completion/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /approve resolution/i })).toBeInTheDocument();
 
@@ -323,6 +332,42 @@ describe("WorkOrdersPage", () => {
         status: "blocked",
       });
     });
+  });
+
+  it("renders export controls and routes PDF export through the summary print helper", async () => {
+    mocks.canUseWorkOrders = true;
+    mocks.listWorkOrders.mockResolvedValue([
+      {
+        id: "wo-1",
+        landlordId: "landlord-1",
+        propertyId: "prop-1",
+        unitId: "unit-1",
+        title: "Broken heater",
+        description: "Restore heat in unit 3A",
+        category: "HVAC",
+        priority: "urgent",
+        status: "completed",
+        visibility: "private",
+        assignedContractorId: null,
+        invitedContractorIds: [],
+        notesInternal: "",
+        linkedExpenseId: null,
+        createdAtMs: 1,
+        updatedAtMs: 35,
+      },
+    ]);
+    mocks.fetchProperties.mockResolvedValue({ items: [{ id: "prop-1", name: "123 Main St" }] });
+
+    render(
+      <MemoryRouter>
+        <WorkOrdersPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole("button", { name: "Export CSV" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Export Spreadsheet" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Export PDF" }));
+    expect(mocks.printSummaryDocument).toHaveBeenCalledWith("summary");
   });
 
   it("shows contractor marketplace candidates and assigns one to the selected work order", async () => {
@@ -404,7 +449,7 @@ describe("WorkOrdersPage", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText(/Kitchen sink leak/i)).toBeInTheDocument();
+    expect((await screen.findAllByText(/Kitchen sink leak/i)).length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole("button", { name: /Timeline/i }));
 
     expect(await screen.findByText(/Marketplace contractor assignment/i)).toBeInTheDocument();
@@ -460,7 +505,7 @@ describe("WorkOrdersPage", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText(/Work Orders/i)).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Create Work Order" })).toBeInTheDocument();
     fireEvent.click(await screen.findByRole("button", { name: /timeline/i }));
     expect(await screen.findByText(/Unlock the contractor directory on Pro/i)).toBeInTheDocument();
     expect(mocks.fetchContractors).not.toHaveBeenCalled();

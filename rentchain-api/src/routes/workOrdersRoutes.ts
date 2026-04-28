@@ -709,6 +709,145 @@ function replaceEvidenceItem(
     return updater(normalized);
   });
 }
+
+function exportCsvEscape(value: unknown): string {
+  const text = String(value ?? "");
+  if (/[",\n]/.test(text)) {
+    return `"${text.replace(/"/g, '""')}"`;
+  }
+  return text;
+}
+
+function exportXmlEscape(value: unknown) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function exportDateTime(value: unknown) {
+  const ms = toMillis(value);
+  if (!ms) return "";
+  return new Date(ms).toISOString();
+}
+
+async function listLandlordWorkOrdersForExport(req: any) {
+  const landlordId = getLandlordId(req);
+  if (!landlordId) return [];
+  const snap = await db.collection("workOrders").where("landlordId", "==", landlordId).limit(500).get();
+  return Promise.all(snap.docs.map((doc) => toWorkOrderResponseForAudience(doc.id, doc.data(), "landlord")));
+}
+
+async function buildWorkOrderExportRows(items: any[]) {
+  const propertyIds = Array.from(new Set(items.map((item) => asString(item.propertyId, 120)).filter(Boolean)));
+  const propertySnaps = await Promise.all(propertyIds.map((id) => db.collection("properties").doc(id).get()));
+  const propertyLabels = new Map<string, string>();
+  propertySnaps.forEach((snap) => {
+    if (!snap.exists) return;
+    const data = snap.data() as any;
+    propertyLabels.set(snap.id, asString(data?.name || data?.addressLine1 || data?.address, 200) || "Property");
+  });
+
+  const latestComments = new Map<string, string>();
+  await Promise.all(
+    items.map(async (item) => {
+      const snap = await db.collection("workOrderUpdates").where("workOrderId", "==", asString(item.id, 120)).limit(50).get();
+      const messages = snap.docs
+        .map((doc) => doc.data() as any)
+        .sort((a, b) => Number(b?.createdAtMs || 0) - Number(a?.createdAtMs || 0))
+        .map((entry) => asString(entry?.message, 500))
+        .filter(Boolean);
+      latestComments.set(asString(item.id, 120), messages[0] || "");
+    })
+  );
+
+  return items.map((item) => ({
+    title: asString(item.title, 200),
+    property: propertyLabels.get(asString(item.propertyId, 120)) || "Property",
+    unit: "",
+    category: asString(item.category, 120),
+    priority: asString(item.priority, 40),
+    status: asString(item.status, 40),
+    visibility: asString(item.visibility, 40),
+    assignedContractor:
+      asString(item.contractorAssignment?.displayName || item.contractorAssignment?.businessName, 180) ||
+      (asString(item.assignedContractorId, 120) ? "Assigned" : ""),
+    scheduledFor: exportDateTime(item.scheduledFor),
+    serviceStartedAt: exportDateTime(item.serviceStartedAt),
+    serviceCompletedAt: exportDateTime(item.serviceCompletedAt),
+    updatedAt: exportDateTime(item.updatedAtMs),
+    completionSummary: asString(item.completionSummary, 500),
+    completionOutcome: asString(item.completionOutcome, 60),
+    resolutionStatus: asString(item.resolutionStatus, 80),
+    followUpRequired: item.followUpRequired ? "yes" : "no",
+    linkedExpenseStatus: asString(item.expenseLink?.status || item.cost?.linkedExpenseStatus, 40),
+    latestComment: latestComments.get(asString(item.id, 120)) || "",
+  }));
+}
+
+function renderWorkOrderSpreadsheetXml(rows: Array<Record<string, string>>) {
+  const headers = [
+    "Title",
+    "Property",
+    "Unit",
+    "Category",
+    "Priority",
+    "Status",
+    "Visibility",
+    "Assigned Contractor",
+    "Scheduled For",
+    "Service Started At",
+    "Service Completed At",
+    "Updated At",
+    "Completion Summary",
+    "Completion Outcome",
+    "Resolution Status",
+    "Follow Up Required",
+    "Linked Expense Status",
+    "Latest Comment",
+  ];
+  const rowXml = rows
+    .map((row) => {
+      const values = [
+        row.title,
+        row.property,
+        row.unit,
+        row.category,
+        row.priority,
+        row.status,
+        row.visibility,
+        row.assignedContractor,
+        row.scheduledFor,
+        row.serviceStartedAt,
+        row.serviceCompletedAt,
+        row.updatedAt,
+        row.completionSummary,
+        row.completionOutcome,
+        row.resolutionStatus,
+        row.followUpRequired,
+        row.linkedExpenseStatus,
+        row.latestComment,
+      ];
+      return `<Row>${values
+        .map((value) => `<Cell><Data ss:Type="String">${exportXmlEscape(value)}</Data></Cell>`)
+        .join("")}</Row>`;
+    })
+    .join("");
+
+  return `<?xml version="1.0"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:o="urn:schemas-microsoft-com:office:office"
+ xmlns:x="urn:schemas-microsoft-com:office:excel"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+  <Worksheet ss:Name="Work Orders">
+    <Table>
+      <Row>${headers.map((header) => `<Cell><Data ss:Type="String">${exportXmlEscape(header)}</Data></Cell>`).join("")}</Row>
+      ${rowXml}
+    </Table>
+  </Worksheet>
+</Workbook>`;
+}
 router.post("/contractor/profile", requireAuth, async (req: any, res) => {
   try {
     if (!isContractor(req)) return res.status(403).json({ ok: false, error: "FORBIDDEN" });
@@ -1333,6 +1472,81 @@ router.get("/work-orders", requireAuth, async (req: any, res) => {
   } catch (err) {
     console.error("[work-orders] list failed", err);
     return res.status(500).json({ ok: false, error: "WORK_ORDER_LIST_FAILED" });
+  }
+});
+
+router.get("/work-orders/export.csv", requireAuth, async (req: any, res) => {
+  try {
+    if (!isLandlord(req)) return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    const rows = await buildWorkOrderExportRows(await listLandlordWorkOrdersForExport(req));
+    const csv = [
+      [
+        "title",
+        "property",
+        "unit",
+        "category",
+        "priority",
+        "status",
+        "visibility",
+        "assigned_contractor",
+        "scheduled_for",
+        "service_started_at",
+        "service_completed_at",
+        "updated_at",
+        "completion_summary",
+        "completion_outcome",
+        "resolution_status",
+        "follow_up_required",
+        "linked_expense_status",
+        "latest_comment",
+      ].join(","),
+      ...rows.map((row) =>
+        [
+          row.title,
+          row.property,
+          row.unit,
+          row.category,
+          row.priority,
+          row.status,
+          row.visibility,
+          row.assignedContractor,
+          row.scheduledFor,
+          row.serviceStartedAt,
+          row.serviceCompletedAt,
+          row.updatedAt,
+          row.completionSummary,
+          row.completionOutcome,
+          row.resolutionStatus,
+          row.followUpRequired,
+          row.linkedExpenseStatus,
+          row.latestComment,
+        ]
+          .map(exportCsvEscape)
+          .join(",")
+      ),
+    ].join("\n");
+
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="rentchain-work-orders-${new Date().toISOString().slice(0, 10)}.csv"`);
+    return res.status(200).send(csv);
+  } catch (err) {
+    console.error("[work-orders] csv export failed", err);
+    return res.status(500).json({ ok: false, error: "WORK_ORDER_EXPORT_FAILED" });
+  }
+});
+
+router.get("/work-orders/export.xlsx", requireAuth, async (req: any, res) => {
+  try {
+    if (!isLandlord(req)) return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    const rows = await buildWorkOrderExportRows(await listLandlordWorkOrdersForExport(req));
+    const xml = renderWorkOrderSpreadsheetXml(rows);
+
+    res.setHeader("Content-Type", "application/vnd.ms-excel; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="rentchain-work-orders-${new Date().toISOString().slice(0, 10)}.xlsx"`);
+    return res.status(200).send(xml);
+  } catch (err) {
+    console.error("[work-orders] xlsx export failed", err);
+    return res.status(500).json({ ok: false, error: "WORK_ORDER_EXPORT_FAILED" });
   }
 });
 

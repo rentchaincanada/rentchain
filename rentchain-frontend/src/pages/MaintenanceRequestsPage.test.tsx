@@ -18,6 +18,7 @@ const workOrdersApi = vi.hoisted(() => ({
 }));
 
 const showToast = vi.fn();
+const printSummaryDocumentMock = vi.fn();
 
 vi.mock("../api/maintenanceWorkflowApi", async () => {
   const actual = await vi.importActual<any>("../api/maintenanceWorkflowApi");
@@ -34,9 +35,14 @@ vi.mock("../components/ui/ToastProvider", () => ({
   useToast: () => ({ showToast }),
 }));
 
+vi.mock("../utils/printSummary", () => ({
+  printSummaryDocument: (...args: unknown[]) => printSummaryDocumentMock(...args),
+}));
+
 describe("landlord maintenance workspace", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    printSummaryDocumentMock.mockReset();
     Object.defineProperty(window, "matchMedia", {
       writable: true,
       value: vi.fn().mockImplementation((query: string) => ({
@@ -97,11 +103,11 @@ describe("landlord maintenance workspace", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText(/Maintenance Workflow/i)).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Maintenance Workflow" })).toBeInTheDocument();
     expect(screen.getByText(/A request is waiting for review/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Needs attention/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Broken heater/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/Lifecycle summary/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Lifecycle summary/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Assignment \/ handling/i)).toBeInTheDocument();
     expect(screen.getAllByText(/No handler has been assigned to this request yet/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Scheduling \/ access/i)).toBeInTheDocument();
@@ -114,6 +120,19 @@ describe("landlord maintenance workspace", () => {
     expect(screen.getByText(/Verification status/i)).toBeInTheDocument();
     expect(screen.getByText(/Review the request details/i)).toBeInTheDocument();
     expect(screen.getByText(/Mark reviewed/i)).toBeInTheDocument();
+  });
+
+  it("renders the PDF summary action and routes it through the shared print helper", async () => {
+    render(
+      <MemoryRouter initialEntries={["/maintenance/maint-1"]}>
+        <Routes>
+          <Route path="/maintenance/:id" element={<MaintenanceRequestsPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    fireEvent.click((await screen.findAllByRole("button", { name: "Export PDF Summary" }))[0]);
+    expect(printSummaryDocumentMock).toHaveBeenCalledWith("summary");
   });
 
   it("shows pending verification and follow-up state in the landlord closure workspace", async () => {

@@ -27,6 +27,7 @@ import { buildPropertyFinancialIntelligenceView } from "./propertyFinancialIntel
 import { buildMaintenanceReopenEscalationView } from "./maintenanceReopenEscalationState";
 import { buildMaintenanceServiceExecutionView } from "./maintenanceServiceExecutionState";
 import { buildMaintenanceResolutionVerificationView } from "./maintenanceResolutionVerificationState";
+import { printSummaryDocument } from "../utils/printSummary";
 import {
   buildMaintenanceSchedulingAccessView,
   buildMaintenanceSchedulingCalendarEvents,
@@ -572,9 +573,14 @@ export default function MaintenanceRequestsPage() {
               Review tenant requests, assign contractors, and track operational progress.
             </div>
           </div>
-          <Button variant="secondary" onClick={() => void load()} disabled={loading || saving}>
-            Refresh
-          </Button>
+          <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
+            <Button variant="secondary" onClick={() => void printSummaryDocument("summary")}>
+              Export PDF Summary
+            </Button>
+            <Button variant="secondary" onClick={() => void load()} disabled={loading || saving}>
+              Refresh
+            </Button>
+          </div>
         </div>
         <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", marginTop: spacing.md }}>
           {[
@@ -607,6 +613,84 @@ export default function MaintenanceRequestsPage() {
       </Card>
 
       {error ? <Card style={{ borderColor: colors.danger, color: colors.danger }}>{error}</Card> : null}
+
+      <div className="print-only print-only-summary">
+        <div className="printHeader">
+          <div className="printTitle">Maintenance workflow summary</div>
+          <div className="printMeta">
+            <div>Generated: {new Date().toLocaleString()}</div>
+            <div>Requests in view: {items.length}</div>
+          </div>
+        </div>
+        <div className="printH3">Portfolio summary</div>
+        <table className="printTable">
+          <tbody>
+            <tr><th>Open requests</th><td>{totalOpen}</td></tr>
+            <tr><th>Need review</th><td>{needsReview}</td></tr>
+            <tr><th>Active jobs</th><td>{activeJobs}</td></tr>
+            <tr><th>Needs attention</th><td>{workspaceView.counts.needs_attention}</td></tr>
+            <tr><th>Recorded maintenance cost</th><td>{fmtMoney(portfolioRollup.totalRecordedCostCents)}</td></tr>
+            <tr><th>Expense linked</th><td>{fmtMoney(portfolioRollup.totalLinkedExpenseCostCents)}</td></tr>
+            <tr><th>Unlinked cost</th><td>{fmtMoney(portfolioRollup.totalUnlinkedCostCents)}</td></tr>
+          </tbody>
+        </table>
+        <div className="printH3">Requests</div>
+        <table className="printTable">
+          <thead>
+            <tr>
+              <th>Title</th>
+              <th>Tenant</th>
+              <th>Property</th>
+              <th>Unit</th>
+              <th>Priority</th>
+              <th>Status</th>
+              <th>Contractor</th>
+              <th>Created</th>
+              <th>Updated</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((item) => (
+              <tr key={item.id}>
+                <td>{item.title}</td>
+                <td>{item.tenantName || "Tenant"}</td>
+                <td>{item.propertyLabel || "Property"}</td>
+                <td>{item.unitLabel || "-"}</td>
+                <td>{item.priority || "-"}</td>
+                <td>{item.status || "-"}</td>
+                <td>{item.assignedContractorName || "-"}</td>
+                <td>{fmtDate(item.createdAt)}</td>
+                <td>{fmtDate(item.updatedAt)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {selected ? (
+          <>
+            <div className="printH3">Selected request</div>
+            <table className="printTable">
+              <tbody>
+                <tr><th>Title</th><td>{selected.title}</td></tr>
+                <tr><th>Category</th><td>{selected.category || "-"}</td></tr>
+                <tr><th>Tenant</th><td>{selected.tenantName || "Tenant"}</td></tr>
+                <tr><th>Property</th><td>{selected.propertyLabel || "Property"}</td></tr>
+                <tr><th>Unit</th><td>{selected.unitLabel || "-"}</td></tr>
+                <tr><th>Priority</th><td>{selected.priority || "-"}</td></tr>
+                <tr><th>Status</th><td>{selected.status || "-"}</td></tr>
+                <tr><th>Assigned contractor</th><td>{selected.assignedContractorName || "-"}</td></tr>
+                <tr><th>Service window start</th><td>{fmtDate(selected.serviceWindowStartAt)}</td></tr>
+                <tr><th>Service window end</th><td>{fmtDate(selected.serviceWindowEndAt)}</td></tr>
+                <tr><th>Access required</th><td>{selected.accessRequired == null ? "-" : selected.accessRequired ? "Yes" : "No"}</td></tr>
+                <tr><th>Lifecycle summary</th><td>{selectedLifecycle.summary}</td></tr>
+                <tr><th>Execution summary</th><td>{selectedExecution.summary}</td></tr>
+                <tr><th>Resolution summary</th><td>{selectedResolution.summary}</td></tr>
+                <tr><th>Landlord note</th><td>{String(selected.landlordNote || "").trim() || "-"}</td></tr>
+                <tr><th>Completion summary</th><td>{String(selected.completionSummary || "").trim() || "-"}</td></tr>
+              </tbody>
+            </table>
+          </>
+        ) : null}
+      </div>
 
       <Card elevated>
         <div style={{ display: "grid", gap: spacing.sm, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
