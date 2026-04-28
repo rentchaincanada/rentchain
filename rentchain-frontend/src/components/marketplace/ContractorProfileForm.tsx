@@ -20,6 +20,17 @@ export default function ContractorProfileForm({
   const [phone, setPhone] = React.useState(initialValue?.contact?.phone || "");
   const [summary, setSummary] = React.useState(initialValue?.summary || "");
 
+  React.useEffect(() => {
+    setDisplayName(initialValue?.displayName || "");
+    setBusinessName(initialValue?.businessName || "");
+    setServiceCategories((initialValue?.serviceCategories || []).join(", "));
+    setServiceAreas((initialValue?.serviceAreas || []).join(", "));
+    setAvailabilityStatus(initialValue?.availabilityStatus || "active");
+    setEmail(initialValue?.contact?.email || "");
+    setPhone(initialValue?.contact?.phone || "");
+    setSummary(initialValue?.summary || "");
+  }, [initialValue]);
+
   return (
     <Card style={{ display: "grid", gap: 10 }}>
       <div style={{ fontWeight: 600 }}>{initialValue?.id ? "Edit contractor profile" : "Create contractor profile"}</div>

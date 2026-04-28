@@ -107,6 +107,19 @@ describe("marketplaceContractorRoutes", () => {
       createdAt: "2026-04-16T00:00:00.000Z",
       updatedAt: "2026-04-16T00:00:00.000Z",
     });
+    ensureCollection("contractorProfiles").set("contractor-2", {
+      id: "contractor-2",
+      displayName: "Archived Electric",
+      businessName: "Archived Electric Ltd.",
+      serviceCategories: ["electrical"],
+      serviceAreas: ["Halifax"],
+      availabilityStatus: "inactive",
+      isActive: false,
+      contact: { email: "archive@electric.test" },
+      metadata: { landlordNetworkIds: ["landlord-1"], createdByLandlordId: "landlord-1" },
+      createdAt: "2026-04-16T00:00:00.000Z",
+      updatedAt: "2026-04-16T00:00:00.000Z",
+    });
     ensureCollection("workOrders").set("wo-1", {
       id: "wo-1",
       landlordId: "landlord-1",
@@ -154,6 +167,24 @@ describe("marketplaceContractorRoutes", () => {
     expect(res.status).toBe(200);
     expect(res.body?.items).toHaveLength(1);
     expect(res.body?.items?.[0]?.id).toBe("contractor-1");
+  });
+
+  it("returns inactive contractors only when archived visibility is explicitly requested", async () => {
+    const router = (await import("../marketplaceContractorRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/marketplace/contractors",
+      headers: {
+        "x-test-user": JSON.stringify({ id: "landlord-1", role: "landlord", landlordId: "landlord-1", plan: "pro" }),
+      },
+      query: {
+        availabilityStatus: "inactive",
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.items).toHaveLength(1);
+    expect(res.body?.items?.[0]?.id).toBe("contractor-2");
   });
 
   it("updates contractor profiles in-network", async () => {

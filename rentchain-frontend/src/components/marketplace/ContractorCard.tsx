@@ -6,11 +6,13 @@ export default function ContractorCard({
   contractor,
   actionLabel,
   onAction,
+  actions,
   disabled,
 }: {
   contractor: ContractorProfileV1;
   actionLabel?: string;
   onAction?: () => void;
+  actions?: Array<{ label: string; onClick: () => void; disabled?: boolean }>;
   disabled?: boolean;
 }) {
   return (
@@ -34,7 +36,15 @@ export default function ContractorCard({
       <div style={{ color: "#475569", fontSize: "0.92rem" }}>
         Contact: {contractor.contact.email || contractor.contact.phone || "-"}
       </div>
-      {actionLabel && onAction ? (
+      {actions?.length ? (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {actions.map((action) => (
+            <Button key={action.label} type="button" onClick={action.onClick} disabled={action.disabled}>
+              {action.label}
+            </Button>
+          ))}
+        </div>
+      ) : actionLabel && onAction ? (
         <div>
           <Button type="button" onClick={onAction} disabled={disabled}>
             {actionLabel}
