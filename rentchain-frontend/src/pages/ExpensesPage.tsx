@@ -305,7 +305,22 @@ const ExpensesPage: React.FC = () => {
             Track operating expenses across your properties.
           </div>
         </div>
-        <Button onClick={() => setShowAdd(true)}>Add Expense</Button>
+        <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap", justifyContent: "flex-end" }}>
+          {capsLoading ? null : proExpensesEnabled ? (
+            <>
+              <Button variant="secondary" onClick={() => void triggerDownload("csv")} disabled={exporting !== null}>
+                {exporting === "csv" ? "Exporting..." : "Export CSV"}
+              </Button>
+              <Button variant="secondary" onClick={() => void triggerDownload("xlsx")} disabled={exporting !== null}>
+                {exporting === "xlsx" ? "Exporting..." : "Export Spreadsheet"}
+              </Button>
+              <Button variant="secondary" onClick={() => void triggerDownload("pdf")} disabled={exporting !== null}>
+                {exporting === "pdf" ? "Exporting..." : "Export PDF"}
+              </Button>
+            </>
+          ) : null}
+          <Button onClick={() => setShowAdd(true)}>Add Expense</Button>
+        </div>
       </Card>
 
       <Card style={{ display: "grid", gap: spacing.md }}>
@@ -380,30 +395,6 @@ const ExpensesPage: React.FC = () => {
           </div>
         </Card>
       )}
-
-      <Card style={{ display: "grid", gap: spacing.md }}>
-        <div style={{ fontWeight: 700 }}>Export expenses</div>
-        <div style={{ color: text.muted, fontSize: 13 }}>
-          Export a clean expense table for your accountant.
-        </div>
-        {capsLoading ? null : proExpensesEnabled ? (
-          <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
-            <Button variant="secondary" onClick={() => void triggerDownload("csv")} disabled={exporting !== null}>
-              {exporting === "csv" ? "Exporting..." : "Export CSV"}
-            </Button>
-            <Button variant="secondary" onClick={() => void triggerDownload("xlsx")} disabled={exporting !== null}>
-              {exporting === "xlsx" ? "Exporting..." : "Export Spreadsheet"}
-            </Button>
-            <Button variant="secondary" onClick={() => void triggerDownload("pdf")} disabled={exporting !== null}>
-              {exporting === "pdf" ? "Exporting..." : "Export PDF"}
-            </Button>
-          </div>
-        ) : (
-          <div style={{ color: text.muted, fontSize: 13 }}>
-            Upgrade to Pro for CSV import and accountant-ready exports.
-          </div>
-        )}
-      </Card>
 
       {previewSummary ? (
         <ExpenseImportSummaryCard

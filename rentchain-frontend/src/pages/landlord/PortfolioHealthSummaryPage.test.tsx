@@ -7,6 +7,7 @@ import PortfolioHealthSummaryPage from "./PortfolioHealthSummaryPage";
 
 const showToast = vi.fn();
 const macShellProps = vi.fn();
+const printSummaryDocumentMock = vi.fn();
 
 vi.mock("../../api/landlordPortfolioHealthApi", () => ({
   fetchLandlordPortfolioHealth: vi.fn(),
@@ -32,6 +33,10 @@ vi.mock("../../components/layout/MacShell", () => ({
   },
 }));
 
+vi.mock("../../utils/printSummary", () => ({
+  printSummaryDocument: (...args: unknown[]) => printSummaryDocumentMock(...args),
+}));
+
 vi.mock("../../components/ui/Ui", () => ({
   Card: ({ children, ...props }: React.PropsWithChildren<Record<string, unknown>>) => {
     const { elevated, ...rest } = props;
@@ -54,6 +59,7 @@ vi.mock("@/components/billing/FeatureTeaser", () => ({
 beforeEach(() => {
   showToast.mockReset();
   macShellProps.mockReset();
+  printSummaryDocumentMock.mockReset();
   vi.clearAllMocks();
 });
 
@@ -130,6 +136,40 @@ describe("PortfolioHealthSummaryPage", () => {
     expect(screen.getByText(/Resident feedback patterns/i)).toBeInTheDocument();
     expect(screen.getByText(/Workflow follow-through/i)).toBeInTheDocument();
     expect(macShellProps).toHaveBeenCalledWith(expect.objectContaining({ showTopNav: false }));
+  });
+
+  it("routes print actions through the shared summary print helper", async () => {
+    await mockEntitlements();
+    const { fetchLandlordPortfolioHealth } = await import("../../api/landlordPortfolioHealthApi");
+    vi.mocked(fetchLandlordPortfolioHealth).mockResolvedValue({
+      portfolioHealth: {
+        version: "v1",
+        portfolioId: "landlord-1",
+        generatedAt: "2026-04-16T12:00:00.000Z",
+        overall: {
+          status: "watch",
+          headline: "Your portfolio health is stable overall.",
+          summary: "Most portfolio activity is progressing normally.",
+        },
+        trend: { direction: "stable", summary: "Stable." },
+        dimensions: [],
+        nextFocus: [],
+        metadata: {
+          portfolioScoreGrade: null,
+          portfolioScoreAvailable: true,
+          trendAvailable: true,
+        },
+      },
+    } as { portfolioHealth: LandlordPortfolioHealthSummaryV1 });
+
+    render(
+      <MemoryRouter>
+        <PortfolioHealthSummaryPage />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Print / Save PDF" }));
+    expect(printSummaryDocumentMock).toHaveBeenCalledWith("summary");
   });
 
   it("shows a compact decision-entry hint for lease renewal destinations", async () => {

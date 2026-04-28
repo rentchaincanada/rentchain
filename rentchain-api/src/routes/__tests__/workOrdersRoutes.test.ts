@@ -13,6 +13,42 @@ function ensureCollection(name: string) {
   return collections.get(name)!;
 }
 
+function matches(entry: any, filters: Array<{ field: string; value: any }>) {
+  return filters.every((filter) => {
+    const value = entry?.[filter.field];
+    if (Array.isArray(value)) return value.includes(filter.value);
+    return value === filter.value;
+  });
+}
+
+function buildQuery(name: string, filters: Array<{ field: string; value: any }> = []) {
+  return {
+    where: (field: string, _op: string, value: any) => buildQuery(name, [...filters, { field, value }]),
+    limit: (n: number) => ({
+      get: async () => {
+        const rows = Array.from(ensureCollection(name).entries())
+          .map(([id, data]) => ({ id, data }))
+          .filter((entry) => matches(entry.data, filters))
+          .slice(0, n);
+        return {
+          empty: rows.length === 0,
+          size: rows.length,
+          docs: rows.map((row) => ({
+            id: row.id,
+            data: () => clone(row.data),
+            ref: {
+              set: async (value: any, opts?: { merge?: boolean }) => {
+                const current = ensureCollection(name).get(row.id);
+                ensureCollection(name).set(row.id, opts?.merge ? applyMerge(current, value) : clone(value));
+              },
+            },
+          })),
+        };
+      },
+    }),
+  };
+}
+
 function clone<T>(value: T): T {
   return value === undefined ? value : JSON.parse(JSON.stringify(value));
 }
@@ -51,6 +87,8 @@ const dbMock = {
         },
       };
     },
+    where: (field: string, _op: string, value: any) => buildQuery(name, [{ field, value }]),
+    limit: (n: number) => buildQuery(name).limit(n),
   }),
 };
 
@@ -107,7 +145,7 @@ describe("workOrdersRoutes execution completion", () => {
       headers?: Record<string, string>;
     }
   ) {
-    return await new Promise<{ status: number; body: any }>((resolve, reject) => {
+    return await new Promise<{ status: number; body: any; headers: Record<string, string> }>((resolve, reject) => {
       const req: any = {
         method: options.method,
         url: options.url,
@@ -119,16 +157,20 @@ describe("workOrdersRoutes execution completion", () => {
       };
       const res: any = {
         statusCode: 200,
+        headers: {} as Record<string, string>,
+        setHeader(name: string, value: string) {
+          this.headers[String(name).toLowerCase()] = value;
+        },
         status(code: number) {
           this.statusCode = code;
           return this;
         },
         json(payload: any) {
-          resolve({ status: this.statusCode, body: payload });
+          resolve({ status: this.statusCode, body: payload, headers: this.headers });
           return this;
         },
         send(payload: any) {
-          resolve({ status: this.statusCode, body: payload });
+          resolve({ status: this.statusCode, body: payload, headers: this.headers });
           return this;
         },
       };
@@ -156,11 +198,20 @@ describe("workOrdersRoutes execution completion", () => {
       id: "wo-1",
       landlordId: "landlord-1",
       maintenanceRequestId: "maint-1",
+      propertyId: "prop-1",
+      category: "HVAC",
+      priority: "urgent",
+      visibility: "private",
       status: "assigned",
       title: "Broken heater",
       assignedContractorId: null,
       createdAtMs: 100,
       updatedAtMs: 100,
+    });
+    ensureCollection("properties").set("prop-1", {
+      id: "prop-1",
+      landlordId: "landlord-1",
+      name: "123 Main St",
     });
   });
 
@@ -1150,5 +1201,42 @@ describe("workOrdersRoutes execution completion", () => {
         topReasonCode: "MAINTENANCE_EVIDENCE_REQUIRED",
       })
     );
+  });
+
+  it("exports landlord-safe work order csv rows without raw attachment fields", async () => {
+    const router = (await import("../workOrdersRoutes")).default;
+    ensureCollection("workOrders").set("wo-1", {
+      ...ensureCollection("workOrders").get("wo-1"),
+      completionSummary: "Heat restored and tested.",
+      serviceStartedAt: 150,
+      serviceCompletedAt: 190,
+      evidence: [{ id: "evidence-1", url: "https://example.com/photo.jpg" }],
+      costAttachments: [{ id: "attach-1", url: "https://example.com/invoice.pdf" }],
+    });
+    ensureCollection("workOrderUpdates").set("upd-1", {
+      id: "upd-1",
+      workOrderId: "wo-1",
+      message: "Landlord confirmed the service window.",
+      createdAtMs: 200,
+    });
+
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/work-orders/export.csv",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "landlord-1",
+          role: "landlord",
+          landlordId: "landlord-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.headers["content-type"]).toContain("text/csv");
+    expect(String(res.body)).toContain("123 Main St");
+    expect(String(res.body)).toContain("Landlord confirmed the service window.");
+    expect(String(res.body)).not.toContain("https://example.com/photo.jpg");
+    expect(String(res.body)).not.toContain("https://example.com/invoice.pdf");
   });
 });

@@ -12,6 +12,7 @@ import { useToast } from "../../components/ui/ToastProvider";
 import { useEntitlements } from "@/hooks/useEntitlements";
 import { FeatureTeaser } from "@/components/billing/FeatureTeaser";
 import { resolveRequiredPlanLabel } from "@/lib/upgradePrompt";
+import { printSummaryDocument } from "../../utils/printSummary";
 import PortfolioHealthStatusCard from "../../components/portfolioHealth/PortfolioHealthStatusCard";
 import PortfolioHealthDimensionList from "../../components/portfolioHealth/PortfolioHealthDimensionList";
 import PortfolioHealthNextFocusList from "../../components/portfolioHealth/PortfolioHealthNextFocusList";
@@ -222,7 +223,7 @@ export default function PortfolioHealthSummaryPage() {
             <button
               type="button"
               className="no-print"
-              onClick={() => window.print()}
+              onClick={() => void printSummaryDocument("summary")}
               style={{ padding: "8px 10px", borderRadius: 12, border: "1px solid #E5E7EB", background: "#FFFFFF", fontWeight: 900, cursor: "pointer" }}
             >
               Print / Save PDF
