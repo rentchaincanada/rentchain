@@ -1,5 +1,5 @@
 import React from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { MacShell } from "../components/layout/MacShell";
 import { Card, Section, Button } from "../components/ui/Ui";
 import { spacing, text, colors } from "../styles/tokens";
@@ -119,6 +119,7 @@ const DashboardPage: React.FC = () => {
   const { user, ready: authReady, isLoading: authLoading } = useAuth();
   const { features } = useCapabilities();
   const { showToast } = useToast();
+  const location = useLocation();
   const navigate = useNavigate();
   const apiBase = debugApiBase();
   const showDebug =
@@ -137,6 +138,7 @@ const DashboardPage: React.FC = () => {
   const canManualScreen = isAdmin || features?.screening_pay_per_use !== false;
   const uiLocale = getUiLocale();
   const screeningLabel = screeningComingSoonLabel(uiLocale);
+  const openActionsRef = React.useRef<HTMLDivElement | null>(null);
   const canUseReferrals = isLandlord || isAdmin;
   const [properties, setProperties] = React.useState<any[]>([]);
   const [propsLoading, setPropsLoading] = React.useState(false);
@@ -420,6 +422,7 @@ const DashboardPage: React.FC = () => {
   };
   const transUnionStarted = transUnionFunnel?.totals.started ?? 0;
   const transUnionConnected = transUnionFunnel?.totals.connected ?? 0;
+  const screeningSetupComplete = SCREENING_ENABLED && transUnionConnected > 0;
   const transUnionConversionLabel =
     transUnionFunnel?.conversionRate == null ? "—" : `${Math.round(transUnionFunnel.conversionRate * 100)}%`;
   const transUnionDropOffInsight =
@@ -431,6 +434,17 @@ const DashboardPage: React.FC = () => {
         ? "No onboarding drop-off right now."
         : "No onboarding starts recorded yet.";
   const events = Array.isArray(data?.events) ? data.events : [];
+
+  React.useEffect(() => {
+    if (location.hash !== "#open-actions") return;
+    const node = openActionsRef.current;
+    if (!node) return;
+    window.setTimeout(() => {
+      node.scrollIntoView({ behavior: "smooth", block: "start" });
+      node.focus();
+    }, 0);
+  }, [location.hash]);
+
   const fallbackActions = React.useMemo(() => {
     const items: Array<{ id: string; title: string; severity: "info"; href: string }> = [];
     if (SCREENING_ENABLED && canManualScreen && (kpis.screeningsCount ?? 0) === 0) {
@@ -666,24 +680,28 @@ const DashboardPage: React.FC = () => {
               }}
             >
               {[
-                { label: "Expiring soon", value: leaseNoticeSummary.expiringSoon },
-                { label: "Pending response", value: leaseNoticeSummary.pendingResponse },
-                { label: "Renewed", value: leaseNoticeSummary.renewed },
-                { label: "Quitting", value: leaseNoticeSummary.quitting },
-                { label: "No response", value: leaseNoticeSummary.noResponse },
+                { label: "Expiring soon", value: leaseNoticeSummary.expiringSoon, href: "/portfolio-health?entry=lease-renewals" },
+                { label: "Pending response", value: leaseNoticeSummary.pendingResponse, href: "/portfolio-health?entry=lease-renewals" },
+                { label: "Renewed", value: leaseNoticeSummary.renewed, href: "/leases?view=active" },
+                { label: "Quitting", value: leaseNoticeSummary.quitting, href: "/leases?view=active" },
+                { label: "No response", value: leaseNoticeSummary.noResponse, href: "/portfolio-health?entry=lease-renewals" },
               ].map((item) => (
-                <div
+                <Link
                   key={item.label}
+                  to={item.href}
                   style={{
+                    display: "block",
                     padding: spacing.sm,
                     borderRadius: 12,
                     border: `1px solid ${colors.border}`,
                     background: colors.panel,
+                    textDecoration: "none",
+                    color: "inherit",
                   }}
                 >
                   <div style={{ color: text.muted, fontSize: 12, marginBottom: 6 }}>{item.label}</div>
                   <div style={{ fontSize: 24, fontWeight: 800 }}>{item.value}</div>
-                </div>
+                </Link>
               ))}
             </div>
           </Card>
@@ -776,7 +794,7 @@ const DashboardPage: React.FC = () => {
               gap: spacing.md,
             }}
           >
-            <div id="open-actions">
+            <div id="open-actions" ref={openActionsRef} tabIndex={-1}>
               <ActionRequiredPanel
                 items={actions}
                 loading={loading}
@@ -828,9 +846,19 @@ const DashboardPage: React.FC = () => {
                 >
                   Add Expense
                 </Button>
-                <Button variant="primary" disabled>
-                  {screeningLabel}
-                </Button>
+                {!SCREENING_ENABLED ? (
+                  <Button variant="primary" disabled>
+                    {screeningLabel}
+                  </Button>
+                ) : screeningSetupComplete ? (
+                  <Button variant="primary" onClick={() => navigate("/applications")}>
+                    Run screening
+                  </Button>
+                ) : (
+                  <Button variant="primary" onClick={() => navigate("/applications?openTransUnionAccess=1")}>
+                    Get TransUnion Access
+                  </Button>
+                )}
               </div>
             </Card>
           </div>
@@ -942,12 +970,14 @@ const DashboardPage: React.FC = () => {
             <div style={{ fontWeight: 700, marginBottom: 6 }}>Credit screening</div>
             <div style={{ color: text.muted, marginBottom: 12 }}>
               {SCREENING_ENABLED
-                ? "Start the TransUnion onboarding path, then return to RentChain to connect your credentials and screen applicants."
+                ? screeningSetupComplete
+                  ? "Your screening setup is connected. Go to Applications to start screening."
+                  : "Start the TransUnion onboarding path, then return to RentChain to connect your credentials and screen applicants."
                 : screeningLabel}
             </div>
             {SCREENING_ENABLED ? (
-              <Button onClick={() => navigate("/applications?openTransUnionAccess=1")}>
-                Get TransUnion Access
+              <Button onClick={() => navigate(screeningSetupComplete ? "/applications" : "/applications?openTransUnionAccess=1")}>
+                {screeningSetupComplete ? "Run screening" : "Get TransUnion Access"}
               </Button>
             ) : (
               <Button disabled>{screeningLabel}</Button>

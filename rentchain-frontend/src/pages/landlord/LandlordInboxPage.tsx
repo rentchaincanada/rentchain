@@ -184,7 +184,7 @@ export default function LandlordInboxPage() {
   const groups = groupItems(data?.items || []);
 
   return (
-    <MacShell title="Landlord inbox">
+    <MacShell title="Landlord inbox" showTopNav={false}>
       <div style={{ display: "grid", gap: 16 }}>
         <Section>
           <div style={{ display: "grid", gap: 6 }}>

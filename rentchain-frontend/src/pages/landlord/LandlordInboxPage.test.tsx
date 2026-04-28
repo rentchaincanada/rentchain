@@ -7,6 +7,7 @@ import LandlordInboxPage from "./LandlordInboxPage";
 const apiMocks = vi.hoisted(() => ({
   fetchLandlordInbox: vi.fn(),
   showToast: vi.fn(),
+  macShellProps: vi.fn(),
 }));
 
 vi.mock("../../api/landlordAnalyticsApi", async () => {
@@ -24,7 +25,10 @@ vi.mock("../../components/ui/ToastProvider", () => ({
 }));
 
 vi.mock("../../components/layout/MacShell", () => ({
-  MacShell: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  MacShell: ({ children, ...props }: { children: React.ReactNode; showTopNav?: boolean }) => {
+    apiMocks.macShellProps(props);
+    return <div>{children}</div>;
+  },
 }));
 
 describe("LandlordInboxPage", () => {
@@ -88,6 +92,7 @@ describe("LandlordInboxPage", () => {
       "href",
       "/applications/app-1/review-summary"
     );
+    expect(apiMocks.macShellProps).toHaveBeenCalledWith(expect.objectContaining({ showTopNav: false }));
   });
 
   it("renders an empty state safely", async () => {
