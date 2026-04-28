@@ -567,4 +567,42 @@ describe("landlord maintenance workspace", () => {
     expect(screen.getAllByText(/Unit 102/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Reopened \/ escalated/i).length).toBeGreaterThan(0);
   });
+
+  it("uses safe placeholders instead of raw ids when maintenance labels are missing", async () => {
+    maintenanceWorkflowApi.listLandlordMaintenance.mockResolvedValue({
+      items: [
+        {
+          id: "maint-1",
+          tenantId: "tenant-1",
+          landlordId: "landlord-1",
+          propertyId: "prop-1",
+          unitId: "unit-2",
+          tenantName: "",
+          propertyLabel: "",
+          unitLabel: "",
+          title: "Broken heater",
+          description: "Heat is not turning on.",
+          category: "HVAC",
+          priority: "urgent",
+          status: "submitted",
+          createdAt: 100,
+          updatedAt: 200,
+          statusHistory: [],
+        },
+      ],
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/maintenance/maint-1"]}>
+        <Routes>
+          <Route path="/maintenance/:id" element={<MaintenanceRequestsPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findAllByText("Tenant • Property")).not.toHaveLength(0);
+    expect(screen.queryByText(/tenant-1/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/prop-1/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/unit-2/i)).not.toBeInTheDocument();
+  });
 });

@@ -52,11 +52,11 @@ function normalizedStatus(item: MaintenanceWorkflowItem) {
 }
 
 function propertyLabel(item: MaintenanceWorkflowItem) {
-  return String(item.propertyLabel || item.propertyId || "Unassigned property").trim() || "Unassigned property";
+  return String(item.propertyLabel || "").trim() || "Unassigned property";
 }
 
 function unitLabel(item: MaintenanceWorkflowItem) {
-  return String(item.unitLabel || item.unitId || "General property area").trim() || "General property area";
+  return String(item.unitLabel || "").trim() || "General property area";
 }
 
 function recordedCostCents(item: MaintenanceWorkflowItem) {

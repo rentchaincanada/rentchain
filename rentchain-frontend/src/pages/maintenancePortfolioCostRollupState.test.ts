@@ -92,4 +92,20 @@ describe("maintenance portfolio cost rollup state", () => {
     expect(view.propertySummaries[0]?.propertyLabel).toBe("Maple Court");
     expect(view.propertySummaries[1]?.propertyLabel).toBe("Harbour View");
   });
+
+  it("uses safe placeholder labels when property or unit labels are missing", () => {
+    const view = buildMaintenancePortfolioCostRollupView([
+      makeItem({
+        propertyId: "prop-1",
+        propertyLabel: "",
+        unitId: "unit-1",
+        unitLabel: "",
+      }),
+    ]);
+
+    expect(view.propertySummaries[0]?.propertyLabel).toBe("Unassigned property");
+    expect(view.propertySummaries[0]?.unitSummaries[0]?.unitLabel).toBe("General property area");
+    expect(view.propertySummaries[0]?.propertyLabel).not.toMatch(/prop-/i);
+    expect(view.propertySummaries[0]?.unitSummaries[0]?.unitLabel).not.toMatch(/unit-/i);
+  });
 });
