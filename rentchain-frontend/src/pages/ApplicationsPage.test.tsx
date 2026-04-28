@@ -199,11 +199,25 @@ vi.mock("@/components/integrations/UpdateTransUnionCredentialsModal", () => ({
 }));
 
 vi.mock("@/components/viewings/ViewingRequestList", () => ({
-  ViewingRequestList: () => <div>Viewing Request List</div>,
+  ViewingRequestList: ({ requests, selectedId, onSelect }: any) => (
+    <div data-testid="viewing-request-list">
+      {requests.length ? (
+        requests.map((request: any) => (
+          <button key={request.id} type="button" onClick={() => onSelect(request.id)}>
+            {request.applicantName} | {request.status} {selectedId === request.id ? "(selected)" : ""}
+          </button>
+        ))
+      ) : (
+        <div>No viewing requests yet.</div>
+      )}
+    </div>
+  ),
 }));
 
 vi.mock("@/components/viewings/ViewingRequestDetail", () => ({
-  ViewingRequestDetail: () => <div>Viewing Request Detail</div>,
+  ViewingRequestDetail: ({ request }: any) => (
+    <div>{request ? `Viewing Request Detail: ${request.applicantName}` : "Select a viewing request to review details."}</div>
+  ),
 }));
 
 vi.mock("@/components/screening/ScreeningHistoryTable", () => ({
@@ -371,6 +385,150 @@ describe("ApplicationsPage", () => {
     expect(container.querySelector(".rc-viewing-requests-detail-pane")).toBeTruthy();
     expect(container.querySelector(".rc-applications-list-scroll")).toBeTruthy();
     expect(container.querySelector(".rc-applications-detail")).toBeTruthy();
+  });
+
+  it("hides cancelled viewing requests by default and preserves active ordering", async () => {
+    mocks.fetchViewingRequests.mockResolvedValueOnce([
+      {
+        id: "view-3",
+        applicantName: "Scheduled Applicant",
+        applicantEmail: "scheduled@example.com",
+        applicantPhone: null,
+        requestedMessage: null,
+        propertyId: "prop-1",
+        unitId: "unit-1",
+        applicationId: null,
+        status: "scheduled",
+        proposedSlots: [],
+        selectedSlot: null,
+        requestedAt: "2026-04-03T10:00:00.000Z",
+        createdAt: "2026-04-03T10:00:00.000Z",
+        updatedAt: "2026-04-03T10:00:00.000Z",
+      },
+      {
+        id: "view-2",
+        applicantName: "Cancelled Applicant",
+        applicantEmail: "cancelled@example.com",
+        applicantPhone: null,
+        requestedMessage: null,
+        propertyId: "prop-1",
+        unitId: "unit-1",
+        applicationId: null,
+        status: "cancelled",
+        proposedSlots: [],
+        selectedSlot: null,
+        requestedAt: "2026-04-02T10:00:00.000Z",
+        createdAt: "2026-04-02T10:00:00.000Z",
+        updatedAt: "2026-04-02T10:00:00.000Z",
+      },
+      {
+        id: "view-1",
+        applicantName: "Requested Applicant",
+        applicantEmail: "requested@example.com",
+        applicantPhone: null,
+        requestedMessage: null,
+        propertyId: "prop-1",
+        unitId: "unit-1",
+        applicationId: null,
+        status: "requested",
+        proposedSlots: [],
+        selectedSlot: null,
+        requestedAt: "2026-04-01T10:00:00.000Z",
+        createdAt: "2026-04-01T10:00:00.000Z",
+        updatedAt: "2026-04-01T10:00:00.000Z",
+      },
+    ]);
+
+    render(
+      <MemoryRouter>
+        <ApplicationsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Scheduled Applicant | scheduled (selected)")).toBeInTheDocument();
+    expect(screen.getByText("Requested Applicant | requested")).toBeInTheDocument();
+    expect(screen.queryByText(/Cancelled Applicant/)).not.toBeInTheDocument();
+    expect(screen.getByText("Viewing Request Detail: Scheduled Applicant")).toBeInTheDocument();
+  });
+
+  it("reveals cancelled viewing requests when the toggle is enabled", async () => {
+    mocks.fetchViewingRequests.mockResolvedValueOnce([
+      {
+        id: "view-2",
+        applicantName: "Cancelled Applicant",
+        applicantEmail: "cancelled@example.com",
+        applicantPhone: null,
+        requestedMessage: null,
+        propertyId: "prop-1",
+        unitId: "unit-1",
+        applicationId: null,
+        status: "cancelled",
+        proposedSlots: [],
+        selectedSlot: null,
+        requestedAt: "2026-04-02T10:00:00.000Z",
+        createdAt: "2026-04-02T10:00:00.000Z",
+        updatedAt: "2026-04-02T10:00:00.000Z",
+      },
+      {
+        id: "view-1",
+        applicantName: "Requested Applicant",
+        applicantEmail: "requested@example.com",
+        applicantPhone: null,
+        requestedMessage: null,
+        propertyId: "prop-1",
+        unitId: "unit-1",
+        applicationId: null,
+        status: "requested",
+        proposedSlots: [],
+        selectedSlot: null,
+        requestedAt: "2026-04-01T10:00:00.000Z",
+        createdAt: "2026-04-01T10:00:00.000Z",
+        updatedAt: "2026-04-01T10:00:00.000Z",
+      },
+    ]);
+
+    render(
+      <MemoryRouter>
+        <ApplicationsPage />
+      </MemoryRouter>
+    );
+
+    await screen.findByText("Requested Applicant | requested (selected)");
+    fireEvent.click(screen.getByLabelText("Show cancelled requests"));
+
+    expect(await screen.findByText("Cancelled Applicant | cancelled")).toBeInTheDocument();
+    expect(screen.getByText("Requested Applicant | requested (selected)")).toBeInTheDocument();
+  });
+
+  it("shows the empty viewing-request state when only cancelled requests exist and the toggle is off", async () => {
+    mocks.fetchViewingRequests.mockResolvedValueOnce([
+      {
+        id: "view-2",
+        applicantName: "Cancelled Applicant",
+        applicantEmail: "cancelled@example.com",
+        applicantPhone: null,
+        requestedMessage: null,
+        propertyId: "prop-1",
+        unitId: "unit-1",
+        applicationId: null,
+        status: "cancelled",
+        proposedSlots: [],
+        selectedSlot: null,
+        requestedAt: "2026-04-02T10:00:00.000Z",
+        createdAt: "2026-04-02T10:00:00.000Z",
+        updatedAt: "2026-04-02T10:00:00.000Z",
+      },
+    ]);
+
+    render(
+      <MemoryRouter>
+        <ApplicationsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("No viewing requests yet.")).toBeInTheDocument();
+    expect(screen.getByText("Select a viewing request to review details.")).toBeInTheDocument();
+    expect(screen.queryByText(/Cancelled Applicant/)).not.toBeInTheDocument();
   });
 
   it("renders without crashing for a free-tier landlord", async () => {

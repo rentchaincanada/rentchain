@@ -386,6 +386,7 @@ const ApplicationsPage: React.FC = () => {
   const [viewingLoading, setViewingLoading] = useState(false);
   const [viewingActionLoading, setViewingActionLoading] = useState(false);
   const [viewingError, setViewingError] = useState<string | null>(null);
+  const [showCancelledViewingRequests, setShowCancelledViewingRequests] = useState(false);
   const [selectedViewingId, setSelectedViewingId] = useState<string | null>(null);
   const [sendingReminderId, setSendingReminderId] = useState<string | null>(null);
   const [funnel, setFunnel] = useState<LandlordApplicationFunnelAnalytics | null>(null);
@@ -497,9 +498,16 @@ const ApplicationsPage: React.FC = () => {
     : "Application";
   const screeningOrderId = detail?.screening?.orderId || null;
   const isTransUnionConnected = transUnionIntegration.status === "connected";
+  const visibleViewingRequests = useMemo(
+    () =>
+      showCancelledViewingRequests
+        ? viewingRequests
+        : viewingRequests.filter((request) => request.status !== "cancelled"),
+    [showCancelledViewingRequests, viewingRequests]
+  );
   const selectedViewingRequest = useMemo(
-    () => viewingRequests.find((request) => request.id === selectedViewingId) || null,
-    [viewingRequests, selectedViewingId]
+    () => visibleViewingRequests.find((request) => request.id === selectedViewingId) || null,
+    [visibleViewingRequests, selectedViewingId]
   );
 
   const promptApplicationsUpgrade = useCallback(
@@ -564,7 +572,8 @@ const ApplicationsPage: React.FC = () => {
       setViewingRequests(data || []);
       setSelectedViewingId((current) => {
         if (current && data.some((item) => item.id === current)) return current;
-        return data[0]?.id || null;
+        const firstVisible = (data || []).find((item) => item.status !== "cancelled");
+        return firstVisible?.id || null;
       });
     } catch (err: any) {
       setViewingError(err?.message || "Unable to load viewing requests.");
@@ -587,6 +596,14 @@ const ApplicationsPage: React.FC = () => {
     },
     []
   );
+
+  useEffect(() => {
+    setSelectedViewingId((current) => {
+      if (!current) return visibleViewingRequests[0]?.id || null;
+      if (visibleViewingRequests.some((request) => request.id === current)) return current;
+      return visibleViewingRequests[0]?.id || null;
+    });
+  }, [visibleViewingRequests]);
 
   const loadScreeningEvents = async (applicationId: string) => {
     setScreeningEventsLoading(true);
@@ -2084,6 +2101,28 @@ const ApplicationsPage: React.FC = () => {
         {viewingError ? (
           <div style={{ color: "#b91c1c", fontSize: 13 }}>{viewingError}</div>
         ) : null}
+        <div style={{ display: "flex", justifyContent: "space-between", gap: spacing.sm, flexWrap: "wrap" }}>
+          <div style={{ color: text.subtle, fontSize: 13 }}>
+            {showCancelledViewingRequests ? "Showing active and cancelled requests." : "Showing active requests only."}
+          </div>
+          <label
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              color: text.muted,
+              fontSize: 13,
+              cursor: "pointer",
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={showCancelledViewingRequests}
+              onChange={(event) => setShowCancelledViewingRequests(event.target.checked)}
+            />
+            <span>Show cancelled requests</span>
+          </label>
+        </div>
         <div
           className="rc-viewing-requests-layout"
           style={{
@@ -2097,7 +2136,7 @@ const ApplicationsPage: React.FC = () => {
               <div style={{ color: text.muted }}>Loading viewing requests...</div>
             ) : (
               <ViewingRequestList
-                requests={viewingRequests}
+                requests={visibleViewingRequests}
                 selectedId={selectedViewingId}
                 onSelect={setSelectedViewingId}
               />
