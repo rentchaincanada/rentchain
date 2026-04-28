@@ -107,4 +107,20 @@ describe("property financial intelligence state", () => {
     expect(view.propertySummaries[0]?.topUnitLabel).toBe("Unit 101");
     expect(view.propertySummaries[0]?.unitActivityLabel).toMatch(/carries most visible maintenance activity/i);
   });
+
+  it("inherits safe placeholder labels from maintenance rollups when labels are missing", () => {
+    const view = buildPropertyFinancialIntelligenceView([
+      makeItem({
+        propertyId: "prop-1",
+        propertyLabel: "",
+        unitId: "unit-1",
+        unitLabel: "",
+      }),
+    ]);
+
+    expect(view.propertySummaries[0]?.propertyLabel).toBe("Unassigned property");
+    expect(view.propertySummaries[0]?.topUnitLabel).toBe("General property area");
+    expect(view.propertySummaries[0]?.propertyLabel).not.toMatch(/prop-/i);
+    expect(view.propertySummaries[0]?.topUnitLabel).not.toMatch(/unit-/i);
+  });
 });

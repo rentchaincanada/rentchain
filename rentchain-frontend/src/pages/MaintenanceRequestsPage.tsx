@@ -95,6 +95,18 @@ function fromLocalInputValue(value: string) {
   return Number.isNaN(parsed.getTime()) ? null : parsed.getTime();
 }
 
+function displayTenantLabel(item: Pick<MaintenanceWorkflowItem, "tenantName">) {
+  return String(item.tenantName || "").trim() || "Tenant";
+}
+
+function displayPropertyLabel(item: Pick<MaintenanceWorkflowItem, "propertyLabel">) {
+  return String(item.propertyLabel || "").trim() || "Property";
+}
+
+function displayUnitLabel(item: Pick<MaintenanceWorkflowItem, "unitLabel">) {
+  return String(item.unitLabel || "").trim();
+}
+
 function startOfCalendarMonth(value: Date) {
   const monthStart = new Date(value.getFullYear(), value.getMonth(), 1);
   const offset = monthStart.getDay();
@@ -1142,8 +1154,8 @@ export default function MaintenanceRequestsPage() {
                       >
                         <div style={{ fontWeight: 800, color: text.primary }}>{item.title}</div>
                         <div style={{ color: text.secondary, fontSize: 12 }}>
-                          {item.tenantName || item.tenantId} • {item.propertyLabel || item.propertyId || "No property"}
-                          {item.unitLabel ? ` • ${item.unitLabel}` : ""}
+                          {displayTenantLabel(item)} • {displayPropertyLabel(item)}
+                          {displayUnitLabel(item) ? ` • ${displayUnitLabel(item)}` : ""}
                         </div>
                         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
                           <span
@@ -1219,8 +1231,8 @@ export default function MaintenanceRequestsPage() {
                     <div>
                       <div style={{ fontSize: "1.2rem", fontWeight: 800, color: text.primary }}>{selected.title}</div>
                       <div style={{ color: text.muted, marginTop: 4 }}>
-                        {selected.tenantName || selected.tenantId} • {selected.propertyLabel || selected.propertyId || "No property"}
-                        {selected.unitLabel ? ` • ${selected.unitLabel}` : ""}
+                        {displayTenantLabel(selected)} • {displayPropertyLabel(selected)}
+                        {displayUnitLabel(selected) ? ` • ${displayUnitLabel(selected)}` : ""}
                       </div>
                     </div>
                     <div
