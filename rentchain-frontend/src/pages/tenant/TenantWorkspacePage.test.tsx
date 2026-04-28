@@ -339,7 +339,6 @@ describe("tenant workspace frontend shell", () => {
           schemaVersion: "2.0",
           exportStorage: "not_stored",
           outboundTransfer: "none",
-        },
       },
       },
       validation: {
