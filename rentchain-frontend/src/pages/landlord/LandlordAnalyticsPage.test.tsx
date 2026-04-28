@@ -499,24 +499,46 @@ describe("LandlordAnalyticsPage", () => {
     );
 
     expect(await screen.findByText(/Analytics alerts/i)).toBeInTheDocument();
+    expect(screen.getByRole("tablist", { name: /Analytics workspace sections/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Analytics alerts" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Portfolio benchmarking" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Decision outcomes" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Operator queue" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Recommended next actions" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Actions to review" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Predictive metrics" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Attention-worthy insights" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Portfolio-level execution state summary" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Review leases/i })).toHaveAttribute("href", "/portfolio-health");
+
+    fireEvent.click(screen.getByRole("tab", { name: "Portfolio benchmarking" }));
+    expect(screen.getByRole("heading", { name: /Portfolio benchmarking/i })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /Analytics alerts/i })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Decision outcomes" }));
     expect(screen.getByRole("heading", { name: /Decision outcomes/i })).toBeInTheDocument();
     expect(screen.getByText(/all-time landlord decision outcomes from canonical decision events/i)).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /Portfolio benchmarking/i })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Recommended next actions" }));
     expect(screen.getByRole("heading", { name: /Recommended next actions/i })).toBeInTheDocument();
     expect(screen.getAllByText(/Automation preview/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Human confirmation required/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Beta carries the strongest vacancy pressure/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Predictive metrics" }));
     expect(screen.getByRole("heading", { name: /Predictive metrics/i })).toBeInTheDocument();
     expect(screen.getByText(/Vacancy pressure is present in the current view/i)).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /Portfolio benchmarking/i })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /Recommended next actions/i })).not.toBeInTheDocument();
+
     expect(screen.getByRole("heading", { name: /Applications/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Revenue signal/i })).toBeInTheDocument();
     expect(screen.getAllByText(/vs prior 90 days/i).length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "Print / Save PDF" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Review leases/i })).toHaveAttribute("href", "/portfolio-health");
     expect(macShellSpy).toHaveBeenCalledWith(expect.objectContaining({ title: "Analytics", showTopNav: false }));
   });
 
-  it("shows an operator queue summary above the analytics decision list", async () => {
+  it("shows an operator queue summary tab with execution-state filters", async () => {
     await mockEntitlements();
     await mockApiResolved();
 
@@ -526,12 +548,13 @@ describe("LandlordAnalyticsPage", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByRole("region", { name: /Operator queue/i })).toBeInTheDocument();
+    await screen.findByText(/Analytics alerts/i);
+    fireEvent.click(screen.getByRole("tab", { name: "Operator queue" }));
+
+    expect(screen.getByRole("tabpanel", { name: "Operator queue" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: /Operator queue/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Action required · 1/i })).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: /Action required · 1/i }));
-
-    expect(screen.getByText(/Beta carries the strongest vacancy pressure/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Beta carries the strongest vacancy pressure/i)).not.toBeInTheDocument();
   });
 
   it("renders analytics decisions in deterministic operator priority order", async () => {
@@ -758,7 +781,10 @@ describe("LandlordAnalyticsPage", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByRole("heading", { name: /Recommended next actions/i })).toBeInTheDocument();
+    await screen.findByText(/Analytics alerts/i);
+    fireEvent.click(screen.getByRole("tab", { name: "Recommended next actions" }));
+
+    expect(screen.getByRole("heading", { name: /Recommended next actions/i })).toBeInTheDocument();
 
     const actionLinks = screen
       .getAllByRole("link")
@@ -1159,6 +1185,7 @@ describe("LandlordAnalyticsPage", () => {
     );
 
     expect(await screen.findByRole("heading", { name: /Applications/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Analytics alerts" })).toHaveAttribute("aria-selected", "true");
   });
 
   it("re-fetches when filters change", async () => {
@@ -1174,6 +1201,8 @@ describe("LandlordAnalyticsPage", () => {
     );
 
     expect(await screen.findByText(/Analytics alerts/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Analytics period/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Analytics property/i)).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText(/Analytics period/i), { target: { value: "30d" } });
     fireEvent.change(screen.getByLabelText(/Analytics property/i), { target: { value: "prop-2" } });
