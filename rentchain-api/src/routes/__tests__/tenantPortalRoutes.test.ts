@@ -1216,6 +1216,143 @@ describe("tenantPortalRoutes foundation", () => {
     });
   });
 
+  it("creates a tenant-owned metadata-only institutional handoff draft safely", async () => {
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/institutional/handoffs",
+      body: {
+        institutionProfile: {
+          institutionType: "bank",
+          displayName: "  Example   Bank  Sandbox ",
+          integrationMode: "sandbox",
+        },
+      },
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.data?.tenantId).toBe("tenant-1");
+    expect(res.body?.data?.schema).toEqual({
+      name: "rentchain.institutional_identity_package",
+      version: "2.0",
+    });
+    expect(res.body?.data?.institutionProfile?.displayName).toBe("Example Bank Sandbox");
+    expect(res.body?.data?.exportStorage).toBe("metadata_only");
+    expect(res.body?.data?.outboundTransfer).toBe("none");
+    expect(["ready_for_manual_review", "blocked"]).toContain(res.body?.data?.handoffStatus);
+    const stored = ensureCollection("institutionalHandoffs").get(res.body?.data?.id);
+    const payload = JSON.stringify(stored || {});
+    expect(payload).not.toContain("\"warnings\":");
+    expect(payload).not.toContain("\"checks\":");
+    expect(payload).not.toContain("documentUrl");
+    expect(payload).not.toContain("paymentMethod");
+    expect(payload).not.toContain("share-token");
+  });
+
+  it("lists only the current tenant institutional handoff drafts and soft-voids owned drafts", async () => {
+    ensureCollection("institutionalHandoffs").set("handoff-1", {
+      id: "handoff-1",
+      tenantId: "tenant-1",
+      institutionProfile: {
+        institutionType: "internal_review",
+        displayName: "Internal review draft",
+        integrationMode: "sandbox",
+        status: "draft_only",
+      },
+      schema: {
+        name: "rentchain.institutional_identity_package",
+        version: "2.0",
+      },
+      compliance: {
+        readinessStatus: "partial",
+        validationStatus: "valid_with_warnings",
+      },
+      handoffStatus: "ready_for_manual_review",
+      exportStorage: "metadata_only",
+      outboundTransfer: "none",
+      createdAt: "2026-04-28T00:00:00.000Z",
+      updatedAt: "2026-04-28T00:00:00.000Z",
+    });
+    ensureCollection("institutionalHandoffs").set("handoff-2", {
+      id: "handoff-2",
+      tenantId: "tenant-2",
+      institutionProfile: {
+        institutionType: "bank",
+        displayName: "Other tenant draft",
+        integrationMode: "sandbox",
+        status: "draft_only",
+      },
+      schema: {
+        name: "rentchain.institutional_identity_package",
+        version: "2.0",
+      },
+      compliance: {
+        readinessStatus: "ready",
+        validationStatus: "valid",
+      },
+      handoffStatus: "ready_for_manual_review",
+      exportStorage: "metadata_only",
+      outboundTransfer: "none",
+      createdAt: "2026-04-28T00:00:00.000Z",
+      updatedAt: "2026-04-28T00:00:00.000Z",
+    });
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const listed = await invokeRouter(router, {
+      method: "GET",
+      url: "/institutional/handoffs",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+
+    expect(listed.status).toBe(200);
+    expect(listed.body?.data?.items).toHaveLength(1);
+    expect(listed.body?.data?.items?.[0]?.id).toBe("handoff-1");
+
+    const missing = await invokeRouter(router, {
+      method: "DELETE",
+      url: "/institutional/handoffs/handoff-2",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+    expect(missing.status).toBe(404);
+
+    const removed = await invokeRouter(router, {
+      method: "DELETE",
+      url: "/institutional/handoffs/handoff-1",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+    expect(removed.status).toBe(200);
+    expect(ensureCollection("institutionalHandoffs").get("handoff-1")?.handoffStatus).toBe("voided");
+  });
+
   it("revokes a tenant share package immediately", async () => {
     ensureCollection("tenantSharePackages").set("share-1", {
       id: "share-1",

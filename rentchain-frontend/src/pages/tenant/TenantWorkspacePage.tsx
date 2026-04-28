@@ -1,11 +1,15 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import {
+  createInstitutionalHandoffDraft,
   createTenantLeasePaymentCheckout,
   exportTenantIdentityPackage,
   getTenantLeasePaymentStatus,
   getTenantWorkspace,
+  listInstitutionalHandoffDrafts,
+  type InstitutionalHandoffSummary,
   type InstitutionalExportV2,
+  voidInstitutionalHandoffDraft,
 } from "../../api/tenantPortal";
 import { getTenantAccess, type TenantAccessWorkspace } from "../../api/tenantAccess";
 import { getTenantAttachments } from "../../api/tenantAttachmentsApi";
@@ -113,6 +117,40 @@ function prettyComplianceCheckStatus(value: "pass" | "warning" | "missing" | nul
   }
 }
 
+function prettyInstitutionType(
+  value: "bank" | "lender" | "insurer" | "regulator" | "internal_review" | null | undefined
+) {
+  switch (value) {
+    case "bank":
+      return "Bank";
+    case "lender":
+      return "Lender";
+    case "insurer":
+      return "Insurer";
+    case "regulator":
+      return "Regulator";
+    case "internal_review":
+    default:
+      return "Internal review";
+  }
+}
+
+function prettyHandoffStatus(
+  value: "draft" | "ready_for_manual_review" | "blocked" | "voided" | null | undefined
+) {
+  switch (value) {
+    case "ready_for_manual_review":
+      return "Ready for manual review";
+    case "blocked":
+      return "Blocked";
+    case "voided":
+      return "Voided";
+    case "draft":
+    default:
+      return "Draft";
+  }
+}
+
 function prettyScreeningIdentityStatus(
   value: "not_started" | "in_progress" | "completed" | "needs_attention" | "blocked" | null | undefined
 ) {
@@ -211,6 +249,13 @@ export default function TenantWorkspacePage() {
   const [exportBusy, setExportBusy] = React.useState(false);
   const [exportError, setExportError] = React.useState<string | null>(null);
   const [showExportPreview, setShowExportPreview] = React.useState(false);
+  const [handoffDrafts, setHandoffDrafts] = React.useState<InstitutionalHandoffSummary[]>([]);
+  const [handoffBusy, setHandoffBusy] = React.useState(false);
+  const [handoffError, setHandoffError] = React.useState<string | null>(null);
+  const [handoffInstitutionType, setHandoffInstitutionType] = React.useState<
+    "bank" | "lender" | "insurer" | "regulator" | "internal_review"
+  >("internal_review");
+  const [handoffDisplayName, setHandoffDisplayName] = React.useState("");
   const [rentPaymentBusy, setRentPaymentBusy] = React.useState(false);
   const [rentPaymentError, setRentPaymentError] = React.useState<string | null>(null);
   const [rentPaymentDetails, setRentPaymentDetails] = React.useState<Awaited<
@@ -224,7 +269,17 @@ export default function TenantWorkspacePage() {
     setLoading(true);
     setError(null);
     try {
-      const [workspaceResult, accessResult, attachmentsResult, completionResult, preferencesResult, communicationsResult, screeningsResult, sharePackagesResult] = await Promise.allSettled([
+      const [
+        workspaceResult,
+        accessResult,
+        attachmentsResult,
+        completionResult,
+        preferencesResult,
+        communicationsResult,
+        screeningsResult,
+        sharePackagesResult,
+        handoffDraftsResult,
+      ] = await Promise.allSettled([
         getTenantWorkspace(),
         getTenantAccess(),
         getTenantAttachments(),
@@ -233,6 +288,7 @@ export default function TenantWorkspacePage() {
         getTenantCommunicationsWorkspace(),
         listTenantScreenings(),
         listTenantSharePackages(),
+        listInstitutionalHandoffDrafts(),
       ]);
 
       if (workspaceResult.status === "rejected") {
@@ -251,6 +307,7 @@ export default function TenantWorkspacePage() {
           : [],
       );
       setSharePackages(sharePackagesResult.status === "fulfilled" ? sharePackagesResult.value : []);
+      setHandoffDrafts(handoffDraftsResult.status === "fulfilled" ? handoffDraftsResult.value : []);
     } catch (err: any) {
       setData(null);
       setAccess(null);
@@ -260,6 +317,7 @@ export default function TenantWorkspacePage() {
       setCommunications(null);
       setScreenings([]);
       setSharePackages([]);
+      setHandoffDrafts([]);
       setError(err?.payload?.error || err?.message || "Unable to load your tenant workspace.");
     } finally {
       setLoading(false);
@@ -389,6 +447,39 @@ export default function TenantWorkspacePage() {
       setExportError("JSON download is unavailable in this browser right now.");
     }
   }, [institutionalPackage]);
+
+  const handleCreateInstitutionalHandoff = React.useCallback(async () => {
+    try {
+      setHandoffBusy(true);
+      setHandoffError(null);
+      const created = await createInstitutionalHandoffDraft({
+        institutionProfile: {
+          institutionType: handoffInstitutionType,
+          displayName: handoffDisplayName,
+          integrationMode: "sandbox",
+        },
+      });
+      setHandoffDrafts((current) => [created, ...current.filter((entry) => entry.id !== created.id)]);
+      setHandoffDisplayName("");
+    } catch (err: any) {
+      setHandoffError(err?.payload?.error || err?.message || "Unable to prepare an institutional handoff draft right now.");
+    } finally {
+      setHandoffBusy(false);
+    }
+  }, [handoffDisplayName, handoffInstitutionType]);
+
+  const handleVoidInstitutionalHandoff = React.useCallback(async (handoffId: string) => {
+    try {
+      setHandoffBusy(true);
+      setHandoffError(null);
+      const updated = await voidInstitutionalHandoffDraft(handoffId);
+      setHandoffDrafts((current) => current.map((entry) => (entry.id === handoffId ? updated : entry)));
+    } catch (err: any) {
+      setHandoffError(err?.payload?.error || err?.message || "Unable to void this institutional handoff draft right now.");
+    } finally {
+      setHandoffBusy(false);
+    }
+  }, []);
 
   const handleRevokeShareLink = React.useCallback(async (id: string) => {
     try {
@@ -998,6 +1089,7 @@ export default function TenantWorkspacePage() {
           </div>
 
           {exportError ? <div style={{ color: "#b91c1c" }}>{exportError}</div> : null}
+          {handoffError ? <div style={{ color: "#b91c1c" }}>{handoffError}</div> : null}
 
           {institutionalPackage ? (
             <div style={{ display: "grid", gap: 8 }}>
@@ -1141,6 +1233,97 @@ export default function TenantWorkspacePage() {
               ) : null}
             </div>
           ) : null}
+
+          <div
+            style={{
+              border: "1px solid rgba(15,23,42,0.08)",
+              borderRadius: 12,
+              padding: "12px 14px",
+              display: "grid",
+              gap: 10,
+            }}
+          >
+            <div style={{ fontWeight: 700, color: textTokens.primary }}>Institutional handoff drafts</div>
+            <div style={{ color: textTokens.secondary, lineHeight: 1.6 }}>
+              Prepare a draft institutional handoff. This prepares a draft package for review only. No data is sent automatically. Institution connections are not enabled yet.
+            </div>
+
+            <label style={{ display: "grid", gap: 6 }}>
+              <span style={{ fontWeight: 600, color: textTokens.primary }}>Institution type</span>
+              <select
+                value={handoffInstitutionType}
+                onChange={(event) =>
+                  setHandoffInstitutionType(
+                    event.target.value as "bank" | "lender" | "insurer" | "regulator" | "internal_review"
+                  )
+                }
+              >
+                <option value="bank">Bank</option>
+                <option value="lender">Lender</option>
+                <option value="insurer">Insurer</option>
+                <option value="regulator">Regulator</option>
+                <option value="internal_review">Internal review</option>
+              </select>
+            </label>
+
+            <label style={{ display: "grid", gap: 6 }}>
+              <span style={{ fontWeight: 600, color: textTokens.primary }}>Display name (optional)</span>
+              <input
+                type="text"
+                value={handoffDisplayName}
+                onChange={(event) => setHandoffDisplayName(event.target.value)}
+                placeholder="Optional draft label"
+                maxLength={80}
+              />
+            </label>
+
+            <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
+              <button type="button" onClick={() => void handleCreateInstitutionalHandoff()} disabled={handoffBusy}>
+                {handoffBusy ? "Preparing draft..." : "Prepare institutional handoff"}
+              </button>
+            </div>
+
+            {handoffDrafts.length ? (
+              <div style={{ display: "grid", gap: 10 }}>
+                {handoffDrafts.map((draft) => (
+                  <div
+                    key={draft.id}
+                    style={{
+                      border: "1px solid rgba(15,23,42,0.08)",
+                      borderRadius: 12,
+                      padding: "12px 14px",
+                      display: "grid",
+                      gap: 8,
+                    }}
+                  >
+                    <TenantKeyValueGrid
+                      rows={[
+                        { label: "Institution type", value: prettyInstitutionType(draft.institutionProfile.institutionType) },
+                        { label: "Display name", value: draft.institutionProfile.displayName },
+                        { label: "Schema version", value: draft.schema.version },
+                        { label: "Readiness", value: prettyComplianceReadinessStatus(draft.compliance.readinessStatus) },
+                        { label: "Validation", value: prettyInstitutionalSchemaStatus(draft.compliance.validationStatus) },
+                        { label: "Status", value: prettyHandoffStatus(draft.handoffStatus) },
+                        { label: "Created", value: formatDate(draft.createdAt) },
+                        { label: "Updated", value: formatDate(draft.updatedAt) },
+                      ]}
+                    />
+                    {draft.handoffStatus !== "voided" ? (
+                      <div style={{ display: "flex", gap: spacing.sm }}>
+                        <button type="button" onClick={() => void handleVoidInstitutionalHandoff(draft.id)} disabled={handoffBusy}>
+                          Void draft
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ color: textTokens.secondary }}>
+                No institutional handoff drafts yet.
+              </div>
+            )}
+          </div>
         </div>
       </TenantInfoCard>
 

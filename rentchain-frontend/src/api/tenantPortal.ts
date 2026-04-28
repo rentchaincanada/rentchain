@@ -452,6 +452,30 @@ export type InstitutionalExportV2 = {
   };
 };
 
+export type InstitutionalHandoffSummary = {
+  id: string;
+  tenantId: string;
+  institutionProfile: {
+    institutionType: "bank" | "lender" | "insurer" | "regulator" | "internal_review";
+    displayName: string;
+    integrationMode: "sandbox" | "manual_export";
+    status: "draft_only" | "not_connected";
+  };
+  schema: {
+    name: "rentchain.institutional_identity_package";
+    version: "2.0";
+  };
+  compliance: {
+    readinessStatus: "not_ready" | "partial" | "ready";
+    validationStatus: "valid" | "valid_with_warnings" | "invalid";
+  };
+  handoffStatus: "draft" | "ready_for_manual_review" | "blocked" | "voided";
+  exportStorage: "metadata_only";
+  outboundTransfer: "none";
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type TenantWorkspaceSummary = {
   context: TenantWorkspaceContext;
   property: TenantWorkspaceProperty | null;
@@ -479,6 +503,37 @@ export async function exportTenantIdentityPackage(
     {
       method: "POST",
       body: JSON.stringify({ schemaVersion }),
+    }
+  );
+  return res?.data;
+}
+
+export async function createInstitutionalHandoffDraft(payload: {
+  institutionProfile: {
+    institutionType: "bank" | "lender" | "insurer" | "regulator" | "internal_review";
+    displayName?: string;
+    integrationMode?: "sandbox" | "manual_export";
+  };
+}): Promise<InstitutionalHandoffSummary> {
+  const res = await tenantApiFetch<{ ok: boolean; data: InstitutionalHandoffSummary }>("/tenant/institutional/handoffs", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  return res?.data;
+}
+
+export async function listInstitutionalHandoffDrafts(): Promise<InstitutionalHandoffSummary[]> {
+  const res = await tenantApiFetch<{ ok: boolean; data: { items: InstitutionalHandoffSummary[] } }>(
+    "/tenant/institutional/handoffs"
+  );
+  return Array.isArray(res?.data?.items) ? res.data.items : [];
+}
+
+export async function voidInstitutionalHandoffDraft(handoffId: string): Promise<InstitutionalHandoffSummary> {
+  const res = await tenantApiFetch<{ ok: boolean; data: InstitutionalHandoffSummary }>(
+    `/tenant/institutional/handoffs/${encodeURIComponent(handoffId)}`,
+    {
+      method: "DELETE",
     }
   );
   return res?.data;
