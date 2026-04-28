@@ -439,15 +439,15 @@ describe("DashboardPage", () => {
 
     expect(await screen.findByRole("link", { name: /Expiring soon/i })).toHaveAttribute(
       "href",
-      "/portfolio-health?entry=lease-renewals"
+      "/portfolio-health?entry=lease-renewals&status=expiring"
     );
     expect(screen.getByRole("link", { name: /Pending response/i })).toHaveAttribute(
       "href",
-      "/portfolio-health?entry=lease-renewals"
+      "/portfolio-health?entry=lease-renewals&status=pending-response"
     );
     expect(screen.getByRole("link", { name: /No response/i })).toHaveAttribute(
       "href",
-      "/portfolio-health?entry=lease-renewals"
+      "/portfolio-health?entry=lease-renewals&status=no-response"
     );
     expect(screen.getByRole("link", { name: /Renewed/i })).toHaveAttribute("href", "/leases?view=active");
     expect(screen.getByRole("link", { name: /Quitting/i })).toHaveAttribute("href", "/leases?view=active");

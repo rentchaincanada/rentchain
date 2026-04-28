@@ -231,14 +231,19 @@ describe("PortfolioHealthSummaryPage", () => {
     });
 
     render(
-      <MemoryRouter initialEntries={["/portfolio-health?entry=lease-renewals&propertyId=prop-2"]}>
+      <MemoryRouter initialEntries={["/portfolio-health?entry=lease-renewals&propertyId=prop-2&status=expiring"]}>
         <PortfolioHealthSummaryPage />
       </MemoryRouter>
     );
 
     expect(await screen.findByText(/Opened from decisions to review lease-renewal pressure/i)).toBeInTheDocument();
-    expect(await screen.findByText(/Lease renewal operator inputs/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Expiring soon leases/i)).toBeInTheDocument();
+    expect(screen.getByText(/Showing leases approaching notice timing/i)).toBeInTheDocument();
     expect(screen.getByText(/Taylor Tenant/i)).toBeInTheDocument();
+    expect(fetchExpiringLeaseRenewals).toHaveBeenCalledWith({
+      propertyId: "prop-2",
+      status: "expiring",
+    });
   });
 
   it("saves lease renewal operator inputs from the decision-entry workflow surface", async () => {
