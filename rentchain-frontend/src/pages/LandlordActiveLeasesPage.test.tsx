@@ -163,6 +163,7 @@ describe("LandlordActiveLeasesPage", () => {
     expect(screen.getAllByText(/Rent terms ready for future setup/i).length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: /Enable rent collection/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "View" })).toHaveAttribute("href", "/leases/lease-1/ledger");
+    expect(screen.getByRole("link", { name: "View lease" })).toHaveAttribute("href", "https://example.com/lease.pdf");
     expect(screen.getByRole("link", { name: "Email" })).toHaveAttribute(
       "href",
       expect.stringContaining("mailto:jane%40example.com")
@@ -251,6 +252,35 @@ describe("LandlordActiveLeasesPage", () => {
     expect(screen.getByText(/Payment Pending → Failed/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Retry payment/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Print \/ Save payment summary/i })).not.toBeInTheDocument();
+  });
+
+  it("does not render a lease document action when no document URL is available", async () => {
+    mocks.getActiveLeasesForLandlord.mockResolvedValue({
+      leases: [
+        {
+          id: "lease-1",
+          propertyId: "prop-1",
+          propertyName: "Harbour View",
+          unitNumber: "101",
+          monthlyRent: 1850,
+          startDate: "2026-01-01",
+          endDate: "2026-12-31",
+          status: "active",
+          tenantName: "Jane Tenant",
+          tenantEmail: "jane@example.com",
+        },
+      ],
+    });
+
+    render(
+      <MemoryRouter>
+        <LandlordActiveLeasesPage />
+      </MemoryRouter>
+    );
+
+    expect((await screen.findAllByText("Harbour View")).length).toBeGreaterThan(0);
+    expect(screen.queryByRole("link", { name: "View lease" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
   });
 
   it("shows reconciliation candidates and converts a reference into a lease", async () => {
@@ -467,6 +497,7 @@ describe("LandlordActiveLeasesPage", () => {
 
     expect(await screen.findByTestId("lease-mobile-card")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "View" })).toHaveAttribute("href", "/leases/lease-1/ledger");
+    expect(screen.getByRole("link", { name: "View lease" })).toHaveAttribute("href", "https://example.com/lease.pdf");
     expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Archive lease" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Enable rent collection/i })).toBeInTheDocument();

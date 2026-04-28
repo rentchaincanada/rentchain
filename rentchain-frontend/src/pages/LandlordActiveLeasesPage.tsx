@@ -340,6 +340,16 @@ export default function LandlordActiveLeasesPage() {
         <Link to={ledgerPath} style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", textDecoration: "none", color: "#0f172a" }}>
           View
         </Link>
+        {lease.documentUrl ? (
+          <a
+            href={lease.documentUrl}
+            target="_blank"
+            rel="noreferrer"
+            style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", textDecoration: "none", color: "#0f172a" }}
+          >
+            View lease
+          </a>
+        ) : null}
         {emailHref ? (
           <a
             href={emailHref}
