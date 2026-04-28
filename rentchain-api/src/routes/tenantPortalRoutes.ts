@@ -3090,7 +3090,6 @@ async function handleTenantWorkspaceSummary(req: any, res: any) {
     },
   });
 }
-
 router.get("/workspace", requireTenantWorkspaceIdentity, handleTenantWorkspaceSummary);
 router.get("/me", requireTenantWorkspaceIdentity, handleTenantWorkspaceSummary);
 
@@ -3237,7 +3236,6 @@ router.delete("/institutional/handoffs/:handoffId", requireTenantWorkspaceIdenti
 
 router.post("/share-packages", requireTenantWorkspaceIdentity, async (req: any, res) => {
   const context = await resolveWorkspaceContextOrRespond(req, res);
-  if (!context) return;
 
   const tenantId = String(req.user?.tenantId || context.tenantId || "").trim();
   if (!tenantId) {
