@@ -13,6 +13,25 @@ const { collections, dbMock } = vi.hoisted(() => {
 
   const dbMock = {
     collection: (name: string) => ({
+      where: (field: string, _op: string, value: any) => ({
+        limit: (_count: number) => ({
+          get: async () => {
+            const docs = Array.from(ensureCollection(name).entries())
+              .filter(([, data]) => data?.[field] === value)
+              .map(([id, data]) => ({ id, data: () => data }));
+            return { docs, empty: docs.length === 0, size: docs.length };
+          },
+        }),
+      }),
+      limit: (_count: number) => ({
+        get: async () => {
+          const docs = Array.from(ensureCollection(name).entries()).map(([id, data]) => ({
+            id,
+            data: () => data,
+          }));
+          return { docs, empty: docs.length === 0, size: docs.length };
+        },
+      }),
       doc: (id?: string) => {
         const docId = id || `${name}_${++autoId}`;
         return {
@@ -64,6 +83,7 @@ vi.mock("../../config/leaseNoticeRules", () => ({
 
 const appendLeaseWorkflowEvent = vi.fn(async () => undefined);
 const buildPreview = vi.fn(async () => undefined);
+const computeNoResponseStateMock = vi.fn(() => false);
 const deriveLeaseRenewalOperatorInputRecord = vi.fn((lease: any) => ({
   rentChangeMode: lease?.renewalRentChangeMode ?? null,
   proposedRent: lease?.renewalOfferedRent ?? null,
@@ -108,7 +128,7 @@ const getLeaseForLandlordWorkflow = vi.fn(async () => ({
 vi.mock("../../services/leaseNoticeWorkflowService", () => ({
   appendLeaseWorkflowEvent,
   buildPreview,
-  computeNoResponseState: vi.fn(),
+  computeNoResponseState: computeNoResponseStateMock,
   deriveLeaseRenewalOperatorInputRecord,
   getLeaseForLandlordWorkflow,
   getLeaseNoticeByLeaseId: vi.fn(),
@@ -121,13 +141,15 @@ vi.mock("../../services/leaseNoticeWorkflowService", () => ({
 
 async function invokeRouter(router: any, options: { method: string; url: string; body?: any }) {
   return await new Promise<{ status: number; body: any }>((resolve, reject) => {
+    const parsedUrl = new URL(options.url, "http://localhost");
     const req: any = {
       method: options.method,
       url: options.url,
       originalUrl: options.url,
-      path: options.url,
+      path: parsedUrl.pathname,
       body: options.body ?? {},
       headers: {},
+      query: Object.fromEntries(parsedUrl.searchParams.entries()),
     };
     const res: any = {
       statusCode: 200,
@@ -158,6 +180,7 @@ describe("leaseNoticeLandlordRoutes policy integration", () => {
   beforeEach(() => {
     collections.clear();
     vi.clearAllMocks();
+    computeNoResponseStateMock.mockReturnValue(false);
     normalizeLeaseRecord.mockImplementation((id: string, raw: any) => ({ id, ...(raw || {}) }));
     sanitizeLeaseRenewalOperatorInput.mockImplementation((body: any) => ({
       ok: true,
@@ -315,5 +338,107 @@ describe("leaseNoticeLandlordRoutes policy integration", () => {
         responseDeadlineAt: 1700000000000,
       })
     );
+  });
+
+  it("returns only expiring workflow items when the expiring status filter is requested", async () => {
+    if (!collections.has("leases")) collections.set("leases", new Map());
+    if (!collections.has("leaseNotices")) collections.set("leaseNotices", new Map());
+    collections.get("leases")?.set("lease-expiring", {
+      landlordId: "landlord-1",
+      propertyId: "property-1",
+      unitId: "unit-1",
+      status: "active",
+      nextNoticeDueAt: Date.now() + 5 * 24 * 60 * 60 * 1000,
+    });
+    collections.get("leases")?.set("lease-pending", {
+      landlordId: "landlord-1",
+      propertyId: "property-1",
+      unitId: "unit-2",
+      status: "renewal_pending",
+      nextNoticeDueAt: Date.now() + 5 * 24 * 60 * 60 * 1000,
+    });
+    collections.get("leaseNotices")?.set("notice-pending", {
+      landlordId: "landlord-1",
+      leaseId: "lease-pending",
+      tenantResponse: "pending",
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+
+    const router = (await import("../leaseNoticeLandlordRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/expiring?status=expiring",
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.items).toHaveLength(1);
+    expect(res.body?.items[0]).toEqual(expect.objectContaining({ id: "lease-expiring", noticeBucket: "expiring" }));
+  });
+
+  it("returns only pending-response workflow items when that status filter is requested", async () => {
+    if (!collections.has("leases")) collections.set("leases", new Map());
+    if (!collections.has("leaseNotices")) collections.set("leaseNotices", new Map());
+    collections.get("leases")?.set("lease-expiring", {
+      landlordId: "landlord-1",
+      propertyId: "property-1",
+      unitId: "unit-1",
+      status: "active",
+      nextNoticeDueAt: Date.now() + 5 * 24 * 60 * 60 * 1000,
+    });
+    collections.get("leases")?.set("lease-pending", {
+      landlordId: "landlord-1",
+      propertyId: "property-1",
+      unitId: "unit-2",
+      status: "renewal_pending",
+      nextNoticeDueAt: Date.now() + 5 * 24 * 60 * 60 * 1000,
+    });
+    collections.get("leaseNotices")?.set("notice-pending", {
+      landlordId: "landlord-1",
+      leaseId: "lease-pending",
+      tenantResponse: "pending",
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+
+    const router = (await import("../leaseNoticeLandlordRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/expiring?status=pending-response",
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.items).toHaveLength(1);
+    expect(res.body?.items[0]).toEqual(expect.objectContaining({ id: "lease-pending", noticeBucket: "pending-response" }));
+  });
+
+  it("returns only no-response workflow items when that status filter is requested", async () => {
+    computeNoResponseStateMock.mockImplementation((notice: any) => String(notice?.leaseId || "").trim() === "lease-no-response");
+    if (!collections.has("leases")) collections.set("leases", new Map());
+    if (!collections.has("leaseNotices")) collections.set("leaseNotices", new Map());
+    collections.get("leases")?.set("lease-no-response", {
+      landlordId: "landlord-1",
+      propertyId: "property-1",
+      unitId: "unit-3",
+      status: "renewal_pending",
+      nextNoticeDueAt: Date.now() + 5 * 24 * 60 * 60 * 1000,
+    });
+    collections.get("leaseNotices")?.set("notice-no-response", {
+      landlordId: "landlord-1",
+      leaseId: "lease-no-response",
+      tenantResponse: "pending",
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+
+    const router = (await import("../leaseNoticeLandlordRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/expiring?status=no-response",
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.items).toHaveLength(1);
+    expect(res.body?.items[0]).toEqual(expect.objectContaining({ id: "lease-no-response", noticeBucket: "no-response" }));
   });
 });

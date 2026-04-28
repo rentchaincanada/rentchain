@@ -27,6 +27,8 @@ type LeaseRenewalFormState = {
   responseDeadlineAt: string;
 };
 
+type LeaseRenewalStatusScope = "expiring" | "pending-response" | "no-response";
+
 function toDatetimeLocalInput(value: number | null) {
   if (!value) return "";
   const date = new Date(value);
@@ -72,12 +74,33 @@ export default function PortfolioHealthSummaryPage() {
   const entryParams = React.useMemo(() => new URLSearchParams(location.search), [location.search]);
   const entry = entryParams.get("entry");
   const entryPropertyId = entryParams.get("propertyId");
+  const entryStatus = (() => {
+    const raw = String(entryParams.get("status") || "").trim().toLowerCase();
+    if (raw === "expiring" || raw === "pending-response" || raw === "no-response") return raw as LeaseRenewalStatusScope;
+    return null;
+  })();
   const entryMessage =
     entry === "lease-renewals"
       ? entryPropertyId
         ? "Opened from decisions to review lease-renewal pressure for a specific property."
         : "Opened from decisions to review lease-renewal pressure."
       : null;
+  const scopedRenewalHeading =
+    entryStatus === "expiring"
+      ? "Expiring soon leases"
+      : entryStatus === "pending-response"
+      ? "Pending response leases"
+      : entryStatus === "no-response"
+      ? "No response leases"
+      : "Lease renewal operator inputs";
+  const scopedRenewalHelper =
+    entryStatus === "expiring"
+      ? "Showing leases approaching notice timing so renewal inputs can be prepared before the notice window closes."
+      : entryStatus === "pending-response"
+      ? "Showing leases with a sent notice that are still awaiting a tenant response."
+      : entryStatus === "no-response"
+      ? "Showing leases where the tenant response window has elapsed without a reply."
+      : "Save renewal term and deadline choices on the lease record so readiness checks can observe them canonically.";
 
   React.useEffect(() => {
     if (entitlementLoading || !canViewPortfolioHealthSummary) return;
@@ -118,6 +141,7 @@ export default function PortfolioHealthSummaryPage() {
         setRenewalError(null);
         const response = await fetchExpiringLeaseRenewals({
           propertyId: entryPropertyId,
+          status: entryStatus,
         });
         if (!mounted) return;
         const items = response.items || [];
@@ -144,7 +168,7 @@ export default function PortfolioHealthSummaryPage() {
     return () => {
       mounted = false;
     };
-  }, [canViewPortfolioHealthSummary, entitlementLoading, entry, entryPropertyId, showToast]);
+  }, [canViewPortfolioHealthSummary, entitlementLoading, entry, entryPropertyId, entryStatus, showToast]);
 
   const scorePlanLabel = resolveRequiredPlanLabel("portfolio_score") || "Pro";
   const recommendationsPlanLabel =
@@ -275,10 +299,8 @@ export default function PortfolioHealthSummaryPage() {
         {entry === "lease-renewals" ? (
           <Card style={{ display: "grid", gap: 16 }}>
             <div style={{ display: "grid", gap: 4 }}>
-              <div style={{ fontWeight: 700 }}>Lease renewal operator inputs</div>
-              <div style={{ color: "#475569" }}>
-                Save renewal term and deadline choices on the lease record so readiness checks can observe them canonically.
-              </div>
+              <div style={{ fontWeight: 700 }}>{scopedRenewalHeading}</div>
+              <div style={{ color: "#475569" }}>{scopedRenewalHelper}</div>
             </div>
 
             {renewalLoading ? <div>Loading lease renewal inputs…</div> : null}

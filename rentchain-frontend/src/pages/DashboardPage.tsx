@@ -680,11 +680,11 @@ const DashboardPage: React.FC = () => {
               }}
             >
               {[
-                { label: "Expiring soon", value: leaseNoticeSummary.expiringSoon, href: "/portfolio-health?entry=lease-renewals" },
-                { label: "Pending response", value: leaseNoticeSummary.pendingResponse, href: "/portfolio-health?entry=lease-renewals" },
+                { label: "Expiring soon", value: leaseNoticeSummary.expiringSoon, href: "/portfolio-health?entry=lease-renewals&status=expiring" },
+                { label: "Pending response", value: leaseNoticeSummary.pendingResponse, href: "/portfolio-health?entry=lease-renewals&status=pending-response" },
                 { label: "Renewed", value: leaseNoticeSummary.renewed, href: "/leases?view=active" },
                 { label: "Quitting", value: leaseNoticeSummary.quitting, href: "/leases?view=active" },
-                { label: "No response", value: leaseNoticeSummary.noResponse, href: "/portfolio-health?entry=lease-renewals" },
+                { label: "No response", value: leaseNoticeSummary.noResponse, href: "/portfolio-health?entry=lease-renewals&status=no-response" },
               ].map((item) => (
                 <Link
                   key={item.label}

@@ -32,14 +32,20 @@ export type LandlordLeaseRenewalLease = {
   renewalNewTermType: "fixed_term" | "year_to_year" | "month_to_month" | null;
   renewalNewLeaseStartDate: string | null;
   renewalNewLeaseEndDate: string | null;
+  noticeBucket?: "expiring" | "pending-response" | "no-response";
 };
 
-export function fetchExpiringLeaseRenewals(params?: { propertyId?: string | null; withinDays?: number }) {
+export function fetchExpiringLeaseRenewals(params?: {
+  propertyId?: string | null;
+  withinDays?: number;
+  status?: "expiring" | "pending-response" | "no-response" | null;
+}) {
   const search = new URLSearchParams();
   if (params?.propertyId) search.set("propertyId", params.propertyId);
   if (typeof params?.withinDays === "number" && Number.isFinite(params.withinDays)) {
     search.set("withinDays", String(params.withinDays));
   }
+  if (params?.status) search.set("status", params.status);
   const suffix = search.size ? `?${search.toString()}` : "";
   return apiFetch<{ ok: true; items: LandlordLeaseRenewalLease[]; data: LandlordLeaseRenewalLease[] }>(
     `/landlord/leases/expiring${suffix}`
