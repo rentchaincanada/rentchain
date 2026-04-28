@@ -26,6 +26,7 @@ function formatDate(ms?: number | null) {
 
 export default function ContractorsPage() {
   const { canViewMarketplaceDirectory, loading: entitlementsLoading } = useEntitlements();
+  const [directoryView, setDirectoryView] = React.useState<"active" | "archived">("active");
   const [loading, setLoading] = React.useState(true);
   const [savingProfile, setSavingProfile] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -48,7 +49,12 @@ export default function ContractorsPage() {
         fetchContractors({
           serviceCategory: serviceCategory || undefined,
           serviceArea: serviceArea || undefined,
-          availabilityStatus: availabilityStatus || undefined,
+          availabilityStatus:
+            directoryView === "archived"
+              ? "inactive"
+              : availabilityStatus && availabilityStatus !== "inactive"
+                ? availabilityStatus
+                : undefined,
         }),
       ]);
       setInvites(inviteItems);
@@ -60,12 +66,33 @@ export default function ContractorsPage() {
     } finally {
       setLoading(false);
     }
-  }, [availabilityStatus, serviceArea, serviceCategory]);
+  }, [availabilityStatus, directoryView, serviceArea, serviceCategory]);
 
   React.useEffect(() => {
     if (entitlementsLoading) return;
     void load();
   }, [entitlementsLoading, load]);
+
+  const handleArchiveToggle = React.useCallback(
+    async (contractor: ContractorProfileV1, nextAvailabilityStatus: ContractorProfileV1["availabilityStatus"]) => {
+      setError(null);
+      try {
+        await updateContractorProfile(contractor.id, { availabilityStatus: nextAvailabilityStatus });
+        if (editing?.id === contractor.id) setEditing(null);
+        await load();
+      } catch (err: any) {
+        setError(
+          String(
+            err?.message ||
+              (nextAvailabilityStatus === "inactive"
+                ? "Failed to archive contractor"
+                : "Failed to restore contractor")
+          )
+        );
+      }
+    },
+    [editing?.id, load]
+  );
 
   const marketplacePlanLabel = resolveRequiredPlanLabel("marketplace_directory") || "Pro";
 
@@ -95,51 +122,110 @@ export default function ContractorsPage() {
       <ContractorFilterBar
         serviceCategory={serviceCategory}
         serviceArea={serviceArea}
-        availabilityStatus={availabilityStatus}
+        availabilityStatus={directoryView === "archived" ? "inactive" : availabilityStatus}
         onChange={(next) => {
           if (next.serviceCategory !== undefined) setServiceCategory(next.serviceCategory);
           if (next.serviceArea !== undefined) setServiceArea(next.serviceArea);
-          if (next.availabilityStatus !== undefined) setAvailabilityStatus(next.availabilityStatus);
+          if (next.availabilityStatus !== undefined) {
+            if (next.availabilityStatus === "inactive") {
+              setDirectoryView("archived");
+              setAvailabilityStatus("");
+            } else {
+              setDirectoryView("active");
+              setAvailabilityStatus(next.availabilityStatus);
+            }
+          }
         }}
         onRefresh={() => void load()}
       />
 
-      {canViewMarketplaceDirectory ? (
-        <ContractorProfileForm
-          initialValue={editing}
-          submitting={savingProfile}
-          onSubmit={async (payload) => {
-            setSavingProfile(true);
-            setError(null);
-            try {
-              if (editing?.id) {
-                await updateContractorProfile(editing.id, payload);
-              } else {
-                await createContractorProfile(payload);
-              }
-              setEditing(null);
-              await load();
-            } catch (err: any) {
-              setError(String(err?.message || "Failed to save contractor profile"));
-            } finally {
-              setSavingProfile(false);
-            }
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <Button
+          type="button"
+          variant={directoryView === "active" ? "primary" : "secondary"}
+          onClick={() => {
+            setDirectoryView("active");
+            setAvailabilityStatus((current) => (current === "inactive" ? "" : current));
           }}
-        />
+        >
+          Active contractors
+        </Button>
+        <Button
+          type="button"
+          variant={directoryView === "archived" ? "primary" : "secondary"}
+          onClick={() => {
+            setDirectoryView("archived");
+            setAvailabilityStatus("");
+          }}
+        >
+          Archived contractors
+        </Button>
+      </div>
+
+      {canViewMarketplaceDirectory ? (
+        <div style={{ display: "grid", gap: 8 }}>
+          {editing ? (
+            <div style={{ color: "#475569", fontSize: "0.92rem", fontWeight: 600 }}>
+              Editing {editing.displayName}
+            </div>
+          ) : null}
+          <ContractorProfileForm
+            initialValue={editing}
+            submitting={savingProfile}
+            onSubmit={async (payload) => {
+              setSavingProfile(true);
+              setError(null);
+              try {
+                if (editing?.id) {
+                  await updateContractorProfile(editing.id, payload);
+                } else {
+                  await createContractorProfile(payload);
+                }
+                setEditing(null);
+                await load();
+              } catch (err: any) {
+                setError(String(err?.message || "Failed to save contractor profile"));
+              } finally {
+                setSavingProfile(false);
+              }
+            }}
+          />
+        </div>
       ) : null}
 
       {loading ? (
         <Card>Loading contractor directory...</Card>
       ) : contractors.length === 0 ? (
-        <Card style={{ color: "#64748b" }}>No contractor profiles match the current filters.</Card>
+        <Card style={{ color: "#64748b" }}>
+          {directoryView === "archived"
+            ? "No archived contractor profiles match the current filters."
+            : "No contractor profiles match the current filters."}
+        </Card>
       ) : (
         <div style={{ display: "grid", gap: 10 }}>
           {contractors.map((contractor) => (
             <ContractorCard
               key={contractor.id}
               contractor={contractor}
-              actionLabel={canViewMarketplaceDirectory ? "Edit profile" : undefined}
-              onAction={canViewMarketplaceDirectory ? () => setEditing(contractor) : undefined}
+              actions={
+                canViewMarketplaceDirectory
+                  ? [
+                      {
+                        label: "Edit profile",
+                        onClick: () => setEditing(contractor),
+                      },
+                      contractor.availabilityStatus === "inactive"
+                        ? {
+                            label: "Restore contractor",
+                            onClick: () => void handleArchiveToggle(contractor, "active"),
+                          }
+                        : {
+                            label: "Archive contractor",
+                            onClick: () => void handleArchiveToggle(contractor, "inactive"),
+                          },
+                    ]
+                  : undefined
+              }
             />
           ))}
         </div>

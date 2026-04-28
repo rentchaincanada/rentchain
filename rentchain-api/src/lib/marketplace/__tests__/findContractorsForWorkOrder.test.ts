@@ -36,6 +36,17 @@ describe("findContractorsForWorkOrder", () => {
       createdAt: "2026-04-16T00:00:00.000Z",
       updatedAt: "2026-04-16T00:00:00.000Z",
     },
+    {
+      version: "v1" as const,
+      id: "c-4",
+      displayName: "Inactive Halifax Plumber",
+      serviceCategories: ["plumbing"] as const,
+      serviceAreas: ["Halifax"],
+      availabilityStatus: "inactive" as const,
+      contact: {},
+      createdAt: "2026-04-16T00:00:00.000Z",
+      updatedAt: "2026-04-16T00:00:00.000Z",
+    },
   ];
 
   it("normalizes category aliases safely", () => {
@@ -51,6 +62,14 @@ describe("findContractorsForWorkOrder", () => {
       serviceArea: "Halifax",
     });
     expect(result.map((item) => item.id)).toEqual(["c-1", "c-2"]);
+  });
+
+  it("returns inactive contractors only when explicitly filtering for inactive visibility", () => {
+    const result = findContractorsForWorkOrder({
+      contractors: contractors as any,
+      availabilityStatus: "inactive",
+    });
+    expect(result.map((item) => item.id)).toEqual(["c-4"]);
   });
 
   it("returns a stable empty result when no category match exists", () => {

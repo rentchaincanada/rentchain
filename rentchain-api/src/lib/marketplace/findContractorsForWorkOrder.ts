@@ -41,7 +41,8 @@ export function findContractorsForWorkOrder(input: {
   const filtered = input.contractors.filter((contractor) => {
     if (availabilityFilter && contractor.availabilityStatus !== availabilityFilter) return false;
     if (serviceCategory && !contractor.serviceCategories.includes(serviceCategory)) return false;
-    if (contractor.availabilityStatus === "inactive") return false;
+    if (!availabilityFilter && contractor.availabilityStatus === "inactive") return false;
+    if (availabilityFilter !== "inactive" && contractor.availabilityStatus === "inactive") return false;
     return true;
   });
 
