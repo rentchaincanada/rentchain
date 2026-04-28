@@ -297,6 +297,50 @@ describe("tenant workspace frontend shell", () => {
         warnings: [],
         missingRecommendedFields: [],
       },
+      complianceReadiness: {
+        readinessStatus: "partial",
+        readinessLabel: "Partially ready for institutional review",
+        readinessDescription:
+          "Core export controls are present, but some audit or consent signals are still limited in this tenant-controlled summary.",
+        checks: [
+          {
+            key: "schema_validated",
+            status: "pass",
+            label: "Schema validated",
+            description: "desc",
+          },
+          {
+            key: "identity_trace_available",
+            status: "warning",
+            label: "Identity trace available",
+            description: "desc",
+          },
+          {
+            key: "consent_controls_available",
+            status: "warning",
+            label: "Consent controls available",
+            description: "desc",
+          },
+          {
+            key: "export_tenant_controlled",
+            status: "pass",
+            label: "Tenant-controlled export",
+            description: "desc",
+          },
+          {
+            key: "sensitive_data_minimized",
+            status: "pass",
+            label: "Sensitive data minimized",
+            description: "desc",
+          },
+        ],
+        exportTraceability: {
+          exportAvailable: true,
+          schemaVersion: "2.0",
+          exportStorage: "not_stored",
+          outboundTransfer: "none",
+        },
+      },
       extensions: {
         reserved: {},
       },
@@ -1023,6 +1067,12 @@ describe("tenant workspace frontend shell", () => {
     expect(screen.getByText(/Schema version/i)).toBeInTheDocument();
     expect(screen.getByText(/Institution-ready structure/i)).toBeInTheDocument();
     expect(screen.getByText(/Validation status/i)).toBeInTheDocument();
+    expect(screen.getByText(/Compliance readiness/i)).toBeInTheDocument();
+    expect(screen.getByText(/Exports are generated on request and are not stored by RentChain/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/No data is sent automatically/i).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/SOC2/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/certification/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/send to bank/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/drawnDataUrl/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/paymentMethod/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Lease activated/i)).not.toBeInTheDocument();

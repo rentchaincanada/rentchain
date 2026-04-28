@@ -1,4 +1,5 @@
 import type { InstitutionalIdentityPackage } from "./deriveInstitutionalIdentityPackage";
+import type { ComplianceReadiness } from "../compliance/deriveComplianceReadiness";
 
 export type InstitutionalExportV2 = {
   schema: {
@@ -40,6 +41,7 @@ export type InstitutionalExportV2 = {
     warnings: string[];
     missingRecommendedFields: string[];
   };
+  complianceReadiness?: ComplianceReadiness;
   extensions: {
     reserved: Record<string, never>;
   };

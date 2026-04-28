@@ -425,6 +425,28 @@ export type InstitutionalExportV2 = {
     warnings: string[];
     missingRecommendedFields: string[];
   };
+  complianceReadiness: {
+    readinessStatus: "not_ready" | "partial" | "ready";
+    readinessLabel: string;
+    readinessDescription: string;
+    checks: Array<{
+      key:
+        | "schema_validated"
+        | "identity_trace_available"
+        | "consent_controls_available"
+        | "export_tenant_controlled"
+        | "sensitive_data_minimized";
+      status: "pass" | "warning" | "missing";
+      label: string;
+      description: string;
+    }>;
+    exportTraceability: {
+      exportAvailable: boolean;
+      schemaVersion: "2.0";
+      exportStorage: "not_stored";
+      outboundTransfer: "none";
+    };
+  };
   extensions: {
     reserved: Record<string, never>;
   };
