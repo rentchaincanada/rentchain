@@ -341,6 +341,12 @@ describe("tenant workspace frontend shell", () => {
           outboundTransfer: "none",
         },
       },
+      },
+      validation: {
+        status: "valid",
+        warnings: [],
+        missingRecommendedFields: [],
+      },
       extensions: {
         reserved: {},
       },
