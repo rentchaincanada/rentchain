@@ -11,6 +11,15 @@ import { buildTenantApplicationEntryPath } from "./tenantApplicationFlow";
 import { buildTenantWorkspaceModeView } from "./tenantWorkspaceMode";
 import TenantWorkspaceModeBanner from "./TenantWorkspaceModeBanner";
 
+function canLoadWorkspaceModeContext() {
+  return (
+    typeof window !== "undefined" &&
+    typeof document !== "undefined" &&
+    typeof window.location !== "undefined" &&
+    Boolean((import.meta as any)?.env?.VITE_API_BASE_URL)
+  );
+}
+
 function mapInviteError(input: string | null) {
   const normalized = String(input || "").trim().toLowerCase();
   if (normalized === "invite_expired") return "This invite has expired. Ask your landlord to send a new one.";
@@ -78,11 +87,15 @@ export default function TenantInviteRedeemPage() {
   }, [prefilledToken]);
 
   React.useEffect(() => {
-    if (typeof window === "undefined") {
+    if (!canLoadWorkspaceModeContext()) {
       return;
     }
     let cancelled = false;
-    void getTenantWorkspace()
+    const workspaceRequest = getTenantWorkspace();
+    if (!workspaceRequest || typeof (workspaceRequest as Promise<unknown>).then !== "function") {
+      return;
+    }
+    void workspaceRequest
       .then((next) => {
         if (!cancelled) {
           setWorkspace(next);
