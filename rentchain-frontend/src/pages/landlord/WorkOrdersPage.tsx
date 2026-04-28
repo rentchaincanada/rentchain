@@ -41,6 +41,7 @@ import {
 } from "../../api/workOrdersApi";
 import { type ExpenseCategory } from "../../api/expensesApi";
 import { printSummaryDocument } from "../../utils/printSummary";
+import { triggerBlobDownload } from "../../utils/downloadBlob";
 
 function formatDate(ms?: number | null) {
   if (!ms) return "-";
@@ -348,12 +349,7 @@ export default function WorkOrdersPage() {
     try {
       setExporting(format);
       const { blob, filename } = await exportWorkOrders(format);
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = filename;
-      link.click();
-      window.URL.revokeObjectURL(url);
+      triggerBlobDownload(blob, filename);
     } catch (err: any) {
       setError(String(err?.message || "Failed to export work orders"));
     } finally {

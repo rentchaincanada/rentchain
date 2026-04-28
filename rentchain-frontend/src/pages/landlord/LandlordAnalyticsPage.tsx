@@ -24,6 +24,7 @@ import DecisionOutcomeAnalyticsPanel from "../../components/analytics/DecisionOu
 import InsightCardsPanel from "../../components/analytics/InsightCardsPanel";
 import PortfolioBenchmarkingPanel from "../../components/analytics/PortfolioBenchmarkingPanel";
 import PredictiveMetricsPanel from "../../components/analytics/PredictiveMetricsPanel";
+import { printSummaryDocument } from "../../utils/printSummary";
 import {
   filterDecisionsByExecutionState,
   prioritizeDecisions,
@@ -285,7 +286,7 @@ export default function LandlordAnalyticsPage() {
             <button
               type="button"
               className="no-print"
-              onClick={() => window.print()}
+              onClick={() => void printSummaryDocument("summary")}
               style={{ padding: "8px 10px", borderRadius: 12, border: "1px solid #E5E7EB", background: "#FFFFFF", fontWeight: 900, cursor: "pointer" }}
             >
               Print / Save PDF
