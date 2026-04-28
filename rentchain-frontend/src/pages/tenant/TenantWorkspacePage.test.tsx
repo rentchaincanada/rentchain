@@ -258,46 +258,47 @@ describe("tenant workspace frontend shell", () => {
       },
     });
     tenantPortalApi.exportTenantIdentityPackage.mockResolvedValue({
-      identitySummary: {
+      schema: {
+        name: "rentchain.institutional_identity_package",
+        version: "2.0",
+        generatedAt: "2026-04-27T00:00:00.000Z",
+        jurisdiction: "CA",
+        dataScope: "tenant_controlled_export",
+        consentRequired: true,
+      },
+      subject: {
+        subjectType: "tenant",
         identityStatus: "ready",
         verificationLevel: "partial",
         completenessLevel: "high",
-        readinessLabel: "Ready to apply",
       },
-      credibilitySummary: {
-        completenessLevel: "high",
-        verificationLevel: "partial",
-        summaryLabel: "Credibility established",
-        summaryDescription: "Most credibility signals are available in your current record.",
-      },
-      leaseSummary: {
-        activeLease: true,
-        leaseExecutionStatus: "fully_executed",
-      },
-      paymentReadinessSummary: {
-        readinessStatus: "ready_to_configure",
-        readinessLabel: "Rent terms ready for future setup",
-        readinessDescription: "The current lease shows the core rent terms needed for future setup planning.",
-      },
-      auditSummary: {
-        totalEvents: 2,
-        recentActivity: [
-          {
-            type: "lease.activated",
-            label: "Lease activated",
-            occurredAt: "2026-02-01T00:00:00.000Z",
-          },
-        ],
-      },
-      portabilitySummary: {
+      identity: {
         portabilityStatus: "ready",
-        portabilityLabel: "Ready to reuse",
-        reusableAcrossApplications: true,
+        identityReadiness: "ready",
+        credibilityReadiness: "high",
       },
-      metadata: {
-        generatedAt: "2026-04-27T00:00:00.000Z",
-        dataScope: "tenant_controlled_institutional_readiness",
-        consentRequired: true,
+      rentalHistory: {
+        activeLeaseAvailable: true,
+        leaseExecutionStatus: "executed",
+        leaseSummaryAvailable: true,
+      },
+      paymentReadiness: {
+        rentTermsReady: true,
+        paymentRailAvailable: false,
+        latestPaymentStatus: "not_available",
+      },
+      audit: {
+        auditTrailAvailable: true,
+        totalIdentityEvents: 2,
+        recentActivityAvailable: true,
+      },
+      validation: {
+        status: "valid",
+        warnings: [],
+        missingRecommendedFields: [],
+      },
+      extensions: {
+        reserved: {},
       },
     });
     tenantPortalApi.createTenantLeasePaymentCheckout.mockResolvedValue({
@@ -1014,15 +1015,17 @@ describe("tenant workspace frontend shell", () => {
     fireEvent.click(screen.getByRole("button", { name: /Export Rental Identity/i }));
 
     await waitFor(() => {
-      expect(tenantPortalApi.exportTenantIdentityPackage).toHaveBeenCalledTimes(1);
+      expect(tenantPortalApi.exportTenantIdentityPackage).toHaveBeenCalledWith("2.0");
     });
 
     expect(await screen.findByRole("button", { name: /Hide preview/i })).toBeInTheDocument();
     expect(screen.getByText(/Export preview/i)).toBeInTheDocument();
-    expect(screen.getAllByText(/Credibility established/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/Lease activated/i)).toBeInTheDocument();
+    expect(screen.getByText(/Schema version/i)).toBeInTheDocument();
+    expect(screen.getByText(/Institution-ready structure/i)).toBeInTheDocument();
+    expect(screen.getByText(/Validation status/i)).toBeInTheDocument();
     expect(screen.queryByText(/drawnDataUrl/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/paymentMethod/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Lease activated/i)).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Download JSON/i }));
     expect(global.URL.createObjectURL).toHaveBeenCalledTimes(1);

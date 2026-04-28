@@ -21,6 +21,8 @@ import { deriveTenantCredibilitySignals } from "../services/tenantCredibility/de
 import { deriveIdentityTimeline } from "../services/identityTimeline/deriveIdentityTimeline";
 import { deriveIdentityPortability } from "../services/identityPortability/deriveIdentityPortability";
 import { deriveInstitutionalIdentityPackage } from "../services/institutional/deriveInstitutionalIdentityPackage";
+import { deriveInstitutionalSchemaV2 } from "../services/institutional/deriveInstitutionalSchemaV2";
+import { validateInstitutionalSchema } from "../services/institutional/validateInstitutionalSchema";
 import { derivePaymentReadiness } from "../services/paymentReadiness/derivePaymentReadiness";
 import {
   createRentPaymentCheckout,
@@ -3014,6 +3016,10 @@ router.get("/me", requireTenantWorkspaceIdentity, handleTenantWorkspaceSummary);
 router.post("/identity/export", requireTenantWorkspaceIdentity, async (req: any, res: any) => {
   const context = await resolveWorkspaceContextOrRespond(req, res);
   if (!context) return;
+  const schemaVersion = String(req.body?.schemaVersion || "1.0").trim() || "1.0";
+  if (!["1.0", "2.0"].includes(schemaVersion)) {
+    return res.status(400).json({ ok: false, error: "UNSUPPORTED_SCHEMA_VERSION" });
+  }
 
   const [workspace, tenantIdentityRecord, identityTimeline] = await Promise.all([
     loadTenantWorkspaceData(context),
@@ -3052,6 +3058,18 @@ router.post("/identity/export", requireTenantWorkspaceIdentity, async (req: any,
     portableIdentity,
     leaseStatus: workspace.lease?.status || null,
   });
+
+  if (schemaVersion === "2.0") {
+    const schemaV2 = deriveInstitutionalSchemaV2({
+      packageV1: institutionalIdentityPackage,
+      latestPaymentStatus: workspace.lease?.rentPaymentSummary?.latestPayment?.status || null,
+    });
+    schemaV2.validation = validateInstitutionalSchema(schemaV2);
+    return res.json({
+      ok: true,
+      data: schemaV2,
+    });
+  }
 
   return res.json({
     ok: true,

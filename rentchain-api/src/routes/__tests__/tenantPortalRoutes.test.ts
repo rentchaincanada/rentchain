@@ -1146,6 +1146,63 @@ describe("tenantPortalRoutes foundation", () => {
     expect(payload).not.toContain("prop-1");
   });
 
+  it("builds a tenant-only institutional schema v2 export safely when requested", async () => {
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/identity/export",
+      body: {
+        schemaVersion: "2.0",
+      },
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.data?.schema?.version).toBe("2.0");
+    expect(res.body?.data?.validation?.status).toBeTruthy();
+    expect(res.body?.data?.audit?.recentActivityAvailable).toBe(false);
+    expect(res.body?.data?.audit?.recentActivity).toBeUndefined();
+    const payload = JSON.stringify(res.body?.data || {});
+    expect(payload).not.toContain("drawnDataUrl");
+    expect(payload).not.toContain("documentUrl");
+    expect(payload).not.toContain("paymentMethod");
+    expect(payload).not.toContain("share-token");
+    expect(payload).not.toContain("tenant-1");
+    expect(payload).not.toContain("prop-1");
+  });
+
+  it("rejects unsupported institutional schema versions narrowly", async () => {
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/identity/export",
+      body: {
+        schemaVersion: "3.0",
+      },
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({
+      ok: false,
+      error: "UNSUPPORTED_SCHEMA_VERSION",
+    });
+  });
+
   it("revokes a tenant share package immediately", async () => {
     ensureCollection("tenantSharePackages").set("share-1", {
       id: "share-1",

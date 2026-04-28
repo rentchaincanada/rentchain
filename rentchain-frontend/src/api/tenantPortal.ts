@@ -383,6 +383,53 @@ export type InstitutionalIdentityPackage = {
   };
 };
 
+export type InstitutionalSchemaVersion = "1.0" | "2.0";
+
+export type InstitutionalExportV2 = {
+  schema: {
+    name: "rentchain.institutional_identity_package";
+    version: "2.0";
+    generatedAt: string;
+    jurisdiction: "CA";
+    dataScope: "tenant_controlled_export";
+    consentRequired: true;
+  };
+  subject: {
+    subjectType: "tenant";
+    identityStatus: "incomplete" | "limited" | "ready" | "verified";
+    verificationLevel: "none" | "partial" | "strong";
+    completenessLevel: "low" | "medium" | "high";
+  };
+  identity: {
+    portabilityStatus: "not_ready" | "limited" | "ready";
+    identityReadiness: "incomplete" | "limited" | "ready" | "verified";
+    credibilityReadiness: "low" | "medium" | "high";
+  };
+  rentalHistory: {
+    activeLeaseAvailable: boolean;
+    leaseExecutionStatus: "not_available" | "draft" | "pending_signature" | "executed" | "blocked";
+    leaseSummaryAvailable: boolean;
+  };
+  paymentReadiness: {
+    rentTermsReady: boolean;
+    paymentRailAvailable: boolean;
+    latestPaymentStatus?: "not_available" | "checkout_created" | "pending" | "paid" | "failed" | "canceled" | "expired";
+  };
+  audit: {
+    auditTrailAvailable: boolean;
+    totalIdentityEvents: number;
+    recentActivityAvailable: boolean;
+  };
+  validation: {
+    status: "valid" | "valid_with_warnings" | "invalid";
+    warnings: string[];
+    missingRecommendedFields: string[];
+  };
+  extensions: {
+    reserved: Record<string, never>;
+  };
+};
+
 export type TenantWorkspaceSummary = {
   context: TenantWorkspaceContext;
   property: TenantWorkspaceProperty | null;
@@ -400,10 +447,18 @@ export async function getTenantWorkspace(): Promise<TenantWorkspaceSummary> {
   return res?.data;
 }
 
-export async function exportTenantIdentityPackage(): Promise<InstitutionalIdentityPackage> {
-  const res = await tenantApiFetch<{ ok: boolean; data: InstitutionalIdentityPackage }>("/tenant/identity/export", {
-    method: "POST",
-  });
+export async function exportTenantIdentityPackage(schemaVersion?: "1.0"): Promise<InstitutionalIdentityPackage>;
+export async function exportTenantIdentityPackage(schemaVersion: "2.0"): Promise<InstitutionalExportV2>;
+export async function exportTenantIdentityPackage(
+  schemaVersion: InstitutionalSchemaVersion = "1.0"
+): Promise<InstitutionalIdentityPackage | InstitutionalExportV2> {
+  const res = await tenantApiFetch<{ ok: boolean; data: InstitutionalIdentityPackage | InstitutionalExportV2 }>(
+    "/tenant/identity/export",
+    {
+      method: "POST",
+      body: JSON.stringify({ schemaVersion }),
+    }
+  );
   return res?.data;
 }
 

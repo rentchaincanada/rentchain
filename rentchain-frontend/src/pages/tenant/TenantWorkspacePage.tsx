@@ -5,6 +5,7 @@ import {
   exportTenantIdentityPackage,
   getTenantLeasePaymentStatus,
   getTenantWorkspace,
+  type InstitutionalExportV2,
 } from "../../api/tenantPortal";
 import { getTenantAccess, type TenantAccessWorkspace } from "../../api/tenantAccess";
 import { getTenantAttachments } from "../../api/tenantAttachmentsApi";
@@ -73,6 +74,18 @@ function prettyVerificationLevel(value: "none" | "partial" | "strong" | null | u
     case "none":
     default:
       return "None";
+  }
+}
+
+function prettyInstitutionalSchemaStatus(value: "valid" | "valid_with_warnings" | "invalid" | null | undefined) {
+  switch (value) {
+    case "valid_with_warnings":
+      return "Valid with warnings";
+    case "invalid":
+      return "Invalid";
+    case "valid":
+    default:
+      return "Valid";
   }
 }
 
@@ -159,7 +172,7 @@ function formatPaymentExperienceStatus(value: "pending" | "paid" | "failed" | "c
 
 export default function TenantWorkspacePage() {
   const [data, setData] = React.useState<Awaited<ReturnType<typeof getTenantWorkspace>> | null>(null);
-  const [institutionalPackage, setInstitutionalPackage] = React.useState<Awaited<ReturnType<typeof exportTenantIdentityPackage>> | null>(null);
+  const [institutionalPackage, setInstitutionalPackage] = React.useState<InstitutionalExportV2 | null>(null);
   const [access, setAccess] = React.useState<TenantAccessWorkspace | null>(null);
   const [attachments, setAttachments] = React.useState<Awaited<ReturnType<typeof getTenantAttachments>> | null>(null);
   const [profileData, setProfileData] = React.useState<Awaited<ReturnType<typeof getTenantProfile>> | null>(null);
@@ -324,7 +337,7 @@ export default function TenantWorkspacePage() {
     try {
       setExportBusy(true);
       setExportError(null);
-      const next = await exportTenantIdentityPackage();
+      const next = await exportTenantIdentityPackage("2.0");
       setInstitutionalPackage(next);
       setShowExportPreview(true);
     } catch (err: any) {
@@ -343,7 +356,7 @@ export default function TenantWorkspacePage() {
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = "rentchain-institutional-identity-package.json";
+      link.download = "rentchain-institutional-identity-package-v2.json";
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -983,34 +996,88 @@ export default function TenantWorkspacePage() {
                   }}
                 >
                   <div style={{ fontWeight: 700, color: textTokens.primary }}>Export preview</div>
+                  <div style={{ color: textTokens.secondary, lineHeight: 1.6 }}>
+                    Tenant-controlled export. Institution-ready structure. No data is sent automatically.
+                  </div>
                   <TenantKeyValueGrid
                     rows={[
-                      { label: "Identity status", value: prettyStatus(institutionalPackage.identitySummary.identityStatus) },
-                      { label: "Verification level", value: prettyVerificationLevel(institutionalPackage.identitySummary.verificationLevel) },
-                      { label: "Completeness", value: prettyStatus(institutionalPackage.identitySummary.completenessLevel) },
-                      { label: "Credibility", value: institutionalPackage.credibilitySummary.summaryLabel },
-                      { label: "Active lease", value: institutionalPackage.leaseSummary.activeLease ? "Yes" : "No" },
-                      { label: "Lease execution", value: prettyStatus(institutionalPackage.leaseSummary.leaseExecutionStatus) },
-                      { label: "Payment readiness", value: institutionalPackage.paymentReadinessSummary.readinessLabel },
-                      { label: "Audit events", value: String(institutionalPackage.auditSummary.totalEvents) },
-                      { label: "Consent required", value: institutionalPackage.metadata.consentRequired ? "Yes" : "No" },
+                      { label: "Schema version", value: institutionalPackage.schema.version },
+                      { label: "Schema name", value: institutionalPackage.schema.name },
+                      { label: "Jurisdiction", value: institutionalPackage.schema.jurisdiction },
+                      { label: "Data scope", value: prettyStatus(institutionalPackage.schema.dataScope) },
+                      { label: "Consent required", value: institutionalPackage.schema.consentRequired ? "Yes" : "No" },
                     ]}
                   />
 
-                  <div style={{ color: textTokens.secondary, lineHeight: 1.6 }}>
-                    {institutionalPackage.credibilitySummary.summaryDescription}
+                  <div style={{ display: "grid", gap: 6 }}>
+                    <div style={{ fontWeight: 700, color: textTokens.primary }}>Subject</div>
+                    <TenantKeyValueGrid
+                      rows={[
+                        { label: "Subject type", value: prettyStatus(institutionalPackage.subject.subjectType) },
+                        { label: "Identity status", value: prettyStatus(institutionalPackage.subject.identityStatus) },
+                        { label: "Verification level", value: prettyVerificationLevel(institutionalPackage.subject.verificationLevel) },
+                        { label: "Completeness", value: prettyStatus(institutionalPackage.subject.completenessLevel) },
+                      ]}
+                    />
                   </div>
 
-                  {institutionalPackage.auditSummary.recentActivity.length ? (
-                    <div style={{ display: "grid", gap: 6 }}>
-                      <div style={{ fontWeight: 700, color: textTokens.primary }}>Recent activity</div>
-                      {institutionalPackage.auditSummary.recentActivity.map((event) => (
-                        <div key={`${event.type}:${event.occurredAt}`} style={{ color: textTokens.secondary }}>
-                          {event.label} • {formatDate(event.occurredAt)}
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
+                  <div style={{ display: "grid", gap: 6 }}>
+                    <div style={{ fontWeight: 700, color: textTokens.primary }}>Identity</div>
+                    <TenantKeyValueGrid
+                      rows={[
+                        { label: "Portability status", value: prettyStatus(institutionalPackage.identity.portabilityStatus) },
+                        { label: "Identity readiness", value: prettyStatus(institutionalPackage.identity.identityReadiness) },
+                        { label: "Credibility readiness", value: prettyStatus(institutionalPackage.identity.credibilityReadiness) },
+                      ]}
+                    />
+                  </div>
+
+                  <div style={{ display: "grid", gap: 6 }}>
+                    <div style={{ fontWeight: 700, color: textTokens.primary }}>Rental history</div>
+                    <TenantKeyValueGrid
+                      rows={[
+                        { label: "Active lease available", value: institutionalPackage.rentalHistory.activeLeaseAvailable ? "Yes" : "No" },
+                        { label: "Lease execution", value: prettyStatus(institutionalPackage.rentalHistory.leaseExecutionStatus) },
+                        { label: "Lease summary available", value: institutionalPackage.rentalHistory.leaseSummaryAvailable ? "Yes" : "No" },
+                      ]}
+                    />
+                  </div>
+
+                  <div style={{ display: "grid", gap: 6 }}>
+                    <div style={{ fontWeight: 700, color: textTokens.primary }}>Payment readiness</div>
+                    <TenantKeyValueGrid
+                      rows={[
+                        { label: "Rent terms ready", value: institutionalPackage.paymentReadiness.rentTermsReady ? "Yes" : "No" },
+                        { label: "Payment rail available", value: institutionalPackage.paymentReadiness.paymentRailAvailable ? "Yes" : "No" },
+                        {
+                          label: "Latest payment status",
+                          value: prettyStatus(institutionalPackage.paymentReadiness.latestPaymentStatus || "not_available"),
+                        },
+                      ]}
+                    />
+                  </div>
+
+                  <div style={{ display: "grid", gap: 6 }}>
+                    <div style={{ fontWeight: 700, color: textTokens.primary }}>Audit</div>
+                    <TenantKeyValueGrid
+                      rows={[
+                        { label: "Audit trail available", value: institutionalPackage.audit.auditTrailAvailable ? "Yes" : "No" },
+                        { label: "Total identity events", value: String(institutionalPackage.audit.totalIdentityEvents) },
+                        { label: "Recent activity available", value: institutionalPackage.audit.recentActivityAvailable ? "Yes" : "No" },
+                      ]}
+                    />
+                  </div>
+
+                  <div style={{ display: "grid", gap: 6 }}>
+                    <div style={{ fontWeight: 700, color: textTokens.primary }}>Validation</div>
+                    <TenantKeyValueGrid
+                      rows={[
+                        { label: "Validation status", value: prettyInstitutionalSchemaStatus(institutionalPackage.validation.status) },
+                        { label: "Warnings", value: String(institutionalPackage.validation.warnings.length) },
+                        { label: "Missing recommended fields", value: String(institutionalPackage.validation.missingRecommendedFields.length) },
+                      ]}
+                    />
+                  </div>
                 </div>
               ) : null}
             </div>
