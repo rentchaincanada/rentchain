@@ -98,7 +98,31 @@ export type TenantWorkspaceLease = {
       updatedAt: string;
       paidAt: string | null;
     } | null;
+    paymentExperience: PaymentExperience;
   } | null;
+};
+
+export type RentPaymentHistoryItem = {
+  id: string;
+  amountCents: number;
+  currency: "cad";
+  status: "setup_required" | "checkout_created" | "payment_pending" | "paid" | "failed" | "canceled" | "expired";
+  createdAt: string;
+  updatedAt: string;
+  paidAt: string | null;
+};
+
+export type PaymentExperience = {
+  history: RentPaymentHistoryItem[];
+  latestStatus: "pending" | "paid" | "failed" | "canceled" | null;
+  retryAvailable: boolean;
+  receiptSummary: {
+    available: boolean;
+    label: string;
+    amountCents: number | null;
+    paidAt: string | null;
+    leaseReference: string | null;
+  };
 };
 
 export type PaymentReadiness = {
@@ -425,6 +449,7 @@ export async function getTenantLeasePaymentStatus(
     updatedAt: string;
     paidAt: string | null;
   } | null;
+  paymentExperience: PaymentExperience;
 }> {
   const res = await tenantApiFetch<{ ok: boolean; data: any }>(`/tenant/leases/${encodeURIComponent(leaseId)}/payments`);
   return res?.data;

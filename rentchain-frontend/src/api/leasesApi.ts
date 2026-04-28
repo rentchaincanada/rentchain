@@ -116,6 +116,7 @@ export interface LandlordActiveLease extends Lease {
       updatedAt: string;
       paidAt: string | null;
     } | null;
+    paymentExperience: PaymentExperience;
   } | null;
   hiddenFromActiveLists?: boolean;
   cleanupReason?: string | null;
@@ -124,6 +125,29 @@ export interface LandlordActiveLease extends Lease {
   archivedByUserId?: string | null;
   isArchived?: boolean;
 }
+
+export type RentPaymentHistoryItem = {
+  id: string;
+  amountCents: number;
+  currency: "cad";
+  status: "setup_required" | "checkout_created" | "payment_pending" | "paid" | "failed" | "canceled" | "expired";
+  createdAt: string;
+  updatedAt: string;
+  paidAt: string | null;
+};
+
+export type PaymentExperience = {
+  history: RentPaymentHistoryItem[];
+  latestStatus: "pending" | "paid" | "failed" | "canceled" | null;
+  retryAvailable: boolean;
+  receiptSummary: {
+    available: boolean;
+    label: string;
+    amountCents: number | null;
+    paidAt: string | null;
+    leaseReference: string | null;
+  };
+};
 
 export interface LeaseReconciliationCandidate {
   id: string;
@@ -296,6 +320,7 @@ export async function getLeasePaymentStatus(id: string): Promise<{
     updatedAt: string;
     paidAt: string | null;
   } | null;
+  paymentExperience: PaymentExperience;
 }> {
   const res = await apiJson<{ ok: boolean; data: any }>(`/leases/${encodeURIComponent(id)}/payments`);
   return res?.data;

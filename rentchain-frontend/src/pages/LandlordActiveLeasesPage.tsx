@@ -156,6 +156,21 @@ function prettyRentPaymentStatus(status: string | null | undefined) {
   return normalized.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
+function formatPaymentExperienceStatus(value: "pending" | "paid" | "failed" | "canceled" | null | undefined) {
+  switch (value) {
+    case "pending":
+      return "Pending";
+    case "paid":
+      return "Paid";
+    case "failed":
+      return "Failed";
+    case "canceled":
+      return "Canceled";
+    default:
+      return "No payment yet";
+  }
+}
+
 export default function LandlordActiveLeasesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const view = searchParams.get("view") === "archived" ? "archived" : "active";
@@ -555,12 +570,20 @@ export default function LandlordActiveLeasesPage() {
                             {lease.rentPaymentSummary.paymentRail.enabled ? "Rent collection enabled" : "Rent collection not enabled"}
                           </div>
                           <div style={{ color: "#64748b", fontSize: 12 }}>
-                            {lease.rentPaymentSummary.latestPayment
-                              ? prettyRentPaymentStatus(lease.rentPaymentSummary.latestPayment.status)
+                            {lease.rentPaymentSummary.paymentExperience?.latestStatus
+                              ? formatPaymentExperienceStatus(lease.rentPaymentSummary.paymentExperience.latestStatus)
                               : lease.rentPaymentSummary.paymentRail.blockedReason
                               ? lease.rentPaymentSummary.paymentRail.blockedReason.replace(/_/g, " ")
-                              : "No payment started"}
+                              : "No payment yet"}
                           </div>
+                          {(lease.rentPaymentSummary.paymentExperience?.history || []).length ? (
+                            <div style={{ color: "#64748b", fontSize: 12 }}>
+                              {lease.rentPaymentSummary.paymentExperience.history
+                                .slice(0, 2)
+                                .map((entry) => prettyRentPaymentStatus(entry.status))
+                                .join(" → ")}
+                            </div>
+                          ) : null}
                         </div>
                       ) : null}
                     </td>

@@ -80,6 +80,18 @@ describe("LandlordActiveLeasesPage", () => {
               blockedReason: null,
             },
             latestPayment: null,
+            paymentExperience: {
+              history: [],
+              latestStatus: null,
+              retryAvailable: false,
+              receiptSummary: {
+                available: false,
+                label: "No payment summary available yet",
+                amountCents: null,
+                paidAt: null,
+                leaseReference: null,
+              },
+            },
           },
         },
       ],
@@ -147,6 +159,85 @@ describe("LandlordActiveLeasesPage", () => {
     await waitFor(() => expect(mocks.enableLeasePaymentRail).toHaveBeenCalledWith("lease-1"));
     fireEvent.click(screen.getByRole("button", { name: "Archive lease" }));
     await waitFor(() => expect(mocks.archiveLeaseRecord).toHaveBeenCalledWith("lease-1"));
+  });
+
+  it("shows landlord-safe payment visibility without retry or receipt actions", async () => {
+    mocks.getActiveLeasesForLandlord.mockResolvedValue({
+      leases: [
+        {
+          id: "lease-1",
+          propertyId: "prop-1",
+          propertyName: "Harbour View",
+          unitNumber: "101",
+          monthlyRent: 1850,
+          startDate: "2026-01-01",
+          endDate: "2026-12-31",
+          status: "active",
+          tenantName: "Jane Tenant",
+          tenantEmail: "jane@example.com",
+          rentPaymentSummary: {
+            paymentRail: {
+              enabled: true,
+              enabledAt: "2026-04-27T10:00:00.000Z",
+              processor: "stripe",
+              blockedReason: null,
+            },
+            latestPayment: {
+              id: "rp-2",
+              amountCents: 185000,
+              currency: "cad",
+              status: "payment_pending",
+              createdAt: "2026-04-20T00:00:00.000Z",
+              updatedAt: "2026-04-21T00:00:00.000Z",
+              paidAt: null,
+            },
+            paymentExperience: {
+              history: [
+                {
+                  id: "rp-2",
+                  amountCents: 185000,
+                  currency: "cad",
+                  status: "payment_pending",
+                  createdAt: "2026-04-20T00:00:00.000Z",
+                  updatedAt: "2026-04-21T00:00:00.000Z",
+                  paidAt: null,
+                },
+                {
+                  id: "rp-1",
+                  amountCents: 185000,
+                  currency: "cad",
+                  status: "failed",
+                  createdAt: "2026-03-20T00:00:00.000Z",
+                  updatedAt: "2026-03-21T00:00:00.000Z",
+                  paidAt: null,
+                },
+              ],
+              latestStatus: "pending",
+              retryAvailable: false,
+              receiptSummary: {
+                available: false,
+                label: "No payment summary available yet",
+                amountCents: null,
+                paidAt: null,
+                leaseReference: null,
+              },
+            },
+          },
+        },
+      ],
+    });
+
+    render(
+      <MemoryRouter>
+        <LandlordActiveLeasesPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Rent collection enabled/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Pending$/i)).toBeInTheDocument();
+    expect(screen.getByText(/Payment Pending → Failed/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Retry payment/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Print \/ Save payment summary/i })).not.toBeInTheDocument();
   });
 
   it("shows reconciliation candidates and converts a reference into a lease", async () => {

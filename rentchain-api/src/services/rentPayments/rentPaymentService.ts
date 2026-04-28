@@ -51,6 +51,26 @@ export type RentPaymentSummary = {
     updatedAt: string;
     paidAt: string | null;
   } | null;
+  paymentExperience: {
+    history: Array<{
+      id: string;
+      amountCents: number;
+      currency: "cad";
+      status: RentPaymentStatus;
+      createdAt: string;
+      updatedAt: string;
+      paidAt: string | null;
+    }>;
+    latestStatus: "pending" | "paid" | "failed" | "canceled" | null;
+    retryAvailable: boolean;
+    receiptSummary: {
+      available: boolean;
+      label: string;
+      amountCents: number | null;
+      paidAt: string | null;
+      leaseReference: string | null;
+    };
+  };
 };
 
 export type RentPaymentEligibility = {
@@ -175,6 +195,43 @@ function summarizePayment(record: RentPaymentRecord | null): RentPaymentSummary[
   };
 }
 
+export function isRentPaymentRetryAvailable(status: RentPaymentStatus | null | undefined): boolean {
+  return status === "failed" || status === "canceled" || status === "expired";
+}
+
+export function derivePaymentExperience(
+  history: RentPaymentRecord[],
+  leaseReference: string
+): RentPaymentSummary["paymentExperience"] {
+  const items = (history || []).map((record) => summarizePayment(record)).filter(Boolean) as NonNullable<
+    RentPaymentSummary["latestPayment"]
+  >[];
+  const latest = items[0] || null;
+  const latestStatus = latest
+    ? latest.status === "checkout_created" || latest.status === "payment_pending"
+      ? "pending"
+      : latest.status === "paid"
+      ? "paid"
+      : latest.status === "failed"
+      ? "failed"
+      : "canceled"
+    : null;
+  const latestPaid = items.find((item) => item.status === "paid") || null;
+
+  return {
+    history: items,
+    latestStatus,
+    retryAvailable: isRentPaymentRetryAvailable(latest?.status || null),
+    receiptSummary: {
+      available: Boolean(latestPaid),
+      label: latestPaid ? "Payment summary available" : "No payment summary available yet",
+      amountCents: latestPaid?.amountCents || null,
+      paidAt: latestPaid?.paidAt || null,
+      leaseReference: latestPaid ? leaseReference : null,
+    },
+  };
+}
+
 function eventSummaryForStatus(status: RentPaymentStatus): string {
   switch (status) {
     case "checkout_created":
@@ -286,7 +343,8 @@ export async function getRentPaymentSummaryForLease(input: {
   paymentRailProcessor?: string | null;
   blockedReason?: string | null;
 }): Promise<RentPaymentSummary> {
-  const latestPayment = await getLatestRentPaymentForLease(input.leaseId);
+  const history = await listRentPaymentsForLease(input.leaseId);
+  const latestPayment = history[0] || null;
   return {
     paymentRail: {
       enabled: input.paymentRailEnabled === true,
@@ -295,6 +353,7 @@ export async function getRentPaymentSummaryForLease(input: {
       blockedReason: asString(input.blockedReason),
     },
     latestPayment: summarizePayment(latestPayment),
+    paymentExperience: derivePaymentExperience(history, String(input.leaseId || "").trim()),
   };
 }
 
