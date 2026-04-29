@@ -1002,6 +1002,8 @@ describe("tenant workspace frontend shell", () => {
     );
 
     expect(await screen.findByText(/Payment history/i)).toBeInTheDocument();
+    expect(screen.getByText(/The payment attempt did not complete successfully\. You can try checkout again\./i)).toBeInTheDocument();
+    expect(screen.getAllByText(/^Payment failed$/i).length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: /Retry payment/i })).toBeInTheDocument();
     expect(screen.getByText(/Payment summary available/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Print \/ Save payment summary/i }));
@@ -1750,6 +1752,77 @@ describe("tenant workspace frontend shell", () => {
     });
   });
 
+  it("maps checkout blocker errors to tenant-safe rent guidance", async () => {
+    tenantPortalApi.getTenantWorkspace.mockResolvedValue({
+      context: {
+        authority: "active_tenant",
+        propertyId: "prop-1",
+        rc_prop_id: "rc-prop-1",
+        applicationId: "app-1",
+        leaseId: "lease-1",
+        tenantId: "tenant-1",
+        unitId: "unit-1",
+        invitedEmail: "tenant@example.com",
+      },
+      property: null,
+      application: null,
+      lease: {
+        leaseId: "lease-1",
+        startDate: "2026-02-01",
+        endDate: "2027-01-31",
+        monthlyRent: 1800,
+        status: "active",
+        documentUrl: null,
+        paymentReadiness: {
+          readinessStatus: "ready_to_configure",
+          readinessLabel: "Rent terms ready for future setup",
+          readinessDescription: "Ready.",
+          requiredNextAction: "confirm_payment_setup_later",
+          rentTerms: {
+            rentAmountAvailable: true,
+            dueDateAvailable: true,
+            leaseDatesAvailable: true,
+            tenantLinked: true,
+            leaseExecuted: true,
+          },
+          paymentSetup: {
+            processorConnected: false,
+            moneyMovementEnabled: false,
+            storedPaymentMethod: false,
+          },
+        },
+        rentPaymentSummary: {
+          paymentRail: {
+            enabled: true,
+            enabledAt: "2026-04-27T10:00:00.000Z",
+            processor: "stripe",
+            blockedReason: null,
+          },
+          latestPayment: null,
+        },
+      },
+      maintenance: [],
+      tenantIdentityRecord: null,
+      tenantCredibilitySignals: null,
+      identityTimeline: { events: [] },
+    });
+    tenantPortalApi.createTenantLeasePaymentCheckout.mockRejectedValue({
+      payload: { detail: "payment_already_pending" },
+    });
+
+    render(
+      <MemoryRouter>
+        <TenantWorkspacePage />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /Pay rent/i }));
+
+    expect(
+      await screen.findByText(/A checkout is already open for this lease\. Finish the existing checkout or wait for its status to update\./i)
+    ).toBeInTheDocument();
+  });
+
   it("renders tenant lease payment history, retry state, and print-safe summary", async () => {
     tenantPortalApi.getTenantLeaseWorkspace.mockResolvedValue({
       leaseId: "lease-1",
@@ -1864,6 +1937,8 @@ describe("tenant workspace frontend shell", () => {
     );
 
     expect(await screen.findByText(/Payment history/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/^Checkout expired$/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/The checkout expired before payment completed\. Start a new checkout to try again\./i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Retry payment/i })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Print \/ Save payment summary/i }));
     expect(printSpy).toHaveBeenCalledTimes(1);
