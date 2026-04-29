@@ -213,11 +213,13 @@ describe("ApplicationReviewSummaryPage", () => {
     expect(await screen.findByText("Credibility established")).toBeInTheDocument();
     expect(await screen.findByText("Most credibility signals are available in the current record.")).toBeInTheDocument();
     expect(await screen.findByText("Ready to reuse")).toBeInTheDocument();
-    expect(await screen.findByText("Apply prefill ready")).toBeInTheDocument();
+    expect(await screen.findByText("Tenant-approved reusable application path is available")).toBeInTheDocument();
     expect(await screen.findByText("RentChain application")).toBeInTheDocument();
+    expect(await screen.findByText("Identity and reusable application context are already in scope for this review path.")).toBeInTheDocument();
     expect(await screen.findByText("Identity and application summaries approved")).toBeInTheDocument();
     expect(await screen.findByText("Additional approval may unlock more")).toBeInTheDocument();
     expect(await screen.findByText("No")).toBeInTheDocument();
+    expect(await screen.findByText("Use this as review context only. It does not expand landlord access or permissions.")).toBeInTheDocument();
     expect(await screen.findByText("Reusable across applications")).toBeInTheDocument();
     expect((await screen.findAllByText("Ready for review")).length).toBeGreaterThan(0);
     expect(await screen.findByText("Application information is mostly complete.")).toBeInTheDocument();

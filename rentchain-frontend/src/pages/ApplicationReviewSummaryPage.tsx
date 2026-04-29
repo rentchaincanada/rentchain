@@ -34,6 +34,7 @@ import { buildDepositPaymentFlowState } from "./depositPaymentFlowState";
 import StructuredNotificationList from "./StructuredNotificationList";
 import { buildLandlordStructuredNotificationTriggers } from "./structuredNotificationTriggers";
 import { resolveRequiredPlanLabel } from "@/lib/upgradePrompt";
+import { buildLandlordNetworkReuseCopy } from "../lib/reuse/landlordNetworkReuseCopy";
 
 function money(cents: number | null): string {
   if (cents == null || !Number.isFinite(cents)) return "Not provided";
@@ -261,21 +262,6 @@ function trustActionLabel(
     default:
       return "Review application";
   }
-}
-
-function networkReuseStatusLabel(value: "available" | "limited" | "not_available" | null | undefined) {
-  switch (value) {
-    case "available":
-      return "Reuse available";
-    case "limited":
-      return "Reuse limited";
-    default:
-      return "Reuse not available";
-  }
-}
-
-function networkReuseSourceLabel(value: "share_package" | "apply_with_rentchain" | null | undefined) {
-  return value === "apply_with_rentchain" ? "RentChain application" : "Share package";
 }
 
 function networkReusePathSupportLabel(
@@ -1765,13 +1751,17 @@ function ApplicationReviewSummaryPageBody() {
 
           {summary.networkReuseSummary ? (
             <Card style={{ display: "grid", gap: 8 }}>
+              {(() => {
+                const networkReuseCopy = buildLandlordNetworkReuseCopy(summary.networkReuseSummary);
+                return (
+                  <>
               <div style={{ fontWeight: 700 }}>Network reuse</div>
               <div style={{ fontSize: 13, color: text.subtle }}>
-                {summary.networkReuseSummary.reusePathDescription} It is descriptive only and does not expand landlord permissions or visibility.
+                {networkReuseCopy.description}
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
-                {kv("Status", summary.networkReuseSummary.reusePathLabel)}
-                {kv("Source", networkReuseSourceLabel(summary.networkReuseSummary.source))}
+                {kv("Status", networkReuseCopy.headline)}
+                {kv("Source", networkReuseCopy.sourceLabel)}
                 {kv("Consent required", summary.networkReuseSummary.consentRequired ? "Yes" : "No")}
                 {kv(
                   "Approved reuse support",
@@ -1785,6 +1775,10 @@ function ApplicationReviewSummaryPageBody() {
                   summary.networkReuseSummary.additionalConsentMayUnlock ? "Yes" : "No"
                 )}
               </div>
+              <div style={{ fontSize: 12, color: text.subtle }}>{networkReuseCopy.guardrailCopy}</div>
+                  </>
+                );
+              })()}
             </Card>
           ) : null}
 

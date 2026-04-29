@@ -67,6 +67,13 @@ describe("LandlordInboxPage", () => {
           source: "apply_with_rentchain",
           reuseStatus: "available",
           consentRequired: true,
+          reusePath: "apply_prefill_ready",
+          reusePathLabel: "Apply prefill ready",
+          reusePathDescription:
+            "Tenant-approved identity and reusable application details are already in scope for the RentChain apply path.",
+          identitySummaryApproved: true,
+          applicationSummaryApproved: true,
+          additionalConsentMayUnlock: false,
         },
         source: "review_summary",
       },
@@ -99,7 +106,9 @@ describe("LandlordInboxPage", () => {
     expect(screen.getByText("Application ready for review")).toBeInTheDocument();
     expect(screen.getByText(/Verification level: partial/i)).toBeInTheDocument();
     expect(screen.getByText(/Application completeness: medium/i)).toBeInTheDocument();
-    expect(screen.getByText(/Reusable application available · Source: RentChain application/i)).toBeInTheDocument();
+    expect(screen.getByText(/Tenant-approved reusable application path is available · Source: RentChain application/i)).toBeInTheDocument();
+    expect(screen.getByText(/Identity and reusable application context are already in scope for this review path\./i)).toBeInTheDocument();
+    expect(screen.getByText(/Use this as review context only\. It does not expand landlord access or permissions\./i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Review application" })).toHaveAttribute(
       "href",
       "/applications/app-1/review-summary"
