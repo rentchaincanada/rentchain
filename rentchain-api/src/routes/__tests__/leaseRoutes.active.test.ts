@@ -68,6 +68,41 @@ const { fakeDb, resetFakeDb, seedDoc } = vi.hoisted(() => {
       }),
     },
   };
+  it("reconciles the affected property unit to vacant when ending a lease", async () => {
+    seedDoc("properties", "prop-1", {
+      landlordId: "landlord-1",
+      name: "Harbour View",
+      units: [
+        { id: "unit-1", unitNumber: "101", status: "occupied" },
+        { id: "unit-2", unitNumber: "102", status: "occupied" },
+      ],
+    });
+    seedDoc("leases", "lease-1", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      tenantId: "tenant-1",
+      tenantIds: ["tenant-1"],
+      primaryTenantId: "tenant-1",
+      unitId: "unit-1",
+      unitNumber: "101",
+      monthlyRent: 1850,
+      startDate: "2026-01-01",
+      endDate: null,
+      status: "active",
+      createdAt: 1,
+      updatedAt: 2,
+    });
+
+    const router = (await import("../leaseRoutes")).default;
+    const res = await invokeRouter(router, { method: "POST", url: "/lease-1/end", body: {} });
+
+    expect(res.status).toBe(200);
+    const propertySnap = await fakeDb.collection("properties").doc("prop-1").get();
+    expect(propertySnap.data()?.units).toEqual([
+      expect.objectContaining({ id: "unit-1", unitNumber: "101", status: "vacant" }),
+      expect.objectContaining({ id: "unit-2", unitNumber: "102", status: "occupied" }),
+    ]);
+  });
 });
 
 vi.mock("../../config/firebase", () => ({

@@ -3,12 +3,39 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const setMock = vi.fn(async () => undefined);
 const getTenantDetailBundleMock = vi.fn();
 const getTenantsListMock = vi.fn();
+const leaseDocs = new Map<string, any>();
+const propertyDocs = new Map<string, any>();
 
 vi.mock("../../config/firebase", () => ({
   db: {
-    collection: () => ({
-      doc: () => ({
+    collection: (name: string) => ({
+      doc: (id?: string) => ({
         set: setMock,
+        get: async () => {
+          if (name === "properties" && id) {
+            return {
+              id,
+              exists: propertyDocs.has(id),
+              data: () => propertyDocs.get(id),
+            };
+          }
+          return { id, exists: false, data: () => undefined };
+        },
+      }),
+      where: (field: string, op: string, value: any) => ({
+        get: async () => {
+          if (name !== "leases") return { docs: [] };
+          const docs = Array.from(leaseDocs.entries())
+            .filter(([, data]) => {
+              if (field === "tenantId" && op === "==" ) return data?.tenantId === value;
+              if (field === "tenantIds" && op === "array-contains") {
+                return Array.isArray(data?.tenantIds) && data.tenantIds.includes(value);
+              }
+              return false;
+            })
+            .map(([id, data]) => ({ id, data: () => data }));
+          return { docs };
+        },
       }),
     }),
   },
@@ -92,6 +119,8 @@ describe("tenantsRoutes", () => {
     setMock.mockClear();
     getTenantDetailBundleMock.mockReset();
     getTenantsListMock.mockReset();
+    leaseDocs.clear();
+    propertyDocs.clear();
   });
 
   it("filters hidden tenants from the landlord list route", async () => {
@@ -145,5 +174,38 @@ describe("tenantsRoutes", () => {
       { merge: true }
     );
     expect(result.body?.tenant?.fullName).toBe("Taylor Tenant");
+  });
+
+  it("returns landlord-safe lease labels for tenant lease history", async () => {
+    leaseDocs.set("lease-1", {
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      propertyId: "prop-raw-1",
+      unitNumber: "101",
+      monthlyRent: 1850,
+      startDate: "2026-01-01",
+      endDate: null,
+      status: "active",
+    });
+    propertyDocs.set("prop-raw-1", {
+      name: "Harbour View",
+      addressLine1: "123 Harbour St",
+    });
+
+    const router = (await import("../leaseRoutes")).default;
+    const result = await invokeRouter(router, {
+      method: "GET",
+      url: "/tenant/tenant-1",
+      body: {},
+    });
+
+    expect(result.status).toBe(200);
+    expect(result.body?.leases?.[0]).toEqual(
+      expect.objectContaining({
+        propertyAddress: "123 Harbour St",
+        propertyName: "Harbour View",
+        propertyLabel: "Harbour View",
+      })
+    );
   });
 });

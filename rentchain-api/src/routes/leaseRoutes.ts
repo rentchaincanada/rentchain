@@ -219,6 +219,63 @@ function propertyUnitKeyByNumber(propertyId: string, unitNumber: string) {
   return `${propertyId}::num::${unitNumber}`;
 }
 
+function normalizeUnitReference(value: any): string {
+  return String(value || "").trim().toLowerCase();
+}
+
+async function reconcilePropertyUnitVacancyForLeaseEnd(lease: any) {
+  const propertyId = String(lease?.propertyId || "").trim();
+  const unitId = String(lease?.unitId || "").trim();
+  const unitNumber = String(lease?.unitNumber || lease?.unit || "").trim();
+  if (!propertyId) {
+    const error = new Error("lease_end_missing_property");
+    (error as any).code = "lease_end_missing_property";
+    throw error;
+  }
+
+  const propertyRef = db.collection("properties").doc(propertyId);
+  const propertySnap = await propertyRef.get();
+  if (!propertySnap.exists) {
+    const error = new Error("lease_end_property_not_found");
+    (error as any).code = "lease_end_property_not_found";
+    throw error;
+  }
+
+  const propertyData = (propertySnap.data() || {}) as any;
+  const units = Array.isArray(propertyData?.units) ? propertyData.units : [];
+  if (!units.length) {
+    const error = new Error("lease_end_unit_not_found");
+    (error as any).code = "lease_end_unit_not_found";
+    throw error;
+  }
+
+  const normalizedUnitId = normalizeUnitReference(unitId);
+  const normalizedUnitNumber = normalizeUnitReference(unitNumber);
+  const unitIndex = units.findIndex((unit: any) => {
+    const candidateUnitId = normalizeUnitReference(unit?.id || unit?.unitId);
+    if (normalizedUnitId && candidateUnitId === normalizedUnitId) return true;
+    const candidateUnitNumber = normalizeUnitReference(unit?.unitNumber || unit?.label || unit?.unit);
+    return Boolean(normalizedUnitNumber) && candidateUnitNumber === normalizedUnitNumber;
+  });
+
+  if (unitIndex < 0) {
+    const error = new Error("lease_end_unit_not_found");
+    (error as any).code = "lease_end_unit_not_found";
+    throw error;
+  }
+
+  const nextUnits = units.map((unit: any, index: number) =>
+    index === unitIndex ? { ...unit, status: "vacant" } : unit
+  );
+  await propertyRef.set(
+    {
+      units: nextUnits,
+      updatedAt: new Date().toISOString(),
+    },
+    { merge: true }
+  );
+}
+
 async function loadLeaseDocumentUrlForLease(raw: any): Promise<string | null> {
   const directUrl =
     String(raw?.documentUrl || raw?.approvedDocumentUrl || raw?.documentRef || "").trim() || null;
@@ -1451,10 +1508,58 @@ router.get("/tenant/:tenantId", requireLandlord, async (req: any, res: Response)
       collectionRef.where("tenantIds", "array-contains", tenantId).get().catch(() => ({ docs: [] })),
     ]);
     const firestoreLeases = [...(directSnap.docs || []), ...(arraySnap.docs || [])]
-      .map((doc: any) => normalizeLeaseRow(doc.id, doc.data() as any))
+      .map((doc: any) => {
+        const raw = doc.data() as any;
+        const lease = normalizeLeaseRow(doc.id, raw);
+        return {
+          ...lease,
+          _rawPropertyAddress:
+            [raw?.propertyAddress, raw?.propertyAddressLine1, raw?.propertyAddressLabel]
+              .map((value: any) => String(value || "").trim())
+              .find(Boolean) || null,
+          _rawPropertyName:
+            [raw?.propertyName, raw?.propertyLabel]
+              .map((value: any) => String(value || "").trim())
+              .find(Boolean) || null,
+        };
+      })
       .filter((lease: any) => !landlordId || String(lease.landlordId || "").trim() === landlordId)
       .map(({ landlordId: _landlordId, ...lease }: any) => lease);
-    return res.status(200).json({ ok: true, leases: mergeLeaseRows([...memoryLeases, ...firestoreLeases]) });
+    const propertyIds = Array.from(
+      new Set(
+        firestoreLeases.map((lease: any) => String(lease.propertyId || "").trim()).filter(Boolean)
+      )
+    );
+    const propertyEntries = await Promise.all(
+      propertyIds.map(async (propertyId) => {
+        const snap = await db.collection("properties").doc(propertyId).get().catch(() => null);
+        if (!snap?.exists) return [propertyId, null] as const;
+        const data = snap.data() as any;
+        return [
+          propertyId,
+          {
+            propertyName: String(data?.name || data?.addressLine1 || "").trim() || null,
+            propertyAddress: String(data?.addressLine1 || data?.address || "").trim() || null,
+          },
+        ] as const;
+      })
+    );
+    const propertyMap = new Map<string, { propertyName: string | null; propertyAddress: string | null } | null>(
+      propertyEntries
+    );
+    const displayLeases = firestoreLeases.map((lease: any) => {
+      const propertyData = propertyMap.get(String(lease.propertyId || "").trim()) || null;
+      const propertyName = lease._rawPropertyName || propertyData?.propertyName || null;
+      const propertyAddress = lease._rawPropertyAddress || propertyData?.propertyAddress || null;
+      const { _rawPropertyName, _rawPropertyAddress, ...rest } = lease;
+      return {
+        ...rest,
+        propertyName,
+        propertyAddress,
+        propertyLabel: propertyName,
+      };
+    });
+    return res.status(200).json({ ok: true, leases: mergeLeaseRows([...memoryLeases, ...displayLeases]) });
   } catch {
     return res.status(200).json({ ok: true, leases: memoryLeases });
   }
@@ -1695,6 +1800,20 @@ router.post("/:id/end", async (req: any, res: Response) => {
         },
         { merge: true }
       );
+      try {
+        await reconcilePropertyUnitVacancyForLeaseEnd({ id: String(req.params?.id || "").trim(), ...(leaseResult.lease as any) });
+      } catch (reconcileErr: any) {
+        console.error("[POST /api/leases/:id/end] occupancy reconciliation failed", {
+          leaseId: String(req.params?.id || "").trim(),
+          landlordId,
+          error: reconcileErr?.message || String(reconcileErr),
+          code: reconcileErr?.code || null,
+        });
+        return res.status(409).json({
+          ok: false,
+          error: "lease_end_occupancy_reconciliation_failed",
+        });
+      }
       const refreshed = await getLeaseEntityForLandlord(String(req.params?.id || "").trim(), landlordId);
       if (!refreshed.ok) return res.status(refreshed.status).json({ error: refreshed.error });
       return res.json({ lease: await enrichLeaseRow({ id: String(req.params?.id || "").trim(), ...(refreshed.lease as any) }) });

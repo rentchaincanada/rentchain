@@ -151,6 +151,11 @@ describe("TenantDetailPanel", () => {
 
     expect(await screen.findByText("Current lease ledger")).toBeInTheDocument();
     expect(screen.getByText("Charges and payments from the current lease ledger.")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Tenant activity is recorded separately and does not add charges or payments to the current lease ledger."
+      )
+    ).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Record tenant activity" }).length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: "Verify ledger" })).not.toBeInTheDocument();
     expect(screen.getByText(/Charge · rent/i)).toBeInTheDocument();
