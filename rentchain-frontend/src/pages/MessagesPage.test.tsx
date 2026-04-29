@@ -41,6 +41,7 @@ vi.mock("@/components/layout/ResponsiveMasterDetail", () => ({
 
 describe("MessagesPage", () => {
   beforeEach(() => {
+    vi.useRealTimers();
     mocks.useCapabilitiesMock.mockReturnValue({
       features: { messaging: true },
       loading: false,

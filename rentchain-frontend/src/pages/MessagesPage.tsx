@@ -70,12 +70,21 @@ export default function MessagesPage() {
   const messagingEnabled = features?.messaging !== false;
   const conversationPollTimeoutRef = useRef<number | null>(null);
   const conversationPollFailureRef = useRef(0);
+  const hasLoadedConversationsRef = useRef(false);
+  const hasLoadedThreadRef = useRef(false);
 
-  const loadConversations = useCallback(async (preferredId?: string | null): Promise<boolean> => {
+  const loadConversations = useCallback(async (
+    preferredId?: string | null,
+    options?: { background?: boolean }
+  ): Promise<boolean> => {
+    const background = options?.background === true;
     try {
-      setLoadingList(true);
+      if (!background || !hasLoadedConversationsRef.current) {
+        setLoadingList(true);
+      }
       const data = await fetchLandlordConversations();
       setConversations(data);
+      hasLoadedConversationsRef.current = true;
       if (preferredId) {
         setSelectedId(preferredId);
       } else if (!selectedId && data.length > 0) {
@@ -86,20 +95,32 @@ export default function MessagesPage() {
       setError(err?.message || "Failed to load conversations");
       return false;
     } finally {
-      setLoadingList(false);
+      if (!background || !hasLoadedConversationsRef.current) {
+        setLoadingList(false);
+      } else {
+        setLoadingList(false);
+      }
     }
   }, [selectedId]);
 
-  const loadThread = async (id: string) => {
+  const loadThread = async (id: string, options?: { background?: boolean }) => {
+    const background = options?.background === true;
     try {
-      setLoadingThread(true);
+      if (!background || !hasLoadedThreadRef.current) {
+        setLoadingThread(true);
+      }
       const res = await fetchLandlordConversationMessages(id);
       setMessages(res.messages || []);
+      hasLoadedThreadRef.current = true;
       await markLandlordConversationRead(id);
     } catch (err: any) {
       setError(err?.message || "Failed to load messages");
     } finally {
-      setLoadingThread(false);
+      if (!background || !hasLoadedThreadRef.current) {
+        setLoadingThread(false);
+      } else {
+        setLoadingThread(false);
+      }
     }
   };
 
@@ -136,7 +157,7 @@ export default function MessagesPage() {
     const tick = async () => {
       if (cancelled) return;
       try {
-        const ok = await loadConversations(selectedId);
+        const ok = await loadConversations(selectedId, { background: true });
         conversationPollFailureRef.current = ok
           ? 0
           : Math.min(conversationPollFailureRef.current + 1, 6);
@@ -160,8 +181,9 @@ export default function MessagesPage() {
   useEffect(() => {
     if (!selectedId) return;
     if (!messagingEnabled) return;
+    hasLoadedThreadRef.current = false;
     void loadThread(selectedId);
-    const t = window.setInterval(() => void loadThread(selectedId), POLL_THREAD_MS);
+    const t = window.setInterval(() => void loadThread(selectedId, { background: true }), POLL_THREAD_MS);
     return () => window.clearInterval(t);
   }, [selectedId, messagingEnabled]);
 

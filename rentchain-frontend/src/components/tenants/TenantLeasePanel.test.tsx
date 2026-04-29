@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TenantLeasePanel } from "./TenantLeasePanel";
 
@@ -44,6 +44,8 @@ describe("TenantLeasePanel", () => {
         {
           id: "lease-1",
           propertyId: "prop-1",
+          propertyAddress: "123 Harbour St",
+          propertyName: "Harbour View",
           unitNumber: "101",
           monthlyRent: 1800,
           startDate: "2026-01-01",
@@ -64,5 +66,66 @@ describe("TenantLeasePanel", () => {
     expect(screen.getByText("We couldn’t load upcoming automation tasks for this lease right now.")).toBeInTheDocument();
     expect(screen.getByText("You can still manage the current lease and ledger normally.")).toBeInTheDocument();
     await waitFor(() => expect(mocks.getLeaseAutomationTasks).toHaveBeenCalledWith("lease-1"));
+  });
+
+  it("requires explicit confirmation before ending a lease", async () => {
+    mocks.getLeaseAutomationTasks.mockResolvedValue({ tasks: [] });
+
+    render(<TenantLeasePanel tenantId="tenant-1" />);
+
+    expect(await screen.findByText("Property: 123 Harbour St - Unit 101")).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button", { name: "End lease" })[0]);
+
+    expect(mocks.endLease).not.toHaveBeenCalled();
+    expect(screen.getByText("End this lease?")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "This will mark the current lease as ended and update the unit’s occupancy status. This action should only be used when the tenant is no longer occupying the unit."
+      )
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByText("End this lease?")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole("button", { name: "End lease" })[0]);
+    fireEvent.click(screen.getByRole("button", { name: "Confirm end lease" }));
+
+    await waitFor(() => expect(mocks.endLease).toHaveBeenCalledWith("lease-1", expect.any(String)));
+  });
+
+  it("does not render raw property ids in lease labels", async () => {
+    mocks.getLeaseAutomationTasks.mockResolvedValue({ tasks: [] });
+    mocks.getLeasesForTenant.mockResolvedValue({
+      leases: [
+        {
+          id: "lease-1",
+          propertyId: "prop-raw-1",
+          propertyName: "Harbour View",
+          unitNumber: "101",
+          monthlyRent: 1800,
+          startDate: "2026-01-01",
+          endDate: null,
+          status: "active",
+          automationEnabled: true,
+        },
+        {
+          id: "lease-2",
+          propertyId: "prop-raw-2",
+          propertyLabel: "Property",
+          unitNumber: "202",
+          monthlyRent: 1600,
+          startDate: "2025-01-01",
+          endDate: "2025-12-31",
+          status: "ended",
+        },
+      ],
+    });
+
+    render(<TenantLeasePanel tenantId="tenant-1" />);
+
+    expect(await screen.findByText("Property: Harbour View - Unit 101")).toBeInTheDocument();
+    expect(screen.getByText("Property - Unit 202")).toBeInTheDocument();
+    expect(screen.queryByText(/prop-raw-1/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/prop-raw-2/i)).not.toBeInTheDocument();
   });
 });

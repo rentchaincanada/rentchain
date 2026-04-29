@@ -28,6 +28,9 @@ export interface Lease {
   tenantIds?: string[];
   primaryTenantId?: string | null;
   propertyId: string;
+  propertyAddress?: string | null;
+  propertyName?: string | null;
+  propertyLabel?: string | null;
   unitId?: string | null;
   unitNumber: string;
   monthlyRent: number;

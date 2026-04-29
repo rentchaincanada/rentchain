@@ -110,6 +110,7 @@ export const TenantLeasePanel: React.FC<TenantLeasePanelProps> = ({ tenantId }) 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [endingLeaseId, setEndingLeaseId] = useState<string | null>(null);
+  const [confirmingLeaseId, setConfirmingLeaseId] = useState<string | null>(null);
   const [automationSaving, setAutomationSaving] = useState(false);
   const [tasksLoading, setTasksLoading] = useState(false);
   const [taskError, setTaskError] = useState<TaskErrorState | null>(null);
@@ -213,11 +214,22 @@ export const TenantLeasePanel: React.FC<TenantLeasePanelProps> = ({ tenantId }) 
       maximumFractionDigits: 0,
     })}`;
 
+  const formatLeaseLabel = (lease: Lease) => {
+    const propertyLabel =
+      String(lease.propertyAddress || "").trim() ||
+      String(lease.propertyName || "").trim() ||
+      String(lease.propertyLabel || "").trim() ||
+      "Property";
+    const unitLabel = String(lease.unitNumber || "").trim();
+    return unitLabel ? `${propertyLabel} - Unit ${unitLabel}` : propertyLabel;
+  };
+
   const handleEndLease = async (leaseId: string) => {
     try {
       setEndingLeaseId(leaseId);
       await endLease(leaseId, new Date().toISOString());
       await loadLeases();
+      setConfirmingLeaseId(null);
     } catch (err) {
       console.error("[TenantLeasePanel] Failed to end lease", err);
     } finally {
@@ -341,7 +353,7 @@ export const TenantLeasePanel: React.FC<TenantLeasePanelProps> = ({ tenantId }) 
               Current Lease
             </div>
             <div style={{ color: "#0f172a", fontWeight: 700 }}>
-              Property: {activeLease.propertyId} - Unit {activeLease.unitNumber}
+              Property: {formatLeaseLabel(activeLease)}
             </div>
             <div style={{ color: "#334155", fontSize: 13, marginTop: 4, fontWeight: 600 }}>
               Rent: {formatCurrency(activeLease.monthlyRent)} / month
@@ -456,24 +468,85 @@ export const TenantLeasePanel: React.FC<TenantLeasePanelProps> = ({ tenantId }) 
                 </div>
               ) : null}
             </div>
-            <button
-              type="button"
-              onClick={() => handleEndLease(activeLease.id)}
-              disabled={endingLeaseId === activeLease.id}
-              style={{
-                marginTop: 8,
-                padding: "6px 10px",
-                borderRadius: 10,
-                border: "1px solid rgba(148,163,184,0.4)",
-                background: "transparent",
-                color: "#e5e7eb",
-                cursor: endingLeaseId === activeLease.id ? "default" : "pointer",
-                opacity: endingLeaseId === activeLease.id ? 0.7 : 1,
-                fontSize: 12,
-              }}
-            >
-              {endingLeaseId === activeLease.id ? "Ending..." : "End lease"}
-            </button>
+            <div style={{ marginTop: 8, display: "grid", gap: 8 }}>
+              {confirmingLeaseId === activeLease.id ? (
+                <div
+                  style={{
+                    borderRadius: 12,
+                    border: "1px solid rgba(185,28,28,0.28)",
+                    background: "rgba(254,242,242,0.98)",
+                    padding: 12,
+                    display: "grid",
+                    gap: 8,
+                  }}
+                >
+                  <div style={{ color: "#7f1d1d", fontWeight: 800 }}>End this lease?</div>
+                  <div style={{ color: "#991b1b", fontSize: 13, lineHeight: 1.5 }}>
+                    This will mark the current lease as ended and update the unit’s occupancy
+                    status. This action should only be used when the tenant is no longer
+                    occupying the unit.
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmingLeaseId(null)}
+                      disabled={endingLeaseId === activeLease.id}
+                      style={{
+                        padding: "6px 10px",
+                        borderRadius: 10,
+                        border: "1px solid rgba(148,163,184,0.35)",
+                        background: "#fff",
+                        color: "#334155",
+                        fontWeight: 700,
+                        cursor: endingLeaseId === activeLease.id ? "default" : "pointer",
+                        opacity: endingLeaseId === activeLease.id ? 0.7 : 1,
+                        fontSize: 12,
+                      }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleEndLease(activeLease.id)}
+                      disabled={endingLeaseId === activeLease.id}
+                      style={{
+                        padding: "6px 10px",
+                        borderRadius: 10,
+                        border: "1px solid rgba(153,27,27,0.6)",
+                        background: "#b91c1c",
+                        color: "#fff",
+                        fontWeight: 800,
+                        cursor: endingLeaseId === activeLease.id ? "default" : "pointer",
+                        opacity: endingLeaseId === activeLease.id ? 0.7 : 1,
+                        fontSize: 12,
+                      }}
+                    >
+                      {endingLeaseId === activeLease.id ? "Ending..." : "Confirm end lease"}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                <button
+                  type="button"
+                  onClick={() => setConfirmingLeaseId(activeLease.id)}
+                  disabled={endingLeaseId === activeLease.id}
+                  style={{
+                    padding: "6px 10px",
+                    borderRadius: 10,
+                    border: "1px solid rgba(185,28,28,0.45)",
+                    background: "rgba(254,226,226,0.98)",
+                    color: "#991b1b",
+                    cursor: endingLeaseId === activeLease.id ? "default" : "pointer",
+                    opacity: endingLeaseId === activeLease.id ? 0.7 : 1,
+                    fontSize: 12,
+                    fontWeight: 800,
+                  }}
+                >
+                  End lease
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
@@ -506,7 +579,7 @@ export const TenantLeasePanel: React.FC<TenantLeasePanelProps> = ({ tenantId }) 
                 >
                   <div>
                     <div style={{ fontWeight: 600 }}>
-                      {lease.propertyId} - Unit {lease.unitNumber}
+                      {formatLeaseLabel(lease)}
                     </div>
                     <div style={{ color: "#475569", fontSize: 12 }}>
                       {formatDate(lease.startDate)} → {formatDate(lease.endDate)}

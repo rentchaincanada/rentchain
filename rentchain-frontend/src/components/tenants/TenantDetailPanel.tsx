@@ -691,6 +691,9 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityR
             <span style={{ color: text.muted, fontSize: "0.75rem", fontWeight: 400 }}>
               Charges and payments from the current lease ledger.
             </span>
+            <span style={{ color: text.muted, fontSize: "0.75rem", fontWeight: 400 }}>
+              Tenant activity is recorded separately and does not add charges or payments to the current lease ledger.
+            </span>
             {ledgerMode === "tenant" ? (
               <span style={{ color: text.muted, fontSize: "0.75rem", fontWeight: 400 }}>
                 No current lease is linked, so this view is showing the existing tenant-level ledger source.
