@@ -59,6 +59,7 @@ import {
   revokeTenantSharePackage,
 } from "../services/tenantPortal/tenantSharePackageService";
 import { recordSystemObservabilityEvent } from "../services/observability/recordSystemObservabilityEvent";
+import { buildLeasePaymentProjection } from "../services/projections/buildLeasePaymentProjection";
 
 const router = Router();
 router.use(authenticateJwt);
@@ -2250,12 +2251,9 @@ async function loadTenantWorkspaceData(context: Awaited<ReturnType<typeof resolv
 
   const lease = leaseDoc ? projectTenantLease(leaseDoc.id, leaseDoc.data) : null;
   const rentPaymentSummary = lease
-    ? await getRentPaymentSummaryForLease({
-        leaseId: lease.leaseId,
-        paymentRailEnabled: leaseDoc?.data?.paymentRailEnabled === true,
-        paymentRailEnabledAt: leaseDoc?.data?.paymentRailEnabledAt || null,
-        paymentRailProcessor: leaseDoc?.data?.paymentRailProcessor || null,
-        blockedReason: deriveRentPaymentEligibility({
+    ? (
+        await buildLeasePaymentProjection({
+          rawLease: leaseDoc?.data || {},
           lease: {
             id: lease.leaseId,
             landlordId: asString(leaseDoc?.data?.landlordId),
@@ -2266,12 +2264,14 @@ async function loadTenantWorkspaceData(context: Awaited<ReturnType<typeof resolv
             unitId: asString(leaseDoc?.data?.unitId),
             unitNumber: asString(leaseDoc?.data?.unitNumber),
             monthlyRent: lease.monthlyRent,
+            startDate: lease.startDate,
+            endDate: lease.endDate,
             status: lease.status,
           },
-          paymentReadiness: lease.paymentReadiness || null,
-          stripeConfigured: isStripeConfigured(),
-        }).blockedReason,
-      })
+          leaseId: lease.leaseId,
+          documentUrl: lease.documentUrl,
+        })
+      ).rentPaymentSummary
     : null;
 
   return {
@@ -4014,29 +4014,27 @@ router.get("/leases/:leaseId/payments", requireTenantWorkspaceIdentity, async (r
     }
     const leaseData = (leaseSnap.data() as any) || {};
     const projectedLease = projectTenantLease(leaseId, leaseData);
-    const eligibility = deriveRentPaymentEligibility({
-      lease: {
-        id: leaseId,
-        landlordId: asString(leaseData?.landlordId),
-        tenantId: asString(leaseData?.tenantId),
-        tenantIds: Array.isArray(leaseData?.tenantIds) ? leaseData.tenantIds : [],
-        primaryTenantId: asString(leaseData?.primaryTenantId),
-        propertyId: asString(leaseData?.propertyId),
-        unitId: asString(leaseData?.unitId),
-        unitNumber: asString(leaseData?.unitNumber),
-        monthlyRent: projectedLease.monthlyRent,
-        status: projectedLease.status,
-      },
-      paymentReadiness: projectedLease.paymentReadiness || null,
-      stripeConfigured: isStripeConfigured(),
-    });
-    const data = await getRentPaymentSummaryForLease({
-      leaseId,
-      paymentRailEnabled: leaseData?.paymentRailEnabled === true,
-      paymentRailEnabledAt: leaseData?.paymentRailEnabledAt || null,
-      paymentRailProcessor: leaseData?.paymentRailProcessor || null,
-      blockedReason: eligibility.blockedReason,
-    });
+    const data = (
+      await buildLeasePaymentProjection({
+        rawLease: leaseData,
+        lease: {
+          id: leaseId,
+          landlordId: asString(leaseData?.landlordId),
+          tenantId: asString(leaseData?.tenantId),
+          tenantIds: Array.isArray(leaseData?.tenantIds) ? leaseData.tenantIds : [],
+          primaryTenantId: asString(leaseData?.primaryTenantId),
+          propertyId: asString(leaseData?.propertyId),
+          unitId: asString(leaseData?.unitId),
+          unitNumber: asString(leaseData?.unitNumber),
+          monthlyRent: projectedLease.monthlyRent,
+          startDate: projectedLease.startDate,
+          endDate: projectedLease.endDate,
+          status: projectedLease.status,
+        },
+        leaseId,
+        documentUrl: projectedLease.documentUrl,
+      })
+    ).rentPaymentSummary;
     return res.json({ ok: true, data });
   } catch (err: any) {
     console.error("[tenant/leases/:leaseId/payments] failed", {
