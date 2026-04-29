@@ -248,6 +248,11 @@ describe("leaseRoutes GET /active", () => {
             },
           },
         }),
+        leaseLifecycleSummary: expect.objectContaining({
+          lifecycleStatus: "active",
+          lifecycleLabel: "Active",
+          requiredNextAction: "none",
+        }),
       })
     );
     expect(res.body?.leases?.[0]?.tenantSignature?.drawnDataUrl).toBeUndefined();

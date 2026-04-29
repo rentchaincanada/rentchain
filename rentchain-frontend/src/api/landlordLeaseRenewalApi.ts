@@ -1,4 +1,5 @@
 import { apiFetch } from "./apiFetch";
+import type { LeaseLifecycleSummary } from "./leasesApi";
 
 export type LandlordLeaseRenewalOperatorInput = {
   rentChangeMode: "no_change" | "increase" | "decrease" | "undecided" | null;
@@ -33,6 +34,7 @@ export type LandlordLeaseRenewalLease = {
   renewalNewLeaseStartDate: string | null;
   renewalNewLeaseEndDate: string | null;
   noticeBucket?: "expiring" | "pending-response" | "no-response";
+  leaseLifecycleSummary?: LeaseLifecycleSummary;
 };
 
 export function fetchExpiringLeaseRenewals(params?: {

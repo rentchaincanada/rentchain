@@ -36,6 +36,8 @@ import {
   enableRentCollectionForLease,
 } from "../services/rentPayments/rentPaymentService";
 import { buildLeasePaymentProjection } from "../services/projections/buildLeasePaymentProjection";
+import { computeNoResponseState } from "../services/leaseNoticeWorkflowService";
+import { deriveLeaseLifecycleSummary } from "../services/leaseLifecycle/deriveLeaseLifecycleSummary";
 
 const router = Router();
 const LEDGER_COLLECTION = "ledgerEntries";
@@ -348,9 +350,42 @@ async function listLandlordLeaseRows(landlordId: string, opts?: { archived?: boo
     if (archivedFlag === false) return !isArchived && isCurrentLeaseStatus(row?.status);
     return true;
   });
+  const rawLeaseById = new Map<string, any>(filtered.map((row: any) => [String(row?.id || "").trim(), row]));
 
   const leases = await Promise.all(filtered.map((row: any) => enrichLeaseRow(row)));
-  return mergeLeaseRows(leases);
+  const mergedLeases = mergeLeaseRows(leases);
+  const leaseIds = mergedLeases.map((lease: any) => String(lease?.id || "").trim()).filter(Boolean);
+  const latestNoticeByLeaseId = new Map<string, any>();
+  if (leaseIds.length > 0) {
+    const noticeSnap = await db.collection("leaseNotices").where("landlordId", "==", landlordId).limit(400).get().catch(() => null);
+    const notices = (noticeSnap?.docs || [])
+      .map((doc: any) => ({ id: doc.id, ...(doc.data() as any) }))
+      .filter((notice: any) => leaseIds.includes(String(notice?.leaseId || "").trim()))
+      .sort((a: any, b: any) => Number(b.updatedAt || b.createdAt || 0) - Number(a.updatedAt || a.createdAt || 0));
+    for (const notice of notices) {
+      const leaseId = String(notice?.leaseId || "").trim();
+      if (!leaseId || latestNoticeByLeaseId.has(leaseId)) continue;
+      latestNoticeByLeaseId.set(leaseId, notice);
+    }
+  }
+
+  return mergedLeases.map((lease: any) => {
+    const rawLease = rawLeaseById.get(String(lease?.id || "").trim()) || null;
+    const latestNotice = latestNoticeByLeaseId.get(String(lease?.id || "").trim()) || null;
+    return {
+      ...lease,
+      leaseLifecycleSummary: deriveLeaseLifecycleSummary({
+        lease: {
+          status: lease?.status,
+          leaseStartDate: lease?.startDate,
+          leaseEndDate: lease?.endDate,
+          nextNoticeDueAt: rawLease?.nextNoticeDueAt,
+        },
+        latestNotice,
+        noResponse: latestNotice ? computeNoResponseState(latestNotice) : false,
+      }),
+    };
+  });
 }
 
 async function listLeaseNotes(leaseId: string, landlordId: string) {

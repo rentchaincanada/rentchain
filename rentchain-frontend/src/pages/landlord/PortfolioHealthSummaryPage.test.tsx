@@ -225,6 +225,15 @@ describe("PortfolioHealthSummaryPage", () => {
           renewalNewTermType: null,
           renewalNewLeaseStartDate: null,
           renewalNewLeaseEndDate: null,
+          leaseLifecycleSummary: {
+            lifecycleStatus: "expiring_soon",
+            lifecycleLabel: "Expiring soon",
+            lifecycleDescription: "This lease is approaching its notice timing and should be reviewed for renewal follow-through.",
+            requiredNextAction: "prepare_renewal_notice",
+            renewalOutcome: "not_started",
+            daysUntilExpiry: 63,
+            history: [{ type: "lease_started", label: "Lease started", occurredAt: "2025-07-01T00:00:00.000Z" }],
+          },
         },
       ],
       data: [],
@@ -240,6 +249,10 @@ describe("PortfolioHealthSummaryPage", () => {
     expect(await screen.findByText(/Expiring soon leases/i)).toBeInTheDocument();
     expect(screen.getByText(/Showing leases approaching notice timing/i)).toBeInTheDocument();
     expect(screen.getByText(/Taylor Tenant/i)).toBeInTheDocument();
+    expect(screen.getByText(/Lifecycle:/i)).toBeInTheDocument();
+    expect(screen.getByText(/Outcome:/i)).toBeInTheDocument();
+    expect(screen.getByText(/Next step:/i)).toBeInTheDocument();
+    expect(screen.getByText(/History:/i)).toBeInTheDocument();
     expect(fetchExpiringLeaseRenewals).toHaveBeenCalledWith({
       propertyId: "prop-2",
       status: "expiring",
