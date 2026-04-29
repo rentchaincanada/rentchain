@@ -5,6 +5,7 @@ import { FRONTEND_URL } from "../../config/screeningConfig";
 import { getStripeClient } from "../stripeService";
 import { writeCanonicalEvent } from "../../lib/events/buildEvent";
 import type { PaymentReadiness } from "../paymentReadiness/derivePaymentReadiness";
+import { recordSystemObservabilityEvent } from "../observability/recordSystemObservabilityEvent";
 
 export const RENT_PAYMENTS_COLLECTION = "rentPayments";
 
@@ -290,6 +291,97 @@ async function writeRentPaymentEvent(params: {
   });
 }
 
+async function recordRentPaymentObservabilityEvent(params: {
+  rentPaymentId: string;
+  status: RentPaymentStatus;
+  occurredAt?: string | null;
+  actorType: "tenant" | "landlord" | "admin" | "system";
+}) {
+  if (params.status === "payment_pending") return;
+
+  const titles: Record<RentPaymentStatus, { eventType: any; severity: "info" | "warning"; status?: "resolved" | "open"; title: string; description: string; actionKey: string; }> = {
+    setup_required: {
+      eventType: "workflow_blocked",
+      severity: "warning",
+      status: "open",
+      title: "Rent payment setup required",
+      description: "A rent payment workflow remains blocked until payment setup is completed.",
+      actionKey: "rent_payment_setup_required",
+    },
+    checkout_created: {
+      eventType: "workflow_started",
+      severity: "info",
+      status: "open",
+      title: "Rent payment checkout created",
+      description: "A rent payment checkout was created and is awaiting processor completion.",
+      actionKey: "rent_payment_checkout_created",
+    },
+    payment_pending: {
+      eventType: "workflow_started",
+      severity: "info",
+      status: "open",
+      title: "Rent payment pending",
+      description: "A rent payment is waiting for processor confirmation.",
+      actionKey: "rent_payment_pending",
+    },
+    paid: {
+      eventType: "workflow_completed",
+      severity: "info",
+      status: "resolved",
+      title: "Rent payment completed",
+      description: "A rent payment was confirmed successfully.",
+      actionKey: "rent_payment_paid",
+    },
+    failed: {
+      eventType: "action_failed",
+      severity: "warning",
+      status: "open",
+      title: "Rent payment failed",
+      description: "A rent payment failed after checkout creation.",
+      actionKey: "rent_payment_failed",
+    },
+    canceled: {
+      eventType: "workflow_blocked",
+      severity: "warning",
+      status: "open",
+      title: "Rent payment checkout canceled",
+      description: "A rent payment checkout was canceled before completion.",
+      actionKey: "rent_payment_canceled",
+    },
+    expired: {
+      eventType: "workflow_blocked",
+      severity: "warning",
+      status: "open",
+      title: "Rent payment checkout expired",
+      description: "A rent payment checkout expired before completion.",
+      actionKey: "rent_payment_expired",
+    },
+  };
+
+  const definition = titles[params.status];
+  await recordSystemObservabilityEvent(
+    {
+      eventType: definition.eventType,
+      workflow: "payment",
+      severity: definition.severity,
+      actorType: params.actorType,
+      status: definition.status,
+      title: definition.title,
+      description: definition.description,
+      safeContext: {
+        actionKey: definition.actionKey,
+        resourceType: "rent_payment",
+        resourceId: params.rentPaymentId,
+      },
+      occurredAt: params.occurredAt || new Date().toISOString(),
+      source: {
+        kind: "system_observability",
+      },
+    },
+    { failSoft: true }
+  );
+}
+
 export function deriveRentPaymentEligibility(input: {
   lease: LeaseLike;
   paymentReadiness: PaymentReadiness | null | undefined;
@@ -474,6 +566,12 @@ export async function createRentPaymentCheckout(input: CreateRentPaymentCheckout
       role: "tenant",
     },
   });
+  await recordRentPaymentObservabilityEvent({
+    rentPaymentId,
+    status: "checkout_created",
+    occurredAt: createdAt,
+    actorType: "tenant",
+  });
 
   return {
     ok: true as const,
@@ -519,6 +617,12 @@ export async function updateRentPaymentFromWebhook(input: UpdateRentPaymentFromW
       id: null,
       role: "system",
     },
+  });
+  await recordRentPaymentObservabilityEvent({
+    rentPaymentId: current.id,
+    status: input.nextStatus,
+    occurredAt: input.paidAt || updatedAt,
+    actorType: "system",
   });
 
   return {

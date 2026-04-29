@@ -11,6 +11,7 @@ import { writeScreeningEvent } from "../services/screening/screeningEvents";
 import { recordScreeningPaymentFailed } from "../services/screeningPaymentTransactionService";
 import { writeCanonicalEvent } from "../lib/events/buildEvent";
 import { buildScreeningMonetizationPatch } from "../services/screening/screeningMonetizationService";
+import { recordSystemObservabilityEvent } from "../services/observability/recordSystemObservabilityEvent";
 import {
   extractRentPaymentMetadata,
   updateRentPaymentFromWebhook,
@@ -172,6 +173,26 @@ async function handleScreeningPaidFromSession(params: {
   const { session, eventType, eventId, paidAt } = params;
   const applicationId = session.metadata?.applicationId || session.metadata?.rentalApplicationId;
   if (!applicationId) {
+    await recordSystemObservabilityEvent(
+      {
+        eventType: "integration_warning",
+        workflow: "screening",
+        severity: "warning",
+        actorType: "system",
+        status: "open",
+        title: "Screening webhook missing application context",
+        description: "A screening payment webhook arrived without application metadata and could not be applied.",
+        safeContext: {
+          route: "/api/stripe/webhook",
+          actionKey: "screening_webhook_missing_application",
+          resourceType: "stripe_event",
+          resourceId: eventId,
+        },
+        idempotencyKey: `screening:webhook_missing_application:${eventId}`,
+        occurredAt: paidAt,
+      },
+      { failSoft: true }
+    );
     console.log("[stripe_webhook]", {
       route: "stripe_webhook",
       eventType,
@@ -416,6 +437,26 @@ async function handleScreeningPaymentFailure(params: {
   });
 
   if (result.ok && !result.alreadyProcessed && !result.alreadyFinalized) {
+    await recordSystemObservabilityEvent(
+      {
+        eventType: "action_failed",
+        workflow: "screening",
+        severity: "warning",
+        actorType: "system",
+        status: "open",
+        title: "Screening payment failed",
+        description: "A screening payment failed and the screening workflow is blocked until payment succeeds.",
+        safeContext: {
+          route: "/api/stripe/webhook",
+          actionKey: "screening_payment_failed",
+          resourceType: "screening_order",
+          resourceId: result.orderIdResolved || orderRef.id,
+        },
+        idempotencyKey: `screening:payment_failed:${eventId}`,
+        occurredAt: params.occurredAt,
+      },
+      { failSoft: true }
+    );
     try {
       const orderSnap = await db.collection("screeningOrders").doc(result.orderIdResolved || orderRef.id).get();
       const order = orderSnap.data() as any;
@@ -712,6 +753,26 @@ export const stripeWebhookHandler = async (req: StripeWebhookRequest, res: Respo
           applicationId: resolvedApplicationId,
           error: applyResult.error,
         });
+      } else {
+        await recordSystemObservabilityEvent(
+          {
+            eventType: "workflow_completed",
+            workflow: "screening",
+            severity: "info",
+            actorType: "system",
+            status: "resolved",
+            title: "Screening completed",
+            description: "A screening workflow completed successfully after payment processing.",
+            safeContext: {
+              route: "/api/stripe/webhook",
+              actionKey: "screening_completed",
+              resourceType: "screening_order",
+              resourceId: resolvedOrderId,
+            },
+            occurredAt: typeof event.created === "number" ? new Date(event.created * 1000).toISOString() : new Date().toISOString(),
+          },
+          { failSoft: true }
+        );
       }
     } catch (err: any) {
       console.error("[stripe-webhook-orders] handler failed", err?.stack || err);
