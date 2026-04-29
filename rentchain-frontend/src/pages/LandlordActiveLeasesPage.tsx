@@ -11,6 +11,11 @@ import {
   type LandlordActiveLease,
   type LeaseReconciliationCandidate,
 } from "@/api/leasesApi";
+import {
+  describeRentPaymentGuidance,
+  formatPaymentExperienceStatus,
+  prettyRentPaymentStatus,
+} from "@/lib/payments/paymentStatusGuidance";
 import { isTargetedHiddenLeaseId } from "@/lib/testDataVisibilityTargets";
 
 function formatCurrency(value: number | null | undefined) {
@@ -148,27 +153,6 @@ function paymentReadinessChecklist(lease: LandlordActiveLease) {
   if (!readiness.rentTerms.tenantLinked) missing.push("Tenant or unit linkage missing");
   if (missing.length === 0) return readiness.readinessLabel;
   return missing.join(" · ");
-}
-
-function prettyRentPaymentStatus(status: string | null | undefined) {
-  const normalized = String(status || "").trim().toLowerCase();
-  if (!normalized) return "No payment started";
-  return normalized.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
-}
-
-function formatPaymentExperienceStatus(value: "pending" | "paid" | "failed" | "canceled" | null | undefined) {
-  switch (value) {
-    case "pending":
-      return "Pending";
-    case "paid":
-      return "Paid";
-    case "failed":
-      return "Failed";
-    case "canceled":
-      return "Canceled";
-    default:
-      return "No payment yet";
-  }
 }
 
 export default function LandlordActiveLeasesPage() {
@@ -677,16 +661,31 @@ export default function LandlordActiveLeasesPage() {
                       ) : null}
                       {lease.rentPaymentSummary ? (
                         <div style={{ display: "grid", gap: 4, marginTop: 6 }}>
+                          {(() => {
+                            const latestPaymentStatus =
+                              lease.rentPaymentSummary?.latestPayment?.status ||
+                              lease.rentPaymentSummary?.paymentExperience?.history?.[0]?.status ||
+                              null;
+                            const paymentStatusLabel = formatPaymentExperienceStatus({
+                              latestPaymentStatus,
+                              latestStatus: lease.rentPaymentSummary.paymentExperience?.latestStatus || null,
+                            });
+                            const paymentGuidance = describeRentPaymentGuidance({
+                              audience: "landlord",
+                              latestPaymentStatus,
+                              latestStatus: lease.rentPaymentSummary.paymentExperience?.latestStatus || null,
+                              blockedReason: lease.rentPaymentSummary.paymentRail.blockedReason || null,
+                              paymentRailEnabled: lease.rentPaymentSummary.paymentRail.enabled,
+                            });
+                            return (
+                              <>
                           <div style={{ fontSize: 12, fontWeight: 700, color: "#0f172a" }}>
                             {lease.rentPaymentSummary.paymentRail.enabled ? "Rent collection enabled" : "Rent collection not enabled"}
                           </div>
                           <div style={{ color: "#64748b", fontSize: 12 }}>
-                            {lease.rentPaymentSummary.paymentExperience?.latestStatus
-                              ? formatPaymentExperienceStatus(lease.rentPaymentSummary.paymentExperience.latestStatus)
-                              : lease.rentPaymentSummary.paymentRail.blockedReason
-                              ? lease.rentPaymentSummary.paymentRail.blockedReason.replace(/_/g, " ")
-                              : "No payment yet"}
+                            {paymentStatusLabel}
                           </div>
+                          <div style={{ color: "#64748b", fontSize: 12 }}>{paymentGuidance}</div>
                           {(lease.rentPaymentSummary.paymentExperience?.history || []).length ? (
                             <div style={{ color: "#64748b", fontSize: 12 }}>
                               {lease.rentPaymentSummary.paymentExperience.history
@@ -695,6 +694,9 @@ export default function LandlordActiveLeasesPage() {
                                 .join(" → ")}
                             </div>
                           ) : null}
+                              </>
+                            );
+                          })()}
                         </div>
                       ) : null}
                     </td>

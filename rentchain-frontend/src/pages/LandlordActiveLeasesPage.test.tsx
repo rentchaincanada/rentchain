@@ -248,10 +248,64 @@ describe("LandlordActiveLeasesPage", () => {
     );
 
     expect(await screen.findByText(/Rent collection enabled/i)).toBeInTheDocument();
-    expect(screen.getByText(/^Pending$/i)).toBeInTheDocument();
-    expect(screen.getByText(/Payment Pending → Failed/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Payment confirmation pending$/i)).toBeInTheDocument();
+    expect(screen.getByText(/Awaiting processor confirmation\./i)).toBeInTheDocument();
+    expect(screen.getByText(/Payment pending → Payment failed/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Retry payment/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Print \/ Save payment summary/i })).not.toBeInTheDocument();
+  });
+
+  it("maps landlord payment blockers without exposing raw codes", async () => {
+    mocks.getActiveLeasesForLandlord.mockResolvedValue({
+      leases: [
+        {
+          id: "lease-1",
+          propertyId: "prop-1",
+          propertyName: "Harbour View",
+          unitNumber: "101",
+          monthlyRent: 1850,
+          startDate: "2026-01-01",
+          endDate: "2026-12-31",
+          status: "active",
+          tenantName: "Jane Tenant",
+          tenantEmail: "jane@example.com",
+          rentPaymentSummary: {
+            paymentRail: {
+              enabled: false,
+              enabledAt: null,
+              processor: null,
+              blockedReason: "payment_already_pending",
+            },
+            latestPayment: null,
+            paymentExperience: {
+              history: [],
+              latestStatus: null,
+              retryAvailable: false,
+              receiptSummary: {
+                available: false,
+                label: "No payment summary available yet",
+                amountCents: null,
+                paidAt: null,
+                leaseReference: null,
+              },
+            },
+          },
+        },
+      ],
+    });
+
+    render(
+      <MemoryRouter>
+        <LandlordActiveLeasesPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Rent collection not enabled/i)).toBeInTheDocument();
+    expect(screen.getByText(/^No payment started$/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/A checkout is already open for this lease\. Finish the existing checkout or wait for its status to update\./i)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/payment already pending/i)).not.toBeInTheDocument();
   });
 
   it("does not render a lease document action when no document URL is available", async () => {

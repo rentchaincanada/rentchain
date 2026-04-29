@@ -16,43 +16,12 @@ import {
   formatMoney,
   prettyStatus,
 } from "./TenantWorkspaceShared";
-
-function prettyRentPaymentStatus(
-  value: "setup_required" | "checkout_created" | "payment_pending" | "paid" | "failed" | "canceled" | "expired" | null | undefined
-) {
-  switch (value) {
-    case "checkout_created":
-      return "Checkout created";
-    case "payment_pending":
-      return "Payment pending";
-    case "paid":
-      return "Paid";
-    case "failed":
-      return "Failed";
-    case "canceled":
-      return "Canceled";
-    case "expired":
-      return "Expired";
-    case "setup_required":
-    default:
-      return "Setup required";
-  }
-}
-
-function formatPaymentExperienceStatus(value: "pending" | "paid" | "failed" | "canceled" | null | undefined) {
-  switch (value) {
-    case "pending":
-      return "Pending";
-    case "paid":
-      return "Paid";
-    case "failed":
-      return "Failed";
-    case "canceled":
-      return "Canceled";
-    default:
-      return "No payment yet";
-  }
-}
+import {
+  describeRentPaymentGuidance,
+  formatPaymentExperienceStatus,
+  mapRentPaymentCheckoutErrorMessage,
+  prettyRentPaymentStatus,
+} from "../../lib/payments/paymentStatusGuidance";
 
 export default function TenantLeasePage() {
   const [data, setData] = React.useState<Awaited<ReturnType<typeof getTenantLeaseWorkspace>>>(null);
@@ -126,7 +95,7 @@ export default function TenantLeasePage() {
       }
       setError("Unable to start rent payment checkout.");
     } catch (err: any) {
-      setError(err?.payload?.detail || err?.payload?.error || err?.message || "Unable to start rent payment checkout.");
+      setError(mapRentPaymentCheckoutErrorMessage(err?.payload?.detail || err?.payload?.error || err?.message));
     } finally {
       setPaying(false);
     }
@@ -134,6 +103,20 @@ export default function TenantLeasePage() {
 
   const execution = data?.leaseExecution || null;
   const paymentReadiness = data?.paymentReadiness || null;
+  const paymentSummary = rentPaymentDetails || data?.rentPaymentSummary || null;
+  const latestPaymentStatus =
+    paymentSummary?.latestPayment?.status || paymentSummary?.paymentExperience?.history?.[0]?.status || null;
+  const paymentExperienceStatusLabel = formatPaymentExperienceStatus({
+    latestPaymentStatus,
+    latestStatus: paymentSummary?.paymentExperience?.latestStatus || null,
+  });
+  const tenantPaymentGuidance = describeRentPaymentGuidance({
+    audience: "tenant",
+    latestPaymentStatus,
+    latestStatus: paymentSummary?.paymentExperience?.latestStatus || null,
+    blockedReason: paymentSummary?.paymentRail.blockedReason || null,
+    paymentRailEnabled: paymentSummary?.paymentRail.enabled ?? null,
+  });
   const timelineRows = execution
     ? [
         {
@@ -229,29 +212,28 @@ export default function TenantLeasePage() {
                     },
                   ]}
                 />
-                {(rentPaymentDetails || data.rentPaymentSummary) ? (
+                {paymentSummary ? (
                   <div style={{ display: "grid", gap: 8 }}>
                     <TenantKeyValueGrid
                       rows={[
                         {
                           label: "Rent collection",
-                          value: (rentPaymentDetails || data.rentPaymentSummary)?.paymentRail.enabled ? "Enabled" : "Not enabled",
+                          value: paymentSummary.paymentRail.enabled ? "Enabled" : "Not enabled",
                         },
                         {
                           label: "Latest status",
-                          value: formatPaymentExperienceStatus(
-                            (rentPaymentDetails || data.rentPaymentSummary)?.paymentExperience?.latestStatus || null
-                          ),
+                          value: paymentExperienceStatusLabel,
                         },
                       ]}
                     />
+                    <div style={{ color: "var(--text-muted, #64748b)" }}>{tenantPaymentGuidance}</div>
                     <div style={{ color: "var(--text-muted, #64748b)" }}>
                       Payment processed by Stripe. RentChain does not store card or bank payment details.
                     </div>
-                    {((rentPaymentDetails || data.rentPaymentSummary)?.paymentExperience?.history || []).length ? (
+                    {(paymentSummary.paymentExperience?.history || []).length ? (
                       <div style={{ display: "grid", gap: 8 }}>
                         <div style={{ fontWeight: 800 }}>Payment history</div>
-                        {((rentPaymentDetails || data.rentPaymentSummary)?.paymentExperience?.history || []).map((entry) => (
+                        {(paymentSummary.paymentExperience?.history || []).map((entry) => (
                           <div
                             key={entry.id}
                             style={{
@@ -271,23 +253,15 @@ export default function TenantLeasePage() {
                     ) : (
                       <div style={{ color: "var(--text-muted, #64748b)" }}>No payment history yet.</div>
                     )}
-                    {(rentPaymentDetails || data.rentPaymentSummary)?.paymentExperience?.receiptSummary?.available ? (
+                    {paymentSummary.paymentExperience?.receiptSummary?.available ? (
                       <div style={{ display: "grid", gap: 8 }}>
-                        <div style={{ fontWeight: 800 }}>
-                          {(rentPaymentDetails || data.rentPaymentSummary)?.paymentExperience?.receiptSummary.label}
-                        </div>
+                        <div style={{ fontWeight: 800 }}>{paymentSummary.paymentExperience?.receiptSummary.label}</div>
                         <div style={{ color: "var(--text-muted, #64748b)" }}>
-                          Lease {(rentPaymentDetails || data.rentPaymentSummary)?.paymentExperience?.receiptSummary
-                            .leaseReference || "reference"}{" "}
+                          Lease {paymentSummary.paymentExperience?.receiptSummary.leaseReference || "reference"}{" "}
                           ·{" "}
-                          {formatMoney(
-                            ((rentPaymentDetails || data.rentPaymentSummary)?.paymentExperience?.receiptSummary
-                              ?.amountCents || 0) / 100
-                          )}{" "}
+                          {formatMoney((paymentSummary.paymentExperience?.receiptSummary?.amountCents || 0) / 100)}{" "}
                           ·{" "}
-                          {formatDate(
-                            (rentPaymentDetails || data.rentPaymentSummary)?.paymentExperience?.receiptSummary?.paidAt
-                          )}
+                          {formatDate(paymentSummary.paymentExperience?.receiptSummary?.paidAt)}
                         </div>
                         <div>
                           <button type="button" onClick={() => window.print()}>
@@ -296,14 +270,14 @@ export default function TenantLeasePage() {
                         </div>
                       </div>
                     ) : null}
-                    {(rentPaymentDetails || data.rentPaymentSummary)?.paymentRail.enabled &&
+                    {paymentSummary.paymentRail.enabled &&
                     paymentReadiness.readinessStatus === "ready_to_configure" &&
-                    (rentPaymentDetails || data.rentPaymentSummary)?.paymentExperience?.latestStatus !== "pending" &&
-                    (rentPaymentDetails || data.rentPaymentSummary)?.paymentExperience?.latestStatus !== "paid" ? (
+                    paymentSummary.paymentExperience?.latestStatus !== "pending" &&
+                    paymentSummary.paymentExperience?.latestStatus !== "paid" ? (
                       <button type="button" onClick={() => void handlePayRent()} disabled={paying}>
                         {paying
                           ? "Opening checkout..."
-                          : (rentPaymentDetails || data.rentPaymentSummary)?.paymentExperience?.retryAvailable
+                          : paymentSummary.paymentExperience?.retryAvailable
                           ? "Retry payment"
                           : "Pay rent"}
                       </button>
