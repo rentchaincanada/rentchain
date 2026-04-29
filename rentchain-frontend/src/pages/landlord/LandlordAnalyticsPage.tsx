@@ -596,7 +596,11 @@ export default function LandlordAnalyticsPage() {
               ) : null}
 
               {activeTab === "attention-worthy-insights" && canViewPortfolioScore && canViewAdvancedAnalytics ? (
-                <InsightCardsPanel insights={snapshot.insights} />
+                <InsightCardsPanel
+                  insights={snapshot.insights}
+                  alerts={alerts?.alerts || []}
+                  decisions={prioritizedDecisions}
+                />
               ) : null}
 
               {activeTab !== "analytics-alerts" && !canViewPortfolioScore ? (

@@ -1,6 +1,7 @@
 import React from "react";
 import { Card } from "../ui/Ui";
 import type { LandlordPredictiveMetric } from "@/api/landlordAnalyticsApi";
+import { formatPredictiveSupportingValues } from "@/lib/analytics/analyticsInsightCopy";
 
 const riskTone: Record<"low" | "medium" | "high", { bg: string; text: string }> = {
   low: { bg: "rgba(14, 165, 233, 0.12)", text: "#075985" },
@@ -11,17 +12,6 @@ const riskTone: Record<"low" | "medium" | "high", { bg: string; text: string }> 
 type Props = {
   metrics: LandlordPredictiveMetric[];
 };
-
-function supportingLine(metric: LandlordPredictiveMetric) {
-  if (!metric.supportingValues) return null;
-
-  const parts = Object.entries(metric.supportingValues)
-    .filter(([, value]) => value != null && value !== "")
-    .slice(0, 3)
-    .map(([key, value]) => `${key}: ${String(value)}`);
-
-  return parts.length ? parts.join(" • ") : null;
-}
 
 export function PredictiveMetricsPanel({ metrics }: Props) {
   return (
@@ -39,7 +29,7 @@ export function PredictiveMetricsPanel({ metrics }: Props) {
         ) : (
           <div style={{ display: "grid", gap: 10 }}>
             {metrics.map((metric) => {
-              const support = supportingLine(metric);
+              const support = formatPredictiveSupportingValues(metric);
               return (
                 <div
                   key={metric.key}
