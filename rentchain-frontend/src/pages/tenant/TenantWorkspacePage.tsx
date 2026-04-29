@@ -1257,6 +1257,51 @@ export default function TenantWorkspacePage() {
                       No data is sent automatically.
                     </div>
                   </div>
+
+                  <div style={{ display: "grid", gap: 6 }}>
+                    <div style={{ fontWeight: 700, color: textTokens.primary }}>Audit traceability</div>
+                    <TenantKeyValueGrid
+                      rows={[
+                        {
+                          label: "Audit traceability",
+                          value: institutionalPackage.complianceReadiness.auditTraceability.traceabilityLabel,
+                        },
+                        {
+                          label: "Draft metadata trace",
+                          value: institutionalPackage.complianceReadiness.auditTraceability.evidenceCoverage
+                            .handoffDraftMetadataAvailable
+                            ? "Available"
+                            : "Not available",
+                        },
+                        {
+                          label: "Institution event coverage",
+                          value:
+                            institutionalPackage.complianceReadiness.auditTraceability.evidenceCoverage
+                              .observabilityCoverage === "draft_creation_only"
+                              ? "Draft creation only"
+                              : "Not available",
+                        },
+                        {
+                          label: "Canonical institution events",
+                          value: institutionalPackage.complianceReadiness.auditTraceability.evidenceCoverage
+                            .canonicalInstitutionEventsAvailable
+                            ? "Available"
+                            : "Not available",
+                        },
+                      ]}
+                    />
+                    <div style={{ color: textTokens.secondary, lineHeight: 1.6 }}>
+                      {institutionalPackage.complianceReadiness.auditTraceability.traceabilityDescription}
+                    </div>
+                    <div style={{ color: textTokens.secondary, lineHeight: 1.6 }}>
+                      This audit traceability summary reflects reduced, tenant-safe evidence only. Institutional exports
+                      are generated on demand, are not stored by RentChain, and are not transmitted automatically.
+                    </div>
+                    <div style={{ color: textTokens.secondary, lineHeight: 1.6 }}>
+                      Current gaps: export generation is not recorded as an institutional event stream, institutional
+                      handoff lifecycle coverage is limited, and a broader access audit summary is not available.
+                    </div>
+                  </div>
                 </div>
               ) : null}
             </div>

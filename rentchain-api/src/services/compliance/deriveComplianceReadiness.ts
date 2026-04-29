@@ -5,6 +5,11 @@ export type ComplianceReadinessCheckKey =
   | "export_tenant_controlled"
   | "sensitive_data_minimized";
 
+export type ComplianceAuditTraceabilityGap =
+  | "institutional_export_events_not_recorded"
+  | "institutional_handoff_lifecycle_events_limited"
+  | "access_audit_summary_not_available";
+
 export type ComplianceReadiness = {
   readinessStatus: "not_ready" | "partial" | "ready";
   readinessLabel: string;
@@ -20,6 +25,21 @@ export type ComplianceReadiness = {
     schemaVersion: "2.0";
     exportStorage: "not_stored";
     outboundTransfer: "none";
+  };
+  auditTraceability: {
+    traceabilityStatus: "limited" | "ready";
+    traceabilityLabel: string;
+    traceabilityDescription: string;
+    evidenceCoverage: {
+      identityTimelineAvailable: boolean;
+      exportGeneratedOnDemand: true;
+      exportStoredByRentChain: false;
+      handoffDraftMetadataAvailable: boolean;
+      manualReleasePreparationAvailable: boolean;
+      observabilityCoverage: "draft_creation_only" | "none";
+      canonicalInstitutionEventsAvailable: false;
+    };
+    readinessGaps: ComplianceAuditTraceabilityGap[];
   };
 };
 
@@ -42,6 +62,12 @@ type DeriveComplianceReadinessInput = {
     schemaVersion: "2.0";
     dataScope: "tenant_controlled_export";
     consentRequired: true;
+  };
+  auditTraceabilityContext: {
+    handoffDraftMetadataAvailable: boolean;
+    manualReleasePreparationAvailable: boolean;
+    observabilityCoverage: "draft_creation_only" | "none";
+    canonicalInstitutionEventsAvailable: false;
   };
 };
 
@@ -73,6 +99,55 @@ function buildOverallReadiness(
     readinessLabel: "Ready for structured institutional review",
     readinessDescription:
       "The current tenant-controlled export shows validated structure, traceability, consent-aware controls, and minimized data exposure.",
+  };
+}
+
+function deriveAuditTraceability(
+  input: DeriveComplianceReadinessInput
+): ComplianceReadiness["auditTraceability"] {
+  const identityTimelineAvailable = input.identityTimeline.totalEvents > 0;
+  const evidenceCoverage: ComplianceReadiness["auditTraceability"]["evidenceCoverage"] = {
+    identityTimelineAvailable,
+    exportGeneratedOnDemand: true,
+    exportStoredByRentChain: false,
+    handoffDraftMetadataAvailable: input.auditTraceabilityContext.handoffDraftMetadataAvailable,
+    manualReleasePreparationAvailable: input.auditTraceabilityContext.manualReleasePreparationAvailable,
+    observabilityCoverage: input.auditTraceabilityContext.observabilityCoverage,
+    canonicalInstitutionEventsAvailable: input.auditTraceabilityContext.canonicalInstitutionEventsAvailable,
+  };
+
+  const readinessGaps: ComplianceAuditTraceabilityGap[] = [
+    "institutional_export_events_not_recorded",
+    "institutional_handoff_lifecycle_events_limited",
+    "access_audit_summary_not_available",
+  ];
+
+  const traceabilityStatus =
+    identityTimelineAvailable &&
+    evidenceCoverage.handoffDraftMetadataAvailable &&
+    evidenceCoverage.manualReleasePreparationAvailable &&
+    evidenceCoverage.observabilityCoverage === "draft_creation_only"
+      ? "ready"
+      : "limited";
+
+  if (traceabilityStatus === "ready") {
+    return {
+      traceabilityStatus,
+      traceabilityLabel: "Ready for summary-only review",
+      traceabilityDescription:
+        "Reduced, tenant-safe audit traceability is available for on-demand exports and metadata-only handoff preparation, with some institutional logging gaps still disclosed.",
+      evidenceCoverage,
+      readinessGaps,
+    };
+  }
+
+  return {
+    traceabilityStatus,
+    traceabilityLabel: "Limited",
+    traceabilityDescription:
+      "Some reduced audit traceability signals are available, but institutional export and lifecycle evidence coverage is still limited in the current tenant-controlled summary.",
+    evidenceCoverage,
+    readinessGaps,
   };
 }
 
@@ -155,5 +230,6 @@ export function deriveComplianceReadiness(
       exportStorage: "not_stored",
       outboundTransfer: "none",
     },
+    auditTraceability: deriveAuditTraceability(input),
   };
 }

@@ -2353,6 +2353,12 @@ async function buildInstitutionalSchemaV2ExportForTenant(
       dataScope: schemaV2.schema.dataScope,
       consentRequired: schemaV2.schema.consentRequired,
     },
+    auditTraceabilityContext: {
+      handoffDraftMetadataAvailable: true,
+      manualReleasePreparationAvailable: true,
+      observabilityCoverage: "draft_creation_only",
+      canonicalInstitutionEventsAvailable: false,
+    },
   });
 
   return schemaV2;

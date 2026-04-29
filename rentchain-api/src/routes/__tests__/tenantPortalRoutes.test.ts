@@ -1190,6 +1190,26 @@ describe("tenantPortalRoutes foundation", () => {
       exportStorage: "not_stored",
       outboundTransfer: "none",
     });
+    expect(res.body?.data?.complianceReadiness?.auditTraceability).toEqual({
+      traceabilityStatus: "limited",
+      traceabilityLabel: "Limited",
+      traceabilityDescription:
+        "Some reduced audit traceability signals are available, but institutional export and lifecycle evidence coverage is still limited in the current tenant-controlled summary.",
+      evidenceCoverage: {
+        identityTimelineAvailable: false,
+        exportGeneratedOnDemand: true,
+        exportStoredByRentChain: false,
+        handoffDraftMetadataAvailable: true,
+        manualReleasePreparationAvailable: true,
+        observabilityCoverage: "draft_creation_only",
+        canonicalInstitutionEventsAvailable: false,
+      },
+      readinessGaps: [
+        "institutional_export_events_not_recorded",
+        "institutional_handoff_lifecycle_events_limited",
+        "access_audit_summary_not_available",
+      ],
+    });
     expect(res.body?.data?.validation?.warnings).toContain("Recommended signal limited: identity trace unavailable");
     expect(res.body?.data?.validation?.warnings).toContain("Recommended signal limited: payment readiness unavailable");
     expect(res.body?.data?.validation?.warnings).toContain("Recommended signal limited: consent controls limited");

@@ -160,6 +160,26 @@ export function deriveInstitutionalSchemaV2(input: DeriveInstitutionalSchemaV2In
         exportStorage: "not_stored",
         outboundTransfer: "none",
       },
+      auditTraceability: {
+        traceabilityStatus: "limited",
+        traceabilityLabel: "Limited",
+        traceabilityDescription:
+          "Audit traceability is attached during tenant-controlled schema export generation.",
+        evidenceCoverage: {
+          identityTimelineAvailable: false,
+          exportGeneratedOnDemand: true,
+          exportStoredByRentChain: false,
+          handoffDraftMetadataAvailable: false,
+          manualReleasePreparationAvailable: false,
+          observabilityCoverage: "none",
+          canonicalInstitutionEventsAvailable: false,
+        },
+        readinessGaps: [
+          "institutional_export_events_not_recorded",
+          "institutional_handoff_lifecycle_events_limited",
+          "access_audit_summary_not_available",
+        ],
+      },
     },
     extensions: {
       reserved: {},
