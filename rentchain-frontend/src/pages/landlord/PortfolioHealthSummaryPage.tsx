@@ -54,6 +54,58 @@ function createLeaseRenewalFormState(lease: LandlordLeaseRenewalLease): LeaseRen
   };
 }
 
+function formatLifecycleNextAction(
+  value:
+    | "review_expiring_lease"
+    | "prepare_renewal_notice"
+    | "follow_up_response"
+    | "review_renewal_outcome"
+    | "review_move_out"
+    | "none"
+    | undefined
+) {
+  switch (value) {
+    case "prepare_renewal_notice":
+      return "Prepare renewal notice";
+    case "follow_up_response":
+      return "Follow up on renewal response";
+    case "review_renewal_outcome":
+      return "Review renewal outcome";
+    case "review_move_out":
+      return "Review move-out follow-through";
+    case "review_expiring_lease":
+      return "Review expiring lease";
+    default:
+      return "No follow-up needed";
+  }
+}
+
+function formatRenewalOutcome(
+  value:
+    | "not_started"
+    | "pending_response"
+    | "renewed"
+    | "tenant_quitting"
+    | "no_response"
+    | "not_applicable"
+    | undefined
+) {
+  switch (value) {
+    case "pending_response":
+      return "Pending response";
+    case "renewed":
+      return "Renewed";
+    case "tenant_quitting":
+      return "Tenant ending lease";
+    case "no_response":
+      return "No response";
+    case "not_started":
+      return "Not started";
+    default:
+      return "Not applicable";
+  }
+}
+
 export default function PortfolioHealthSummaryPage() {
   const location = useLocation();
   const { showToast } = useToast();
@@ -333,6 +385,26 @@ export default function PortfolioHealthSummaryPage() {
                           Lease ends {lease.leaseEndDate || "unknown"}{lease.tenantName ? ` • ${lease.tenantName}` : ""}
                         </div>
                       </div>
+
+                      {lease.leaseLifecycleSummary ? (
+                        <div style={{ display: "grid", gap: 6, color: "#334155", fontSize: 14 }}>
+                          <div>
+                            <strong>Lifecycle:</strong> {lease.leaseLifecycleSummary.lifecycleLabel}
+                          </div>
+                          <div>
+                            <strong>Outcome:</strong> {formatRenewalOutcome(lease.leaseLifecycleSummary.renewalOutcome)}
+                          </div>
+                          <div>
+                            <strong>Next step:</strong> {formatLifecycleNextAction(lease.leaseLifecycleSummary.requiredNextAction)}
+                          </div>
+                          {lease.leaseLifecycleSummary.history.length > 0 ? (
+                            <div>
+                              <strong>History:</strong>{" "}
+                              {lease.leaseLifecycleSummary.history.map((item) => item.label).join(" • ")}
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
 
                       <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
                         <label style={{ display: "grid", gap: 4 }}>

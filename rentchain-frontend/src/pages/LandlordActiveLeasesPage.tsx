@@ -155,6 +155,52 @@ function paymentReadinessChecklist(lease: LandlordActiveLease) {
   return missing.join(" · ");
 }
 
+function lifecycleNextActionLabel(
+  value:
+    | "review_expiring_lease"
+    | "prepare_renewal_notice"
+    | "follow_up_response"
+    | "review_renewal_outcome"
+    | "review_move_out"
+    | "none"
+    | undefined
+) {
+  switch (value) {
+    case "prepare_renewal_notice":
+      return "Prepare renewal notice";
+    case "follow_up_response":
+      return "Follow up on renewal response";
+    case "review_renewal_outcome":
+      return "Review renewal outcome";
+    case "review_move_out":
+      return "Review move-out follow-through";
+    case "review_expiring_lease":
+      return "Review expiring lease";
+    default:
+      return "No follow-up needed";
+  }
+}
+
+function renderLifecycleSummary(lease: LandlordActiveLease) {
+  const lifecycle = lease.leaseLifecycleSummary;
+  if (!lifecycle) return null;
+  return (
+    <div style={{ display: "grid", gap: 4, marginTop: 6 }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: "#0f172a" }}>{lifecycle.lifecycleLabel}</div>
+      <div style={{ color: "#64748b", fontSize: 12 }}>{lifecycleNextActionLabel(lifecycle.requiredNextAction)}</div>
+      {typeof lifecycle.daysUntilExpiry === "number" ? (
+        <div style={{ color: "#64748b", fontSize: 12 }}>
+          {lifecycle.daysUntilExpiry === 0
+            ? "Lease ends today"
+            : lifecycle.daysUntilExpiry === 1
+            ? "1 day until lease end"
+            : `${lifecycle.daysUntilExpiry} days until lease end`}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export default function LandlordActiveLeasesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const view = searchParams.get("view") === "archived" ? "archived" : "active";
@@ -438,6 +484,7 @@ export default function LandlordActiveLeasesPage() {
               <th>Unit</th>
               <th>Tenant</th>
               <th>Status</th>
+              <th>Lifecycle</th>
               <th>Payment readiness</th>
             </tr>
           </thead>
@@ -448,6 +495,7 @@ export default function LandlordActiveLeasesPage() {
                 <td>{lease.unitNumber || "—"}</td>
                 <td>{lease.tenantName || "—"}</td>
                 <td>{prettyLeaseStatus(lease.status)}</td>
+                <td>{lease.leaseLifecycleSummary?.lifecycleLabel || "—"}</td>
                 <td>{lease.paymentReadiness?.readinessLabel || "Payment readiness unavailable"}</td>
               </tr>
             ))}
@@ -644,6 +692,7 @@ export default function LandlordActiveLeasesPage() {
                           </div>
                         </div>
                       ) : null}
+                      {renderLifecycleSummary(lease)}
                       {lease.archivedAt ? (
                         <div style={{ color: "#64748b", fontSize: 12, marginTop: 4 }}>
                           Archived {formatDate(lease.archivedAt)}
@@ -756,7 +805,18 @@ export default function LandlordActiveLeasesPage() {
                     {lease.paymentReadiness?.readinessLabel || "Payment readiness unavailable"}
                   </div>
                 </div>
+                <div>
+                  <div style={{ color: "#64748b", fontSize: 12 }}>Lifecycle</div>
+                  <div style={{ color: "#0f172a", marginTop: 6 }}>
+                    {lease.leaseLifecycleSummary?.lifecycleLabel || "No lifecycle status available"}
+                  </div>
+                </div>
               </div>
+              {lease.leaseLifecycleSummary ? (
+                <div style={{ color: "#64748b", fontSize: 12 }}>
+                  {lifecycleNextActionLabel(lease.leaseLifecycleSummary.requiredNextAction)}
+                </div>
+              ) : null}
               {lease.paymentReadiness ? (
                 <div style={{ color: "#64748b", fontSize: 12 }}>{paymentReadinessChecklist(lease)}</div>
               ) : null}

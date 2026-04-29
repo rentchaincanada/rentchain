@@ -373,7 +373,16 @@ describe("leaseNoticeLandlordRoutes policy integration", () => {
 
     expect(res.status).toBe(200);
     expect(res.body?.items).toHaveLength(1);
-    expect(res.body?.items[0]).toEqual(expect.objectContaining({ id: "lease-expiring", noticeBucket: "expiring" }));
+    expect(res.body?.items[0]).toEqual(
+      expect.objectContaining({
+        id: "lease-expiring",
+        noticeBucket: "expiring",
+        leaseLifecycleSummary: expect.objectContaining({
+          lifecycleStatus: "expiring_soon",
+          requiredNextAction: "prepare_renewal_notice",
+        }),
+      })
+    );
   });
 
   it("returns only pending-response workflow items when that status filter is requested", async () => {
@@ -409,7 +418,15 @@ describe("leaseNoticeLandlordRoutes policy integration", () => {
 
     expect(res.status).toBe(200);
     expect(res.body?.items).toHaveLength(1);
-    expect(res.body?.items[0]).toEqual(expect.objectContaining({ id: "lease-pending", noticeBucket: "pending-response" }));
+    expect(res.body?.items[0]).toEqual(
+      expect.objectContaining({
+        id: "lease-pending",
+        noticeBucket: "pending-response",
+        leaseLifecycleSummary: expect.objectContaining({
+          lifecycleStatus: "renewal_pending",
+        }),
+      })
+    );
   });
 
   it("returns only no-response workflow items when that status filter is requested", async () => {
@@ -439,6 +456,14 @@ describe("leaseNoticeLandlordRoutes policy integration", () => {
 
     expect(res.status).toBe(200);
     expect(res.body?.items).toHaveLength(1);
-    expect(res.body?.items[0]).toEqual(expect.objectContaining({ id: "lease-no-response", noticeBucket: "no-response" }));
+    expect(res.body?.items[0]).toEqual(
+      expect.objectContaining({
+        id: "lease-no-response",
+        noticeBucket: "no-response",
+        leaseLifecycleSummary: expect.objectContaining({
+          lifecycleStatus: "no_response",
+        }),
+      })
+    );
   });
 });

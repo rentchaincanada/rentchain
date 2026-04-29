@@ -118,6 +118,7 @@ export interface LandlordActiveLease extends Lease {
     } | null;
     paymentExperience: PaymentExperience;
   } | null;
+  leaseLifecycleSummary?: LeaseLifecycleSummary;
   hiddenFromActiveLists?: boolean;
   cleanupReason?: string | null;
   cleanupBatch?: string | null;
@@ -147,6 +148,47 @@ export type PaymentExperience = {
     paidAt: string | null;
     leaseReference: string | null;
   };
+};
+
+export type LeaseLifecycleSummary = {
+  lifecycleStatus:
+    | "active"
+    | "expiring_soon"
+    | "renewal_pending"
+    | "no_response"
+    | "renewed"
+    | "ending"
+    | "expired"
+    | "blocked";
+  lifecycleLabel: string;
+  lifecycleDescription: string;
+  requiredNextAction:
+    | "review_expiring_lease"
+    | "prepare_renewal_notice"
+    | "follow_up_response"
+    | "review_renewal_outcome"
+    | "review_move_out"
+    | "none";
+  renewalOutcome:
+    | "not_started"
+    | "pending_response"
+    | "renewed"
+    | "tenant_quitting"
+    | "no_response"
+    | "not_applicable";
+  daysUntilExpiry?: number;
+  history: Array<{
+    type:
+      | "lease_started"
+      | "notice_prepared"
+      | "notice_sent"
+      | "tenant_response_pending"
+      | "renewed"
+      | "tenant_quitting"
+      | "expired";
+    label: string;
+    occurredAt?: string;
+  }>;
 };
 
 export interface LeaseReconciliationCandidate {

@@ -20,6 +20,7 @@ import {
   sanitizeLeaseRenewalOperatorInput,
   sendLeaseWorkflowEmail,
 } from "../services/leaseNoticeWorkflowService";
+import { deriveLeaseLifecycleSummary } from "../services/leaseLifecycle/deriveLeaseLifecycleSummary";
 import { executeAutomation } from "../lib/automation/automationExecutor";
 import { buildLeaseNoticePolicyRequest } from "../lib/policy/policyAdapters";
 import { evaluatePolicy, toAutopilotPolicySummary, writePolicyEvaluatedEvent } from "../lib/policy/policyEvaluator";
@@ -132,9 +133,28 @@ router.get("/expiring", async (req: any, res) => {
           now,
           horizon,
         });
-        return noticeBucket ? { ...lease, noticeBucket } : null;
+        return noticeBucket
+          ? {
+              ...lease,
+              noticeBucket,
+              leaseLifecycleSummary: deriveLeaseLifecycleSummary({
+                lease,
+                latestNotice,
+                noResponse: latestNotice ? computeNoResponseState(latestNotice) : false,
+                now,
+                expiringWindowMs: withinDays * 24 * 60 * 60 * 1000,
+              }),
+            }
+          : null;
       })
-      .filter((lease): lease is ReturnType<typeof normalizeLeaseRecord> & { noticeBucket: LeaseRenewalWorkflowBucket } => Boolean(lease))
+      .filter(
+        (
+          lease
+        ): lease is ReturnType<typeof normalizeLeaseRecord> & {
+          noticeBucket: LeaseRenewalWorkflowBucket;
+          leaseLifecycleSummary: ReturnType<typeof deriveLeaseLifecycleSummary>;
+        } => Boolean(lease)
+      )
       .filter((lease: any) => !statusFilter || lease.noticeBucket === statusFilter)
       .sort((a, b) => Number(a.nextNoticeDueAt || 0) - Number(b.nextNoticeDueAt || 0));
 

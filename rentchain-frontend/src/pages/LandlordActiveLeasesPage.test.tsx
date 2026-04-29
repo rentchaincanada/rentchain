@@ -106,6 +106,15 @@ describe("LandlordActiveLeasesPage", () => {
               },
             },
           },
+          leaseLifecycleSummary: {
+            lifecycleStatus: "expiring_soon",
+            lifecycleLabel: "Expiring soon",
+            lifecycleDescription: "This lease is approaching its notice timing and should be reviewed for renewal follow-through.",
+            requiredNextAction: "prepare_renewal_notice",
+            renewalOutcome: "not_started",
+            daysUntilExpiry: 30,
+            history: [{ type: "lease_started", label: "Lease started", occurredAt: "2026-01-01T00:00:00.000Z" }],
+          },
         },
       ],
     });
@@ -160,6 +169,8 @@ describe("LandlordActiveLeasesPage", () => {
     expect((await screen.findAllByText("Harbour View")).length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "Print / Save PDF" })).toBeInTheDocument();
     expect(screen.getAllByText("Lease fully executed").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Expiring soon").length).toBeGreaterThan(0);
+    expect(screen.getByText(/Prepare renewal notice/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Rent terms ready for future setup/i).length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: /Enable rent collection/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "View" })).toHaveAttribute("href", "/leases/lease-1/ledger");
