@@ -202,6 +202,37 @@ describe("lease draft routes", () => {
     expect(listRes.body?.tasks).toHaveLength(3);
   });
 
+  it("regenerates and lists automation tasks for a firestore-backed lease", async () => {
+    const router = (await import("../leaseRoutes")).default;
+    const app = express();
+    app.use(express.json());
+    app.use(router);
+
+    await fakeDb.collection("leases").doc("lease-firestore").set({
+      landlordId: "landlord-1",
+      tenantId: "tenant-3",
+      propertyId: "prop-3",
+      unitNumber: "3A",
+      startDate: "2026-01-01",
+      endDate: "2026-12-31",
+      automationEnabled: true,
+      renewalStatus: "offered",
+      status: "active",
+    });
+
+    const regenerateRes = await request(app)
+      .post("/lease-firestore/automation/tasks/regenerate")
+      .set(auth);
+    expect(regenerateRes.status).toBe(200);
+    expect(regenerateRes.body?.ok).toBe(true);
+    expect(Array.isArray(regenerateRes.body?.tasks)).toBe(true);
+
+    const listRes = await request(app).get("/lease-firestore/automation/tasks").set(auth);
+    expect(listRes.status).toBe(200);
+    expect(listRes.body?.ok).toBe(true);
+    expect(Array.isArray(listRes.body?.tasks)).toBe(true);
+  });
+
   it("activates lease from draft and tenant lease fetch includes it", async () => {
     const router = (await import("../leaseRoutes")).default;
     const app = express();

@@ -57,6 +57,7 @@ export type LeaseWorkflowLease = {
   tenantName: string | null;
   unitLabel: string | null;
   propertyLabel: string | null;
+  propertyAddress: string | null;
 };
 
 export type LeaseNoticePreviewInput = {
@@ -253,6 +254,7 @@ export function normalizeLeaseRecord(id: string, raw: any): LeaseWorkflowLease {
     tenantName: String(raw?.tenantName || raw?.residentName || "").trim() || null,
     unitLabel: String(raw?.unitLabel || raw?.unitNumber || raw?.unit || "").trim() || null,
     propertyLabel: String(raw?.propertyLabel || raw?.propertyName || "").trim() || null,
+    propertyAddress: String(raw?.propertyAddress || raw?.propertyAddressLine1 || raw?.addressLine1 || raw?.propertyAddress1 || raw?.address || "").trim() || null,
   };
 }
 

@@ -1,4 +1,4 @@
-export async function printSummaryDocument(mode: "summary" = "summary"): Promise<void> {
+export async function printSummaryDocument(mode: "summary" | "lease-renewals" = "summary"): Promise<void> {
   if (typeof window === "undefined" || typeof document === "undefined") return;
 
   const body = document.body;

@@ -1171,11 +1171,13 @@ router.get("/snapshots/:id", requireLandlord, async (req: any, res: Response) =>
   }
 });
 
-router.post("/:id/automation/tasks/regenerate", requireLandlord, (req: any, res: Response) => {
-  const lease = leaseService.getById(String(req.params?.id || "").trim());
-  if (!lease) {
-    return res.status(404).json({ ok: false, error: "Lease not found" });
+router.post("/:id/automation/tasks/regenerate", requireLandlord, async (req: any, res: Response) => {
+  const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
+  const leaseResult = await getLeaseEntityForLandlord(String(req.params?.id || "").trim(), landlordId);
+  if (!leaseResult.ok) {
+    return res.status(leaseResult.status).json({ ok: false, error: leaseResult.error });
   }
+  const lease = leaseResult.lease as any;
   const tasks = regenerateLeaseAutomationTasks({
     id: lease.id,
     startDate: lease.startDate,
@@ -1186,11 +1188,13 @@ router.post("/:id/automation/tasks/regenerate", requireLandlord, (req: any, res:
   return res.status(200).json({ ok: true, tasks });
 });
 
-router.get("/:id/automation/tasks", requireLandlord, (req: any, res: Response) => {
-  const lease = leaseService.getById(String(req.params?.id || "").trim());
-  if (!lease) {
-    return res.status(404).json({ ok: false, error: "Lease not found" });
+router.get("/:id/automation/tasks", requireLandlord, async (req: any, res: Response) => {
+  const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
+  const leaseResult = await getLeaseEntityForLandlord(String(req.params?.id || "").trim(), landlordId);
+  if (!leaseResult.ok) {
+    return res.status(leaseResult.status).json({ ok: false, error: leaseResult.error });
   }
+  const lease = leaseResult.lease as any;
   const tasks = getLeaseAutomationTasks(lease.id);
   return res.status(200).json({ ok: true, tasks });
 });

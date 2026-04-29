@@ -14,6 +14,7 @@ export type LandlordLeaseRenewalLease = {
   id: string;
   tenantId: string;
   propertyId: string | null;
+  propertyAddress: string | null;
   unitId: string | null;
   status: string;
   leaseType: "fixed_term" | "year_to_year" | "month_to_month";
