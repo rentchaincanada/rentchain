@@ -58,6 +58,7 @@ import {
   revokeTenantShareVerificationRequest,
   revokeTenantSharePackage,
 } from "../services/tenantPortal/tenantSharePackageService";
+import { recordSystemObservabilityEvent } from "../services/observability/recordSystemObservabilityEvent";
 
 const router = Router();
 router.use(authenticateJwt);
@@ -3190,6 +3191,25 @@ router.post("/institutional/handoffs", requireTenantWorkspaceIdentity, async (re
         validationStatus: schemaV2.validation.status,
       },
     });
+    await recordSystemObservabilityEvent(
+      {
+        eventType: "workflow_started",
+        workflow: "institutional",
+        severity: "info",
+        actorType: "tenant",
+        status: "open",
+        title: "Institutional handoff draft created",
+        description: "A tenant created an institutional handoff draft for a downstream review workflow.",
+        safeContext: {
+          route: "/api/tenant/institutional/handoffs",
+          actionKey: "institutional_handoff_created",
+          resourceType: "institutional_handoff",
+          resourceId: created.id,
+        },
+        occurredAt: created.createdAt,
+      },
+      { failSoft: true }
+    );
     return res.json({ ok: true, data: created });
   } catch (err: any) {
     if (err?.message === "invalid_institution_display_name") {
@@ -4137,6 +4157,25 @@ router.post("/leases/:leaseId/sign", requireTenantWorkspaceIdentity, async (req:
         nextStatus: "tenant_signed",
       },
     });
+    await recordSystemObservabilityEvent(
+      {
+        eventType: "workflow_completed",
+        workflow: "lease",
+        severity: "info",
+        actorType: "tenant",
+        status: "resolved",
+        title: "Tenant lease signature recorded",
+        description: "A tenant signature milestone was recorded for lease execution.",
+        safeContext: {
+          route: "/api/tenant/leases/sign",
+          actionKey: "tenant_lease_signed",
+          resourceType: "lease",
+          resourceId: leaseId,
+        },
+        occurredAt: nowIso,
+      },
+      { failSoft: true }
+    );
 
     const refreshedSnap = await leaseRef.get();
     const refreshed = refreshedSnap.exists ? ((refreshedSnap.data() as any) || {}) : leaseData;

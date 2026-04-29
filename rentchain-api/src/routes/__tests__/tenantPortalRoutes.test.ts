@@ -7,6 +7,17 @@ const { sendEmailMock } = vi.hoisted(() => ({
 const { stripeCheckoutCreateMock } = vi.hoisted(() => ({
   stripeCheckoutCreateMock: vi.fn(),
 }));
+const { setObservabilityWriteShouldFail, getObservabilityWriteShouldFail } = vi.hoisted(() => {
+  let observabilityWriteShouldFail = false;
+  return {
+    setObservabilityWriteShouldFail(value: boolean) {
+      observabilityWriteShouldFail = value;
+    },
+    getObservabilityWriteShouldFail() {
+      return observabilityWriteShouldFail;
+    },
+  };
+});
 
 const collections = new Map<string, Map<string, any>>();
 
@@ -74,6 +85,9 @@ const dbMock = {
           data: () => clone(ensureCollection(name).get(docId)),
         }),
         set: async (value: any, opts?: { merge?: boolean }) => {
+          if (name === "systemObservabilityEvents" && getObservabilityWriteShouldFail()) {
+            throw new Error("observability_write_failed");
+          }
           const current = ensureCollection(name).get(docId) || {};
           ensureCollection(name).set(docId, opts?.merge ? applyMerge(current, value) : clone(value));
         },
@@ -185,6 +199,7 @@ describe("tenantPortalRoutes foundation", () => {
       url: "https://checkout.stripe.test/session/cs_test_1",
       payment_intent: "pi_test_1",
     });
+    setObservabilityWriteShouldFail(false);
     process.env.EMAIL_FROM = "noreply@example.com";
     process.env.GCS_UPLOAD_BUCKET = "test-bucket";
     getSignedDownloadUrlMock.mockReset();
@@ -1255,6 +1270,34 @@ describe("tenantPortalRoutes foundation", () => {
     expect(payload).not.toContain("documentUrl");
     expect(payload).not.toContain("paymentMethod");
     expect(payload).not.toContain("share-token");
+  });
+
+  it("keeps institutional handoff creation successful when observability recording fails softly", async () => {
+    setObservabilityWriteShouldFail(true);
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/institutional/handoffs",
+      body: {
+        institutionProfile: {
+          institutionType: "bank",
+          displayName: "Example Bank Sandbox",
+          integrationMode: "sandbox",
+        },
+      },
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.ok).toBe(true);
+    expect(ensureCollection("institutionalHandoffs").size).toBe(1);
   });
 
   it("lists only the current tenant institutional handoff drafts and soft-voids owned drafts", async () => {
