@@ -8,6 +8,7 @@ import {
 import { MacShell } from "../../components/layout/MacShell";
 import { Card, Section } from "../../components/ui/Ui";
 import { useToast } from "../../components/ui/ToastProvider";
+import { buildLandlordNetworkReuseCopy } from "../../lib/reuse/landlordNetworkReuseCopy";
 
 function errorMessage(error: unknown) {
   if (error instanceof Error && error.message) return error.message;
@@ -45,21 +46,6 @@ function nextActionLabel(action: LandlordInboxItem["nextAction"]) {
   }
 }
 
-function networkReuseStatusLabel(value: NonNullable<LandlordInboxItem["networkReuseSummary"]>["reuseStatus"]) {
-  switch (value) {
-    case "available":
-      return "Reusable application available";
-    case "limited":
-      return "Reusable application limited";
-    default:
-      return "Reusable application not available";
-  }
-}
-
-function networkReuseSourceLabel(value: NonNullable<LandlordInboxItem["networkReuseSummary"]>["source"]) {
-  return value === "apply_with_rentchain" ? "RentChain application" : "Share package";
-}
-
 function sectionLabel(status: LandlordInboxItem["status"]) {
   if (status === "action_required") return "Needs attention";
   if (status === "pending") return "Waiting on follow-up";
@@ -92,6 +78,7 @@ function groupItems(items: LandlordInboxResponse["items"]) {
 function InboxItemCard({ item }: { item: LandlordInboxItem }) {
   const priority = priorityTone(item.priority);
   const trustTone = item.trustSummary ? readinessTone(item.trustSummary.readiness) : null;
+  const networkReuseCopy = item.networkReuseSummary ? buildLandlordNetworkReuseCopy(item.networkReuseSummary as any) : null;
 
   return (
     <Card style={{ display: "grid", gap: 12 }}>
@@ -142,9 +129,12 @@ function InboxItemCard({ item }: { item: LandlordInboxItem }) {
           </div>
         ) : null}
         {item.networkReuseSummary ? (
-          <div style={{ color: "#64748b", fontSize: "0.82rem" }}>
-            {networkReuseStatusLabel(item.networkReuseSummary.reuseStatus)} · Source:{" "}
-            {networkReuseSourceLabel(item.networkReuseSummary.source)}
+          <div style={{ display: "grid", gap: 4 }}>
+            <div style={{ color: "#64748b", fontSize: "0.82rem" }}>
+              {networkReuseCopy?.headline} · Source: {networkReuseCopy?.sourceLabel}
+            </div>
+            <div style={{ color: "#64748b", fontSize: "0.82rem" }}>{networkReuseCopy?.description}</div>
+            <div style={{ color: "#64748b", fontSize: "0.82rem" }}>{networkReuseCopy?.guardrailCopy}</div>
           </div>
         ) : null}
       </div>
