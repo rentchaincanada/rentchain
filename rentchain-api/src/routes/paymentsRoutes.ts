@@ -10,6 +10,7 @@ import { leaseService } from "../services/leaseService";
 import { recordPaymentEvent } from "../services/ledgerEventsService";
 import { requireAuth } from "../middleware/requireAuth";
 import { requirePermission } from "../middleware/requireAuthz";
+import { buildDatedExportFilename, setAttachmentExportHeaders } from "../lib/exports/exportResponse";
 import { db } from "../config/firebase";
 
 const router = Router();
@@ -136,8 +137,10 @@ router.get("/payments/export.csv", requireAuth, async (req: any, res: Response) 
       ...rows.map((row) => [row.paidDate, row.tenant, row.property, row.amount, row.method, row.notes].map(csvEscape).join(",")),
     ].join("\n");
 
-    res.setHeader("Content-Type", "text/csv; charset=utf-8");
-    res.setHeader("Content-Disposition", `attachment; filename="rentchain-payments-${new Date().toISOString().slice(0, 10)}.csv"`);
+    setAttachmentExportHeaders(res, {
+      filename: buildDatedExportFilename({ prefix: "rentchain-payments", format: "csv" }),
+      format: "csv",
+    });
     return res.status(200).send(csv);
   } catch (err) {
     console.error("[paymentsRoutes] csv export failed", err);
@@ -155,8 +158,10 @@ router.get("/payments/export.xlsx", requireAuth, async (req: any, res: Response)
     const rows = await buildPaymentExportRows(paymentsService.getAll());
     const xml = renderPaymentSpreadsheetXml(rows);
 
-    res.setHeader("Content-Type", "application/vnd.ms-excel; charset=utf-8");
-    res.setHeader("Content-Disposition", `attachment; filename="rentchain-payments-${new Date().toISOString().slice(0, 10)}.xlsx"`);
+    setAttachmentExportHeaders(res, {
+      filename: buildDatedExportFilename({ prefix: "rentchain-payments", format: "xlsx" }),
+      format: "xlsx",
+    });
     return res.status(200).send(xml);
   } catch (err) {
     console.error("[paymentsRoutes] xlsx export failed", err);

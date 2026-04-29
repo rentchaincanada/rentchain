@@ -227,6 +227,9 @@ describe("expenses routes", () => {
 
     expect(res.status).toBe(200);
     expect(res.headers["content-type"]).toContain("text/csv");
+    expect(String(res.headers["content-disposition"] || "")).toMatch(
+      /^attachment; filename="rentchain-expenses-\d{4}-\d{2}-\d{2}\.csv"$/
+    );
     expect(res.text).toContain("Alpha Property");
     expect(res.text).toContain("125.00");
   });

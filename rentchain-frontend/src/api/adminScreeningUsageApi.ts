@@ -2,6 +2,7 @@ import { apiUrl } from "./config";
 import { getAuthToken } from "../lib/authToken";
 import { getFirebaseIdToken } from "../lib/firebaseAuthToken";
 import { apiFetch } from "./apiFetch";
+import { parseContentDispositionFilename } from "./exportDownload";
 
 export type TransUnionUsageReport = {
   ok: true;
@@ -114,10 +115,11 @@ export async function downloadAdminTransUnionUsagePdf(params?: TransUnionUsageRe
   }
 
   const blob = await response.blob();
-  const disposition = response.headers.get("Content-Disposition") || "";
-  const match = disposition.match(/filename="?([^";]+)"?/i);
   return {
     blob,
-    filename: match?.[1] || "rentchain-transunion-usage-summary-v1.pdf",
+    filename: parseContentDispositionFilename(
+      response.headers.get("Content-Disposition"),
+      "rentchain-transunion-usage-summary-v1.pdf"
+    ),
   };
 }

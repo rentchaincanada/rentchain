@@ -7,6 +7,7 @@ import path from "path";
 import Papa from "papaparse";
 import PDFDocument from "pdfkit";
 import { runAIAgent } from "../ai/agent";
+import { buildDatedExportFilename, setAttachmentExportHeaders } from "../lib/exports/exportResponse";
 import { getUserEntitlements } from "../services/entitlementsService";
 import {
   confirmExpenseImport,
@@ -1430,8 +1431,10 @@ router.get("/expenses/export.csv", requireAuth, async (req: any, res) => {
       ),
     ].join("\n");
 
-    res.setHeader("Content-Type", "text/csv; charset=utf-8");
-    res.setHeader("Content-Disposition", `attachment; filename="rentchain-expenses-${new Date().toISOString().slice(0, 10)}.csv"`);
+    setAttachmentExportHeaders(res, {
+      filename: buildDatedExportFilename({ prefix: "rentchain-expenses", format: "csv" }),
+      format: "csv",
+    });
     return res.status(200).send(csv);
   } catch (err: any) {
     console.error("[expenses] csv export failed", err?.message || err);
@@ -1463,8 +1466,10 @@ router.get("/expenses/export.xlsx", requireAuth, async (req: any, res) => {
     const totalAmountCents = result.items.reduce((sum: number, item: any) => sum + Number(item.amountCents || 0), 0);
     const xml = renderExpenseSpreadsheetXml(rows, totalAmountCents);
 
-    res.setHeader("Content-Type", "application/vnd.ms-excel; charset=utf-8");
-    res.setHeader("Content-Disposition", `attachment; filename="rentchain-expenses-${new Date().toISOString().slice(0, 10)}.xlsx"`);
+    setAttachmentExportHeaders(res, {
+      filename: buildDatedExportFilename({ prefix: "rentchain-expenses", format: "xlsx" }),
+      format: "xlsx",
+    });
     return res.status(200).send(xml);
   } catch (err: any) {
     console.error("[expenses] xlsx export failed", err?.message || err);
@@ -1510,8 +1515,10 @@ router.get("/expenses/export.pdf", requireAuth, async (req: any, res) => {
       totalAmountCents,
     });
 
-    res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `attachment; filename="rentchain-expenses-${new Date().toISOString().slice(0, 10)}.pdf"`);
+    setAttachmentExportHeaders(res, {
+      filename: buildDatedExportFilename({ prefix: "rentchain-expenses", format: "pdf" }),
+      format: "pdf",
+    });
     return res.status(200).send(pdf);
   } catch (err: any) {
     console.error("[expenses] pdf export failed", err?.message || err);
