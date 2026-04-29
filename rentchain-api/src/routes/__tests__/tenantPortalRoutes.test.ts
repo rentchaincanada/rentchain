@@ -1262,7 +1262,9 @@ describe("tenantPortalRoutes foundation", () => {
     expect(res.body?.data?.institutionProfile?.displayName).toBe("Example Bank Sandbox");
     expect(res.body?.data?.exportStorage).toBe("metadata_only");
     expect(res.body?.data?.outboundTransfer).toBe("none");
-    expect(["ready_for_manual_review", "blocked"]).toContain(res.body?.data?.handoffStatus);
+    expect(["ready_for_manual_review", "ready_for_tenant_managed_release", "blocked"]).toContain(
+      res.body?.data?.handoffStatus
+    );
     const stored = ensureCollection("institutionalHandoffs").get(res.body?.data?.id);
     const payload = JSON.stringify(stored || {});
     expect(payload).not.toContain("\"warnings\":");

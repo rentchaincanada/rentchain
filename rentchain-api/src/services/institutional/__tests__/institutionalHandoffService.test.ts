@@ -77,6 +77,30 @@ describe("institutionalHandoffService", () => {
     expect(payload).not.toContain("documentUrl");
   });
 
+  it("marks fully ready valid drafts as ready for tenant-managed manual release", async () => {
+    const { createInstitutionalHandoffDraft } = await import("../institutionalHandoffService");
+    const created = await createInstitutionalHandoffDraft({
+      tenantId: "tenant-1",
+      institutionProfile: {
+        institutionType: "lender",
+        displayName: "Ready Lender Draft",
+        integrationMode: "manual_export",
+      },
+      schema: {
+        name: "rentchain.institutional_identity_package",
+        version: "2.0",
+      },
+      compliance: {
+        readinessStatus: "ready",
+        validationStatus: "valid",
+      },
+    });
+
+    expect(created.exportStorage).toBe("metadata_only");
+    expect(created.outboundTransfer).toBe("none");
+    expect(created.handoffStatus).toBe("ready_for_tenant_managed_release");
+  });
+
   it("lists only the tenant handoff drafts sorted by updatedAt descending and soft-voids owned drafts", async () => {
     const {
       createInstitutionalHandoffDraft,

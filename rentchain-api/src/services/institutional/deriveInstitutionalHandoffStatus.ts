@@ -1,4 +1,9 @@
-export type InstitutionalHandoffStatus = "draft" | "ready_for_manual_review" | "blocked" | "voided";
+export type InstitutionalHandoffStatus =
+  | "draft"
+  | "ready_for_manual_review"
+  | "ready_for_tenant_managed_release"
+  | "blocked"
+  | "voided";
 
 type DeriveInstitutionalHandoffStatusInput = {
   validationStatus: "valid" | "valid_with_warnings" | "invalid";
@@ -10,6 +15,10 @@ export function deriveInstitutionalHandoffStatus(
 ): InstitutionalHandoffStatus {
   if (input.validationStatus === "invalid" || input.readinessStatus === "not_ready") {
     return "blocked";
+  }
+
+  if (input.validationStatus === "valid" && input.readinessStatus === "ready") {
+    return "ready_for_tenant_managed_release";
   }
 
   if (
