@@ -223,29 +223,29 @@ function normalizeUnitReference(value: any): string {
   return String(value || "").trim().toLowerCase();
 }
 
-async function reconcilePropertyUnitVacancyForLeaseEnd(lease: any) {
+async function resolvePropertyUnitForLease(lease: any, errorPrefix: string) {
   const propertyId = String(lease?.propertyId || "").trim();
   const unitId = String(lease?.unitId || "").trim();
   const unitNumber = String(lease?.unitNumber || lease?.unit || "").trim();
   if (!propertyId) {
-    const error = new Error("lease_end_missing_property");
-    (error as any).code = "lease_end_missing_property";
+    const error = new Error(`${errorPrefix}_property_not_found`);
+    (error as any).code = `${errorPrefix}_property_not_found`;
     throw error;
   }
 
   const propertyRef = db.collection("properties").doc(propertyId);
   const propertySnap = await propertyRef.get();
   if (!propertySnap.exists) {
-    const error = new Error("lease_end_property_not_found");
-    (error as any).code = "lease_end_property_not_found";
+    const error = new Error(`${errorPrefix}_property_not_found`);
+    (error as any).code = `${errorPrefix}_property_not_found`;
     throw error;
   }
 
   const propertyData = (propertySnap.data() || {}) as any;
   const units = Array.isArray(propertyData?.units) ? propertyData.units : [];
   if (!units.length) {
-    const error = new Error("lease_end_unit_not_found");
-    (error as any).code = "lease_end_unit_not_found";
+    const error = new Error(`${errorPrefix}_unit_not_found`);
+    (error as any).code = `${errorPrefix}_unit_not_found`;
     throw error;
   }
 
@@ -259,13 +259,36 @@ async function reconcilePropertyUnitVacancyForLeaseEnd(lease: any) {
   });
 
   if (unitIndex < 0) {
-    const error = new Error("lease_end_unit_not_found");
-    (error as any).code = "lease_end_unit_not_found";
+    const error = new Error(`${errorPrefix}_unit_not_found`);
+    (error as any).code = `${errorPrefix}_unit_not_found`;
     throw error;
   }
 
+  return {
+    propertyRef,
+    units,
+    unitIndex,
+  };
+}
+
+async function reconcilePropertyUnitVacancyForLeaseEnd(lease: any) {
+  const { propertyRef, units, unitIndex } = await resolvePropertyUnitForLease(lease, "lease_end");
   const nextUnits = units.map((unit: any, index: number) =>
     index === unitIndex ? { ...unit, status: "vacant" } : unit
+  );
+  await propertyRef.set(
+    {
+      units: nextUnits,
+      updatedAt: new Date().toISOString(),
+    },
+    { merge: true }
+  );
+}
+
+async function reconcilePropertyUnitOccupancyForLeaseRestore(lease: any) {
+  const { propertyRef, units, unitIndex } = await resolvePropertyUnitForLease(lease, "lease_restore");
+  const nextUnits = units.map((unit: any, index: number) =>
+    index === unitIndex ? { ...unit, status: "occupied" } : unit
   );
   await propertyRef.set(
     {
@@ -460,6 +483,7 @@ async function listLeaseNotes(leaseId: string, landlordId: string) {
 
 async function assertNoConflictingActiveAgreement(input: {
   leaseId?: string | null;
+  excludeLeaseId?: string | null;
   landlordId: string;
   propertyId: string;
   unitId: string;
@@ -495,7 +519,12 @@ async function assertNoConflictingActiveAgreement(input: {
     .where("propertyId", "==", input.propertyId)
     .get();
   const existing = snap.docs
-    .filter((doc: any) => String(doc.id || "") !== String(input.leaseId || ""))
+    .filter((doc: any) => {
+      const docId = String(doc.id || "");
+      if (docId === String(input.leaseId || "")) return false;
+      if (docId === String(input.excludeLeaseId || "")) return false;
+      return true;
+    })
     .map((doc: any) => ({ raw: doc.data() as any, lease: toCanonicalLeaseRecord(doc.id, doc.data() as any, units) }))
     .filter((entry: any) => CURRENT_LEASE_STATUSES.has(String(entry.lease.status || "").trim().toLowerCase()));
 
@@ -503,6 +532,37 @@ async function assertNoConflictingActiveAgreement(input: {
     const result = evaluateSameLeaseAgreement(candidate as any, entry as any);
     return result.decision === "merge" || result.decision === "ambiguous";
   });
+}
+
+async function findCurrentLeaseConflictsForUnit(input: {
+  landlordId: string;
+  propertyId: string;
+  unitId?: string | null;
+  unitNumber?: string | null;
+  excludeLeaseId?: string | null;
+}) {
+  const collectionRef: any = (db as any).collection("leases");
+  if (!collectionRef || typeof collectionRef.where !== "function") {
+    return [];
+  }
+
+  const normalizedUnitId = normalizeUnitReference(input.unitId);
+  const normalizedUnitNumber = normalizeUnitReference(input.unitNumber);
+  const snap = await collectionRef
+    .where("landlordId", "==", input.landlordId)
+    .where("propertyId", "==", input.propertyId)
+    .get();
+
+  return snap.docs
+    .map((doc: any) => ({ id: String(doc.id || "").trim(), ...(doc.data() as any) }))
+    .filter((row: any) => row.id !== String(input.excludeLeaseId || ""))
+    .filter((row: any) => CURRENT_LEASE_STATUSES.has(String(row?.status || "").trim().toLowerCase()))
+    .filter((row: any) => {
+      const candidateUnitId = normalizeUnitReference(row?.unitId);
+      if (normalizedUnitId && candidateUnitId === normalizedUnitId) return true;
+      const candidateUnitNumber = normalizeUnitReference(row?.unitNumber || row?.unit);
+      return Boolean(normalizedUnitNumber) && candidateUnitNumber === normalizedUnitNumber;
+    });
 }
 
 async function loadLedgerEntries(leaseId: string, landlordId: string, from?: string | null, to?: string | null) {
@@ -1826,6 +1886,115 @@ router.post("/:id/end", async (req: any, res: Response) => {
   } catch (err) {
     console.error("[POST /api/leases/:id/end] error", err);
     return res.status(500).json({ error: "Failed to process lease" });
+  }
+});
+
+router.post("/:id/restore-active", requireLandlord, async (req: any, res: Response) => {
+  try {
+    if (!(await enforceLeaseCapability(req, res))) return;
+    const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
+    const leaseId = String(req.params?.id || "").trim();
+    if (!leaseId) return res.status(400).json({ ok: false, error: "leaseId is required" });
+
+    const leaseResult = await getLeaseEntityForLandlord(leaseId, landlordId);
+    if (!leaseResult.ok) {
+      return res.status(leaseResult.status).json({ ok: false, error: leaseResult.error });
+    }
+    if (leaseResult.source !== "firestore") {
+      return res.status(400).json({ ok: false, error: "lease_restore_requires_firestore_lease" });
+    }
+
+    const existingLease = { id: leaseId, ...(leaseResult.lease as any) };
+    if (normalizeStatus(existingLease?.status) !== "ended") {
+      return res.status(409).json({ ok: false, error: "lease_restore_requires_ended_status" });
+    }
+
+    const propertyId = String(existingLease?.propertyId || "").trim();
+    const unitId = String(existingLease?.unitId || existingLease?.unitNumber || "").trim();
+    const tenantIds = Array.isArray(existingLease?.tenantIds)
+      ? existingLease.tenantIds.map((value: any) => String(value || "").trim()).filter(Boolean)
+      : [String(existingLease?.tenantId || existingLease?.primaryTenantId || "").trim()].filter(Boolean);
+    const conflicts = await assertNoConflictingActiveAgreement({
+      leaseId,
+      excludeLeaseId: leaseId,
+      landlordId,
+      propertyId,
+      unitId,
+      tenantIds,
+      startDate: String(existingLease?.startDate || "").trim() || null,
+      endDate: null,
+      monthlyRent:
+        typeof existingLease?.monthlyRent === "number" ? existingLease.monthlyRent : Number(existingLease?.monthlyRent || 0) || null,
+    });
+    if (conflicts.length) {
+      return res.status(409).json({
+        ok: false,
+        error: "conflicting_active_lease_agreement",
+        conflictLeaseIds: conflicts.map((entry: any) => entry.lease.id),
+      });
+    }
+
+    const currentUnitConflicts = await findCurrentLeaseConflictsForUnit({
+      landlordId,
+      propertyId,
+      unitId: String(existingLease?.unitId || "").trim() || null,
+      unitNumber: String(existingLease?.unitNumber || existingLease?.unit || "").trim() || null,
+      excludeLeaseId: leaseId,
+    });
+    if (currentUnitConflicts.length) {
+      return res.status(409).json({
+        ok: false,
+        error: "conflicting_active_lease_agreement",
+        conflictLeaseIds: currentUnitConflicts.map((entry: any) => entry.id),
+      });
+    }
+
+    try {
+      await resolvePropertyUnitForLease(existingLease, "lease_restore");
+    } catch (resolveErr: any) {
+      console.error("[POST /api/leases/:id/restore-active] property unit resolution failed", {
+        leaseId,
+        landlordId,
+        error: resolveErr?.message || String(resolveErr),
+        code: resolveErr?.code || null,
+      });
+      return res.status(409).json({
+        ok: false,
+        error: "lease_restore_unit_reconciliation_failed",
+      });
+    }
+
+    await db.collection("leases").doc(leaseId).set(
+      {
+        status: "active",
+        endDate: null,
+        updatedAt: new Date().toISOString(),
+      },
+      { merge: true }
+    );
+    try {
+      await reconcilePropertyUnitOccupancyForLeaseRestore(existingLease);
+    } catch (reconcileErr: any) {
+      console.error("[POST /api/leases/:id/restore-active] occupancy reconciliation failed", {
+        leaseId,
+        landlordId,
+        error: reconcileErr?.message || String(reconcileErr),
+        code: reconcileErr?.code || null,
+      });
+      return res.status(409).json({
+        ok: false,
+        error: "lease_restore_unit_reconciliation_failed",
+      });
+    }
+    const refreshed = await getLeaseEntityForLandlord(leaseId, landlordId);
+    if (!refreshed.ok) return res.status(refreshed.status).json({ ok: false, error: refreshed.error });
+    return res.status(200).json({
+      ok: true,
+      lease: await enrichLeaseRow({ id: leaseId, ...(refreshed.lease as any) }),
+    });
+  } catch (err) {
+    console.error("[POST /api/leases/:id/restore-active] error", err);
+    return res.status(500).json({ ok: false, error: "Failed to restore active lease" });
   }
 });
 

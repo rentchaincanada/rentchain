@@ -68,41 +68,6 @@ const { fakeDb, resetFakeDb, seedDoc } = vi.hoisted(() => {
       }),
     },
   };
-  it("reconciles the affected property unit to vacant when ending a lease", async () => {
-    seedDoc("properties", "prop-1", {
-      landlordId: "landlord-1",
-      name: "Harbour View",
-      units: [
-        { id: "unit-1", unitNumber: "101", status: "occupied" },
-        { id: "unit-2", unitNumber: "102", status: "occupied" },
-      ],
-    });
-    seedDoc("leases", "lease-1", {
-      landlordId: "landlord-1",
-      propertyId: "prop-1",
-      tenantId: "tenant-1",
-      tenantIds: ["tenant-1"],
-      primaryTenantId: "tenant-1",
-      unitId: "unit-1",
-      unitNumber: "101",
-      monthlyRent: 1850,
-      startDate: "2026-01-01",
-      endDate: null,
-      status: "active",
-      createdAt: 1,
-      updatedAt: 2,
-    });
-
-    const router = (await import("../leaseRoutes")).default;
-    const res = await invokeRouter(router, { method: "POST", url: "/lease-1/end", body: {} });
-
-    expect(res.status).toBe(200);
-    const propertySnap = await fakeDb.collection("properties").doc("prop-1").get();
-    expect(propertySnap.data()?.units).toEqual([
-      expect.objectContaining({ id: "unit-1", unitNumber: "101", status: "vacant" }),
-      expect.objectContaining({ id: "unit-2", unitNumber: "102", status: "occupied" }),
-    ]);
-  });
 });
 
 vi.mock("../../config/firebase", () => ({
@@ -139,51 +104,52 @@ vi.mock("../../services/stripeService", () => ({
   isStripeConfigured: () => true,
 }));
 
+async function invokeRouter(router: any, options: {
+  method: string;
+  url: string;
+  body?: any;
+  headers?: Record<string, string>;
+}) {
+  return await new Promise<{ status: number; body: any; headers: Record<string, any> }>((resolve, reject) => {
+    const headers: Record<string, any> = {};
+    const req: any = {
+      method: options.method,
+      url: options.url,
+      originalUrl: options.url,
+      path: options.url,
+      body: options.body ?? {},
+      headers: options.headers ?? {},
+      user: { id: "landlord-1", landlordId: "landlord-1", role: "landlord" },
+    };
+    const res: any = {
+      statusCode: 200,
+      setHeader: (key: string, value: any) => {
+        headers[key.toLowerCase()] = value;
+      },
+      status(code: number) {
+        this.statusCode = code;
+        return this;
+      },
+      json(payload: any) {
+        resolve({ status: this.statusCode, body: payload, headers });
+        return this;
+      },
+      send(payload: any) {
+        resolve({ status: this.statusCode, body: payload, headers });
+        return this;
+      },
+    };
+    router.handle(req, res, (error: any) => {
+      if (error) reject(error);
+    });
+  });
+}
+
 describe("leaseRoutes GET /active", () => {
   beforeEach(() => {
     resetFakeDb();
     getSignedDownloadUrlMock.mockClear();
   });
-
-  async function invokeRouter(router: any, options: {
-    method: string;
-    url: string;
-    body?: any;
-    headers?: Record<string, string>;
-  }) {
-    return await new Promise<{ status: number; body: any; headers: Record<string, any> }>((resolve, reject) => {
-      const headers: Record<string, any> = {};
-      const req: any = {
-        method: options.method,
-        url: options.url,
-        originalUrl: options.url,
-        path: options.url,
-        body: options.body ?? {},
-        headers: options.headers ?? {},
-      };
-      const res: any = {
-        statusCode: 200,
-        setHeader: (key: string, value: any) => {
-          headers[key.toLowerCase()] = value;
-        },
-        status(code: number) {
-          this.statusCode = code;
-          return this;
-        },
-        json(payload: any) {
-          resolve({ status: this.statusCode, body: payload, headers });
-          return this;
-        },
-        send(payload: any) {
-          resolve({ status: this.statusCode, body: payload, headers });
-          return this;
-        },
-      };
-      router.handle(req, res, (error: any) => {
-        if (error) reject(error);
-      });
-    });
-  }
 
   it("returns landlord-scoped active leases with tenant and document details", async () => {
     seedDoc("properties", "prop-1", { landlordId: "landlord-1", name: "Harbour View" });
@@ -554,5 +520,209 @@ describe("leaseRoutes GET /active", () => {
         },
       },
     });
+  });
+
+  it("reconciles the affected property unit to vacant when ending a lease", async () => {
+    seedDoc("properties", "prop-1", {
+      landlordId: "landlord-1",
+      name: "Harbour View",
+      units: [
+        { id: "unit-1", unitNumber: "101", status: "occupied" },
+        { id: "unit-2", unitNumber: "102", status: "occupied" },
+      ],
+    });
+    seedDoc("leases", "lease-1", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      tenantId: "tenant-1",
+      tenantIds: ["tenant-1"],
+      primaryTenantId: "tenant-1",
+      unitId: "unit-1",
+      unitNumber: "101",
+      monthlyRent: 1850,
+      startDate: "2026-01-01",
+      endDate: null,
+      status: "active",
+      createdAt: 1,
+      updatedAt: 2,
+    });
+
+    const router = (await import("../leaseRoutes")).default;
+    const res = await invokeRouter(router, { method: "POST", url: "/lease-1/end", body: {} });
+
+    expect(res.status).toBe(200);
+    const propertySnap = await fakeDb.collection("properties").doc("prop-1").get();
+    expect(propertySnap.data()?.units).toEqual([
+      expect.objectContaining({ id: "unit-1", unitNumber: "101", status: "vacant" }),
+      expect.objectContaining({ id: "unit-2", unitNumber: "102", status: "occupied" }),
+    ]);
+  });
+
+  it("restores an ended firestore lease and marks the matched unit occupied", async () => {
+    seedDoc("properties", "prop-1", {
+      landlordId: "landlord-1",
+      name: "Harbour View",
+      units: [
+        { id: "unit-1", unitNumber: "101", status: "vacant" },
+        { id: "unit-2", unitNumber: "102", status: "vacant" },
+      ],
+    });
+    seedDoc("leases", "lease-1", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      tenantId: "tenant-1",
+      tenantIds: ["tenant-1"],
+      primaryTenantId: "tenant-1",
+      unitId: "unit-1",
+      unitNumber: "101",
+      monthlyRent: 1850,
+      startDate: "2026-01-01",
+      endDate: "2026-04-01",
+      status: "ended",
+      createdAt: 1,
+      updatedAt: 2,
+    });
+
+    const router = (await import("../leaseRoutes")).default;
+    const res = await invokeRouter(router, { method: "POST", url: "/lease-1/restore-active", body: {} });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      ok: true,
+      lease: expect.objectContaining({
+        id: "lease-1",
+        status: "active",
+        endDate: null,
+      }),
+    });
+
+    const leaseSnap = await fakeDb.collection("leases").doc("lease-1").get();
+    expect(leaseSnap.data()).toEqual(
+      expect.objectContaining({
+        status: "active",
+        endDate: null,
+        updatedAt: expect.any(String),
+      })
+    );
+
+    const propertySnap = await fakeDb.collection("properties").doc("prop-1").get();
+    expect(propertySnap.data()?.units).toEqual([
+      expect.objectContaining({ id: "unit-1", unitNumber: "101", status: "occupied" }),
+      expect.objectContaining({ id: "unit-2", unitNumber: "102", status: "vacant" }),
+    ]);
+  });
+
+  it("fails to restore a lease unless it is currently ended", async () => {
+    seedDoc("properties", "prop-1", {
+      landlordId: "landlord-1",
+      name: "Harbour View",
+      units: [{ id: "unit-1", unitNumber: "101", status: "occupied" }],
+    });
+    seedDoc("leases", "lease-1", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      tenantId: "tenant-1",
+      tenantIds: ["tenant-1"],
+      primaryTenantId: "tenant-1",
+      unitId: "unit-1",
+      unitNumber: "101",
+      monthlyRent: 1850,
+      startDate: "2026-01-01",
+      endDate: null,
+      status: "active",
+    });
+
+    const router = (await import("../leaseRoutes")).default;
+    const res = await invokeRouter(router, { method: "POST", url: "/lease-1/restore-active", body: {} });
+
+    expect(res.status).toBe(409);
+    expect(res.body).toEqual({ ok: false, error: "lease_restore_requires_ended_status" });
+  });
+
+  it("fails to restore when another active lease already exists for the same unit", async () => {
+    seedDoc("properties", "prop-1", {
+      landlordId: "landlord-1",
+      name: "Harbour View",
+      units: [{ id: "unit-1", unitNumber: "101", status: "vacant" }],
+    });
+    seedDoc("leases", "lease-ended", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      tenantId: "tenant-1",
+      tenantIds: ["tenant-1"],
+      primaryTenantId: "tenant-1",
+      unitId: "unit-1",
+      unitNumber: "101",
+      monthlyRent: 1850,
+      startDate: "2026-01-01",
+      endDate: "2026-04-01",
+      status: "ended",
+    });
+    seedDoc("leases", "lease-active", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      tenantId: "tenant-2",
+      tenantIds: ["tenant-2"],
+      primaryTenantId: "tenant-2",
+      unitId: "unit-1",
+      unitNumber: "101",
+      monthlyRent: 1900,
+      startDate: "2026-04-02",
+      endDate: null,
+      status: "active",
+    });
+
+    const router = (await import("../leaseRoutes")).default;
+    const res = await invokeRouter(router, { method: "POST", url: "/lease-ended/restore-active", body: {} });
+
+    expect(res.status).toBe(409);
+    expect(res.body).toEqual({
+      ok: false,
+      error: "conflicting_active_lease_agreement",
+      conflictLeaseIds: ["lease-active"],
+    });
+
+    const propertySnap = await fakeDb.collection("properties").doc("prop-1").get();
+    expect(propertySnap.data()?.units).toEqual([
+      expect.objectContaining({ id: "unit-1", unitNumber: "101", status: "vacant" }),
+    ]);
+  });
+
+  it("fails to restore when the matching property unit cannot be found", async () => {
+    seedDoc("properties", "prop-1", {
+      landlordId: "landlord-1",
+      name: "Harbour View",
+      units: [{ id: "unit-2", unitNumber: "102", status: "vacant" }],
+    });
+    seedDoc("leases", "lease-1", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      tenantId: "tenant-1",
+      tenantIds: ["tenant-1"],
+      primaryTenantId: "tenant-1",
+      unitId: "unit-1",
+      unitNumber: "101",
+      monthlyRent: 1850,
+      startDate: "2026-01-01",
+      endDate: "2026-04-01",
+      status: "ended",
+    });
+
+    const router = (await import("../leaseRoutes")).default;
+    const res = await invokeRouter(router, { method: "POST", url: "/lease-1/restore-active", body: {} });
+
+    expect(res.status).toBe(409);
+    expect(res.body).toEqual({
+      ok: false,
+      error: "lease_restore_unit_reconciliation_failed",
+    });
+
+    const leaseSnap = await fakeDb.collection("leases").doc("lease-1").get();
+    expect(leaseSnap.data()).toEqual(
+      expect.objectContaining({
+        status: "ended",
+        endDate: "2026-04-01",
+      })
+    );
   });
 });
