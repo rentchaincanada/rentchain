@@ -1153,6 +1153,7 @@ describe("tenant workspace frontend shell", () => {
     expect((await screen.findAllByText(/Institutional handoff drafts/i)).length).toBeGreaterThan(0);
     expect(screen.getByText(/No data is sent automatically/i)).toBeInTheDocument();
     expect(screen.getByText(/Institution connections are not enabled yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/tenant-managed manual-release preparation only/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /send/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /submit to bank/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /connect institution/i })).not.toBeInTheDocument();
@@ -1175,14 +1176,20 @@ describe("tenant workspace frontend shell", () => {
       });
     });
 
-    expect(await screen.findByText(/Ready for manual review/i)).toBeInTheDocument();
+    expect(await screen.findByText(/^Ready for manual review$/i)).toBeInTheDocument();
     expect(screen.getByText(/Example Bank Sandbox/i)).toBeInTheDocument();
+    expect(screen.getByText(/ready for manual review before any tenant-managed sharing decision/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/You may manually share a downloaded export outside RentChain when you choose/i)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/ready to send/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/delivered/i)).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Void draft/i }));
     await waitFor(() => {
       expect(tenantPortalApi.voidInstitutionalHandoffDraft).toHaveBeenCalledWith("handoff-1");
     });
-    expect(await screen.findByText(/Voided/i)).toBeInTheDocument();
+    expect(await screen.findByText(/^Voided$/i)).toBeInTheDocument();
   });
 
   it("lets tenants approve a pending share access request", async () => {

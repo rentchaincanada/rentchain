@@ -142,9 +142,18 @@ function prettyInstitutionType(
 }
 
 function prettyHandoffStatus(
-  value: "draft" | "ready_for_manual_review" | "blocked" | "voided" | null | undefined
+  value:
+    | "draft"
+    | "ready_for_manual_review"
+    | "ready_for_tenant_managed_release"
+    | "blocked"
+    | "voided"
+    | null
+    | undefined
 ) {
   switch (value) {
+    case "ready_for_tenant_managed_release":
+      return "Ready for tenant-managed release";
     case "ready_for_manual_review":
       return "Ready for manual review";
     case "blocked":
@@ -154,6 +163,31 @@ function prettyHandoffStatus(
     case "draft":
     default:
       return "Draft";
+  }
+}
+
+function institutionalHandoffStatusDescription(
+  value:
+    | "draft"
+    | "ready_for_manual_review"
+    | "ready_for_tenant_managed_release"
+    | "blocked"
+    | "voided"
+    | null
+    | undefined
+) {
+  switch (value) {
+    case "ready_for_tenant_managed_release":
+      return "This draft is ready for tenant-managed manual release. You may manually share a downloaded export outside RentChain when you choose.";
+    case "ready_for_manual_review":
+      return "This draft is ready for manual review before any tenant-managed sharing decision.";
+    case "blocked":
+      return "This draft still needs more readiness details before manual review can proceed.";
+    case "voided":
+      return "This draft has been voided and is no longer part of your current manual-release preparation.";
+    case "draft":
+    default:
+      return "This draft is still being prepared for manual review.";
   }
 }
 
@@ -1239,7 +1273,7 @@ export default function TenantWorkspacePage() {
           >
             <div style={{ fontWeight: 700, color: textTokens.primary }}>Institutional handoff drafts</div>
             <div style={{ color: textTokens.secondary, lineHeight: 1.6 }}>
-              Prepare a draft institutional handoff. This prepares a draft package for review only. No data is sent automatically. Institution connections are not enabled yet.
+              Prepare a draft institutional handoff. This supports tenant-managed manual-release preparation only. No data is sent automatically, and institution connections are not enabled yet.
             </div>
 
             <label style={{ display: "grid", gap: 6 }}>
@@ -1302,6 +1336,15 @@ export default function TenantWorkspacePage() {
                         { label: "Updated", value: formatDate(draft.updatedAt) },
                       ]}
                     />
+                    <div style={{ color: textTokens.secondary, lineHeight: 1.6 }}>
+                      {institutionalHandoffStatusDescription(draft.handoffStatus)}
+                    </div>
+                    <div style={{ color: textTokens.secondary, lineHeight: 1.6 }}>
+                      No data is sent automatically. You may manually share a downloaded export outside RentChain when you choose.
+                    </div>
+                    <div style={{ color: textTokens.secondary, lineHeight: 1.6 }}>
+                      Institution connections are not enabled yet.
+                    </div>
                     {draft.handoffStatus !== "voided" ? (
                       <div style={{ display: "flex", gap: spacing.sm }}>
                         <button type="button" onClick={() => void handleVoidInstitutionalHandoff(draft.id)} disabled={handoffBusy}>

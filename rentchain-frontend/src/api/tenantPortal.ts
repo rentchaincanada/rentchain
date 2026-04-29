@@ -469,7 +469,12 @@ export type InstitutionalHandoffSummary = {
     readinessStatus: "not_ready" | "partial" | "ready";
     validationStatus: "valid" | "valid_with_warnings" | "invalid";
   };
-  handoffStatus: "draft" | "ready_for_manual_review" | "blocked" | "voided";
+  handoffStatus:
+    | "draft"
+    | "ready_for_manual_review"
+    | "ready_for_tenant_managed_release"
+    | "blocked"
+    | "voided";
   exportStorage: "metadata_only";
   outboundTransfer: "none";
   createdAt: string;
