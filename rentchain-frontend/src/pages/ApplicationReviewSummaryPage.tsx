@@ -278,6 +278,16 @@ function networkReuseSourceLabel(value: "share_package" | "apply_with_rentchain"
   return value === "apply_with_rentchain" ? "RentChain application" : "Share package";
 }
 
+function networkReusePathSupportLabel(
+  approvedIdentity: boolean | null | undefined,
+  approvedApplication: boolean | null | undefined
+) {
+  if (approvedIdentity && approvedApplication) return "Identity and application summaries approved";
+  if (approvedIdentity) return "Identity summary approved";
+  if (approvedApplication) return "Application summary approved";
+  return "No reusable summaries approved yet";
+}
+
 type SummaryLoadError = {
   message: string;
   status?: number;
@@ -1757,12 +1767,23 @@ function ApplicationReviewSummaryPageBody() {
             <Card style={{ display: "grid", gap: 8 }}>
               <div style={{ fontWeight: 700 }}>Network reuse</div>
               <div style={{ fontSize: 13, color: text.subtle }}>
-                This application already carries tenant-approved RentChain reuse metadata. It is descriptive only and does not expand landlord permissions or visibility.
+                {summary.networkReuseSummary.reusePathDescription} It is descriptive only and does not expand landlord permissions or visibility.
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
-                {kv("Status", networkReuseStatusLabel(summary.networkReuseSummary.reuseStatus))}
+                {kv("Status", summary.networkReuseSummary.reusePathLabel)}
                 {kv("Source", networkReuseSourceLabel(summary.networkReuseSummary.source))}
                 {kv("Consent required", summary.networkReuseSummary.consentRequired ? "Yes" : "No")}
+                {kv(
+                  "Approved reuse support",
+                  networkReusePathSupportLabel(
+                    summary.networkReuseSummary.identitySummaryApproved,
+                    summary.networkReuseSummary.applicationSummaryApproved
+                  )
+                )}
+                {kv(
+                  "Additional approval may unlock more",
+                  summary.networkReuseSummary.additionalConsentMayUnlock ? "Yes" : "No"
+                )}
               </div>
             </Card>
           ) : null}

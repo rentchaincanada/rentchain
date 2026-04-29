@@ -201,6 +201,26 @@ function prettyShareRequestItem(
   }
 }
 
+function describeShareLinkReusePath(entry: TenantSharePackageLink): string {
+  const identitySummaryApproved = entry.approvedItems.includes("identity_summary");
+  const applicationSummaryApproved = entry.approvedItems.includes("application_summary");
+  const referenceStatus = entry.identityExchangeReference?.referenceStatus || "not_ready";
+
+  if (identitySummaryApproved && applicationSummaryApproved) {
+    return "Apply with RentChain is available with your approved identity and reusable application details.";
+  }
+
+  if (identitySummaryApproved) {
+    return "This link currently shares identity summary only. Additional approval is still required before reusable application details can be used.";
+  }
+
+  if (referenceStatus === "available" || referenceStatus === "limited") {
+    return "This link can support summary-only follow-through today. Broader reuse still requires your approval.";
+  }
+
+  return "This link does not yet support a reusable RentChain application path.";
+}
+
 export default function TenantWorkspacePage() {
   const [data, setData] = React.useState<Awaited<ReturnType<typeof getTenantWorkspace>> | null>(null);
   const [institutionalPackage, setInstitutionalPackage] = React.useState<InstitutionalExportV2 | null>(null);
@@ -1398,6 +1418,9 @@ export default function TenantWorkspacePage() {
                       ? entry.approvedItems.map((item) => prettyShareRequestItem(item)).join(", ")
                       : "Identity summary only"}
                   </div>
+                  <div style={{ color: textTokens.secondary }}>
+                    Reuse path: {describeShareLinkReusePath(entry)}
+                  </div>
                   {entry.verificationRequests.some((request) => request.status === "approved") ? (
                     <div style={{ color: textTokens.secondary }}>
                       Verification approvals:{" "}
@@ -1421,6 +1444,9 @@ export default function TenantWorkspacePage() {
                       <div style={{ fontWeight: 700, color: textTokens.primary }}>Pending request</div>
                       <div style={{ color: textTokens.secondary }}>
                         {entry.requestedItems.map((item) => prettyShareRequestItem(item)).join(", ")}
+                      </div>
+                      <div style={{ color: textTokens.secondary }}>
+                        No new access is granted unless you approve it.
                       </div>
                       <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
                         <button
