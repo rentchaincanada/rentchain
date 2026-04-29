@@ -23,6 +23,12 @@ describe("deriveComplianceReadiness", () => {
         dataScope: "tenant_controlled_export",
         consentRequired: true,
       },
+      auditTraceabilityContext: {
+        handoffDraftMetadataAvailable: true,
+        manualReleasePreparationAvailable: true,
+        observabilityCoverage: "draft_creation_only",
+        canonicalInstitutionEventsAvailable: false,
+      },
     });
 
     expect(result.readinessStatus).toBe("ready");
@@ -31,6 +37,26 @@ describe("deriveComplianceReadiness", () => {
       schemaVersion: "2.0",
       exportStorage: "not_stored",
       outboundTransfer: "none",
+    });
+    expect(result.auditTraceability).toEqual({
+      traceabilityStatus: "ready",
+      traceabilityLabel: "Ready for summary-only review",
+      traceabilityDescription:
+        "Reduced, tenant-safe audit traceability is available for on-demand exports and metadata-only handoff preparation, with some institutional logging gaps still disclosed.",
+      evidenceCoverage: {
+        identityTimelineAvailable: true,
+        exportGeneratedOnDemand: true,
+        exportStoredByRentChain: false,
+        handoffDraftMetadataAvailable: true,
+        manualReleasePreparationAvailable: true,
+        observabilityCoverage: "draft_creation_only",
+        canonicalInstitutionEventsAvailable: false,
+      },
+      readinessGaps: [
+        "institutional_export_events_not_recorded",
+        "institutional_handoff_lifecycle_events_limited",
+        "access_audit_summary_not_available",
+      ],
     });
   });
 
@@ -55,9 +81,16 @@ describe("deriveComplianceReadiness", () => {
         dataScope: "tenant_controlled_export",
         consentRequired: true,
       },
+      auditTraceabilityContext: {
+        handoffDraftMetadataAvailable: true,
+        manualReleasePreparationAvailable: true,
+        observabilityCoverage: "draft_creation_only",
+        canonicalInstitutionEventsAvailable: false,
+      },
     });
 
     expect(result.readinessStatus).toBe("partial");
+    expect(result.auditTraceability.traceabilityStatus).toBe("limited");
     expect(result.checks.find((check) => check.key === "identity_trace_available")?.status).toBe("warning");
     expect(result.checks.find((check) => check.key === "consent_controls_available")?.status).toBe("warning");
   });
@@ -83,10 +116,21 @@ describe("deriveComplianceReadiness", () => {
         dataScope: "tenant_controlled_export",
         consentRequired: true,
       },
+      auditTraceabilityContext: {
+        handoffDraftMetadataAvailable: true,
+        manualReleasePreparationAvailable: true,
+        observabilityCoverage: "draft_creation_only",
+        canonicalInstitutionEventsAvailable: false,
+      },
     });
 
     expect(result.readinessStatus).toBe("not_ready");
     expect(result.checks.find((check) => check.key === "schema_validated")?.status).toBe("missing");
+    expect(result.auditTraceability.readinessGaps).toEqual([
+      "institutional_export_events_not_recorded",
+      "institutional_handoff_lifecycle_events_limited",
+      "access_audit_summary_not_available",
+    ]);
     expect(JSON.stringify(result)).not.toContain("tokenHash");
     expect(JSON.stringify(result)).not.toContain("documentUrl");
     expect(JSON.stringify(result)).not.toContain("paymentMethod");

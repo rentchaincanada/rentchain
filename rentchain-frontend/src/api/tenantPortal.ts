@@ -446,6 +446,25 @@ export type InstitutionalExportV2 = {
       exportStorage: "not_stored";
       outboundTransfer: "none";
     };
+    auditTraceability: {
+      traceabilityStatus: "limited" | "ready";
+      traceabilityLabel: string;
+      traceabilityDescription: string;
+      evidenceCoverage: {
+        identityTimelineAvailable: boolean;
+        exportGeneratedOnDemand: true;
+        exportStoredByRentChain: false;
+        handoffDraftMetadataAvailable: boolean;
+        manualReleasePreparationAvailable: boolean;
+        observabilityCoverage: "draft_creation_only" | "none";
+        canonicalInstitutionEventsAvailable: false;
+      };
+      readinessGaps: Array<
+        | "institutional_export_events_not_recorded"
+        | "institutional_handoff_lifecycle_events_limited"
+        | "access_audit_summary_not_available"
+      >;
+    };
   };
   extensions: {
     reserved: Record<string, never>;

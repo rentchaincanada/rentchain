@@ -389,12 +389,27 @@ describe("tenant workspace frontend shell", () => {
           schemaVersion: "2.0",
           exportStorage: "not_stored",
           outboundTransfer: "none",
-      },
-      },
-      validation: {
-        status: "valid",
-        warnings: [],
-        missingRecommendedFields: [],
+        },
+        auditTraceability: {
+          traceabilityStatus: "ready",
+          traceabilityLabel: "Ready for summary-only review",
+          traceabilityDescription:
+            "Reduced, tenant-safe audit traceability is available for on-demand exports and metadata-only handoff preparation, with some institutional logging gaps still disclosed.",
+          evidenceCoverage: {
+            identityTimelineAvailable: true,
+            exportGeneratedOnDemand: true,
+            exportStoredByRentChain: false,
+            handoffDraftMetadataAvailable: true,
+            manualReleasePreparationAvailable: true,
+            observabilityCoverage: "draft_creation_only",
+            canonicalInstitutionEventsAvailable: false,
+          },
+          readinessGaps: [
+            "institutional_export_events_not_recorded",
+            "institutional_handoff_lifecycle_events_limited",
+            "access_audit_summary_not_available",
+          ],
+        },
       },
       extensions: {
         reserved: {},
@@ -1130,11 +1145,22 @@ describe("tenant workspace frontend shell", () => {
     expect(screen.getByText(/Institution-ready structure/i)).toBeInTheDocument();
     expect(screen.getByText(/Validation status/i)).toBeInTheDocument();
     expect(screen.getByText(/Compliance readiness/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Audit traceability/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Draft metadata trace/i)).toBeInTheDocument();
+    expect(screen.getByText(/Institution event coverage/i)).toBeInTheDocument();
+    expect(screen.getByText(/Draft creation only/i)).toBeInTheDocument();
     expect(screen.getByText(/Exports are generated on request and are not stored by RentChain/i)).toBeInTheDocument();
     expect(screen.getAllByText(/No data is sent automatically/i).length).toBeGreaterThan(0);
+    expect(
+      screen.getByText(/This audit traceability summary reflects reduced, tenant-safe evidence only/i)
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Current gaps: export generation is not recorded as an institutional event stream/i)).toBeInTheDocument();
     expect(screen.queryByText(/SOC2/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/certification/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/guaranteed/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/send to bank/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/ready to send/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/delivered/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/drawnDataUrl/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/paymentMethod/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Lease activated/i)).not.toBeInTheDocument();
