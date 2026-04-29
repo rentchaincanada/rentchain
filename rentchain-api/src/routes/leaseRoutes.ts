@@ -32,14 +32,10 @@ import {
   isTargetedHiddenLeaseId,
   isTargetedHiddenTenantId,
 } from "../lib/testDataVisibilityTargets";
-import { deriveTenantSafeLeaseReadinessMetadata } from "../services/tenantPortal/tenantProjectionService";
-import { derivePaymentReadiness } from "../services/paymentReadiness/derivePaymentReadiness";
 import {
-  deriveRentPaymentEligibility,
   enableRentCollectionForLease,
-  getRentPaymentSummaryForLease,
 } from "../services/rentPayments/rentPaymentService";
-import { isStripeConfigured } from "../services/stripeService";
+import { buildLeasePaymentProjection } from "../services/projections/buildLeasePaymentProjection";
 
 const router = Router();
 const LEDGER_COLLECTION = "ledgerEntries";
@@ -298,30 +294,28 @@ async function enrichLeaseRow(raw: any) {
       : null;
   const tenantEmail =
     tenantSnap?.exists ? String(tenantSnap.data()?.email || "").trim() || null : null;
-  const leaseReadiness = deriveTenantSafeLeaseReadinessMetadata(raw, { documentUrl, leaseId: lease.id });
-  const paymentReadiness = derivePaymentReadiness({
+  const leasePaymentProjection = await buildLeasePaymentProjection({
+    rawLease: raw,
+    lease: {
+      id: lease.id,
+      landlordId: String(lease.landlordId || "").trim() || null,
+      tenantId,
+      primaryTenantId: String(lease.primaryTenantId || "").trim() || null,
+      tenantIds: Array.isArray(lease.tenantIds) ? lease.tenantIds : [],
+      propertyId,
+      unitId: String(lease.unitId || "").trim() || null,
+      unitNumber: String(lease.unitNumber || "").trim() || null,
+      monthlyRent: lease.monthlyRent,
+      startDate: lease.startDate,
+      endDate: lease.endDate,
+      status: lease.status,
+    },
     leaseId: lease.id,
-    monthlyRent: lease.monthlyRent,
-    startDate: lease.startDate,
-    endDate: lease.endDate,
-    dueDay: typeof raw?.dueDay === "number" ? raw.dueDay : null,
-    tenantId,
-    propertyId,
-    unitId: String(lease.unitId || lease.unitNumber || "").trim() || null,
-    leaseExecution: leaseReadiness.leaseExecution,
+    documentUrl,
   });
-  const eligibility = deriveRentPaymentEligibility({
-    lease,
-    paymentReadiness,
-    stripeConfigured: isStripeConfigured(),
-  });
-  const rentPaymentSummary = await getRentPaymentSummaryForLease({
-    leaseId: lease.id,
-    paymentRailEnabled: raw?.paymentRailEnabled === true,
-    paymentRailEnabledAt: raw?.paymentRailEnabledAt || null,
-    paymentRailProcessor: raw?.paymentRailProcessor || null,
-    blockedReason: eligibility.blockedReason,
-  });
+  const leaseReadiness = leasePaymentProjection.leaseReadiness;
+  const paymentReadiness = leasePaymentProjection.paymentReadiness;
+  const rentPaymentSummary = leasePaymentProjection.rentPaymentSummary;
 
   return {
     ...lease,
@@ -1256,27 +1250,30 @@ router.post("/:leaseId/payment-rails/enable", requireLandlord, async (req: any, 
 
     const raw = result.lease as any;
     const lease = normalizeLeaseRow(leaseId, raw);
-    const paymentReadiness = derivePaymentReadiness({
+    const leasePaymentProjection = await buildLeasePaymentProjection({
+      rawLease: raw,
+      lease: {
+        id: leaseId,
+        landlordId: String(lease.landlordId || "").trim() || null,
+        tenantId: String(lease.primaryTenantId || lease.tenantId || lease.tenantIds?.[0] || "").trim() || null,
+        primaryTenantId: String(lease.primaryTenantId || "").trim() || null,
+        tenantIds: Array.isArray(lease.tenantIds) ? lease.tenantIds : [],
+        propertyId: lease.propertyId,
+        unitId: String(lease.unitId || "").trim() || null,
+        unitNumber: String(lease.unitNumber || "").trim() || null,
+        monthlyRent: lease.monthlyRent,
+        startDate: lease.startDate,
+        endDate: lease.endDate,
+        status: lease.status,
+      },
       leaseId,
-      monthlyRent: lease.monthlyRent,
-      startDate: lease.startDate,
-      endDate: lease.endDate,
-      dueDay: typeof raw?.dueDay === "number" ? raw.dueDay : null,
-      tenantId: String(lease.primaryTenantId || lease.tenantId || lease.tenantIds?.[0] || "").trim() || null,
-      propertyId: lease.propertyId,
-      unitId: String(lease.unitId || lease.unitNumber || "").trim() || null,
-      leaseExecution: deriveTenantSafeLeaseReadinessMetadata(raw, { leaseId, documentUrl: null }).leaseExecution,
+      documentUrl: null,
     });
-    const eligibility = deriveRentPaymentEligibility({
-      lease,
-      paymentReadiness,
-      stripeConfigured: isStripeConfigured(),
-    });
-    if (!eligibility.eligible) {
+    if (leasePaymentProjection.blockedReason) {
       return res.status(400).json({
         ok: false,
         error: "LEASE_PAYMENT_RAIL_INELIGIBLE",
-        detail: eligibility.blockedReason,
+        detail: leasePaymentProjection.blockedReason,
       });
     }
 
@@ -1321,29 +1318,27 @@ router.get("/:leaseId/payments", requireLandlord, async (req: any, res: Response
 
     const raw = result.lease as any;
     const lease = normalizeLeaseRow(leaseId, raw);
-    const paymentReadiness = derivePaymentReadiness({
-      leaseId,
-      monthlyRent: lease.monthlyRent,
-      startDate: lease.startDate,
-      endDate: lease.endDate,
-      dueDay: typeof raw?.dueDay === "number" ? raw.dueDay : null,
-      tenantId: String(lease.primaryTenantId || lease.tenantId || lease.tenantIds?.[0] || "").trim() || null,
-      propertyId: lease.propertyId,
-      unitId: String(lease.unitId || lease.unitNumber || "").trim() || null,
-      leaseExecution: deriveTenantSafeLeaseReadinessMetadata(raw, { leaseId, documentUrl: null }).leaseExecution,
-    });
-    const eligibility = deriveRentPaymentEligibility({
-      lease,
-      paymentReadiness,
-      stripeConfigured: isStripeConfigured(),
-    });
-    const data = await getRentPaymentSummaryForLease({
-      leaseId,
-      paymentRailEnabled: raw?.paymentRailEnabled === true,
-      paymentRailEnabledAt: raw?.paymentRailEnabledAt || null,
-      paymentRailProcessor: raw?.paymentRailProcessor || null,
-      blockedReason: eligibility.blockedReason,
-    });
+    const data = (
+      await buildLeasePaymentProjection({
+        rawLease: raw,
+        lease: {
+          id: leaseId,
+          landlordId: String(lease.landlordId || "").trim() || null,
+          tenantId: String(lease.primaryTenantId || lease.tenantId || lease.tenantIds?.[0] || "").trim() || null,
+          primaryTenantId: String(lease.primaryTenantId || "").trim() || null,
+          tenantIds: Array.isArray(lease.tenantIds) ? lease.tenantIds : [],
+          propertyId: lease.propertyId,
+          unitId: String(lease.unitId || "").trim() || null,
+          unitNumber: String(lease.unitNumber || "").trim() || null,
+          monthlyRent: lease.monthlyRent,
+          startDate: lease.startDate,
+          endDate: lease.endDate,
+          status: lease.status,
+        },
+        leaseId,
+        documentUrl: null,
+      })
+    ).rentPaymentSummary;
     return res.status(200).json({ ok: true, data });
   } catch (err) {
     console.error("[GET /api/leases/:leaseId/payments] error", err);
