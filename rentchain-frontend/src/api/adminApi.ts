@@ -2,6 +2,7 @@ import { apiFetch } from "./apiFetch";
 import { API_BASE_URL } from "./config";
 import { getAuthToken } from "../lib/authToken";
 import { getFirebaseIdToken } from "../lib/firebaseAuthToken";
+import { parseContentDispositionFilename } from "./exportDownload";
 
 export type AdminPropertyView = {
   id: string;
@@ -387,9 +388,7 @@ async function downloadAdminCsv(path: string, params?: Record<string, string | n
   }
 
   const blob = await response.blob();
-  const disposition = response.headers.get("content-disposition") || "";
-  const filenameMatch = disposition.match(/filename="([^"]+)"/i);
-  const filename = filenameMatch?.[1] || "admin-export.csv";
+  const filename = parseContentDispositionFilename(response.headers.get("content-disposition"), "admin-export.csv");
   return { blob, filename };
 }
 

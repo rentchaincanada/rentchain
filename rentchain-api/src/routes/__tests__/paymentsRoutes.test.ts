@@ -115,6 +115,9 @@ describe("paymentsRoutes exports", () => {
 
     expect(res.status).toBe(200);
     expect(res.headers["content-type"]).toContain("text/csv");
+    expect(res.headers["content-disposition"]).toMatch(
+      /^attachment; filename="rentchain-payments-\d{4}-\d{2}-\d{2}\.csv"$/
+    );
     expect(String(res.body)).toContain("Taylor Tenant");
     expect(String(res.body)).toContain("123 Main St");
     expect(String(res.body)).not.toContain("tenant-1");
@@ -127,6 +130,9 @@ describe("paymentsRoutes exports", () => {
 
     expect(res.status).toBe(200);
     expect(res.headers["content-type"]).toContain("application/vnd.ms-excel");
+    expect(res.headers["content-disposition"]).toMatch(
+      /^attachment; filename="rentchain-payments-\d{4}-\d{2}-\d{2}\.xlsx"$/
+    );
     expect(String(res.body)).toContain("Taylor Tenant");
     expect(String(res.body)).toContain("123 Main St");
   });

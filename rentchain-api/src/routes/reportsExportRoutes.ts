@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { requireAuth } from "../middleware/requireAuth";
 import { requirePermission } from "../middleware/requireAuthz";
+import { setAttachmentExportHeaders } from "../lib/exports/exportResponse";
 
 const router = Router();
 
@@ -48,11 +49,10 @@ router.get(
 
     const csv = toCSV(rows);
 
-    res.setHeader("Content-Type", "text/csv; charset=utf-8");
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename="rentchain-monthly-ops-${period}.csv"`
-    );
+    setAttachmentExportHeaders(res, {
+      filename: `rentchain-monthly-ops-${period}.csv`,
+      format: "csv",
+    });
 
     return res.status(200).send(csv);
   }

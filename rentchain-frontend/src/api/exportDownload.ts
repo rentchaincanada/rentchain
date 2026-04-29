@@ -7,6 +7,15 @@ type DownloadAuthenticatedExportOptions = {
   errorMessage: string;
 };
 
+export function parseContentDispositionFilename(
+  disposition: string | null,
+  fallbackFilename: string
+): string {
+  const raw = disposition || "";
+  const match = raw.match(/filename\*?=(?:UTF-8''|\"?)([^\";]+)/i);
+  return match?.[1] ? decodeURIComponent(match[1].replace(/\"/g, "").trim()) : fallbackFilename;
+}
+
 export async function downloadAuthenticatedExport({
   path,
   fallbackFilename,
@@ -32,9 +41,7 @@ export async function downloadAuthenticatedExport({
   }
 
   const blob = await response.blob();
-  const disposition = response.headers.get("Content-Disposition") || "";
-  const match = disposition.match(/filename\*?=(?:UTF-8''|\"?)([^\";]+)/i);
-  const filename = match?.[1] ? decodeURIComponent(match[1].replace(/\"/g, "").trim()) : fallbackFilename;
+  const filename = parseContentDispositionFilename(response.headers.get("Content-Disposition"), fallbackFilename);
 
   return { blob, filename };
 }

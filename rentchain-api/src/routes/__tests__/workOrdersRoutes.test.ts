@@ -1234,6 +1234,9 @@ describe("workOrdersRoutes execution completion", () => {
 
     expect(res.status).toBe(200);
     expect(res.headers["content-type"]).toContain("text/csv");
+    expect(String(res.headers["content-disposition"] || "")).toMatch(
+      /^attachment; filename="rentchain-work-orders-\d{4}-\d{2}-\d{2}\.csv"$/
+    );
     expect(String(res.body)).toContain("123 Main St");
     expect(String(res.body)).toContain("Landlord confirmed the service window.");
     expect(String(res.body)).not.toContain("https://example.com/photo.jpg");

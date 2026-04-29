@@ -30,6 +30,7 @@ import {
 } from "../lib/maintenanceNotifications";
 import { createTransaction } from "../services/financialTransactionService";
 import { writeCanonicalEvent } from "../lib/events/buildEvent";
+import { buildDatedExportFilename, setAttachmentExportHeaders } from "../lib/exports/exportResponse";
 import { executeMaintenanceApprovalAutomation } from "../services/maintenanceApprovalExecutionService";
 import { buildMaintenancePolicyRequest } from "../lib/policy/policyAdapters";
 import { evaluatePolicy, toAutopilotPolicySummary, writePolicyEvaluatedEvent } from "../lib/policy/policyEvaluator";
@@ -1526,8 +1527,10 @@ router.get("/work-orders/export.csv", requireAuth, async (req: any, res) => {
       ),
     ].join("\n");
 
-    res.setHeader("Content-Type", "text/csv; charset=utf-8");
-    res.setHeader("Content-Disposition", `attachment; filename="rentchain-work-orders-${new Date().toISOString().slice(0, 10)}.csv"`);
+    setAttachmentExportHeaders(res, {
+      filename: buildDatedExportFilename({ prefix: "rentchain-work-orders", format: "csv" }),
+      format: "csv",
+    });
     return res.status(200).send(csv);
   } catch (err) {
     console.error("[work-orders] csv export failed", err);
@@ -1541,8 +1544,10 @@ router.get("/work-orders/export.xlsx", requireAuth, async (req: any, res) => {
     const rows = await buildWorkOrderExportRows(await listLandlordWorkOrdersForExport(req));
     const xml = renderWorkOrderSpreadsheetXml(rows);
 
-    res.setHeader("Content-Type", "application/vnd.ms-excel; charset=utf-8");
-    res.setHeader("Content-Disposition", `attachment; filename="rentchain-work-orders-${new Date().toISOString().slice(0, 10)}.xlsx"`);
+    setAttachmentExportHeaders(res, {
+      filename: buildDatedExportFilename({ prefix: "rentchain-work-orders", format: "xlsx" }),
+      format: "xlsx",
+    });
     return res.status(200).send(xml);
   } catch (err) {
     console.error("[work-orders] xlsx export failed", err);
