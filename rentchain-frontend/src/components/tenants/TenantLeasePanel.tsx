@@ -61,8 +61,8 @@ function getAutomationErrorCopy(error: TaskErrorState) {
     case "tasks_unavailable":
       return {
         title: "Automation tasks unavailable",
-        body: "We couldn’t load upcoming automation tasks right now.",
-        hint: "This may be temporary. Please refresh or try again shortly.",
+        body: "We couldn’t load upcoming automation tasks for this lease right now.",
+        hint: "You can still manage the current lease and ledger normally.",
       };
     case "tasks_refresh_failed":
       return {
@@ -79,8 +79,8 @@ function getAutomationErrorCopy(error: TaskErrorState) {
     default:
       return {
         title: "Automation tasks unavailable",
-        body: "We couldn’t load upcoming automation tasks right now.",
-        hint: "Please refresh or try again shortly.",
+        body: "We couldn’t load upcoming automation tasks for this lease right now.",
+        hint: "You can still manage the current lease and ledger normally.",
       };
   }
 }

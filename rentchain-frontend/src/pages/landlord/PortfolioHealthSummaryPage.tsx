@@ -27,6 +27,10 @@ type LeaseRenewalFormState = {
   responseDeadlineAt: string;
 };
 
+type LeaseRenewalValidationState = {
+  proposedRent?: string | null;
+};
+
 type LeaseRenewalStatusScope = "expiring" | "pending-response" | "no-response";
 
 function toDatetimeLocalInput(value: number | null) {
@@ -106,6 +110,36 @@ function formatRenewalOutcome(
   }
 }
 
+function canSetProposedRent(rentChangeMode: LeaseRenewalFormState["rentChangeMode"]) {
+  return rentChangeMode === "increase" || rentChangeMode === "decrease";
+}
+
+function formatLeaseRenewalLocation(lease: LandlordLeaseRenewalLease) {
+  const propertyLabel = lease.propertyAddress || lease.propertyLabel || "Property";
+  return lease.unitLabel ? `${propertyLabel} • ${lease.unitLabel}` : propertyLabel;
+}
+
+function mapRenewalValidationMessage(errorCode: string | null | undefined) {
+  switch (String(errorCode || "").trim()) {
+    case "RENT_CHANGE_MODE_REQUIRED_FOR_PROPOSED_RENT":
+      return "Choose Increase or Decrease before entering a proposed rent.";
+    case "PROPOSED_RENT_NOT_ALLOWED_FOR_RENT_CHANGE_MODE":
+      return "Proposed rent is only allowed when rent change mode is Increase or Decrease.";
+    case "INVALID_PROPOSED_RENT":
+      return "Enter a valid proposed rent amount.";
+    case "INVALID_NEW_TERM_TYPE":
+      return "Choose a valid renewal term type.";
+    case "INVALID_NEW_LEASE_START_DATE":
+      return "Enter a valid new lease start date.";
+    case "INVALID_NEW_LEASE_END_DATE":
+      return "Enter a valid new lease end date.";
+    case "INVALID_RESPONSE_DEADLINE":
+      return "Enter a valid response deadline.";
+    default:
+      return null;
+  }
+}
+
 export default function PortfolioHealthSummaryPage() {
   const location = useLocation();
   const { showToast } = useToast();
@@ -123,6 +157,7 @@ export default function PortfolioHealthSummaryPage() {
   const [renewalLoading, setRenewalLoading] = React.useState(false);
   const [renewalError, setRenewalError] = React.useState<string | null>(null);
   const [savingLeaseId, setSavingLeaseId] = React.useState<string | null>(null);
+  const [renewalValidation, setRenewalValidation] = React.useState<Record<string, LeaseRenewalValidationState>>({});
   const entryParams = React.useMemo(() => new URLSearchParams(location.search), [location.search]);
   const entry = entryParams.get("entry");
   const entryPropertyId = entryParams.get("propertyId");
@@ -204,6 +239,7 @@ export default function PortfolioHealthSummaryPage() {
             return acc;
           }, {})
         );
+        setRenewalValidation({});
       } catch (err: unknown) {
         if (!mounted) return;
         const message = err instanceof Error && err.message ? err.message : "Failed to load lease renewal inputs";
@@ -228,9 +264,8 @@ export default function PortfolioHealthSummaryPage() {
 
   const handleRenewalFieldChange = React.useCallback(
     (leaseId: string, field: keyof LeaseRenewalFormState, value: string) => {
-      setRenewalForms((current) => ({
-        ...current,
-        [leaseId]: {
+      setRenewalForms((current) => {
+        const next = {
           ...(current[leaseId] || {
             rentChangeMode: "",
             proposedRent: "",
@@ -240,6 +275,23 @@ export default function PortfolioHealthSummaryPage() {
             responseDeadlineAt: "",
           }),
           [field]: value,
+        };
+        if (field === "rentChangeMode" && !canSetProposedRent(value as LeaseRenewalFormState["rentChangeMode"])) {
+          next.proposedRent = "";
+        }
+        return {
+          ...current,
+          [leaseId]: next,
+        };
+      });
+      setRenewalValidation((current) => ({
+        ...current,
+        [leaseId]: {
+          ...current[leaseId],
+          proposedRent:
+            field === "rentChangeMode" && !canSetProposedRent(value as LeaseRenewalFormState["rentChangeMode"])
+              ? "Choose Increase or Decrease before entering a proposed rent."
+              : null,
         },
       }));
     },
@@ -250,9 +302,21 @@ export default function PortfolioHealthSummaryPage() {
     async (leaseId: string) => {
       const form = renewalForms[leaseId];
       if (!form) return;
+      const nextValidation: LeaseRenewalValidationState = {};
+      if (form.proposedRent.trim() && !canSetProposedRent(form.rentChangeMode)) {
+        nextValidation.proposedRent = "Choose Increase or Decrease before entering a proposed rent.";
+        setRenewalValidation((current) => ({ ...current, [leaseId]: nextValidation }));
+        showToast({
+          message: "Review renewal inputs",
+          description: nextValidation.proposedRent,
+          variant: "warning",
+        });
+        return;
+      }
 
       try {
         setSavingLeaseId(leaseId);
+        setRenewalValidation((current) => ({ ...current, [leaseId]: {} }));
         const response = await saveLeaseRenewalInputs(leaseId, {
           rentChangeMode: form.rentChangeMode || null,
           proposedRent: form.proposedRent.trim() ? Number(form.proposedRent) : null,
@@ -266,6 +330,7 @@ export default function PortfolioHealthSummaryPage() {
           ...current,
           [leaseId]: createLeaseRenewalFormState(response.lease),
         }));
+        setRenewalValidation((current) => ({ ...current, [leaseId]: {} }));
         showToast({
           message: "Lease renewal inputs saved",
           description: "Saved values will be picked up by lease notice readiness checks.",
@@ -273,9 +338,22 @@ export default function PortfolioHealthSummaryPage() {
         });
       } catch (err: unknown) {
         const message = err instanceof Error && err.message ? err.message : "Failed to save lease renewal inputs";
+        const friendlyMessage = mapRenewalValidationMessage(message) || mapRenewalValidationMessage((err as any)?.payload?.error) || message;
+        if (
+          friendlyMessage &&
+          (message.includes("PROPOSED_RENT") || message.includes("RENT_CHANGE_MODE_REQUIRED_FOR_PROPOSED_RENT"))
+        ) {
+          setRenewalValidation((current) => ({
+            ...current,
+            [leaseId]: {
+              ...current[leaseId],
+              proposedRent: friendlyMessage,
+            },
+          }));
+        }
         showToast({
           message: "Failed to save lease renewal inputs",
-          description: message,
+          description: friendlyMessage,
           variant: "error",
         });
       } finally {
@@ -354,6 +432,64 @@ export default function PortfolioHealthSummaryPage() {
               <div style={{ fontWeight: 700 }}>{scopedRenewalHeading}</div>
               <div style={{ color: "#475569" }}>{scopedRenewalHelper}</div>
             </div>
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <button
+                type="button"
+                className="no-print"
+                onClick={() => void printSummaryDocument("lease-renewals")}
+                style={{ padding: "8px 10px", borderRadius: 12, border: "1px solid #E5E7EB", background: "#FFFFFF", fontWeight: 900, cursor: "pointer" }}
+              >
+                Print / Save renewal view
+              </button>
+            </div>
+
+            <div className="print-only print-only-lease-renewals">
+              <div className="printHeader">
+                <div className="printTitle">{scopedRenewalHeading}</div>
+                <div className="printMeta">
+                  <div>Scope: Lease renewals</div>
+                  <div>Visible leases: {renewalItems.length}</div>
+                </div>
+              </div>
+              <div>{scopedRenewalHelper}</div>
+              <table className="printTable">
+                <thead>
+                  <tr>
+                    <th>Property</th>
+                    <th>Tenant</th>
+                    <th>Lease end</th>
+                    <th>Lifecycle</th>
+                    <th>Outcome</th>
+                    <th>Next step</th>
+                    <th>Renewal inputs</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {renewalItems.map((lease) => {
+                    const form = renewalForms[lease.id] || createLeaseRenewalFormState(lease);
+                    const renewalSummary = [
+                      form.rentChangeMode ? `Mode: ${form.rentChangeMode.replace(/_/g, " ")}` : null,
+                      form.proposedRent.trim() ? `Proposed rent: ${form.proposedRent}` : null,
+                      form.newTermType ? `Term: ${form.newTermType.replace(/_/g, " ")}` : null,
+                      form.responseDeadlineAt ? `Deadline: ${form.responseDeadlineAt}` : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ");
+                    return (
+                      <tr key={lease.id}>
+                        <td>{formatLeaseRenewalLocation(lease)}</td>
+                        <td>{lease.tenantName || "—"}</td>
+                        <td>{lease.leaseEndDate || "unknown"}</td>
+                        <td>{lease.leaseLifecycleSummary?.lifecycleLabel || "—"}</td>
+                        <td>{formatRenewalOutcome(lease.leaseLifecycleSummary?.renewalOutcome)}</td>
+                        <td>{formatLifecycleNextAction(lease.leaseLifecycleSummary?.requiredNextAction)}</td>
+                        <td>{renewalSummary || "No renewal inputs saved"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
 
             {renewalLoading ? <div>Loading lease renewal inputs…</div> : null}
             {!renewalLoading && renewalError ? <div style={{ color: "#b91c1c" }}>{renewalError}</div> : null}
@@ -364,6 +500,8 @@ export default function PortfolioHealthSummaryPage() {
             {!renewalLoading && !renewalError
               ? renewalItems.map((lease) => {
                   const form = renewalForms[lease.id] || createLeaseRenewalFormState(lease);
+                  const validation = renewalValidation[lease.id] || {};
+                  const proposedRentAllowed = canSetProposedRent(form.rentChangeMode);
                   const isSaving = savingLeaseId === lease.id;
                   return (
                     <div
@@ -379,7 +517,7 @@ export default function PortfolioHealthSummaryPage() {
                     >
                       <div style={{ display: "grid", gap: 2 }}>
                         <div style={{ fontWeight: 700 }}>
-                          {lease.propertyLabel || "Property"} {lease.unitLabel ? `• ${lease.unitLabel}` : ""}
+                          {formatLeaseRenewalLocation(lease)}
                         </div>
                         <div style={{ color: "#475569", fontSize: 14 }}>
                           Lease ends {lease.leaseEndDate || "unknown"}{lease.tenantName ? ` • ${lease.tenantName}` : ""}
@@ -428,8 +566,12 @@ export default function PortfolioHealthSummaryPage() {
                             min="0"
                             step="0.01"
                             value={form.proposedRent}
+                            disabled={!proposedRentAllowed}
                             onChange={(event) => handleRenewalFieldChange(lease.id, "proposedRent", event.target.value)}
                           />
+                          <span style={{ color: validation.proposedRent ? "#b91c1c" : "#64748b", fontSize: 12 }}>
+                            {validation.proposedRent || "Choose Increase or Decrease before entering a proposed rent."}
+                          </span>
                         </label>
 
                         <label style={{ display: "grid", gap: 4 }}>

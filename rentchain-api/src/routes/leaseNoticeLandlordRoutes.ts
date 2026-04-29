@@ -111,6 +111,29 @@ router.get("/expiring", async (req: any, res) => {
       db.collection("leases").where("landlordId", "==", landlordId).limit(400).get(),
       db.collection("leaseNotices").where("landlordId", "==", landlordId).limit(400).get(),
     ]);
+    const propertyIds = Array.from(
+      new Set(
+        leaseSnap.docs
+          .map((doc) => String((doc.data() as any)?.propertyId || "").trim())
+          .filter(Boolean)
+      )
+    );
+    const propertyEntries = await Promise.all(
+      propertyIds.map(async (id) => {
+        try {
+          const snap = await db.collection("properties").doc(id).get();
+          if (!snap.exists) return [id, null] as const;
+          const raw = snap.data() as any;
+          const address =
+            String(raw?.addressLine1 || raw?.address || "").trim() ||
+            null;
+          return [id, address] as const;
+        } catch {
+          return [id, null] as const;
+        }
+      })
+    );
+    const propertyAddressById = new Map<string, string | null>(propertyEntries);
     const latestNoticeByLeaseId = new Map<string, any>();
     const leaseNotices = noticeSnap.docs
       .map((doc) => ({ id: doc.id, ...(doc.data() as any) }))
@@ -133,9 +156,14 @@ router.get("/expiring", async (req: any, res) => {
           now,
           horizon,
         });
+        const propertyAddress =
+          (lease.propertyId ? propertyAddressById.get(lease.propertyId) : null) ||
+          lease.propertyAddress ||
+          null;
         return noticeBucket
           ? {
               ...lease,
+              propertyAddress,
               noticeBucket,
               leaseLifecycleSummary: deriveLeaseLifecycleSummary({
                 lease,

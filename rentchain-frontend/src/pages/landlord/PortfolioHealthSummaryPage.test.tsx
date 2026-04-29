@@ -206,6 +206,7 @@ describe("PortfolioHealthSummaryPage", () => {
           id: "lease-1",
           tenantId: "tenant-1",
           propertyId: "prop-2",
+          propertyAddress: "123 Harbour St",
           unitId: "unit-2",
           status: "active",
           leaseType: "fixed_term",
@@ -246,17 +247,59 @@ describe("PortfolioHealthSummaryPage", () => {
     );
 
     expect(await screen.findByText(/Opened from decisions to review lease-renewal pressure/i)).toBeInTheDocument();
-    expect(await screen.findByText(/Expiring soon leases/i)).toBeInTheDocument();
-    expect(screen.getByText(/Showing leases approaching notice timing/i)).toBeInTheDocument();
-    expect(screen.getByText(/Taylor Tenant/i)).toBeInTheDocument();
-    expect(screen.getByText(/Lifecycle:/i)).toBeInTheDocument();
-    expect(screen.getByText(/Outcome:/i)).toBeInTheDocument();
-    expect(screen.getByText(/Next step:/i)).toBeInTheDocument();
-    expect(screen.getByText(/History:/i)).toBeInTheDocument();
+    expect((await screen.findAllByText(/Expiring soon leases/i)).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(/Showing leases approaching notice timing/i)).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(/Taylor Tenant/i)).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("123 Harbour St • Unit 2")).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Print / Save renewal view" })).toBeInTheDocument();
+    expect((await screen.findAllByText(/Lifecycle:/i)).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(/Outcome:/i)).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(/Next step:/i)).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(/History:/i)).length).toBeGreaterThan(0);
     expect(fetchExpiringLeaseRenewals).toHaveBeenCalledWith({
       propertyId: "prop-2",
       status: "expiring",
     });
+  });
+
+  it("routes scoped renewal printing through the shared print helper", async () => {
+    await mockEntitlements();
+    const { fetchLandlordPortfolioHealth } = await import("../../api/landlordPortfolioHealthApi");
+    const { fetchExpiringLeaseRenewals } = await import("../../api/landlordLeaseRenewalApi");
+    vi.mocked(fetchLandlordPortfolioHealth).mockResolvedValue({
+      portfolioHealth: {
+        version: "v1",
+        portfolioId: "landlord-1",
+        generatedAt: "2026-04-16T12:00:00.000Z",
+        overall: {
+          status: "watch",
+          headline: "Your portfolio health is stable overall.",
+          summary: "Most portfolio activity is progressing normally.",
+        },
+        trend: { direction: "stable", summary: "Stable." },
+        dimensions: [],
+        nextFocus: [],
+        metadata: {
+          portfolioScoreGrade: null,
+          portfolioScoreAvailable: true,
+          trendAvailable: true,
+        },
+      },
+    } as { portfolioHealth: LandlordPortfolioHealthSummaryV1 });
+    vi.mocked(fetchExpiringLeaseRenewals).mockResolvedValue({
+      ok: true,
+      items: [],
+      data: [],
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/portfolio-health?entry=lease-renewals&status=expiring"]}>
+        <PortfolioHealthSummaryPage />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Print / Save renewal view" }));
+    expect(printSummaryDocumentMock).toHaveBeenCalledWith("lease-renewals");
   });
 
   it("saves lease renewal operator inputs from the decision-entry workflow surface", async () => {
@@ -293,6 +336,7 @@ describe("PortfolioHealthSummaryPage", () => {
           id: "lease-1",
           tenantId: "tenant-1",
           propertyId: "prop-1",
+          propertyAddress: "12 Main St",
           unitId: "unit-1",
           status: "active",
           leaseType: "fixed_term",
@@ -322,6 +366,7 @@ describe("PortfolioHealthSummaryPage", () => {
         id: "lease-1",
         tenantId: "tenant-1",
         propertyId: "prop-1",
+        propertyAddress: "12 Main St",
         unitId: "unit-1",
         status: "active",
         leaseType: "fixed_term",
@@ -358,7 +403,7 @@ describe("PortfolioHealthSummaryPage", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText(/Lease renewal operator inputs/i)).toBeInTheDocument();
+    expect((await screen.findAllByText(/Lease renewal operator inputs/i)).length).toBeGreaterThan(0);
     fireEvent.change(screen.getByLabelText(/Rent change mode/i), { target: { value: "no_change" } });
     fireEvent.change(screen.getByLabelText(/New term type/i), { target: { value: "fixed_term" } });
     fireEvent.change(screen.getByLabelText(/New lease start date/i), { target: { value: "2026-07-01" } });
@@ -380,6 +425,96 @@ describe("PortfolioHealthSummaryPage", () => {
     expect(showToast).toHaveBeenCalledWith(
       expect.objectContaining({
         message: "Lease renewal inputs saved",
+      })
+    );
+  });
+
+  it("clears and blocks proposed rent when rent change mode does not allow it", async () => {
+    await mockEntitlements();
+    const { fetchLandlordPortfolioHealth } = await import("../../api/landlordPortfolioHealthApi");
+    const { fetchExpiringLeaseRenewals, saveLeaseRenewalInputs } = await import("../../api/landlordLeaseRenewalApi");
+    vi.mocked(fetchLandlordPortfolioHealth).mockResolvedValue({
+      portfolioHealth: {
+        version: "v1",
+        portfolioId: "landlord-1",
+        generatedAt: "2026-04-16T12:00:00.000Z",
+        overall: {
+          status: "watch",
+          headline: "Your portfolio health is stable overall.",
+          summary: "Most portfolio activity is progressing normally.",
+        },
+        trend: { direction: "stable", summary: "Stable." },
+        dimensions: [],
+        nextFocus: [],
+        metadata: {
+          portfolioScoreGrade: null,
+          portfolioScoreAvailable: true,
+          trendAvailable: true,
+        },
+      },
+    } as { portfolioHealth: LandlordPortfolioHealthSummaryV1 });
+    vi.mocked(fetchExpiringLeaseRenewals).mockResolvedValue({
+      ok: true,
+      items: [
+        {
+          id: "lease-1",
+          tenantId: "tenant-1",
+          propertyId: "prop-1",
+          propertyAddress: "12 Main St",
+          unitId: "unit-1",
+          status: "active",
+          leaseType: "fixed_term",
+          province: "NS",
+          leaseStartDate: "2025-07-01",
+          leaseEndDate: "2026-06-30",
+          currentRent: 1800,
+          currency: "CAD",
+          nextNoticeDueAt: Date.UTC(2026, 3, 1, 0, 0, 0, 0),
+          latestNoticeId: null,
+          tenantName: "Taylor Tenant",
+          unitLabel: "Unit 1",
+          propertyLabel: "Alpha",
+          renewalRentChangeMode: null,
+          renewalOfferedRent: null,
+          renewalDecisionDeadlineAt: null,
+          renewalNewTermType: null,
+          renewalNewLeaseStartDate: null,
+          renewalNewLeaseEndDate: null,
+        },
+      ],
+      data: [],
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/portfolio-health?entry=lease-renewals&propertyId=prop-1"]}>
+        <PortfolioHealthSummaryPage />
+      </MemoryRouter>
+    );
+
+    expect((await screen.findAllByText(/Lease renewal operator inputs/i)).length).toBeGreaterThan(0);
+    const proposedRentInput = screen.getByLabelText(/Proposed rent/i) as HTMLInputElement;
+
+    expect(proposedRentInput).toBeDisabled();
+    fireEvent.change(screen.getByLabelText(/Rent change mode/i), { target: { value: "increase" } });
+    expect(proposedRentInput).not.toBeDisabled();
+    fireEvent.change(proposedRentInput, { target: { value: "2000" } });
+    fireEvent.change(screen.getByLabelText(/Rent change mode/i), { target: { value: "no_change" } });
+
+    expect(proposedRentInput.value).toBe("");
+    fireEvent.click(screen.getByRole("button", { name: /Save renewal inputs/i }));
+
+    await waitFor(() =>
+      expect(saveLeaseRenewalInputs).toHaveBeenCalledWith(
+        "lease-1",
+        expect.objectContaining({
+          rentChangeMode: "no_change",
+          proposedRent: null,
+        })
+      )
+    );
+    expect(showToast).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: "Review renewal inputs",
       })
     );
   });

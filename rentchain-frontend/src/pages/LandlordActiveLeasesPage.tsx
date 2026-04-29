@@ -367,9 +367,6 @@ export default function LandlordActiveLeasesPage() {
     const { ledgerPath, emailHref } = buildLeaseActionMeta(lease);
     return (
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <Link to={ledgerPath} style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", textDecoration: "none", color: "#0f172a" }}>
-          View
-        </Link>
         {lease.documentUrl ? (
           <a
             href={lease.documentUrl}
@@ -379,7 +376,18 @@ export default function LandlordActiveLeasesPage() {
           >
             View lease
           </a>
-        ) : null}
+        ) : (
+          <button
+            type="button"
+            disabled
+            style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #e2e8f0", background: "#f8fafc", color: "#94a3b8" }}
+          >
+            Lease document unavailable
+          </button>
+        )}
+        <Link to={ledgerPath} style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", textDecoration: "none", color: "#0f172a" }}>
+          Ledger
+        </Link>
         {emailHref ? (
           <a
             href={emailHref}

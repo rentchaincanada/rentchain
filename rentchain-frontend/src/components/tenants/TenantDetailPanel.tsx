@@ -6,6 +6,7 @@ import { downloadTenantReport } from "@/api/tenantsApi";
 import { updateTenantMoveInReadiness, type MoveInReadiness } from "@/api/tenantDetail";
 import { getTenantSignals, type TenantSignals } from "@/api/tenantSignals";
 import { fetchLedger } from "@/api/ledgerApi";
+import { fetchLeaseLedger, type LeaseLedgerEntry } from "@/api/leaseLedgerApi";
 import { LedgerTimeline } from "../ledger/LedgerTimeline";
 import { VerifyLedgerButton } from "../ledger/VerifyLedgerButton";
 import { RecordTenantEventModal } from "./RecordTenantEventModal";
@@ -111,6 +112,10 @@ interface LayoutProps {
   activityRefreshKey: number;
 }
 
+function formatCurrencyCents(value: number) {
+  return (value / 100).toLocaleString(undefined, { style: "currency", currency: "CAD" });
+}
+
 const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityRefreshKey }) => {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -131,6 +136,8 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityR
   const [readinessSaving, setReadinessSaving] = useState(false);
 
   const [ledgerItems, setLedgerItems] = useState<any[]>([]);
+  const [leaseLedgerItems, setLeaseLedgerItems] = useState<LeaseLedgerEntry[]>([]);
+  const [ledgerMode, setLedgerMode] = useState<"lease" | "tenant">("tenant");
   const [ledgerLoading, setLedgerLoading] = useState(false);
   const [ledgerError, setLedgerError] = useState<string | null>(null);
   const cancelledRef = useRef(false);
@@ -185,25 +192,41 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityR
   };
 
   const loadLedger = React.useCallback(async () => {
+    const currentLeaseId = String(lease?.id || tenant?.currentLeaseId || tenant?.leaseId || "").trim();
     if (!tenantId) {
       setLedgerItems([]);
+      setLeaseLedgerItems([]);
       return;
     }
     if (!ledgerEnabled) {
       setLedgerItems([]);
+      setLeaseLedgerItems([]);
       return;
     }
     setLedgerLoading(true);
     setLedgerError(null);
     try {
-      const items = await fetchLedger({ tenantId, limit: 50 });
-      if (!cancelledRef.current) setLedgerItems(items || []);
+      if (currentLeaseId) {
+        const ledger = await fetchLeaseLedger(currentLeaseId);
+        if (!cancelledRef.current) {
+          setLedgerMode("lease");
+          setLeaseLedgerItems(Array.isArray(ledger.entries) ? ledger.entries : []);
+          setLedgerItems([]);
+        }
+      } else {
+        const items = await fetchLedger({ tenantId, limit: 50 });
+        if (!cancelledRef.current) {
+          setLedgerMode("tenant");
+          setLedgerItems(items || []);
+          setLeaseLedgerItems([]);
+        }
+      }
     } catch (err: any) {
       if (!cancelledRef.current) setLedgerError(err?.message || "Failed to load ledger");
     } finally {
       if (!cancelledRef.current) setLedgerLoading(false);
     }
-  }, [tenantId, ledgerEnabled]);
+  }, [lease?.id, ledgerEnabled, tenant?.currentLeaseId, tenant?.leaseId, tenantId]);
 
   useEffect(() => {
     cancelledRef.current = false;
@@ -447,7 +470,7 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityR
                       boxShadow: shadows.sm,
                     }}
                   >
-                    <span>Record event</span>
+                    <span>Record tenant activity</span>
                   </button>
                 ) : null}
               </>
@@ -663,7 +686,17 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityR
             alignItems: "center",
           }}
         >
-          <span>Ledger timeline</span>
+          <div style={{ display: "grid", gap: 2 }}>
+            <span>Current lease ledger</span>
+            <span style={{ color: text.muted, fontSize: "0.75rem", fontWeight: 400 }}>
+              Charges and payments from the current lease ledger.
+            </span>
+            {ledgerMode === "tenant" ? (
+              <span style={{ color: text.muted, fontSize: "0.75rem", fontWeight: 400 }}>
+                No current lease is linked, so this view is showing the existing tenant-level ledger source.
+              </span>
+            ) : null}
+          </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <button
               type="button"
@@ -678,9 +711,9 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityR
                 fontSize: "0.8rem",
               }}
             >
-              Record event
+              Record tenant activity
             </button>
-            <VerifyLedgerButton onVerified={() => void loadLedger()} />
+            {ledgerMode === "tenant" ? <VerifyLedgerButton onVerified={() => void loadLedger()} /> : null}
           </div>
         </div>
         {ledgerLoading ? (
@@ -688,7 +721,50 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityR
         ) : ledgerError ? (
           <div style={{ color: colors.danger, fontSize: "0.85rem" }}>{ledgerError}</div>
         ) : (
-          <LedgerTimeline items={ledgerItems || []} compact />
+          ledgerMode === "lease" ? (
+            leaseLedgerItems.length === 0 ? (
+              <div style={{ color: text.muted }}>No ledger entries for the current lease yet.</div>
+            ) : (
+              <div style={{ display: "grid", gap: 8 }}>
+                {leaseLedgerItems.slice(0, 6).map((entry) => (
+                  <div
+                    key={entry.id}
+                    style={{
+                      border: "1px solid rgba(148,163,184,0.35)",
+                      borderRadius: 10,
+                      padding: 12,
+                      background: "rgba(255,255,255,0.8)",
+                      display: "grid",
+                      gap: 4,
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
+                      <div style={{ fontWeight: 800, fontSize: 14, color: text.primary }}>
+                        {entry.entryType === "payment" ? "Payment" : "Charge"} · {entry.category}
+                      </div>
+                      <div
+                        style={{
+                          fontWeight: 700,
+                          color: entry.entryType === "payment" ? "#047857" : text.primary,
+                        }}
+                      >
+                        {entry.entryType === "payment" ? "-" : "+"}
+                        {formatCurrencyCents(Math.abs(Number(entry.amountCents || 0)))}
+                      </div>
+                    </div>
+                    <div style={{ color: text.muted, fontSize: "0.8rem" }}>
+                      {formatDateLabel(entry.effectiveDate)} · Balance {formatCurrencyCents(Number(entry.balanceCents || 0))}
+                    </div>
+                    <div style={{ color: text.primary, fontSize: "0.82rem" }}>
+                      {[entry.method, entry.reference].filter(Boolean).join(" · ") || entry.notes || "No additional details"}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )
+          ) : (
+            <LedgerTimeline items={ledgerItems || []} compact />
+          )
         )}
       </div>
       <TenantActivityPanel tenantId={tenantId} refreshKey={activityRefreshKey} />

@@ -173,8 +173,8 @@ describe("LandlordActiveLeasesPage", () => {
     expect(screen.getByText(/Prepare renewal notice/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Rent terms ready for future setup/i).length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: /Enable rent collection/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "View" })).toHaveAttribute("href", "/leases/lease-1/ledger");
     expect(screen.getByRole("link", { name: "View lease" })).toHaveAttribute("href", "https://example.com/lease.pdf");
+    expect(screen.getByRole("link", { name: "Ledger" })).toHaveAttribute("href", "/leases/lease-1/ledger");
     expect(screen.getByRole("link", { name: "Email" })).toHaveAttribute(
       "href",
       expect.stringContaining("mailto:jane%40example.com")
@@ -344,7 +344,8 @@ describe("LandlordActiveLeasesPage", () => {
     );
 
     expect((await screen.findAllByText("Harbour View")).length).toBeGreaterThan(0);
-    expect(screen.queryByRole("link", { name: "View lease" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Lease document unavailable" })).toBeDisabled();
+    expect(screen.getByRole("link", { name: "Ledger" })).toHaveAttribute("href", "/leases/lease-1/ledger");
     expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
   });
 
@@ -561,8 +562,8 @@ describe("LandlordActiveLeasesPage", () => {
     );
 
     expect(await screen.findByTestId("lease-mobile-card")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "View" })).toHaveAttribute("href", "/leases/lease-1/ledger");
     expect(screen.getByRole("link", { name: "View lease" })).toHaveAttribute("href", "https://example.com/lease.pdf");
+    expect(screen.getByRole("link", { name: "Ledger" })).toHaveAttribute("href", "/leases/lease-1/ledger");
     expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Archive lease" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Enable rent collection/i })).toBeInTheDocument();

@@ -417,6 +417,10 @@ button,
     display: block !important;
   }
 
+  body[data-print-mode="lease-renewals"] .print-only-lease-renewals {
+    display: block !important;
+  }
+
   body[data-print-mode="application"] .print-only-application {
     display: block !important;
   }

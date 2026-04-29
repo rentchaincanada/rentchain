@@ -343,6 +343,11 @@ describe("leaseNoticeLandlordRoutes policy integration", () => {
   it("returns only expiring workflow items when the expiring status filter is requested", async () => {
     if (!collections.has("leases")) collections.set("leases", new Map());
     if (!collections.has("leaseNotices")) collections.set("leaseNotices", new Map());
+    if (!collections.has("properties")) collections.set("properties", new Map());
+    collections.get("properties")?.set("property-1", {
+      landlordId: "landlord-1",
+      addressLine1: "123 Harbour St",
+    });
     collections.get("leases")?.set("lease-expiring", {
       landlordId: "landlord-1",
       propertyId: "property-1",
@@ -376,6 +381,7 @@ describe("leaseNoticeLandlordRoutes policy integration", () => {
     expect(res.body?.items[0]).toEqual(
       expect.objectContaining({
         id: "lease-expiring",
+        propertyAddress: "123 Harbour St",
         noticeBucket: "expiring",
         leaseLifecycleSummary: expect.objectContaining({
           lifecycleStatus: "expiring_soon",
