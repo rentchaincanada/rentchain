@@ -535,7 +535,13 @@ describe("LandlordAnalyticsPage", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Predictive metrics" }));
     expect(screen.getByRole("heading", { name: /Predictive metrics/i })).toBeInTheDocument();
     expect(screen.getByText(/Vacancy pressure is present in the current view/i)).toBeInTheDocument();
+    expect(screen.getByText(/Current vacancy: 20% • Vacant units: 1/i)).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: /Recommended next actions/i })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Attention-worthy insights" }));
+    expect(screen.getByRole("heading", { name: /Attention-worthy insights/i })).toBeInTheDocument();
+    expect(screen.getByText(/Distinct portfolio patterns worth reviewing after alerts and next actions/i)).toBeInTheDocument();
+    expect(screen.queryByText(/^1 lease ends within 30 days\.$/i)).not.toBeInTheDocument();
 
     expect(screen.getByRole("heading", { name: /Applications/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Revenue signal/i })).toBeInTheDocument();

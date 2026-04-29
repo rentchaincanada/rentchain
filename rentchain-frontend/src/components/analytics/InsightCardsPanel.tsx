@@ -1,6 +1,12 @@
 import React from "react";
 import { Card } from "../ui/Ui";
+import type { AnalyticsAlert } from "@/api/landlordAnalyticsAlertsApi";
+import type { LandlordAgentDecision } from "@/api/landlordAnalyticsApi";
 import type { LandlordAnalyticsInsight } from "@/api/landlordAnalyticsApi";
+import {
+  analyticsInsightIntroCopy,
+  shouldRenderInsightCard,
+} from "@/lib/analytics/analyticsInsightCopy";
 
 const severityColor: Record<LandlordAnalyticsInsight["severity"], string> = {
   low: "#0369a1",
@@ -10,24 +16,34 @@ const severityColor: Record<LandlordAnalyticsInsight["severity"], string> = {
 
 type Props = {
   insights: LandlordAnalyticsInsight[];
+  alerts?: AnalyticsAlert[];
+  decisions?: LandlordAgentDecision[];
 };
 
-export function InsightCardsPanel({ insights }: Props) {
+export function InsightCardsPanel({ insights, alerts = [], decisions = [] }: Props) {
+  const visibleInsights = insights.filter((insight) =>
+    shouldRenderInsightCard({
+      insight,
+      alerts,
+      decisions,
+    })
+  );
+
   return (
     <Card>
       <div style={{ display: "grid", gap: 12 }}>
         <div style={{ display: "grid", gap: 4 }}>
           <h2 style={{ margin: 0, fontSize: "1.05rem" }}>Attention-worthy insights</h2>
           <div style={{ color: "#475569" }}>
-            A small set of explainable analytics signals worth reviewing first.
+            {analyticsInsightIntroCopy()}
           </div>
         </div>
 
-        {insights.length === 0 ? (
+        {visibleInsights.length === 0 ? (
           <div style={{ color: "#64748b" }}>No standout analytics signals in this view right now.</div>
         ) : (
           <div style={{ display: "grid", gap: 10 }}>
-            {insights.map((insight, index) => (
+            {visibleInsights.map((insight, index) => (
               <div
                 key={`${insight.type}-${index}`}
                 style={{
