@@ -68,6 +68,11 @@ describe("TenantSharePackagePage", () => {
     expect(screen.getByText(/Identity exchange available/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Request verification/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Apply with RentChain/i })).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /This shared profile supports summary-only reuse today\. Reusable application prefill is only available when both identity and application sharing have been approved by the tenant\./i
+      )
+    ).toBeInTheDocument();
     expect(screen.queryByText(/TransUnion/i)).not.toBeInTheDocument();
   });
 
@@ -118,7 +123,77 @@ describe("TenantSharePackagePage", () => {
         "payment_readiness_summary",
       ]);
     });
+    expect(
+      screen.getByText(
+        /Requesting additional sections does not grant access automatically\. The tenant must approve any expanded scope later\./i
+      )
+    ).toBeInTheDocument();
     expect(screen.getAllByText(/^Unavailable$/i).length).toBeGreaterThan(0);
+  });
+
+  it("explains when only summary reuse is available", async () => {
+    publicTenantSharePackageApi.fetchPublicTenantSharePackage.mockResolvedValue({
+      identity: {
+        identityStatus: "ready",
+        verification: { level: "partial" },
+        readinessLabel: "Ready to apply",
+        readinessDescription: "Your core profile and supporting records are ready for most rental workflows.",
+      },
+      identityExchangeReference: {
+        referenceType: "tenant_identity_reference",
+        referenceStatus: "limited",
+        referenceLabel: "Identity exchange available",
+        referenceDescription: "This rental identity can support summary-only exchange requests within the tenant-controlled sharing flow.",
+        portabilityStatus: "limited",
+      },
+      availability: {
+        canRequestMore: true,
+        availableSections: ["identity"],
+      },
+      generatedAt: "2026-04-26T00:00:00.000Z",
+    });
+
+    renderPage();
+
+    expect(await screen.findByRole("button", { name: /Apply with RentChain/i })).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        /This shared profile supports summary-only reuse today\. Reusable application prefill is only available when both identity and application sharing have been approved by the tenant\./i
+      )
+    ).toBeInTheDocument();
+  });
+
+  it("explains when approved identity and application details can prefill the apply path", async () => {
+    publicTenantSharePackageApi.fetchPublicTenantSharePackage.mockResolvedValue({
+      identity: {
+        identityStatus: "ready",
+        verification: { level: "partial" },
+        readinessLabel: "Ready to apply",
+        readinessDescription: "Your core profile and supporting records are ready for most rental workflows.",
+      },
+      application: { reusable: true },
+      identityExchangeReference: {
+        referenceType: "tenant_identity_reference",
+        referenceStatus: "available",
+        referenceLabel: "Identity exchange available",
+        referenceDescription: "This rental identity can support summary-only exchange requests within the tenant-controlled sharing flow.",
+        portabilityStatus: "ready",
+      },
+      availability: {
+        canRequestMore: true,
+        availableSections: ["identity", "application"],
+      },
+      generatedAt: "2026-04-26T00:00:00.000Z",
+    });
+
+    renderPage();
+
+    expect(await screen.findByRole("button", { name: /Apply with RentChain/i })).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /Use the tenant-approved identity and application details already shared here to start an application faster\. Any remaining application requirements, including consent, still apply\./i
+      )
+    ).toBeInTheDocument();
   });
 
   it("routes into the applicant apply flow with visible prefill state", async () => {

@@ -12,6 +12,26 @@ function prettyStatus(value: string | null | undefined) {
     .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
+function describePublicReusePath(input: {
+  canApplyWithRentChain: boolean;
+  identityReferenceStatus: "available" | "limited" | "not_ready" | null;
+  hasIdentitySection: boolean;
+  hasApplicationSection: boolean;
+}) {
+  if (input.canApplyWithRentChain && input.hasIdentitySection && input.hasApplicationSection) {
+    return "Use the tenant-approved identity and application details already shared here to start an application faster. Any remaining application requirements, including consent, still apply.";
+  }
+
+  if (
+    (input.identityReferenceStatus === "available" || input.identityReferenceStatus === "limited") &&
+    (input.hasIdentitySection || input.hasApplicationSection)
+  ) {
+    return "This shared profile supports summary-only reuse today. Reusable application prefill is only available when both identity and application sharing have been approved by the tenant.";
+  }
+
+  return null;
+}
+
 export default function TenantSharePackagePage() {
   const { token = "" } = useParams();
   const navigate = useNavigate();
@@ -110,6 +130,12 @@ export default function TenantSharePackagePage() {
         data.identityExchangeReference.referenceStatus === "limited") &&
       (availableSections.has("identity") || availableSections.has("application"))
   );
+  const publicReusePathDescription = describePublicReusePath({
+    canApplyWithRentChain,
+    identityReferenceStatus: data?.identityExchangeReference?.referenceStatus || null,
+    hasIdentitySection: availableSections.has("identity"),
+    hasApplicationSection: availableSections.has("application"),
+  });
 
   return (
     <div style={{ minHeight: "100vh", background: "linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%)", padding: 24 }}>
@@ -167,11 +193,13 @@ export default function TenantSharePackagePage() {
                     >
                       {applyLoading ? "Preparing application..." : "Apply with RentChain"}
                     </button>
-                    <div style={{ color: "#475569", fontSize: "0.92rem" }}>
-                      Use the tenant-approved profile details already shared here to start an application faster.
-                    </div>
+                    {publicReusePathDescription ? (
+                      <div style={{ color: "#475569", fontSize: "0.92rem" }}>{publicReusePathDescription}</div>
+                    ) : null}
                     {applyError ? <div style={{ color: "#b91c1c" }}>{applyError}</div> : null}
                   </div>
+                ) : publicReusePathDescription ? (
+                  <div style={{ color: "#475569", fontSize: "0.92rem" }}>{publicReusePathDescription}</div>
                 ) : null}
               </div>
             ) : null}
@@ -207,7 +235,7 @@ export default function TenantSharePackagePage() {
             <div style={{ border: "1px solid rgba(15,23,42,0.08)", borderRadius: 16, background: "#fff", padding: 18, display: "grid", gap: 12 }}>
               <div style={{ fontWeight: 800, color: "#0f172a" }}>Request additional information</div>
               <div style={{ color: "#475569", lineHeight: 1.6 }}>
-                Request additional summary sections. Access is only expanded if the tenant approves it later.
+                Request additional summary sections. Requesting additional sections does not grant access automatically. The tenant must approve any expanded scope later.
               </div>
               <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 <input

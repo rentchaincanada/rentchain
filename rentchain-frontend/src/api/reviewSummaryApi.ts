@@ -95,6 +95,16 @@ export type ApplicationReviewSummary = ReviewSummaryCore & {
     source: "share_package" | "apply_with_rentchain";
     reuseStatus: "available" | "limited" | "not_available";
     consentRequired: true;
+    reusePath:
+      | "apply_prefill_ready"
+      | "share_summary_ready"
+      | "share_summary_with_more_available"
+      | "not_ready";
+    reusePathLabel: string;
+    reusePathDescription: string;
+    identitySummaryApproved: boolean;
+    applicationSummaryApproved: boolean;
+    additionalConsentMayUnlock: boolean;
   } | null;
 };
 

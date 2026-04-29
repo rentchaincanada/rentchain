@@ -1098,6 +1098,11 @@ describe("tenant workspace frontend shell", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Copy latest link/i }));
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith("https://app.example/share/share-token-1");
+    expect(
+      screen.getByText(
+        /Reuse path: This link can support summary-only follow-through today\. Broader reuse still requires your approval\./i
+      )
+    ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Revoke link/i }));
     await waitFor(() => {
@@ -1241,6 +1246,11 @@ describe("tenant workspace frontend shell", () => {
     });
     expect(await screen.findByText(/Approved: Credibility summary, Documents summary/i)).toBeInTheDocument();
     expect(screen.getByText(/Identity exchange available/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /Reuse path: This link can support summary-only follow-through today\. Broader reuse still requires your approval\./i
+      )
+    ).toBeInTheDocument();
   });
 
   it("lets tenants approve and revoke verification requests", async () => {
