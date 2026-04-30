@@ -1,5 +1,10 @@
 // @ts-nocheck
 import { db } from "../config/firebase";
+import {
+  deriveFinancialProjectionRows,
+  type FinancialProjectionRow,
+  type FinancialProjectionSourceType,
+} from "./financialProjectionService";
 import { getTenantLedger } from "./tenantLedgerService";
 import { getTenantDetailBundle } from "./tenantDetailsService";
 
@@ -29,6 +34,7 @@ export type TenantReportData = {
   ledgerSummary: TenantLedgerSummary;
   payments: any[];
   ledgerEntries: any[];
+  financialActivityRows: FinancialProjectionRow[];
 };
 
 const PDF_LEFT = 40;
@@ -188,6 +194,62 @@ function drawLedgerTableHeader(doc: any, columns: Array<{ label: string; x: numb
   doc.y = lineY + 8;
 }
 
+const projectionGroupOrder: FinancialProjectionSourceType[] = [
+  "recorded_payment",
+  "lease_charge",
+  "lease_credit",
+  "ledger_payment_unmatched",
+];
+
+const projectionGroupLabels: Record<FinancialProjectionSourceType, string> = {
+  recorded_payment: "Recorded Payments",
+  lease_charge: "Lease Charges",
+  lease_credit: "Lease Credits",
+  ledger_payment_unmatched: "Unmatched Ledger Payments",
+};
+
+const projectionSourceLabels: Record<FinancialProjectionSourceType, string> = {
+  recorded_payment: "Payment",
+  lease_charge: "Lease Charge",
+  lease_credit: "Credit",
+  ledger_payment_unmatched: "Unmatched Ledger Entry",
+};
+
+function drawProjectionTableHeader(doc: any, columns: Array<{ label: string; x: number; width: number }>) {
+  doc.fontSize(10).fillColor("#0f172a");
+  columns.forEach((column) => {
+    doc.text(column.label, column.x, doc.y, {
+      width: column.width,
+      align: column.label === "Amount" ? "right" : "left",
+    });
+  });
+  doc.moveDown(0.2);
+  const lineY = doc.y + 2;
+  doc
+    .strokeColor("#d4d4d8")
+    .lineWidth(0.75)
+    .moveTo(PDF_LEFT, lineY)
+    .lineTo(PDF_RIGHT, lineY)
+    .stroke();
+  doc.y = lineY + 8;
+}
+
+function formatProjectionDate(value: string | null | undefined) {
+  const parsed = parseDate(value);
+  if (!parsed) return "Unknown date";
+  return parsed.toISOString().slice(0, 10);
+}
+
+function formatProjectionAmount(value: number, direction: string) {
+  const magnitude = Math.abs(Number(value || 0)).toFixed(2);
+  return `${direction === "debit" ? "-" : "+"}$${magnitude}`;
+}
+
+function buildProjectionContext(row: FinancialProjectionRow) {
+  const parts = [row.propertyLabel, row.unitLabel ? `Unit ${row.unitLabel}` : null].filter(Boolean);
+  return parts.length ? parts.join(" • ") : "—";
+}
+
 export async function buildTenantReportData(
   tenantId: string
 ): Promise<TenantReportData> {
@@ -203,6 +265,9 @@ export async function buildTenantReportData(
   const ledgerEntries = currentLeaseId
     ? await loadCurrentLeaseLedgerEntries(currentLeaseId, landlordId)
     : await getTenantLedger(tenantId);
+  const financialActivityRows = landlordId
+    ? (await deriveFinancialProjectionRows({ landlordId, tenantId, limit: 48 })).rows
+    : [];
 
   const behavior: TenantPaymentBehaviorSummary = {
     onTimeRate: null,
@@ -325,6 +390,7 @@ export async function buildTenantReportData(
     ledgerSummary,
     payments,
     ledgerEntries,
+    financialActivityRows,
   };
 }
 
@@ -490,6 +556,108 @@ export async function generateTenantReportPdfBuffer(
         )}`
       )
       .moveDown(0.5);
+
+    doc
+      .moveDown(0.3)
+      .strokeColor("#e5e5e5")
+      .lineWidth(0.5)
+      .moveTo(40, doc.y)
+      .lineTo(555, doc.y)
+      .stroke()
+      .moveDown(0.5);
+
+    doc
+      .fontSize(13)
+      .fillColor("#000000")
+      .text("Financial activity overview", { underline: true })
+      .moveDown(0.2);
+
+    doc
+      .fontSize(10)
+      .fillColor("#555555")
+      .text(
+        "This read-only section combines recorded payments and lease ledger activity without changing the underlying records."
+      )
+      .moveDown(0.4);
+
+    const projectionRows = Array.isArray(data.financialActivityRows) ? data.financialActivityRows : [];
+    const groupedProjectionRows = new Map<FinancialProjectionSourceType, FinancialProjectionRow[]>();
+    projectionGroupOrder.forEach((groupKey) => groupedProjectionRows.set(groupKey, []));
+    projectionRows.forEach((row) => {
+      const group = groupedProjectionRows.get(row.sourceType);
+      if (group) group.push(row);
+    });
+
+    if (projectionRows.length === 0) {
+      doc.fontSize(11).text("No financial activity is available for this tenant yet.").moveDown(0.5);
+    } else {
+      const columns = [
+        { label: "Date", x: PDF_LEFT, width: 70 },
+        { label: "Activity", x: 114, width: 162 },
+        { label: "Context", x: 282, width: 132 },
+        { label: "Amount", x: 420, width: 56 },
+        { label: "Source", x: 482, width: 62 },
+      ];
+
+      projectionGroupOrder.forEach((groupKey) => {
+        const items = groupedProjectionRows.get(groupKey) || [];
+        if (!items.length) return;
+
+        ensurePdfSpace(doc, 32);
+        doc
+          .fontSize(11)
+          .fillColor("#0f172a")
+          .text(projectionGroupLabels[groupKey])
+          .moveDown(0.2);
+        drawProjectionTableHeader(doc, columns);
+
+        items.forEach((row) => {
+          const rowValues = {
+            date: formatProjectionDate(row.occurredAt),
+            activity: String(row.displayLabel || "Financial activity"),
+            context: buildProjectionContext(row),
+            amount: formatProjectionAmount(row.amount, row.direction),
+            source: projectionSourceLabels[row.sourceType] || "Financial item",
+          };
+          const rowHeight = Math.max(
+            18,
+            doc.heightOfString(rowValues.date, { width: columns[0].width }),
+            doc.heightOfString(rowValues.activity, { width: columns[1].width }),
+            doc.heightOfString(rowValues.context, { width: columns[2].width }),
+            doc.heightOfString(rowValues.amount, { width: columns[3].width, align: "right" }),
+            doc.heightOfString(rowValues.source, { width: columns[4].width })
+          ) + 8;
+
+          if (ensurePdfSpace(doc, rowHeight + 12)) {
+            doc
+              .fontSize(11)
+              .fillColor("#0f172a")
+              .text(projectionGroupLabels[groupKey])
+              .moveDown(0.2);
+            drawProjectionTableHeader(doc, columns);
+          }
+
+          const rowY = doc.y;
+          doc.fontSize(10).fillColor("#000000");
+          doc.text(rowValues.date, columns[0].x, rowY, { width: columns[0].width });
+          doc.text(rowValues.activity, columns[1].x, rowY, { width: columns[1].width });
+          doc.text(rowValues.context, columns[2].x, rowY, { width: columns[2].width });
+          doc.text(rowValues.amount, columns[3].x, rowY, { width: columns[3].width, align: "right" });
+          doc.text(rowValues.source, columns[4].x, rowY, { width: columns[4].width });
+
+          const dividerY = rowY + rowHeight - 4;
+          doc
+            .strokeColor("#ececf1")
+            .lineWidth(0.5)
+            .moveTo(PDF_LEFT, dividerY)
+            .lineTo(PDF_RIGHT, dividerY)
+            .stroke();
+          doc.y = rowY + rowHeight;
+        });
+
+        doc.moveDown(0.3);
+      });
+    }
 
     doc
       .moveDown(0.3)
