@@ -58,14 +58,29 @@ describe("PaymentsPage", () => {
     });
   });
 
-  it("renders export controls and payment labels", async () => {
+  it("renders the recorded-payments framing, explainer, and export controls", async () => {
     render(<PaymentsPage />);
 
+    expect(screen.getByText("Payments (recorded)")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "This page shows recorded rent payments only. Lease charges, credits, and unmatched ledger entries appear in tenant Financial activity and lease ledger views."
+      )
+    ).toBeInTheDocument();
+    expect(screen.getByText("Financial Activity")).toBeInTheDocument();
+    expect(screen.getByText("Recorded payments track money entered in the payments system.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Lease ledger activity tracks charges, credits, and unmatched ledger entries separately.")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("These views are intentionally separate to avoid double counting and preserve audit integrity.")
+    ).toBeInTheDocument();
     expect(await screen.findByRole("button", { name: "Export CSV" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Export Spreadsheet" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Export PDF" })).toBeInTheDocument();
     expect((await screen.findAllByText("Taylor Tenant")).length).toBeGreaterThan(0);
     expect(screen.getAllByText("123 Main St").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("e-transfer").length).toBeGreaterThan(0);
   });
 
   it("routes PDF export through the shared print helper", async () => {

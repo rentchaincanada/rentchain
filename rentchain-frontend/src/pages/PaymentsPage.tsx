@@ -146,7 +146,7 @@ const PaymentsPage: React.FC = () => {
       <Card elevated>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: spacing.md }}>
           <div>
-            <h1 style={{ fontSize: "1.4rem", fontWeight: 700, margin: 0, color: text.primary }}>Payments</h1>
+            <h1 style={{ fontSize: "1.4rem", fontWeight: 700, margin: 0, color: text.primary }}>Payments (recorded)</h1>
             <div
               style={{
                 marginTop: "0.1rem",
@@ -154,7 +154,7 @@ const PaymentsPage: React.FC = () => {
                 color: text.muted,
               }}
             >
-              All recorded payments across tenants and properties.
+              This page shows recorded rent payments only. Lease charges, credits, and unmatched ledger entries appear in tenant Financial activity and lease ledger views.
             </div>
           </div>
           <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap", justifyContent: "flex-end" }}>
@@ -165,6 +165,21 @@ const PaymentsPage: React.FC = () => {
               {exporting === "xlsx" ? "Exporting..." : "Export Spreadsheet"}
             </Button>
             <Button variant="secondary" onClick={() => void printSummaryDocument("summary")}>Export PDF</Button>
+          </div>
+        </div>
+      </Card>
+
+      <Card>
+        <div style={{ display: "grid", gap: spacing.xs }}>
+          <div style={{ fontSize: "1rem", fontWeight: 700, color: text.primary }}>Financial Activity</div>
+          <div style={{ fontSize: "0.92rem", color: text.primary }}>
+            Recorded payments track money entered in the payments system.
+          </div>
+          <div style={{ fontSize: "0.92rem", color: text.primary }}>
+            Lease ledger activity tracks charges, credits, and unmatched ledger entries separately.
+          </div>
+          <div style={{ fontSize: "0.92rem", color: text.muted }}>
+            These views are intentionally separate to avoid double counting and preserve audit integrity.
           </div>
         </div>
       </Card>
