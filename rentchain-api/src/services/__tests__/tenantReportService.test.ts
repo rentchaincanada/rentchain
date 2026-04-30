@@ -12,6 +12,16 @@ function ensureCollection(name: string) {
 vi.mock("../../config/firebase", () => ({
   db: {
     collection: (name: string) => ({
+      doc: (id: string) => ({
+        get: async () => {
+          const row = ensureCollection(name).get(id);
+          return {
+            id,
+            exists: row !== undefined,
+            data: () => row ?? null,
+          };
+        },
+      }),
       where: (field: string, _op: string, value: any) => {
         const applyFilter = (rows: Array<[string, any]>) =>
           rows.filter(([, data]) => data?.[field] === value);
@@ -49,6 +59,17 @@ vi.mock("../../config/firebase", () => ({
           },
         };
       },
+      orderBy: (_field: string, _direction?: string) => ({
+        limit: (_count: number) => ({
+          get: async () => {
+            const docs = Array.from(ensureCollection(name).entries()).map(([id, data]) => ({
+              id,
+              data: () => data,
+            }));
+            return { docs };
+          },
+        }),
+      }),
     }),
   },
 }));
@@ -112,6 +133,20 @@ describe("tenantReportService", () => {
       method: "etransfer",
       createdAt: 2,
     });
+    ensureCollection("leases").set("lease-1", {
+      tenantId: "tenant-1",
+      propertyId: "property-1",
+      unitId: "unit-1",
+      propertyName: "Harbour View",
+      unitLabel: "101",
+    });
+    ensureCollection("properties").set("property-1", {
+      name: "Harbour View",
+    });
+    ensureCollection("units").set("unit-1", {
+      propertyId: "property-1",
+      unitNumber: "101",
+    });
 
     const { buildTenantReportData } = await import("../tenantReportService");
     const result = await buildTenantReportData("tenant-1");
@@ -136,6 +171,22 @@ describe("tenantReportService", () => {
       totalPayments: 1850,
       netLifetime: 3700,
     });
+    expect(result.financialActivityRows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sourceType: "recorded_payment",
+          displayLabel: "Recorded payment (e-transfer)",
+        }),
+        expect.objectContaining({
+          sourceType: "lease_charge",
+          displayLabel: "Rent charge",
+        }),
+        expect.objectContaining({
+          sourceType: "ledger_payment_unmatched",
+          displayLabel: "Lease ledger payment (etransfer)",
+        }),
+      ])
+    );
     expect(getTenantLedgerMock).not.toHaveBeenCalled();
   });
 
@@ -177,5 +228,13 @@ describe("tenantReportService", () => {
       }),
     ]);
     expect(result.behavior.totalPayments).toBe(1);
+    expect(result.financialActivityRows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sourceType: "recorded_payment",
+          displayLabel: "Recorded payment",
+        }),
+      ])
+    );
   });
 });
