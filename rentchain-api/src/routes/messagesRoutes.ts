@@ -80,7 +80,17 @@ async function enrichConversationDisplay<T extends ReturnType<typeof normalizeCo
     Promise.all(
       tenantIds.map(async (tenantId) => {
         const snap = await db.collection("tenants").doc(tenantId).get();
-        return [tenantId, snap.exists ? buildTenantLabel(snap.data() as any) : null] as const;
+        const raw = snap.exists ? (snap.data() as any) : null;
+        return [
+          tenantId,
+          {
+            raw,
+            label: raw ? buildTenantLabel(raw) : null,
+            unitLabel: raw ? normalizeUnitLabel(raw?.unitLabel || raw?.unit) : null,
+            unitId: raw ? stringOrNull(raw?.unitId) : null,
+            propertyId: raw ? stringOrNull(raw?.propertyId) : null,
+          },
+        ] as const;
       })
     ),
     Promise.all(
@@ -98,7 +108,10 @@ async function enrichConversationDisplay<T extends ReturnType<typeof normalizeCo
     ),
   ]);
 
-  const tenantNameById = new Map<string, string | null>(tenants);
+  const tenantById = new Map<
+    string,
+    { raw: any; label: string | null; unitLabel: string | null; unitId: string | null; propertyId: string | null }
+  >(tenants);
   const unitById = new Map<string, { raw: any; label: string | null }>(units);
   const propertyIds = Array.from(
     new Set(
@@ -107,7 +120,9 @@ async function enrichConversationDisplay<T extends ReturnType<typeof normalizeCo
           const direct = stringOrNull((conversation as any).propertyId);
           if (direct) return direct;
           const unitId = stringOrNull(conversation.unitId);
-          return unitId ? stringOrNull(unitById.get(unitId)?.raw?.propertyId) : null;
+          if (unitId) return stringOrNull(unitById.get(unitId)?.raw?.propertyId);
+          const tenantId = stringOrNull(conversation.tenantId);
+          return tenantId ? stringOrNull(tenantById.get(tenantId)?.propertyId) : null;
         })
         .filter(Boolean)
     )
@@ -122,24 +137,30 @@ async function enrichConversationDisplay<T extends ReturnType<typeof normalizeCo
 
   return conversations.map((conversation) => {
     const unitId = stringOrNull(conversation.unitId);
+    const tenantId = stringOrNull(conversation.tenantId);
+    const resolvedTenant = tenantId ? tenantById.get(tenantId) : null;
     const resolvedUnit = unitId ? unitById.get(unitId) : null;
     const propertyId =
       stringOrNull((conversation as any).propertyId) ||
-      stringOrNull(resolvedUnit?.raw?.propertyId);
+      stringOrNull(resolvedUnit?.raw?.propertyId) ||
+      stringOrNull(resolvedTenant?.propertyId);
     const property = propertyId ? propertyById.get(propertyId) : null;
     const fallbackUnitFromProperty = Array.isArray(property?.units)
       ? property.units.find((unit: any) => {
           const candidateId = stringOrNull(unit?.id) || stringOrNull(unit?.unitId) || stringOrNull(unit?.uid);
-          return candidateId && unitId && candidateId === unitId;
+          if (candidateId && unitId && candidateId === unitId) return true;
+          const candidateLabel = normalizeUnitLabel(unit?.unitNumber || unit?.label || unit?.name);
+          return Boolean(candidateLabel && resolvedTenant?.unitLabel && candidateLabel === resolvedTenant.unitLabel);
         })
       : null;
 
     return {
       ...conversation,
-      tenantDisplayName: tenantNameById.get(String(conversation.tenantId || "").trim()) || null,
+      tenantDisplayName: resolvedTenant?.label || null,
       propertyDisplayLabel: buildPropertyLabel(property),
       unitDisplayLabel:
         resolvedUnit?.label ||
+        resolvedTenant?.unitLabel ||
         normalizeUnitLabel(
           fallbackUnitFromProperty?.unitNumber ||
             fallbackUnitFromProperty?.label ||
@@ -447,9 +468,11 @@ router.get("/tenant/messages/conversation", requireTenant, async (req: any, res)
         lastReadAtTenant: null,
       });
       const created = await ref.get();
-      return res.json({ ok: true, conversation: normalizeConversation(created) });
+      const enriched = (await enrichConversationDisplay([normalizeConversation(created)]))[0];
+      return res.json({ ok: true, conversation: enriched });
     }
-    return res.json({ ok: true, conversation: normalizeConversation(snap) });
+    const enriched = (await enrichConversationDisplay([normalizeConversation(snap)]))[0];
+    return res.json({ ok: true, conversation: enriched });
   } catch (err: any) {
     console.error("[messages] tenant get/create conversation error", err);
     return res.status(500).json({ ok: false, error: "Failed to load conversation" });
@@ -468,7 +491,7 @@ router.get("/tenant/messages/conversation/:id", requireTenant, async (req: any, 
   try {
     const convoSnap = await db.collection("conversations").doc(id).get();
     if (!convoSnap.exists) return res.status(404).json({ ok: false, error: "Conversation not found" });
-    const convo = normalizeConversation(convoSnap);
+    const convo = (await enrichConversationDisplay([normalizeConversation(convoSnap)]))[0];
     if (convo.tenantId !== ctx.tenantId || convo.landlordId !== ctx.landlordId) {
       return res.status(403).json({ ok: false, error: "Forbidden" });
     }
