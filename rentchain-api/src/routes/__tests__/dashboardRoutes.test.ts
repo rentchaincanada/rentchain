@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const computePortfolioCredibilitySummaryMock = vi.fn();
 const resolveLandlordAndTierMock = vi.fn();
+const deriveLandlordVisibleExpiringLeasesMock = vi.fn();
 
 const { fakeDb, resetFakeDb, seedDoc } = vi.hoisted(() => {
   const store = new Map<string, Map<string, any>>();
@@ -68,6 +69,7 @@ vi.mock("../../lib/landlordResolver", () => ({
 
 vi.mock("../../services/leaseNoticeWorkflowService", () => ({
   computeNoResponseState: vi.fn(() => false),
+  deriveLandlordVisibleExpiringLeases: deriveLandlordVisibleExpiringLeasesMock,
   normalizeLeaseRecord: vi.fn((id: string, raw: any) => ({ id, ...raw })),
 }));
 
@@ -80,7 +82,9 @@ describe("dashboardRoutes GET /summary", () => {
     resetFakeDb();
     computePortfolioCredibilitySummaryMock.mockReset();
     resolveLandlordAndTierMock.mockReset();
+    deriveLandlordVisibleExpiringLeasesMock.mockReset();
     resolveLandlordAndTierMock.mockResolvedValue({ tier: "pro" });
+    deriveLandlordVisibleExpiringLeasesMock.mockResolvedValue([]);
     computePortfolioCredibilitySummaryMock.mockImplementation(({ leases }: any) => ({
       propertyCount: 1,
       activeLeaseCount: Array.isArray(leases) ? leases.length : 0,
@@ -216,6 +220,43 @@ describe("dashboardRoutes GET /summary", () => {
           href: "/applications?openTransUnionAccess=1",
         }),
       ])
+    );
+  });
+
+  it("derives expiring, pending, and no-response counts from the shared renewal dataset", async () => {
+    seedDoc("properties", "prop-active", {
+      landlordId: "landlord-1",
+      portfolioStatus: "active",
+      units: [{ id: "unit-1" }],
+    });
+    seedDoc("leases", "lease-visible", {
+      landlordId: "landlord-1",
+      propertyId: "prop-active",
+      tenantId: "tenant-active",
+      status: "active",
+    });
+    deriveLandlordVisibleExpiringLeasesMock.mockResolvedValue([
+      { id: "lease-expiring", noticeBucket: "expiring" },
+      { id: "lease-pending", noticeBucket: "pending-response" },
+      { id: "lease-no-response", noticeBucket: "no-response" },
+    ]);
+
+    const app = await makeApp();
+    const response = await invokeSummary(app);
+
+    expect(response.status).toBe(200);
+    expect(response.body?.data?.leaseNoticeSummary).toEqual(
+      expect.objectContaining({
+        expiringSoon: 1,
+        pendingResponse: 1,
+        noResponse: 1,
+      })
+    );
+    expect(deriveLandlordVisibleExpiringLeasesMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        landlordId: "landlord-1",
+        withinDays: 120,
+      })
     );
   });
 });

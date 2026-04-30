@@ -3,7 +3,11 @@ import { authenticateJwt } from "../middleware/authMiddleware";
 import { requireAuth } from "../middleware/requireAuth";
 import { db } from "../config/firebase";
 import { resolveLandlordAndTier } from "../lib/landlordResolver";
-import { computeNoResponseState, normalizeLeaseRecord } from "../services/leaseNoticeWorkflowService";
+import {
+  computeNoResponseState,
+  deriveLandlordVisibleExpiringLeases,
+  normalizeLeaseRecord,
+} from "../services/leaseNoticeWorkflowService";
 import { computePortfolioCredibilitySummary } from "../services/risk/portfolioCredibilitySummary";
 import {
   isTargetedHiddenLeaseId,
@@ -279,7 +283,14 @@ router.get("/summary", requireAuth, async (req: any, res) => {
     if (!leaseId || latestNoticeByLeaseId.has(leaseId)) continue;
     latestNoticeByLeaseId.set(leaseId, notice);
   }
-  const soonWindowMs = 120 * 24 * 60 * 60 * 1000;
+  const sharedRenewalItems = await deriveLandlordVisibleExpiringLeases({
+    landlordId,
+    withinDays: 120,
+    now,
+    leaseDocs: leasesSnap.docs as any,
+    noticeDocs: leaseNoticesSnap.docs as any,
+    propertyRecords: properties,
+  });
   const portfolioCredibilitySummary = computePortfolioCredibilitySummary({
     leases: visibleLeases.map((lease) => ({
       id: lease.id,
@@ -304,28 +315,18 @@ router.get("/summary", requireAuth, async (req: any, res) => {
   });
 
   const leaseNoticeSummary = {
-    expiringSoon: visibleLeases.filter((lease) => {
-      const dueAt = Number(lease.nextNoticeDueAt || 0);
-      return dueAt > 0 && dueAt <= now + soonWindowMs;
-    }).length,
-    pendingResponse: 0,
+    expiringSoon: sharedRenewalItems.filter((lease) => lease.noticeBucket === "expiring").length,
+    pendingResponse: sharedRenewalItems.filter((lease) => lease.noticeBucket === "pending-response").length,
     renewed: 0,
     quitting: 0,
-    noResponse: 0,
+    noResponse: sharedRenewalItems.filter((lease) => lease.noticeBucket === "no-response").length,
   };
   latestNoticeByLeaseId.forEach((notice, leaseId) => {
     const response = String(notice?.tenantResponse || "pending").trim().toLowerCase();
     const lease = visibleLeases.find((row) => row.id === leaseId) || null;
     if (!lease) return;
     const noResponse = computeNoResponseState(notice);
-    if (noResponse) {
-      leaseNoticeSummary.noResponse += 1;
-      return;
-    }
-    if (response === "pending") {
-      leaseNoticeSummary.pendingResponse += 1;
-      return;
-    }
+    if (noResponse || response === "pending") return;
     if (response === "renew" || String(lease?.status || "") === "renewal_accepted") {
       leaseNoticeSummary.renewed += 1;
       return;

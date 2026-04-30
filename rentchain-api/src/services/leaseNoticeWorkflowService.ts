@@ -9,6 +9,8 @@ import {
   resolveLeaseNoticeRule,
 } from "../config/leaseNoticeRules";
 import { toAutopilotPolicySummary } from "../lib/policy/policyEvaluator";
+import { loadUnitsForProperty, resolveUnitReference } from "./leaseCanonicalizationService";
+import { isTargetedHiddenLeaseId } from "../lib/testDataVisibilityTargets";
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -111,6 +113,24 @@ export type LeaseNoticeExecutionInputSnapshot = {
   responseDeadlineAt: number | null;
 };
 
+export type LeaseRenewalWorkflowBucket = "expiring" | "pending-response" | "no-response";
+
+export type LandlordVisibleExpiringLeaseItem = LeaseWorkflowLease & {
+  noticeBucket: LeaseRenewalWorkflowBucket;
+  latestNotice: any | null;
+};
+
+type FirestoreLikeDoc = {
+  id: string;
+  data(): any;
+};
+
+type NormalizedLeaseCandidate = {
+  id: string;
+  raw: any;
+  lease: LeaseWorkflowLease;
+};
+
 export type LeaseRenewalOperatorInputRecord = {
   rentChangeMode: RentChangeMode | null;
   proposedRent: number | null;
@@ -155,6 +175,26 @@ function minusDays(dateOnly: string, days: number): number | null {
 function asCurrency(value: unknown): string {
   const raw = String(value || "CAD").trim().toUpperCase();
   return raw || "CAD";
+}
+
+function normalizePortfolioStatus(value: unknown): "active" | "archived" {
+  return String(value || "").trim().toLowerCase() === "archived" ? "archived" : "active";
+}
+
+function normalizeStatus(value: unknown): string {
+  return String(value || "").trim().toLowerCase();
+}
+
+function resolveUnitOccupancyStatus(unit: Record<string, unknown> | null | undefined): "occupied" | "vacant" | null {
+  const explicitStatus = normalizeStatus(unit?.status);
+  if (explicitStatus === "occupied" || explicitStatus === "vacant") {
+    return explicitStatus;
+  }
+  const occupancyStatus = normalizeStatus(unit?.occupancyStatus);
+  if (occupancyStatus === "occupied" || occupancyStatus === "vacant") {
+    return occupancyStatus;
+  }
+  return null;
 }
 
 function asLeaseType(value: unknown): LeaseType {
@@ -256,6 +296,141 @@ export function normalizeLeaseRecord(id: string, raw: any): LeaseWorkflowLease {
     propertyLabel: String(raw?.propertyLabel || raw?.propertyName || "").trim() || null,
     propertyAddress: String(raw?.propertyAddress || raw?.propertyAddressLine1 || raw?.addressLine1 || raw?.propertyAddress1 || raw?.address || "").trim() || null,
   };
+}
+
+function isLeaseRenewalWorkflowStatus(status: unknown) {
+  const normalized = String(status || "").trim().toLowerCase();
+  return normalized === "active" || normalized === "notice_pending" || normalized === "renewal_pending";
+}
+
+function deriveLeaseRenewalWorkflowBucket(params: {
+  lease: LeaseWorkflowLease;
+  latestNotice: any | null;
+  now: number;
+  horizon: number;
+}): LeaseRenewalWorkflowBucket | null {
+  const { lease, latestNotice, now, horizon } = params;
+  const dueAt = Number(lease?.nextNoticeDueAt || 0);
+  if (!(dueAt > 0 && dueAt >= now && dueAt <= horizon)) return null;
+  const noResponse = latestNotice ? computeNoResponseState(latestNotice) : false;
+  if (noResponse) return "no-response";
+  const response = String(latestNotice?.tenantResponse || "").trim().toLowerCase();
+  if (latestNotice && response === "pending") return "pending-response";
+  return "expiring";
+}
+
+export async function deriveLandlordVisibleExpiringLeases(params: {
+  landlordId: string;
+  withinDays?: number;
+  propertyId?: string | null;
+  now?: number;
+  leaseDocs?: FirestoreLikeDoc[];
+  noticeDocs?: FirestoreLikeDoc[];
+  propertyRecords?: Array<{ id: string; [key: string]: any }>;
+}): Promise<LandlordVisibleExpiringLeaseItem[]> {
+  const landlordId = String(params.landlordId || "").trim();
+  if (!landlordId) return [];
+
+  const now = typeof params.now === "number" ? params.now : nowMs();
+  const withinDays = Math.max(1, Number(params.withinDays || 120));
+  const horizon = now + withinDays * 24 * 60 * 60 * 1000;
+  const propertyIdFilter = String(params.propertyId || "").trim() || null;
+
+  const [leaseDocs, noticeDocs] = await Promise.all([
+    params.leaseDocs
+      ? Promise.resolve(params.leaseDocs)
+      : db.collection("leases").where("landlordId", "==", landlordId).limit(400).get().then((snap) => snap.docs as any),
+    params.noticeDocs
+      ? Promise.resolve(params.noticeDocs)
+      : db.collection("leaseNotices").where("landlordId", "==", landlordId).limit(400).get().then((snap) => snap.docs as any),
+  ]);
+
+  const normalizedLeases: NormalizedLeaseCandidate[] = leaseDocs
+    .map((doc: any) => {
+      const raw = doc.data() as any;
+      return { id: doc.id, raw, lease: normalizeLeaseRecord(doc.id, raw) };
+    })
+    .filter(({ id, raw, lease }: NormalizedLeaseCandidate) => {
+      if (raw?.hiddenFromActiveLists === true || isTargetedHiddenLeaseId(id)) return false;
+      if (!isLeaseRenewalWorkflowStatus(lease.status)) return false;
+      if (propertyIdFilter && lease.propertyId !== propertyIdFilter) return false;
+      return true;
+    });
+
+  const propertyIds = Array.from(
+    new Set(
+      normalizedLeases
+        .map(({ lease }: NormalizedLeaseCandidate) => String(lease.propertyId || "").trim())
+        .filter(Boolean)
+    )
+  );
+
+  const propertyRecords = params.propertyRecords
+    ? params.propertyRecords
+    : await Promise.all(
+        (propertyIds as string[]).map(async (id) => {
+          const snap = await db.collection("properties").doc(id).get();
+          return snap.exists ? { id: snap.id, ...(snap.data() as any) } : null;
+        })
+      ).then((items) => items.filter(Boolean) as Array<{ id: string; [key: string]: any }>);
+
+  const propertyById = new Map<string, any>(
+    propertyRecords.map((property) => [String(property?.id || "").trim(), property])
+  );
+
+  const unitsByPropertyId = new Map<string, Awaited<ReturnType<typeof loadUnitsForProperty>>>();
+  for (const propertyId of propertyIds as string[]) {
+    unitsByPropertyId.set(propertyId, await loadUnitsForProperty(db as any, propertyId, landlordId));
+  }
+
+  const latestNoticeByLeaseId = new Map<string, any>();
+  const notices = noticeDocs
+    .map((doc: any) => ({ id: doc.id, ...(doc.data() as any) }))
+    .sort((a: any, b: any) => Number(b.updatedAt || b.createdAt || 0) - Number(a.updatedAt || a.createdAt || 0));
+  for (const notice of notices) {
+    const leaseId = String(notice?.leaseId || "").trim();
+    if (!leaseId || latestNoticeByLeaseId.has(leaseId)) continue;
+    latestNoticeByLeaseId.set(leaseId, notice);
+  }
+
+  const items: LandlordVisibleExpiringLeaseItem[] = [];
+  for (const { lease, raw } of normalizedLeases) {
+    const propertyId = String(lease.propertyId || "").trim();
+    if (!propertyId) continue;
+    const property = propertyById.get(propertyId);
+    if (!property) continue;
+    if (property?.hiddenFromActiveLists === true) continue;
+    if (Boolean(property?.archivedAt) || normalizePortfolioStatus(property?.portfolioStatus) === "archived") continue;
+
+    const units = unitsByPropertyId.get(propertyId) || [];
+    const resolution = resolveUnitReference(units, lease.unitId || lease.unitLabel || raw?.unitNumber || raw?.unit || null);
+    if (!resolution.unit || resolution.ambiguous) continue;
+    if (resolution.unit.raw?.hiddenFromActiveLists === true) continue;
+    if (resolveUnitOccupancyStatus(resolution.unit.raw) !== "occupied") continue;
+
+    const latestNotice = latestNoticeByLeaseId.get(lease.id) || null;
+    const noticeBucket = deriveLeaseRenewalWorkflowBucket({
+      lease,
+      latestNotice,
+      now,
+      horizon,
+    });
+    if (!noticeBucket) continue;
+
+    items.push({
+      ...lease,
+      propertyLabel:
+        String(property?.name || property?.addressLine1 || property?.address || "").trim() ||
+        lease.propertyLabel,
+      propertyAddress:
+        String(property?.addressLine1 || property?.address || "").trim() || lease.propertyAddress,
+      unitLabel: resolution.unit.label || resolution.unit.unitNumber || lease.unitLabel,
+      latestNotice,
+      noticeBucket,
+    });
+  }
+
+  return items.sort((a, b) => Number(a.nextNoticeDueAt || 0) - Number(b.nextNoticeDueAt || 0));
 }
 
 export function deriveLeaseRenewalOperatorInputRecord(lease: LeaseWorkflowLease): LeaseRenewalOperatorInputRecord {
