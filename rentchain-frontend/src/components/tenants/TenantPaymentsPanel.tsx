@@ -151,7 +151,7 @@ export function TenantPaymentsPanel({ tenantId }: Props) {
             Last payment: {lastPayment ? formatDate((lastPayment as any).paidAt) : "--"}
           </div>
           <div style={{ fontSize: 12, opacity: 0.78, marginTop: 4 }}>
-            Only recorded rent payments appear here. Charges and credits are shown in the lease ledger.
+            Only recorded rent payments appear here. Lease ledger charges and credits are shown in the current lease ledger section.
           </div>
         </div>
 
