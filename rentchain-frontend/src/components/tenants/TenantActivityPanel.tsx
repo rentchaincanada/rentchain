@@ -139,8 +139,9 @@ export const TenantActivityPanel: React.FC<Props> = ({ tenantId, refreshKey = 0 
           }}
         >
           {items.map((evt) => {
+            const occurred = toMillis(evt.occurredAt);
             const created = toMillis(evt.createdAt);
-            const when = created ? new Date(created).toLocaleString() : "";
+            const when = occurred || created ? new Date(occurred || created || 0).toLocaleString() : "";
 
             return (
               <div

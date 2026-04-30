@@ -19,6 +19,47 @@ vi.mock("../../config/firebase", () => ({
             data: () => value,
           };
         },
+        set: async (value: any, opts?: { merge?: boolean }) => {
+          const current = ensureCollection(name).get(id) || {};
+          ensureCollection(name).set(id, opts?.merge ? { ...current, ...value } : value);
+        },
+        delete: async () => {
+          ensureCollection(name).delete(id);
+        },
+      }),
+      add: async (value: any) => {
+        const id = `${name}-${ensureCollection(name).size + 1}`;
+        ensureCollection(name).set(id, value);
+        return { id };
+      },
+      where: (field: string, _op: string, value: any) => ({
+        orderBy: (_orderField?: string, _direction?: string) => ({
+          limit: (_count?: number) => ({
+            get: async () => {
+              const docs = Array.from(ensureCollection(name).entries())
+                .filter(([, data]) => data?.[field] === value)
+                .sort((a, b) => String(b[1]?.paidAt || "").localeCompare(String(a[1]?.paidAt || "")))
+                .map(([docId, data]) => ({
+                  id: docId,
+                  data: () => data,
+                }));
+              return { docs };
+            },
+          }),
+        }),
+      }),
+      orderBy: (_field: string, _direction?: string) => ({
+        limit: (_count?: number) => ({
+          get: async () => {
+            const docs = Array.from(ensureCollection(name).entries())
+              .sort((a, b) => String(b[1]?.paidAt || "").localeCompare(String(a[1]?.paidAt || "")))
+              .map(([docId, data]) => ({
+                id: docId,
+                data: () => data,
+              }));
+            return { docs };
+          },
+        }),
       }),
     }),
   },
@@ -54,15 +95,14 @@ describe("paymentsRoutes exports", () => {
       id: "prop-1",
       name: "123 Main St",
     });
-    const { paymentsService } = await import("../../services/paymentsService");
-    paymentsService.getAll().splice(0, paymentsService.getAll().length);
-    paymentsService.create({
+    ensureCollection("payments").set("payment-1", {
       tenantId: "tenant-1",
       propertyId: "prop-1",
       amount: 1800,
       paidAt: "2026-04-01",
       method: "e-transfer",
       notes: "April rent",
+      status: "Recorded",
     });
   });
 
@@ -74,14 +114,15 @@ describe("paymentsRoutes exports", () => {
     }
   ) {
     return await new Promise<{ status: number; body: any; headers: Record<string, string> }>((resolve, reject) => {
+      const parsed = new URL(`http://test${options.url}`);
       const req: any = {
         method: options.method,
         url: options.url,
         originalUrl: options.url,
-        path: options.url,
+        path: parsed.pathname,
         headers: {},
         body: {},
-        query: {},
+        query: Object.fromEntries(parsed.searchParams.entries()),
         params: {},
       };
       const res: any = {
@@ -135,5 +176,44 @@ describe("paymentsRoutes exports", () => {
     );
     expect(String(res.body)).toContain("Taylor Tenant");
     expect(String(res.body)).toContain("123 Main St");
+  });
+
+  it("lists persisted Firestore payments for a tenant", async () => {
+    const router = (await import("../paymentsRoutes")).default;
+    const res = await invokeRouter(router, { method: "GET", url: "/payments?tenantId=tenant-1" });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual([
+      expect.objectContaining({
+        id: "payment-1",
+        tenantId: "tenant-1",
+        propertyId: "prop-1",
+        amount: 1800,
+        paidAt: "2026-04-01",
+        method: "e-transfer",
+        notes: "April rent",
+        status: "Recorded",
+      }),
+    ]);
+  });
+
+  it("returns monthly totals from the persisted payments source", async () => {
+    const router = (await import("../paymentsRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/payments/tenant/tenant-1/monthly?year=2026&month=4",
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      payments: [
+        expect.objectContaining({
+          id: "payment-1",
+          tenantId: "tenant-1",
+          amount: 1800,
+        }),
+      ],
+      total: 1800,
+    });
   });
 });
