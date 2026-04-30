@@ -45,7 +45,7 @@ describe("TenantPaymentsPanel", () => {
 
     expect(
       screen.getByText(
-        "Only recorded rent payments appear here. Lease ledger charges and credits are shown in the current lease ledger section."
+        "Only recorded rent payments appear here. Lease charges, credits, and unmatched ledger entries appear in Financial activity and the current lease ledger."
       )
     ).toBeInTheDocument();
 
