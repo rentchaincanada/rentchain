@@ -31,6 +31,10 @@ export type TenantReportData = {
   ledgerEntries: any[];
 };
 
+const PDF_LEFT = 40;
+const PDF_RIGHT = 555;
+const PDF_BOTTOM_MARGIN = 40;
+
 let PDFDocument: any | null = null;
 
 async function loadPDFKit() {
@@ -154,6 +158,34 @@ async function loadCurrentLeaseLedgerEntries(leaseId: string, landlordId?: strin
   });
 
   return mappedAsc.reverse();
+}
+
+function ensurePdfSpace(doc: any, neededHeight: number) {
+  const bottomLimit = Number(doc.page?.height || 842) - PDF_BOTTOM_MARGIN;
+  if (doc.y + neededHeight <= bottomLimit) return false;
+  doc.addPage();
+  return true;
+}
+
+function drawLedgerTableHeader(doc: any, columns: Array<{ label: string; x: number; width: number }>) {
+  doc
+    .fontSize(10)
+    .fillColor("#0f172a");
+  columns.forEach((column) => {
+    doc.text(column.label, column.x, doc.y, {
+      width: column.width,
+      align: column.label === "Amount" || column.label === "Balance" ? "right" : "left",
+    });
+  });
+  doc.moveDown(0.2);
+  const lineY = doc.y + 2;
+  doc
+    .strokeColor("#d4d4d8")
+    .lineWidth(0.75)
+    .moveTo(PDF_LEFT, lineY)
+    .lineTo(PDF_RIGHT, lineY)
+    .stroke();
+  doc.y = lineY + 8;
 }
 
 export async function buildTenantReportData(
@@ -355,7 +387,15 @@ export async function generateTenantReportPdfBuffer(
     doc
       .fontSize(14)
       .fillColor("#000000")
-      .text("Payment behavior summary", { underline: true })
+      .text("Recorded rent payment summary", { underline: true })
+      .moveDown(0.2);
+
+    doc
+      .fontSize(10)
+      .fillColor("#555555")
+      .text(
+        "This section uses recorded rent payments only. Lease ledger charges and credits are summarized separately below."
+      )
       .moveDown(0.4);
 
     const onTimeRatePercent =
@@ -411,7 +451,15 @@ export async function generateTenantReportPdfBuffer(
     doc
       .fontSize(14)
       .fillColor("#000000")
-      .text("Ledger summary", { underline: true })
+      .text("Current lease ledger summary", { underline: true })
+      .moveDown(0.2);
+
+    doc
+      .fontSize(10)
+      .fillColor("#555555")
+      .text(
+        "This section uses the current lease ledger to show charges, credits, and running balance for the active lease."
+      )
       .moveDown(0.4);
 
     doc
@@ -455,7 +503,7 @@ export async function generateTenantReportPdfBuffer(
     doc
       .fontSize(13)
       .fillColor("#000000")
-      .text("Recent ledger entries", { underline: true })
+      .text("Recent current lease ledger entries", { underline: true })
       .moveDown(0.3);
 
     const maxLedgerRows = 12;
@@ -464,25 +512,53 @@ export async function generateTenantReportPdfBuffer(
     if (ledgerSlice.length === 0) {
       doc.fontSize(11).text("No ledger entries on file.").moveDown(0.5);
     } else {
+      const columns = [
+        { label: "Date", x: PDF_LEFT, width: 74 },
+        { label: "Type", x: 118, width: 62 },
+        { label: "Details", x: 186, width: 180 },
+        { label: "Amount", x: 372, width: 78 },
+        { label: "Balance", x: 456, width: 88 },
+      ];
+
+      drawLedgerTableHeader(doc, columns);
+
       ledgerSlice.forEach((entry: any) => {
+        const rowValues = {
+          date: String(entry.date || "Unknown date"),
+          type: String(entry.type || "entry").replace(/_/g, " "),
+          details: String(entry.label || entry.notes || "—"),
+          amount: `${entry.type === "payment" ? "+" : ""}$${Number(entry.amount || 0).toFixed(2)}`,
+          balance: `$${Number(entry.runningBalance || 0).toFixed(2)}`,
+        };
+        const rowHeight = Math.max(
+          18,
+          doc.heightOfString(rowValues.date, { width: columns[0].width }),
+          doc.heightOfString(rowValues.type, { width: columns[1].width }),
+          doc.heightOfString(rowValues.details, { width: columns[2].width }),
+          doc.heightOfString(rowValues.amount, { width: columns[3].width, align: "right" }),
+          doc.heightOfString(rowValues.balance, { width: columns[4].width, align: "right" })
+        ) + 8;
+
+        if (ensurePdfSpace(doc, rowHeight + 12)) {
+          drawLedgerTableHeader(doc, columns);
+        }
+
+        const rowY = doc.y;
+        doc.fontSize(10).fillColor("#000000");
+        doc.text(rowValues.date, columns[0].x, rowY, { width: columns[0].width });
+        doc.text(rowValues.type, columns[1].x, rowY, { width: columns[1].width });
+        doc.text(rowValues.details, columns[2].x, rowY, { width: columns[2].width });
+        doc.text(rowValues.amount, columns[3].x, rowY, { width: columns[3].width, align: "right" });
+        doc.text(rowValues.balance, columns[4].x, rowY, { width: columns[4].width, align: "right" });
+
+        const dividerY = rowY + rowHeight - 4;
         doc
-          .fontSize(11)
-          .fillColor("#000000")
-          .text(
-            `${entry.date || "Unknown date"}  |  ${entry.type || "entry"}  |  ${entry.label || ""}`
-          );
-        doc
-          .fontSize(10)
-          .fillColor("#444444")
-          .text(
-            `Amount: ${entry.type === "payment" ? "+" : ""}$${Number(
-              entry.amount || 0
-            ).toFixed(2)}   |   Balance: $${Number(
-              entry.runningBalance || 0
-            ).toFixed(2)}`,
-            { indent: 12 }
-          )
-          .moveDown(0.25);
+          .strokeColor("#ececf1")
+          .lineWidth(0.5)
+          .moveTo(PDF_LEFT, dividerY)
+          .lineTo(PDF_RIGHT, dividerY)
+          .stroke();
+        doc.y = rowY + rowHeight;
       });
       if ((data.ledgerEntries || []).length > maxLedgerRows) {
         doc
