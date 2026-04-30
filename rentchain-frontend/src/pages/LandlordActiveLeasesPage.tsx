@@ -338,6 +338,7 @@ export default function LandlordActiveLeasesPage() {
 
   function buildLeaseActionMeta(lease: LandlordActiveLease) {
     const ledgerPath = `/leases/${encodeURIComponent(lease.id)}/ledger`;
+    const summaryPath = `/leases/${encodeURIComponent(lease.id)}/summary`;
     const ledgerUrl =
       typeof window !== "undefined"
         ? `${window.location.origin}${ledgerPath}`
@@ -358,6 +359,7 @@ export default function LandlordActiveLeasesPage() {
     );
     return {
       ledgerPath,
+      summaryPath,
       emailHref: lease.tenantEmail
         ? `mailto:${encodeURIComponent(lease.tenantEmail)}?subject=${emailSubject}&body=${emailBody}`
         : null,
@@ -365,7 +367,7 @@ export default function LandlordActiveLeasesPage() {
   }
 
   function renderLeaseActions(lease: LandlordActiveLease) {
-    const { ledgerPath, emailHref } = buildLeaseActionMeta(lease);
+    const { ledgerPath, summaryPath, emailHref } = buildLeaseActionMeta(lease);
     return (
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         {lease.documentUrl ? (
@@ -378,13 +380,12 @@ export default function LandlordActiveLeasesPage() {
             View lease
           </a>
         ) : (
-          <button
-            type="button"
-            disabled
-            style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #e2e8f0", background: "#f8fafc", color: "#94a3b8" }}
+          <Link
+            to={summaryPath}
+            style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a", textDecoration: "none" }}
           >
-            Lease document unavailable
-          </button>
+            View lease
+          </Link>
         )}
         <Link to={ledgerPath} style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", textDecoration: "none", color: "#0f172a" }}>
           Ledger

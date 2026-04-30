@@ -352,7 +352,7 @@ describe("LandlordActiveLeasesPage", () => {
     );
 
     expect((await screen.findAllByText("Harbour View")).length).toBeGreaterThan(0);
-    expect(screen.getByRole("button", { name: "Lease document unavailable" })).toBeDisabled();
+    expect(screen.getByRole("link", { name: "View lease" })).toHaveAttribute("href", "/leases/lease-1/summary");
     expect(screen.getByRole("link", { name: "Ledger" })).toHaveAttribute("href", "/leases/lease-1/ledger");
     expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
   });
