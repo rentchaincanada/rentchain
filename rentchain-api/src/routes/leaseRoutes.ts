@@ -223,6 +223,12 @@ function normalizeUnitReference(value: any): string {
   return String(value || "").trim().toLowerCase();
 }
 
+function normalizeUnitMatchToken(value: any): string {
+  const raw = String(value || "").trim().toLowerCase();
+  if (!raw) return "";
+  return raw.replace(/^unit\b/, "").replace(/[\s_-]+/g, "");
+}
+
 async function resolvePropertyUnitForLease(lease: any, errorPrefix: string) {
   const propertyId = String(lease?.propertyId || "").trim();
   const unitId = String(lease?.unitId || "").trim();
@@ -286,17 +292,138 @@ async function reconcilePropertyUnitVacancyForLeaseEnd(lease: any) {
 }
 
 async function reconcilePropertyUnitOccupancyForLeaseRestore(lease: any) {
-  const { propertyRef, units, unitIndex } = await resolvePropertyUnitForLease(lease, "lease_restore");
-  const nextUnits = units.map((unit: any, index: number) =>
-    index === unitIndex ? { ...unit, status: "occupied" } : unit
-  );
-  await propertyRef.set(
+  const targets = await resolveRestoreUnitTargetsForLease(lease, "lease_restore");
+  const nowIso = new Date().toISOString();
+
+  await db.collection("units").doc(targets.unitDocId).set(
     {
-      units: nextUnits,
-      updatedAt: new Date().toISOString(),
+      status: "occupied",
+      occupancyStatus: "occupied",
+      updatedAt: nowIso,
     },
     { merge: true }
   );
+
+  const propertyPatch: Record<string, unknown> = {
+    updatedAt: nowIso,
+  };
+  if (targets.propertyUnitIndex >= 0) {
+    propertyPatch.units = targets.propertyUnits.map((unit: any, index: number) =>
+      index === targets.propertyUnitIndex ? { ...unit, status: "occupied" } : unit
+    );
+  }
+  await targets.propertyRef.set(propertyPatch, { merge: true });
+}
+
+async function resolveRestoreUnitTargetsForLease(lease: any, errorPrefix: string) {
+  const propertyId = String(lease?.propertyId || "").trim();
+  const landlordId = String(lease?.landlordId || "").trim();
+  const leaseUnitId = String(lease?.unitId || "").trim();
+  const leaseUnitNumber = String(lease?.unitNumber || lease?.unit || "").trim();
+  if (!propertyId) {
+    const error = new Error(`${errorPrefix}_property_not_found`);
+    (error as any).code = `${errorPrefix}_property_not_found`;
+    throw error;
+  }
+
+  const propertyRef = db.collection("properties").doc(propertyId);
+  const propertySnap = await propertyRef.get();
+  if (!propertySnap.exists) {
+    const error = new Error(`${errorPrefix}_property_not_found`);
+    (error as any).code = `${errorPrefix}_property_not_found`;
+    throw error;
+  }
+
+  const propertyData = (propertySnap.data() || {}) as any;
+  const propertyUnits = Array.isArray(propertyData?.units) ? propertyData.units : [];
+  const canonicalUnits = await loadUnitsForProperty(db as any, propertyId, landlordId || null);
+
+  const normalizedLeaseUnitId = normalizeUnitReference(leaseUnitId);
+  const canonicalIdMatches = normalizedLeaseUnitId
+    ? canonicalUnits.filter((unit) => normalizeUnitReference(unit.id) === normalizedLeaseUnitId)
+    : [];
+  if (canonicalIdMatches.length > 1) {
+    const error = new Error(`${errorPrefix}_unit_ambiguous`);
+    (error as any).code = `${errorPrefix}_unit_ambiguous`;
+    throw error;
+  }
+
+  const fallbackTarget = normalizeUnitMatchToken(leaseUnitNumber);
+  const canonicalFallbackMatches =
+    canonicalIdMatches.length === 1 || !fallbackTarget
+      ? []
+      : canonicalUnits.filter((unit) => {
+          const tokens = [
+            normalizeUnitMatchToken(unit.unitNumber),
+            normalizeUnitMatchToken(unit.label),
+            normalizeUnitMatchToken((unit.raw as any)?.unit),
+            normalizeUnitMatchToken((unit.raw as any)?.name),
+          ].filter(Boolean);
+          return tokens.includes(fallbackTarget);
+        });
+  if (!canonicalIdMatches.length && canonicalFallbackMatches.length > 1) {
+    const error = new Error(`${errorPrefix}_unit_ambiguous`);
+    (error as any).code = `${errorPrefix}_unit_ambiguous`;
+    throw error;
+  }
+
+  const matchedUnit = canonicalIdMatches[0] || canonicalFallbackMatches[0] || null;
+  if (!matchedUnit) {
+    const error = new Error(`${errorPrefix}_unit_not_found`);
+    (error as any).code = `${errorPrefix}_unit_not_found`;
+    throw error;
+  }
+
+  let propertyUnitIndex = -1;
+  if (propertyUnits.length) {
+    const embeddedIdMatches = leaseUnitId
+      ? propertyUnits
+          .map((unit: any, index: number) => ({ unit, index }))
+          .filter(
+            ({ unit }: { unit: any; index: number }) =>
+              normalizeUnitReference(unit?.id || unit?.unitId) === normalizedLeaseUnitId
+          )
+      : [];
+    if (embeddedIdMatches.length > 1) {
+      const error = new Error(`${errorPrefix}_unit_ambiguous`);
+      (error as any).code = `${errorPrefix}_unit_ambiguous`;
+      throw error;
+    }
+
+    if (embeddedIdMatches.length === 1) {
+      propertyUnitIndex = embeddedIdMatches[0].index;
+    } else {
+      const embeddedTarget = normalizeUnitMatchToken(
+        matchedUnit.unitNumber || matchedUnit.label || leaseUnitNumber
+      );
+      if (embeddedTarget) {
+        const embeddedLabelMatches = propertyUnits
+          .map((unit: any, index: number) => ({ unit, index }))
+          .filter(({ unit }: { unit: any; index: number }) => {
+            const tokens = [
+              normalizeUnitMatchToken(unit?.unitNumber),
+              normalizeUnitMatchToken(unit?.label),
+              normalizeUnitMatchToken(unit?.unit),
+              normalizeUnitMatchToken(unit?.name),
+            ].filter(Boolean);
+            return tokens.includes(embeddedTarget);
+          });
+        if (embeddedLabelMatches.length > 1) {
+          const error = new Error(`${errorPrefix}_unit_ambiguous`);
+          (error as any).code = `${errorPrefix}_unit_ambiguous`;
+          throw error;
+        }
+        propertyUnitIndex = embeddedLabelMatches[0]?.index ?? -1;
+      }
+    }
+  }
+
+  return {
+    propertyRef,
+    propertyUnits,
+    propertyUnitIndex,
+    unitDocId: matchedUnit.id,
+  };
 }
 
 async function loadLeaseDocumentUrlForLease(raw: any): Promise<string | null> {
@@ -1950,7 +2077,7 @@ router.post("/:id/restore-active", requireLandlord, async (req: any, res: Respon
     }
 
     try {
-      await resolvePropertyUnitForLease(existingLease, "lease_restore");
+      await resolveRestoreUnitTargetsForLease(existingLease, "lease_restore");
     } catch (resolveErr: any) {
       console.error("[POST /api/leases/:id/restore-active] property unit resolution failed", {
         leaseId,
