@@ -1,6 +1,6 @@
 // @ts-nocheck
+import { db } from "../config/firebase";
 import { getTenantLedger } from "./tenantLedgerService";
-import { getPaymentsForTenant } from "./paymentsService";
 import { getTenantDetailBundle } from "./tenantDetailsService";
 
 export type TenantPaymentBehaviorSummary = {
@@ -53,12 +53,124 @@ const parseDate = (value: any): Date | null => {
   return Number.isNaN(d.getTime()) ? null : d;
 };
 
+const toMillis = (value: any): number => {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value?.toMillis === "function") {
+    try {
+      return Number(value.toMillis()) || 0;
+    } catch {
+      return 0;
+    }
+  }
+  if (typeof value?.seconds === "number") return Number(value.seconds) * 1000;
+  const parsed = Date.parse(String(value || ""));
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+async function loadPersistedPaymentsForTenant(tenantId: string) {
+  const snap = await db
+    .collection("payments")
+    .where("tenantId", "==", tenantId)
+    .orderBy("paidAt", "desc")
+    .limit(200)
+    .get();
+
+  return snap.docs.map((doc: any) => {
+    const raw = doc.data() as any;
+    return {
+      id: doc.id,
+      tenantId: String(raw?.tenantId || "").trim() || tenantId,
+      propertyId: String(raw?.propertyId || "").trim() || null,
+      amount: Number(raw?.amount ?? 0),
+      paidAt: String(raw?.paidAt || "").trim(),
+      dueDate: raw?.dueDate ?? null,
+      method: raw?.method ?? null,
+      notes: raw?.notes ?? null,
+      status: String(raw?.status || "").trim() || "Recorded",
+    };
+  });
+}
+
+function buildLedgerEntryLabel(entry: any) {
+  const category = String(entry?.category || "").trim();
+  const reference = String(entry?.reference || "").trim();
+  const notes = String(entry?.notes || "").trim();
+
+  if (entry?.entryType === "payment") {
+    if (reference) return `Payment${entry?.method ? ` (${entry.method})` : ""} · ${reference}`;
+    if (entry?.method) return `Payment (${entry.method})`;
+    return "Payment";
+  }
+
+  if (category === "rent") return "Charge · rent";
+  if (category === "fee") return "Charge · fee";
+  if (category === "adjustment") return "Charge · adjustment";
+  if (notes) return notes;
+  return "Charge";
+}
+
+async function loadCurrentLeaseLedgerEntries(leaseId: string, landlordId?: string | null) {
+  const snap = await db
+    .collection("ledgerEntries")
+    .where("leaseId", "==", leaseId)
+    .get();
+
+  const rawEntries = snap.docs
+    .map((doc: any) => ({ id: doc.id, ...(doc.data() as any) }))
+    .filter((entry: any) => {
+      if (!landlordId) return true;
+      return String(entry?.landlordId || "").trim() === String(landlordId).trim();
+    })
+    .sort((a: any, b: any) => {
+      const dateDiff = String(a?.effectiveDate || "").localeCompare(String(b?.effectiveDate || ""));
+      if (dateDiff !== 0) return dateDiff;
+      return toMillis(a?.createdAt) - toMillis(b?.createdAt);
+    });
+
+  let runningBalanceCents = 0;
+  const mappedAsc = rawEntries.map((entry: any) => {
+    const amountCents = Math.abs(Number(entry?.amountCents || 0));
+    const signedAmountCents =
+      String(entry?.entryType || "").trim().toLowerCase() === "payment"
+        ? -amountCents
+        : amountCents;
+    runningBalanceCents += signedAmountCents;
+    return {
+      id: entry.id,
+      tenantId: null,
+      date: String(entry?.effectiveDate || "").trim() || null,
+      type: String(entry?.entryType || "").trim().toLowerCase() || "entry",
+      amount: amountCents / 100,
+      direction:
+        String(entry?.entryType || "").trim().toLowerCase() === "payment"
+          ? "credit"
+          : "debit",
+      method: entry?.method ?? null,
+      label: buildLedgerEntryLabel(entry),
+      notes: entry?.notes ?? null,
+      referenceId: entry?.reference ?? null,
+      runningBalance: runningBalanceCents / 100,
+    };
+  });
+
+  return mappedAsc.reverse();
+}
+
 export async function buildTenantReportData(
   tenantId: string
 ): Promise<TenantReportData> {
   const bundle = await getTenantDetailBundle(tenantId);
-  const payments = await getPaymentsForTenant(tenantId);
-  const ledgerEntries = await getTenantLedger(tenantId);
+  const currentLeaseId = String(
+    bundle?.currentLease?.id ||
+      bundle?.lease?.id ||
+      bundle?.tenant?.currentLeaseId ||
+      ""
+  ).trim();
+  const landlordId = String(bundle?.tenant?.landlordId || "").trim() || null;
+  const payments = await loadPersistedPaymentsForTenant(tenantId);
+  const ledgerEntries = currentLeaseId
+    ? await loadCurrentLeaseLedgerEntries(currentLeaseId, landlordId)
+    : await getTenantLedger(tenantId);
 
   const behavior: TenantPaymentBehaviorSummary = {
     onTimeRate: null,
@@ -166,8 +278,16 @@ export async function buildTenantReportData(
       bundle?.tenant?.fullName ||
       bundle?.tenant?.name ||
       "Unknown tenant",
-    propertyName: bundle?.tenant?.propertyName ?? null,
-    unitLabel: (bundle?.tenant as any)?.unit ?? null,
+    propertyName:
+      bundle?.currentLease?.propertyName ??
+      bundle?.lease?.propertyName ??
+      bundle?.tenant?.propertyName ??
+      null,
+    unitLabel:
+      bundle?.currentLease?.unit ??
+      bundle?.lease?.unit ??
+      (bundle?.tenant as any)?.unit ??
+      null,
     createdAt: (bundle?.tenant as any)?.createdAt ?? null,
     behavior,
     ledgerSummary,
