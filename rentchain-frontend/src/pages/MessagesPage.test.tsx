@@ -1,6 +1,6 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import MessagesPage from "./MessagesPage";
 
 const mocks = vi.hoisted(() => ({
@@ -40,8 +40,18 @@ vi.mock("@/components/layout/ResponsiveMasterDetail", () => ({
 }));
 
 describe("MessagesPage", () => {
-  beforeEach(() => {
+  afterEach(() => {
+    cleanup();
+    vi.clearAllTimers();
     vi.useRealTimers();
+  });
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    mocks.fetchLandlordConversationsMock.mockReset();
+    mocks.fetchLandlordConversationMessagesMock.mockReset();
+    mocks.markLandlordConversationReadMock.mockReset();
+    mocks.sendLandlordMessageMock.mockReset();
     mocks.useCapabilitiesMock.mockReturnValue({
       features: { messaging: true },
       loading: false,
@@ -67,6 +77,20 @@ describe("MessagesPage", () => {
     mocks.sendLandlordMessageMock.mockResolvedValue(undefined);
   });
 
+  async function flushTimers(ms: number) {
+    await act(async () => {
+      vi.advanceTimersByTime(ms);
+      await Promise.resolve();
+    });
+  }
+
+  async function flushAsync() {
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+  }
+
   it("prefers tenant and property/unit labels over raw ids", async () => {
     render(
       <MemoryRouter>
@@ -74,15 +98,14 @@ describe("MessagesPage", () => {
       </MemoryRouter>
     );
 
-    await waitFor(() => {
-      expect(screen.getByText("Taylor Tenant")).toBeInTheDocument();
-      expect(screen.getByText("Harbour View / Unit 2A")).toBeInTheDocument();
-      expect(screen.getByText("TT")).toBeInTheDocument();
-    });
+    await flushAsync();
+    expect(screen.getByText("Taylor Tenant")).toBeInTheDocument();
+    expect(screen.getByText("Harbour View / Unit 2A")).toBeInTheDocument();
+    expect(screen.getByText("TT")).toBeInTheDocument();
     expect(screen.queryByText(/Tenant tenant-/i)).not.toBeInTheDocument();
   });
 
-  it("shows unread state from existing conversation data", async () => {
+  it("marks an unread selected conversation read without exposing raw ids", async () => {
     mocks.fetchLandlordConversationsMock.mockResolvedValue([
       {
         id: "conv-1",
@@ -99,9 +122,9 @@ describe("MessagesPage", () => {
       </MemoryRouter>
     );
 
-    await waitFor(() => {
-      expect(container.querySelector(".rc-messages-unread-dot")).not.toBeNull();
-    });
+    await flushAsync();
+    expect(container.querySelector(".rc-messages-list-item-title")?.textContent).toContain("Taylor Tenant");
+    expect(mocks.markLandlordConversationReadMock).toHaveBeenCalledTimes(1);
   });
 
   it("uses safe context fallbacks and deterministic initials for Taylor Tenant", async () => {
@@ -131,13 +154,87 @@ describe("MessagesPage", () => {
       </MemoryRouter>
     );
 
-    await waitFor(() => {
-      expect(screen.getAllByText("Taylor Tenant")[0]).toBeInTheDocument();
-      expect(screen.getByText("Tenant conversation")).toBeInTheDocument();
-    });
+    await flushAsync();
+    expect(screen.getAllByText("Taylor Tenant")[0]).toBeInTheDocument();
+    expect(screen.getByText("Tenant conversation")).toBeInTheDocument();
     expect(screen.getAllByText("TT")[0]).toBeInTheDocument();
     expect(screen.queryByText(/tenant-raw-1/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/prop-raw-1/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/unit-raw-1/i)).not.toBeInTheDocument();
+  });
+
+  it("preserves the selected conversation across background refresh without blanking the thread", async () => {
+    mocks.fetchLandlordConversationMessagesMock.mockResolvedValue({
+      conversation: {
+        id: "conv-1",
+        tenantDisplayName: "Taylor Tenant",
+        propertyDisplayLabel: "Harbour View",
+        unitDisplayLabel: "Unit 2A",
+      },
+      messages: [
+        {
+          id: "msg-1",
+          conversationId: "conv-1",
+          senderRole: "tenant",
+          body: "Hello there",
+          createdAtMs: 1,
+        },
+      ],
+    });
+
+    render(
+      <MemoryRouter>
+        <MessagesPage />
+      </MemoryRouter>
+    );
+
+    await flushAsync();
+    expect(screen.getByText("Hello there")).toBeInTheDocument();
+    expect(screen.getAllByText("Taylor Tenant • Harbour View / Unit 2A").length).toBeGreaterThan(0);
+
+    await flushTimers(15000);
+    await flushTimers(12000);
+
+    expect(screen.getByText("Hello there")).toBeInTheDocument();
+    expect(screen.queryByText("Loading messages…")).not.toBeInTheDocument();
+    expect(screen.getAllByText("Taylor Tenant • Harbour View / Unit 2A").length).toBeGreaterThan(0);
+  });
+
+  it("does not repeatedly fire read for a stable selected conversation after background refresh", async () => {
+    mocks.fetchLandlordConversationsMock.mockResolvedValue([
+      {
+        id: "conv-1",
+        tenantDisplayName: "Taylor Tenant",
+        propertyDisplayLabel: "Harbour View",
+        unitDisplayLabel: "Unit 2A",
+        hasUnread: true,
+        lastMessageAt: 123,
+      },
+    ]);
+    mocks.fetchLandlordConversationMessagesMock.mockResolvedValue({
+      conversation: {
+        id: "conv-1",
+        tenantDisplayName: "Taylor Tenant",
+        propertyDisplayLabel: "Harbour View",
+        unitDisplayLabel: "Unit 2A",
+        hasUnread: true,
+        lastMessageAt: 123,
+      },
+      messages: [],
+    });
+
+    render(
+      <MemoryRouter>
+        <MessagesPage />
+      </MemoryRouter>
+    );
+
+    await flushAsync();
+    expect(mocks.markLandlordConversationReadMock).toHaveBeenCalledTimes(1);
+
+    await flushTimers(15000);
+    await flushTimers(12000);
+
+    expect(mocks.markLandlordConversationReadMock).toHaveBeenCalledTimes(1);
   });
 });

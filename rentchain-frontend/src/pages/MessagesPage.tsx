@@ -19,6 +19,36 @@ const POLL_CONVERSATIONS_MS = 15000;
 const POLL_THREAD_MS = 12000;
 const MAX_CONVERSATIONS_BACKOFF_MS = 120000;
 
+function areConversationsEquivalent(current: Conversation[], next: Conversation[]) {
+  if (current === next) return true;
+  if (current.length !== next.length) return false;
+  return current.every((item, index) => {
+    const candidate = next[index];
+    return (
+      item.id === candidate?.id &&
+      item.tenantDisplayName === candidate?.tenantDisplayName &&
+      item.propertyDisplayLabel === candidate?.propertyDisplayLabel &&
+      item.unitDisplayLabel === candidate?.unitDisplayLabel &&
+      item.lastMessageAt === candidate?.lastMessageAt &&
+      item.hasUnread === candidate?.hasUnread
+    );
+  });
+}
+
+function areMessagesEquivalent(current: Message[], next: Message[]) {
+  if (current === next) return true;
+  if (current.length !== next.length) return false;
+  return current.every((item, index) => {
+    const candidate = next[index];
+    return (
+      item.id === candidate?.id &&
+      item.body === candidate?.body &&
+      item.senderRole === candidate?.senderRole &&
+      item.createdAtMs === candidate?.createdAtMs
+    );
+  });
+}
+
 function displayTenantName(conversation: Conversation | null) {
   const tenantName = String(conversation?.tenantDisplayName || "").trim();
   return tenantName || "Tenant";
@@ -72,6 +102,12 @@ export default function MessagesPage() {
   const conversationPollFailureRef = useRef(0);
   const hasLoadedConversationsRef = useRef(false);
   const hasLoadedThreadRef = useRef(false);
+  const selectedIdRef = useRef<string | null>(null);
+  const lastMarkedReadRef = useRef<Record<string, number>>({});
+
+  useEffect(() => {
+    selectedIdRef.current = selectedId;
+  }, [selectedId]);
 
   const loadConversations = useCallback(async (
     preferredId?: string | null,
@@ -83,46 +119,63 @@ export default function MessagesPage() {
         setLoadingList(true);
       }
       const data = await fetchLandlordConversations();
-      setConversations(data);
+      setConversations((prev) => (areConversationsEquivalent(prev, data) ? prev : data));
       hasLoadedConversationsRef.current = true;
-      if (preferredId) {
-        setSelectedId(preferredId);
-      } else if (!selectedId && data.length > 0) {
-        setSelectedId(data[0].id);
+
+      const currentSelectedId = selectedIdRef.current;
+      const preferredSelectedId =
+        preferredId && data.some((conversation) => conversation.id === preferredId)
+          ? preferredId
+          : null;
+      const existingSelectedId =
+        currentSelectedId && data.some((conversation) => conversation.id === currentSelectedId)
+          ? currentSelectedId
+          : null;
+      const nextSelectedId =
+        preferredSelectedId || existingSelectedId || data[0]?.id || null;
+
+      if (nextSelectedId !== currentSelectedId) {
+        selectedIdRef.current = nextSelectedId;
+        setSelectedId(nextSelectedId);
       }
+      setError(null);
       return true;
     } catch (err: any) {
       setError(err?.message || "Failed to load conversations");
       return false;
     } finally {
-      if (!background || !hasLoadedConversationsRef.current) {
-        setLoadingList(false);
-      } else {
+      if (!background) {
         setLoadingList(false);
       }
     }
-  }, [selectedId]);
+  }, []);
 
-  const loadThread = async (id: string, options?: { background?: boolean }) => {
+  const loadThread = useCallback(async (id: string, options?: { background?: boolean }) => {
     const background = options?.background === true;
     try {
       if (!background || !hasLoadedThreadRef.current) {
         setLoadingThread(true);
       }
       const res = await fetchLandlordConversationMessages(id);
-      setMessages(res.messages || []);
+      const nextMessages = Array.isArray(res.messages) ? res.messages : [];
+      setMessages((prev) => (areMessagesEquivalent(prev, nextMessages) ? prev : nextMessages));
+      if (res.conversation) {
+        setConversations((prev) =>
+          prev.map((conversation) =>
+            conversation.id === res.conversation?.id ? { ...conversation, ...res.conversation } : conversation
+          )
+        );
+      }
       hasLoadedThreadRef.current = true;
-      await markLandlordConversationRead(id);
+      setError(null);
     } catch (err: any) {
       setError(err?.message || "Failed to load messages");
     } finally {
-      if (!background || !hasLoadedThreadRef.current) {
-        setLoadingThread(false);
-      } else {
+      if (!background) {
         setLoadingThread(false);
       }
     }
-  };
+  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -130,9 +183,6 @@ export default function MessagesPage() {
     void (async () => {
       if (!messagingEnabled) return;
       await loadConversations(deepLinkId);
-      if (deepLinkId) {
-        await loadThread(deepLinkId);
-      }
     })();
   }, [location.search, messagingEnabled, loadConversations]);
 
@@ -157,7 +207,7 @@ export default function MessagesPage() {
     const tick = async () => {
       if (cancelled) return;
       try {
-        const ok = await loadConversations(selectedId, { background: true });
+        const ok = await loadConversations(selectedIdRef.current, { background: true });
         conversationPollFailureRef.current = ok
           ? 0
           : Math.min(conversationPollFailureRef.current + 1, 6);
@@ -168,7 +218,7 @@ export default function MessagesPage() {
       }
     };
 
-    void tick();
+    scheduleNext();
     return () => {
       cancelled = true;
       if (conversationPollTimeoutRef.current) {
@@ -176,7 +226,7 @@ export default function MessagesPage() {
         conversationPollTimeoutRef.current = null;
       }
     };
-  }, [messagingEnabled, loadConversations, selectedId]);
+  }, [messagingEnabled, loadConversations]);
 
   useEffect(() => {
     if (!selectedId) return;
@@ -185,7 +235,51 @@ export default function MessagesPage() {
     void loadThread(selectedId);
     const t = window.setInterval(() => void loadThread(selectedId, { background: true }), POLL_THREAD_MS);
     return () => window.clearInterval(t);
-  }, [selectedId, messagingEnabled]);
+  }, [selectedId, messagingEnabled, loadThread]);
+
+  const selectedConversation = useMemo(
+    () => conversations.find((c) => c.id === selectedId) || null,
+    [conversations, selectedId]
+  );
+
+  useEffect(() => {
+    if (!messagingEnabled || !selectedConversation?.id || selectedConversation.hasUnread !== true) return;
+    const marker = Number(selectedConversation.lastMessageAt || 0);
+    if (lastMarkedReadRef.current[selectedConversation.id] === marker) return;
+
+    let cancelled = false;
+    void (async () => {
+      lastMarkedReadRef.current[selectedConversation.id] = marker;
+      try {
+        await markLandlordConversationRead(selectedConversation.id);
+        if (cancelled) return;
+        setConversations((prev) =>
+          prev.map((conversation) =>
+            conversation.id === selectedConversation.id
+              ? {
+                  ...conversation,
+                  hasUnread: false,
+                }
+              : conversation
+          )
+        );
+      } catch (err: any) {
+        delete lastMarkedReadRef.current[selectedConversation.id];
+        if (!cancelled) {
+          setError(err?.message || "Failed to mark conversation read");
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    messagingEnabled,
+    selectedConversation?.id,
+    selectedConversation?.hasUnread,
+    selectedConversation?.lastMessageAt,
+  ]);
 
 
   const handleSend = async () => {
@@ -194,13 +288,8 @@ export default function MessagesPage() {
     setComposer("");
     await sendLandlordMessage(selectedId, body);
     await loadThread(selectedId);
-    await loadConversations();
+    await loadConversations(selectedId, { background: true });
   };
-
-  const selectedConversation = useMemo(
-    () => conversations.find((c) => c.id === selectedId) || null,
-    [conversations, selectedId]
-  );
   const selectedConversationTitle = buildConversationTitle(selectedConversation);
 
   return (

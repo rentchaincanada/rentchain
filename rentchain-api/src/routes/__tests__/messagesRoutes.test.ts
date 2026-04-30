@@ -214,6 +214,40 @@ describe("messagesRoutes notifications", () => {
     );
   });
 
+  it("enriches older conversations from tenant-linked property and unit context when available", async () => {
+    ensureCollection("conversations").set("conv-2", {
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      propertyId: null,
+      unitId: null,
+    });
+    ensureCollection("tenants").set("tenant-1", {
+      email: "tenant@example.com",
+      fullName: "Taylor Tenant",
+      propertyId: "prop-1",
+      unit: "2A",
+    });
+
+    const router = await createRouter();
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/landlord/messages/conversations",
+      headers: { "x-test-user": JSON.stringify({ id: "landlord-1", landlordId: "landlord-1", role: "landlord" }) },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.conversations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "conv-2",
+          tenantDisplayName: "Taylor Tenant",
+          propertyDisplayLabel: "Harbour View",
+          unitDisplayLabel: "Unit 2A",
+        }),
+      ])
+    );
+  });
+
   it("stores deterministic property context when tenant conversation is created", async () => {
     const router = await createRouter();
     const res = await invokeRouter(router, {
@@ -228,6 +262,31 @@ describe("messagesRoutes notifications", () => {
         tenantId: "tenant-1",
         propertyId: "prop-1",
         unitId: "unit-1",
+      })
+    );
+  });
+
+  it("returns enriched tenant conversation detail without raw ids in labels", async () => {
+    const router = await createRouter();
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/tenant/messages/conversation/conv-1",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "tenant-user-1",
+          tenantId: "tenant-1",
+          landlordId: "landlord-1",
+          role: "tenant",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.conversation).toEqual(
+      expect.objectContaining({
+        tenantDisplayName: "Taylor Tenant",
+        propertyDisplayLabel: "Harbour View",
+        unitDisplayLabel: "Unit 2A",
       })
     );
   });
