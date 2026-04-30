@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   useTenantDetail: vi.fn(),
   fetchLedger: vi.fn(),
   fetchLeaseLedger: vi.fn(),
+  fetchTenantFinancialActivity: vi.fn(),
   getTenantSignals: vi.fn(),
   showToast: vi.fn(),
 }));
@@ -21,6 +22,11 @@ vi.mock("@/api/ledgerApi", () => ({
 
 vi.mock("@/api/leaseLedgerApi", () => ({
   fetchLeaseLedger: mocks.fetchLeaseLedger,
+}));
+
+vi.mock("@/api/tenantDetail", () => ({
+  fetchTenantFinancialActivity: mocks.fetchTenantFinancialActivity,
+  updateTenantMoveInReadiness: vi.fn(),
 }));
 
 vi.mock("@/api/tenantSignals", () => ({
@@ -90,6 +96,24 @@ describe("TenantDetailPanel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getTenantSignals.mockResolvedValue({ signals: null });
+    mocks.fetchTenantFinancialActivity.mockResolvedValue([
+      {
+        id: "row-1",
+        sourceType: "recorded_payment",
+        sourceId: "payment-1",
+        leaseId: "lease-1",
+        tenantId: "tenant-1",
+        propertyId: "property-1",
+        unitId: "unit-1",
+        propertyLabel: "Harbour View",
+        unitLabel: "101",
+        amount: 1850,
+        direction: "credit",
+        occurredAt: "2026-04-03T10:00:00.000Z",
+        displayLabel: "Recorded payment (e-transfer)",
+        sourceBadge: "Recorded payment",
+      },
+    ]);
     mocks.fetchLedger.mockResolvedValue([]);
     mocks.fetchLeaseLedger.mockResolvedValue({
       ok: true,
@@ -160,8 +184,12 @@ describe("TenantDetailPanel", () => {
     expect(screen.queryByRole("button", { name: "Verify ledger" })).not.toBeInTheDocument();
     expect(screen.getByText(/Charge · rent/i)).toBeInTheDocument();
     expect(screen.getByText(/Balance .*1,850\.00/i)).toBeInTheDocument();
+    expect(await screen.findByText("Financial activity")).toBeInTheDocument();
+    expect(screen.getByText("Recorded Payments")).toBeInTheDocument();
+    expect(screen.getByText("Recorded payment (e-transfer)")).toBeInTheDocument();
     expect(screen.getByText("Tenant activity panel")).toBeInTheDocument();
     await waitFor(() => expect(mocks.fetchLeaseLedger).toHaveBeenCalledWith("lease-1"));
+    await waitFor(() => expect(mocks.fetchTenantFinancialActivity).toHaveBeenCalledWith("tenant-1"));
     expect(mocks.fetchLedger).not.toHaveBeenCalled();
   });
 
@@ -207,5 +235,6 @@ describe("TenantDetailPanel", () => {
 
     expect(await screen.findByText(/No current lease is linked, so this view is showing the existing tenant-level ledger source\./i)).toBeInTheDocument();
     await waitFor(() => expect(mocks.fetchLedger).toHaveBeenCalledWith({ tenantId: "tenant-1", limit: 50 }));
+    await waitFor(() => expect(mocks.fetchTenantFinancialActivity).toHaveBeenCalledWith("tenant-1"));
   });
 });

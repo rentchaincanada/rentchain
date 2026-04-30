@@ -3,7 +3,12 @@ import React, { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTenantDetail } from "../../hooks/useTenantDetail";
 import { downloadTenantReport } from "@/api/tenantsApi";
-import { updateTenantMoveInReadiness, type MoveInReadiness } from "@/api/tenantDetail";
+import {
+  fetchTenantFinancialActivity,
+  updateTenantMoveInReadiness,
+  type FinancialProjectionRow,
+  type MoveInReadiness,
+} from "@/api/tenantDetail";
 import { getTenantSignals, type TenantSignals } from "@/api/tenantSignals";
 import { fetchLedger } from "@/api/ledgerApi";
 import { fetchLeaseLedger, type LeaseLedgerEntry } from "@/api/leaseLedgerApi";
@@ -21,6 +26,7 @@ import { useAuth } from "@/context/useAuth";
 import { CredibilityInsightsCard } from "./CredibilityInsightsCard";
 import { MoveInReadinessPanel } from "./MoveInReadinessPanel";
 import { TenantActivityPanel } from "./TenantActivityPanel";
+import { FinancialActivityPanel } from "./FinancialActivityPanel";
 import { FeatureGate } from "@/components/billing/FeatureGate";
 import { LockedFeature } from "@/components/billing/LockedFeature";
 
@@ -140,6 +146,9 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityR
   const [ledgerMode, setLedgerMode] = useState<"lease" | "tenant">("tenant");
   const [ledgerLoading, setLedgerLoading] = useState(false);
   const [ledgerError, setLedgerError] = useState<string | null>(null);
+  const [financialActivityRows, setFinancialActivityRows] = useState<FinancialProjectionRow[]>([]);
+  const [financialActivityLoading, setFinancialActivityLoading] = useState(false);
+  const [financialActivityError, setFinancialActivityError] = useState<string | null>(null);
   const cancelledRef = useRef(false);
 
   const [signals, setSignals] = useState<TenantSignals | null>(null);
@@ -235,6 +244,42 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityR
       cancelledRef.current = true;
     };
   }, [loadLedger]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadFinancialActivity() {
+      if (!tenantId) {
+        setFinancialActivityRows([]);
+        setFinancialActivityLoading(false);
+        setFinancialActivityError(null);
+        return;
+      }
+
+      try {
+        setFinancialActivityLoading(true);
+        setFinancialActivityError(null);
+        const rows = await fetchTenantFinancialActivity(tenantId);
+        if (!cancelled) {
+          setFinancialActivityRows(Array.isArray(rows) ? rows : []);
+        }
+      } catch (err: any) {
+        if (!cancelled) {
+          setFinancialActivityRows([]);
+          setFinancialActivityError(err?.message || "Failed to load financial activity");
+        }
+      } finally {
+        if (!cancelled) {
+          setFinancialActivityLoading(false);
+        }
+      }
+    }
+
+    void loadFinancialActivity();
+    return () => {
+      cancelled = true;
+    };
+  }, [tenantId]);
 
   const handleDownloadReport = async () => {
     if (!canExportPdf) {
@@ -665,6 +710,12 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityR
           <div style={{ opacity: 0.75 }}>No signals yet.</div>
         )}
       </div>
+
+      <FinancialActivityPanel
+        rows={financialActivityRows}
+        loading={financialActivityLoading}
+        error={financialActivityError}
+      />
 
       {/* Ledger timeline */}
       <div

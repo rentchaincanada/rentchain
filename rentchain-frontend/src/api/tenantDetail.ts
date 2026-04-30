@@ -83,6 +83,31 @@ export interface TenantInsight {
   [key: string]: any;
 }
 
+export type FinancialProjectionSourceType =
+  | "recorded_payment"
+  | "lease_charge"
+  | "lease_credit"
+  | "ledger_payment_unmatched";
+
+export type FinancialProjectionDirection = "credit" | "debit";
+
+export interface FinancialProjectionRow {
+  id: string;
+  sourceType: FinancialProjectionSourceType;
+  sourceId: string;
+  leaseId: string | null;
+  tenantId: string | null;
+  propertyId: string | null;
+  unitId: string | null;
+  propertyLabel: string | null;
+  unitLabel: string | null;
+  amount: number;
+  direction: FinancialProjectionDirection;
+  occurredAt: string;
+  displayLabel: string;
+  sourceBadge: string;
+}
+
 export type MoveInRequirementsStatus = "not-started" | "in-progress" | "complete" | "unknown";
 export type MoveInRequirementState = "complete" | "pending" | "not-required" | "unknown";
 export type MoveInRequirementKey =
@@ -224,6 +249,17 @@ export async function fetchTenantDetail(tenantId: string): Promise<TenantDetailB
 
   const res = await apiFetch<TenantDetailBundle>(`/tenants/${encodeURIComponent(tenantId)}`);
   return res;
+}
+
+export async function fetchTenantFinancialActivity(tenantId: string): Promise<FinancialProjectionRow[]> {
+  if (!tenantId) {
+    throw new Error("tenantId is required");
+  }
+
+  const res = await apiFetch<{ ok: true; data: { rows: FinancialProjectionRow[] } }>(
+    `/tenants/${encodeURIComponent(tenantId)}/financial-activity`
+  );
+  return Array.isArray(res?.data?.rows) ? res.data.rows : [];
 }
 
 export async function updateTenantMoveInReadiness(
