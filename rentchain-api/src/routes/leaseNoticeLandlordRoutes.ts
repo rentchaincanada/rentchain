@@ -11,6 +11,7 @@ import {
   buildLeaseNoticePreviewInputFromLease,
   buildPreview,
   computeNoResponseState,
+  deriveLandlordVisibleExpiringLeases,
   deriveLeaseRenewalOperatorInputRecord,
   getLeaseForLandlordWorkflow,
   getLeaseNoticeByLeaseId,
@@ -55,22 +56,6 @@ function asLeaseRenewalWorkflowBucket(value: unknown): LeaseRenewalWorkflowBucke
   return null;
 }
 
-function deriveLeaseRenewalWorkflowBucket(params: {
-  lease: any;
-  latestNotice: any | null;
-  now: number;
-  horizon: number;
-}): LeaseRenewalWorkflowBucket | null {
-  const { lease, latestNotice, now, horizon } = params;
-  const noResponse = latestNotice ? computeNoResponseState(latestNotice) : false;
-  if (noResponse) return "no-response";
-  const response = String(latestNotice?.tenantResponse || "pending").trim().toLowerCase();
-  if (latestNotice && response === "pending") return "pending-response";
-  const dueAt = Number(lease?.nextNoticeDueAt || 0);
-  if (dueAt > 0 && dueAt >= now && dueAt <= horizon) return "expiring";
-  return null;
-}
-
 async function performLeaseNoticeSend(params: {
   leaseId: string;
   landlordId: string;
@@ -106,84 +91,29 @@ router.get("/expiring", async (req: any, res) => {
     const propertyId = String(req.query?.propertyId || "").trim();
     const statusFilter = asLeaseRenewalWorkflowBucket(req.query?.status);
     const now = Date.now();
-    const horizon = now + withinDays * 24 * 60 * 60 * 1000;
     const [leaseSnap, noticeSnap] = await Promise.all([
       db.collection("leases").where("landlordId", "==", landlordId).limit(400).get(),
       db.collection("leaseNotices").where("landlordId", "==", landlordId).limit(400).get(),
     ]);
-    const propertyIds = Array.from(
-      new Set(
-        leaseSnap.docs
-          .map((doc) => String((doc.data() as any)?.propertyId || "").trim())
-          .filter(Boolean)
-      )
-    );
-    const propertyEntries = await Promise.all(
-      propertyIds.map(async (id) => {
-        try {
-          const snap = await db.collection("properties").doc(id).get();
-          if (!snap.exists) return [id, null] as const;
-          const raw = snap.data() as any;
-          const address =
-            String(raw?.addressLine1 || raw?.address || "").trim() ||
-            null;
-          return [id, address] as const;
-        } catch {
-          return [id, null] as const;
-        }
-      })
-    );
-    const propertyAddressById = new Map<string, string | null>(propertyEntries);
-    const latestNoticeByLeaseId = new Map<string, any>();
-    const leaseNotices = noticeSnap.docs
-      .map((doc) => ({ id: doc.id, ...(doc.data() as any) }))
-      .sort((a, b) => Number(b.updatedAt || b.createdAt || 0) - Number(a.updatedAt || a.createdAt || 0));
-    for (const notice of leaseNotices) {
-      const leaseId = String(notice?.leaseId || "").trim();
-      if (!leaseId || latestNoticeByLeaseId.has(leaseId)) continue;
-      latestNoticeByLeaseId.set(leaseId, notice);
-    }
-
-    const items = leaseSnap.docs
-      .map((doc) => normalizeLeaseRecord(doc.id, doc.data() as any))
-      .filter((lease) => !propertyId || lease.propertyId === propertyId)
-      .filter((lease) => lease.status === "active" || lease.status === "notice_pending" || lease.status === "renewal_pending")
-      .map((lease) => {
-        const latestNotice = latestNoticeByLeaseId.get(lease.id) || null;
-        const noticeBucket = deriveLeaseRenewalWorkflowBucket({
-          lease,
-          latestNotice,
-          now,
-          horizon,
-        });
-        const propertyAddress =
-          (lease.propertyId ? propertyAddressById.get(lease.propertyId) : null) ||
-          lease.propertyAddress ||
-          null;
-        return noticeBucket
-          ? {
-              ...lease,
-              propertyAddress,
-              noticeBucket,
-              leaseLifecycleSummary: deriveLeaseLifecycleSummary({
-                lease,
-                latestNotice,
-                noResponse: latestNotice ? computeNoResponseState(latestNotice) : false,
-                now,
-                expiringWindowMs: withinDays * 24 * 60 * 60 * 1000,
-              }),
-            }
-          : null;
-      })
-      .filter(
-        (
-          lease
-        ): lease is ReturnType<typeof normalizeLeaseRecord> & {
-          noticeBucket: LeaseRenewalWorkflowBucket;
-          leaseLifecycleSummary: ReturnType<typeof deriveLeaseLifecycleSummary>;
-        } => Boolean(lease)
-      )
+    const items = (await deriveLandlordVisibleExpiringLeases({
+      landlordId,
+      withinDays,
+      propertyId,
+      now,
+      leaseDocs: leaseSnap.docs as any,
+      noticeDocs: noticeSnap.docs as any,
+    }))
       .filter((lease: any) => !statusFilter || lease.noticeBucket === statusFilter)
+      .map((lease) => ({
+        ...lease,
+        leaseLifecycleSummary: deriveLeaseLifecycleSummary({
+          lease,
+          latestNotice: lease.latestNotice,
+          noResponse: lease.latestNotice ? computeNoResponseState(lease.latestNotice) : false,
+          now,
+          expiringWindowMs: withinDays * 24 * 60 * 60 * 1000,
+        }),
+      }))
       .sort((a, b) => Number(a.nextNoticeDueAt || 0) - Number(b.nextNoticeDueAt || 0));
 
     console.info("[lease-notice] expiring-list", {

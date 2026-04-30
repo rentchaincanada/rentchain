@@ -84,6 +84,7 @@ vi.mock("../../config/leaseNoticeRules", () => ({
 const appendLeaseWorkflowEvent = vi.fn(async () => undefined);
 const buildPreview = vi.fn(async () => undefined);
 const computeNoResponseStateMock = vi.fn(() => false);
+const deriveLandlordVisibleExpiringLeasesMock = vi.fn(async () => []);
 const deriveLeaseRenewalOperatorInputRecord = vi.fn((lease: any) => ({
   rentChangeMode: lease?.renewalRentChangeMode ?? null,
   proposedRent: lease?.renewalOfferedRent ?? null,
@@ -129,6 +130,7 @@ vi.mock("../../services/leaseNoticeWorkflowService", () => ({
   appendLeaseWorkflowEvent,
   buildPreview,
   computeNoResponseState: computeNoResponseStateMock,
+  deriveLandlordVisibleExpiringLeases: deriveLandlordVisibleExpiringLeasesMock,
   deriveLeaseRenewalOperatorInputRecord,
   getLeaseForLandlordWorkflow,
   getLeaseNoticeByLeaseId: vi.fn(),
@@ -181,6 +183,7 @@ describe("leaseNoticeLandlordRoutes policy integration", () => {
     collections.clear();
     vi.clearAllMocks();
     computeNoResponseStateMock.mockReturnValue(false);
+    deriveLandlordVisibleExpiringLeasesMock.mockResolvedValue([]);
     normalizeLeaseRecord.mockImplementation((id: string, raw: any) => ({ id, ...(raw || {}) }));
     sanitizeLeaseRenewalOperatorInput.mockImplementation((body: any) => ({
       ok: true,
@@ -341,34 +344,22 @@ describe("leaseNoticeLandlordRoutes policy integration", () => {
   });
 
   it("returns only expiring workflow items when the expiring status filter is requested", async () => {
-    if (!collections.has("leases")) collections.set("leases", new Map());
-    if (!collections.has("leaseNotices")) collections.set("leaseNotices", new Map());
-    if (!collections.has("properties")) collections.set("properties", new Map());
-    collections.get("properties")?.set("property-1", {
-      landlordId: "landlord-1",
-      addressLine1: "123 Harbour St",
-    });
-    collections.get("leases")?.set("lease-expiring", {
-      landlordId: "landlord-1",
-      propertyId: "property-1",
-      unitId: "unit-1",
-      status: "active",
-      nextNoticeDueAt: Date.now() + 5 * 24 * 60 * 60 * 1000,
-    });
-    collections.get("leases")?.set("lease-pending", {
-      landlordId: "landlord-1",
-      propertyId: "property-1",
-      unitId: "unit-2",
-      status: "renewal_pending",
-      nextNoticeDueAt: Date.now() + 5 * 24 * 60 * 60 * 1000,
-    });
-    collections.get("leaseNotices")?.set("notice-pending", {
-      landlordId: "landlord-1",
-      leaseId: "lease-pending",
-      tenantResponse: "pending",
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    });
+    deriveLandlordVisibleExpiringLeasesMock.mockResolvedValue([
+      {
+        id: "lease-expiring",
+        propertyAddress: "123 Harbour St",
+        noticeBucket: "expiring",
+        nextNoticeDueAt: Date.now() + 5 * 24 * 60 * 60 * 1000,
+        latestNotice: null,
+      },
+      {
+        id: "lease-pending",
+        propertyAddress: "123 Harbour St",
+        noticeBucket: "pending-response",
+        nextNoticeDueAt: Date.now() + 5 * 24 * 60 * 60 * 1000,
+        latestNotice: { tenantResponse: "pending" },
+      },
+    ]);
 
     const router = (await import("../leaseNoticeLandlordRoutes")).default;
     const res = await invokeRouter(router, {
@@ -392,29 +383,20 @@ describe("leaseNoticeLandlordRoutes policy integration", () => {
   });
 
   it("returns only pending-response workflow items when that status filter is requested", async () => {
-    if (!collections.has("leases")) collections.set("leases", new Map());
-    if (!collections.has("leaseNotices")) collections.set("leaseNotices", new Map());
-    collections.get("leases")?.set("lease-expiring", {
-      landlordId: "landlord-1",
-      propertyId: "property-1",
-      unitId: "unit-1",
-      status: "active",
-      nextNoticeDueAt: Date.now() + 5 * 24 * 60 * 60 * 1000,
-    });
-    collections.get("leases")?.set("lease-pending", {
-      landlordId: "landlord-1",
-      propertyId: "property-1",
-      unitId: "unit-2",
-      status: "renewal_pending",
-      nextNoticeDueAt: Date.now() + 5 * 24 * 60 * 60 * 1000,
-    });
-    collections.get("leaseNotices")?.set("notice-pending", {
-      landlordId: "landlord-1",
-      leaseId: "lease-pending",
-      tenantResponse: "pending",
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    });
+    deriveLandlordVisibleExpiringLeasesMock.mockResolvedValue([
+      {
+        id: "lease-expiring",
+        noticeBucket: "expiring",
+        nextNoticeDueAt: Date.now() + 5 * 24 * 60 * 60 * 1000,
+        latestNotice: null,
+      },
+      {
+        id: "lease-pending",
+        noticeBucket: "pending-response",
+        nextNoticeDueAt: Date.now() + 5 * 24 * 60 * 60 * 1000,
+        latestNotice: { tenantResponse: "pending" },
+      },
+    ]);
 
     const router = (await import("../leaseNoticeLandlordRoutes")).default;
     const res = await invokeRouter(router, {
@@ -436,23 +418,15 @@ describe("leaseNoticeLandlordRoutes policy integration", () => {
   });
 
   it("returns only no-response workflow items when that status filter is requested", async () => {
-    computeNoResponseStateMock.mockImplementation((notice: any) => String(notice?.leaseId || "").trim() === "lease-no-response");
-    if (!collections.has("leases")) collections.set("leases", new Map());
-    if (!collections.has("leaseNotices")) collections.set("leaseNotices", new Map());
-    collections.get("leases")?.set("lease-no-response", {
-      landlordId: "landlord-1",
-      propertyId: "property-1",
-      unitId: "unit-3",
-      status: "renewal_pending",
-      nextNoticeDueAt: Date.now() + 5 * 24 * 60 * 60 * 1000,
-    });
-    collections.get("leaseNotices")?.set("notice-no-response", {
-      landlordId: "landlord-1",
-      leaseId: "lease-no-response",
-      tenantResponse: "pending",
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    });
+    computeNoResponseStateMock.mockReturnValue(true);
+    deriveLandlordVisibleExpiringLeasesMock.mockResolvedValue([
+      {
+        id: "lease-no-response",
+        noticeBucket: "no-response",
+        nextNoticeDueAt: Date.now() + 5 * 24 * 60 * 60 * 1000,
+        latestNotice: { tenantResponse: "pending" },
+      },
+    ]);
 
     const router = (await import("../leaseNoticeLandlordRoutes")).default;
     const res = await invokeRouter(router, {

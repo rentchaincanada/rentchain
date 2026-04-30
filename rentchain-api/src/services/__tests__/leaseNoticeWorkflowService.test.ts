@@ -1,11 +1,62 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const { collections, dbMock } = vi.hoisted(() => {
+  const collections = new Map<string, Map<string, any>>();
+
+  function ensureCollection(name: string) {
+    if (!collections.has(name)) collections.set(name, new Map<string, any>());
+    return collections.get(name)!;
+  }
+
+  function makeQuery(name: string, filters: Array<{ field: string; value: any }> = []) {
+    return {
+      where: (field: string, _op: string, value: any) => makeQuery(name, [...filters, { field, value }]),
+      limit: (_count: number) => makeQuery(name, filters),
+      get: async () => {
+        const docs = Array.from(ensureCollection(name).entries())
+          .filter(([, data]) => filters.every((filter) => data?.[filter.field] === filter.value))
+          .map(([id, data]) => ({ id, data: () => data }));
+        return { docs, empty: docs.length === 0, size: docs.length };
+      },
+    };
+  }
+
+  return {
+    collections,
+    dbMock: {
+      collection: (name: string) => ({
+        where: (field: string, op: string, value: any) => makeQuery(name, [{ field, value }]),
+        limit: (_count: number) => makeQuery(name),
+        get: async () => makeQuery(name).get(),
+        doc: (id: string) => ({
+          id,
+          get: async () => ({
+            id,
+            exists: ensureCollection(name).has(id),
+            data: () => ensureCollection(name).get(id),
+          }),
+        }),
+      }),
+    },
+  };
+});
+
+vi.mock("../../config/firebase", () => ({
+  db: dbMock,
+}));
+
 import {
+  deriveLandlordVisibleExpiringLeases,
   deriveLeaseNoticeExecutionInputSnapshot,
   normalizeLeaseRecord,
   sanitizeLeaseRenewalOperatorInput,
 } from "../leaseNoticeWorkflowService";
 
 describe("leaseNoticeWorkflowService renewal operator inputs", () => {
+  beforeEach(() => {
+    collections.clear();
+  });
+
   it("keeps readiness partial when term fields are still unset", () => {
     const lease = normalizeLeaseRecord("lease-1", {
       landlordId: "landlord-1",
@@ -75,5 +126,59 @@ describe("leaseNoticeWorkflowService renewal operator inputs", () => {
       ok: false,
       error: "PROPOSED_RENT_NOT_ALLOWED_FOR_RENT_CHANGE_MODE",
     });
+  });
+
+  it("builds one landlord-visible renewal dataset and excludes hidden, archived, vacant, ended, and past-due leases", async () => {
+    collections.set(
+      "properties",
+      new Map([
+        ["prop-active", { landlordId: "landlord-1", name: "Active Property", addressLine1: "123 Main St", portfolioStatus: "active" }],
+        ["prop-archived", { landlordId: "landlord-1", name: "Archived Property", portfolioStatus: "archived" }],
+      ])
+    );
+    collections.set(
+      "units",
+      new Map([
+        ["unit-1", { landlordId: "landlord-1", propertyId: "prop-active", unitNumber: "1", label: "Unit 1", status: "occupied" }],
+        ["unit-2", { landlordId: "landlord-1", propertyId: "prop-active", unitNumber: "2", label: "Unit 2", status: "occupied" }],
+        ["unit-3", { landlordId: "landlord-1", propertyId: "prop-active", unitNumber: "3", label: "Unit 3", status: "occupied" }],
+        ["unit-4", { landlordId: "landlord-1", propertyId: "prop-active", unitNumber: "4", label: "Unit 4", status: "vacant" }],
+        ["unit-5", { landlordId: "landlord-1", propertyId: "prop-archived", unitNumber: "5", label: "Unit 5", status: "occupied" }],
+      ])
+    );
+    collections.set(
+      "leases",
+      new Map([
+        ["lease-expiring", { landlordId: "landlord-1", propertyId: "prop-active", unitId: "unit-1", status: "active", nextNoticeDueAt: Date.now() + 5 * 24 * 60 * 60 * 1000 }],
+        ["lease-pending", { landlordId: "landlord-1", propertyId: "prop-active", unitId: "unit-2", status: "renewal_pending", nextNoticeDueAt: Date.now() + 5 * 24 * 60 * 60 * 1000 }],
+        ["lease-no-response", { landlordId: "landlord-1", propertyId: "prop-active", unitId: "unit-3", status: "notice_pending", nextNoticeDueAt: Date.now() + 5 * 24 * 60 * 60 * 1000 }],
+        ["lease-vacant", { landlordId: "landlord-1", propertyId: "prop-active", unitId: "unit-4", status: "active", nextNoticeDueAt: Date.now() + 5 * 24 * 60 * 60 * 1000 }],
+        ["lease-archived-property", { landlordId: "landlord-1", propertyId: "prop-archived", unitId: "unit-5", status: "active", nextNoticeDueAt: Date.now() + 5 * 24 * 60 * 60 * 1000 }],
+        ["lease-ended", { landlordId: "landlord-1", propertyId: "prop-active", unitId: "unit-1", status: "ended", nextNoticeDueAt: Date.now() + 5 * 24 * 60 * 60 * 1000 }],
+        ["lease-renewed", { landlordId: "landlord-1", propertyId: "prop-active", unitId: "unit-1", status: "renewal_accepted", nextNoticeDueAt: Date.now() + 5 * 24 * 60 * 60 * 1000 }],
+        ["lease-move-out", { landlordId: "landlord-1", propertyId: "prop-active", unitId: "unit-1", status: "move_out_pending", nextNoticeDueAt: Date.now() + 5 * 24 * 60 * 60 * 1000 }],
+        ["lease-past-due", { landlordId: "landlord-1", propertyId: "prop-active", unitId: "unit-1", status: "active", nextNoticeDueAt: Date.now() - 5 * 24 * 60 * 60 * 1000 }],
+        ["lease-hidden", { landlordId: "landlord-1", propertyId: "prop-active", unitId: "unit-1", status: "active", nextNoticeDueAt: Date.now() + 5 * 24 * 60 * 60 * 1000, hiddenFromActiveLists: true }],
+      ])
+    );
+    collections.set(
+      "leaseNotices",
+      new Map([
+        ["notice-pending", { landlordId: "landlord-1", leaseId: "lease-pending", tenantResponse: "pending", createdAt: Date.now(), updatedAt: Date.now() }],
+        ["notice-no-response", { landlordId: "landlord-1", leaseId: "lease-no-response", tenantResponse: "pending", responseDeadlineAt: Date.now() - 1000, createdAt: Date.now(), updatedAt: Date.now() }],
+      ])
+    );
+
+    const items = await deriveLandlordVisibleExpiringLeases({
+      landlordId: "landlord-1",
+      withinDays: 120,
+      now: Date.now(),
+    });
+
+    expect(items.map((item) => ({ id: item.id, bucket: item.noticeBucket }))).toEqual([
+      { id: "lease-expiring", bucket: "expiring" },
+      { id: "lease-pending", bucket: "pending-response" },
+      { id: "lease-no-response", bucket: "no-response" },
+    ]);
   });
 });
