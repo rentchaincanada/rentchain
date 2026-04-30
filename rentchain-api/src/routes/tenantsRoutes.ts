@@ -7,6 +7,10 @@ import {
 } from "../services/tenantDetailsService";
 import { getTenantLedger } from "../services/tenantLedgerService";
 import { generateTenantReportPdfBuffer } from "../services/tenantReportService";
+import {
+  deriveFinancialProjectionRows,
+  type FinancialProjectionRow,
+} from "../services/financialProjectionService";
 import { listTenanciesByTenantId } from "../services/tenanciesService";
 import {
   updateMoveInReadinessItems,
@@ -19,6 +23,14 @@ function getLandlordId(req: any): string | null {
   const role = String(req.user?.role || "").toLowerCase();
   if (role === "admin") return null;
   return req.user?.landlordId || req.user?.id || null;
+}
+
+function compareFinancialProjectionRows(a: FinancialProjectionRow, b: FinancialProjectionRow) {
+  const dateDiff = String(b?.occurredAt || "").localeCompare(String(a?.occurredAt || ""));
+  if (dateDiff !== 0) return dateDiff;
+  const typeDiff = String(a?.sourceType || "").localeCompare(String(b?.sourceType || ""));
+  if (typeDiff !== 0) return typeDiff;
+  return String(a?.sourceId || "").localeCompare(String(b?.sourceId || ""));
 }
 
 router.use(requireLandlord);
@@ -151,6 +163,34 @@ router.get("/:tenantId/payments", async (req: any, res) => {
   } catch (err: any) {
     console.error("[GET /api/tenants/:tenantId/payments] error", err);
     return res.status(500).json({ ok: false, error: "Failed to load tenant payments" });
+  }
+});
+
+router.get("/:tenantId/financial-activity", async (req: any, res) => {
+  const landlordId = getLandlordId(req);
+  const tenantId = String(req.params?.tenantId || "").trim();
+  if (!tenantId) return res.status(400).json({ ok: false, error: "tenantId is required" });
+  if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+
+  try {
+    const bundle = await getTenantDetailBundle(tenantId, { landlordId });
+    if (!bundle?.tenant) return res.status(404).json({ ok: false, error: "Tenant not found" });
+
+    const projection = await deriveFinancialProjectionRows({ landlordId, tenantId });
+    const rows = Array.isArray(projection?.rows)
+      ? projection.rows.slice().sort(compareFinancialProjectionRows)
+      : [];
+
+    return res.status(200).json({
+      ok: true,
+      data: { rows },
+    });
+  } catch (err: any) {
+    console.error("[GET /api/tenants/:tenantId/financial-activity] error", err);
+    return res.status(500).json({
+      ok: false,
+      error: err?.message ?? "Failed to load tenant financial activity",
+    });
   }
 });
 

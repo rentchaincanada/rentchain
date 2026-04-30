@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const setMock = vi.fn(async () => undefined);
 const getTenantDetailBundleMock = vi.fn();
 const getTenantsListMock = vi.fn();
+const deriveFinancialProjectionRowsMock = vi.fn();
 const leaseDocs = new Map<string, any>();
 const propertyDocs = new Map<string, any>();
 
@@ -54,6 +55,10 @@ vi.mock("../../middleware/requireLandlord", () => ({
 vi.mock("../../services/tenantDetailsService", () => ({
   getTenantDetailBundle: getTenantDetailBundleMock,
   getTenantsList: getTenantsListMock,
+}));
+
+vi.mock("../../services/financialProjectionService", () => ({
+  deriveFinancialProjectionRows: deriveFinancialProjectionRowsMock,
 }));
 
 vi.mock("../../services/tenantLedgerService", () => ({
@@ -119,6 +124,7 @@ describe("tenantsRoutes", () => {
     setMock.mockClear();
     getTenantDetailBundleMock.mockReset();
     getTenantsListMock.mockReset();
+    deriveFinancialProjectionRowsMock.mockReset();
     leaseDocs.clear();
     propertyDocs.clear();
   });
@@ -207,5 +213,102 @@ describe("tenantsRoutes", () => {
         propertyLabel: "Harbour View",
       })
     );
+  });
+
+  it("returns sorted financial projection rows for a landlord-owned tenant", async () => {
+    getTenantDetailBundleMock.mockResolvedValue({
+      tenant: { id: "tenant-1", landlordId: "landlord-1" },
+    });
+    deriveFinancialProjectionRowsMock.mockResolvedValue({
+      rows: [
+        {
+          id: "lease_charge:entry-1",
+          sourceType: "lease_charge",
+          sourceId: "entry-1",
+          leaseId: "lease-1",
+          tenantId: "tenant-1",
+          propertyId: "property-1",
+          unitId: "unit-1",
+          propertyLabel: "Harbour View",
+          unitLabel: "101",
+          amount: 1850,
+          direction: "debit",
+          occurredAt: "2026-04-01",
+          displayLabel: "Rent charge",
+          sourceBadge: "Lease charge",
+        },
+        {
+          id: "recorded_payment:payment-1",
+          sourceType: "recorded_payment",
+          sourceId: "payment-1",
+          leaseId: null,
+          tenantId: "tenant-1",
+          propertyId: "property-1",
+          unitId: null,
+          propertyLabel: "Harbour View",
+          unitLabel: null,
+          amount: 1850,
+          direction: "credit",
+          occurredAt: "2026-04-03",
+          displayLabel: "Recorded payment (e-transfer)",
+          sourceBadge: "Recorded payment",
+        },
+      ],
+      counts: {
+        recorded_payment: 1,
+        lease_charge: 1,
+        lease_credit: 0,
+        ledger_payment_unmatched: 0,
+      },
+    });
+
+    const router = (await import("../tenantsRoutes")).default;
+    const result = await invokeRouter(router, {
+      method: "GET",
+      url: "/tenant-1/financial-activity",
+    });
+
+    expect(result.status).toBe(200);
+    expect(getTenantDetailBundleMock).toHaveBeenCalledWith("tenant-1", { landlordId: "landlord-1" });
+    expect(deriveFinancialProjectionRowsMock).toHaveBeenCalledWith({
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+    });
+    expect(result.body).toEqual({
+      ok: true,
+      data: {
+        rows: [
+          expect.objectContaining({
+            sourceType: "recorded_payment",
+            sourceBadge: "Recorded payment",
+            propertyLabel: "Harbour View",
+            unitLabel: null,
+          }),
+          expect.objectContaining({
+            sourceType: "lease_charge",
+            sourceBadge: "Lease charge",
+            propertyLabel: "Harbour View",
+            unitLabel: "101",
+          }),
+        ],
+      },
+    });
+    expect(result.body.data.rows[0].occurredAt).toBe("2026-04-03");
+    expect(result.body.data.rows[0].propertyLabel).not.toBe(result.body.data.rows[0].propertyId);
+  });
+
+  it("rejects financial projection access when the tenant is outside landlord scope", async () => {
+    getTenantDetailBundleMock.mockResolvedValue({ tenant: null });
+    const router = (await import("../tenantsRoutes")).default;
+
+    const result = await invokeRouter(router, {
+      method: "GET",
+      url: "/tenant-1/financial-activity",
+    });
+
+    expect(result.status).toBe(404);
+    expect(result.body).toEqual({ ok: false, error: "Tenant not found" });
+    expect(deriveFinancialProjectionRowsMock).not.toHaveBeenCalled();
+    expect(setMock).not.toHaveBeenCalled();
   });
 });
