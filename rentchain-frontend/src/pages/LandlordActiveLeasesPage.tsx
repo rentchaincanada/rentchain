@@ -17,6 +17,7 @@ import {
   prettyRentPaymentStatus,
 } from "@/lib/payments/paymentStatusGuidance";
 import { isTargetedHiddenLeaseId } from "@/lib/testDataVisibilityTargets";
+import { printSummaryDocument } from "@/utils/printSummary";
 
 function formatCurrency(value: number | null | undefined) {
   const amount = typeof value === "number" ? value : 0;
@@ -470,7 +471,7 @@ export default function LandlordActiveLeasesPage() {
         <button
           type="button"
           className="no-print"
-          onClick={() => window.print()}
+          onClick={() => void printSummaryDocument("summary")}
           style={{ padding: "8px 10px", borderRadius: 12, border: "1px solid #E5E7EB", background: "#FFFFFF", fontWeight: 900, cursor: "pointer" }}
         >
           Print / Save PDF

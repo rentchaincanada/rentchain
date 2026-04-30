@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   convertUnitReferenceToLease: vi.fn(),
   archiveLeaseRecord: vi.fn(),
   restoreLeaseRecord: vi.fn(),
+  printSummaryDocument: vi.fn(),
 }));
 
 vi.mock("@/api/leasesApi", () => ({
@@ -23,12 +24,17 @@ vi.mock("@/api/leasesApi", () => ({
   restoreLeaseRecord: mocks.restoreLeaseRecord,
 }));
 
+vi.mock("@/utils/printSummary", () => ({
+  printSummaryDocument: (...args: unknown[]) => mocks.printSummaryDocument(...args),
+}));
+
 describe("LandlordActiveLeasesPage", () => {
   afterEach(() => {
     cleanup();
   });
 
   beforeEach(() => {
+    mocks.printSummaryDocument.mockReset();
     Object.defineProperty(window, "matchMedia", {
       writable: true,
       value: vi.fn().mockImplementation((query: string) => ({
@@ -184,6 +190,8 @@ describe("LandlordActiveLeasesPage", () => {
     await waitFor(() => expect(mocks.enableLeasePaymentRail).toHaveBeenCalledWith("lease-1"));
     fireEvent.click(screen.getByRole("button", { name: "Archive lease" }));
     await waitFor(() => expect(mocks.archiveLeaseRecord).toHaveBeenCalledWith("lease-1"));
+    fireEvent.click(screen.getByRole("button", { name: "Print / Save PDF" }));
+    expect(mocks.printSummaryDocument).toHaveBeenCalledWith("summary");
   });
 
   it("shows landlord-safe payment visibility without retry or receipt actions", async () => {
