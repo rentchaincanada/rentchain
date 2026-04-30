@@ -151,7 +151,6 @@ describe("messagesRoutes notifications", () => {
     ensureCollection("conversations").set("conv-1", {
       landlordId: "landlord-1",
       tenantId: "tenant-1",
-      propertyId: "prop-1",
       unitId: "unit-1",
     });
     ensureCollection("tenants").set("tenant-1", {
@@ -211,6 +210,24 @@ describe("messagesRoutes notifications", () => {
         tenantDisplayName: "Taylor Tenant",
         propertyDisplayLabel: "Harbour View",
         unitDisplayLabel: "Unit 2A",
+      })
+    );
+  });
+
+  it("stores deterministic property context when tenant conversation is created", async () => {
+    const router = await createRouter();
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/tenant/messages/conversation",
+      headers: { "x-test-user": JSON.stringify({ id: "tenant-user-1", tenantId: "tenant-1", landlordId: "landlord-1", unitId: "unit-1", role: "tenant" }) },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.conversation).toEqual(
+      expect.objectContaining({
+        tenantId: "tenant-1",
+        propertyId: "prop-1",
+        unitId: "unit-1",
       })
     );
   });

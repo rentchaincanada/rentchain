@@ -31,6 +31,72 @@ const xmlEscape = (value: unknown) =>
 
 const roleForReq = (req: any) => String(req.user?.actorRole || req.user?.role || "").trim().toLowerCase();
 
+function toMillis(value: any): number | null {
+  if (value == null) return null;
+  if (typeof value === "number") return value;
+  if (typeof value === "string") {
+    const parsed = Date.parse(value);
+    return Number.isNaN(parsed) ? null : parsed;
+  }
+  if (typeof value?.toMillis === "function") return value.toMillis();
+  if (typeof value?.seconds === "number") return value.seconds * 1000;
+  return null;
+}
+
+function toIsoString(value: any): string | null {
+  if (value == null || value === "") return null;
+  if (typeof value === "string") return value;
+  const millis = toMillis(value);
+  return millis == null ? null : new Date(millis).toISOString();
+}
+
+function isSameYearMonth(value: any, year: number, month: number) {
+  const iso = String(toIsoString(value) || "").trim();
+  if (!iso) return false;
+  const expectedMonth = String(month).padStart(2, "0");
+  const dateOnlyMatch = iso.match(/^(\d{4})-(\d{2})/);
+  if (dateOnlyMatch) {
+    return Number(dateOnlyMatch[1]) === year && dateOnlyMatch[2] === expectedMonth;
+  }
+  const parsed = new Date(iso);
+  if (Number.isNaN(parsed.getTime())) return false;
+  return parsed.getUTCFullYear() === year && parsed.getUTCMonth() + 1 === month;
+}
+
+function normalizePersistedPayment(docId: string, raw: any): Payment & {
+  status?: string;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+} {
+  return {
+    id: docId,
+    tenantId: String(raw?.tenantId || "").trim(),
+    propertyId: String(raw?.propertyId || "").trim() || null,
+    amount: Number(raw?.amount ?? 0),
+    paidAt: String(toIsoString(raw?.paidAt) || "").trim(),
+    method: String(raw?.method || "").trim(),
+    notes: raw?.notes ?? null,
+    status: String(raw?.status || "").trim() || "Recorded",
+    createdAt: toIsoString(raw?.createdAt),
+    updatedAt: toIsoString(raw?.updatedAt),
+  };
+}
+
+async function listPersistedPayments(tenantId?: string): Promise<Array<ReturnType<typeof normalizePersistedPayment>>> {
+  const base = db.collection("payments");
+  const query = tenantId
+    ? base.where("tenantId", "==", tenantId).orderBy("paidAt", "desc").limit(200)
+    : base.orderBy("paidAt", "desc").limit(500);
+  const snap = await query.get();
+  return snap.docs.map((doc: any) => normalizePersistedPayment(doc.id, doc.data() as any));
+}
+
+async function getPersistedPaymentById(paymentId: string) {
+  const snap = await db.collection("payments").doc(paymentId).get();
+  if (!snap.exists) return null;
+  return normalizePersistedPayment(snap.id, snap.data() as any);
+}
+
 async function buildPaymentLabelMaps(payments: Payment[]) {
   const tenantIds = Array.from(new Set(payments.map((payment) => String(payment.tenantId || "").trim()).filter(Boolean)));
   const propertyIds = Array.from(new Set(payments.map((payment) => String(payment.propertyId || "").trim()).filter(Boolean)));
@@ -110,18 +176,16 @@ const parseYearMonth = (req: Request): { year: number; month: number } | null =>
 };
 
 // GET /api/payments?tenantId=...
-router.get("/payments", (req: Request, res: Response) => {
+router.get("/payments", async (req: Request, res: Response) => {
   res.setHeader("x-route-source", "paymentsRoutes.ts");
   const tenantId = (req.query.tenantId as string | undefined) ?? undefined;
-
-  let results: Payment[] = [];
-  if (tenantId) {
-    results = paymentsService.getByTenantId(tenantId);
-  } else {
-    results = paymentsService.getAll();
+  try {
+    const results = await listPersistedPayments(tenantId);
+    return res.json(results);
+  } catch (err) {
+    console.error("[paymentsRoutes] list failed", err);
+    return res.status(500).json({ ok: false, error: "PAYMENTS_LIST_FAILED" });
   }
-
-  res.json(results);
 });
 
 router.get("/payments/export.csv", requireAuth, async (req: any, res: Response) => {
@@ -131,7 +195,7 @@ router.get("/payments/export.csv", requireAuth, async (req: any, res: Response) 
       return res.status(403).json({ ok: false, error: "FORBIDDEN" });
     }
 
-    const rows = await buildPaymentExportRows(paymentsService.getAll());
+    const rows = await buildPaymentExportRows(await listPersistedPayments());
     const csv = [
       ["paid_date", "tenant", "property", "amount", "method", "notes"].join(","),
       ...rows.map((row) => [row.paidDate, row.tenant, row.property, row.amount, row.method, row.notes].map(csvEscape).join(",")),
@@ -155,7 +219,7 @@ router.get("/payments/export.xlsx", requireAuth, async (req: any, res: Response)
       return res.status(403).json({ ok: false, error: "FORBIDDEN" });
     }
 
-    const rows = await buildPaymentExportRows(paymentsService.getAll());
+    const rows = await buildPaymentExportRows(await listPersistedPayments());
     const xml = renderPaymentSpreadsheetXml(rows);
 
     setAttachmentExportHeaders(res, {
@@ -174,20 +238,25 @@ router.post(
   "/payments",
   requireAuth,
   requirePermission(["payments.record", "ledger.record"]),
-  (req: any, res: Response) => {
+  async (req: any, res: Response) => {
   const body = req.body as Partial<CreatePaymentPayload>;
   if (!body.tenantId || typeof body.amount !== "number" || !body.paidAt || !body.method) {
     return res.status(400).json({ error: "tenantId, amount, paidAt, and method are required" });
   }
-
-  const payment = paymentsService.create({
+  const now = new Date().toISOString();
+  const paymentPayload = {
     tenantId: body.tenantId,
     amount: body.amount,
     paidAt: body.paidAt,
     method: body.method,
     notes: body.notes ?? null,
     propertyId: body.propertyId ?? null,
-  });
+    createdAt: now,
+    updatedAt: now,
+    status: "Recorded",
+  };
+  const paymentRef = await db.collection("payments").add(paymentPayload);
+  const payment = normalizePersistedPayment(paymentRef.id, paymentPayload);
 
   recordPaymentEvent({
     landlordId: (req as any).user?.id,
@@ -208,20 +277,25 @@ router.post(
   "/payments/record",
   requireAuth,
   requirePermission(["payments.record", "ledger.record"]),
-  (req: any, res: Response) => {
+  async (req: any, res: Response) => {
   const body = req.body as Partial<CreatePaymentPayload>;
   if (!body.tenantId || typeof body.amount !== "number" || !body.paidAt || !body.method) {
     return res.status(400).json({ error: "tenantId, amount, paidAt, and method are required" });
   }
-
-  const payment = paymentsService.create({
+  const now = new Date().toISOString();
+  const paymentPayload = {
     tenantId: body.tenantId,
     amount: body.amount,
     paidAt: body.paidAt,
     method: body.method,
     notes: body.notes ?? null,
     propertyId: body.propertyId ?? null,
-  });
+    createdAt: now,
+    updatedAt: now,
+    status: "Recorded",
+  };
+  const paymentRef = await db.collection("payments").add(paymentPayload);
+  const payment = normalizePersistedPayment(paymentRef.id, paymentPayload);
 
   recordPaymentEvent({
     landlordId: (req as any).user?.id,
@@ -238,16 +312,22 @@ router.post(
 );
 
 // GET /api/payments/tenant/:tenantId/monthly
-router.get("/payments/tenant/:tenantId/monthly", (req: Request, res: Response) => {
+router.get("/payments/tenant/:tenantId/monthly", async (req: Request, res: Response) => {
   const { tenantId } = req.params;
   const parsed = parseYearMonth(req);
   if (!parsed) {
     return res.json({ payments: [], total: 0 });
   }
-
-  const payments = paymentsService.getForTenantInMonth(tenantId, parsed.year, parsed.month);
-  const total = payments.reduce((sum, p) => sum + (typeof p.amount === "number" ? p.amount : 0), 0);
-  return res.json({ payments, total });
+  try {
+    const payments = (await listPersistedPayments(tenantId)).filter((payment) =>
+      isSameYearMonth(payment.paidAt, parsed.year, parsed.month)
+    );
+    const total = payments.reduce((sum, p) => sum + (typeof p.amount === "number" ? p.amount : 0), 0);
+    return res.json({ payments, total });
+  } catch (err) {
+    console.error("[paymentsRoutes] tenant monthly failed", err);
+    return res.status(500).json({ ok: false, error: "PAYMENTS_MONTHLY_FAILED" });
+  }
 });
 
 // GET /api/payments/property/:propertyId/monthly (stubbed to avoid 404/400)
@@ -278,23 +358,26 @@ router.get("/payments/property/:propertyId/monthly", requireAuth, (req: any, res
 });
 
 // PUT /api/payments/:paymentId
-router.put("/payments/:paymentId", requireAuth, requirePermission("payments.edit"), (req: any, res: Response) => {
+router.put("/payments/:paymentId", requireAuth, requirePermission("payments.edit"), async (req: any, res: Response) => {
   const { paymentId } = req.params;
   const { amount, notes } = req.body as Partial<Payment>;
-
-  const existing = paymentsService.getById(paymentId);
+  const existing = await getPersistedPaymentById(paymentId);
   if (!existing) {
     return res.status(404).json({ error: "Payment not found" });
   }
 
   const updatedAmount =
     typeof amount === "number" && !Number.isNaN(amount) ? amount : existing.amount;
-
-  const updated =
-    paymentsService.update(paymentId, {
-      amount: updatedAmount,
-      notes: notes ?? existing.notes,
-    }) || existing;
+  const updatedPayload = {
+    amount: updatedAmount,
+    notes: notes ?? existing.notes ?? null,
+    updatedAt: new Date().toISOString(),
+  };
+  await db.collection("payments").doc(paymentId).set(updatedPayload, { merge: true });
+  const updated = {
+    ...existing,
+    ...updatedPayload,
+  };
 
   const delta = updatedAmount - existing.amount;
   if (delta !== 0) {
@@ -313,13 +396,12 @@ router.put("/payments/:paymentId", requireAuth, requirePermission("payments.edit
 });
 
 // DELETE /api/payments/:paymentId
-router.delete("/payments/:paymentId", requireAuth, requirePermission("payments.edit"), (req: any, res: Response) => {
+router.delete("/payments/:paymentId", requireAuth, requirePermission("payments.edit"), async (req: any, res: Response) => {
   const { paymentId } = req.params;
   if (!paymentId) {
     return res.status(400).json({ error: "paymentId is required" });
   }
-
-  const existing = paymentsService.getById(paymentId);
+  const existing = await getPersistedPaymentById(paymentId);
   if (!existing) {
     return res.status(404).json({ error: "Payment not found" });
   }
@@ -334,7 +416,7 @@ router.delete("/payments/:paymentId", requireAuth, requirePermission("payments.e
     notes: existing.notes ?? undefined,
   });
 
-  paymentsService.delete(paymentId);
+  await db.collection("payments").doc(paymentId).delete();
   return res.status(204).send();
 });
 

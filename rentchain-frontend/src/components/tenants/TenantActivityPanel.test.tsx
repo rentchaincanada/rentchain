@@ -73,4 +73,29 @@ describe("TenantActivityPanel", () => {
 
     await waitFor(() => expect(screen.getByText("Refreshed note")).toBeInTheDocument());
   });
+
+  it("prefers occurredAt over createdAt when displaying the activity timestamp", async () => {
+    mocks.listTenantEvents.mockResolvedValue({
+      ok: true,
+      items: [
+        {
+          id: "event-3",
+          tenantId: "tenant-1",
+          landlordId: "landlord-1",
+          type: "PAYMENT_RECORDED",
+          title: "Payment recorded",
+          description: "Manual payment entry",
+          occurredAt: "2026-04-20T09:00:00.000Z",
+          createdAt: "2026-04-23T11:00:00.000Z",
+        },
+      ],
+      nextCursor: null,
+    });
+
+    render(<TenantActivityPanel tenantId="tenant-1" />);
+
+    const expected = new Date("2026-04-20T09:00:00.000Z").toLocaleString();
+    expect(await screen.findByText("Payment recorded")).toBeInTheDocument();
+    expect(screen.getByText(expected)).toBeInTheDocument();
+  });
 });
