@@ -550,6 +550,65 @@ describe("ApplicationsPage", () => {
     expect(screen.getByText("40%")).toBeInTheDocument();
   });
 
+  it("hydrates analytics application-funnel query params into valid filters", async () => {
+    render(
+      <MemoryRouter initialEntries={["/applications?entry=application-funnel&status=SUBMITTED&propertyId=prop-1"]}>
+        <ApplicationsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Application funnel review")).toBeInTheDocument();
+    expect(screen.getByText(/Status filter: SUBMITTED/i)).toBeInTheDocument();
+    expect(screen.getByText(/Property: Harbour View/i)).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(mocks.fetchRentalApplications).toHaveBeenCalledWith(
+        expect.objectContaining({
+          propertyId: "prop-1",
+          status: "SUBMITTED",
+        })
+      );
+    });
+    await waitFor(() => {
+      expect(mocks.fetchLandlordApplicationFunnel).toHaveBeenCalledWith({ propertyId: "prop-1" });
+    });
+  });
+
+  it("ignores invalid application status query params without changing default loading", async () => {
+    render(
+      <MemoryRouter initialEntries={["/applications?status=review"]}>
+        <ApplicationsPage />
+      </MemoryRouter>
+    );
+
+    await screen.findByText("Jamie Stone");
+
+    await waitFor(() => {
+      expect(mocks.fetchRentalApplications).toHaveBeenCalledWith({
+        propertyId: undefined,
+        status: undefined,
+      });
+    });
+    expect(mocks.fetchRentalApplications).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "review",
+      })
+    );
+  });
+
+  it("preserves screening-checkout applicationId selection from query params", async () => {
+    render(
+      <MemoryRouter initialEntries={["/applications?entry=screening-checkout&applicationId=app-1"]}>
+        <ApplicationsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Screening checkout review")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(mocks.fetchRentalApplication).toHaveBeenCalledWith("app-1");
+    });
+  });
+
   it("renders the application funnel card with counts and a simple drop-off hint", async () => {
     render(
       <MemoryRouter>

@@ -108,6 +108,51 @@ vi.mock("@/components/billing/FeatureTeaser", () => ({
   ),
 }));
 
+const makeWorkOrder = (overrides: Record<string, unknown> = {}) => ({
+  id: "wo-1",
+  landlordId: "landlord-1",
+  propertyId: "prop-1",
+  unitId: "unit-1",
+  title: "Broken heater",
+  description: "Restore heat in unit 3A",
+  category: "HVAC",
+  priority: "urgent",
+  status: "completed",
+  visibility: "private",
+  budgetMinCents: null,
+  budgetMaxCents: null,
+  assignedContractorId: "contractor-1",
+  invitedContractorIds: [],
+  acceptedAtMs: 10,
+  startedAtMs: 20,
+  completedAtMs: 30,
+  scheduledFor: 15,
+  serviceStartedAt: 20,
+  serviceCompletedAt: 30,
+  completionSummary: "Replaced igniter and restored heat.",
+  completionOutcome: "completed",
+  completedByActorRole: "contractor",
+  notifications: {
+    landlord: {
+      requiresReview: true,
+      requiresReschedule: false,
+      lastNotifiedAt: 39,
+    },
+  },
+  completionConfirmedByLandlordAt: null,
+  completionConfirmedByLandlordBy: null,
+  reopenedAt: null,
+  reopenedByActorId: null,
+  reopenedByActorRole: null,
+  reopenReason: null,
+  executionBlockedReason: null,
+  notesInternal: "",
+  linkedExpenseId: null,
+  createdAtMs: 1,
+  updatedAtMs: 35,
+  ...overrides,
+});
+
 describe("WorkOrdersPage", () => {
   beforeEach(() => {
     cleanup();
@@ -168,6 +213,70 @@ describe("WorkOrdersPage", () => {
     });
 
     expect(mocks.listWorkOrders).not.toHaveBeenCalled();
+  });
+
+  it("preserves default no-query work-order loading", async () => {
+    mocks.canUseWorkOrders = true;
+    mocks.listWorkOrders.mockResolvedValue([makeWorkOrder()]);
+
+    render(
+      <MemoryRouter>
+        <WorkOrdersPage />
+      </MemoryRouter>
+    );
+
+    expect((await screen.findAllByText("Broken heater")).length).toBeGreaterThan(0);
+    expect(screen.queryByText("Maintenance backlog review")).not.toBeInTheDocument();
+    expect(mocks.listWorkOrders).toHaveBeenCalledWith();
+  });
+
+  it("hydrates maintenance-backlog query params into a property-scoped visible list", async () => {
+    mocks.canUseWorkOrders = true;
+    mocks.fetchProperties.mockResolvedValue({
+      items: [
+        { id: "prop-1", name: "Harbour View" },
+        { id: "prop-2", name: "North Point" },
+      ],
+    });
+    mocks.listWorkOrders.mockResolvedValue([
+      makeWorkOrder({ id: "wo-1", propertyId: "prop-1", title: "Broken heater" }),
+      makeWorkOrder({ id: "wo-2", propertyId: "prop-2", title: "Lobby paint" }),
+    ]);
+
+    render(
+      <MemoryRouter initialEntries={["/work-orders?entry=maintenance-backlog&propertyId=prop-1"]}>
+        <WorkOrdersPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Maintenance backlog review")).toBeInTheDocument();
+    expect((await screen.findAllByText("Broken heater")).length).toBeGreaterThan(0);
+    expect(screen.queryByText("Lobby paint")).not.toBeInTheDocument();
+    expect(await screen.findByText(/Property: Harbour View/i)).toBeInTheDocument();
+  });
+
+  it("hydrates maintenance-cost-approval query params and selects the matching work order", async () => {
+    mocks.canUseWorkOrders = true;
+    mocks.fetchProperties.mockResolvedValue({ items: [{ id: "prop-1", name: "Harbour View" }] });
+    mocks.listWorkOrders.mockResolvedValue([
+      makeWorkOrder({ id: "wo-1", propertyId: "prop-1", title: "Broken heater", cost: { reviewStatus: "pending_review" } }),
+      makeWorkOrder({ id: "wo-2", propertyId: "prop-1", title: "Leaky faucet" }),
+    ]);
+    mocks.listWorkOrderUpdates.mockResolvedValue([]);
+
+    render(
+      <MemoryRouter initialEntries={["/work-orders?entry=maintenance-cost-approval&propertyId=prop-1&workOrderId=wo-1"]}>
+        <WorkOrdersPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Maintenance cost approval")).toBeInTheDocument();
+    expect(await screen.findByText("Timeline: Broken heater")).toBeInTheDocument();
+    expect(await screen.findByText(/Matching work order selected when available/i)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(mocks.listWorkOrderUpdates).toHaveBeenCalledWith("wo-1");
+    });
+    expect(mocks.reviewWorkOrderCost).not.toHaveBeenCalled();
   });
 
   it("shows execution details and lets the landlord confirm and reopen completion", async () => {
