@@ -31,6 +31,22 @@ const xmlEscape = (value: unknown) =>
 
 const roleForReq = (req: any) => String(req.user?.actorRole || req.user?.role || "").trim().toLowerCase();
 
+function resolveTenantLabel(raw: any): string {
+  return (
+    String(raw?.fullName || raw?.name || raw?.displayName || "").trim() ||
+    [String(raw?.firstName || "").trim(), String(raw?.lastName || "").trim()].filter(Boolean).join(" ") ||
+    String(raw?.email || "").trim() ||
+    "Tenant"
+  );
+}
+
+function resolvePropertyLabel(raw: any): string {
+  return (
+    String(raw?.name || raw?.addressLine1 || raw?.address || raw?.displayName || raw?.propertyName || "").trim() ||
+    "Property"
+  );
+}
+
 function toMillis(value: any): number | null {
   if (value == null) return null;
   if (typeof value === "number") return value;
@@ -110,19 +126,14 @@ async function buildPaymentLabelMaps(payments: Payment[]) {
   tenantSnaps.forEach((snap) => {
     if (!snap.exists) return;
     const data = snap.data() as any;
-    const label =
-      String(data?.fullName || data?.name || data?.displayName || "").trim()
-      || [String(data?.firstName || "").trim(), String(data?.lastName || "").trim()].filter(Boolean).join(" ")
-      || "Tenant";
-    tenantLabels.set(snap.id, label);
+    tenantLabels.set(snap.id, resolveTenantLabel(data));
   });
 
   const propertyLabels = new Map<string, string>();
   propertySnaps.forEach((snap) => {
     if (!snap.exists) return;
     const data = snap.data() as any;
-    const label = String(data?.name || data?.addressLine1 || data?.address || "").trim() || "Property";
-    propertyLabels.set(snap.id, label);
+    propertyLabels.set(snap.id, resolvePropertyLabel(data));
   });
 
   return { tenantLabels, propertyLabels };
@@ -223,8 +234,8 @@ router.get("/payments/export.xlsx", requireAuth, async (req: any, res: Response)
     const xml = renderPaymentSpreadsheetXml(rows);
 
     setAttachmentExportHeaders(res, {
-      filename: buildDatedExportFilename({ prefix: "rentchain-payments", format: "xlsx" }),
-      format: "xlsx",
+      filename: buildDatedExportFilename({ prefix: "rentchain-payments", format: "xls" }),
+      format: "xls",
     });
     return res.status(200).send(xml);
   } catch (err) {

@@ -1,4 +1,4 @@
-export type ExportFormat = "csv" | "xlsx" | "pdf";
+export type ExportFormat = "csv" | "xls" | "pdf";
 
 function isoDateStamp(date: Date): string {
   return date.toISOString().slice(0, 10);
@@ -17,7 +17,7 @@ export function getExportContentType(format: ExportFormat): string {
   switch (format) {
     case "csv":
       return "text/csv; charset=utf-8";
-    case "xlsx":
+    case "xls":
       return "application/vnd.ms-excel; charset=utf-8";
     case "pdf":
       return "application/pdf";

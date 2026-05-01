@@ -99,12 +99,25 @@ function displayTenantLabel(item: Pick<MaintenanceWorkflowItem, "tenantName">) {
   return String(item.tenantName || "").trim() || "Tenant";
 }
 
-function displayPropertyLabel(item: Pick<MaintenanceWorkflowItem, "propertyLabel">) {
-  return String(item.propertyLabel || "").trim() || "Property";
+function displayPropertyLabel(item: Pick<MaintenanceWorkflowItem, "propertyLabel" | "propertyId">) {
+  const label = String(item.propertyLabel || "").trim();
+  const propertyId = String(item.propertyId || "").trim();
+  return label && label !== propertyId ? label : "Property";
 }
 
-function displayUnitLabel(item: Pick<MaintenanceWorkflowItem, "unitLabel">) {
-  return String(item.unitLabel || "").trim();
+function displayUnitLabel(item: Pick<MaintenanceWorkflowItem, "unitLabel" | "unitId">) {
+  const label = String(item.unitLabel || "").trim();
+  const unitId = String(item.unitId || "").trim();
+  if (!label && !unitId) return "";
+  return label && label !== unitId ? label : "Unit";
+}
+
+function normalizeMaintenanceLabels<T extends MaintenanceWorkflowItem>(item: T): T {
+  return {
+    ...item,
+    propertyLabel: displayPropertyLabel(item),
+    unitLabel: displayUnitLabel(item) || null,
+  };
 }
 
 function startOfCalendarMonth(value: Date) {
@@ -208,7 +221,7 @@ export default function MaintenanceRequestsPage() {
         (item, index, list): item is LandlordMaintenanceContractor =>
           Boolean(item?.id) && list.findIndex((entry) => entry?.id === item?.id) === index
       );
-      setItems(nextItems);
+      setItems(nextItems.map((item) => normalizeMaintenanceLabels(item)));
       setContractors(nextContractors);
     } catch (err: any) {
       setItems([]);
@@ -666,8 +679,8 @@ export default function MaintenanceRequestsPage() {
               <tr key={item.id}>
                 <td>{item.title}</td>
                 <td>{item.tenantName || "Tenant"}</td>
-                <td>{item.propertyLabel || "Property"}</td>
-                <td>{item.unitLabel || "-"}</td>
+                <td>{displayPropertyLabel(item)}</td>
+                <td>{displayUnitLabel(item)}</td>
                 <td>{item.priority || "-"}</td>
                 <td>{item.status || "-"}</td>
                 <td>{item.assignedContractorName || "-"}</td>
@@ -685,8 +698,8 @@ export default function MaintenanceRequestsPage() {
                 <tr><th>Title</th><td>{selected.title}</td></tr>
                 <tr><th>Category</th><td>{selected.category || "-"}</td></tr>
                 <tr><th>Tenant</th><td>{selected.tenantName || "Tenant"}</td></tr>
-                <tr><th>Property</th><td>{selected.propertyLabel || "Property"}</td></tr>
-                <tr><th>Unit</th><td>{selected.unitLabel || "-"}</td></tr>
+                <tr><th>Property</th><td>{displayPropertyLabel(selected)}</td></tr>
+                <tr><th>Unit</th><td>{displayUnitLabel(selected)}</td></tr>
                 <tr><th>Priority</th><td>{selected.priority || "-"}</td></tr>
                 <tr><th>Status</th><td>{selected.status || "-"}</td></tr>
                 <tr><th>Assigned contractor</th><td>{selected.assignedContractorName || "-"}</td></tr>

@@ -9,6 +9,22 @@ import { fetchTenants } from "../api/tenantsApi";
 import { printSummaryDocument } from "../utils/printSummary";
 import { triggerBlobDownload } from "../utils/downloadBlob";
 
+function tenantLabelFromValue(value: any): string {
+  return (
+    String(value?.fullName || value?.name || value?.displayName || "").trim() ||
+    [String(value?.firstName || "").trim(), String(value?.lastName || "").trim()].filter(Boolean).join(" ") ||
+    String(value?.email || "").trim() ||
+    ""
+  );
+}
+
+function propertyLabelFromValue(value: any): string {
+  return (
+    String(value?.name || value?.addressLine1 || value?.address || value?.displayName || value?.propertyName || "").trim() ||
+    ""
+  );
+}
+
 const PaymentsPage: React.FC = () => {
   const { payments, loading, error } = usePayments();
   const [rows, setRows] = useState<PaymentRecord[]>([]);
@@ -40,13 +56,13 @@ const PaymentsPage: React.FC = () => {
           tenants: new Map(
             tenantList.map((tenant) => [
               String(tenant.id || ""),
-              String(tenant.fullName || tenant.name || tenant.unitLabel || "").trim(),
+              tenantLabelFromValue(tenant),
             ])
           ),
           properties: new Map(
             propertyItems.map((property: any) => [
               String(property?.id || ""),
-              String(property?.name || property?.addressLine1 || property?.address || "").trim(),
+              propertyLabelFromValue(property),
             ])
           ),
         });

@@ -213,6 +213,11 @@ describe("workOrdersRoutes execution completion", () => {
       landlordId: "landlord-1",
       name: "123 Main St",
     });
+    ensureCollection("units").set("unit-1", {
+      id: "unit-1",
+      propertyId: "prop-1",
+      unitNumber: "4B",
+    });
   });
 
   it("writes structured metadata when a landlord completes an in-house work order", async () => {
@@ -1241,5 +1246,37 @@ describe("workOrdersRoutes execution completion", () => {
     expect(String(res.body)).toContain("Landlord confirmed the service window.");
     expect(String(res.body)).not.toContain("https://example.com/photo.jpg");
     expect(String(res.body)).not.toContain("https://example.com/invoice.pdf");
+  });
+
+  it("exports spreadsheet xml with human property and unit labels", async () => {
+    const router = (await import("../workOrdersRoutes")).default;
+    ensureCollection("workOrders").set("wo-1", {
+      ...ensureCollection("workOrders").get("wo-1"),
+      unitId: "unit-1",
+      status: "completed",
+      completionSummary: "Heat restored and tested.",
+    });
+
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/work-orders/export.xlsx",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "landlord-1",
+          role: "landlord",
+          landlordId: "landlord-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.headers["content-type"]).toContain("application/vnd.ms-excel");
+    expect(String(res.headers["content-disposition"] || "")).toMatch(
+      /^attachment; filename="rentchain-work-orders-\d{4}-\d{2}-\d{2}\.xls"$/
+    );
+    expect(String(res.body)).toContain("123 Main St");
+    expect(String(res.body)).toContain("4B");
+    expect(String(res.body)).not.toContain("prop-1");
+    expect(String(res.body)).not.toContain("unit-1");
   });
 });

@@ -173,8 +173,9 @@ describe("TenantDetailPanel", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText("Current lease ledger")).toBeInTheDocument();
-    expect(screen.getByText("Charges and payments from the current lease ledger.")).toBeInTheDocument();
+    expect(await screen.findByText("Recent current lease ledger entries")).toBeInTheDocument();
+    expect(screen.getByText("Showing the most recent charges and payments from the current lease ledger.")).toBeInTheDocument();
+    expect(screen.getByText("Showing the latest 10 entries here. Open current lease ledger for the full history.")).toBeInTheDocument();
     expect(
       screen.getByText(
         "Tenant activity is recorded separately and does not add charges or payments to the current lease ledger."

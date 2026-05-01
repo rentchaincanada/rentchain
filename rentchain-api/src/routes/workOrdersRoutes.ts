@@ -95,6 +95,16 @@ function asOptionalString(value: unknown, max = 2000): string | null {
   return v || null;
 }
 
+function resolvePropertyLabel(raw: any): string {
+  return (
+    asString(raw?.name || raw?.addressLine1 || raw?.address || raw?.displayName || raw?.propertyName, 200) || "Property"
+  );
+}
+
+function resolveUnitLabel(raw: any): string {
+  return asString(raw?.unitNumber || raw?.name || raw?.label || raw?.displayLabel || raw?.unitLabel, 120) || "Unit";
+}
+
 function isAutomationRequested(body: any) {
   return Boolean(body?.automationEnabled || body?.automation?.enabled);
 }
@@ -741,12 +751,19 @@ async function listLandlordWorkOrdersForExport(req: any) {
 
 async function buildWorkOrderExportRows(items: any[]) {
   const propertyIds = Array.from(new Set(items.map((item) => asString(item.propertyId, 120)).filter(Boolean)));
+  const unitIds = Array.from(new Set(items.map((item) => asString(item.unitId, 120)).filter(Boolean)));
   const propertySnaps = await Promise.all(propertyIds.map((id) => db.collection("properties").doc(id).get()));
+  const unitSnaps = await Promise.all(unitIds.map((id) => db.collection("units").doc(id).get()));
   const propertyLabels = new Map<string, string>();
   propertySnaps.forEach((snap) => {
     if (!snap.exists) return;
     const data = snap.data() as any;
-    propertyLabels.set(snap.id, asString(data?.name || data?.addressLine1 || data?.address, 200) || "Property");
+    propertyLabels.set(snap.id, resolvePropertyLabel(data));
+  });
+  const unitLabels = new Map<string, string>();
+  unitSnaps.forEach((snap) => {
+    if (!snap.exists) return;
+    unitLabels.set(snap.id, resolveUnitLabel(snap.data() as any));
   });
 
   const latestComments = new Map<string, string>();
@@ -764,8 +781,14 @@ async function buildWorkOrderExportRows(items: any[]) {
 
   return items.map((item) => ({
     title: asString(item.title, 200),
-    property: propertyLabels.get(asString(item.propertyId, 120)) || "Property",
-    unit: "",
+    property:
+      (asString(item.propertyLabel, 200) && asString(item.propertyLabel, 200) !== asString(item.propertyId, 120)
+        ? asString(item.propertyLabel, 200)
+        : "") || propertyLabels.get(asString(item.propertyId, 120)) || "Property",
+    unit:
+      (asString(item.unitLabel, 120) && asString(item.unitLabel, 120) !== asString(item.unitId, 120)
+        ? asString(item.unitLabel, 120)
+        : "") || unitLabels.get(asString(item.unitId, 120)) || (asString(item.unitId, 120) ? "Unit" : ""),
     category: asString(item.category, 120),
     priority: asString(item.priority, 40),
     status: asString(item.status, 40),
@@ -1545,8 +1568,8 @@ router.get("/work-orders/export.xlsx", requireAuth, async (req: any, res) => {
     const xml = renderWorkOrderSpreadsheetXml(rows);
 
     setAttachmentExportHeaders(res, {
-      filename: buildDatedExportFilename({ prefix: "rentchain-work-orders", format: "xlsx" }),
-      format: "xlsx",
+      filename: buildDatedExportFilename({ prefix: "rentchain-work-orders", format: "xls" }),
+      format: "xls",
     });
     return res.status(200).send(xml);
   } catch (err) {
