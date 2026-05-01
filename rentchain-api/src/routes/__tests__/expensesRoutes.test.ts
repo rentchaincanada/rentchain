@@ -254,7 +254,7 @@ describe("expenses routes", () => {
       source: "manual",
     });
     const app = await createApp();
-    const res = await request(app).get("/api/expenses/export.xlsx");
+    const res = await request(app).get("/api/expenses/export.xls");
 
     expect(res.status).toBe(200);
     expect(res.headers["content-type"]).toContain("application/vnd.ms-excel");
@@ -265,5 +265,17 @@ describe("expenses routes", () => {
     expect(res.text).toContain("12A");
     expect(res.text).not.toContain("prop-1");
     expect(res.text).not.toContain("unit-1");
+  });
+
+  it("keeps the legacy .xlsx expense export route as a compatibility alias", async () => {
+    setPlan("pro");
+    const app = await createApp();
+    const res = await request(app).get("/api/expenses/export.xlsx");
+
+    expect(res.status).toBe(200);
+    expect(res.headers["content-type"]).toContain("application/vnd.ms-excel");
+    expect(String(res.headers["content-disposition"] || "")).toMatch(
+      /^attachment; filename="rentchain-expenses-\d{4}-\d{2}-\d{2}\.xls"$/
+    );
   });
 });

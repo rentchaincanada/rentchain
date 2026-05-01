@@ -70,7 +70,7 @@ describe("ExpensesPage", () => {
 
     expect(await screen.findByText("Upgrade to Pro to import receipts, PDFs, CSVs, and spreadsheets with AI-assisted review.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Export CSV" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Export Spreadsheet" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Export Spreadsheet (.xls)" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Export PDF" })).not.toBeInTheDocument();
     expect(screen.getAllByText("Alpha Property").length).toBeGreaterThan(0);
   });
@@ -87,7 +87,7 @@ describe("ExpensesPage", () => {
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "Export CSV" })).toBeInTheDocument();
     });
-    expect(screen.getByRole("button", { name: "Export Spreadsheet" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Export Spreadsheet (.xls)" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Export PDF" })).toBeInTheDocument();
   });
 
@@ -108,8 +108,8 @@ describe("ExpensesPage", () => {
     fireEvent.click((await screen.findAllByRole("button", { name: "Export CSV" }))[0]);
     await waitFor(() => expect(mocks.exportExpensesMock).toHaveBeenCalledWith("csv", expect.any(Object)));
 
-    fireEvent.click(screen.getAllByRole("button", { name: "Export Spreadsheet" })[0]);
-    await waitFor(() => expect(mocks.exportExpensesMock).toHaveBeenCalledWith("xlsx", expect.any(Object)));
+    fireEvent.click(screen.getAllByRole("button", { name: "Export Spreadsheet (.xls)" })[0]);
+    await waitFor(() => expect(mocks.exportExpensesMock).toHaveBeenCalledWith("xls", expect.any(Object)));
 
     fireEvent.click(screen.getAllByRole("button", { name: "Export PDF" })[0]);
     await waitFor(() => expect(mocks.exportExpensesMock).toHaveBeenCalledWith("pdf", expect.any(Object)));

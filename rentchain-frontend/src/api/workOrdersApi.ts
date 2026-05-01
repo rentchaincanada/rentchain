@@ -267,7 +267,7 @@ async function downloadWorkOrderExport(path: string) {
   });
 }
 
-export async function exportWorkOrders(format: "csv" | "xlsx") {
+export async function exportWorkOrders(format: "csv" | "xls") {
   return downloadWorkOrderExport(`/work-orders/export.${format}`);
 }
 

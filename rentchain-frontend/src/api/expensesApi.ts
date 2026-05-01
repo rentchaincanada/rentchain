@@ -145,7 +145,7 @@ async function downloadExpenseExport(path: string) {
   });
 }
 
-export async function exportExpenses(format: "csv" | "xlsx" | "pdf", filters?: ListExpensesFilters) {
+export async function exportExpenses(format: "csv" | "xls" | "pdf", filters?: ListExpensesFilters) {
   const params = new URLSearchParams();
   if (filters?.propertyId) params.set("propertyId", filters.propertyId);
   if (filters?.unitId) params.set("unitId", filters.unitId);

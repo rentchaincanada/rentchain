@@ -1463,7 +1463,7 @@ router.get("/expenses/export.csv", requireAuth, async (req: any, res) => {
   }
 });
 
-router.get("/expenses/export.xlsx", requireAuth, async (req: any, res) => {
+async function handleExpenseSpreadsheetExport(req: any, res: any) {
   try {
     const role = normalizeRole(req);
     if (role !== "landlord" && role !== "admin") {
@@ -1493,10 +1493,13 @@ router.get("/expenses/export.xlsx", requireAuth, async (req: any, res) => {
     });
     return res.status(200).send(xml);
   } catch (err: any) {
-    console.error("[expenses] xlsx export failed", err?.message || err);
+    console.error("[expenses] xls export failed", err?.message || err);
     return res.status(500).json({ ok: false, error: "EXPENSE_EXPORT_FAILED" });
   }
-});
+}
+
+router.get("/expenses/export.xls", requireAuth, handleExpenseSpreadsheetExport);
+router.get("/expenses/export.xlsx", requireAuth, handleExpenseSpreadsheetExport);
 
 router.get("/expenses/export.pdf", requireAuth, async (req: any, res) => {
   try {

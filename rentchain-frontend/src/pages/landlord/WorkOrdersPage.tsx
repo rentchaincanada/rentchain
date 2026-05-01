@@ -254,7 +254,7 @@ export default function WorkOrdersPage() {
   const [convertTarget, setConvertTarget] = React.useState<WorkOrderRecord | null>(null);
   const [convertVendor, setConvertVendor] = React.useState("");
   const [isMobile, setIsMobile] = React.useState(false);
-  const [exporting, setExporting] = React.useState<null | "csv" | "xlsx">(null);
+  const [exporting, setExporting] = React.useState<null | "csv" | "xls">(null);
   const [evidenceFile, setEvidenceFile] = React.useState<File | null>(null);
   const [evidenceType, setEvidenceType] = React.useState<WorkOrderEvidenceType>("inspection");
   const [evidenceCaption, setEvidenceCaption] = React.useState("");
@@ -345,7 +345,7 @@ export default function WorkOrdersPage() {
     );
   }, []);
 
-  const triggerExport = React.useCallback(async (format: "csv" | "xlsx") => {
+  const triggerExport = React.useCallback(async (format: "csv" | "xls") => {
     try {
       setExporting(format);
       const { blob, filename } = await exportWorkOrders(format);
@@ -916,8 +916,8 @@ export default function WorkOrdersPage() {
           <Button variant="secondary" onClick={() => void triggerExport("csv")} disabled={exporting !== null}>
             {exporting === "csv" ? "Exporting..." : "Export CSV"}
           </Button>
-          <Button variant="secondary" onClick={() => void triggerExport("xlsx")} disabled={exporting !== null}>
-            {exporting === "xlsx" ? "Exporting..." : "Export Spreadsheet"}
+          <Button variant="secondary" onClick={() => void triggerExport("xls")} disabled={exporting !== null}>
+            {exporting === "xls" ? "Exporting..." : "Export Spreadsheet (.xls)"}
           </Button>
           <Button variant="secondary" onClick={() => void printSummaryDocument("summary")}>
             Export PDF

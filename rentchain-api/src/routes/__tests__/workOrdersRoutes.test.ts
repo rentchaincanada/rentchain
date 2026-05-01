@@ -1259,7 +1259,7 @@ describe("workOrdersRoutes execution completion", () => {
 
     const res = await invokeRouter(router, {
       method: "GET",
-      url: "/work-orders/export.xlsx",
+      url: "/work-orders/export.xls",
       headers: {
         "x-test-user": JSON.stringify({
           id: "landlord-1",
@@ -1278,5 +1278,27 @@ describe("workOrdersRoutes execution completion", () => {
     expect(String(res.body)).toContain("4B");
     expect(String(res.body)).not.toContain("prop-1");
     expect(String(res.body)).not.toContain("unit-1");
+  });
+
+  it("keeps the legacy .xlsx work-order export route as a compatibility alias", async () => {
+    const router = (await import("../workOrdersRoutes")).default;
+
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/work-orders/export.xlsx",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "landlord-1",
+          role: "landlord",
+          landlordId: "landlord-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.headers["content-type"]).toContain("application/vnd.ms-excel");
+    expect(String(res.headers["content-disposition"] || "")).toMatch(
+      /^attachment; filename="rentchain-work-orders-\d{4}-\d{2}-\d{2}\.xls"$/
+    );
   });
 });

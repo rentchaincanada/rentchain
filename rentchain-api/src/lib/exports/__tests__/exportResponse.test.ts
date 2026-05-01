@@ -18,7 +18,7 @@ describe("exportResponse", () => {
 
   it("returns the expected export content types", () => {
     expect(getExportContentType("csv")).toBe("text/csv; charset=utf-8");
-    expect(getExportContentType("xls")).toBe("application/vnd.ms-excel; charset=utf-8");
+    expect(getExportContentType("xls")).toBe("application/vnd.ms-excel");
     expect(getExportContentType("pdf")).toBe("application/pdf");
   });
 

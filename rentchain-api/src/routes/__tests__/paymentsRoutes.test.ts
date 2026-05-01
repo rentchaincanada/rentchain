@@ -165,9 +165,9 @@ describe("paymentsRoutes exports", () => {
     expect(String(res.body)).not.toContain("prop-1");
   });
 
-  it("exports spreadsheet xml with safe labels", async () => {
+  it("exports spreadsheet xml from the primary .xls route with safe labels", async () => {
     const router = (await import("../paymentsRoutes")).default;
-    const res = await invokeRouter(router, { method: "GET", url: "/payments/export.xlsx" });
+    const res = await invokeRouter(router, { method: "GET", url: "/payments/export.xls" });
 
     expect(res.status).toBe(200);
     expect(res.headers["content-type"]).toContain("application/vnd.ms-excel");
@@ -176,6 +176,17 @@ describe("paymentsRoutes exports", () => {
     );
     expect(String(res.body)).toContain("Taylor Tenant");
     expect(String(res.body)).toContain("123 Main St");
+  });
+
+  it("keeps the legacy .xlsx spreadsheet route as a compatibility alias", async () => {
+    const router = (await import("../paymentsRoutes")).default;
+    const res = await invokeRouter(router, { method: "GET", url: "/payments/export.xlsx" });
+
+    expect(res.status).toBe(200);
+    expect(res.headers["content-type"]).toContain("application/vnd.ms-excel");
+    expect(res.headers["content-disposition"]).toMatch(
+      /^attachment; filename="rentchain-payments-\d{4}-\d{2}-\d{2}\.xls"$/
+    );
   });
 
   it("lists persisted Firestore payments for a tenant", async () => {
