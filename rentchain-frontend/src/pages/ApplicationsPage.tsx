@@ -118,6 +118,28 @@ const statusOptions: RentalApplicationStatus[] = [
   "CONDITIONAL_DEPOSIT",
 ];
 
+const supportedAnalyticsApplicationEntries = ["application-funnel", "screening-checkout"] as const;
+type AnalyticsApplicationEntry = (typeof supportedAnalyticsApplicationEntries)[number];
+
+const isAnalyticsApplicationEntry = (value: string | null): value is AnalyticsApplicationEntry =>
+  supportedAnalyticsApplicationEntries.includes(value as AnalyticsApplicationEntry);
+
+const normalizeApplicationStatusParam = (value: string | null): RentalApplicationStatus | null => {
+  const normalized = String(value || "").trim().toUpperCase();
+  return statusOptions.includes(normalized as RentalApplicationStatus) ? (normalized as RentalApplicationStatus) : null;
+};
+
+const analyticsApplicationEntryCopy: Record<AnalyticsApplicationEntry, { title: string; body: string }> = {
+  "application-funnel": {
+    title: "Application funnel review",
+    body: "Opened from analytics to review submitted application follow-through.",
+  },
+  "screening-checkout": {
+    title: "Screening checkout review",
+    body: "Opened from analytics to continue the selected application screening workflow.",
+  },
+};
+
 type PropertyOption = { id: string; name: string };
 
 const AI_FLAG_LABELS: Record<string, string> = {
@@ -297,7 +319,7 @@ const ApplicationsPage: React.FC = () => {
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("");
+  const [statusFilter, setStatusFilter] = useState<string>(() => normalizeApplicationStatusParam(upgradeParams.get("status")) || "");
   const [propertyFilter, setPropertyFilter] = useState<string>("");
   const [properties, setProperties] = useState<PropertyOption[]>([]);
   const [propertyRecords, setPropertyRecords] = useState<any[]>([]);
@@ -490,6 +512,15 @@ const ApplicationsPage: React.FC = () => {
     currentPlan === "elite";
   const upgradeConfirmed = upgradeParams.get("upgradeConfirmed") === "1";
   const upgradeHighlight = upgradeParams.get("highlight");
+  const analyticsEntryParam = upgradeParams.get("entry");
+  const analyticsEntry = isAnalyticsApplicationEntry(analyticsEntryParam) ? analyticsEntryParam : null;
+  const analyticsStatusFilter = normalizeApplicationStatusParam(upgradeParams.get("status"));
+  const analyticsPropertyId = String(upgradeParams.get("propertyId") || "").trim();
+  const analyticsEntryContext = analyticsEntry ? analyticsApplicationEntryCopy[analyticsEntry] : null;
+  const analyticsEntryPropertyName =
+    analyticsPropertyId && propertiesLoaded
+      ? properties.find((property) => property.id === analyticsPropertyId)?.name || null
+      : null;
   const canViewScreeningHistory = entitlements.canViewScreeningHistory;
   const canExportPdf = entitlements.canExportPdf;
   const canViewReviewSummary = entitlements.canViewReviewSummary;
@@ -1019,6 +1050,24 @@ const ApplicationsPage: React.FC = () => {
       alive = false;
     };
   }, [propertyFilter]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const nextStatus = normalizeApplicationStatusParam(params.get("status"));
+    if (nextStatus && nextStatus !== statusFilter) {
+      setStatusFilter(nextStatus);
+    }
+  }, [location.search, statusFilter]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const nextPropertyId = String(params.get("propertyId") || "").trim();
+    if (!nextPropertyId || !propertiesLoaded || propertiesError) return;
+    const propertyExists = properties.some((property) => property.id === nextPropertyId);
+    if (propertyExists && nextPropertyId !== propertyFilter) {
+      setPropertyFilter(nextPropertyId);
+    }
+  }, [location.search, properties, propertiesError, propertiesLoaded, propertyFilter]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -2056,6 +2105,28 @@ const ApplicationsPage: React.FC = () => {
             {upgradeHighlight === "screening"
               ? "Upgrade confirmed. Screening workflows are now active on this page."
               : "Upgrade confirmed. Secure application links are now active on this page."}
+          </div>
+        ) : null}
+        {analyticsEntryContext ? (
+          <div
+            style={{
+              marginTop: 12,
+              padding: "10px 12px",
+              borderRadius: 12,
+              border: "1px solid rgba(14,165,233,0.28)",
+              background: "rgba(14,165,233,0.08)",
+              color: text.primary,
+              fontSize: 13,
+              display: "grid",
+              gap: 4,
+            }}
+          >
+            <div style={{ fontWeight: 700 }}>{analyticsEntryContext.title}</div>
+            <div style={{ color: text.muted }}>
+              {analyticsEntryContext.body}
+              {analyticsStatusFilter ? ` Status filter: ${analyticsStatusFilter}.` : ""}
+              {analyticsEntryPropertyName ? ` Property: ${analyticsEntryPropertyName}.` : ""}
+            </div>
           </div>
         ) : null}
       </Card>

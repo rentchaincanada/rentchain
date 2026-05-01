@@ -1,5 +1,5 @@
 import React from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { Button, Card } from "../../components/ui/Ui";
 import { AddExpenseModal } from "../../components/expenses/AddExpenseModal";
 import ContractorAssignmentPanel from "../../components/marketplace/ContractorAssignmentPanel";
@@ -222,7 +222,25 @@ function expenseLinkStatusLabel(item: WorkOrderRecord | null) {
   return "Not linked";
 }
 
+const supportedWorkOrderEntries = ["maintenance-backlog", "maintenance-cost-approval"] as const;
+type WorkOrderEntry = (typeof supportedWorkOrderEntries)[number];
+
+const isWorkOrderEntry = (value: string | null): value is WorkOrderEntry =>
+  supportedWorkOrderEntries.includes(value as WorkOrderEntry);
+
+const workOrderEntryCopy: Record<WorkOrderEntry, { title: string; body: string }> = {
+  "maintenance-backlog": {
+    title: "Maintenance backlog review",
+    body: "Opened from analytics to review maintenance items that need landlord follow-through.",
+  },
+  "maintenance-cost-approval": {
+    title: "Maintenance cost approval",
+    body: "Opened from analytics to review the selected work order cost before any manual approval.",
+  },
+};
+
 export default function WorkOrdersPage() {
+  const location = useLocation();
   const entitlements = useEntitlements();
   const [items, setItems] = React.useState<WorkOrderRecord[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -270,6 +288,16 @@ export default function WorkOrdersPage() {
   const marketplaceDirectoryPlanLabel = resolveRequiredPlanLabel("marketplace_directory") || "Pro";
   const marketplaceAssignmentPlanLabel =
     resolveRequiredPlanLabel("marketplace_contractor_assignment") || "Elite";
+  const queryParams = React.useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const entryParam = queryParams.get("entry");
+  const workOrderEntry = isWorkOrderEntry(entryParam) ? entryParam : null;
+  const workOrderEntryContext = workOrderEntry ? workOrderEntryCopy[workOrderEntry] : null;
+  const propertyIdParam = String(queryParams.get("propertyId") || "").trim();
+  const workOrderIdParam = String(queryParams.get("workOrderId") || "").trim();
+  const deepLinkPropertyName =
+    propertyIdParam && properties.length
+      ? properties.find((property) => property.id === propertyIdParam)?.name || null
+      : null;
 
   const normalizeCategory = React.useCallback((input: string): ExpenseCategory => {
     const raw = String(input || "").trim().toLowerCase();
@@ -344,6 +372,11 @@ export default function WorkOrdersPage() {
       (String(item.assignedContractorId || "").trim() ? "Assigned" : "-")
     );
   }, []);
+
+  const visibleWorkOrders = React.useMemo(() => {
+    if (!propertyIdParam) return items;
+    return items.filter((item) => item.propertyId === propertyIdParam);
+  }, [items, propertyIdParam]);
 
   const triggerExport = React.useCallback(async (format: "csv" | "xls") => {
     try {
@@ -893,6 +926,14 @@ export default function WorkOrdersPage() {
     void run();
   }, [canUseMarketplaceContractorAssignment, canUseWorkOrders, selected, selectedServiceArea]);
 
+  React.useEffect(() => {
+    if (!canUseWorkOrders || !workOrderIdParam || loading) return;
+    const nextSelected = items.find((item) => item.id === workOrderIdParam);
+    if (!nextSelected || selected?.id === nextSelected.id) return;
+    setSelected(nextSelected);
+    void loadUpdates(nextSelected.id);
+  }, [canUseWorkOrders, items, loadUpdates, loading, selected?.id, workOrderIdParam]);
+
   if (!canUseWorkOrders) {
     return (
       <LockedFeature
@@ -935,12 +976,31 @@ export default function WorkOrdersPage() {
         <Card style={{ borderColor: "#ef4444", color: "#991b1b" }}>{error}</Card>
       ) : null}
 
+      {workOrderEntryContext ? (
+        <Card
+          style={{
+            borderColor: "#bae6fd",
+            background: "#f0f9ff",
+            color: "#0f172a",
+            display: "grid",
+            gap: 4,
+          }}
+        >
+          <div style={{ fontWeight: 700 }}>{workOrderEntryContext.title}</div>
+          <div style={{ color: "#475569", fontSize: 13 }}>
+            {workOrderEntryContext.body}
+            {deepLinkPropertyName ? ` Property: ${deepLinkPropertyName}.` : propertyIdParam ? " Property filter applied." : ""}
+            {workOrderIdParam ? " Matching work order selected when available." : ""}
+          </div>
+        </Card>
+      ) : null}
+
       <div className="print-only print-only-summary">
         <div className="printHeader">
           <div className="printTitle">Work orders summary</div>
           <div className="printMeta">
             <div>Generated: {new Date().toLocaleString()}</div>
-            <div>Rows: {items.length}</div>
+            <div>Rows: {visibleWorkOrders.length}</div>
           </div>
         </div>
         <div className="printH3">Work orders</div>
@@ -960,7 +1020,7 @@ export default function WorkOrdersPage() {
             </tr>
           </thead>
           <tbody>
-            {items.map((item) => (
+            {visibleWorkOrders.map((item) => (
               <tr key={item.id}>
                 <td>{item.title}</td>
                 <td>{getPropertyLabel(item)}</td>
@@ -1027,11 +1087,11 @@ export default function WorkOrdersPage() {
         <Card>
           {loading ? (
             <div>Loading work orders...</div>
-          ) : items.length === 0 ? (
+          ) : visibleWorkOrders.length === 0 ? (
             <div style={{ color: "#64748b" }}>No work orders yet.</div>
           ) : isMobile ? (
             <div style={{ display: "grid", gap: 12 }}>
-              {items.map((item) => (
+              {visibleWorkOrders.map((item) => (
                 <div
                   key={item.id}
                   style={{
@@ -1124,7 +1184,7 @@ export default function WorkOrdersPage() {
                 </tr>
               </thead>
               <tbody>
-                {items.map((item) => (
+                {visibleWorkOrders.map((item) => (
                   <tr key={item.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
                     <td style={{ padding: 8, fontWeight: 600 }}>{item.title}</td>
                     <td style={{ padding: 8 }}>{item.category || "-"}</td>
