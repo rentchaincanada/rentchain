@@ -24,6 +24,10 @@ function getErrorMessage(error: unknown) {
   return "Failed to load tenant activity";
 }
 
+function isTimelineOnlyFinanceType(type?: string | null) {
+  return type === "PAYMENT_RECORDED" || type === "CHARGE_ADDED";
+}
+
 export const TenantActivityPanel: React.FC<Props> = ({ tenantId, refreshKey = 0 }) => {
   const [items, setItems] = useState<TenantEvent[]>([]);
   const [nextCursor, setNextCursor] = useState<string | number | null>(null);
@@ -142,6 +146,7 @@ export const TenantActivityPanel: React.FC<Props> = ({ tenantId, refreshKey = 0 
             const occurred = toMillis(evt.occurredAt);
             const created = toMillis(evt.createdAt);
             const when = occurred || created ? new Date(occurred || created || 0).toLocaleString() : "";
+            const showTimelineNote = isTimelineOnlyFinanceType(evt.type);
 
             return (
               <div
@@ -183,7 +188,23 @@ export const TenantActivityPanel: React.FC<Props> = ({ tenantId, refreshKey = 0 
                         marginBottom: 2,
                       }}
                     >
-                      {evt.title || evt.type}
+                      <span>{evt.title || evt.type}</span>
+                      {showTimelineNote ? (
+                        <span
+                          style={{
+                            marginLeft: 6,
+                            padding: "2px 6px",
+                            borderRadius: "999px",
+                            border: `1px solid ${colors.border}`,
+                            color: text.muted,
+                            fontSize: 10,
+                            fontWeight: 700,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          Timeline note
+                        </span>
+                      ) : null}
                     </div>
                     {evt.description ? (
                       <div style={{ color: text.muted }}>{evt.description}</div>

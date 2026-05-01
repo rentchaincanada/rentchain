@@ -96,6 +96,33 @@ describe("TenantActivityPanel", () => {
 
     const expected = new Date("2026-04-20T09:00:00.000Z").toLocaleString();
     expect(await screen.findByText("Payment recorded")).toBeInTheDocument();
+    expect(screen.getByText("Timeline note")).toBeInTheDocument();
     expect(screen.getByText(expected)).toBeInTheDocument();
+  });
+
+  it("marks charge activity entries as timeline notes without implying ledger changes", async () => {
+    mocks.listTenantEvents.mockResolvedValue({
+      ok: true,
+      items: [
+        {
+          id: "event-4",
+          tenantId: "tenant-1",
+          landlordId: "landlord-1",
+          type: "CHARGE_ADDED",
+          title: "Charge added",
+          description: "Manual charge note",
+          amountCents: 12500,
+          currency: "CAD",
+          createdAt: "2026-04-23T11:00:00.000Z",
+        },
+      ],
+      nextCursor: null,
+    });
+
+    render(<TenantActivityPanel tenantId="tenant-1" />);
+
+    expect(await screen.findByText("Charge added")).toBeInTheDocument();
+    expect(screen.getByText("Timeline note")).toBeInTheDocument();
+    expect(screen.getByText(/CHARGE_ADDED/)).toBeInTheDocument();
   });
 });
