@@ -303,15 +303,15 @@ function isLeaseRenewalWorkflowStatus(status: unknown) {
   return normalized === "active" || normalized === "notice_pending" || normalized === "renewal_pending";
 }
 
+function toLeaseEndAt(lease: LeaseWorkflowLease | null | undefined): number {
+  return toMillis(lease?.leaseEndDate) || 0;
+}
+
 function deriveLeaseRenewalWorkflowBucket(params: {
   lease: LeaseWorkflowLease;
   latestNotice: any | null;
-  now: number;
-  horizon: number;
-}): LeaseRenewalWorkflowBucket | null {
-  const { lease, latestNotice, now, horizon } = params;
-  const dueAt = Number(lease?.nextNoticeDueAt || 0);
-  if (!(dueAt > 0 && dueAt >= now && dueAt <= horizon)) return null;
+}): LeaseRenewalWorkflowBucket {
+  const { latestNotice } = params;
   const noResponse = latestNotice ? computeNoResponseState(latestNotice) : false;
   if (noResponse) return "no-response";
   const response = String(latestNotice?.tenantResponse || "").trim().toLowerCase();
@@ -354,6 +354,8 @@ export async function deriveLandlordVisibleExpiringLeases(params: {
       if (raw?.hiddenFromActiveLists === true || isTargetedHiddenLeaseId(id)) return false;
       if (!isLeaseRenewalWorkflowStatus(lease.status)) return false;
       if (propertyIdFilter && lease.propertyId !== propertyIdFilter) return false;
+      const leaseEndAt = toLeaseEndAt(lease);
+      if (!(leaseEndAt > 0 && leaseEndAt <= horizon)) return false;
       return true;
     });
 
@@ -412,10 +414,7 @@ export async function deriveLandlordVisibleExpiringLeases(params: {
     const noticeBucket = deriveLeaseRenewalWorkflowBucket({
       lease,
       latestNotice,
-      now,
-      horizon,
     });
-    if (!noticeBucket) continue;
 
     items.push({
       ...lease,
@@ -430,7 +429,13 @@ export async function deriveLandlordVisibleExpiringLeases(params: {
     });
   }
 
-  return items.sort((a, b) => Number(a.nextNoticeDueAt || 0) - Number(b.nextNoticeDueAt || 0));
+  return items.sort((a, b) => {
+    const endDiff = toLeaseEndAt(a) - toLeaseEndAt(b);
+    if (endDiff !== 0) return endDiff;
+    const noticeDiff = Number(a.nextNoticeDueAt || 0) - Number(b.nextNoticeDueAt || 0);
+    if (noticeDiff !== 0) return noticeDiff;
+    return String(a.id || "").localeCompare(String(b.id || ""));
+  });
 }
 
 export function deriveLeaseRenewalOperatorInputRecord(lease: LeaseWorkflowLease): LeaseRenewalOperatorInputRecord {

@@ -128,7 +128,8 @@ describe("leaseNoticeWorkflowService renewal operator inputs", () => {
     });
   });
 
-  it("builds one landlord-visible renewal dataset and excludes hidden, archived, vacant, ended, and past-due leases", async () => {
+  it("builds one landlord-visible renewal dataset from end-date eligibility and preserves response buckets", async () => {
+    const now = Date.UTC(2026, 3, 30, 12, 0, 0, 0);
     collections.set(
       "properties",
       new Map([
@@ -149,36 +150,39 @@ describe("leaseNoticeWorkflowService renewal operator inputs", () => {
     collections.set(
       "leases",
       new Map([
-        ["lease-expiring", { landlordId: "landlord-1", propertyId: "prop-active", unitId: "unit-1", status: "active", nextNoticeDueAt: Date.now() + 5 * 24 * 60 * 60 * 1000 }],
-        ["lease-pending", { landlordId: "landlord-1", propertyId: "prop-active", unitId: "unit-2", status: "renewal_pending", nextNoticeDueAt: Date.now() + 5 * 24 * 60 * 60 * 1000 }],
-        ["lease-no-response", { landlordId: "landlord-1", propertyId: "prop-active", unitId: "unit-3", status: "notice_pending", nextNoticeDueAt: Date.now() + 5 * 24 * 60 * 60 * 1000 }],
-        ["lease-vacant", { landlordId: "landlord-1", propertyId: "prop-active", unitId: "unit-4", status: "active", nextNoticeDueAt: Date.now() + 5 * 24 * 60 * 60 * 1000 }],
-        ["lease-archived-property", { landlordId: "landlord-1", propertyId: "prop-archived", unitId: "unit-5", status: "active", nextNoticeDueAt: Date.now() + 5 * 24 * 60 * 60 * 1000 }],
-        ["lease-ended", { landlordId: "landlord-1", propertyId: "prop-active", unitId: "unit-1", status: "ended", nextNoticeDueAt: Date.now() + 5 * 24 * 60 * 60 * 1000 }],
-        ["lease-renewed", { landlordId: "landlord-1", propertyId: "prop-active", unitId: "unit-1", status: "renewal_accepted", nextNoticeDueAt: Date.now() + 5 * 24 * 60 * 60 * 1000 }],
-        ["lease-move-out", { landlordId: "landlord-1", propertyId: "prop-active", unitId: "unit-1", status: "move_out_pending", nextNoticeDueAt: Date.now() + 5 * 24 * 60 * 60 * 1000 }],
-        ["lease-past-due", { landlordId: "landlord-1", propertyId: "prop-active", unitId: "unit-1", status: "active", nextNoticeDueAt: Date.now() - 5 * 24 * 60 * 60 * 1000 }],
-        ["lease-hidden", { landlordId: "landlord-1", propertyId: "prop-active", unitId: "unit-1", status: "active", nextNoticeDueAt: Date.now() + 5 * 24 * 60 * 60 * 1000, hiddenFromActiveLists: true }],
+        ["lease-expired", { landlordId: "landlord-1", propertyId: "prop-active", unitId: "unit-1", status: "active", leaseEndDate: "2026-04-29" }],
+        ["lease-pending", { landlordId: "landlord-1", propertyId: "prop-active", unitId: "unit-2", status: "renewal_pending", leaseEndDate: "2026-05-29", nextNoticeDueAt: now + 5 * 24 * 60 * 60 * 1000 }],
+        ["lease-no-response", { landlordId: "landlord-1", propertyId: "prop-active", unitId: "unit-3", status: "notice_pending", leaseEndDate: "2026-06-29", nextNoticeDueAt: now + 5 * 24 * 60 * 60 * 1000 }],
+        ["lease-ending-today", { landlordId: "landlord-1", propertyId: "prop-active", unitId: "unit-1", status: "active", leaseEndDate: "2026-04-30", currentRent: null }],
+        ["lease-no-payment-setup", { landlordId: "landlord-1", propertyId: "prop-active", unitId: "unit-1", status: "active", leaseEndDate: "2026-07-01" }],
+        ["lease-vacant", { landlordId: "landlord-1", propertyId: "prop-active", unitId: "unit-4", status: "active", leaseEndDate: "2026-06-01" }],
+        ["lease-archived-property", { landlordId: "landlord-1", propertyId: "prop-archived", unitId: "unit-5", status: "active", leaseEndDate: "2026-06-01" }],
+        ["lease-ended", { landlordId: "landlord-1", propertyId: "prop-active", unitId: "unit-1", status: "ended", leaseEndDate: "2026-06-01" }],
+        ["lease-renewed", { landlordId: "landlord-1", propertyId: "prop-active", unitId: "unit-1", status: "renewal_accepted", leaseEndDate: "2026-06-01" }],
+        ["lease-move-out", { landlordId: "landlord-1", propertyId: "prop-active", unitId: "unit-1", status: "move_out_pending", leaseEndDate: "2026-06-01" }],
+        ["lease-hidden", { landlordId: "landlord-1", propertyId: "prop-active", unitId: "unit-1", status: "active", leaseEndDate: "2026-06-01", hiddenFromActiveLists: true }],
       ])
     );
     collections.set(
       "leaseNotices",
       new Map([
-        ["notice-pending", { landlordId: "landlord-1", leaseId: "lease-pending", tenantResponse: "pending", createdAt: Date.now(), updatedAt: Date.now() }],
-        ["notice-no-response", { landlordId: "landlord-1", leaseId: "lease-no-response", tenantResponse: "pending", responseDeadlineAt: Date.now() - 1000, createdAt: Date.now(), updatedAt: Date.now() }],
+        ["notice-pending", { landlordId: "landlord-1", leaseId: "lease-pending", tenantResponse: "pending", createdAt: now, updatedAt: now }],
+        ["notice-no-response", { landlordId: "landlord-1", leaseId: "lease-no-response", tenantResponse: "pending", responseDeadlineAt: now - 1000, createdAt: now, updatedAt: now }],
       ])
     );
 
     const items = await deriveLandlordVisibleExpiringLeases({
       landlordId: "landlord-1",
       withinDays: 120,
-      now: Date.now(),
+      now,
     });
 
     expect(items.map((item) => ({ id: item.id, bucket: item.noticeBucket }))).toEqual([
-      { id: "lease-expiring", bucket: "expiring" },
+      { id: "lease-expired", bucket: "expiring" },
+      { id: "lease-ending-today", bucket: "expiring" },
       { id: "lease-pending", bucket: "pending-response" },
       { id: "lease-no-response", bucket: "no-response" },
+      { id: "lease-no-payment-setup", bucket: "expiring" },
     ]);
   });
 });
