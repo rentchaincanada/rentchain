@@ -5,6 +5,7 @@ import type { LandlordAgentDecision } from "@/api/landlordAnalyticsApi";
 import type { LandlordAnalyticsInsight } from "@/api/landlordAnalyticsApi";
 import {
   analyticsInsightIntroCopy,
+  insightNextStepCopy,
   shouldRenderInsightCard,
 } from "@/lib/analytics/analyticsInsightCopy";
 
@@ -59,6 +60,9 @@ export function InsightCardsPanel({ insights, alerts = [], decisions = [] }: Pro
                   {insight.severity}
                 </div>
                 <div style={{ color: "#0f172a", fontWeight: 600 }}>{insight.message}</div>
+                <div style={{ color: "#334155", fontSize: "0.88rem", fontWeight: 600 }}>
+                  {insightNextStepCopy(insight)}
+                </div>
               </div>
             ))}
           </div>

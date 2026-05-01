@@ -1,6 +1,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import type { AnalyticsAlert } from "@/api/landlordAnalyticsAlertsApi";
+import { analyticsAlertNextStepCopy } from "@/lib/analytics/analyticsInsightCopy";
 import { Card } from "../ui/Ui";
 
 const severityColors: Record<AnalyticsAlert["severity"], { bg: string; text: string }> = {
@@ -73,6 +74,9 @@ export function AnalyticsAlertsPanel({ alerts, summary }: Props) {
                   >
                     {alert.severity}
                   </div>
+                </div>
+                <div style={{ color: "#334155", fontSize: "0.88rem", fontWeight: 600 }}>
+                  {analyticsAlertNextStepCopy(alert)}
                 </div>
                 {alert.actions?.length ? (
                   <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>

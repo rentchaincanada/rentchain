@@ -22,6 +22,7 @@ import {
   formatExecutionSummary,
   getExecutionConfirmationDetails,
 } from "./decisionExecutionDisplay";
+import { decisionNextStepCopy } from "@/lib/analytics/analyticsInsightCopy";
 
 const priorityTone: Record<"low" | "medium" | "high", { bg: string; text: string }> = {
   low: { bg: "rgba(14, 165, 233, 0.12)", text: "#075985" },
@@ -534,6 +535,22 @@ function ActionDecisionCard(props: {
           {decision.executionOutcomeReason || "The last execution attempt failed."}
         </div>
       ) : null}
+      {ctaDestination && ctaLabel ? (
+        <div
+          style={{
+            display: "grid",
+            gap: 4,
+            padding: 10,
+            borderRadius: 10,
+            border: "1px solid #ccfbf1",
+            background: "#f0fdfa",
+          }}
+        >
+          <div style={{ color: "#0f766e", fontSize: "0.84rem", fontWeight: 700 }}>
+            {decisionNextStepCopy(decision)}
+          </div>
+        </div>
+      ) : null}
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
         {ctaDestination && ctaLabel ? (
           <Link to={ctaDestination} style={{ color: "#0f766e", fontWeight: 700, textDecoration: "none" }}>
@@ -802,6 +819,22 @@ function ExecutedDecisionCard(props: {
           </div>
         ) : null}
       </div>
+      {ctaDestination && ctaLabel ? (
+        <div
+          style={{
+            display: "grid",
+            gap: 4,
+            padding: 10,
+            borderRadius: 10,
+            border: "1px solid #ccfbf1",
+            background: "#f0fdfa",
+          }}
+        >
+          <div style={{ color: "#0f766e", fontSize: "0.84rem", fontWeight: 700 }}>
+            {decisionNextStepCopy(decision)}
+          </div>
+        </div>
+      ) : null}
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
         {ctaDestination && ctaLabel ? (
           <Link to={ctaDestination} style={{ color: "#0f766e", fontWeight: 700, textDecoration: "none" }}>

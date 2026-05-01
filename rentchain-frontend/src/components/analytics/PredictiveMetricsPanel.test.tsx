@@ -26,6 +26,7 @@ describe("PredictiveMetricsPanel", () => {
 
     expect(screen.getByText(/Current vacancy: 20%/i)).toBeInTheDocument();
     expect(screen.getByText(/Vacant units: 1/i)).toBeInTheDocument();
+    expect(screen.getByText(/Next review: check vacancy readiness/i)).toBeInTheDocument();
     expect(screen.queryByText(/topPropertyId/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/prop-2/i)).not.toBeInTheDocument();
   });

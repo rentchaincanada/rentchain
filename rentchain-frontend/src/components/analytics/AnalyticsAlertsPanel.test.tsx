@@ -30,6 +30,7 @@ describe("AnalyticsAlertsPanel", () => {
 
     expect(screen.getByText(/Vacancy is elevated/i)).toBeInTheDocument();
     expect(screen.getByText(/1 active alerts/i)).toBeInTheDocument();
+    expect(screen.getByText(/Next step: review the affected property view/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /View analytics/i })).toHaveAttribute("href", "/analytics");
   });
 

@@ -29,6 +29,7 @@ describe("InsightCardsPanel", () => {
     );
 
     expect(screen.getByText(/Alpha currently has the lowest vacancy rate/i)).toBeInTheDocument();
+    expect(screen.getByText(/Next step: compare this pattern with alerts and recommended actions/i)).toBeInTheDocument();
     expect(screen.queryByText(/^1 lease ends within 30 days\.$/i)).not.toBeInTheDocument();
   });
 

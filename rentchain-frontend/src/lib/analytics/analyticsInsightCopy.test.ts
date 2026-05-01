@@ -6,10 +6,14 @@ import type {
   LandlordPredictiveMetric,
 } from "@/api/landlordAnalyticsApi";
 import {
+  analyticsAlertNextStepCopy,
+  decisionNextStepCopy,
   deriveAlertTheme,
   deriveDecisionTheme,
   deriveInsightTheme,
   formatPredictiveSupportingValues,
+  insightNextStepCopy,
+  predictiveMetricNextReviewCopy,
   shouldRenderInsightCard,
 } from "./analyticsInsightCopy";
 
@@ -140,5 +144,22 @@ describe("analyticsInsightCopy", () => {
         message: "Applications dropped compared with the previous period.",
       })
     ).toBe("applications");
+  });
+
+  it("derives deterministic next-step copy by alert, metric, insight, and decision theme", () => {
+    expect(analyticsAlertNextStepCopy(buildAlert({ type: "high_vacancy" }))).toContain("pricing");
+    expect(predictiveMetricNextReviewCopy(buildMetric({ key: "projected_application_slowdown_risk" }))).toContain(
+      "submitted applications"
+    );
+    expect(
+      insightNextStepCopy({
+        type: "maintenance_cost_increase",
+        severity: "medium",
+        message: "Maintenance costs increased compared with the previous period.",
+      })
+    ).toContain("work orders");
+    expect(decisionNextStepCopy(buildDecision({ decisionType: "review_revenue_pressure" }))).toContain(
+      "revenue pressure"
+    );
   });
 });

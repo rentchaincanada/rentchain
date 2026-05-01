@@ -1,7 +1,10 @@
 import React from "react";
 import { Card } from "../ui/Ui";
 import type { LandlordPredictiveMetric } from "@/api/landlordAnalyticsApi";
-import { formatPredictiveSupportingValues } from "@/lib/analytics/analyticsInsightCopy";
+import {
+  formatPredictiveSupportingValues,
+  predictiveMetricNextReviewCopy,
+} from "@/lib/analytics/analyticsInsightCopy";
 
 const riskTone: Record<"low" | "medium" | "high", { bg: string; text: string }> = {
   low: { bg: "rgba(14, 165, 233, 0.12)", text: "#075985" },
@@ -66,6 +69,9 @@ export function PredictiveMetricsPanel({ metrics }: Props) {
                   </div>
                   <div style={{ color: "#334155" }}>{metric.explanation}</div>
                   {support ? <div style={{ color: "#64748b", fontSize: "0.88rem" }}>{support}</div> : null}
+                  <div style={{ color: "#334155", fontSize: "0.88rem", fontWeight: 600 }}>
+                    {predictiveMetricNextReviewCopy(metric)}
+                  </div>
                 </div>
               );
             })}
