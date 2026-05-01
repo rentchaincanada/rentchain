@@ -254,3 +254,81 @@ export function shouldRenderInsightCard(params: {
 export function analyticsInsightIntroCopy() {
   return "Distinct portfolio patterns worth reviewing after alerts and next actions.";
 }
+
+export function analyticsAlertNextStepCopy(alert: AnalyticsAlert): string {
+  const theme = deriveAlertTheme(alert);
+
+  switch (theme) {
+    case "vacancy":
+      return "Next step: review the affected property view, then check pricing, listing quality, and lead follow-up before dismissing this alert.";
+    case "lease_expiry":
+      return "Next step: open lease renewals and confirm the leases, dates, and renewal inputs that need landlord follow-through.";
+    case "applications":
+      return "Next step: review submitted applications and conversion friction before changing leasing or applicant follow-up.";
+    case "maintenance":
+      return "Next step: review the affected work orders and costs, then decide which records need landlord follow-up first.";
+    default:
+      return "Next step: open the linked workspace and review the affected records before dismissing this alert.";
+  }
+}
+
+export function predictiveMetricNextReviewCopy(metric: LandlordPredictiveMetric): string {
+  const theme = derivePredictiveMetricTheme(metric);
+
+  switch (theme) {
+    case "vacancy":
+      return "Next review: check vacancy readiness, listing quality, pricing, and lead follow-up for the affected property.";
+    case "lease_expiry":
+      return "Next review: check renewal timing, tenant response status, and the lease inputs needed before notices or turnover planning.";
+    case "applications":
+      return "Next review: compare current submitted applications with prior demand and inspect where applicants may be stalling.";
+    case "maintenance":
+      return "Next review: inspect open work orders, cost concentration, and follow-up records before changing maintenance priorities.";
+    case "revenue":
+      return "Next review: compare scheduled rent movement with vacancy and renewal pressure before changing portfolio assumptions.";
+    default:
+      return "Next review: compare this signal with alerts and recommended actions before changing operations.";
+  }
+}
+
+export function insightNextStepCopy(insight: LandlordAnalyticsInsight): string {
+  const theme = deriveInsightTheme(insight);
+
+  switch (theme) {
+    case "vacancy":
+      return "Next step: compare this vacancy pattern with alerts and recommended actions, then review the affected property context.";
+    case "lease_expiry":
+      return "Next step: compare this renewal pattern with the lease-renewal workspace before changing follow-up timing.";
+    case "applications":
+      return "Next step: compare this application pattern with submitted applications and applicant follow-up before changing process.";
+    case "maintenance":
+      return "Next step: compare this maintenance pattern with work orders and cost records before changing priorities.";
+    case "revenue":
+      return "Next step: compare this revenue pattern with vacancy, renewals, and scheduled rent before changing assumptions.";
+    case "property_focus":
+      return "Next step: review the focused property alongside alerts and recommended actions before shifting operational attention.";
+    default:
+      return "Next step: compare this pattern with alerts and recommended actions before changing operations.";
+  }
+}
+
+export function decisionNextStepCopy(decision: LandlordAgentDecision): string {
+  const theme = deriveDecisionTheme(decision);
+
+  switch (theme) {
+    case "vacancy":
+      return "Recommended next step: open the linked workspace to review vacancy readiness and decide the landlord follow-up.";
+    case "lease_expiry":
+      return "Recommended next step: open the linked renewal view to review dates, tenant response state, and required inputs.";
+    case "applications":
+      return "Recommended next step: open the linked applications view to inspect submitted applications and conversion friction.";
+    case "maintenance":
+      return "Recommended next step: open the linked work order view to inspect the affected records before changing priorities.";
+    case "revenue":
+      return "Recommended next step: open the linked analytics view to review revenue pressure in context.";
+    case "property_focus":
+      return "Recommended next step: open the linked property focus view and compare the current signals before shifting attention.";
+    default:
+      return "Recommended next step: open the linked workspace and review the affected records.";
+  }
+}

@@ -221,6 +221,7 @@ describe("AgentDecisionPanel", () => {
     expect(screen.getByText(/Emerging supporting signals/i)).toBeInTheDocument();
     expect(screen.getByText(/Employment or income details are still incomplete./i)).toBeInTheDocument();
     expect(screen.getByText(/Recommended next action: Review application/i)).toBeInTheDocument();
+    expect(screen.getByText(/Recommended next step: open the linked workspace to review vacancy readiness/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Open vacancy readiness/i })).toHaveAttribute("href", "/analytics?propertyId=prop-2");
     expect(screen.getByText(/Vacancy is elevated/i)).toBeInTheDocument();
     expect(screen.queryByText(/Automation blocked/i)).not.toBeInTheDocument();
