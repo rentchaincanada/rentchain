@@ -135,6 +135,44 @@ describe("landlord maintenance workspace", () => {
     expect(printSummaryDocumentMock).toHaveBeenCalledWith("summary");
   });
 
+  it("falls back to human property and unit labels when raw ids leak through", async () => {
+    maintenanceWorkflowApi.listLandlordMaintenance.mockResolvedValue({
+      items: [
+        {
+          id: "maint-1",
+          tenantId: "tenant-1",
+          landlordId: "landlord-1",
+          propertyId: "W5ELj880M1z2i6uAWgHA",
+          unitId: "unit-opaque-1",
+          tenantName: "Taylor Tenant",
+          propertyLabel: "W5ELj880M1z2i6uAWgHA",
+          unitLabel: "unit-opaque-1",
+          title: "Broken heater",
+          description: "Heat is not turning on.",
+          category: "HVAC",
+          priority: "urgent",
+          status: "submitted",
+          createdAt: 100,
+          updatedAt: 200,
+          statusHistory: [],
+        },
+      ],
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/maintenance/maint-1"]}>
+        <Routes>
+          <Route path="/maintenance/:id" element={<MaintenanceRequestsPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findAllByText("Property")).not.toHaveLength(0);
+    expect(screen.getAllByText("Unit").length).toBeGreaterThan(0);
+    expect(screen.queryAllByText("W5ELj880M1z2i6uAWgHA")).toHaveLength(0);
+    expect(screen.queryAllByText("unit-opaque-1")).toHaveLength(0);
+  });
+
   it("shows pending verification and follow-up state in the landlord closure workspace", async () => {
     maintenanceWorkflowApi.listLandlordMaintenance.mockResolvedValue({
       items: [
@@ -600,7 +638,7 @@ describe("landlord maintenance workspace", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findAllByText("Tenant • Property")).not.toHaveLength(0);
+    expect(await screen.findAllByText(/Tenant\s+•\s+Property(?:\s+•\s+Unit)?/)).not.toHaveLength(0);
     expect(screen.queryByText(/tenant-1/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/prop-1/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/unit-2/i)).not.toBeInTheDocument();

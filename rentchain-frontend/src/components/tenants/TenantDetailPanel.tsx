@@ -47,6 +47,8 @@ const riskBorderMap: Record<string, string> = {
   HIGH: "1px solid rgba(239,68,68,0.55)",
 };
 
+const RECENT_LEASE_LEDGER_ENTRY_LIMIT = 10;
+
 function formatDateLabel(value?: string | number | null) {
   if (!value) return "--";
   const parsed = new Date(typeof value === "number" ? value : String(value));
@@ -738,13 +740,18 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityR
           }}
         >
           <div style={{ display: "grid", gap: 2 }}>
-            <span>Current lease ledger</span>
+            <span>Recent current lease ledger entries</span>
             <span style={{ color: text.muted, fontSize: "0.75rem", fontWeight: 400 }}>
-              Charges and payments from the current lease ledger.
+              Showing the most recent charges and payments from the current lease ledger.
             </span>
             <span style={{ color: text.muted, fontSize: "0.75rem", fontWeight: 400 }}>
               Tenant activity is recorded separately and does not add charges or payments to the current lease ledger.
             </span>
+            {ledgerMode === "lease" ? (
+              <span style={{ color: text.muted, fontSize: "0.75rem", fontWeight: 400 }}>
+                Showing the latest {RECENT_LEASE_LEDGER_ENTRY_LIMIT} entries here. Open current lease ledger for the full history.
+              </span>
+            ) : null}
             {ledgerMode === "tenant" ? (
               <span style={{ color: text.muted, fontSize: "0.75rem", fontWeight: 400 }}>
                 No current lease is linked, so this view is showing the existing tenant-level ledger source.
@@ -780,7 +787,7 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityR
               <div style={{ color: text.muted }}>No ledger entries for the current lease yet.</div>
             ) : (
               <div style={{ display: "grid", gap: 8 }}>
-                {leaseLedgerItems.slice(0, 6).map((entry) => (
+                {leaseLedgerItems.slice(0, RECENT_LEASE_LEDGER_ENTRY_LIMIT).map((entry) => (
                   <div
                     key={entry.id}
                     style={{

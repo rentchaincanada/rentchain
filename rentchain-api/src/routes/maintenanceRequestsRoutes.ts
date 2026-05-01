@@ -128,6 +128,58 @@ function optionalString(value: unknown, max = 1000): string | null {
   return next || null;
 }
 
+function resolvePropertyLabel(raw: any): string {
+  return (
+    String(raw?.name || raw?.addressLine1 || raw?.address || raw?.displayName || raw?.propertyName || "").trim() ||
+    "Property"
+  );
+}
+
+function resolveUnitLabel(raw: any): string {
+  return (
+    String(raw?.unitNumber || raw?.name || raw?.label || raw?.displayLabel || raw?.unitLabel || "").trim() || "Unit"
+  );
+}
+
+async function normalizeLandlordMaintenanceLabels(items: any[]) {
+  const propertyIds = Array.from(new Set(items.map((item) => String(item?.propertyId || "").trim()).filter(Boolean)));
+  const unitIds = Array.from(new Set(items.map((item) => String(item?.unitId || "").trim()).filter(Boolean)));
+  const [propertySnaps, unitSnaps] = await Promise.all([
+    Promise.all(propertyIds.map((id) => db.collection("properties").doc(id).get())),
+    Promise.all(unitIds.map((id) => db.collection("units").doc(id).get())),
+  ]);
+
+  const propertyLabels = new Map<string, string>();
+  propertySnaps.forEach((snap) => {
+    if (!snap.exists) return;
+    propertyLabels.set(snap.id, resolvePropertyLabel(snap.data() as any));
+  });
+
+  const unitLabels = new Map<string, string>();
+  unitSnaps.forEach((snap) => {
+    if (!snap.exists) return;
+    unitLabels.set(snap.id, resolveUnitLabel(snap.data() as any));
+  });
+
+  return items.map((item) => {
+    const propertyId = String(item?.propertyId || "").trim();
+    const unitId = String(item?.unitId || "").trim();
+    const currentPropertyLabel = String(item?.propertyLabel || "").trim();
+    const currentUnitLabel = String(item?.unitLabel || "").trim();
+    return {
+      ...item,
+      propertyLabel:
+        (currentPropertyLabel && currentPropertyLabel !== propertyId ? currentPropertyLabel : "") ||
+        propertyLabels.get(propertyId) ||
+        "Property",
+      unitLabel:
+        (currentUnitLabel && currentUnitLabel !== unitId ? currentUnitLabel : "") ||
+        unitLabels.get(unitId) ||
+        (unitId ? "Unit" : ""),
+    };
+  });
+}
+
 function landlordIdOf(req: any): string | null {
   return String(req.user?.landlordId || req.user?.id || "").trim() || null;
 }
@@ -1486,6 +1538,7 @@ router.get("/landlord/maintenance", async (req: any, res) => {
     if (statusFilter) {
       items = items.filter((item) => normalizeWorkflowStatus(item.status) === statusFilter);
     }
+    items = await normalizeLandlordMaintenanceLabels(items);
     items.sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0));
     return res.json({ ok: true, items, data: items });
   } catch (err: any) {

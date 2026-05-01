@@ -117,6 +117,19 @@ function landlordIdFromReq(req: any): string {
   return String(req.user?.landlordId || req.user?.id || "").trim();
 }
 
+function resolvePropertyLabel(raw: any): string {
+  return (
+    String(raw?.name || raw?.addressLine1 || raw?.address || raw?.displayName || raw?.propertyName || "").trim() ||
+    "Property"
+  );
+}
+
+function resolveUnitLabel(raw: any): string {
+  return (
+    String(raw?.unitNumber || raw?.name || raw?.label || raw?.displayLabel || raw?.unitLabel || "").trim() || "Unit"
+  );
+}
+
 async function getExpenseEntitlements(req: any) {
   const userId = String(req.user?.id || "").trim();
   return getUserEntitlements(userId, {
@@ -610,11 +623,19 @@ async function listExpensesForRequest(req: any, options: ExpenseQueryOptions = {
   return { ok: true as const, items };
 }
 
-function buildExpenseExportRows(items: any[], propertyNames: Map<string, string>) {
+async function buildExpenseExportRows(items: any[], propertyNames: Map<string, string>) {
+  const unitIds = Array.from(new Set(items.map((item: any) => String(item.unitId || "").trim()).filter(Boolean)));
+  const unitSnaps = await Promise.all(unitIds.map((id) => db.collection("units").doc(id).get()));
+  const unitLabels = new Map<string, string>();
+  unitSnaps.forEach((snap) => {
+    if (!snap.exists) return;
+    unitLabels.set(snap.id, resolveUnitLabel(snap.data() as any));
+  });
+
   return items.map((item: any) => ({
     date: toIsoDateFromMs(Number(item.incurredAtMs || 0)),
-    property: propertyNames.get(String(item.propertyId || "")) || String(item.propertyId || ""),
-    unit: String(item.unitId || ""),
+    property: propertyNames.get(String(item.propertyId || "").trim()) || "Property",
+    unit: item.unitId ? unitLabels.get(String(item.unitId || "").trim()) || "Unit" : "",
     category: String(item.category || ""),
     vendor: String(item.vendorName || ""),
     description: String(item.notes || ""),
@@ -1419,9 +1440,9 @@ router.get("/expenses/export.csv", requireAuth, async (req: any, res) => {
     propertySnaps.forEach((snap) => {
       if (!snap.exists) return;
       const data = snap.data() as any;
-      propertyNames.set(snap.id, String(data?.name || data?.addressLine1 || data?.address || snap.id));
+      propertyNames.set(snap.id, resolvePropertyLabel(data));
     });
-    const rows = buildExpenseExportRows(result.items, propertyNames);
+    const rows = await buildExpenseExportRows(result.items, propertyNames);
     const csv = [
       ["date", "property", "unit", "category", "vendor", "description", "amount", "status", "source"].join(","),
       ...rows.map((row) =>
@@ -1460,15 +1481,15 @@ router.get("/expenses/export.xlsx", requireAuth, async (req: any, res) => {
     propertySnaps.forEach((snap) => {
       if (!snap.exists) return;
       const data = snap.data() as any;
-      propertyNames.set(snap.id, String(data?.name || data?.addressLine1 || data?.address || snap.id));
+      propertyNames.set(snap.id, resolvePropertyLabel(data));
     });
-    const rows = buildExpenseExportRows(result.items, propertyNames);
+    const rows = await buildExpenseExportRows(result.items, propertyNames);
     const totalAmountCents = result.items.reduce((sum: number, item: any) => sum + Number(item.amountCents || 0), 0);
     const xml = renderExpenseSpreadsheetXml(rows, totalAmountCents);
 
     setAttachmentExportHeaders(res, {
-      filename: buildDatedExportFilename({ prefix: "rentchain-expenses", format: "xlsx" }),
-      format: "xlsx",
+      filename: buildDatedExportFilename({ prefix: "rentchain-expenses", format: "xls" }),
+      format: "xls",
     });
     return res.status(200).send(xml);
   } catch (err: any) {
@@ -1495,9 +1516,9 @@ router.get("/expenses/export.pdf", requireAuth, async (req: any, res) => {
     propertySnaps.forEach((snap) => {
       if (!snap.exists) return;
       const data = snap.data() as any;
-      propertyNames.set(snap.id, String(data?.name || data?.addressLine1 || data?.address || snap.id));
+      propertyNames.set(snap.id, resolvePropertyLabel(data));
     });
-    const rows = buildExpenseExportRows(result.items, propertyNames);
+    const rows = await buildExpenseExportRows(result.items, propertyNames);
     const totalAmountCents = result.items.reduce((sum: number, item: any) => sum + Number(item.amountCents || 0), 0);
     const propertyLabel = String(req.query?.propertyId || "").trim();
     const subtitle = [

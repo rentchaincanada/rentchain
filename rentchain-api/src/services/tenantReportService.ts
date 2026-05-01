@@ -592,11 +592,11 @@ export async function generateTenantReportPdfBuffer(
       doc.fontSize(11).text("No financial activity is available for this tenant yet.").moveDown(0.5);
     } else {
       const columns = [
-        { label: "Date", x: PDF_LEFT, width: 70 },
-        { label: "Activity", x: 114, width: 162 },
-        { label: "Context", x: 282, width: 132 },
-        { label: "Amount", x: 420, width: 56 },
-        { label: "Source", x: 482, width: 62 },
+        { label: "Date", x: PDF_LEFT, width: 64 },
+        { label: "Activity", x: 110, width: 142 },
+        { label: "Context", x: 258, width: 162 },
+        { label: "Amount", x: 426, width: 52 },
+        { label: "Source", x: 484, width: 60 },
       ];
 
       projectionGroupOrder.forEach((groupKey) => {
@@ -638,7 +638,7 @@ export async function generateTenantReportPdfBuffer(
           }
 
           const rowY = doc.y;
-          doc.fontSize(10).fillColor("#000000");
+          doc.fontSize(9.5).fillColor("#000000");
           doc.text(rowValues.date, columns[0].x, rowY, { width: columns[0].width });
           doc.text(rowValues.activity, columns[1].x, rowY, { width: columns[1].width });
           doc.text(rowValues.context, columns[2].x, rowY, { width: columns[2].width });
