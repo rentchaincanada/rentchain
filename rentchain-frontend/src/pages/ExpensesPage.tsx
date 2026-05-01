@@ -106,7 +106,7 @@ const ExpensesPage: React.FC = () => {
   const [dateFrom, setDateFrom] = React.useState("");
   const [dateTo, setDateTo] = React.useState("");
   const [importing, setImporting] = React.useState(false);
-  const [exporting, setExporting] = React.useState<null | "csv" | "xlsx" | "pdf">(null);
+  const [exporting, setExporting] = React.useState<null | "csv" | "xls" | "pdf">(null);
   const [importFiles, setImportFiles] = React.useState<File[]>([]);
   const [previewRows, setPreviewRows] = React.useState<ExpenseImportPreviewRow[]>([]);
   const [previewSummary, setPreviewSummary] = React.useState<null | {
@@ -195,7 +195,7 @@ const ExpensesPage: React.FC = () => {
     [items]
   );
 
-  const triggerDownload = async (format: "csv" | "xlsx" | "pdf") => {
+  const triggerDownload = async (format: "csv" | "xls" | "pdf") => {
     try {
       setExporting(format);
       const { blob, filename } = await exportExpenses(format, {
@@ -307,8 +307,8 @@ const ExpensesPage: React.FC = () => {
               <Button variant="secondary" onClick={() => void triggerDownload("csv")} disabled={exporting !== null}>
                 {exporting === "csv" ? "Exporting..." : "Export CSV"}
               </Button>
-              <Button variant="secondary" onClick={() => void triggerDownload("xlsx")} disabled={exporting !== null}>
-                {exporting === "xlsx" ? "Exporting..." : "Export Spreadsheet"}
+              <Button variant="secondary" onClick={() => void triggerDownload("xls")} disabled={exporting !== null}>
+                {exporting === "xls" ? "Exporting..." : "Export Spreadsheet (.xls)"}
               </Button>
               <Button variant="secondary" onClick={() => void triggerDownload("pdf")} disabled={exporting !== null}>
                 {exporting === "pdf" ? "Exporting..." : "Export PDF"}

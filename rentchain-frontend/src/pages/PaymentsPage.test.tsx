@@ -76,7 +76,7 @@ describe("PaymentsPage", () => {
       screen.getByText("These views are intentionally separate to avoid double counting and preserve audit integrity.")
     ).toBeInTheDocument();
     expect(await screen.findByRole("button", { name: "Export CSV" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Export Spreadsheet" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Export Spreadsheet (.xls)" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Export PDF" })).toBeInTheDocument();
     expect((await screen.findAllByText("Taylor Tenant")).length).toBeGreaterThan(0);
     expect(screen.getAllByText("123 Main St").length).toBeGreaterThan(0);
@@ -108,8 +108,8 @@ describe("PaymentsPage", () => {
     fireEvent.click((await screen.findAllByRole("button", { name: "Export CSV" }))[0]);
     await waitFor(() => expect(mocks.exportPayments).toHaveBeenCalledWith("csv"));
 
-    fireEvent.click(screen.getAllByRole("button", { name: "Export Spreadsheet" })[0]);
-    await waitFor(() => expect(mocks.exportPayments).toHaveBeenCalledWith("xlsx"));
+    fireEvent.click(screen.getAllByRole("button", { name: "Export Spreadsheet (.xls)" })[0]);
+    await waitFor(() => expect(mocks.exportPayments).toHaveBeenCalledWith("xls"));
 
     createElementSpy.mockRestore();
     click.mockRestore();

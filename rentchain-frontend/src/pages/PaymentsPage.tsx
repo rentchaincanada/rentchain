@@ -28,7 +28,7 @@ function propertyLabelFromValue(value: any): string {
 const PaymentsPage: React.FC = () => {
   const { payments, loading, error } = usePayments();
   const [rows, setRows] = useState<PaymentRecord[]>([]);
-  const [exporting, setExporting] = useState<null | "csv" | "xlsx">(null);
+  const [exporting, setExporting] = useState<null | "csv" | "xls">(null);
   const [labelMap, setLabelMap] = useState<{ tenants: Map<string, string>; properties: Map<string, string> }>({
     tenants: new Map(),
     properties: new Map(),
@@ -84,7 +84,7 @@ const PaymentsPage: React.FC = () => {
   const getPropertyLabel = (payment: PaymentRecord) =>
     labelMap.properties.get(String(payment.propertyId || "").trim()) || "Property";
 
-  const triggerExport = async (format: "csv" | "xlsx") => {
+  const triggerExport = async (format: "csv" | "xls") => {
     try {
       setExporting(format);
       const { blob, filename } = await exportPayments(format);
@@ -177,8 +177,8 @@ const PaymentsPage: React.FC = () => {
             <Button variant="secondary" onClick={() => void triggerExport("csv")} disabled={exporting !== null}>
               {exporting === "csv" ? "Exporting..." : "Export CSV"}
             </Button>
-            <Button variant="secondary" onClick={() => void triggerExport("xlsx")} disabled={exporting !== null}>
-              {exporting === "xlsx" ? "Exporting..." : "Export Spreadsheet"}
+            <Button variant="secondary" onClick={() => void triggerExport("xls")} disabled={exporting !== null}>
+              {exporting === "xls" ? "Exporting..." : "Export Spreadsheet (.xls)"}
             </Button>
             <Button variant="secondary" onClick={() => void printSummaryDocument("summary")}>Export PDF</Button>
           </div>

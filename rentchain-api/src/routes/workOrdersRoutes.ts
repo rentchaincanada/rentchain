@@ -1561,7 +1561,7 @@ router.get("/work-orders/export.csv", requireAuth, async (req: any, res) => {
   }
 });
 
-router.get("/work-orders/export.xlsx", requireAuth, async (req: any, res) => {
+async function handleWorkOrderSpreadsheetExport(req: any, res: any) {
   try {
     if (!isLandlord(req)) return res.status(403).json({ ok: false, error: "FORBIDDEN" });
     const rows = await buildWorkOrderExportRows(await listLandlordWorkOrdersForExport(req));
@@ -1573,10 +1573,13 @@ router.get("/work-orders/export.xlsx", requireAuth, async (req: any, res) => {
     });
     return res.status(200).send(xml);
   } catch (err) {
-    console.error("[work-orders] xlsx export failed", err);
+    console.error("[work-orders] xls export failed", err);
     return res.status(500).json({ ok: false, error: "WORK_ORDER_EXPORT_FAILED" });
   }
-});
+}
+
+router.get("/work-orders/export.xls", requireAuth, handleWorkOrderSpreadsheetExport);
+router.get("/work-orders/export.xlsx", requireAuth, handleWorkOrderSpreadsheetExport);
 
 router.get("/work-orders/:id", requireAuth, async (req: any, res) => {
   try {

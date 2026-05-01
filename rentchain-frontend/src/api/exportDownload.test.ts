@@ -26,8 +26,8 @@ describe("exportDownload", () => {
       "admin-leases-2026-04-01.csv"
     );
     expect(
-      parseContentDispositionFilename("attachment; filename*=UTF-8''rentchain%20expenses.xlsx", "fallback.xlsx")
-    ).toBe("rentchain expenses.xlsx");
+      parseContentDispositionFilename("attachment; filename*=UTF-8''rentchain%20expenses.xls", "fallback.xls")
+    ).toBe("rentchain expenses.xls");
     expect(parseContentDispositionFilename(null, "fallback.csv")).toBe("fallback.csv");
   });
 

@@ -18,7 +18,7 @@ export function getExportContentType(format: ExportFormat): string {
     case "csv":
       return "text/csv; charset=utf-8";
     case "xls":
-      return "application/vnd.ms-excel; charset=utf-8";
+      return "application/vnd.ms-excel";
     case "pdf":
       return "application/pdf";
     default:

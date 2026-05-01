@@ -100,7 +100,7 @@ export async function getPropertyMonthlyPayments(
   return data;
 }
 
-export async function exportPayments(format: "csv" | "xlsx") {
+export async function exportPayments(format: "csv" | "xls") {
   return downloadAuthenticatedExport({
     path: `/payments/export.${format}`,
     fallbackFilename: "rentchain-payments-export",

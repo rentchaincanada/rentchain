@@ -209,10 +209,10 @@ const projectionGroupLabels: Record<FinancialProjectionSourceType, string> = {
 };
 
 const projectionSourceLabels: Record<FinancialProjectionSourceType, string> = {
-  recorded_payment: "Payment",
+  recorded_payment: "Recorded Payment",
   lease_charge: "Lease Charge",
   lease_credit: "Credit",
-  ledger_payment_unmatched: "Unmatched Ledger Entry",
+  ledger_payment_unmatched: "Ledger Payment",
 };
 
 function drawProjectionTableHeader(doc: any, columns: Array<{ label: string; x: number; width: number }>) {
@@ -223,15 +223,15 @@ function drawProjectionTableHeader(doc: any, columns: Array<{ label: string; x: 
       align: column.label === "Amount" ? "right" : "left",
     });
   });
-  doc.moveDown(0.2);
-  const lineY = doc.y + 2;
+  doc.moveDown(0.1);
+  const lineY = doc.y + 1;
   doc
     .strokeColor("#d4d4d8")
     .lineWidth(0.75)
     .moveTo(PDF_LEFT, lineY)
     .lineTo(PDF_RIGHT, lineY)
     .stroke();
-  doc.y = lineY + 8;
+  doc.y = lineY + 6;
 }
 
 function formatProjectionDate(value: string | null | undefined) {
@@ -593,10 +593,10 @@ export async function generateTenantReportPdfBuffer(
     } else {
       const columns = [
         { label: "Date", x: PDF_LEFT, width: 64 },
-        { label: "Activity", x: 110, width: 142 },
-        { label: "Context", x: 258, width: 162 },
-        { label: "Amount", x: 426, width: 52 },
-        { label: "Source", x: 484, width: 60 },
+        { label: "Activity", x: 110, width: 134 },
+        { label: "Context", x: 250, width: 158 },
+        { label: "Amount", x: 414, width: 56 },
+        { label: "Source", x: 476, width: 72 },
       ];
 
       projectionGroupOrder.forEach((groupKey) => {
@@ -638,7 +638,7 @@ export async function generateTenantReportPdfBuffer(
           }
 
           const rowY = doc.y;
-          doc.fontSize(9.5).fillColor("#000000");
+          doc.fontSize(9).fillColor("#000000");
           doc.text(rowValues.date, columns[0].x, rowY, { width: columns[0].width });
           doc.text(rowValues.activity, columns[1].x, rowY, { width: columns[1].width });
           doc.text(rowValues.context, columns[2].x, rowY, { width: columns[2].width });

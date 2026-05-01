@@ -223,7 +223,7 @@ router.get("/payments/export.csv", requireAuth, async (req: any, res: Response) 
   }
 });
 
-router.get("/payments/export.xlsx", requireAuth, async (req: any, res: Response) => {
+async function handlePaymentSpreadsheetExport(req: any, res: Response) {
   try {
     const role = roleForReq(req);
     if (role !== "landlord" && role !== "admin") {
@@ -239,10 +239,13 @@ router.get("/payments/export.xlsx", requireAuth, async (req: any, res: Response)
     });
     return res.status(200).send(xml);
   } catch (err) {
-    console.error("[paymentsRoutes] xlsx export failed", err);
+    console.error("[paymentsRoutes] xls export failed", err);
     return res.status(500).json({ ok: false, error: "PAYMENTS_EXPORT_FAILED" });
   }
-});
+}
+
+router.get("/payments/export.xls", requireAuth, handlePaymentSpreadsheetExport);
+router.get("/payments/export.xlsx", requireAuth, handlePaymentSpreadsheetExport);
 
 // POST /api/payments
 router.post(
