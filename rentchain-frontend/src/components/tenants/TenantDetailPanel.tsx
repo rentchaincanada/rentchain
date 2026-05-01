@@ -663,11 +663,15 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityR
             style={{
               marginTop: "0.5rem",
               display: "flex",
-              justifyContent: "flex-end",
+              justifyContent: "space-between",
+              alignItems: "center",
               gap: 8,
               flexWrap: "wrap",
             }}
           >
+            <div style={{ color: text.muted, fontSize: "0.8rem" }}>
+              Use the current lease ledger to record charges and payments.
+            </div>
             <button
               type="button"
               onClick={handleViewInLedger}

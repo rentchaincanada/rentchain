@@ -175,6 +175,7 @@ describe("TenantDetailPanel", () => {
 
     expect(await screen.findByText("Recent current lease ledger entries")).toBeInTheDocument();
     expect(screen.getByText("Showing the most recent charges and payments from the current lease ledger.")).toBeInTheDocument();
+    expect(screen.getByText("Use the current lease ledger to record charges and payments.")).toBeInTheDocument();
     expect(screen.getByText("Showing the latest 10 entries here. Open current lease ledger for the full history.")).toBeInTheDocument();
     expect(
       screen.getByText(

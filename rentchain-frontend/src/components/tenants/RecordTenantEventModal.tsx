@@ -15,12 +15,15 @@ type Props = {
 };
 
 const TYPES: { type: TenantEventType; label: string; hint: string }[] = [
-  { type: "PAYMENT_RECORDED", label: "Payment recorded", hint: "Payment received" },
-  { type: "CHARGE_ADDED", label: "Charge added", hint: "Rent or fee added" },
+  { type: "PAYMENT_RECORDED", label: "Payment recorded", hint: "Payment received as a tenant timeline note" },
+  { type: "CHARGE_ADDED", label: "Charge added", hint: "Rent or fee noted on the tenant timeline" },
   { type: "ADJUSTMENT_RECORDED", label: "Adjustment recorded", hint: "Credit or adjustment" },
   { type: "NOTICE_SERVED", label: "Notice served", hint: "Formal notice delivered" },
   { type: "LEASE_STARTED", label: "Lease started", hint: "Start of tenancy" },
 ];
+
+const TIMELINE_ONLY_FINANCE_TYPES: TenantEventType[] = ["PAYMENT_RECORDED", "CHARGE_ADDED"];
+const timelineOnlyFinanceCopy = "Timeline note only — does not update the lease ledger or payments register.";
 
 const isoToday = () => {
   const d = new Date();
@@ -62,6 +65,7 @@ export const RecordTenantEventModal: React.FC<Props> = ({
 
   const financeTypes: TenantEventType[] = ["PAYMENT_RECORDED", "CHARGE_ADDED", "ADJUSTMENT_RECORDED"];
   const showAmount = financeTypes.includes(type);
+  const isTimelineOnlyFinanceType = TIMELINE_ONLY_FINANCE_TYPES.includes(type);
   const showDaysLate = false;
   const showNotice = type === "NOTICE_SERVED";
 
@@ -216,7 +220,8 @@ export const RecordTenantEventModal: React.FC<Props> = ({
           <div>
             <div style={{ fontSize: 16, fontWeight: 700 }}>Record tenant event</div>
             <div style={{ fontSize: 12, color: text.muted }}>
-              This becomes part of the tenant's permanent rental history.
+              Tenant activity records notes on the tenant timeline only. To add charges or payments to the lease ledger,
+              use the current lease ledger.
             </div>
           </div>
           <button
@@ -259,6 +264,11 @@ export const RecordTenantEventModal: React.FC<Props> = ({
               ))}
             </select>
             <div style={{ fontSize: 12, color: text.muted }}>{typeMeta?.hint}</div>
+            {isTimelineOnlyFinanceType ? (
+              <div style={{ fontSize: 12, color: text.muted, fontWeight: 600 }}>
+                {timelineOnlyFinanceCopy}
+              </div>
+            ) : null}
         </label>
 
           <label style={{ display: "grid", gap: 6 }}>
