@@ -16,9 +16,9 @@ import { useEntitlements } from "@/hooks/useEntitlements";
 import { FeatureTeaser } from "@/components/billing/FeatureTeaser";
 import AnalyticsAlertsPanel from "../../components/analytics/AnalyticsAlertsPanel";
 import AgentDecisionPanel from "../../components/analytics/AgentDecisionPanel";
-import AnalyticsFiltersBar from "../../components/analytics/AnalyticsFiltersBar";
 import AnalyticsKpiGrid from "../../components/analytics/AnalyticsKpiGrid";
 import AnalyticsSectionPanel from "../../components/analytics/AnalyticsSectionPanel";
+import AnalyticsWorkspaceHeader from "../../components/analytics/AnalyticsWorkspaceHeader";
 import DecisionQueueSummary from "../../components/analytics/DecisionQueueSummary";
 import DecisionOutcomeAnalyticsPanel from "../../components/analytics/DecisionOutcomeAnalyticsPanel";
 import InsightCardsPanel from "../../components/analytics/InsightCardsPanel";
@@ -102,6 +102,50 @@ function workspaceTabIntro(tab: AnalyticsWorkspaceTabId) {
     return "This view summarizes how decisions are distributed across execution states so you can see what is ready, blocked, or already handled.";
   }
   return null;
+}
+
+function formatPrintDate(value: string | null | undefined) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(date);
+}
+
+function resolvePropertyFilterLabel(
+  propertyId: string,
+  properties: Array<{ id: string; name: string }>
+) {
+  if (!propertyId) return "All properties";
+  return properties.find((property) => property.id === propertyId)?.name || "Filtered property";
+}
+
+function renderPrintTable(
+  headers: string[],
+  rows: Array<Array<React.ReactNode>>,
+  emptyMessage: string
+) {
+  if (!rows.length) return <div style={{ color: "#64748b" }}>{emptyMessage}</div>;
+
+  return (
+    <table className="printTable">
+      <thead>
+        <tr>
+          {headers.map((header) => (
+            <th key={header}>{header}</th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((row, rowIndex) => (
+          <tr key={rowIndex}>
+            {row.map((cell, cellIndex) => (
+              <td key={cellIndex}>{cell}</td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
 }
 
 function useAnalyticsState(enabled: boolean, includeBenchmarking: boolean, period: AnalyticsPeriod, propertyId: string) {
@@ -219,6 +263,7 @@ export default function LandlordAnalyticsPage() {
   const activeTabLabel = ANALYTICS_WORKSPACE_TABS.find((tab) => tab.id === activeTab)?.label || "Analytics alerts";
   const showPortfolioScoreTeaser = canViewPortfolioScore === false;
   const showAdvancedAnalyticsTeaser = canViewPortfolioScore && !canViewAdvancedAnalytics;
+  const propertyFilterLabel = resolvePropertyFilterLabel(propertyId, snapshot?.properties || []);
 
   const summaryItems = snapshot
     ? [
@@ -267,128 +312,161 @@ export default function LandlordAnalyticsPage() {
       ]
     : [];
 
+  const printWorkspaceContent = React.useMemo(() => {
+    if (!snapshot) return null;
+
+    if (activeTab === "analytics-alerts") {
+      const alertRows =
+        alerts?.alerts.map((alert) => [
+          alert.title,
+          alert.severity,
+          alert.status,
+          formatPrintDate(alert.detectedAt),
+        ]) || [];
+      return renderPrintTable(
+        ["Alert", "Severity", "Status", "Detected"],
+        alertRows,
+        "No analytics alerts are active for this view."
+      );
+    }
+
+    if (activeTab === "portfolio-benchmarking") {
+      const comparisonRows =
+        benchmarking?.comparisons.map((comparison) => [
+          comparison.propertyName,
+          formatPercent(comparison.metrics.occupancyRate),
+          formatPercent(comparison.metrics.vacancyRate),
+          String(comparison.metrics.openWorkOrders),
+        ]) || [];
+      return renderPrintTable(
+        ["Property", "Occupancy", "Vacancy", "Open work orders"],
+        comparisonRows,
+        "Benchmarking is not available for this view yet."
+      );
+    }
+
+    if (activeTab === "decision-outcomes") {
+      const analytics = snapshot.decisionOutcomeAnalytics;
+      const rows = analytics
+        ? [
+            ["Appeared", String(analytics.appearedCount)],
+            ["Reviewed", String(analytics.reviewedCount)],
+            ["Executed", String(analytics.executedCount)],
+            ["Failed", String(analytics.failedExecutionCount)],
+            ["Resolved", String(analytics.resolvedCount)],
+            ["Resolution rate", formatPercent(analytics.resolutionRate)],
+          ]
+        : [];
+      return renderPrintTable(["Metric", "Value"], rows, "Decision outcomes are not available for this view yet.");
+    }
+
+    if (activeTab === "operator-queue" || activeTab === "portfolio-execution-summary") {
+      const queueRows = decisions.slice(0, 12).map((decision) => [
+        decision.title,
+        decision.priority,
+        decision.executionState,
+        decision.automationState,
+      ]);
+      return renderPrintTable(
+        ["Decision", "Priority", "Execution state", "Automation"],
+        queueRows,
+        "No operator queue decisions are available in this view."
+      );
+    }
+
+    if (activeTab === "recommended-next-actions" || activeTab === "actions-to-review") {
+      const actionRows = prioritizedDecisions.slice(0, 12).map((decision) => [
+        decision.title,
+        decision.priority,
+        decision.recommendedAction,
+        decision.automationState,
+      ]);
+      return renderPrintTable(
+        ["Decision", "Priority", "Recommended action", "Automation"],
+        actionRows,
+        "No recommended actions are available in this view."
+      );
+    }
+
+    if (activeTab === "predictive-metrics") {
+      const rows =
+        snapshot.predictive?.metrics.map((metric) => [
+          metric.label,
+          metric.riskLevel || metric.status,
+          metric.explanation,
+        ]) || [];
+      return renderPrintTable(["Metric", "Signal", "Explanation"], rows, "No predictive metrics are available.");
+    }
+
+    if (activeTab === "attention-worthy-insights") {
+      const rows = snapshot.insights.map((insight) => [insight.severity, insight.message]);
+      return renderPrintTable(["Severity", "Insight"], rows, "No standout analytics insights are available.");
+    }
+
+    return null;
+  }, [activeTab, alerts?.alerts, benchmarking?.comparisons, decisions, prioritizedDecisions, snapshot]);
+
   return (
     <MacShell title="Analytics" showTopNav={false}>
-      <div style={{ display: "grid", gap: 16 }}>
-        <Section>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "flex-start" }}>
+      <div className="analytics-workspace-page">
+        {analyticsEnabled ? (
+          <AnalyticsWorkspaceHeader
+            title="Analytics"
+            description="A calm view of portfolio health, application activity, leasing pressure, maintenance burden, and rent signals."
+            focusLabel={routedEntryLabel}
+            activeTab={activeTab}
+            tabs={ANALYTICS_WORKSPACE_TABS}
+            period={period}
+            propertyId={propertyId}
+            properties={snapshot?.properties || []}
+            disabled={loading}
+            onTabChange={setActiveTab}
+            onPeriodChange={setPeriod}
+            onPropertyChange={setPropertyId}
+            onPrint={() => void printSummaryDocument("summary")}
+          />
+        ) : (
+          <Section>
             <div style={{ display: "grid", gap: 6 }}>
               <h1 style={{ margin: 0, fontSize: "1.5rem" }}>Analytics</h1>
               <div style={{ color: "#475569", maxWidth: 840 }}>
                 A calm view of portfolio health, application activity, leasing pressure, maintenance burden, and rent signals.
               </div>
-              {routedEntryLabel ? (
-                <div style={{ color: "#0f766e", fontWeight: 600, fontSize: "0.92rem" }}>
-                  Focused from decisions: {routedEntryLabel}
-                </div>
-              ) : null}
             </div>
-            <button
-              type="button"
-              className="no-print"
-              onClick={() => void printSummaryDocument("summary")}
-              style={{ padding: "8px 10px", borderRadius: 12, border: "1px solid #E5E7EB", background: "#FFFFFF", fontWeight: 900, cursor: "pointer" }}
-            >
-              Print / Save PDF
-            </button>
-          </div>
-        </Section>
+          </Section>
+        )}
 
         {snapshot ? (
-          <div className="print-only print-only-summary">
+          <div
+            className="print-only print-only-summary analytics-print-summary"
+            data-testid="analytics-print-summary"
+            data-active-workspace={activeTab}
+          >
             <div className="printHeader">
-              <div className="printTitle">Analytics summary</div>
+              <div className="printTitle">Analytics workspace</div>
               <div className="printMeta">
+                <div>Workspace: {activeTabLabel}</div>
                 <div>Period: {periodLabel(period)}</div>
-                <div>Property filter: {propertyId || "All properties"}</div>
+                <div>Property filter: {propertyFilterLabel}</div>
               </div>
             </div>
             <div className="printKpis">
-              {summaryItems.slice(0, 4).map((item) => (
+              {summaryItems.slice(0, 6).map((item) => (
                 <div key={item.label} className="printKpi">
                   <div className="printKpiLabel">{item.label}</div>
                   <div className="printKpiValue">{item.value}</div>
                 </div>
               ))}
             </div>
-            <div className="printH3">Decision queue</div>
-            <table className="printTable">
-              <thead>
-                <tr>
-                  <th>Title</th>
-                  <th>Priority</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {prioritizedDecisions.slice(0, 10).map((decision) => (
-                  <tr key={decision.id}>
-                    <td>{decision.title}</td>
-                    <td>{decision.priority}</td>
-                    <td>{decision.executionState}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="printH3">{activeTabLabel}</div>
+            {activeTabIntro ? <div className="analytics-print-summary__intro">{activeTabIntro}</div> : null}
+            {printWorkspaceContent}
           </div>
         ) : null}
 
         {entitlementLoading ? <Card>Loading analytics access…</Card> : null}
         {!entitlementLoading && !canViewPortfolioHealthSummary ? (
           <Card style={{ color: "#b91c1c" }}>Analytics is currently unavailable for this account.</Card>
-        ) : null}
-
-        {analyticsEnabled ? (
-          <div
-            role="tablist"
-            aria-label="Analytics workspace sections"
-            style={{
-              display: "flex",
-              gap: 8,
-              overflowX: "auto",
-              paddingBottom: 4,
-              scrollbarWidth: "thin",
-            }}
-          >
-            {ANALYTICS_WORKSPACE_TABS.map((tab) => {
-              const selected = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  id={`analytics-tab-${tab.id}`}
-                  type="button"
-                  role="tab"
-                  aria-selected={selected}
-                  aria-controls={`analytics-panel-${tab.id}`}
-                  onClick={() => setActiveTab(tab.id)}
-                  style={{
-                    borderRadius: 999,
-                    border: selected ? "1px solid #0f172a" : "1px solid #cbd5e1",
-                    background: selected ? "#0f172a" : "#fff",
-                    color: selected ? "#fff" : "#334155",
-                    fontWeight: 700,
-                    padding: "8px 12px",
-                    cursor: "pointer",
-                    whiteSpace: "nowrap",
-                    flex: "0 0 auto",
-                  }}
-                >
-                  {tab.label}
-                </button>
-              );
-            })}
-          </div>
-        ) : null}
-
-        {analyticsEnabled ? (
-          <AnalyticsFiltersBar
-            period={period}
-            propertyId={propertyId}
-            properties={snapshot?.properties || []}
-            disabled={loading}
-            onPeriodChange={setPeriod}
-            onPropertyChange={setPropertyId}
-          />
         ) : null}
 
         {analyticsEnabled && loading ? <Card>Loading analytics…</Card> : null}
@@ -402,9 +480,10 @@ export default function LandlordAnalyticsPage() {
 
             {canViewPortfolioScore ? (
               <div
+                className="analytics-workspace-summary-grid"
                 style={{
                   display: "grid",
-                  gap: 16,
+                  gap: 12,
                   gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
                 }}
               >
@@ -553,7 +632,7 @@ export default function LandlordAnalyticsPage() {
               role="tabpanel"
               aria-labelledby={`analytics-tab-${activeTab}`}
               aria-label={activeTabLabel}
-              style={{ display: "grid", gap: 12 }}
+              style={{ display: "grid", gap: 12, alignContent: "start" }}
             >
               {activeTabIntro ? (
                 <Card style={{ color: "#475569" }}>{activeTabIntro}</Card>

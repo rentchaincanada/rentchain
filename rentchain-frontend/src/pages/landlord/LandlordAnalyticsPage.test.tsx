@@ -2,7 +2,7 @@ import React from "react";
 import type { LandlordAnalyticsSnapshot } from "../../api/landlordAnalyticsApi";
 import type { LandlordAnalyticsAlertsResponse } from "../../api/landlordAnalyticsAlertsApi";
 import type { LandlordAnalyticsBenchmarkingResponse } from "../../api/landlordAnalyticsBenchmarkingApi";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import LandlordAnalyticsPage from "./LandlordAnalyticsPage";
@@ -51,8 +51,11 @@ vi.mock("../../components/layout/MacShell", () => ({
 }));
 
 vi.mock("../../components/ui/Ui", () => ({
-  Card: ({ children, ...props }: React.PropsWithChildren<Record<string, unknown>>) => <div {...props}>{children}</div>,
+  Card: ({ children, elevated: _elevated, ...props }: React.PropsWithChildren<Record<string, unknown>>) => (
+    <div {...props}>{children}</div>
+  ),
   Section: ({ children }: React.PropsWithChildren) => <section>{children}</section>,
+  Button: ({ children, ...props }: React.PropsWithChildren<Record<string, unknown>>) => <button {...props}>{children}</button>,
 }));
 
 vi.mock("@/components/billing/FeatureTeaser", () => ({
@@ -498,14 +501,20 @@ describe("LandlordAnalyticsPage", () => {
     await mockEntitlements();
     await mockApiResolved();
 
-    render(
+    const { container } = render(
       <MemoryRouter>
         <LandlordAnalyticsPage />
       </MemoryRouter>
     );
 
     expect(await screen.findByText(/Analytics alerts/i)).toBeInTheDocument();
-    expect(screen.getByRole("tablist", { name: /Analytics workspace sections/i })).toBeInTheDocument();
+    const workspacePage = container.querySelector(".analytics-workspace-page");
+    expect(workspacePage).toBeTruthy();
+
+    const controlArea = screen.getByLabelText(/Analytics control area/i);
+    expect(within(controlArea).getByRole("tablist", { name: /Analytics workspace sections/i })).toBeInTheDocument();
+    expect(within(controlArea).getByLabelText(/Analytics period/i)).toBeInTheDocument();
+    expect(within(controlArea).getByLabelText(/Analytics property/i)).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Analytics alerts" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("tab", { name: "Portfolio benchmarking" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Decision outcomes" })).toBeInTheDocument();
@@ -534,14 +543,18 @@ describe("LandlordAnalyticsPage", () => {
 
     fireEvent.click(screen.getByRole("tab", { name: "Predictive metrics" }));
     expect(screen.getByRole("heading", { name: /Predictive metrics/i })).toBeInTheDocument();
-    expect(screen.getByText(/Vacancy pressure is present in the current view/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Vacancy pressure is present in the current view/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Current vacancy: 20% • Vacant units: 1/i)).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: /Recommended next actions/i })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("tab", { name: "Attention-worthy insights" }));
     expect(screen.getByRole("heading", { name: /Attention-worthy insights/i })).toBeInTheDocument();
     expect(screen.getByText(/Distinct portfolio patterns worth reviewing after alerts and next actions/i)).toBeInTheDocument();
-    expect(screen.queryByText(/^1 lease ends within 30 days\.$/i)).not.toBeInTheDocument();
+    expect(
+      within(screen.getByRole("tabpanel", { name: "Attention-worthy insights" })).queryByText(
+        /^1 lease ends within 30 days\.$/i
+      )
+    ).not.toBeInTheDocument();
 
     expect(screen.getByRole("heading", { name: /Applications/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Revenue signal/i })).toBeInTheDocument();
@@ -569,7 +582,7 @@ describe("LandlordAnalyticsPage", () => {
     expect(screen.queryByText(/Beta carries the strongest vacancy pressure/i)).not.toBeInTheDocument();
   });
 
-  it("routes print/save pdf through the shared print helper", async () => {
+  it("routes print/save pdf through the selected analytics workspace summary", async () => {
     await mockEntitlements();
     await mockApiResolved();
 
@@ -578,6 +591,12 @@ describe("LandlordAnalyticsPage", () => {
         <LandlordAnalyticsPage />
       </MemoryRouter>
     );
+
+    fireEvent.click(await screen.findByRole("tab", { name: "Predictive metrics" }));
+    const printSummary = screen.getByTestId("analytics-print-summary");
+    expect(printSummary).toHaveAttribute("data-active-workspace", "predictive-metrics");
+    expect(within(printSummary).getByText("Predictive metrics")).toBeInTheDocument();
+    expect(within(printSummary).queryByText("Decision queue")).not.toBeInTheDocument();
 
     fireEvent.click(await screen.findByRole("button", { name: "Print / Save PDF" }));
     expect(printSummaryDocument).toHaveBeenCalledWith("summary");
