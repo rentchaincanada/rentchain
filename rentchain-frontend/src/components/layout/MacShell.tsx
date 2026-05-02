@@ -38,6 +38,7 @@ export const MacShell: React.FC<MacShellProps> = ({
         </div>
       ) : null}
       <main
+        className="rc-mac-shell-main"
         style={{
           maxWidth: layout.maxWidth,
           margin: "0 auto",

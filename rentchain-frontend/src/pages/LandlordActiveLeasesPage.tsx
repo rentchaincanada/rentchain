@@ -461,7 +461,7 @@ export default function LandlordActiveLeasesPage() {
   }
 
   return (
-    <div style={{ display: "grid", gap: 16 }}>
+    <div className="rc-leases-page" style={{ display: "grid", gap: 16 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "flex-start" }}>
         <div style={{ display: "grid", gap: 6 }}>
           <div style={{ fontSize: 24, fontWeight: 800 }}>Lease operations</div>
