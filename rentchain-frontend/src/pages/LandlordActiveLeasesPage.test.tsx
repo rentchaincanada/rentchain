@@ -173,6 +173,7 @@ describe("LandlordActiveLeasesPage", () => {
     );
 
     expect((await screen.findAllByText("Harbour View")).length).toBeGreaterThan(0);
+    expect(document.querySelector(".rc-leases-page")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Print / Save PDF" })).toBeInTheDocument();
     expect(screen.getAllByText("Lease fully executed").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Expiring soon").length).toBeGreaterThan(0);

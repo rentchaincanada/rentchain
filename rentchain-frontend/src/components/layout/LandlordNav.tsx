@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { Menu, X } from "lucide-react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import TopNav from "./TopNav";
 import { useAuth } from "../../context/useAuth";
@@ -53,6 +54,15 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
     [primaryDrawerItems]
   );
   const tabItems = visibleItems.filter((item) => item.showInTabs);
+  const contentClassName = [
+    "rc-landlord-content",
+    loc.pathname.startsWith("/messages") ? "rc-landlord-content--mobile-flush" : "",
+  ].filter(Boolean).join(" ");
+
+  const handleDrawerNavigation = (path: string) => {
+    setDrawerOpen(false);
+    nav(path);
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -203,7 +213,7 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
                 <button
                   key={to}
                   type="button"
-                  onClick={() => nav(to)}
+                  onClick={() => handleDrawerNavigation(to)}
                   className={loc.pathname.startsWith(to) ? "active" : ""}
                 >
                   {label}
@@ -224,7 +234,7 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
                 <button
                   key={to}
                   type="button"
-                  onClick={() => nav(to)}
+                  onClick={() => handleDrawerNavigation(to)}
                   className={loc.pathname.startsWith(to) ? "active" : ""}
                 >
                   {label}
@@ -236,7 +246,7 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
       </aside>
 
       <UpgradeNudgeHost />
-      <div className="rc-landlord-content">{children}</div>
+      <div className={contentClassName}>{children}</div>
 
       <nav className="rc-mobile-tabbar" aria-label="Bottom navigation">
         {(navLoading ? [] : tabItems).map(({ to, label, icon: Icon }) => {
@@ -259,6 +269,20 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
             </button>
           );
         })}
+        <button
+          type="button"
+          onClick={(event) => {
+            lastFocusedRef.current = event.currentTarget;
+            setDrawerOpen(true);
+          }}
+          className={drawerOpen ? "active" : ""}
+          aria-label="Open workspace pages"
+          aria-expanded={drawerOpen}
+          aria-controls="rc-landlord-drawer"
+        >
+          {drawerOpen ? <X size={20} strokeWidth={2.2} /> : <Menu size={20} strokeWidth={2.2} />}
+          <span className="rc-mobile-tabbar-label">More</span>
+        </button>
       </nav>
     </div>
   );
