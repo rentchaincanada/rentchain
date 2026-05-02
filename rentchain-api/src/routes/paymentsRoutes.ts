@@ -23,12 +23,6 @@ const csvEscape = (value: unknown) => {
   return text;
 };
 
-const xmlEscape = (value: unknown) =>
-  String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-
 const roleForReq = (req: any) => String(req.user?.actorRole || req.user?.role || "").trim().toLowerCase();
 
 function resolveTenantLabel(raw: any): string {
@@ -151,30 +145,35 @@ async function buildPaymentExportRows(payments: Payment[]) {
   }));
 }
 
-function renderPaymentSpreadsheetXml(rows: Array<Record<string, string>>) {
+function htmlEscape(value: unknown) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function renderPaymentsSpreadsheetTable(rows: Array<Record<string, string>>) {
   const headers = ["Paid Date", "Tenant", "Property", "Amount", "Method", "Notes"];
-  const rowXml = rows
+  const rowHtml = rows
     .map((row) => {
       const cells = [row.paidDate, row.tenant, row.property, row.amount, row.method, row.notes]
-        .map((value) => `<Cell><Data ss:Type="String">${xmlEscape(value)}</Data></Cell>`)
+        .map((value) => `<td>${htmlEscape(value)}</td>`)
         .join("");
-      return `<Row>${cells}</Row>`;
+      return `<tr>${cells}</tr>`;
     })
     .join("");
 
-  return `<?xml version="1.0"?>
-<?mso-application progid="Excel.Sheet"?>
-<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
- xmlns:o="urn:schemas-microsoft-com:office:office"
- xmlns:x="urn:schemas-microsoft-com:office:excel"
- xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
-  <Worksheet ss:Name="Payments">
-    <Table>
-      <Row>${headers.map((header) => `<Cell><Data ss:Type="String">${xmlEscape(header)}</Data></Cell>`).join("")}</Row>
-      ${rowXml}
-    </Table>
-  </Worksheet>
-</Workbook>`;
+  return `<!doctype html>
+<html>
+  <head><meta charset="utf-8"><title>RentChain Payments Export</title></head>
+  <body>
+    <table>
+      <thead><tr>${headers.map((header) => `<th>${htmlEscape(header)}</th>`).join("")}</tr></thead>
+      <tbody>${rowHtml}</tbody>
+    </table>
+  </body>
+</html>`;
 }
 
 const parseYearMonth = (req: Request): { year: number; month: number } | null => {
@@ -231,13 +230,13 @@ async function handlePaymentSpreadsheetExport(req: any, res: Response) {
     }
 
     const rows = await buildPaymentExportRows(await listPersistedPayments());
-    const xml = renderPaymentSpreadsheetXml(rows);
+    const table = renderPaymentsSpreadsheetTable(rows);
 
     setAttachmentExportHeaders(res, {
       filename: buildDatedExportFilename({ prefix: "rentchain-payments", format: "xls" }),
       format: "xls",
     });
-    return res.status(200).send(xml);
+    return res.status(200).send(table);
   } catch (err) {
     console.error("[paymentsRoutes] xls export failed", err);
     return res.status(500).json({ ok: false, error: "PAYMENTS_EXPORT_FAILED" });

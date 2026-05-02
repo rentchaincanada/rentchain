@@ -713,6 +713,24 @@ async function loadLedgerEntries(leaseId: string, landlordId: string, from?: str
     });
 }
 
+async function resolveLeaseLedgerExportLabels(lease: any) {
+  const propertyId = String(lease?.propertyId || "").trim();
+  const propertySnap = propertyId
+    ? await db.collection("properties").doc(propertyId).get().catch(() => null)
+    : null;
+  const propertyData = propertySnap?.exists ? (propertySnap.data() as any) : null;
+  const property =
+    String(propertyData?.propertyAddress || lease?.propertyAddress || "").trim() ||
+    String(propertyData?.addressLine1 || propertyData?.address || lease?.addressLine1 || lease?.address || "").trim() ||
+    String(propertyData?.propertyName || lease?.propertyName || "").trim() ||
+    String(propertyData?.name || lease?.name || "").trim() ||
+    "Property";
+  const unit =
+    String(lease?.unitLabel || lease?.unitNumber || lease?.unit || "").trim() ||
+    "Unit";
+  return { property, unit };
+}
+
 async function enforceLeaseCapability(req: any, res: Response): Promise<boolean> {
   const landlordId = req.user?.landlordId || req.user?.id;
   if (!landlordId) {
@@ -2292,6 +2310,7 @@ router.get("/:leaseId/ledger/export.csv", async (req: any, res: Response) => {
     const from = toIsoDate(req.query?.from) || null;
     const to = toIsoDate(req.query?.to) || null;
     const entries = await loadLedgerEntries(leaseId, landlordId, from, to);
+    const labels = await resolveLeaseLedgerExportLabels(leaseCheck.lease);
     let runningBalance = 0;
     const header = [
       "date",
@@ -2303,8 +2322,8 @@ router.get("/:leaseId/ledger/export.csv", async (req: any, res: Response) => {
       "method",
       "reference",
       "notes",
-      "propertyId",
-      "unitId",
+      "property",
+      "unit",
       "createdAt",
     ];
     const rows = entries.map((entry: any) => {
@@ -2320,8 +2339,8 @@ router.get("/:leaseId/ledger/export.csv", async (req: any, res: Response) => {
         entry.method || "",
         entry.reference || "",
         entry.notes || "",
-        entry.propertyId || "",
-        entry.unitId || "",
+        labels.property,
+        labels.unit,
         entry.createdAt || "",
       ]
         .map(escapeCsvCell)

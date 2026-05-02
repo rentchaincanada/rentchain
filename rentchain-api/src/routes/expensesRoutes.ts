@@ -645,15 +645,18 @@ async function buildExpenseExportRows(items: any[], propertyNames: Map<string, s
   }));
 }
 
-function renderExpenseSpreadsheetXml(rows: Array<Record<string, string>>, totalAmountCents: number) {
-  const headers = ["Date", "Property", "Unit", "Category", "Vendor", "Description", "Amount", "Status", "Source"];
-  const xmlEscape = (value: unknown) =>
-    String(value ?? "")
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;");
+function htmlEscape(value: unknown) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
 
-  const rowXml = rows
+function renderExpensesSpreadsheetTable(rows: Array<Record<string, string>>, totalAmountCents: number) {
+  const headers = ["Date", "Property", "Unit", "Category", "Vendor", "Description", "Amount", "Status", "Source"];
+
+  const rowHtml = rows
     .map((row) => {
       const cells = [
         row.date,
@@ -666,34 +669,30 @@ function renderExpenseSpreadsheetXml(rows: Array<Record<string, string>>, totalA
         row.status,
         row.source,
       ]
-        .map(
-          (value) =>
-            `<Cell><Data ss:Type="String">${xmlEscape(value)}</Data></Cell>`
-        )
+        .map((value) => `<td>${htmlEscape(value)}</td>`)
         .join("");
-      return `<Row>${cells}</Row>`;
+      return `<tr>${cells}</tr>`;
     })
     .join("");
 
-  return `<?xml version="1.0"?>
-<?mso-application progid="Excel.Sheet"?>
-<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
- xmlns:o="urn:schemas-microsoft-com:office:office"
- xmlns:x="urn:schemas-microsoft-com:office:excel"
- xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
-  <Worksheet ss:Name="Expenses">
-    <Table>
-      <Row>${headers.map((header) => `<Cell><Data ss:Type="String">${xmlEscape(header)}</Data></Cell>`).join("")}</Row>
-      ${rowXml}
-      <Row>
-        <Cell><Data ss:Type="String">Total</Data></Cell>
-        <Cell/><Cell/><Cell/><Cell/><Cell/>
-        <Cell><Data ss:Type="String">${(totalAmountCents / 100).toFixed(2)}</Data></Cell>
-        <Cell/><Cell/>
-      </Row>
-    </Table>
-  </Worksheet>
-</Workbook>`;
+  return `<!doctype html>
+<html>
+  <head><meta charset="utf-8"><title>RentChain Expenses Export</title></head>
+  <body>
+    <table>
+      <thead><tr>${headers.map((header) => `<th>${htmlEscape(header)}</th>`).join("")}</tr></thead>
+      <tbody>
+        ${rowHtml}
+        <tr>
+          <td>Total</td>
+          <td></td><td></td><td></td><td></td><td></td>
+          <td>${htmlEscape((totalAmountCents / 100).toFixed(2))}</td>
+          <td></td><td></td>
+        </tr>
+      </tbody>
+    </table>
+  </body>
+</html>`;
 }
 
 async function renderExpensePdf(params: {
@@ -1485,13 +1484,13 @@ async function handleExpenseSpreadsheetExport(req: any, res: any) {
     });
     const rows = await buildExpenseExportRows(result.items, propertyNames);
     const totalAmountCents = result.items.reduce((sum: number, item: any) => sum + Number(item.amountCents || 0), 0);
-    const xml = renderExpenseSpreadsheetXml(rows, totalAmountCents);
+    const table = renderExpensesSpreadsheetTable(rows, totalAmountCents);
 
     setAttachmentExportHeaders(res, {
       filename: buildDatedExportFilename({ prefix: "rentchain-expenses", format: "xls" }),
       format: "xls",
     });
-    return res.status(200).send(xml);
+    return res.status(200).send(table);
   } catch (err: any) {
     console.error("[expenses] xls export failed", err?.message || err);
     return res.status(500).json({ ok: false, error: "EXPENSE_EXPORT_FAILED" });
