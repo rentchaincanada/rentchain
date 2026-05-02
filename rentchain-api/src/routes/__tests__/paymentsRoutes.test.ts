@@ -165,7 +165,7 @@ describe("paymentsRoutes exports", () => {
     expect(String(res.body)).not.toContain("prop-1");
   });
 
-  it("exports spreadsheet xml from the primary .xls route with safe labels", async () => {
+  it("exports spreadsheet table from the primary .xls route with safe labels", async () => {
     const router = (await import("../paymentsRoutes")).default;
     const res = await invokeRouter(router, { method: "GET", url: "/payments/export.xls" });
 
@@ -176,6 +176,10 @@ describe("paymentsRoutes exports", () => {
     );
     expect(String(res.body)).toContain("Taylor Tenant");
     expect(String(res.body)).toContain("123 Main St");
+    expect(String(res.body)).toContain("<table>");
+    expect(String(res.body)).toContain("<th>Paid Date</th>");
+    expect(String(res.body)).not.toContain("<?xml");
+    expect(String(res.body)).not.toContain("<Workbook");
   });
 
   it("keeps the legacy .xlsx spreadsheet route as a compatibility alias", async () => {

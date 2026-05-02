@@ -729,11 +729,12 @@ function exportCsvEscape(value: unknown): string {
   return text;
 }
 
-function exportXmlEscape(value: unknown) {
+function exportHtmlEscape(value: unknown) {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 function exportDateTime(value: unknown) {
@@ -809,7 +810,7 @@ async function buildWorkOrderExportRows(items: any[]) {
   }));
 }
 
-function renderWorkOrderSpreadsheetXml(rows: Array<Record<string, string>>) {
+function renderWorkOrdersSpreadsheetTable(rows: Array<Record<string, string>>) {
   const headers = [
     "Title",
     "Property",
@@ -830,7 +831,7 @@ function renderWorkOrderSpreadsheetXml(rows: Array<Record<string, string>>) {
     "Linked Expense Status",
     "Latest Comment",
   ];
-  const rowXml = rows
+  const rowHtml = rows
     .map((row) => {
       const values = [
         row.title,
@@ -852,25 +853,20 @@ function renderWorkOrderSpreadsheetXml(rows: Array<Record<string, string>>) {
         row.linkedExpenseStatus,
         row.latestComment,
       ];
-      return `<Row>${values
-        .map((value) => `<Cell><Data ss:Type="String">${exportXmlEscape(value)}</Data></Cell>`)
-        .join("")}</Row>`;
+      return `<tr>${values.map((value) => `<td>${exportHtmlEscape(value)}</td>`).join("")}</tr>`;
     })
     .join("");
 
-  return `<?xml version="1.0"?>
-<?mso-application progid="Excel.Sheet"?>
-<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
- xmlns:o="urn:schemas-microsoft-com:office:office"
- xmlns:x="urn:schemas-microsoft-com:office:excel"
- xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
-  <Worksheet ss:Name="Work Orders">
-    <Table>
-      <Row>${headers.map((header) => `<Cell><Data ss:Type="String">${exportXmlEscape(header)}</Data></Cell>`).join("")}</Row>
-      ${rowXml}
-    </Table>
-  </Worksheet>
-</Workbook>`;
+  return `<!doctype html>
+<html>
+  <head><meta charset="utf-8"><title>RentChain Work Orders Export</title></head>
+  <body>
+    <table>
+      <thead><tr>${headers.map((header) => `<th>${exportHtmlEscape(header)}</th>`).join("")}</tr></thead>
+      <tbody>${rowHtml}</tbody>
+    </table>
+  </body>
+</html>`;
 }
 router.post("/contractor/profile", requireAuth, async (req: any, res) => {
   try {
@@ -1565,13 +1561,13 @@ async function handleWorkOrderSpreadsheetExport(req: any, res: any) {
   try {
     if (!isLandlord(req)) return res.status(403).json({ ok: false, error: "FORBIDDEN" });
     const rows = await buildWorkOrderExportRows(await listLandlordWorkOrdersForExport(req));
-    const xml = renderWorkOrderSpreadsheetXml(rows);
+    const table = renderWorkOrdersSpreadsheetTable(rows);
 
     setAttachmentExportHeaders(res, {
       filename: buildDatedExportFilename({ prefix: "rentchain-work-orders", format: "xls" }),
       format: "xls",
     });
-    return res.status(200).send(xml);
+    return res.status(200).send(table);
   } catch (err) {
     console.error("[work-orders] xls export failed", err);
     return res.status(500).json({ ok: false, error: "WORK_ORDER_EXPORT_FAILED" });

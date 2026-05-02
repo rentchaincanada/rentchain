@@ -1248,7 +1248,7 @@ describe("workOrdersRoutes execution completion", () => {
     expect(String(res.body)).not.toContain("https://example.com/invoice.pdf");
   });
 
-  it("exports spreadsheet xml with human property and unit labels", async () => {
+  it("exports spreadsheet table with human property and unit labels", async () => {
     const router = (await import("../workOrdersRoutes")).default;
     ensureCollection("workOrders").set("wo-1", {
       ...ensureCollection("workOrders").get("wo-1"),
@@ -1276,6 +1276,10 @@ describe("workOrdersRoutes execution completion", () => {
     );
     expect(String(res.body)).toContain("123 Main St");
     expect(String(res.body)).toContain("4B");
+    expect(String(res.body)).toContain("<table>");
+    expect(String(res.body)).toContain("<th>Title</th>");
+    expect(String(res.body)).not.toContain("<?xml");
+    expect(String(res.body)).not.toContain("<Workbook");
     expect(String(res.body)).not.toContain("prop-1");
     expect(String(res.body)).not.toContain("unit-1");
   });

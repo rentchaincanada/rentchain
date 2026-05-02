@@ -444,9 +444,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       clearAuthStateBeforeNewSession();
       const demoEmail = import.meta.env.DEV ? "demo@rentchain.dev" : "";
-      const response = await apiLogin(demoEmail, "demo", {
-        headers: { "x-rentchain-plan": plan },
-      });
+      const response = await apiLoginDemo(plan);
 
       if (response.requires2fa) {
         setTwoFactorPendingToken(response.pendingToken ?? null);

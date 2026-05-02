@@ -234,7 +234,7 @@ describe("expenses routes", () => {
     expect(res.text).toContain("125.00");
   });
 
-  it("exports spreadsheet xml with human property and unit labels", async () => {
+  it("exports spreadsheet table with human property and unit labels", async () => {
     setPlan("pro");
     seedDoc("units", "unit-1", {
       landlordId: "landlord-1",
@@ -263,6 +263,10 @@ describe("expenses routes", () => {
     );
     expect(res.text).toContain("Alpha Property");
     expect(res.text).toContain("12A");
+    expect(res.text).toContain("<table>");
+    expect(res.text).toContain("<th>Date</th>");
+    expect(res.text).not.toContain("<?xml");
+    expect(res.text).not.toContain("<Workbook");
     expect(res.text).not.toContain("prop-1");
     expect(res.text).not.toContain("unit-1");
   });
