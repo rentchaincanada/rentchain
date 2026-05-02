@@ -336,6 +336,7 @@ function App() {
         <Route path="/site" element={suspensePage(<LandingPage />)} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignupPage />} />
+        <Route path="/register" element={<SignupPage />} />
         <Route path="/app/login" element={<LoginPage />} />
         <Route path="/invite" element={<InviteRedeemPage />} />
         <Route path="/invite/:token" element={<InviteRedeemPage />} />

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { fetchAccountLimits, type AccountLimits } from "../api/accountApi";
+import { getAuthToken } from "../lib/authToken";
 
 const lastApiError: unknown = null;
 
@@ -12,15 +13,34 @@ function formatApiError(err: unknown) {
 
 export const DebugPanel: React.FC = () => {
   const [limits, setLimits] = useState<AccountLimits | null>(null);
+  const [hasAuthToken, setHasAuthToken] = useState(false);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") {
       return;
     }
-    fetchAccountLimits().then(setLimits).catch(() => setLimits(null));
+    const updateDebugEligibility = () => {
+      setHasAuthToken(Boolean(getAuthToken()));
+      setIsMobileViewport(window.innerWidth < 821);
+    };
+    updateDebugEligibility();
+    window.addEventListener("resize", updateDebugEligibility);
+    window.addEventListener("storage", updateDebugEligibility);
+    return () => {
+      window.removeEventListener("resize", updateDebugEligibility);
+      window.removeEventListener("storage", updateDebugEligibility);
+    };
   }, []);
 
-  if (!import.meta.env.DEV) return null;
+  useEffect(() => {
+    if (!import.meta.env.DEV || !hasAuthToken || isMobileViewport) {
+      return;
+    }
+    fetchAccountLimits().then(setLimits).catch(() => setLimits(null));
+  }, [hasAuthToken, isMobileViewport]);
+
+  if (!import.meta.env.DEV || !hasAuthToken || isMobileViewport) return null;
 
   // Normalize data to avoid crashes when limits are missing/shape differs
   const limitsData = limits || null;
