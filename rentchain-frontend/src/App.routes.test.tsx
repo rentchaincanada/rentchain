@@ -159,6 +159,20 @@ describe("Routes: /tenant", () => {
   });
 });
 
+describe("Routes: /register", () => {
+  it("renders the signup page instead of a not-found dead end", async () => {
+    const { default: App } = await import("./App");
+    render(
+      <MemoryRouter initialEntries={["/register"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Create your RentChain account/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
+  });
+});
+
 describe("Routes: /tenant/dashboard", () => {
   it("renders the tenant dashboard route without falling into landlord surfaces", async () => {
     const { default: App } = await import("./App");
