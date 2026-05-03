@@ -51,6 +51,111 @@ describe("stripePaymentProvider", () => {
     });
   });
 
+  it("normalizes checkout session completed webhook events with metadata and amounts", () => {
+    expect(
+      stripePaymentProvider.normalizeProviderEvent({
+        provider: "stripe",
+        rawEvent: {
+          id: "evt_checkout_1",
+          type: "checkout.session.completed",
+          created: 1_714_213_200,
+          data: {
+            object: {
+              id: "cs_test_1",
+              payment_intent: "pi_test_1",
+              payment_status: "paid",
+              amount_total: 180000,
+              currency: "cad",
+              metadata: {
+                rentPaymentId: "rp-1",
+                leaseId: "lease-1",
+              },
+            },
+          },
+        },
+      })
+    ).toMatchObject({
+      provider: "stripe",
+      providerEventId: "evt_checkout_1",
+      providerSessionId: "cs_test_1",
+      providerPaymentId: "pi_test_1",
+      rawStatus: "paid",
+      normalizedStatus: "confirmed",
+      amount: 180000,
+      currency: "CAD",
+      occurredAt: "2024-04-27T10:20:00.000Z",
+      metadata: {
+        rentPaymentId: "rp-1",
+        leaseId: "lease-1",
+      },
+    });
+  });
+
+  it("normalizes payment intent succeeded webhook events with metadata and amounts", () => {
+    expect(
+      stripePaymentProvider.normalizeProviderEvent({
+        provider: "stripe",
+        rawEvent: {
+          id: "evt_pi_1",
+          type: "payment_intent.succeeded",
+          created: 1_714_213_200,
+          data: {
+            object: {
+              id: "pi_test_1",
+              amount_received: 180000,
+              currency: "cad",
+              metadata: {
+                rentPaymentId: "rp-1",
+              },
+            },
+          },
+        },
+      })
+    ).toMatchObject({
+      provider: "stripe",
+      providerEventId: "evt_pi_1",
+      providerPaymentId: "pi_test_1",
+      rawStatus: "succeeded",
+      normalizedStatus: "confirmed",
+      amount: 180000,
+      currency: "CAD",
+      metadata: {
+        rentPaymentId: "rp-1",
+      },
+    });
+  });
+
+  it("preserves unknown webhook status as manual review", () => {
+    expect(
+      stripePaymentProvider.normalizeProviderEvent({
+        provider: "stripe",
+        rawEvent: {
+          id: "evt_unknown_1",
+          type: "payment_intent.requires_capture",
+          data: {
+            object: {
+              id: "pi_test_1",
+              status: "requires_capture",
+              amount: 180000,
+              currency: "cad",
+              metadata: {
+                rentPaymentId: "rp-1",
+              },
+            },
+          },
+        },
+      })
+    ).toMatchObject({
+      providerEventId: "evt_unknown_1",
+      providerPaymentId: "pi_test_1",
+      rawStatus: "requires_capture",
+      normalizedStatus: "manual_review_required",
+      metadata: {
+        rentPaymentId: "rp-1",
+      },
+    });
+  });
+
   it("delegates session creation without changing rent payment metadata", async () => {
     const createCheckoutSession = vi.fn().mockResolvedValue({
       id: "cs_test_1",

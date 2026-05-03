@@ -217,6 +217,53 @@ Future migration path:
 4. Canonical payment event domain expansion and emission.
 5. Trustly sandbox adapter.
 
+## Rent Webhook Normalization Seam v1
+
+Status: Stripe rent-payment webhook interpretation now passes through the provider boundary in read-only mode.
+
+What changed:
+
+- The shared Stripe webhook route still verifies Stripe signatures and handles subscription, screening, and rent-payment events in the same order as before.
+- Only the existing rent-payment branch calls `paymentExecutionService.normalizeRentPaymentProviderEvent`.
+- `stripePaymentProvider.normalizeProviderEvent` now understands the Stripe webhook shapes used by rent payments:
+  - `checkout.session.completed`
+  - `checkout.session.async_payment_succeeded`
+  - `checkout.session.async_payment_failed`
+  - `checkout.session.expired`
+  - `payment_intent.succeeded`
+  - `payment_intent.payment_failed`
+- The seam derives the deterministic provider-event idempotency key:
+
+```text
+provider_event:stripe:{stripeEventId}
+```
+
+- The seam derives reconciliation with `deriveRentPaymentReconciliation` using the current rent payment record and normalized provider signal.
+
+Behavior intentionally unchanged:
+
+- Existing `rentPayments` status transitions remain owned by `updateRentPaymentFromWebhook`.
+- Existing Stripe webhook HTTP responses remain unchanged.
+- Existing rent-payment canonical events remain unchanged.
+- Reconciliation output is not persisted.
+- Provider-event receipt/idempotency state is not persisted.
+- No new canonical payment events are emitted.
+- Screening checkout webhook behavior is untouched.
+- SaaS subscription webhook behavior is untouched.
+
+Why reconciliation is read-only:
+
+The current rent-payment records do not yet have provider-neutral payment intent or provider-event receipt persistence. Running reconciliation read-only lets RentChain prove the normalized signal and expected intent can be compared without risking double writes, new status transitions, or webhook retry behavior changes.
+
+Deferred items:
+
+1. Persisted provider-event receipt collection.
+2. Active idempotency enforcement for provider webhooks.
+3. `payment.provider_signal_received` canonical event emission.
+4. Reconciliation state persistence.
+5. Provider-neutral rent-payment intent persistence.
+6. Trustly webhook adapter.
+
 ## Intentional Non-Implementation
 
 This mission intentionally does not:

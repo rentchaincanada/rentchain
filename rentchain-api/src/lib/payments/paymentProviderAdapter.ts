@@ -22,6 +22,7 @@ export type CreatePaymentSessionResult = {
 
 export type NormalizeProviderEventInput = {
   provider: PaymentProvider;
+  rawEvent?: unknown;
   providerEventId?: string | null;
   providerPaymentId?: string | null;
   providerSessionId?: string | null;
@@ -31,6 +32,7 @@ export type NormalizeProviderEventInput = {
   amount?: number | null;
   currency?: string | null;
   occurredAt?: string | null;
+  metadata?: Record<string, unknown> | null;
 };
 
 export type NormalizedProviderPaymentEvent = {
@@ -45,6 +47,7 @@ export type NormalizedProviderPaymentEvent = {
   amount?: number | null;
   currency?: string | null;
   occurredAt?: string | null;
+  metadata?: Record<string, unknown> | null;
 };
 
 export type PaymentProviderAdapter = {
@@ -117,7 +120,7 @@ export function mapProviderStatus(provider: PaymentProvider, rawStatus: unknown)
 
 export function normalizeProviderPaymentEvent(input: NormalizeProviderEventInput): NormalizedProviderPaymentEvent {
   const rawStatus = String(input.rawStatus || "").trim() || null;
-  return {
+  const normalized: NormalizedProviderPaymentEvent = {
     provider: input.provider,
     providerEventId: input.providerEventId || null,
     providerPaymentId: input.providerPaymentId || null,
@@ -130,4 +133,8 @@ export function normalizeProviderPaymentEvent(input: NormalizeProviderEventInput
     currency: String(input.currency || "").trim().toUpperCase() || null,
     occurredAt: input.occurredAt || null,
   };
+  if (input.metadata && typeof input.metadata === "object") {
+    normalized.metadata = input.metadata;
+  }
+  return normalized;
 }
