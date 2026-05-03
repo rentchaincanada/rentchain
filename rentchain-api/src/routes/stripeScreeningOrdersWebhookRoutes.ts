@@ -21,6 +21,12 @@ import {
   deriveBillingTierFromSubscription,
   updateLandlordSubscriptionState,
 } from "../services/billingSubscriptionSyncService";
+import { buildProviderWebhookIdempotencyKey } from "../lib/payments/paymentIdempotency";
+import {
+  deriveRentPaymentReconciliation,
+  normalizeRentPaymentProviderEvent,
+} from "../lib/payments/paymentExecutionService";
+import type { PaymentIntentReference } from "../lib/payments/paymentTypes";
 
 interface StripeWebhookRequest extends Request {
   rawBody?: Buffer;
@@ -246,6 +252,67 @@ function normalizeFailureReason(value: unknown): { code?: string; message?: stri
     code: normalizeOptionalString(item.code, 120),
     message: normalizeOptionalString(item.message || item.reason, 500),
   };
+}
+
+function buildExpectedRentPaymentIntent(
+  rentPaymentId: string,
+  rentPayment: Record<string, unknown> | null | undefined
+): PaymentIntentReference | null {
+  if (!rentPayment) return null;
+  const amount = Number(rentPayment.amountCents);
+  return {
+    paymentIntentId: normalizeString(rentPaymentId, 120),
+    landlordId: normalizeString(rentPayment.landlordId, 120),
+    tenantId: normalizeOptionalString(rentPayment.tenantId, 120) || null,
+    propertyId: normalizeOptionalString(rentPayment.propertyId, 120) || null,
+    unitId: normalizeOptionalString(rentPayment.unitId, 120) || null,
+    leaseId: normalizeOptionalString(rentPayment.leaseId, 120) || null,
+    amount: Number.isFinite(amount) ? Math.round(amount) : 0,
+    currency: normalizeOptionalString(rentPayment.currency, 8) || "cad",
+    purpose: "rent",
+    provider: "stripe",
+  };
+}
+
+async function prepareRentPaymentWebhookNormalizationContext(params: {
+  event: Stripe.Event;
+  rentPaymentEvent: ReturnType<typeof extractRentPaymentMetadata>;
+}) {
+  const { event, rentPaymentEvent } = params;
+  try {
+    const normalizedProviderEvent = normalizeRentPaymentProviderEvent({
+      provider: "stripe",
+      rawEvent: event,
+      providerEventId: event.id,
+      providerPaymentId: rentPaymentEvent.paymentIntentId,
+      providerSessionId: rentPaymentEvent.checkoutSessionId,
+      purpose: "rent",
+    });
+    const idempotencyKey = buildProviderWebhookIdempotencyKey({
+      provider: "stripe",
+      providerEventId: normalizedProviderEvent.providerEventId || event.id || "event_missing",
+    });
+
+    const rentPaymentId = normalizeString(rentPaymentEvent.rentPaymentId, 120);
+    const snap = rentPaymentId ? await db.collection("rentPayments").doc(rentPaymentId).get() : null;
+    const expectedIntent = snap?.exists
+      ? buildExpectedRentPaymentIntent(rentPaymentId, (snap.data() as Record<string, unknown>) || null)
+      : null;
+    const reconciliation = deriveRentPaymentReconciliation({
+      expectedIntent,
+      providerSignal: normalizedProviderEvent,
+    });
+
+    return { normalizedProviderEvent, idempotencyKey, reconciliation };
+  } catch (err: any) {
+    console.warn("[stripe-webhook-rent-payment] normalization seam skipped", {
+      eventId: event.id,
+      eventType: event.type,
+      rentPaymentId: rentPaymentEvent.rentPaymentId || null,
+      message: err?.message || String(err),
+    });
+    return null;
+  }
 }
 
 async function resolveOrderRefFromStripePayment(params: {
@@ -594,6 +661,7 @@ export const stripeWebhookHandler = async (req: StripeWebhookRequest, res: Respo
     try {
       const rentPaymentEvent = extractRentPaymentMetadata(event);
       if (rentPaymentEvent.rentPaymentId && rentPaymentEvent.nextStatus) {
+        await prepareRentPaymentWebhookNormalizationContext({ event, rentPaymentEvent });
         await updateRentPaymentFromWebhook({
           rentPaymentId: rentPaymentEvent.rentPaymentId,
           nextStatus: rentPaymentEvent.nextStatus,
@@ -783,6 +851,7 @@ export const stripeWebhookHandler = async (req: StripeWebhookRequest, res: Respo
     try {
       const rentPaymentEvent = extractRentPaymentMetadata(event);
       if (rentPaymentEvent.rentPaymentId && rentPaymentEvent.nextStatus) {
+        await prepareRentPaymentWebhookNormalizationContext({ event, rentPaymentEvent });
         await updateRentPaymentFromWebhook({
           rentPaymentId: rentPaymentEvent.rentPaymentId,
           nextStatus: rentPaymentEvent.nextStatus,

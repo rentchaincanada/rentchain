@@ -1,6 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { store, ensureCollection, constructEventMock, docRef } = vi.hoisted(() => {
+const {
+  store,
+  ensureCollection,
+  constructEventMock,
+  docRef,
+  normalizeRentPaymentProviderEventMock,
+  deriveRentPaymentReconciliationMock,
+  buildProviderWebhookIdempotencyKeyMock,
+} = vi.hoisted(() => {
   const store = new Map<string, Map<string, any>>();
 
   function ensureCollection(name: string) {
@@ -29,6 +37,27 @@ const { store, ensureCollection, constructEventMock, docRef } = vi.hoisted(() =>
     ensureCollection,
     constructEventMock: vi.fn(),
     docRef,
+    normalizeRentPaymentProviderEventMock: vi.fn((input: any) => ({
+      provider: "stripe",
+      providerEventId: input.providerEventId || input.rawEvent?.id || null,
+      providerPaymentId: input.providerPaymentId || null,
+      providerSessionId: input.providerSessionId || null,
+      rawStatus: "paid",
+      normalizedStatus: "confirmed",
+      purpose: input.purpose || null,
+      amount: 180000,
+      currency: "CAD",
+      metadata: input.rawEvent?.data?.object?.metadata || null,
+    })),
+    deriveRentPaymentReconciliationMock: vi.fn(() => ({
+      reconciliationStatus: "reconciled",
+      reasons: ["provider_confirmed_amount_currency_match"],
+      automationEligible: true,
+      requiresManualReview: false,
+    })),
+    buildProviderWebhookIdempotencyKeyMock: vi.fn(
+      (input: any) => `provider_event:${input.provider}:${input.providerEventId}`
+    ),
   };
 });
 
@@ -103,6 +132,23 @@ vi.mock("../../services/screeningPaymentTransactionService", () => ({
   recordScreeningPaymentFailed: vi.fn(async () => undefined),
 }));
 
+vi.mock("../../lib/payments/paymentExecutionService", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../lib/payments/paymentExecutionService")>();
+  return {
+    ...actual,
+    normalizeRentPaymentProviderEvent: normalizeRentPaymentProviderEventMock,
+    deriveRentPaymentReconciliation: deriveRentPaymentReconciliationMock,
+  };
+});
+
+vi.mock("../../lib/payments/paymentIdempotency", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../lib/payments/paymentIdempotency")>();
+  return {
+    ...actual,
+    buildProviderWebhookIdempotencyKey: buildProviderWebhookIdempotencyKeyMock,
+  };
+});
+
 async function invokeWebhook(body: string) {
   const { stripeWebhookHandler } = await import("../stripeScreeningOrdersWebhookRoutes");
   return await new Promise<{ status: number; body: any; text?: string }>((resolve, reject) => {
@@ -135,6 +181,30 @@ describe("rent payment webhook reconciliation", () => {
   beforeEach(() => {
     store.clear();
     constructEventMock.mockReset();
+    normalizeRentPaymentProviderEventMock.mockClear();
+    deriveRentPaymentReconciliationMock.mockClear();
+    buildProviderWebhookIdempotencyKeyMock.mockClear();
+    normalizeRentPaymentProviderEventMock.mockImplementation((input: any) => ({
+      provider: "stripe",
+      providerEventId: input.providerEventId || input.rawEvent?.id || null,
+      providerPaymentId: input.providerPaymentId || null,
+      providerSessionId: input.providerSessionId || null,
+      rawStatus: "paid",
+      normalizedStatus: "confirmed",
+      purpose: input.purpose || null,
+      amount: 180000,
+      currency: "CAD",
+      metadata: input.rawEvent?.data?.object?.metadata || null,
+    }));
+    deriveRentPaymentReconciliationMock.mockReturnValue({
+      reconciliationStatus: "reconciled",
+      reasons: ["provider_confirmed_amount_currency_match"],
+      automationEligible: true,
+      requiresManualReview: false,
+    });
+    buildProviderWebhookIdempotencyKeyMock.mockImplementation(
+      (input: any) => `provider_event:${input.provider}:${input.providerEventId}`
+    );
     ensureCollection("rentPayments").set("rp-1", {
       id: "rp-1",
       leaseId: "lease-1",
@@ -178,6 +248,36 @@ describe("rent payment webhook reconciliation", () => {
     expect(first.status).toBe(200);
     expect(second.status).toBe(200);
 
+    expect(normalizeRentPaymentProviderEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: "stripe",
+        providerEventId: "evt_rent_paid_1",
+        providerPaymentId: "pi_test_1",
+        providerSessionId: "cs_test_1",
+        purpose: "rent",
+      })
+    );
+    expect(buildProviderWebhookIdempotencyKeyMock).toHaveBeenCalledWith({
+      provider: "stripe",
+      providerEventId: "evt_rent_paid_1",
+    });
+    expect(deriveRentPaymentReconciliationMock).toHaveBeenCalledWith({
+      expectedIntent: expect.objectContaining({
+        paymentIntentId: "rp-1",
+        landlordId: "landlord-1",
+        tenantId: "tenant-1",
+        leaseId: "lease-1",
+        amount: 180000,
+        currency: "cad",
+        purpose: "rent",
+        provider: "stripe",
+      }),
+      providerSignal: expect.objectContaining({
+        provider: "stripe",
+        providerEventId: "evt_rent_paid_1",
+      }),
+    });
+
     const stored = ensureCollection("rentPayments").get("rp-1");
     expect(stored).toEqual(
       expect.objectContaining({
@@ -187,6 +287,8 @@ describe("rent payment webhook reconciliation", () => {
         paidAt: expect.any(String),
       })
     );
+    expect(stored).not.toHaveProperty("reconciliationStatus");
+    expect(stored).not.toHaveProperty("providerEventReceiptId");
 
     const canonicalEvents = Array.from(ensureCollection("canonicalEvents").values());
     expect(canonicalEvents.filter((event: any) => event.type === "rent_payment.paid")).toHaveLength(1);
@@ -217,6 +319,15 @@ describe("rent payment webhook reconciliation", () => {
     const res = await invokeWebhook('{"id":"evt_rent_failed_1","type":"checkout.session.async_payment_failed"}');
 
     expect(res.status).toBe(200);
+    expect(normalizeRentPaymentProviderEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: "stripe",
+        providerEventId: "evt_rent_failed_1",
+        providerPaymentId: "pi_test_1",
+        providerSessionId: "cs_test_1",
+        purpose: "rent",
+      })
+    );
     expect(ensureCollection("rentPayments").get("rp-1")).toEqual(
       expect.objectContaining({
         status: "failed",
@@ -227,5 +338,68 @@ describe("rent payment webhook reconciliation", () => {
 
     const canonicalEvents = Array.from(ensureCollection("canonicalEvents").values());
     expect(canonicalEvents.some((event: any) => event.type === "rent_payment.failed")).toBe(true);
+  });
+
+  it("does not run rent normalization for screening checkout webhooks", async () => {
+    constructEventMock.mockReturnValue({
+      id: "evt_screening_paid_1",
+      created: 1_714_213_200,
+      type: "checkout.session.completed",
+      data: {
+        object: {
+          id: "cs_screening_1",
+          payment_intent: "pi_screening_1",
+          payment_status: "paid",
+          client_reference_id: "order-1",
+          metadata: {
+            orderId: "order-1",
+            applicationId: "app-1",
+            landlordId: "landlord-1",
+          },
+        },
+      },
+    });
+
+    ensureCollection("rentalApplications").set("app-1", {
+      id: "app-1",
+      landlordId: "landlord-1",
+      screeningStatus: "pending_payment",
+      screeningSessionId: "",
+    });
+
+    const res = await invokeWebhook('{"id":"evt_screening_paid_1","type":"checkout.session.completed"}');
+
+    expect(res.status).toBe(200);
+    expect(normalizeRentPaymentProviderEventMock).not.toHaveBeenCalled();
+    expect(buildProviderWebhookIdempotencyKeyMock).not.toHaveBeenCalled();
+    expect(deriveRentPaymentReconciliationMock).not.toHaveBeenCalled();
+  });
+
+  it("does not run rent normalization for subscription webhooks", async () => {
+    constructEventMock.mockReturnValue({
+      id: "evt_subscription_1",
+      created: 1_714_213_200,
+      type: "customer.subscription.updated",
+      data: {
+        object: {
+          id: "sub_1",
+          customer: "cus_1",
+          status: "active",
+          metadata: {
+            landlordId: "landlord-1",
+          },
+          items: {
+            data: [],
+          },
+        },
+      },
+    });
+
+    const res = await invokeWebhook('{"id":"evt_subscription_1","type":"customer.subscription.updated"}');
+
+    expect(res.status).toBe(200);
+    expect(normalizeRentPaymentProviderEventMock).not.toHaveBeenCalled();
+    expect(buildProviderWebhookIdempotencyKeyMock).not.toHaveBeenCalled();
+    expect(deriveRentPaymentReconciliationMock).not.toHaveBeenCalled();
   });
 });

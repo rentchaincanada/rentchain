@@ -141,6 +141,53 @@ describe("paymentExecutionService", () => {
     expect(result.normalizedStatus).toBe("confirmed");
   });
 
+  it("routes Stripe rent webhook events without dropping provider event id", () => {
+    const adapter = buildStripeAdapter();
+    const service = createPaymentExecutionService({ stripe: adapter });
+
+    const rawEvent = {
+      id: "evt_rent_paid_1",
+      type: "checkout.session.completed",
+      data: {
+        object: {
+          id: "cs_test_1",
+          payment_intent: "pi_test_1",
+          payment_status: "paid",
+          metadata: {
+            rentPaymentId: "rp-1",
+          },
+        },
+      },
+    };
+    const result = service.normalizeRentPaymentProviderEvent({
+      provider: "stripe",
+      rawEvent,
+      providerEventId: "evt_rent_paid_1",
+      rawStatus: "paid",
+    });
+
+    expect(adapter.normalizeProviderEvent).toHaveBeenCalledWith({
+      provider: "stripe",
+      rawEvent,
+      providerEventId: "evt_rent_paid_1",
+      rawStatus: "paid",
+    });
+    expect(result.providerEventId).toBe("evt_rent_paid_1");
+    expect(result.normalizedStatus).toBe("confirmed");
+  });
+
+  it("fails closed for unknown rent webhook provider", () => {
+    const service = createPaymentExecutionService({ stripe: buildStripeAdapter() });
+
+    expect(() =>
+      service.normalizeRentPaymentProviderEvent({
+        provider: "manual",
+        providerEventId: "evt_manual_1",
+        rawStatus: "recorded",
+      })
+    ).toThrow("payment_provider_unsupported");
+  });
+
   it("derives reconciliation without mutating payment intent or provider signal", () => {
     const service = createPaymentExecutionService({ stripe: buildStripeAdapter() });
     const intent = { ...rentIntent };
