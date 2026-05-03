@@ -6,6 +6,7 @@ export type CanonicalEventDomain =
   | "expense"
   | "tenant"
   | "billing"
+  | "payment"
   | "policy"
   | "system";
 
