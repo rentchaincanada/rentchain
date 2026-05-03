@@ -2,8 +2,8 @@ import crypto from "crypto";
 import Stripe from "stripe";
 import { db } from "../../config/firebase";
 import { FRONTEND_URL } from "../../config/screeningConfig";
-import { getStripeClient } from "../stripeService";
 import { writeCanonicalEvent } from "../../lib/events/buildEvent";
+import { createRentPaymentSession } from "../../lib/payments/paymentExecutionService";
 import type { PaymentReadiness } from "../paymentReadiness/derivePaymentReadiness";
 import { recordSystemObservabilityEvent } from "../observability/recordSystemObservabilityEvent";
 
@@ -497,42 +497,33 @@ export async function createRentPaymentCheckout(input: CreateRentPaymentCheckout
   const rentPaymentId = crypto.randomUUID();
   const createdAt = new Date().toISOString();
   const checkoutRef = db.collection(RENT_PAYMENTS_COLLECTION).doc(rentPaymentId);
-  const stripe = getStripeClient();
   const frontendBase = resolveFrontendBase();
   const successUrl = `${frontendBase}${sanitizeRelativePath(input.successPath, "/tenant/lease")}`;
   const cancelUrl = `${frontendBase}${sanitizeRelativePath(input.cancelPath, "/tenant/lease")}`;
+  const stripeSuccessUrl = `${successUrl}${successUrl.includes("?") ? "&" : "?"}rentPaymentStatus=success`;
+  const stripeCancelUrl = `${cancelUrl}${cancelUrl.includes("?") ? "&" : "?"}rentPaymentStatus=canceled`;
 
-  const session = await stripe.checkout.sessions.create({
-    mode: "payment",
-    payment_method_types: ["card"],
-    line_items: [
-      {
-        price_data: {
-          currency: "cad",
-          product_data: {
-            name: "Monthly rent payment",
-          },
-          unit_amount: amountCents,
-        },
-        quantity: 1,
-      },
-    ],
+  const session = await createRentPaymentSession({
+    intent: {
+      paymentIntentId: rentPaymentId,
+      landlordId,
+      tenantId,
+      propertyId: asString(lease.propertyId),
+      unitId: asString(lease.unitId) || asString(lease.unitNumber),
+      leaseId,
+      amount: amountCents,
+      currency: "cad",
+      purpose: "rent",
+      provider: "stripe",
+    },
     metadata: {
       leaseId,
       tenantId,
       landlordId,
       rentPaymentId,
     },
-    payment_intent_data: {
-      metadata: {
-        leaseId,
-        tenantId,
-        landlordId,
-        rentPaymentId,
-      },
-    },
-    success_url: `${successUrl}${successUrl.includes("?") ? "&" : "?"}rentPaymentStatus=success`,
-    cancel_url: `${cancelUrl}${cancelUrl.includes("?") ? "&" : "?"}rentPaymentStatus=canceled`,
+    successUrl: stripeSuccessUrl,
+    cancelUrl: stripeCancelUrl,
   });
 
   const record: RentPaymentRecord = {
@@ -546,8 +537,8 @@ export async function createRentPaymentCheckout(input: CreateRentPaymentCheckout
     currency: "cad",
     status: "checkout_created",
     processor: "stripe",
-    processorCheckoutSessionId: session.id,
-    processorPaymentIntentId: typeof session.payment_intent === "string" ? session.payment_intent : null,
+    processorCheckoutSessionId: session.reference.providerSessionId,
+    processorPaymentIntentId: session.reference.providerPaymentId,
     createdAt,
     updatedAt: createdAt,
     paidAt: null,
@@ -577,7 +568,7 @@ export async function createRentPaymentCheckout(input: CreateRentPaymentCheckout
     ok: true as const,
     rentPaymentId,
     status: "checkout_created" as const,
-    redirectUrl: String(session.url || "").trim(),
+    redirectUrl: String(session.redirectUrl || "").trim(),
   };
 }
 
