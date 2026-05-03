@@ -80,6 +80,7 @@ export function derivePaymentReconciliation(params: {
       requiresManualReview: true,
     });
   }
+  const checkedExpected = expected as PaymentIntentReference;
 
   if (!signal) {
     return result("manual_review_required", ["missing_provider_signal"], {
@@ -93,11 +94,11 @@ export function derivePaymentReconciliation(params: {
     });
   }
 
-  if (typeof signal.amount === "number" && Number.isFinite(signal.amount) && signal.amount !== expected.amount) {
+  if (typeof signal.amount === "number" && Number.isFinite(signal.amount) && signal.amount !== checkedExpected.amount) {
     reasons.push("amount_mismatch");
   }
 
-  if (normalizeCurrency(signal.currency) && normalizeCurrency(signal.currency) !== normalizeCurrency(expected.currency)) {
+  if (normalizeCurrency(signal.currency) && normalizeCurrency(signal.currency) !== normalizeCurrency(checkedExpected.currency)) {
     reasons.push("currency_mismatch");
   }
 

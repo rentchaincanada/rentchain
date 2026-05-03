@@ -163,6 +163,60 @@ Trustly can be evaluated later by implementing a Trustly adapter that satisfies 
 - payment and payout reconciliation states are supported
 - Stripe behavior remains covered by regression tests
 
+## Stripe Rent-Payment Adapter Seam v1
+
+Status: Stripe rent-payment session creation is now routed through the provider boundary.
+
+What changed:
+
+- `rentPaymentService.ts` still owns RentChain rent-payment record creation, validation, canonical event writes, observability writes, and response shaping.
+- Stripe Checkout session creation for rent payments now flows through `paymentExecutionService.createRentPaymentSession`.
+- `paymentExecutionService` supports only Stripe for live rent-payment sessions in this phase and fails closed for unknown providers.
+- `stripePaymentProvider` is a thin wrapper around the existing Stripe SDK helper pattern and creates the same Checkout Session shape used before.
+
+Why this contains Stripe:
+
+```text
+tenant route
+  -> rentPaymentService
+    -> paymentExecutionService
+      -> stripePaymentProvider
+        -> existing Stripe SDK helper
+```
+
+Behavior intentionally unchanged:
+
+- Stripe Checkout mode remains `payment`.
+- Payment method remains card checkout.
+- Product label remains `Monthly rent payment`.
+- Stripe metadata still includes `leaseId`, `tenantId`, `landlordId`, and `rentPaymentId`.
+- PaymentIntent metadata remains the same.
+- Success and cancel URLs still append `rentPaymentStatus=success` or `rentPaymentStatus=canceled`.
+- `rentPayments` records still use `processor: "stripe"`, `processorCheckoutSessionId`, and `processorPaymentIntentId`.
+- Existing rent payment canonical events remain under the existing event behavior.
+- Tenant route response shape remains `{ rentPaymentId, status, redirectUrl }`.
+
+Webhook seam decision:
+
+The Stripe webhook route currently handles rent payments, screening payments, and subscription events in one file. This mission leaves webhook persistence behavior unchanged to avoid touching screening or subscriptions. Future work should add a rent-only provider-event normalization seam before any persisted webhook behavior changes.
+
+Out of scope:
+
+- Screening checkout adapter changes.
+- SaaS subscription billing changes.
+- Payout behavior.
+- Provider switching UI.
+- Trustly implementation.
+- New canonical payment event emission.
+
+Future migration path:
+
+1. Rent payment session creation seam.
+2. Rent webhook normalization seam.
+3. Provider-neutral persisted rent payment fields.
+4. Canonical payment event domain expansion and emission.
+5. Trustly sandbox adapter.
+
 ## Intentional Non-Implementation
 
 This mission intentionally does not:
