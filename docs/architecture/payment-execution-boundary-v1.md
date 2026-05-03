@@ -264,6 +264,64 @@ Deferred items:
 5. Provider-neutral rent-payment intent persistence.
 6. Trustly webhook adapter.
 
+## Provider Event Receipts v1
+
+Status: provider-event receipts are persisted for rent-payment webhook events only.
+
+What is persisted:
+
+- Collection: `paymentProviderEventReceipts`
+- Document id: deterministic receipt id derived from the provider webhook idempotency key.
+- Core fields:
+  - `receiptId`
+  - `idempotencyKey`
+  - `provider`
+  - `providerEventId`
+  - `purpose`
+  - `subjectType`
+  - `subjectId`
+  - `status`
+  - `firstReceivedAt`
+  - `lastSeenAt`
+  - `processedAt`
+  - `failedAt`
+  - `failureReason`
+  - `duplicateCount`
+  - `normalizedStatus`
+  - `rawStatus`
+  - `metadataSummary`
+
+Receipt statuses:
+
+- `received`
+- `processing`
+- `processed`
+- `ignored_duplicate`
+- `failed`
+- `manual_review_required`
+
+Why this comes before active idempotency enforcement:
+
+The existing Stripe webhook behavior is intentionally preserved. Stripe may retry events, and RentChain's current rent-payment updater is already idempotent for the persisted rent payment status. Persisting receipts first gives support and future reconciliation jobs an audit trail of what arrived, when it arrived again, and how it was interpreted before RentChain starts suppressing duplicate execution paths.
+
+Behavior intentionally unchanged:
+
+- Rent-payment webhook HTTP responses are unchanged.
+- Existing `rentPayments` updates are unchanged.
+- Existing rent-payment canonical events are unchanged.
+- Duplicate provider events are recorded as `ignored_duplicate`, but they do not suppress the existing webhook code path yet.
+- Screening checkout webhook behavior is untouched.
+- SaaS subscription webhook behavior is untouched.
+- Reconciliation remains read-only.
+
+Deferred items:
+
+1. Active duplicate suppression after receipt confidence is proven.
+2. `payment.provider_signal_received` canonical event emission.
+3. Persisted reconciliation state.
+4. Provider-neutral `PaymentIntent` persistence.
+5. Trustly sandbox adapter.
+
 ## Intentional Non-Implementation
 
 This mission intentionally does not:

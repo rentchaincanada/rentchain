@@ -27,6 +27,14 @@ import {
   normalizeRentPaymentProviderEvent,
 } from "../lib/payments/paymentExecutionService";
 import type { PaymentIntentReference } from "../lib/payments/paymentTypes";
+import {
+  markProviderEventFailed,
+  markProviderEventIgnoredDuplicate,
+  markProviderEventManualReviewRequired,
+  markProviderEventProcessed,
+  markProviderEventProcessing,
+  markProviderEventReceived,
+} from "../lib/payments/paymentProviderEventReceipts";
 
 interface StripeWebhookRequest extends Request {
   rawBody?: Buffer;
@@ -292,6 +300,24 @@ async function prepareRentPaymentWebhookNormalizationContext(params: {
       provider: "stripe",
       providerEventId: normalizedProviderEvent.providerEventId || event.id || "event_missing",
     });
+    const receipt = await markProviderEventReceived({
+      idempotencyKey,
+      provider: "stripe",
+      providerEventId: normalizedProviderEvent.providerEventId || event.id || "event_missing",
+      purpose: "rent",
+      subjectType: "rent_payment",
+      subjectId: rentPaymentEvent.rentPaymentId,
+      normalizedStatus: normalizedProviderEvent.normalizedStatus,
+      rawStatus: normalizedProviderEvent.rawStatus,
+      metadata: normalizedProviderEvent.metadata || null,
+    });
+
+    if (receipt.isDuplicate) {
+      await markProviderEventIgnoredDuplicate({ receiptId: receipt.receiptId });
+      return { normalizedProviderEvent, idempotencyKey, reconciliation: null, receipt };
+    }
+
+    await markProviderEventProcessing({ receiptId: receipt.receiptId });
 
     const rentPaymentId = normalizeString(rentPaymentEvent.rentPaymentId, 120);
     const snap = rentPaymentId ? await db.collection("rentPayments").doc(rentPaymentId).get() : null;
@@ -302,8 +328,14 @@ async function prepareRentPaymentWebhookNormalizationContext(params: {
       expectedIntent,
       providerSignal: normalizedProviderEvent,
     });
+    if (reconciliation.requiresManualReview) {
+      await markProviderEventManualReviewRequired({
+        receiptId: receipt.receiptId,
+        failureReason: reconciliation.reasons.join(",") || "manual_review_required",
+      });
+    }
 
-    return { normalizedProviderEvent, idempotencyKey, reconciliation };
+    return { normalizedProviderEvent, idempotencyKey, reconciliation, receipt };
   } catch (err: any) {
     console.warn("[stripe-webhook-rent-payment] normalization seam skipped", {
       eventId: event.id,
@@ -312,6 +344,39 @@ async function prepareRentPaymentWebhookNormalizationContext(params: {
       message: err?.message || String(err),
     });
     return null;
+  }
+}
+
+async function markRentPaymentWebhookReceiptProcessed(
+  context: Awaited<ReturnType<typeof prepareRentPaymentWebhookNormalizationContext>>
+) {
+  if (!context?.receipt || context.receipt.isDuplicate) return;
+  if (context.reconciliation?.requiresManualReview) return;
+  try {
+    await markProviderEventProcessed({ receiptId: context.receipt.receiptId });
+  } catch (err: any) {
+    console.warn("[stripe-webhook-rent-payment] receipt processed marker skipped", {
+      receiptId: context.receipt.receiptId,
+      message: err?.message || String(err),
+    });
+  }
+}
+
+async function markRentPaymentWebhookReceiptFailed(
+  context: Awaited<ReturnType<typeof prepareRentPaymentWebhookNormalizationContext>>,
+  err: unknown
+) {
+  if (!context?.receipt || context.receipt.isDuplicate) return;
+  try {
+    await markProviderEventFailed({
+      receiptId: context.receipt.receiptId,
+      failureReason: (err as any)?.message || String(err || "rent_payment_webhook_failed"),
+    });
+  } catch (markerErr: any) {
+    console.warn("[stripe-webhook-rent-payment] receipt failed marker skipped", {
+      receiptId: context.receipt.receiptId,
+      message: markerErr?.message || String(markerErr),
+    });
   }
 }
 
@@ -661,15 +726,21 @@ export const stripeWebhookHandler = async (req: StripeWebhookRequest, res: Respo
     try {
       const rentPaymentEvent = extractRentPaymentMetadata(event);
       if (rentPaymentEvent.rentPaymentId && rentPaymentEvent.nextStatus) {
-        await prepareRentPaymentWebhookNormalizationContext({ event, rentPaymentEvent });
-        await updateRentPaymentFromWebhook({
-          rentPaymentId: rentPaymentEvent.rentPaymentId,
-          nextStatus: rentPaymentEvent.nextStatus,
-          processorCheckoutSessionId: rentPaymentEvent.checkoutSessionId,
-          processorPaymentIntentId: rentPaymentEvent.paymentIntentId,
-          paidAt: rentPaymentEvent.paidAt,
-          eventId: event.id,
-        });
+        const receiptContext = await prepareRentPaymentWebhookNormalizationContext({ event, rentPaymentEvent });
+        try {
+          await updateRentPaymentFromWebhook({
+            rentPaymentId: rentPaymentEvent.rentPaymentId,
+            nextStatus: rentPaymentEvent.nextStatus,
+            processorCheckoutSessionId: rentPaymentEvent.checkoutSessionId,
+            processorPaymentIntentId: rentPaymentEvent.paymentIntentId,
+            paidAt: rentPaymentEvent.paidAt,
+            eventId: event.id,
+          });
+          await markRentPaymentWebhookReceiptProcessed(receiptContext);
+        } catch (err) {
+          await markRentPaymentWebhookReceiptFailed(receiptContext, err);
+          throw err;
+        }
         return res.status(200).json({ received: true });
       }
 
@@ -851,15 +922,21 @@ export const stripeWebhookHandler = async (req: StripeWebhookRequest, res: Respo
     try {
       const rentPaymentEvent = extractRentPaymentMetadata(event);
       if (rentPaymentEvent.rentPaymentId && rentPaymentEvent.nextStatus) {
-        await prepareRentPaymentWebhookNormalizationContext({ event, rentPaymentEvent });
-        await updateRentPaymentFromWebhook({
-          rentPaymentId: rentPaymentEvent.rentPaymentId,
-          nextStatus: rentPaymentEvent.nextStatus,
-          processorCheckoutSessionId: rentPaymentEvent.checkoutSessionId,
-          processorPaymentIntentId: rentPaymentEvent.paymentIntentId,
-          paidAt: rentPaymentEvent.paidAt,
-          eventId: event.id,
-        });
+        const receiptContext = await prepareRentPaymentWebhookNormalizationContext({ event, rentPaymentEvent });
+        try {
+          await updateRentPaymentFromWebhook({
+            rentPaymentId: rentPaymentEvent.rentPaymentId,
+            nextStatus: rentPaymentEvent.nextStatus,
+            processorCheckoutSessionId: rentPaymentEvent.checkoutSessionId,
+            processorPaymentIntentId: rentPaymentEvent.paymentIntentId,
+            paidAt: rentPaymentEvent.paidAt,
+            eventId: event.id,
+          });
+          await markRentPaymentWebhookReceiptProcessed(receiptContext);
+        } catch (err) {
+          await markRentPaymentWebhookReceiptFailed(receiptContext, err);
+          throw err;
+        }
         return res.status(200).json({ received: true });
       }
 
