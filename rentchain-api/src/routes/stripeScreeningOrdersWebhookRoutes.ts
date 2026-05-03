@@ -311,6 +311,37 @@ async function prepareRentPaymentWebhookNormalizationContext(params: {
       rawStatus: normalizedProviderEvent.rawStatus,
       metadata: normalizedProviderEvent.metadata || null,
     });
+    await writeCanonicalEvent({
+      type: "payment.provider_signal_received",
+      domain: "payment",
+      action: "provider_signal_received",
+      status: normalizedProviderEvent.normalizedStatus,
+      actor: {
+        type: "system",
+        role: "system",
+        id: null,
+      },
+      resource: {
+        type: "provider_event_receipt",
+        id: receipt.receiptId,
+        parentType: "rent_payment",
+        parentId: rentPaymentEvent.rentPaymentId,
+      },
+      occurredAt: typeof event.created === "number" ? event.created * 1000 : new Date().toISOString(),
+      visibility: "internal",
+      summary: "Payment provider signal received",
+      metadata: {
+        provider: "stripe",
+        providerEventId: normalizedProviderEvent.providerEventId || event.id || "event_missing",
+        idempotencyKey,
+        receiptId: receipt.receiptId,
+        purpose: "rent",
+        normalizedStatus: normalizedProviderEvent.normalizedStatus,
+        rawStatus: normalizedProviderEvent.rawStatus,
+        subjectType: "rent_payment",
+        subjectId: rentPaymentEvent.rentPaymentId,
+      },
+    });
 
     if (receipt.isDuplicate) {
       await markProviderEventIgnoredDuplicate({ receiptId: receipt.receiptId });

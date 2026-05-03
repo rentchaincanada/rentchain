@@ -317,10 +317,55 @@ Behavior intentionally unchanged:
 Deferred items:
 
 1. Active duplicate suppression after receipt confidence is proven.
-2. `payment.provider_signal_received` canonical event emission.
-3. Persisted reconciliation state.
-4. Provider-neutral `PaymentIntent` persistence.
-5. Trustly sandbox adapter.
+2. Persisted reconciliation state.
+3. Provider-neutral `PaymentIntent` persistence.
+4. Trustly sandbox adapter.
+
+## Provider Signal Canonical Events v1
+
+Status: rent-payment webhook provider signals emit a canonical audit event after receipt persistence succeeds.
+
+What is emitted:
+
+- Type: `payment.provider_signal_received`
+- Domain: `payment`
+- Action: `provider_signal_received`
+- Resource: provider-event receipt
+- Parent resource: rent payment
+- Visibility: `internal`
+
+Safe metadata only:
+
+- `provider`
+- `providerEventId`
+- `idempotencyKey`
+- `receiptId`
+- `purpose`
+- `normalizedStatus`
+- `rawStatus`
+- `subjectType`
+- `subjectId`
+
+Why emission happens after receipt persistence:
+
+The provider receipt is the stable audit anchor for provider webhook evidence. Emitting after the receipt write means the canonical event can reference the receipt id and idempotency key without storing raw provider payloads or depending on later rent-payment status updates.
+
+Behavior intentionally unchanged:
+
+- Existing webhook HTTP responses are unchanged.
+- Existing `rentPayments` status updates are unchanged.
+- Duplicate provider events are still not actively suppressed.
+- Reconciliation remains read-only.
+- Screening checkout webhook behavior is untouched.
+- SaaS subscription webhook behavior is untouched.
+- No Trustly adapter or Trustly events are implemented.
+
+Deferred items:
+
+1. Active duplicate suppression.
+2. Persisted reconciliation state.
+3. Provider-neutral `PaymentIntent` persistence.
+4. Trustly sandbox adapter.
 
 ## Intentional Non-Implementation
 

@@ -314,10 +314,37 @@ describe("rent payment webhook reconciliation", () => {
     );
 
     const canonicalEvents = Array.from(ensureCollection("canonicalEvents").values());
+    const providerSignalEvents = canonicalEvents.filter((event: any) => event.type === "payment.provider_signal_received");
+    expect(providerSignalEvents).toHaveLength(2);
+    expect(providerSignalEvents[0]).toEqual(
+      expect.objectContaining({
+        domain: "payment",
+        action: "provider_signal_received",
+        status: "confirmed",
+        resource: expect.objectContaining({
+          type: "provider_event_receipt",
+          id: "provider_event:stripe:evt_rent_paid_1",
+          parentType: "rent_payment",
+          parentId: "rp-1",
+        }),
+        metadata: expect.objectContaining({
+          provider: "stripe",
+          providerEventId: "evt_rent_paid_1",
+          idempotencyKey: "provider_event:stripe:evt_rent_paid_1",
+          receiptId: "provider_event:stripe:evt_rent_paid_1",
+          purpose: "rent",
+          normalizedStatus: "confirmed",
+          rawStatus: "paid",
+          subjectType: "rent_payment",
+          subjectId: "rp-1",
+        }),
+      })
+    );
     expect(canonicalEvents.filter((event: any) => event.type === "rent_payment.paid")).toHaveLength(1);
-    expect(JSON.stringify(canonicalEvents[0] || {})).not.toContain("card");
-    expect(JSON.stringify(canonicalEvents[0] || {})).not.toContain("receipt");
-    expect(JSON.stringify(canonicalEvents[0] || {})).not.toContain("@");
+    const rentPaidEvent = canonicalEvents.find((event: any) => event.type === "rent_payment.paid");
+    expect(JSON.stringify(rentPaidEvent || {})).not.toContain("card");
+    expect(JSON.stringify(rentPaidEvent || {})).not.toContain("receipt");
+    expect(JSON.stringify(rentPaidEvent || {})).not.toContain("@");
   });
 
   it("updates a rent payment to failed from async payment failure metadata", async () => {
@@ -371,6 +398,18 @@ describe("rent payment webhook reconciliation", () => {
     );
 
     const canonicalEvents = Array.from(ensureCollection("canonicalEvents").values());
+    const providerSignalEvent = canonicalEvents.find((event: any) => event.type === "payment.provider_signal_received");
+    expect(providerSignalEvent).toEqual(
+      expect.objectContaining({
+        status: "failed",
+        metadata: expect.objectContaining({
+          providerEventId: "evt_rent_failed_1",
+          receiptId: "provider_event:stripe:evt_rent_failed_1",
+          normalizedStatus: "failed",
+          rawStatus: "failed",
+        }),
+      })
+    );
     expect(canonicalEvents.some((event: any) => event.type === "rent_payment.failed")).toBe(true);
   });
 
@@ -408,6 +447,11 @@ describe("rent payment webhook reconciliation", () => {
     expect(buildProviderWebhookIdempotencyKeyMock).not.toHaveBeenCalled();
     expect(deriveRentPaymentReconciliationMock).not.toHaveBeenCalled();
     expect(Array.from(ensureCollection("paymentProviderEventReceipts").values())).toHaveLength(0);
+    expect(
+      Array.from(ensureCollection("canonicalEvents").values()).some(
+        (event: any) => event.type === "payment.provider_signal_received"
+      )
+    ).toBe(false);
   });
 
   it("does not run rent normalization for subscription webhooks", async () => {
@@ -437,5 +481,10 @@ describe("rent payment webhook reconciliation", () => {
     expect(buildProviderWebhookIdempotencyKeyMock).not.toHaveBeenCalled();
     expect(deriveRentPaymentReconciliationMock).not.toHaveBeenCalled();
     expect(Array.from(ensureCollection("paymentProviderEventReceipts").values())).toHaveLength(0);
+    expect(
+      Array.from(ensureCollection("canonicalEvents").values()).some(
+        (event: any) => event.type === "payment.provider_signal_received"
+      )
+    ).toBe(false);
   });
 });

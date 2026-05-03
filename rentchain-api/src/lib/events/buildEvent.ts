@@ -18,6 +18,7 @@ const ALLOWED_DOMAINS = new Set<CanonicalEventDomain>([
   "expense",
   "tenant",
   "billing",
+  "payment",
   "policy",
   "system",
 ]);
