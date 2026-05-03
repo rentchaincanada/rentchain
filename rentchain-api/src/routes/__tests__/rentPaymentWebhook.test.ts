@@ -37,18 +37,21 @@ const {
     ensureCollection,
     constructEventMock: vi.fn(),
     docRef,
-    normalizeRentPaymentProviderEventMock: vi.fn((input: any) => ({
-      provider: "stripe",
-      providerEventId: input.providerEventId || input.rawEvent?.id || null,
-      providerPaymentId: input.providerPaymentId || null,
-      providerSessionId: input.providerSessionId || null,
-      rawStatus: "paid",
-      normalizedStatus: "confirmed",
-      purpose: input.purpose || null,
-      amount: 180000,
-      currency: "CAD",
-      metadata: input.rawEvent?.data?.object?.metadata || null,
-    })),
+    normalizeRentPaymentProviderEventMock: vi.fn((input: any) => {
+      const failed = String(input.rawEvent?.type || "").includes("failed");
+      return {
+        provider: "stripe",
+        providerEventId: input.providerEventId || input.rawEvent?.id || null,
+        providerPaymentId: input.providerPaymentId || null,
+        providerSessionId: input.providerSessionId || null,
+        rawStatus: failed ? "failed" : "paid",
+        normalizedStatus: failed ? "failed" : "confirmed",
+        purpose: input.purpose || null,
+        amount: 180000,
+        currency: "CAD",
+        metadata: input.rawEvent?.data?.object?.metadata || null,
+      };
+    }),
     deriveRentPaymentReconciliationMock: vi.fn(() => ({
       reconciliationStatus: "reconciled",
       reasons: ["provider_confirmed_amount_currency_match"],
@@ -184,18 +187,21 @@ describe("rent payment webhook reconciliation", () => {
     normalizeRentPaymentProviderEventMock.mockClear();
     deriveRentPaymentReconciliationMock.mockClear();
     buildProviderWebhookIdempotencyKeyMock.mockClear();
-    normalizeRentPaymentProviderEventMock.mockImplementation((input: any) => ({
-      provider: "stripe",
-      providerEventId: input.providerEventId || input.rawEvent?.id || null,
-      providerPaymentId: input.providerPaymentId || null,
-      providerSessionId: input.providerSessionId || null,
-      rawStatus: "paid",
-      normalizedStatus: "confirmed",
-      purpose: input.purpose || null,
-      amount: 180000,
-      currency: "CAD",
-      metadata: input.rawEvent?.data?.object?.metadata || null,
-    }));
+    normalizeRentPaymentProviderEventMock.mockImplementation((input: any) => {
+      const failed = String(input.rawEvent?.type || "").includes("failed");
+      return {
+        provider: "stripe",
+        providerEventId: input.providerEventId || input.rawEvent?.id || null,
+        providerPaymentId: input.providerPaymentId || null,
+        providerSessionId: input.providerSessionId || null,
+        rawStatus: failed ? "failed" : "paid",
+        normalizedStatus: failed ? "failed" : "confirmed",
+        purpose: input.purpose || null,
+        amount: 180000,
+        currency: "CAD",
+        metadata: input.rawEvent?.data?.object?.metadata || null,
+      };
+    });
     deriveRentPaymentReconciliationMock.mockReturnValue({
       reconciliationStatus: "reconciled",
       reasons: ["provider_confirmed_amount_currency_match"],
@@ -290,6 +296,23 @@ describe("rent payment webhook reconciliation", () => {
     expect(stored).not.toHaveProperty("reconciliationStatus");
     expect(stored).not.toHaveProperty("providerEventReceiptId");
 
+    const receipt = ensureCollection("paymentProviderEventReceipts").get("provider_event:stripe:evt_rent_paid_1");
+    expect(receipt).toEqual(
+      expect.objectContaining({
+        receiptId: "provider_event:stripe:evt_rent_paid_1",
+        idempotencyKey: "provider_event:stripe:evt_rent_paid_1",
+        provider: "stripe",
+        providerEventId: "evt_rent_paid_1",
+        purpose: "rent",
+        subjectType: "rent_payment",
+        subjectId: "rp-1",
+        status: "ignored_duplicate",
+        duplicateCount: 1,
+        normalizedStatus: "confirmed",
+        rawStatus: "paid",
+      })
+    );
+
     const canonicalEvents = Array.from(ensureCollection("canonicalEvents").values());
     expect(canonicalEvents.filter((event: any) => event.type === "rent_payment.paid")).toHaveLength(1);
     expect(JSON.stringify(canonicalEvents[0] || {})).not.toContain("card");
@@ -335,6 +358,17 @@ describe("rent payment webhook reconciliation", () => {
         processorPaymentIntentId: "pi_test_1",
       })
     );
+    expect(ensureCollection("paymentProviderEventReceipts").get("provider_event:stripe:evt_rent_failed_1")).toEqual(
+      expect.objectContaining({
+        provider: "stripe",
+        providerEventId: "evt_rent_failed_1",
+        purpose: "rent",
+        status: "processed",
+        duplicateCount: 0,
+        normalizedStatus: "failed",
+        rawStatus: "failed",
+      })
+    );
 
     const canonicalEvents = Array.from(ensureCollection("canonicalEvents").values());
     expect(canonicalEvents.some((event: any) => event.type === "rent_payment.failed")).toBe(true);
@@ -373,6 +407,7 @@ describe("rent payment webhook reconciliation", () => {
     expect(normalizeRentPaymentProviderEventMock).not.toHaveBeenCalled();
     expect(buildProviderWebhookIdempotencyKeyMock).not.toHaveBeenCalled();
     expect(deriveRentPaymentReconciliationMock).not.toHaveBeenCalled();
+    expect(Array.from(ensureCollection("paymentProviderEventReceipts").values())).toHaveLength(0);
   });
 
   it("does not run rent normalization for subscription webhooks", async () => {
@@ -401,5 +436,6 @@ describe("rent payment webhook reconciliation", () => {
     expect(normalizeRentPaymentProviderEventMock).not.toHaveBeenCalled();
     expect(buildProviderWebhookIdempotencyKeyMock).not.toHaveBeenCalled();
     expect(deriveRentPaymentReconciliationMock).not.toHaveBeenCalled();
+    expect(Array.from(ensureCollection("paymentProviderEventReceipts").values())).toHaveLength(0);
   });
 });
