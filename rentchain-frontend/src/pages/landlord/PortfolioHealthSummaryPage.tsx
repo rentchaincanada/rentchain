@@ -119,6 +119,10 @@ function formatLeaseRenewalLocation(lease: LandlordLeaseRenewalLease) {
   return lease.unitLabel ? `${propertyLabel} • ${lease.unitLabel}` : propertyLabel;
 }
 
+function formatLeaseExpiryBadge(lease: LandlordLeaseRenewalLease) {
+  return lease.leaseEndDate ? `Expires ${lease.leaseEndDate}` : "Expiry date unavailable";
+}
+
 function mapRenewalValidationMessage(errorCode: string | null | undefined) {
   switch (String(errorCode || "").trim()) {
     case "RENT_CHANGE_MODE_REQUIRED_FOR_PROPOSED_RENT":
@@ -516,12 +520,28 @@ export default function PortfolioHealthSummaryPage() {
                         background: "#fff",
                       }}
                     >
-                      <div style={{ display: "grid", gap: 2 }}>
-                        <div style={{ fontWeight: 700 }}>
-                          {formatLeaseRenewalLocation(lease)}
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
+                        <div style={{ display: "grid", gap: 2 }}>
+                          <div style={{ fontWeight: 700 }}>
+                            {formatLeaseRenewalLocation(lease)}
+                          </div>
+                          <div style={{ color: "#475569", fontSize: 14 }}>
+                            Lease ends {lease.leaseEndDate || "unknown"}{lease.tenantName ? ` • ${lease.tenantName}` : ""}
+                          </div>
                         </div>
-                        <div style={{ color: "#475569", fontSize: 14 }}>
-                          Lease ends {lease.leaseEndDate || "unknown"}{lease.tenantName ? ` • ${lease.tenantName}` : ""}
+                        <div
+                          style={{
+                            padding: "5px 10px",
+                            borderRadius: 999,
+                            border: "1px solid rgba(245,158,11,0.35)",
+                            background: "rgba(245,158,11,0.14)",
+                            color: "#92400e",
+                            fontSize: 12,
+                            fontWeight: 800,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {formatLeaseExpiryBadge(lease)}
                         </div>
                       </div>
 

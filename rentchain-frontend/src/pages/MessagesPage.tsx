@@ -54,10 +54,21 @@ function displayTenantName(conversation: Conversation | null) {
   return tenantName || "Tenant";
 }
 
+function hasTenantDisplayName(conversation: Conversation | null) {
+  return Boolean(String(conversation?.tenantDisplayName || "").trim());
+}
+
+function displayUnitContext(conversation: Conversation | null) {
+  const unitLabel = String(conversation?.unitDisplayLabel || "").trim();
+  if (!unitLabel) return "Unit unavailable";
+  return /^unit\b/i.test(unitLabel) ? unitLabel : `Unit ${unitLabel}`;
+}
+
 function displayConversationContext(conversation: Conversation | null) {
   const propertyLabel = String(conversation?.propertyDisplayLabel || "").trim();
-  const unitLabel = String(conversation?.unitDisplayLabel || "").trim();
-  return [propertyLabel, unitLabel].filter(Boolean).join(" / ") || "Tenant conversation";
+  const unitLabel = displayUnitContext(conversation);
+  if (propertyLabel) return `${propertyLabel} / ${unitLabel}`;
+  return `Tenant conversation • ${unitLabel}`;
 }
 
 function buildTenantInitials(conversation: Conversation | null) {
@@ -75,6 +86,7 @@ function buildConversationTitle(conversation: Conversation | null) {
   if (!conversation) return "Conversation";
   const tenantName = displayTenantName(conversation);
   const locationLabel = displayConversationContext(conversation);
+  if (!hasTenantDisplayName(conversation)) return locationLabel;
   if (tenantName && locationLabel) return `${tenantName} • ${locationLabel}`;
   if (tenantName) return tenantName;
   if (locationLabel) return locationLabel;

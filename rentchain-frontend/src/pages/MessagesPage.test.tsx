@@ -156,7 +156,8 @@ describe("MessagesPage", () => {
 
     await flushAsync();
     expect(screen.getAllByText("Taylor Tenant")[0]).toBeInTheDocument();
-    expect(screen.getByText("Tenant conversation")).toBeInTheDocument();
+    expect(screen.getByText("Tenant conversation • Unit unavailable")).toBeInTheDocument();
+    expect(screen.queryByText("Tenant • Tenant conversation")).not.toBeInTheDocument();
     expect(screen.getAllByText("TT")[0]).toBeInTheDocument();
     expect(screen.queryByText(/tenant-raw-1/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/prop-raw-1/i)).not.toBeInTheDocument();
