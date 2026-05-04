@@ -8,6 +8,7 @@ const {
   normalizeRentPaymentProviderEventMock,
   deriveRentPaymentReconciliationMock,
   buildProviderWebhookIdempotencyKeyMock,
+  derivePaymentDuplicateSuppressionDecisionMock,
 } = vi.hoisted(() => {
   const store = new Map<string, Map<string, any>>();
 
@@ -61,6 +62,17 @@ const {
     buildProviderWebhookIdempotencyKeyMock: vi.fn(
       (input: any) => `provider_event:${input.provider}:${input.providerEventId}`
     ),
+    derivePaymentDuplicateSuppressionDecisionMock: vi.fn((input: any) => ({
+      shouldSuppress: input.receipt?.status === "processed" || input.receipt?.status === "ignored_duplicate",
+      reason:
+        input.receipt?.status === "ignored_duplicate"
+          ? "provider_event_duplicate_already_recorded"
+          : "provider_event_not_processed_yet",
+      existingReceiptStatus: input.receipt?.status || null,
+      duplicateCount: input.receipt?.duplicateCount || 0,
+      safeToAcknowledge: input.receipt?.status === "ignored_duplicate",
+      requiresManualReview: false,
+    })),
   };
 });
 
@@ -152,6 +164,14 @@ vi.mock("../../lib/payments/paymentIdempotency", async (importOriginal) => {
   };
 });
 
+vi.mock("../../lib/payments/paymentDuplicateSuppression", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../lib/payments/paymentDuplicateSuppression")>();
+  return {
+    ...actual,
+    derivePaymentDuplicateSuppressionDecision: derivePaymentDuplicateSuppressionDecisionMock,
+  };
+});
+
 async function invokeWebhook(body: string) {
   const { stripeWebhookHandler } = await import("../stripeScreeningOrdersWebhookRoutes");
   return await new Promise<{ status: number; body: any; text?: string }>((resolve, reject) => {
@@ -187,6 +207,7 @@ describe("rent payment webhook reconciliation", () => {
     normalizeRentPaymentProviderEventMock.mockClear();
     deriveRentPaymentReconciliationMock.mockClear();
     buildProviderWebhookIdempotencyKeyMock.mockClear();
+    derivePaymentDuplicateSuppressionDecisionMock.mockClear();
     normalizeRentPaymentProviderEventMock.mockImplementation((input: any) => {
       const failed = String(input.rawEvent?.type || "").includes("failed");
       return {
@@ -281,6 +302,19 @@ describe("rent payment webhook reconciliation", () => {
       providerSignal: expect.objectContaining({
         provider: "stripe",
         providerEventId: "evt_rent_paid_1",
+      }),
+    });
+    expect(derivePaymentDuplicateSuppressionDecisionMock).toHaveBeenCalledTimes(2);
+    expect(derivePaymentDuplicateSuppressionDecisionMock).toHaveBeenNthCalledWith(1, {
+      receipt: expect.objectContaining({
+        status: "received",
+        duplicateCount: 0,
+      }),
+    });
+    expect(derivePaymentDuplicateSuppressionDecisionMock).toHaveBeenNthCalledWith(2, {
+      receipt: expect.objectContaining({
+        status: "ignored_duplicate",
+        duplicateCount: 1,
       }),
     });
 
@@ -475,6 +509,7 @@ describe("rent payment webhook reconciliation", () => {
     expect(normalizeRentPaymentProviderEventMock).not.toHaveBeenCalled();
     expect(buildProviderWebhookIdempotencyKeyMock).not.toHaveBeenCalled();
     expect(deriveRentPaymentReconciliationMock).not.toHaveBeenCalled();
+    expect(derivePaymentDuplicateSuppressionDecisionMock).not.toHaveBeenCalled();
     expect(Array.from(ensureCollection("paymentProviderEventReceipts").values())).toHaveLength(0);
     expect(Array.from(ensureCollection("paymentReconciliationRecords").values())).toHaveLength(0);
     expect(
@@ -510,6 +545,7 @@ describe("rent payment webhook reconciliation", () => {
     expect(normalizeRentPaymentProviderEventMock).not.toHaveBeenCalled();
     expect(buildProviderWebhookIdempotencyKeyMock).not.toHaveBeenCalled();
     expect(deriveRentPaymentReconciliationMock).not.toHaveBeenCalled();
+    expect(derivePaymentDuplicateSuppressionDecisionMock).not.toHaveBeenCalled();
     expect(Array.from(ensureCollection("paymentProviderEventReceipts").values())).toHaveLength(0);
     expect(Array.from(ensureCollection("paymentReconciliationRecords").values())).toHaveLength(0);
     expect(

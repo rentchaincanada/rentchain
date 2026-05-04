@@ -35,6 +35,7 @@ import {
   markProviderEventProcessing,
   markProviderEventReceived,
 } from "../lib/payments/paymentProviderEventReceipts";
+import { derivePaymentDuplicateSuppressionDecision } from "../lib/payments/paymentDuplicateSuppression";
 import { upsertPaymentReconciliationRecord } from "../lib/payments/paymentReconciliationRecords";
 
 interface StripeWebhookRequest extends Request {
@@ -312,6 +313,7 @@ async function prepareRentPaymentWebhookNormalizationContext(params: {
       rawStatus: normalizedProviderEvent.rawStatus,
       metadata: normalizedProviderEvent.metadata || null,
     });
+    const duplicateSuppressionDecision = derivePaymentDuplicateSuppressionDecision({ receipt: receipt.receipt });
     await writeCanonicalEvent({
       type: "payment.provider_signal_received",
       domain: "payment",
@@ -365,7 +367,7 @@ async function prepareRentPaymentWebhookNormalizationContext(params: {
 
     if (receipt.isDuplicate) {
       await markProviderEventIgnoredDuplicate({ receiptId: receipt.receiptId });
-      return { normalizedProviderEvent, idempotencyKey, reconciliation, receipt };
+      return { normalizedProviderEvent, idempotencyKey, reconciliation, receipt, duplicateSuppressionDecision };
     }
 
     await markProviderEventProcessing({ receiptId: receipt.receiptId });
@@ -377,7 +379,7 @@ async function prepareRentPaymentWebhookNormalizationContext(params: {
       });
     }
 
-    return { normalizedProviderEvent, idempotencyKey, reconciliation, receipt };
+    return { normalizedProviderEvent, idempotencyKey, reconciliation, receipt, duplicateSuppressionDecision };
   } catch (err: any) {
     console.warn("[stripe-webhook-rent-payment] normalization seam skipped", {
       eventId: event.id,
