@@ -251,6 +251,9 @@ describe("PortfolioHealthSummaryPage", () => {
     expect((await screen.findAllByText(/Showing leases approaching notice timing/i)).length).toBeGreaterThan(0);
     expect((await screen.findAllByText(/Taylor Tenant/i)).length).toBeGreaterThan(0);
     expect((await screen.findAllByText("123 Harbour St • Unit 2")).length).toBeGreaterThan(0);
+    expect(screen.getByText("Expires 2026-06-30")).toBeInTheDocument();
+    expect(screen.queryByText(/^Updated/)).not.toBeInTheDocument();
+    expect(screen.getByText("Visible leases: 1")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Print / Save renewal view" })).toBeInTheDocument();
     expect((await screen.findAllByText(/Lifecycle:/i)).length).toBeGreaterThan(0);
     expect((await screen.findAllByText(/Outcome:/i)).length).toBeGreaterThan(0);
@@ -386,6 +389,7 @@ describe("PortfolioHealthSummaryPage", () => {
         renewalNewTermType: "fixed_term",
         renewalNewLeaseStartDate: "2026-07-01",
         renewalNewLeaseEndDate: "2027-06-30",
+        renewalUpdatedAt: "2026-05-04T12:00:00.000Z",
       },
       renewalInputs: {
         rentChangeMode: "no_change",
@@ -427,6 +431,7 @@ describe("PortfolioHealthSummaryPage", () => {
         message: "Lease renewal inputs saved",
       })
     );
+    expect(await screen.findByText("Updated • May 4")).toBeInTheDocument();
   });
 
   it("clears and blocks proposed rent when rent change mode does not allow it", async () => {

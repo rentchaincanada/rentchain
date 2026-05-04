@@ -119,6 +119,34 @@ function formatLeaseRenewalLocation(lease: LandlordLeaseRenewalLease) {
   return lease.unitLabel ? `${propertyLabel} • ${lease.unitLabel}` : propertyLabel;
 }
 
+function formatLeaseExpiryBadge(lease: LandlordLeaseRenewalLease) {
+  return lease.leaseEndDate ? `Expires ${lease.leaseEndDate}` : "Expiry date unavailable";
+}
+
+function hasSavedRenewalInputs(lease: LandlordLeaseRenewalLease) {
+  return Boolean(
+    lease.renewalRentChangeMode ||
+      lease.renewalOfferedRent != null ||
+      lease.renewalDecisionDeadlineAt ||
+      lease.renewalNewTermType ||
+      lease.renewalNewLeaseStartDate ||
+      lease.renewalNewLeaseEndDate
+  );
+}
+
+function formatShortUpdateDate(value: string | number | null | undefined) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function formatRenewalUpdatedBadge(lease: LandlordLeaseRenewalLease) {
+  if (!hasSavedRenewalInputs(lease)) return null;
+  const updatedAt = formatShortUpdateDate(lease.renewalUpdatedAt || lease.updatedAt);
+  return updatedAt ? `Updated • ${updatedAt}` : "Updated";
+}
+
 function mapRenewalValidationMessage(errorCode: string | null | undefined) {
   switch (String(errorCode || "").trim()) {
     case "RENT_CHANGE_MODE_REQUIRED_FOR_PROPOSED_RENT":
@@ -188,6 +216,7 @@ export default function PortfolioHealthSummaryPage() {
       : entryStatus === "no-response"
       ? "Showing leases where the tenant response window has elapsed without a reply."
       : "Save renewal term and deadline choices on the lease record so readiness checks can observe them canonically.";
+  const renewalDisplayItems = React.useMemo(() => renewalItems, [renewalItems]);
 
   React.useEffect(() => {
     if (entitlementLoading || !canViewPortfolioHealthSummary) return;
@@ -448,7 +477,7 @@ export default function PortfolioHealthSummaryPage() {
                 <div className="printTitle">{scopedRenewalHeading}</div>
                 <div className="printMeta">
                   <div>Scope: Lease renewals</div>
-                  <div>Visible leases: {renewalItems.length}</div>
+                  <div>Visible leases: {renewalDisplayItems.length}</div>
                 </div>
               </div>
               <div>{scopedRenewalHelper}</div>
@@ -465,7 +494,7 @@ export default function PortfolioHealthSummaryPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {renewalItems.map((lease) => {
+                  {renewalDisplayItems.map((lease) => {
                     const form = renewalForms[lease.id] || createLeaseRenewalFormState(lease);
                     const renewalSummary = [
                       form.rentChangeMode ? `Mode: ${form.rentChangeMode.replace(/_/g, " ")}` : null,
@@ -493,16 +522,17 @@ export default function PortfolioHealthSummaryPage() {
 
             {renewalLoading ? <div>Loading lease renewal inputs…</div> : null}
             {!renewalLoading && renewalError ? <div style={{ color: "#b91c1c" }}>{renewalError}</div> : null}
-            {!renewalLoading && !renewalError && renewalItems.length === 0 ? (
+            {!renewalLoading && !renewalError && renewalDisplayItems.length === 0 ? (
               <div style={{ color: "#475569" }}>No expiring leases are currently visible for this scope.</div>
             ) : null}
 
             {!renewalLoading && !renewalError
-              ? renewalItems.map((lease) => {
+              ? renewalDisplayItems.map((lease) => {
                   const form = renewalForms[lease.id] || createLeaseRenewalFormState(lease);
                   const validation = renewalValidation[lease.id] || {};
                   const proposedRentAllowed = canSetProposedRent(form.rentChangeMode);
                   const isSaving = savingLeaseId === lease.id;
+                  const updatedBadge = formatRenewalUpdatedBadge(lease);
                   return (
                     <div
                       key={lease.id}
@@ -515,12 +545,46 @@ export default function PortfolioHealthSummaryPage() {
                         background: "#fff",
                       }}
                     >
-                      <div style={{ display: "grid", gap: 2 }}>
-                        <div style={{ fontWeight: 700 }}>
-                          {formatLeaseRenewalLocation(lease)}
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
+                        <div style={{ display: "grid", gap: 2 }}>
+                          <div style={{ fontWeight: 700 }}>
+                            {formatLeaseRenewalLocation(lease)}
+                          </div>
+                          <div style={{ color: "#475569", fontSize: 14 }}>
+                            Lease ends {lease.leaseEndDate || "unknown"}{lease.tenantName ? ` • ${lease.tenantName}` : ""}
+                          </div>
                         </div>
-                        <div style={{ color: "#475569", fontSize: 14 }}>
-                          Lease ends {lease.leaseEndDate || "unknown"}{lease.tenantName ? ` • ${lease.tenantName}` : ""}
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                          {updatedBadge ? (
+                            <div
+                              style={{
+                                padding: "5px 10px",
+                                borderRadius: 999,
+                                border: "1px solid rgba(22,101,52,0.28)",
+                                background: "rgba(22,101,52,0.10)",
+                                color: "#166534",
+                                fontSize: 12,
+                                fontWeight: 800,
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {updatedBadge}
+                            </div>
+                          ) : null}
+                          <div
+                            style={{
+                              padding: "5px 10px",
+                              borderRadius: 999,
+                              border: "1px solid rgba(245,158,11,0.35)",
+                              background: "rgba(245,158,11,0.14)",
+                              color: "#92400e",
+                              fontSize: 12,
+                              fontWeight: 800,
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {formatLeaseExpiryBadge(lease)}
+                          </div>
                         </div>
                       </div>
 

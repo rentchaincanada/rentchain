@@ -34,6 +34,8 @@ export type LandlordLeaseRenewalLease = {
   renewalNewTermType: "fixed_term" | "year_to_year" | "month_to_month" | null;
   renewalNewLeaseStartDate: string | null;
   renewalNewLeaseEndDate: string | null;
+  renewalUpdatedAt?: string | number | null;
+  updatedAt?: string | number | null;
   noticeBucket?: "expiring" | "pending-response" | "no-response";
   leaseLifecycleSummary?: LeaseLifecycleSummary;
 };

@@ -37,6 +37,10 @@ import { HalifaxRegistrySubmissionAssistant } from "@/components/properties/Hali
 import type { PropertyCredibilitySummary } from "@/types/credibilitySummary";
 import { calculateConfiguredUnitRentTotal, resolveConfiguredUnitRent } from "@/lib/propertyRentSummary";
 import { buildPropertySummaryMetrics } from "@/lib/propertySummaryMetrics";
+import {
+  deriveUnitOccupancyFromLeases,
+  type UnitOccupancyStatus,
+} from "@/lib/leases/leaseLifecycle";
 import { getUnitsNeedingOccupancySetup } from "./occupancyPrompt";
 
 interface PropertyDetailPanelProps {
@@ -53,6 +57,19 @@ interface PropertyDetailPanelProps {
 import { safeLocaleNumber } from "@/utils/format";
 
 const formatCurrency = (value: number): string => `$${safeLocaleNumber(value)}`;
+
+function unitOccupancyTone(status: UnitOccupancyStatus) {
+  if (status === "occupied") {
+    return { background: "rgba(34,197,94,0.1)", color: "#166534", dot: "#22c55e" };
+  }
+  if (status === "notice_period") {
+    return { background: "rgba(245,158,11,0.12)", color: "#92400e", dot: "#f59e0b" };
+  }
+  if (status === "upcoming") {
+    return { background: "rgba(59,130,246,0.1)", color: "#1d4ed8", dot: "#3b82f6" };
+  }
+  return { background: "rgba(248,113,113,0.08)", color: "#b91c1c", dot: "#f87171" };
+}
 
 const formatDate = (iso: string): string => {
   const d = new Date(iso);
@@ -586,23 +603,11 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
     activeLeaseRentTotal,
     currentOccupiedRentTotal,
   } = useMemo(() => buildPropertySummaryMetrics(displayedUnits, leases, unitCount), [displayedUnits, leases, unitCount]);
-  const leasedUnitIds = useMemo(
-    () => new Set(activeLeases.map((lease) => String(lease.unitId || "").trim()).filter(Boolean)),
-    [activeLeases]
-  );
-  const leasedUnitNumbers = useMemo(
-    () => new Set(activeLeases.map((lease) => String(lease.unitNumber || "").trim()).filter(Boolean)),
-    [activeLeases]
-  );
   const collectionRate =
     currentOccupiedRentTotal > 0 ? totalCollectedThisMonth / currentOccupiedRentTotal : 0;
-  const isLeaseBackedUnit = useCallback(
-    (unit: any) => {
-      const unitId = String(unit?.id || unit?.unitId || "").trim();
-      const unitNumber = String(unit?.unitNumber || unit?.label || "").trim();
-      return (unitId && leasedUnitIds.has(unitId)) || (unitNumber && leasedUnitNumbers.has(unitNumber));
-    },
-    [leasedUnitIds, leasedUnitNumbers]
+  const getUnitOccupancy = useCallback(
+    (unit: any) => deriveUnitOccupancyFromLeases(unit, leases),
+    [leases]
   );
 
   const unitsNeedingOccupancySetup = useMemo(
@@ -1105,7 +1110,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
             {unitCount === 0 ? "--" : `${occupancyRate.toFixed(0)}%`}
           </div>
           <div className="rc-kpi-subtext" style={{ color: "#4b5563", fontSize: "0.75rem", marginTop: 2 }}>
-            Based on units marked occupied in the unit table.
+            Based on active and notice-period lease records.
           </div>
         </div>
         <div
@@ -1164,7 +1169,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
             {formatCurrency(currentOccupiedRentTotal)}
           </div>
           <div className="rc-kpi-subtext" style={{ color: "#4b5563", fontSize: "0.75rem", marginTop: 2 }}>
-            Uses active lease rent when present and otherwise falls back to occupied unit rent.
+            Uses active and notice-period lease rent when present.
           </div>
         </div>
 
@@ -1446,8 +1451,22 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                     (u as any).baths ?? (u as any).bathrooms ?? (u as any).bathroomsCount ?? null;
                   const rentVal = resolveConfiguredUnitRent(u);
                   const sqftVal = (u as any).sqft ?? null;
-                  const statusVal = (u as any).status || (isLeaseBackedUnit(u) ? "occupied" : "vacant");
-                  const isLeased = String(statusVal || "").toLowerCase() === "occupied";
+                  const occupancy = getUnitOccupancy(u);
+                  const occupancyTone = unitOccupancyTone(occupancy.status);
+                  const isLeased = occupancy.status === "occupied" || occupancy.status === "notice_period";
+                  const occupantName =
+                    isLeased || occupancy.status === "upcoming"
+                      ? String((u as any).occupantName || (occupancy.lease as any)?.tenantName || "").trim()
+                      : "";
+                  const leaseEndDate =
+                    isLeased || occupancy.status === "upcoming"
+                      ? String(
+                          (occupancy.lease as any)?.endDate ||
+                            (occupancy.lease as any)?.leaseEndDate ||
+                            (u as any).leaseEndDate ||
+                            ""
+                        ).trim()
+                      : "";
                   const rentDisplay =
                     rentVal !== null && rentVal !== undefined
                       ? formatCurrency(Number(rentVal) || 0)
@@ -1510,10 +1529,8 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                               padding: "4px 10px",
                               borderRadius: 999,
                               border: "1px solid rgba(148,163,184,0.35)",
-                              background: isLeased
-                                ? "rgba(34,197,94,0.1)"
-                                : "rgba(248,113,113,0.08)",
-                              color: isLeased ? "#166534" : "#f87171",
+                              background: occupancyTone.background,
+                              color: occupancyTone.color,
                               fontSize: "0.8rem",
                             }}
                           >
@@ -1522,17 +1539,15 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                                 width: 8,
                                 height: 8,
                                 borderRadius: "999px",
-                                backgroundColor: isLeased ? "#22c55e" : "#f87171",
+                                backgroundColor: occupancyTone.dot,
                               }}
                             />
-                            {isLeased ? "Occupied" : "Vacant"}
+                            {occupancy.label}
                           </span>
-                          {(u as any).occupantName ? (
+                          {occupantName ? (
                             <div style={{ fontSize: "0.8rem", color: "#475569" }}>
-                              {String((u as any).occupantName)}
-                              {(u as any).leaseEndDate
-                                ? ` · Ends ${formatDate(String((u as any).leaseEndDate))}`
-                                : ""}
+                              {occupantName}
+                              {leaseEndDate ? ` · Ends ${formatDate(leaseEndDate)}` : ""}
                             </div>
                           ) : null}
                           {(u as any).leaseDocument?.fileName ? (
@@ -1615,8 +1630,21 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
               (u as any).baths ?? (u as any).bathrooms ?? (u as any).bathroomsCount ?? null;
             const rentVal = resolveConfiguredUnitRent(u);
             const sqftVal = (u as any).sqft ?? null;
-            const statusVal = (u as any).status || (isLeaseBackedUnit(u) ? "occupied" : "vacant");
-            const isLeased = String(statusVal || "").toLowerCase() === "occupied";
+            const occupancy = getUnitOccupancy(u);
+            const isLeased = occupancy.status === "occupied" || occupancy.status === "notice_period";
+            const occupantName =
+              isLeased || occupancy.status === "upcoming"
+                ? String((u as any).occupantName || (occupancy.lease as any)?.tenantName || "").trim()
+                : "";
+            const leaseEndDate =
+              isLeased || occupancy.status === "upcoming"
+                ? String(
+                    (occupancy.lease as any)?.endDate ||
+                      (occupancy.lease as any)?.leaseEndDate ||
+                      (u as any).leaseEndDate ||
+                      ""
+                  ).trim()
+                : "";
             const rentDisplay =
               rentVal !== null && rentVal !== undefined
                 ? formatCurrency(Number(rentVal) || 0)
@@ -1654,13 +1682,11 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                   </div>
                   <div>
                     <div className="rc-unit-label">Status</div>
-                    <div className="rc-unit-value">{isLeased ? "Occupied" : "Vacant"}</div>
-                    {(u as any).occupantName ? (
+                    <div className="rc-unit-value">{occupancy.label}</div>
+                    {occupantName ? (
                       <div style={{ fontSize: "0.8rem", color: "#475569", marginTop: 4 }}>
-                        {String((u as any).occupantName)}
-                        {(u as any).leaseEndDate
-                          ? ` · Ends ${formatDate(String((u as any).leaseEndDate))}`
-                          : ""}
+                        {occupantName}
+                        {leaseEndDate ? ` · Ends ${formatDate(leaseEndDate)}` : ""}
                       </div>
                     ) : null}
                     {(u as any).leaseDocument?.fileName ? (

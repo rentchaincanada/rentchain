@@ -33,6 +33,7 @@ import "./PropertiesPage.css";
 import { track } from "../lib/analytics";
 import { resolveReturnToParam } from "../lib/propertyGate";
 import { useCapabilities } from "../hooks/useCapabilities";
+import { deriveUnitOccupancyFromLeases } from "../lib/leases/leaseLifecycle";
 
 const PropertiesPage: React.FC = () => {
   const [properties, setProperties] = useState<Property[]>([]);
@@ -894,12 +895,16 @@ const PropertiesPage: React.FC = () => {
                         </tr>
                       </thead>
                       <tbody>
-                        {(Array.isArray((selectedProperty as any)?.units) ? (selectedProperty as any).units : []).map((unit: any, index: number) => (
-                          <tr key={String(unit?.id || unit?.unitId || unit?.uid || index)}>
-                            <td>{String(unit?.unitNumber || unit?.label || unit?.name || "—")}</td>
-                            <td>{String(unit?.status || unit?.occupancyStatus || "unknown")}</td>
-                          </tr>
-                        ))}
+                        {(Array.isArray((selectedProperty as any)?.units) ? (selectedProperty as any).units : []).map((unit: any, index: number) => {
+                          const leases = Array.isArray((selectedProperty as any)?.leases) ? (selectedProperty as any).leases : [];
+                          const occupancy = deriveUnitOccupancyFromLeases(unit, leases);
+                          return (
+                            <tr key={String(unit?.id || unit?.unitId || unit?.uid || index)}>
+                              <td>{String(unit?.unitNumber || unit?.label || unit?.name || "—")}</td>
+                              <td>{occupancy.label}</td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>

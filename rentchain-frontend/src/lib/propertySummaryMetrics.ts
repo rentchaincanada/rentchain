@@ -1,49 +1,11 @@
 import type { Lease } from "@/api/leasesApi";
+import {
+  deriveUnitOccupancyFromLeases,
+  isLeaseCurrentlyActive,
+} from "@/lib/leases/leaseLifecycle";
 import { resolveConfiguredUnitRent } from "@/lib/propertyRentSummary";
 
-const ACTIVE_LEASE_STATUSES = new Set([
-  "active",
-  "notice_pending",
-  "renewal_pending",
-  "renewal_accepted",
-  "move_out_pending",
-]);
-
 type UnitLike = Record<string, unknown>;
-
-function normalizeString(value: unknown): string {
-  return String(value || "").trim();
-}
-
-function unitIdentifiers(unit: UnitLike): string[] {
-  const values = [
-    normalizeString(unit.id),
-    normalizeString(unit.unitId),
-    normalizeString(unit.unitNumber),
-    normalizeString(unit.label),
-  ].filter(Boolean);
-  return Array.from(new Set(values));
-}
-
-function leaseIdentifiers(lease: Lease): string[] {
-  const values = [normalizeString(lease.unitId), normalizeString(lease.unitNumber)].filter(Boolean);
-  return Array.from(new Set(values));
-}
-
-function isOccupiedUnit(unit: UnitLike): boolean {
-  const status = normalizeString(unit.occupancyStatus || unit.status).toLowerCase();
-  return status === "occupied";
-}
-
-function isActiveLease(lease: Lease): boolean {
-  return ACTIVE_LEASE_STATUSES.has(normalizeString(lease.status).toLowerCase());
-}
-
-function getMatchingActiveLeases(unit: UnitLike, activeLeases: Lease[]): Lease[] {
-  const ids = new Set(unitIdentifiers(unit));
-  if (!ids.size) return [];
-  return activeLeases.filter((lease) => leaseIdentifiers(lease).some((identifier) => ids.has(identifier)));
-}
 
 export type PropertySummaryMetrics = {
   activeLeases: Lease[];
@@ -54,28 +16,34 @@ export type PropertySummaryMetrics = {
   currentOccupiedRentTotal: number;
 };
 
-export function buildPropertySummaryMetrics(units: UnitLike[], leases: Lease[], unitCount: number): PropertySummaryMetrics {
+export function buildPropertySummaryMetrics(
+  units: UnitLike[],
+  leases: Lease[],
+  unitCount: number,
+  today: string | number | Date = new Date()
+): PropertySummaryMetrics {
   const displayedUnits = Array.isArray(units) ? units : [];
-  const activeLeases = (Array.isArray(leases) ? leases : []).filter(isActiveLease);
-  const occupiedUnits = displayedUnits.filter(isOccupiedUnit);
-  const leasedUnits = displayedUnits.filter((unit) => getMatchingActiveLeases(unit, activeLeases).length > 0);
+  const activeLeases = (Array.isArray(leases) ? leases : []).filter((lease) => isLeaseCurrentlyActive(lease, today));
+  const occupancyByUnit = displayedUnits.map((unit) => ({
+    unit,
+    occupancy: deriveUnitOccupancyFromLeases(unit, leases, today),
+  }));
+  const occupiedUnits = occupancyByUnit
+    .filter((item) => item.occupancy.status === "occupied" || item.occupancy.status === "notice_period")
+    .map((item) => item.unit);
+  const leasedUnits = occupiedUnits;
   const occupancyRate = unitCount > 0 ? (occupiedUnits.length / unitCount) * 100 : 0;
   const activeLeaseRentTotal = activeLeases.reduce(
     (sum, lease) => sum + (typeof lease.monthlyRent === "number" ? lease.monthlyRent : 0),
     0
   );
-  const currentOccupiedRentTotal = occupiedUnits.reduce((sum, unit) => {
-    const matchingLeases = getMatchingActiveLeases(unit, activeLeases);
-    if (matchingLeases.length > 0) {
-      return (
-        sum +
-        matchingLeases.reduce(
-          (leaseSum, lease) => leaseSum + (typeof lease.monthlyRent === "number" ? lease.monthlyRent : 0),
-          0
-        )
-      );
-    }
-    return sum + (resolveConfiguredUnitRent(unit) ?? 0);
+  const currentOccupiedRentTotal = occupancyByUnit.reduce((sum, item) => {
+    if (item.occupancy.status !== "occupied" && item.occupancy.status !== "notice_period") return sum;
+    const rentFromLease =
+      typeof item.occupancy.lease?.monthlyRent === "number"
+        ? item.occupancy.lease.monthlyRent
+        : null;
+    return sum + (rentFromLease ?? resolveConfiguredUnitRent(item.unit) ?? 0);
   }, 0);
 
   return {

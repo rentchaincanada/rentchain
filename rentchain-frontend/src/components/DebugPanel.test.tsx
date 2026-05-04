@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DebugPanel } from "./DebugPanel";
 import { fetchAccountLimits } from "../api/accountApi";
@@ -7,6 +8,14 @@ import { setAuthToken } from "../lib/authToken";
 vi.mock("../api/accountApi", () => ({
   fetchAccountLimits: vi.fn(),
 }));
+
+function renderDebugPanel(path = "/dashboard") {
+  return render(
+    <MemoryRouter initialEntries={[path]}>
+      <DebugPanel />
+    </MemoryRouter>
+  );
+}
 
 describe("DebugPanel", () => {
   beforeEach(() => {
@@ -20,7 +29,7 @@ describe("DebugPanel", () => {
   });
 
   it("stays hidden without an authenticated landlord token", () => {
-    render(<DebugPanel />);
+    renderDebugPanel();
 
     expect(screen.queryByText("Debug (dev only)")).not.toBeInTheDocument();
     expect(fetchAccountLimits).not.toHaveBeenCalled();
@@ -29,7 +38,15 @@ describe("DebugPanel", () => {
   it("stays hidden on mobile so it cannot cover bottom navigation", async () => {
     setAuthToken("demo-token");
     window.innerWidth = 390;
-    render(<DebugPanel />);
+    renderDebugPanel();
+
+    await waitFor(() => expect(fetchAccountLimits).not.toHaveBeenCalled());
+    expect(screen.queryByText("Debug (dev only)")).not.toBeInTheDocument();
+  });
+
+  it("stays hidden on public routes even when a token is present", async () => {
+    setAuthToken("demo-token");
+    renderDebugPanel("/login");
 
     await waitFor(() => expect(fetchAccountLimits).not.toHaveBeenCalled());
     expect(screen.queryByText("Debug (dev only)")).not.toBeInTheDocument();
@@ -54,7 +71,7 @@ describe("DebugPanel", () => {
       },
     });
 
-    render(<DebugPanel />);
+    renderDebugPanel();
 
     expect(await screen.findByText("Debug (dev only)")).toBeInTheDocument();
     expect(screen.getByText("Plan: elite")).toBeInTheDocument();

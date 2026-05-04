@@ -18,6 +18,7 @@ import {
 } from "@/lib/payments/paymentStatusGuidance";
 import { isTargetedHiddenLeaseId } from "@/lib/testDataVisibilityTargets";
 import { printSummaryDocument } from "@/utils/printSummary";
+import "./LandlordActiveLeasesPage.css";
 
 function formatCurrency(value: number | null | undefined) {
   const amount = typeof value === "number" ? value : 0;

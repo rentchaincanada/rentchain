@@ -36,6 +36,15 @@ import { buildLandlordStructuredNotificationTriggers } from "./structuredNotific
 import { resolveRequiredPlanLabel } from "@/lib/upgradePrompt";
 import { buildLandlordNetworkReuseCopy } from "../lib/reuse/landlordNetworkReuseCopy";
 
+type ReviewSummaryTab = "overview" | "screening" | "decision" | "activity";
+
+const reviewSummaryTabs: Array<{ id: ReviewSummaryTab; label: string }> = [
+  { id: "overview", label: "Overview" },
+  { id: "screening", label: "Screening" },
+  { id: "decision", label: "Decision" },
+  { id: "activity", label: "Activity" },
+];
+
 function money(cents: number | null): string {
   if (cents == null || !Number.isFinite(cents)) return "Not provided";
   return (cents / 100).toLocaleString(undefined, { style: "currency", currency: "CAD" });
@@ -321,6 +330,7 @@ function ApplicationReviewSummaryPageBody() {
   const [summary, setSummary] = useState<ApplicationReviewSummary | null>(null);
   const [evaluatingRisk, setEvaluatingRisk] = useState(false);
   const [savingDecision, setSavingDecision] = useState(false);
+  const [activeReviewTab, setActiveReviewTab] = useState<ReviewSummaryTab>("overview");
 
   const loadSummary = React.useCallback(async () => {
     if (!entitlements.canViewReviewSummary) {
@@ -618,6 +628,53 @@ function ApplicationReviewSummaryPageBody() {
 
       {!loading && !error && summary ? (
         <>
+          <div
+            role="tablist"
+            aria-label="Review summary sections"
+            style={{
+              display: "flex",
+              gap: 8,
+              flexWrap: "wrap",
+              padding: 6,
+              border: `1px solid ${colors.border}`,
+              borderRadius: 12,
+              background: "#f8fafc",
+            }}
+          >
+            {reviewSummaryTabs.map((tab) => {
+              const selected = activeReviewTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={selected}
+                  aria-controls={`review-summary-panel-${tab.id}`}
+                  id={`review-summary-tab-${tab.id}`}
+                  onClick={() => setActiveReviewTab(tab.id)}
+                  style={{
+                    border: `1px solid ${selected ? "rgba(37,99,235,0.45)" : "transparent"}`,
+                    borderRadius: 10,
+                    background: selected ? "#ffffff" : "transparent",
+                    color: selected ? text.main : text.subtle,
+                    fontWeight: 800,
+                    padding: "8px 12px",
+                    cursor: "pointer",
+                  }}
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {activeReviewTab === "overview" ? (
+            <div
+              role="tabpanel"
+              id="review-summary-panel-overview"
+              aria-labelledby="review-summary-tab-overview"
+              style={{ display: "grid", gap: 12 }}
+            >
           {intakeView ? (
             <Card style={{ display: "grid", gap: 12 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
@@ -782,6 +839,59 @@ function ApplicationReviewSummaryPageBody() {
             </Card>
           ) : null}
 
+          <Card style={{ display: "grid", gap: 8 }}>
+            <div style={{ fontWeight: 700 }}>Applicant Overview</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
+              {kv("Name", summary.applicant.name || "Not provided")}
+              {kv("Email", summary.applicant.email || "Not provided")}
+              {kv(
+                "Address",
+                [
+                  summary.applicant.currentAddressLine,
+                  summary.applicant.city,
+                  summary.applicant.provinceState,
+                  summary.applicant.postalCode,
+                  summary.applicant.country,
+                ]
+                  .filter(Boolean)
+                  .join(", ") || "Not provided"
+              )}
+              {kv(
+                "Time at current address",
+                summary.applicant.timeAtCurrentAddressMonths != null
+                  ? `${summary.applicant.timeAtCurrentAddressMonths} months`
+                  : "Not provided"
+              )}
+              {kv("Current rent", money(summary.applicant.currentRentAmountCents))}
+            </div>
+          </Card>
+
+          <Card style={{ display: "grid", gap: 8 }}>
+            <div style={{ fontWeight: 700 }}>Employment & Income</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
+              {kv("Employer", summary.employment.employerName || "Not provided")}
+              {kv("Job title", summary.employment.jobTitle || "Not provided")}
+              {kv("Income", money(summary.employment.incomeAmountCents))}
+              {kv("Income frequency", summary.employment.incomeFrequency || "Not provided")}
+              {kv("Income monthly (derived)", money(summary.employment.incomeMonthlyCents))}
+              {kv(
+                "Months at current job",
+                summary.employment.monthsAtJob != null ? String(summary.employment.monthsAtJob) : "Not provided"
+              )}
+              {kv("Work reference name", summary.reference.name || "Not provided")}
+              {kv("Work reference phone", summary.reference.phone || "Not provided")}
+            </div>
+          </Card>
+            </div>
+          ) : null}
+
+          {activeReviewTab === "activity" ? (
+            <div
+              role="tabpanel"
+              id="review-summary-panel-activity"
+              aria-labelledby="review-summary-tab-activity"
+              style={{ display: "grid", gap: 12 }}
+            >
           {guidanceView && interactionLoop && resolutionView ? (
             <Card style={{ display: "grid", gap: 10 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
@@ -886,6 +996,74 @@ function ApplicationReviewSummaryPageBody() {
             </Card>
           ) : null}
 
+          {structuredNotifications.length ? (
+            <Card style={{ display: "grid", gap: 8 }}>
+              <StructuredNotificationList
+                heading="Recent updates"
+                emptyLabel="Recent workflow-triggered review updates will appear here as the package changes."
+                items={structuredNotifications}
+              />
+            </Card>
+          ) : null}
+
+          {summary.portableIdentitySummary ? (
+            <Card style={{ display: "grid", gap: 8 }}>
+              <div style={{ fontWeight: 700 }}>Portability summary</div>
+              <div style={{ fontSize: 13, color: text.subtle }}>
+                {summary.portableIdentitySummary.portabilityDescription}
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
+                {kv("Status", summary.portableIdentitySummary.portabilityLabel)}
+                {kv(
+                  "Reusable across applications",
+                  summary.portableIdentitySummary.reusableAcrossApplications ? "Yes" : "Not yet"
+                )}
+              </div>
+            </Card>
+          ) : null}
+
+          {summary.networkReuseSummary ? (
+            <Card style={{ display: "grid", gap: 8 }}>
+              {(() => {
+                const networkReuseCopy = buildLandlordNetworkReuseCopy(summary.networkReuseSummary);
+                return (
+                  <>
+              <div style={{ fontWeight: 700 }}>Network reuse</div>
+              <div style={{ fontSize: 13, color: text.subtle }}>
+                {networkReuseCopy.description}
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
+                {kv("Status", networkReuseCopy.headline)}
+                {kv("Source", networkReuseCopy.sourceLabel)}
+                {kv("Consent required", summary.networkReuseSummary.consentRequired ? "Yes" : "No")}
+                {kv(
+                  "Approved reuse support",
+                  networkReusePathSupportLabel(
+                    summary.networkReuseSummary.identitySummaryApproved,
+                    summary.networkReuseSummary.applicationSummaryApproved
+                  )
+                )}
+                {kv(
+                  "Additional approval may unlock more",
+                  summary.networkReuseSummary.additionalConsentMayUnlock ? "Yes" : "No"
+                )}
+              </div>
+              <div style={{ fontSize: 12, color: text.subtle }}>{networkReuseCopy.guardrailCopy}</div>
+                  </>
+                );
+              })()}
+            </Card>
+          ) : null}
+            </div>
+          ) : null}
+
+          {activeReviewTab === "decision" ? (
+            <div
+              role="tabpanel"
+              id="review-summary-panel-decision"
+              aria-labelledby="review-summary-tab-decision"
+              style={{ display: "grid", gap: 12 }}
+            >
           {decisionWorkspace ? (
             <Card style={{ display: "grid", gap: 10 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
@@ -1616,13 +1794,75 @@ function ApplicationReviewSummaryPageBody() {
             </Card>
           ) : null}
 
-          {structuredNotifications.length ? (
+          <ApplicationDecisionSummaryCard
+            summary={summary.decisionSummary || null}
+            onEvaluateRisk={handleEvaluateRisk}
+            evaluatingRisk={evaluatingRisk}
+            onDecision={handleDecision}
+            submittingDecision={savingDecision}
+          />
+
+          <Card style={{ display: "grid", gap: 6 }}>
+            <div style={{ fontWeight: 700 }}>Insights</div>
+            {summary.insights.length ? (
+              <ul style={{ margin: 0, paddingLeft: 20, color: text.main }}>
+                {summary.insights.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            ) : (
+              <div style={{ color: text.subtle }}>No insights available.</div>
+            )}
+            <div style={{ fontSize: 12, color: text.subtle }}>
+              This summary is descriptive and does not provide approval/denial recommendations.
+            </div>
+          </Card>
+            </div>
+          ) : null}
+
+          {activeReviewTab === "screening" ? (
+            <div
+              role="tabpanel"
+              id="review-summary-panel-screening"
+              aria-labelledby="review-summary-tab-screening"
+              style={{ display: "grid", gap: 12 }}
+            >
+          <Card style={{ display: "grid", gap: 8 }}>
+            <div style={{ fontWeight: 700 }}>Screening & Compliance</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
+              {kv("Screening status", summary.screening.status || "not_run")}
+              {kv("Screening provider", summary.screening.provider || "Not provided")}
+              {kv("Reference ID", summary.screening.referenceId || "Not provided")}
+              {kv(
+                "Completeness",
+                `${summary.derived.completeness.label} (${Math.round(summary.derived.completeness.score * 100)}%)`
+              )}
+              {kv("Income-to-rent ratio", ratio(summary.derived.incomeToRentRatio))}
+              {kv("Consent version", summary.compliance.applicationConsentVersion || "Not provided")}
+              {kv("Consent accepted at", dateOr(summary.compliance.applicationConsentAcceptedAt))}
+              {kv("Signature type", summary.compliance.signatureType || "Not provided")}
+              {kv("Signed at", dateOr(summary.compliance.signedAt))}
+            </div>
+            {summary.derived.flags.length ? (
+              <div style={{ fontSize: 13, color: text.subtle }}>
+                Flags: {summary.derived.flags.join(", ")}
+              </div>
+            ) : (
+              <div style={{ fontSize: 13, color: text.subtle }}>Flags: none</div>
+            )}
+          </Card>
+
+          {summary.tenantCredibilitySummary ? (
             <Card style={{ display: "grid", gap: 8 }}>
-              <StructuredNotificationList
-                heading="Recent updates"
-                emptyLabel="Recent workflow-triggered review updates will appear here as the package changes."
-                items={structuredNotifications}
-              />
+              <div style={{ fontWeight: 700 }}>Credibility summary</div>
+              <div style={{ fontSize: 13, color: text.subtle }}>
+                {summary.tenantCredibilitySummary.summaryDescription}
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
+                {kv("Summary", summary.tenantCredibilitySummary.summaryLabel)}
+                {kv("Completeness level", summary.tenantCredibilitySummary.completenessLevel)}
+                {kv("Verification level", summary.tenantCredibilitySummary.verificationLevel)}
+              </div>
             </Card>
           ) : null}
 
@@ -1718,162 +1958,8 @@ function ApplicationReviewSummaryPageBody() {
               </div>
             </Card>
           ) : null}
-
-          {summary.tenantCredibilitySummary ? (
-            <Card style={{ display: "grid", gap: 8 }}>
-              <div style={{ fontWeight: 700 }}>Credibility summary</div>
-              <div style={{ fontSize: 13, color: text.subtle }}>
-                {summary.tenantCredibilitySummary.summaryDescription}
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
-                {kv("Summary", summary.tenantCredibilitySummary.summaryLabel)}
-                {kv("Completeness level", summary.tenantCredibilitySummary.completenessLevel)}
-                {kv("Verification level", summary.tenantCredibilitySummary.verificationLevel)}
-              </div>
-            </Card>
+            </div>
           ) : null}
-
-          {summary.portableIdentitySummary ? (
-            <Card style={{ display: "grid", gap: 8 }}>
-              <div style={{ fontWeight: 700 }}>Portability summary</div>
-              <div style={{ fontSize: 13, color: text.subtle }}>
-                {summary.portableIdentitySummary.portabilityDescription}
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
-                {kv("Status", summary.portableIdentitySummary.portabilityLabel)}
-                {kv(
-                  "Reusable across applications",
-                  summary.portableIdentitySummary.reusableAcrossApplications ? "Yes" : "Not yet"
-                )}
-              </div>
-            </Card>
-          ) : null}
-
-          {summary.networkReuseSummary ? (
-            <Card style={{ display: "grid", gap: 8 }}>
-              {(() => {
-                const networkReuseCopy = buildLandlordNetworkReuseCopy(summary.networkReuseSummary);
-                return (
-                  <>
-              <div style={{ fontWeight: 700 }}>Network reuse</div>
-              <div style={{ fontSize: 13, color: text.subtle }}>
-                {networkReuseCopy.description}
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
-                {kv("Status", networkReuseCopy.headline)}
-                {kv("Source", networkReuseCopy.sourceLabel)}
-                {kv("Consent required", summary.networkReuseSummary.consentRequired ? "Yes" : "No")}
-                {kv(
-                  "Approved reuse support",
-                  networkReusePathSupportLabel(
-                    summary.networkReuseSummary.identitySummaryApproved,
-                    summary.networkReuseSummary.applicationSummaryApproved
-                  )
-                )}
-                {kv(
-                  "Additional approval may unlock more",
-                  summary.networkReuseSummary.additionalConsentMayUnlock ? "Yes" : "No"
-                )}
-              </div>
-              <div style={{ fontSize: 12, color: text.subtle }}>{networkReuseCopy.guardrailCopy}</div>
-                  </>
-                );
-              })()}
-            </Card>
-          ) : null}
-
-          <Card style={{ display: "grid", gap: 8 }}>
-            <div style={{ fontWeight: 700 }}>Applicant Overview</div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
-              {kv("Name", summary.applicant.name || "Not provided")}
-              {kv("Email", summary.applicant.email || "Not provided")}
-              {kv(
-                "Address",
-                [
-                  summary.applicant.currentAddressLine,
-                  summary.applicant.city,
-                  summary.applicant.provinceState,
-                  summary.applicant.postalCode,
-                  summary.applicant.country,
-                ]
-                  .filter(Boolean)
-                  .join(", ") || "Not provided"
-              )}
-              {kv(
-                "Time at current address",
-                summary.applicant.timeAtCurrentAddressMonths != null
-                  ? `${summary.applicant.timeAtCurrentAddressMonths} months`
-                  : "Not provided"
-              )}
-              {kv("Current rent", money(summary.applicant.currentRentAmountCents))}
-            </div>
-          </Card>
-
-          <Card style={{ display: "grid", gap: 8 }}>
-            <div style={{ fontWeight: 700 }}>Employment & Income</div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
-              {kv("Employer", summary.employment.employerName || "Not provided")}
-              {kv("Job title", summary.employment.jobTitle || "Not provided")}
-              {kv("Income", money(summary.employment.incomeAmountCents))}
-              {kv("Income frequency", summary.employment.incomeFrequency || "Not provided")}
-              {kv("Income monthly (derived)", money(summary.employment.incomeMonthlyCents))}
-              {kv(
-                "Months at current job",
-                summary.employment.monthsAtJob != null ? String(summary.employment.monthsAtJob) : "Not provided"
-              )}
-              {kv("Work reference name", summary.reference.name || "Not provided")}
-              {kv("Work reference phone", summary.reference.phone || "Not provided")}
-            </div>
-          </Card>
-
-          <Card style={{ display: "grid", gap: 8 }}>
-            <div style={{ fontWeight: 700 }}>Screening & Compliance</div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
-              {kv("Screening status", summary.screening.status || "not_run")}
-              {kv("Screening provider", summary.screening.provider || "Not provided")}
-              {kv("Reference ID", summary.screening.referenceId || "Not provided")}
-              {kv(
-                "Completeness",
-                `${summary.derived.completeness.label} (${Math.round(summary.derived.completeness.score * 100)}%)`
-              )}
-              {kv("Income-to-rent ratio", ratio(summary.derived.incomeToRentRatio))}
-              {kv("Consent version", summary.compliance.applicationConsentVersion || "Not provided")}
-              {kv("Consent accepted at", dateOr(summary.compliance.applicationConsentAcceptedAt))}
-              {kv("Signature type", summary.compliance.signatureType || "Not provided")}
-              {kv("Signed at", dateOr(summary.compliance.signedAt))}
-            </div>
-            {summary.derived.flags.length ? (
-              <div style={{ fontSize: 13, color: text.subtle }}>
-                Flags: {summary.derived.flags.join(", ")}
-              </div>
-            ) : (
-              <div style={{ fontSize: 13, color: text.subtle }}>Flags: none</div>
-            )}
-          </Card>
-
-          <ApplicationDecisionSummaryCard
-            summary={summary.decisionSummary || null}
-            onEvaluateRisk={handleEvaluateRisk}
-            evaluatingRisk={evaluatingRisk}
-            onDecision={handleDecision}
-            submittingDecision={savingDecision}
-          />
-
-          <Card style={{ display: "grid", gap: 6 }}>
-            <div style={{ fontWeight: 700 }}>Insights</div>
-            {summary.insights.length ? (
-              <ul style={{ margin: 0, paddingLeft: 20, color: text.main }}>
-                {summary.insights.map((line) => (
-                  <li key={line}>{line}</li>
-                ))}
-              </ul>
-            ) : (
-              <div style={{ color: text.subtle }}>No insights available.</div>
-            )}
-            <div style={{ fontSize: 12, color: text.subtle }}>
-              This summary is descriptive and does not provide approval/denial recommendations.
-            </div>
-          </Card>
         </>
       ) : null}
         </>

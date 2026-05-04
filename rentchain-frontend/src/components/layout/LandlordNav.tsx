@@ -182,14 +182,14 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
       </button>
 
       <div
-        className={`rc-landlord-backdrop ${drawerOpen ? "is-open" : ""}`}
+        className={`rc-landlord-backdrop rc-landlord-backdrop--nav-safe ${drawerOpen ? "is-open" : ""}`}
         onClick={() => setDrawerOpen(false)}
         aria-hidden={!drawerOpen}
       />
 
       <aside
         id="rc-landlord-drawer"
-        className={`rc-landlord-drawer ${drawerOpen ? "is-open" : ""}`}
+        className={`rc-landlord-drawer rc-landlord-drawer--nav-safe ${drawerOpen ? "is-open" : ""}`}
         role="dialog"
         aria-modal="true"
         aria-label="Navigation menu"

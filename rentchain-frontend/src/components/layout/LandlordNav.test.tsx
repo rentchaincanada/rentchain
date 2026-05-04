@@ -83,6 +83,30 @@ describe("LandlordNav mobile drawer", () => {
     expect(within(drawer).getByRole("button", { name: "Work Orders" })).toBeInTheDocument();
   });
 
+  it("keeps the mobile tab bar and close control available while the drawer is open", () => {
+    renderLandlordNav();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open workspace pages" }));
+
+    expect(screen.getByRole("navigation", { name: "Bottom navigation" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open workspace pages" })).toHaveClass("active");
+    expect(
+      within(screen.getByRole("dialog", { name: "Navigation menu" })).getByRole("button", {
+        name: "Close menu",
+      })
+    ).toBeInTheDocument();
+  });
+
+  it("uses a safe-area drawer offset so the sheet and backdrop stop above the mobile nav", () => {
+    renderLandlordNav();
+
+    const drawer = document.querySelector(".rc-landlord-drawer");
+    const backdrop = document.querySelector(".rc-landlord-backdrop");
+
+    expect(drawer).toHaveClass("rc-landlord-drawer--nav-safe");
+    expect(backdrop).toHaveClass("rc-landlord-backdrop--nav-safe");
+  });
+
   it("closes the drawer on option select and route change", async () => {
     renderLandlordNav();
 

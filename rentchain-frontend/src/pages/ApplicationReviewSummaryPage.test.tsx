@@ -1,6 +1,6 @@
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import ApplicationReviewSummaryPage from "./ApplicationReviewSummaryPage";
 
 vi.mock("@/hooks/useEntitlements", () => ({
@@ -25,6 +25,11 @@ vi.mock("../components/ui/ToastProvider", () => ({
 vi.mock("@/components/billing/LockedFeature", () => ({
   LockedFeature: ({ title }: { title: string }) => <div>{title}</div>,
 }));
+
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+});
 
 function renderPage() {
   return render(
@@ -155,9 +160,8 @@ describe("ApplicationReviewSummaryPage", () => {
     renderPage();
 
     expect(await screen.findByText("Application Review Summary")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Overview" })).toHaveAttribute("aria-selected", "true");
     expect(await screen.findByText("Intake Summary")).toBeInTheDocument();
-    expect(await screen.findByText("Follow-up resolution")).toBeInTheDocument();
-    expect((await screen.findAllByText("Decision workspace")).length).toBeGreaterThan(0);
     expect(await screen.findByText("Shared package categories")).toBeInTheDocument();
     expect(await screen.findByText("Recent activity")).toBeInTheDocument();
     expect(screen.getAllByText("Profile details").length).toBeGreaterThan(0);
@@ -165,13 +169,34 @@ describe("ApplicationReviewSummaryPage", () => {
     expect(screen.getAllByText("Documents & records").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Consent / identity status").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Application readiness").length).toBeGreaterThan(0);
-    expect((await screen.findAllByText("Partly addressed")).length).toBeGreaterThan(0);
     expect(await screen.findByText("Application readiness updated")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Activity" }));
+    expect(screen.getByRole("tab", { name: "Activity" })).toHaveAttribute("aria-selected", "true");
+    expect(await screen.findByText("Follow-up resolution")).toBeInTheDocument();
+    expect((await screen.findAllByText("Partly addressed")).length).toBeGreaterThan(0);
     expect((await screen.findAllByText("Next steps")).length).toBeGreaterThan(0);
     expect(await screen.findByText("Structured follow-up loop")).toBeInTheDocument();
     expect(screen.getAllByText(/Review the addressed categories now visible/i).length).toBeGreaterThan(0);
     expect(await screen.findByText("Still needs follow-up")).toBeInTheDocument();
     expect(await screen.findByText("Now appears addressed")).toBeInTheDocument();
+    expect(await screen.findByText("Recent updates")).toBeInTheDocument();
+    expect(await screen.findByText(/Tenant updated follow-up items/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Follow-up stays organized by aligned package categories/i)).toBeInTheDocument();
+    expect(await screen.findByText("Portability summary")).toBeInTheDocument();
+    expect(await screen.findByText("Network reuse")).toBeInTheDocument();
+    expect(await screen.findByText("Ready to reuse")).toBeInTheDocument();
+    expect(await screen.findByText("Tenant-approved reusable application path is available")).toBeInTheDocument();
+    expect(await screen.findByText("RentChain application")).toBeInTheDocument();
+    expect(await screen.findByText("Identity and reusable application context are already in scope for this review path.")).toBeInTheDocument();
+    expect(await screen.findByText("Identity and application summaries approved")).toBeInTheDocument();
+    expect(await screen.findByText("Additional approval may unlock more")).toBeInTheDocument();
+    expect(await screen.findByText("No")).toBeInTheDocument();
+    expect(await screen.findByText("Use this as review context only. It does not expand landlord access or permissions.")).toBeInTheDocument();
+    expect(await screen.findByText("Reusable across applications")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Decision" }));
+    expect(await screen.findByText("Decision workspace")).toBeInTheDocument();
     expect(await screen.findByText("Decision status")).toBeInTheDocument();
     expect(await screen.findByText("What is still missing")).toBeInTheDocument();
     expect(await screen.findByText(/This application is not ready for a landlord next-step decision yet/i)).toBeInTheDocument();
@@ -199,28 +224,14 @@ describe("ApplicationReviewSummaryPage", () => {
     expect((await screen.findAllByText("Next actor")).length).toBeGreaterThan(0);
     expect(await screen.findByText("Deposit / first payment")).toBeInTheDocument();
     expect(await screen.findByText("Payment status")).toBeInTheDocument();
-    expect(await screen.findByText("Recent updates")).toBeInTheDocument();
-    expect(await screen.findByText(/Tenant updated follow-up items/i)).toBeInTheDocument();
-    expect(await screen.findByText(/Follow-up stays organized by aligned package categories/i)).toBeInTheDocument();
-    expect(await screen.findByText("Shared with tenant permission and current server-authorized review access.")).toBeInTheDocument();
-    expect(await screen.findByText("Jane Applicant")).toBeInTheDocument();
     expect(await screen.findByText("Landlord Decision Panel")).toBeInTheDocument();
     expect(await screen.findByText("Identity verification completed")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Screening" }));
     expect(await screen.findByText("Trust guidance")).toBeInTheDocument();
     expect(await screen.findByText("Credibility summary")).toBeInTheDocument();
-    expect(await screen.findByText("Portability summary")).toBeInTheDocument();
-    expect(await screen.findByText("Network reuse")).toBeInTheDocument();
     expect(await screen.findByText("Credibility established")).toBeInTheDocument();
     expect(await screen.findByText("Most credibility signals are available in the current record.")).toBeInTheDocument();
-    expect(await screen.findByText("Ready to reuse")).toBeInTheDocument();
-    expect(await screen.findByText("Tenant-approved reusable application path is available")).toBeInTheDocument();
-    expect(await screen.findByText("RentChain application")).toBeInTheDocument();
-    expect(await screen.findByText("Identity and reusable application context are already in scope for this review path.")).toBeInTheDocument();
-    expect(await screen.findByText("Identity and application summaries approved")).toBeInTheDocument();
-    expect(await screen.findByText("Additional approval may unlock more")).toBeInTheDocument();
-    expect(await screen.findByText("No")).toBeInTheDocument();
-    expect(await screen.findByText("Use this as review context only. It does not expand landlord access or permissions.")).toBeInTheDocument();
-    expect(await screen.findByText("Reusable across applications")).toBeInTheDocument();
     expect((await screen.findAllByText("Ready for review")).length).toBeGreaterThan(0);
     expect(await screen.findByText("Application information is mostly complete.")).toBeInTheDocument();
     expect(await screen.findByText("Employment or income details are still incomplete.")).toBeInTheDocument();
@@ -296,6 +307,7 @@ describe("ApplicationReviewSummaryPage", () => {
 
     renderPage();
 
+    fireEvent.click(await screen.findByRole("tab", { name: "Decision" }));
     expect((await screen.findAllByText("Decision workspace")).length).toBeGreaterThan(0);
     expect((await screen.findAllByText("Ready for decision")).length).toBeGreaterThan(0);
     expect((await screen.findAllByText("Ready for next step")).length).toBeGreaterThan(0);
@@ -381,6 +393,7 @@ describe("ApplicationReviewSummaryPage", () => {
 
     renderPage();
 
+    fireEvent.click(await screen.findByRole("tab", { name: "Decision" }));
     expect((await screen.findAllByText("Decision workspace")).length).toBeGreaterThan(0);
     expect((await screen.findAllByText("Hold for later")).length).toBeGreaterThan(0);
     expect((await screen.findAllByText("Not ready for lease step")).length).toBeGreaterThan(0);
