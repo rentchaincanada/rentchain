@@ -312,6 +312,26 @@ describe("rent payment webhook reconciliation", () => {
         rawStatus: "paid",
       })
     );
+    const reconciliationRecord = ensureCollection("paymentReconciliationRecords").get("provider_event:stripe:evt_rent_paid_1");
+    expect(reconciliationRecord).toEqual(
+      expect.objectContaining({
+        reconciliationId: "provider_event:stripe:evt_rent_paid_1",
+        provider: "stripe",
+        providerEventId: "evt_rent_paid_1",
+        idempotencyKey: "provider_event:stripe:evt_rent_paid_1",
+        receiptId: "provider_event:stripe:evt_rent_paid_1",
+        subjectType: "rent_payment",
+        subjectId: "rp-1",
+        purpose: "rent",
+        normalizedStatus: "confirmed",
+        rawStatus: "paid",
+        reconciliationStatus: "reconciled",
+        reasons: ["provider_confirmed_amount_currency_match"],
+        requiresManualReview: false,
+        automationEligible: true,
+      })
+    );
+    expect(ensureCollection("paymentReconciliationRecords").size).toBe(1);
 
     const canonicalEvents = Array.from(ensureCollection("canonicalEvents").values());
     const providerSignalEvents = canonicalEvents.filter((event: any) => event.type === "payment.provider_signal_received");
@@ -396,6 +416,15 @@ describe("rent payment webhook reconciliation", () => {
         rawStatus: "failed",
       })
     );
+    expect(ensureCollection("paymentReconciliationRecords").get("provider_event:stripe:evt_rent_failed_1")).toEqual(
+      expect.objectContaining({
+        reconciliationId: "provider_event:stripe:evt_rent_failed_1",
+        providerEventId: "evt_rent_failed_1",
+        receiptId: "provider_event:stripe:evt_rent_failed_1",
+        reconciliationStatus: "reconciled",
+        reasons: ["provider_confirmed_amount_currency_match"],
+      })
+    );
 
     const canonicalEvents = Array.from(ensureCollection("canonicalEvents").values());
     const providerSignalEvent = canonicalEvents.find((event: any) => event.type === "payment.provider_signal_received");
@@ -447,6 +476,7 @@ describe("rent payment webhook reconciliation", () => {
     expect(buildProviderWebhookIdempotencyKeyMock).not.toHaveBeenCalled();
     expect(deriveRentPaymentReconciliationMock).not.toHaveBeenCalled();
     expect(Array.from(ensureCollection("paymentProviderEventReceipts").values())).toHaveLength(0);
+    expect(Array.from(ensureCollection("paymentReconciliationRecords").values())).toHaveLength(0);
     expect(
       Array.from(ensureCollection("canonicalEvents").values()).some(
         (event: any) => event.type === "payment.provider_signal_received"
@@ -481,10 +511,62 @@ describe("rent payment webhook reconciliation", () => {
     expect(buildProviderWebhookIdempotencyKeyMock).not.toHaveBeenCalled();
     expect(deriveRentPaymentReconciliationMock).not.toHaveBeenCalled();
     expect(Array.from(ensureCollection("paymentProviderEventReceipts").values())).toHaveLength(0);
+    expect(Array.from(ensureCollection("paymentReconciliationRecords").values())).toHaveLength(0);
     expect(
       Array.from(ensureCollection("canonicalEvents").values()).some(
         (event: any) => event.type === "payment.provider_signal_received"
       )
     ).toBe(false);
+  });
+
+  it("persists manual review reconciliation without changing webhook response or rent payment update", async () => {
+    deriveRentPaymentReconciliationMock.mockReturnValueOnce({
+      reconciliationStatus: "manual_review_required",
+      reasons: ["missing_internal_subject_reference"],
+      automationEligible: false,
+      requiresManualReview: true,
+    });
+    constructEventMock.mockReturnValue({
+      id: "evt_rent_manual_review_1",
+      created: 1_714_213_200,
+      type: "checkout.session.completed",
+      data: {
+        object: {
+          id: "cs_test_1",
+          payment_intent: "pi_test_1",
+          payment_status: "paid",
+          metadata: {
+            rentPaymentId: "rp-1",
+          },
+        },
+      },
+    });
+
+    const res = await invokeWebhook('{"id":"evt_rent_manual_review_1","type":"checkout.session.completed"}');
+
+    expect(res.status).toBe(200);
+    expect(ensureCollection("rentPayments").get("rp-1")).toEqual(
+      expect.objectContaining({
+        status: "paid",
+        processorCheckoutSessionId: "cs_test_1",
+        processorPaymentIntentId: "pi_test_1",
+      })
+    );
+    expect(ensureCollection("paymentReconciliationRecords").get("provider_event:stripe:evt_rent_manual_review_1")).toEqual(
+      expect.objectContaining({
+        reconciliationStatus: "manual_review_required",
+        reasons: ["missing_internal_subject_reference"],
+        requiresManualReview: true,
+        automationEligible: false,
+        receiptId: "provider_event:stripe:evt_rent_manual_review_1",
+        idempotencyKey: "provider_event:stripe:evt_rent_manual_review_1",
+      })
+    );
+    expect(ensureCollection("paymentProviderEventReceipts").get("provider_event:stripe:evt_rent_manual_review_1")).toEqual(
+      expect.objectContaining({
+        status: "manual_review_required",
+        failureReason: "missing_internal_subject_reference",
+      })
+    );
   });
 });
