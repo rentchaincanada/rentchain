@@ -313,7 +313,9 @@ async function prepareRentPaymentWebhookNormalizationContext(params: {
       rawStatus: normalizedProviderEvent.rawStatus,
       metadata: normalizedProviderEvent.metadata || null,
     });
-    const duplicateSuppressionDecision = derivePaymentDuplicateSuppressionDecision({ receipt: receipt.receipt });
+    const duplicateSuppressionDecision = derivePaymentDuplicateSuppressionDecision({
+      receipt: receipt.isDuplicate ? receipt.previousReceipt || receipt.receipt : receipt.receipt,
+    });
     await writeCanonicalEvent({
       type: "payment.provider_signal_received",
       domain: "payment",
@@ -422,6 +424,16 @@ async function markRentPaymentWebhookReceiptFailed(
       message: markerErr?.message || String(markerErr),
     });
   }
+}
+
+function shouldSuppressRentPaymentWebhookUpdate(
+  context: Awaited<ReturnType<typeof prepareRentPaymentWebhookNormalizationContext>>
+): boolean {
+  return Boolean(
+    context?.receipt?.isDuplicate &&
+      context.duplicateSuppressionDecision?.shouldSuppress &&
+      context.duplicateSuppressionDecision.safeToAcknowledge
+  );
 }
 
 async function resolveOrderRefFromStripePayment(params: {
@@ -771,6 +783,9 @@ export const stripeWebhookHandler = async (req: StripeWebhookRequest, res: Respo
       const rentPaymentEvent = extractRentPaymentMetadata(event);
       if (rentPaymentEvent.rentPaymentId && rentPaymentEvent.nextStatus) {
         const receiptContext = await prepareRentPaymentWebhookNormalizationContext({ event, rentPaymentEvent });
+        if (shouldSuppressRentPaymentWebhookUpdate(receiptContext)) {
+          return res.status(200).json({ received: true });
+        }
         try {
           await updateRentPaymentFromWebhook({
             rentPaymentId: rentPaymentEvent.rentPaymentId,
@@ -967,6 +982,9 @@ export const stripeWebhookHandler = async (req: StripeWebhookRequest, res: Respo
       const rentPaymentEvent = extractRentPaymentMetadata(event);
       if (rentPaymentEvent.rentPaymentId && rentPaymentEvent.nextStatus) {
         const receiptContext = await prepareRentPaymentWebhookNormalizationContext({ event, rentPaymentEvent });
+        if (shouldSuppressRentPaymentWebhookUpdate(receiptContext)) {
+          return res.status(200).json({ received: true });
+        }
         try {
           await updateRentPaymentFromWebhook({
             rentPaymentId: rentPaymentEvent.rentPaymentId,
