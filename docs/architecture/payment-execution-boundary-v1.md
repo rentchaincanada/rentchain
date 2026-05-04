@@ -423,6 +423,52 @@ Deferred items:
 3. Provider-neutral `PaymentIntent` persistence.
 4. Trustly sandbox adapter.
 
+## Duplicate Suppression Readiness v1
+
+Status: duplicate-suppression decisions are derived for rent-payment webhook provider events, but suppression is not active.
+
+Decision helper behavior:
+
+- `processed` receipt: future suppress candidate with `shouldSuppress: true`.
+- `ignored_duplicate` receipt: future suppress candidate with `shouldSuppress: true`.
+- `processing` receipt: does not suppress; requires manual review before future enforcement.
+- `failed` receipt: does not suppress; requires manual review.
+- `manual_review_required` receipt: does not suppress; remains manual-review owned.
+- `received` receipt: does not suppress because processing has not completed.
+- Missing or unknown receipt state: does not suppress and fails closed.
+
+Where the decision is inserted:
+
+```text
+provider event
+  -> provider-event receipt persistence
+  -> duplicate-suppression decision derivation
+  -> payment.provider_signal_received canonical event
+  -> read-only reconciliation derivation
+  -> paymentReconciliationRecords upsert
+  -> existing rent-payment webhook status update
+```
+
+Why suppression is not active yet:
+
+The existing rent-payment webhook updater is already behavior-preserving and idempotent for current Stripe rent payments. This phase only proves the decision layer can classify receipt states deterministically. Active suppression requires explicit follow-up approval because it would change whether duplicate provider events execute the existing webhook update path.
+
+Behavior intentionally unchanged:
+
+- Existing webhook HTTP responses are unchanged.
+- Existing `rentPayments` status updates are unchanged.
+- Duplicate webhooks still execute the existing rent-payment update path.
+- Provider-event receipts and reconciliation records remain audit/readiness layers.
+- Screening checkout webhook behavior is untouched.
+- SaaS subscription webhook behavior is untouched.
+
+Deferred items:
+
+1. Active duplicate suppression after explicit approval.
+2. Reconciliation-driven status transitions.
+3. Provider-neutral `PaymentIntent` persistence.
+4. Trustly sandbox adapter.
+
 ## Intentional Non-Implementation
 
 This mission intentionally does not:
