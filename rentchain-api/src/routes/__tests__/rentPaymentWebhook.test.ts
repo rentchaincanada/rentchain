@@ -70,7 +70,7 @@ const {
           : "provider_event_not_processed_yet",
       existingReceiptStatus: input.receipt?.status || null,
       duplicateCount: input.receipt?.duplicateCount || 0,
-      safeToAcknowledge: input.receipt?.status === "ignored_duplicate",
+      safeToAcknowledge: input.receipt?.status === "processed" || input.receipt?.status === "ignored_duplicate",
       requiresManualReview: false,
     })),
   };
@@ -313,8 +313,8 @@ describe("rent payment webhook reconciliation", () => {
     });
     expect(derivePaymentDuplicateSuppressionDecisionMock).toHaveBeenNthCalledWith(2, {
       receipt: expect.objectContaining({
-        status: "ignored_duplicate",
-        duplicateCount: 1,
+        status: "processed",
+        duplicateCount: 0,
       }),
     });
 
@@ -399,6 +399,109 @@ describe("rent payment webhook reconciliation", () => {
     expect(JSON.stringify(rentPaidEvent || {})).not.toContain("card");
     expect(JSON.stringify(rentPaidEvent || {})).not.toContain("receipt");
     expect(JSON.stringify(rentPaidEvent || {})).not.toContain("@");
+  });
+
+  it("acknowledges already-processed duplicate rent webhooks without rerunning the rent payment update", async () => {
+    constructEventMock.mockReturnValue({
+      id: "evt_rent_paid_1",
+      created: 1_714_213_200,
+      type: "checkout.session.completed",
+      data: {
+        object: {
+          id: "cs_test_1",
+          payment_intent: "pi_test_1",
+          payment_status: "paid",
+          metadata: {
+            rentPaymentId: "rp-1",
+            leaseId: "lease-1",
+            tenantId: "tenant-1",
+            landlordId: "landlord-1",
+          },
+        },
+      },
+    });
+
+    const first = await invokeWebhook('{"id":"evt_rent_paid_1","type":"checkout.session.completed"}');
+    ensureCollection("rentPayments").set("rp-1", {
+      ...ensureCollection("rentPayments").get("rp-1"),
+      status: "checkout_created",
+      updatedAt: "2026-04-27T10:00:00.000Z",
+      paidAt: null,
+    });
+    const duplicate = await invokeWebhook('{"id":"evt_rent_paid_1","type":"checkout.session.completed"}');
+
+    expect(first.status).toBe(200);
+    expect(duplicate.status).toBe(200);
+    expect(ensureCollection("rentPayments").get("rp-1")).toEqual(
+      expect.objectContaining({
+        status: "checkout_created",
+        updatedAt: "2026-04-27T10:00:00.000Z",
+        paidAt: null,
+      })
+    );
+    expect(ensureCollection("paymentProviderEventReceipts").get("provider_event:stripe:evt_rent_paid_1")).toEqual(
+      expect.objectContaining({
+        status: "ignored_duplicate",
+        duplicateCount: 1,
+      })
+    );
+    expect(derivePaymentDuplicateSuppressionDecisionMock).toHaveBeenNthCalledWith(2, {
+      receipt: expect.objectContaining({
+        status: "processed",
+        duplicateCount: 0,
+      }),
+    });
+    expect(Array.from(ensureCollection("canonicalEvents").values()).filter((event: any) => event.type === "rent_payment.paid")).toHaveLength(1);
+  });
+
+  it("does not suppress duplicate rent webhooks when the previous receipt failed", async () => {
+    ensureCollection("paymentProviderEventReceipts").set("provider_event:stripe:evt_rent_paid_failed_receipt", {
+      receiptId: "provider_event:stripe:evt_rent_paid_failed_receipt",
+      idempotencyKey: "provider_event:stripe:evt_rent_paid_failed_receipt",
+      provider: "stripe",
+      providerEventId: "evt_rent_paid_failed_receipt",
+      purpose: "rent",
+      subjectType: "rent_payment",
+      subjectId: "rp-1",
+      status: "failed",
+      firstReceivedAt: "2026-04-27T10:00:00.000Z",
+      lastSeenAt: "2026-04-27T10:00:00.000Z",
+      duplicateCount: 0,
+      normalizedStatus: "confirmed",
+      rawStatus: "paid",
+    });
+    constructEventMock.mockReturnValue({
+      id: "evt_rent_paid_failed_receipt",
+      created: 1_714_213_200,
+      type: "checkout.session.completed",
+      data: {
+        object: {
+          id: "cs_test_1",
+          payment_intent: "pi_test_1",
+          payment_status: "paid",
+          metadata: {
+            rentPaymentId: "rp-1",
+          },
+        },
+      },
+    });
+
+    const res = await invokeWebhook('{"id":"evt_rent_paid_failed_receipt","type":"checkout.session.completed"}');
+
+    expect(res.status).toBe(200);
+    expect(derivePaymentDuplicateSuppressionDecisionMock).toHaveBeenCalledWith({
+      receipt: expect.objectContaining({
+        status: "failed",
+        duplicateCount: 0,
+      }),
+    });
+    expect(ensureCollection("rentPayments").get("rp-1")).toEqual(
+      expect.objectContaining({
+        status: "paid",
+        processorCheckoutSessionId: "cs_test_1",
+        processorPaymentIntentId: "pi_test_1",
+      })
+    );
   });
 
   it("updates a rent payment to failed from async payment failure metadata", async () => {

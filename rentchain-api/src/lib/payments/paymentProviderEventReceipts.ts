@@ -70,6 +70,7 @@ export type ProviderEventReceiptWriteResult = {
   receiptId: string;
   isDuplicate: boolean;
   receipt: PaymentProviderEventReceipt;
+  previousReceipt?: PaymentProviderEventReceipt | null;
 };
 
 function nowIso(value?: string | null): string {
@@ -181,7 +182,7 @@ export async function markProviderEventReceived(input: ReceiptWriteInput): Promi
       metadataSummary: metadataSummary || existing.metadataSummary || null,
     };
     await ref.set(next, { merge: true });
-    return { receiptId, isDuplicate: true, receipt: next };
+    return { receiptId, isDuplicate: true, receipt: next, previousReceipt: existing };
   }
 
   const receipt: PaymentProviderEventReceipt = {
@@ -204,7 +205,7 @@ export async function markProviderEventReceived(input: ReceiptWriteInput): Promi
     metadataSummary,
   };
   await ref.set(receipt, { merge: true });
-  return { receiptId, isDuplicate: false, receipt };
+  return { receiptId, isDuplicate: false, receipt, previousReceipt: null };
 }
 
 async function markProviderEventStatus(

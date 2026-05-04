@@ -102,6 +102,11 @@ describe("paymentProviderEventReceipts", () => {
     });
 
     expect(duplicate.isDuplicate).toBe(true);
+    expect(duplicate.previousReceipt).toMatchObject({
+      status: "received",
+      duplicateCount: 0,
+      lastSeenAt: "2026-05-03T12:00:00.000Z",
+    });
     expect(duplicate.receipt).toMatchObject({
       status: "ignored_duplicate",
       duplicateCount: 1,

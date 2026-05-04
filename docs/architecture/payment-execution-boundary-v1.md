@@ -469,6 +469,63 @@ Deferred items:
 3. Provider-neutral `PaymentIntent` persistence.
 4. Trustly sandbox adapter.
 
+## Duplicate Suppression Enforcement v1
+
+Status: already-processed rent-payment provider events are suppressed before the existing rent-payment update call.
+
+What is suppressed:
+
+- Duplicate provider events whose previous receipt state was `processed`.
+- Duplicate provider events whose previous receipt state was `ignored_duplicate`.
+
+What is not suppressed:
+
+- First-time provider events.
+- Duplicate provider events whose previous receipt state was `failed`.
+- Duplicate provider events whose previous receipt state was `manual_review_required`.
+- Duplicate provider events whose previous receipt state was `processing`, `received`, missing, or unknown.
+
+Stripe acknowledgment semantics:
+
+Suppressed rent-payment duplicates still return the same Stripe-safe success acknowledgment:
+
+```json
+{ "received": true }
+```
+
+The webhook does not throw for suppressed duplicate events. Stripe retry semantics remain stable because RentChain acknowledges events it has already safely processed.
+
+Ordering:
+
+```text
+provider event
+  -> provider-event receipt persistence
+  -> duplicate-suppression decision derivation from previous receipt state
+  -> payment.provider_signal_received canonical event
+  -> read-only reconciliation derivation
+  -> paymentReconciliationRecords upsert
+  -> suppress only if previous receipt was processed/ignored_duplicate
+  -> otherwise continue existing rent-payment webhook status update
+```
+
+Why enforcement is narrow:
+
+Only receipt states that prove the provider event has already passed the existing webhook path are suppressible. Failed, manual-review, in-progress, missing, and unknown states continue through the existing path so RentChain does not accidentally hide a payment update that still needs processing.
+
+Behavior intentionally unchanged:
+
+- First-time rent-payment webhook behavior is unchanged.
+- Existing webhook HTTP response shape is unchanged.
+- Existing `rentPayments` status transition logic is unchanged for non-suppressed events.
+- Screening checkout webhook behavior is untouched.
+- SaaS subscription webhook behavior is untouched.
+
+Deferred items:
+
+1. Provider-neutral `PaymentIntent` persistence.
+2. Reconciliation-driven status transitions.
+3. Trustly sandbox adapter.
+
 ## Intentional Non-Implementation
 
 This mission intentionally does not:
