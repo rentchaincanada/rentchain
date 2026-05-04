@@ -74,6 +74,7 @@
 
 .rc-applications-detail .rc-applications-status-row button {
   white-space: nowrap;
+  flex: 0 1 auto;
 }
 
 .rc-applications-detail .rc-applications-text {
@@ -162,7 +163,22 @@
   }
 
   .rc-applications-detail {
-    overflow-x: auto;
+    overflow-x: hidden;
+  }
+
+  .rc-applications-status-row {
+    width: 100%;
+    align-items: stretch;
+  }
+
+  .rc-applications-detail .rc-applications-status-row button {
+    flex: 1 1 128px;
+    min-width: 0;
+    padding-left: 8px;
+    padding-right: 8px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.15;
   }
 
   .rc-applications-screening-grid {

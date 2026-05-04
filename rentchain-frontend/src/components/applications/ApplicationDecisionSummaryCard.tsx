@@ -11,6 +11,7 @@ interface ApplicationDecisionSummaryCardProps {
   evaluatingRisk?: boolean;
   onDecision?: ((decision: LandlordDecisionAction, notes: string) => void | Promise<void>) | null;
   submittingDecision?: boolean;
+  requestInfoDrawer?: React.ReactNode;
 }
 
 function formatConfidence(value?: number | null) {
@@ -74,6 +75,7 @@ export const ApplicationDecisionSummaryCard: React.FC<ApplicationDecisionSummary
   evaluatingRisk = false,
   onDecision = null,
   submittingDecision = false,
+  requestInfoDrawer = null,
 }) => {
   const risk = summary?.riskInsights ?? null;
   const riskSnapshot = summary?.riskSnapshot ?? null;
@@ -126,6 +128,7 @@ export const ApplicationDecisionSummaryCard: React.FC<ApplicationDecisionSummary
             onDecision={onDecision}
             submittingDecision={submittingDecision}
           />
+          {requestInfoDrawer}
 
           {risk ? (
             <div

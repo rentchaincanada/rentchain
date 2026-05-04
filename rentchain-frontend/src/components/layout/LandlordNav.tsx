@@ -64,6 +64,12 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
     nav(path);
   };
 
+  const mobileTabLabel = (label: string) => {
+    if (label === "Applications") return "Apps";
+    if (label === "Messages") return "Msgs";
+    return label;
+  };
+
   useEffect(() => {
     let mounted = true;
     if (navLoading || !isLandlordWorkspace || features?.messaging === false) {
@@ -261,7 +267,7 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
             >
               <Icon size={20} strokeWidth={2.2} />
               <span className="rc-mobile-tabbar-label">
-                {label}
+                {mobileTabLabel(label)}
                 {label === "Messages" && unreadFlag ? (
                   <span className="rc-mobile-tabbar-dot" />
                 ) : null}

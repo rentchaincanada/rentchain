@@ -258,8 +258,11 @@ describe("DashboardPage", () => {
       </ToastProvider>
     );
 
-    expect(await screen.findByRole("link", { name: "3" })).toHaveAttribute("href", "/dashboard#open-actions");
-    expect(screen.getByRole("link", { name: "2" })).toHaveAttribute("href", "/applications?status=review");
+    expect(await screen.findByRole("link", { name: "Open Actions" })).toHaveAttribute("href", "/dashboard#open-actions");
+    expect(screen.getByRole("link", { name: "Properties" })).toHaveAttribute("href", "/properties");
+    expect(screen.getByRole("link", { name: "Tenants" })).toHaveAttribute("href", "/tenants");
+    expect(screen.getByRole("link", { name: "Delinquencies" })).toHaveAttribute("href", "/payments?filter=delinquent");
+    expect(screen.getAllByRole("link", { name: "2" }).some((link) => link.getAttribute("href") === "/applications?status=review")).toBe(true);
   });
 
   it("routes the screening setup CTA to the applications TransUnion onboarding path", async () => {

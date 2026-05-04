@@ -199,8 +199,8 @@ describe("MessagesPage", () => {
 
     await flushAsync();
     expect(screen.getAllByText("Jordan Tenant • Unit 4B").length).toBeGreaterThan(0);
-    expect(screen.getByText("Morgan Tenant • Property unavailable")).toBeInTheDocument();
-    expect(screen.getByText("Tenant • North Point / Unit 8")).toBeInTheDocument();
+    expect(screen.getByText("Morgan Tenant • Harbour View")).toBeInTheDocument();
+    expect(screen.getByText("Tenant name unavailable • North Point / Unit 8")).toBeInTheDocument();
     expect(screen.queryByText("Tenant conversation • Unit unavailable")).not.toBeInTheDocument();
   });
 

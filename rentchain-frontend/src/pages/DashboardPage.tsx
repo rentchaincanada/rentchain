@@ -652,7 +652,13 @@ const DashboardPage: React.FC = () => {
           <KpiStrip
             kpis={kpis}
             loading={loading}
-            links={{ openActionsCount: "/dashboard#open-actions" }}
+            links={{
+              propertiesCount: "/properties",
+              unitsCount: "/properties",
+              tenantsCount: "/tenants",
+              openActionsCount: "/dashboard#open-actions",
+              delinquentCount: "/payments?filter=delinquent",
+            }}
           />
         ) : null}
         {dataReady ? (
@@ -1036,7 +1042,7 @@ const DashboardPage: React.FC = () => {
               <RecentEventsCard
                 events={events}
                 loading={loading}
-                openLedgerEnabled={false}
+                onOpenLedger={() => navigate("/ledger")}
                 title="Recent activity"
                 emptyLabel="No recent activity yet. Add a property to start activity tracking."
               />
@@ -1053,7 +1059,7 @@ const DashboardPage: React.FC = () => {
             <RecentEventsCard
               events={events}
               loading={loading}
-              openLedgerEnabled={false}
+              onOpenLedger={() => navigate("/ledger")}
               title="Recent activity"
               emptyLabel="No recent activity yet. Add a property to start activity tracking."
             />

@@ -41,6 +41,7 @@ describe("PaymentsPage", () => {
           id: "payment-1",
           tenantId: "tenant-1",
           propertyId: "prop-1",
+          unitDisplayLabel: "3A",
           amount: 1800,
           paidAt: "2026-04-01",
           method: "e-transfer",
@@ -79,7 +80,7 @@ describe("PaymentsPage", () => {
     expect(screen.getByRole("button", { name: "Export Spreadsheet (.xls)" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Export PDF" })).toBeInTheDocument();
     expect((await screen.findAllByText("Taylor Tenant")).length).toBeGreaterThan(0);
-    expect(screen.getAllByText("123 Main St").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("123 Main St / Unit 3A").length).toBeGreaterThan(0);
     expect(screen.getAllByText("e-transfer").length).toBeGreaterThan(0);
   });
 

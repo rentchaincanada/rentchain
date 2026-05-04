@@ -79,10 +79,28 @@ const PaymentsPage: React.FC = () => {
     };
   }, []);
 
-  const getTenantLabel = (payment: PaymentRecord) =>
-    labelMap.tenants.get(String(payment.tenantId || "").trim()) || "Tenant";
-  const getPropertyLabel = (payment: PaymentRecord) =>
-    labelMap.properties.get(String(payment.propertyId || "").trim()) || "Property";
+  const getTenantLabel = (payment: PaymentRecord) => {
+    const record = payment as any;
+    return (
+      tenantLabelFromValue(record.tenant) ||
+      tenantLabelFromValue(record.tenantProfile) ||
+      String(record.tenantName || record.tenantDisplayName || record.applicantName || "").trim() ||
+      labelMap.tenants.get(String(payment.tenantId || "").trim()) ||
+      "Tenant name unavailable"
+    );
+  };
+  const getPropertyLabel = (payment: PaymentRecord) => {
+    const record = payment as any;
+    const propertyLabel =
+      propertyLabelFromValue(record.property) ||
+      String(record.propertyName || record.propertyDisplayName || record.propertyDisplayLabel || "").trim() ||
+      labelMap.properties.get(String(payment.propertyId || "").trim()) ||
+      "";
+    const unitLabel = String(record.unitName || record.unitNumber || record.unitLabel || record.unitDisplayLabel || "").trim();
+    const formattedUnit = unitLabel ? (/^unit\b/i.test(unitLabel) ? unitLabel : `Unit ${unitLabel}`) : "";
+    if (propertyLabel && formattedUnit) return `${propertyLabel} / ${formattedUnit}`;
+    return propertyLabel || formattedUnit || "Property/unit unavailable";
+  };
 
   const triggerExport = async (format: "csv" | "xls") => {
     try {

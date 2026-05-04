@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { LandlordNav } from "./LandlordNav";
 
 const mocks = vi.hoisted(() => ({
@@ -35,6 +35,11 @@ vi.mock("@/features/upgradeNudges/UpgradeNudgeHost", () => ({
   UpgradeNudgeHost: () => null,
 }));
 
+function CurrentPath() {
+  const location = useLocation();
+  return <div data-testid="current-path">{location.pathname}</div>;
+}
+
 function renderLandlordNav(initialPath = "/dashboard") {
   return render(
     <MemoryRouter initialEntries={[initialPath]}>
@@ -44,6 +49,7 @@ function renderLandlordNav(initialPath = "/dashboard") {
           element={
             <LandlordNav>
               <div data-testid="page-content">Page content</div>
+              <CurrentPath />
             </LandlordNav>
           }
         />
@@ -116,6 +122,17 @@ describe("LandlordNav mobile drawer", () => {
     await waitFor(() => {
       expect(screen.getByRole("dialog", { name: "Navigation menu" })).not.toHaveClass("is-open");
     });
+    expect(screen.getByTestId("current-path")).toHaveTextContent("/payments");
+  });
+
+  it("uses compact labels for long mobile tabs", () => {
+    renderLandlordNav();
+
+    const tabbar = screen.getByRole("navigation", { name: "Bottom navigation" });
+    expect(within(tabbar).getByText("Apps")).toBeInTheDocument();
+    expect(within(tabbar).getByText("Msgs")).toBeInTheDocument();
+    expect(within(tabbar).queryByText("Applications")).not.toBeInTheDocument();
+    expect(within(tabbar).queryByText("Messages")).not.toBeInTheDocument();
   });
 
   it("closes the drawer on Escape", async () => {

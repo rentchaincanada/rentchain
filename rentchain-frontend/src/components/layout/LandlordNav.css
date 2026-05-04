@@ -173,9 +173,11 @@
   display: grid;
   justify-items: center;
   gap: 4px;
-  padding: 6px 4px;
+  min-width: 0;
+  min-height: 52px;
+  padding: 6px 2px;
   color: #6b7280;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   border-radius: 10px;
 }
@@ -189,6 +191,10 @@
   position: relative;
   display: inline-flex;
   align-items: center;
+  max-width: 100%;
+  line-height: 1.1;
+  text-align: center;
+  white-space: nowrap;
 }
 
 .rc-mobile-tabbar-dot {
@@ -239,6 +245,7 @@
   }
 
   .rc-landlord-drawer {
+    z-index: 80;
     top: auto;
     left: max(12px, env(safe-area-inset-left, 0px));
     right: max(12px, env(safe-area-inset-right, 0px));

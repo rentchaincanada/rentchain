@@ -123,6 +123,9 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
         }}
       />
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Workspace navigation"
         style={{
           position: "relative",
           width: 320,
