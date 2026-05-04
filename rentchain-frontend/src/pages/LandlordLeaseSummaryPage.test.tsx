@@ -76,10 +76,17 @@ describe("LandlordLeaseSummaryPage", () => {
     );
 
     expect(await screen.findByText("Lease summary")).toBeInTheDocument();
+    expect(screen.getByTestId("lease-document-view")).toBeInTheDocument();
+    expect(screen.getByText("Residential Lease Pack")).toBeInTheDocument();
+    expect(screen.getByText("Property and Unit")).toBeInTheDocument();
+    expect(screen.getByText("Landlord and Tenant")).toBeInTheDocument();
+    expect(screen.getByText("Lease Term")).toBeInTheDocument();
+    expect(screen.getByText("Rent and Payment Terms")).toBeInTheDocument();
+    expect(screen.getByText("Clauses and Additional Terms")).toBeInTheDocument();
+    expect(screen.getByText("Audit and Events")).toBeInTheDocument();
     expect(mocks.getLeaseById).toHaveBeenCalledWith("lease-1");
     expect(screen.getByText("Coburg Rd")).toBeInTheDocument();
     expect(screen.getByText("Tony Wenpeng")).toBeInTheDocument();
-    expect(screen.getByText("Not attached")).toBeInTheDocument();
     expect(screen.queryByText(/gs:\/\//i)).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open ledger" })).toHaveAttribute("href", "/leases/lease-1/ledger");
     expect(screen.getByRole("link", { name: "Back to leases" })).toHaveAttribute("href", "/leases");

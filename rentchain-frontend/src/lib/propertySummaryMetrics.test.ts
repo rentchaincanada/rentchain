@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildPropertySummaryMetrics } from "./propertySummaryMetrics";
 
 describe("buildPropertySummaryMetrics", () => {
-  it("keeps leased units lease-based while occupancy stays unit-based", () => {
+  it("derives occupancy and rent from active lease lifecycle instead of stale unit status", () => {
     const metrics = buildPropertySummaryMetrics(
       [
         {
@@ -32,12 +32,48 @@ describe("buildPropertySummaryMetrics", () => {
           updatedAt: "2026-01-01T00:00:00.000Z",
         },
       ],
-      2
+      2,
+      "2026-05-04"
     );
 
     expect(metrics.leasedUnits).toHaveLength(1);
     expect(metrics.occupancyRate).toBe(50);
     expect(metrics.activeLeaseRentTotal).toBe(1900);
-    expect(metrics.currentOccupiedRentTotal).toBe(1800);
+    expect(metrics.currentOccupiedRentTotal).toBe(1900);
+  });
+
+  it("does not count expired leases or stale occupied flags as occupied", () => {
+    const metrics = buildPropertySummaryMetrics(
+      [
+        {
+          id: "unit-1",
+          unitNumber: "101",
+          status: "occupied",
+          rent: 1800,
+        },
+      ],
+      [
+        {
+          id: "lease-expired",
+          tenantId: "tenant-1",
+          propertyId: "prop-1",
+          unitId: "unit-1",
+          unitNumber: "101",
+          monthlyRent: 1800,
+          startDate: "2025-01-01",
+          endDate: "2025-12-31",
+          status: "active",
+          createdAt: "2025-01-01T00:00:00.000Z",
+          updatedAt: "2025-01-01T00:00:00.000Z",
+        },
+      ],
+      1,
+      "2026-05-04"
+    );
+
+    expect(metrics.leasedUnits).toHaveLength(0);
+    expect(metrics.occupancyRate).toBe(0);
+    expect(metrics.activeLeaseRentTotal).toBe(0);
+    expect(metrics.currentOccupiedRentTotal).toBe(0);
   });
 });

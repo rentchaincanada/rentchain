@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { fetchAccountLimits, type AccountLimits } from "../api/accountApi";
 import { getAuthToken } from "../lib/authToken";
+import { isPublicRoutePath } from "../lib/publicRoute";
 
 const lastApiError: unknown = null;
 
@@ -12,9 +14,11 @@ function formatApiError(err: unknown) {
 }
 
 export const DebugPanel: React.FC = () => {
+  const location = useLocation();
   const [limits, setLimits] = useState<AccountLimits | null>(null);
   const [hasAuthToken, setHasAuthToken] = useState(false);
   const [isMobileViewport, setIsMobileViewport] = useState(false);
+  const isPublicRoute = isPublicRoutePath(location.pathname);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -34,13 +38,13 @@ export const DebugPanel: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (!import.meta.env.DEV || !hasAuthToken || isMobileViewport) {
+    if (!import.meta.env.DEV || !hasAuthToken || isMobileViewport || isPublicRoute) {
       return;
     }
     fetchAccountLimits().then(setLimits).catch(() => setLimits(null));
-  }, [hasAuthToken, isMobileViewport]);
+  }, [hasAuthToken, isMobileViewport, isPublicRoute]);
 
-  if (!import.meta.env.DEV || !hasAuthToken || isMobileViewport) return null;
+  if (!import.meta.env.DEV || !hasAuthToken || isMobileViewport || isPublicRoute) return null;
 
   // Normalize data to avoid crashes when limits are missing/shape differs
   const limitsData = limits || null;

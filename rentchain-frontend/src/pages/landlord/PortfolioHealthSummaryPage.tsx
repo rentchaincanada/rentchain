@@ -188,6 +188,7 @@ export default function PortfolioHealthSummaryPage() {
       : entryStatus === "no-response"
       ? "Showing leases where the tenant response window has elapsed without a reply."
       : "Save renewal term and deadline choices on the lease record so readiness checks can observe them canonically.";
+  const renewalDisplayItems = React.useMemo(() => renewalItems, [renewalItems]);
 
   React.useEffect(() => {
     if (entitlementLoading || !canViewPortfolioHealthSummary) return;
@@ -448,7 +449,7 @@ export default function PortfolioHealthSummaryPage() {
                 <div className="printTitle">{scopedRenewalHeading}</div>
                 <div className="printMeta">
                   <div>Scope: Lease renewals</div>
-                  <div>Visible leases: {renewalItems.length}</div>
+                  <div>Visible leases: {renewalDisplayItems.length}</div>
                 </div>
               </div>
               <div>{scopedRenewalHelper}</div>
@@ -465,7 +466,7 @@ export default function PortfolioHealthSummaryPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {renewalItems.map((lease) => {
+                  {renewalDisplayItems.map((lease) => {
                     const form = renewalForms[lease.id] || createLeaseRenewalFormState(lease);
                     const renewalSummary = [
                       form.rentChangeMode ? `Mode: ${form.rentChangeMode.replace(/_/g, " ")}` : null,
@@ -493,12 +494,12 @@ export default function PortfolioHealthSummaryPage() {
 
             {renewalLoading ? <div>Loading lease renewal inputs…</div> : null}
             {!renewalLoading && renewalError ? <div style={{ color: "#b91c1c" }}>{renewalError}</div> : null}
-            {!renewalLoading && !renewalError && renewalItems.length === 0 ? (
+            {!renewalLoading && !renewalError && renewalDisplayItems.length === 0 ? (
               <div style={{ color: "#475569" }}>No expiring leases are currently visible for this scope.</div>
             ) : null}
 
             {!renewalLoading && !renewalError
-              ? renewalItems.map((lease) => {
+              ? renewalDisplayItems.map((lease) => {
                   const form = renewalForms[lease.id] || createLeaseRenewalFormState(lease);
                   const validation = renewalValidation[lease.id] || {};
                   const proposedRentAllowed = canSetProposedRent(form.rentChangeMode);
