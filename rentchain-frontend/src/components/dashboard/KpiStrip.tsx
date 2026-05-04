@@ -43,7 +43,7 @@ export function KpiStrip({ kpis, loading, links }: Props) {
       style={{
         display: "grid",
         gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(140px, 1fr))",
-        gap: isMobile ? 12 : spacing.sm,
+        gap: isMobile ? 16 : spacing.sm,
         alignItems: "stretch",
       }}
     >
@@ -53,7 +53,7 @@ export function KpiStrip({ kpis, loading, links }: Props) {
           <Card
             key={item.key}
             style={{
-              padding: isMobile ? spacing.sm : spacing.md,
+              padding: isMobile ? spacing.md : spacing.md,
               border: `1px solid ${colors.border}`,
               minHeight: isMobile ? 0 : 80,
               height: "100%",

@@ -156,12 +156,52 @@ describe("MessagesPage", () => {
 
     await flushAsync();
     expect(screen.getAllByText("Taylor Tenant")[0]).toBeInTheDocument();
-    expect(screen.getByText("Tenant conversation • Unit unavailable")).toBeInTheDocument();
-    expect(screen.queryByText("Tenant • Tenant conversation")).not.toBeInTheDocument();
+    expect(screen.getAllByText("Taylor Tenant • Conversation").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Tenant conversation • Unit unavailable")).not.toBeInTheDocument();
     expect(screen.getAllByText("TT")[0]).toBeInTheDocument();
     expect(screen.queryByText(/tenant-raw-1/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/prop-raw-1/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/unit-raw-1/i)).not.toBeInTheDocument();
+  });
+
+  it("keeps message labels useful when property or unit context is incomplete", async () => {
+    mocks.fetchLandlordConversationsMock.mockResolvedValue([
+      {
+        id: "conv-2",
+        tenantDisplayName: "Jordan Tenant",
+        unitDisplayLabel: "4B",
+      },
+      {
+        id: "conv-3",
+        tenantDisplayName: "Morgan Tenant",
+        propertyDisplayLabel: "Harbour View",
+      },
+      {
+        id: "conv-4",
+        propertyDisplayLabel: "North Point",
+        unitDisplayLabel: "Unit 8",
+      },
+    ]);
+    mocks.fetchLandlordConversationMessagesMock.mockResolvedValue({
+      conversation: {
+        id: "conv-2",
+        tenantDisplayName: "Jordan Tenant",
+        unitDisplayLabel: "4B",
+      },
+      messages: [],
+    });
+
+    render(
+      <MemoryRouter>
+        <MessagesPage />
+      </MemoryRouter>
+    );
+
+    await flushAsync();
+    expect(screen.getAllByText("Jordan Tenant • Unit 4B").length).toBeGreaterThan(0);
+    expect(screen.getByText("Morgan Tenant • Property unavailable")).toBeInTheDocument();
+    expect(screen.getByText("Tenant • North Point / Unit 8")).toBeInTheDocument();
+    expect(screen.queryByText("Tenant conversation • Unit unavailable")).not.toBeInTheDocument();
   });
 
   it("preserves the selected conversation across background refresh without blanking the thread", async () => {
