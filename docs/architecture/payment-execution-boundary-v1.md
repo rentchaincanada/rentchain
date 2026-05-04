@@ -363,7 +363,63 @@ Behavior intentionally unchanged:
 Deferred items:
 
 1. Active duplicate suppression.
-2. Persisted reconciliation state.
+2. Provider-neutral `PaymentIntent` persistence.
+3. Trustly sandbox adapter.
+
+## Payment Reconciliation Persistence v1
+
+Status: rent-payment webhook reconciliation results are persisted as read-only audit records.
+
+What is persisted:
+
+- Collection: `paymentReconciliationRecords`
+- Document id: deterministic id derived from the provider webhook idempotency key.
+- Core fields:
+  - `reconciliationId`
+  - `provider`
+  - `providerEventId`
+  - `idempotencyKey`
+  - `receiptId`
+  - `subjectType`
+  - `subjectId`
+  - `purpose`
+  - `normalizedStatus`
+  - `rawStatus`
+  - `reconciliationStatus`
+  - `reasons`
+  - `requiresManualReview`
+  - `automationEligible`
+  - `createdAt`
+  - `updatedAt`
+
+Ordering:
+
+```text
+provider event
+  -> provider-event receipt persistence
+  -> payment.provider_signal_received canonical event
+  -> read-only reconciliation derivation
+  -> paymentReconciliationRecords upsert
+  -> existing rent-payment webhook status update
+```
+
+Why this is read-only:
+
+The reconciliation record captures RentChain's interpretation of provider evidence for audit visibility and future operations. It does not currently drive live `rentPayments` status transitions because the existing webhook updater remains the source of current production behavior.
+
+Behavior intentionally unchanged:
+
+- Existing webhook HTTP responses are unchanged.
+- Existing `rentPayments` status updates are unchanged.
+- Duplicate provider events upsert the same reconciliation record but do not suppress webhook execution.
+- Screening checkout webhook behavior is untouched.
+- SaaS subscription webhook behavior is untouched.
+- No reconciliation canonical events are emitted in this phase.
+
+Deferred items:
+
+1. Active duplicate suppression.
+2. Reconciliation-driven status transitions.
 3. Provider-neutral `PaymentIntent` persistence.
 4. Trustly sandbox adapter.
 

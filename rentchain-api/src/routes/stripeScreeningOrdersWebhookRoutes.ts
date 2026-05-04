@@ -35,6 +35,7 @@ import {
   markProviderEventProcessing,
   markProviderEventReceived,
 } from "../lib/payments/paymentProviderEventReceipts";
+import { upsertPaymentReconciliationRecord } from "../lib/payments/paymentReconciliationRecords";
 
 interface StripeWebhookRequest extends Request {
   rawBody?: Buffer;
@@ -343,13 +344,6 @@ async function prepareRentPaymentWebhookNormalizationContext(params: {
       },
     });
 
-    if (receipt.isDuplicate) {
-      await markProviderEventIgnoredDuplicate({ receiptId: receipt.receiptId });
-      return { normalizedProviderEvent, idempotencyKey, reconciliation: null, receipt };
-    }
-
-    await markProviderEventProcessing({ receiptId: receipt.receiptId });
-
     const rentPaymentId = normalizeString(rentPaymentEvent.rentPaymentId, 120);
     const snap = rentPaymentId ? await db.collection("rentPayments").doc(rentPaymentId).get() : null;
     const expectedIntent = snap?.exists
@@ -359,6 +353,23 @@ async function prepareRentPaymentWebhookNormalizationContext(params: {
       expectedIntent,
       providerSignal: normalizedProviderEvent,
     });
+    await upsertPaymentReconciliationRecord({
+      idempotencyKey,
+      receiptId: receipt.receiptId,
+      subjectType: "rent_payment",
+      subjectId: rentPaymentEvent.rentPaymentId,
+      purpose: "rent",
+      providerSignal: normalizedProviderEvent,
+      reconciliation,
+    });
+
+    if (receipt.isDuplicate) {
+      await markProviderEventIgnoredDuplicate({ receiptId: receipt.receiptId });
+      return { normalizedProviderEvent, idempotencyKey, reconciliation, receipt };
+    }
+
+    await markProviderEventProcessing({ receiptId: receipt.receiptId });
+
     if (reconciliation.requiresManualReview) {
       await markProviderEventManualReviewRequired({
         receiptId: receipt.receiptId,
