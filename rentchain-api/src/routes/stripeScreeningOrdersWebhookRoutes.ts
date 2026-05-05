@@ -29,6 +29,10 @@ import {
 import type { PaymentIntentReference } from "../lib/payments/paymentTypes";
 import { updatePaymentIntentFromProviderSignal } from "../lib/payments/paymentIntents";
 import {
+  resolvePaymentIntentByMetadata,
+  resolvePaymentIntentByRentPaymentId,
+} from "../lib/payments/paymentIntentResolver";
+import {
   markProviderEventFailed,
   markProviderEventIgnoredDuplicate,
   markProviderEventManualReviewRequired,
@@ -305,8 +309,14 @@ async function prepareRentPaymentWebhookNormalizationContext(params: {
       providerSessionId: rentPaymentEvent.checkoutSessionId,
       purpose: "rent",
     });
+    const resolvedPaymentIntent =
+      (await resolvePaymentIntentByMetadata({ metadata: normalizedProviderEvent.metadata })) ||
+      (await resolvePaymentIntentByRentPaymentId({ rentPaymentId: rentPaymentEvent.rentPaymentId }));
     const paymentIntent = await updatePaymentIntentFromProviderSignal({
-      paymentIntentId: getPaymentIntentIdFromProviderMetadata(normalizedProviderEvent.metadata),
+      paymentIntentId:
+        resolvedPaymentIntent?.paymentIntentId ||
+        rentPaymentEvent.internalPaymentIntentId ||
+        getPaymentIntentIdFromProviderMetadata(normalizedProviderEvent.metadata),
       rentPaymentId: rentPaymentEvent.rentPaymentId,
       provider: "stripe",
       providerSessionId: normalizedProviderEvent.providerSessionId || rentPaymentEvent.checkoutSessionId,
@@ -314,7 +324,10 @@ async function prepareRentPaymentWebhookNormalizationContext(params: {
       normalizedStatus: normalizedProviderEvent.normalizedStatus,
     });
     const paymentIntentId =
-      paymentIntent?.paymentIntentId || getPaymentIntentIdFromProviderMetadata(normalizedProviderEvent.metadata);
+      paymentIntent?.paymentIntentId ||
+      resolvedPaymentIntent?.paymentIntentId ||
+      rentPaymentEvent.internalPaymentIntentId ||
+      getPaymentIntentIdFromProviderMetadata(normalizedProviderEvent.metadata);
     const idempotencyKey = buildProviderWebhookIdempotencyKey({
       provider: "stripe",
       providerEventId: normalizedProviderEvent.providerEventId || event.id || "event_missing",
@@ -389,7 +402,7 @@ async function prepareRentPaymentWebhookNormalizationContext(params: {
 
     if (receipt.isDuplicate) {
       await markProviderEventIgnoredDuplicate({ receiptId: receipt.receiptId });
-      return { normalizedProviderEvent, idempotencyKey, reconciliation, receipt, duplicateSuppressionDecision };
+      return { normalizedProviderEvent, idempotencyKey, reconciliation, receipt, duplicateSuppressionDecision, paymentIntentId };
     }
 
     await markProviderEventProcessing({ receiptId: receipt.receiptId });
@@ -401,7 +414,7 @@ async function prepareRentPaymentWebhookNormalizationContext(params: {
       });
     }
 
-    return { normalizedProviderEvent, idempotencyKey, reconciliation, receipt, duplicateSuppressionDecision };
+    return { normalizedProviderEvent, idempotencyKey, reconciliation, receipt, duplicateSuppressionDecision, paymentIntentId };
   } catch (err: any) {
     console.warn("[stripe-webhook-rent-payment] normalization seam skipped", {
       eventId: event.id,
@@ -812,6 +825,7 @@ export const stripeWebhookHandler = async (req: StripeWebhookRequest, res: Respo
             nextStatus: rentPaymentEvent.nextStatus,
             processorCheckoutSessionId: rentPaymentEvent.checkoutSessionId,
             processorPaymentIntentId: rentPaymentEvent.paymentIntentId,
+            paymentIntentId: receiptContext?.paymentIntentId || rentPaymentEvent.internalPaymentIntentId,
             paidAt: rentPaymentEvent.paidAt,
             eventId: event.id,
           });
@@ -1011,6 +1025,7 @@ export const stripeWebhookHandler = async (req: StripeWebhookRequest, res: Respo
             nextStatus: rentPaymentEvent.nextStatus,
             processorCheckoutSessionId: rentPaymentEvent.checkoutSessionId,
             processorPaymentIntentId: rentPaymentEvent.paymentIntentId,
+            paymentIntentId: receiptContext?.paymentIntentId || rentPaymentEvent.internalPaymentIntentId,
             paidAt: rentPaymentEvent.paidAt,
             eventId: event.id,
           });

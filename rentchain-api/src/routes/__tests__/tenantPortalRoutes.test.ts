@@ -826,6 +826,7 @@ describe("tenantPortalRoutes foundation", () => {
         currency: "cad",
         status: "checkout_created",
         processor: "stripe",
+        paymentIntentId: expect.stringMatching(/^pi_rent_/),
         processorCheckoutSessionId: "cs_test_1",
         processorPaymentIntentId: "pi_test_1",
       })
@@ -1005,6 +1006,7 @@ describe("tenantPortalRoutes foundation", () => {
           amountCents: 180000,
           currency: "cad",
           status: "paid",
+          paymentIntentId: null,
           createdAt: "2026-04-27T10:05:00.000Z",
           updatedAt: "2026-04-27T10:06:00.000Z",
           paidAt: "2026-04-27T10:06:00.000Z",
@@ -1016,6 +1018,7 @@ describe("tenantPortalRoutes foundation", () => {
               amountCents: 180000,
               currency: "cad",
               status: "paid",
+              paymentIntentId: null,
               createdAt: "2026-04-27T10:05:00.000Z",
               updatedAt: "2026-04-27T10:06:00.000Z",
               paidAt: "2026-04-27T10:06:00.000Z",

@@ -30,6 +30,9 @@ import { dedupePropertyScopedLeasesByUnit, filterPropertyScopedLeases } from "..
 import { writeCanonicalEvent } from "../lib/events/buildEvent";
 import { getSignedDownloadUrl } from "../lib/gcsSignedUrl";
 import {
+  resolvePaymentIntentByRentPaymentId,
+} from "../lib/payments/paymentIntentResolver";
+import {
   isTargetedHiddenLeaseId,
   isTargetedHiddenTenantId,
 } from "../lib/testDataVisibilityTargets";
@@ -719,6 +722,64 @@ async function loadLedgerEntries(leaseId: string, landlordId: string, from?: str
       if (dateDiff !== 0) return dateDiff;
       return toMillis(a?.createdAt) - toMillis(b?.createdAt);
     });
+}
+
+type LeaseLedgerPaymentIntentLink = {
+  rentPaymentId: string;
+  paymentIntentId: string | null;
+  paymentIntentStatus: string | null;
+};
+
+function getLedgerRentPaymentId(entry: any): string | null {
+  const candidates = [entry?.rentPaymentId, entry?.reference, entry?.paymentId];
+  for (const candidate of candidates) {
+    const value = String(candidate || "").trim();
+    if (value) return value;
+  }
+  return null;
+}
+
+async function loadLeaseLedgerPaymentIntentLinks(
+  leaseId: string,
+  landlordId: string
+): Promise<Map<string, LeaseLedgerPaymentIntentLink>> {
+  const links = new Map<string, LeaseLedgerPaymentIntentLink>();
+  const snap = await db
+    .collection("rentPayments")
+    .where("leaseId", "==", leaseId)
+    .get()
+    .catch(() => null);
+  for (const doc of snap?.docs || []) {
+    const data = (doc.data() as any) || {};
+    if (String(data?.landlordId || "").trim() !== landlordId) continue;
+    const rentPaymentId = String(data?.id || data?.rentPaymentId || doc.id || "").trim();
+    if (!rentPaymentId) continue;
+    const resolved = await resolvePaymentIntentByRentPaymentId({ rentPaymentId }).catch(() => null);
+    links.set(rentPaymentId, {
+      rentPaymentId,
+      paymentIntentId:
+        String(data?.paymentIntentId || resolved?.paymentIntentId || "").trim() || null,
+      paymentIntentStatus: String(resolved?.status || "").trim() || null,
+    });
+  }
+  return links;
+}
+
+function enrichLeaseLedgerEntryWithPaymentIntent(
+  entry: any,
+  links: Map<string, LeaseLedgerPaymentIntentLink>
+) {
+  if (entry?.entryType !== "payment") return entry;
+  const rentPaymentId = getLedgerRentPaymentId(entry);
+  if (!rentPaymentId) return entry;
+  const link = links.get(rentPaymentId);
+  if (!link) return { ...entry, rentPaymentId };
+  return {
+    ...entry,
+    rentPaymentId,
+    paymentIntentId: link.paymentIntentId,
+    paymentIntentStatus: link.paymentIntentStatus,
+  };
 }
 
 async function resolveLeaseLedgerExportLabels(lease: any) {
@@ -2280,10 +2341,12 @@ router.get("/:leaseId/ledger", async (req: any, res: Response) => {
     const from = toIsoDate(req.query?.from) || null;
     const to = toIsoDate(req.query?.to) || null;
     const entries = await loadLedgerEntries(leaseId, landlordId, from, to);
+    const paymentIntentLinks = await loadLeaseLedgerPaymentIntentLinks(leaseId, landlordId);
 
     let runningBalanceCents = 0;
     const monthlyTotals: Record<string, { chargesCents: number; paymentsCents: number; netCents: number }> = {};
-    const rows = entries.map((entry: any) => {
+    const rows = entries.map((rawEntry: any) => {
+      const entry = enrichLeaseLedgerEntryWithPaymentIntent(rawEntry, paymentIntentLinks);
       const signedAmountCents =
         entry.entryType === "payment" ? -Math.abs(Number(entry.amountCents || 0)) : Math.abs(Number(entry.amountCents || 0));
       runningBalanceCents += signedAmountCents;

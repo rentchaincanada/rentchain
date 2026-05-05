@@ -161,6 +161,41 @@ Stripe remains the only live rent-payment execution provider in V1. PaymentInten
 
 Future Trustly work should consume PaymentIntent as the internal obligation, but this mission does not add a Trustly adapter, credentials, UI, or switching logic.
 
+## Payment To Lease Linking
+
+PaymentIntent V1 links the rent obligation chain without replacing existing records:
+
+```text
+lease lifecycle
+  -> PaymentIntent obligation
+    -> rentPayments checkout record
+      -> provider receipt
+        -> reconciliation record
+          -> lease ledger read model
+```
+
+The lease lifecycle remains the source of truth for whether an obligation should exist. PaymentIntent stores the obligation context additively:
+
+- `leaseId`
+- `propertyId`
+- `unitId`
+- `tenantId`
+- `landlordId`
+- `periodStart` and `periodEnd` when available
+- `rentPaymentId` when checkout creates an execution record
+
+`rentPayments` continues to exist as the compatibility and checkout-history layer. New checkout records store `paymentIntentId`, and repeated checkout attempts for the same deterministic rent obligation update the same PaymentIntent while preserving separate `rentPayments` records.
+
+Webhook processing resolves the internal PaymentIntent in this order:
+
+1. `paymentIntentId` from provider metadata
+2. PaymentIntent lookup by `rentPaymentId`
+3. Safe lease-context lookup where enough obligation fields exist
+
+Resolved IDs are attached to provider receipts and reconciliation records. Existing `rentPayments` status transitions still run exactly as before; PaymentIntent is not authoritative for webhook behavior in V1.
+
+Lease ledger reads may include optional `paymentIntentId` and `paymentIntentStatus` for payment rows when the matching rentPayment/PaymentIntent can be resolved. Ledger calculations remain based on existing ledger entries and are not rewritten by PaymentIntent.
+
 ## Deferred Future Steps
 
 1. PaymentIntent-driven rent ledger.
@@ -170,4 +205,3 @@ Future Trustly work should consume PaymentIntent as the internal obligation, but
 5. Landlord/tenant UI for PaymentIntent history.
 6. PaymentIntent review queue for incomplete obligations.
 7. PaymentIntent-driven retry and expiration workflow.
-
