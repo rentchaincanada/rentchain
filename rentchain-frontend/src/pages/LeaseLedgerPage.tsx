@@ -5,7 +5,10 @@ import {
   addLeasePayment,
   fetchLeaseLedger,
   leaseLedgerExportUrl,
+  type LeaseObligationLedgerRow,
+  type LeaseObligationLedgerSummary,
   type LeaseLedgerEntry,
+  type PaymentObligationStatus,
 } from "../api/leaseLedgerApi";
 import { getAuthToken } from "../lib/authToken";
 import { getFirebaseIdToken } from "../lib/firebaseAuthToken";
@@ -53,6 +56,59 @@ function formatDate(value: string | null | undefined) {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
   return parsed.toLocaleDateString();
+}
+
+function formatPeriod(row: LeaseObligationLedgerRow): string {
+  const start = formatDate(row.periodStart);
+  const end = formatDate(row.periodEnd);
+  if (start === "—" && end === "—") return "—";
+  if (start !== "—" && end !== "—") return `${start} - ${end}`;
+  return start !== "—" ? start : end;
+}
+
+function obligationOutstandingCents(row: LeaseObligationLedgerRow): number {
+  return Math.max(0, Number(row.expectedAmountCents || 0) - Number(row.paidAmountCents || 0));
+}
+
+const obligationStatusCopy: Record<PaymentObligationStatus, { label: string; bg: string; color: string; border: string }> = {
+  expected: { label: "Expected", bg: "#eff6ff", color: "#1d4ed8", border: "#bfdbfe" },
+  pending: { label: "Pending", bg: "#fef9c3", color: "#854d0e", border: "#fde68a" },
+  paid: { label: "Paid", bg: "#dcfce7", color: "#166534", border: "#bbf7d0" },
+  underpaid: { label: "Underpaid", bg: "#ffedd5", color: "#9a3412", border: "#fed7aa" },
+  overpaid: { label: "Overpaid", bg: "#e0f2fe", color: "#075985", border: "#bae6fd" },
+  failed: { label: "Failed", bg: "#fee2e2", color: "#991b1b", border: "#fecaca" },
+  missing: { label: "Missing", bg: "#fef3c7", color: "#92400e", border: "#fde68a" },
+  manual_review_required: { label: "Manual review", bg: "#fae8ff", color: "#86198f", border: "#f5d0fe" },
+  unknown: { label: "Unknown", bg: "#f1f5f9", color: "#334155", border: "#cbd5e1" },
+};
+
+function ObligationStatusBadge({ status }: { status: PaymentObligationStatus }) {
+  const copy = obligationStatusCopy[status] || obligationStatusCopy.unknown;
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        borderRadius: 999,
+        border: `1px solid ${copy.border}`,
+        background: copy.bg,
+        color: copy.color,
+        padding: "3px 8px",
+        fontSize: 12,
+        fontWeight: 800,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {copy.label}
+    </span>
+  );
+}
+
+function prettyEvidenceStatus(row: LeaseObligationLedgerRow): string {
+  const evidence = String(row.evidenceStatus || "").trim();
+  if (evidence) return evidence.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+  const fallback = row.reconciliationStatus || row.rentPaymentStatus || row.paymentIntentStatus || row.source;
+  return String(fallback || "none").replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 function executionNextActionLabel(value: string | null | undefined) {
@@ -103,6 +159,8 @@ export default function LeaseLedgerPage() {
   const [entries, setEntries] = useState<LeaseLedgerEntry[]>([]);
   const [totals, setTotals] = useState({ chargesCents: 0, paymentsCents: 0, balanceCents: 0 });
   const [monthlyTotals, setMonthlyTotals] = useState<Record<string, { chargesCents: number; paymentsCents: number; netCents: number }>>({});
+  const [obligationRows, setObligationRows] = useState<LeaseObligationLedgerRow[]>([]);
+  const [obligationSummary, setObligationSummary] = useState<LeaseObligationLedgerSummary | null>(null);
   const [showChargeModal, setShowChargeModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showNoteModal, setShowNoteModal] = useState(false);
@@ -135,6 +193,8 @@ export default function LeaseLedgerPage() {
       setEntries(Array.isArray(res.entries) ? res.entries : []);
       setTotals(res.totals || { chargesCents: 0, paymentsCents: 0, balanceCents: 0 });
       setMonthlyTotals(res.monthlyTotals || {});
+      setObligationRows(Array.isArray(res.obligationRows) ? res.obligationRows : []);
+      setObligationSummary(res.obligationSummary || null);
     } catch (err: unknown) {
       setError(errorMessage(err, "Failed to load lease ledger"));
     } finally {
@@ -387,6 +447,65 @@ export default function LeaseLedgerPage() {
           </div>
         </div>
       ) : null}
+
+      <section style={{ display: "grid", gap: 10 }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: "1rem" }}>Payment obligations</h2>
+          <div style={{ color: "#64748b", fontSize: 13, marginTop: 3 }}>
+            Read-only view of expected rent, execution records, and reconciliation evidence.
+          </div>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 8 }}>
+          <div style={{ border: "1px solid #e2e8f0", borderRadius: 10, padding: 10 }}>
+            <div style={{ fontSize: 12, color: "#64748b" }}>Expected</div>
+            <strong>{formatCurrencyCents(obligationSummary?.expectedAmountCents || 0)}</strong>
+          </div>
+          <div style={{ border: "1px solid #e2e8f0", borderRadius: 10, padding: 10 }}>
+            <div style={{ fontSize: 12, color: "#64748b" }}>Paid</div>
+            <strong>{formatCurrencyCents(obligationSummary?.paidAmountCents || 0)}</strong>
+          </div>
+          <div style={{ border: "1px solid #e2e8f0", borderRadius: 10, padding: 10 }}>
+            <div style={{ fontSize: 12, color: "#64748b" }}>Outstanding</div>
+            <strong>{formatCurrencyCents(obligationSummary?.outstandingAmountCents || 0)}</strong>
+          </div>
+          <div style={{ border: "1px solid #e2e8f0", borderRadius: 10, padding: 10 }}>
+            <div style={{ fontSize: 12, color: "#64748b" }}>Manual Review</div>
+            <strong>{obligationSummary?.manualReviewCount || 0}</strong>
+          </div>
+        </div>
+        {obligationRows.length === 0 ? (
+          <div style={{ border: "1px solid #e2e8f0", borderRadius: 12, padding: 12, color: "#64748b", background: "#fff" }}>
+            Obligation ledger is not available yet for this lease.
+          </div>
+        ) : (
+          <div style={{ overflowX: "auto", border: "1px solid #e2e8f0", borderRadius: 12 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 920 }}>
+              <thead>
+                <tr style={{ background: "#f8fafc" }}>
+                  {["Period", "Due date", "Expected", "Paid", "Outstanding", "Status", "Evidence"].map((h) => (
+                    <th key={h} style={{ textAlign: "left", padding: 10, borderBottom: "1px solid #e2e8f0" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {obligationRows.map((row) => (
+                  <tr key={row.rowId}>
+                    <td style={{ padding: 10, borderBottom: "1px solid #f1f5f9" }}>{formatPeriod(row)}</td>
+                    <td style={{ padding: 10, borderBottom: "1px solid #f1f5f9" }}>{formatDate(row.dueDate)}</td>
+                    <td style={{ padding: 10, borderBottom: "1px solid #f1f5f9" }}>{formatCurrencyCents(row.expectedAmountCents)}</td>
+                    <td style={{ padding: 10, borderBottom: "1px solid #f1f5f9" }}>{formatCurrencyCents(row.paidAmountCents)}</td>
+                    <td style={{ padding: 10, borderBottom: "1px solid #f1f5f9" }}>{formatCurrencyCents(obligationOutstandingCents(row))}</td>
+                    <td style={{ padding: 10, borderBottom: "1px solid #f1f5f9" }}>
+                      <ObligationStatusBadge status={row.obligationStatus || "unknown"} />
+                    </td>
+                    <td style={{ padding: 10, borderBottom: "1px solid #f1f5f9", color: "#475569" }}>{prettyEvidenceStatus(row)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
 
       {error ? <div style={{ color: "#b91c1c" }}>{error}</div> : null}
 

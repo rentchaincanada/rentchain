@@ -18,6 +18,49 @@ export type LeaseLedgerEntry = {
   balanceCents: number;
 };
 
+export type PaymentObligationStatus =
+  | "expected"
+  | "pending"
+  | "paid"
+  | "underpaid"
+  | "overpaid"
+  | "failed"
+  | "missing"
+  | "manual_review_required"
+  | "unknown";
+
+export type LeaseObligationLedgerRow = {
+  rowId: string;
+  leaseId: string;
+  paymentIntentId?: string | null;
+  rentPaymentId?: string | null;
+  propertyId?: string | null;
+  unitId?: string | null;
+  tenantId?: string | null;
+  periodStart?: string | null;
+  periodEnd?: string | null;
+  dueDate?: string | null;
+  expectedAmountCents: number;
+  paidAmountCents?: number;
+  currency: string;
+  obligationStatus: PaymentObligationStatus;
+  paymentIntentStatus?: string | null;
+  rentPaymentStatus?: string | null;
+  reconciliationStatus?: string | null;
+  evidenceStatus?: "none" | "provider_received" | "reconciled" | "manual_review_required" | "failed" | "pending" | null;
+  source: "lease_lifecycle" | "payment_intent" | "rent_payment" | "reconciliation";
+  reasons: string[];
+};
+
+export type LeaseObligationLedgerSummary = {
+  totalRows: number;
+  expectedAmountCents: number;
+  paidAmountCents: number;
+  outstandingAmountCents: number;
+  statusCounts: Record<PaymentObligationStatus, number>;
+  manualReviewCount: number;
+};
+
 export type LeaseLedgerResponse = {
   ok: boolean;
   leaseId: string;
@@ -35,6 +78,8 @@ export type LeaseLedgerResponse = {
       netCents: number;
     }
   >;
+  obligationRows?: LeaseObligationLedgerRow[];
+  obligationSummary?: LeaseObligationLedgerSummary;
 };
 
 export async function fetchLeaseLedger(
