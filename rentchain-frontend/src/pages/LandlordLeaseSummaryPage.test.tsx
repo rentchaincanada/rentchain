@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import LandlordLeaseSummaryPage from "./LandlordLeaseSummaryPage";
+import { buildLeaseSummaryPdfSource } from "@/utils/leaseSummaryPdf";
 
 const mocks = vi.hoisted(() => ({
   getLeaseById: vi.fn(),
@@ -118,6 +119,14 @@ describe("LandlordLeaseSummaryPage", () => {
     });
     const blob = vi.mocked(global.URL.createObjectURL).mock.calls[0][0] as Blob;
     expect(blob.type).toBe("application/pdf");
+    const pdfText = buildLeaseSummaryPdfSource(mocks.getLeaseById.mock.calls.length ? (await mocks.getLeaseById.mock.results[0].value).lease : {});
+    expect(pdfText).toContain("Residential Lease Pack");
+    expect(pdfText).toContain("Property and Unit");
+    expect(pdfText).toContain("Landlord and Tenant");
+    expect(pdfText).toContain("Lease Term");
+    expect(pdfText).toContain("Rent and Payment Terms");
+    expect(pdfText).toContain("Clauses and Additional Terms");
+    expect(pdfText).toContain("Audit and Events");
     const downloadAnchor = createdAnchors[createdAnchors.length - 1];
     expect(downloadAnchor?.download).toBe("lease-3.pdf");
     expect(downloadAnchor?.download).not.toMatch(/\.txt$/);

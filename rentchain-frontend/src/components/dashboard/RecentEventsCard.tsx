@@ -5,7 +5,7 @@ import { spacing, colors, text } from "../../styles/tokens";
 type Props = {
   events: any[];
   loading?: boolean;
-  onOpenLedger?: () => void;
+  onOpenLedger?: (leaseId?: string) => void;
   openLedgerEnabled?: boolean;
   title?: string;
   emptyLabel?: string;
@@ -38,18 +38,22 @@ export function RecentEventsCard({
 }: Props) {
   const skeletonRows = Array.from({ length: 8 });
   const list = Array.isArray(events) ? events.slice(0, 10) : [];
+  const ledgerLeaseId = list
+    .map((event) => String(event?.leaseId || event?.subjectLeaseId || event?.metadata?.leaseId || "").trim())
+    .find(Boolean);
   const canOpenLedger = Boolean(onOpenLedger) && openLedgerEnabled !== false;
+  const ledgerButtonLabel = ledgerLeaseId ? "View ledger" : "View leases";
 
   return (
     <Card style={{ padding: spacing.md, border: `1px solid ${colors.border}` }}>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: spacing.sm }}>
         <div style={{ fontWeight: 800 }}>{title}</div>
         <Button
-          onClick={canOpenLedger ? onOpenLedger : undefined}
+          onClick={canOpenLedger ? () => onOpenLedger?.(ledgerLeaseId) : undefined}
           disabled={!canOpenLedger}
-          title={canOpenLedger ? undefined : "Coming soon"}
+          title={canOpenLedger ? (ledgerLeaseId ? undefined : "Choose a lease to view its ledger") : "Coming soon"}
         >
-          Open ledger
+          {ledgerButtonLabel}
         </Button>
       </div>
 

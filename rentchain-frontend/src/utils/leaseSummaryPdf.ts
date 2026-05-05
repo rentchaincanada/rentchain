@@ -26,53 +26,134 @@ function escapePdfText(value: string) {
   return value.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
 }
 
-export function buildLeaseSummaryPdf(lease: LandlordActiveLease) {
-  const lines = [
-    { text: "RentChain lease record", size: 10 },
-    { text: "Residential Lease Pack", size: 18 },
-    { text: "Document-style summary generated from the current landlord lease record.", size: 10 },
-    { text: "", size: 10 },
-    { text: "Property and Unit", size: 13 },
-    { text: `Property: ${lease.propertyName || lease.propertyLabel || lease.propertyAddress || "Property"}`, size: 10 },
-    { text: `Unit: ${lease.unitNumber || "—"}`, size: 10 },
-    { text: `Lease reference: ${lease.id}`, size: 10 },
-    { text: "", size: 10 },
-    { text: "Landlord and Tenant", size: 13 },
-    { text: `Tenant: ${lease.tenantName || "Tenant not linked"}`, size: 10 },
-    { text: `Tenant email: ${lease.tenantEmail || "No email on file"}`, size: 10 },
-    { text: "Landlord record: Current RentChain landlord account", size: 10 },
-    { text: "", size: 10 },
-    { text: "Lease Term", size: 13 },
-    { text: `Start date: ${formatDate(lease.startDate)}`, size: 10 },
-    { text: `End date: ${formatDate(lease.endDate)}`, size: 10 },
-    { text: `Current status: ${prettyLeaseStatus(lease.status)}`, size: 10 },
-    { text: "", size: 10 },
-    { text: "Rent and Payment Terms", size: 13 },
-    { text: `Monthly rent: ${formatCurrency(lease.monthlyRent)}`, size: 10 },
-    { text: `Payment readiness: ${lease.paymentReadiness?.readinessLabel || "Payment readiness unavailable"}`, size: 10 },
-    { text: `Rent collection: ${lease.rentPaymentSummary?.paymentRail.enabled ? "Enabled" : "Not enabled"}`, size: 10 },
-    ...(lease.paymentReadiness?.readinessDescription
-      ? [{ text: lease.paymentReadiness.readinessDescription, size: 10 }]
-      : []),
-    { text: "", size: 10 },
-    { text: "Clauses and Additional Terms", size: 13 },
+export function buildLeaseSummaryPdfSource(lease: LandlordActiveLease) {
+  const sections = [
     {
-      text:
+      title: "Property and Unit",
+      rows: [
+        ["Property", lease.propertyName || lease.propertyLabel || lease.propertyAddress || "Property"],
+        ["Unit", lease.unitNumber || "—"],
+        ["Lease reference", lease.id],
+      ],
+    },
+    {
+      title: "Landlord and Tenant",
+      rows: [
+        ["Tenant", lease.tenantName || "Tenant not linked"],
+        ["Tenant email", lease.tenantEmail || "No email on file"],
+        ["Landlord record", "Current RentChain landlord account"],
+      ],
+    },
+    {
+      title: "Lease Term",
+      rows: [
+        ["Start date", formatDate(lease.startDate)],
+        ["End date", formatDate(lease.endDate)],
+        ["Current status", prettyLeaseStatus(lease.status)],
+      ],
+    },
+    {
+      title: "Rent and Payment Terms",
+      rows: [
+        ["Monthly rent", formatCurrency(lease.monthlyRent)],
+        ["Payment readiness", lease.paymentReadiness?.readinessLabel || "Payment readiness unavailable"],
+        ["Rent collection", lease.rentPaymentSummary?.paymentRail.enabled ? "Enabled" : "Not enabled"],
+      ],
+      note: lease.paymentReadiness?.readinessDescription || null,
+    },
+    {
+      title: "Clauses and Additional Terms",
+      rows: [],
+      note:
         "Full legal clauses remain in the attached lease document when one is available. This fallback view summarizes the landlord-visible lease record so the lease is still reviewable when no separate file is attached.",
-      size: 10,
     },
   ];
-  const contentLines = lines.map((line, index) => {
-    const y = 760 - index * 18;
-    return `BT /F1 ${line.size} Tf 54 ${y} Td (${escapePdfText(line.text)}) Tj ET`;
+  if (lease.leaseExecution || lease.leaseLifecycleSummary) {
+    sections.push({
+      title: "Audit and Events",
+      rows: [],
+      note: [
+        lease.leaseExecution
+          ? `${lease.leaseExecution.executionLabel}: ${lease.leaseExecution.executionDescription}`
+          : "",
+        lease.leaseLifecycleSummary
+          ? `${lease.leaseLifecycleSummary.lifecycleLabel}: ${lease.leaseLifecycleSummary.lifecycleDescription}`
+          : "",
+      ]
+        .filter(Boolean)
+        .join(" "),
+    });
+  }
+
+  const content: string[] = [];
+  const page = { width: 612, height: 792 };
+  const docX = 54;
+  const docY = 52;
+  const docWidth = 504;
+  const docHeight = 688;
+  let y = 704;
+
+  const textAt = (text: string, x: number, baselineY: number, size = 10, font = "F1") => {
+    content.push(`BT /${font} ${size} Tf ${x} ${baselineY} Td (${escapePdfText(text)}) Tj ET`);
+  };
+  const line = (x1: number, y1: number, x2: number, y2: number) => {
+    content.push(`q 0.86 0.89 0.93 RG ${x1} ${y1} m ${x2} ${y2} l S Q`);
+  };
+  const rect = (x: number, rectY: number, width: number, height: number, fill = false) => {
+    content.push(`q ${fill ? "0.97 0.98 0.99 rg" : "0.86 0.89 0.93 RG"} ${x} ${rectY} ${width} ${height} re ${fill ? "f" : "S"} Q`);
+  };
+
+  rect(docX, docY, docWidth, docHeight);
+  textAt("RentChain lease record", 236, y, 10, "F2");
+  y -= 24;
+  textAt("Residential Lease Pack", 193, y, 20, "F2");
+  y -= 18;
+  textAt("Document-style summary generated from the current landlord lease record.", 128, y, 10);
+  y -= 30;
+
+  sections.forEach((section) => {
+    line(84, y + 14, 528, y + 14);
+    textAt(section.title, 84, y, 13, "F2");
+    y -= 22;
+
+    section.rows.forEach(([label, value]) => {
+      rect(84, y - 8, 444, 24, true);
+      textAt(label.toUpperCase(), 96, y, 8, "F2");
+      textAt(String(value), 252, y, 10);
+      y -= 28;
+    });
+
+    if (section.note) {
+      const words = String(section.note).split(/\s+/);
+      let current = "";
+      const wrapped: string[] = [];
+      words.forEach((word) => {
+        const next = current ? `${current} ${word}` : word;
+        if (next.length > 86) {
+          wrapped.push(current);
+          current = word;
+        } else {
+          current = next;
+        }
+      });
+      if (current) wrapped.push(current);
+      wrapped.forEach((wrappedLine) => {
+        textAt(wrappedLine, 96, y, 10);
+        y -= 14;
+      });
+      y -= 6;
+    }
+    y -= 10;
   });
-  const stream = contentLines.join("\n");
+
+  const stream = content.join("\n");
   const objects = [
     "1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n",
     "2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n",
-    "3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >> endobj\n",
+    `3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 ${page.width} ${page.height}] /Resources << /Font << /F1 4 0 R /F2 6 0 R >> >> /Contents 5 0 R >> endobj\n`,
     "4 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj\n",
     `5 0 obj << /Length ${new TextEncoder().encode(stream).length} >> stream\n${stream}\nendstream endobj\n`,
+    "6 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >> endobj\n",
   ];
   let pdf = "%PDF-1.4\n";
   const offsets = [0];
@@ -86,7 +167,11 @@ export function buildLeaseSummaryPdf(lease: LandlordActiveLease) {
     pdf += `${String(offsets[i]).padStart(10, "0")} 00000 n \n`;
   }
   pdf += `trailer << /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
-  return new Blob([pdf], { type: "application/pdf" });
+  return pdf;
+}
+
+export function buildLeaseSummaryPdf(lease: LandlordActiveLease) {
+  return new Blob([buildLeaseSummaryPdfSource(lease)], { type: "application/pdf" });
 }
 
 export function downloadLeaseSummaryPdf(lease: LandlordActiveLease) {

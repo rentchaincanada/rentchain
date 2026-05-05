@@ -19,8 +19,21 @@ export function ActionRequiredPanel({
   title = "Action Required",
   emptyLabel = "No action items right now.",
 }: Props) {
+  const [infoItemId, setInfoItemId] = React.useState<string | null>(null);
   const skeletonRows = Array.from({ length: 5 });
   const canViewAll = Boolean(onViewAll) && viewAllEnabled !== false;
+
+  const infoItem = items.find((item, idx) => String(item?.id || idx) === infoItemId);
+
+  function screeningInfoCopy(item: any) {
+    const title = String(item?.title || "").toLowerCase();
+    const href = String(item?.href || "").toLowerCase();
+    const isScreening = title.includes("screening") || title.includes("transunion") || href.includes("opentransunionaccess");
+    if (isScreening) {
+      return "Connect TransUnion access from Applications, then open an application review to run screening once the applicant has provided the required consent.";
+    }
+    return "Open this action to continue the related workflow. RentChain keeps these items here when there is a clear next step for the landlord.";
+  }
 
   return (
     <Card style={{ padding: spacing.md, border: `1px solid ${colors.border}` }}>
@@ -76,6 +89,23 @@ export function ActionRequiredPanel({
                   ) : null}
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <button
+                    type="button"
+                    aria-label={`Info about ${title}`}
+                    onClick={() => setInfoItemId(String(item?.id || idx))}
+                    style={{
+                      borderRadius: 10,
+                      border: `1px solid ${colors.border}`,
+                      background: "#f8fafc",
+                      color: text.primary,
+                      fontSize: 12,
+                      fontWeight: 700,
+                      padding: "4px 8px",
+                      cursor: "pointer",
+                    }}
+                  >
+                    Info
+                  </button>
                   {item?.href ? (
                     <button
                       type="button"
@@ -115,6 +145,41 @@ export function ActionRequiredPanel({
               </div>
             );
           })}
+          {infoItem ? (
+            <div
+              role="dialog"
+              aria-label="Action information"
+              style={{
+                border: `1px solid ${colors.border}`,
+                borderRadius: 10,
+                padding: 12,
+                background: "#f8fafc",
+                display: "grid",
+                gap: 8,
+              }}
+            >
+              <div style={{ fontWeight: 800 }}>{infoItem.title || "Action information"}</div>
+              <div style={{ color: text.muted, fontSize: 13, lineHeight: 1.5 }}>{screeningInfoCopy(infoItem)}</div>
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setInfoItemId(null)}
+                  style={{
+                    borderRadius: 10,
+                    border: `1px solid ${colors.border}`,
+                    background: colors.card,
+                    color: text.primary,
+                    fontSize: 12,
+                    fontWeight: 700,
+                    padding: "4px 8px",
+                    cursor: "pointer",
+                  }}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          ) : null}
         </div>
       )}
     </Card>

@@ -1042,7 +1042,7 @@ const DashboardPage: React.FC = () => {
               <RecentEventsCard
                 events={events}
                 loading={loading}
-                onOpenLedger={() => navigate("/leases")}
+                onOpenLedger={(leaseId) => navigate(leaseId ? `/leases/${leaseId}/ledger` : "/leases")}
                 title="Recent activity"
                 emptyLabel="No recent activity yet. Add a property to start activity tracking."
               />
@@ -1059,7 +1059,7 @@ const DashboardPage: React.FC = () => {
             <RecentEventsCard
               events={events}
               loading={loading}
-              onOpenLedger={() => navigate("/leases")}
+              onOpenLedger={(leaseId) => navigate(leaseId ? `/leases/${leaseId}/ledger` : "/leases")}
               title="Recent activity"
               emptyLabel="No recent activity yet. Add a property to start activity tracking."
             />
