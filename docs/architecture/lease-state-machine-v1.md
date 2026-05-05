@@ -51,11 +51,37 @@ Phase 2 exposes additive derived lifecycle fields in lease view models.
 Phase 3 aligns frontend helper semantics and prefers backend-derived lifecycle fields when present.
 Phase 4 uses the derived lifecycle in safe display contexts such as lease badges, unit occupancy, and portfolio health/expiring-soon summaries.
 
+## Lease Lifecycle Review Queue V1
+
+The review queue surfaces lifecycle records that need operator attention without mutating leases, unit records, or stored statuses. It is an admin/operator visibility layer, not an automation or correction workflow.
+
+Review criteria include:
+
+- `derivedLifecycleState === "unknown"`
+- `derivedLifecycleRequiresReview === true`
+- contradictory or incomplete lifecycle derivation reasons
+- missing critical start or end dates on current/signed leases
+- stored active/current status with a past end date
+- expired lease plus current manual occupied unit data
+- ambiguous renewal or successor links
+- termination or notice fields that conflict with lifecycle interpretation
+
+Queue items use read-only severity and category metadata:
+
+- Severities: `critical`, `warning`, `info`
+- Categories: `unknown_lifecycle`, `missing_dates`, `contradictory_status`, `expired_occupancy_conflict`, `renewal_ambiguity`, `termination_conflict`, `notice_conflict`
+
+Recommended actions are non-mutating prompts such as reviewing lease dates, reviewing renewal links, reviewing termination notice, confirming occupancy manually, opening a property/unit record, or opening a lease record.
+
 ## Deferred Future Steps
 
 1. Stored lifecycle transition events.
 2. Scheduled lease lifecycle reconciliation job.
-3. Admin review queue for contradictory leases.
-4. Lease renewal workflow enforcement.
-5. Payment obligation generation from active lease lifecycle.
-6. Institution-ready lease export schema.
+3. Operator acknowledgement state.
+4. Review assignment/owner.
+5. Auto-created admin triage queue items.
+6. Landlord-safe warning surfacing.
+7. Lifecycle correction workflow.
+8. Lease renewal workflow enforcement.
+9. Payment obligation generation from active lease lifecycle.
+10. Institution-ready lease export schema.
