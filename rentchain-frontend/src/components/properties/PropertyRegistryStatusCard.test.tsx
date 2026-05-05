@@ -1088,7 +1088,7 @@ expect(screen.getByRole("button", { name: "View details" })).toBeInTheDocument()
           campaign: "halifax-readiness",
           variant: "spring-a",
           landingPath: "/?utm_source=google",
-          capturedAt: "2026-04-05T12:00:00.000Z",
+          capturedAt: new Date().toISOString(),
         })
       );
 

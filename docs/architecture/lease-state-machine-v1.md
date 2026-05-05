@@ -73,12 +73,32 @@ Queue items use read-only severity and category metadata:
 
 Recommended actions are non-mutating prompts such as reviewing lease dates, reviewing renewal links, reviewing termination notice, confirming occupancy manually, opening a property/unit record, or opening a lease record.
 
+## Lease Lifecycle Operator Acknowledgements V1
+
+Acknowledgements add operator workflow state to review queue items without changing the underlying lease, unit, property, or stored lease status. They are stored separately in `leaseLifecycleReviewAcknowledgements` and keyed from the deterministic review item ID.
+
+Supported acknowledgement states:
+
+- `open`: no operator disposition has been applied.
+- `reviewed`: an admin/operator has reviewed the item.
+- `snoozed`: an admin/operator has deferred the item until a future timestamp.
+- `assigned`: an admin/operator has assigned the item to an owner or team.
+
+Acknowledgement records include the review item ID, lease/property/unit references, status, optional assignee, optional snooze timestamp, optional note, actor ID, first acknowledgement timestamp, and updated timestamp. They are admin/operator metadata only.
+
+Important boundaries:
+
+- Acknowledgement writes never mutate lease records.
+- Acknowledgement writes never rewrite `lease.status`.
+- Acknowledgements do not auto-correct lifecycle derivation.
+- Acknowledgements do not create payment obligations or trigger renewal enforcement.
+
 ## Deferred Future Steps
 
 1. Stored lifecycle transition events.
 2. Scheduled lease lifecycle reconciliation job.
-3. Operator acknowledgement state.
-4. Review assignment/owner.
+3. Assignment notifications.
+4. Review history timeline.
 5. Auto-created admin triage queue items.
 6. Landlord-safe warning surfacing.
 7. Lifecycle correction workflow.

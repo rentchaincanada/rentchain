@@ -4,6 +4,8 @@ import { MacShell } from "../../components/layout/MacShell";
 import { Button, Card, Pill, Section } from "../../components/ui/Ui";
 import {
   fetchAdminLeaseLifecycleReviewQueue,
+  updateAdminLeaseLifecycleReviewAcknowledgement,
+  type AdminLeaseLifecycleReviewAcknowledgement,
   type AdminLeaseLifecycleReviewItem,
   type AdminLeaseLifecycleReviewSummary,
   type LeaseLifecycleReviewSeverity,
@@ -30,6 +32,17 @@ function reasonText(item: AdminLeaseLifecycleReviewItem) {
   return item.derivedLifecycleReasons?.length ? item.derivedLifecycleReasons.join(", ") : item.description;
 }
 
+function acknowledgementLabel(acknowledgement: AdminLeaseLifecycleReviewAcknowledgement | null) {
+  if (!acknowledgement) return "open";
+  if (acknowledgement.status === "snoozed" && acknowledgement.snoozedUntil) {
+    return `snoozed until ${new Date(acknowledgement.snoozedUntil).toLocaleDateString()}`;
+  }
+  if (acknowledgement.status === "assigned" && acknowledgement.assignedTo) {
+    return `assigned to ${acknowledgement.assignedTo}`;
+  }
+  return acknowledgement.status;
+}
+
 function SummaryCard({ label, value }: { label: string; value: number }) {
   return (
     <Card style={{ padding: 14 }}>
@@ -39,7 +52,18 @@ function SummaryCard({ label, value }: { label: string; value: number }) {
   );
 }
 
-function QueueItemRow({ item }: { item: AdminLeaseLifecycleReviewItem }) {
+function QueueItemRow({
+  item,
+  busy,
+  onAcknowledge,
+}: {
+  item: AdminLeaseLifecycleReviewItem;
+  busy: boolean;
+  onAcknowledge: (
+    item: AdminLeaseLifecycleReviewItem,
+    payload: { status: "reviewed" | "snoozed" | "assigned"; assignedTo?: string | null; snoozedUntil?: string | null; note?: string | null }
+  ) => void;
+}) {
   return (
     <tr>
       <td style={{ padding: "12px 10px", verticalAlign: "top", borderBottom: "1px solid #e2e8f0" }}>
@@ -65,6 +89,40 @@ function QueueItemRow({ item }: { item: AdminLeaseLifecycleReviewItem }) {
       <td style={{ padding: "12px 10px", verticalAlign: "top", borderBottom: "1px solid #e2e8f0" }}>
         <span style={{ color: "#0f172a", fontWeight: 700 }}>{item.recommendedAction}</span>
       </td>
+      <td style={{ padding: "12px 10px", verticalAlign: "top", borderBottom: "1px solid #e2e8f0" }}>
+        <div style={{ display: "grid", gap: 8 }}>
+          <Pill>{acknowledgementLabel(item.acknowledgement)}</Pill>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <Button
+              variant="secondary"
+              disabled={busy}
+              onClick={() => onAcknowledge(item, { status: "reviewed", note: "Reviewed from lease lifecycle queue" })}
+            >
+              Mark reviewed
+            </Button>
+            <Button
+              variant="ghost"
+              disabled={busy}
+              onClick={() =>
+                onAcknowledge(item, {
+                  status: "snoozed",
+                  snoozedUntil: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+                  note: "Snoozed for follow-up",
+                })
+              }
+            >
+              Snooze
+            </Button>
+            <Button
+              variant="ghost"
+              disabled={busy}
+              onClick={() => onAcknowledge(item, { status: "assigned", assignedTo: "operations", note: "Assigned from lease lifecycle queue" })}
+            >
+              Assign
+            </Button>
+          </div>
+        </div>
+      </td>
     </tr>
   );
 }
@@ -74,6 +132,7 @@ export default function AdminLeaseLifecycleReviewPage() {
   const [summary, setSummary] = React.useState<AdminLeaseLifecycleReviewSummary>(emptySummary);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [busyItemId, setBusyItemId] = React.useState<string | null>(null);
 
   const load = React.useCallback(async () => {
     try {
@@ -92,6 +151,29 @@ export default function AdminLeaseLifecycleReviewPage() {
   React.useEffect(() => {
     void load();
   }, [load]);
+
+  const handleAcknowledge = React.useCallback(
+    async (
+      item: AdminLeaseLifecycleReviewItem,
+      payload: { status: "reviewed" | "snoozed" | "assigned"; assignedTo?: string | null; snoozedUntil?: string | null; note?: string | null }
+    ) => {
+      try {
+        setBusyItemId(item.id);
+        setError(null);
+        const response = await updateAdminLeaseLifecycleReviewAcknowledgement(item.id, payload);
+        setItems((current) =>
+          current.map((candidate) =>
+            candidate.id === item.id ? { ...candidate, acknowledgement: response.acknowledgement } : candidate
+          )
+        );
+      } catch (err: any) {
+        setError(err?.message || "Failed to update lease lifecycle acknowledgement");
+      } finally {
+        setBusyItemId(null);
+      }
+    },
+    []
+  );
 
   return (
     <MacShell title="Admin - Lease Lifecycle Review">
@@ -135,11 +217,12 @@ export default function AdminLeaseLifecycleReviewPage() {
                   <th style={{ padding: "0 10px 10px" }}>Lease</th>
                   <th style={{ padding: "0 10px 10px" }}>Reason</th>
                   <th style={{ padding: "0 10px 10px" }}>Recommended action</th>
+                  <th style={{ padding: "0 10px 10px" }}>Acknowledgement</th>
                 </tr>
               </thead>
               <tbody>
                 {items.map((item) => (
-                  <QueueItemRow key={item.id} item={item} />
+                  <QueueItemRow key={item.id} item={item} busy={busyItemId === item.id} onAcknowledge={handleAcknowledge} />
                 ))}
               </tbody>
             </table>

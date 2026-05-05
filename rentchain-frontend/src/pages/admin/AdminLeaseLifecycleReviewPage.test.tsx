@@ -6,6 +6,7 @@ import AdminLeaseLifecycleReviewPage from "./AdminLeaseLifecycleReviewPage";
 
 vi.mock("../../api/adminLeaseLifecycleReviewApi", () => ({
   fetchAdminLeaseLifecycleReviewQueue: vi.fn(),
+  updateAdminLeaseLifecycleReviewAcknowledgement: vi.fn(),
 }));
 
 vi.mock("../../components/layout/MacShell", () => ({
@@ -55,6 +56,18 @@ describe("AdminLeaseLifecycleReviewPage", () => {
           recommendedAction: "Open lease record",
           createdFrom: "lease_lifecycle_review_queue_v1",
           detectedAt: "2026-05-05T12:00:00.000Z",
+          acknowledgement: {
+            acknowledgementId: "ack-1",
+            reviewItemId: "lease_lifecycle:lease-1:unknown_lifecycle",
+            leaseId: "lease-1",
+            landlordId: "landlord-1",
+            propertyId: "property-1",
+            unitId: "unit-1",
+            status: "reviewed",
+            acknowledgedBy: "admin-1",
+            acknowledgedAt: "2026-05-05T12:00:00.000Z",
+            updatedAt: "2026-05-05T12:00:00.000Z",
+          },
         },
         {
           id: "lease_lifecycle:lease-2:expired_occupancy_conflict",
@@ -71,6 +84,7 @@ describe("AdminLeaseLifecycleReviewPage", () => {
           recommendedAction: "Confirm occupancy manually",
           createdFrom: "lease_lifecycle_review_queue_v1",
           detectedAt: "2026-05-05T12:00:00.000Z",
+          acknowledgement: null,
         },
       ],
     });
@@ -87,9 +101,79 @@ describe("AdminLeaseLifecycleReviewPage", () => {
     expect(screen.getByText(/expired occupancy conflict/i)).toBeInTheDocument();
     expect(screen.getByText(/Open lease record/i)).toBeInTheDocument();
     expect(screen.getByText(/Confirm occupancy manually/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/reviewed/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: /Mark reviewed/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: /Snooze/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: /Assign/i }).length).toBeGreaterThan(0);
     expect(screen.getByRole("link", { name: "lease-1" })).toHaveAttribute("href", "/admin/leases?q=lease-1");
     expect(screen.queryByRole("button", { name: /fix/i })).not.toBeInTheDocument();
     expect(screen.queryByText(/Fix automatically/i)).not.toBeInTheDocument();
+  });
+
+  it("updates acknowledgement state from row actions", async () => {
+    const { fetchAdminLeaseLifecycleReviewQueue, updateAdminLeaseLifecycleReviewAcknowledgement } = await import(
+      "../../api/adminLeaseLifecycleReviewApi"
+    );
+    vi.mocked(fetchAdminLeaseLifecycleReviewQueue).mockResolvedValue({
+      ok: true,
+      summary: {
+        total: 1,
+        critical: 1,
+        warning: 0,
+        info: 0,
+      },
+      items: [
+        {
+          id: "lease_lifecycle:lease-1:unknown_lifecycle",
+          leaseId: "lease-1",
+          propertyId: "property-1",
+          unitId: "unit-1",
+          landlordId: "landlord-1",
+          tenantId: "tenant-1",
+          derivedLifecycleState: "unknown",
+          derivedLifecycleReasons: ["date_range_invalid"],
+          severity: "critical",
+          category: "unknown_lifecycle",
+          title: "Lease lifecycle needs review",
+          description: "Canonical lifecycle derivation could not safely classify this lease.",
+          recommendedAction: "Open lease record",
+          createdFrom: "lease_lifecycle_review_queue_v1",
+          detectedAt: "2026-05-05T12:00:00.000Z",
+          acknowledgement: null,
+        },
+      ],
+    });
+    vi.mocked(updateAdminLeaseLifecycleReviewAcknowledgement).mockResolvedValue({
+      ok: true,
+      acknowledgement: {
+        acknowledgementId: "ack-1",
+        reviewItemId: "lease_lifecycle:lease-1:unknown_lifecycle",
+        leaseId: "lease-1",
+        landlordId: "landlord-1",
+        propertyId: "property-1",
+        unitId: "unit-1",
+        status: "reviewed",
+        acknowledgedBy: "admin-1",
+        acknowledgedAt: "2026-05-05T12:00:00.000Z",
+        updatedAt: "2026-05-05T12:00:00.000Z",
+      },
+    });
+
+    render(
+      <MemoryRouter>
+        <AdminLeaseLifecycleReviewPage />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /Mark reviewed/i }));
+
+    expect(vi.mocked(updateAdminLeaseLifecycleReviewAcknowledgement)).toHaveBeenCalledWith(
+      "lease_lifecycle:lease-1:unknown_lifecycle",
+      expect.objectContaining({
+        status: "reviewed",
+      })
+    );
+    expect((await screen.findAllByText(/reviewed/i)).length).toBeGreaterThan(0);
   });
 
   it("renders empty and error states", async () => {
