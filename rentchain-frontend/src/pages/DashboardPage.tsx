@@ -157,6 +157,9 @@ function DashboardDecisionSummaryPanel({
         <div style={{ color: text.muted, fontSize: 13, marginTop: 3 }}>
           Read-only decisions from detected rent and lease signals.
         </div>
+        <Link to="/decision-inbox" style={{ display: "inline-block", marginTop: 6, color: "#2563eb", fontWeight: 800 }}>
+          Open decision inbox
+        </Link>
       </div>
       {summary.total === 0 ? (
         <div style={{ color: "#166534", background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 10, padding: 10 }}>

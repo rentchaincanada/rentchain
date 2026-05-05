@@ -94,6 +94,10 @@ vi.mock("./pages/landlord/LandlordAnalyticsPage", () => ({
   default: () => <h1>Landlord Analytics Dashboard</h1>,
 }));
 
+vi.mock("./pages/DecisionInboxPage", () => ({
+  default: () => <h1>Decision Inbox Page</h1>,
+}));
+
 vi.mock("./pages/landlord/PortfolioScorePage", () => ({
   default: () => <h1>Landlord Portfolio Score</h1>,
 }));
@@ -215,6 +219,20 @@ describe("Routes: /automation/timeline", () => {
     );
 
     expect(await screen.findByText(/Automation Timeline/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("Routes: /decision-inbox", () => {
+  it("renders the read-only decision inbox route", async () => {
+    const { default: App } = await import("./App");
+    render(
+      <MemoryRouter initialEntries={["/decision-inbox"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Decision Inbox Page/i)).toBeInTheDocument();
     expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
   });
 });
