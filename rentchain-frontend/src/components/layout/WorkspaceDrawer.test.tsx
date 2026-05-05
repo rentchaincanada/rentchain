@@ -69,12 +69,28 @@ describe("WorkspaceDrawer", () => {
 
     const dialog = screen.getByRole("dialog", { name: "Workspace navigation" });
     expect(dialog.parentElement).toHaveStyle({
-      bottom: "calc(104px + env(safe-area-inset-bottom, 0px))",
+      bottom: "var(--rc-mobile-drawer-bottom-offset, calc(104px + env(safe-area-inset-bottom, 0px)))",
       alignItems: "flex-end",
+      zIndex: "60",
     });
     expect(dialog).toHaveStyle({
       height: "auto",
-      maxHeight: "min(calc(100dvh - calc(104px + env(safe-area-inset-bottom, 0px)) - 16px), 560px)",
+      maxHeight:
+        "min(calc(100dvh - var(--rc-mobile-drawer-bottom-offset, calc(104px + env(safe-area-inset-bottom, 0px))) - 16px), 560px)",
+      zIndex: "61",
     });
+  });
+
+  it("calls close immediately from the close button", () => {
+    const onClose = vi.fn();
+    render(
+      <MemoryRouter initialEntries={["/dashboard"]}>
+        <WorkspaceDrawer open onClose={onClose} userRole="landlord" userEmail="owner@example.com" />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

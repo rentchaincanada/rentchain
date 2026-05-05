@@ -73,7 +73,8 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
     navigate(path);
     onClose();
   };
-  const mobileBottomNavOffset = "calc(104px + env(safe-area-inset-bottom, 0px))";
+  const mobileBottomNavOffset =
+    "var(--rc-mobile-drawer-bottom-offset, calc(104px + env(safe-area-inset-bottom, 0px)))";
 
   const footerContent = (
     <>
@@ -106,7 +107,7 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
         left: 0,
         right: 0,
         bottom: isMobile ? mobileBottomNavOffset : 0,
-        zIndex: 3000,
+        zIndex: isMobile ? 60 : 3000,
         display: "flex",
         justifyContent: "flex-end",
         alignItems: isMobile ? "flex-end" : "flex-start",
@@ -145,7 +146,7 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
           boxShadow: shadows.lg,
           display: "flex",
           flexDirection: "column",
-          zIndex: 3001,
+          zIndex: isMobile ? 61 : 3001,
           overflow: "hidden",
           overscrollBehaviorY: "contain",
           contain: "layout paint size",

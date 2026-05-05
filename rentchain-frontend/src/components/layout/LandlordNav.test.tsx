@@ -120,7 +120,7 @@ describe("LandlordNav mobile drawer", () => {
     fireEvent.click(within(screen.getByRole("dialog", { name: "Navigation menu" })).getByRole("button", { name: "Payments" }));
 
     await waitFor(() => {
-      expect(screen.getByRole("dialog", { name: "Navigation menu" })).not.toHaveClass("is-open");
+      expect(document.querySelector("#rc-landlord-drawer")).not.toHaveClass("is-open");
     });
     expect(screen.getByTestId("current-path")).toHaveTextContent("/payments");
   });
@@ -144,8 +144,25 @@ describe("LandlordNav mobile drawer", () => {
     fireEvent.keyDown(document, { key: "Escape" });
 
     await waitFor(() => {
-      expect(screen.getByRole("dialog", { name: "Navigation menu" })).not.toHaveClass("is-open");
+      expect(document.querySelector("#rc-landlord-drawer")).not.toHaveClass("is-open");
     });
+  });
+
+  it("closes immediately from the drawer close button and leaves the tab bar available", async () => {
+    renderLandlordNav();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open workspace pages" }));
+    fireEvent.click(
+      within(screen.getByRole("dialog", { name: "Navigation menu" })).getByRole("button", {
+        name: "Close menu",
+      })
+    );
+
+    await waitFor(() => {
+      expect(document.querySelector("#rc-landlord-drawer")).not.toHaveClass("is-open");
+    });
+    expect(screen.getByRole("navigation", { name: "Bottom navigation" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open workspace pages" })).not.toHaveClass("active");
   });
 
   it("keeps messages flush so its own mobile spacing remains authoritative", () => {

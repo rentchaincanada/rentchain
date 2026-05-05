@@ -1,10 +1,13 @@
-.rc-landlord-shell {
-  min-height: 100vh;
-  position: relative;
+:root {
   --rc-mobile-bottom-nav-height: 104px;
   --rc-mobile-drawer-bottom-offset: calc(
     var(--rc-mobile-bottom-nav-height) + env(safe-area-inset-bottom, 0px)
   );
+}
+
+.rc-landlord-shell {
+  min-height: 100vh;
+  position: relative;
 }
 
 .rc-landlord-topnav {
@@ -56,7 +59,10 @@
 
 .rc-landlord-backdrop {
   position: fixed;
-  inset: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   background: rgba(15, 23, 42, 0.35);
   opacity: 0;
   pointer-events: none;
@@ -87,10 +93,12 @@
   padding: 18px 16px calc(18px + env(safe-area-inset-bottom));
   gap: 16px;
   overflow: hidden;
+  pointer-events: none;
 }
 
 .rc-landlord-drawer.is-open {
   transform: translateX(0);
+  pointer-events: auto;
 }
 
 .rc-landlord-drawer-header {
@@ -236,16 +244,16 @@
   .rc-mobile-tabbar {
     display: grid;
     grid-template-columns: repeat(6, minmax(0, 1fr));
-    z-index: 70;
+    z-index: 100;
   }
 
   .rc-landlord-backdrop {
-    z-index: 55;
+    z-index: 60;
     bottom: var(--rc-mobile-drawer-bottom-offset);
   }
 
   .rc-landlord-drawer {
-    z-index: 80;
+    z-index: 70;
     top: auto;
     left: max(12px, env(safe-area-inset-left, 0px));
     right: max(12px, env(safe-area-inset-right, 0px));

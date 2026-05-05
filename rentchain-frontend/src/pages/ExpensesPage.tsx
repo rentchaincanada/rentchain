@@ -40,6 +40,21 @@ function formatDate(ms: number): string {
   }
 }
 
+function readableUnitLabel(expense: ExpenseRecord): string {
+  const record = expense as any;
+  const unitOnlyLabel = [
+    record.unitNumber,
+    record.unitLabel,
+    record.unitName,
+    record.unitDisplayLabel,
+    record.displayUnitLabel,
+  ]
+    .map((value) => String(value || "").trim())
+    .find(Boolean);
+  if (unitOnlyLabel) return /^unit\b/i.test(unitOnlyLabel) ? unitOnlyLabel : `Unit ${unitOnlyLabel}`;
+  return String(record.propertyUnitDisplayLabel || record.propertyUnitLabel || "").trim();
+}
+
 function normalizePreviewRowForReview(row: ExpenseImportPreviewRow): ExpenseImportPreviewRow {
   const warningCodes = new Set<string>(row.warningCodes || []);
   const warnings = new Set<string>((row.warnings || []).filter(Boolean));
@@ -205,7 +220,7 @@ const ExpensesPage: React.FC = () => {
           items.map((item) => [
             formatDate(item.incurredAtMs),
             propertyById.get(item.propertyId) || (item.propertyId ? `Property ${item.propertyId}` : "Property"),
-            item.unitId ? `Unit ${item.unitId}` : "",
+            readableUnitLabel(item),
             item.category,
             item.vendorName || "",
             item.notes || "",
