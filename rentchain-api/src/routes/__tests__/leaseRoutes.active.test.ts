@@ -494,6 +494,7 @@ describe("leaseRoutes GET /active", () => {
         },
         latestPayment: {
           id: "rp-1",
+          paymentIntentId: null,
           amountCents: 185000,
           currency: "cad",
           status: "paid",
@@ -505,6 +506,7 @@ describe("leaseRoutes GET /active", () => {
           history: [
             {
               id: "rp-1",
+              paymentIntentId: null,
               amountCents: 185000,
               currency: "cad",
               status: "paid",

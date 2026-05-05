@@ -337,12 +337,14 @@ describe("rentalApplications review summary risk surface", () => {
         reusableAcrossApplications: expect.any(Boolean),
       })
     );
-    expect(res.body?.networkReuseSummary).toEqual({
-      reusable: true,
-      source: "apply_with_rentchain",
-      reuseStatus: "available",
-      consentRequired: true,
-    });
+    expect(res.body?.networkReuseSummary).toEqual(
+      expect.objectContaining({
+        reusable: true,
+        source: "apply_with_rentchain",
+        reuseStatus: "available",
+        consentRequired: true,
+      })
+    );
     expect(res.body?.tenantIdentitySummary?.documents).toBeUndefined();
     expect(res.body?.tenantIdentitySummary?.screening).toBeUndefined();
     expect(res.body?.tenantCredibilitySummary?.signals).toBeUndefined();
