@@ -41,6 +41,13 @@ import {
 } from "@/api/landlordAnalyticsApi";
 import { LandlordActivationFlowCard } from "@/components/activation/LandlordActivationFlowCard";
 import { clearPostUpgradeState, getPostUpgradeContent, getPostUpgradeState } from "@/lib/postUpgrade";
+import {
+  decisionDisplayCopy,
+  decisionSeverityStyle,
+  normalizeDecisionItems,
+  summarizeDecisionItems,
+  type DecisionItem,
+} from "@/lib/decisions/decisionDisplay";
 
 const StarterOnboardingPanel = React.lazy(
   () => import("../components/dashboard/StarterOnboardingPanel")
@@ -106,6 +113,61 @@ function formatDate(ts: number | null): string {
   } catch {
     return new Date(ts).toISOString();
   }
+}
+
+function DashboardDecisionSummaryPanel({ decisions }: { decisions: DecisionItem[] }) {
+  const summary = summarizeDecisionItems(decisions);
+  const cells = [
+    { label: "Overdue", value: summary.overdue, severity: "critical" as const },
+    { label: "Underpaid", value: summary.underpaid, severity: "warning" as const },
+    { label: "Missing", value: summary.missing, severity: "critical" as const },
+    { label: "Failed", value: summary.failed, severity: "critical" as const },
+    { label: "Manual Review", value: summary.manualReview, severity: "warning" as const },
+  ];
+  return (
+    <Card style={{ padding: spacing.md, border: `1px solid ${colors.border}`, display: "grid", gap: spacing.sm }}>
+      <div>
+        <div style={{ fontWeight: 800 }}>Decision summary</div>
+        <div style={{ color: text.muted, fontSize: 13, marginTop: 3 }}>
+          Read-only decisions from detected rent and lease signals.
+        </div>
+      </div>
+      {summary.total === 0 ? (
+        <div style={{ color: "#166534", background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 10, padding: 10 }}>
+          No issues detected. Everything is up to date.
+        </div>
+      ) : (
+        <>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: spacing.sm }}>
+            {cells.map((cell) => {
+              const tone = decisionSeverityStyle[cell.severity];
+              return (
+                <div key={cell.label} style={{ border: `1px solid ${tone.border}`, background: tone.bg, borderRadius: 10, padding: 10 }}>
+                  <div style={{ color: tone.color, fontSize: 12, fontWeight: 700 }}>{cell.label}</div>
+                  <strong style={{ color: tone.color, fontSize: 20 }}>{cell.value}</strong>
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ display: "grid", gap: 6 }}>
+            {decisions.slice(0, 3).map((decision) => {
+              const copy = decisionDisplayCopy[decision.decisionType];
+              const tone = decisionSeverityStyle[decision.severity];
+              return (
+                <div key={decision.decisionId} style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", color: text.primary }}>
+                  <span style={{ border: `1px solid ${tone.border}`, background: tone.bg, color: tone.color, borderRadius: 999, padding: "2px 8px", fontSize: 12, fontWeight: 800 }}>
+                    {copy.badge}
+                  </span>
+                  <span>{copy.label}</span>
+                  <span style={{ color: text.muted }}>{decision.reason}</span>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </Card>
+  );
 }
 
 const DashboardPage: React.FC = () => {
@@ -434,6 +496,7 @@ const DashboardPage: React.FC = () => {
         ? "No onboarding drop-off right now."
         : "No onboarding starts recorded yet.";
   const events = Array.isArray(data?.events) ? data.events : [];
+  const dashboardDecisions = React.useMemo(() => normalizeDecisionItems(data?.decisions), [data?.decisions]);
 
   React.useEffect(() => {
     if (location.hash !== "#open-actions") return;
@@ -661,6 +724,7 @@ const DashboardPage: React.FC = () => {
             }}
           />
         ) : null}
+        {dataReady ? <DashboardDecisionSummaryPanel decisions={dashboardDecisions} /> : null}
         {dataReady ? (
           <div style={{ marginTop: spacing.md }}>
             <PortfolioCredibilitySummaryCard

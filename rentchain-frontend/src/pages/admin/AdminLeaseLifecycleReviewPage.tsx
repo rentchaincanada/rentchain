@@ -11,6 +11,11 @@ import {
   type AdminLeaseLifecycleReviewSummary,
   type LeaseLifecycleReviewSeverity,
 } from "../../api/adminLeaseLifecycleReviewApi";
+import {
+  decisionDisplayCopy,
+  decisionFromLifecycleReviewItem,
+  decisionSeverityStyle,
+} from "@/lib/decisions/decisionDisplay";
 
 const emptySummary: AdminLeaseLifecycleReviewSummary = {
   total: 0,
@@ -88,6 +93,7 @@ function QueueItemRow({
     payload: { status: "reviewed" | "snoozed" | "assigned"; assignedTo?: string | null; snoozedUntil?: string | null; note?: string | null }
   ) => void;
 }) {
+  const decision = decisionFromLifecycleReviewItem(item);
   return (
     <tr>
       <td style={{ padding: "12px 10px", verticalAlign: "top", borderBottom: "1px solid #e2e8f0" }}>
@@ -109,6 +115,25 @@ function QueueItemRow({
         <div style={{ fontWeight: 700, color: "#0f172a" }}>{item.title}</div>
         <div style={{ color: "#475569", marginTop: 4 }}>{item.description}</div>
         <div style={{ color: "#64748b", fontSize: "0.9rem", marginTop: 6 }}>{reasonText(item)}</div>
+        {decision ? (
+          <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <span style={{ color: "#64748b", fontSize: 12, fontWeight: 700 }}>Related decision</span>
+            <span
+              style={{
+                border: `1px solid ${decisionSeverityStyle[decision.severity].border}`,
+                background: decisionSeverityStyle[decision.severity].bg,
+                color: decisionSeverityStyle[decision.severity].color,
+                borderRadius: 999,
+                padding: "2px 8px",
+                fontSize: 12,
+                fontWeight: 800,
+              }}
+            >
+              {decisionDisplayCopy[decision.decisionType].badge}
+            </span>
+            <span style={{ color: "#475569", fontSize: 12 }}>{decision.reason}</span>
+          </div>
+        ) : null}
       </td>
       <td style={{ padding: "12px 10px", verticalAlign: "top", borderBottom: "1px solid #e2e8f0" }}>
         <span style={{ color: "#0f172a", fontWeight: 700 }}>{item.recommendedAction}</span>
