@@ -100,6 +100,7 @@ const { dbMock, resetDb, seedDoc } = vi.hoisted(() => {
       },
       where: (field: string, op: string, value: any) => buildQuery(name, [{ field, op, value }]),
       orderBy: (field: string, dir?: "asc" | "desc") => buildQuery(name).orderBy(field, dir),
+      get: async () => buildQuery(name).get(),
     }),
     runTransaction: async (cb: any) => {
       const tx = {
@@ -784,9 +785,9 @@ describe("properties routes publish + defaults", () => {
     const res = await request(app).get("/api/properties/prop-submission/registry-submission/halifax");
 
     expect(res.status).toBe(200);
-    expect(res.body?.submission?.fieldValues?.siteAddress?.line1).toBe("12 Wharf Street");
-    expect(res.body?.submission?.fieldValues?.propertyIdentifierPid).toBe("PID-123");
-    expect(res.body?.submission?.fieldValues?.owner?.email).toBe("owner@example.com");
+    expect(res.body?.submission?.form?.fieldValues?.siteAddress?.line1).toBe("12 Wharf Street");
+    expect(res.body?.submission?.form?.fieldValues?.propertyIdentifierPid).toBe("PID-123");
+    expect(res.body?.submission?.form?.fieldValues?.owner?.email).toBe("owner@example.com");
     expect(Array.isArray(res.body?.fieldMap)).toBe(true);
   });
 
@@ -848,9 +849,9 @@ describe("properties routes publish + defaults", () => {
     });
 
     expect(res.status).toBe(200);
-    expect(res.body?.submission?.declarations?.acknowledged).toBe(true);
-    expect(res.body?.submission?.fieldValues?.buildings?.[0]?.buildingType).toBe("Apartment building");
-    expect(typeof res.body?.submission?.validation?.readinessScore).toBe("number");
+    expect(res.body?.submission?.declarations?.acceptedIds).toContain("acknowledged");
+    expect(res.body?.submission?.form?.fieldValues?.buildings?.[0]?.buildingType).toBe("Apartment building");
+    expect(typeof res.body?.submission?.review?.validation?.readinessScore).toBe("number");
   });
 
   it("creates a ready package and filing request from the canonical draft", async () => {
@@ -1106,7 +1107,7 @@ describe("properties routes publish + defaults", () => {
       ...draft,
       timestamps: {
         ...draft.timestamps,
-        updatedAt: "2026-04-07T00:00:00.000Z",
+        updatedAt: "2026-06-07T00:00:00.000Z",
       },
     });
 

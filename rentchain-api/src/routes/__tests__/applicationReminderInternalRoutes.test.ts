@@ -219,7 +219,7 @@ describe("applicationReminderInternalRoutes", () => {
       applicantEmail: "sent@example.com",
       expiresAt: 4102444800000,
       status: "ACTIVE",
-      partialProgress: buildPartialProgress({ reminderSentAt: 1700007200000 }),
+      partialProgress: buildPartialProgress({ reminderSentAt: Date.now() }),
     });
     upsertDoc("applicationLinks", "link-no-email", {
       landlordId: "landlord-1",

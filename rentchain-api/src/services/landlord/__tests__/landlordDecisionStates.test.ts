@@ -235,7 +235,7 @@ describe("landlordDecisionStates", () => {
     const snoozed = await saveSnoozedLandlordDecisionState({
       landlordId: "landlord-1",
       decisionId: "reduce_vacancy_risk:prop-1",
-      snoozedUntil: "2026-04-29T12:00:00.000Z",
+      snoozedUntil: "2026-06-29T12:00:00.000Z",
     });
     const dismissed = await saveDismissedLandlordDecisionState({
       landlordId: "landlord-1",
@@ -243,7 +243,7 @@ describe("landlordDecisionStates", () => {
     });
 
     expect(snoozed.state).toBe("snoozed");
-    expect(snoozed.snoozedUntil).toBe("2026-04-29T12:00:00.000Z");
+    expect(snoozed.snoozedUntil).toBe("2026-06-29T12:00:00.000Z");
     expect(dismissed.state).toBe("dismissed");
     expect(dismissed.dismissedAt).toBeTruthy();
   });

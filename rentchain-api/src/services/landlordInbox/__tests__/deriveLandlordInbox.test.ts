@@ -141,12 +141,12 @@ describe("deriveLandlordInbox", () => {
         credibilitySummary: {
           completenessLevel: "medium",
         },
-        networkReuseSummary: {
+        networkReuseSummary: expect.objectContaining({
           reusable: true,
           source: "apply_with_rentchain",
           reuseStatus: "available",
           consentRequired: true,
-        },
+        }),
         source: "review_summary",
       }),
     ]);

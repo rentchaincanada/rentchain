@@ -16,7 +16,11 @@ import {
 import { deriveLeaseExecution } from "../services/leaseExecution/deriveLeaseExecution";
 import { recordTenantEvent } from "../services/tenantPortal/tenantEventLogService";
 import { redeemTenancyInvite } from "../services/tenantPortal/tenantInviteService";
-import { loadTenantIdentityRecord, loadTenantProfileProjection } from "../services/tenantPortal/tenantProfileService";
+import {
+  loadTenantApplicationReuseProjection,
+  loadTenantIdentityRecord,
+  loadTenantProfileProjection,
+} from "../services/tenantPortal/tenantProfileService";
 import { deriveTenantCredibilitySignals } from "../services/tenantCredibility/deriveTenantCredibilitySignals";
 import { deriveIdentityTimeline } from "../services/identityTimeline/deriveIdentityTimeline";
 import { deriveIdentityPortability } from "../services/identityPortability/deriveIdentityPortability";
@@ -3535,6 +3539,25 @@ router.get("/profile", requireTenantWorkspaceIdentity, async (req: any, res) => 
       message: err?.message || "failed",
     });
     return res.status(500).json({ ok: false, error: "TENANT_PROFILE_FAILED" });
+  }
+});
+
+router.get("/application-reuse", requireTenantWorkspaceIdentity, async (req: any, res) => {
+  const context = await resolveWorkspaceContextOrRespond(req, res);
+  if (!context) return;
+
+  try {
+    const projection = await loadTenantApplicationReuseProjection({
+      context,
+      userEmail: String(req.user?.email || "").trim() || null,
+    });
+    return res.json({ ok: true, data: projection });
+  } catch (err: any) {
+    console.error("[tenant/application-reuse] failed", {
+      userId: req.user?.id,
+      message: err?.message || "failed",
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_APPLICATION_REUSE_FAILED" });
   }
 });
 

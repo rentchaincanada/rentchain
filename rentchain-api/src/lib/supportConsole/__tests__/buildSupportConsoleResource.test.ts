@@ -339,6 +339,10 @@ describe("buildSupportConsoleResource", () => {
       policyDecisions: [],
       automation: [],
       reconciliation: null,
+      sla: null,
+      assignment: null,
+      resolution: null,
+      watch: null,
       debug: {
         canonicalEventCount: 0,
         domainsPresent: [],
@@ -347,4 +351,3 @@ describe("buildSupportConsoleResource", () => {
     });
   });
 });
-

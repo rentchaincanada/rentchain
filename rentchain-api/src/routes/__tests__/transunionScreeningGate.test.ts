@@ -12,6 +12,28 @@ const { dbMock, resetDb, seedRentalApplication } = vi.hoisted(() => {
     return collections.get(name)!;
   }
 
+  function buildQuery(name: string, filters: Array<{ field: string; op: string; value: any }> = []) {
+    const query: any = {
+      where: (field: string, op: string, value: any) => buildQuery(name, [...filters, { field, op, value }]),
+      limit: (_count: number) => query,
+      orderBy: () => query,
+      get: async () => {
+        const docs = Array.from(ensureCollection(name).values())
+          .filter((entry) =>
+            filters.every((filter) => {
+              const current = entry.data?.[filter.field];
+              if (filter.op === "==") return current === filter.value;
+              if (filter.op === "array-contains") return Array.isArray(current) && current.includes(filter.value);
+              return false;
+            })
+          )
+          .map((entry) => ({ id: entry.id, exists: true, data: () => entry.data }));
+        return { docs, empty: docs.length === 0, size: docs.length };
+      },
+    };
+    return query;
+  }
+
   return {
     dbMock: {
       collection: (name: string) => ({
@@ -34,6 +56,9 @@ const { dbMock, resetDb, seedRentalApplication } = vi.hoisted(() => {
             col.set(id, { id, data: payload || {} });
           },
         }),
+        where: (field: string, op: string, value: any) => buildQuery(name, [{ field, op, value }]),
+        orderBy: (field: string, dir?: "asc" | "desc") => buildQuery(name).orderBy(field, dir),
+        get: async () => buildQuery(name).get(),
       }),
     },
     resetDb: () => collections.clear(),

@@ -62,10 +62,11 @@ const dbMock = {
 
 const resolveTenancyContext = vi.fn();
 const loadTenantIdentityRecord = vi.fn();
+const loadTenantApplicationReuseProjection = vi.fn();
 
 vi.mock("../../../config/firebase", () => ({ db: dbMock }));
 vi.mock("../tenancyContextService", () => ({ resolveTenancyContext }));
-vi.mock("../tenantProfileService", () => ({ loadTenantIdentityRecord }));
+vi.mock("../tenantProfileService", () => ({ loadTenantApplicationReuseProjection, loadTenantIdentityRecord }));
 
 describe("tenantSharePackageService", () => {
   beforeEach(() => {
@@ -106,6 +107,20 @@ describe("tenantSharePackageService", () => {
       verification: { level: "strong" },
       readinessLabel: "Well established",
       readinessDescription: "Your rental identity includes completed verification signals and visible lease history.",
+    });
+    loadTenantApplicationReuseProjection.mockResolvedValue({
+      applicant: {
+        firstName: "Taylor",
+        lastName: "Tenant",
+        email: "tenant@example.com",
+        phone: "9025550100",
+      },
+      currentAddress: null,
+      timeAtCurrentAddressMonths: null,
+      currentRentAmountCents: null,
+      employment: null,
+      workReference: null,
+      nextOfKin: null,
     });
   });
 
