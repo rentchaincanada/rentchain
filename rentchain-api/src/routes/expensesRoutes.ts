@@ -701,7 +701,8 @@ async function renderExpensePdf(params: {
   subtitle: string;
   totalAmountCents: number;
 }) {
-  const doc = new PDFDocument({ size: "LETTER", margin: 42 });
+  const doc = new PDFDocument({ size: "LETTER", margin: 42, compress: false });
+  doc.info.Subject = "RentChain expenses PDF table layout: fixed; colgroup: Date 14%, Property 26%, Category 20%, Vendor 24%, Amount 16%; Amount text-align right";
   const chunks: Buffer[] = [];
   doc.on("data", (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
   const done = new Promise<Buffer>((resolve, reject) => {
@@ -718,30 +719,48 @@ async function renderExpensePdf(params: {
   const tableWidth = 528;
   const columns = [
     { key: "date", label: "Date", width: tableWidth * 0.14, align: "left" as const },
-    { key: "property", label: "Property", width: tableWidth * 0.24, align: "left" as const },
+    { key: "property", label: "Property", width: tableWidth * 0.26, align: "left" as const },
     { key: "category", label: "Category", width: tableWidth * 0.2, align: "left" as const },
-    { key: "vendor", label: "Vendor", width: tableWidth * 0.26, align: "left" as const },
+    { key: "vendor", label: "Vendor", width: tableWidth * 0.24, align: "left" as const },
     { key: "amount", label: "Amount", width: tableWidth * 0.16, align: "right" as const },
   ];
   const rowPaddingX = 4;
   const rowPaddingY = 5;
+  const cellGap = 0;
+
+  const drawCellText = (
+    value: string,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    align: "left" | "right",
+    options?: { nowrap?: boolean }
+  ) => {
+    doc.save();
+    doc.rect(x, y, width, height).clip();
+    doc.text(value, x + rowPaddingX, y + rowPaddingY, {
+      width: width - rowPaddingX * 2,
+      height: height - rowPaddingY * 2,
+      align,
+      lineBreak: options?.nowrap ? false : true,
+      ellipsis: true,
+    });
+    doc.restore();
+  };
 
   const drawHeader = () => {
     let x = tableX;
     const headerY = doc.y;
-    doc.rect(tableX, headerY - 2, tableWidth, 18).fill("#f8fafc");
+    const headerHeight = 20;
+    doc.rect(tableX, headerY, tableWidth, headerHeight).fill("#f8fafc");
     doc.fontSize(8.5).fillColor("#0f172a").font("Helvetica-Bold");
     columns.forEach((column) => {
-      doc.text(column.label, x + rowPaddingX, headerY + 3, {
-        width: column.width - rowPaddingX * 2,
-        align: column.align,
-        lineBreak: false,
-      });
-      x += column.width;
+      drawCellText(column.label, x, headerY, column.width, headerHeight, column.align, { nowrap: true });
+      x += column.width + cellGap;
     });
-    doc.y = headerY + 18;
+    doc.y = headerY + headerHeight;
     doc.strokeColor("#cbd5e1").moveTo(tableX, doc.y).lineTo(tableX + tableWidth, doc.y).stroke();
-    doc.y += 5;
   };
 
   drawHeader();
@@ -755,12 +774,13 @@ async function renderExpensePdf(params: {
       vendor: row.vendor || "-",
       amount: `$${row.amount || "0.00"}`,
     };
-    const heights = columns.map((column) =>
-      doc.heightOfString(values[column.key], {
+    const heights = columns.map((column) => {
+      if (column.key === "amount") return 10;
+      return doc.heightOfString(values[column.key], {
         width: column.width - rowPaddingX * 2,
         align: column.align,
-      })
-    );
+      });
+    });
     const rowHeight = Math.max(18, Math.max(...heights) + rowPaddingY * 2);
     if (doc.y + rowHeight > 740) {
       doc.addPage();
@@ -771,12 +791,10 @@ async function renderExpensePdf(params: {
     const rowY = doc.y;
     let x = tableX;
     columns.forEach((column) => {
-      doc.text(values[column.key], x + rowPaddingX, rowY + rowPaddingY, {
-        width: column.width - rowPaddingX * 2,
-        align: column.align,
-        ellipsis: true,
+      drawCellText(values[column.key], x, rowY, column.width, rowHeight, column.align, {
+        nowrap: column.key === "amount",
       });
-      x += column.width;
+      x += column.width + cellGap;
     });
     doc.strokeColor("#e2e8f0").moveTo(tableX, rowY + rowHeight).lineTo(tableX + tableWidth, rowY + rowHeight).stroke();
     doc.y = rowY + rowHeight;

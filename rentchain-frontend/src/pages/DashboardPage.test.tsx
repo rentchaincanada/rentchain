@@ -411,9 +411,12 @@ describe("DashboardPage", () => {
     );
 
     expect(await screen.findByText("Run your first screening")).toBeInTheDocument();
+    expect(screen.getAllByText("Info")).toHaveLength(1);
     screen.getByRole("button", { name: "Info about Run your first screening" }).click();
     await waitFor(() => expect(screen.getByRole("dialog", { name: "Action information" })).toBeInTheDocument());
     expect(screen.getByText(/Connect TransUnion access from Applications/i)).toBeInTheDocument();
+    screen.getByRole("button", { name: "Open" }).click();
+    expect(assignMock).toHaveBeenCalledWith("/applications?openTransUnionAccess=1");
   });
 
   it("routes the screening setup CTA to the applications TransUnion onboarding path", async () => {

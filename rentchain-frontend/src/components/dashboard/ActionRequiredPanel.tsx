@@ -124,23 +124,25 @@ export function ActionRequiredPanel({
                       Open
                     </button>
                   ) : null}
-                  <span
-                    aria-hidden="true"
-                    style={{
-                      padding: "4px 8px",
-                      borderRadius: 12,
-                      border: `1px solid ${colors.border}`,
-                      background: severity === "high" ? "rgba(239,68,68,0.12)" : "rgba(59,130,246,0.12)",
-                      color: severity === "high" ? "#dc2626" : "#1d4ed8",
-                      fontSize: 11,
-                      fontWeight: 700,
-                      textTransform: "capitalize",
-                      cursor: "default",
-                      userSelect: "none",
-                    }}
-                  >
-                    {severity}
-                  </span>
+                  {severity !== "info" ? (
+                    <span
+                      aria-hidden="true"
+                      style={{
+                        padding: "4px 8px",
+                        borderRadius: 12,
+                        border: `1px solid ${colors.border}`,
+                        background: severity === "high" ? "rgba(239,68,68,0.12)" : "rgba(59,130,246,0.12)",
+                        color: severity === "high" ? "#dc2626" : "#1d4ed8",
+                        fontSize: 11,
+                        fontWeight: 700,
+                        textTransform: "capitalize",
+                        cursor: "default",
+                        userSelect: "none",
+                      }}
+                    >
+                      {severity}
+                    </span>
+                  ) : null}
                 </div>
               </div>
             );

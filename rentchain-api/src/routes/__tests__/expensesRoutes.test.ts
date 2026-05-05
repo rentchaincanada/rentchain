@@ -307,5 +307,9 @@ describe("expenses routes", () => {
     );
     expect(Buffer.isBuffer(res.body)).toBe(true);
     expect(res.body.length).toBeGreaterThan(100);
+    const pdfSource = res.body.toString("latin1");
+    expect(pdfSource).toContain("table layout: fixed");
+    expect(pdfSource).toContain("Date 14%, Property 26%, Category 20%, Vendor 24%, Amount 16%");
+    expect(pdfSource).toContain("Amount text-align right");
   });
 });
