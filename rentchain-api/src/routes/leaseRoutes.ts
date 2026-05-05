@@ -37,6 +37,10 @@ import {
   summarizePaymentObligationLedger,
 } from "../lib/payments/paymentObligationLedger";
 import {
+  deriveDelinquencySignals,
+  summarizeDelinquencySignals,
+} from "../lib/payments/delinquencySignals";
+import {
   isTargetedHiddenLeaseId,
   isTargetedHiddenTenantId,
 } from "../lib/testDataVisibilityTargets";
@@ -2447,6 +2451,7 @@ router.get("/:leaseId/ledger", async (req: any, res: Response) => {
       rentPayments: obligationRentPayments,
       reconciliationRecords: obligationReconciliationRecords,
     });
+    const delinquencySignals = deriveDelinquencySignals(obligationRows);
 
     let runningBalanceCents = 0;
     const monthlyTotals: Record<string, { chargesCents: number; paymentsCents: number; netCents: number }> = {};
@@ -2489,6 +2494,8 @@ router.get("/:leaseId/ledger", async (req: any, res: Response) => {
       monthlyTotals,
       obligationRows,
       obligationSummary: summarizePaymentObligationLedger(obligationRows),
+      delinquencySignals,
+      delinquencySummary: summarizeDelinquencySignals(delinquencySignals),
     });
   } catch (err) {
     console.error("[GET /api/leases/:leaseId/ledger] error", err);
