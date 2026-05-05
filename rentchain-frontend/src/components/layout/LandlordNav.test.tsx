@@ -103,6 +103,21 @@ describe("LandlordNav mobile drawer", () => {
     ).toBeInTheDocument();
   });
 
+  it("toggles the mobile drawer from the More tab", async () => {
+    renderLandlordNav();
+
+    const moreButton = screen.getByRole("button", { name: "Open workspace pages" });
+    fireEvent.click(moreButton);
+    expect(screen.getByRole("dialog", { name: "Navigation menu" })).toHaveClass("is-open");
+
+    fireEvent.click(moreButton);
+
+    await waitFor(() => {
+      expect(document.querySelector("#rc-landlord-drawer")).not.toHaveClass("is-open");
+    });
+    expect(moreButton).not.toHaveClass("active");
+  });
+
   it("uses a safe-area drawer offset so the sheet and backdrop stop above the mobile nav", () => {
     renderLandlordNav();
 

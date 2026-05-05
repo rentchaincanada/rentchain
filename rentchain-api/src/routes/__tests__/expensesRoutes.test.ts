@@ -282,4 +282,30 @@ describe("expenses routes", () => {
       /^attachment; filename="rentchain-expenses-\d{4}-\d{2}-\d{2}\.xls"$/
     );
   });
+
+  it("exports a readable PDF for Pro plans", async () => {
+    setPlan("pro");
+    seedDoc("expenses", "expense-1", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitId: null,
+      category: "Repairs",
+      vendorName: "FixIt",
+      amountCents: 12500,
+      incurredAtMs: Date.parse("2026-03-01T00:00:00.000Z"),
+      notes: "Pipe repair",
+      status: "recorded",
+      source: "manual",
+    });
+    const app = await createApp();
+    const res = await request(app).get("/api/expenses/export.pdf");
+
+    expect(res.status).toBe(200);
+    expect(res.headers["content-type"]).toContain("application/pdf");
+    expect(String(res.headers["content-disposition"] || "")).toMatch(
+      /^attachment; filename="rentchain-expenses-\d{4}-\d{2}-\d{2}\.pdf"$/
+    );
+    expect(Buffer.isBuffer(res.body)).toBe(true);
+    expect(res.body.length).toBeGreaterThan(100);
+  });
 });

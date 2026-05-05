@@ -290,7 +290,7 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
           type="button"
           onClick={(event) => {
             lastFocusedRef.current = event.currentTarget;
-            setDrawerOpen(true);
+            setDrawerOpen((open) => !open);
           }}
           className={drawerOpen ? "active" : ""}
           aria-label="Open workspace pages"

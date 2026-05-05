@@ -714,32 +714,79 @@ async function renderExpensePdf(params: {
   doc.fontSize(10).font("Helvetica").fillColor("#475569").text(params.subtitle);
   doc.moveDown(0.75);
 
-  const headers = ["Date", "Property", "Category", "Vendor", "Amount"];
-  const colX = [42, 110, 250, 360, 500];
-  doc.fontSize(9).fillColor("#0f172a").font("Helvetica-Bold");
-  headers.forEach((header, idx) => {
-    doc.text(header, colX[idx], doc.y, { width: idx === headers.length - 1 ? 60 : colX[idx + 1] - colX[idx] - 8 });
-  });
-  doc.moveDown(0.4);
-  doc.strokeColor("#cbd5e1").moveTo(42, doc.y).lineTo(570, doc.y).stroke();
-  doc.moveDown(0.35);
+  const tableX = 42;
+  const tableWidth = 528;
+  const columns = [
+    { key: "date", label: "Date", width: tableWidth * 0.14, align: "left" as const },
+    { key: "property", label: "Property", width: tableWidth * 0.24, align: "left" as const },
+    { key: "category", label: "Category", width: tableWidth * 0.2, align: "left" as const },
+    { key: "vendor", label: "Vendor", width: tableWidth * 0.26, align: "left" as const },
+    { key: "amount", label: "Amount", width: tableWidth * 0.16, align: "right" as const },
+  ];
+  const rowPaddingX = 4;
+  const rowPaddingY = 5;
+
+  const drawHeader = () => {
+    let x = tableX;
+    const headerY = doc.y;
+    doc.rect(tableX, headerY - 2, tableWidth, 18).fill("#f8fafc");
+    doc.fontSize(8.5).fillColor("#0f172a").font("Helvetica-Bold");
+    columns.forEach((column) => {
+      doc.text(column.label, x + rowPaddingX, headerY + 3, {
+        width: column.width - rowPaddingX * 2,
+        align: column.align,
+        lineBreak: false,
+      });
+      x += column.width;
+    });
+    doc.y = headerY + 18;
+    doc.strokeColor("#cbd5e1").moveTo(tableX, doc.y).lineTo(tableX + tableWidth, doc.y).stroke();
+    doc.y += 5;
+  };
+
+  drawHeader();
 
   doc.font("Helvetica").fontSize(8).fillColor("#0f172a");
   params.rows.forEach((row) => {
+    const values: Record<string, string> = {
+      date: row.date || "-",
+      property: row.property || "-",
+      category: row.category || "-",
+      vendor: row.vendor || "-",
+      amount: `$${row.amount || "0.00"}`,
+    };
+    const heights = columns.map((column) =>
+      doc.heightOfString(values[column.key], {
+        width: column.width - rowPaddingX * 2,
+        align: column.align,
+      })
+    );
+    const rowHeight = Math.max(18, Math.max(...heights) + rowPaddingY * 2);
+    if (doc.y + rowHeight > 740) {
+      doc.addPage();
+      drawHeader();
+      doc.font("Helvetica").fontSize(8).fillColor("#0f172a");
+    }
+
     const rowY = doc.y;
-    const values = [row.date, row.property, row.category, row.vendor, `$${row.amount}`];
-    values.forEach((value, idx) => {
-      doc.text(value || "-", colX[idx], rowY, {
-        width: idx === values.length - 1 ? 60 : colX[idx + 1] - colX[idx] - 8,
+    let x = tableX;
+    columns.forEach((column) => {
+      doc.text(values[column.key], x + rowPaddingX, rowY + rowPaddingY, {
+        width: column.width - rowPaddingX * 2,
+        align: column.align,
         ellipsis: true,
       });
+      x += column.width;
     });
-    doc.moveDown(0.5);
-    if (doc.y > 720) doc.addPage();
+    doc.strokeColor("#e2e8f0").moveTo(tableX, rowY + rowHeight).lineTo(tableX + tableWidth, rowY + rowHeight).stroke();
+    doc.y = rowY + rowHeight;
   });
 
   doc.moveDown(0.75);
-  doc.font("Helvetica-Bold").fontSize(10).text(`Total: $${(params.totalAmountCents / 100).toFixed(2)}`);
+  doc.font("Helvetica-Bold").fontSize(10).text(`Total: $${(params.totalAmountCents / 100).toFixed(2)}`, tableX, doc.y, {
+    width: tableWidth,
+    align: "right",
+  });
   doc.end();
   return done;
 }
