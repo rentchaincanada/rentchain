@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { ToastProvider } from "../components/ui/ToastProvider";
@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   useOnboardingStateMock: vi.fn(),
   useUpgradeMock: vi.fn(),
   navigateMock: vi.fn(),
+  patchDecisionActionMock: vi.fn(),
 }));
 
 vi.mock("react-router-dom", async () => {
@@ -82,6 +83,10 @@ vi.mock("../config/screening", () => ({
   screeningComingSoonLabel: () => "Credit screening - coming soon.",
 }));
 
+vi.mock("@/api/decisionApi", () => ({
+  patchDecisionAction: mocks.patchDecisionActionMock,
+}));
+
 afterEach(() => {
   cleanup();
 });
@@ -117,6 +122,20 @@ describe("DashboardPage", () => {
       loading: false,
     });
     mocks.fetchDashboardSummaryMock.mockResolvedValue({});
+    mocks.patchDecisionActionMock.mockImplementation(async (_decisionId: string, payload: any) => ({
+      ok: true,
+      decision: {
+        ...payload.decision,
+        status: payload.actionType === "reviewed" ? "reviewed" : payload.actionType,
+        latestAction: {
+          actionId: "action-1",
+          decisionId: payload.decision.decisionId,
+          actionType: payload.actionType,
+          nextStatus: payload.actionType === "reviewed" ? "reviewed" : payload.actionType,
+          createdAt: "2026-05-05T12:00:00.000Z",
+        },
+      },
+    }));
     mocks.useApplicationsMock.mockReturnValue({
       applications: [],
       loading: false,
@@ -306,6 +325,43 @@ describe("DashboardPage", () => {
     expect(screen.getByText("Partial payment received")).toBeInTheDocument();
     expect(screen.getAllByText("Manual Review").length).toBeGreaterThan(0);
     expect(screen.getByText("Payment mismatch detected")).toBeInTheDocument();
+  });
+
+  it("updates dashboard decision status from human actions", async () => {
+    mocks.fetchDashboardSummaryMock.mockResolvedValue({
+      decisions: [
+        {
+          decisionId: "decision:review_overdue_rent:lease-1",
+          leaseId: "lease-1",
+          propertyId: "property-1",
+          unitId: "unit-1",
+          decisionType: "review_overdue_rent",
+          severity: "critical",
+          status: "detected",
+          reason: "Rent past due date",
+          metadata: {},
+        },
+      ],
+    });
+
+    render(
+      <ToastProvider>
+        <MemoryRouter>
+          <DashboardPage />
+        </MemoryRouter>
+      </ToastProvider>
+    );
+
+    expect(await screen.findByText("Overdue Rent")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Mark reviewed" }));
+
+    await waitFor(() =>
+      expect(mocks.patchDecisionActionMock).toHaveBeenCalledWith(
+        "decision:review_overdue_rent:lease-1",
+        expect.objectContaining({ actionType: "reviewed", leaseId: "lease-1" })
+      )
+    );
+    expect(screen.getByText("Reviewed")).toBeInTheDocument();
   });
 
   it("renders an empty dashboard decision state without adding actions", async () => {

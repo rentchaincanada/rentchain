@@ -40,6 +40,11 @@ import {
   deriveDelinquencySignals,
   summarizeDelinquencySignals,
 } from "../lib/payments/delinquencySignals";
+import { deriveDecisions } from "../lib/decisions/decisionEngine";
+import {
+  applyDecisionActions,
+  DECISION_ACTIONS_COLLECTION,
+} from "../lib/decisions/decisionActions";
 import {
   isTargetedHiddenLeaseId,
   isTargetedHiddenTenantId,
@@ -852,6 +857,11 @@ async function loadLeaseReconciliationRecordsForObligationLedger(params: {
     await collect("subjectId", rentPaymentId);
   }
   return Array.from(records.values());
+}
+
+async function loadLeaseDecisionActions(leaseId: string) {
+  const snap = await db.collection(DECISION_ACTIONS_COLLECTION).where("leaseId", "==", leaseId).get().catch(() => null);
+  return (snap?.docs || []).map((doc: any) => ({ id: doc.id, ...((doc.data() as any) || {}) }));
 }
 
 function enrichLeaseLedgerEntryWithPaymentIntent(
@@ -2452,6 +2462,22 @@ router.get("/:leaseId/ledger", async (req: any, res: Response) => {
       reconciliationRecords: obligationReconciliationRecords,
     });
     const delinquencySignals = deriveDelinquencySignals(obligationRows);
+    const decisionActions = await loadLeaseDecisionActions(leaseId);
+    const leaseLifecycle = deriveLeaseLifecycleState({ id: leaseId, ...(leaseCheck.lease as any) });
+    const decisions = applyDecisionActions(
+      deriveDecisions({
+        delinquencySignals,
+        leaseLifecycle: {
+          ...leaseLifecycle,
+          leaseId,
+          propertyId: String((leaseCheck.lease as any)?.propertyId || "").trim() || null,
+          unitId: String((leaseCheck.lease as any)?.unitId || "").trim() || null,
+          tenantId: String((leaseCheck.lease as any)?.tenantId || (leaseCheck.lease as any)?.primaryTenantId || "").trim() || null,
+        },
+        obligationRows,
+      }),
+      decisionActions
+    );
 
     let runningBalanceCents = 0;
     const monthlyTotals: Record<string, { chargesCents: number; paymentsCents: number; netCents: number }> = {};
@@ -2496,6 +2522,7 @@ router.get("/:leaseId/ledger", async (req: any, res: Response) => {
       obligationSummary: summarizePaymentObligationLedger(obligationRows),
       delinquencySignals,
       delinquencySummary: summarizeDelinquencySignals(delinquencySignals),
+      decisions,
     });
   } catch (err) {
     console.error("[GET /api/leases/:leaseId/ledger] error", err);

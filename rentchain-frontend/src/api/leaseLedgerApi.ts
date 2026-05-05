@@ -1,5 +1,6 @@
 import { apiFetch } from "./apiFetch";
 import { API_BASE_URL } from "./config";
+import type { DecisionItem } from "@/lib/decisions/decisionDisplay";
 
 export type LeaseLedgerEntry = {
   id: string;
@@ -122,6 +123,7 @@ export type LeaseLedgerResponse = {
   obligationSummary?: LeaseObligationLedgerSummary;
   delinquencySignals?: LeaseDelinquencySignal[];
   delinquencySummary?: LeaseDelinquencySummary;
+  decisions?: DecisionItem[];
 };
 
 export async function fetchLeaseLedger(

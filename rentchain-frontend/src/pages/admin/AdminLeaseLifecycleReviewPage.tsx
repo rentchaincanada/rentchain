@@ -15,7 +15,11 @@ import {
   decisionDisplayCopy,
   decisionFromLifecycleReviewItem,
   decisionSeverityStyle,
+  decisionStatusCopy,
+  type DecisionActionType,
+  type DecisionItem,
 } from "@/lib/decisions/decisionDisplay";
+import { patchDecisionAction } from "@/api/decisionApi";
 
 const emptySummary: AdminLeaseLifecycleReviewSummary = {
   total: 0,
@@ -84,16 +88,21 @@ function SummaryCard({ label, value }: { label: string; value: number }) {
 function QueueItemRow({
   item,
   busy,
+  decisionStatusById,
   onAcknowledge,
+  onDecisionAction,
 }: {
   item: AdminLeaseLifecycleReviewItem;
   busy: boolean;
+  decisionStatusById: Record<string, DecisionItem>;
   onAcknowledge: (
     item: AdminLeaseLifecycleReviewItem,
     payload: { status: "reviewed" | "snoozed" | "assigned"; assignedTo?: string | null; snoozedUntil?: string | null; note?: string | null }
   ) => void;
+  onDecisionAction: (decision: DecisionItem, actionType: DecisionActionType) => void;
 }) {
-  const decision = decisionFromLifecycleReviewItem(item);
+  const baseDecision = decisionFromLifecycleReviewItem(item);
+  const decision = baseDecision ? decisionStatusById[baseDecision.decisionId] || baseDecision : null;
   return (
     <tr>
       <td style={{ padding: "12px 10px", verticalAlign: "top", borderBottom: "1px solid #e2e8f0" }}>
@@ -131,7 +140,30 @@ function QueueItemRow({
             >
               {decisionDisplayCopy[decision.decisionType].badge}
             </span>
+            <span style={{ border: "1px solid #cbd5e1", borderRadius: 999, padding: "2px 8px", fontSize: 12, fontWeight: 800 }}>
+              {decisionStatusCopy[decision.status || "detected"]}
+            </span>
             <span style={{ color: "#475569", fontSize: 12 }}>{decision.reason}</span>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", width: "100%" }}>
+              {(["reviewed", "snoozed", "assigned", "dismissed", "resolved"] as DecisionActionType[]).map((actionType) => (
+                <Button
+                  key={actionType}
+                  variant="ghost"
+                  disabled={busy}
+                  onClick={() => onDecisionAction(decision, actionType)}
+                >
+                  {actionType === "reviewed"
+                    ? "Mark reviewed"
+                    : actionType === "snoozed"
+                    ? "Snooze"
+                    : actionType === "assigned"
+                    ? "Assign"
+                    : actionType === "dismissed"
+                    ? "Dismiss"
+                    : "Resolve"}
+                </Button>
+              ))}
+            </div>
           </div>
         ) : null}
       </td>
@@ -198,6 +230,7 @@ export default function AdminLeaseLifecycleReviewPage() {
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [busyItemId, setBusyItemId] = React.useState<string | null>(null);
+  const [decisionStatusById, setDecisionStatusById] = React.useState<Record<string, DecisionItem>>({});
 
   const load = React.useCallback(async () => {
     try {
@@ -246,6 +279,28 @@ export default function AdminLeaseLifecycleReviewPage() {
     []
   );
 
+  const handleDecisionAction = React.useCallback(async (decision: DecisionItem, actionType: DecisionActionType) => {
+    try {
+      setBusyItemId(decision.decisionId);
+      setError(null);
+      const response = await patchDecisionAction(decision.decisionId, {
+        leaseId: decision.leaseId || "",
+        actionType,
+        decision,
+        assignedTo: actionType === "assigned" ? "operations" : undefined,
+        snoozedUntil: actionType === "snoozed" ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() : undefined,
+      });
+      setDecisionStatusById((current) => ({
+        ...current,
+        [decision.decisionId]: response?.decision || { ...decision, status: actionType === "reviewed" ? "reviewed" : actionType },
+      }));
+    } catch (err: any) {
+      setError(err?.message || "Failed to update decision action");
+    } finally {
+      setBusyItemId(null);
+    }
+  }, []);
+
   return (
     <MacShell title="Admin - Lease Lifecycle Review">
       <div style={{ display: "grid", gap: 16 }}>
@@ -293,7 +348,14 @@ export default function AdminLeaseLifecycleReviewPage() {
               </thead>
               <tbody>
                 {items.map((item) => (
-                  <QueueItemRow key={item.id} item={item} busy={busyItemId === item.id} onAcknowledge={handleAcknowledge} />
+                  <QueueItemRow
+                    key={item.id}
+                    item={item}
+                    busy={busyItemId === item.id || busyItemId === decisionFromLifecycleReviewItem(item)?.decisionId}
+                    decisionStatusById={decisionStatusById}
+                    onAcknowledge={handleAcknowledge}
+                    onDecisionAction={handleDecisionAction}
+                  />
                 ))}
               </tbody>
             </table>

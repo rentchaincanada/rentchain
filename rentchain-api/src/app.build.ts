@@ -129,6 +129,7 @@ import viewingRoutes from "./routes/viewingRoutes";
 import screeningOpsRoutes from "./routes/screeningOpsRoutes";
 import leaseOverlapCleanupRoutes from "./routes/leaseOverlapCleanupRoutes";
 import riskAgentRoutes from "./routes/riskAgentRoutes";
+import decisionRoutes from "./routes/decisionRoutes";
 
 process.on("unhandledRejection", (reason) => {
   console.error("[FATAL] unhandledRejection", reason);
@@ -309,6 +310,7 @@ app.get("/api/me", async (req: any, res: any, next: any) => {
 
 // Core prefixed APIs must mount before broad /api routers.
 app.use("/api/compliance", routeSource("complianceRoutes.ts"), complianceRoutes);
+app.use("/api/decisions", routeSource("decisionRoutes.ts"), decisionRoutes);
 app.use("/api/leases", routeSource("leaseRoutes.ts"), leaseRoutes);
 app.use("/api/tenants", routeSource("tenantsRoutes.ts"), tenantsRoutes);
 app.use("/api", routeSource("tenanciesRoutes.ts"), tenanciesRoutes);
