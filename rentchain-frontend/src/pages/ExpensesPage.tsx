@@ -18,6 +18,7 @@ import { ExpenseImportSummaryCard } from "../components/expenses/ExpenseImportSu
 import { ExpenseImportUploadCard } from "../components/expenses/ExpenseImportUploadCard";
 import { useCapabilities } from "../hooks/useCapabilities";
 import { triggerBlobDownload } from "../utils/downloadBlob";
+import { buildCsvBlob } from "../utils/csvExport";
 
 function formatCents(cents: number): string {
   const amount = Number(cents || 0) / 100;
@@ -198,6 +199,24 @@ const ExpensesPage: React.FC = () => {
   const triggerDownload = async (format: "csv" | "xls" | "pdf") => {
     try {
       setExporting(format);
+      if (format === "csv" || format === "xls") {
+        const blob = buildCsvBlob(
+          ["date", "property", "unit", "category", "vendor", "description", "amount", "status", "source"],
+          items.map((item) => [
+            formatDate(item.incurredAtMs),
+            propertyById.get(item.propertyId) || (item.propertyId ? `Property ${item.propertyId}` : "Property"),
+            item.unitId ? `Unit ${item.unitId}` : "",
+            item.category,
+            item.vendorName || "",
+            item.notes || "",
+            (Number(item.amountCents || 0) / 100).toFixed(2),
+            item.status,
+            item.source,
+          ])
+        );
+        triggerBlobDownload(blob, `rentchain-expenses-${new Date().toISOString().slice(0, 10)}.csv`);
+        return;
+      }
       const { blob, filename } = await exportExpenses(format, {
         propertyId: propertyFilter || undefined,
         category: (categoryFilter as ExpenseCategory) || undefined,

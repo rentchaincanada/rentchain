@@ -164,6 +164,7 @@
 
   .rc-applications-detail {
     overflow-x: hidden;
+    padding-top: 12px;
   }
 
   .rc-applications-status-row {

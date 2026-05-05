@@ -28,10 +28,12 @@ describe("WorkspaceDrawer", () => {
       loading: false,
     });
     mocks.useIsMobile.mockReturnValue(true);
+    vi.spyOn(window, "scrollTo").mockImplementation(() => {});
   });
 
   afterEach(() => {
     cleanup();
+    vi.restoreAllMocks();
   });
 
   it("navigates when a drawer option is selected", () => {
@@ -56,5 +58,23 @@ describe("WorkspaceDrawer", () => {
 
     expect(screen.getByTestId("current-path")).toHaveTextContent("/payments");
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("positions the mobile sheet above the bottom navigation", () => {
+    render(
+      <MemoryRouter initialEntries={["/dashboard"]}>
+        <WorkspaceDrawer open onClose={vi.fn()} userRole="landlord" userEmail="owner@example.com" />
+      </MemoryRouter>
+    );
+
+    const dialog = screen.getByRole("dialog", { name: "Workspace navigation" });
+    expect(dialog.parentElement).toHaveStyle({
+      bottom: "calc(104px + env(safe-area-inset-bottom, 0px))",
+      alignItems: "flex-end",
+    });
+    expect(dialog).toHaveStyle({
+      height: "auto",
+      maxHeight: "min(calc(100dvh - calc(104px + env(safe-area-inset-bottom, 0px)) - 16px), 560px)",
+    });
   });
 });

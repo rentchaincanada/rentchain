@@ -156,12 +156,10 @@ describe("MessagesPage", () => {
 
     await flushAsync();
     expect(screen.getAllByText("Taylor Tenant")[0]).toBeInTheDocument();
-    expect(screen.getAllByText("Taylor Tenant • Conversation").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Taylor Tenant • Property prop-raw-1 / Unit unit-raw-1").length).toBeGreaterThan(0);
     expect(screen.queryByText("Tenant conversation • Unit unavailable")).not.toBeInTheDocument();
     expect(screen.getAllByText("TT")[0]).toBeInTheDocument();
-    expect(screen.queryByText(/tenant-raw-1/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/prop-raw-1/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/unit-raw-1/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/unavailable/i)).not.toBeInTheDocument();
   });
 
   it("keeps message labels useful when property or unit context is incomplete", async () => {
@@ -200,8 +198,39 @@ describe("MessagesPage", () => {
     await flushAsync();
     expect(screen.getAllByText("Jordan Tenant • Unit 4B").length).toBeGreaterThan(0);
     expect(screen.getByText("Morgan Tenant • Harbour View")).toBeInTheDocument();
-    expect(screen.getByText("Tenant name unavailable • North Point / Unit 8")).toBeInTheDocument();
+    expect(screen.getByText("Tenant • North Point / Unit 8")).toBeInTheDocument();
     expect(screen.queryByText("Tenant conversation • Unit unavailable")).not.toBeInTheDocument();
+    expect(screen.queryByText(/unavailable/i)).not.toBeInTheDocument();
+  });
+
+  it("uses explicit ids instead of unavailable labels when only ids are present", async () => {
+    mocks.fetchLandlordConversationsMock.mockResolvedValue([
+      {
+        id: "conv-5",
+        tenantId: "tenant-raw-5",
+        propertyId: "prop-raw-5",
+        unitId: "unit-raw-5",
+      },
+    ]);
+    mocks.fetchLandlordConversationMessagesMock.mockResolvedValue({
+      conversation: {
+        id: "conv-5",
+        tenantId: "tenant-raw-5",
+        propertyId: "prop-raw-5",
+        unitId: "unit-raw-5",
+      },
+      messages: [],
+    });
+
+    render(
+      <MemoryRouter>
+        <MessagesPage />
+      </MemoryRouter>
+    );
+
+    await flushAsync();
+    expect(screen.getAllByText("Tenant tenant-raw-5 • Property prop-raw-5 / Unit unit-raw-5").length).toBeGreaterThan(0);
+    expect(screen.queryByText(/unavailable/i)).not.toBeInTheDocument();
   });
 
   it("preserves the selected conversation across background refresh without blanking the thread", async () => {

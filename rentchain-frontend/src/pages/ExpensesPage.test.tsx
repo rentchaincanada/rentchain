@@ -91,7 +91,7 @@ describe("ExpensesPage", () => {
     expect(screen.getByRole("button", { name: "Export PDF" })).toBeInTheDocument();
   });
 
-  it("routes export buttons through the existing export api", async () => {
+  it("generates client-side CSV for CSV and spreadsheet downloads without HTML", async () => {
     mocks.useCapabilitiesMock.mockReturnValue({
       caps: { plan: "pro" },
       features: { "expenses.import": true },
@@ -106,10 +106,16 @@ describe("ExpensesPage", () => {
     render(<ExpensesPage />);
 
     fireEvent.click((await screen.findAllByRole("button", { name: "Export CSV" }))[0]);
-    await waitFor(() => expect(mocks.exportExpensesMock).toHaveBeenCalledWith("csv", expect.any(Object)));
+    await waitFor(() => expect(createObjectURL).toHaveBeenCalledTimes(1));
+    const csvBlob = createObjectURL.mock.calls[0][0] as Blob;
+    expect(csvBlob.type).toBe("text/csv;charset=utf-8");
+    expect(mocks.exportExpensesMock).not.toHaveBeenCalledWith("csv", expect.any(Object));
 
     fireEvent.click(screen.getAllByRole("button", { name: "Export Spreadsheet (.xls)" })[0]);
-    await waitFor(() => expect(mocks.exportExpensesMock).toHaveBeenCalledWith("xls", expect.any(Object)));
+    await waitFor(() => expect(createObjectURL).toHaveBeenCalledTimes(2));
+    const spreadsheetBlob = createObjectURL.mock.calls[1][0] as Blob;
+    expect(spreadsheetBlob.type).toBe("text/csv;charset=utf-8");
+    expect(mocks.exportExpensesMock).not.toHaveBeenCalledWith("xls", expect.any(Object));
 
     fireEvent.click(screen.getAllByRole("button", { name: "Export PDF" })[0]);
     await waitFor(() => expect(mocks.exportExpensesMock).toHaveBeenCalledWith("pdf", expect.any(Object)));
