@@ -83,6 +83,134 @@ describe("LeaseLedgerPage", () => {
       monthlyTotals: {
         "2026-04": { chargesCents: 145000, paymentsCents: 10000, netCents: 135000 },
       },
+      obligationRows: [
+        {
+          rowId: "obligation-paid",
+          leaseId: "lease-1",
+          paymentIntentId: "pi-paid",
+          rentPaymentId: "rp-paid",
+          propertyId: "prop-1",
+          unitId: "unit-1",
+          tenantId: "tenant-1",
+          periodStart: "2026-04-01",
+          periodEnd: "2026-04-30",
+          dueDate: "2026-04-01",
+          expectedAmountCents: 145000,
+          paidAmountCents: 145000,
+          currency: "cad",
+          obligationStatus: "paid",
+          paymentIntentStatus: "confirmed",
+          rentPaymentStatus: "paid",
+          reconciliationStatus: "reconciled",
+          evidenceStatus: "reconciled",
+          source: "reconciliation",
+          reasons: ["paid_amount_matches_expected"],
+        },
+        {
+          rowId: "obligation-underpaid",
+          leaseId: "lease-1",
+          propertyId: "prop-1",
+          expectedAmountCents: 145000,
+          paidAmountCents: 10000,
+          currency: "cad",
+          obligationStatus: "underpaid",
+          evidenceStatus: "provider_received",
+          source: "rent_payment",
+          reasons: ["paid_amount_below_expected"],
+        },
+        {
+          rowId: "obligation-overpaid",
+          leaseId: "lease-1",
+          propertyId: "prop-1",
+          expectedAmountCents: 145000,
+          paidAmountCents: 150000,
+          currency: "cad",
+          obligationStatus: "overpaid",
+          evidenceStatus: "provider_received",
+          source: "rent_payment",
+          reasons: ["paid_amount_above_expected"],
+        },
+        {
+          rowId: "obligation-missing",
+          leaseId: "lease-1",
+          propertyId: "prop-1",
+          expectedAmountCents: 145000,
+          paidAmountCents: 0,
+          currency: "cad",
+          obligationStatus: "missing",
+          evidenceStatus: "none",
+          source: "lease_lifecycle",
+          reasons: ["expected_payment_missing"],
+        },
+        {
+          rowId: "obligation-pending",
+          leaseId: "lease-1",
+          propertyId: "prop-1",
+          expectedAmountCents: 145000,
+          paidAmountCents: 0,
+          currency: "cad",
+          obligationStatus: "pending",
+          paymentIntentStatus: "pending_settlement",
+          evidenceStatus: "pending",
+          source: "payment_intent",
+          reasons: ["payment_pending"],
+        },
+        {
+          rowId: "obligation-failed",
+          leaseId: "lease-1",
+          propertyId: "prop-1",
+          expectedAmountCents: 145000,
+          paidAmountCents: 0,
+          currency: "cad",
+          obligationStatus: "failed",
+          evidenceStatus: "failed",
+          source: "rent_payment",
+          reasons: ["rent_payment_failed"],
+        },
+        {
+          rowId: "obligation-manual-review",
+          leaseId: "lease-1",
+          propertyId: "prop-1",
+          expectedAmountCents: 145000,
+          paidAmountCents: 145000,
+          currency: "cad",
+          obligationStatus: "manual_review_required",
+          evidenceStatus: "manual_review_required",
+          reconciliationStatus: "mismatch",
+          source: "reconciliation",
+          reasons: ["amount_mismatch"],
+        },
+        {
+          rowId: "obligation-unknown",
+          leaseId: "lease-1",
+          propertyId: "prop-1",
+          expectedAmountCents: 0,
+          paidAmountCents: 0,
+          currency: "cad",
+          obligationStatus: "unknown",
+          evidenceStatus: "none",
+          source: "payment_intent",
+          reasons: ["missing_expected_amount"],
+        },
+      ],
+      obligationSummary: {
+        totalRows: 8,
+        expectedAmountCents: 1015000,
+        paidAmountCents: 595000,
+        outstandingAmountCents: 420000,
+        manualReviewCount: 1,
+        statusCounts: {
+          expected: 0,
+          pending: 1,
+          paid: 1,
+          underpaid: 1,
+          overpaid: 1,
+          failed: 1,
+          missing: 1,
+          manual_review_required: 1,
+          unknown: 1,
+        },
+      },
     });
     mocks.getLeaseById.mockResolvedValue({
       lease: {
@@ -151,6 +279,95 @@ describe("LeaseLedgerPage", () => {
     expect(screen.getByText("-$100.00")).toBeInTheDocument();
     expect(screen.queryByText("145000")).not.toBeInTheDocument();
     expect(screen.queryByText("10000")).not.toBeInTheDocument();
+  });
+
+  it("renders read-only obligation summary and rows with dollar amounts and status badges", async () => {
+    render(
+      <MemoryRouter initialEntries={["/leases/lease-1/ledger"]}>
+        <Routes>
+          <Route path="/leases/:leaseId/ledger" element={<LeaseLedgerPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Payment obligations")).toBeInTheDocument();
+    expect(screen.getByText("Read-only view of expected rent, execution records, and reconciliation evidence.")).toBeInTheDocument();
+    expect(screen.getAllByText("Expected").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Paid").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Outstanding").length).toBeGreaterThan(0);
+    expect(screen.getByText("Manual Review")).toBeInTheDocument();
+    expect(screen.getByText("$10,150.00")).toBeInTheDocument();
+    expect(screen.getByText("$5,950.00")).toBeInTheDocument();
+    expect(screen.getByText("$4,200.00")).toBeInTheDocument();
+    expect(screen.getAllByText("1").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("$1,350.00").length).toBeGreaterThan(0);
+    expect(screen.getByText("$1,500.00")).toBeInTheDocument();
+    expect(screen.queryByText("1015000")).not.toBeInTheDocument();
+    expect(screen.queryByText("595000")).not.toBeInTheDocument();
+    expect(screen.queryByText("420000")).not.toBeInTheDocument();
+    expect(screen.getAllByText("Paid").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Pending").length).toBeGreaterThan(0);
+    expect(screen.getByText("Underpaid")).toBeInTheDocument();
+    expect(screen.getByText("Overpaid")).toBeInTheDocument();
+    expect(screen.getByText("Missing")).toBeInTheDocument();
+    expect(screen.getAllByText("Failed").length).toBeGreaterThan(0);
+    expect(screen.getByText("Manual review")).toBeInTheDocument();
+    expect(screen.getByText("Unknown")).toBeInTheDocument();
+    expect(screen.getAllByText("Reconciled").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Manual Review Required").length).toBeGreaterThan(0);
+  });
+
+  it("renders an empty obligation state while preserving existing ledger entries", async () => {
+    mocks.fetchLeaseLedger.mockResolvedValueOnce({
+      ok: true,
+      leaseId: "lease-1",
+      entries: [
+        {
+          id: "entry-1",
+          leaseId: "lease-1",
+          entryType: "charge",
+          category: "rent",
+          amountCents: 145000,
+          effectiveDate: "2026-04-01",
+          createdAt: 1,
+          signedAmountCents: 145000,
+          balanceCents: 145000,
+        },
+      ],
+      totals: { chargesCents: 145000, paymentsCents: 0, balanceCents: 145000 },
+      monthlyTotals: {},
+      obligationRows: [],
+      obligationSummary: {
+        totalRows: 0,
+        expectedAmountCents: 0,
+        paidAmountCents: 0,
+        outstandingAmountCents: 0,
+        manualReviewCount: 0,
+        statusCounts: {
+          expected: 0,
+          pending: 0,
+          paid: 0,
+          underpaid: 0,
+          overpaid: 0,
+          failed: 0,
+          missing: 0,
+          manual_review_required: 0,
+          unknown: 0,
+        },
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/leases/lease-1/ledger"]}>
+        <Routes>
+          <Route path="/leases/:leaseId/ledger" element={<LeaseLedgerPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Obligation ledger is not available yet for this lease.")).toBeInTheDocument();
+    expect(screen.getByText("+$1,450.00")).toBeInTheDocument();
+    expect(screen.getAllByText("$1,450.00").length).toBeGreaterThan(0);
   });
 
   it("exports the lease ledger as a PDF download", async () => {
