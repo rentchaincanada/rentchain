@@ -203,6 +203,66 @@ describe("leaseRoutes integrity repairs", () => {
     expect(res.body?.totals?.chargesCents).toBe(180000);
   });
 
+  it("enriches lease ledger payment rows with PaymentIntent linkage when available", async () => {
+    seedDoc("leases", "lease-1", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      tenantId: "tenant-1",
+      unitId: "unit-1",
+      unitNumber: "101",
+      status: "active",
+    });
+    seedDoc("ledgerEntries", "entry-1", {
+      landlordId: "landlord-1",
+      leaseId: "lease-1",
+      entryType: "payment",
+      reference: "rp-1",
+      amountCents: 180000,
+      effectiveDate: "2026-04-05",
+      createdAt: 10,
+    });
+    seedDoc("rentPayments", "rp-1", {
+      landlordId: "landlord-1",
+      leaseId: "lease-1",
+      paymentIntentId: "pi_rent_1",
+      amountCents: 180000,
+      currency: "cad",
+      status: "paid",
+    });
+    seedDoc("paymentIntents", "pi_rent_1", {
+      paymentIntentId: "pi_rent_1",
+      rentPaymentId: "rp-1",
+      leaseId: "lease-1",
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      purpose: "rent",
+      amountCents: 180000,
+      currency: "cad",
+      status: "confirmed",
+      source: "rent_payment_checkout",
+      lifecycleState: "complete",
+      requiresReview: false,
+      createdAt: "2026-04-27T10:00:00.000Z",
+      updatedAt: "2026-04-27T10:00:00.000Z",
+    });
+
+    const app = await makeApp();
+    const res = await request(app).get("/lease-1/ledger");
+
+    expect(res.status).toBe(200);
+    expect(res.body?.entries?.[0]).toEqual(
+      expect.objectContaining({
+        entryType: "payment",
+        rentPaymentId: "rp-1",
+        paymentIntentId: "pi_rent_1",
+        paymentIntentStatus: "confirmed",
+        signedAmountCents: -180000,
+      })
+    );
+  });
+
   it("exports lease ledger csv with property and unit labels instead of raw ids", async () => {
     seedDoc("properties", "prop-1", {
       landlordId: "landlord-1",

@@ -241,6 +241,7 @@ describe("rent payment webhook reconciliation", () => {
       currency: "cad",
       status: "checkout_created",
       processor: "stripe",
+      paymentIntentId: "pi_rent_1",
       processorCheckoutSessionId: "cs_test_1",
       processorPaymentIntentId: "pi_test_1",
       createdAt: "2026-04-27T10:00:00.000Z",
@@ -344,6 +345,7 @@ describe("rent payment webhook reconciliation", () => {
     expect(stored).toEqual(
       expect.objectContaining({
         status: "paid",
+        paymentIntentId: "pi_rent_1",
         processorCheckoutSessionId: "cs_test_1",
         processorPaymentIntentId: "pi_test_1",
         paidAt: expect.any(String),
@@ -530,6 +532,7 @@ describe("rent payment webhook reconciliation", () => {
     expect(ensureCollection("rentPayments").get("rp-1")).toEqual(
       expect.objectContaining({
         status: "paid",
+        paymentIntentId: "pi_rent_1",
         processorCheckoutSessionId: "cs_test_1",
         processorPaymentIntentId: "pi_test_1",
       })
@@ -570,6 +573,7 @@ describe("rent payment webhook reconciliation", () => {
     expect(ensureCollection("rentPayments").get("rp-1")).toEqual(
       expect.objectContaining({
         status: "failed",
+        paymentIntentId: "pi_rent_1",
         processorCheckoutSessionId: "cs_test_1",
         processorPaymentIntentId: "pi_test_1",
       })
@@ -726,6 +730,7 @@ describe("rent payment webhook reconciliation", () => {
     expect(ensureCollection("rentPayments").get("rp-1")).toEqual(
       expect.objectContaining({
         status: "paid",
+        paymentIntentId: "pi_rent_1",
         processorCheckoutSessionId: "cs_test_1",
         processorPaymentIntentId: "pi_test_1",
       })

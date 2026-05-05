@@ -30,6 +30,7 @@ export type RentPaymentRecord = {
   landlordId: string;
   propertyId?: string | null;
   unitId?: string | null;
+  paymentIntentId?: string | null;
   amountCents: number;
   currency: "cad";
   status: RentPaymentStatus;
@@ -56,6 +57,7 @@ export type RentPaymentSummary = {
     createdAt: string;
     updatedAt: string;
     paidAt: string | null;
+    paymentIntentId?: string | null;
   } | null;
   paymentExperience: {
     history: Array<{
@@ -66,6 +68,7 @@ export type RentPaymentSummary = {
       createdAt: string;
       updatedAt: string;
       paidAt: string | null;
+      paymentIntentId?: string | null;
     }>;
     latestStatus: "pending" | "paid" | "failed" | "canceled" | null;
     retryAvailable: boolean;
@@ -119,6 +122,7 @@ type UpdateRentPaymentFromWebhookInput = {
   nextStatus: RentPaymentStatus;
   processorCheckoutSessionId?: string | null;
   processorPaymentIntentId?: string | null;
+  paymentIntentId?: string | null;
   paidAt?: string | null;
   eventId: string;
 };
@@ -198,6 +202,7 @@ function summarizePayment(record: RentPaymentRecord | null): RentPaymentSummary[
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
     paidAt: record.paidAt || null,
+    paymentIntentId: asString(record.paymentIntentId),
   };
 }
 
@@ -633,6 +638,7 @@ export async function createRentPaymentCheckout(input: CreateRentPaymentCheckout
     landlordId,
     propertyId: asString(lease.propertyId),
     unitId: asString(lease.unitId) || asString(lease.unitNumber),
+    paymentIntentId: paymentIntentResult.paymentIntent.paymentIntentId,
     amountCents,
     currency: "cad",
     status: "checkout_created",
@@ -692,6 +698,7 @@ export async function updateRentPaymentFromWebhook(input: UpdateRentPaymentFromW
       input.processorCheckoutSessionId === undefined ? current.processorCheckoutSessionId || null : input.processorCheckoutSessionId,
     processorPaymentIntentId:
       input.processorPaymentIntentId === undefined ? current.processorPaymentIntentId || null : input.processorPaymentIntentId,
+    paymentIntentId: input.paymentIntentId === undefined ? current.paymentIntentId || null : input.paymentIntentId,
     paidAt: input.nextStatus === "paid" ? asString(input.paidAt) || updatedAt : current.paidAt || null,
   };
   await ref.set(next, { merge: true });
@@ -730,6 +737,7 @@ export function extractRentPaymentMetadata(event: Stripe.Event): {
   rentPaymentId: string | null;
   checkoutSessionId: string | null;
   paymentIntentId: string | null;
+  internalPaymentIntentId: string | null;
   nextStatus: RentPaymentStatus | null;
   paidAt: string | null;
 } {
@@ -739,6 +747,7 @@ export function extractRentPaymentMetadata(event: Stripe.Event): {
       rentPaymentId: asString(session.metadata?.rentPaymentId),
       checkoutSessionId: asString(session.id),
       paymentIntentId: typeof session.payment_intent === "string" ? session.payment_intent : null,
+      internalPaymentIntentId: asString(session.metadata?.paymentIntentId),
       nextStatus:
         event.type === "checkout.session.async_payment_succeeded"
           ? "paid"
@@ -754,6 +763,7 @@ export function extractRentPaymentMetadata(event: Stripe.Event): {
       rentPaymentId: asString(session.metadata?.rentPaymentId),
       checkoutSessionId: asString(session.id),
       paymentIntentId: typeof session.payment_intent === "string" ? session.payment_intent : null,
+      internalPaymentIntentId: asString(session.metadata?.paymentIntentId),
       nextStatus: "failed",
       paidAt: null,
     };
@@ -764,6 +774,7 @@ export function extractRentPaymentMetadata(event: Stripe.Event): {
       rentPaymentId: asString(paymentIntent.metadata?.rentPaymentId),
       checkoutSessionId: null,
       paymentIntentId: asString(paymentIntent.id),
+      internalPaymentIntentId: asString(paymentIntent.metadata?.paymentIntentId),
       nextStatus: event.type === "payment_intent.succeeded" ? "paid" : "failed",
       paidAt: typeof event.created === "number" ? new Date(event.created * 1000).toISOString() : null,
     };
@@ -774,6 +785,7 @@ export function extractRentPaymentMetadata(event: Stripe.Event): {
       rentPaymentId: asString(session.metadata?.rentPaymentId),
       checkoutSessionId: asString(session.id),
       paymentIntentId: typeof session.payment_intent === "string" ? session.payment_intent : null,
+      internalPaymentIntentId: asString(session.metadata?.paymentIntentId),
       nextStatus: "expired",
       paidAt: null,
     };
@@ -782,6 +794,7 @@ export function extractRentPaymentMetadata(event: Stripe.Event): {
     rentPaymentId: null,
     checkoutSessionId: null,
     paymentIntentId: null,
+    internalPaymentIntentId: null,
     nextStatus: null,
     paidAt: null,
   };
