@@ -132,8 +132,13 @@ describe("AdminLeaseLifecycleReviewPage", () => {
     expect(screen.getByText(/admin@example.com/i)).toBeInTheDocument();
     expect(screen.getByText(/No history yet/i)).toBeInTheDocument();
     expect(screen.getByText(/Related decision/i)).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: "Lease summary" }).some((link) => link.getAttribute("href") === "/leases/lease-2/summary")).toBe(true);
+    expect(screen.getAllByRole("link", { name: "Lease ledger" }).some((link) => link.getAttribute("href") === "/leases/lease-2/ledger")).toBe(true);
+    expect(screen.getAllByRole("link", { name: "Property / unit" }).some((link) => link.getAttribute("href") === "/properties?propertyId=property-2&unitId=unit-2")).toBe(true);
+    expect(screen.getAllByRole("link", { name: "Lifecycle review" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Evidence").length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Occupancy/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/Lease lifecycle indicates an occupancy conflict that needs review/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Lease lifecycle indicates an occupancy conflict that needs review/i).length).toBeGreaterThan(0);
     expect(screen.getByRole("link", { name: "lease-1" })).toHaveAttribute("href", "/admin/leases?q=lease-1");
     expect(screen.queryByRole("button", { name: /fix/i })).not.toBeInTheDocument();
     expect(screen.queryByText(/Fix automatically/i)).not.toBeInTheDocument();
@@ -195,7 +200,8 @@ describe("AdminLeaseLifecycleReviewPage", () => {
       expect.stringContaining("review_occupancy_conflict"),
       expect.objectContaining({ actionType: "resolved", leaseId: "lease-2" })
     );
-    expect(await screen.findByText("Resolved")).toBeInTheDocument();
+    await screen.findAllByText("Resolved");
+    expect(screen.getAllByText("Resolved").length).toBeGreaterThan(0);
   });
 
   it("updates acknowledgement state from row actions", async () => {

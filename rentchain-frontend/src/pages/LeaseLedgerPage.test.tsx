@@ -306,11 +306,17 @@ describe("LeaseLedgerPage", () => {
           propertyId: "prop-1",
           unitId: "unit-1",
           tenantId: "tenant-1",
+          paymentIntentId: "pi-missing",
           decisionType: "review_overdue_rent",
           severity: "critical",
           status: "detected",
           reason: "Rent past due date",
-          metadata: {},
+          metadata: {
+            signalId: "delinquency:overdue:pi-missing",
+            signalType: "overdue",
+            outstandingAmountCents: 145000,
+            obligationStatus: "missing",
+          },
           createdAt: "2026-05-05T00:00:00.000Z",
           updatedAt: "2026-05-05T00:00:00.000Z",
         },
@@ -520,15 +526,20 @@ describe("LeaseLedgerPage", () => {
     expect(await screen.findByText("Decisions")).toBeInTheDocument();
     expect(screen.getByText("Read-only decisions derived from detected lease and payment signals.")).toBeInTheDocument();
     expect(screen.getByText("Overdue Rent")).toBeInTheDocument();
-    expect(screen.getByText("Rent past due date")).toBeInTheDocument();
+    expect(screen.getAllByText("Rent past due date").length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("link", { name: "Lease ledger" }).some((link) => link.getAttribute("href") === "/leases/lease-1/ledger")).toBe(true);
+    expect(screen.getAllByRole("link", { name: "Property / unit" }).some((link) => link.getAttribute("href") === "/properties?propertyId=prop-1&unitId=unit-1")).toBe(true);
+    expect(screen.getByRole("link", { name: "Tenant" })).toHaveAttribute("href", "/tenants?tenantId=tenant-1");
+    expect(screen.getAllByText("Outstanding amount").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("$1,450.00").length).toBeGreaterThan(0);
     expect(screen.getByText("Underpaid Rent")).toBeInTheDocument();
-    expect(screen.getByText("Partial payment received")).toBeInTheDocument();
+    expect(screen.getAllByText("Partial payment received").length).toBeGreaterThan(0);
     expect(screen.getByText("Missing Payment")).toBeInTheDocument();
-    expect(screen.getByText("Expected rent payment is missing")).toBeInTheDocument();
+    expect(screen.getAllByText("Expected rent payment is missing").length).toBeGreaterThan(0);
     expect(screen.getByText("Failed Payment")).toBeInTheDocument();
-    expect(screen.getByText("Payment did not complete")).toBeInTheDocument();
+    expect(screen.getAllByText("Payment did not complete").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Manual Review").length).toBeGreaterThan(0);
-    expect(screen.getByText("Payment mismatch detected")).toBeInTheDocument();
+    expect(screen.getAllByText("Payment mismatch detected").length).toBeGreaterThan(0);
   });
 
   it("updates lease decision status from human actions", async () => {
