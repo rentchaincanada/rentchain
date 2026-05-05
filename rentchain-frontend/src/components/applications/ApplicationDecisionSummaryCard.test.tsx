@@ -187,4 +187,31 @@ describe("ApplicationDecisionSummaryCard", () => {
     fireEvent.click(screen.getByRole("button", { name: "Approve" }));
     expect(onDecision).toHaveBeenCalledWith("approve", "Looks strong overall.");
   });
+
+  it("renders request-more-info content inline inside the decision support panel", () => {
+    render(
+      <ApplicationDecisionSummaryCard
+        summary={{
+          applicationId: "app-5",
+          riskSnapshot: {
+            version: "risk-v1",
+            status: "completed",
+            score: 64,
+            grade: "C",
+            confidence: 0.7,
+            factors: [],
+            flags: [],
+            recommendations: [],
+            updatedAt: "2026-04-01T00:00:00.000Z",
+          },
+        }}
+        requestInfoDrawer={<div role="region" aria-label="Request more information">Inline request drawer</div>}
+      />
+    );
+
+    const panel = screen.getByText("Application decision support").closest("section");
+    expect(panel).not.toBeNull();
+    expect(screen.getByRole("region", { name: "Request more information" })).toHaveTextContent("Inline request drawer");
+    expect(panel).toContainElement(screen.getByRole("region", { name: "Request more information" }));
+  });
 });

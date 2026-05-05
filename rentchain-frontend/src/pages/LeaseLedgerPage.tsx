@@ -33,8 +33,19 @@ function centsFromInput(input: string): number | null {
   return Math.round(parsed * 100);
 }
 
-function dollars(cents: number): string {
-  return (cents / 100).toLocaleString(undefined, { style: "currency", currency: "CAD" });
+function formatCurrencyCents(cents: number | null | undefined): string {
+  const centsNumber = Number(cents || 0);
+  const negative = centsNumber < 0;
+  const amount = Math.abs(centsNumber) / 100;
+  return `${negative ? "-" : ""}$${amount.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+function formatSignedCurrencyCents(cents: number, entryType: LeaseLedgerEntry["entryType"]): string {
+  const prefix = entryType === "payment" ? "-" : "+";
+  return `${prefix}${formatCurrencyCents(Math.abs(Number(cents || 0)))}`;
 }
 
 function formatDate(value: string | null | undefined) {
@@ -268,11 +279,11 @@ export default function LeaseLedgerPage() {
     }
   }
 
-  async function exportCsv() {
+  async function exportLedger(format: "csv" | "pdf") {
     try {
       const token = (await getFirebaseIdToken()) || getAuthToken();
       const authHeader = token ? { Authorization: `Bearer ${token}` } : {};
-      const url = leaseLedgerExportUrl(leaseId, from || undefined, to || undefined);
+      const url = leaseLedgerExportUrl(leaseId, from || undefined, to || undefined, format);
       const res = await fetch(url, {
         method: "GET",
         headers: {
@@ -287,13 +298,13 @@ export default function LeaseLedgerPage() {
       const objectUrl = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = objectUrl;
-      a.download = `lease-ledger-${leaseId}.csv`;
+      a.download = `lease-ledger-${leaseId}.${format}`;
       document.body.appendChild(a);
       a.click();
       a.remove();
       URL.revokeObjectURL(objectUrl);
     } catch (err: unknown) {
-      setError(errorMessage(err, "Failed to export CSV"));
+      setError(errorMessage(err, `Failed to export ${format.toUpperCase()}`));
     }
   }
 
@@ -320,7 +331,8 @@ export default function LeaseLedgerPage() {
           <button aria-label="Add lease note" onClick={() => setShowNoteModal(true)}>Add note</button>
           <button onClick={() => setShowChargeModal(true)}>Add charge</button>
           <button onClick={() => setShowPaymentModal(true)}>Record payment</button>
-          <button onClick={exportCsv}>Export CSV</button>
+          <button onClick={() => void exportLedger("csv")}>Export CSV</button>
+          <button onClick={() => void exportLedger("pdf")}>Export PDF</button>
           <button onClick={() => void toggleArchive()} disabled={saving || !lease}>
             {lease?.archivedAt ? "Restore lease" : "Archive lease"}
           </button>
@@ -342,15 +354,15 @@ export default function LeaseLedgerPage() {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 8 }}>
         <div style={{ border: "1px solid #e2e8f0", borderRadius: 10, padding: 10 }}>
           <div style={{ fontSize: 12, color: "#64748b" }}>Charges</div>
-          <strong>{dollars(totals.chargesCents)}</strong>
+          <strong>{formatCurrencyCents(totals.chargesCents)}</strong>
         </div>
         <div style={{ border: "1px solid #e2e8f0", borderRadius: 10, padding: 10 }}>
           <div style={{ fontSize: 12, color: "#64748b" }}>Payments</div>
-          <strong>{dollars(totals.paymentsCents)}</strong>
+          <strong>{formatCurrencyCents(totals.paymentsCents)}</strong>
         </div>
         <div style={{ border: "1px solid #e2e8f0", borderRadius: 10, padding: 10 }}>
           <div style={{ fontSize: 12, color: "#64748b" }}>Balance</div>
-          <strong>{dollars(totals.balanceCents)}</strong>
+          <strong>{formatCurrencyCents(totals.balanceCents)}</strong>
         </div>
       </div>
 
@@ -404,14 +416,13 @@ export default function LeaseLedgerPage() {
                     <td style={{ padding: 10, borderBottom: "1px solid #f1f5f9", textTransform: "capitalize" }}>{entry.entryType}</td>
                     <td style={{ padding: 10, borderBottom: "1px solid #f1f5f9", textTransform: "capitalize" }}>{entry.category}</td>
                     <td style={{ padding: 10, borderBottom: "1px solid #f1f5f9", color: entry.entryType === "payment" ? "#047857" : "#0f172a" }}>
-                      {entry.entryType === "payment" ? "-" : "+"}
-                      {dollars(Math.abs(entry.amountCents))}
+                      {formatSignedCurrencyCents(entry.amountCents, entry.entryType)}
                     </td>
                     <td style={{ padding: 10, borderBottom: "1px solid #f1f5f9" }}>
                       {[entry.method, entry.reference].filter(Boolean).join(" · ") || "—"}
                     </td>
                     <td style={{ padding: 10, borderBottom: "1px solid #f1f5f9" }}>{entry.notes || "—"}</td>
-                    <td style={{ padding: 10, borderBottom: "1px solid #f1f5f9" }}>{dollars(entry.balanceCents)}</td>
+                    <td style={{ padding: 10, borderBottom: "1px solid #f1f5f9" }}>{formatCurrencyCents(entry.balanceCents)}</td>
                   </tr>
                 ))
               )}
@@ -436,9 +447,9 @@ export default function LeaseLedgerPage() {
               }}
             >
               <strong style={{ minWidth: 90 }}>{month}</strong>
-              <span>Charges: {dollars(row.chargesCents)}</span>
-              <span>Payments: {dollars(row.paymentsCents)}</span>
-              <span>Net: {dollars(row.netCents)}</span>
+              <span>Charges: {formatCurrencyCents(row.chargesCents)}</span>
+              <span>Payments: {formatCurrencyCents(row.paymentsCents)}</span>
+              <span>Net: {formatCurrencyCents(row.netCents)}</span>
             </div>
           ))}
         </div>

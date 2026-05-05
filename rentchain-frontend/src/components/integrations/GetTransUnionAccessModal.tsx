@@ -100,20 +100,25 @@ export function GetTransUnionAccessModal({
         inset: 0,
         background: "rgba(15,23,42,0.42)",
         display: "flex",
-        alignItems: "center",
+        alignItems: "flex-start",
         justifyContent: "center",
-        padding: spacing.md,
+        padding: "clamp(12px, 3vw, 24px)",
         zIndex: 1000,
+        overflowY: "auto",
       }}
     >
       <Card
         elevated
         style={{
-          width: "min(560px, 100%)",
+          boxSizing: "border-box",
+          width: "min(760px, 100%)",
+          maxHeight: "calc(100dvh - 24px)",
           borderRadius: radius.lg,
           boxShadow: shadows.pop,
           display: "grid",
           gap: spacing.md,
+          overflowY: "auto",
+          WebkitOverflowScrolling: "touch",
         }}
       >
         <div style={{ display: "grid", gap: spacing.sm }}>
@@ -179,20 +184,23 @@ export function GetTransUnionAccessModal({
             padding: spacing.sm,
             background: "#fff",
             display: "grid",
+            gridTemplateColumns: "minmax(0, 1fr) minmax(220px, 0.75fr)",
             gap: 8,
           }}
         >
-          <div style={{ fontWeight: 700, color: text.primary }}>TransUnion contact</div>
-          <div style={{ color: text.primary, lineHeight: 1.6 }}>
-            <div>Chhavi Kumar</div>
-            <div>Account Executive, Inside Sales</div>
-            <div>{CHHAVI_EMAIL}</div>
-            <div>{CHHAVI_PHONE}</div>
-            <div>Customer Support: {CUSTOMER_SUPPORT_PHONE}</div>
-            <div>Tech Support: {TECH_SUPPORT_PHONE}</div>
-            <div>{TECH_SUPPORT_EMAIL}</div>
+          <div style={{ display: "grid", gap: 8, minWidth: 0 }}>
+            <div style={{ fontWeight: 700, color: text.primary }}>TransUnion contact</div>
+            <div style={{ color: text.primary, lineHeight: 1.6, overflowWrap: "anywhere" }}>
+              <div>Chhavi Kumar</div>
+              <div>Account Executive, Inside Sales</div>
+              <div>{CHHAVI_EMAIL}</div>
+              <div>{CHHAVI_PHONE}</div>
+              <div>Customer Support: {CUSTOMER_SUPPORT_PHONE}</div>
+              <div>Tech Support: {TECH_SUPPORT_PHONE}</div>
+              <div>{TECH_SUPPORT_EMAIL}</div>
+            </div>
           </div>
-          <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
+          <div style={{ display: "grid", gap: spacing.sm, alignContent: "start", minWidth: 0 }}>
             <a
               href={CHHAVI_MAILTO}
               onClick={handleEmailClick}
@@ -238,15 +246,17 @@ export function GetTransUnionAccessModal({
               Copy email template
             </Button>
           </div>
-          {emailStatus ? (
-            <div
-              role="status"
-              aria-live="polite"
-              style={{ color: text.muted, fontSize: "0.9rem", lineHeight: 1.5 }}
-            >
-              {emailStatus}
-            </div>
-          ) : null}
+          <div style={{ gridColumn: "1 / -1" }}>
+            {emailStatus ? (
+              <div
+                role="status"
+                aria-live="polite"
+                style={{ color: text.muted, fontSize: "0.9rem", lineHeight: 1.5 }}
+              >
+                {emailStatus}
+              </div>
+            ) : null}
+          </div>
         </div>
         <div
           style={{

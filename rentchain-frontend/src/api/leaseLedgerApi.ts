@@ -86,11 +86,11 @@ export async function addLeasePayment(
   });
 }
 
-export function leaseLedgerExportUrl(leaseId: string, from?: string, to?: string): string {
+export function leaseLedgerExportUrl(leaseId: string, from?: string, to?: string, format: "csv" | "pdf" = "csv"): string {
   const search = new URLSearchParams();
   if (from) search.set("from", from);
   if (to) search.set("to", to);
   const qs = search.toString();
   const base = API_BASE_URL.replace(/\/$/, "").replace(/\/api$/i, "");
-  return `${base}/api/leases/${encodeURIComponent(leaseId)}/ledger/export.csv${qs ? `?${qs}` : ""}`;
+  return `${base}/api/leases/${encodeURIComponent(leaseId)}/ledger/export.${format}${qs ? `?${qs}` : ""}`;
 }

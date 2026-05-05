@@ -153,4 +153,21 @@ describe("GetTransUnionAccessModal", () => {
     expect(onAlreadyCredentialedClick).toHaveBeenCalledTimes(1);
     expect(onEnterCredentials).toHaveBeenCalledTimes(1);
   });
+
+  it("constrains the modal content to the viewport so footer actions stay reachable", () => {
+    render(
+      <GetTransUnionAccessModal
+        open
+        onClose={vi.fn()}
+        onMarkInProgress={vi.fn()}
+        onEnterCredentials={vi.fn()}
+      />
+    );
+
+    const dialog = screen.getByRole("dialog", { name: "Get TransUnion Access" });
+    const card = dialog.firstElementChild as HTMLElement;
+    expect(dialog).toHaveStyle({ overflowY: "auto" });
+    expect(card).toHaveStyle({ maxHeight: "calc(100dvh - 24px)", overflowY: "auto" });
+    expect(screen.getByRole("button", { name: "Get TransUnion Access" })).toBeInTheDocument();
+  });
 });

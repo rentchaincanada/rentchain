@@ -17,6 +17,7 @@ import {
   prettyRentPaymentStatus,
 } from "@/lib/payments/paymentStatusGuidance";
 import { isTargetedHiddenLeaseId } from "@/lib/testDataVisibilityTargets";
+import { downloadLeaseSummaryPdf } from "@/utils/leaseSummaryPdf";
 import { printSummaryDocument } from "@/utils/printSummary";
 import "./LandlordActiveLeasesPage.css";
 
@@ -40,30 +41,6 @@ function prettyLeaseStatus(value: string | null | undefined) {
   if (normalized === "renewal_accepted") return "Renewing";
   if (normalized === "move_out_pending") return "Quitting";
   return normalized.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
-}
-
-function downloadLeaseSummary(lease: LandlordActiveLease) {
-  const text = [
-    `Property: ${lease.propertyName || "Property"}`,
-    `Unit: ${lease.unitNumber || "—"}`,
-    `Tenant: ${lease.tenantName || "—"}`,
-    `Tenant email: ${lease.tenantEmail || "—"}`,
-    `Monthly rent: ${formatCurrency(lease.monthlyRent)}`,
-    `Start date: ${lease.startDate || "—"}`,
-    `End date: ${lease.endDate || "—"}`,
-    `Status: ${prettyLeaseStatus(lease.status)}`,
-    `Lease document: ${lease.documentUrl || "Not available"}`,
-  ].join("\n");
-
-  const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
-  const url = window.URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `lease-${lease.unitNumber || lease.id}.txt`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  window.URL.revokeObjectURL(url);
 }
 
 function todayIso() {
@@ -421,7 +398,7 @@ export default function LandlordActiveLeasesPage() {
               a.remove();
               return;
             }
-            downloadLeaseSummary(lease);
+            downloadLeaseSummaryPdf(lease);
           }}
           style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a" }}
         >

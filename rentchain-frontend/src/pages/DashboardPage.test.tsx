@@ -258,8 +258,165 @@ describe("DashboardPage", () => {
       </ToastProvider>
     );
 
-    expect(await screen.findByRole("link", { name: "3" })).toHaveAttribute("href", "/dashboard#open-actions");
-    expect(screen.getByRole("link", { name: "2" })).toHaveAttribute("href", "/applications?status=review");
+    expect(await screen.findByRole("link", { name: "Open Actions" })).toHaveAttribute("href", "/dashboard#open-actions");
+    expect(screen.getByRole("link", { name: "Properties" })).toHaveAttribute("href", "/properties");
+    expect(screen.getByRole("link", { name: "Tenants" })).toHaveAttribute("href", "/tenants");
+    expect(screen.getByRole("link", { name: "Delinquencies" })).toHaveAttribute("href", "/payments?filter=delinquent");
+    expect(screen.getAllByRole("link", { name: "2" }).some((link) => link.getAttribute("href") === "/applications?status=review")).toBe(true);
+  });
+
+  it("keeps dashboard recent activity ledger CTA label consistent when lease context is missing", async () => {
+    mocks.fetchDashboardSummaryMock.mockResolvedValue({
+      kpis: {
+        propertiesCount: 1,
+        unitsCount: 1,
+        tenantsCount: 1,
+        openActionsCount: 0,
+        delinquentCount: 0,
+        screeningsCount: 0,
+      },
+      actions: [],
+      events: [{ id: "event-1", title: "Rent charge posted", createdAt: "2026-04-01T00:00:00.000Z" }],
+      leaseNoticeSummary: {
+        expiringSoon: 0,
+        pendingResponse: 0,
+        renewed: 0,
+        quitting: 0,
+        noResponse: 0,
+      },
+      portfolioCredibilitySummary: {
+        propertyCount: 1,
+        activeLeaseCount: 1,
+        tenantScoreAverage: null,
+        tenantScoreGradeAverage: null,
+        leaseRiskAverage: null,
+        leaseRiskGradeAverage: null,
+        tenantsWithScoreCount: 0,
+        leasesWithRiskCount: 0,
+        lowConfidenceCount: 0,
+        missingCredibilityCount: 0,
+        healthStatus: "watch",
+      },
+    });
+
+    render(
+      <ToastProvider>
+        <MemoryRouter>
+          <DashboardPage />
+        </MemoryRouter>
+      </ToastProvider>
+    );
+
+    expect(await screen.findByText("Rent charge posted")).toBeInTheDocument();
+    screen.getByRole("button", { name: "View leases" }).click();
+    expect(mocks.navigateMock).toHaveBeenCalledWith("/leases");
+    expect(mocks.navigateMock).not.toHaveBeenCalledWith("/ledger");
+    expect(screen.queryByRole("button", { name: "View ledger" })).not.toBeInTheDocument();
+  });
+
+  it("routes dashboard recent activity ledger CTA to a lease ledger when lease context exists", async () => {
+    mocks.fetchDashboardSummaryMock.mockResolvedValue({
+      kpis: {
+        propertiesCount: 1,
+        unitsCount: 1,
+        tenantsCount: 1,
+        openActionsCount: 0,
+        delinquentCount: 0,
+        screeningsCount: 0,
+      },
+      actions: [],
+      events: [{ id: "event-1", title: "Rent charge posted", leaseId: "lease-42", createdAt: "2026-04-01T00:00:00.000Z" }],
+      leaseNoticeSummary: {
+        expiringSoon: 0,
+        pendingResponse: 0,
+        renewed: 0,
+        quitting: 0,
+        noResponse: 0,
+      },
+      portfolioCredibilitySummary: {
+        propertyCount: 1,
+        activeLeaseCount: 1,
+        tenantScoreAverage: null,
+        tenantScoreGradeAverage: null,
+        leaseRiskAverage: null,
+        leaseRiskGradeAverage: null,
+        tenantsWithScoreCount: 0,
+        leasesWithRiskCount: 0,
+        lowConfidenceCount: 0,
+        missingCredibilityCount: 0,
+        healthStatus: "watch",
+      },
+    });
+
+    render(
+      <ToastProvider>
+        <MemoryRouter>
+          <DashboardPage />
+        </MemoryRouter>
+      </ToastProvider>
+    );
+
+    expect(await screen.findByText("Rent charge posted")).toBeInTheDocument();
+    screen.getByRole("button", { name: "View ledger" }).click();
+    expect(mocks.navigateMock).toHaveBeenCalledWith("/leases/lease-42/ledger");
+  });
+
+  it("opens an explanation from the action required Info button", async () => {
+    mocks.fetchDashboardSummaryMock.mockResolvedValue({
+      kpis: {
+        propertiesCount: 1,
+        unitsCount: 1,
+        tenantsCount: 1,
+        openActionsCount: 1,
+        delinquentCount: 0,
+        screeningsCount: 0,
+      },
+      actions: [
+        {
+          id: "run-first-screening",
+          title: "Run your first screening",
+          severity: "info",
+          href: "/applications?openTransUnionAccess=1",
+        },
+      ],
+      events: [],
+      leaseNoticeSummary: {
+        expiringSoon: 0,
+        pendingResponse: 0,
+        renewed: 0,
+        quitting: 0,
+        noResponse: 0,
+      },
+      portfolioCredibilitySummary: {
+        propertyCount: 1,
+        activeLeaseCount: 1,
+        tenantScoreAverage: null,
+        tenantScoreGradeAverage: null,
+        leaseRiskAverage: null,
+        leaseRiskGradeAverage: null,
+        tenantsWithScoreCount: 0,
+        leasesWithRiskCount: 0,
+        lowConfidenceCount: 0,
+        missingCredibilityCount: 0,
+        healthStatus: "watch",
+      },
+    });
+
+    render(
+      <ToastProvider>
+        <MemoryRouter>
+          <DashboardPage />
+        </MemoryRouter>
+      </ToastProvider>
+    );
+
+    expect(await screen.findByText("Run your first screening")).toBeInTheDocument();
+    expect(screen.getAllByText("Info")).toHaveLength(1);
+    screen.getByRole("button", { name: "Info about Run your first screening" }).click();
+    await waitFor(() => expect(screen.getByRole("dialog", { name: "Action information" })).toBeInTheDocument());
+    expect(screen.getByText(/Connect TransUnion access from Applications/i)).toBeInTheDocument();
+    screen.getByRole("button", { name: "Open" }).click();
+    expect(assignMock).toHaveBeenCalledWith("/applications?openTransUnionAccess=1");
   });
 
   it("routes the screening setup CTA to the applications TransUnion onboarding path", async () => {

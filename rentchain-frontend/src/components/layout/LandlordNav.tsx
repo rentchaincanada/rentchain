@@ -63,6 +63,15 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
     setDrawerOpen(false);
     nav(path);
   };
+  const closeDrawer = () => {
+    setDrawerOpen(false);
+  };
+
+  const mobileTabLabel = (label: string) => {
+    if (label === "Applications") return "Apps";
+    if (label === "Messages") return "Msgs";
+    return label;
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -183,7 +192,7 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
 
       <div
         className={`rc-landlord-backdrop rc-landlord-backdrop--nav-safe ${drawerOpen ? "is-open" : ""}`}
-        onClick={() => setDrawerOpen(false)}
+        onClick={closeDrawer}
         aria-hidden={!drawerOpen}
       />
 
@@ -191,12 +200,20 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
         id="rc-landlord-drawer"
         className={`rc-landlord-drawer rc-landlord-drawer--nav-safe ${drawerOpen ? "is-open" : ""}`}
         role="dialog"
-        aria-modal="true"
+        aria-modal={drawerOpen ? "true" : undefined}
         aria-label="Navigation menu"
+        aria-hidden={!drawerOpen}
       >
         <div className="rc-landlord-drawer-header">
           <span>Workspace</span>
-          <button type="button" onClick={() => setDrawerOpen(false)} aria-label="Close menu">
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              closeDrawer();
+            }}
+            aria-label="Close menu"
+          >
             Close
           </button>
         </div>
@@ -261,7 +278,7 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
             >
               <Icon size={20} strokeWidth={2.2} />
               <span className="rc-mobile-tabbar-label">
-                {label}
+                {mobileTabLabel(label)}
                 {label === "Messages" && unreadFlag ? (
                   <span className="rc-mobile-tabbar-dot" />
                 ) : null}
@@ -273,7 +290,7 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
           type="button"
           onClick={(event) => {
             lastFocusedRef.current = event.currentTarget;
-            setDrawerOpen(true);
+            setDrawerOpen((open) => !open);
           }}
           className={drawerOpen ? "active" : ""}
           aria-label="Open workspace pages"

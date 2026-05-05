@@ -44,15 +44,18 @@ export function LeaseDocumentView({ lease }: { lease: LandlordActiveLease }) {
     <article
       data-testid="lease-document-view"
       style={{
-        width: "min(100%, 860px)",
+        boxSizing: "border-box",
+        width: "100%",
+        maxWidth: 860,
         margin: "0 auto",
-        padding: "32px min(6vw, 52px)",
+        padding: "clamp(18px, 5vw, 32px) clamp(14px, 5vw, 52px)",
         border: "1px solid #dbe4ee",
         borderRadius: 6,
         background: "#fff",
         boxShadow: "0 14px 32px rgba(15,23,42,0.08)",
         display: "grid",
         gap: 22,
+        overflowWrap: "anywhere",
       }}
     >
       <header style={{ display: "grid", gap: 8, textAlign: "center" }}>

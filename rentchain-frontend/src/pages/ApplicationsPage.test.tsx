@@ -156,7 +156,7 @@ vi.mock("../components/billing/SamplePdfModal", () => ({
 }));
 
 vi.mock("@/components/applications/ApplicationDecisionSummaryCard", () => ({
-  ApplicationDecisionSummaryCard: ({ onDecision, submittingDecision }: any) => (
+  ApplicationDecisionSummaryCard: ({ onDecision, submittingDecision, requestInfoDrawer }: any) => (
     <div>
       <button type="button" onClick={() => onDecision?.("request_info", "Need paystub")} disabled={submittingDecision}>
         Trigger Request More Info
@@ -167,6 +167,7 @@ vi.mock("@/components/applications/ApplicationDecisionSummaryCard", () => ({
       <button type="button" onClick={() => onDecision?.("reject", "Not a fit")} disabled={submittingDecision}>
         Trigger Reject
       </button>
+      {requestInfoDrawer}
     </div>
   ),
 }));
@@ -776,7 +777,7 @@ describe("ApplicationsPage", () => {
     fireEvent.click(screen.getAllByText("Jamie Stone")[0]);
     fireEvent.click(await screen.findByRole("button", { name: "Trigger Request More Info" }));
 
-    expect(await screen.findByRole("dialog", { name: /request more information/i })).toBeInTheDocument();
+    expect(await screen.findByRole("region", { name: /request more information/i })).toBeInTheDocument();
     fireEvent.click(screen.getByLabelText("Upload ID"));
     fireEvent.click(screen.getByRole("button", { name: /send request/i }));
 

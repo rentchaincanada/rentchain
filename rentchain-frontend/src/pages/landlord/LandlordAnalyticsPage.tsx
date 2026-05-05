@@ -406,6 +406,87 @@ export default function LandlordAnalyticsPage() {
     return null;
   }, [activeTab, alerts?.alerts, benchmarking?.comparisons, decisions, prioritizedDecisions, snapshot]);
 
+  const activeWorkspacePanel = snapshot ? (
+    <div
+      id={`analytics-panel-${activeTab}`}
+      role="tabpanel"
+      aria-labelledby={`analytics-tab-${activeTab}`}
+      aria-label={activeTabLabel}
+      style={{ display: "grid", gap: 12, alignContent: "start" }}
+    >
+      {activeTabIntro ? (
+        <Card style={{ color: "#475569" }}>{activeTabIntro}</Card>
+      ) : null}
+
+      {activeTab === "analytics-alerts" ? (
+        <AnalyticsAlertsPanel alerts={alerts?.alerts || []} summary={alerts?.summary || null} />
+      ) : null}
+
+      {activeTab === "portfolio-benchmarking" && canViewBenchmarking ? (
+        <PortfolioBenchmarkingPanel benchmarking={benchmarking} />
+      ) : null}
+
+      {activeTab === "decision-outcomes" && canViewPortfolioScore && canViewAdvancedAnalytics ? (
+        <DecisionOutcomeAnalyticsPanel analytics={snapshot.decisionOutcomeAnalytics} />
+      ) : null}
+
+      {(activeTab === "operator-queue" || activeTab === "portfolio-execution-summary") &&
+      canViewPortfolioScore &&
+      canViewAdvancedAnalytics ? (
+        <DecisionQueueSummary
+          decisions={decisions}
+          filter={executionFilter}
+          onFilterChange={setExecutionFilter}
+        />
+      ) : null}
+
+      {(activeTab === "recommended-next-actions" || activeTab === "actions-to-review") &&
+      canViewPortfolioScore &&
+      canViewAdvancedAnalytics ? (
+        <AgentDecisionPanel
+          decisions={prioritizedDecisions}
+          period={period}
+          propertyId={propertyId}
+        />
+      ) : null}
+
+      {activeTab === "predictive-metrics" && canViewPortfolioScore && canViewAdvancedAnalytics ? (
+        <PredictiveMetricsPanel metrics={snapshot.predictive?.metrics || []} />
+      ) : null}
+
+      {activeTab === "attention-worthy-insights" && canViewPortfolioScore && canViewAdvancedAnalytics ? (
+        <InsightCardsPanel
+          insights={snapshot.insights}
+          alerts={alerts?.alerts || []}
+          decisions={prioritizedDecisions}
+        />
+      ) : null}
+
+      {activeTab !== "analytics-alerts" && !canViewPortfolioScore ? (
+        <FeatureTeaser
+          featureKey="portfolio_score"
+          eyebrow="Pro analytics"
+          title="Unlock deeper analytics on Pro"
+          description="Move from a summary overview into detailed application, leasing, maintenance, and revenue panels."
+          ctaLabel="Upgrade to Pro"
+        />
+      ) : null}
+
+      {activeTab !== "analytics-alerts" &&
+      activeTab !== "portfolio-benchmarking" &&
+      canViewPortfolioScore &&
+      !canViewAdvancedAnalytics ? (
+        <FeatureTeaser
+          featureKey="portfolio_analytics"
+          eyebrow="Elite analytics"
+          title="Unlock attention-worthy insights on Elite"
+          description="Surface more actionable analytics signals across vacancies, maintenance burden, and application changes."
+          ctaLabel="Upgrade to Elite"
+        />
+      ) : null}
+    </div>
+  ) : null;
+
   return (
     <MacShell title="Analytics" showTopNav={false}>
       <div className="analytics-workspace-page">
@@ -476,6 +557,8 @@ export default function LandlordAnalyticsPage() {
 
         {analyticsEnabled && !loading && !error && snapshot ? (
           <>
+            {activeWorkspacePanel}
+
             <AnalyticsKpiGrid items={summaryItems} periodLabel={periodLabel(period)} />
 
             {canViewPortfolioScore ? (
@@ -626,85 +709,6 @@ export default function LandlordAnalyticsPage() {
                 />
               </div>
             ) : null}
-
-            <div
-              id={`analytics-panel-${activeTab}`}
-              role="tabpanel"
-              aria-labelledby={`analytics-tab-${activeTab}`}
-              aria-label={activeTabLabel}
-              style={{ display: "grid", gap: 12, alignContent: "start" }}
-            >
-              {activeTabIntro ? (
-                <Card style={{ color: "#475569" }}>{activeTabIntro}</Card>
-              ) : null}
-
-              {activeTab === "analytics-alerts" ? (
-                <AnalyticsAlertsPanel alerts={alerts?.alerts || []} summary={alerts?.summary || null} />
-              ) : null}
-
-              {activeTab === "portfolio-benchmarking" && canViewBenchmarking ? (
-                <PortfolioBenchmarkingPanel benchmarking={benchmarking} />
-              ) : null}
-
-              {activeTab === "decision-outcomes" && canViewPortfolioScore && canViewAdvancedAnalytics ? (
-                <DecisionOutcomeAnalyticsPanel analytics={snapshot.decisionOutcomeAnalytics} />
-              ) : null}
-
-              {(activeTab === "operator-queue" || activeTab === "portfolio-execution-summary") &&
-              canViewPortfolioScore &&
-              canViewAdvancedAnalytics ? (
-                <DecisionQueueSummary
-                  decisions={decisions}
-                  filter={executionFilter}
-                  onFilterChange={setExecutionFilter}
-                />
-              ) : null}
-
-              {(activeTab === "recommended-next-actions" || activeTab === "actions-to-review") &&
-              canViewPortfolioScore &&
-              canViewAdvancedAnalytics ? (
-                <AgentDecisionPanel
-                  decisions={prioritizedDecisions}
-                  period={period}
-                  propertyId={propertyId}
-                />
-              ) : null}
-
-              {activeTab === "predictive-metrics" && canViewPortfolioScore && canViewAdvancedAnalytics ? (
-                <PredictiveMetricsPanel metrics={snapshot.predictive?.metrics || []} />
-              ) : null}
-
-              {activeTab === "attention-worthy-insights" && canViewPortfolioScore && canViewAdvancedAnalytics ? (
-                <InsightCardsPanel
-                  insights={snapshot.insights}
-                  alerts={alerts?.alerts || []}
-                  decisions={prioritizedDecisions}
-                />
-              ) : null}
-
-              {activeTab !== "analytics-alerts" && !canViewPortfolioScore ? (
-                <FeatureTeaser
-                  featureKey="portfolio_score"
-                  eyebrow="Pro analytics"
-                  title="Unlock deeper analytics on Pro"
-                  description="Move from a summary overview into detailed application, leasing, maintenance, and revenue panels."
-                  ctaLabel="Upgrade to Pro"
-                />
-              ) : null}
-
-              {activeTab !== "analytics-alerts" &&
-              activeTab !== "portfolio-benchmarking" &&
-              canViewPortfolioScore &&
-              !canViewAdvancedAnalytics ? (
-                <FeatureTeaser
-                  featureKey="portfolio_analytics"
-                  eyebrow="Elite analytics"
-                  title="Unlock attention-worthy insights on Elite"
-                  description="Surface more actionable analytics signals across vacancies, maintenance burden, and application changes."
-                  ctaLabel="Upgrade to Elite"
-                />
-              ) : null}
-            </div>
 
             {showPortfolioScoreTeaser ? (
               <FeatureTeaser

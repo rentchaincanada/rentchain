@@ -2666,87 +2666,86 @@ const ApplicationsPage: React.FC = () => {
                 summary={decisionSummary}
                 onEvaluateRisk={refreshRiskSnapshot}
                 evaluatingRisk={evaluatingRisk}
-                onDecision={saveLandlordDecision}
-                submittingDecision={savingDecision}
-              />
-              {requestInfoOpen ? (
-                <Card
-                  role="dialog"
-                  aria-modal="true"
-                  aria-label="Request more information"
-                  style={{
-                    border: `1px solid ${colors.accent}`,
-                    background: "rgba(239,246,255,0.98)",
-                    display: "grid",
-                    gap: spacing.md,
-                  }}
-                >
-                  <div style={{ display: "grid", gap: 4 }}>
-                    <div style={{ fontSize: 18, fontWeight: 800, color: text.primary }}>Request More Info</div>
-                    <div style={{ color: text.muted, fontSize: 13, lineHeight: 1.6 }}>
-                      Choose the missing items to request and add an optional note for the applicant email.
-                    </div>
-                  </div>
-                  <div style={{ display: "grid", gap: 10 }}>
-                    {REQUEST_INFO_OPTIONS.map((option) => (
-                      <label
-                        key={option.value}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 10,
-                          color: text.primary,
-                          fontSize: 14,
-                        }}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={requestInfoItems.includes(option.value)}
-                          onChange={() => toggleRequestInfoItem(option.value)}
-                        />
-                        <span>{option.label}</span>
-                      </label>
-                    ))}
-                  </div>
-                  <div style={{ display: "grid", gap: 6 }}>
-                    <div style={{ color: text.muted, fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                      Optional note
-                    </div>
-                    <textarea
-                      value={requestInfoMessage}
-                      onChange={(event) => setRequestInfoMessage(event.target.value)}
-                      placeholder="Add any extra context for the applicant."
-                      rows={4}
-                      style={{
-                        width: "100%",
-                        boxSizing: "border-box",
-                        resize: "vertical",
-                        padding: "10px 12px",
-                        borderRadius: radius.md,
-                        border: `1px solid ${colors.border}`,
-                        background: colors.card,
-                        color: text.primary,
-                      }}
-                    />
-                  </div>
-                  <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap" }}>
-                    <Button
-                      variant="secondary"
-                      onClick={() => {
-                        setRequestInfoOpen(false);
-                        setRequestInfoItems([]);
-                        setRequestInfoMessage("");
-                      }}
-                      disabled={savingDecision}
-                    >
-                      Cancel
-                    </Button>
-                    <Button onClick={() => void handleSubmitRequestInfo()} disabled={savingDecision}>
-                      {savingDecision ? "Sending..." : "Send request"}
-                    </Button>
-                  </div>
-                </Card>
-              ) : null}
+	                onDecision={saveLandlordDecision}
+	                submittingDecision={savingDecision}
+	                requestInfoDrawer={requestInfoOpen ? (
+	                  <Card
+	                    role="region"
+	                    aria-label="Request more information"
+	                    style={{
+	                      border: `1px solid ${colors.accent}`,
+	                      background: "rgba(239,246,255,0.98)",
+	                      display: "grid",
+	                      gap: spacing.md,
+	                    }}
+	                  >
+	                    <div style={{ display: "grid", gap: 4 }}>
+	                      <div style={{ fontSize: 18, fontWeight: 800, color: text.primary }}>Request More Info</div>
+	                      <div style={{ color: text.muted, fontSize: 13, lineHeight: 1.6 }}>
+	                        Choose the missing items to request and add an optional note for the applicant email.
+	                      </div>
+	                    </div>
+	                    <div style={{ display: "grid", gap: 10 }}>
+	                      {REQUEST_INFO_OPTIONS.map((option) => (
+	                        <label
+	                          key={option.value}
+	                          style={{
+	                            display: "flex",
+	                            alignItems: "center",
+	                            gap: 10,
+	                            color: text.primary,
+	                            fontSize: 14,
+	                          }}
+	                        >
+	                          <input
+	                            type="checkbox"
+	                            checked={requestInfoItems.includes(option.value)}
+	                            onChange={() => toggleRequestInfoItem(option.value)}
+	                          />
+	                          <span>{option.label}</span>
+	                        </label>
+	                      ))}
+	                    </div>
+	                    <div style={{ display: "grid", gap: 6 }}>
+	                      <div style={{ color: text.muted, fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+	                        Optional note
+	                      </div>
+	                      <textarea
+	                        value={requestInfoMessage}
+	                        onChange={(event) => setRequestInfoMessage(event.target.value)}
+	                        placeholder="Add any extra context for the applicant."
+	                        rows={4}
+	                        style={{
+	                          width: "100%",
+	                          boxSizing: "border-box",
+	                          resize: "vertical",
+	                          padding: "10px 12px",
+	                          borderRadius: radius.md,
+	                          border: `1px solid ${colors.border}`,
+	                          background: colors.card,
+	                          color: text.primary,
+	                        }}
+	                      />
+	                    </div>
+	                    <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap" }}>
+	                      <Button
+	                        variant="secondary"
+	                        onClick={() => {
+	                          setRequestInfoOpen(false);
+	                          setRequestInfoItems([]);
+	                          setRequestInfoMessage("");
+	                        }}
+	                        disabled={savingDecision}
+	                      >
+	                        Cancel
+	                      </Button>
+	                      <Button onClick={() => void handleSubmitRequestInfo()} disabled={savingDecision}>
+	                        {savingDecision ? "Sending..." : "Send request"}
+	                      </Button>
+	                    </div>
+	                  </Card>
+	                ) : null}
+	              />
               <div ref={screeningSectionRef}>
                 <Card>
                   <div className="rc-applications-card-header" style={{ marginBottom: 8 }}>

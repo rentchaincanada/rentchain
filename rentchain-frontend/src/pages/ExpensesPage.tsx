@@ -18,6 +18,7 @@ import { ExpenseImportSummaryCard } from "../components/expenses/ExpenseImportSu
 import { ExpenseImportUploadCard } from "../components/expenses/ExpenseImportUploadCard";
 import { useCapabilities } from "../hooks/useCapabilities";
 import { triggerBlobDownload } from "../utils/downloadBlob";
+import { buildCsvBlob } from "../utils/csvExport";
 
 function formatCents(cents: number): string {
   const amount = Number(cents || 0) / 100;
@@ -37,6 +38,21 @@ function formatDate(ms: number): string {
   } catch {
     return "-";
   }
+}
+
+function readableUnitLabel(expense: ExpenseRecord): string {
+  const record = expense as any;
+  const unitOnlyLabel = [
+    record.unitNumber,
+    record.unitLabel,
+    record.unitName,
+    record.unitDisplayLabel,
+    record.displayUnitLabel,
+  ]
+    .map((value) => String(value || "").trim())
+    .find(Boolean);
+  if (unitOnlyLabel) return /^unit\b/i.test(unitOnlyLabel) ? unitOnlyLabel : `Unit ${unitOnlyLabel}`;
+  return String(record.propertyUnitDisplayLabel || record.propertyUnitLabel || "").trim();
 }
 
 function normalizePreviewRowForReview(row: ExpenseImportPreviewRow): ExpenseImportPreviewRow {
@@ -198,6 +214,24 @@ const ExpensesPage: React.FC = () => {
   const triggerDownload = async (format: "csv" | "xls" | "pdf") => {
     try {
       setExporting(format);
+      if (format === "csv" || format === "xls") {
+        const blob = buildCsvBlob(
+          ["date", "property", "unit", "category", "vendor", "description", "amount", "status", "source"],
+          items.map((item) => [
+            formatDate(item.incurredAtMs),
+            propertyById.get(item.propertyId) || (item.propertyId ? `Property ${item.propertyId}` : "Property"),
+            readableUnitLabel(item),
+            item.category,
+            item.vendorName || "",
+            item.notes || "",
+            (Number(item.amountCents || 0) / 100).toFixed(2),
+            item.status,
+            item.source,
+          ])
+        );
+        triggerBlobDownload(blob, `rentchain-expenses-${new Date().toISOString().slice(0, 10)}.csv`);
+        return;
+      }
       const { blob, filename } = await exportExpenses(format, {
         propertyId: propertyFilter || undefined,
         category: (categoryFilter as ExpenseCategory) || undefined,

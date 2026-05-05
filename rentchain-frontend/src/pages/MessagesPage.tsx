@@ -51,7 +51,8 @@ function areMessagesEquivalent(current: Message[], next: Message[]) {
 
 function displayTenantName(conversation: Conversation | null) {
   const tenantName = String(conversation?.tenantDisplayName || "").trim();
-  return tenantName || "Tenant";
+  const tenantId = String(conversation?.tenantId || "").trim();
+  return tenantName || (tenantId ? `Tenant ${tenantId}` : "Tenant");
 }
 
 function hasTenantDisplayName(conversation: Conversation | null) {
@@ -67,9 +68,14 @@ function displayUnitContext(conversation: Conversation | null) {
 function displayConversationContext(conversation: Conversation | null) {
   const propertyLabel = String(conversation?.propertyDisplayLabel || "").trim();
   const unitLabel = displayUnitContext(conversation);
+  const propertyId = String(conversation?.propertyId || "").trim();
+  const unitId = String(conversation?.unitId || "").trim();
   if (propertyLabel && unitLabel) return `${propertyLabel} / ${unitLabel}`;
   if (unitLabel) return unitLabel;
-  if (propertyLabel) return "Property unavailable";
+  if (propertyLabel) return propertyLabel;
+  if (propertyId && unitId) return `Property ${propertyId} / Unit ${unitId}`;
+  if (propertyId) return `Property ${propertyId}`;
+  if (unitId) return `Unit ${unitId}`;
   return "Conversation";
 }
 
@@ -88,7 +94,7 @@ function buildConversationTitle(conversation: Conversation | null) {
   if (!conversation) return "Conversation";
   const tenantName = displayTenantName(conversation);
   const locationLabel = displayConversationContext(conversation);
-  if (!hasTenantDisplayName(conversation)) return `Tenant • ${locationLabel}`;
+  if (!hasTenantDisplayName(conversation)) return `${tenantName} • ${locationLabel}`;
   if (tenantName && locationLabel) return `${tenantName} • ${locationLabel}`;
   if (tenantName) return tenantName;
   if (locationLabel) return locationLabel;

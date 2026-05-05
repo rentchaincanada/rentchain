@@ -515,6 +515,9 @@ describe("LandlordAnalyticsPage", () => {
     expect(within(controlArea).getByRole("tablist", { name: /Analytics workspace sections/i })).toBeInTheDocument();
     expect(within(controlArea).getByLabelText(/Analytics period/i)).toBeInTheDocument();
     expect(within(controlArea).getByLabelText(/Analytics property/i)).toBeInTheDocument();
+    const tabPanel = screen.getByRole("tabpanel", { name: "Analytics alerts" });
+    const kpiGrid = screen.getByTestId("analytics-kpi-grid");
+    expect(Boolean(tabPanel.compareDocumentPosition(kpiGrid) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
     expect(screen.getByRole("tab", { name: "Analytics alerts" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("tab", { name: "Portfolio benchmarking" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Decision outcomes" })).toBeInTheDocument();

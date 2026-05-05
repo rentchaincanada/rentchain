@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { LandlordNav } from "./LandlordNav";
 
 const mocks = vi.hoisted(() => ({
@@ -35,6 +35,11 @@ vi.mock("@/features/upgradeNudges/UpgradeNudgeHost", () => ({
   UpgradeNudgeHost: () => null,
 }));
 
+function CurrentPath() {
+  const location = useLocation();
+  return <div data-testid="current-path">{location.pathname}</div>;
+}
+
 function renderLandlordNav(initialPath = "/dashboard") {
   return render(
     <MemoryRouter initialEntries={[initialPath]}>
@@ -44,6 +49,7 @@ function renderLandlordNav(initialPath = "/dashboard") {
           element={
             <LandlordNav>
               <div data-testid="page-content">Page content</div>
+              <CurrentPath />
             </LandlordNav>
           }
         />
@@ -97,6 +103,21 @@ describe("LandlordNav mobile drawer", () => {
     ).toBeInTheDocument();
   });
 
+  it("toggles the mobile drawer from the More tab", async () => {
+    renderLandlordNav();
+
+    const moreButton = screen.getByRole("button", { name: "Open workspace pages" });
+    fireEvent.click(moreButton);
+    expect(screen.getByRole("dialog", { name: "Navigation menu" })).toHaveClass("is-open");
+
+    fireEvent.click(moreButton);
+
+    await waitFor(() => {
+      expect(document.querySelector("#rc-landlord-drawer")).not.toHaveClass("is-open");
+    });
+    expect(moreButton).not.toHaveClass("active");
+  });
+
   it("uses a safe-area drawer offset so the sheet and backdrop stop above the mobile nav", () => {
     renderLandlordNav();
 
@@ -114,8 +135,19 @@ describe("LandlordNav mobile drawer", () => {
     fireEvent.click(within(screen.getByRole("dialog", { name: "Navigation menu" })).getByRole("button", { name: "Payments" }));
 
     await waitFor(() => {
-      expect(screen.getByRole("dialog", { name: "Navigation menu" })).not.toHaveClass("is-open");
+      expect(document.querySelector("#rc-landlord-drawer")).not.toHaveClass("is-open");
     });
+    expect(screen.getByTestId("current-path")).toHaveTextContent("/payments");
+  });
+
+  it("uses compact labels for long mobile tabs", () => {
+    renderLandlordNav();
+
+    const tabbar = screen.getByRole("navigation", { name: "Bottom navigation" });
+    expect(within(tabbar).getByText("Apps")).toBeInTheDocument();
+    expect(within(tabbar).getByText("Msgs")).toBeInTheDocument();
+    expect(within(tabbar).queryByText("Applications")).not.toBeInTheDocument();
+    expect(within(tabbar).queryByText("Messages")).not.toBeInTheDocument();
   });
 
   it("closes the drawer on Escape", async () => {
@@ -127,8 +159,25 @@ describe("LandlordNav mobile drawer", () => {
     fireEvent.keyDown(document, { key: "Escape" });
 
     await waitFor(() => {
-      expect(screen.getByRole("dialog", { name: "Navigation menu" })).not.toHaveClass("is-open");
+      expect(document.querySelector("#rc-landlord-drawer")).not.toHaveClass("is-open");
     });
+  });
+
+  it("closes immediately from the drawer close button and leaves the tab bar available", async () => {
+    renderLandlordNav();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open workspace pages" }));
+    fireEvent.click(
+      within(screen.getByRole("dialog", { name: "Navigation menu" })).getByRole("button", {
+        name: "Close menu",
+      })
+    );
+
+    await waitFor(() => {
+      expect(document.querySelector("#rc-landlord-drawer")).not.toHaveClass("is-open");
+    });
+    expect(screen.getByRole("navigation", { name: "Bottom navigation" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open workspace pages" })).not.toHaveClass("active");
   });
 
   it("keeps messages flush so its own mobile spacing remains authoritative", () => {

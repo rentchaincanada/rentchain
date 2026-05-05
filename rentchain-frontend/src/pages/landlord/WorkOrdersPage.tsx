@@ -280,7 +280,9 @@ export default function WorkOrdersPage() {
   const [costActualInput, setCostActualInput] = React.useState("");
   const [costCurrency, setCostCurrency] = React.useState("CAD");
   const [costReviewNote, setCostReviewNote] = React.useState("");
-  const [costLineItemsJson, setCostLineItemsJson] = React.useState("");
+  const [costLineItemLabel, setCostLineItemLabel] = React.useState("");
+  const [costLineItemAmount, setCostLineItemAmount] = React.useState("");
+  const [costLineItemCategory, setCostLineItemCategory] = React.useState<"labor" | "materials" | "inspection" | "other">("labor");
   const [costAttachmentFile, setCostAttachmentFile] = React.useState<File | null>(null);
   const canUseWorkOrders = entitlements.canUseWorkOrders;
   const canViewMarketplaceDirectory = entitlements.canViewMarketplaceDirectory;
@@ -694,16 +696,23 @@ export default function WorkOrdersPage() {
       return;
     }
 
-    let lineItems: Array<{ id?: string; label: string; amountCents: number; category?: "labor" | "materials" | "inspection" | "other" }> =
-      [];
-    if (costLineItemsJson.trim()) {
-      try {
-        const parsed = JSON.parse(costLineItemsJson);
-        lineItems = Array.isArray(parsed) ? parsed : [];
-      } catch {
-        setError("Line items must be valid JSON.");
+    const existingLineItems = Array.isArray(selected.costLineItems) ? selected.costLineItems : [];
+    let lineItems: Array<{ id?: string; label: string; amountCents: number; category?: "labor" | "materials" | "inspection" | "other" }> = existingLineItems;
+    if (costLineItemLabel.trim() || costLineItemAmount.trim()) {
+      const lineAmount = Number(costLineItemAmount);
+      if (!costLineItemLabel.trim() || Number.isNaN(lineAmount)) {
+        setError("Add a line item label and valid amount before saving.");
         return;
       }
+      lineItems = [
+        {
+          id: existingLineItems[0]?.id,
+          label: costLineItemLabel.trim(),
+          amountCents: Math.round(lineAmount * 100),
+          category: costLineItemCategory,
+        },
+        ...existingLineItems.slice(1),
+      ];
     }
 
     setSavingCost(true);
@@ -722,7 +731,7 @@ export default function WorkOrdersPage() {
     } finally {
       setSavingCost(false);
     }
-  }, [costActualInput, costCurrency, costLineItemsJson, costReviewNote, loadUpdates, selected, syncSelectedItem]);
+  }, [costActualInput, costCurrency, costLineItemAmount, costLineItemCategory, costLineItemLabel, costReviewNote, loadUpdates, selected, syncSelectedItem]);
 
   const handleReviewCost = React.useCallback(
     async (decision: "approve" | "reject" | "revision_requested") => {
@@ -821,7 +830,9 @@ export default function WorkOrdersPage() {
       setCostActualInput("");
       setCostCurrency("CAD");
       setCostReviewNote("");
-      setCostLineItemsJson("");
+      setCostLineItemLabel("");
+      setCostLineItemAmount("");
+      setCostLineItemCategory("labor");
       setCostAttachmentFile(null);
       return;
     }
@@ -845,9 +856,10 @@ export default function WorkOrdersPage() {
     );
     setCostCurrency(String(selected.cost?.currency || "CAD"));
     setCostReviewNote(String(selected.cost?.reviewNote || ""));
-    setCostLineItemsJson(
-      selected.costLineItems?.length ? JSON.stringify(selected.costLineItems, null, 2) : ""
-    );
+    const firstLineItem = selected.costLineItems?.[0] || null;
+    setCostLineItemLabel(String(firstLineItem?.label || ""));
+    setCostLineItemAmount(typeof firstLineItem?.amountCents === "number" ? String((firstLineItem.amountCents / 100).toFixed(2)) : "");
+    setCostLineItemCategory(firstLineItem?.category || "labor");
     setCostAttachmentFile(null);
   }, [selected]);
 
@@ -1447,17 +1459,45 @@ export default function WorkOrdersPage() {
                   />
                 </label>
               </div>
-              <label style={{ display: "grid", gap: 4 }}>
-                <span style={{ fontSize: 12, color: "#64748b" }}>Line items JSON</span>
-                <textarea
-                  aria-label="Cost line items"
-                  rows={4}
-                  value={costLineItemsJson}
-                  onChange={(e) => setCostLineItemsJson(e.target.value)}
-                  placeholder='[{"label":"Labor","amountCents":15000,"category":"labor"}]'
-                  style={{ width: "100%", borderRadius: 8, border: "1px solid #cbd5e1", padding: 8, resize: "vertical" }}
-                />
-              </label>
+              <div style={{ display: "grid", gap: 8 }}>
+                <div style={{ fontSize: 12, color: "#64748b", fontWeight: 700 }}>Line item</div>
+                <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))" }}>
+                  <label style={{ display: "grid", gap: 4 }}>
+                    <span style={{ fontSize: 12, color: "#64748b" }}>Description</span>
+                    <input
+                      aria-label="Cost line item description"
+                      value={costLineItemLabel}
+                      onChange={(e) => setCostLineItemLabel(e.target.value)}
+                      placeholder="Labor"
+                      style={{ width: "100%", borderRadius: 8, border: "1px solid #cbd5e1", padding: 8 }}
+                    />
+                  </label>
+                  <label style={{ display: "grid", gap: 4 }}>
+                    <span style={{ fontSize: 12, color: "#64748b" }}>Amount</span>
+                    <input
+                      aria-label="Cost line item amount"
+                      value={costLineItemAmount}
+                      onChange={(e) => setCostLineItemAmount(e.target.value)}
+                      placeholder="150.00"
+                      style={{ width: "100%", borderRadius: 8, border: "1px solid #cbd5e1", padding: 8 }}
+                    />
+                  </label>
+                  <label style={{ display: "grid", gap: 4 }}>
+                    <span style={{ fontSize: 12, color: "#64748b" }}>Category</span>
+                    <select
+                      aria-label="Cost line item category"
+                      value={costLineItemCategory}
+                      onChange={(e) => setCostLineItemCategory(e.target.value as "labor" | "materials" | "inspection" | "other")}
+                      style={{ width: "100%", borderRadius: 8, border: "1px solid #cbd5e1", padding: 8, background: "#fff" }}
+                    >
+                      <option value="labor">Labor</option>
+                      <option value="materials">Materials</option>
+                      <option value="inspection">Inspection</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </label>
+                </div>
+              </div>
               <label style={{ display: "grid", gap: 4 }}>
                 <span style={{ fontSize: 12, color: "#64748b" }}>Review note</span>
                 <textarea

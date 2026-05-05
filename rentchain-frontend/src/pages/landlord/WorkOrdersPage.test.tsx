@@ -732,10 +732,11 @@ describe("WorkOrdersPage", () => {
     fireEvent.click(await screen.findByRole("button", { name: /timeline/i }));
 
     expect(await screen.findByText(/Cost & Invoice/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Line items JSON/i)).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(/Actual cost/i), { target: { value: "245.00" } });
-    fireEvent.change(screen.getByLabelText(/Cost line items/i), {
-      target: { value: '[{"label":"Labor","amountCents":24500,"category":"labor"}]' },
-    });
+    fireEvent.change(screen.getByLabelText(/Cost line item description/i), { target: { value: "Labor" } });
+    fireEvent.change(screen.getByLabelText(/Cost line item amount/i), { target: { value: "245.00" } });
+    fireEvent.change(screen.getByLabelText(/Cost line item category/i), { target: { value: "labor" } });
     fireEvent.click(screen.getByRole("button", { name: /Save cost/i }));
 
     await waitFor(() => {
@@ -743,6 +744,7 @@ describe("WorkOrdersPage", () => {
         "wo-cost",
         expect.objectContaining({
           actualCostCents: 24500,
+          lineItems: [expect.objectContaining({ id: "line-1", label: "Labor", amountCents: 24500, category: "labor" })],
         })
       );
     });

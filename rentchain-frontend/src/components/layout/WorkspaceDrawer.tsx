@@ -73,6 +73,8 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
     navigate(path);
     onClose();
   };
+  const mobileBottomNavOffset =
+    "var(--rc-mobile-drawer-bottom-offset, calc(104px + env(safe-area-inset-bottom, 0px)))";
 
   const footerContent = (
     <>
@@ -101,13 +103,16 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
     <div
       style={{
         position: "fixed",
-        inset: 0,
-        zIndex: 3000,
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: isMobile ? mobileBottomNavOffset : 0,
+        zIndex: isMobile ? 60 : 3000,
         display: "flex",
         justifyContent: "flex-end",
-        alignItems: "flex-start",
+        alignItems: isMobile ? "flex-end" : "flex-start",
         overscrollBehavior: "none",
-        touchAction: "none",
+        touchAction: isMobile ? "auto" : "none",
         pointerEvents: "auto",
       }}
     >
@@ -117,31 +122,37 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
           position: "absolute",
           inset: 0,
           background: "rgba(0,0,0,0.35)",
-          touchAction: "none",
+          touchAction: isMobile ? "auto" : "none",
           overscrollBehavior: "none",
           pointerEvents: "auto",
         }}
       />
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Workspace navigation"
         style={{
           position: "relative",
-          width: 320,
-          maxWidth: "90vw",
-          height: "100dvh",
-          maxHeight: "100dvh",
+          width: isMobile ? "auto" : 320,
+          maxWidth: isMobile ? "none" : "90vw",
+          height: isMobile ? "auto" : "100dvh",
+          maxHeight: isMobile ? `min(calc(100dvh - ${mobileBottomNavOffset} - 16px), 560px)` : "100dvh",
+          margin: isMobile ? "0 max(12px, env(safe-area-inset-right, 0px)) 8px max(12px, env(safe-area-inset-left, 0px))" : 0,
           minHeight: 0,
           background: colors.card,
-          borderLeft: `1px solid ${colors.border}`,
+          border: isMobile ? `1px solid ${colors.border}` : undefined,
+          borderLeft: isMobile ? undefined : `1px solid ${colors.border}`,
+          borderRadius: isMobile ? 20 : 0,
           boxShadow: shadows.lg,
           display: "flex",
           flexDirection: "column",
-          zIndex: 3001,
+          zIndex: isMobile ? 61 : 3001,
           overflow: "hidden",
           overscrollBehaviorY: "contain",
           contain: "layout paint size",
           isolation: "isolate",
           WebkitOverflowScrolling: "touch",
-          paddingTop: "env(safe-area-inset-top)",
+          paddingTop: isMobile ? 0 : "env(safe-area-inset-top)",
           paddingBottom: "env(safe-area-inset-bottom, 0px)",
           pointerEvents: "auto",
         }}

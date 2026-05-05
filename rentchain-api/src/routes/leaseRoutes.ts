@@ -1,4 +1,5 @@
 import { Router, Request, Response } from "express";
+import PDFDocument from "pdfkit";
 import {
   CreateLeasePayload,
   leaseService,
@@ -729,6 +730,121 @@ async function resolveLeaseLedgerExportLabels(lease: any) {
     String(lease?.unitLabel || lease?.unitNumber || lease?.unit || "").trim() ||
     "Unit";
   return { property, unit };
+}
+
+function formatLedgerCurrency(centsValue: unknown): string {
+  const centsNumber = Number(centsValue || 0);
+  const negative = centsNumber < 0;
+  const amount = Math.abs(centsNumber) / 100;
+  return `${negative ? "-" : ""}$${amount.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+async function renderLeaseLedgerPdf(params: {
+  leaseId: string;
+  rows: any[];
+  labels: { property: string; unit: string };
+  from?: string | null;
+  to?: string | null;
+}) {
+  const doc = new PDFDocument({ size: "LETTER", margin: 42 });
+  const chunks: Buffer[] = [];
+  doc.on("data", (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+  const done = new Promise<Buffer>((resolve, reject) => {
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+    doc.on("error", reject);
+  });
+
+  const rangeLabel = [params.from, params.to].filter(Boolean).join(" to ") || "All dates";
+  doc.font("Helvetica-Bold").fontSize(18).fillColor("#0f172a").text("Lease Ledger");
+  doc.moveDown(0.25);
+  doc.font("Helvetica").fontSize(10).fillColor("#475569").text(`${params.labels.property} · Unit ${params.labels.unit}`);
+  doc.text(`Lease ${params.leaseId} · ${rangeLabel} · ${params.rows.length} entries`);
+  doc.moveDown(0.75);
+
+  const tableX = 42;
+  const tableWidth = 528;
+  const columns = [
+    { key: "date", label: "Date", width: tableWidth * 0.14, align: "left" as const },
+    { key: "type", label: "Type", width: tableWidth * 0.16, align: "left" as const },
+    { key: "description", label: "Description/Notes", width: tableWidth * 0.34, align: "left" as const },
+    { key: "amount", label: "Amount", width: tableWidth * 0.17, align: "right" as const },
+    { key: "balance", label: "Balance", width: tableWidth * 0.19, align: "right" as const },
+  ];
+  const rowPaddingX = 4;
+  const rowPaddingY = 5;
+
+  const drawHeader = () => {
+    let x = tableX;
+    const y = doc.y;
+    doc.rect(tableX, y - 2, tableWidth, 18).fill("#f8fafc");
+    doc.font("Helvetica-Bold").fontSize(8.5).fillColor("#0f172a");
+    columns.forEach((column) => {
+      doc.text(column.label, x + rowPaddingX, y + 3, {
+        width: column.width - rowPaddingX * 2,
+        align: column.align,
+        lineBreak: false,
+      });
+      x += column.width;
+    });
+    doc.y = y + 18;
+    doc.strokeColor("#cbd5e1").moveTo(tableX, doc.y).lineTo(tableX + tableWidth, doc.y).stroke();
+    doc.y += 5;
+  };
+
+  drawHeader();
+  doc.font("Helvetica").fontSize(8).fillColor("#0f172a");
+  let runningBalance = 0;
+
+  for (const row of params.rows) {
+    const signedAmount = row?.entryType === "payment"
+      ? -Math.abs(Number(row?.amountCents || 0))
+      : Math.abs(Number(row?.amountCents || 0));
+    runningBalance += signedAmount;
+    const description =
+      String(row?.notes || "").trim() ||
+      [row?.category, row?.method, row?.reference].map((value) => String(value || "").trim()).filter(Boolean).join(" · ") ||
+      "-";
+    const values: Record<string, string> = {
+      date: String(row?.effectiveDate || "-"),
+      type: String(row?.entryType || "-").replace(/_/g, " "),
+      description,
+      amount: formatLedgerCurrency(signedAmount),
+      balance: formatLedgerCurrency(runningBalance),
+    };
+    const heights = columns.map((column) =>
+      doc.heightOfString(values[column.key], {
+        width: column.width - rowPaddingX * 2,
+        align: column.align,
+      })
+    );
+    const rowHeight = Math.max(20, Math.max(...heights) + rowPaddingY * 2);
+    if (doc.y + rowHeight > 740) {
+      doc.addPage();
+      drawHeader();
+      doc.font("Helvetica").fontSize(8).fillColor("#0f172a");
+    }
+    const rowY = doc.y;
+    let x = tableX;
+    columns.forEach((column) => {
+      doc.text(values[column.key], x + rowPaddingX, rowY + rowPaddingY, {
+        width: column.width - rowPaddingX * 2,
+        align: column.align,
+      });
+      x += column.width;
+    });
+    doc.y = rowY + rowHeight;
+    doc.strokeColor("#e2e8f0").moveTo(tableX, doc.y).lineTo(tableX + tableWidth, doc.y).stroke();
+  }
+
+  if (params.rows.length === 0) {
+    doc.font("Helvetica").fontSize(9).fillColor("#64748b").text("No ledger entries for this range.", tableX, doc.y + 5);
+  }
+
+  doc.end();
+  return done;
 }
 
 async function enforceLeaseCapability(req: any, res: Response): Promise<boolean> {
@@ -2356,6 +2472,33 @@ router.get("/:leaseId/ledger/export.csv", async (req: any, res: Response) => {
   } catch (err) {
     console.error("[GET /api/leases/:leaseId/ledger/export.csv] error", err);
     return res.status(500).json({ ok: false, error: "Failed to export lease ledger" });
+  }
+});
+
+router.get("/:leaseId/ledger/export.pdf", async (req: any, res: Response) => {
+  try {
+    const landlordId = req.user?.landlordId || req.user?.id;
+    if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+
+    const leaseId = String(req.params?.leaseId || "").trim();
+    if (!leaseId) return res.status(400).json({ ok: false, error: "leaseId is required" });
+    const leaseCheck = await getLeaseEntityForLandlord(leaseId, landlordId);
+    if (!leaseCheck.ok) return res.status(leaseCheck.status).json({ ok: false, error: leaseCheck.error });
+
+    const from = toIsoDate(req.query?.from) || null;
+    const to = toIsoDate(req.query?.to) || null;
+    const entries = await loadLedgerEntries(leaseId, landlordId, from, to);
+    const labels = await resolveLeaseLedgerExportLabels(leaseCheck.lease);
+    const pdf = await renderLeaseLedgerPdf({ leaseId, rows: entries, labels, from, to });
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename=\"lease-ledger-${leaseId}.pdf\"`
+    );
+    return res.status(200).send(pdf);
+  } catch (err) {
+    console.error("[GET /api/leases/:leaseId/ledger/export.pdf] error", err);
+    return res.status(500).json({ ok: false, error: "Failed to export lease ledger PDF" });
   }
 });
 

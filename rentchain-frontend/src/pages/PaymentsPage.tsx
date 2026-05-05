@@ -1,13 +1,14 @@
 // rentchain-frontend/src/pages/PaymentsPage.tsx
 import React, { useEffect, useState } from "react";
 import { usePayments } from "../hooks/usePayments";
-import { exportPayments, updatePayment, type PaymentRecord } from "@/api/paymentsApi";
+import { updatePayment, type PaymentRecord } from "@/api/paymentsApi";
 import { Card, Button } from "../components/ui/Ui";
 import { spacing, text, colors } from "../styles/tokens";
 import { fetchProperties } from "../api/propertiesApi";
 import { fetchTenants } from "../api/tenantsApi";
 import { printSummaryDocument } from "../utils/printSummary";
 import { triggerBlobDownload } from "../utils/downloadBlob";
+import { buildCsvBlob } from "../utils/csvExport";
 
 function tenantLabelFromValue(value: any): string {
   return (
@@ -79,16 +80,50 @@ const PaymentsPage: React.FC = () => {
     };
   }, []);
 
-  const getTenantLabel = (payment: PaymentRecord) =>
-    labelMap.tenants.get(String(payment.tenantId || "").trim()) || "Tenant";
-  const getPropertyLabel = (payment: PaymentRecord) =>
-    labelMap.properties.get(String(payment.propertyId || "").trim()) || "Property";
+  const getTenantLabel = (payment: PaymentRecord) => {
+    const record = payment as any;
+    return (
+      tenantLabelFromValue(record.tenant) ||
+      tenantLabelFromValue(record.tenantProfile) ||
+      String(record.tenantName || record.tenantDisplayName || record.applicantName || "").trim() ||
+      labelMap.tenants.get(String(payment.tenantId || "").trim()) ||
+      (payment.tenantId ? `Tenant ${payment.tenantId}` : "Tenant")
+    );
+  };
+  const getPropertyLabel = (payment: PaymentRecord) => {
+    const record = payment as any;
+    const propertyLabel =
+      propertyLabelFromValue(record.property) ||
+      String(record.propertyName || record.propertyDisplayName || record.propertyDisplayLabel || "").trim() ||
+      labelMap.properties.get(String(payment.propertyId || "").trim()) ||
+      "";
+    const unitLabel = String(record.unitName || record.unitNumber || record.unitLabel || record.unitDisplayLabel || "").trim();
+    const formattedUnit = unitLabel ? (/^unit\b/i.test(unitLabel) ? unitLabel : `Unit ${unitLabel}`) : "";
+    if (propertyLabel && formattedUnit) return `${propertyLabel} / ${formattedUnit}`;
+    const propertyId = String(payment.propertyId || "").trim();
+    const unitId = String(record.unitId || "").trim();
+    if (propertyLabel || formattedUnit) return propertyLabel || formattedUnit;
+    if (propertyId && unitId) return `Property ${propertyId} / Unit ${unitId}`;
+    if (propertyId) return `Property ${propertyId}`;
+    if (unitId) return `Unit ${unitId}`;
+    return "Property";
+  };
 
   const triggerExport = async (format: "csv" | "xls") => {
     try {
       setExporting(format);
-      const { blob, filename } = await exportPayments(format);
-      triggerBlobDownload(blob, filename);
+      const blob = buildCsvBlob(
+        ["tenant", "property", "amount", "paid_date", "method", "notes"],
+        rows.map((payment) => [
+          getTenantLabel(payment),
+          getPropertyLabel(payment),
+          Number(payment.amount || 0),
+          payment.paidAt ? new Date(payment.paidAt).toLocaleDateString() : "",
+          payment.method || "",
+          String(payment.notes || "").trim(),
+        ])
+      );
+      triggerBlobDownload(blob, `rentchain-payments-${new Date().toISOString().slice(0, 10)}.csv`);
     } catch (err) {
       console.error("[PaymentsPage] Failed to export payments:", err);
       window.alert(err instanceof Error ? `Failed to export payments: ${err.message}` : "Failed to export payments.");

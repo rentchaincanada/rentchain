@@ -72,6 +72,7 @@ export function KpiStrip({ kpis, loading, links }: Props) {
             ) : links?.[item.key] ? (
               <Link
                 to={String(links[item.key])}
+                aria-label={item.label}
                 style={{ fontSize: isMobile ? 18 : 20, fontWeight: 800, color: text.primary, textDecoration: "underline" }}
               >
                 {Number(value).toLocaleString()}

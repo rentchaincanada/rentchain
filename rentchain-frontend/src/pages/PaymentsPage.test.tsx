@@ -5,7 +5,6 @@ import PaymentsPage from "./PaymentsPage";
 const mocks = vi.hoisted(() => ({
   usePayments: vi.fn(),
   updatePayment: vi.fn(),
-  exportPayments: vi.fn(),
   fetchProperties: vi.fn(),
   fetchTenants: vi.fn(),
   printSummaryDocument: vi.fn(),
@@ -17,7 +16,6 @@ vi.mock("../hooks/usePayments", () => ({
 
 vi.mock("../api/paymentsApi", () => ({
   updatePayment: mocks.updatePayment,
-  exportPayments: mocks.exportPayments,
 }));
 
 vi.mock("../api/propertiesApi", () => ({
@@ -41,6 +39,7 @@ describe("PaymentsPage", () => {
           id: "payment-1",
           tenantId: "tenant-1",
           propertyId: "prop-1",
+          unitDisplayLabel: "3A",
           amount: 1800,
           paidAt: "2026-04-01",
           method: "e-transfer",
@@ -52,10 +51,6 @@ describe("PaymentsPage", () => {
     });
     mocks.fetchTenants.mockResolvedValue([{ id: "tenant-1", fullName: "Taylor Tenant" }]);
     mocks.fetchProperties.mockResolvedValue({ items: [{ id: "prop-1", name: "123 Main St" }] });
-    mocks.exportPayments.mockResolvedValue({
-      blob: new Blob(["csv"]),
-      filename: "payments.csv",
-    });
   });
 
   it("renders the recorded-payments framing, explainer, and export controls", async () => {
@@ -79,7 +74,7 @@ describe("PaymentsPage", () => {
     expect(screen.getByRole("button", { name: "Export Spreadsheet (.xls)" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Export PDF" })).toBeInTheDocument();
     expect((await screen.findAllByText("Taylor Tenant")).length).toBeGreaterThan(0);
-    expect(screen.getAllByText("123 Main St").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("123 Main St / Unit 3A").length).toBeGreaterThan(0);
     expect(screen.getAllByText("e-transfer").length).toBeGreaterThan(0);
   });
 
@@ -90,7 +85,7 @@ describe("PaymentsPage", () => {
     expect(mocks.printSummaryDocument).toHaveBeenCalledWith("summary");
   });
 
-  it("calls the export api for CSV and spreadsheet downloads", async () => {
+  it("generates client-side CSV for CSV and spreadsheet downloads without HTML", async () => {
     const createObjectURL = vi.fn(() => "blob:url");
     const revokeObjectURL = vi.fn();
     const originalCreateElement = document.createElement.bind(document);
@@ -106,12 +101,42 @@ describe("PaymentsPage", () => {
     render(<PaymentsPage />);
 
     fireEvent.click((await screen.findAllByRole("button", { name: "Export CSV" }))[0]);
-    await waitFor(() => expect(mocks.exportPayments).toHaveBeenCalledWith("csv"));
+    await waitFor(() => expect(createObjectURL).toHaveBeenCalledTimes(1));
+    const csvBlob = createObjectURL.mock.calls[0][0] as Blob;
+    expect(csvBlob.type).toBe("text/csv;charset=utf-8");
 
     fireEvent.click(screen.getAllByRole("button", { name: "Export Spreadsheet (.xls)" })[0]);
-    await waitFor(() => expect(mocks.exportPayments).toHaveBeenCalledWith("xls"));
+    await waitFor(() => expect(createObjectURL).toHaveBeenCalledTimes(2));
+    const spreadsheetBlob = createObjectURL.mock.calls[1][0] as Blob;
+    expect(spreadsheetBlob.type).toBe("text/csv;charset=utf-8");
 
     createElementSpy.mockRestore();
     click.mockRestore();
+  });
+
+  it("falls back to explicit IDs instead of unavailable labels when API labels are absent", async () => {
+    mocks.usePayments.mockReturnValue({
+      payments: [
+        {
+          id: "payment-2",
+          tenantId: "tenant-2",
+          propertyId: "prop-2",
+          amount: 900,
+          paidAt: "2026-04-02",
+          method: "cash",
+          notes: "",
+        },
+      ],
+      loading: false,
+      error: null,
+    });
+    mocks.fetchTenants.mockResolvedValue([]);
+    mocks.fetchProperties.mockResolvedValue({ items: [] });
+
+    render(<PaymentsPage />);
+
+    expect((await screen.findAllByText("Tenant tenant-2")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("Property prop-2")).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/unavailable/i)).not.toBeInTheDocument();
   });
 });
