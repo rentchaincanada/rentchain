@@ -61,6 +61,46 @@ export type LeaseObligationLedgerSummary = {
   manualReviewCount: number;
 };
 
+export type DelinquencySignalType =
+  | "rent_due"
+  | "overdue"
+  | "partially_paid"
+  | "failed_payment"
+  | "missing_payment"
+  | "manual_review_required";
+
+export type DelinquencySeverity = "info" | "warning" | "critical";
+
+export type LeaseDelinquencySignal = {
+  signalId: string;
+  leaseId: string;
+  paymentIntentId?: string | null;
+  rentPaymentId?: string | null;
+  propertyId?: string | null;
+  unitId?: string | null;
+  tenantId?: string | null;
+  periodStart?: string | null;
+  periodEnd?: string | null;
+  dueDate?: string | null;
+  expectedAmountCents: number;
+  paidAmountCents: number;
+  outstandingAmountCents: number;
+  signalType: DelinquencySignalType;
+  severity: DelinquencySeverity;
+  detectedAt: string;
+  reasons: string[];
+};
+
+export type LeaseDelinquencySummary = {
+  totalSignals: number;
+  overdueCount: number;
+  partiallyPaidCount: number;
+  failedCount: number;
+  missingCount: number;
+  manualReviewCount: number;
+  totalOutstandingCents: number;
+};
+
 export type LeaseLedgerResponse = {
   ok: boolean;
   leaseId: string;
@@ -80,6 +120,8 @@ export type LeaseLedgerResponse = {
   >;
   obligationRows?: LeaseObligationLedgerRow[];
   obligationSummary?: LeaseObligationLedgerSummary;
+  delinquencySignals?: LeaseDelinquencySignal[];
+  delinquencySummary?: LeaseDelinquencySummary;
 };
 
 export async function fetchLeaseLedger(
