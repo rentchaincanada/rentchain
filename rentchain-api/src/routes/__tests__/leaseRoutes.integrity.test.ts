@@ -261,6 +261,89 @@ describe("leaseRoutes integrity repairs", () => {
         signedAmountCents: -180000,
       })
     );
+    expect(res.body?.obligationRows?.[0]).toEqual(
+      expect.objectContaining({
+        leaseId: "lease-1",
+        paymentIntentId: "pi_rent_1",
+        rentPaymentId: "rp-1",
+        expectedAmountCents: 180000,
+        paidAmountCents: 180000,
+        obligationStatus: "paid",
+        paymentIntentStatus: "confirmed",
+        rentPaymentStatus: "paid",
+      })
+    );
+    expect(res.body?.obligationSummary).toEqual(
+      expect.objectContaining({
+        totalRows: 1,
+        expectedAmountCents: 180000,
+        paidAmountCents: 180000,
+        outstandingAmountCents: 0,
+      })
+    );
+  });
+
+  it("adds read-only obligation rows without changing existing ledger rows when payment is missing", async () => {
+    seedDoc("leases", "lease-1", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      tenantId: "tenant-1",
+      unitId: "unit-1",
+      unitNumber: "101",
+      monthlyRent: 1800,
+      startDate: "2026-04-01",
+      endDate: "2027-03-31",
+      status: "active",
+    });
+    seedDoc("ledgerEntries", "entry-1", {
+      landlordId: "landlord-1",
+      leaseId: "lease-1",
+      entryType: "charge",
+      category: "rent",
+      amountCents: 180000,
+      effectiveDate: "2026-04-01",
+      createdAt: 10,
+    });
+
+    const app = await makeApp();
+    const res = await request(app).get("/lease-1/ledger");
+
+    expect(res.status).toBe(200);
+    expect(res.body?.entries).toEqual([
+      expect.objectContaining({
+        id: "entry-1",
+        entryType: "charge",
+        amountCents: 180000,
+        signedAmountCents: 180000,
+        balanceCents: 180000,
+      }),
+    ]);
+    expect(res.body?.totals).toEqual(
+      expect.objectContaining({
+        chargesCents: 180000,
+        paymentsCents: 0,
+        balanceCents: 180000,
+      })
+    );
+    expect(res.body?.obligationRows).toEqual([
+      expect.objectContaining({
+        leaseId: "lease-1",
+        paymentIntentId: null,
+        rentPaymentId: null,
+        expectedAmountCents: 180000,
+        paidAmountCents: 0,
+        obligationStatus: "missing",
+        source: "lease_lifecycle",
+      }),
+    ]);
+    expect(res.body?.obligationSummary).toEqual(
+      expect.objectContaining({
+        totalRows: 1,
+        expectedAmountCents: 180000,
+        paidAmountCents: 0,
+        outstandingAmountCents: 180000,
+      })
+    );
   });
 
   it("exports lease ledger csv with property and unit labels instead of raw ids", async () => {
