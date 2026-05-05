@@ -12,6 +12,14 @@ Do not skip steps.
 
 Mission execution follows the Mission Promotion Pipeline: only the active mission is executed; future roadmap remains private.
 
+## Repository Discovery
+
+All missions inherit the repository discovery and governance-resolution rules from `codex.md` when `codex.md` exists.
+
+Mission prompts should not repeat generic repository bootstrap instructions unless the mission has specialized audit requirements.
+
+If `codex.md` is absent, Codex should follow the nearest available process/governance document and document assumptions.
+
 ---
 
 ## 1. Explore
