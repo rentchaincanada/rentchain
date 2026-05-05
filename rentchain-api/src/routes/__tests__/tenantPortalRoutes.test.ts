@@ -801,6 +801,7 @@ describe("tenantPortalRoutes foundation", () => {
           tenantId: "tenant-1",
           landlordId: "landlord-1",
           rentPaymentId: expect.any(String),
+          paymentIntentId: expect.stringMatching(/^pi_rent_/),
         }),
         payment_intent_data: expect.objectContaining({
           metadata: expect.objectContaining({
@@ -808,6 +809,7 @@ describe("tenantPortalRoutes foundation", () => {
             tenantId: "tenant-1",
             landlordId: "landlord-1",
             rentPaymentId: expect.any(String),
+            paymentIntentId: expect.stringMatching(/^pi_rent_/),
           }),
         }),
       })
@@ -826,6 +828,26 @@ describe("tenantPortalRoutes foundation", () => {
         processor: "stripe",
         processorCheckoutSessionId: "cs_test_1",
         processorPaymentIntentId: "pi_test_1",
+      })
+    );
+    const storedPaymentIntents = Array.from(ensureCollection("paymentIntents").values());
+    expect(storedPaymentIntents).toHaveLength(1);
+    expect(storedPaymentIntents[0]).toEqual(
+      expect.objectContaining({
+        paymentIntentId: expect.stringMatching(/^pi_rent_/),
+        rentPaymentId: res.body.data.rentPaymentId,
+        leaseId: "lease-1",
+        tenantId: "tenant-1",
+        landlordId: "landlord-1",
+        propertyId: "prop-1",
+        amountCents: 180000,
+        currency: "cad",
+        purpose: "rent",
+        source: "rent_payment_checkout",
+        provider: "stripe",
+        providerSessionId: "cs_test_1",
+        providerPaymentId: "pi_test_1",
+        status: "provider_session_created",
       })
     );
     expect(JSON.stringify(storedPayments[0])).not.toContain("card");
@@ -875,6 +897,61 @@ describe("tenantPortalRoutes foundation", () => {
       detail: "payment_already_pending",
     });
     expect(stripeCheckoutCreateMock).not.toHaveBeenCalled();
+  });
+
+  it("reuses the same PaymentIntent for repeated checkout attempts on the same rent obligation", async () => {
+    ensureCollection("leases").set("lease-1", {
+      ...(ensureCollection("leases").get("lease-1") || {}),
+      landlordId: "landlord-1",
+      paymentRailEnabled: true,
+      paymentRailEnabledAt: "2026-04-27T10:00:00.000Z",
+      paymentRailProcessor: "stripe",
+    });
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const first = await invokeRouter(router, {
+      method: "POST",
+      url: "/leases/lease-1/payments/checkout",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+    const firstPaymentId = first.body.data.rentPaymentId;
+    ensureCollection("rentPayments").set(firstPaymentId, {
+      ...ensureCollection("rentPayments").get(firstPaymentId),
+      status: "failed",
+      updatedAt: "2026-04-27T10:05:00.000Z",
+    });
+
+    const second = await invokeRouter(router, {
+      method: "POST",
+      url: "/leases/lease-1/payments/checkout",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect(second.body.data.rentPaymentId).not.toBe(firstPaymentId);
+    expect(ensureCollection("rentPayments").size).toBe(2);
+    expect(ensureCollection("paymentIntents").size).toBe(1);
+    expect(Array.from(ensureCollection("paymentIntents").values())[0]).toEqual(
+      expect.objectContaining({
+        rentPaymentId: second.body.data.rentPaymentId,
+        paymentIntentId: stripeCheckoutCreateMock.mock.calls[1][0].metadata.paymentIntentId,
+      })
+    );
   });
 
   it("returns tenant-safe rent payment status for the current lease", async () => {

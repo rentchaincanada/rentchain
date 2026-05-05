@@ -27,6 +27,7 @@ import {
   normalizeRentPaymentProviderEvent,
 } from "../lib/payments/paymentExecutionService";
 import type { PaymentIntentReference } from "../lib/payments/paymentTypes";
+import { updatePaymentIntentFromProviderSignal } from "../lib/payments/paymentIntents";
 import {
   markProviderEventFailed,
   markProviderEventIgnoredDuplicate,
@@ -266,12 +267,13 @@ function normalizeFailureReason(value: unknown): { code?: string; message?: stri
 
 function buildExpectedRentPaymentIntent(
   rentPaymentId: string,
-  rentPayment: Record<string, unknown> | null | undefined
+  rentPayment: Record<string, unknown> | null | undefined,
+  paymentIntentId?: string | null
 ): PaymentIntentReference | null {
   if (!rentPayment) return null;
   const amount = Number(rentPayment.amountCents);
   return {
-    paymentIntentId: normalizeString(rentPaymentId, 120),
+    paymentIntentId: normalizeOptionalString(paymentIntentId, 240) || normalizeString(rentPaymentId, 120),
     landlordId: normalizeString(rentPayment.landlordId, 120),
     tenantId: normalizeOptionalString(rentPayment.tenantId, 120) || null,
     propertyId: normalizeOptionalString(rentPayment.propertyId, 120) || null,
@@ -282,6 +284,11 @@ function buildExpectedRentPaymentIntent(
     purpose: "rent",
     provider: "stripe",
   };
+}
+
+function getPaymentIntentIdFromProviderMetadata(metadata: unknown): string | null {
+  if (!metadata || typeof metadata !== "object") return null;
+  return normalizeOptionalString((metadata as Record<string, unknown>).paymentIntentId, 240) || null;
 }
 
 async function prepareRentPaymentWebhookNormalizationContext(params: {
@@ -298,6 +305,16 @@ async function prepareRentPaymentWebhookNormalizationContext(params: {
       providerSessionId: rentPaymentEvent.checkoutSessionId,
       purpose: "rent",
     });
+    const paymentIntent = await updatePaymentIntentFromProviderSignal({
+      paymentIntentId: getPaymentIntentIdFromProviderMetadata(normalizedProviderEvent.metadata),
+      rentPaymentId: rentPaymentEvent.rentPaymentId,
+      provider: "stripe",
+      providerSessionId: normalizedProviderEvent.providerSessionId || rentPaymentEvent.checkoutSessionId,
+      providerPaymentId: normalizedProviderEvent.providerPaymentId || rentPaymentEvent.paymentIntentId,
+      normalizedStatus: normalizedProviderEvent.normalizedStatus,
+    });
+    const paymentIntentId =
+      paymentIntent?.paymentIntentId || getPaymentIntentIdFromProviderMetadata(normalizedProviderEvent.metadata);
     const idempotencyKey = buildProviderWebhookIdempotencyKey({
       provider: "stripe",
       providerEventId: normalizedProviderEvent.providerEventId || event.id || "event_missing",
@@ -309,6 +326,7 @@ async function prepareRentPaymentWebhookNormalizationContext(params: {
       purpose: "rent",
       subjectType: "rent_payment",
       subjectId: rentPaymentEvent.rentPaymentId,
+      paymentIntentId,
       normalizedStatus: normalizedProviderEvent.normalizedStatus,
       rawStatus: normalizedProviderEvent.rawStatus,
       metadata: normalizedProviderEvent.metadata || null,
@@ -345,13 +363,14 @@ async function prepareRentPaymentWebhookNormalizationContext(params: {
         rawStatus: normalizedProviderEvent.rawStatus,
         subjectType: "rent_payment",
         subjectId: rentPaymentEvent.rentPaymentId,
+        paymentIntentId: paymentIntentId || null,
       },
     });
 
     const rentPaymentId = normalizeString(rentPaymentEvent.rentPaymentId, 120);
     const snap = rentPaymentId ? await db.collection("rentPayments").doc(rentPaymentId).get() : null;
     const expectedIntent = snap?.exists
-      ? buildExpectedRentPaymentIntent(rentPaymentId, (snap.data() as Record<string, unknown>) || null)
+      ? buildExpectedRentPaymentIntent(rentPaymentId, (snap.data() as Record<string, unknown>) || null, paymentIntentId)
       : null;
     const reconciliation = deriveRentPaymentReconciliation({
       expectedIntent,
@@ -362,6 +381,7 @@ async function prepareRentPaymentWebhookNormalizationContext(params: {
       receiptId: receipt.receiptId,
       subjectType: "rent_payment",
       subjectId: rentPaymentEvent.rentPaymentId,
+      paymentIntentId,
       purpose: "rent",
       providerSignal: normalizedProviderEvent,
       reconciliation,
