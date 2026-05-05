@@ -93,15 +93,37 @@ Important boundaries:
 - Acknowledgements do not auto-correct lifecycle derivation.
 - Acknowledgements do not create payment obligations or trigger renewal enforcement.
 
+## Lease Lifecycle Review History V1
+
+Review history adds an audit timeline for acknowledgement changes without changing lease records. History events are stored separately in `leaseLifecycleReviewHistory` and are keyed to the deterministic review item ID plus a generated history ID.
+
+Tracked actions include:
+
+- `reviewed`: an operator marked a review item reviewed.
+- `snoozed`: an operator deferred a review item until a future timestamp.
+- `assigned`: an operator assigned a review item to an owner or team.
+- `reopened`: an operator returned a review item to open status.
+- `note_updated`: an operator updated acknowledgement context without changing the acknowledgement status.
+
+History events include the review item ID, lease/property/unit references, previous and next acknowledgement status, optional assignee, optional snooze timestamp, optional note, actor ID/email, and event timestamp. The admin review queue returns a small recent-history timeline per item for audit visibility.
+
+Important boundaries:
+
+- History writes never mutate lease records.
+- History writes never rewrite `lease.status`.
+- History is not a lifecycle correction workflow.
+- History is admin/operator audit metadata only.
+
 ## Deferred Future Steps
 
 1. Stored lifecycle transition events.
 2. Scheduled lease lifecycle reconciliation job.
 3. Assignment notifications.
-4. Review history timeline.
-5. Auto-created admin triage queue items.
-6. Landlord-safe warning surfacing.
-7. Lifecycle correction workflow.
-8. Lease renewal workflow enforcement.
-9. Payment obligation generation from active lease lifecycle.
-10. Institution-ready lease export schema.
+4. Auto-created admin triage queue items.
+5. Landlord-safe warning surfacing.
+6. Lifecycle correction workflow.
+7. Assignment notifications from review history events.
+8. Review history retention/export policy.
+9. Lease renewal workflow enforcement.
+10. Payment obligation generation from active lease lifecycle.
+11. Institution-ready lease export schema.

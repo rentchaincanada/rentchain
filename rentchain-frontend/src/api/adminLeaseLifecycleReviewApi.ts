@@ -28,6 +28,7 @@ export type AdminLeaseLifecycleReviewItem = {
   createdFrom: "lease_lifecycle_review_queue_v1";
   detectedAt: string;
   acknowledgement: AdminLeaseLifecycleReviewAcknowledgement | null;
+  recentHistory: AdminLeaseLifecycleReviewHistoryEvent[];
 };
 
 export type AdminLeaseLifecycleReviewAcknowledgementStatus = "open" | "reviewed" | "snoozed" | "assigned";
@@ -46,6 +47,26 @@ export type AdminLeaseLifecycleReviewAcknowledgement = {
   acknowledgedBy: string | null;
   acknowledgedAt: string;
   updatedAt: string;
+};
+
+export type AdminLeaseLifecycleReviewHistoryAction = "reviewed" | "snoozed" | "assigned" | "reopened" | "note_updated";
+
+export type AdminLeaseLifecycleReviewHistoryEvent = {
+  historyId: string;
+  reviewItemId: string;
+  leaseId: string;
+  landlordId: string | null;
+  propertyId: string | null;
+  unitId: string | null;
+  action: AdminLeaseLifecycleReviewHistoryAction;
+  previousStatus?: AdminLeaseLifecycleReviewAcknowledgementStatus | null;
+  nextStatus: AdminLeaseLifecycleReviewAcknowledgementStatus;
+  assignedTo?: string | null;
+  snoozedUntil?: string | null;
+  note?: string | null;
+  actorId: string | null;
+  actorEmail?: string | null;
+  createdAt: string;
 };
 
 export type AdminLeaseLifecycleReviewSummary = {
@@ -80,8 +101,12 @@ export async function updateAdminLeaseLifecycleReviewAcknowledgement(
     snoozedUntil?: string | null;
     note?: string | null;
   }
-): Promise<{ ok: true; acknowledgement: AdminLeaseLifecycleReviewAcknowledgement }> {
-  return await apiFetch<{ ok: true; acknowledgement: AdminLeaseLifecycleReviewAcknowledgement }>(
+): Promise<{ ok: true; acknowledgement: AdminLeaseLifecycleReviewAcknowledgement; historyEvent: AdminLeaseLifecycleReviewHistoryEvent }> {
+  return await apiFetch<{
+    ok: true;
+    acknowledgement: AdminLeaseLifecycleReviewAcknowledgement;
+    historyEvent: AdminLeaseLifecycleReviewHistoryEvent;
+  }>(
     `/admin/lease-lifecycle-review-queue/${encodeURIComponent(reviewItemId)}/acknowledgement`,
     {
       method: "PATCH",

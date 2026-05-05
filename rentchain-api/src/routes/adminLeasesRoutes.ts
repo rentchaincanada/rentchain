@@ -15,6 +15,11 @@ import {
   type LeaseLifecycleReviewAcknowledgementPatch,
   type LeaseLifecycleReviewAcknowledgementStatus,
 } from "../lib/leases/leaseLifecycleReviewAcknowledgements";
+import {
+  buildLeaseLifecycleReviewHistoryEvent,
+  LEASE_LIFECYCLE_REVIEW_HISTORY_COLLECTION,
+  mergeLeaseLifecycleReviewHistory,
+} from "../lib/leases/leaseLifecycleReviewHistory";
 
 const router = Router();
 
@@ -37,6 +42,10 @@ function actorIdFromReq(req: any) {
   return asString(req.user?.uid || req.user?.id || req.user?.sub, 240) || null;
 }
 
+function actorEmailFromReq(req: any) {
+  return asString(req.user?.email, 320) || null;
+}
+
 function parseAcknowledgementPatch(body: any): LeaseLifecycleReviewAcknowledgementPatch | null {
   const status = asString(body?.status, 40) as LeaseLifecycleReviewAcknowledgementStatus;
   if (!["open", "reviewed", "snoozed", "assigned"].includes(status)) return null;
@@ -56,17 +65,22 @@ function parseAcknowledgementPatch(body: any): LeaseLifecycleReviewAcknowledgeme
 }
 
 async function deriveReviewQueueWithAcknowledgements(today: unknown) {
-  const [leases, units, acknowledgements] = await Promise.all([
+  const [leases, units, acknowledgements, history] = await Promise.all([
     loadCollection("leases"),
     loadCollection("units"),
     loadCollection(LEASE_LIFECYCLE_REVIEW_ACKNOWLEDGEMENTS_COLLECTION),
+    loadCollection(LEASE_LIFECYCLE_REVIEW_HISTORY_COLLECTION),
   ]);
   const queue = deriveLeaseLifecycleReviewQueue({
     leases,
     units,
     today: today || new Date(),
   });
-  return mergeLeaseLifecycleReviewAcknowledgements(queue, acknowledgements);
+  const withAcknowledgements = mergeLeaseLifecycleReviewAcknowledgements(queue, acknowledgements);
+  return {
+    ...withAcknowledgements,
+    items: mergeLeaseLifecycleReviewHistory(withAcknowledgements.items, history),
+  };
 }
 
 router.get(
@@ -131,6 +145,15 @@ router.patch(
         existing,
       });
       await ref.set(acknowledgement, { merge: false });
+      const historyEvent = buildLeaseLifecycleReviewHistoryEvent({
+        item,
+        acknowledgement,
+        patch,
+        existing,
+        actorId: actorIdFromReq(req),
+        actorEmail: actorEmailFromReq(req),
+      });
+      await db.collection(LEASE_LIFECYCLE_REVIEW_HISTORY_COLLECTION).doc(historyEvent.historyId).set(historyEvent, { merge: false });
 
       console.info("[leases.lifecycleReviewQueue.acknowledgement]", {
         route: "/api/admin/lease-lifecycle-review-queue/:reviewItemId/acknowledgement",
@@ -141,7 +164,7 @@ router.patch(
         status: acknowledgement.status,
       });
 
-      return res.json({ ok: true, acknowledgement });
+      return res.json({ ok: true, acknowledgement, historyEvent });
     } catch (err: any) {
       console.error("[adminLeasesRoutes] lifecycle review acknowledgement failed", err?.message || err);
       return res.status(500).json({ ok: false, error: "admin_lease_lifecycle_acknowledgement_failed" });
