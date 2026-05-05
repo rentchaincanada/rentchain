@@ -320,11 +320,13 @@ describe("DashboardPage", () => {
     expect(screen.getByText("Decision summary")).toBeInTheDocument();
     expect(screen.getByText("Read-only decisions from detected rent and lease signals.")).toBeInTheDocument();
     expect(screen.getByText("Overdue Rent")).toBeInTheDocument();
-    expect(screen.getByText("Rent past due date")).toBeInTheDocument();
+    expect(screen.getAllByText("Rent past due date").length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("link", { name: "Lease ledger" }).some((link) => link.getAttribute("href") === "/leases/lease-1/ledger")).toBe(true);
+    expect(screen.getAllByRole("link", { name: "Property / unit" }).some((link) => link.getAttribute("href") === "/properties?propertyId=property-1&unitId=unit-1")).toBe(true);
     expect(screen.getByText("Underpaid Rent")).toBeInTheDocument();
-    expect(screen.getByText("Partial payment received")).toBeInTheDocument();
+    expect(screen.getAllByText("Partial payment received").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Manual Review").length).toBeGreaterThan(0);
-    expect(screen.getByText("Payment mismatch detected")).toBeInTheDocument();
+    expect(screen.getAllByText("Payment mismatch detected").length).toBeGreaterThan(0);
   });
 
   it("updates dashboard decision status from human actions", async () => {
@@ -361,7 +363,7 @@ describe("DashboardPage", () => {
         expect.objectContaining({ actionType: "reviewed", leaseId: "lease-1" })
       )
     );
-    expect(screen.getByText("Reviewed")).toBeInTheDocument();
+    expect(screen.getAllByText("Reviewed").length).toBeGreaterThan(0);
   });
 
   it("renders an empty dashboard decision state without adding actions", async () => {

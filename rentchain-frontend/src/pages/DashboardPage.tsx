@@ -51,6 +51,7 @@ import {
   type DecisionItem,
 } from "@/lib/decisions/decisionDisplay";
 import { patchDecisionAction } from "@/api/decisionApi";
+import { DecisionContextPanel } from "@/components/decisions/DecisionContextPanel";
 
 const StarterOnboardingPanel = React.lazy(
   () => import("../components/dashboard/StarterOnboardingPanel")
@@ -190,6 +191,7 @@ function DashboardDecisionSummaryPanel({
                   <span>{copy.label}</span>
                   <span style={{ color: text.muted }}>{decision.reason}</span>
                   </div>
+                  <DecisionContextPanel decision={decision} compact />
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                     {(["reviewed", "snoozed", "assigned", "dismissed", "resolved"] as DecisionActionType[]).map((actionType) => (
                       <button

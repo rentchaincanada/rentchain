@@ -20,6 +20,7 @@ import {
   type DecisionItem,
 } from "@/lib/decisions/decisionDisplay";
 import { patchDecisionAction } from "@/api/decisionApi";
+import { DecisionContextPanel } from "@/components/decisions/DecisionContextPanel";
 
 const emptySummary: AdminLeaseLifecycleReviewSummary = {
   total: 0,
@@ -144,6 +145,9 @@ function QueueItemRow({
               {decisionStatusCopy[decision.status || "detected"]}
             </span>
             <span style={{ color: "#475569", fontSize: 12 }}>{decision.reason}</span>
+            <div style={{ width: "100%" }}>
+              <DecisionContextPanel decision={decision} includeAdminReviewLink compact />
+            </div>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", width: "100%" }}>
               {(["reviewed", "snoozed", "assigned", "dismissed", "resolved"] as DecisionActionType[]).map((actionType) => (
                 <Button

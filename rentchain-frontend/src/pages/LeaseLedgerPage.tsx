@@ -34,6 +34,7 @@ import {
   type DecisionItem,
   type DecisionSeverity,
 } from "@/lib/decisions/decisionDisplay";
+import { DecisionContextPanel } from "@/components/decisions/DecisionContextPanel";
 
 type ChargeType = "rent" | "fee" | "adjustment";
 type PaymentMethod = "cash" | "etransfer" | "cheque" | "bank" | "card" | "other";
@@ -242,10 +243,14 @@ function DecisionActionControls({
 
 function DecisionRow({
   decision,
+  obligationRows,
+  delinquencySignals,
   pending,
   onAction,
 }: {
   decision: DecisionItem;
+  obligationRows: LeaseObligationLedgerRow[];
+  delinquencySignals: LeaseDelinquencySignal[];
   pending: boolean;
   onAction: (decision: DecisionItem, actionType: DecisionActionType) => void;
 }) {
@@ -268,6 +273,7 @@ function DecisionRow({
       {decision.latestAction ? (
         <div style={{ color: "#64748b", fontSize: 12 }}>Last action: {decisionStatusCopy[decision.latestAction.nextStatus]}</div>
       ) : null}
+      <DecisionContextPanel decision={decision} obligationRows={obligationRows} delinquencySignals={delinquencySignals} />
       <DecisionActionControls decision={decision} pending={pending} onAction={onAction} />
     </div>
   );
@@ -740,6 +746,8 @@ export default function LeaseLedgerPage() {
                 <DecisionRow
                   key={decision.decisionId}
                   decision={decision}
+                  obligationRows={obligationRows}
+                  delinquencySignals={delinquencySignals}
                   pending={decisionActionPendingId === decision.decisionId}
                   onAction={handleDecisionAction}
                 />

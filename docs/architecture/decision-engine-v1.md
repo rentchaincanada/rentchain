@@ -89,11 +89,44 @@ Decision Engine V1 does not:
 
 It prepares an auditable layer for later review and workflow surfaces.
 
+## Decision Context Linking V1
+
+Decision Context Linking V1 makes each visible decision an entry point into the records and evidence that explain it.
+
+The context layer is frontend-readable and non-mutating:
+
+- lease context links to `/leases/:leaseId/summary`
+- ledger context links to `/leases/:leaseId/ledger`
+- property and unit context links to `/properties` with query parameters where available
+- tenant context links to `/tenants` with query parameters where available
+- admin lifecycle context links to `/admin/lease-lifecycle-review`
+
+Evidence summaries are derived from existing decision metadata, obligation rows, delinquency signals, and the latest decision action overlay. They can include:
+
+- decision reason
+- severity
+- related delinquency signal and signal reason
+- obligation status
+- outstanding amount
+- lease lifecycle state and lifecycle reason
+- PaymentIntent and rentPayment references
+- current status and last action
+
+Missing context is shown as unavailable instead of rendering empty identifiers. Raw internal IDs remain secondary technical references, not the primary display label.
+
+This layer does not add:
+
+- automated actions
+- notices
+- payment retries
+- lease or payment mutations
+- decision execution workflows
+
 ## Deferred
 
-1. Decision persistence and history.
-2. Admin and landlord decision review surfaces.
-3. Decision acknowledgements and assignments.
-4. Notification and notice workflows.
-5. Auto-resolution after source evidence changes.
-6. Decision-to-action execution policies.
+1. Full decision inbox.
+2. Decision timeline page.
+3. Decision-to-action execution workflows.
+4. Automated notices.
+5. Institution export of decision packets.
+6. Compliance rollup for decision context and evidence.
