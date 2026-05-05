@@ -127,9 +127,14 @@ describe("AdminLeaseLifecycleReviewPage", () => {
     expect(screen.getByText(/Reviewed by ops/i)).toBeInTheDocument();
     expect(screen.getByText(/admin@example.com/i)).toBeInTheDocument();
     expect(screen.getByText(/No history yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/Related decision/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Occupancy/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Lease lifecycle indicates an occupancy conflict that needs review/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "lease-1" })).toHaveAttribute("href", "/admin/leases?q=lease-1");
     expect(screen.queryByRole("button", { name: /fix/i })).not.toBeInTheDocument();
     expect(screen.queryByText(/Fix automatically/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /accept/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /dismiss/i })).not.toBeInTheDocument();
   });
 
   it("updates acknowledgement state from row actions", async () => {

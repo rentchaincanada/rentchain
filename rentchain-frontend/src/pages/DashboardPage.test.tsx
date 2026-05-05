@@ -248,6 +248,41 @@ describe("DashboardPage", () => {
         missingCredibilityCount: 1,
         healthStatus: "watch",
       },
+      decisions: [
+        {
+          decisionId: "decision:review_overdue_rent:lease-1",
+          leaseId: "lease-1",
+          propertyId: "property-1",
+          unitId: "unit-1",
+          decisionType: "review_overdue_rent",
+          severity: "critical",
+          status: "detected",
+          reason: "Rent past due date",
+          metadata: {},
+        },
+        {
+          decisionId: "decision:review_underpaid_rent:lease-2",
+          leaseId: "lease-2",
+          propertyId: "property-2",
+          unitId: "unit-2",
+          decisionType: "review_underpaid_rent",
+          severity: "warning",
+          status: "detected",
+          reason: "Partial payment received",
+          metadata: {},
+        },
+        {
+          decisionId: "decision:review_manual_payment_issue:lease-3",
+          leaseId: "lease-3",
+          propertyId: "property-3",
+          unitId: "unit-3",
+          decisionType: "review_manual_payment_issue",
+          severity: "warning",
+          status: "detected",
+          reason: "Payment mismatch detected",
+          metadata: {},
+        },
+      ],
     });
 
     render(
@@ -263,6 +298,29 @@ describe("DashboardPage", () => {
     expect(screen.getByRole("link", { name: "Tenants" })).toHaveAttribute("href", "/tenants");
     expect(screen.getByRole("link", { name: "Delinquencies" })).toHaveAttribute("href", "/payments?filter=delinquent");
     expect(screen.getAllByRole("link", { name: "2" }).some((link) => link.getAttribute("href") === "/applications?status=review")).toBe(true);
+    expect(screen.getByText("Decision summary")).toBeInTheDocument();
+    expect(screen.getByText("Read-only decisions from detected rent and lease signals.")).toBeInTheDocument();
+    expect(screen.getByText("Overdue Rent")).toBeInTheDocument();
+    expect(screen.getByText("Rent past due date")).toBeInTheDocument();
+    expect(screen.getByText("Underpaid Rent")).toBeInTheDocument();
+    expect(screen.getByText("Partial payment received")).toBeInTheDocument();
+    expect(screen.getAllByText("Manual Review").length).toBeGreaterThan(0);
+    expect(screen.getByText("Payment mismatch detected")).toBeInTheDocument();
+  });
+
+  it("renders an empty dashboard decision state without adding actions", async () => {
+    render(
+      <ToastProvider>
+        <MemoryRouter>
+          <DashboardPage />
+        </MemoryRouter>
+      </ToastProvider>
+    );
+
+    expect(await screen.findByText("Decision summary")).toBeInTheDocument();
+    expect(screen.getByText("No issues detected. Everything is up to date.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /accept/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /dismiss/i })).not.toBeInTheDocument();
   });
 
   it("keeps dashboard recent activity ledger CTA label consistent when lease context is missing", async () => {

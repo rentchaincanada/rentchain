@@ -425,6 +425,29 @@ describe("LeaseLedgerPage", () => {
     expect(screen.getByText("Manual review required — Payment mismatch or incomplete evidence (obligation requires manual review)")).toBeInTheDocument();
   });
 
+  it("renders read-only lease decisions derived from delinquency signals", async () => {
+    render(
+      <MemoryRouter initialEntries={["/leases/lease-1/ledger"]}>
+        <Routes>
+          <Route path="/leases/:leaseId/ledger" element={<LeaseLedgerPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Decisions")).toBeInTheDocument();
+    expect(screen.getByText("Read-only decisions derived from detected lease and payment signals.")).toBeInTheDocument();
+    expect(screen.getByText("Overdue Rent")).toBeInTheDocument();
+    expect(screen.getByText("Rent past due date")).toBeInTheDocument();
+    expect(screen.getByText("Underpaid Rent")).toBeInTheDocument();
+    expect(screen.getByText("Partial payment received")).toBeInTheDocument();
+    expect(screen.getByText("Missing Payment")).toBeInTheDocument();
+    expect(screen.getByText("Expected rent payment is missing")).toBeInTheDocument();
+    expect(screen.getByText("Failed Payment")).toBeInTheDocument();
+    expect(screen.getByText("Payment did not complete")).toBeInTheDocument();
+    expect(screen.getAllByText("Manual Review").length).toBeGreaterThan(0);
+    expect(screen.getByText("Payment mismatch detected")).toBeInTheDocument();
+  });
+
   it("renders an empty obligation state while preserving existing ledger entries", async () => {
     mocks.fetchLeaseLedger.mockResolvedValueOnce({
       ok: true,
@@ -485,6 +508,7 @@ describe("LeaseLedgerPage", () => {
 
     expect(await screen.findByText("Obligation ledger is not available yet for this lease.")).toBeInTheDocument();
     expect(screen.getByText("All rent obligations are up to date.")).toBeInTheDocument();
+    expect(screen.getByText("No issues detected. Everything is up to date.")).toBeInTheDocument();
     expect(screen.getByText("+$1,450.00")).toBeInTheDocument();
     expect(screen.getAllByText("$1,450.00").length).toBeGreaterThan(0);
   });

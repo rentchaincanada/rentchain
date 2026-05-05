@@ -24,6 +24,14 @@ import {
   type LandlordActiveLease,
   type LeaseNote,
 } from "@/api/leasesApi";
+import {
+  decisionDisplayCopy,
+  decisionSeverityStyle,
+  deriveDecisionItemsFromDelinquencySignals,
+  summarizeDecisionItems,
+  type DecisionItem,
+  type DecisionSeverity,
+} from "@/lib/decisions/decisionDisplay";
 
 type ChargeType = "rent" | "fee" | "adjustment";
 type PaymentMethod = "cash" | "etransfer" | "cheque" | "bank" | "card" | "other";
@@ -147,6 +155,46 @@ function DelinquencySignalBadge({ signalType }: { signalType: DelinquencySignalT
     >
       {copy.label}
     </span>
+  );
+}
+
+function DecisionBadge({ severity, label }: { severity: DecisionSeverity; label: string }) {
+  const style = decisionSeverityStyle[severity] || decisionSeverityStyle.info;
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        borderRadius: 999,
+        border: `1px solid ${style.border}`,
+        background: style.bg,
+        color: style.color,
+        padding: "3px 8px",
+        fontSize: 12,
+        fontWeight: 800,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
+function DecisionRow({ decision }: { decision: DecisionItem }) {
+  const copy = decisionDisplayCopy[decision.decisionType];
+  const context = [
+    decision.unitId ? `Unit ${decision.unitId}` : null,
+    decision.tenantId ? `Tenant ${decision.tenantId}` : null,
+  ].filter(Boolean);
+  return (
+    <div style={{ border: "1px solid #e2e8f0", borderRadius: 12, padding: 12, background: "#fff", display: "grid", gap: 6 }}>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        <DecisionBadge severity={decision.severity} label={copy.badge} />
+        <strong>{copy.label}</strong>
+      </div>
+      <div style={{ color: "#475569" }}>{decision.reason}</div>
+      {context.length ? <div style={{ color: "#64748b", fontSize: 12 }}>{context.join(" · ")}</div> : null}
+    </div>
   );
 }
 
@@ -288,6 +336,9 @@ export default function LeaseLedgerPage() {
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentReference, setPaymentReference] = useState("");
   const [paymentNotes, setPaymentNotes] = useState("");
+
+  const decisions = useMemo(() => deriveDecisionItemsFromDelinquencySignals(delinquencySignals), [delinquencySignals]);
+  const decisionSummary = useMemo(() => summarizeDecisionItems(decisions), [decisions]);
 
   const monthlyRows = useMemo(() => {
     return Object.entries(monthlyTotals).sort((a, b) => (a[0] < b[0] ? 1 : -1));
@@ -558,6 +609,42 @@ export default function LeaseLedgerPage() {
           </div>
         </div>
       ) : null}
+
+      <section style={{ display: "grid", gap: 10 }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: "1rem" }}>Decisions</h2>
+          <div style={{ color: "#64748b", fontSize: 13, marginTop: 3 }}>
+            Read-only decisions derived from detected lease and payment signals.
+          </div>
+        </div>
+        {decisions.length === 0 ? (
+          <div style={{ border: "1px solid #bbf7d0", borderRadius: 12, padding: 12, color: "#166534", background: "#f0fdf4" }}>
+            No issues detected. Everything is up to date.
+          </div>
+        ) : (
+          <>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 8 }}>
+              <div style={{ border: "1px solid #fecaca", borderRadius: 10, padding: 10, background: "#fef2f2" }}>
+                <div style={{ fontSize: 12, color: "#991b1b" }}>Critical</div>
+                <strong>{decisionSummary.critical}</strong>
+              </div>
+              <div style={{ border: "1px solid #fed7aa", borderRadius: 10, padding: 10, background: "#fff7ed" }}>
+                <div style={{ fontSize: 12, color: "#9a3412" }}>Warning</div>
+                <strong>{decisionSummary.warning}</strong>
+              </div>
+              <div style={{ border: "1px solid #e2e8f0", borderRadius: 10, padding: 10 }}>
+                <div style={{ fontSize: 12, color: "#64748b" }}>Total</div>
+                <strong>{decisionSummary.total}</strong>
+              </div>
+            </div>
+            <div style={{ display: "grid", gap: 8 }}>
+              {decisions.map((decision) => (
+                <DecisionRow key={decision.decisionId} decision={decision} />
+              ))}
+            </div>
+          </>
+        )}
+      </section>
 
       <section style={{ display: "grid", gap: 10 }}>
         <div>
