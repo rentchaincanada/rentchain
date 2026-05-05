@@ -71,6 +71,14 @@ export const NAV_ITEMS: NavItem[] = [
     requiresLandlordOrAdmin: true,
   },
   {
+    id: "decision-inbox",
+    label: "Decisions",
+    to: "/decision-inbox",
+    icon: Inbox,
+    showInDrawer: true,
+    requiresLandlordOrAdmin: true,
+  },
+  {
     id: "analytics",
     label: "Analytics",
     to: "/analytics",
