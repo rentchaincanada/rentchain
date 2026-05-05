@@ -2,6 +2,7 @@ import React from "react";
 import { Link, useParams } from "react-router-dom";
 import { getLeaseById, type LandlordActiveLease } from "@/api/leasesApi";
 import { LeaseDocumentView } from "@/components/leases/LeaseDocumentView";
+import { downloadLeaseSummaryPdf } from "@/utils/leaseSummaryPdf";
 
 function errorMessage(error: unknown, fallback: string) {
   if (error instanceof Error && error.message) return error.message;
@@ -28,30 +29,6 @@ function prettyLeaseStatus(value: string | null | undefined) {
   if (normalized === "renewal_accepted") return "Renewing";
   if (normalized === "move_out_pending") return "Quitting";
   return normalized.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
-}
-
-function downloadLeaseSummary(lease: LandlordActiveLease) {
-  const text = [
-    `Property: ${lease.propertyName || "Property"}`,
-    `Unit: ${lease.unitNumber || "—"}`,
-    `Tenant: ${lease.tenantName || "—"}`,
-    `Tenant email: ${lease.tenantEmail || "—"}`,
-    `Monthly rent: ${formatCurrency(lease.monthlyRent)}`,
-    `Start date: ${lease.startDate || "—"}`,
-    `End date: ${lease.endDate || "—"}`,
-    `Status: ${prettyLeaseStatus(lease.status)}`,
-    `Lease document: ${lease.documentUrl ? "Available" : "Not available"}`,
-  ].join("\n");
-
-  const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
-  const url = window.URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = `lease-${lease.unitNumber || lease.id}.txt`;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  window.URL.revokeObjectURL(url);
 }
 
 export default function LandlordLeaseSummaryPage() {
@@ -109,11 +86,11 @@ export default function LandlordLeaseSummaryPage() {
         >
           Open ledger
         </Link>
-        <button
-          type="button"
-          onClick={() => {
-            if (lease) downloadLeaseSummary(lease);
-          }}
+          <button
+            type="button"
+            onClick={() => {
+              if (lease) downloadLeaseSummaryPdf(lease);
+            }}
           disabled={!lease}
           style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a" }}
         >

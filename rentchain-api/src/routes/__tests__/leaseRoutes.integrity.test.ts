@@ -243,6 +243,51 @@ describe("leaseRoutes integrity repairs", () => {
     expect(res.text).not.toContain("unit-1");
   });
 
+  it("exports lease ledger pdf for landlord-visible ledger rows", async () => {
+    seedDoc("properties", "prop-1", {
+      landlordId: "landlord-1",
+      propertyAddress: "123 Main St",
+      name: "Harbour View",
+    });
+    seedDoc("leases", "lease-1", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      tenantId: "tenant-1",
+      unitId: "unit-1",
+      unitNumber: "101",
+      status: "active",
+    });
+    seedDoc("ledgerEntries", "entry-1", {
+      landlordId: "landlord-1",
+      leaseId: "lease-1",
+      entryType: "charge",
+      category: "rent",
+      amountCents: 145000,
+      effectiveDate: "2026-04-01",
+      createdAt: 10,
+    });
+    seedDoc("ledgerEntries", "entry-2", {
+      landlordId: "landlord-1",
+      leaseId: "lease-1",
+      entryType: "payment",
+      category: "rent",
+      amountCents: 10000,
+      effectiveDate: "2026-04-05",
+      method: "etransfer",
+      notes: "April partial payment",
+      createdAt: 11,
+    });
+
+    const app = await makeApp();
+    const res = await request(app).get("/lease-1/ledger/export.pdf");
+
+    expect(res.status).toBe(200);
+    expect(res.headers["content-type"]).toContain("application/pdf");
+    expect(res.headers["content-disposition"]).toContain("lease-ledger-lease-1.pdf");
+    expect(Buffer.isBuffer(res.body)).toBe(true);
+    expect(res.body.length).toBeGreaterThan(500);
+  });
+
   it("converts an occupied unit reference into a canonical lease and tenant", async () => {
     seedDoc("properties", "prop-1", { landlordId: "landlord-1", name: "Harbour View" });
     seedDoc("units", "unit-1", {

@@ -92,7 +92,15 @@ describe("LandlordLeaseSummaryPage", () => {
     expect(screen.getByRole("link", { name: "Back to leases" })).toHaveAttribute("href", "/leases");
   });
 
-  it("keeps save lease summary available for missing-document leases", async () => {
+  it("saves missing-document lease summaries as PDFs instead of raw text", async () => {
+    const realCreateElement = document.createElement.bind(document);
+    const createdAnchors: HTMLAnchorElement[] = [];
+    vi.spyOn(document, "createElement").mockImplementation((tagName: string, options?: ElementCreationOptions) => {
+      const element = realCreateElement(tagName, options);
+      if (tagName.toLowerCase() === "a") createdAnchors.push(element as HTMLAnchorElement);
+      return element;
+    });
+
     render(
       <MemoryRouter initialEntries={["/leases/lease-1/summary"]}>
         <Routes>
@@ -108,5 +116,10 @@ describe("LandlordLeaseSummaryPage", () => {
       expect(HTMLAnchorElement.prototype.click).toHaveBeenCalledTimes(1);
       expect(global.URL.revokeObjectURL).toHaveBeenCalledTimes(1);
     });
+    const blob = vi.mocked(global.URL.createObjectURL).mock.calls[0][0] as Blob;
+    expect(blob.type).toBe("application/pdf");
+    const downloadAnchor = createdAnchors[createdAnchors.length - 1];
+    expect(downloadAnchor?.download).toBe("lease-3.pdf");
+    expect(downloadAnchor?.download).not.toMatch(/\.txt$/);
   });
 });
