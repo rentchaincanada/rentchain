@@ -66,6 +66,10 @@ vi.mock("./pages/admin/AdminTriageQueuePage", () => ({
   default: () => <h1>Admin Triage Queue</h1>,
 }));
 
+vi.mock("./pages/admin/AdminLeaseLifecycleReviewPage", () => ({
+  default: () => <h1>Lease Lifecycle Review</h1>,
+}));
+
 vi.mock("./pages/admin/AdminAlertingPage", () => ({
   default: () => <h1>Admin Alerts</h1>,
 }));
@@ -281,6 +285,20 @@ describe("Routes: /admin/triage", () => {
     );
 
     expect(await screen.findByText(/Admin Triage Queue/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("Routes: /admin/lease-lifecycle-review", () => {
+  it("renders the admin lease lifecycle review route", async () => {
+    const { default: App } = await import("./App");
+    render(
+      <MemoryRouter initialEntries={["/admin/lease-lifecycle-review"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Lease Lifecycle Review/i)).toBeInTheDocument();
     expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
   });
 });

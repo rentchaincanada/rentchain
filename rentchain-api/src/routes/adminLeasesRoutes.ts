@@ -1,11 +1,60 @@
 import { Router } from "express";
+import { db } from "../config/firebase";
 import { requireAuth } from "../middleware/requireAuth";
 import { requirePermission } from "../middleware/requireAuthz";
 import { listAdminLeases } from "../services/admin/adminLeaseView";
 import { buildAdminLeasesCsv } from "../services/admin/adminCsvExport";
 import { recordAdminAuditEvent } from "../services/admin/adminAuditEvents";
+import { deriveLeaseLifecycleReviewQueue } from "../lib/leases/leaseLifecycleReviewQueue";
 
 const router = Router();
+
+function parseReviewQueueLimit(value: unknown) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return 100;
+  return Math.max(1, Math.min(250, Math.floor(parsed)));
+}
+
+async function loadCollection(name: string) {
+  const snap = await db.collection(name).get();
+  return (snap.docs || []).map((doc: any) => ({ id: doc.id, ...(doc.data() || {}) }));
+}
+
+router.get(
+  "/lease-lifecycle-review-queue",
+  requireAuth,
+  requirePermission("system.admin"),
+  async (req: any, res) => {
+    try {
+      const limit = parseReviewQueueLimit(req.query?.limit);
+      const [leases, units] = await Promise.all([loadCollection("leases"), loadCollection("units")]);
+      const queue = deriveLeaseLifecycleReviewQueue({
+        leases,
+        units,
+        today: req.query?.today || new Date(),
+      });
+      const items = queue.items.slice(0, limit);
+
+      console.info("[leases.lifecycleReviewQueue]", {
+        route: "/api/admin/lease-lifecycle-review-queue",
+        userId: String(req.user?.id || req.user?.sub || "").trim() || null,
+        role: String(req.user?.role || "").toLowerCase(),
+        adminAccessResolved: true,
+        resultCount: items.length,
+        total: queue.summary.total,
+      });
+
+      return res.json({
+        ok: true,
+        items,
+        summary: queue.summary,
+      });
+    } catch (err: any) {
+      console.error("[adminLeasesRoutes] lifecycle review queue failed", err?.message || err);
+      return res.status(500).json({ ok: false, error: "admin_lease_lifecycle_review_queue_failed" });
+    }
+  }
+);
 
 router.get(
   "/leases/export.csv",

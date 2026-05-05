@@ -107,6 +107,7 @@ const AutomationTimelineV1Page = lazy(() => import("./pages/admin/AutomationTime
 const SupportDebugConsolePage = lazy(() => import("./pages/admin/SupportDebugConsolePage"));
 const SecurityReliabilityConsolePage = lazy(() => import("./pages/admin/SecurityReliabilityConsolePage"));
 const AdminTriageQueuePage = lazy(() => import("./pages/admin/AdminTriageQueuePage"));
+const AdminLeaseLifecycleReviewPage = lazy(() => import("./pages/admin/AdminLeaseLifecycleReviewPage"));
 const AdminAlertingPage = lazy(() => import("./pages/admin/AdminAlertingPage"));
 const AdminObservabilityPage = lazy(() => import("./pages/admin/AdminObservabilityPage"));
 const AdminNotificationsPage = lazy(() => import("./pages/admin/AdminNotificationsPage"));
@@ -1020,6 +1021,16 @@ function App() {
             <RequireAdmin>
               <Suspense fallback={null}>
                 <AdminTriageQueuePage />
+              </Suspense>
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="/admin/lease-lifecycle-review"
+          element={
+            <RequireAdmin>
+              <Suspense fallback={null}>
+                <AdminLeaseLifecycleReviewPage />
               </Suspense>
             </RequireAdmin>
           }
