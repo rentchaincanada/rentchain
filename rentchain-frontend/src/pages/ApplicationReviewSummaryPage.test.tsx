@@ -160,7 +160,7 @@ describe("ApplicationReviewSummaryPage", () => {
     renderPage();
 
     expect(await screen.findByText("Application Review Summary")).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Overview" })).toHaveAttribute("aria-selected", "true");
+    expect(await screen.findByRole("tab", { name: "Overview" })).toHaveAttribute("aria-selected", "true");
     expect(await screen.findByText("Intake Summary")).toBeInTheDocument();
     expect(await screen.findByText("Shared package categories")).toBeInTheDocument();
     expect(await screen.findByText("Recent activity")).toBeInTheDocument();
