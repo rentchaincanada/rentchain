@@ -170,7 +170,7 @@ describe("leaseRoutes GET /active", () => {
       monthlyRent: 1850,
       dueDay: 1,
       startDate: "2026-01-01",
-      endDate: "2026-12-31",
+      endDate: "2099-12-31",
       status: "active",
       tenantSignature: {
         signedAt: "2026-01-05T12:00:00.000Z",
@@ -254,6 +254,11 @@ describe("leaseRoutes GET /active", () => {
           lifecycleLabel: "Active",
           requiredNextAction: "none",
         }),
+        derivedLifecycleState: "active",
+        derivedLifecycleReasons: ["signed_current_term"],
+        derivedLifecycleRequiresReview: false,
+        derivedLifecycleIsCurrent: true,
+        derivedLifecycleIsOccupancyActive: true,
       })
     );
     expect(res.body?.leases?.[0]?.tenantSignature?.drawnDataUrl).toBeUndefined();

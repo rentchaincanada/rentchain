@@ -12,21 +12,10 @@ import type {
   LandlordPropertyAnalytics,
   LandlordAnalyticsSnapshot,
 } from "./analyticsTypes";
+import { deriveLeaseLifecycleState } from "../leases/leaseLifecycle";
 
 function asString(value: unknown, max = 240) {
   return String(value || "").trim().slice(0, max);
-}
-
-function toMillis(value: unknown): number | null {
-  if (value == null || value === "") return null;
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string") {
-    const parsed = Date.parse(value);
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-  if (typeof (value as any)?.toMillis === "function") return (value as any).toMillis();
-  if (typeof (value as any)?.seconds === "number") return (value as any).seconds * 1000;
-  return null;
 }
 
 function isOccupiedUnit(unit: any) {
@@ -34,17 +23,6 @@ function isOccupiedUnit(unit: any) {
   if (status === "occupied" || status === "leased") return true;
   if (status === "vacant" || status === "available") return false;
   return Boolean(asString(unit?.tenantName, 120) || asString(unit?.tenantId, 120));
-}
-
-function isActiveLease(lease: any, now: number) {
-  const status = asString(lease?.status, 80).toLowerCase();
-  if (status === "active" || status === "current") return true;
-  const startAt = toMillis(lease?.leaseStartDate) || toMillis(lease?.startDate) || toMillis(lease?.leaseStart);
-  const endAt =
-    toMillis(lease?.leaseEndDate) || toMillis(lease?.endDate) || toMillis(lease?.leaseEnd) || toMillis(lease?.moveOutDate);
-  if (startAt != null && startAt > now) return false;
-  if (endAt != null && endAt < now) return false;
-  return startAt != null || endAt != null;
 }
 
 function numberOrNull(...values: unknown[]) {
@@ -71,7 +49,7 @@ function deriveEstimatedRent(leases: any[], now: number) {
   let occupiedUnitsWithRent = 0;
 
   for (const lease of leases || []) {
-    if (!isActiveLease(lease, now)) continue;
+    if (!deriveLeaseLifecycleState(lease, now).isOccupancyActive) continue;
     const rentCents = monthlyRentCentsFromLease(lease);
     if (rentCents == null || rentCents <= 0) continue;
     estimatedScheduledRentCents += rentCents;

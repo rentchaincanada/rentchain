@@ -10,6 +10,21 @@ import {
 const today = "2026-05-04";
 
 describe("leaseLifecycle", () => {
+  it("prefers backend derived lifecycle state when present", () => {
+    const lease = {
+      id: "lease-derived",
+      unitId: "unit-1",
+      status: "active",
+      startDate: "2026-01-01",
+      endDate: "2026-12-31",
+      derivedLifecycleState: "expired",
+      derivedLifecycleReasons: ["end_date_past"],
+    };
+
+    expect(deriveLeaseLifecycleStatus(lease, today)).toBe("expired");
+    expect(isLeaseCurrentlyActive(lease, today)).toBe(false);
+  });
+
   it("treats expired leases as expired instead of active", () => {
     const lease = {
       id: "lease-expired",
@@ -91,6 +106,30 @@ describe("leaseLifecycle", () => {
     ).toMatchObject({ status: "vacant", label: "Vacant" });
   });
 
+  it("respects valid manual unit occupancy when only expired leases exist", () => {
+    expect(
+      deriveUnitOccupancyFromLeases(
+        {
+          id: "unit-manual",
+          unitNumber: "105",
+          status: "occupied",
+          occupantName: "Leen Bakri-Kasbah and Patricia Emeline Krisinta",
+          leaseEndDate: "2027-04-30",
+        },
+        [
+          {
+            id: "lease-expired",
+            unitId: "unit-manual",
+            status: "active",
+            startDate: "2025-01-01",
+            endDate: "2026-04-30",
+          },
+        ],
+        today
+      )
+    ).toMatchObject({ status: "occupied", label: "Occupied", lease: null });
+  });
+
   it("returns only currently active leases ending inside the threshold", () => {
     const leases = [
       {
@@ -125,5 +164,23 @@ describe("leaseLifecycle", () => {
     ];
 
     expect(getExpiringSoonLeases(leases, today, 60).map((lease) => lease.id)).toEqual(["lease-29", "lease-60"]);
+  });
+
+  it("maps backend unknown lifecycle to review-required occupancy", () => {
+    expect(
+      deriveUnitOccupancyFromLeases(
+        { id: "unit-review", unitNumber: "105" },
+        [
+          {
+            id: "lease-review",
+            unitId: "unit-review",
+            status: "active",
+            derivedLifecycleState: "unknown",
+            derivedLifecycleRequiresReview: true,
+          },
+        ],
+        today
+      )
+    ).toMatchObject({ status: "review_required", label: "Review required" });
   });
 });

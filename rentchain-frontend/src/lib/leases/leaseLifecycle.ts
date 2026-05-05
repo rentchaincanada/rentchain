@@ -7,13 +7,14 @@ export type LeaseLifecycleStatus =
   | "expired"
   | "renewed"
   | "terminated"
-  | "cancelled";
+  | "cancelled"
+  | "unknown";
 
-export type UnitOccupancyStatus = "vacant" | "occupied" | "notice_period" | "upcoming";
+export type UnitOccupancyStatus = "vacant" | "occupied" | "notice_period" | "upcoming" | "review_required";
 
 export type UnitOccupancy = {
   status: UnitOccupancyStatus;
-  label: "Vacant" | "Occupied" | "Notice period" | "Upcoming";
+  label: "Vacant" | "Occupied" | "Notice period" | "Upcoming" | "Review required";
   lease: LeaseLike | null;
 };
 
@@ -43,6 +44,9 @@ export type LeaseLike = {
     lifecycleStatus?: string | null;
     renewalOutcome?: string | null;
   } | null;
+  derivedLifecycleState?: string | null;
+  derivedLifecycleReasons?: string[] | null;
+  derivedLifecycleRequiresReview?: boolean | null;
 };
 
 type UnitLike = {
@@ -51,6 +55,13 @@ type UnitLike = {
   unitNumber?: string | null;
   label?: string | null;
   name?: string | null;
+  status?: string | null;
+  occupancyStatus?: string | null;
+  occupantName?: string | null;
+  tenantName?: string | null;
+  occupants?: string[] | null;
+  leaseEndDate?: string | number | Date | null;
+  leaseEnd?: string | number | Date | null;
 };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -67,6 +78,19 @@ const PENDING_SIGNATURE_STATUSES = new Set([
   "tenant_signed",
   "ready_for_landlord_signature",
   "landlord_signed",
+]);
+
+const CANONICAL_LIFECYCLE_STATUSES = new Set<LeaseLifecycleStatus>([
+  "draft",
+  "pending_signature",
+  "signed_future",
+  "active",
+  "notice_period",
+  "expired",
+  "renewed",
+  "terminated",
+  "cancelled",
+  "unknown",
 ]);
 
 function normalize(value: unknown): string {
@@ -129,11 +153,20 @@ function hasRenewalReplacement(lease: LeaseLike): boolean {
   );
 }
 
+function backendDerivedLifecycleStatus(lease: LeaseLike): LeaseLifecycleStatus | null {
+  const derived = normalize(lease.derivedLifecycleState);
+  return CANONICAL_LIFECYCLE_STATUSES.has(derived as LeaseLifecycleStatus)
+    ? (derived as LeaseLifecycleStatus)
+    : null;
+}
+
 export function deriveLeaseLifecycleStatus(
   lease: LeaseLike | null | undefined,
   today: string | number | Date = new Date()
 ): LeaseLifecycleStatus {
   if (!lease) return "draft";
+  const derived = backendDerivedLifecycleStatus(lease);
+  if (derived) return derived;
 
   const status = normalize(lease.status);
   const lifecycleStatus = normalize(lease.leaseLifecycleSummary?.lifecycleStatus);
@@ -193,6 +226,24 @@ function leaseIdentifiers(lease: LeaseLike): string[] {
   );
 }
 
+function hasManualOccupant(unit: UnitLike): boolean {
+  return Boolean(
+    String(unit.occupantName || unit.tenantName || "").trim() ||
+      (Array.isArray(unit.occupants) && unit.occupants.some((value) => String(value || "").trim()))
+  );
+}
+
+function hasCurrentManualLeaseEnd(unit: UnitLike, today: string | number | Date): boolean {
+  const endDay = toDay(unit.leaseEndDate ?? unit.leaseEnd);
+  if (endDay == null) return false;
+  return endDay >= todayDay(today);
+}
+
+function hasManualCurrentOccupancy(unit: UnitLike, today: string | number | Date): boolean {
+  const status = normalize(unit.occupancyStatus || unit.status);
+  return status === "occupied" && hasManualOccupant(unit) && hasCurrentManualLeaseEnd(unit, today);
+}
+
 export function leasesForUnit(unit: UnitLike, leases: LeaseLike[]): LeaseLike[] {
   const ids = new Set(unitIdentifiers(unit));
   if (!ids.size) return [];
@@ -212,6 +263,9 @@ export function deriveUnitOccupancyFromLeases(
     status: deriveLeaseLifecycleStatus(lease, today),
   }));
 
+  const review = withLifecycle.find((item) => item.status === "unknown" || item.lease.derivedLifecycleRequiresReview === true);
+  if (review) return { status: "review_required", label: "Review required", lease: review.lease };
+
   const notice = withLifecycle.find((item) => item.status === "notice_period");
   if (notice) return { status: "notice_period", label: "Notice period", lease: notice.lease };
 
@@ -220,6 +274,10 @@ export function deriveUnitOccupancyFromLeases(
 
   const upcoming = withLifecycle.find((item) => item.status === "signed_future");
   if (upcoming) return { status: "upcoming", label: "Upcoming", lease: upcoming.lease };
+
+  if (hasManualCurrentOccupancy(unit, today)) {
+    return { status: "occupied", label: "Occupied", lease: null };
+  }
 
   return { status: "vacant", label: "Vacant", lease: null };
 }
