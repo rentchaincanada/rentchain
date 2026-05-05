@@ -5,8 +5,11 @@ import {
   addLeasePayment,
   fetchLeaseLedger,
   leaseLedgerExportUrl,
+  type DelinquencySignalType,
   type LeaseObligationLedgerRow,
   type LeaseObligationLedgerSummary,
+  type LeaseDelinquencySignal,
+  type LeaseDelinquencySummary,
   type LeaseLedgerEntry,
   type PaymentObligationStatus,
 } from "../api/leaseLedgerApi";
@@ -82,6 +85,27 @@ const obligationStatusCopy: Record<PaymentObligationStatus, { label: string; bg:
   unknown: { label: "Unknown", bg: "#f1f5f9", color: "#334155", border: "#cbd5e1" },
 };
 
+const delinquencySignalCopy: Record<DelinquencySignalType, { label: string; reason: string; bg: string; color: string; border: string }> = {
+  rent_due: { label: "Rent due", reason: "Rent is due by the due date", bg: "#eff6ff", color: "#1d4ed8", border: "#bfdbfe" },
+  overdue: { label: "Overdue", reason: "Rent past due date", bg: "#fee2e2", color: "#991b1b", border: "#fecaca" },
+  partially_paid: { label: "Underpaid", reason: "Partial payment received", bg: "#ffedd5", color: "#9a3412", border: "#fed7aa" },
+  failed_payment: { label: "Failed", reason: "Payment did not complete", bg: "#fee2e2", color: "#991b1b", border: "#fecaca" },
+  missing_payment: { label: "Missing", reason: "No rent payment found after due date", bg: "#fef3c7", color: "#92400e", border: "#fde68a" },
+  manual_review_required: { label: "Manual review required", reason: "Payment mismatch or incomplete evidence", bg: "#fae8ff", color: "#86198f", border: "#f5d0fe" },
+};
+
+const obligationFallbackReason: Record<PaymentObligationStatus, string> = {
+  expected: "Expected rent obligation",
+  pending: "Payment pending",
+  paid: "Obligation satisfied",
+  underpaid: "Partial payment received",
+  overpaid: "Payment exceeds expected amount",
+  failed: "Payment did not complete",
+  missing: "Expected payment is missing",
+  manual_review_required: "Payment mismatch or incomplete evidence",
+  unknown: "Obligation state needs review",
+};
+
 function ObligationStatusBadge({ status }: { status: PaymentObligationStatus }) {
   const copy = obligationStatusCopy[status] || obligationStatusCopy.unknown;
   return (
@@ -101,6 +125,89 @@ function ObligationStatusBadge({ status }: { status: PaymentObligationStatus }) 
     >
       {copy.label}
     </span>
+  );
+}
+
+function DelinquencySignalBadge({ signalType }: { signalType: DelinquencySignalType }) {
+  const copy = delinquencySignalCopy[signalType];
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        borderRadius: 999,
+        border: `1px solid ${copy.border}`,
+        background: copy.bg,
+        color: copy.color,
+        padding: "3px 8px",
+        fontSize: 12,
+        fontWeight: 800,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {copy.label}
+    </span>
+  );
+}
+
+function reasonTextFromSignal(signal: LeaseDelinquencySignal): string {
+  const copy = delinquencySignalCopy[signal.signalType];
+  const reason = (signal.reasons || [])[0]?.replace(/_/g, " ");
+  return `${copy.label} — ${copy.reason}${reason ? ` (${reason})` : ""}`;
+}
+
+function comparableDate(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toISOString().slice(0, 10);
+}
+
+function signalMatchesRow(signal: LeaseDelinquencySignal, row: LeaseObligationLedgerRow): boolean {
+  if (signal.paymentIntentId && row.paymentIntentId && signal.paymentIntentId === row.paymentIntentId) return true;
+  if (signal.rentPaymentId && row.rentPaymentId && signal.rentPaymentId === row.rentPaymentId) return true;
+  if (signal.paymentIntentId || signal.rentPaymentId) return false;
+  const sameLease = signal.leaseId === row.leaseId;
+  const sameExpected = Number(signal.expectedAmountCents || 0) === Number(row.expectedAmountCents || 0);
+  const hasDateAnchor = Boolean(signal.periodStart || signal.periodEnd || signal.dueDate);
+  const samePeriod =
+    (!signal.periodStart || comparableDate(signal.periodStart) === comparableDate(row.periodStart)) &&
+    (!signal.periodEnd || comparableDate(signal.periodEnd) === comparableDate(row.periodEnd)) &&
+    (!signal.dueDate || comparableDate(signal.dueDate) === comparableDate(row.dueDate));
+  return sameLease && sameExpected && hasDateAnchor && samePeriod;
+}
+
+function DelinquencyIndicators({
+  row,
+  signals,
+}: {
+  row: LeaseObligationLedgerRow;
+  signals: LeaseDelinquencySignal[];
+}) {
+  const matchingSignals = signals.filter((signal) => signalMatchesRow(signal, row));
+  if (matchingSignals.length === 0) {
+    const status = row.obligationStatus || "unknown";
+    const copy = obligationStatusCopy[status] || obligationStatusCopy.unknown;
+    return (
+      <div style={{ display: "grid", gap: 4 }}>
+        <span style={{ color: copy.color, fontWeight: 800 }}>{copy.label}</span>
+        <span style={{ color: "#64748b", fontSize: 12 }}>{obligationFallbackReason[status] || obligationFallbackReason.unknown}</span>
+      </div>
+    );
+  }
+  return (
+    <div style={{ display: "grid", gap: 6 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+        {matchingSignals.map((signal) => (
+          <DelinquencySignalBadge key={signal.signalId} signalType={signal.signalType} />
+        ))}
+      </div>
+      {matchingSignals.map((signal) => (
+        <span key={`${signal.signalId}-reason`} style={{ color: "#475569", fontSize: 12 }}>
+          {reasonTextFromSignal(signal)}
+        </span>
+      ))}
+    </div>
   );
 }
 
@@ -161,6 +268,8 @@ export default function LeaseLedgerPage() {
   const [monthlyTotals, setMonthlyTotals] = useState<Record<string, { chargesCents: number; paymentsCents: number; netCents: number }>>({});
   const [obligationRows, setObligationRows] = useState<LeaseObligationLedgerRow[]>([]);
   const [obligationSummary, setObligationSummary] = useState<LeaseObligationLedgerSummary | null>(null);
+  const [delinquencySignals, setDelinquencySignals] = useState<LeaseDelinquencySignal[]>([]);
+  const [delinquencySummary, setDelinquencySummary] = useState<LeaseDelinquencySummary | null>(null);
   const [showChargeModal, setShowChargeModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showNoteModal, setShowNoteModal] = useState(false);
@@ -195,6 +304,8 @@ export default function LeaseLedgerPage() {
       setMonthlyTotals(res.monthlyTotals || {});
       setObligationRows(Array.isArray(res.obligationRows) ? res.obligationRows : []);
       setObligationSummary(res.obligationSummary || null);
+      setDelinquencySignals(Array.isArray(res.delinquencySignals) ? res.delinquencySignals : []);
+      setDelinquencySummary(res.delinquencySummary || null);
     } catch (err: unknown) {
       setError(errorMessage(err, "Failed to load lease ledger"));
     } finally {
@@ -450,6 +561,38 @@ export default function LeaseLedgerPage() {
 
       <section style={{ display: "grid", gap: 10 }}>
         <div>
+          <h2 style={{ margin: 0, fontSize: "1rem" }}>Delinquency overview</h2>
+          <div style={{ color: "#64748b", fontSize: 13, marginTop: 3 }}>
+            Read-only detection based on obligation ledger signals.
+          </div>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 8 }}>
+          <div style={{ border: "1px solid #fecaca", borderRadius: 10, padding: 10, background: "#fef2f2" }}>
+            <div style={{ fontSize: 12, color: "#991b1b" }}>Overdue</div>
+            <strong>{delinquencySummary?.overdueCount || 0}</strong>
+          </div>
+          <div style={{ border: "1px solid #fde68a", borderRadius: 10, padding: 10, background: "#fffbeb" }}>
+            <div style={{ fontSize: 12, color: "#92400e" }}>Outstanding</div>
+            <strong>{formatCurrencyCents(delinquencySummary?.totalOutstandingCents || 0)}</strong>
+          </div>
+          <div style={{ border: "1px solid #fed7aa", borderRadius: 10, padding: 10, background: "#fff7ed" }}>
+            <div style={{ fontSize: 12, color: "#9a3412" }}>Underpaid</div>
+            <strong>{delinquencySummary?.partiallyPaidCount || 0}</strong>
+          </div>
+          <div style={{ border: "1px solid #f5d0fe", borderRadius: 10, padding: 10, background: "#fdf4ff" }}>
+            <div style={{ fontSize: 12, color: "#86198f" }}>Manual Review</div>
+            <strong>{delinquencySummary?.manualReviewCount || 0}</strong>
+          </div>
+        </div>
+        {delinquencySignals.length === 0 ? (
+          <div style={{ border: "1px solid #bbf7d0", borderRadius: 12, padding: 12, color: "#166534", background: "#f0fdf4" }}>
+            All rent obligations are up to date.
+          </div>
+        ) : null}
+      </section>
+
+      <section style={{ display: "grid", gap: 10 }}>
+        <div>
           <h2 style={{ margin: 0, fontSize: "1rem" }}>Payment obligations</h2>
           <div style={{ color: "#64748b", fontSize: 13, marginTop: 3 }}>
             Read-only view of expected rent, execution records, and reconciliation evidence.
@@ -479,10 +622,10 @@ export default function LeaseLedgerPage() {
           </div>
         ) : (
           <div style={{ overflowX: "auto", border: "1px solid #e2e8f0", borderRadius: 12 }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 920 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1080 }}>
               <thead>
                 <tr style={{ background: "#f8fafc" }}>
-                  {["Period", "Due date", "Expected", "Paid", "Outstanding", "Status", "Evidence"].map((h) => (
+                  {["Period", "Due date", "Expected", "Paid", "Outstanding", "Status", "Delinquency", "Evidence"].map((h) => (
                     <th key={h} style={{ textAlign: "left", padding: 10, borderBottom: "1px solid #e2e8f0" }}>{h}</th>
                   ))}
                 </tr>
@@ -497,6 +640,9 @@ export default function LeaseLedgerPage() {
                     <td style={{ padding: 10, borderBottom: "1px solid #f1f5f9" }}>{formatCurrencyCents(obligationOutstandingCents(row))}</td>
                     <td style={{ padding: 10, borderBottom: "1px solid #f1f5f9" }}>
                       <ObligationStatusBadge status={row.obligationStatus || "unknown"} />
+                    </td>
+                    <td style={{ padding: 10, borderBottom: "1px solid #f1f5f9", minWidth: 220 }}>
+                      <DelinquencyIndicators row={row} signals={delinquencySignals} />
                     </td>
                     <td style={{ padding: 10, borderBottom: "1px solid #f1f5f9", color: "#475569" }}>{prettyEvidenceStatus(row)}</td>
                   </tr>

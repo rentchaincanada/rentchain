@@ -109,6 +109,7 @@ describe("LeaseLedgerPage", () => {
         {
           rowId: "obligation-underpaid",
           leaseId: "lease-1",
+          paymentIntentId: "pi-underpaid",
           propertyId: "prop-1",
           expectedAmountCents: 145000,
           paidAmountCents: 10000,
@@ -133,6 +134,7 @@ describe("LeaseLedgerPage", () => {
         {
           rowId: "obligation-missing",
           leaseId: "lease-1",
+          paymentIntentId: "pi-missing",
           propertyId: "prop-1",
           expectedAmountCents: 145000,
           paidAmountCents: 0,
@@ -145,6 +147,7 @@ describe("LeaseLedgerPage", () => {
         {
           rowId: "obligation-pending",
           leaseId: "lease-1",
+          paymentIntentId: "pi-pending",
           propertyId: "prop-1",
           expectedAmountCents: 145000,
           paidAmountCents: 0,
@@ -158,6 +161,7 @@ describe("LeaseLedgerPage", () => {
         {
           rowId: "obligation-failed",
           leaseId: "lease-1",
+          paymentIntentId: "pi-failed",
           propertyId: "prop-1",
           expectedAmountCents: 145000,
           paidAmountCents: 0,
@@ -170,6 +174,7 @@ describe("LeaseLedgerPage", () => {
         {
           rowId: "obligation-manual-review",
           leaseId: "lease-1",
+          paymentIntentId: "pi-manual-review",
           propertyId: "prop-1",
           expectedAmountCents: 145000,
           paidAmountCents: 145000,
@@ -210,6 +215,84 @@ describe("LeaseLedgerPage", () => {
           manual_review_required: 1,
           unknown: 1,
         },
+      },
+      delinquencySignals: [
+        {
+          signalId: "delinquency:overdue:pi-missing",
+          leaseId: "lease-1",
+          paymentIntentId: "pi-missing",
+          propertyId: "prop-1",
+          dueDate: "2026-04-01T00:00:00.000Z",
+          expectedAmountCents: 145000,
+          paidAmountCents: 0,
+          outstandingAmountCents: 145000,
+          signalType: "overdue",
+          severity: "critical",
+          detectedAt: "2026-05-05T00:00:00.000Z",
+          reasons: ["obligation_missing_after_due_date"],
+        },
+        {
+          signalId: "delinquency:missing_payment:pi-missing",
+          leaseId: "lease-1",
+          paymentIntentId: "pi-missing",
+          propertyId: "prop-1",
+          dueDate: "2026-04-01T00:00:00.000Z",
+          expectedAmountCents: 145000,
+          paidAmountCents: 0,
+          outstandingAmountCents: 145000,
+          signalType: "missing_payment",
+          severity: "warning",
+          detectedAt: "2026-05-05T00:00:00.000Z",
+          reasons: ["missing_rent_payment_after_due_date"],
+        },
+        {
+          signalId: "delinquency:partially_paid:pi-underpaid",
+          leaseId: "lease-1",
+          paymentIntentId: "pi-underpaid",
+          propertyId: "prop-1",
+          expectedAmountCents: 145000,
+          paidAmountCents: 10000,
+          outstandingAmountCents: 135000,
+          signalType: "partially_paid",
+          severity: "warning",
+          detectedAt: "2026-05-05T00:00:00.000Z",
+          reasons: ["obligation_partially_paid"],
+        },
+        {
+          signalId: "delinquency:failed_payment:pi-failed",
+          leaseId: "lease-1",
+          paymentIntentId: "pi-failed",
+          propertyId: "prop-1",
+          expectedAmountCents: 145000,
+          paidAmountCents: 0,
+          outstandingAmountCents: 145000,
+          signalType: "failed_payment",
+          severity: "critical",
+          detectedAt: "2026-05-05T00:00:00.000Z",
+          reasons: ["obligation_payment_failed"],
+        },
+        {
+          signalId: "delinquency:manual_review_required:pi-manual-review",
+          leaseId: "lease-1",
+          paymentIntentId: "pi-manual-review",
+          propertyId: "prop-1",
+          expectedAmountCents: 145000,
+          paidAmountCents: 145000,
+          outstandingAmountCents: 0,
+          signalType: "manual_review_required",
+          severity: "warning",
+          detectedAt: "2026-05-05T00:00:00.000Z",
+          reasons: ["obligation_requires_manual_review"],
+        },
+      ],
+      delinquencySummary: {
+        totalSignals: 5,
+        overdueCount: 1,
+        partiallyPaidCount: 1,
+        failedCount: 1,
+        missingCount: 1,
+        manualReviewCount: 1,
+        totalOutstandingCents: 425000,
       },
     });
     mocks.getLeaseById.mockResolvedValue({
@@ -295,7 +378,7 @@ describe("LeaseLedgerPage", () => {
     expect(screen.getAllByText("Expected").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Paid").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Outstanding").length).toBeGreaterThan(0);
-    expect(screen.getByText("Manual Review")).toBeInTheDocument();
+    expect(screen.getAllByText("Manual Review").length).toBeGreaterThan(0);
     expect(screen.getByText("$10,150.00")).toBeInTheDocument();
     expect(screen.getByText("$5,950.00")).toBeInTheDocument();
     expect(screen.getByText("$4,200.00")).toBeInTheDocument();
@@ -307,14 +390,39 @@ describe("LeaseLedgerPage", () => {
     expect(screen.queryByText("420000")).not.toBeInTheDocument();
     expect(screen.getAllByText("Paid").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Pending").length).toBeGreaterThan(0);
-    expect(screen.getByText("Underpaid")).toBeInTheDocument();
-    expect(screen.getByText("Overpaid")).toBeInTheDocument();
-    expect(screen.getByText("Missing")).toBeInTheDocument();
+    expect(screen.getAllByText("Underpaid").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Overpaid").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Missing").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Failed").length).toBeGreaterThan(0);
     expect(screen.getByText("Manual review")).toBeInTheDocument();
-    expect(screen.getByText("Unknown")).toBeInTheDocument();
+    expect(screen.getAllByText("Unknown").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Reconciled").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Manual Review Required").length).toBeGreaterThan(0);
+  });
+
+  it("renders delinquency summary cards and row-level signal reasons", async () => {
+    render(
+      <MemoryRouter initialEntries={["/leases/lease-1/ledger"]}>
+        <Routes>
+          <Route path="/leases/:leaseId/ledger" element={<LeaseLedgerPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Delinquency overview")).toBeInTheDocument();
+    expect(screen.getByText("Read-only detection based on obligation ledger signals.")).toBeInTheDocument();
+    expect(screen.getAllByText("Overdue").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Outstanding").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Underpaid").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Manual Review").length).toBeGreaterThan(0);
+    expect(screen.getByText("$4,250.00")).toBeInTheDocument();
+    expect(screen.queryByText("425000")).not.toBeInTheDocument();
+
+    expect(screen.getByText("Overdue — Rent past due date (obligation missing after due date)")).toBeInTheDocument();
+    expect(screen.getByText("Missing — No rent payment found after due date (missing rent payment after due date)")).toBeInTheDocument();
+    expect(screen.getByText("Underpaid — Partial payment received (obligation partially paid)")).toBeInTheDocument();
+    expect(screen.getByText("Failed — Payment did not complete (obligation payment failed)")).toBeInTheDocument();
+    expect(screen.getByText("Manual review required — Payment mismatch or incomplete evidence (obligation requires manual review)")).toBeInTheDocument();
   });
 
   it("renders an empty obligation state while preserving existing ledger entries", async () => {
@@ -355,6 +463,16 @@ describe("LeaseLedgerPage", () => {
           unknown: 0,
         },
       },
+      delinquencySignals: [],
+      delinquencySummary: {
+        totalSignals: 0,
+        overdueCount: 0,
+        partiallyPaidCount: 0,
+        failedCount: 0,
+        missingCount: 0,
+        manualReviewCount: 0,
+        totalOutstandingCents: 0,
+      },
     });
 
     render(
@@ -366,6 +484,7 @@ describe("LeaseLedgerPage", () => {
     );
 
     expect(await screen.findByText("Obligation ledger is not available yet for this lease.")).toBeInTheDocument();
+    expect(screen.getByText("All rent obligations are up to date.")).toBeInTheDocument();
     expect(screen.getByText("+$1,450.00")).toBeInTheDocument();
     expect(screen.getAllByText("$1,450.00").length).toBeGreaterThan(0);
   });
