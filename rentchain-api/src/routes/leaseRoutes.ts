@@ -33,11 +33,16 @@ import {
   resolvePaymentIntentByRentPaymentId,
 } from "../lib/payments/paymentIntentResolver";
 import {
+  buildPaymentObligationLedgerRows,
+  summarizePaymentObligationLedger,
+} from "../lib/payments/paymentObligationLedger";
+import {
   isTargetedHiddenLeaseId,
   isTargetedHiddenTenantId,
 } from "../lib/testDataVisibilityTargets";
 import {
   enableRentCollectionForLease,
+  type RentPaymentRecord,
 } from "../services/rentPayments/rentPaymentService";
 import { buildLeasePaymentProjection } from "../services/projections/buildLeasePaymentProjection";
 import { computeNoResponseState } from "../services/leaseNoticeWorkflowService";
@@ -763,6 +768,86 @@ async function loadLeaseLedgerPaymentIntentLinks(
     });
   }
   return links;
+}
+
+function normalizeLeaseRentAmountCents(value: unknown): number {
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount <= 0) return 0;
+  return Math.round(amount * 100);
+}
+
+async function loadLeaseRentPaymentsForObligationLedger(
+  leaseId: string,
+  landlordId: string
+): Promise<RentPaymentRecord[]> {
+  const snap = await db
+    .collection("rentPayments")
+    .where("leaseId", "==", leaseId)
+    .get()
+    .catch(() => null);
+  return (snap?.docs || [])
+    .map((doc: any) => ({ id: doc.id, ...((doc.data() as any) || {}) }))
+    .filter((record: any) => String(record?.landlordId || "").trim() === landlordId)
+    .map((record: any) => ({
+      id: String(record?.id || record?.rentPaymentId || "").trim() || String(record?.id || "").trim(),
+      leaseId: String(record?.leaseId || "").trim(),
+      tenantId: String(record?.tenantId || "").trim(),
+      landlordId: String(record?.landlordId || "").trim(),
+      propertyId: String(record?.propertyId || "").trim() || null,
+      unitId: String(record?.unitId || "").trim() || null,
+      paymentIntentId: String(record?.paymentIntentId || "").trim() || null,
+      amountCents: Math.max(0, Math.round(Number(record?.amountCents || 0))),
+      currency: "cad" as const,
+      status: String(record?.status || "setup_required").trim() as RentPaymentRecord["status"],
+      processor: "stripe" as const,
+      processorCheckoutSessionId: String(record?.processorCheckoutSessionId || "").trim() || null,
+      processorPaymentIntentId: String(record?.processorPaymentIntentId || "").trim() || null,
+      createdAt: String(record?.createdAt || "").trim(),
+      updatedAt: String(record?.updatedAt || "").trim(),
+      paidAt: String(record?.paidAt || "").trim() || null,
+    }));
+}
+
+async function loadLeasePaymentIntentsForObligationLedger(leaseId: string, landlordId: string) {
+  const snap = await db
+    .collection("paymentIntents")
+    .where("leaseId", "==", leaseId)
+    .get()
+    .catch(() => null);
+  return (snap?.docs || [])
+    .map((doc: any) => ({ paymentIntentId: doc.id, ...((doc.data() as any) || {}) }))
+    .filter((record: any) => String(record?.landlordId || "").trim() === landlordId);
+}
+
+async function loadLeaseReconciliationRecordsForObligationLedger(params: {
+  leaseId: string;
+  paymentIntentIds: string[];
+  rentPaymentIds: string[];
+}) {
+  const records = new Map<string, any>();
+  async function collect(field: string, value: string) {
+    const normalizedValue = String(value || "").trim();
+    if (!normalizedValue) return;
+    const snap = await db
+      .collection("paymentReconciliationRecords")
+      .where(field, "==", normalizedValue)
+      .get()
+      .catch(() => null);
+    for (const doc of snap?.docs || []) {
+      records.set(doc.id, { reconciliationId: doc.id, ...((doc.data() as any) || {}) });
+    }
+  }
+
+  await collect("leaseId", params.leaseId);
+  await collect("subjectId", params.leaseId);
+  for (const paymentIntentId of params.paymentIntentIds) {
+    await collect("paymentIntentId", paymentIntentId);
+  }
+  for (const rentPaymentId of params.rentPaymentIds) {
+    await collect("rentPaymentId", rentPaymentId);
+    await collect("subjectId", rentPaymentId);
+  }
+  return Array.from(records.values());
 }
 
 function enrichLeaseLedgerEntryWithPaymentIntent(
@@ -2342,6 +2427,26 @@ router.get("/:leaseId/ledger", async (req: any, res: Response) => {
     const to = toIsoDate(req.query?.to) || null;
     const entries = await loadLedgerEntries(leaseId, landlordId, from, to);
     const paymentIntentLinks = await loadLeaseLedgerPaymentIntentLinks(leaseId, landlordId);
+    const obligationRentPayments = await loadLeaseRentPaymentsForObligationLedger(leaseId, landlordId);
+    const obligationPaymentIntents = await loadLeasePaymentIntentsForObligationLedger(leaseId, landlordId);
+    const obligationReconciliationRecords = await loadLeaseReconciliationRecordsForObligationLedger({
+      leaseId,
+      paymentIntentIds: obligationPaymentIntents.map((record: any) => String(record?.paymentIntentId || "").trim()),
+      rentPaymentIds: obligationRentPayments.map((record) => String(record?.id || "").trim()),
+    });
+    const obligationRows = buildPaymentObligationLedgerRows({
+      leases: [
+        {
+          id: leaseId,
+          ...(leaseCheck.lease as any),
+          amountCents: normalizeLeaseRentAmountCents((leaseCheck.lease as any)?.monthlyRent),
+          derivedLifecycleState: deriveLeaseLifecycleState({ id: leaseId, ...(leaseCheck.lease as any) }).state,
+        },
+      ],
+      paymentIntents: obligationPaymentIntents as any,
+      rentPayments: obligationRentPayments,
+      reconciliationRecords: obligationReconciliationRecords,
+    });
 
     let runningBalanceCents = 0;
     const monthlyTotals: Record<string, { chargesCents: number; paymentsCents: number; netCents: number }> = {};
@@ -2382,6 +2487,8 @@ router.get("/:leaseId/ledger", async (req: any, res: Response) => {
         balanceCents: runningBalanceCents,
       },
       monthlyTotals,
+      obligationRows,
+      obligationSummary: summarizePaymentObligationLedger(obligationRows),
     });
   } catch (err) {
     console.error("[GET /api/leases/:leaseId/ledger] error", err);

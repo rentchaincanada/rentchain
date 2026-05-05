@@ -196,6 +196,20 @@ Resolved IDs are attached to provider receipts and reconciliation records. Exist
 
 Lease ledger reads may include optional `paymentIntentId` and `paymentIntentStatus` for payment rows when the matching rentPayment/PaymentIntent can be resolved. Ledger calculations remain based on existing ledger entries and are not rewritten by PaymentIntent.
 
+## Payment Obligation Ledger Readiness
+
+Payment Obligation Ledger Readiness V1 adds a read-only derivation layer that combines:
+
+```text
+lease lifecycle + PaymentIntent + rentPayments + reconciliation records
+```
+
+The read model derives obligation rows and summary totals for expected, paid, outstanding, and review-required payment states. It supports `paid`, `underpaid`, `overpaid`, `failed`, `missing`, `pending`, `manual_review_required`, and `unknown`.
+
+Reconciliation evidence wins over otherwise successful-looking payment records when it indicates mismatch, duplicate risk, or manual review. Missing or contradictory payment context fails safely into `manual_review_required` or `unknown`.
+
+V1 keeps PaymentIntent additive and non-authoritative. It does not generate monthly obligations, enforce collections, replace `rentPayments`, mutate leases, or change Stripe checkout/webhook behavior.
+
 ## Deferred Future Steps
 
 1. PaymentIntent-driven rent ledger.
