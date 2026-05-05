@@ -27,6 +27,25 @@ export type AdminLeaseLifecycleReviewItem = {
   recommendedAction: string;
   createdFrom: "lease_lifecycle_review_queue_v1";
   detectedAt: string;
+  acknowledgement: AdminLeaseLifecycleReviewAcknowledgement | null;
+};
+
+export type AdminLeaseLifecycleReviewAcknowledgementStatus = "open" | "reviewed" | "snoozed" | "assigned";
+
+export type AdminLeaseLifecycleReviewAcknowledgement = {
+  acknowledgementId: string;
+  reviewItemId: string;
+  leaseId: string;
+  landlordId: string | null;
+  propertyId: string | null;
+  unitId: string | null;
+  status: AdminLeaseLifecycleReviewAcknowledgementStatus;
+  assignedTo?: string | null;
+  snoozedUntil?: string | null;
+  note?: string | null;
+  acknowledgedBy: string | null;
+  acknowledgedAt: string;
+  updatedAt: string;
 };
 
 export type AdminLeaseLifecycleReviewSummary = {
@@ -50,5 +69,23 @@ export async function fetchAdminLeaseLifecycleReviewQueue(params?: {
   const query = search.toString();
   return await apiFetch<AdminLeaseLifecycleReviewResponse>(
     `/admin/lease-lifecycle-review-queue${query ? `?${query}` : ""}`
+  );
+}
+
+export async function updateAdminLeaseLifecycleReviewAcknowledgement(
+  reviewItemId: string,
+  payload: {
+    status: AdminLeaseLifecycleReviewAcknowledgementStatus;
+    assignedTo?: string | null;
+    snoozedUntil?: string | null;
+    note?: string | null;
+  }
+): Promise<{ ok: true; acknowledgement: AdminLeaseLifecycleReviewAcknowledgement }> {
+  return await apiFetch<{ ok: true; acknowledgement: AdminLeaseLifecycleReviewAcknowledgement }>(
+    `/admin/lease-lifecycle-review-queue/${encodeURIComponent(reviewItemId)}/acknowledgement`,
+    {
+      method: "PATCH",
+      body: payload,
+    }
   );
 }

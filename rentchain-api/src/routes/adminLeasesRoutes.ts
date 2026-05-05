@@ -6,6 +6,15 @@ import { listAdminLeases } from "../services/admin/adminLeaseView";
 import { buildAdminLeasesCsv } from "../services/admin/adminCsvExport";
 import { recordAdminAuditEvent } from "../services/admin/adminAuditEvents";
 import { deriveLeaseLifecycleReviewQueue } from "../lib/leases/leaseLifecycleReviewQueue";
+import {
+  buildLeaseLifecycleReviewAcknowledgement,
+  LEASE_LIFECYCLE_REVIEW_ACKNOWLEDGEMENTS_COLLECTION,
+  leaseLifecycleReviewAcknowledgementId,
+  mergeLeaseLifecycleReviewAcknowledgements,
+  normalizeLeaseLifecycleReviewAcknowledgement,
+  type LeaseLifecycleReviewAcknowledgementPatch,
+  type LeaseLifecycleReviewAcknowledgementStatus,
+} from "../lib/leases/leaseLifecycleReviewAcknowledgements";
 
 const router = Router();
 
@@ -20,6 +29,46 @@ async function loadCollection(name: string) {
   return (snap.docs || []).map((doc: any) => ({ id: doc.id, ...(doc.data() || {}) }));
 }
 
+function asString(value: unknown, max = 1000) {
+  return String(value || "").trim().slice(0, max);
+}
+
+function actorIdFromReq(req: any) {
+  return asString(req.user?.uid || req.user?.id || req.user?.sub, 240) || null;
+}
+
+function parseAcknowledgementPatch(body: any): LeaseLifecycleReviewAcknowledgementPatch | null {
+  const status = asString(body?.status, 40) as LeaseLifecycleReviewAcknowledgementStatus;
+  if (!["open", "reviewed", "snoozed", "assigned"].includes(status)) return null;
+  const patch: LeaseLifecycleReviewAcknowledgementPatch = {
+    status,
+    note: asString(body?.note, 1000) || null,
+  };
+  if (status === "assigned") {
+    patch.assignedTo = asString(body?.assignedTo, 240) || null;
+    if (!patch.assignedTo) return null;
+  }
+  if (status === "snoozed") {
+    patch.snoozedUntil = asString(body?.snoozedUntil, 120) || null;
+    if (!patch.snoozedUntil || Number.isNaN(new Date(patch.snoozedUntil).getTime())) return null;
+  }
+  return patch;
+}
+
+async function deriveReviewQueueWithAcknowledgements(today: unknown) {
+  const [leases, units, acknowledgements] = await Promise.all([
+    loadCollection("leases"),
+    loadCollection("units"),
+    loadCollection(LEASE_LIFECYCLE_REVIEW_ACKNOWLEDGEMENTS_COLLECTION),
+  ]);
+  const queue = deriveLeaseLifecycleReviewQueue({
+    leases,
+    units,
+    today: today || new Date(),
+  });
+  return mergeLeaseLifecycleReviewAcknowledgements(queue, acknowledgements);
+}
+
 router.get(
   "/lease-lifecycle-review-queue",
   requireAuth,
@@ -27,12 +76,7 @@ router.get(
   async (req: any, res) => {
     try {
       const limit = parseReviewQueueLimit(req.query?.limit);
-      const [leases, units] = await Promise.all([loadCollection("leases"), loadCollection("units")]);
-      const queue = deriveLeaseLifecycleReviewQueue({
-        leases,
-        units,
-        today: req.query?.today || new Date(),
-      });
+      const queue = await deriveReviewQueueWithAcknowledgements(req.query?.today);
       const items = queue.items.slice(0, limit);
 
       console.info("[leases.lifecycleReviewQueue]", {
@@ -52,6 +96,55 @@ router.get(
     } catch (err: any) {
       console.error("[adminLeasesRoutes] lifecycle review queue failed", err?.message || err);
       return res.status(500).json({ ok: false, error: "admin_lease_lifecycle_review_queue_failed" });
+    }
+  }
+);
+
+router.patch(
+  "/lease-lifecycle-review-queue/:reviewItemId/acknowledgement",
+  requireAuth,
+  requirePermission("system.admin"),
+  async (req: any, res) => {
+    try {
+      const reviewItemId = asString(req.params?.reviewItemId, 4000);
+      const patch = parseAcknowledgementPatch(req.body);
+      if (!reviewItemId || !patch) {
+        return res.status(400).json({ ok: false, error: "lease_lifecycle_acknowledgement_invalid" });
+      }
+
+      const queue = await deriveReviewQueueWithAcknowledgements(req.query?.today);
+      const item = queue.items.find((candidate) => candidate.id === reviewItemId);
+      if (!item) {
+        return res.status(404).json({ ok: false, error: "lease_lifecycle_review_item_not_found" });
+      }
+
+      const acknowledgementId = leaseLifecycleReviewAcknowledgementId(reviewItemId);
+      const ref = db.collection(LEASE_LIFECYCLE_REVIEW_ACKNOWLEDGEMENTS_COLLECTION).doc(acknowledgementId);
+      const existingSnap = await ref.get();
+      const existing = existingSnap.exists
+        ? normalizeLeaseLifecycleReviewAcknowledgement({ acknowledgementId: existingSnap.id, ...(existingSnap.data() || {}) })
+        : null;
+      const acknowledgement = buildLeaseLifecycleReviewAcknowledgement({
+        item,
+        patch,
+        acknowledgedBy: actorIdFromReq(req),
+        existing,
+      });
+      await ref.set(acknowledgement, { merge: false });
+
+      console.info("[leases.lifecycleReviewQueue.acknowledgement]", {
+        route: "/api/admin/lease-lifecycle-review-queue/:reviewItemId/acknowledgement",
+        userId: actorIdFromReq(req),
+        role: String(req.user?.role || "").toLowerCase(),
+        reviewItemId,
+        leaseId: item.leaseId,
+        status: acknowledgement.status,
+      });
+
+      return res.json({ ok: true, acknowledgement });
+    } catch (err: any) {
+      console.error("[adminLeasesRoutes] lifecycle review acknowledgement failed", err?.message || err);
+      return res.status(500).json({ ok: false, error: "admin_lease_lifecycle_acknowledgement_failed" });
     }
   }
 );

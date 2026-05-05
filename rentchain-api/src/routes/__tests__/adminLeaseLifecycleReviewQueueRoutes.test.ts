@@ -21,6 +21,24 @@ const { collections, dbMock } = vi.hoisted(() => {
           }));
           return { docs, empty: docs.length === 0, size: docs.length };
         },
+        doc(id: string) {
+          return {
+            async get() {
+              const collection = ensureCollection(name);
+              const data = collection.get(id);
+              return {
+                id,
+                exists: Boolean(data),
+                data: () => data,
+              };
+            },
+            async set(payload: any, options?: { merge?: boolean }) {
+              const collection = ensureCollection(name);
+              const existing = collection.get(id) || {};
+              collection.set(id, options?.merge ? { ...existing, ...payload } : payload);
+            },
+          };
+        },
       }),
     },
   };
@@ -46,7 +64,7 @@ function seedDoc(collectionName: string, id: string, data: any) {
 
 async function invokeRouter(
   router: any,
-  options: { method: string; url: string; user?: Record<string, unknown> | null }
+  options: { method: string; url: string; user?: Record<string, unknown> | null; body?: Record<string, unknown> }
 ) {
   return await new Promise<{ status: number; body: any }>((resolve, reject) => {
     const [path, queryString] = options.url.split("?");
@@ -58,6 +76,7 @@ async function invokeRouter(
       path,
       user: options.user ?? null,
       query: Object.fromEntries(query.entries()),
+      body: options.body || {},
       params: {},
       headers: {},
       get(name: string) {
@@ -198,6 +217,145 @@ describe("admin lease lifecycle review queue route", () => {
     );
     expect(response.body.items[0]).not.toHaveProperty("raw");
     expect(response.body.items[0]).not.toHaveProperty("payload");
+  });
+
+  it("merges acknowledgement state into the queue response", async () => {
+    seedDoc("leases", "lease-unknown", {
+      status: "active",
+      propertyId: "property-1",
+      unitId: "unit-2",
+      landlordId: "landlord-1",
+      startDate: "2026-12-31",
+      endDate: "2026-01-01",
+    });
+    seedDoc("leaseLifecycleReviewAcknowledgements", "ack-1", {
+      acknowledgementId: "ack-1",
+      reviewItemId: "lease_lifecycle:lease-unknown:unknown_lifecycle",
+      leaseId: "lease-unknown",
+      landlordId: "landlord-1",
+      propertyId: "property-1",
+      unitId: "unit-2",
+      status: "reviewed",
+      note: "Reviewed by ops",
+      acknowledgedBy: "admin-1",
+      acknowledgedAt: "2026-05-05T12:00:00.000Z",
+      updatedAt: "2026-05-05T12:00:00.000Z",
+    });
+
+    const router = (await import("../adminLeasesRoutes")).default;
+    const response = await invokeRouter(router, {
+      method: "GET",
+      url: "/lease-lifecycle-review-queue?today=2026-05-05",
+      user: adminUser,
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.items[0]).toEqual(
+      expect.objectContaining({
+        leaseId: "lease-unknown",
+        acknowledgement: expect.objectContaining({
+          reviewItemId: "lease_lifecycle:lease-unknown:unknown_lifecycle",
+          status: "reviewed",
+          note: "Reviewed by ops",
+          acknowledgedBy: "admin-1",
+        }),
+      })
+    );
+  });
+
+  it("allows admins to mark review items reviewed without mutating leases", async () => {
+    const originalLease = {
+      status: "active",
+      propertyId: "property-1",
+      unitId: "unit-2",
+      landlordId: "landlord-1",
+      startDate: "2026-12-31",
+      endDate: "2026-01-01",
+    };
+    seedDoc("leases", "lease-unknown", originalLease);
+
+    const router = (await import("../adminLeasesRoutes")).default;
+    const response = await invokeRouter(router, {
+      method: "PATCH",
+      url: "/lease-lifecycle-review-queue/lease_lifecycle%3Alease-unknown%3Aunknown_lifecycle/acknowledgement?today=2026-05-05",
+      user: adminUser,
+      body: {
+        status: "reviewed",
+        note: "Dates reviewed",
+      },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.acknowledgement).toEqual(
+      expect.objectContaining({
+        reviewItemId: "lease_lifecycle:lease-unknown:unknown_lifecycle",
+        leaseId: "lease-unknown",
+        status: "reviewed",
+        note: "Dates reviewed",
+        acknowledgedBy: "admin-1",
+      })
+    );
+    expect(collections.get("leases")?.get("lease-unknown")).toEqual({ id: "lease-unknown", ...originalLease });
+  });
+
+  it("allows admins to snooze and assign review items", async () => {
+    seedDoc("leases", "lease-unknown", {
+      status: "active",
+      propertyId: "property-1",
+      unitId: "unit-2",
+      landlordId: "landlord-1",
+      startDate: "2026-12-31",
+      endDate: "2026-01-01",
+    });
+
+    const router = (await import("../adminLeasesRoutes")).default;
+    const snoozed = await invokeRouter(router, {
+      method: "PATCH",
+      url: "/lease-lifecycle-review-queue/lease_lifecycle%3Alease-unknown%3Aunknown_lifecycle/acknowledgement?today=2026-05-05",
+      user: adminUser,
+      body: {
+        status: "snoozed",
+        snoozedUntil: "2026-05-12T12:00:00.000Z",
+      },
+    });
+    expect(snoozed.status).toBe(200);
+    expect(snoozed.body.acknowledgement).toEqual(
+      expect.objectContaining({
+        status: "snoozed",
+        snoozedUntil: "2026-05-12T12:00:00.000Z",
+      })
+    );
+
+    const assigned = await invokeRouter(router, {
+      method: "PATCH",
+      url: "/lease-lifecycle-review-queue/lease_lifecycle%3Alease-unknown%3Aunknown_lifecycle/acknowledgement?today=2026-05-05",
+      user: adminUser,
+      body: {
+        status: "assigned",
+        assignedTo: "ops-admin-2",
+      },
+    });
+    expect(assigned.status).toBe(200);
+    expect(assigned.body.acknowledgement).toEqual(
+      expect.objectContaining({
+        status: "assigned",
+        assignedTo: "ops-admin-2",
+      })
+    );
+  });
+
+  it("blocks non-admin acknowledgement mutations", async () => {
+    const router = (await import("../adminLeasesRoutes")).default;
+    const response = await invokeRouter(router, {
+      method: "PATCH",
+      url: "/lease-lifecycle-review-queue/lease_lifecycle%3Alease-unknown%3Aunknown_lifecycle/acknowledgement",
+      user: { id: "landlord-1", role: "landlord", permissions: [], revokedPermissions: [] },
+      body: {
+        status: "reviewed",
+      },
+    });
+
+    expect(response.status).toBe(403);
   });
 
   it("returns an empty queue for valid leases", async () => {
