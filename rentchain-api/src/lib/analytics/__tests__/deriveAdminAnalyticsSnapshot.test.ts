@@ -215,4 +215,59 @@ describe("deriveAdminAnalyticsSnapshot", () => {
       activeActors: 0,
     });
   });
+
+  it("counts expiring soon leases only when canonical lifecycle is active or notice-period", () => {
+    const now = Date.UTC(2026, 4, 5, 12, 0, 0, 0);
+    const result = deriveAdminAnalyticsSnapshot({
+      now,
+      from: now - 30 * 24 * 60 * 60 * 1000,
+      to: now,
+      period: "30d",
+      granularity: "daily",
+      applications: [],
+      screeningReconciliations: [],
+      financialTransactions: [],
+      workOrders: [],
+      properties: [],
+      units: [],
+      leases: [
+        {
+          id: "lease-active",
+          status: "active",
+          signedAt: "2026-01-01",
+          startDate: "2026-01-01",
+          endDate: "2026-06-01",
+        },
+        {
+          id: "lease-expired-stale-active",
+          status: "active",
+          signedAt: "2025-01-01",
+          startDate: "2025-01-01",
+          endDate: "2026-04-30",
+        },
+        {
+          id: "lease-renewed",
+          status: "renewed",
+          signedAt: "2025-01-01",
+          startDate: "2025-01-01",
+          endDate: "2026-06-01",
+          successorLeaseId: "lease-next",
+          hasSignedSuccessorLease: true,
+        },
+        {
+          id: "lease-future",
+          status: "active",
+          signedAt: "2026-05-01",
+          startDate: "2026-06-01",
+          endDate: "2026-06-30",
+        },
+      ],
+      events: [],
+      canonicalEvents: [],
+    });
+
+    expect(result.portfolio.leasesEndingIn30Days).toBe(1);
+    expect(result.portfolio.leasesEndingIn60Days).toBe(1);
+    expect(result.portfolio.leasesEndingIn90Days).toBe(1);
+  });
 });

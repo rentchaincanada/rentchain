@@ -8,6 +8,7 @@ import type {
   AdminActivityAnalytics,
 } from "./analyticsTypes";
 import type { ScreeningReconciliationStatus } from "../reconciliation/reconciliationTypes";
+import { isLeaseExpiringSoon } from "../leases/leaseLifecycle";
 
 const SCREENING_STATUS_KEYS: ScreeningReconciliationStatus[] = [
   "not_started",
@@ -304,10 +305,9 @@ function derivePortfolioAnalytics(
       toMillis(lease?.leaseEnd) ||
       toMillis(lease?.moveOutDate);
     if (endAt != null) {
-      const deltaDays = Math.floor((endAt - now) / (24 * 60 * 60 * 1000));
-      if (deltaDays >= 0 && deltaDays <= 30) leasesEndingIn30Days += 1;
-      if (deltaDays >= 0 && deltaDays <= 60) leasesEndingIn60Days += 1;
-      if (deltaDays >= 0 && deltaDays <= 90) leasesEndingIn90Days += 1;
+      if (isLeaseExpiringSoon(lease, now, 30)) leasesEndingIn30Days += 1;
+      if (isLeaseExpiringSoon(lease, now, 60)) leasesEndingIn60Days += 1;
+      if (isLeaseExpiringSoon(lease, now, 90)) leasesEndingIn90Days += 1;
       if (endAt >= from && endAt <= to) turnoverCount += 1;
     }
   }

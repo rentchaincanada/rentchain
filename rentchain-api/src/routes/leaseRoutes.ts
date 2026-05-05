@@ -39,6 +39,7 @@ import {
 import { buildLeasePaymentProjection } from "../services/projections/buildLeasePaymentProjection";
 import { computeNoResponseState } from "../services/leaseNoticeWorkflowService";
 import { deriveLeaseLifecycleSummary } from "../services/leaseLifecycle/deriveLeaseLifecycleSummary";
+import { deriveLeaseLifecycleState } from "../lib/leases/leaseLifecycle";
 
 const router = Router();
 const LEDGER_COLLECTION = "ledgerEntries";
@@ -132,6 +133,7 @@ function toMillis(value: any): number {
 
 function normalizeLeaseRow(id: string, raw: any) {
   const risk = raw?.risk && typeof raw?.risk === "object" ? raw.risk : null;
+  const lifecycle = deriveLeaseLifecycleState({ id, ...raw });
   return {
     id,
     landlordId: String(raw?.landlordId || "").trim() || null,
@@ -174,6 +176,11 @@ function normalizeLeaseRow(id: string, raw: any) {
     cleanupBatch: String(raw?.cleanupBatch || "").trim() || null,
     createdAt: raw?.createdAt || null,
     updatedAt: raw?.updatedAt || null,
+    derivedLifecycleState: lifecycle.state,
+    derivedLifecycleReasons: lifecycle.reasons,
+    derivedLifecycleRequiresReview: lifecycle.requiresReview,
+    derivedLifecycleIsCurrent: lifecycle.isCurrent,
+    derivedLifecycleIsOccupancyActive: lifecycle.isOccupancyActive,
   };
 }
 
