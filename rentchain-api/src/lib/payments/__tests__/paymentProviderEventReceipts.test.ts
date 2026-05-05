@@ -201,6 +201,7 @@ describe("paymentProviderEventReceipts", () => {
       purpose: null,
       subjectType: null,
       subjectId: null,
+      paymentIntentId: null,
       status: "received",
       duplicateCount: 0,
       normalizedStatus: "confirmed",

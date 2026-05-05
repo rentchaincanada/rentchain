@@ -526,6 +526,48 @@ Deferred items:
 2. Reconciliation-driven status transitions.
 3. Trustly sandbox adapter.
 
+## PaymentIntent System v1
+
+Status: provider-neutral rent-payment obligations are persisted passively.
+
+What changed:
+
+- Collection: `paymentIntents`
+- Rent checkout now creates or upserts a deterministic PaymentIntent before Stripe session creation.
+- Stripe Checkout metadata now includes the internal `paymentIntentId` in addition to the existing `rentPaymentId`.
+- Provider session references are linked back to the PaymentIntent after Stripe session creation.
+- Rent webhook provider receipts and reconciliation records can include `paymentIntentId` when metadata or the `rentPaymentId` mapping resolves it.
+- PaymentIntent status updates from provider signals are passive and do not drive existing webhook behavior.
+
+Behavior intentionally unchanged:
+
+- Existing Stripe rent checkout response shape is unchanged.
+- Existing `rentPayments` records remain the active checkout/history records.
+- Existing rent-payment webhook status transitions remain unchanged.
+- Existing duplicate suppression behavior remains unchanged.
+- Screening checkout, subscriptions, payouts, pricing, and plans are untouched.
+- No Trustly implementation is included.
+
+Ordering:
+
+```text
+rent checkout request
+  -> validate existing rent-payment eligibility
+  -> upsert PaymentIntent
+  -> create existing Stripe Checkout Session
+  -> link provider session refs to PaymentIntent
+  -> write existing rentPayments record
+  -> return existing tenant checkout response
+```
+
+Deferred items:
+
+1. PaymentIntent-driven rent ledger.
+2. PaymentIntent monthly generation from active leases.
+3. PaymentIntent reconciliation-driven status enforcement.
+4. Trustly sandbox adapter using PaymentIntent.
+5. Landlord/tenant UI for PaymentIntent history.
+
 ## Intentional Non-Implementation
 
 This mission intentionally does not:

@@ -1,5 +1,7 @@
 export const PAYMENT_CANONICAL_EVENTS = [
   "payment.intent_created",
+  "payment.intent_updated",
+  "payment.intent_provider_linked",
   "payment.provider_selected",
   "payment.provider_session_created",
   "payment.provider_signal_received",

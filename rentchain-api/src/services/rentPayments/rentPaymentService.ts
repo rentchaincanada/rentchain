@@ -4,6 +4,11 @@ import { db } from "../../config/firebase";
 import { FRONTEND_URL } from "../../config/screeningConfig";
 import { writeCanonicalEvent } from "../../lib/events/buildEvent";
 import { createRentPaymentSession } from "../../lib/payments/paymentExecutionService";
+import {
+  linkPaymentIntentProviderReference,
+  upsertPaymentIntent,
+  type PaymentIntentRecord,
+} from "../../lib/payments/paymentIntents";
 import type { PaymentReadiness } from "../paymentReadiness/derivePaymentReadiness";
 import { recordSystemObservabilityEvent } from "../observability/recordSystemObservabilityEvent";
 
@@ -291,6 +296,59 @@ async function writeRentPaymentEvent(params: {
   });
 }
 
+async function writePaymentIntentEvent(params: {
+  type: "payment.intent_created" | "payment.intent_provider_linked";
+  paymentIntent: PaymentIntentRecord;
+  rentPaymentId: string;
+  occurredAt?: string;
+}) {
+  try {
+    await writeCanonicalEvent({
+      type: params.type,
+      domain: "payment",
+      action: params.type.replace(/^payment\./, ""),
+      status: params.paymentIntent.status,
+      actor: {
+        type: "system",
+        id: null,
+        role: "system",
+      },
+      resource: {
+        type: "payment_intent",
+        id: params.paymentIntent.paymentIntentId,
+        parentType: "rent_payment",
+        parentId: params.rentPaymentId,
+      },
+      occurredAt: params.occurredAt || new Date().toISOString(),
+      visibility: "internal",
+      summary:
+        params.type === "payment.intent_created"
+          ? "Rent PaymentIntent created"
+          : "Rent PaymentIntent linked to provider session",
+      metadata: {
+        paymentIntentId: params.paymentIntent.paymentIntentId,
+        rentPaymentId: params.rentPaymentId,
+        leaseId: params.paymentIntent.leaseId || null,
+        landlordId: params.paymentIntent.landlordId || null,
+        tenantId: params.paymentIntent.tenantId || null,
+        propertyId: params.paymentIntent.propertyId || null,
+        unitId: params.paymentIntent.unitId || null,
+        purpose: params.paymentIntent.purpose,
+        provider: params.paymentIntent.provider || null,
+        providerSessionId: params.paymentIntent.providerSessionId || null,
+        providerPaymentId: params.paymentIntent.providerPaymentId || null,
+      },
+    });
+  } catch (err: any) {
+    console.warn("[rentPaymentService] payment intent canonical event skipped", {
+      type: params.type,
+      paymentIntentId: params.paymentIntent.paymentIntentId,
+      rentPaymentId: params.rentPaymentId,
+      message: err?.message || String(err),
+    });
+  }
+}
+
 async function recordRentPaymentObservabilityEvent(params: {
   rentPaymentId: string;
   status: RentPaymentStatus;
@@ -502,10 +560,37 @@ export async function createRentPaymentCheckout(input: CreateRentPaymentCheckout
   const cancelUrl = `${frontendBase}${sanitizeRelativePath(input.cancelPath, "/tenant/lease")}`;
   const stripeSuccessUrl = `${successUrl}${successUrl.includes("?") ? "&" : "?"}rentPaymentStatus=success`;
   const stripeCancelUrl = `${cancelUrl}${cancelUrl.includes("?") ? "&" : "?"}rentPaymentStatus=canceled`;
+  const paymentIntentResult = await upsertPaymentIntent({
+    landlordId,
+    tenantId,
+    propertyId: asString(lease.propertyId),
+    unitId: asString(lease.unitId) || asString(lease.unitNumber),
+    leaseId,
+    rentPaymentId,
+    purpose: "rent",
+    amountCents,
+    currency: "cad",
+    source: "rent_payment_checkout",
+    provider: "stripe",
+    metadataSummary: {
+      leaseId,
+      rentPaymentId,
+      source: "rent_payment_checkout",
+    },
+    now: createdAt,
+  });
+  if (paymentIntentResult.created) {
+    await writePaymentIntentEvent({
+      type: "payment.intent_created",
+      paymentIntent: paymentIntentResult.paymentIntent,
+      rentPaymentId,
+      occurredAt: createdAt,
+    });
+  }
 
   const session = await createRentPaymentSession({
     intent: {
-      paymentIntentId: rentPaymentId,
+      paymentIntentId: paymentIntentResult.paymentIntent.paymentIntentId,
       landlordId,
       tenantId,
       propertyId: asString(lease.propertyId),
@@ -521,10 +606,25 @@ export async function createRentPaymentCheckout(input: CreateRentPaymentCheckout
       tenantId,
       landlordId,
       rentPaymentId,
+      paymentIntentId: paymentIntentResult.paymentIntent.paymentIntentId,
     },
     successUrl: stripeSuccessUrl,
     cancelUrl: stripeCancelUrl,
   });
+  const linkedPaymentIntent = await linkPaymentIntentProviderReference({
+    paymentIntentId: paymentIntentResult.paymentIntent.paymentIntentId,
+    provider: "stripe",
+    providerSessionId: session.reference.providerSessionId,
+    providerPaymentId: session.reference.providerPaymentId,
+    status: "provider_session_created",
+  });
+  if (linkedPaymentIntent) {
+    await writePaymentIntentEvent({
+      type: "payment.intent_provider_linked",
+      paymentIntent: linkedPaymentIntent,
+      rentPaymentId,
+    });
+  }
 
   const record: RentPaymentRecord = {
     id: rentPaymentId,

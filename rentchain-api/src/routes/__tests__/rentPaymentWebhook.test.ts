@@ -247,6 +247,27 @@ describe("rent payment webhook reconciliation", () => {
       updatedAt: "2026-04-27T10:00:00.000Z",
       paidAt: null,
     });
+    ensureCollection("paymentIntents").set("pi_rent_1", {
+      paymentIntentId: "pi_rent_1",
+      rentPaymentId: "rp-1",
+      leaseId: "lease-1",
+      tenantId: "tenant-1",
+      landlordId: "landlord-1",
+      propertyId: null,
+      unitId: null,
+      purpose: "rent",
+      amountCents: 180000,
+      currency: "cad",
+      status: "provider_session_created",
+      provider: "stripe",
+      providerSessionId: "cs_test_1",
+      providerPaymentId: "pi_test_1",
+      source: "rent_payment_checkout",
+      lifecycleState: "complete",
+      requiresReview: false,
+      createdAt: "2026-04-27T10:00:00.000Z",
+      updatedAt: "2026-04-27T10:00:00.000Z",
+    });
   });
 
   it("marks a rent payment paid idempotently from checkout completion metadata", async () => {
@@ -261,6 +282,7 @@ describe("rent payment webhook reconciliation", () => {
           payment_status: "paid",
           metadata: {
             rentPaymentId: "rp-1",
+            paymentIntentId: "pi_rent_1",
             leaseId: "lease-1",
             tenantId: "tenant-1",
             landlordId: "landlord-1",
@@ -290,7 +312,7 @@ describe("rent payment webhook reconciliation", () => {
     });
     expect(deriveRentPaymentReconciliationMock).toHaveBeenCalledWith({
       expectedIntent: expect.objectContaining({
-        paymentIntentId: "rp-1",
+        paymentIntentId: "pi_rent_1",
         landlordId: "landlord-1",
         tenantId: "tenant-1",
         leaseId: "lease-1",
@@ -340,6 +362,7 @@ describe("rent payment webhook reconciliation", () => {
         purpose: "rent",
         subjectType: "rent_payment",
         subjectId: "rp-1",
+        paymentIntentId: "pi_rent_1",
         status: "ignored_duplicate",
         duplicateCount: 1,
         normalizedStatus: "confirmed",
@@ -356,6 +379,7 @@ describe("rent payment webhook reconciliation", () => {
         receiptId: "provider_event:stripe:evt_rent_paid_1",
         subjectType: "rent_payment",
         subjectId: "rp-1",
+        paymentIntentId: "pi_rent_1",
         purpose: "rent",
         normalizedStatus: "confirmed",
         rawStatus: "paid",
@@ -391,7 +415,15 @@ describe("rent payment webhook reconciliation", () => {
           rawStatus: "paid",
           subjectType: "rent_payment",
           subjectId: "rp-1",
+          paymentIntentId: "pi_rent_1",
         }),
+      })
+    );
+    expect(ensureCollection("paymentIntents").get("pi_rent_1")).toEqual(
+      expect.objectContaining({
+        status: "confirmed",
+        providerSessionId: "cs_test_1",
+        providerPaymentId: "pi_test_1",
       })
     );
     expect(canonicalEvents.filter((event: any) => event.type === "rent_payment.paid")).toHaveLength(1);
@@ -540,6 +572,13 @@ describe("rent payment webhook reconciliation", () => {
         status: "failed",
         processorCheckoutSessionId: "cs_test_1",
         processorPaymentIntentId: "pi_test_1",
+      })
+    );
+    expect(ensureCollection("paymentIntents").get("pi_rent_1")).toEqual(
+      expect.objectContaining({
+        status: "failed",
+        providerSessionId: "cs_test_1",
+        providerPaymentId: "pi_test_1",
       })
     );
     expect(ensureCollection("paymentProviderEventReceipts").get("provider_event:stripe:evt_rent_failed_1")).toEqual(

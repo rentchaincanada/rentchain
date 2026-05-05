@@ -54,6 +54,7 @@ describe("paymentReconciliationRecords", () => {
       receiptId: "provider_event:stripe:evt_1",
       subjectType: "rent_payment",
       subjectId: "rp-1",
+      paymentIntentId: null,
       purpose: "rent",
       providerSignal,
       reconciliation: {
@@ -73,6 +74,7 @@ describe("paymentReconciliationRecords", () => {
       receiptId: "provider_event:stripe:evt_1",
       subjectType: "rent_payment",
       subjectId: "rp-1",
+      paymentIntentId: null,
       purpose: "rent",
       normalizedStatus: "confirmed",
       rawStatus: "paid",

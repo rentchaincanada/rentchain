@@ -22,6 +22,7 @@ export type PaymentProviderEventReceipt = {
   purpose?: PaymentPurpose | null;
   subjectType?: string | null;
   subjectId?: string | null;
+  paymentIntentId?: string | null;
   status: PaymentProviderEventReceiptStatus;
   firstReceivedAt: string;
   lastSeenAt: string;
@@ -52,6 +53,7 @@ type ReceiptWriteInput = {
   purpose?: PaymentPurpose | null;
   subjectType?: string | null;
   subjectId?: string | null;
+  paymentIntentId?: string | null;
   normalizedStatus?: PaymentExecutionStatus | null;
   rawStatus?: string | null;
   metadata?: Record<string, unknown> | null;
@@ -126,6 +128,7 @@ function normalizeReceipt(data: Record<string, unknown>, fallback: { receiptId: 
     purpose: (normalizeOptionalString(data.purpose, 50) as PaymentPurpose | null) || null,
     subjectType: normalizeOptionalString(data.subjectType, 80),
     subjectId: normalizeOptionalString(data.subjectId, 300),
+    paymentIntentId: normalizeOptionalString(data.paymentIntentId, 300),
     status: (normalizeOptionalString(data.status, 80) || "received") as PaymentProviderEventReceiptStatus,
     firstReceivedAt: normalizeOptionalString(data.firstReceivedAt, 80) || nowIso(),
     lastSeenAt: normalizeOptionalString(data.lastSeenAt, 80) || nowIso(),
@@ -155,6 +158,7 @@ export function serializeProviderEventReceiptSummary(receipt: PaymentProviderEve
     purpose: receipt.purpose || null,
     subjectType: receipt.subjectType || null,
     subjectId: receipt.subjectId || null,
+    paymentIntentId: receipt.paymentIntentId || null,
     status: receipt.status,
     duplicateCount: receipt.duplicateCount,
     normalizedStatus: receipt.normalizedStatus || null,
@@ -180,6 +184,7 @@ export async function markProviderEventReceived(input: ReceiptWriteInput): Promi
       normalizedStatus: input.normalizedStatus || existing.normalizedStatus || null,
       rawStatus: input.rawStatus || existing.rawStatus || null,
       metadataSummary: metadataSummary || existing.metadataSummary || null,
+      paymentIntentId: normalizeOptionalString(input.paymentIntentId, 300) || existing.paymentIntentId || null,
     };
     await ref.set(next, { merge: true });
     return { receiptId, isDuplicate: true, receipt: next, previousReceipt: existing };
@@ -193,6 +198,7 @@ export async function markProviderEventReceived(input: ReceiptWriteInput): Promi
     purpose: input.purpose || null,
     subjectType: normalizeOptionalString(input.subjectType, 80),
     subjectId: normalizeOptionalString(input.subjectId, 300),
+    paymentIntentId: normalizeOptionalString(input.paymentIntentId, 300),
     status: "received",
     firstReceivedAt: at,
     lastSeenAt: at,

@@ -13,6 +13,7 @@ export type PaymentReconciliationRecord = {
   receiptId: string;
   subjectType?: string | null;
   subjectId?: string | null;
+  paymentIntentId?: string | null;
   purpose?: PaymentPurpose | null;
   normalizedStatus?: PaymentExecutionStatus | null;
   rawStatus?: string | null;
@@ -40,6 +41,7 @@ type UpsertPaymentReconciliationRecordInput = {
   receiptId: string;
   subjectType?: string | null;
   subjectId?: string | null;
+  paymentIntentId?: string | null;
   purpose?: PaymentPurpose | null;
   providerSignal: NormalizedProviderPaymentEvent;
   reconciliation: PaymentReconciliationResult;
@@ -92,6 +94,7 @@ function normalizeRecord(
     receiptId: normalizeOptionalString(data.receiptId, 300) || fallback.receiptId,
     subjectType: normalizeOptionalString(data.subjectType, 80),
     subjectId: normalizeOptionalString(data.subjectId, 300),
+    paymentIntentId: normalizeOptionalString(data.paymentIntentId, 300),
     purpose: (normalizeOptionalString(data.purpose, 50) as PaymentPurpose | null) || null,
     normalizedStatus: (normalizeOptionalString(data.normalizedStatus, 80) as PaymentExecutionStatus | null) || null,
     rawStatus: normalizeOptionalString(data.rawStatus, 200),
@@ -133,6 +136,7 @@ export async function upsertPaymentReconciliationRecord(
     receiptId: input.receiptId,
     subjectType: normalizeOptionalString(input.subjectType, 80),
     subjectId: normalizeOptionalString(input.subjectId, 300),
+    paymentIntentId: normalizeOptionalString(input.paymentIntentId, 300),
     purpose: input.purpose || input.providerSignal.purpose || null,
     normalizedStatus: input.providerSignal.normalizedStatus || null,
     rawStatus: input.providerSignal.rawStatus || null,
