@@ -114,6 +114,7 @@ describe("ExpensesPage", () => {
 
     render(<ExpensesPage />);
 
+    expect((await screen.findAllByText("FixIt")).length).toBeGreaterThan(0);
     fireEvent.click((await screen.findAllByRole("button", { name: "Export CSV" }))[0]);
     await waitFor(() => expect(createObjectURL).toHaveBeenCalledTimes(1));
     const csvBlob = createObjectURL.mock.calls[0][0] as Blob;
@@ -166,6 +167,7 @@ describe("ExpensesPage", () => {
 
     render(<ExpensesPage />);
 
+    expect((await screen.findAllByText("FixIt")).length).toBeGreaterThan(0);
     fireEvent.click((await screen.findAllByRole("button", { name: "Export CSV" }))[0]);
     await waitFor(() => expect(createObjectURL).toHaveBeenCalledTimes(1));
     const csvText = await readBlobText(createObjectURL.mock.calls[0][0] as Blob);

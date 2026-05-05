@@ -16,6 +16,7 @@ export default function PortfolioScoreHistoryPage() {
   const [loading, setLoading] = React.useState(false);
   const [snapshotLoading, setSnapshotLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const hasHandledInitialSearch = React.useRef(false);
 
   const load = React.useCallback(
     async (nextPortfolioId: string) => {
@@ -50,11 +51,14 @@ export default function PortfolioScoreHistoryPage() {
 
   React.useEffect(() => {
     const initialPortfolioId = searchParams.get("portfolioId") || "";
-    if (initialPortfolioId) {
+    if (initialPortfolioId && (!hasHandledInitialSearch.current || initialPortfolioId !== portfolioId)) {
+      hasHandledInitialSearch.current = true;
       setPortfolioId(initialPortfolioId);
       void load(initialPortfolioId);
+      return;
     }
-  }, [load, searchParams]);
+    hasHandledInitialSearch.current = true;
+  }, [load, portfolioId, searchParams]);
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
@@ -130,4 +134,3 @@ export default function PortfolioScoreHistoryPage() {
     </MacShell>
   );
 }
-

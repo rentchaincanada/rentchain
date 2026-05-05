@@ -183,6 +183,7 @@ describe("leaseRoutes integrity repairs", () => {
       unitId: "unit-1",
       unitNumber: "101",
       status: "active",
+      dueDate: "2026-04-01",
     });
     seedDoc("ledgerEntries", "entry-1", {
       landlordId: "landlord-1",
@@ -281,6 +282,13 @@ describe("leaseRoutes integrity repairs", () => {
         outstandingAmountCents: 0,
       })
     );
+    expect(res.body?.delinquencySignals).toEqual([]);
+    expect(res.body?.delinquencySummary).toEqual(
+      expect.objectContaining({
+        totalSignals: 0,
+        totalOutstandingCents: 0,
+      })
+    );
   });
 
   it("adds read-only obligation rows without changing existing ledger rows when payment is missing", async () => {
@@ -293,6 +301,7 @@ describe("leaseRoutes integrity repairs", () => {
       monthlyRent: 1800,
       startDate: "2026-04-01",
       endDate: "2027-03-31",
+      dueDate: "2026-04-01",
       status: "active",
     });
     seedDoc("ledgerEntries", "entry-1", {
@@ -342,6 +351,32 @@ describe("leaseRoutes integrity repairs", () => {
         expectedAmountCents: 180000,
         paidAmountCents: 0,
         outstandingAmountCents: 180000,
+      })
+    );
+    expect(res.body?.delinquencySignals).toEqual([
+      expect.objectContaining({
+        leaseId: "lease-1",
+        signalType: "overdue",
+        severity: "critical",
+        expectedAmountCents: 180000,
+        paidAmountCents: 0,
+        outstandingAmountCents: 180000,
+      }),
+      expect.objectContaining({
+        leaseId: "lease-1",
+        signalType: "missing_payment",
+        severity: "warning",
+        expectedAmountCents: 180000,
+        paidAmountCents: 0,
+        outstandingAmountCents: 180000,
+      }),
+    ]);
+    expect(res.body?.delinquencySummary).toEqual(
+      expect.objectContaining({
+        totalSignals: 2,
+        overdueCount: 1,
+        missingCount: 1,
+        totalOutstandingCents: 180000,
       })
     );
   });
