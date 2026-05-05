@@ -113,6 +113,7 @@ async function invokeRouter(
 
 const adminUser = {
   id: "admin-1",
+  email: "admin@example.com",
   role: "admin",
   permissions: [],
   revokedPermissions: [],
@@ -241,6 +242,21 @@ describe("admin lease lifecycle review queue route", () => {
       acknowledgedAt: "2026-05-05T12:00:00.000Z",
       updatedAt: "2026-05-05T12:00:00.000Z",
     });
+    seedDoc("leaseLifecycleReviewHistory", "history-1", {
+      historyId: "history-1",
+      reviewItemId: "lease_lifecycle:lease-unknown:unknown_lifecycle",
+      leaseId: "lease-unknown",
+      landlordId: "landlord-1",
+      propertyId: "property-1",
+      unitId: "unit-2",
+      action: "reviewed",
+      previousStatus: null,
+      nextStatus: "reviewed",
+      note: "Reviewed by ops",
+      actorId: "admin-1",
+      actorEmail: "admin@example.com",
+      createdAt: "2026-05-05T12:00:00.000Z",
+    });
 
     const router = (await import("../adminLeasesRoutes")).default;
     const response = await invokeRouter(router, {
@@ -259,6 +275,16 @@ describe("admin lease lifecycle review queue route", () => {
           note: "Reviewed by ops",
           acknowledgedBy: "admin-1",
         }),
+        recentHistory: [
+          expect.objectContaining({
+            historyId: "history-1",
+            action: "reviewed",
+            nextStatus: "reviewed",
+            note: "Reviewed by ops",
+            actorId: "admin-1",
+            actorEmail: "admin@example.com",
+          }),
+        ],
       })
     );
   });
@@ -295,18 +321,38 @@ describe("admin lease lifecycle review queue route", () => {
         acknowledgedBy: "admin-1",
       })
     );
+    expect(response.body.historyEvent).toEqual(
+      expect.objectContaining({
+        reviewItemId: "lease_lifecycle:lease-unknown:unknown_lifecycle",
+        leaseId: "lease-unknown",
+        action: "reviewed",
+        previousStatus: null,
+        nextStatus: "reviewed",
+        note: "Dates reviewed",
+        actorId: "admin-1",
+        actorEmail: "admin@example.com",
+      })
+    );
+    expect(Array.from(collections.get("leaseLifecycleReviewHistory")?.values() || [])).toEqual([
+      expect.objectContaining({
+        action: "reviewed",
+        nextStatus: "reviewed",
+        leaseId: "lease-unknown",
+      }),
+    ]);
     expect(collections.get("leases")?.get("lease-unknown")).toEqual({ id: "lease-unknown", ...originalLease });
   });
 
   it("allows admins to snooze and assign review items", async () => {
-    seedDoc("leases", "lease-unknown", {
+    const originalLease = {
       status: "active",
       propertyId: "property-1",
       unitId: "unit-2",
       landlordId: "landlord-1",
       startDate: "2026-12-31",
       endDate: "2026-01-01",
-    });
+    };
+    seedDoc("leases", "lease-unknown", originalLease);
 
     const router = (await import("../adminLeasesRoutes")).default;
     const snoozed = await invokeRouter(router, {
@@ -322,6 +368,13 @@ describe("admin lease lifecycle review queue route", () => {
     expect(snoozed.body.acknowledgement).toEqual(
       expect.objectContaining({
         status: "snoozed",
+        snoozedUntil: "2026-05-12T12:00:00.000Z",
+      })
+    );
+    expect(snoozed.body.historyEvent).toEqual(
+      expect.objectContaining({
+        action: "snoozed",
+        nextStatus: "snoozed",
         snoozedUntil: "2026-05-12T12:00:00.000Z",
       })
     );
@@ -342,6 +395,21 @@ describe("admin lease lifecycle review queue route", () => {
         assignedTo: "ops-admin-2",
       })
     );
+    expect(assigned.body.historyEvent).toEqual(
+      expect.objectContaining({
+        action: "assigned",
+        previousStatus: "snoozed",
+        nextStatus: "assigned",
+        assignedTo: "ops-admin-2",
+      })
+    );
+    expect(Array.from(collections.get("leaseLifecycleReviewHistory")?.values() || [])).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ action: "snoozed", leaseId: "lease-unknown" }),
+        expect.objectContaining({ action: "assigned", leaseId: "lease-unknown" }),
+      ])
+    );
+    expect(collections.get("leases")?.get("lease-unknown")).toEqual({ id: "lease-unknown", ...originalLease });
   });
 
   it("blocks non-admin acknowledgement mutations", async () => {

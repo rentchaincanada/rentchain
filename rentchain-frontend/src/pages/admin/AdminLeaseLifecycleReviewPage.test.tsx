@@ -68,6 +68,23 @@ describe("AdminLeaseLifecycleReviewPage", () => {
             acknowledgedAt: "2026-05-05T12:00:00.000Z",
             updatedAt: "2026-05-05T12:00:00.000Z",
           },
+          recentHistory: [
+            {
+              historyId: "history-1",
+              reviewItemId: "lease_lifecycle:lease-1:unknown_lifecycle",
+              leaseId: "lease-1",
+              landlordId: "landlord-1",
+              propertyId: "property-1",
+              unitId: "unit-1",
+              action: "reviewed",
+              previousStatus: null,
+              nextStatus: "reviewed",
+              note: "Reviewed by ops",
+              actorId: "admin-1",
+              actorEmail: "admin@example.com",
+              createdAt: "2026-05-05T12:00:00.000Z",
+            },
+          ],
         },
         {
           id: "lease_lifecycle:lease-2:expired_occupancy_conflict",
@@ -85,6 +102,7 @@ describe("AdminLeaseLifecycleReviewPage", () => {
           createdFrom: "lease_lifecycle_review_queue_v1",
           detectedAt: "2026-05-05T12:00:00.000Z",
           acknowledgement: null,
+          recentHistory: [],
         },
       ],
     });
@@ -105,6 +123,10 @@ describe("AdminLeaseLifecycleReviewPage", () => {
     expect(screen.getAllByRole("button", { name: /Mark reviewed/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("button", { name: /Snooze/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("button", { name: /Assign/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Recent history/i).length).toBe(2);
+    expect(screen.getByText(/Reviewed by ops/i)).toBeInTheDocument();
+    expect(screen.getByText(/admin@example.com/i)).toBeInTheDocument();
+    expect(screen.getByText(/No history yet/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "lease-1" })).toHaveAttribute("href", "/admin/leases?q=lease-1");
     expect(screen.queryByRole("button", { name: /fix/i })).not.toBeInTheDocument();
     expect(screen.queryByText(/Fix automatically/i)).not.toBeInTheDocument();
@@ -140,6 +162,7 @@ describe("AdminLeaseLifecycleReviewPage", () => {
           createdFrom: "lease_lifecycle_review_queue_v1",
           detectedAt: "2026-05-05T12:00:00.000Z",
           acknowledgement: null,
+          recentHistory: [],
         },
       ],
     });
@@ -156,6 +179,21 @@ describe("AdminLeaseLifecycleReviewPage", () => {
         acknowledgedBy: "admin-1",
         acknowledgedAt: "2026-05-05T12:00:00.000Z",
         updatedAt: "2026-05-05T12:00:00.000Z",
+      },
+      historyEvent: {
+        historyId: "history-1",
+        reviewItemId: "lease_lifecycle:lease-1:unknown_lifecycle",
+        leaseId: "lease-1",
+        landlordId: "landlord-1",
+        propertyId: "property-1",
+        unitId: "unit-1",
+        action: "reviewed",
+        previousStatus: null,
+        nextStatus: "reviewed",
+        note: "Reviewed from lease lifecycle queue",
+        actorId: "admin-1",
+        actorEmail: "admin@example.com",
+        createdAt: "2026-05-05T12:00:00.000Z",
       },
     });
 
@@ -174,6 +212,8 @@ describe("AdminLeaseLifecycleReviewPage", () => {
       })
     );
     expect((await screen.findAllByText(/reviewed/i)).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Reviewed from lease lifecycle queue/i)).toBeInTheDocument();
+    expect(screen.getByText(/admin@example.com/i)).toBeInTheDocument();
   });
 
   it("renders empty and error states", async () => {

@@ -6,6 +6,7 @@ import {
   fetchAdminLeaseLifecycleReviewQueue,
   updateAdminLeaseLifecycleReviewAcknowledgement,
   type AdminLeaseLifecycleReviewAcknowledgement,
+  type AdminLeaseLifecycleReviewHistoryEvent,
   type AdminLeaseLifecycleReviewItem,
   type AdminLeaseLifecycleReviewSummary,
   type LeaseLifecycleReviewSeverity,
@@ -41,6 +42,29 @@ function acknowledgementLabel(acknowledgement: AdminLeaseLifecycleReviewAcknowle
     return `assigned to ${acknowledgement.assignedTo}`;
   }
   return acknowledgement.status;
+}
+
+function formatHistoryTimestamp(value: string) {
+  const parsed = Date.parse(value);
+  if (!Number.isFinite(parsed)) return value || "Unknown time";
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(parsed));
+}
+
+function historyActor(event: AdminLeaseLifecycleReviewHistoryEvent) {
+  return event.actorEmail || event.actorId || "Unknown admin";
+}
+
+function historyLine(event: AdminLeaseLifecycleReviewHistoryEvent) {
+  const details = [
+    event.assignedTo ? `assigned to ${event.assignedTo}` : null,
+    event.snoozedUntil ? `snoozed until ${new Date(event.snoozedUntil).toLocaleDateString()}` : null,
+  ].filter(Boolean);
+  return details.length ? `${event.action.replace(/_/g, " ")} - ${details.join(", ")}` : event.action.replace(/_/g, " ");
 }
 
 function SummaryCard({ label, value }: { label: string; value: number }) {
@@ -121,6 +145,22 @@ function QueueItemRow({
               Assign
             </Button>
           </div>
+          <div style={{ display: "grid", gap: 6 }}>
+            <div style={{ color: "#64748b", fontSize: 12, fontWeight: 700 }}>Recent history</div>
+            {item.recentHistory?.length ? (
+              item.recentHistory.map((event) => (
+                <div key={event.historyId} style={{ color: "#475569", fontSize: 12, lineHeight: 1.35 }}>
+                  <strong style={{ color: "#0f172a" }}>{historyLine(event)}</strong>
+                  <div>
+                    {historyActor(event)} · {formatHistoryTimestamp(event.createdAt)}
+                  </div>
+                  {event.note ? <div>{event.note}</div> : null}
+                </div>
+              ))
+            ) : (
+              <div style={{ color: "#64748b", fontSize: 12 }}>No history yet.</div>
+            )}
+          </div>
         </div>
       </td>
     </tr>
@@ -163,7 +203,13 @@ export default function AdminLeaseLifecycleReviewPage() {
         const response = await updateAdminLeaseLifecycleReviewAcknowledgement(item.id, payload);
         setItems((current) =>
           current.map((candidate) =>
-            candidate.id === item.id ? { ...candidate, acknowledgement: response.acknowledgement } : candidate
+            candidate.id === item.id
+              ? {
+                  ...candidate,
+                  acknowledgement: response.acknowledgement,
+                  recentHistory: [response.historyEvent, ...(candidate.recentHistory || [])].slice(0, 3),
+                }
+              : candidate
           )
         );
       } catch (err: any) {
