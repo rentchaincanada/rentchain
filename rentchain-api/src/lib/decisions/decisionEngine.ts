@@ -13,7 +13,15 @@ export type DecisionType =
 
 export type DecisionSeverity = "info" | "warning" | "critical";
 
-export type DecisionStatus = "detected" | "surfaced" | "reviewed" | "accepted" | "dismissed" | "resolved";
+export type DecisionStatus =
+  | "detected"
+  | "surfaced"
+  | "reviewed"
+  | "snoozed"
+  | "assigned"
+  | "accepted"
+  | "dismissed"
+  | "resolved";
 
 export type Decision = {
   decisionId: string;

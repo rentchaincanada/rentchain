@@ -13,6 +13,7 @@ import {
   type LeaseLedgerEntry,
   type PaymentObligationStatus,
 } from "../api/leaseLedgerApi";
+import { patchDecisionAction } from "@/api/decisionApi";
 import { getAuthToken } from "../lib/authToken";
 import { getFirebaseIdToken } from "../lib/firebaseAuthToken";
 import {
@@ -27,8 +28,9 @@ import {
 import {
   decisionDisplayCopy,
   decisionSeverityStyle,
-  deriveDecisionItemsFromDelinquencySignals,
+  decisionStatusCopy,
   summarizeDecisionItems,
+  type DecisionActionType,
   type DecisionItem,
   type DecisionSeverity,
 } from "@/lib/decisions/decisionDisplay";
@@ -180,7 +182,73 @@ function DecisionBadge({ severity, label }: { severity: DecisionSeverity; label:
   );
 }
 
-function DecisionRow({ decision }: { decision: DecisionItem }) {
+function decisionWithStatus(decision: DecisionItem, actionType: DecisionActionType): DecisionItem {
+  const nextStatus =
+    actionType === "reviewed"
+      ? "reviewed"
+      : actionType === "snoozed"
+      ? "snoozed"
+      : actionType === "assigned"
+      ? "assigned"
+      : actionType === "dismissed"
+      ? "dismissed"
+      : "resolved";
+  return {
+    ...decision,
+    status: nextStatus,
+    latestAction: {
+      actionId: `local-${decision.decisionId}-${actionType}`,
+      decisionId: decision.decisionId,
+      actionType,
+      previousStatus: decision.status || "detected",
+      nextStatus,
+      createdAt: new Date().toISOString(),
+    },
+  };
+}
+
+function DecisionActionControls({
+  decision,
+  pending,
+  onAction,
+}: {
+  decision: DecisionItem;
+  pending: boolean;
+  onAction: (decision: DecisionItem, actionType: DecisionActionType) => void;
+}) {
+  const actions: Array<{ actionType: DecisionActionType; label: string }> = [
+    { actionType: "reviewed", label: "Mark reviewed" },
+    { actionType: "snoozed", label: "Snooze" },
+    { actionType: "assigned", label: "Assign" },
+    { actionType: "dismissed", label: "Dismiss" },
+    { actionType: "resolved", label: "Resolve" },
+  ];
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+      {actions.map((action) => (
+        <button
+          key={action.actionType}
+          type="button"
+          disabled={pending}
+          onClick={() => onAction(decision, action.actionType)}
+          style={{ border: "1px solid #cbd5e1", background: "#fff", borderRadius: 8, padding: "6px 9px", fontWeight: 700 }}
+        >
+          {pending ? "Saving..." : action.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function DecisionRow({
+  decision,
+  pending,
+  onAction,
+}: {
+  decision: DecisionItem;
+  pending: boolean;
+  onAction: (decision: DecisionItem, actionType: DecisionActionType) => void;
+}) {
   const copy = decisionDisplayCopy[decision.decisionType];
   const context = [
     decision.unitId ? `Unit ${decision.unitId}` : null,
@@ -190,10 +258,17 @@ function DecisionRow({ decision }: { decision: DecisionItem }) {
     <div style={{ border: "1px solid #e2e8f0", borderRadius: 12, padding: 12, background: "#fff", display: "grid", gap: 6 }}>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
         <DecisionBadge severity={decision.severity} label={copy.badge} />
+        <span style={{ border: "1px solid #cbd5e1", borderRadius: 999, padding: "3px 8px", fontSize: 12, fontWeight: 800 }}>
+          {decisionStatusCopy[decision.status || "detected"]}
+        </span>
         <strong>{copy.label}</strong>
       </div>
       <div style={{ color: "#475569" }}>{decision.reason}</div>
       {context.length ? <div style={{ color: "#64748b", fontSize: 12 }}>{context.join(" · ")}</div> : null}
+      {decision.latestAction ? (
+        <div style={{ color: "#64748b", fontSize: 12 }}>Last action: {decisionStatusCopy[decision.latestAction.nextStatus]}</div>
+      ) : null}
+      <DecisionActionControls decision={decision} pending={pending} onAction={onAction} />
     </div>
   );
 }
@@ -318,6 +393,8 @@ export default function LeaseLedgerPage() {
   const [obligationSummary, setObligationSummary] = useState<LeaseObligationLedgerSummary | null>(null);
   const [delinquencySignals, setDelinquencySignals] = useState<LeaseDelinquencySignal[]>([]);
   const [delinquencySummary, setDelinquencySummary] = useState<LeaseDelinquencySummary | null>(null);
+  const [decisions, setDecisions] = useState<DecisionItem[]>([]);
+  const [decisionActionPendingId, setDecisionActionPendingId] = useState<string | null>(null);
   const [showChargeModal, setShowChargeModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showNoteModal, setShowNoteModal] = useState(false);
@@ -337,7 +414,6 @@ export default function LeaseLedgerPage() {
   const [paymentReference, setPaymentReference] = useState("");
   const [paymentNotes, setPaymentNotes] = useState("");
 
-  const decisions = useMemo(() => deriveDecisionItemsFromDelinquencySignals(delinquencySignals), [delinquencySignals]);
   const decisionSummary = useMemo(() => summarizeDecisionItems(decisions), [decisions]);
 
   const monthlyRows = useMemo(() => {
@@ -357,10 +433,32 @@ export default function LeaseLedgerPage() {
       setObligationSummary(res.obligationSummary || null);
       setDelinquencySignals(Array.isArray(res.delinquencySignals) ? res.delinquencySignals : []);
       setDelinquencySummary(res.delinquencySummary || null);
+      setDecisions(Array.isArray(res.decisions) ? res.decisions : []);
     } catch (err: unknown) {
       setError(errorMessage(err, "Failed to load lease ledger"));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDecisionAction = async (decision: DecisionItem, actionType: DecisionActionType) => {
+    if (!leaseId) return;
+    setDecisionActionPendingId(decision.decisionId);
+    const snoozedUntil = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    try {
+      const result = await patchDecisionAction(decision.decisionId, {
+        leaseId,
+        actionType,
+        decision,
+        assignedTo: actionType === "assigned" ? "operations" : undefined,
+        snoozedUntil: actionType === "snoozed" ? snoozedUntil : undefined,
+      });
+      const nextDecision = result?.decision || decisionWithStatus(decision, actionType);
+      setDecisions((current) => current.map((item) => (item.decisionId === decision.decisionId ? nextDecision : item)));
+    } catch (err: unknown) {
+      setError(errorMessage(err, "Failed to update decision"));
+    } finally {
+      setDecisionActionPendingId(null);
     }
   };
 
@@ -639,7 +737,12 @@ export default function LeaseLedgerPage() {
             </div>
             <div style={{ display: "grid", gap: 8 }}>
               {decisions.map((decision) => (
-                <DecisionRow key={decision.decisionId} decision={decision} />
+                <DecisionRow
+                  key={decision.decisionId}
+                  decision={decision}
+                  pending={decisionActionPendingId === decision.decisionId}
+                  onAction={handleDecisionAction}
+                />
               ))}
             </div>
           </>

@@ -10,7 +10,30 @@ export type DecisionType =
   | "review_occupancy_conflict";
 
 export type DecisionSeverity = "info" | "warning" | "critical";
-export type DecisionStatus = "detected" | "surfaced" | "reviewed" | "accepted" | "dismissed" | "resolved";
+export type DecisionActionType = "reviewed" | "snoozed" | "assigned" | "dismissed" | "resolved";
+export type DecisionStatus =
+  | "detected"
+  | "surfaced"
+  | "reviewed"
+  | "snoozed"
+  | "assigned"
+  | "accepted"
+  | "dismissed"
+  | "resolved";
+
+export type DecisionAction = {
+  actionId: string;
+  decisionId: string;
+  actionType: DecisionActionType;
+  previousStatus?: DecisionStatus;
+  nextStatus: DecisionStatus;
+  note?: string | null;
+  assignedTo?: string | null;
+  snoozedUntil?: string | null;
+  actorId?: string | null;
+  actorEmail?: string | null;
+  createdAt: string;
+};
 
 export type DecisionItem = {
   decisionId: string;
@@ -27,6 +50,7 @@ export type DecisionItem = {
   metadata?: Record<string, unknown>;
   createdAt?: string | null;
   updatedAt?: string | null;
+  latestAction?: DecisionAction | null;
 };
 
 export type DecisionSummary = {
@@ -56,6 +80,17 @@ export const decisionSeverityStyle: Record<DecisionSeverity, { bg: string; color
   critical: { bg: "#fee2e2", color: "#991b1b", border: "#fecaca" },
   warning: { bg: "#ffedd5", color: "#9a3412", border: "#fed7aa" },
   info: { bg: "#f1f5f9", color: "#334155", border: "#cbd5e1" },
+};
+
+export const decisionStatusCopy: Record<DecisionStatus, string> = {
+  detected: "Detected",
+  surfaced: "Surfaced",
+  reviewed: "Reviewed",
+  snoozed: "Snoozed",
+  assigned: "Assigned",
+  accepted: "Accepted",
+  dismissed: "Dismissed",
+  resolved: "Resolved",
 };
 
 const delinquencyDecisionMap: Record<
@@ -102,6 +137,7 @@ export function normalizeDecisionItems(value: unknown): DecisionItem[] {
       metadata: item.metadata || {},
       createdAt: item.createdAt || null,
       updatedAt: item.updatedAt || null,
+      latestAction: item.latestAction || null,
     }));
 }
 

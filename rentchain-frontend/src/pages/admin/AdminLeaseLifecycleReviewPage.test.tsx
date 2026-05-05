@@ -9,6 +9,10 @@ vi.mock("../../api/adminLeaseLifecycleReviewApi", () => ({
   updateAdminLeaseLifecycleReviewAcknowledgement: vi.fn(),
 }));
 
+vi.mock("@/api/decisionApi", () => ({
+  patchDecisionAction: vi.fn(),
+}));
+
 vi.mock("../../components/layout/MacShell", () => ({
   MacShell: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
@@ -134,7 +138,64 @@ describe("AdminLeaseLifecycleReviewPage", () => {
     expect(screen.queryByRole("button", { name: /fix/i })).not.toBeInTheDocument();
     expect(screen.queryByText(/Fix automatically/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /accept/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /dismiss/i })).not.toBeInTheDocument();
+  });
+
+  it("updates related decision lifecycle state from row actions", async () => {
+    const { fetchAdminLeaseLifecycleReviewQueue } = await import("../../api/adminLeaseLifecycleReviewApi");
+    const { patchDecisionAction } = await import("@/api/decisionApi");
+    vi.mocked(fetchAdminLeaseLifecycleReviewQueue).mockResolvedValue({
+      ok: true,
+      summary: { total: 1, critical: 0, warning: 1, info: 0 },
+      items: [
+        {
+          id: "lease_lifecycle:lease-2:expired_occupancy_conflict",
+          leaseId: "lease-2",
+          propertyId: "property-2",
+          unitId: "unit-2",
+          landlordId: "landlord-2",
+          derivedLifecycleState: "expired",
+          derivedLifecycleReasons: ["end_date_past"],
+          severity: "warning",
+          category: "expired_occupancy_conflict",
+          title: "Expired lease conflicts with manual occupancy",
+          description: "The lease is expired, but the unit has current manual occupied data.",
+          recommendedAction: "Confirm occupancy manually",
+          createdFrom: "lease_lifecycle_review_queue_v1",
+          detectedAt: "2026-05-05T12:00:00.000Z",
+          acknowledgement: null,
+          recentHistory: [],
+        },
+      ],
+    });
+    vi.mocked(patchDecisionAction).mockResolvedValue({
+      ok: true,
+      decision: {
+        decisionId: "decision:review_occupancy_conflict:lease_lifecycle:lease-2:expired_occupancy_conflict",
+        leaseId: "lease-2",
+        propertyId: "property-2",
+        unitId: "unit-2",
+        decisionType: "review_occupancy_conflict",
+        severity: "warning",
+        status: "resolved",
+        reason: "Lease lifecycle indicates an occupancy conflict that needs review.",
+        metadata: {},
+      },
+    });
+
+    render(
+      <MemoryRouter>
+        <AdminLeaseLifecycleReviewPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Related decision/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Resolve" }));
+
+    expect(vi.mocked(patchDecisionAction)).toHaveBeenCalledWith(
+      expect.stringContaining("review_occupancy_conflict"),
+      expect.objectContaining({ actionType: "resolved", leaseId: "lease-2" })
+    );
+    expect(await screen.findByText("Resolved")).toBeInTheDocument();
   });
 
   it("updates acknowledgement state from row actions", async () => {

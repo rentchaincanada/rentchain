@@ -44,10 +44,13 @@ import { clearPostUpgradeState, getPostUpgradeContent, getPostUpgradeState } fro
 import {
   decisionDisplayCopy,
   decisionSeverityStyle,
+  decisionStatusCopy,
   normalizeDecisionItems,
   summarizeDecisionItems,
+  type DecisionActionType,
   type DecisionItem,
 } from "@/lib/decisions/decisionDisplay";
+import { patchDecisionAction } from "@/api/decisionApi";
 
 const StarterOnboardingPanel = React.lazy(
   () => import("../components/dashboard/StarterOnboardingPanel")
@@ -115,7 +118,29 @@ function formatDate(ts: number | null): string {
   }
 }
 
-function DashboardDecisionSummaryPanel({ decisions }: { decisions: DecisionItem[] }) {
+function localDecisionStatus(decision: DecisionItem, actionType: DecisionActionType): DecisionItem {
+  const status =
+    actionType === "reviewed"
+      ? "reviewed"
+      : actionType === "snoozed"
+      ? "snoozed"
+      : actionType === "assigned"
+      ? "assigned"
+      : actionType === "dismissed"
+      ? "dismissed"
+      : "resolved";
+  return { ...decision, status };
+}
+
+function DashboardDecisionSummaryPanel({
+  decisions,
+  pendingId,
+  onAction,
+}: {
+  decisions: DecisionItem[];
+  pendingId: string | null;
+  onAction: (decision: DecisionItem, actionType: DecisionActionType) => void;
+}) {
   const summary = summarizeDecisionItems(decisions);
   const cells = [
     { label: "Overdue", value: summary.overdue, severity: "critical" as const },
@@ -154,12 +179,40 @@ function DashboardDecisionSummaryPanel({ decisions }: { decisions: DecisionItem[
               const copy = decisionDisplayCopy[decision.decisionType];
               const tone = decisionSeverityStyle[decision.severity];
               return (
-                <div key={decision.decisionId} style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", color: text.primary }}>
+                <div key={decision.decisionId} style={{ display: "grid", gap: 6, color: text.primary, borderTop: `1px solid ${colors.border}`, paddingTop: 8 }}>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                   <span style={{ border: `1px solid ${tone.border}`, background: tone.bg, color: tone.color, borderRadius: 999, padding: "2px 8px", fontSize: 12, fontWeight: 800 }}>
                     {copy.badge}
                   </span>
+                    <span style={{ border: "1px solid #cbd5e1", borderRadius: 999, padding: "2px 8px", fontSize: 12, fontWeight: 800 }}>
+                      {decisionStatusCopy[decision.status || "detected"]}
+                    </span>
                   <span>{copy.label}</span>
                   <span style={{ color: text.muted }}>{decision.reason}</span>
+                  </div>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {(["reviewed", "snoozed", "assigned", "dismissed", "resolved"] as DecisionActionType[]).map((actionType) => (
+                      <button
+                        key={actionType}
+                        type="button"
+                        disabled={pendingId === decision.decisionId || !decision.leaseId}
+                        onClick={() => onAction(decision, actionType)}
+                        style={{ border: "1px solid #cbd5e1", background: "#fff", borderRadius: 8, padding: "5px 8px", fontWeight: 700 }}
+                      >
+                        {pendingId === decision.decisionId
+                          ? "Saving..."
+                          : actionType === "reviewed"
+                          ? "Mark reviewed"
+                          : actionType === "snoozed"
+                          ? "Snooze"
+                          : actionType === "assigned"
+                          ? "Assign"
+                          : actionType === "dismissed"
+                          ? "Dismiss"
+                          : "Resolve"}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               );
             })}
@@ -173,6 +226,8 @@ function DashboardDecisionSummaryPanel({ decisions }: { decisions: DecisionItem[
 const DashboardPage: React.FC = () => {
   // Guardrail: declare derived values used in hook deps above the hooks that depend on them.
   const [data, setData] = React.useState<any | null>(null);
+  const [decisionRows, setDecisionRows] = React.useState<DecisionItem[]>([]);
+  const [decisionActionPendingId, setDecisionActionPendingId] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [lastUpdatedAt, setLastUpdatedAt] = React.useState<number | null>(null);
@@ -236,6 +291,7 @@ const DashboardPage: React.FC = () => {
     try {
       const summary = await fetchDashboardSummary();
       setData(summary);
+      setDecisionRows(normalizeDecisionItems((summary as any)?.decisions));
       setLastUpdatedAt(Date.now());
     } catch (err: any) {
       setError(err?.message || "Failed to load dashboard");
@@ -496,7 +552,27 @@ const DashboardPage: React.FC = () => {
         ? "No onboarding drop-off right now."
         : "No onboarding starts recorded yet.";
   const events = Array.isArray(data?.events) ? data.events : [];
-  const dashboardDecisions = React.useMemo(() => normalizeDecisionItems(data?.decisions), [data?.decisions]);
+  const dashboardDecisions = decisionRows;
+
+  const handleDashboardDecisionAction = async (decision: DecisionItem, actionType: DecisionActionType) => {
+    if (!decision.leaseId) return;
+    setDecisionActionPendingId(decision.decisionId);
+    try {
+      const result = await patchDecisionAction(decision.decisionId, {
+        leaseId: decision.leaseId,
+        actionType,
+        decision,
+        assignedTo: actionType === "assigned" ? "operations" : undefined,
+        snoozedUntil: actionType === "snoozed" ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() : undefined,
+      });
+      const nextDecision = result?.decision || localDecisionStatus(decision, actionType);
+      setDecisionRows((current) => current.map((item) => (item.decisionId === decision.decisionId ? nextDecision : item)));
+    } catch (err) {
+      showToast("Unable to update decision right now.", "error");
+    } finally {
+      setDecisionActionPendingId(null);
+    }
+  };
 
   React.useEffect(() => {
     if (location.hash !== "#open-actions") return;
@@ -724,7 +800,13 @@ const DashboardPage: React.FC = () => {
             }}
           />
         ) : null}
-        {dataReady ? <DashboardDecisionSummaryPanel decisions={dashboardDecisions} /> : null}
+        {dataReady ? (
+          <DashboardDecisionSummaryPanel
+            decisions={dashboardDecisions}
+            pendingId={decisionActionPendingId}
+            onAction={handleDashboardDecisionAction}
+          />
+        ) : null}
         {dataReady ? (
           <div style={{ marginTop: spacing.md }}>
             <PortfolioCredibilitySummaryCard

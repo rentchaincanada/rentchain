@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   createLeaseNote: vi.fn(),
   archiveLeaseRecord: vi.fn(),
   restoreLeaseRecord: vi.fn(),
+  patchDecisionAction: vi.fn(),
 }));
 
 vi.mock("../api/leaseLedgerApi", () => ({
@@ -28,6 +29,10 @@ vi.mock("@/api/leasesApi", () => ({
   createLeaseNote: mocks.createLeaseNote,
   archiveLeaseRecord: mocks.archiveLeaseRecord,
   restoreLeaseRecord: mocks.restoreLeaseRecord,
+}));
+
+vi.mock("@/api/decisionApi", () => ({
+  patchDecisionAction: mocks.patchDecisionAction,
 }));
 
 vi.mock("../lib/authToken", () => ({
@@ -294,6 +299,70 @@ describe("LeaseLedgerPage", () => {
         manualReviewCount: 1,
         totalOutstandingCents: 425000,
       },
+      decisions: [
+        {
+          decisionId: "decision-overdue",
+          leaseId: "lease-1",
+          propertyId: "prop-1",
+          unitId: "unit-1",
+          tenantId: "tenant-1",
+          decisionType: "review_overdue_rent",
+          severity: "critical",
+          status: "detected",
+          reason: "Rent past due date",
+          metadata: {},
+          createdAt: "2026-05-05T00:00:00.000Z",
+          updatedAt: "2026-05-05T00:00:00.000Z",
+        },
+        {
+          decisionId: "decision-underpaid",
+          leaseId: "lease-1",
+          propertyId: "prop-1",
+          decisionType: "review_underpaid_rent",
+          severity: "warning",
+          status: "detected",
+          reason: "Partial payment received",
+          metadata: {},
+          createdAt: "2026-05-05T00:00:00.000Z",
+          updatedAt: "2026-05-05T00:00:00.000Z",
+        },
+        {
+          decisionId: "decision-missing",
+          leaseId: "lease-1",
+          propertyId: "prop-1",
+          decisionType: "review_missing_payment",
+          severity: "critical",
+          status: "detected",
+          reason: "Expected rent payment is missing",
+          metadata: {},
+          createdAt: "2026-05-05T00:00:00.000Z",
+          updatedAt: "2026-05-05T00:00:00.000Z",
+        },
+        {
+          decisionId: "decision-failed",
+          leaseId: "lease-1",
+          propertyId: "prop-1",
+          decisionType: "review_failed_payment",
+          severity: "critical",
+          status: "detected",
+          reason: "Payment did not complete",
+          metadata: {},
+          createdAt: "2026-05-05T00:00:00.000Z",
+          updatedAt: "2026-05-05T00:00:00.000Z",
+        },
+        {
+          decisionId: "decision-manual",
+          leaseId: "lease-1",
+          propertyId: "prop-1",
+          decisionType: "review_manual_payment_issue",
+          severity: "warning",
+          status: "detected",
+          reason: "Payment mismatch detected",
+          metadata: {},
+          createdAt: "2026-05-05T00:00:00.000Z",
+          updatedAt: "2026-05-05T00:00:00.000Z",
+        },
+      ],
     });
     mocks.getLeaseById.mockResolvedValue({
       lease: {
@@ -324,6 +393,20 @@ describe("LeaseLedgerPage", () => {
     });
     mocks.archiveLeaseRecord.mockResolvedValue({ ok: true, lease: { id: "lease-1", archivedAt: "2026-04-01T00:00:00.000Z" } });
     mocks.restoreLeaseRecord.mockResolvedValue({ ok: true, lease: { id: "lease-1", archivedAt: null } });
+    mocks.patchDecisionAction.mockImplementation(async (_decisionId: string, payload: any) => ({
+      ok: true,
+      decision: {
+        ...payload.decision,
+        status: payload.actionType === "reviewed" ? "reviewed" : payload.actionType,
+        latestAction: {
+          actionId: "action-1",
+          decisionId: payload.decision.decisionId,
+          actionType: payload.actionType,
+          nextStatus: payload.actionType === "reviewed" ? "reviewed" : payload.actionType,
+          createdAt: "2026-05-05T12:00:00.000Z",
+        },
+      },
+    }));
     vi.spyOn(window, "confirm").mockReturnValue(true);
   });
 
@@ -446,6 +529,22 @@ describe("LeaseLedgerPage", () => {
     expect(screen.getByText("Payment did not complete")).toBeInTheDocument();
     expect(screen.getAllByText("Manual Review").length).toBeGreaterThan(0);
     expect(screen.getByText("Payment mismatch detected")).toBeInTheDocument();
+  });
+
+  it("updates lease decision status from human actions", async () => {
+    render(
+      <MemoryRouter initialEntries={["/leases/lease-1/ledger"]}>
+        <Routes>
+          <Route path="/leases/:leaseId/ledger" element={<LeaseLedgerPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Overdue Rent")).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button", { name: "Mark reviewed" })[0]);
+
+    await waitFor(() => expect(mocks.patchDecisionAction).toHaveBeenCalledWith("decision-overdue", expect.objectContaining({ actionType: "reviewed" })));
+    expect(screen.getAllByText("Reviewed").length).toBeGreaterThan(0);
   });
 
   it("renders an empty obligation state while preserving existing ledger entries", async () => {
