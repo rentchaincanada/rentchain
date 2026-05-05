@@ -85,6 +85,43 @@ gcloud run deploy
 * `.codex/docs/auth.md`
 * `.codex/docs/pipeline.md`
 
+## Repository Discovery & Governance Resolution
+
+Before planning or implementing any mission, Codex must:
+
+1. Audit the repository structure.
+2. Identify the actual governance, workflow, architecture, and execution files present in the current branch.
+3. Follow discovered repository conventions.
+4. Avoid introducing duplicate systems, duplicate execution layers, or conflicting abstractions.
+5. Never assume files exist unless they are present.
+
+Expected inspection locations include:
+
+- repository root
+- `docs/`
+- `.github/`
+- `.codex/`
+- execution or mission folders
+- architecture or planning folders
+
+Possible governance files may include, when present:
+
+- `AGENTS.md`
+- `PROCESS.md`
+- `codex.md`
+- `specifications.md`
+- `ARCHITECTURE.md`
+- `CONTRIBUTING.md`
+- `docs/missions/_template.md`
+- `docs/execution/CURRENT_MISSION.md`
+
+If expected governance files are missing, Codex must:
+
+- proceed using nearby implementation patterns and existing repository conventions
+- document assumptions in the PR summary
+- avoid fabricating missing framework files
+- avoid adding mission-local bootstrap text unless the mission specifically requires specialized discovery behavior
+
 ## Strict Rule
 
 Only read sub-docs when specifically prompted for that domain.

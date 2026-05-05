@@ -1,5 +1,7 @@
 # RentChain Architecture & Deployment Quick Guide
 
+For implementation workflow, mission execution, and repository discovery rules, follow `codex.md` and `PROCESS.md` when present.
+
 ## 1) What runs where
 - **Vercel**: `rentchain-frontend` only (static build + client-side app + serverless functions under `rentchain-frontend/api/*` for lightweight proxies/waitlist).
 - **Cloud Run**: `rentchain-api` (Express app). All core API routes live here.

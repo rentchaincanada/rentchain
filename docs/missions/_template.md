@@ -2,6 +2,8 @@
 
 MISSION: <Mission title>
 
+Codex must follow the repository discovery and governance-resolution rules defined in `codex.md` before implementation begins. If `codex.md` is unavailable, Codex must discover and follow the nearest available governance/process documents and document assumptions.
+
 # Branch
 
 BRANCH:
