@@ -1,6 +1,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { evidencePackPath } from "@/api/evidencePackApi";
+import { reviewTimelinePath } from "@/api/reviewTimelineApi";
 import {
   fetchInstitutionExportPreview,
   type InstitutionExportPackage,
@@ -223,12 +224,20 @@ export default function InstitutionExportsPage() {
 
             <PreviewSummary data={data} />
             <Section>
-              <Link
-                to={evidencePackPath({ scope: "institution_export", scopeId: data.packageId })}
-                style={{ color: "#2563eb", fontWeight: 800 }}
-              >
-                Preview evidence
-              </Link>
+              <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                <Link
+                  to={evidencePackPath({ scope: "institution_export", scopeId: data.packageId })}
+                  style={{ color: "#2563eb", fontWeight: 800 }}
+                >
+                  Preview evidence
+                </Link>
+                <Link
+                  to={reviewTimelinePath({ scope: "institution_export", scopeId: data.packageId })}
+                  style={{ color: "#2563eb", fontWeight: 800 }}
+                >
+                  View timeline
+                </Link>
+              </div>
             </Section>
 
             <Section>

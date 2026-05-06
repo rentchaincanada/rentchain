@@ -13,6 +13,7 @@ import {
 } from "@/api/decisionInboxApi";
 import type { OperatorReviewEvidenceReference, OperatorReviewScope } from "@/api/operatorReviewApi";
 import { evidencePackPath } from "@/api/evidencePackApi";
+import { reviewTimelinePath } from "@/api/reviewTimelineApi";
 import { MacShell } from "@/components/layout/MacShell";
 import { OperatorReviewSessionPanel } from "@/components/operatorReviews/OperatorReviewSessionPanel";
 import { Card, Section } from "@/components/ui/Ui";
@@ -188,6 +189,12 @@ function DecisionInboxCard({ item }: { item: DecisionInboxItem }) {
           style={{ color: "#2563eb", fontWeight: 800 }}
         >
           Preview evidence
+        </Link>
+        <Link
+          to={reviewTimelinePath({ scope: reviewScope, scopeId: item.id })}
+          style={{ color: "#2563eb", fontWeight: 800 }}
+        >
+          View timeline
         </Link>
       </div>
       {delinquencyActions.length ? (

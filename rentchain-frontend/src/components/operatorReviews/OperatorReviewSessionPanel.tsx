@@ -1,6 +1,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { evidencePackPath } from "@/api/evidencePackApi";
+import { reviewTimelinePath } from "@/api/reviewTimelineApi";
 import {
   addOperatorReviewNote,
   closeOperatorReviewSession,
@@ -151,9 +152,14 @@ export function OperatorReviewSessionPanel({
         </div>
         {latestSession ? <Badge status={latestSession.status}>{label(latestSession.status)}</Badge> : null}
       </div>
-      <Link to={evidencePackPath({ scope, scopeId })} style={{ color: "#2563eb", fontWeight: 800, fontSize: 13 }}>
-        View evidence pack
-      </Link>
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+        <Link to={evidencePackPath({ scope, scopeId })} style={{ color: "#2563eb", fontWeight: 800, fontSize: 13 }}>
+          View evidence pack
+        </Link>
+        <Link to={reviewTimelinePath({ scope: "operator_review", scopeId: latestSession?.reviewSessionId || scopeId })} style={{ color: "#2563eb", fontWeight: 800, fontSize: 13 }}>
+          View timeline
+        </Link>
+      </div>
 
       {loading ? <div style={{ color: "#64748b", fontSize: 13 }}>Loading review history...</div> : null}
 

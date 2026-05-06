@@ -120,6 +120,7 @@ const DecisionInboxPage = lazy(() => import("./pages/DecisionInboxPage"));
 const InstitutionExportsPage = lazy(() => import("./pages/InstitutionExportsPage"));
 const AuditCompliancePage = lazy(() => import("./pages/AuditCompliancePage"));
 const EvidencePackPage = lazy(() => import("./pages/EvidencePackPage"));
+const ReviewTimelinePage = lazy(() => import("./pages/ReviewTimelinePage"));
 const LandlordPortfolioScorePage = lazy(() => import("./pages/landlord/PortfolioScorePage"));
 const SharedPortfolioScorePage = lazy(() => import("./pages/public/SharedPortfolioScorePage"));
 const TenantSharePackagePage = lazy(() => import("./pages/public/TenantSharePackagePage"));
@@ -551,6 +552,18 @@ function App() {
               <LandlordNav>
                 <Suspense fallback={null}>
                   <EvidencePackPage />
+                </Suspense>
+              </LandlordNav>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/review-timeline"
+          element={
+            <RequireAuth>
+              <LandlordNav>
+                <Suspense fallback={null}>
+                  <ReviewTimelinePage />
                 </Suspense>
               </LandlordNav>
             </RequireAuth>

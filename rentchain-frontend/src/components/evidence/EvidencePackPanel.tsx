@@ -1,6 +1,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { type EvidencePack } from "@/api/evidencePackApi";
+import { reviewTimelinePath } from "@/api/reviewTimelineApi";
 import { Card, Section } from "@/components/ui/Ui";
 
 function label(value: string) {
@@ -58,6 +59,12 @@ export function EvidencePackPanel({ evidencePack }: { evidencePack: EvidencePack
             {evidencePack.externalSharingEnabled ? "Yes" : "No"}. Certification issued:{" "}
             {evidencePack.certificationIssued ? "Yes" : "No"}.
           </div>
+          <Link
+            to={reviewTimelinePath({ scope: "evidence_pack", scopeId: evidencePack.evidencePackId })}
+            style={{ color: "#2563eb", fontWeight: 800, fontSize: 13 }}
+          >
+            View timeline
+          </Link>
         </div>
       </Section>
 
