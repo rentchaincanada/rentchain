@@ -121,6 +121,7 @@ import landlordPortfolioScoreRoutes from "./routes/landlordPortfolioScoreRoutes"
 import landlordPortfolioScoreSharingRoutes from "./routes/landlordPortfolioScoreSharingRoutes";
 import landlordDecisionInboxRoutes from "./routes/landlordDecisionInboxRoutes";
 import landlordInstitutionExportsRoutes from "./routes/landlordInstitutionExportsRoutes";
+import landlordAuditComplianceRoutes from "./routes/landlordAuditComplianceRoutes";
 import publicPortfolioScoreRoutes from "./routes/publicPortfolioScoreRoutes";
 import publicTenantShareRoutes from "./routes/publicTenantShareRoutes";
 import landlordActionRecommendationRoutes from "./routes/landlordActionRecommendationRoutes";
@@ -286,6 +287,8 @@ app.use("/api/landlord", routeSource("landlordDecisionInboxRoutes.ts"), landlord
 console.log("[route-mount] landlordDecisionInboxRoutes mounted at /api/landlord");
 app.use("/api/landlord", routeSource("landlordInstitutionExportsRoutes.ts"), landlordInstitutionExportsRoutes);
 console.log("[route-mount] landlordInstitutionExportsRoutes mounted at /api/landlord");
+app.use("/api/landlord", routeSource("landlordAuditComplianceRoutes.ts"), landlordAuditComplianceRoutes);
+console.log("[route-mount] landlordAuditComplianceRoutes mounted at /api/landlord");
 app.use("/api", routeSource("landlordActionRecommendationRoutes.ts"), landlordActionRecommendationRoutes);
 console.log("[route-mount] landlordActionRecommendationRoutes mounted at /api");
 app.use("/api", routeSource("tenantFeedbackRoutes.ts"), tenantFeedbackRoutes);

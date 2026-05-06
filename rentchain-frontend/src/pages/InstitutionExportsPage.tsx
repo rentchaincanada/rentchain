@@ -1,4 +1,5 @@
 import React from "react";
+import { Link } from "react-router-dom";
 import {
   fetchInstitutionExportPreview,
   type InstitutionExportPackage,
@@ -140,6 +141,9 @@ export default function InstitutionExportsPage() {
               Preview only. No data is submitted externally. Manual review required before sharing with any institution.
               Sensitive tenant data may be excluded or redacted.
             </div>
+            <Link to="/audit-compliance" style={{ color: "#2563eb", fontWeight: 800 }}>
+              View readiness
+            </Link>
           </div>
         </Section>
 
