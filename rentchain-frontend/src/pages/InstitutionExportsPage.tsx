@@ -7,6 +7,7 @@ import {
   type InstitutionExportSection,
 } from "@/api/institutionExportsApi";
 import { MacShell } from "@/components/layout/MacShell";
+import { OperatorReviewSessionPanel } from "@/components/operatorReviews/OperatorReviewSessionPanel";
 import { Button, Card, Section } from "@/components/ui/Ui";
 import { useToast } from "@/components/ui/ToastProvider";
 
@@ -220,6 +221,21 @@ export default function InstitutionExportsPage() {
             </Section>
 
             <PreviewSummary data={data} />
+
+            <Section>
+              <OperatorReviewSessionPanel
+                scope="institution_export"
+                scopeId={data.packageId}
+                linkedEvidence={[
+                  {
+                    evidenceId: data.packageId,
+                    label: `${label(data.packageType)} preview`,
+                    kind: "export_package",
+                    destination: "/institution-exports",
+                  },
+                ]}
+              />
+            </Section>
           </>
         ) : null}
       </div>

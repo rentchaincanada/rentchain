@@ -6,6 +6,10 @@ import DecisionInboxPage from "./DecisionInboxPage";
 
 const apiMocks = vi.hoisted(() => ({
   fetchDecisionInbox: vi.fn(),
+  fetchOperatorReviewSessions: vi.fn(),
+  openOperatorReviewSession: vi.fn(),
+  addOperatorReviewNote: vi.fn(),
+  closeOperatorReviewSession: vi.fn(),
   showToast: vi.fn(),
   macShellProps: vi.fn(),
 }));
@@ -15,6 +19,17 @@ vi.mock("@/api/decisionInboxApi", async () => {
   return {
     ...actual,
     fetchDecisionInbox: apiMocks.fetchDecisionInbox,
+  };
+});
+
+vi.mock("@/api/operatorReviewApi", async () => {
+  const actual = await vi.importActual<any>("@/api/operatorReviewApi");
+  return {
+    ...actual,
+    fetchOperatorReviewSessions: apiMocks.fetchOperatorReviewSessions,
+    openOperatorReviewSession: apiMocks.openOperatorReviewSession,
+    addOperatorReviewNote: apiMocks.addOperatorReviewNote,
+    closeOperatorReviewSession: apiMocks.closeOperatorReviewSession,
   };
 });
 
@@ -154,6 +169,7 @@ describe("DecisionInboxPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     apiMocks.fetchDecisionInbox.mockResolvedValue(inboxResponse());
+    apiMocks.fetchOperatorReviewSessions.mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -196,6 +212,8 @@ describe("DecisionInboxPage", () => {
     expect(screen.getByRole("link", { name: "View context" })).toHaveAttribute("href", "/leases/lease-1/ledger");
     expect(screen.getByText("Open cost approval")).toBeInTheDocument();
     expect(screen.getByText("No context link available")).toBeInTheDocument();
+    expect(screen.getAllByText("Operator review session").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/No automated approval or certification occurs/i).length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: /resolve|dismiss|snooze|approve|retry|execute/i })).not.toBeInTheDocument();
     expect(screen.queryByText(/send notice|charge tenant|start eviction|auto-send|auto-charge/i)).not.toBeInTheDocument();
     expect(apiMocks.macShellProps).toHaveBeenCalledWith(expect.objectContaining({ showTopNav: false }));
