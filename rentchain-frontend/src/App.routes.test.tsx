@@ -126,6 +126,10 @@ vi.mock("./pages/InstitutionalSharingRoomPage", () => ({
   default: () => <h1>Institutional Sharing Rooms Page</h1>,
 }));
 
+vi.mock("./pages/VerifiedRentalHistoryPage", () => ({
+  default: () => <h1>Verified Rental History Page</h1>,
+}));
+
 vi.mock("./pages/landlord/PortfolioScorePage", () => ({
   default: () => <h1>Landlord Portfolio Score</h1>,
 }));
@@ -359,6 +363,20 @@ describe("Routes: /institutional-sharing-rooms", () => {
     );
 
     expect(await screen.findByText(/Institutional Sharing Rooms Page/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("Routes: /verified-rental-history", () => {
+  it("renders the verified rental history route", async () => {
+    const { default: App } = await import("./App");
+    render(
+      <MemoryRouter initialEntries={["/verified-rental-history?identityId=tenant-1"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Verified Rental History Page/i)).toBeInTheDocument();
     expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
   });
 });

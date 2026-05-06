@@ -104,6 +104,12 @@ export default function IdentityLayerPage() {
             <Link to="/review-timeline" style={{ color: "#2563eb", fontWeight: 800, paddingBottom: 9 }}>
               View review lineage
             </Link>
+            <Link
+              to={`/verified-rental-history${identityId ? `?identityId=${encodeURIComponent(identityId)}` : ""}`}
+              style={{ color: "#2563eb", fontWeight: 800, paddingBottom: 9 }}
+            >
+              View rental history
+            </Link>
           </div>
         </Section>
 
