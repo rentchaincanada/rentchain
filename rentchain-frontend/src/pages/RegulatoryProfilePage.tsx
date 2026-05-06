@@ -1,5 +1,5 @@
 import React from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { fetchRegulatoryProfiles, type RegulatoryProfile, type RegulatoryProfileStatus } from "@/api/regulatoryProfileApi";
 import { MacShell } from "@/components/layout/MacShell";
 import { RegulatoryProfilePanel } from "@/components/regulatory/RegulatoryProfilePanel";
@@ -64,6 +64,9 @@ export default function RegulatoryProfilePage() {
               Regulatory profiles are operational readiness references only. No legal certification or regulator submission is enabled.
               Manual review remains required.
             </div>
+            <Link to="/asset-tokenization-readiness" style={{ color: "#2563eb", fontWeight: 800, width: "fit-content" }}>
+              View asset tokenization readiness
+            </Link>
           </div>
         </Section>
 
