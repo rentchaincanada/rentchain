@@ -14,6 +14,7 @@ import type {
 import { deriveDecisionWorkflowRouting } from "./deriveDecisionWorkflowRouting";
 import { deriveDelinquencyActions } from "../delinquency/deriveDelinquencyActions";
 import { deriveAutomatedWorkflowTransitions } from "../automatedWorkflows/deriveAutomatedWorkflowTransitions";
+import { derivePolicyGatedAgentActions } from "../agentActions/derivePolicyGatedAgentActions";
 
 type SourceDecision = Decision & { latestAction?: unknown };
 
@@ -254,10 +255,23 @@ export function deriveDecisionInbox(input: DeriveDecisionInboxInput): DecisionIn
   const automationByDecisionId = new Map(
     deriveAutomatedWorkflowTransitions({ decisions: baseItems }).workflows.map((workflow) => [workflow.decisionId, workflow])
   );
-  const allItems = baseItems.map((item) => ({
+  const itemsWithAutomation = baseItems.map((item) => ({
     ...item,
     automatedWorkflow: automationByDecisionId.get(item.id),
-  })).sort((a, b) => {
+  }));
+  const agentActionsByDecisionId = new Map(
+    derivePolicyGatedAgentActions({ decisions: itemsWithAutomation }).actions.map((action) => [
+      action.relatedScope.scopeId,
+      action,
+    ])
+  );
+  const allItems = itemsWithAutomation.map((item) => {
+    const action = agentActionsByDecisionId.get(item.id);
+    return {
+      ...item,
+      agentActions: action ? [action] : [],
+    };
+  }).sort((a, b) => {
     const severityOrder: Record<DecisionInboxSeverity, number> = {
       critical: 0,
       high: 1,
@@ -339,5 +353,6 @@ export function deriveDecisionInbox(input: DeriveDecisionInboxInput): DecisionIn
       critical: items.filter((item) => item.workflow.escalationLevel === "critical").length,
     },
     automationSummary: deriveAutomatedWorkflowTransitions({ decisions: items }).summary,
+    agentActionSummary: derivePolicyGatedAgentActions({ decisions: items }).summary,
   };
 }

@@ -16,6 +16,7 @@ import type { OperatorReviewEvidenceReference, OperatorReviewScope } from "@/api
 import { evidencePackPath } from "@/api/evidencePackApi";
 import { reviewTimelinePath } from "@/api/reviewTimelineApi";
 import { MacShell } from "@/components/layout/MacShell";
+import { AgentActionPanel } from "@/components/agentActions/AgentActionPanel";
 import { OperatorReviewSessionPanel } from "@/components/operatorReviews/OperatorReviewSessionPanel";
 import { Card, Section } from "@/components/ui/Ui";
 import { useToast } from "@/components/ui/ToastProvider";
@@ -310,6 +311,7 @@ function DecisionInboxCard({ item }: { item: DecisionInboxItem }) {
           </div>
         </div>
       ) : null}
+      <AgentActionPanel actions={item.agentActions} />
       <OperatorReviewSessionPanel
         scope={reviewScope}
         scopeId={item.id}
@@ -431,6 +433,10 @@ export default function DecisionInboxPage() {
                 ["Review required", data.automationSummary.reviewRequired],
                 ["Escalation flags", data.automationSummary.escalationFlagged],
                 ["Blocked orchestration", data.automationSummary.blocked],
+                ["Agent suggestions", data.agentActionSummary.total],
+                ["Suggested actions", data.agentActionSummary.suggested],
+                ["Blocked suggestions", data.agentActionSummary.blocked],
+                ["Suggestion review required", data.agentActionSummary.reviewRequired],
               ].map(([name, value]) => (
                 <Card key={String(name)} style={{ borderRadius: 8, padding: 12 }}>
                   <div style={{ color: "#64748b", fontSize: 12, fontWeight: 800 }}>{name}</div>

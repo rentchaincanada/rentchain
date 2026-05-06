@@ -90,6 +90,39 @@ function inboxResponse(overrides: Record<string, unknown> = {}) {
           ],
           generatedAt: "2026-05-05T12:00:00.000Z",
         },
+        agentActions: [
+          {
+            agentActionId: "policy_gated_agent_action:decision_review_missing_payment_lease-1:suggest_escalation",
+            actionType: "suggest_escalation",
+            status: "suggested",
+            manualReviewRequired: true,
+            policyGuarded: true,
+            externalExecutionEnabled: false,
+            requiresHumanApproval: true,
+            explanation: {
+              summary: "Escalation review is recommended based on workflow severity.",
+              reasons: [
+                "Workflow escalation metadata indicates elevated review priority.",
+                "Operator review and human approval remain required.",
+              ],
+              blockedReasons: [],
+            },
+            relatedScope: { scope: "decision", scopeId: "decision:review_missing_payment:lease-1" },
+            queue: "delinquency_review",
+            escalationLevel: "critical",
+            canonicalEvents: [
+              {
+                eventType: "policy_gated_agent_action_review_required",
+                action: "review_required",
+                status: "suggested",
+                resourceType: "workflow",
+                resourceId: "decision:review_missing_payment:lease-1",
+                summary: "Human approval remains required; no agent action will execute automatically.",
+              },
+            ],
+            generatedAt: "2026-05-05T12:00:00.000Z",
+          },
+        ],
         workflow: {
           queue: "delinquency_review",
           workflowState: "escalated",
@@ -187,6 +220,36 @@ function inboxResponse(overrides: Record<string, unknown> = {}) {
           ],
           generatedAt: "2026-05-05T12:00:00.000Z",
         },
+        agentActions: [
+          {
+            agentActionId: "policy_gated_agent_action:approve_maintenance_cost_wo-1:request_evidence",
+            actionType: "request_evidence",
+            status: "blocked",
+            manualReviewRequired: true,
+            policyGuarded: true,
+            externalExecutionEnabled: false,
+            requiresHumanApproval: true,
+            explanation: {
+              summary: "Request additional evidence before progressing this workflow.",
+              reasons: ["Workflow context is blocked or waiting for additional evidence."],
+              blockedReasons: ["Required workflow context is missing or incomplete."],
+            },
+            relatedScope: { scope: "evidence_pack", scopeId: "approve_maintenance_cost:wo-1" },
+            queue: "maintenance_review",
+            escalationLevel: "urgent",
+            canonicalEvents: [
+              {
+                eventType: "policy_gated_agent_action_blocked",
+                action: "request_evidence",
+                status: "blocked",
+                resourceType: "decision",
+                resourceId: "approve_maintenance_cost:wo-1",
+                summary: "Policy-gated agent suggestion is blocked pending manual review.",
+              },
+            ],
+            generatedAt: "2026-05-05T12:00:00.000Z",
+          },
+        ],
         workflow: {
           queue: "maintenance_review",
           workflowState: "waiting_context",
@@ -229,6 +292,15 @@ function inboxResponse(overrides: Record<string, unknown> = {}) {
       escalationFlagged: 2,
       reviewRequired: 2,
     },
+    agentActionSummary: {
+      total: 2,
+      suggested: 1,
+      blocked: 1,
+      unavailable: 0,
+      acknowledged: 0,
+      reviewRequired: 2,
+      escalationSuggested: 1,
+    },
     ...overrides,
   };
 }
@@ -267,19 +339,29 @@ describe("DecisionInboxPage", () => {
     expect(screen.getByText("Review required")).toBeInTheDocument();
     expect(screen.getByText("Escalation flags")).toBeInTheDocument();
     expect(screen.getByText("Blocked orchestration")).toBeInTheDocument();
+    expect(screen.getByText("Agent suggestions")).toBeInTheDocument();
+    expect(screen.getByText("Suggested actions")).toBeInTheDocument();
+    expect(screen.getByText("Blocked suggestions")).toBeInTheDocument();
+    expect(screen.getByText("Suggestion review required")).toBeInTheDocument();
     expect(screen.getByText("Review Missing Payment")).toBeInTheDocument();
     expect(screen.getByText("Expected rent payment is missing.")).toBeInTheDocument();
     expect(screen.getAllByText("Delinquency Review").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Maintenance Review").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Urgent").length).toBeGreaterThan(0);
-    expect(screen.getByText("Manual review required")).toBeInTheDocument();
+    expect(screen.getAllByText("Manual review required").length).toBeGreaterThan(0);
     expect(screen.getByText("No automated notice or payment action will be taken.")).toBeInTheDocument();
     expect(screen.getAllByText("Deterministic workflow orchestration only.").length).toBeGreaterThan(0);
     expect(screen.getAllByText(/No tenant communication, payment action, or legal enforcement is automated/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText("Review automation reasoning").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Workflow type:").length).toBeGreaterThan(0);
     expect(screen.getAllByText(/External execution:/).length).toBeGreaterThan(0);
-    expect(screen.getByText("Required workflow context is missing or incomplete.")).toBeInTheDocument();
+    expect(screen.getAllByText("Required workflow context is missing or incomplete.").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Suggested actions only.").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Manual approval is required/i).length).toBeGreaterThan(0);
+    expect(screen.getByText("Suggest Escalation")).toBeInTheDocument();
+    expect(screen.getByText("Request Evidence")).toBeInTheDocument();
+    expect(screen.getAllByText("Review explanation").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Human approval required").length).toBeGreaterThan(0);
     expect(screen.getByText("Review context")).toBeInTheDocument();
     expect(screen.getByText("Prepare reminder")).toBeInTheDocument();
     expect(screen.getByText("Prepare notice")).toBeInTheDocument();
@@ -320,6 +402,7 @@ describe("DecisionInboxPage", () => {
           summary: { total: 1, critical: 1, high: 0, open: 1, blocked: 0 },
           workflowSummary: { new: 0, underReview: 0, escalated: 1, critical: 1 },
           automationSummary: { total: 1, pending: 1, derived: 0, blocked: 0, completed: 0, escalationFlagged: 1, reviewRequired: 1 },
+          agentActionSummary: { total: 1, suggested: 1, blocked: 0, unavailable: 0, acknowledged: 0, reviewRequired: 1, escalationSuggested: 1 },
         })
       );
 
@@ -351,6 +434,7 @@ describe("DecisionInboxPage", () => {
         summary: { total: 1, critical: 0, high: 1, open: 0, blocked: 1 },
         workflowSummary: { new: 0, underReview: 0, escalated: 0, critical: 0 },
         automationSummary: { total: 1, pending: 0, derived: 0, blocked: 1, completed: 0, escalationFlagged: 1, reviewRequired: 1 },
+        agentActionSummary: { total: 1, suggested: 0, blocked: 1, unavailable: 0, acknowledged: 0, reviewRequired: 1, escalationSuggested: 0 },
       })
     );
     fireEvent.change(screen.getByLabelText("Queue"), { target: { value: "maintenance_review" } });
@@ -369,6 +453,7 @@ describe("DecisionInboxPage", () => {
         summary: { total: 0, critical: 0, high: 0, open: 0, blocked: 0 },
         workflowSummary: { new: 0, underReview: 0, escalated: 0, critical: 0 },
         automationSummary: { total: 0, pending: 0, derived: 0, blocked: 0, completed: 0, escalationFlagged: 0, reviewRequired: 0 },
+        agentActionSummary: { total: 0, suggested: 0, blocked: 0, unavailable: 0, acknowledged: 0, reviewRequired: 0, escalationSuggested: 0 },
       })
     );
 
