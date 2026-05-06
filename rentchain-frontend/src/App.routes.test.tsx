@@ -102,6 +102,10 @@ vi.mock("./pages/InstitutionExportsPage", () => ({
   default: () => <h1>Institution Export Preview Page</h1>,
 }));
 
+vi.mock("./pages/AuditCompliancePage", () => ({
+  default: () => <h1>Audit Compliance Readiness Page</h1>,
+}));
+
 vi.mock("./pages/landlord/PortfolioScorePage", () => ({
   default: () => <h1>Landlord Portfolio Score</h1>,
 }));
@@ -251,6 +255,20 @@ describe("Routes: /institution-exports", () => {
     );
 
     expect(await screen.findByText(/Institution Export Preview Page/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("Routes: /audit-compliance", () => {
+  it("renders the read-only audit compliance readiness route", async () => {
+    const { default: App } = await import("./App");
+    render(
+      <MemoryRouter initialEntries={["/audit-compliance"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Audit Compliance Readiness Page/i)).toBeInTheDocument();
     expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
   });
 });

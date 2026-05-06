@@ -1,5 +1,6 @@
 import React from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import InstitutionExportsPage from "./InstitutionExportsPage";
 
@@ -85,12 +86,17 @@ describe("InstitutionExportsPage", () => {
   });
 
   it("renders read-only preview status, sections, redactions, and safety copy", async () => {
-    render(<InstitutionExportsPage />);
+    render(
+      <MemoryRouter>
+        <InstitutionExportsPage />
+      </MemoryRouter>
+    );
 
     expect(await screen.findByRole("heading", { name: "Institution export preview" })).toBeInTheDocument();
     expect(screen.getByText(/Preview only\. No data is submitted externally\./i)).toBeInTheDocument();
     expect(screen.getByText(/Manual review required before sharing with any institution\./i)).toBeInTheDocument();
     expect(screen.getByText(/Sensitive tenant data may be excluded or redacted\./i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "View readiness" })).toHaveAttribute("href", "/audit-compliance");
     expect(screen.getByText("Lender Due Diligence")).toBeInTheDocument();
     expect(screen.getByText("Preview Ready")).toBeInTheDocument();
     expect(screen.getByText("Property summary")).toBeInTheDocument();
@@ -111,7 +117,11 @@ describe("InstitutionExportsPage", () => {
       .mockResolvedValueOnce(previewPackage())
       .mockResolvedValueOnce(previewPackage({ packageType: "auditor_review", audience: "auditor" }));
 
-    render(<InstitutionExportsPage />);
+    render(
+      <MemoryRouter>
+        <InstitutionExportsPage />
+      </MemoryRouter>
+    );
 
     expect(await screen.findByText("Lender Due Diligence")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Package type"), { target: { value: "auditor_review" } });
@@ -130,7 +140,11 @@ describe("InstitutionExportsPage", () => {
       })
     );
 
-    render(<InstitutionExportsPage />);
+    render(
+      <MemoryRouter>
+        <InstitutionExportsPage />
+      </MemoryRouter>
+    );
 
     expect(await screen.findByText("Blocked")).toBeInTheDocument();
     expect(screen.getByText(/At least one landlord-scoped property is required/i)).toBeInTheDocument();
