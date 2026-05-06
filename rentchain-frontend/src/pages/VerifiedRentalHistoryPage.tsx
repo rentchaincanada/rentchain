@@ -1,5 +1,5 @@
 import React from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   fetchRentalHistoryLedgers,
   type RentalHistoryLedgerStatus,
@@ -76,6 +76,9 @@ export default function VerifiedRentalHistoryPage() {
               Rental history references are permissioned and operationally scoped. Manual review remains required. No public sharing,
               bureau reporting, or tokenization is enabled.
             </div>
+            <Link to="/settlement-readiness" style={{ color: "#2563eb", fontWeight: 800, width: "fit-content" }}>
+              View settlement readiness
+            </Link>
           </div>
         </Section>
 

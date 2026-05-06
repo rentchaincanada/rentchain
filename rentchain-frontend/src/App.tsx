@@ -125,6 +125,7 @@ const ReviewTimelinePage = lazy(() => import("./pages/ReviewTimelinePage"));
 const IdentityLayerPage = lazy(() => import("./pages/IdentityLayerPage"));
 const InstitutionalSharingRoomPage = lazy(() => import("./pages/InstitutionalSharingRoomPage"));
 const VerifiedRentalHistoryPage = lazy(() => import("./pages/VerifiedRentalHistoryPage"));
+const SettlementReadinessPage = lazy(() => import("./pages/SettlementReadinessPage"));
 const LandlordPortfolioScorePage = lazy(() => import("./pages/landlord/PortfolioScorePage"));
 const SharedPortfolioScorePage = lazy(() => import("./pages/public/SharedPortfolioScorePage"));
 const TenantSharePackagePage = lazy(() => import("./pages/public/TenantSharePackagePage"));
@@ -616,6 +617,18 @@ function App() {
               <LandlordNav>
                 <Suspense fallback={null}>
                   <VerifiedRentalHistoryPage />
+                </Suspense>
+              </LandlordNav>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/settlement-readiness"
+          element={
+            <RequireAuth>
+              <LandlordNav>
+                <Suspense fallback={null}>
+                  <SettlementReadinessPage />
                 </Suspense>
               </LandlordNav>
             </RequireAuth>
