@@ -415,6 +415,9 @@ export default function DecisionInboxPage() {
             <Link to="/agent-supervision" style={{ color: "#2563eb", fontWeight: 800 }}>
               Agent supervision
             </Link>
+            <Link to="/identity-layer" style={{ color: "#2563eb", fontWeight: 800 }}>
+              Identity layer
+            </Link>
           </div>
         </Section>
 

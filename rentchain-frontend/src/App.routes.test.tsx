@@ -118,6 +118,10 @@ vi.mock("./pages/ReviewTimelinePage", () => ({
   default: () => <h1>Canonical Review Timeline Page</h1>,
 }));
 
+vi.mock("./pages/IdentityLayerPage", () => ({
+  default: () => <h1>Identity Layer Page</h1>,
+}));
+
 vi.mock("./pages/landlord/PortfolioScorePage", () => ({
   default: () => <h1>Landlord Portfolio Score</h1>,
 }));
@@ -323,6 +327,20 @@ describe("Routes: /review-timeline", () => {
     );
 
     expect(await screen.findByText(/Canonical Review Timeline Page/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("Routes: /identity-layer", () => {
+  it("renders the permissioned identity layer route", async () => {
+    const { default: App } = await import("./App");
+    render(
+      <MemoryRouter initialEntries={["/identity-layer?identityType=tenant&identityId=tenant-1"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Identity Layer Page/i)).toBeInTheDocument();
     expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
   });
 });
