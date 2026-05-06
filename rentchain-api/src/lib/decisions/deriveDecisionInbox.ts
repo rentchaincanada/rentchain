@@ -13,6 +13,7 @@ import type {
 } from "./decisionInboxTypes";
 import { deriveDecisionWorkflowRouting } from "./deriveDecisionWorkflowRouting";
 import { deriveDelinquencyActions } from "../delinquency/deriveDelinquencyActions";
+import { deriveAutomatedWorkflowTransitions } from "../automatedWorkflows/deriveAutomatedWorkflowTransitions";
 
 type SourceDecision = Decision & { latestAction?: unknown };
 
@@ -199,7 +200,7 @@ export function decisionInboxItemFromLeaseDecision(decision: SourceDecision): De
     createdAt: normalizeDate(decision.createdAt),
     updatedAt: normalizeDate(decision.updatedAt),
   };
-  const item = {
+  const item: DecisionInboxItem = {
     ...base,
     workflow: deriveDecisionWorkflowRouting({ ...base, decisionType: decision.decisionType }),
   };
@@ -222,7 +223,7 @@ export function decisionInboxItemFromAnalyticsDecision(decision: LandlordAgentDe
     createdAt: null,
     updatedAt: normalizeDate(decision.reviewedAt || decision.executedAt || decision.executionOutcomeAt),
   };
-  const item = {
+  const item: DecisionInboxItem = {
     ...base,
     workflow: deriveDecisionWorkflowRouting({
       ...base,
@@ -246,10 +247,17 @@ function uniqueSorted<T extends string>(values: T[], known: readonly T[]): T[] {
 }
 
 export function deriveDecisionInbox(input: DeriveDecisionInboxInput): DecisionInboxResult {
-  const allItems = [
+  const baseItems = [
     ...(input.analyticsDecisions || []).map(decisionInboxItemFromAnalyticsDecision),
     ...(input.leaseDecisions || []).map(decisionInboxItemFromLeaseDecision),
-  ].sort((a, b) => {
+  ];
+  const automationByDecisionId = new Map(
+    deriveAutomatedWorkflowTransitions({ decisions: baseItems }).workflows.map((workflow) => [workflow.decisionId, workflow])
+  );
+  const allItems = baseItems.map((item) => ({
+    ...item,
+    automatedWorkflow: automationByDecisionId.get(item.id),
+  })).sort((a, b) => {
     const severityOrder: Record<DecisionInboxSeverity, number> = {
       critical: 0,
       high: 1,
@@ -330,5 +338,6 @@ export function deriveDecisionInbox(input: DeriveDecisionInboxInput): DecisionIn
       escalated: items.filter((item) => item.workflow.workflowState === "escalated").length,
       critical: items.filter((item) => item.workflow.escalationLevel === "critical").length,
     },
+    automationSummary: deriveAutomatedWorkflowTransitions({ decisions: items }).summary,
   };
 }

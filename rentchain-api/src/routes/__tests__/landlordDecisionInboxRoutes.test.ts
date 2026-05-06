@@ -181,6 +181,13 @@ describe("landlordDecisionInboxRoutes", () => {
           type: "maintenance",
           severity: "high",
           automationEligible: false,
+          automatedWorkflow: expect.objectContaining({
+            workflowType: "maintenance",
+            status: "pending",
+            manualReviewRequired: true,
+            externalExecutionEnabled: false,
+            policyGuarded: true,
+          }),
           workflow: expect.objectContaining({
             queue: "maintenance_review",
             workflowState: "escalated",
@@ -194,6 +201,16 @@ describe("landlordDecisionInboxRoutes", () => {
           severity: "critical",
           destination: "/leases/lease-1/ledger",
           automationEligible: false,
+          automatedWorkflow: expect.objectContaining({
+            workflowType: "delinquency",
+            status: "pending",
+            manualReviewRequired: true,
+            externalExecutionEnabled: false,
+            canonicalEvents: expect.arrayContaining([
+              expect.objectContaining({ eventType: "automated_workflow_escalation_flagged" }),
+              expect.objectContaining({ eventType: "automated_workflow_review_required" }),
+            ]),
+          }),
           workflow: expect.objectContaining({
             queue: "delinquency_review",
             workflowState: "escalated",
@@ -209,6 +226,12 @@ describe("landlordDecisionInboxRoutes", () => {
     );
     expect(res.body.summary).toEqual(expect.objectContaining({ total: 3, critical: 2, high: 1, open: 3 }));
     expect(res.body.workflowSummary).toEqual(expect.objectContaining({ escalated: 3, critical: 2 }));
+    expect(res.body.automationSummary).toEqual(expect.objectContaining({
+      total: 3,
+      pending: 3,
+      escalationFlagged: 3,
+      reviewRequired: 3,
+    }));
   });
 
   it("filters inbox items by severity, status, type, and workflow routing", async () => {
@@ -239,6 +262,37 @@ describe("landlordDecisionInboxRoutes", () => {
     expect(res.status).toBe(200);
     expect(res.body.items).toEqual([]);
     expect(res.body.summary.total).toBe(0);
+  });
+
+  it("returns read-only automated workflow previews without invoking execution behavior", async () => {
+    seedLease();
+    const router = (await import("../landlordDecisionInboxRoutes")).default;
+
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/automated-workflows/preview?workflowType=delinquency&status=pending&queue=delinquency_review",
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(res.body.manualReviewRequired).toBe(true);
+    expect(res.body.externalExecutionEnabled).toBe(false);
+    expect(res.body.workflows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          workflowType: "delinquency",
+          queue: "delinquency_review",
+          status: "pending",
+          manualReviewRequired: true,
+          externalExecutionEnabled: false,
+          requiresHumanAcknowledgement: true,
+          canonicalEvents: expect.arrayContaining([
+            expect.objectContaining({ eventType: "automated_workflow_review_required" }),
+          ]),
+        }),
+      ])
+    );
+    expect(JSON.stringify(res.body)).not.toMatch(/externalExecutionEnabled":true|executed":true|charge tenant|file eviction/i);
   });
 
   it("blocks non-landlord users", async () => {

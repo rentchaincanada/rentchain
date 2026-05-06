@@ -29,6 +29,14 @@ export type DecisionWorkflowState =
   | "resolved"
   | "archived";
 export type DecisionWorkflowEscalationLevel = "none" | "attention" | "urgent" | "critical";
+export type AutomatedWorkflowType = "review" | "evidence" | "readiness" | "delinquency" | "export" | "maintenance";
+export type AutomatedWorkflowStatus = "pending" | "derived" | "blocked" | "completed";
+export type AutomatedWorkflowEventType =
+  | "automated_workflow_transition_derived"
+  | "automated_workflow_blocked"
+  | "automated_workflow_escalation_flagged"
+  | "automated_workflow_review_required"
+  | "automated_workflow_sync_completed";
 export type DecisionWorkflowRouting = {
   queue: DecisionWorkflowQueue;
   workflowState: DecisionWorkflowState;
@@ -36,6 +44,42 @@ export type DecisionWorkflowRouting = {
   reviewPriority: "critical" | "high" | "medium" | "low";
   escalationLevel: DecisionWorkflowEscalationLevel;
   manualOnly: true;
+};
+export type AutomatedWorkflowPreview = {
+  automationId: string;
+  decisionId: string;
+  workflowType: AutomatedWorkflowType;
+  status: AutomatedWorkflowStatus;
+  queue: DecisionWorkflowQueue;
+  escalationLevel: DecisionWorkflowEscalationLevel;
+  manualReviewRequired: true;
+  policyGuarded: true;
+  externalExecutionEnabled: false;
+  requiresHumanAcknowledgement: true;
+  transition: {
+    fromState: DecisionWorkflowState;
+    toState: DecisionWorkflowState;
+  };
+  reasons: string[];
+  blockedReasons: string[];
+  canonicalEvents: Array<{
+    eventType: AutomatedWorkflowEventType;
+    action: string;
+    status: AutomatedWorkflowStatus;
+    resourceType: "decision" | "workflow";
+    resourceId: string;
+    summary: string;
+  }>;
+  generatedAt: string;
+};
+export type AutomatedWorkflowSummary = {
+  total: number;
+  pending: number;
+  derived: number;
+  blocked: number;
+  completed: number;
+  escalationFlagged: number;
+  reviewRequired: number;
 };
 export type DelinquencyActionDescriptor = {
   actionKey: "review_context" | "prepare_reminder" | "prepare_notice" | "view_ledger";
@@ -65,6 +109,7 @@ export type DecisionInboxItem = {
   destination: string | null;
   automationEligible: false;
   workflow: DecisionWorkflowRouting;
+  automatedWorkflow?: AutomatedWorkflowPreview;
   delinquencyActions?: DelinquencyActionDescriptor[];
   createdAt: string | null;
   updatedAt: string | null;
@@ -93,6 +138,7 @@ export type DecisionInboxResponse = {
     escalated: number;
     critical: number;
   };
+  automationSummary: AutomatedWorkflowSummary;
 };
 
 export type DecisionInboxQuery = {
@@ -126,5 +172,14 @@ export async function fetchDecisionInbox(params?: DecisionInboxQuery): Promise<D
     },
     summary: response.summary || { total: 0, critical: 0, high: 0, open: 0, blocked: 0 },
     workflowSummary: response.workflowSummary || { new: 0, underReview: 0, escalated: 0, critical: 0 },
+    automationSummary: response.automationSummary || {
+      total: 0,
+      pending: 0,
+      derived: 0,
+      blocked: 0,
+      completed: 0,
+      escalationFlagged: 0,
+      reviewRequired: 0,
+    },
   };
 }
