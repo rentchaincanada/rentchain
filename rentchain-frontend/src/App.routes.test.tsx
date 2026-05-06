@@ -122,6 +122,10 @@ vi.mock("./pages/IdentityLayerPage", () => ({
   default: () => <h1>Identity Layer Page</h1>,
 }));
 
+vi.mock("./pages/InstitutionalSharingRoomPage", () => ({
+  default: () => <h1>Institutional Sharing Rooms Page</h1>,
+}));
+
 vi.mock("./pages/landlord/PortfolioScorePage", () => ({
   default: () => <h1>Landlord Portfolio Score</h1>,
 }));
@@ -341,6 +345,20 @@ describe("Routes: /identity-layer", () => {
     );
 
     expect(await screen.findByText(/Identity Layer Page/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("Routes: /institutional-sharing-rooms", () => {
+  it("renders the institutional sharing room route", async () => {
+    const { default: App } = await import("./App");
+    render(
+      <MemoryRouter initialEntries={["/institutional-sharing-rooms"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Institutional Sharing Rooms Page/i)).toBeInTheDocument();
     expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
   });
 });

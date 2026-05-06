@@ -147,6 +147,9 @@ export default function InstitutionExportsPage() {
             <Link to="/audit-compliance" style={{ color: "#2563eb", fontWeight: 800 }}>
               View readiness
             </Link>
+            <Link to="/institutional-sharing-rooms" style={{ color: "#2563eb", fontWeight: 800 }}>
+              View sharing room
+            </Link>
           </div>
         </Section>
 

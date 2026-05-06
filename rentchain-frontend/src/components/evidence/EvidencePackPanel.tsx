@@ -65,6 +65,9 @@ export function EvidencePackPanel({ evidencePack }: { evidencePack: EvidencePack
           >
             View timeline
           </Link>
+          <Link to="/institutional-sharing-rooms" style={{ color: "#2563eb", fontWeight: 800, fontSize: 13 }}>
+            View sharing room
+          </Link>
         </div>
       </Section>
 
