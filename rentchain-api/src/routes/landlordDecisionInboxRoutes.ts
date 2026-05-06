@@ -174,6 +174,9 @@ router.get("/decision-inbox", requireAuth, requireLandlord, async (req: any, res
         severity: req.query?.severity,
         status: req.query?.status,
         type: req.query?.type,
+        queue: req.query?.queue,
+        workflowState: req.query?.workflowState,
+        escalationLevel: req.query?.escalationLevel,
       },
     });
 

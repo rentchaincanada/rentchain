@@ -45,6 +45,14 @@ function inboxResponse(overrides: Record<string, unknown> = {}) {
         relatedEntity: { kind: "lease", id: "lease-1", label: "Lease lease-1" },
         destination: "/leases/lease-1/ledger",
         automationEligible: false,
+        workflow: {
+          queue: "delinquency_review",
+          workflowState: "escalated",
+          ownershipType: "landlord",
+          reviewPriority: "critical",
+          escalationLevel: "critical",
+          manualOnly: true,
+        },
         createdAt: "2026-05-05T12:00:00.000Z",
         updatedAt: "2026-05-05T12:00:00.000Z",
       },
@@ -59,6 +67,14 @@ function inboxResponse(overrides: Record<string, unknown> = {}) {
         relatedEntity: { kind: "maintenance_request", id: "wo-1", label: "Work order wo-1" },
         destination: null,
         automationEligible: false,
+        workflow: {
+          queue: "maintenance_review",
+          workflowState: "waiting_context",
+          ownershipType: "landlord",
+          reviewPriority: "high",
+          escalationLevel: "urgent",
+          manualOnly: true,
+        },
         createdAt: null,
         updatedAt: null,
       },
@@ -67,6 +83,9 @@ function inboxResponse(overrides: Record<string, unknown> = {}) {
       severity: ["critical", "high"],
       status: ["open", "blocked"],
       type: ["billing", "maintenance"],
+      queue: ["delinquency_review", "maintenance_review"],
+      workflowState: ["escalated", "waiting_context"],
+      escalationLevel: ["critical", "urgent"],
     },
     summary: {
       total: 2,
@@ -74,6 +93,12 @@ function inboxResponse(overrides: Record<string, unknown> = {}) {
       high: 1,
       open: 1,
       blocked: 1,
+    },
+    workflowSummary: {
+      new: 0,
+      underReview: 0,
+      escalated: 1,
+      critical: 1,
     },
     ...overrides,
   };
@@ -102,8 +127,13 @@ describe("DecisionInboxPage", () => {
     expect(screen.getAllByText("High").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Open").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Blocked").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Escalated").length).toBeGreaterThan(0);
+    expect(screen.getByText("Critical workflow")).toBeInTheDocument();
     expect(screen.getByText("Review Missing Payment")).toBeInTheDocument();
     expect(screen.getByText("Expected rent payment is missing.")).toBeInTheDocument();
+    expect(screen.getAllByText("Delinquency Review").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Maintenance Review").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Urgent").length).toBeGreaterThan(0);
     expect(screen.getByText("Source: Lease Ledger")).toBeInTheDocument();
     expect(screen.getByText("Related: Lease lease-1")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "View context" })).toHaveAttribute("href", "/leases/lease-1/ledger");
@@ -120,6 +150,7 @@ describe("DecisionInboxPage", () => {
         inboxResponse({
           items: [inboxResponse().items[0]],
           summary: { total: 1, critical: 1, high: 0, open: 1, blocked: 0 },
+          workflowSummary: { new: 0, underReview: 0, escalated: 1, critical: 1 },
         })
       );
 
@@ -134,7 +165,29 @@ describe("DecisionInboxPage", () => {
 
     await waitFor(() => {
       expect(apiMocks.fetchDecisionInbox).toHaveBeenLastCalledWith(
-        expect.objectContaining({ severity: "critical", status: "all", type: "all" })
+        expect.objectContaining({
+          severity: "critical",
+          status: "all",
+          type: "all",
+          queue: "all",
+          workflowState: "all",
+          escalationLevel: "all",
+        })
+      );
+    });
+
+    apiMocks.fetchDecisionInbox.mockResolvedValueOnce(
+      inboxResponse({
+        items: [inboxResponse().items[1]],
+        summary: { total: 1, critical: 0, high: 1, open: 0, blocked: 1 },
+        workflowSummary: { new: 0, underReview: 0, escalated: 0, critical: 0 },
+      })
+    );
+    fireEvent.change(screen.getByLabelText("Queue"), { target: { value: "maintenance_review" } });
+
+    await waitFor(() => {
+      expect(apiMocks.fetchDecisionInbox).toHaveBeenLastCalledWith(
+        expect.objectContaining({ severity: "critical", queue: "maintenance_review" })
       );
     });
   });
@@ -144,6 +197,7 @@ describe("DecisionInboxPage", () => {
       inboxResponse({
         items: [],
         summary: { total: 0, critical: 0, high: 0, open: 0, blocked: 0 },
+        workflowSummary: { new: 0, underReview: 0, escalated: 0, critical: 0 },
       })
     );
 

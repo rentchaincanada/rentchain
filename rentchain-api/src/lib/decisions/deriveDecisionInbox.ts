@@ -7,7 +7,11 @@ import type {
   DecisionInboxSource,
   DecisionInboxStatus,
   DecisionInboxType,
+  DecisionWorkflowEscalationLevel,
+  DecisionWorkflowQueue,
+  DecisionWorkflowState,
 } from "./decisionInboxTypes";
+import { deriveDecisionWorkflowRouting } from "./deriveDecisionWorkflowRouting";
 
 type SourceDecision = Decision & { latestAction?: unknown };
 
@@ -18,6 +22,9 @@ export type DeriveDecisionInboxInput = {
     severity?: unknown;
     status?: unknown;
     type?: unknown;
+    queue?: unknown;
+    workflowState?: unknown;
+    escalationLevel?: unknown;
   } | null;
 };
 
@@ -33,6 +40,30 @@ const KNOWN_TYPES = new Set<DecisionInboxType>([
   "tenant",
   "billing",
   "unknown",
+]);
+const KNOWN_QUEUES = new Set<DecisionWorkflowQueue>([
+  "lease_review",
+  "delinquency_review",
+  "screening_review",
+  "maintenance_review",
+  "compliance_review",
+  "admin_review",
+  "general_review",
+]);
+const KNOWN_WORKFLOW_STATES = new Set<DecisionWorkflowState>([
+  "new",
+  "triaged",
+  "under_review",
+  "waiting_context",
+  "escalated",
+  "resolved",
+  "archived",
+]);
+const KNOWN_ESCALATION_LEVELS = new Set<DecisionWorkflowEscalationLevel>([
+  "none",
+  "attention",
+  "urgent",
+  "critical",
 ]);
 
 function asString(value: unknown, max = 500): string | null {
@@ -153,7 +184,7 @@ function relatedEntityForAnalyticsDecision(decision: LandlordAgentDecision): Dec
 
 export function decisionInboxItemFromLeaseDecision(decision: SourceDecision): DecisionInboxItem {
   const type = typeFromDecisionType(decision.decisionType);
-  return {
+  const base: Omit<DecisionInboxItem, "workflow"> = {
     id: asString(decision.decisionId, 600) || fallbackId("lease_ledger", decision.decisionId, decision.decisionType),
     title: titleCase(decision.decisionType),
     description: asString(decision.reason, 1000) || "Decision context is available for review.",
@@ -167,10 +198,14 @@ export function decisionInboxItemFromLeaseDecision(decision: SourceDecision): De
     createdAt: normalizeDate(decision.createdAt),
     updatedAt: normalizeDate(decision.updatedAt),
   };
+  return {
+    ...base,
+    workflow: deriveDecisionWorkflowRouting({ ...base, decisionType: decision.decisionType }),
+  };
 }
 
 export function decisionInboxItemFromAnalyticsDecision(decision: LandlordAgentDecision): DecisionInboxItem {
-  return {
+  const base: Omit<DecisionInboxItem, "workflow"> = {
     id: asString(decision.id, 600) || fallbackId("analytics", decision.id, decision.decisionType),
     title: asString(decision.actionLabel || decision.recommendedAction, 240) || titleCase(decision.decisionType),
     description: asString(decision.explanation || decision.recommendedAction, 1000) || "Analytics decision context is available for review.",
@@ -183,6 +218,14 @@ export function decisionInboxItemFromAnalyticsDecision(decision: LandlordAgentDe
     automationEligible: false,
     createdAt: null,
     updatedAt: normalizeDate(decision.reviewedAt || decision.executedAt || decision.executionOutcomeAt),
+  };
+  return {
+    ...base,
+    workflow: deriveDecisionWorkflowRouting({
+      ...base,
+      decisionType: decision.decisionType,
+      workflowCategory: decision.workflowCategory,
+    }),
   };
 }
 
@@ -220,10 +263,16 @@ export function deriveDecisionInbox(input: DeriveDecisionInboxInput): DecisionIn
   const severity = filterValue(input.filters?.severity, KNOWN_SEVERITIES);
   const status = filterValue(input.filters?.status, KNOWN_STATUSES);
   const type = filterValue(input.filters?.type, KNOWN_TYPES);
+  const queue = filterValue(input.filters?.queue, KNOWN_QUEUES);
+  const workflowState = filterValue(input.filters?.workflowState, KNOWN_WORKFLOW_STATES);
+  const escalationLevel = filterValue(input.filters?.escalationLevel, KNOWN_ESCALATION_LEVELS);
   const items = allItems.filter((item) => {
     if (severity && item.severity !== severity) return false;
     if (status && item.status !== status) return false;
     if (type && item.type !== type) return false;
+    if (queue && item.workflow.queue !== queue) return false;
+    if (workflowState && item.workflow.workflowState !== workflowState) return false;
+    if (escalationLevel && item.workflow.escalationLevel !== escalationLevel) return false;
     return true;
   });
 
@@ -242,6 +291,26 @@ export function deriveDecisionInbox(input: DeriveDecisionInboxInput): DecisionIn
         allItems.map((item) => item.type),
         ["lease", "screening", "maintenance", "compliance", "admin", "property", "tenant", "billing", "unknown"]
       ),
+      queue: uniqueSorted(
+        allItems.map((item) => item.workflow.queue),
+        [
+          "lease_review",
+          "delinquency_review",
+          "screening_review",
+          "maintenance_review",
+          "compliance_review",
+          "admin_review",
+          "general_review",
+        ]
+      ),
+      workflowState: uniqueSorted(
+        allItems.map((item) => item.workflow.workflowState),
+        ["new", "triaged", "under_review", "waiting_context", "escalated", "resolved", "archived"]
+      ),
+      escalationLevel: uniqueSorted(
+        allItems.map((item) => item.workflow.escalationLevel),
+        ["none", "attention", "urgent", "critical"]
+      ),
     },
     summary: {
       total: items.length,
@@ -249,6 +318,12 @@ export function deriveDecisionInbox(input: DeriveDecisionInboxInput): DecisionIn
       high: items.filter((item) => item.severity === "high").length,
       open: items.filter((item) => item.status === "open").length,
       blocked: items.filter((item) => item.status === "blocked").length,
+    },
+    workflowSummary: {
+      new: items.filter((item) => item.workflow.workflowState === "new").length,
+      underReview: items.filter((item) => item.workflow.workflowState === "under_review").length,
+      escalated: items.filter((item) => item.workflow.workflowState === "escalated").length,
+      critical: items.filter((item) => item.workflow.escalationLevel === "critical").length,
     },
   };
 }

@@ -7,6 +7,9 @@ import {
   type DecisionInboxSeverity,
   type DecisionInboxStatus,
   type DecisionInboxType,
+  type DecisionWorkflowEscalationLevel,
+  type DecisionWorkflowQueue,
+  type DecisionWorkflowState,
 } from "@/api/decisionInboxApi";
 import { MacShell } from "@/components/layout/MacShell";
 import { Card, Section } from "@/components/ui/Ui";
@@ -44,6 +47,33 @@ const typeOptions: Array<FilterValue<DecisionInboxType>> = [
   "billing",
   "unknown",
 ];
+const queueOptions: Array<FilterValue<DecisionWorkflowQueue>> = [
+  "all",
+  "lease_review",
+  "delinquency_review",
+  "screening_review",
+  "maintenance_review",
+  "compliance_review",
+  "admin_review",
+  "general_review",
+];
+const workflowStateOptions: Array<FilterValue<DecisionWorkflowState>> = [
+  "all",
+  "new",
+  "triaged",
+  "under_review",
+  "waiting_context",
+  "escalated",
+  "resolved",
+  "archived",
+];
+const escalationOptions: Array<FilterValue<DecisionWorkflowEscalationLevel>> = [
+  "all",
+  "none",
+  "attention",
+  "urgent",
+  "critical",
+];
 
 function label(value: string) {
   if (value === "all") return "All";
@@ -65,6 +95,22 @@ function statusTone(status: DecisionInboxStatus) {
   if (status === "pending") return { color: "#1d4ed8", background: "#dbeafe", border: "#bfdbfe" };
   if (status === "resolved") return { color: "#166534", background: "#dcfce7", border: "#bbf7d0" };
   if (status === "dismissed") return { color: "#475569", background: "#f1f5f9", border: "#cbd5e1" };
+  return { color: "#475569", background: "#f8fafc", border: "#e2e8f0" };
+}
+
+function workflowStateTone(state: DecisionWorkflowState) {
+  if (state === "escalated") return { color: "#991b1b", background: "#fee2e2", border: "#fecaca" };
+  if (state === "waiting_context") return { color: "#92400e", background: "#fef3c7", border: "#fde68a" };
+  if (state === "under_review") return { color: "#1d4ed8", background: "#dbeafe", border: "#bfdbfe" };
+  if (state === "resolved") return { color: "#166534", background: "#dcfce7", border: "#bbf7d0" };
+  if (state === "archived") return { color: "#475569", background: "#f1f5f9", border: "#cbd5e1" };
+  return { color: "#334155", background: "#f8fafc", border: "#e2e8f0" };
+}
+
+function escalationTone(level: DecisionWorkflowEscalationLevel) {
+  if (level === "critical") return { color: "#991b1b", background: "#fee2e2", border: "#fecaca" };
+  if (level === "urgent") return { color: "#9f1239", background: "#ffe4e6", border: "#fecdd3" };
+  if (level === "attention") return { color: "#92400e", background: "#fef3c7", border: "#fde68a" };
   return { color: "#475569", background: "#f8fafc", border: "#e2e8f0" };
 }
 
@@ -93,7 +139,12 @@ function DecisionInboxCard({ item }: { item: DecisionInboxItem }) {
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
         <Badge tone={severityTone(item.severity)}>{label(item.severity)}</Badge>
         <Badge tone={statusTone(item.status)}>{label(item.status)}</Badge>
+        <Badge tone={workflowStateTone(item.workflow.workflowState)}>{label(item.workflow.workflowState)}</Badge>
+        <Badge tone={escalationTone(item.workflow.escalationLevel)}>
+          {item.workflow.escalationLevel === "none" ? "No escalation" : label(item.workflow.escalationLevel)}
+        </Badge>
         <span style={{ color: "#475569", fontSize: 13, fontWeight: 700 }}>{label(item.type)}</span>
+        <span style={{ color: "#475569", fontSize: 13, fontWeight: 700 }}>{label(item.workflow.queue)}</span>
         <span style={{ color: "#64748b", fontSize: 13 }}>Source: {label(item.source)}</span>
       </div>
       <div style={{ display: "grid", gap: 5 }}>
@@ -162,6 +213,9 @@ export default function DecisionInboxPage() {
   const [severity, setSeverity] = React.useState<FilterValue<DecisionInboxSeverity>>("all");
   const [status, setStatus] = React.useState<FilterValue<DecisionInboxStatus>>("all");
   const [type, setType] = React.useState<FilterValue<DecisionInboxType>>("all");
+  const [queue, setQueue] = React.useState<FilterValue<DecisionWorkflowQueue>>("all");
+  const [workflowState, setWorkflowState] = React.useState<FilterValue<DecisionWorkflowState>>("all");
+  const [escalationLevel, setEscalationLevel] = React.useState<FilterValue<DecisionWorkflowEscalationLevel>>("all");
   const [data, setData] = React.useState<DecisionInboxResponse | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -172,7 +226,7 @@ export default function DecisionInboxPage() {
       try {
         setLoading(true);
         setError(null);
-        const response = await fetchDecisionInbox({ severity, status, type });
+        const response = await fetchDecisionInbox({ severity, status, type, queue, workflowState, escalationLevel });
         if (!mounted) return;
         setData(response);
       } catch (err) {
@@ -187,7 +241,7 @@ export default function DecisionInboxPage() {
     return () => {
       mounted = false;
     };
-  }, [severity, status, type, showToast]);
+  }, [severity, status, type, queue, workflowState, escalationLevel, showToast]);
 
   return (
     <MacShell title="Decision inbox" showTopNav={false}>
@@ -212,6 +266,10 @@ export default function DecisionInboxPage() {
                 ["High", data.summary.high],
                 ["Open", data.summary.open],
                 ["Blocked", data.summary.blocked],
+                ["New", data.workflowSummary.new],
+                ["Under review", data.workflowSummary.underReview],
+                ["Escalated", data.workflowSummary.escalated],
+                ["Critical workflow", data.workflowSummary.critical],
               ].map(([name, value]) => (
                 <Card key={String(name)} style={{ borderRadius: 8, padding: 12 }}>
                   <div style={{ color: "#64748b", fontSize: 12, fontWeight: 800 }}>{name}</div>
@@ -226,6 +284,19 @@ export default function DecisionInboxPage() {
           <FilterSelect labelText="Severity" value={severity} options={severityOptions} onChange={setSeverity} />
           <FilterSelect labelText="Status" value={status} options={statusOptions} onChange={setStatus} />
           <FilterSelect labelText="Type" value={type} options={typeOptions} onChange={setType} />
+          <FilterSelect labelText="Queue" value={queue} options={queueOptions} onChange={setQueue} />
+          <FilterSelect
+            labelText="Workflow state"
+            value={workflowState}
+            options={workflowStateOptions}
+            onChange={setWorkflowState}
+          />
+          <FilterSelect
+            labelText="Escalation"
+            value={escalationLevel}
+            options={escalationOptions}
+            onChange={setEscalationLevel}
+          />
         </Section>
 
         {loading ? <Card>Loading decision inbox…</Card> : null}
