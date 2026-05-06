@@ -81,6 +81,10 @@ describe("OperatorReviewSessionPanel", () => {
     );
 
     expect(await screen.findByText("Operator review session")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "View evidence pack" })).toHaveAttribute(
+      "href",
+      "/evidence-packs?scope=decision&scopeId=decision-1"
+    );
     expect(screen.getByText(/Manual operator review/i)).toBeInTheDocument();
     expect(screen.getByText(/Review sessions are audit logged/i)).toBeInTheDocument();
     expect(screen.getByText(/No automated approval or certification occurs/i)).toBeInTheDocument();

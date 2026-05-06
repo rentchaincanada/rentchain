@@ -1,5 +1,6 @@
 import React from "react";
 import { cleanup, render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import AuditCompliancePage from "./AuditCompliancePage";
 
@@ -118,7 +119,11 @@ describe("AuditCompliancePage", () => {
   });
 
   it("renders readiness summary, checks, redactions, and required safety copy", async () => {
-    render(<AuditCompliancePage />);
+    render(
+      <MemoryRouter>
+        <AuditCompliancePage />
+      </MemoryRouter>
+    );
 
     expect(await screen.findByRole("heading", { name: "Audit and compliance readiness" })).toBeInTheDocument();
     expect(screen.getAllByText(/Readiness only\. This is not legal certification\./i).length).toBeGreaterThan(0);
@@ -141,7 +146,11 @@ describe("AuditCompliancePage", () => {
   it("renders an empty redaction state safely", async () => {
     apiMocks.fetchAuditComplianceReadiness.mockResolvedValue(readiness({ redactions: [] }));
 
-    render(<AuditCompliancePage />);
+    render(
+      <MemoryRouter>
+        <AuditCompliancePage />
+      </MemoryRouter>
+    );
 
     expect(await screen.findByText("No redaction metadata is available yet.")).toBeInTheDocument();
   });
