@@ -11,7 +11,9 @@ import {
   type DecisionWorkflowQueue,
   type DecisionWorkflowState,
 } from "@/api/decisionInboxApi";
+import type { OperatorReviewEvidenceReference, OperatorReviewScope } from "@/api/operatorReviewApi";
 import { MacShell } from "@/components/layout/MacShell";
+import { OperatorReviewSessionPanel } from "@/components/operatorReviews/OperatorReviewSessionPanel";
 import { Card, Section } from "@/components/ui/Ui";
 import { useToast } from "@/components/ui/ToastProvider";
 
@@ -135,6 +137,23 @@ function Badge({ children, tone }: { children: React.ReactNode; tone: { color: s
 
 function DecisionInboxCard({ item }: { item: DecisionInboxItem }) {
   const delinquencyActions = item.delinquencyActions || [];
+  const reviewScope: OperatorReviewScope = item.workflow.queue === "delinquency_review" ? "delinquency" : "decision";
+  const evidence: OperatorReviewEvidenceReference[] = [
+    {
+      evidenceId: item.id,
+      label: item.title,
+      kind: "decision",
+      destination: item.destination,
+    },
+  ];
+  if (item.destination) {
+    evidence.push({
+      evidenceId: `${item.id}:context`,
+      label: "Decision context",
+      kind: item.workflow.queue === "delinquency_review" ? "ledger" : "workflow",
+      destination: item.destination,
+    });
+  }
   return (
     <Card style={{ display: "grid", gap: 12, borderRadius: 8 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
@@ -219,6 +238,11 @@ function DecisionInboxCard({ item }: { item: DecisionInboxItem }) {
           </div>
         </div>
       ) : null}
+      <OperatorReviewSessionPanel
+        scope={reviewScope}
+        scopeId={item.id}
+        linkedEvidence={evidence}
+      />
     </Card>
   );
 }

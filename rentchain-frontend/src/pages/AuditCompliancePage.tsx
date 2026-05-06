@@ -5,6 +5,7 @@ import {
   type AuditComplianceReadiness,
 } from "@/api/auditComplianceApi";
 import { MacShell } from "@/components/layout/MacShell";
+import { OperatorReviewSessionPanel } from "@/components/operatorReviews/OperatorReviewSessionPanel";
 import { Card, Section } from "@/components/ui/Ui";
 import { useToast } from "@/components/ui/ToastProvider";
 
@@ -184,6 +185,21 @@ export default function AuditCompliancePage() {
                   {disclaimer}
                 </div>
               ))}
+            </Section>
+
+            <Section>
+              <OperatorReviewSessionPanel
+                scope="audit_compliance"
+                scopeId={data.readinessId}
+                linkedEvidence={[
+                  {
+                    evidenceId: data.readinessId,
+                    label: "Audit and compliance readiness",
+                    kind: "audit_readiness",
+                    destination: "/audit-compliance",
+                  },
+                ]}
+              />
             </Section>
           </>
         ) : null}

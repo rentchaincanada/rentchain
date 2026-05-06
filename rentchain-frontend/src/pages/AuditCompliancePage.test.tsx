@@ -5,6 +5,10 @@ import AuditCompliancePage from "./AuditCompliancePage";
 
 const apiMocks = vi.hoisted(() => ({
   fetchAuditComplianceReadiness: vi.fn(),
+  fetchOperatorReviewSessions: vi.fn(),
+  openOperatorReviewSession: vi.fn(),
+  addOperatorReviewNote: vi.fn(),
+  closeOperatorReviewSession: vi.fn(),
   showToast: vi.fn(),
   macShellProps: vi.fn(),
 }));
@@ -14,6 +18,17 @@ vi.mock("@/api/auditComplianceApi", async () => {
   return {
     ...actual,
     fetchAuditComplianceReadiness: apiMocks.fetchAuditComplianceReadiness,
+  };
+});
+
+vi.mock("@/api/operatorReviewApi", async () => {
+  const actual = await vi.importActual<any>("@/api/operatorReviewApi");
+  return {
+    ...actual,
+    fetchOperatorReviewSessions: apiMocks.fetchOperatorReviewSessions,
+    openOperatorReviewSession: apiMocks.openOperatorReviewSession,
+    addOperatorReviewNote: apiMocks.addOperatorReviewNote,
+    closeOperatorReviewSession: apiMocks.closeOperatorReviewSession,
   };
 });
 
@@ -99,6 +114,7 @@ describe("AuditCompliancePage", () => {
     cleanup();
     vi.clearAllMocks();
     apiMocks.fetchAuditComplianceReadiness.mockResolvedValue(readiness());
+    apiMocks.fetchOperatorReviewSessions.mockResolvedValue([]);
   });
 
   it("renders readiness summary, checks, redactions, and required safety copy", async () => {
@@ -115,6 +131,8 @@ describe("AuditCompliancePage", () => {
     expect(screen.getByText(/Missing evidence: No landlord-scoped audit or canonical event records/i)).toBeInTheDocument();
     expect(screen.getByText(/Blocked: Redaction metadata is required/i)).toBeInTheDocument();
     expect(screen.getByText("Tenant Contact Details")).toBeInTheDocument();
+    expect(screen.getByText("Operator review session")).toBeInTheDocument();
+    expect(screen.getByText(/Review sessions are audit logged/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /certify|submit|file|send|auto-report|approve compliance/i })).not.toBeInTheDocument();
     expect(screen.queryByText(/approved compliant|legal compliance confirmed/i)).not.toBeInTheDocument();
     expect(apiMocks.macShellProps).toHaveBeenCalledWith(expect.objectContaining({ showTopNav: false }));

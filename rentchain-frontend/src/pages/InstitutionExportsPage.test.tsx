@@ -6,6 +6,10 @@ import InstitutionExportsPage from "./InstitutionExportsPage";
 
 const apiMocks = vi.hoisted(() => ({
   fetchInstitutionExportPreview: vi.fn(),
+  fetchOperatorReviewSessions: vi.fn(),
+  openOperatorReviewSession: vi.fn(),
+  addOperatorReviewNote: vi.fn(),
+  closeOperatorReviewSession: vi.fn(),
   showToast: vi.fn(),
   macShellProps: vi.fn(),
 }));
@@ -15,6 +19,17 @@ vi.mock("@/api/institutionExportsApi", async () => {
   return {
     ...actual,
     fetchInstitutionExportPreview: apiMocks.fetchInstitutionExportPreview,
+  };
+});
+
+vi.mock("@/api/operatorReviewApi", async () => {
+  const actual = await vi.importActual<any>("@/api/operatorReviewApi");
+  return {
+    ...actual,
+    fetchOperatorReviewSessions: apiMocks.fetchOperatorReviewSessions,
+    openOperatorReviewSession: apiMocks.openOperatorReviewSession,
+    addOperatorReviewNote: apiMocks.addOperatorReviewNote,
+    closeOperatorReviewSession: apiMocks.closeOperatorReviewSession,
   };
 });
 
@@ -83,6 +98,7 @@ describe("InstitutionExportsPage", () => {
     cleanup();
     vi.clearAllMocks();
     apiMocks.fetchInstitutionExportPreview.mockResolvedValue(previewPackage());
+    apiMocks.fetchOperatorReviewSessions.mockResolvedValue([]);
   });
 
   it("renders read-only preview status, sections, redactions, and safety copy", async () => {
@@ -107,6 +123,8 @@ describe("InstitutionExportsPage", () => {
     expect(screen.getByText("Payment Account Details")).toBeInTheDocument();
     expect(screen.getByText("Preview payload summary")).toBeInTheDocument();
     expect(screen.getByText("75%")).toBeInTheDocument();
+    expect(screen.getByText("Operator review session")).toBeInTheDocument();
+    expect(screen.getByText(/No automated approval or certification occurs/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /submit|send|upload|auto-report|schedule|file now/i })).not.toBeInTheDocument();
     expect(screen.queryByText(/send to lender|send to institution/i)).not.toBeInTheDocument();
     expect(apiMocks.macShellProps).toHaveBeenCalledWith(expect.objectContaining({ showTopNav: false }));
