@@ -138,6 +138,10 @@ vi.mock("./pages/RegulatoryProfilePage", () => ({
   default: () => <h1>Regulatory Profiles Page</h1>,
 }));
 
+vi.mock("./pages/AssetTokenizationReadinessPage", () => ({
+  default: () => <h1>Asset Tokenization Readiness Page</h1>,
+}));
+
 vi.mock("./pages/landlord/PortfolioScorePage", () => ({
   default: () => <h1>Landlord Portfolio Score</h1>,
 }));
@@ -413,6 +417,20 @@ describe("Routes: /regulatory-profiles", () => {
     );
 
     expect(await screen.findByText(/Regulatory Profiles Page/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("Routes: /asset-tokenization-readiness", () => {
+  it("renders the asset tokenization readiness route", async () => {
+    const { default: App } = await import("./App");
+    render(
+      <MemoryRouter initialEntries={["/asset-tokenization-readiness?propertyId=property-1"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Asset Tokenization Readiness Page/i)).toBeInTheDocument();
     expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
   });
 });
