@@ -303,12 +303,17 @@ export default function DecisionInboxPage() {
     <MacShell title="Decision inbox" showTopNav={false}>
       <div style={{ display: "grid", gap: 16 }}>
         <Section>
-          <div style={{ display: "grid", gap: 6 }}>
-            <h1 style={{ margin: 0, fontSize: "1.5rem" }}>Decision inbox</h1>
-            <div style={{ color: "#475569", maxWidth: 900 }}>
-              A read-only view of detected decisions across analytics and lease ledger surfaces. Review context here without
-              triggering workflow actions.
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "start" }}>
+            <div style={{ display: "grid", gap: 6 }}>
+              <h1 style={{ margin: 0, fontSize: "1.5rem" }}>Decision inbox</h1>
+              <div style={{ color: "#475569", maxWidth: 900 }}>
+                A read-only view of detected decisions across analytics and lease ledger surfaces. Review context here without
+                triggering workflow actions.
+              </div>
             </div>
+            <Link to="/institution-exports" style={{ color: "#2563eb", fontWeight: 800 }}>
+              Institution export preview
+            </Link>
           </div>
         </Section>
 
