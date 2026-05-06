@@ -117,6 +117,7 @@ const PortfolioHealthSummaryPage = lazy(() => import("./pages/landlord/Portfolio
 const LandlordAnalyticsPage = lazy(() => import("./pages/landlord/LandlordAnalyticsPage"));
 const LandlordInboxPage = lazy(() => import("./pages/landlord/LandlordInboxPage"));
 const DecisionInboxPage = lazy(() => import("./pages/DecisionInboxPage"));
+const AgentSupervisionPage = lazy(() => import("./pages/AgentSupervisionPage"));
 const InstitutionExportsPage = lazy(() => import("./pages/InstitutionExportsPage"));
 const AuditCompliancePage = lazy(() => import("./pages/AuditCompliancePage"));
 const EvidencePackPage = lazy(() => import("./pages/EvidencePackPage"));
@@ -516,6 +517,18 @@ function App() {
               <LandlordNav>
                 <Suspense fallback={null}>
                   <DecisionInboxPage />
+                </Suspense>
+              </LandlordNav>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/agent-supervision"
+          element={
+            <RequireAuth>
+              <LandlordNav>
+                <Suspense fallback={null}>
+                  <AgentSupervisionPage />
                 </Suspense>
               </LandlordNav>
             </RequireAuth>

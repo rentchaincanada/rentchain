@@ -98,6 +98,10 @@ vi.mock("./pages/DecisionInboxPage", () => ({
   default: () => <h1>Decision Inbox Page</h1>,
 }));
 
+vi.mock("./pages/AgentSupervisionPage", () => ({
+  default: () => <h1>Agent Supervision Page</h1>,
+}));
+
 vi.mock("./pages/InstitutionExportsPage", () => ({
   default: () => <h1>Institution Export Preview Page</h1>,
 }));
@@ -249,6 +253,20 @@ describe("Routes: /decision-inbox", () => {
     );
 
     expect(await screen.findByText(/Decision Inbox Page/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("Routes: /agent-supervision", () => {
+  it("renders the read-only agent supervision route", async () => {
+    const { default: App } = await import("./App");
+    render(
+      <MemoryRouter initialEntries={["/agent-supervision"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Agent Supervision Page/i)).toBeInTheDocument();
     expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
   });
 });

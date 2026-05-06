@@ -328,6 +328,7 @@ describe("DecisionInboxPage", () => {
       "href",
       "/institution-exports"
     );
+    expect(screen.getByRole("link", { name: "Agent supervision" })).toHaveAttribute("href", "/agent-supervision");
     expect(screen.getByText("Summary")).toBeInTheDocument();
     expect(screen.getAllByText("Critical").length).toBeGreaterThan(0);
     expect(screen.getAllByText("High").length).toBeGreaterThan(0);

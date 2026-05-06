@@ -412,6 +412,9 @@ export default function DecisionInboxPage() {
             <Link to="/institution-exports" style={{ color: "#2563eb", fontWeight: 800 }}>
               Institution export preview
             </Link>
+            <Link to="/agent-supervision" style={{ color: "#2563eb", fontWeight: 800 }}>
+              Agent supervision
+            </Link>
           </div>
         </Section>
 
