@@ -130,6 +130,10 @@ vi.mock("./pages/VerifiedRentalHistoryPage", () => ({
   default: () => <h1>Verified Rental History Page</h1>,
 }));
 
+vi.mock("./pages/SettlementReadinessPage", () => ({
+  default: () => <h1>Settlement Readiness Page</h1>,
+}));
+
 vi.mock("./pages/landlord/PortfolioScorePage", () => ({
   default: () => <h1>Landlord Portfolio Score</h1>,
 }));
@@ -377,6 +381,20 @@ describe("Routes: /verified-rental-history", () => {
     );
 
     expect(await screen.findByText(/Verified Rental History Page/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("Routes: /settlement-readiness", () => {
+  it("renders the settlement readiness route", async () => {
+    const { default: App } = await import("./App");
+    render(
+      <MemoryRouter initialEntries={["/settlement-readiness?leaseId=lease-1"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Settlement Readiness Page/i)).toBeInTheDocument();
     expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
   });
 });
