@@ -91,6 +91,11 @@ describe("deriveDecisionInbox", () => {
             escalationLevel: "critical",
             manualOnly: true,
           }),
+          delinquencyActions: expect.arrayContaining([
+            expect.objectContaining({ actionKey: "view_ledger", status: "available", manualOnly: true }),
+            expect.objectContaining({ actionKey: "prepare_reminder", status: "blocked", manualOnly: true }),
+            expect.objectContaining({ actionKey: "prepare_notice", status: "blocked", manualOnly: true }),
+          ]),
         }),
         expect.objectContaining({
           id: "approve_maintenance_cost:wo-1",
@@ -109,6 +114,7 @@ describe("deriveDecisionInbox", () => {
         }),
       ])
     );
+    expect(result.items.find((item) => item.id === "approve_maintenance_cost:wo-1")?.delinquencyActions).toBeUndefined();
   });
 
   it("filters by severity, status, type, and workflow routing deterministically", () => {
