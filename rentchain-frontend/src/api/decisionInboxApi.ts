@@ -37,6 +37,20 @@ export type AutomatedWorkflowEventType =
   | "automated_workflow_escalation_flagged"
   | "automated_workflow_review_required"
   | "automated_workflow_sync_completed";
+export type AgentActionType =
+  | "request_evidence"
+  | "recommend_review"
+  | "suggest_escalation"
+  | "suggest_follow_up"
+  | "suggest_workflow_transition"
+  | "suggest_export_review";
+export type AgentActionStatus = "suggested" | "blocked" | "unavailable" | "acknowledged";
+export type AgentActionScope = "decision" | "workflow" | "evidence_pack" | "operator_review" | "export" | "audit_compliance";
+export type PolicyGatedAgentActionEventType =
+  | "policy_gated_agent_action_suggested"
+  | "policy_gated_agent_action_blocked"
+  | "policy_gated_agent_action_acknowledged"
+  | "policy_gated_agent_action_review_required";
 export type DecisionWorkflowRouting = {
   queue: DecisionWorkflowQueue;
   workflowState: DecisionWorkflowState;
@@ -81,6 +95,44 @@ export type AutomatedWorkflowSummary = {
   escalationFlagged: number;
   reviewRequired: number;
 };
+export type PolicyGatedAgentAction = {
+  agentActionId: string;
+  actionType: AgentActionType;
+  status: AgentActionStatus;
+  manualReviewRequired: true;
+  policyGuarded: true;
+  externalExecutionEnabled: false;
+  requiresHumanApproval: true;
+  explanation: {
+    summary: string;
+    reasons: string[];
+    blockedReasons: string[];
+  };
+  relatedScope: {
+    scope: AgentActionScope;
+    scopeId: string;
+  };
+  queue: DecisionWorkflowQueue;
+  escalationLevel: DecisionWorkflowEscalationLevel;
+  canonicalEvents: Array<{
+    eventType: PolicyGatedAgentActionEventType;
+    action: string;
+    status: AgentActionStatus;
+    resourceType: AgentActionScope;
+    resourceId: string;
+    summary: string;
+  }>;
+  generatedAt: string;
+};
+export type PolicyGatedAgentActionSummary = {
+  total: number;
+  suggested: number;
+  blocked: number;
+  unavailable: number;
+  acknowledged: number;
+  reviewRequired: number;
+  escalationSuggested: number;
+};
 export type DelinquencyActionDescriptor = {
   actionKey: "review_context" | "prepare_reminder" | "prepare_notice" | "view_ledger";
   label: string;
@@ -110,6 +162,7 @@ export type DecisionInboxItem = {
   automationEligible: false;
   workflow: DecisionWorkflowRouting;
   automatedWorkflow?: AutomatedWorkflowPreview;
+  agentActions?: PolicyGatedAgentAction[];
   delinquencyActions?: DelinquencyActionDescriptor[];
   createdAt: string | null;
   updatedAt: string | null;
@@ -139,6 +192,7 @@ export type DecisionInboxResponse = {
     critical: number;
   };
   automationSummary: AutomatedWorkflowSummary;
+  agentActionSummary: PolicyGatedAgentActionSummary;
 };
 
 export type DecisionInboxQuery = {
@@ -180,6 +234,15 @@ export async function fetchDecisionInbox(params?: DecisionInboxQuery): Promise<D
       completed: 0,
       escalationFlagged: 0,
       reviewRequired: 0,
+    },
+    agentActionSummary: response.agentActionSummary || {
+      total: 0,
+      suggested: 0,
+      blocked: 0,
+      unavailable: 0,
+      acknowledged: 0,
+      reviewRequired: 0,
+      escalationSuggested: 0,
     },
   };
 }

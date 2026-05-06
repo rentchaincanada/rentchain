@@ -188,6 +188,16 @@ describe("landlordDecisionInboxRoutes", () => {
             externalExecutionEnabled: false,
             policyGuarded: true,
           }),
+          agentActions: expect.arrayContaining([
+            expect.objectContaining({
+              actionType: "suggest_escalation",
+              status: "suggested",
+              manualReviewRequired: true,
+              policyGuarded: true,
+              externalExecutionEnabled: false,
+              requiresHumanApproval: true,
+            }),
+          ]),
           workflow: expect.objectContaining({
             queue: "maintenance_review",
             workflowState: "escalated",
@@ -211,6 +221,15 @@ describe("landlordDecisionInboxRoutes", () => {
               expect.objectContaining({ eventType: "automated_workflow_review_required" }),
             ]),
           }),
+          agentActions: expect.arrayContaining([
+            expect.objectContaining({
+              actionType: "suggest_escalation",
+              status: "suggested",
+              canonicalEvents: expect.arrayContaining([
+                expect.objectContaining({ eventType: "policy_gated_agent_action_review_required" }),
+              ]),
+            }),
+          ]),
           workflow: expect.objectContaining({
             queue: "delinquency_review",
             workflowState: "escalated",
@@ -231,6 +250,12 @@ describe("landlordDecisionInboxRoutes", () => {
       pending: 3,
       escalationFlagged: 3,
       reviewRequired: 3,
+    }));
+    expect(res.body.agentActionSummary).toEqual(expect.objectContaining({
+      total: 3,
+      suggested: 3,
+      reviewRequired: 3,
+      escalationSuggested: 3,
     }));
   });
 
@@ -288,6 +313,39 @@ describe("landlordDecisionInboxRoutes", () => {
           requiresHumanAcknowledgement: true,
           canonicalEvents: expect.arrayContaining([
             expect.objectContaining({ eventType: "automated_workflow_review_required" }),
+          ]),
+        }),
+      ])
+    );
+    expect(JSON.stringify(res.body)).not.toMatch(/externalExecutionEnabled":true|executed":true|charge tenant|file eviction/i);
+  });
+
+  it("returns read-only policy-gated agent action suggestions", async () => {
+    seedLease();
+    const router = (await import("../landlordDecisionInboxRoutes")).default;
+
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/agent-actions/suggestions?actionType=suggest_escalation&status=suggested&queue=delinquency_review",
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(res.body.manualReviewRequired).toBe(true);
+    expect(res.body.externalExecutionEnabled).toBe(false);
+    expect(res.body.requiresHumanApproval).toBe(true);
+    expect(res.body.actions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          actionType: "suggest_escalation",
+          status: "suggested",
+          manualReviewRequired: true,
+          policyGuarded: true,
+          externalExecutionEnabled: false,
+          requiresHumanApproval: true,
+          canonicalEvents: expect.arrayContaining([
+            expect.objectContaining({ eventType: "policy_gated_agent_action_suggested" }),
+            expect.objectContaining({ eventType: "policy_gated_agent_action_review_required" }),
           ]),
         }),
       ])

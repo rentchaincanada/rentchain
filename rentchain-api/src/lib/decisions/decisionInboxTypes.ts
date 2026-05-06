@@ -1,4 +1,5 @@
 import type { AutomatedWorkflowPreview, AutomatedWorkflowSummary } from "../automatedWorkflows/automatedWorkflowTypes";
+import type { PolicyGatedAgentAction, PolicyGatedAgentActionSummary } from "../agentActions/agentActionTypes";
 
 export type DecisionInboxSeverity = "critical" | "high" | "medium" | "low" | "info" | "unknown";
 
@@ -85,6 +86,7 @@ export type DecisionInboxItem = {
   automationEligible: false;
   workflow: DecisionWorkflowRouting;
   automatedWorkflow?: AutomatedWorkflowPreview;
+  agentActions?: PolicyGatedAgentAction[];
   delinquencyActions?: DelinquencyActionDescriptor[];
   createdAt: string | null;
   updatedAt: string | null;
@@ -120,4 +122,5 @@ export type DecisionInboxResult = {
   summary: DecisionInboxSummary;
   workflowSummary: DecisionInboxWorkflowSummary;
   automationSummary: AutomatedWorkflowSummary;
+  agentActionSummary: PolicyGatedAgentActionSummary;
 };
