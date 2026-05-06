@@ -353,6 +353,55 @@ describe("landlordDecisionInboxRoutes", () => {
     expect(JSON.stringify(res.body)).not.toMatch(/externalExecutionEnabled":true|executed":true|charge tenant|file eviction/i);
   });
 
+  it("returns a read-only agent supervision snapshot without execution behavior", async () => {
+    seedLease();
+    const router = (await import("../landlordDecisionInboxRoutes")).default;
+
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/agent-supervision/snapshot?queue=delinquency_review&escalationLevel=critical",
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(res.body.manualReviewRequired).toBe(true);
+    expect(res.body.externalExecutionEnabled).toBe(false);
+    expect(res.body.autonomousExecutionEnabled).toBe(false);
+    expect(res.body.summary).toEqual(
+      expect.objectContaining({
+        suggestedActions: 2,
+        blockedActions: 0,
+        escalations: 2,
+      })
+    );
+    expect(res.body.agentActions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          itemType: "agent_action",
+          status: "suggested",
+          policyGuarded: true,
+          manualReviewRequired: true,
+          requiresHumanApproval: true,
+        }),
+      ])
+    );
+    expect(res.body.workflowStates).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          status: "pending_review",
+          relatedScope: expect.objectContaining({ scope: "workflow" }),
+        }),
+      ])
+    );
+    expect(res.body.canonicalEvents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ eventType: "agent_supervision_snapshot_generated" }),
+        expect.objectContaining({ eventType: "agent_supervision_escalation_visible" }),
+      ])
+    );
+    expect(JSON.stringify(res.body)).not.toMatch(/externalExecutionEnabled":true|autonomousExecutionEnabled":true|executed":true|charge tenant|file eviction/i);
+  });
+
   it("blocks non-landlord users", async () => {
     const router = (await import("../landlordDecisionInboxRoutes")).default;
 

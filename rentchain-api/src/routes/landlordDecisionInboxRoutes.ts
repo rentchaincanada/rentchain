@@ -6,6 +6,7 @@ import { loadLandlordAnalyticsSnapshot } from "../services/landlord/landlordAnal
 import { deriveDecisionInbox } from "../lib/decisions/deriveDecisionInbox";
 import { deriveAutomatedWorkflowTransitions } from "../lib/automatedWorkflows/deriveAutomatedWorkflowTransitions";
 import { derivePolicyGatedAgentActions } from "../lib/agentActions/derivePolicyGatedAgentActions";
+import { deriveAgentSupervisionSnapshot } from "../lib/agentSupervision/deriveAgentSupervisionSnapshot";
 import { deriveDecisions, type Decision } from "../lib/decisions/decisionEngine";
 import { applyDecisionActions, DECISION_ACTIONS_COLLECTION } from "../lib/decisions/decisionActions";
 import { deriveLeaseLifecycleState } from "../lib/leases/leaseLifecycle";
@@ -289,6 +290,46 @@ router.get("/agent-actions/suggestions", requireAuth, requireLandlord, async (re
   } catch (err: any) {
     console.error("[landlord-agent-actions] suggestions failed", err?.message || err);
     return res.status(500).json({ ok: false, error: "AGENT_ACTION_SUGGESTIONS_FAILED" });
+  }
+});
+
+router.get("/agent-supervision/snapshot", requireAuth, requireLandlord, async (req: any, res) => {
+  try {
+    const landlordId = asString(req.user?.landlordId || req.user?.id, 240);
+    if (!landlordId) {
+      return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    }
+
+    const [snapshot, leaseDecisions] = await Promise.all([
+      loadLandlordAnalyticsSnapshot({
+        landlordId,
+        period: req.query?.period,
+        propertyId: req.query?.propertyId,
+      }),
+      deriveLeaseDecisionsForInbox(landlordId),
+    ]);
+
+    const inbox = deriveDecisionInbox({
+      analyticsDecisions: Array.isArray(snapshot?.decisions?.items) ? snapshot.decisions.items : [],
+      leaseDecisions,
+      filters: {
+        severity: req.query?.severity,
+        status: req.query?.decisionStatus,
+        type: req.query?.type,
+        queue: req.query?.queue,
+        workflowState: req.query?.workflowState,
+        escalationLevel: req.query?.escalationLevel,
+      },
+    });
+    const supervision = deriveAgentSupervisionSnapshot({ decisions: inbox.items });
+
+    return res.json({
+      ok: true,
+      ...supervision,
+    });
+  } catch (err: any) {
+    console.error("[landlord-agent-supervision] snapshot failed", err?.message || err);
+    return res.status(500).json({ ok: false, error: "AGENT_SUPERVISION_SNAPSHOT_FAILED" });
   }
 });
 
