@@ -110,6 +110,10 @@ vi.mock("./pages/EvidencePackPage", () => ({
   default: () => <h1>Evidence Pack Preview Page</h1>,
 }));
 
+vi.mock("./pages/ReviewTimelinePage", () => ({
+  default: () => <h1>Canonical Review Timeline Page</h1>,
+}));
+
 vi.mock("./pages/landlord/PortfolioScorePage", () => ({
   default: () => <h1>Landlord Portfolio Score</h1>,
 }));
@@ -287,6 +291,20 @@ describe("Routes: /evidence-packs", () => {
     );
 
     expect(await screen.findByText(/Evidence Pack Preview Page/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("Routes: /review-timeline", () => {
+  it("renders the canonical review timeline route", async () => {
+    const { default: App } = await import("./App");
+    render(
+      <MemoryRouter initialEntries={["/review-timeline?scope=decision&scopeId=decision-1"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Canonical Review Timeline Page/i)).toBeInTheDocument();
     expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
   });
 });

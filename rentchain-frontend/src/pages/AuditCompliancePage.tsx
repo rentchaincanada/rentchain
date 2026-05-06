@@ -6,6 +6,7 @@ import {
   type AuditComplianceReadiness,
 } from "@/api/auditComplianceApi";
 import { evidencePackPath } from "@/api/evidencePackApi";
+import { reviewTimelinePath } from "@/api/reviewTimelineApi";
 import { MacShell } from "@/components/layout/MacShell";
 import { OperatorReviewSessionPanel } from "@/components/operatorReviews/OperatorReviewSessionPanel";
 import { Card, Section } from "@/components/ui/Ui";
@@ -190,12 +191,20 @@ export default function AuditCompliancePage() {
             </Section>
 
             <Section>
-              <Link
-                to={evidencePackPath({ scope: "audit_compliance", scopeId: data.readinessId })}
-                style={{ color: "#2563eb", fontWeight: 800 }}
-              >
-                Preview evidence
-              </Link>
+              <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                <Link
+                  to={evidencePackPath({ scope: "audit_compliance", scopeId: data.readinessId })}
+                  style={{ color: "#2563eb", fontWeight: 800 }}
+                >
+                  Preview evidence
+                </Link>
+                <Link
+                  to={reviewTimelinePath({ scope: "audit_compliance", scopeId: data.readinessId })}
+                  style={{ color: "#2563eb", fontWeight: 800 }}
+                >
+                  View timeline
+                </Link>
+              </div>
             </Section>
 
             <Section>

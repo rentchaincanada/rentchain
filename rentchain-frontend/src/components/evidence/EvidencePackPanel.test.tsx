@@ -77,6 +77,10 @@ describe("EvidencePackPanel", () => {
     expect(screen.getByText("Decision lineage")).toBeInTheDocument();
     expect(screen.getByText("Review missing payment")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "View context" })).toHaveAttribute("href", "/leases/lease-1/ledger");
+    expect(screen.getByRole("link", { name: "View timeline" })).toHaveAttribute(
+      "href",
+      "/review-timeline?scope=evidence_pack&scopeId=evidence_pack%3Adecision%3Alandlord-1%3Adecision-1"
+    );
     expect(screen.getByText(/Missing evidence: No landlord-scoped canonical events/i)).toBeInTheDocument();
     expect(screen.getByText("Payment Account Details")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /submit|send|share externally|certify|file|upload|auto-report|legal approval/i })).not.toBeInTheDocument();
