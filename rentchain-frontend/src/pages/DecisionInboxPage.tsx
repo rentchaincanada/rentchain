@@ -134,6 +134,7 @@ function Badge({ children, tone }: { children: React.ReactNode; tone: { color: s
 }
 
 function DecisionInboxCard({ item }: { item: DecisionInboxItem }) {
+  const delinquencyActions = item.delinquencyActions || [];
   return (
     <Card style={{ display: "grid", gap: 12, borderRadius: 8 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
@@ -163,6 +164,61 @@ function DecisionInboxCard({ item }: { item: DecisionInboxItem }) {
           <span style={{ color: "#64748b", fontSize: 13 }}>No context link available</span>
         )}
       </div>
+      {delinquencyActions.length ? (
+        <div
+          style={{
+            border: "1px solid #fed7aa",
+            background: "#fff7ed",
+            borderRadius: 8,
+            padding: 12,
+            display: "grid",
+            gap: 10,
+          }}
+        >
+          <div style={{ display: "grid", gap: 4 }}>
+            <div style={{ color: "#9a3412", fontWeight: 900 }}>Manual review required</div>
+            <div style={{ color: "#7c2d12", fontSize: 13 }}>
+              No automated notice or payment action will be taken.
+            </div>
+          </div>
+          <div style={{ display: "grid", gap: 8 }}>
+            {delinquencyActions.map((action) => (
+              <div
+                key={action.actionKey}
+                style={{
+                  display: "grid",
+                  gap: 4,
+                  border: "1px solid #fed7aa",
+                  borderRadius: 8,
+                  padding: 10,
+                  background: "#fff",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                  <strong style={{ color: "#0f172a" }}>{action.label}</strong>
+                  <span style={{ color: action.status === "available" ? "#166534" : "#92400e", fontSize: 12, fontWeight: 900 }}>
+                    {label(action.status)}
+                  </span>
+                </div>
+                <div style={{ color: "#475569", fontSize: 13 }}>{action.description}</div>
+                {action.actionKey === "prepare_notice" ? (
+                  <div style={{ color: "#7c2d12", fontSize: 12 }}>
+                    Draft only. Review local legal requirements before use.
+                  </div>
+                ) : null}
+                {action.blockedReason ? (
+                  <div style={{ color: "#92400e", fontSize: 12 }}>{action.blockedReason}</div>
+                ) : null}
+                {action.status === "available" && action.destination ? (
+                  <Link to={action.destination} style={{ color: "#2563eb", fontWeight: 800, fontSize: 13 }}>
+                    Open manual context
+                  </Link>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
     </Card>
   );
 }

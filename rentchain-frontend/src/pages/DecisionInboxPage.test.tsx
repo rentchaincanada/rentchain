@@ -53,6 +53,52 @@ function inboxResponse(overrides: Record<string, unknown> = {}) {
           escalationLevel: "critical",
           manualOnly: true,
         },
+        delinquencyActions: [
+          {
+            actionKey: "review_context",
+            label: "Review context",
+            description: "Review lease and payment context before taking any manual follow-up.",
+            manualOnly: true,
+            requiresConfirmation: false,
+            policyGuarded: true,
+            destination: "/leases/lease-1/ledger",
+            status: "available",
+            blockedReason: null,
+          },
+          {
+            actionKey: "view_ledger",
+            label: "View ledger",
+            description: "Open the existing lease ledger to compare expected rent, payments, and reconciliation evidence.",
+            manualOnly: true,
+            requiresConfirmation: false,
+            policyGuarded: true,
+            destination: "/leases/lease-1/ledger",
+            status: "available",
+            blockedReason: null,
+          },
+          {
+            actionKey: "prepare_reminder",
+            label: "Prepare reminder",
+            description: "Scaffold a manual reminder review. No tenant message is generated or sent from this inbox.",
+            manualOnly: true,
+            requiresConfirmation: true,
+            policyGuarded: true,
+            destination: "/leases/lease-1/ledger",
+            status: "blocked",
+            blockedReason: "Reminder draft preview is not enabled in this scaffold; no tenant communication will be sent.",
+          },
+          {
+            actionKey: "prepare_notice",
+            label: "Prepare notice",
+            description: "Scaffold a manual notice review. Draft only. Review local legal requirements before use.",
+            manualOnly: true,
+            requiresConfirmation: true,
+            policyGuarded: true,
+            destination: "/leases/lease-1/ledger",
+            status: "blocked",
+            blockedReason: "Notice draft preview is not enabled in this scaffold; no legal notice will be generated or sent.",
+          },
+        ],
         createdAt: "2026-05-05T12:00:00.000Z",
         updatedAt: "2026-05-05T12:00:00.000Z",
       },
@@ -134,12 +180,20 @@ describe("DecisionInboxPage", () => {
     expect(screen.getAllByText("Delinquency Review").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Maintenance Review").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Urgent").length).toBeGreaterThan(0);
+    expect(screen.getByText("Manual review required")).toBeInTheDocument();
+    expect(screen.getByText("No automated notice or payment action will be taken.")).toBeInTheDocument();
+    expect(screen.getByText("Review context")).toBeInTheDocument();
+    expect(screen.getByText("Prepare reminder")).toBeInTheDocument();
+    expect(screen.getByText("Prepare notice")).toBeInTheDocument();
+    expect(screen.getByText("Draft only. Review local legal requirements before use.")).toBeInTheDocument();
+    expect(screen.getByText(/no tenant communication will be sent/i)).toBeInTheDocument();
     expect(screen.getByText("Source: Lease Ledger")).toBeInTheDocument();
     expect(screen.getByText("Related: Lease lease-1")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "View context" })).toHaveAttribute("href", "/leases/lease-1/ledger");
     expect(screen.getByText("Open cost approval")).toBeInTheDocument();
     expect(screen.getByText("No context link available")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /resolve|dismiss|snooze|approve|retry|execute/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/send notice|charge tenant|start eviction|auto-send|auto-charge/i)).not.toBeInTheDocument();
     expect(apiMocks.macShellProps).toHaveBeenCalledWith(expect.objectContaining({ showTopNav: false }));
   });
 

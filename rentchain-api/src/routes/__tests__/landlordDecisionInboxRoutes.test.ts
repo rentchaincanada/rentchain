@@ -200,6 +200,10 @@ describe("landlordDecisionInboxRoutes", () => {
             escalationLevel: "critical",
             manualOnly: true,
           }),
+          delinquencyActions: expect.arrayContaining([
+            expect.objectContaining({ actionKey: "view_ledger", status: "available", manualOnly: true }),
+            expect.objectContaining({ actionKey: "prepare_notice", status: "blocked", manualOnly: true }),
+          ]),
         }),
       ])
     );

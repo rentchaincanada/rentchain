@@ -37,6 +37,17 @@ export type DecisionWorkflowRouting = {
   escalationLevel: DecisionWorkflowEscalationLevel;
   manualOnly: true;
 };
+export type DelinquencyActionDescriptor = {
+  actionKey: "review_context" | "prepare_reminder" | "prepare_notice" | "view_ledger";
+  label: string;
+  description: string;
+  manualOnly: true;
+  requiresConfirmation: boolean;
+  policyGuarded: true;
+  destination: string | null;
+  status: "available" | "blocked" | "unavailable";
+  blockedReason: string | null;
+};
 
 export type DecisionInboxItem = {
   id: string;
@@ -54,6 +65,7 @@ export type DecisionInboxItem = {
   destination: string | null;
   automationEligible: false;
   workflow: DecisionWorkflowRouting;
+  delinquencyActions?: DelinquencyActionDescriptor[];
   createdAt: string | null;
   updatedAt: string | null;
 };

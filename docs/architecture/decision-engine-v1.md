@@ -166,6 +166,33 @@ This layer does not add:
 - notification sending
 - payment or lease enforcement
 
+## Delinquency Actions V1
+
+Delinquency Actions V1 adds guarded manual action descriptors to Decision Inbox items routed to `delinquency_review`.
+
+The descriptors are scaffolding only:
+
+- `review_context`
+- `view_ledger`
+- `prepare_reminder`
+- `prepare_notice`
+
+Every descriptor is `manualOnly: true` and `policyGuarded: true`. Available descriptors only navigate to existing context, such as the lease ledger. Blocked descriptors explain why no draft or execution path is available.
+
+The inbox copy explicitly states that no automated notice or payment action will be taken. Notice-related copy is draft-only and tells operators to review local legal requirements before use.
+
+This layer does not add:
+
+- tenant email or SMS sending
+- notice sending
+- payment collection
+- Stripe, Trustly, or PaymentIntent behavior
+- lease financial mutations
+- delinquency status mutation
+- eviction filing
+- notification infrastructure
+- background workers
+
 ## Deferred
 
 1. Decision timeline page.

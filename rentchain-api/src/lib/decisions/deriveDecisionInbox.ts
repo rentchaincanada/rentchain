@@ -12,6 +12,7 @@ import type {
   DecisionWorkflowState,
 } from "./decisionInboxTypes";
 import { deriveDecisionWorkflowRouting } from "./deriveDecisionWorkflowRouting";
+import { deriveDelinquencyActions } from "../delinquency/deriveDelinquencyActions";
 
 type SourceDecision = Decision & { latestAction?: unknown };
 
@@ -198,10 +199,12 @@ export function decisionInboxItemFromLeaseDecision(decision: SourceDecision): De
     createdAt: normalizeDate(decision.createdAt),
     updatedAt: normalizeDate(decision.updatedAt),
   };
-  return {
+  const item = {
     ...base,
     workflow: deriveDecisionWorkflowRouting({ ...base, decisionType: decision.decisionType }),
   };
+  const delinquencyActions = deriveDelinquencyActions(item);
+  return delinquencyActions.length ? { ...item, delinquencyActions } : item;
 }
 
 export function decisionInboxItemFromAnalyticsDecision(decision: LandlordAgentDecision): DecisionInboxItem {
@@ -219,7 +222,7 @@ export function decisionInboxItemFromAnalyticsDecision(decision: LandlordAgentDe
     createdAt: null,
     updatedAt: normalizeDate(decision.reviewedAt || decision.executedAt || decision.executionOutcomeAt),
   };
-  return {
+  const item = {
     ...base,
     workflow: deriveDecisionWorkflowRouting({
       ...base,
@@ -227,6 +230,8 @@ export function decisionInboxItemFromAnalyticsDecision(decision: LandlordAgentDe
       workflowCategory: decision.workflowCategory,
     }),
   };
+  const delinquencyActions = deriveDelinquencyActions(item);
+  return delinquencyActions.length ? { ...item, delinquencyActions } : item;
 }
 
 function filterValue<T extends string>(value: unknown, known: Set<T>): T | null {
