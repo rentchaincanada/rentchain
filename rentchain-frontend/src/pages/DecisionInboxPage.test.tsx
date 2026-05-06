@@ -168,6 +168,10 @@ describe("DecisionInboxPage", () => {
     );
 
     expect(await screen.findByRole("heading", { name: "Decision inbox" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Institution export preview" })).toHaveAttribute(
+      "href",
+      "/institution-exports"
+    );
     expect(screen.getByText("Summary")).toBeInTheDocument();
     expect(screen.getAllByText("Critical").length).toBeGreaterThan(0);
     expect(screen.getAllByText("High").length).toBeGreaterThan(0);

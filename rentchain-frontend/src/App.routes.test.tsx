@@ -98,6 +98,10 @@ vi.mock("./pages/DecisionInboxPage", () => ({
   default: () => <h1>Decision Inbox Page</h1>,
 }));
 
+vi.mock("./pages/InstitutionExportsPage", () => ({
+  default: () => <h1>Institution Export Preview Page</h1>,
+}));
+
 vi.mock("./pages/landlord/PortfolioScorePage", () => ({
   default: () => <h1>Landlord Portfolio Score</h1>,
 }));
@@ -233,6 +237,20 @@ describe("Routes: /decision-inbox", () => {
     );
 
     expect(await screen.findByText(/Decision Inbox Page/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("Routes: /institution-exports", () => {
+  it("renders the read-only institution export preview route", async () => {
+    const { default: App } = await import("./App");
+    render(
+      <MemoryRouter initialEntries={["/institution-exports"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Institution Export Preview Page/i)).toBeInTheDocument();
     expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
   });
 });
