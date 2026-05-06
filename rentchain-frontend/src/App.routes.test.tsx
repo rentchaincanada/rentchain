@@ -106,6 +106,10 @@ vi.mock("./pages/AuditCompliancePage", () => ({
   default: () => <h1>Audit Compliance Readiness Page</h1>,
 }));
 
+vi.mock("./pages/EvidencePackPage", () => ({
+  default: () => <h1>Evidence Pack Preview Page</h1>,
+}));
+
 vi.mock("./pages/landlord/PortfolioScorePage", () => ({
   default: () => <h1>Landlord Portfolio Score</h1>,
 }));
@@ -269,6 +273,20 @@ describe("Routes: /audit-compliance", () => {
     );
 
     expect(await screen.findByText(/Audit Compliance Readiness Page/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("Routes: /evidence-packs", () => {
+  it("renders the read-only evidence pack preview route", async () => {
+    const { default: App } = await import("./App");
+    render(
+      <MemoryRouter initialEntries={["/evidence-packs?scope=decision&scopeId=decision-1"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Evidence Pack Preview Page/i)).toBeInTheDocument();
     expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
   });
 });

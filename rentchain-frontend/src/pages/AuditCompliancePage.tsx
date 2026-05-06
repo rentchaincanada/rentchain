@@ -1,9 +1,11 @@
 import React from "react";
+import { Link } from "react-router-dom";
 import {
   fetchAuditComplianceReadiness,
   type AuditComplianceCheck,
   type AuditComplianceReadiness,
 } from "@/api/auditComplianceApi";
+import { evidencePackPath } from "@/api/evidencePackApi";
 import { MacShell } from "@/components/layout/MacShell";
 import { OperatorReviewSessionPanel } from "@/components/operatorReviews/OperatorReviewSessionPanel";
 import { Card, Section } from "@/components/ui/Ui";
@@ -185,6 +187,15 @@ export default function AuditCompliancePage() {
                   {disclaimer}
                 </div>
               ))}
+            </Section>
+
+            <Section>
+              <Link
+                to={evidencePackPath({ scope: "audit_compliance", scopeId: data.readinessId })}
+                style={{ color: "#2563eb", fontWeight: 800 }}
+              >
+                Preview evidence
+              </Link>
             </Section>
 
             <Section>

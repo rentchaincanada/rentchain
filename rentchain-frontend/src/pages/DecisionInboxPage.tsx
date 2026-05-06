@@ -12,6 +12,7 @@ import {
   type DecisionWorkflowState,
 } from "@/api/decisionInboxApi";
 import type { OperatorReviewEvidenceReference, OperatorReviewScope } from "@/api/operatorReviewApi";
+import { evidencePackPath } from "@/api/evidencePackApi";
 import { MacShell } from "@/components/layout/MacShell";
 import { OperatorReviewSessionPanel } from "@/components/operatorReviews/OperatorReviewSessionPanel";
 import { Card, Section } from "@/components/ui/Ui";
@@ -182,6 +183,12 @@ function DecisionInboxCard({ item }: { item: DecisionInboxItem }) {
         ) : (
           <span style={{ color: "#64748b", fontSize: 13 }}>No context link available</span>
         )}
+        <Link
+          to={evidencePackPath({ scope: reviewScope, scopeId: item.id })}
+          style={{ color: "#2563eb", fontWeight: 800 }}
+        >
+          Preview evidence
+        </Link>
       </div>
       {delinquencyActions.length ? (
         <div

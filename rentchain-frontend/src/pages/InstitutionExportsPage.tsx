@@ -1,5 +1,6 @@
 import React from "react";
 import { Link } from "react-router-dom";
+import { evidencePackPath } from "@/api/evidencePackApi";
 import {
   fetchInstitutionExportPreview,
   type InstitutionExportPackage,
@@ -221,6 +222,14 @@ export default function InstitutionExportsPage() {
             </Section>
 
             <PreviewSummary data={data} />
+            <Section>
+              <Link
+                to={evidencePackPath({ scope: "institution_export", scopeId: data.packageId })}
+                style={{ color: "#2563eb", fontWeight: 800 }}
+              >
+                Preview evidence
+              </Link>
+            </Section>
 
             <Section>
               <OperatorReviewSessionPanel

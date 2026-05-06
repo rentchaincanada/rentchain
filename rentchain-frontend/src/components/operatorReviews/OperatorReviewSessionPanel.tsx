@@ -1,5 +1,6 @@
 import React from "react";
 import { Link } from "react-router-dom";
+import { evidencePackPath } from "@/api/evidencePackApi";
 import {
   addOperatorReviewNote,
   closeOperatorReviewSession,
@@ -150,6 +151,9 @@ export function OperatorReviewSessionPanel({
         </div>
         {latestSession ? <Badge status={latestSession.status}>{label(latestSession.status)}</Badge> : null}
       </div>
+      <Link to={evidencePackPath({ scope, scopeId })} style={{ color: "#2563eb", fontWeight: 800, fontSize: 13 }}>
+        View evidence pack
+      </Link>
 
       {loading ? <div style={{ color: "#64748b", fontSize: 13 }}>Loading review history...</div> : null}
 
