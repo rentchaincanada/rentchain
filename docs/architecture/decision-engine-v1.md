@@ -122,11 +122,55 @@ This layer does not add:
 - lease or payment mutations
 - decision execution workflows
 
+## Decision Workflow Routing V1
+
+Decision Workflow Routing V1 adds read-only organization metadata to Decision Inbox items. It does not create queues, workers, assignments, notifications, or execution behavior.
+
+Routing is derived deterministically from the normalized decision inbox item and existing analytics workflow category when present. Each item receives:
+
+- `queue`
+- `workflowState`
+- `ownershipType`
+- `reviewPriority`
+- `escalationLevel`
+- `manualOnly: true`
+
+Supported queues are:
+
+- `lease_review`
+- `delinquency_review`
+- `screening_review`
+- `maintenance_review`
+- `compliance_review`
+- `admin_review`
+- `general_review`
+
+Supported workflow states are:
+
+- `new`
+- `triaged`
+- `under_review`
+- `waiting_context`
+- `escalated`
+- `resolved`
+- `archived`
+
+The landlord Decision Inbox can filter by queue, workflow state, and escalation level. Landlord routes expose only landlord-safe routing metadata and continue to exclude admin-only review data.
+
+This layer does not add:
+
+- workflow-triggered mutations
+- autonomous routing
+- assignment persistence
+- background queue infrastructure
+- notification sending
+- payment or lease enforcement
+
 ## Deferred
 
-1. Full decision inbox.
-2. Decision timeline page.
-3. Decision-to-action execution workflows.
-4. Automated notices.
-5. Institution export of decision packets.
-6. Compliance rollup for decision context and evidence.
+1. Decision timeline page.
+2. Decision-to-action execution workflows.
+3. Automated notices.
+4. Institution export of decision packets.
+5. Compliance rollup for decision context and evidence.
+6. Operator assignment persistence after access and audit boundaries are finalized.

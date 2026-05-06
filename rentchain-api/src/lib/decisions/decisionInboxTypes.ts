@@ -21,6 +21,39 @@ export type DecisionInboxRelatedEntity = {
   label: string;
 };
 
+export type DecisionWorkflowQueue =
+  | "lease_review"
+  | "delinquency_review"
+  | "screening_review"
+  | "maintenance_review"
+  | "compliance_review"
+  | "admin_review"
+  | "general_review";
+
+export type DecisionWorkflowState =
+  | "new"
+  | "triaged"
+  | "under_review"
+  | "waiting_context"
+  | "escalated"
+  | "resolved"
+  | "archived";
+
+export type DecisionWorkflowOwnershipType = "landlord" | "admin" | "compliance" | "operations" | "system";
+
+export type DecisionWorkflowReviewPriority = "critical" | "high" | "medium" | "low";
+
+export type DecisionWorkflowEscalationLevel = "none" | "attention" | "urgent" | "critical";
+
+export type DecisionWorkflowRouting = {
+  queue: DecisionWorkflowQueue;
+  workflowState: DecisionWorkflowState;
+  ownershipType: DecisionWorkflowOwnershipType;
+  reviewPriority: DecisionWorkflowReviewPriority;
+  escalationLevel: DecisionWorkflowEscalationLevel;
+  manualOnly: true;
+};
+
 export type DecisionInboxItem = {
   id: string;
   title: string;
@@ -32,6 +65,7 @@ export type DecisionInboxItem = {
   relatedEntity: DecisionInboxRelatedEntity | null;
   destination: string | null;
   automationEligible: false;
+  workflow: DecisionWorkflowRouting;
   createdAt: string | null;
   updatedAt: string | null;
 };
@@ -40,6 +74,9 @@ export type DecisionInboxFilters = {
   severity: DecisionInboxSeverity[];
   status: DecisionInboxStatus[];
   type: DecisionInboxType[];
+  queue: DecisionWorkflowQueue[];
+  workflowState: DecisionWorkflowState[];
+  escalationLevel: DecisionWorkflowEscalationLevel[];
 };
 
 export type DecisionInboxSummary = {
@@ -50,8 +87,16 @@ export type DecisionInboxSummary = {
   blocked: number;
 };
 
+export type DecisionInboxWorkflowSummary = {
+  new: number;
+  underReview: number;
+  escalated: number;
+  critical: number;
+};
+
 export type DecisionInboxResult = {
   items: DecisionInboxItem[];
   filters: DecisionInboxFilters;
   summary: DecisionInboxSummary;
+  workflowSummary: DecisionInboxWorkflowSummary;
 };

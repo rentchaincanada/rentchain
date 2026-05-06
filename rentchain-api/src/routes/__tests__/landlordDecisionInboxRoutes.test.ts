@@ -181,6 +181,12 @@ describe("landlordDecisionInboxRoutes", () => {
           type: "maintenance",
           severity: "high",
           automationEligible: false,
+          workflow: expect.objectContaining({
+            queue: "maintenance_review",
+            workflowState: "escalated",
+            escalationLevel: "urgent",
+            manualOnly: true,
+          }),
         }),
         expect.objectContaining({
           source: "lease_ledger",
@@ -188,19 +194,26 @@ describe("landlordDecisionInboxRoutes", () => {
           severity: "critical",
           destination: "/leases/lease-1/ledger",
           automationEligible: false,
+          workflow: expect.objectContaining({
+            queue: "delinquency_review",
+            workflowState: "escalated",
+            escalationLevel: "critical",
+            manualOnly: true,
+          }),
         }),
       ])
     );
     expect(res.body.summary).toEqual(expect.objectContaining({ total: 3, critical: 2, high: 1, open: 3 }));
+    expect(res.body.workflowSummary).toEqual(expect.objectContaining({ escalated: 3, critical: 2 }));
   });
 
-  it("filters inbox items by severity, status, and type", async () => {
+  it("filters inbox items by severity, status, type, and workflow routing", async () => {
     seedLease();
     const router = (await import("../landlordDecisionInboxRoutes")).default;
 
     const res = await invokeRouter(router, {
       method: "GET",
-      url: "/decision-inbox?severity=critical&status=open&type=billing",
+      url: "/decision-inbox?severity=critical&status=open&type=billing&queue=delinquency_review&workflowState=escalated&escalationLevel=critical",
     });
 
     expect(res.status).toBe(200);

@@ -85,6 +85,12 @@ describe("deriveDecisionInbox", () => {
           source: "lease_ledger",
           destination: "/leases/lease-1/ledger",
           automationEligible: false,
+          workflow: expect.objectContaining({
+            queue: "delinquency_review",
+            workflowState: "escalated",
+            escalationLevel: "critical",
+            manualOnly: true,
+          }),
         }),
         expect.objectContaining({
           id: "approve_maintenance_cost:wo-1",
@@ -94,12 +100,18 @@ describe("deriveDecisionInbox", () => {
           source: "analytics",
           destination: "/work-orders?workOrderId=wo-1",
           automationEligible: false,
+          workflow: expect.objectContaining({
+            queue: "maintenance_review",
+            workflowState: "escalated",
+            escalationLevel: "urgent",
+            manualOnly: true,
+          }),
         }),
       ])
     );
   });
 
-  it("filters by severity, status, and type deterministically", () => {
+  it("filters by severity, status, type, and workflow routing deterministically", () => {
     const result = deriveDecisionInbox({
       leaseDecisions: [
         leaseDecision(),
@@ -112,7 +124,14 @@ describe("deriveDecisionInbox", () => {
         }),
       ],
       analyticsDecisions: [analyticsDecision()],
-      filters: { severity: "medium", status: "pending", type: "billing" },
+      filters: {
+        severity: "medium",
+        status: "pending",
+        type: "billing",
+        queue: "delinquency_review",
+        workflowState: "under_review",
+        escalationLevel: "attention",
+      },
     });
 
     expect(result.items).toHaveLength(1);
@@ -122,6 +141,11 @@ describe("deriveDecisionInbox", () => {
         severity: "medium",
         status: "pending",
         type: "billing",
+        workflow: expect.objectContaining({
+          queue: "delinquency_review",
+          workflowState: "under_review",
+          escalationLevel: "attention",
+        }),
       })
     );
   });
@@ -139,5 +163,18 @@ describe("deriveDecisionInbox", () => {
       open: 1,
       blocked: 1,
     });
+    expect(result.workflowSummary).toEqual({
+      new: 0,
+      underReview: 0,
+      escalated: 1,
+      critical: 1,
+    });
+    expect(result.filters).toEqual(
+      expect.objectContaining({
+        queue: expect.arrayContaining(["delinquency_review", "maintenance_review"]),
+        workflowState: expect.arrayContaining(["escalated", "waiting_context"]),
+        escalationLevel: expect.arrayContaining(["critical", "urgent"]),
+      })
+    );
   });
 });
