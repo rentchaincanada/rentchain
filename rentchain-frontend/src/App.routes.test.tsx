@@ -134,6 +134,10 @@ vi.mock("./pages/SettlementReadinessPage", () => ({
   default: () => <h1>Settlement Readiness Page</h1>,
 }));
 
+vi.mock("./pages/RegulatoryProfilePage", () => ({
+  default: () => <h1>Regulatory Profiles Page</h1>,
+}));
+
 vi.mock("./pages/landlord/PortfolioScorePage", () => ({
   default: () => <h1>Landlord Portfolio Score</h1>,
 }));
@@ -395,6 +399,20 @@ describe("Routes: /settlement-readiness", () => {
     );
 
     expect(await screen.findByText(/Settlement Readiness Page/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("Routes: /regulatory-profiles", () => {
+  it("renders the regulatory profiles route", async () => {
+    const { default: App } = await import("./App");
+    render(
+      <MemoryRouter initialEntries={["/regulatory-profiles?province=NS&municipality=Halifax"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Regulatory Profiles Page/i)).toBeInTheDocument();
     expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
   });
 });

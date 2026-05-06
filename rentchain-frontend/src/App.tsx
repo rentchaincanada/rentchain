@@ -126,6 +126,7 @@ const IdentityLayerPage = lazy(() => import("./pages/IdentityLayerPage"));
 const InstitutionalSharingRoomPage = lazy(() => import("./pages/InstitutionalSharingRoomPage"));
 const VerifiedRentalHistoryPage = lazy(() => import("./pages/VerifiedRentalHistoryPage"));
 const SettlementReadinessPage = lazy(() => import("./pages/SettlementReadinessPage"));
+const RegulatoryProfilePage = lazy(() => import("./pages/RegulatoryProfilePage"));
 const LandlordPortfolioScorePage = lazy(() => import("./pages/landlord/PortfolioScorePage"));
 const SharedPortfolioScorePage = lazy(() => import("./pages/public/SharedPortfolioScorePage"));
 const TenantSharePackagePage = lazy(() => import("./pages/public/TenantSharePackagePage"));
@@ -629,6 +630,18 @@ function App() {
               <LandlordNav>
                 <Suspense fallback={null}>
                   <SettlementReadinessPage />
+                </Suspense>
+              </LandlordNav>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/regulatory-profiles"
+          element={
+            <RequireAuth>
+              <LandlordNav>
+                <Suspense fallback={null}>
+                  <RegulatoryProfilePage />
                 </Suspense>
               </LandlordNav>
             </RequireAuth>

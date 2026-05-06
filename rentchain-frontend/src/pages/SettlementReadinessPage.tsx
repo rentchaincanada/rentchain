@@ -1,5 +1,5 @@
 import React from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   fetchSettlementReadiness,
   type SettlementReadiness,
@@ -85,6 +85,9 @@ export default function SettlementReadinessPage() {
               Settlement readiness references are operational and review scoped. No payment execution or banking integration is enabled.
               Manual review remains required.
             </div>
+            <Link to="/regulatory-profiles" style={{ color: "#2563eb", fontWeight: 800, width: "fit-content" }}>
+              View regulatory profile
+            </Link>
           </div>
         </Section>
 
