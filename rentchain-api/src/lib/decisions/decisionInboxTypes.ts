@@ -1,3 +1,5 @@
+import type { AutomatedWorkflowPreview, AutomatedWorkflowSummary } from "../automatedWorkflows/automatedWorkflowTypes";
+
 export type DecisionInboxSeverity = "critical" | "high" | "medium" | "low" | "info" | "unknown";
 
 export type DecisionInboxStatus = "open" | "pending" | "blocked" | "resolved" | "dismissed" | "unknown";
@@ -82,6 +84,7 @@ export type DecisionInboxItem = {
   destination: string | null;
   automationEligible: false;
   workflow: DecisionWorkflowRouting;
+  automatedWorkflow?: AutomatedWorkflowPreview;
   delinquencyActions?: DelinquencyActionDescriptor[];
   createdAt: string | null;
   updatedAt: string | null;
@@ -116,4 +119,5 @@ export type DecisionInboxResult = {
   filters: DecisionInboxFilters;
   summary: DecisionInboxSummary;
   workflowSummary: DecisionInboxWorkflowSummary;
+  automationSummary: AutomatedWorkflowSummary;
 };

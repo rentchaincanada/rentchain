@@ -4,6 +4,7 @@ import { requireAuth } from "../middleware/requireAuth";
 import { requireLandlord } from "../middleware/requireLandlord";
 import { loadLandlordAnalyticsSnapshot } from "../services/landlord/landlordAnalyticsSnapshot";
 import { deriveDecisionInbox } from "../lib/decisions/deriveDecisionInbox";
+import { deriveAutomatedWorkflowTransitions } from "../lib/automatedWorkflows/deriveAutomatedWorkflowTransitions";
 import { deriveDecisions, type Decision } from "../lib/decisions/decisionEngine";
 import { applyDecisionActions, DECISION_ACTIONS_COLLECTION } from "../lib/decisions/decisionActions";
 import { deriveLeaseLifecycleState } from "../lib/leases/leaseLifecycle";
@@ -184,6 +185,57 @@ router.get("/decision-inbox", requireAuth, requireLandlord, async (req: any, res
   } catch (err: any) {
     console.error("[landlord-decision-inbox] failed", err?.message || err);
     return res.status(500).json({ ok: false, error: "DECISION_INBOX_FAILED" });
+  }
+});
+
+router.get("/automated-workflows/preview", requireAuth, requireLandlord, async (req: any, res) => {
+  try {
+    const landlordId = asString(req.user?.landlordId || req.user?.id, 240);
+    if (!landlordId) {
+      return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    }
+
+    const [snapshot, leaseDecisions] = await Promise.all([
+      loadLandlordAnalyticsSnapshot({
+        landlordId,
+        period: req.query?.period,
+        propertyId: req.query?.propertyId,
+      }),
+      deriveLeaseDecisionsForInbox(landlordId),
+    ]);
+
+    const inbox = deriveDecisionInbox({
+      analyticsDecisions: Array.isArray(snapshot?.decisions?.items) ? snapshot.decisions.items : [],
+      leaseDecisions,
+      filters: {
+        severity: req.query?.severity,
+        status: req.query?.decisionStatus,
+        type: req.query?.type,
+        queue: req.query?.queue,
+        workflowState: req.query?.workflowState,
+        escalationLevel: req.query?.escalationLevel,
+      },
+    });
+    const preview = deriveAutomatedWorkflowTransitions({
+      decisions: inbox.items,
+      filters: {
+        workflowType: req.query?.workflowType,
+        status: req.query?.status,
+        queue: req.query?.queue,
+        escalationLevel: req.query?.escalationLevel,
+      },
+    });
+
+    return res.json({
+      ok: true,
+      workflows: preview.workflows,
+      summary: preview.summary,
+      manualReviewRequired: true,
+      externalExecutionEnabled: false,
+    });
+  } catch (err: any) {
+    console.error("[landlord-automated-workflows] preview failed", err?.message || err);
+    return res.status(500).json({ ok: false, error: "AUTOMATED_WORKFLOW_PREVIEW_FAILED" });
   }
 });
 

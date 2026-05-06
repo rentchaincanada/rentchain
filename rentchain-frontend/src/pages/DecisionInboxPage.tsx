@@ -10,6 +10,7 @@ import {
   type DecisionWorkflowEscalationLevel,
   type DecisionWorkflowQueue,
   type DecisionWorkflowState,
+  type AutomatedWorkflowStatus,
 } from "@/api/decisionInboxApi";
 import type { OperatorReviewEvidenceReference, OperatorReviewScope } from "@/api/operatorReviewApi";
 import { evidencePackPath } from "@/api/evidencePackApi";
@@ -118,6 +119,13 @@ function escalationTone(level: DecisionWorkflowEscalationLevel) {
   return { color: "#475569", background: "#f8fafc", border: "#e2e8f0" };
 }
 
+function automationStatusTone(status: AutomatedWorkflowStatus) {
+  if (status === "blocked") return { color: "#991b1b", background: "#fee2e2", border: "#fecaca" };
+  if (status === "pending") return { color: "#92400e", background: "#fef3c7", border: "#fde68a" };
+  if (status === "derived") return { color: "#1d4ed8", background: "#dbeafe", border: "#bfdbfe" };
+  return { color: "#166534", background: "#dcfce7", border: "#bbf7d0" };
+}
+
 function Badge({ children, tone }: { children: React.ReactNode; tone: { color: string; background: string; border: string } }) {
   return (
     <span
@@ -139,6 +147,7 @@ function Badge({ children, tone }: { children: React.ReactNode; tone: { color: s
 
 function DecisionInboxCard({ item }: { item: DecisionInboxItem }) {
   const delinquencyActions = item.delinquencyActions || [];
+  const automatedWorkflow = item.automatedWorkflow;
   const reviewScope: OperatorReviewScope = item.workflow.queue === "delinquency_review" ? "delinquency" : "decision";
   const evidence: OperatorReviewEvidenceReference[] = [
     {
@@ -248,6 +257,55 @@ function DecisionInboxCard({ item }: { item: DecisionInboxItem }) {
                   </Link>
                 ) : null}
               </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+      {automatedWorkflow ? (
+        <div
+          style={{
+            border: "1px solid #bfdbfe",
+            background: "#eff6ff",
+            borderRadius: 8,
+            padding: 12,
+            display: "grid",
+            gap: 10,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+            <div style={{ display: "grid", gap: 4 }}>
+              <strong style={{ color: "#1e3a8a" }}>Deterministic workflow orchestration only.</strong>
+              <span style={{ color: "#1e40af", fontSize: 13 }}>
+                No tenant communication, payment action, or legal enforcement is automated. Manual review remains required.
+              </span>
+            </div>
+            <Badge tone={automationStatusTone(automatedWorkflow.status)}>{label(automatedWorkflow.status)}</Badge>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8 }}>
+            <div style={{ color: "#334155", fontSize: 13 }}>
+              <strong>Workflow type:</strong> {label(automatedWorkflow.workflowType)}
+            </div>
+            <div style={{ color: "#334155", fontSize: 13 }}>
+              <strong>Transition:</strong> {label(automatedWorkflow.transition.fromState)} to {label(automatedWorkflow.transition.toState)}
+            </div>
+            <div style={{ color: "#334155", fontSize: 13 }}>
+              <strong>Policy guarded:</strong> {automatedWorkflow.policyGuarded ? "Yes" : "No"}
+            </div>
+            <div style={{ color: "#334155", fontSize: 13 }}>
+              <strong>External execution:</strong> {automatedWorkflow.externalExecutionEnabled ? "Enabled" : "Disabled"}
+            </div>
+          </div>
+          <div style={{ display: "grid", gap: 5 }}>
+            <strong style={{ color: "#1e3a8a", fontSize: 13 }}>Review automation reasoning</strong>
+            {automatedWorkflow.reasons.slice(0, 3).map((reason) => (
+              <span key={reason} style={{ color: "#334155", fontSize: 13 }}>
+                {reason}
+              </span>
+            ))}
+            {automatedWorkflow.blockedReasons.map((reason) => (
+              <span key={reason} style={{ color: "#991b1b", fontSize: 13, fontWeight: 700 }}>
+                {reason}
+              </span>
             ))}
           </div>
         </div>
@@ -369,6 +427,10 @@ export default function DecisionInboxPage() {
                 ["Under review", data.workflowSummary.underReview],
                 ["Escalated", data.workflowSummary.escalated],
                 ["Critical workflow", data.workflowSummary.critical],
+                ["Workflow previews", data.automationSummary.total],
+                ["Review required", data.automationSummary.reviewRequired],
+                ["Escalation flags", data.automationSummary.escalationFlagged],
+                ["Blocked orchestration", data.automationSummary.blocked],
               ].map(([name, value]) => (
                 <Card key={String(name)} style={{ borderRadius: 8, padding: 12 }}>
                   <div style={{ color: "#64748b", fontSize: 12, fontWeight: 800 }}>{name}</div>
