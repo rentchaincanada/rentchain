@@ -142,6 +142,10 @@ vi.mock("./pages/AssetTokenizationReadinessPage", () => ({
   default: () => <h1>Asset Tokenization Readiness Page</h1>,
 }));
 
+vi.mock("./pages/NetworkParticipantsPage", () => ({
+  default: () => <h1>Network Participants Page</h1>,
+}));
+
 vi.mock("./pages/landlord/PortfolioScorePage", () => ({
   default: () => <h1>Landlord Portfolio Score</h1>,
 }));
@@ -431,6 +435,20 @@ describe("Routes: /asset-tokenization-readiness", () => {
     );
 
     expect(await screen.findByText(/Asset Tokenization Readiness Page/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("Routes: /network-participants", () => {
+  it("renders the network participants route", async () => {
+    const { default: App } = await import("./App");
+    render(
+      <MemoryRouter initialEntries={["/network-participants?participantType=lender"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Network Participants Page/i)).toBeInTheDocument();
     expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
   });
 });

@@ -110,6 +110,12 @@ export default function IdentityLayerPage() {
             >
               View rental history
             </Link>
+            <Link
+              to={`/network-participants${identityId ? `?participantId=${encodeURIComponent(identityId)}` : ""}`}
+              style={{ color: "#2563eb", fontWeight: 800, paddingBottom: 9 }}
+            >
+              View network participants
+            </Link>
           </div>
         </Section>
 
