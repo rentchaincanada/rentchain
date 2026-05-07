@@ -131,6 +131,7 @@ const AssetTokenizationReadinessPage = lazy(() => import("./pages/AssetTokenizat
 const NetworkParticipantsPage = lazy(() => import("./pages/NetworkParticipantsPage"));
 const CrossOrganizationTrustPage = lazy(() => import("./pages/CrossOrganizationTrustPage"));
 const InstitutionOnboardingReadinessPage = lazy(() => import("./pages/InstitutionOnboardingReadinessPage"));
+const OperationalRiskPage = lazy(() => import("./pages/OperationalRiskPage"));
 const LandlordPortfolioScorePage = lazy(() => import("./pages/landlord/PortfolioScorePage"));
 const SharedPortfolioScorePage = lazy(() => import("./pages/public/SharedPortfolioScorePage"));
 const TenantSharePackagePage = lazy(() => import("./pages/public/TenantSharePackagePage"));
@@ -694,6 +695,18 @@ function App() {
               <LandlordNav>
                 <Suspense fallback={null}>
                   <InstitutionOnboardingReadinessPage />
+                </Suspense>
+              </LandlordNav>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/operational-risk"
+          element={
+            <RequireAuth>
+              <LandlordNav>
+                <Suspense fallback={null}>
+                  <OperationalRiskPage />
                 </Suspense>
               </LandlordNav>
             </RequireAuth>
