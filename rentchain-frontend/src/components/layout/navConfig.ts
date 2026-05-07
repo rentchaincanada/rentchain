@@ -181,6 +181,13 @@ export const NAV_ITEMS: NavItem[] = [
     showInDrawer: true,
   },
   {
+    id: "production-integrations",
+    label: "Production Integrations",
+    to: "/admin/production-integrations",
+    requiresAdmin: true,
+    showInDrawer: true,
+  },
+  {
     id: "admin-leads",
     label: "Referral Requests",
     to: "/admin/leads",
