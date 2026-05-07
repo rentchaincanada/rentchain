@@ -78,6 +78,10 @@ vi.mock("./pages/admin/AdminNotificationsPage", () => ({
   default: () => <h1>Admin Notifications</h1>,
 }));
 
+vi.mock("./pages/ReleaseGovernancePage", () => ({
+  default: () => <h1>Release Governance Page</h1>,
+}));
+
 vi.mock("./pages/admin/PortfolioScorePage", () => ({
   default: () => <h1>Portfolio Score Foundation</h1>,
 }));
@@ -633,6 +637,20 @@ describe("Routes: /admin/notifications", () => {
     );
 
     expect(await screen.findByText(/Admin Notifications/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("Routes: /admin/release-governance", () => {
+  it("renders the admin release governance route", async () => {
+    const { default: App } = await import("./App");
+    render(
+      <MemoryRouter initialEntries={["/admin/release-governance?releaseVersion=v0.9.0-core-foundation"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Release Governance Page/i)).toBeInTheDocument();
     expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
   });
 });
