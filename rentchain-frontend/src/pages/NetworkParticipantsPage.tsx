@@ -1,5 +1,5 @@
 import React from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   fetchNetworkParticipants,
   type NetworkParticipantProfile,
@@ -75,12 +75,15 @@ export default function NetworkParticipantsPage() {
     <MacShell title="Network participants" showTopNav={false}>
       <div style={{ display: "grid", gap: 16 }}>
         <Section>
-          <div style={{ display: "grid", gap: 6 }}>
-            <h1 style={{ margin: 0, fontSize: "1.5rem" }}>Network participants</h1>
-            <div style={{ color: "#475569", maxWidth: 900 }}>
-              Network participants are permissioned operational actors. No public discovery or autonomous relationship execution is enabled.
-              Manual review remains required.
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "start" }}>
+            <div style={{ display: "grid", gap: 6 }}>
+              <h1 style={{ margin: 0, fontSize: "1.5rem" }}>Network participants</h1>
+              <div style={{ color: "#475569", maxWidth: 900 }}>
+                Network participants are permissioned operational actors. No public discovery or autonomous relationship execution is enabled.
+                Manual review remains required.
+              </div>
             </div>
+            <Link to="/cross-organization-trust" style={{ color: "#2563eb", fontWeight: 900 }}>View trust relationship</Link>
           </div>
         </Section>
 

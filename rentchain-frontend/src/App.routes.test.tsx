@@ -146,6 +146,10 @@ vi.mock("./pages/NetworkParticipantsPage", () => ({
   default: () => <h1>Network Participants Page</h1>,
 }));
 
+vi.mock("./pages/CrossOrganizationTrustPage", () => ({
+  default: () => <h1>Cross Organization Trust Page</h1>,
+}));
+
 vi.mock("./pages/landlord/PortfolioScorePage", () => ({
   default: () => <h1>Landlord Portfolio Score</h1>,
 }));
@@ -449,6 +453,20 @@ describe("Routes: /network-participants", () => {
     );
 
     expect(await screen.findByText(/Network Participants Page/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("Routes: /cross-organization-trust", () => {
+  it("renders the cross-organization trust route", async () => {
+    const { default: App } = await import("./App");
+    render(
+      <MemoryRouter initialEntries={["/cross-organization-trust?relationshipType=operational_trust"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Cross Organization Trust Page/i)).toBeInTheDocument();
     expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
   });
 });
