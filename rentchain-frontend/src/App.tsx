@@ -112,6 +112,7 @@ const AdminAlertingPage = lazy(() => import("./pages/admin/AdminAlertingPage"));
 const AdminObservabilityPage = lazy(() => import("./pages/admin/AdminObservabilityPage"));
 const AdminNotificationsPage = lazy(() => import("./pages/admin/AdminNotificationsPage"));
 const ReleaseGovernancePage = lazy(() => import("./pages/ReleaseGovernancePage"));
+const PublicExposureHardeningPage = lazy(() => import("./pages/PublicExposureHardeningPage"));
 const PortfolioScorePage = lazy(() => import("./pages/admin/PortfolioScorePage"));
 const PortfolioScoreHistoryPage = lazy(() => import("./pages/admin/PortfolioScoreHistoryPage"));
 const PortfolioHealthSummaryPage = lazy(() => import("./pages/landlord/PortfolioHealthSummaryPage"));
@@ -1286,6 +1287,14 @@ function App() {
               element={
                 <RequireAdmin>
                   <ReleaseGovernancePage />
+                </RequireAdmin>
+              }
+            />
+            <Route
+              path="/admin/public-exposure-hardening"
+              element={
+                <RequireAdmin>
+                  <PublicExposureHardeningPage />
                 </RequireAdmin>
               }
             />

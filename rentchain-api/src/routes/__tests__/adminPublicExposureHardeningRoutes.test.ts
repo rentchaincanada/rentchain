@@ -1,0 +1,140 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const { fakeDb, resetFakeDb, seedDoc } = vi.hoisted(() => {
+  const store = new Map<string, Map<string, any>>();
+  function ensureCollection(name: string) {
+    if (!store.has(name)) store.set(name, new Map());
+    return store.get(name)!;
+  }
+  return {
+    resetFakeDb: () => store.clear(),
+    seedDoc: (collection: string, id: string, data: any) => ensureCollection(collection).set(id, { id, data }),
+    fakeDb: {
+      collection: (name: string) => ({
+        get: async () => {
+          const docs = Array.from(ensureCollection(name).values()).map((doc) => ({ id: doc.id, exists: true, data: () => doc.data }));
+          return { docs, empty: docs.length === 0, size: docs.length };
+        },
+      }),
+    },
+  };
+});
+
+let mockUser: any;
+
+vi.mock("../../config/firebase", () => ({ db: fakeDb }));
+vi.mock("../../middleware/requireAuth", () => ({
+  requireAuth: (req: any, res: any, next: any) => {
+    if (!mockUser) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    req.user = mockUser;
+    return next();
+  },
+}));
+
+async function invokeRouter(router: any, options: { method: string; url: string; user?: Record<string, unknown> | null }) {
+  return await new Promise<{ status: number; body: any }>((resolve, reject) => {
+    const [path, queryString] = options.url.split("?");
+    mockUser = options.user ?? mockUser;
+    const req: any = {
+      method: options.method,
+      url: options.url,
+      originalUrl: options.url,
+      path,
+      user: mockUser,
+      query: Object.fromEntries(new URLSearchParams(queryString || "").entries()),
+      params: {},
+      headers: {},
+    };
+    const match = path.match(/^\/public-exposure-hardening\/(.+)$/);
+    if (match) req.params = { publicExposureHardeningId: decodeURIComponent(match[1]) };
+    const res: any = {
+      statusCode: 200,
+      status(code: number) {
+        this.statusCode = code;
+        return this;
+      },
+      json(payload: any) {
+        resolve({ status: this.statusCode, body: payload });
+        return this;
+      },
+    };
+    router.handle(req, res, (error: any) => (error ? reject(error) : undefined));
+  });
+}
+
+describe("adminPublicExposureHardeningRoutes", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.clearAllMocks();
+    resetFakeDb();
+    mockUser = { id: "admin-1", role: "admin", permissions: ["system.admin"] };
+  });
+
+  function seedHardeningContext() {
+    seedDoc("releaseGovernanceProfiles", "release-1", { releaseGovernanceId: "release-1", status: "ready_for_review", deploymentSecret: "secret-value" });
+    seedDoc("rollbackReadinessArtifacts", "rollback-1", { artifactId: "rollback-1", status: "verified", secretToken: "token-value" });
+    seedDoc("securityReadiness", "security-1", { securityReadinessId: "security-1", status: "verified", credential: "credential-value" });
+    seedDoc("operationalRiskProfiles", "risk-1", { operationalRiskId: "risk-1", status: "stable", rawPayload: "sensitive" });
+    seedDoc("institutionOnboardingReadiness", "onboarding-1", { onboardingReadinessId: "onboarding-1", status: "ready_for_review" });
+    seedDoc("supportReadiness", "support-1", { supportReadinessId: "support-1", status: "ready_for_review" });
+    seedDoc("evidencePacks", "evidence-1", { evidencePackId: "evidence-1", status: "ready_for_review", rawGovernmentId: "sensitive-id" });
+    seedDoc("operatorReviewSessions", "review-1", { reviewSessionId: "review-1", status: "completed", privateNote: "hidden" });
+    seedDoc("events", "event-1", { eventId: "event-1", eventType: "release_governance_profile_derived" });
+  }
+
+  it("returns admin-gated public exposure hardening profiles without sensitive payloads", async () => {
+    seedHardeningContext();
+    const router = (await import("../adminPublicExposureHardeningRoutes")).default;
+
+    const forbidden = await invokeRouter(router, {
+      method: "GET",
+      url: "/public-exposure-hardening",
+      user: { id: "landlord-1", role: "landlord", permissions: [] },
+    });
+    expect(forbidden.status).toBe(403);
+
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/public-exposure-hardening",
+      user: { id: "admin-1", role: "admin", permissions: ["system.admin"] },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.profiles).toHaveLength(1);
+    expect(res.body.profiles[0]).toEqual(
+      expect.objectContaining({
+        manualApprovalRequired: true,
+        autonomousLaunchEnabled: false,
+        autonomousRollbackEnabled: false,
+        publicExposureEnabled: false,
+      })
+    );
+    expect(JSON.stringify(res.body)).not.toContain("secret-value");
+    expect(JSON.stringify(res.body)).not.toContain("token-value");
+    expect(JSON.stringify(res.body)).not.toContain("credential-value");
+    expect(JSON.stringify(res.body)).not.toContain("sensitive-id");
+    expect(JSON.stringify(res.body)).not.toContain("privateNote");
+  });
+
+  it("returns a single public exposure hardening profile by id", async () => {
+    seedHardeningContext();
+    const router = (await import("../adminPublicExposureHardeningRoutes")).default;
+    const list = await invokeRouter(router, { method: "GET", url: "/public-exposure-hardening" });
+    const id = list.body.profiles[0].publicExposureHardeningId;
+
+    const res = await invokeRouter(router, { method: "GET", url: `/public-exposure-hardening/${encodeURIComponent(id)}` });
+
+    expect(res.status).toBe(200);
+    expect(res.body.profile.publicExposureHardeningId).toBe(id);
+  });
+
+  it("filters by status", async () => {
+    seedHardeningContext();
+    const router = (await import("../adminPublicExposureHardeningRoutes")).default;
+
+    const filtered = await invokeRouter(router, { method: "GET", url: "/public-exposure-hardening?status=unknown" });
+
+    expect(filtered.status).toBe(200);
+    expect(filtered.body.profiles).toEqual([]);
+  });
+});
