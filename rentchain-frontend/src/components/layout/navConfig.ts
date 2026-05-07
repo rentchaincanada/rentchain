@@ -188,6 +188,13 @@ export const NAV_ITEMS: NavItem[] = [
     showInDrawer: true,
   },
   {
+    id: "enterprise-municipal-readiness",
+    label: "Enterprise Readiness",
+    to: "/admin/enterprise-municipal-readiness",
+    requiresAdmin: true,
+    showInDrawer: true,
+  },
+  {
     id: "admin-leads",
     label: "Referral Requests",
     to: "/admin/leads",

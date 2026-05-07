@@ -117,6 +117,7 @@ const PublicExposureHardeningPage = lazy(() => import("./pages/PublicExposureHar
 const CommercialReadinessPage = lazy(() => import("./pages/CommercialReadinessPage"));
 const ControlledIntegrationsPage = lazy(() => import("./pages/ControlledIntegrationsPage"));
 const ProductionIntegrationsPage = lazy(() => import("./pages/ProductionIntegrationsPage"));
+const EnterpriseMunicipalReadinessPage = lazy(() => import("./pages/EnterpriseMunicipalReadinessPage"));
 const EcosystemCoordinationPage = lazy(() => import("./pages/EcosystemCoordinationPage"));
 const PlatformCredentialingReadinessPage = lazy(() => import("./pages/PlatformCredentialingReadinessPage"));
 const ConsumerReportingGovernancePage = lazy(() => import("./pages/ConsumerReportingGovernancePage"));
@@ -1387,6 +1388,14 @@ function App() {
               element={
                 <RequireAdmin>
                   <ProductionIntegrationsPage />
+                </RequireAdmin>
+              }
+            />
+            <Route
+              path="/admin/enterprise-municipal-readiness"
+              element={
+                <RequireAdmin>
+                  <EnterpriseMunicipalReadinessPage />
                 </RequireAdmin>
               }
             />
