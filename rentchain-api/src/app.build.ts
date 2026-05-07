@@ -120,6 +120,7 @@ import adminPublicExposureHardeningRoutes from "./routes/adminPublicExposureHard
 import adminCommercialReadinessRoutes from "./routes/adminCommercialReadinessRoutes";
 import adminControlledIntegrationsRoutes from "./routes/adminControlledIntegrationsRoutes";
 import adminProductionIntegrationsRoutes from "./routes/adminProductionIntegrationsRoutes";
+import adminEnterpriseMunicipalReadinessRoutes from "./routes/adminEnterpriseMunicipalReadinessRoutes";
 import adminEcosystemCoordinationRoutes from "./routes/adminEcosystemCoordinationRoutes";
 import adminPlatformCredentialingRoutes from "./routes/adminPlatformCredentialingRoutes";
 import adminConsumerReportingGovernanceRoutes from "./routes/adminConsumerReportingGovernanceRoutes";
@@ -310,6 +311,8 @@ app.use("/api/admin", routeSource("adminControlledIntegrationsRoutes.ts"), admin
 console.log("[route-mount] adminControlledIntegrationsRoutes mounted at /api/admin");
 app.use("/api/admin", routeSource("adminProductionIntegrationsRoutes.ts"), adminProductionIntegrationsRoutes);
 console.log("[route-mount] adminProductionIntegrationsRoutes mounted at /api/admin");
+app.use("/api/admin", routeSource("adminEnterpriseMunicipalReadinessRoutes.ts"), adminEnterpriseMunicipalReadinessRoutes);
+console.log("[route-mount] adminEnterpriseMunicipalReadinessRoutes mounted at /api/admin");
 app.use("/api/admin", routeSource("adminEcosystemCoordinationRoutes.ts"), adminEcosystemCoordinationRoutes);
 console.log("[route-mount] adminEcosystemCoordinationRoutes mounted at /api/admin");
 app.use("/api/admin", routeSource("adminPlatformCredentialingRoutes.ts"), adminPlatformCredentialingRoutes);
