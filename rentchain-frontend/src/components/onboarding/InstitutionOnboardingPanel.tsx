@@ -1,6 +1,6 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import type { CrossOrganizationTrustReference, CrossOrganizationTrustRelationship, CrossOrganizationTrustRestriction } from "@/api/crossOrganizationTrustApi";
+import type { InstitutionOnboardingReadiness, InstitutionOnboardingReference, InstitutionOnboardingRestriction } from "@/api/institutionOnboardingApi";
 import { Card, Section } from "@/components/ui/Ui";
 
 function label(value: string) {
@@ -9,8 +9,8 @@ function label(value: string) {
 
 function tone(status: string) {
   if (status === "blocked") return { color: "#991b1b", background: "#fee2e2", border: "#fecaca" };
-  if (status === "review_required" || status === "partially_verified" || status === "unavailable") return { color: "#92400e", background: "#fef3c7", border: "#fde68a" };
-  if (status === "verified") return { color: "#166534", background: "#dcfce7", border: "#bbf7d0" };
+  if (status === "review_required" || status === "partially_ready" || status === "partially_verified" || status === "unavailable") return { color: "#92400e", background: "#fef3c7", border: "#fde68a" };
+  if (status === "ready_for_review" || status === "verified") return { color: "#166534", background: "#dcfce7", border: "#bbf7d0" };
   return { color: "#475569", background: "#f8fafc", border: "#e2e8f0" };
 }
 
@@ -23,13 +23,13 @@ function Badge({ children, status }: { children: React.ReactNode; status: string
   );
 }
 
-function ReferenceList({ title, references }: { title: string; references: CrossOrganizationTrustReference[] }) {
+function ReferenceList({ title, references }: { title: string; references: InstitutionOnboardingReference[] }) {
   return (
     <Section style={{ display: "grid", gap: 10 }}>
       <div style={{ fontWeight: 900 }}>{title}</div>
       {references.length ? (
         references.slice(0, 12).map((reference) => (
-          <Card key={reference.trustReferenceId} style={{ borderRadius: 8, padding: 12 }}>
+          <Card key={reference.referenceId} style={{ borderRadius: 8, padding: 12 }}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
               <div>
                 <strong>{reference.label}</strong>
@@ -40,7 +40,7 @@ function ReferenceList({ title, references }: { title: string; references: Cross
             <div style={{ color: "#475569", fontSize: 13, marginTop: 8 }}>{reference.description}</div>
             {reference.lineageReferences.length ? <div style={{ color: "#475569", fontSize: 13, marginTop: 8 }}>Lineage references: {reference.lineageReferences.length}</div> : null}
             {reference.blockedReason ? <div style={{ color: "#991b1b", fontSize: 13, marginTop: 8 }}>View blocked reason: {reference.blockedReason}</div> : null}
-            {reference.redacted ? <div style={{ color: "#92400e", fontSize: 13, marginTop: 8 }}>{reference.redactionReason || "Redacted trust reference"}</div> : null}
+            {reference.redacted ? <div style={{ color: "#92400e", fontSize: 13, marginTop: 8 }}>{reference.redactionReason || "Redacted onboarding reference"}</div> : null}
             {reference.destination ? <Link to={reference.destination} style={{ color: "#2563eb", fontWeight: 800, fontSize: 13, marginTop: 8, display: "inline-block" }}>View context</Link> : null}
           </Card>
         ))
@@ -51,7 +51,7 @@ function ReferenceList({ title, references }: { title: string; references: Cross
   );
 }
 
-function RestrictionList({ restrictions }: { restrictions: CrossOrganizationTrustRestriction[] }) {
+function RestrictionList({ restrictions }: { restrictions: InstitutionOnboardingRestriction[] }) {
   return (
     <Section style={{ display: "grid", gap: 10 }}>
       <div style={{ fontWeight: 900 }}>View restrictions</div>
@@ -70,44 +70,44 @@ function RestrictionList({ restrictions }: { restrictions: CrossOrganizationTrus
           </Card>
         ))
       ) : (
-        <Card style={{ color: "#64748b" }}>No trust restrictions detected.</Card>
+        <Card style={{ color: "#64748b" }}>No onboarding restrictions detected.</Card>
       )}
     </Section>
   );
 }
 
-export function CrossOrganizationTrustPanel({ trustRelationship }: { trustRelationship: CrossOrganizationTrustRelationship }) {
+export function InstitutionOnboardingPanel({ readiness }: { readiness: InstitutionOnboardingReadiness }) {
   return (
     <div style={{ display: "grid", gap: 16 }}>
       <Section style={{ display: "grid", gap: 10 }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
           <div>
-            <div style={{ color: "#64748b", fontSize: 12, fontWeight: 800 }}>View trust relationship</div>
-            <h2 style={{ margin: "2px 0 0", fontSize: "1.15rem" }}>{label(trustRelationship.relationshipType)}</h2>
+            <div style={{ color: "#64748b", fontSize: 12, fontWeight: 800 }}>View onboarding readiness</div>
+            <h2 style={{ margin: "2px 0 0", fontSize: "1.15rem" }}>{label(readiness.institutionType)}</h2>
           </div>
-          <Badge status={trustRelationship.status}>{label(trustRelationship.status)}</Badge>
+          <Badge status={readiness.status}>{label(readiness.status)}</Badge>
         </div>
         <div style={{ color: "#475569", lineHeight: 1.55 }}>
-          Trust relationships are operationally scoped and review controlled. No public trust exposure or autonomous trust approval is enabled.
+          Institution onboarding readiness is operationally scoped and review controlled. No live institution integration or autonomous onboarding is enabled.
           Manual review remains required.
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <Badge status="review_required">Manual review required</Badge>
-          <Badge status={trustRelationship.publicTrustExposureEnabled ? "blocked" : "verified"}>Public exposure disabled</Badge>
-          <Badge status={trustRelationship.autonomousTrustApprovalEnabled ? "blocked" : "verified"}>Approval automation disabled</Badge>
+          <Badge status={readiness.externalOnboardingEnabled ? "blocked" : "verified"}>External onboarding disabled</Badge>
+          <Badge status={readiness.autonomousApprovalEnabled ? "blocked" : "verified"}>Approval automation disabled</Badge>
         </div>
       </Section>
 
       <Section style={{ display: "grid", gap: 10 }}>
-        <div style={{ fontWeight: 900 }}>Trust summary</div>
+        <div style={{ fontWeight: 900 }}>Onboarding summary</div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10 }}>
           {[
-            ["References", trustRelationship.summary.totalReferences],
-            ["Verified", trustRelationship.summary.verifiedReferences],
-            ["Partial", trustRelationship.summary.partiallyVerifiedReferences],
-            ["Blocked", trustRelationship.summary.blockedReferences],
-            ["Unavailable", trustRelationship.summary.unavailableReferences],
-            ["Restrictions", trustRelationship.summary.restrictions],
+            ["References", readiness.summary.totalReferences],
+            ["Verified", readiness.summary.verifiedReferences],
+            ["Partial", readiness.summary.partiallyVerifiedReferences],
+            ["Blocked", readiness.summary.blockedReferences],
+            ["Unavailable", readiness.summary.unavailableReferences],
+            ["Restrictions", readiness.summary.restrictions],
           ].map(([name, value]) => (
             <Card key={String(name)} style={{ borderRadius: 8, padding: 12 }}>
               <div style={{ color: "#64748b", fontSize: 12, fontWeight: 800 }}>{name}</div>
@@ -117,18 +117,20 @@ export function CrossOrganizationTrustPanel({ trustRelationship }: { trustRelati
         </div>
       </Section>
 
-      <RestrictionList restrictions={trustRelationship.trustRestrictions} />
-      <ReferenceList title="View evidence lineage" references={trustRelationship.evidenceReferences} />
-      <ReferenceList title="View review lineage" references={trustRelationship.reviewReferences} />
-      <ReferenceList title="Settlement references" references={trustRelationship.settlementReferences} />
-      <ReferenceList title="Regulatory references" references={trustRelationship.regulatoryReferences} />
-      <ReferenceList title="Sharing references" references={trustRelationship.sharingReferences} />
-      <ReferenceList title="Audit references" references={trustRelationship.auditReferences} />
-      <ReferenceList title="Operational references" references={trustRelationship.operationalReferences} />
+      <RestrictionList restrictions={readiness.onboardingRestrictions} />
+      <ReferenceList title="Participant references" references={readiness.participantReferences} />
+      <ReferenceList title="Trust references" references={readiness.trustReferences} />
+      <ReferenceList title="Identity references" references={readiness.identityReferences} />
+      <ReferenceList title="View evidence lineage" references={readiness.evidenceReferences} />
+      <ReferenceList title="View review lineage" references={readiness.reviewReferences} />
+      <ReferenceList title="Settlement dependencies" references={readiness.settlementReferences} />
+      <ReferenceList title="Regulatory dependencies" references={readiness.regulatoryReferences} />
+      <ReferenceList title="Sharing dependencies" references={readiness.sharingReferences} />
+      <ReferenceList title="Audit references" references={readiness.auditReferences} />
 
       <Section style={{ display: "grid", gap: 10 }}>
         <div style={{ fontWeight: 900 }}>Redactions</div>
-        {trustRelationship.redactions.map((redaction) => (
+        {readiness.redactions.map((redaction) => (
           <Card key={redaction} style={{ borderRadius: 8, padding: 12, color: "#475569" }}>{redaction}</Card>
         ))}
       </Section>

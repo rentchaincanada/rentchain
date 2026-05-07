@@ -133,6 +133,7 @@ import landlordRegulatoryProfileRoutes from "./routes/landlordRegulatoryProfileR
 import landlordAssetTokenizationReadinessRoutes from "./routes/landlordAssetTokenizationReadinessRoutes";
 import landlordNetworkParticipantRoutes from "./routes/landlordNetworkParticipantRoutes";
 import landlordCrossOrganizationTrustRoutes from "./routes/landlordCrossOrganizationTrustRoutes";
+import landlordInstitutionOnboardingRoutes from "./routes/landlordInstitutionOnboardingRoutes";
 import publicPortfolioScoreRoutes from "./routes/publicPortfolioScoreRoutes";
 import publicTenantShareRoutes from "./routes/publicTenantShareRoutes";
 import landlordActionRecommendationRoutes from "./routes/landlordActionRecommendationRoutes";
@@ -322,6 +323,8 @@ app.use("/api/landlord", routeSource("landlordNetworkParticipantRoutes.ts"), lan
 console.log("[route-mount] landlordNetworkParticipantRoutes mounted at /api/landlord");
 app.use("/api/landlord", routeSource("landlordCrossOrganizationTrustRoutes.ts"), landlordCrossOrganizationTrustRoutes);
 console.log("[route-mount] landlordCrossOrganizationTrustRoutes mounted at /api/landlord");
+app.use("/api/landlord", routeSource("landlordInstitutionOnboardingRoutes.ts"), landlordInstitutionOnboardingRoutes);
+console.log("[route-mount] landlordInstitutionOnboardingRoutes mounted at /api/landlord");
 app.use("/api", routeSource("landlordActionRecommendationRoutes.ts"), landlordActionRecommendationRoutes);
 console.log("[route-mount] landlordActionRecommendationRoutes mounted at /api");
 app.use("/api", routeSource("tenantFeedbackRoutes.ts"), tenantFeedbackRoutes);
