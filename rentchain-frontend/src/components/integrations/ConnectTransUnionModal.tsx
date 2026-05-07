@@ -296,8 +296,8 @@ export function ConnectTransUnionModal({
               >
                 <div style={{ fontWeight: 700 }}>Already credentialed?</div>
                 <div style={{ color: text.muted, fontSize: "0.92rem", lineHeight: 1.5 }}>
-                  Already approved by TransUnion? Enter the member code and passcode that were issued
-                  to your business so you can start screening in RentChain.
+                  Already have TransUnion-issued credentials? Enter the member code and passcode that
+                  were issued to your business so you can configure screening access in RentChain.
                 </div>
                 <div style={{ color: text.subtle, fontSize: "0.86rem" }}>
                   Outcome: once the credentials are verified, your account is connected and ready to

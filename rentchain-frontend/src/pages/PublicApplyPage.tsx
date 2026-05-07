@@ -2197,7 +2197,7 @@ export default function PublicApplyPage() {
             </label>
             <label style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
               <input ref={registerFieldRef("consent.dataSharingConsent")} type="checkbox" checked={consent.dataSharingConsent} onChange={(e) => setConsent({ ...consent, dataSharingConsent: e.target.checked })} />
-              <span>{req("I consent to data sharing for the tenant database.")}</span>
+              <span>{req("I consent to permissioned data sharing for rental application review and verification workflows.")}</span>
             </label>
             <div style={{ display: "grid", gap: 8 }}>
               <label style={labelStyle}>
@@ -2267,7 +2267,8 @@ export default function PublicApplyPage() {
                 </span>
               </label>
               <div style={{ fontSize: "0.85rem", opacity: 0.7 }}>
-                By proceeding, you consent to the collection, use, and disclosure of your information for tenant screening and verification.
+                By proceeding, you consent to the collection, use, and disclosure of your information for tenant
+                screening and verification, subject to applicable access, consent, and provider requirements.
               </div>
             </div>
             <div style={{ borderTop: "1px solid #e5e7eb", paddingTop: 10 }}>

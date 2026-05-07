@@ -3153,7 +3153,8 @@ const ApplicationsPage: React.FC = () => {
                           </div>
                         )}
                         <div style={{ fontSize: 12, color: text.muted }}>
-                          This is a pre-approval report (stub). Real bureau integration coming.
+                          Screening availability depends on configured provider access, consent, and lawful-use
+                          requirements. RentChain records review metadata and does not represent bureau approval.
                         </div>
                       </>
                     )}
