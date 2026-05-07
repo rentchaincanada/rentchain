@@ -133,6 +133,7 @@ const ReviewTimelinePage = lazy(() => import("./pages/ReviewTimelinePage"));
 const IdentityLayerPage = lazy(() => import("./pages/IdentityLayerPage"));
 const InstitutionalSharingRoomPage = lazy(() => import("./pages/InstitutionalSharingRoomPage"));
 const VerifiedRentalHistoryPage = lazy(() => import("./pages/VerifiedRentalHistoryPage"));
+const RentalDebtPage = lazy(() => import("./pages/RentalDebtPage"));
 const SettlementReadinessPage = lazy(() => import("./pages/SettlementReadinessPage"));
 const RegulatoryProfilePage = lazy(() => import("./pages/RegulatoryProfilePage"));
 const AssetTokenizationReadinessPage = lazy(() => import("./pages/AssetTokenizationReadinessPage"));
@@ -633,6 +634,18 @@ function App() {
               <LandlordNav>
                 <Suspense fallback={null}>
                   <VerifiedRentalHistoryPage />
+                </Suspense>
+              </LandlordNav>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/rental-debt"
+          element={
+            <RequireAuth>
+              <LandlordNav>
+                <Suspense fallback={null}>
+                  <RentalDebtPage />
                 </Suspense>
               </LandlordNav>
             </RequireAuth>
