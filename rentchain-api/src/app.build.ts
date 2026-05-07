@@ -35,6 +35,7 @@ import tenantSignalsRoutes from "./routes/tenantSignalsRoutes";
 import reportingRoutes from "./routes/reportingRoutes";
 import tenantInvitesRoutes from "./routes/tenantInvitesRoutes";
 import tenantPortalRoutes from "./routes/tenantPortalRoutes";
+import tenantParticipationRoutes from "./routes/tenantParticipationRoutes";
 import tenantInviteAliasesRoutes from "./routes/tenantInviteAliasesRoutes";
 import landlordInvitesAdminRoutes from "./routes/landlordInvitesAdminRoutes";
 import landlordInvitesPublicRoutes from "./routes/landlordInvitesPublicRoutes";
@@ -409,6 +410,7 @@ app.use(
 );
 app.use("/api/tenant-invites", tenantInvitesRoutes);
 app.use("/api/tenant", tenantPortalRoutes);
+app.use("/api/tenant", tenantParticipationRoutes);
 app.use("/api", routeSource("tenantInviteAliasesRoutes"), tenantInviteAliasesRoutes);
 app.use("/api", routeSource("tenantEventsRoutes"), tenantEventsRoutes);
 app.use("/api", routeSource("tenantEventsWriteRoutes"), tenantEventsWriteRoutes);
