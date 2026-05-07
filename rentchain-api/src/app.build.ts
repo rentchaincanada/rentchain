@@ -112,6 +112,7 @@ import adminSlaRoutes from "./routes/adminSlaRoutes";
 import adminAlertingRoutes from "./routes/adminAlertingRoutes";
 import adminAssignmentRoutes from "./routes/adminAssignmentRoutes";
 import adminNotificationRoutes from "./routes/adminNotificationRoutes";
+import adminSupportOperationsRoutes from "./routes/adminSupportOperationsRoutes";
 import adminObservabilityRoutes from "./routes/adminObservabilityRoutes";
 import adminObservabilityIncidentReadinessRoutes from "./routes/adminObservabilityIncidentReadinessRoutes";
 import adminReleaseGovernanceRoutes from "./routes/adminReleaseGovernanceRoutes";
@@ -292,6 +293,8 @@ app.use("/api/admin", routeSource("adminAssignmentRoutes.ts"), adminAssignmentRo
 console.log("[route-mount] adminAssignmentRoutes mounted at /api/admin");
 app.use("/api/admin", routeSource("adminNotificationRoutes.ts"), adminNotificationRoutes);
 console.log("[route-mount] adminNotificationRoutes mounted at /api/admin");
+app.use("/api/admin", routeSource("adminSupportOperationsRoutes.ts"), adminSupportOperationsRoutes);
+console.log("[route-mount] adminSupportOperationsRoutes mounted at /api/admin");
 app.use("/api/admin", routeSource("adminObservabilityRoutes.ts"), adminObservabilityRoutes);
 console.log("[route-mount] adminObservabilityRoutes mounted at /api/admin");
 app.use("/api/admin", routeSource("adminObservabilityIncidentReadinessRoutes.ts"), adminObservabilityIncidentReadinessRoutes);

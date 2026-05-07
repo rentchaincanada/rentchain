@@ -136,6 +136,7 @@ const VerifiedRentalHistoryPage = lazy(() => import("./pages/VerifiedRentalHisto
 const RentalDebtPage = lazy(() => import("./pages/RentalDebtPage"));
 const CourtDisputeLineagePage = lazy(() => import("./pages/CourtDisputeLineagePage"));
 const OnboardingHardeningPage = lazy(() => import("./pages/OnboardingHardeningPage"));
+const SupportOperationsPage = lazy(() => import("./pages/SupportOperationsPage"));
 const SettlementReadinessPage = lazy(() => import("./pages/SettlementReadinessPage"));
 const RegulatoryProfilePage = lazy(() => import("./pages/RegulatoryProfilePage"));
 const AssetTokenizationReadinessPage = lazy(() => import("./pages/AssetTokenizationReadinessPage"));
@@ -675,6 +676,18 @@ function App() {
                 </Suspense>
               </LandlordNav>
             </RequireAuth>
+          }
+        />
+        <Route
+          path="/support-operations"
+          element={
+            <RequireAdmin>
+              <LandlordNav>
+                <Suspense fallback={null}>
+                  <SupportOperationsPage />
+                </Suspense>
+              </LandlordNav>
+            </RequireAdmin>
           }
         />
         <Route

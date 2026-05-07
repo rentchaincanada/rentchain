@@ -174,6 +174,13 @@ export const NAV_ITEMS: NavItem[] = [
     showInDrawer: true,
   },
   {
+    id: "support-operations",
+    label: "Support Ops",
+    to: "/support-operations",
+    requiresAdmin: true,
+    showInDrawer: true,
+  },
+  {
     id: "admin-leads",
     label: "Referral Requests",
     to: "/admin/leads",
