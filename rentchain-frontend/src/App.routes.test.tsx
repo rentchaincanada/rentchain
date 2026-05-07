@@ -150,6 +150,10 @@ vi.mock("./pages/CrossOrganizationTrustPage", () => ({
   default: () => <h1>Cross Organization Trust Page</h1>,
 }));
 
+vi.mock("./pages/InstitutionOnboardingReadinessPage", () => ({
+  default: () => <h1>Institution Onboarding Readiness Page</h1>,
+}));
+
 vi.mock("./pages/landlord/PortfolioScorePage", () => ({
   default: () => <h1>Landlord Portfolio Score</h1>,
 }));
@@ -467,6 +471,20 @@ describe("Routes: /cross-organization-trust", () => {
     );
 
     expect(await screen.findByText(/Cross Organization Trust Page/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("Routes: /institution-onboarding-readiness", () => {
+  it("renders the institution onboarding readiness route", async () => {
+    const { default: App } = await import("./App");
+    render(
+      <MemoryRouter initialEntries={["/institution-onboarding-readiness?institutionType=lender"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Institution Onboarding Readiness Page/i)).toBeInTheDocument();
     expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
   });
 });
