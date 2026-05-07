@@ -138,6 +138,7 @@ import landlordIdentityLayerRoutes from "./routes/landlordIdentityLayerRoutes";
 import landlordSharingRoomRoutes from "./routes/landlordSharingRoomRoutes";
 import landlordRentalHistoryLedgerRoutes from "./routes/landlordRentalHistoryLedgerRoutes";
 import landlordRentalDebtRoutes from "./routes/landlordRentalDebtRoutes";
+import landlordCourtDisputeLineageRoutes from "./routes/landlordCourtDisputeLineageRoutes";
 import landlordSettlementReadinessRoutes from "./routes/landlordSettlementReadinessRoutes";
 import landlordRegulatoryProfileRoutes from "./routes/landlordRegulatoryProfileRoutes";
 import landlordAssetTokenizationReadinessRoutes from "./routes/landlordAssetTokenizationReadinessRoutes";
@@ -343,6 +344,8 @@ app.use("/api/landlord", routeSource("landlordRentalHistoryLedgerRoutes.ts"), la
 console.log("[route-mount] landlordRentalHistoryLedgerRoutes mounted at /api/landlord");
 app.use("/api/landlord", routeSource("landlordRentalDebtRoutes.ts"), landlordRentalDebtRoutes);
 console.log("[route-mount] landlordRentalDebtRoutes mounted at /api/landlord");
+app.use("/api/landlord", routeSource("landlordCourtDisputeLineageRoutes.ts"), landlordCourtDisputeLineageRoutes);
+console.log("[route-mount] landlordCourtDisputeLineageRoutes mounted at /api/landlord");
 app.use("/api/landlord", routeSource("landlordSettlementReadinessRoutes.ts"), landlordSettlementReadinessRoutes);
 console.log("[route-mount] landlordSettlementReadinessRoutes mounted at /api/landlord");
 app.use("/api/landlord", routeSource("landlordRegulatoryProfileRoutes.ts"), landlordRegulatoryProfileRoutes);
