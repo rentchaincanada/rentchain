@@ -27,6 +27,7 @@ describe("deriveObservabilityIncidentReadinessProfile", () => {
         manualReviewRequired: true,
         externalMonitoringIntegrationEnabled: false,
         autonomousRemediationEnabled: false,
+        alertExecutionEnabled: false,
         alertSendingEnabled: false,
         productionMutationEnabled: false,
         sensitiveTelemetryExposed: false,
@@ -85,6 +86,7 @@ describe("deriveObservabilityIncidentReadinessProfile", () => {
     expect(profile.status).toBe("partially_ready");
     expect(profile.manualReviewRequired).toBe(true);
     expect(profile.autonomousRemediationEnabled).toBe(false);
+    expect(profile.alertExecutionEnabled).toBe(false);
     expect(profile.alertSendingEnabled).toBe(false);
     expect(profile.productionMutationEnabled).toBe(false);
   });

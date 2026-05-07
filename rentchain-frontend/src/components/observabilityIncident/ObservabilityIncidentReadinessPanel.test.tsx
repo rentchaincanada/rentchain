@@ -11,6 +11,7 @@ const profile: ObservabilityIncidentReadinessProfile = {
   manualReviewRequired: true,
   externalMonitoringIntegrationEnabled: false,
   autonomousRemediationEnabled: false,
+  alertExecutionEnabled: false,
   alertSendingEnabled: false,
   productionMutationEnabled: false,
   sensitiveTelemetryExposed: false,

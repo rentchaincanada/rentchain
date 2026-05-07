@@ -101,6 +101,7 @@ export function ObservabilityIncidentReadinessPanel({ profile }: { profile: Obse
           <Badge status="review_required">Manual review required</Badge>
           <Badge status={profile.externalMonitoringIntegrationEnabled ? "blocked" : "verified"}>External monitoring disabled</Badge>
           <Badge status={profile.autonomousRemediationEnabled ? "blocked" : "verified"}>Autonomous remediation disabled</Badge>
+          <Badge status={profile.alertExecutionEnabled ? "blocked" : "verified"}>Alert execution disabled</Badge>
           <Badge status={profile.alertSendingEnabled ? "blocked" : "verified"}>Alert sending disabled</Badge>
           <Badge status={profile.productionMutationEnabled ? "blocked" : "verified"}>Production mutation disabled</Badge>
           <Badge status={profile.sensitiveTelemetryExposed ? "blocked" : "verified"}>Sensitive telemetry excluded</Badge>
