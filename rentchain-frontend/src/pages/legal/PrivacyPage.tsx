@@ -16,7 +16,9 @@ const PrivacyPage: React.FC = () => {
         </div>
         <p style={{ margin: 0, color: text.muted }}>
           This Privacy Policy explains how RentChain (RentChain, we, our, us) collects, uses, shares, and protects
-          personal information when you use our website and platform.
+          personal information when you use our website and platform. RentChain provides governed operational
+          infrastructure for rental workflows; it does not operate as a consumer reporting agency, credit bureau,
+          government authority, collections service, or legal decision-maker.
         </p>
 
         <h2 style={{ marginTop: spacing.lg }}>1) Information We Collect</h2>
@@ -25,7 +27,16 @@ const PrivacyPage: React.FC = () => {
           <li>Application information: rental application responses and documents provided by the user.</li>
           <li>
             Screening and verification information: consent records, screening request metadata, provider statuses, and
-            outcomes necessary to deliver screening workflows.
+            outcomes necessary to deliver permissioned screening workflows.
+          </li>
+          <li>
+            Governance records: consent acknowledgements, audit lineage, review timestamps, evidence references,
+            dispute-governance metadata, and operational status references used to support review-controlled workflows.
+          </li>
+          <li>
+            Institutional and interoperability metadata: permissioned sharing-room references, onboarding-readiness
+            metadata, provider-readiness metadata, and integration-governance references where those workflows are
+            enabled for authorized users.
           </li>
           <li>
             Usage and device information: IP address, device/browser information, and activity logs used for security
@@ -38,7 +49,9 @@ const PrivacyPage: React.FC = () => {
         <ul style={{ marginTop: spacing.sm, marginBottom: 0, paddingLeft: "1.1rem", color: text.muted }}>
           <li>Provide and operate the RentChain platform</li>
           <li>Facilitate tenant-initiated screening and verification workflows</li>
-          <li>Maintain audit logs and security controls</li>
+          <li>Maintain consent records, audit lineage, operational review controls, and security controls</li>
+          <li>Support onboarding, dispute, evidence, and institutional-readiness workflows</li>
+          <li>Provide permissioned interoperability governance and operational coordination tooling</li>
           <li>Prevent fraud and abuse</li>
           <li>Improve platform reliability and performance</li>
           <li>Comply with legal obligations</li>
@@ -48,17 +61,30 @@ const PrivacyPage: React.FC = () => {
         <h2 style={{ marginTop: spacing.lg }}>3) Screening & Consumer Reports</h2>
         <p style={{ margin: 0, color: text.muted }}>
           Where screening is enabled, screening information is processed only with appropriate authorization and for
-          lawful rental screening purposes. Screening outputs are provided by authorized third-party providers where
-          applicable. RentChain is not a consumer reporting agency and does not create independent consumer credit
-          files.
+          lawful rental screening purposes. Screening outputs may be provided by third-party providers that maintain
+          their own credentialing, permissible-purpose, and service requirements. RentChain is not a consumer reporting
+          agency, does not claim credit-bureau approval, does not create independent consumer credit files, and does not
+          replace a landlord's responsibility to use screening information lawfully.
         </p>
 
-        <h2 style={{ marginTop: spacing.lg }}>4) How We Share Information</h2>
+        <h2 style={{ marginTop: spacing.lg }}>4) Consent, Audit, and Operational Review</h2>
+        <p style={{ margin: 0, color: text.muted }}>
+          RentChain records consent and review metadata to support auditability, dispute handling, and operational
+          accountability. Audit lineage may include references to actions, reviews, evidence packs, permissioned
+          sharing, and workflow status changes. These records are used to verify what happened inside the platform; they
+          do not create automatic approvals, public scoring, public blacklists, or autonomous enforcement.
+        </p>
+
+        <h2 style={{ marginTop: spacing.lg }}>5) How We Share Information</h2>
         <p style={{ margin: 0, color: text.muted }}>We may share personal information with:</p>
         <ul style={{ marginTop: spacing.sm, marginBottom: 0, paddingLeft: "1.1rem", color: text.muted }}>
           <li>
-            Screening and verification partners (for example, authorized providers) when a user initiates a screening
-            workflow and proper authorization exists
+            Screening and verification partners when a user initiates a screening workflow and proper authorization
+            exists
+          </li>
+          <li>
+            Permissioned institutional, interoperability, or operational partners only when the workflow, role, consent,
+            and access controls support that disclosure
           </li>
           <li>
             Service providers who support hosting, security, analytics, communications, and platform operations under
@@ -69,10 +95,11 @@ const PrivacyPage: React.FC = () => {
           </li>
         </ul>
         <p style={{ marginTop: spacing.sm, marginBottom: 0, color: text.muted }}>
-          Tenant information is not shared without authorization or a valid legal basis.
+          Tenant information is not shared without authorization or a valid legal basis. RentChain does not provide
+          unrestricted public-sector exports, unrestricted portfolio exposure, or uncontrolled external synchronization.
         </p>
 
-        <h2 style={{ marginTop: spacing.lg }}>5) Data Retention</h2>
+        <h2 style={{ marginTop: spacing.lg }}>6) Data Retention</h2>
         <p style={{ margin: 0, color: text.muted }}>
           We retain personal information only as long as necessary for the purposes described above, including
           compliance, auditability, dispute handling, and legal obligations. Retention periods may vary by record type
@@ -80,14 +107,14 @@ const PrivacyPage: React.FC = () => {
           and legitimate business purposes.
         </p>
 
-        <h2 style={{ marginTop: spacing.lg }}>6) Security</h2>
+        <h2 style={{ marginTop: spacing.lg }}>7) Security</h2>
         <p style={{ margin: 0, color: text.muted }}>
           We implement reasonable safeguards designed to protect personal information, including encryption in transit,
           access controls, audit logging, and secure infrastructure. No method of transmission or storage is completely
           secure.
         </p>
 
-        <h2 style={{ marginTop: spacing.lg }}>7) Your Choices and Rights</h2>
+        <h2 style={{ marginTop: spacing.lg }}>8) Your Choices and Rights</h2>
         <p style={{ margin: 0, color: text.muted }}>Depending on your jurisdiction, you may have rights to:</p>
         <ul style={{ marginTop: spacing.sm, marginBottom: 0, paddingLeft: "1.1rem", color: text.muted }}>
           <li>Access your personal information</li>
@@ -100,18 +127,18 @@ const PrivacyPage: React.FC = () => {
           To submit a request, contact: privacy@rentchain.ai
         </p>
 
-        <h2 style={{ marginTop: spacing.lg }}>8) Cookies & Tracking</h2>
+        <h2 style={{ marginTop: spacing.lg }}>9) Cookies & Tracking</h2>
         <p style={{ margin: 0, color: text.muted }}>
           We may use essential cookies and limited analytics to operate and improve the service. We do not use cookies
           for third-party advertising.
         </p>
 
-        <h2 style={{ marginTop: spacing.lg }}>9) Children's Privacy</h2>
+        <h2 style={{ marginTop: spacing.lg }}>10) Children's Privacy</h2>
         <p style={{ margin: 0, color: text.muted }}>
           RentChain is not intended for individuals under the age of majority in their jurisdiction.
         </p>
 
-        <h2 style={{ marginTop: spacing.lg }}>10) Changes to this Policy</h2>
+        <h2 style={{ marginTop: spacing.lg }}>11) Changes to this Policy</h2>
         <p style={{ margin: 0, color: text.muted }}>
           We may update this policy periodically. Updates will be posted with a revised effective date.
         </p>

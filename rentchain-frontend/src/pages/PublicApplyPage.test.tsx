@@ -8,6 +8,7 @@ const { fetchPublicApplicationLink, submitPublicApplication, updatePublicApplica
   submitPublicApplication: vi.fn(),
   updatePublicApplicationProgress: vi.fn(),
 }));
+const permissionedDataSharingConsentLabel = /I consent to permissioned data sharing for rental application review and verification workflows\./i;
 
 vi.mock("@/api/publicApplications", async () => {
   const actual = await vi.importActual<typeof import("@/api/publicApplications")>("@/api/publicApplications");
@@ -328,7 +329,7 @@ describe("PublicApplyPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
     fireEvent.click(screen.getByLabelText(/I consent to a credit\/consumer report\./i));
     fireEvent.click(screen.getByLabelText(/I consent to contacting references and past landlords\./i));
-    fireEvent.click(screen.getByLabelText(/I consent to data sharing for the tenant database\./i));
+    fireEvent.click(screen.getByLabelText(permissionedDataSharingConsentLabel));
     fireEvent.change(screen.getByLabelText("Applicant full name (typed) *"), { target: { value: "Jordan Lee" } });
     fireEvent.change(screen.getByLabelText("Type your full name *"), { target: { value: "Jordan Lee" } });
     fireEvent.click(screen.getByLabelText(/I agree this is my legal signature\./i));
@@ -345,7 +346,7 @@ describe("PublicApplyPage", () => {
 
     fireEvent.click(screen.getByLabelText(/I consent to a credit\/consumer report\./i));
     fireEvent.click(screen.getByLabelText(/I consent to contacting references and past landlords\./i));
-    fireEvent.click(screen.getByLabelText(/I consent to data sharing for the tenant database\./i));
+    fireEvent.click(screen.getByLabelText(permissionedDataSharingConsentLabel));
     fireEvent.change(screen.getByLabelText("Applicant full name (typed) *"), { target: { value: "Jordan Lee" } });
     fireEvent.change(screen.getByLabelText("Type your full name *"), { target: { value: "Jordan Lee" } });
     fireEvent.click(screen.getByLabelText(/I agree this is my legal signature\./i));
@@ -378,7 +379,7 @@ describe("PublicApplyPage", () => {
 
     fireEvent.click(screen.getByLabelText(/I consent to a credit\/consumer report\./i));
     fireEvent.click(screen.getByLabelText(/I consent to contacting references and past landlords\./i));
-    fireEvent.click(screen.getByLabelText(/I consent to data sharing for the tenant database\./i));
+    fireEvent.click(screen.getByLabelText(permissionedDataSharingConsentLabel));
     fireEvent.change(screen.getByLabelText("Applicant full name (typed) *"), { target: { value: "Jordan Lee" } });
     fireEvent.change(screen.getByLabelText("Type your full name *"), { target: { value: "Jordan Lee" } });
     fireEvent.click(screen.getByLabelText(/I agree this is my legal signature\./i));
@@ -406,7 +407,7 @@ describe("PublicApplyPage", () => {
 
     fireEvent.click(screen.getByLabelText(/I consent to a credit\/consumer report\./i));
     fireEvent.click(screen.getByLabelText(/I consent to contacting references and past landlords\./i));
-    fireEvent.click(screen.getByLabelText(/I consent to data sharing for the tenant database\./i));
+    fireEvent.click(screen.getByLabelText(permissionedDataSharingConsentLabel));
     fireEvent.change(screen.getByLabelText("Applicant full name (typed) *"), { target: { value: "Jordan Lee" } });
     fireEvent.click(screen.getByLabelText(/I agree this is my legal signature\./i));
     fireEvent.click(screen.getByLabelText(/I confirm the information provided is accurate and I authorize/i));
@@ -421,7 +422,7 @@ describe("PublicApplyPage", () => {
 
     fireEvent.click(screen.getByLabelText(/I consent to a credit\/consumer report\./i));
     fireEvent.click(screen.getByLabelText(/I consent to contacting references and past landlords\./i));
-    fireEvent.click(screen.getByLabelText(/I consent to data sharing for the tenant database\./i));
+    fireEvent.click(screen.getByLabelText(permissionedDataSharingConsentLabel));
     fireEvent.change(screen.getByLabelText("Applicant full name (typed) *"), { target: { value: "Jordan Lee" } });
     fireEvent.change(screen.getByLabelText("Type your full name *"), { target: { value: "Jordan Lee" } });
     fireEvent.click(screen.getByLabelText(/I confirm the information provided is accurate and I authorize/i));
@@ -457,7 +458,7 @@ describe("PublicApplyPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
     fireEvent.click(screen.getByLabelText(/I consent to a credit\/consumer report\./i));
     fireEvent.click(screen.getByLabelText(/I consent to contacting references and past landlords\./i));
-    fireEvent.click(screen.getByLabelText(/I consent to data sharing for the tenant database\./i));
+    fireEvent.click(screen.getByLabelText(permissionedDataSharingConsentLabel));
     fireEvent.change(screen.getByLabelText("Applicant full name (typed) *"), { target: { value: "Jordan Lee" } });
     fireEvent.change(screen.getByLabelText("Co-applicant full name (typed) *"), { target: { value: "Taylor Lee" } });
     fireEvent.change(screen.getByLabelText("Type your full name *"), { target: { value: "Jordan Lee" } });
@@ -484,7 +485,7 @@ describe("PublicApplyPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
     fireEvent.click(screen.getByLabelText(/I consent to a credit\/consumer report\./i));
     fireEvent.click(screen.getByLabelText(/I consent to contacting references and past landlords\./i));
-    fireEvent.click(screen.getByLabelText(/I consent to data sharing for the tenant database\./i));
+    fireEvent.click(screen.getByLabelText(permissionedDataSharingConsentLabel));
     fireEvent.change(screen.getByLabelText("Applicant full name (typed) *"), { target: { value: "Jordan Lee" } });
     fireEvent.change(screen.getByLabelText("Type your full name *"), { target: { value: "Jordan Lee" } });
     fireEvent.click(screen.getByLabelText(/I agree this is my legal signature\./i));

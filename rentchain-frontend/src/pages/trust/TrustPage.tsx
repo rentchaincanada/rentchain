@@ -16,7 +16,19 @@ const TrustPage: React.FC = () => {
           lifecycle.
         </p>
         <p style={{ margin: 0, color: text.muted }}>
-          We focus on verified data, consent, and structured records to reduce disputes and increase accountability.
+          We focus on permissioned workflows, consent-aware governance, review-controlled operations, evidence lineage,
+          and structured records to reduce disputes and increase accountability.
+        </p>
+        <p style={{ margin: 0, color: text.muted }}>
+          Screening and interoperability workflows remain governed by role-based access, consent or lawful-basis
+          requirements, provider requirements, and operational review controls. RentChain does not present itself as a
+          credit bureau, consumer reporting agency, government authority, collections platform, or public enforcement
+          system.
+        </p>
+        <p style={{ margin: 0, color: text.muted }}>
+          Institutional-readiness features are designed to organize review, evidence, audit, and interoperability
+          metadata. They do not represent institutional approval, government approval, legal certification, autonomous
+          onboarding, or uncontrolled external data sharing.
         </p>
       </div>
     </MarketingLayout>
