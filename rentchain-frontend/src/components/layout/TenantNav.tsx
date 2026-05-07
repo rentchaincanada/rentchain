@@ -12,6 +12,7 @@ const navItems = [
   { label: "Dashboard", to: "/tenant/dashboard" },
   { label: "Screening Requests", to: "/tenant/screening" },
   { label: "Profile", to: "/tenant/profile" },
+  { label: "Onboarding", to: "/tenant/onboarding-hardening" },
   { label: "Access", to: "/tenant/access" },
   { label: "Application", to: "/tenant/application" },
   { label: "Documents", to: "/tenant/attachments" },

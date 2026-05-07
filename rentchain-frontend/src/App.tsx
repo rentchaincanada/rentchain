@@ -135,6 +135,7 @@ const InstitutionalSharingRoomPage = lazy(() => import("./pages/InstitutionalSha
 const VerifiedRentalHistoryPage = lazy(() => import("./pages/VerifiedRentalHistoryPage"));
 const RentalDebtPage = lazy(() => import("./pages/RentalDebtPage"));
 const CourtDisputeLineagePage = lazy(() => import("./pages/CourtDisputeLineagePage"));
+const OnboardingHardeningPage = lazy(() => import("./pages/OnboardingHardeningPage"));
 const SettlementReadinessPage = lazy(() => import("./pages/SettlementReadinessPage"));
 const RegulatoryProfilePage = lazy(() => import("./pages/RegulatoryProfilePage"));
 const AssetTokenizationReadinessPage = lazy(() => import("./pages/AssetTokenizationReadinessPage"));
@@ -659,6 +660,18 @@ function App() {
               <LandlordNav>
                 <Suspense fallback={null}>
                   <CourtDisputeLineagePage />
+                </Suspense>
+              </LandlordNav>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/onboarding-hardening"
+          element={
+            <RequireAuth>
+              <LandlordNav>
+                <Suspense fallback={null}>
+                  <OnboardingHardeningPage participantType="landlord" />
                 </Suspense>
               </LandlordNav>
             </RequireAuth>
@@ -1557,6 +1570,10 @@ function App() {
         <Route
           path="/tenant/participation"
           element={renderTenantShell(suspensePage(<TenantParticipationPage />))}
+        />
+        <Route
+          path="/tenant/onboarding-hardening"
+          element={renderTenantShell(suspensePage(<OnboardingHardeningPage participantType="tenant" />))}
         />
         <Route
           path="/tenant/attachments"

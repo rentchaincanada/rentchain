@@ -140,6 +140,13 @@ export const NAV_ITEMS: NavItem[] = [
     requiresLandlordOrAdmin: true,
   },
   {
+    id: "onboarding-hardening",
+    label: "Onboarding",
+    to: "/onboarding-hardening",
+    showInDrawer: true,
+    requiresLandlordOrAdmin: true,
+  },
+  {
     id: "referrals",
     label: "Referrals",
     to: "/referrals",
