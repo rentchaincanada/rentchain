@@ -134,6 +134,7 @@ const IdentityLayerPage = lazy(() => import("./pages/IdentityLayerPage"));
 const InstitutionalSharingRoomPage = lazy(() => import("./pages/InstitutionalSharingRoomPage"));
 const VerifiedRentalHistoryPage = lazy(() => import("./pages/VerifiedRentalHistoryPage"));
 const RentalDebtPage = lazy(() => import("./pages/RentalDebtPage"));
+const CourtDisputeLineagePage = lazy(() => import("./pages/CourtDisputeLineagePage"));
 const SettlementReadinessPage = lazy(() => import("./pages/SettlementReadinessPage"));
 const RegulatoryProfilePage = lazy(() => import("./pages/RegulatoryProfilePage"));
 const AssetTokenizationReadinessPage = lazy(() => import("./pages/AssetTokenizationReadinessPage"));
@@ -646,6 +647,18 @@ function App() {
               <LandlordNav>
                 <Suspense fallback={null}>
                   <RentalDebtPage />
+                </Suspense>
+              </LandlordNav>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/court-dispute-lineage"
+          element={
+            <RequireAuth>
+              <LandlordNav>
+                <Suspense fallback={null}>
+                  <CourtDisputeLineagePage />
                 </Suspense>
               </LandlordNav>
             </RequireAuth>
