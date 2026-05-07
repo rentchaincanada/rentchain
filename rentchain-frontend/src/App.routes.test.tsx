@@ -154,6 +154,10 @@ vi.mock("./pages/InstitutionOnboardingReadinessPage", () => ({
   default: () => <h1>Institution Onboarding Readiness Page</h1>,
 }));
 
+vi.mock("./pages/OperationalRiskPage", () => ({
+  default: () => <h1>Operational Risk Page</h1>,
+}));
+
 vi.mock("./pages/landlord/PortfolioScorePage", () => ({
   default: () => <h1>Landlord Portfolio Score</h1>,
 }));
@@ -485,6 +489,20 @@ describe("Routes: /institution-onboarding-readiness", () => {
     );
 
     expect(await screen.findByText(/Institution Onboarding Readiness Page/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("Routes: /operational-risk", () => {
+  it("renders the operational risk route", async () => {
+    const { default: App } = await import("./App");
+    render(
+      <MemoryRouter initialEntries={["/operational-risk?riskScope=institution"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Operational Risk Page/i)).toBeInTheDocument();
     expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
   });
 });

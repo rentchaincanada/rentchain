@@ -69,6 +69,7 @@ describe("InstitutionOnboardingReadinessPage", () => {
 
     expect(await screen.findByText("Institution onboarding readiness")).toBeInTheDocument();
     expect(screen.getAllByText(/No live institution integration or autonomous onboarding is enabled/i).length).toBeGreaterThan(0);
+    expect(screen.getByRole("link", { name: "View operational risk" })).toHaveAttribute("href", "/operational-risk");
     expect(screen.getByText("Public onboarding portals and unrestricted institutional directory data are not included.")).toBeInTheDocument();
   });
 

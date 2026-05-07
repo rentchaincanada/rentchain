@@ -1,5 +1,5 @@
 import React from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   fetchInstitutionOnboardingReadiness,
   type InstitutionOnboardingReadiness,
@@ -63,12 +63,15 @@ export default function InstitutionOnboardingReadinessPage() {
     <MacShell title="Institution onboarding readiness" showTopNav={false}>
       <div style={{ display: "grid", gap: 16 }}>
         <Section>
-          <div style={{ display: "grid", gap: 6 }}>
-            <h1 style={{ margin: 0, fontSize: "1.5rem" }}>Institution onboarding readiness</h1>
-            <div style={{ color: "#475569", maxWidth: 900 }}>
-              Institution onboarding readiness is operationally scoped and review controlled. No live institution integration or autonomous onboarding is enabled.
-              Manual review remains required.
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "start" }}>
+            <div style={{ display: "grid", gap: 6 }}>
+              <h1 style={{ margin: 0, fontSize: "1.5rem" }}>Institution onboarding readiness</h1>
+              <div style={{ color: "#475569", maxWidth: 900 }}>
+                Institution onboarding readiness is operationally scoped and review controlled. No live institution integration or autonomous onboarding is enabled.
+                Manual review remains required.
+              </div>
             </div>
+            <Link to="/operational-risk" style={{ color: "#2563eb", fontWeight: 900 }}>View operational risk</Link>
           </div>
         </Section>
 
