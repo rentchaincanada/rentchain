@@ -129,6 +129,7 @@ const SettlementReadinessPage = lazy(() => import("./pages/SettlementReadinessPa
 const RegulatoryProfilePage = lazy(() => import("./pages/RegulatoryProfilePage"));
 const AssetTokenizationReadinessPage = lazy(() => import("./pages/AssetTokenizationReadinessPage"));
 const NetworkParticipantsPage = lazy(() => import("./pages/NetworkParticipantsPage"));
+const CrossOrganizationTrustPage = lazy(() => import("./pages/CrossOrganizationTrustPage"));
 const LandlordPortfolioScorePage = lazy(() => import("./pages/landlord/PortfolioScorePage"));
 const SharedPortfolioScorePage = lazy(() => import("./pages/public/SharedPortfolioScorePage"));
 const TenantSharePackagePage = lazy(() => import("./pages/public/TenantSharePackagePage"));
@@ -668,6 +669,18 @@ function App() {
               <LandlordNav>
                 <Suspense fallback={null}>
                   <NetworkParticipantsPage />
+                </Suspense>
+              </LandlordNav>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/cross-organization-trust"
+          element={
+            <RequireAuth>
+              <LandlordNav>
+                <Suspense fallback={null}>
+                  <CrossOrganizationTrustPage />
                 </Suspense>
               </LandlordNav>
             </RequireAuth>
