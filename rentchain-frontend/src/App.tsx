@@ -118,6 +118,7 @@ const CommercialReadinessPage = lazy(() => import("./pages/CommercialReadinessPa
 const ControlledIntegrationsPage = lazy(() => import("./pages/ControlledIntegrationsPage"));
 const EcosystemCoordinationPage = lazy(() => import("./pages/EcosystemCoordinationPage"));
 const PlatformCredentialingReadinessPage = lazy(() => import("./pages/PlatformCredentialingReadinessPage"));
+const ConsumerReportingGovernancePage = lazy(() => import("./pages/ConsumerReportingGovernancePage"));
 const PortfolioScorePage = lazy(() => import("./pages/admin/PortfolioScorePage"));
 const PortfolioScoreHistoryPage = lazy(() => import("./pages/admin/PortfolioScoreHistoryPage"));
 const PortfolioHealthSummaryPage = lazy(() => import("./pages/landlord/PortfolioHealthSummaryPage"));
@@ -1340,6 +1341,14 @@ function App() {
               element={
                 <RequireAdmin>
                   <PlatformCredentialingReadinessPage />
+                </RequireAdmin>
+              }
+            />
+            <Route
+              path="/admin/consumer-reporting-governance"
+              element={
+                <RequireAdmin>
+                  <ConsumerReportingGovernancePage />
                 </RequireAdmin>
               }
             />

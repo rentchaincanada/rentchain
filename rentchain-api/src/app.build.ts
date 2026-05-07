@@ -118,6 +118,7 @@ import adminCommercialReadinessRoutes from "./routes/adminCommercialReadinessRou
 import adminControlledIntegrationsRoutes from "./routes/adminControlledIntegrationsRoutes";
 import adminEcosystemCoordinationRoutes from "./routes/adminEcosystemCoordinationRoutes";
 import adminPlatformCredentialingRoutes from "./routes/adminPlatformCredentialingRoutes";
+import adminConsumerReportingGovernanceRoutes from "./routes/adminConsumerReportingGovernanceRoutes";
 import portfolioScoreRoutes from "./routes/portfolioScoreRoutes";
 import portfolioScoreHistoryRoutes from "./routes/portfolioScoreHistoryRoutes";
 import landlordPortfolioHealthRoutes from "./routes/landlordPortfolioHealthRoutes";
@@ -302,6 +303,8 @@ app.use("/api/admin", routeSource("adminEcosystemCoordinationRoutes.ts"), adminE
 console.log("[route-mount] adminEcosystemCoordinationRoutes mounted at /api/admin");
 app.use("/api/admin", routeSource("adminPlatformCredentialingRoutes.ts"), adminPlatformCredentialingRoutes);
 console.log("[route-mount] adminPlatformCredentialingRoutes mounted at /api/admin");
+app.use("/api/admin", routeSource("adminConsumerReportingGovernanceRoutes.ts"), adminConsumerReportingGovernanceRoutes);
+console.log("[route-mount] adminConsumerReportingGovernanceRoutes mounted at /api/admin");
 app.use("/api/admin", routeSource("portfolioScoreRoutes.ts"), portfolioScoreRoutes);
 console.log("[route-mount] portfolioScoreRoutes mounted at /api/admin");
 app.use("/api/admin", routeSource("portfolioScoreHistoryRoutes.ts"), portfolioScoreHistoryRoutes);
