@@ -115,6 +115,7 @@ const ObservabilityIncidentReadinessPage = lazy(() => import("./pages/Observabil
 const ReleaseGovernancePage = lazy(() => import("./pages/ReleaseGovernancePage"));
 const PublicExposureHardeningPage = lazy(() => import("./pages/PublicExposureHardeningPage"));
 const CommercialReadinessPage = lazy(() => import("./pages/CommercialReadinessPage"));
+const ControlledIntegrationsPage = lazy(() => import("./pages/ControlledIntegrationsPage"));
 const PortfolioScorePage = lazy(() => import("./pages/admin/PortfolioScorePage"));
 const PortfolioScoreHistoryPage = lazy(() => import("./pages/admin/PortfolioScoreHistoryPage"));
 const PortfolioHealthSummaryPage = lazy(() => import("./pages/landlord/PortfolioHealthSummaryPage"));
@@ -1313,6 +1314,14 @@ function App() {
               element={
                 <RequireAdmin>
                   <CommercialReadinessPage />
+                </RequireAdmin>
+              }
+            />
+            <Route
+              path="/admin/controlled-integrations"
+              element={
+                <RequireAdmin>
+                  <ControlledIntegrationsPage />
                 </RequireAdmin>
               }
             />
