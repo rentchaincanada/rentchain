@@ -158,6 +158,10 @@ vi.mock("./pages/OperationalRiskPage", () => ({
   default: () => <h1>Operational Risk Page</h1>,
 }));
 
+vi.mock("./pages/InteroperabilityAdapterPage", () => ({
+  default: () => <h1>Interoperability Adapter Page</h1>,
+}));
+
 vi.mock("./pages/landlord/PortfolioScorePage", () => ({
   default: () => <h1>Landlord Portfolio Score</h1>,
 }));
@@ -503,6 +507,20 @@ describe("Routes: /operational-risk", () => {
     );
 
     expect(await screen.findByText(/Operational Risk Page/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("Routes: /interoperability-adapters", () => {
+  it("renders the interoperability adapters route", async () => {
+    const { default: App } = await import("./App");
+    render(
+      <MemoryRouter initialEntries={["/interoperability-adapters?adapterType=lender"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Interoperability Adapter Page/i)).toBeInTheDocument();
     expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
   });
 });
