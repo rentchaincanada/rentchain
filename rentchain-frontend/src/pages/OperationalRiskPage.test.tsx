@@ -72,6 +72,7 @@ describe("OperationalRiskPage", () => {
 
     expect(await screen.findByText("Operational risk")).toBeInTheDocument();
     expect(screen.getAllByText(/No underwriting, autonomous enforcement, or public risk exposure is enabled/i).length).toBeGreaterThan(0);
+    expect(screen.getByRole("link", { name: "View interoperability readiness" })).toHaveAttribute("href", "/interoperability-adapters");
     expect(screen.getByText("Public risk exposure and autonomous enforcement are not enabled.")).toBeInTheDocument();
   });
 

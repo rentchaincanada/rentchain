@@ -132,6 +132,7 @@ const NetworkParticipantsPage = lazy(() => import("./pages/NetworkParticipantsPa
 const CrossOrganizationTrustPage = lazy(() => import("./pages/CrossOrganizationTrustPage"));
 const InstitutionOnboardingReadinessPage = lazy(() => import("./pages/InstitutionOnboardingReadinessPage"));
 const OperationalRiskPage = lazy(() => import("./pages/OperationalRiskPage"));
+const InteroperabilityAdapterPage = lazy(() => import("./pages/InteroperabilityAdapterPage"));
 const LandlordPortfolioScorePage = lazy(() => import("./pages/landlord/PortfolioScorePage"));
 const SharedPortfolioScorePage = lazy(() => import("./pages/public/SharedPortfolioScorePage"));
 const TenantSharePackagePage = lazy(() => import("./pages/public/TenantSharePackagePage"));
@@ -707,6 +708,18 @@ function App() {
               <LandlordNav>
                 <Suspense fallback={null}>
                   <OperationalRiskPage />
+                </Suspense>
+              </LandlordNav>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/interoperability-adapters"
+          element={
+            <RequireAuth>
+              <LandlordNav>
+                <Suspense fallback={null}>
+                  <InteroperabilityAdapterPage />
                 </Suspense>
               </LandlordNav>
             </RequireAuth>

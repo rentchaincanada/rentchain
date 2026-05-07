@@ -1,5 +1,5 @@
 import React from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   fetchOperationalRiskProfiles,
   type OperationalRiskProfile,
@@ -66,12 +66,15 @@ export default function OperationalRiskPage() {
     <MacShell title="Operational risk" showTopNav={false}>
       <div style={{ display: "grid", gap: 16 }}>
         <Section>
-          <div style={{ display: "grid", gap: 6 }}>
-            <h1 style={{ margin: 0, fontSize: "1.5rem" }}>Operational risk</h1>
-            <div style={{ color: "#475569", maxWidth: 900 }}>
-              Operational risk visibility is operationally scoped and review controlled. No underwriting, autonomous enforcement, or public risk exposure is enabled.
-              Manual review remains required.
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "start" }}>
+            <div style={{ display: "grid", gap: 6 }}>
+              <h1 style={{ margin: 0, fontSize: "1.5rem" }}>Operational risk</h1>
+              <div style={{ color: "#475569", maxWidth: 900 }}>
+                Operational risk visibility is operationally scoped and review controlled. No underwriting, autonomous enforcement, or public risk exposure is enabled.
+                Manual review remains required.
+              </div>
             </div>
+            <Link to="/interoperability-adapters" style={{ color: "#2563eb", fontWeight: 900 }}>View interoperability readiness</Link>
           </div>
         </Section>
 
