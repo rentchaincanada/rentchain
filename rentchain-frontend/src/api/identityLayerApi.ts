@@ -208,6 +208,124 @@ export type IdentityAssuranceSummary = {
   generatedAt: string;
 };
 
+export type PropertyTrustSummary = {
+  subjectType: "landlord" | "organization" | "business_entity" | "property" | "operator" | "property_account_relationship";
+  subjectId: string;
+  propertyId: string | null;
+  accountId: string | null;
+  businessId: string | null;
+  businessStatus:
+    | "not_started"
+    | "self_asserted"
+    | "pending"
+    | "completed"
+    | "failed"
+    | "expired"
+    | "revoked"
+    | "manual_review_required";
+  propertyStatus:
+    | "not_started"
+    | "self_asserted"
+    | "registry_linked"
+    | "pending"
+    | "completed"
+    | "failed"
+    | "expired"
+    | "revoked"
+    | "manual_review_required";
+  operatorAuthorityStatus:
+    | "not_asserted"
+    | "self_asserted"
+    | "partially_supported"
+    | "externally_supported"
+    | "institution_reviewed"
+    | "expired"
+    | "revoked"
+    | "manual_review_required";
+  registryLinkStatus:
+    | "not_linked"
+    | "pid_present"
+    | "syntax_validated"
+    | "linked"
+    | "partial_match"
+    | "unverified"
+    | "source_unavailable"
+    | "manual_review_required";
+  relationshipType:
+    | "none"
+    | "landlord_asserted"
+    | "manager_asserted"
+    | "operator_asserted"
+    | "agent_authorized"
+    | "registry_linked"
+    | "institution_reviewed";
+  authorityConfidence: "none" | "low" | "medium" | "high";
+  trustLabel: string;
+  trustDescription: string;
+  providerCategory: "none" | "public_registry" | "business_registry" | "title_registry" | "operator_review" | "institution_review" | "future_provider";
+  consentRequired: true;
+  consentAvailable: boolean;
+  retentionClass: "authority_metadata" | "registry_reference" | "provider_reference" | "support_diagnostics" | "audit_record";
+  metadataOnly: true;
+  rawSensitivePayloadStored: false;
+  liveRegistryIntegrationEnabled: false;
+  onboardingBlocking: false;
+  publicShareable: false;
+  executionEligible: false;
+  legalOwnershipConclusion: false;
+  reverificationRequired: boolean;
+  nextReverificationAt: string | null;
+  signalSummary: {
+    totalAttestations: number;
+    businessCompletedAttestations: number;
+    propertyCompletedAttestations: number;
+    operatorAuthorityAttestations: number;
+    registryLinkedAttestations: number;
+    expiredAttestations: number;
+    revokedAttestations: number;
+    reviewRequiredAttestations: number;
+  };
+  supportSummary: {
+    visibleToSupport: true;
+    rawTitleDocumentVisible: false;
+    rawRegistryPayloadVisible: false;
+    rawBankingPayloadVisible: false;
+    legalOwnershipConclusionVisible: false;
+    attestations: Array<{
+      attestationId: string;
+      subjectType: string;
+      relationshipType: string;
+      businessStatus: string;
+      propertyStatus: string;
+      operatorAuthorityStatus: string;
+      registryLinkStatus: string;
+      providerType: string;
+      providerKey: string | null;
+      providerReferenceRedacted: string | null;
+      evidenceRefRedacted: string | null;
+      confidence: string;
+      consentPurpose: string;
+      retentionClass: string;
+      completedAt: string | null;
+      expiresAt: string | null;
+      nextReverificationAt: string | null;
+      reviewRequired: boolean;
+    }>;
+  };
+  redactions: string[];
+  reviewReasons: string[];
+  canonicalEvents: Array<{
+    eventType: string;
+    action: string;
+    subjectType: string;
+    subjectId: string;
+    authorityConfidence: string;
+    summary: string;
+    metadataOnly: true;
+  }>;
+  generatedAt: string;
+};
+
 export type IdentityLayerProfile = {
   identityId: string;
   identityType: IdentityLayerType;
@@ -235,6 +353,7 @@ export type IdentityLayerProfile = {
   };
   trustState: AccountTrustStateSummary;
   identityAssurance: IdentityAssuranceSummary;
+  propertyTrust: PropertyTrustSummary;
   lineageReferences: IdentityLayerReference[];
   verificationReferences: IdentityLayerReference[];
   consentReferences: IdentityLayerReference[];

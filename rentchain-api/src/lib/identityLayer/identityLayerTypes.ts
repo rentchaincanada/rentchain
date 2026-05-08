@@ -1,5 +1,6 @@
 import type { AccountTrustStateSummary } from "../accountTrust";
 import type { IdentityAssuranceAttestation, IdentityAssuranceSummary } from "../identityAssurance";
+import type { PropertyTrustSummary, PropertyVerificationAttestation } from "../propertyTrust";
 
 export type IdentityLayerType = "tenant" | "property" | "organization" | "operator" | "review_actor";
 
@@ -68,6 +69,7 @@ export type IdentityLayerProfile = {
   };
   trustState: AccountTrustStateSummary;
   identityAssurance: IdentityAssuranceSummary;
+  propertyTrust: PropertyTrustSummary;
   lineageReferences: IdentityLayerReference[];
   verificationReferences: IdentityLayerReference[];
   consentReferences: IdentityLayerReference[];
@@ -91,4 +93,5 @@ export type DeriveIdentityProfileInput = {
   canonicalEvents?: Array<Record<string, unknown>> | null;
   consentRecords?: Array<Record<string, unknown>> | null;
   identityAssuranceAttestations?: IdentityAssuranceAttestation[] | null;
+  propertyVerificationAttestations?: PropertyVerificationAttestation[] | null;
 };

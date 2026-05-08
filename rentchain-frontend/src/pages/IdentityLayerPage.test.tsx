@@ -127,6 +127,56 @@ function profile() {
       canonicalEvents: [],
       generatedAt: "2026-05-06T00:00:00.000Z",
     },
+    propertyTrust: {
+      subjectType: "landlord",
+      subjectId: "tenant:tenant-1",
+      propertyId: null,
+      accountId: null,
+      businessId: null,
+      businessStatus: "not_started",
+      propertyStatus: "not_started",
+      operatorAuthorityStatus: "not_asserted",
+      registryLinkStatus: "not_linked",
+      relationshipType: "none",
+      authorityConfidence: "none",
+      trustLabel: "Property authority not verified",
+      trustDescription: "No provider-neutral business, property, or operator authority attestation is present. Onboarding remains unblocked.",
+      providerCategory: "none",
+      consentRequired: true,
+      consentAvailable: false,
+      retentionClass: "authority_metadata",
+      metadataOnly: true,
+      rawSensitivePayloadStored: false,
+      liveRegistryIntegrationEnabled: false,
+      onboardingBlocking: false,
+      publicShareable: false,
+      executionEligible: false,
+      legalOwnershipConclusion: false,
+      reverificationRequired: false,
+      nextReverificationAt: null,
+      signalSummary: {
+        totalAttestations: 0,
+        businessCompletedAttestations: 0,
+        propertyCompletedAttestations: 0,
+        operatorAuthorityAttestations: 0,
+        registryLinkedAttestations: 0,
+        expiredAttestations: 0,
+        revokedAttestations: 0,
+        reviewRequiredAttestations: 0,
+      },
+      supportSummary: {
+        visibleToSupport: true,
+        rawTitleDocumentVisible: false,
+        rawRegistryPayloadVisible: false,
+        rawBankingPayloadVisible: false,
+        legalOwnershipConclusionVisible: false,
+        attestations: [],
+      },
+      redactions: [],
+      reviewReasons: [],
+      canonicalEvents: [],
+      generatedAt: "2026-05-06T00:00:00.000Z",
+    },
     lineageReferences: [],
     verificationReferences: [
       {
@@ -173,6 +223,8 @@ describe("IdentityLayerPage", () => {
     expect(screen.getByText("Account trust state")).toBeInTheDocument();
     expect(screen.getByText("Identity assurance")).toBeInTheDocument();
     expect(screen.getByText("Identity assurance not started")).toBeInTheDocument();
+    expect(screen.getByText("Business and property authority")).toBeInTheDocument();
+    expect(screen.getByText("No ownership conclusion")).toBeInTheDocument();
     expect(screen.getByText("Onboarding unblocked")).toBeInTheDocument();
     expect(screen.getByText("Payment account details are excluded.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /publish identity|share publicly|mint token|export identity publicly|autonomous verification|approve identity automatically/i })).not.toBeInTheDocument();

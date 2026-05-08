@@ -11,6 +11,7 @@ import {
   deriveIdentityAssuranceSummary,
   identityAssuranceSignalsFromAttestations,
 } from "../identityAssurance";
+import { derivePropertyTrustSummary, propertyTrustSignalsFromAttestations } from "../propertyTrust";
 import { consentReference } from "./identityConsentModels";
 import { identityReference, isVerifiedReference } from "./identityVerificationModels";
 
@@ -382,6 +383,25 @@ export function deriveIdentityProfile(input: DeriveIdentityProfileInput): Identi
     attestations: input.identityAssuranceAttestations || [],
     generatedAt,
   });
+  const propertyTrust = derivePropertyTrustSummary({
+    subjectType:
+      identityType === "property"
+        ? "property"
+        : identityType === "organization"
+          ? "organization"
+          : identityType === "operator" || identityType === "review_actor"
+            ? "operator"
+            : "landlord",
+    subjectId: identityId.replace(/^[^:]+:/, "") || "unknown",
+    propertyId:
+      identityType === "property"
+        ? sourceRecord?.id || sourceRecord?.propertyId || input.identityId
+        : sourceRecord?.propertyId || null,
+    accountId: sourceRecord?.landlordId || sourceRecord?.ownerUserId || sourceRecord?.userId || null,
+    businessId: input.organization?.id || input.organization?.organizationId || null,
+    attestations: input.propertyVerificationAttestations || [],
+    generatedAt,
+  });
   const trustState = deriveAccountTrustState({
     subjectType: trustSubjectType(identityType),
     subjectId: identityId.replace(/^[^:]+:/, "") || "unknown",
@@ -396,6 +416,10 @@ export function deriveIdentityProfile(input: DeriveIdentityProfileInput): Identi
       }),
       ...identityAssuranceSignalsFromAttestations({
         attestations: input.identityAssuranceAttestations || [],
+        generatedAt,
+      }),
+      ...propertyTrustSignalsFromAttestations({
+        attestations: input.propertyVerificationAttestations || [],
         generatedAt,
       }),
     ],
@@ -483,6 +507,7 @@ export function deriveIdentityProfile(input: DeriveIdentityProfileInput): Identi
     },
     trustState,
     identityAssurance,
+    propertyTrust,
     lineageReferences,
     verificationReferences,
     consentReferences,
