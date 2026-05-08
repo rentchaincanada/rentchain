@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { recordPdfExportEvent } from "../../lib/pdfExportObservability";
-import { useMobilePdfPreviewGuard } from "../../utils/pdfPreviewGuard";
+import { PdfPreviewBoundary } from "../documentRendering/PdfPreviewBoundary";
 
 type Props = {
   open: boolean;
@@ -11,7 +11,6 @@ export function SamplePdfModal({ open, onClose }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
-  const useMobileFallback = useMobilePdfPreviewGuard();
   const pdfUrl = "/sample/screening_report_sample.pdf?v=1";
 
   useEffect(() => {
@@ -54,16 +53,6 @@ export function SamplePdfModal({ open, onClose }: Props) {
     );
     focusable?.focus();
   }, [open]);
-
-  useEffect(() => {
-    if (!open || !useMobileFallback) return;
-    recordPdfExportEvent("pdf_mobile_fallback_used", {
-      exportType: "sample_screening_report",
-      renderingPath: "mobile_fallback",
-      status: "fallback_used",
-      fallbackMode: "mobile_open_download",
-    });
-  }, [open, useMobileFallback]);
 
   if (!open) return null;
 
@@ -210,72 +199,23 @@ export function SamplePdfModal({ open, onClose }: Props) {
                 </a>
               </div>
             </div>
-          ) : useMobileFallback ? (
-            <div style={{ display: "grid", gap: 10, padding: 16, fontSize: 14, color: "#0f172a" }}>
-              <div style={{ fontWeight: 700 }}>Open the sample PDF</div>
-              <div style={{ color: "#475569" }}>
-                Mobile browsers handle PDF files more reliably in the browser viewer or download manager.
-              </div>
-              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                <a
-                  href={pdfUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  onClick={() =>
-                    recordPdfExportEvent("pdf_download_triggered", {
-                      exportType: "sample_screening_report",
-                      renderingPath: "mobile_fallback",
-                      status: "download_triggered",
-                      fallbackMode: "mobile_open_download",
-                    })
-                  }
-                >
-                  Open PDF
-                </a>
-                <a
-                  href={pdfUrl}
-                  download
-                  onClick={() =>
-                    recordPdfExportEvent("pdf_download_triggered", {
-                      exportType: "sample_screening_report",
-                      renderingPath: "mobile_fallback",
-                      status: "download_triggered",
-                      fallbackMode: "mobile_open_download",
-                    })
-                  }
-                >
-                  Download PDF
-                </a>
-              </div>
-            </div>
           ) : (
-            <iframe
-              title="Sample screening report PDF"
-              src={`${pdfUrl}#view=FitH`}
-              className="w-full h-full rounded-xl"
-              style={{
+            <PdfPreviewBoundary
+              pdfUrl={pdfUrl}
+              exportType="sample_screening_report"
+              title="Open the sample PDF"
+              iframeTitle="Sample screening report PDF"
+              iframeClassName="w-full h-full rounded-xl"
+              active={open}
+              fallbackStyle={{ display: "grid", gap: 10, padding: 16, fontSize: 14, color: "#0f172a" }}
+              iframeStyle={{
                 width: "100%",
                 minHeight: 520,
                 height: "min(760px, 72dvh)",
                 border: "none",
                 display: "block",
               }}
-              onLoad={() =>
-                recordPdfExportEvent("pdf_export_completed", {
-                  exportType: "sample_screening_report",
-                  renderingPath: "desktop_iframe",
-                  status: "completed",
-                })
-              }
-              onError={() => {
-                setLoadError(true);
-                recordPdfExportEvent("pdf_export_failed", {
-                  exportType: "sample_screening_report",
-                  renderingPath: "desktop_iframe",
-                  status: "failed",
-                  errorCode: "iframe_load_error",
-                });
-              }}
+              onDesktopError={() => setLoadError(true)}
             />
           )}
         </div>

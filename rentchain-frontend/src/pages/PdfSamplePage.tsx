@@ -1,26 +1,14 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
+import { PdfPreviewBoundary } from "../components/documentRendering/PdfPreviewBoundary";
 import { Card } from "../components/ui/Ui";
 import { recordPdfExportEvent } from "../lib/pdfExportObservability";
 import { spacing } from "../styles/tokens";
-import { useMobilePdfPreviewGuard } from "../utils/pdfPreviewGuard";
 
 const pdfUrl = "/sample/screening_report_sample.pdf?v=1";
 
 const PdfSamplePage: React.FC = () => {
   const navigate = useNavigate();
-  const [loaded, setLoaded] = React.useState(false);
-  const useMobileFallback = useMobilePdfPreviewGuard();
-
-  React.useEffect(() => {
-    if (!useMobileFallback) return;
-    recordPdfExportEvent("pdf_mobile_fallback_used", {
-      exportType: "sample_screening_report",
-      renderingPath: "mobile_fallback",
-      status: "fallback_used",
-      fallbackMode: "mobile_open_download",
-    });
-  }, [useMobileFallback]);
 
   return (
     <div style={{ display: "grid", gap: spacing.md }}>
@@ -101,70 +89,20 @@ const PdfSamplePage: React.FC = () => {
         </div>
       </Card>
       <Card style={{ padding: 0, overflow: "visible" }}>
-        {useMobileFallback ? (
-          <div style={{ display: "grid", gap: spacing.sm, padding: spacing.md }}>
-            <div style={{ fontWeight: 700 }}>Open the sample PDF</div>
-            <div style={{ color: "#475569" }}>
-              Mobile browsers handle PDF files more reliably in the browser viewer or download manager.
-            </div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <a
-                href={pdfUrl}
-                target="_blank"
-                rel="noreferrer"
-                onClick={() =>
-                  recordPdfExportEvent("pdf_download_triggered", {
-                    exportType: "sample_screening_report",
-                    renderingPath: "mobile_fallback",
-                    status: "download_triggered",
-                    fallbackMode: "mobile_open_download",
-                  })
-                }
-                style={{ color: "#0f172a", fontWeight: 700 }}
-              >
-                Open PDF
-              </a>
-              <a
-                href={pdfUrl}
-                download
-                onClick={() =>
-                  recordPdfExportEvent("pdf_download_triggered", {
-                    exportType: "sample_screening_report",
-                    renderingPath: "mobile_fallback",
-                    status: "download_triggered",
-                    fallbackMode: "mobile_open_download",
-                  })
-                }
-                style={{ color: "#0f172a", fontWeight: 700 }}
-              >
-                Download PDF
-              </a>
-            </div>
-          </div>
-        ) : (
-          <>
-            {!loaded ? <div style={{ padding: spacing.md }}>Loading…</div> : null}
-            <iframe
-              title="Sample screening report"
-              src={`${pdfUrl}#view=FitH`}
-              style={{
-                width: "100%",
-                minHeight: 720,
-                height: "min(900px, 82dvh)",
-                border: "none",
-                display: "block",
-              }}
-              onLoad={() => {
-                setLoaded(true);
-                recordPdfExportEvent("pdf_export_completed", {
-                  exportType: "sample_screening_report",
-                  renderingPath: "desktop_iframe",
-                  status: "completed",
-                });
-              }}
-            />
-          </>
-        )}
+        <PdfPreviewBoundary
+          pdfUrl={pdfUrl}
+          exportType="sample_screening_report"
+          title="Open the sample PDF"
+          iframeTitle="Sample screening report"
+          fallbackStyle={{ display: "grid", gap: spacing.sm, padding: spacing.md }}
+          iframeStyle={{
+            width: "100%",
+            minHeight: 720,
+            height: "min(900px, 82dvh)",
+            border: "none",
+            display: "block",
+          }}
+        />
       </Card>
     </div>
   );
