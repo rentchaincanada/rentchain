@@ -9,6 +9,7 @@ import { deriveSlaState } from "../sla/deriveSlaState";
 import { deriveAdminTriageQueue } from "../triage/deriveAdminTriageQueue";
 import { loadWatchlistEntries } from "../watchlist/loadWatchlistEntries";
 import { canonicalEventToTimelineItem } from "../timeline/timelineAdapter";
+import { redactIdentifierMap } from "../governance/platformGovernance";
 import type {
   SupportConsoleAutomationItem,
   SupportConsolePolicyDecision,
@@ -294,6 +295,12 @@ function emptyResponse(spec: NormalizedResourceSpec, resourceId: string): Suppor
       domainsPresent: [],
       identifiers: {},
     },
+    governance: {
+      sensitivity: "restricted",
+      metadataOnly: true,
+      retentionCategory: "support_diagnostics",
+      redactionApplied: true,
+    },
   };
 }
 
@@ -398,7 +405,13 @@ export async function buildSupportConsoleResource(input: {
     debug: {
       canonicalEventCount: relatedEvents.length,
       domainsPresent: domainsPresent(relatedEvents),
-      identifiers: buildDebugIdentifiers(spec, doc, reconciliation),
+      identifiers: redactIdentifierMap(buildDebugIdentifiers(spec, doc, reconciliation)),
+    },
+    governance: {
+      sensitivity: "restricted",
+      metadataOnly: true,
+      retentionCategory: "support_diagnostics",
+      redactionApplied: true,
     },
   };
 }

@@ -38,5 +38,8 @@ describe("exportResponse", () => {
       "Content-Disposition",
       'attachment; filename="rentchain-expenses-2026-04-29.pdf"'
     );
+    expect(setHeader).toHaveBeenCalledWith("X-RentChain-Governance", "metadata-only");
+    expect(setHeader).toHaveBeenCalledWith("X-RentChain-Export-Sensitivity", "confidential");
+    expect(setHeader).toHaveBeenCalledWith("X-RentChain-Retention-Category", "export_metadata");
   });
 });

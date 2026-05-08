@@ -1,4 +1,9 @@
 import type { PdfExportEventName, PdfExportType, PdfRenderingPath } from "./pdfExportObservabilityTypes";
+import {
+  actorFromRequest,
+  exportGovernanceMetadata,
+  sanitizeTelemetryProps,
+} from "../governance/platformGovernance";
 
 type RecordPdfExportTelemetryInput = {
   eventName: PdfExportEventName;
@@ -32,9 +37,10 @@ function browserClass(userAgent: string) {
 export async function recordPdfExportTelemetry(input: RecordPdfExportTelemetryInput): Promise<void> {
   try {
     const { db } = await import("../../config/firebase");
-    const userId = asString(input.req?.user?.id, 160) || null;
-    const landlordId = asString(input.req?.user?.landlordId || input.req?.user?.id, 160) || null;
-    const role = asString(input.req?.user?.role || input.req?.user?.actorRole, 80) || "unknown";
+    const actor = actorFromRequest(input.req);
+    const userId = actor.actorId;
+    const landlordId = actor.landlordId;
+    const role = actor.actorRole;
     const userAgent = asString(input.req?.headers?.["user-agent"], 400);
     const durationMs = asNumber(input.durationMs);
     const byteSize = asNumber(input.byteSize);
@@ -44,7 +50,7 @@ export async function recordPdfExportTelemetry(input: RecordPdfExportTelemetryIn
       landlordId,
       role,
       eventName: input.eventName,
-      eventProps: {
+      eventProps: sanitizeTelemetryProps({
         exportType: input.exportType,
         renderingPath: input.renderingPath,
         status: input.status || null,
@@ -53,7 +59,8 @@ export async function recordPdfExportTelemetry(input: RecordPdfExportTelemetryIn
         browserClass: userAgent ? browserClass(userAgent) : "unknown",
         viewportCategory: "server",
         errorCode: input.errorCode ? asString(input.errorCode, 120).toLowerCase().replace(/[^a-z0-9_:-]+/g, "_") : null,
-      },
+      }),
+      governance: exportGovernanceMetadata(input.exportType),
       createdAt: Date.now(),
     });
   } catch (err: any) {
