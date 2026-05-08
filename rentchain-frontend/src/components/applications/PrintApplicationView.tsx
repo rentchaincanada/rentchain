@@ -61,7 +61,7 @@ export const PrintApplicationView: React.FC<PrintApplicationViewProps> = ({
   const propertyAddress = getPropertyAddress(application);
 
   return (
-    <div className="print-application-view">
+    <article className="print-application-view" aria-label="Application summary print view">
       <style>
         {`
         @media print {
@@ -105,16 +105,18 @@ export const PrintApplicationView: React.FC<PrintApplicationViewProps> = ({
             text-transform: uppercase;
             letter-spacing: 0.06em;
             color: #111;
-            margin-bottom: 4px;
+            margin: 0 0 4px;
           }
           .print-value {
             font-size: 14px;
             color: #000;
             line-height: 1.35;
+            overflow-wrap: anywhere;
           }
           .print-muted {
             color: #111;
             font-size: 12px;
+            overflow-wrap: anywhere;
           }
           .no-print {
             display: none !important;
@@ -126,12 +128,12 @@ export const PrintApplicationView: React.FC<PrintApplicationViewProps> = ({
       `}
       </style>
 
-      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
+      <header style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
         <div>
           <div style={{ fontSize: 12, letterSpacing: 0.08, textTransform: "uppercase", marginBottom: 4 }}>
             Application summary
           </div>
-          <div style={{ fontSize: 20, fontWeight: 700 }}>{applicantName}</div>
+          <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>{applicantName}</h1>
           <div style={{ fontSize: 14, marginTop: 4 }}>
             {application.propertyName}
             {propertyAddress ? ` · ${propertyAddress}` : ""}
@@ -146,18 +148,18 @@ export const PrintApplicationView: React.FC<PrintApplicationViewProps> = ({
           <div>Approved: {formatDate(application.approvedAt, true)}</div>
           <div>Status: {application.status}</div>
         </div>
-      </div>
+      </header>
 
       <div className="print-grid" style={{ marginBottom: 12 }}>
-        <div className="print-card">
-          <div className="print-label">Contact</div>
+        <section className="print-card" aria-labelledby="print-application-contact-heading">
+          <h2 id="print-application-contact-heading" className="print-label">Contact</h2>
           <div className="print-value">{applicantName}</div>
           <div className="print-muted">{commaOrDash(application.email)}</div>
           <div className="print-muted">{commaOrDash(application.phone || application.applicantPhone)}</div>
-        </div>
+        </section>
 
-        <div className="print-card">
-          <div className="print-label">Applicant details</div>
+        <section className="print-card" aria-labelledby="print-application-details-heading">
+          <h2 id="print-application-details-heading" className="print-label">Applicant details</h2>
           <div className="print-value">DOB: {formatDate(application.dateOfBirth)}</div>
           <div className="print-value" style={{ marginTop: 4 }}>
             Recent address: {formatRecentAddress(application)}
@@ -165,11 +167,11 @@ export const PrintApplicationView: React.FC<PrintApplicationViewProps> = ({
           <div className="print-value" style={{ marginTop: 4 }}>
             Monthly income: {formatMoney(application.monthlyIncome)}
           </div>
-        </div>
+        </section>
       </div>
 
-      <div className="print-card" style={{ marginBottom: 12 }}>
-        <div className="print-label">References</div>
+      <section className="print-card" aria-labelledby="print-application-references-heading" style={{ marginBottom: 12 }}>
+        <h2 id="print-application-references-heading" className="print-label">References</h2>
         <div className="print-value">
           Contacted: {application.referencesContacted ? "Yes" : "No"}
           {application.referencesContactedAt
@@ -179,30 +181,30 @@ export const PrintApplicationView: React.FC<PrintApplicationViewProps> = ({
         <div className="print-muted" style={{ marginTop: 4 }}>
           Notes: {application.referencesNotes ? application.referencesNotes : "—"}
         </div>
-      </div>
+      </section>
 
       <div className="print-grid" style={{ marginBottom: 12 }}>
-        <div className="print-card">
-          <div className="print-label">Flags</div>
+        <section className="print-card" aria-labelledby="print-application-flags-heading">
+          <h2 id="print-application-flags-heading" className="print-label">Flags</h2>
           <div className="print-value">
             {application.flags && application.flags.length > 0
               ? application.flags.join(", ")
               : "None recorded"}
           </div>
-        </div>
-        <div className="print-card">
-          <div className="print-label">Notes</div>
+        </section>
+        <section className="print-card" aria-labelledby="print-application-notes-heading">
+          <h2 id="print-application-notes-heading" className="print-label">Notes</h2>
           <div className="print-value">
             {application.notes && application.notes.trim()
               ? application.notes
               : "No notes on file."}
           </div>
-        </div>
+        </section>
       </div>
 
       {application.applicants && application.applicants.length > 0 && (
-        <div className="print-card">
-          <div className="print-label">Applicants</div>
+        <section className="print-card" aria-labelledby="print-application-applicants-heading">
+          <h2 id="print-application-applicants-heading" className="print-label">Applicants</h2>
           {application.applicants.map((appl) => (
             <div key={appl.id} style={{ marginBottom: 8 }}>
               <div className="print-value">
@@ -229,8 +231,8 @@ export const PrintApplicationView: React.FC<PrintApplicationViewProps> = ({
               )}
             </div>
           ))}
-        </div>
+        </section>
       )}
-    </div>
+    </article>
   );
 };

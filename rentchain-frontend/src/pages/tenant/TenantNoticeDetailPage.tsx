@@ -132,7 +132,7 @@ export default function TenantNoticeDetailPage() {
       <Section style={{ maxWidth: 900, margin: "0 auto" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: spacing.md }}>
           <div>
-            <div style={{ fontSize: "1.6rem", fontWeight: 800, color: textTokens.primary }}>Notice</div>
+            <h1 style={{ margin: 0, fontSize: "1.6rem", fontWeight: 800, color: textTokens.primary }}>Notice</h1>
             <div style={{ color: textTokens.muted }}>Official communication from your landlord</div>
           </div>
           <a
@@ -186,7 +186,7 @@ export default function TenantNoticeDetailPage() {
           <Card elevated>
             <div style={{ display: "grid", gap: spacing.sm }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                <div style={{ fontSize: "1.3rem", fontWeight: 800, color: textTokens.primary }}>{notice.title}</div>
+                <h2 style={{ margin: 0, fontSize: "1.3rem", fontWeight: 800, color: textTokens.primary }}>{notice.title}</h2>
                 <div style={{ color: textTokens.muted, fontSize: "0.95rem" }}>{formatNoticeType(notice.type)}</div>
               </div>
               <div style={{ color: textTokens.secondary, fontSize: "0.95rem" }}>

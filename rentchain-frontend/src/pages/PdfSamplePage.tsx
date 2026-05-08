@@ -9,6 +9,8 @@ const pdfUrl = "/sample/screening_report_sample.pdf?v=1";
 
 const PdfSamplePage: React.FC = () => {
   const navigate = useNavigate();
+  const titleId = React.useId();
+  const previewId = React.useId();
 
   return (
     <div style={{ display: "grid", gap: spacing.md }}>
@@ -22,10 +24,10 @@ const PdfSamplePage: React.FC = () => {
             flexWrap: "wrap",
           }}
         >
-          <div style={{ fontWeight: 700, fontSize: "1.1rem" }}>
+          <h1 id={titleId} style={{ margin: 0, fontWeight: 700, fontSize: "1.1rem" }}>
             Sample screening report
-          </div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          </h1>
+          <div role="group" aria-label="Sample screening report PDF actions" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button
               type="button"
               onClick={() => navigate(-1)}
@@ -44,6 +46,7 @@ const PdfSamplePage: React.FC = () => {
               href={pdfUrl}
               target="_blank"
               rel="noreferrer"
+              aria-label="Open sample screening report in a new tab"
               onClick={() =>
                 recordPdfExportEvent("pdf_download_triggered", {
                   exportType: "sample_screening_report",
@@ -66,6 +69,7 @@ const PdfSamplePage: React.FC = () => {
             <a
               href={pdfUrl}
               download
+              aria-label="Download sample screening report PDF"
               onClick={() =>
                 recordPdfExportEvent("pdf_download_triggered", {
                   exportType: "sample_screening_report",
@@ -88,7 +92,10 @@ const PdfSamplePage: React.FC = () => {
           </div>
         </div>
       </Card>
-      <Card style={{ padding: 0, overflow: "visible" }}>
+      <Card role="region" aria-labelledby={previewId} style={{ padding: 0, overflow: "visible" }}>
+        <div id={previewId} style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)" }}>
+          Sample screening report PDF preview
+        </div>
         <PdfPreviewBoundary
           pdfUrl={pdfUrl}
           exportType="sample_screening_report"

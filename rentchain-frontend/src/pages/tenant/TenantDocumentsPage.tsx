@@ -47,7 +47,7 @@ export const TenantDocumentsPage: React.FC = () => {
           <div style={{ color: "#9ca3af", fontSize: 12, textTransform: "uppercase", letterSpacing: "0.04em" }}>
             Documents & Notices
           </div>
-          <div style={{ fontSize: 20, fontWeight: 700 }}>Issued items</div>
+          <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>Issued items</h1>
           <div style={{ color: "#9ca3af", fontSize: 13 }}>
             {lease?.propertyName || "Your lease"} · {lease?.unitNumber ? `Unit ${lease.unitNumber}` : "Unit"}
           </div>
@@ -110,6 +110,7 @@ export const TenantDocumentsPage: React.FC = () => {
                         href={d.fileUrl}
                         target="_blank"
                         rel="noopener noreferrer"
+                        aria-label={`View ${d.title || "tenant document"} in a new tab`}
                         style={{ color: "#93c5fd", textDecoration: "underline", fontWeight: 600 }}
                       >
                         View

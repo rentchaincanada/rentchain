@@ -9,20 +9,28 @@ type Props = {
 
 export function SamplePdfModal({ open, onClose }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
+  const titleId = React.useId();
+  const descriptionId = React.useId();
   const [loadError, setLoadError] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const pdfUrl = "/sample/screening_report_sample.pdf?v=1";
+
+  const closeModal = React.useCallback(() => {
+    onClose();
+    previouslyFocusedRef.current?.focus();
+  }, [onClose]);
 
   useEffect(() => {
     if (!open) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        onClose();
+        closeModal();
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [open, onClose]);
+  }, [closeModal, open]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -45,6 +53,8 @@ export function SamplePdfModal({ open, onClose }: Props) {
 
   useEffect(() => {
     if (!open) return;
+    previouslyFocusedRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setLoadError(false);
     const node = containerRef.current;
     if (!node) return;
@@ -81,7 +91,7 @@ export function SamplePdfModal({ open, onClose }: Props) {
     <div
       role="presentation"
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
+        if (event.target === event.currentTarget) closeModal();
       }}
       style={{
         position: "fixed",
@@ -98,7 +108,8 @@ export function SamplePdfModal({ open, onClose }: Props) {
         ref={containerRef}
         role="dialog"
         aria-modal="true"
-        aria-label="Sample screening report"
+        aria-labelledby={titleId}
+        aria-describedby={descriptionId}
         style={{
           width: "min(1024px, 95vw)",
           minHeight: isMobile ? "auto" : 520,
@@ -123,10 +134,11 @@ export function SamplePdfModal({ open, onClose }: Props) {
             borderBottom: "1px solid #e2e8f0",
           }}
         >
-          <div style={{ fontWeight: 700 }}>Sample screening report</div>
+          <h2 id={titleId} style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Sample screening report</h2>
           <div style={{ display: "flex", gap: 8 }}>
             <button
               type="button"
+              aria-label="View sample screening report full page"
               onClick={() => {
                 recordPdfExportEvent("pdf_download_triggered", {
                   exportType: "sample_screening_report",
@@ -154,6 +166,7 @@ export function SamplePdfModal({ open, onClose }: Props) {
               href={pdfUrl}
               target="_blank"
               rel="noreferrer"
+              aria-label="Open sample screening report in a new tab"
               onClick={() =>
                 recordPdfExportEvent("pdf_download_triggered", {
                   exportType: "sample_screening_report",
@@ -175,7 +188,8 @@ export function SamplePdfModal({ open, onClose }: Props) {
             </a>
             <button
               type="button"
-              onClick={onClose}
+              aria-label="Close sample screening report preview"
+              onClick={closeModal}
               style={{
                 border: "1px solid #e2e8f0",
                 background: "#fff",
@@ -189,12 +203,15 @@ export function SamplePdfModal({ open, onClose }: Props) {
             </button>
           </div>
         </div>
+        <div id={descriptionId} style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)" }}>
+          PDF preview controls for the sample screening report.
+        </div>
         <div style={{ flex: 1, position: "relative", background: "#f8fafc", overflow: "visible" }}>
           {loadError ? (
-            <div style={{ padding: 16, fontSize: 14, color: "#b91c1c" }}>
+            <div role="alert" style={{ padding: 16, fontSize: 14, color: "#b91c1c" }}>
               Unable to load the sample report.
               <div style={{ marginTop: 8 }}>
-                <a href={pdfUrl} target="_blank" rel="noreferrer">
+                <a href={pdfUrl} target="_blank" rel="noreferrer" aria-label="Open sample screening report in a new tab">
                   Open in new tab
                 </a>
               </div>

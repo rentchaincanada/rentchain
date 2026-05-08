@@ -24,6 +24,11 @@ export const LeasePackGeneratorModal: React.FC<Props> = ({
   properties,
   initialPropertyId,
 }) => {
+  const containerRef = React.useRef<HTMLDivElement | null>(null);
+  const previouslyFocusedRef = React.useRef<HTMLElement | null>(null);
+  const titleId = React.useId();
+  const descriptionId = React.useId();
+  const propertySelectId = React.useId();
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>(initialPropertyId || "");
   const [copyMessage, setCopyMessage] = useState<string>("");
 
@@ -35,6 +40,11 @@ export const LeasePackGeneratorModal: React.FC<Props> = ({
   const provinceCode = normalizeProvinceCode(selectedProperty?.province || "UNSET");
   const pack = getLeasePackForProvince(provinceCode);
 
+  const closeModal = React.useCallback(() => {
+    onClose();
+    previouslyFocusedRef.current?.focus();
+  }, [onClose]);
+
   React.useEffect(() => {
     if (!open) return;
     if (initialPropertyId) {
@@ -45,6 +55,28 @@ export const LeasePackGeneratorModal: React.FC<Props> = ({
       setSelectedPropertyId(String(properties[0].id));
     }
   }, [initialPropertyId, open, properties]);
+
+  React.useEffect(() => {
+    if (!open) return;
+    previouslyFocusedRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const node = containerRef.current;
+    const focusable = node?.querySelector<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    );
+    focusable?.focus();
+  }, [open]);
+
+  React.useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        closeModal();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [closeModal, open]);
 
   if (!open) return null;
 
@@ -68,6 +100,27 @@ export const LeasePackGeneratorModal: React.FC<Props> = ({
     }
   };
 
+  const trapFocus = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "Tab") return;
+    const node = containerRef.current;
+    if (!node) return;
+    const focusable = Array.from(
+      node.querySelectorAll<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      )
+    ).filter((el) => !el.hasAttribute("disabled"));
+    if (!focusable.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+
   return (
     <div
       style={{
@@ -82,6 +135,13 @@ export const LeasePackGeneratorModal: React.FC<Props> = ({
       }}
     >
       <div
+        ref={containerRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={descriptionId}
+        tabIndex={-1}
+        onKeyDown={trapFocus}
         style={{
           width: "min(820px, 96vw)",
           maxHeight: "90dvh",
@@ -97,14 +157,15 @@ export const LeasePackGeneratorModal: React.FC<Props> = ({
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: spacing.sm }}>
           <div>
-            <div style={{ fontWeight: 800, fontSize: "1.1rem" }}>Generate Lease Pack</div>
-            <div style={{ color: text.muted, fontSize: "0.92rem", marginTop: 4 }}>
+            <h2 id={titleId} style={{ margin: 0, fontWeight: 800, fontSize: "1.1rem" }}>Generate Lease Pack</h2>
+            <div id={descriptionId} style={{ color: text.muted, fontSize: "0.92rem", marginTop: 4 }}>
               Choose a property to view province pack contents and download documents.
             </div>
           </div>
           <button
             type="button"
-            onClick={onClose}
+            aria-label="Close lease pack generator"
+            onClick={closeModal}
             style={{
               border: `1px solid ${colors.border}`,
               borderRadius: radius.pill,
@@ -118,8 +179,9 @@ export const LeasePackGeneratorModal: React.FC<Props> = ({
         </div>
 
         <div style={{ display: "grid", gap: 8 }}>
-          <label style={{ fontWeight: 700, fontSize: "0.9rem" }}>Property</label>
+          <label htmlFor={propertySelectId} style={{ fontWeight: 700, fontSize: "0.9rem" }}>Property</label>
           <select
+            id={propertySelectId}
             value={selectedPropertyId}
             onChange={(event) => setSelectedPropertyId(event.target.value)}
             style={{
@@ -182,6 +244,7 @@ export const LeasePackGeneratorModal: React.FC<Props> = ({
                 <a
                   href={pack.bundleUrl}
                   download
+                  aria-label={`Download ${pack.title} bundle`}
                   onClick={() => void handleDownload()}
                   style={{
                     borderRadius: radius.pill,
@@ -234,6 +297,7 @@ export const LeasePackGeneratorModal: React.FC<Props> = ({
                       <a
                         href={doc.url}
                         download
+                        aria-label={`Download ${doc.name}`}
                         onClick={() => void handleDownload()}
                         style={{
                           textDecoration: "none",
@@ -278,4 +342,3 @@ export const LeasePackGeneratorModal: React.FC<Props> = ({
     </div>
   );
 };
-
