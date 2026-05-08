@@ -24,6 +24,14 @@ describe("deriveIdentityProfile", () => {
       })
     );
     expect(profile.verificationSummary.verifiedReferences).toBeGreaterThan(0);
+    expect(profile.trustState).toEqual(
+      expect.objectContaining({
+        trustLevel: "institution_reviewed",
+        manualReviewRequired: true,
+        rawSensitivePayloadStored: false,
+        executionEligible: false,
+      })
+    );
     expect(profile.consentSummary.consentAvailable).toBe(true);
     expect(profile.reviewReferences).toHaveLength(1);
     expect(profile.canonicalEvents).toEqual(
@@ -43,6 +51,7 @@ describe("deriveIdentityProfile", () => {
     });
 
     expect(profile.status).toBe("partially_verified");
+    expect(profile.trustState.trustLevel).toBe("asserted");
     expect(profile.consentSummary.missingConsentReasons).toContain("Consent lineage reference is missing.");
     expect(profile.portabilitySummary.portabilityStatus).toBe("limited");
   });
@@ -57,6 +66,7 @@ describe("deriveIdentityProfile", () => {
     });
 
     expect(profile.status).toBe("verified");
+    expect(profile.trustState.trustLevel).toBe("provider_attested");
     expect(profile.verificationReferences).toEqual(
       expect.arrayContaining([expect.objectContaining({ label: "Registry verification reference", status: "available" })])
     );
@@ -101,5 +111,6 @@ describe("deriveIdentityProfile", () => {
     expect(serialized).not.toContain("sensitive-credit-payload");
     expect(serialized).not.toContain("sensitive-payment-account");
     expect(profile.redactions).toEqual(expect.arrayContaining(["Raw screening and credit bureau payloads are excluded."]));
+    expect(profile.trustState.redactions).toEqual(expect.arrayContaining(["Raw government identity documents are excluded."]));
   });
 });

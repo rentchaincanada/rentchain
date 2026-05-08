@@ -10,10 +10,10 @@ function label(value: string) {
 function statusTone(status: string) {
   if (status === "blocked") return { color: "#991b1b", background: "#fee2e2", border: "#fecaca" };
   if (status === "review_required" || status === "missing") return { color: "#92400e", background: "#fef3c7", border: "#fde68a" };
-  if (status === "verified" || status === "available" || status === "ready") {
+  if (status === "verified" || status === "available" || status === "ready" || status === "provider_attested" || status === "institution_reviewed") {
     return { color: "#166534", background: "#dcfce7", border: "#bbf7d0" };
   }
-  if (status === "partially_verified" || status === "limited") {
+  if (status === "partially_verified" || status === "limited" || status === "platform_correlated" || status === "authenticated") {
     return { color: "#9a3412", background: "#ffedd5", border: "#fed7aa" };
   }
   return { color: "#475569", background: "#f8fafc", border: "#e2e8f0" };
@@ -110,6 +110,45 @@ export function IdentityProfilePanel({ profile }: { profile: IdentityLayerProfil
             </Card>
           ))}
         </div>
+      </Section>
+
+      <Section style={{ display: "grid", gap: 10 }}>
+        <div style={{ fontWeight: 900 }}>Account trust state</div>
+        <Card style={{ borderRadius: 8, padding: 12 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+            <div>
+              <strong>{profile.trustState.trustLabel}</strong>
+              <div style={{ color: "#475569", fontSize: 13, marginTop: 4, lineHeight: 1.5 }}>
+                {profile.trustState.trustDescription}
+              </div>
+            </div>
+            <Badge status={profile.trustState.trustLevel}>{label(profile.trustState.trustLevel)}</Badge>
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+            <Badge status={profile.trustState.manualReviewRequired ? "review_required" : "unknown"}>Manual review required</Badge>
+            <Badge status={profile.trustState.providerIntegrationEnabled ? "available" : "limited"}>Provider integration disabled</Badge>
+            <Badge status={profile.trustState.executionEligible ? "blocked" : "available"}>Execution disabled</Badge>
+            <Badge status={profile.trustState.rawSensitivePayloadStored ? "blocked" : "available"}>Metadata only</Badge>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 8, marginTop: 12 }}>
+            {[
+              ["Signals", profile.trustState.signalSummary.totalSignals],
+              ["Verified", profile.trustState.signalSummary.verifiedSignals],
+              ["Provider attested", profile.trustState.signalSummary.providerAttestedSignals],
+              ["Needs review", profile.trustState.signalSummary.reviewRequiredSignals],
+            ].map(([name, value]) => (
+              <div key={String(name)} style={{ border: "1px solid #e2e8f0", borderRadius: 8, padding: 10 }}>
+                <div style={{ color: "#64748b", fontSize: 12, fontWeight: 800 }}>{name}</div>
+                <strong style={{ color: "#0f172a", fontSize: 18 }}>{String(value)}</strong>
+              </div>
+            ))}
+          </div>
+          {profile.trustState.missingSignals.length ? (
+            <div style={{ color: "#92400e", fontSize: 13, marginTop: 10 }}>
+              Missing trust signals: {profile.trustState.missingSignals.map(label).join(", ")}.
+            </div>
+          ) : null}
+        </Card>
       </Section>
 
       <ReferenceList title="View verification lineage" references={profile.verificationReferences} />
