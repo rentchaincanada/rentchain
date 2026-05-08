@@ -333,6 +333,12 @@ button,
     display: block !important;
     padding: 24px !important;
     background: #fff !important;
+    box-sizing: border-box !important;
+    height: auto !important;
+    min-height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    transform: none !important;
   }
 
   body[data-print-root-active="true"] > [data-print-root="true"],
@@ -357,13 +363,16 @@ button,
   body:not([data-print-root-active="true"]) .print-only-application {
     display: block !important;
     visibility: visible !important;
-    position: absolute !important;
-    left: 0 !important;
-    top: 0 !important;
+    position: static !important;
     width: 100% !important;
     padding: 24px !important;
     background: #fff !important;
     box-sizing: border-box !important;
+    height: auto !important;
+    min-height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    transform: none !important;
   }
 
   body:not([data-print-root-active="true"]) .print-only-summary *,
