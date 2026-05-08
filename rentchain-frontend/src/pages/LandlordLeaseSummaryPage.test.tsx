@@ -78,6 +78,8 @@ describe("LandlordLeaseSummaryPage", () => {
 
     expect(await screen.findByText("Lease summary")).toBeInTheDocument();
     expect(screen.getByTestId("lease-document-view")).toBeInTheDocument();
+    expect(screen.getByRole("article", { name: "Residential Lease Pack" })).toBeInTheDocument();
+    expect(screen.getByRole("term", { name: "Property" })).toBeInTheDocument();
     expect(screen.getByText("Residential Lease Pack")).toBeInTheDocument();
     expect(screen.getByText("Property and Unit")).toBeInTheDocument();
     expect(screen.getByText("Landlord and Tenant")).toBeInTheDocument();

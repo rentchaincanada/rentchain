@@ -45,6 +45,9 @@ describe("PdfSamplePage", () => {
       </MemoryRouter>
     );
 
+    expect(screen.getByRole("heading", { name: "Sample screening report" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Sample screening report PDF actions" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Sample screening report PDF preview" })).toBeInTheDocument();
     expect(await screen.findByTitle("Sample screening report")).toBeInTheDocument();
     expect(screen.queryByText("Open the sample PDF")).not.toBeInTheDocument();
   });
@@ -69,10 +72,10 @@ describe("PdfSamplePage", () => {
       )
     );
     expect(screen.queryByTitle("Sample screening report")).not.toBeInTheDocument();
-    expect(screen.getAllByRole("link", { name: "Open PDF" })[0]).toHaveAttribute(
+    expect(screen.getAllByRole("link", { name: "Sample screening report: open PDF in a new tab" })[0]).toHaveAttribute(
       "href",
       "/sample/screening_report_sample.pdf?v=1"
     );
-    expect(screen.getAllByRole("link", { name: "Download PDF" })[0]).toHaveAttribute("download");
+    expect(screen.getAllByRole("link", { name: "Sample screening report: download PDF" })[0]).toHaveAttribute("download");
   });
 });

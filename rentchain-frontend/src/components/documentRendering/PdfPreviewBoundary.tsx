@@ -33,6 +33,9 @@ export function PdfPreviewBoundary({
   onDesktopError,
 }: PdfPreviewBoundaryProps) {
   const useMobileFallback = useMobilePdfPreviewGuard();
+  const fallbackTitleId = React.useId();
+  const fallbackDescriptionId = React.useId();
+  const previewLabel = iframeTitle || title;
 
   React.useEffect(() => {
     if (!active || !useMobileFallback) return;
@@ -46,14 +49,20 @@ export function PdfPreviewBoundary({
 
   if (useMobileFallback) {
     return (
-      <div style={fallbackStyle}>
-        <div style={{ fontWeight: 700 }}>{title}</div>
-        <div style={{ color: "#475569" }}>{fallbackDescription}</div>
+      <div
+        role="region"
+        aria-labelledby={fallbackTitleId}
+        aria-describedby={fallbackDescriptionId}
+        style={fallbackStyle}
+      >
+        <div id={fallbackTitleId} style={{ fontWeight: 700 }}>{title}</div>
+        <div id={fallbackDescriptionId} style={{ color: "#475569" }}>{fallbackDescription}</div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <a
             href={pdfUrl}
             target="_blank"
             rel="noreferrer"
+            aria-label={`${previewLabel}: open PDF in a new tab`}
             onClick={() =>
               recordPdfExportEvent("pdf_download_triggered", {
                 exportType,
@@ -68,6 +77,7 @@ export function PdfPreviewBoundary({
           <a
             href={pdfUrl}
             download
+            aria-label={`${previewLabel}: download PDF`}
             onClick={() =>
               recordPdfExportEvent("pdf_download_triggered", {
                 exportType,
@@ -86,7 +96,8 @@ export function PdfPreviewBoundary({
 
   return (
     <iframe
-      title={iframeTitle || title}
+      title={previewLabel}
+      aria-label={previewLabel}
       src={`${pdfUrl}#view=FitH`}
       className={iframeClassName}
       style={iframeStyle}

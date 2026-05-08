@@ -40,5 +40,8 @@ describe("print PDF guardrails", () => {
     expect(source).not.toMatch(/min-height:\s*100vh/);
     expect(source).toMatch(/overflow:\s*visible/);
     expect(source).toMatch(/transform:\s*none/);
+    expect(source).toMatch(/<article className="print-application-view"/);
+    expect(source).toMatch(/aria-label="Application summary print view"/);
+    expect(source).toMatch(/overflow-wrap:\s*anywhere/);
   });
 });
