@@ -11,6 +11,7 @@ import {
 import { toAutopilotPolicySummary } from "../lib/policy/policyEvaluator";
 import { loadUnitsForProperty, resolveUnitReference } from "./leaseCanonicalizationService";
 import { isTargetedHiddenLeaseId } from "../lib/testDataVisibilityTargets";
+import { composeLeaseNoticeLegalDocument } from "../lib/legalDocuments/leaseNoticeComposition";
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -720,6 +721,26 @@ export function buildPreview(lease: LeaseWorkflowLease, input: LeaseNoticePrevie
       : input.rentChangeMode === "undecided"
       ? null
       : proposedRent;
+  const legalDocument = composeLeaseNoticeLegalDocument({
+    leaseId: lease.id,
+    landlordId: lease.landlordId,
+    tenantId: lease.tenantId,
+    propertyId: lease.propertyId,
+    unitId: lease.unitId,
+    province: lease.province,
+    leaseType: lease.leaseType,
+    noticeType,
+    rule,
+    rentChangeMode: input.rentChangeMode,
+    currency: lease.currency,
+    currentRent: lease.currentRent,
+    proposedRent: effectiveProposedRent,
+    newTermType: input.newTermType,
+    newTermStartDate: newLeaseStartDate,
+    newTermEndDate: newLeaseEndDate,
+    responseDeadlineAt,
+    noticeDueAt,
+  });
   const preview = {
     leaseId: lease.id,
     landlordId: lease.landlordId,
@@ -741,14 +762,10 @@ export function buildPreview(lease: LeaseWorkflowLease, input: LeaseNoticePrevie
     responseRequired: true,
     responseDeadlineAt,
     summary: {
-      title: "Lease notice preview",
-      body:
-        input.rentChangeMode === "undecided"
-          ? "Rent will be decided later by the landlord."
-          : effectiveProposedRent != null
-          ? `Proposed rent: ${effectiveProposedRent} ${lease.currency}`
-          : "No rent change provided.",
+      title: legalDocument.heading.title,
+      body: legalDocument.heading.description,
     },
+    legalDocumentMetadata: legalDocument.metadata,
   };
   return { ok: true as const, rule, preview };
 }
