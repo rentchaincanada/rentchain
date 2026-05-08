@@ -131,4 +131,49 @@ describe("LandlordLeaseSummaryPage", () => {
     expect(downloadAnchor?.download).toBe("lease-3.pdf");
     expect(downloadAnchor?.download).not.toMatch(/\.txt$/);
   });
+
+  it("paginates long lease summary content without adding empty trailing pages", () => {
+    const longText = Array.from({ length: 180 }, (_, index) => `deterministic clause ${index + 1}`).join(" ");
+    const pdfText = buildLeaseSummaryPdfSource({
+      id: "lease-long",
+      propertyId: "prop-1",
+      propertyName: "Coburg Rd",
+      unitNumber: "3",
+      monthlyRent: 2100,
+      startDate: "2026-01-01",
+      endDate: "2026-12-31",
+      status: "active",
+      tenantName: "Tony Wenpeng",
+      tenantEmail: "tony@example.com",
+      documentUrl: null,
+      paymentReadiness: {
+        readinessStatus: "ready_to_configure",
+        readinessLabel: "Rent terms ready for future setup",
+        readinessDescription: longText,
+        requiredNextAction: "confirm_payment_setup_later",
+        rentTerms: {
+          rentAmountAvailable: true,
+          dueDateAvailable: true,
+          leaseDatesAvailable: true,
+          tenantLinked: true,
+          leaseExecuted: false,
+        },
+        paymentSetup: {
+          processorConnected: false,
+          moneyMovementEnabled: false,
+          storedPaymentMethod: false,
+        },
+      },
+      leaseExecution: {
+        executionStatus: "ready_for_review",
+        executionLabel: "Execution review",
+        executionDescription: longText,
+      },
+    } as any);
+
+    const pageCount = (pdfText.match(/\/Type \/Page /g) || []).length;
+    expect(pageCount).toBeGreaterThan(1);
+    expect(pdfText).toContain(`/Count ${pageCount}`);
+    expect(pdfText).toContain("deterministic clause 180");
+  });
 });

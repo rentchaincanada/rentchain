@@ -85,13 +85,22 @@ export function buildLeaseSummaryPdfSource(lease: LandlordActiveLease) {
     });
   }
 
-  const content: string[] = [];
   const page = { width: 612, height: 792 };
   const docX = 54;
   const docY = 52;
   const docWidth = 504;
   const docHeight = 688;
+  const bottomY = 88;
+  const pageTopY = 704;
+  const pages: string[][] = [];
+  let content: string[] = [];
   let y = 704;
+
+  const addPage = () => {
+    content = [];
+    pages.push(content);
+    y = pageTopY;
+  };
 
   const textAt = (text: string, x: number, baselineY: number, size = 10, font = "F1") => {
     content.push(`BT /${font} ${size} Tf ${x} ${baselineY} Td (${escapePdfText(text)}) Tj ET`);
@@ -102,8 +111,17 @@ export function buildLeaseSummaryPdfSource(lease: LandlordActiveLease) {
   const rect = (x: number, rectY: number, width: number, height: number, fill = false) => {
     content.push(`q ${fill ? "0.97 0.98 0.99 rg" : "0.86 0.89 0.93 RG"} ${x} ${rectY} ${width} ${height} re ${fill ? "f" : "S"} Q`);
   };
+  const drawPageFrame = () => {
+    rect(docX, docY, docWidth, docHeight);
+  };
+  const ensureSpace = (neededHeight: number) => {
+    if (y - neededHeight >= bottomY) return;
+    addPage();
+    drawPageFrame();
+  };
 
-  rect(docX, docY, docWidth, docHeight);
+  addPage();
+  drawPageFrame();
   textAt("RentChain lease record", 236, y, 10, "F2");
   y -= 24;
   textAt("Residential Lease Pack", 193, y, 20, "F2");
@@ -112,11 +130,13 @@ export function buildLeaseSummaryPdfSource(lease: LandlordActiveLease) {
   y -= 30;
 
   sections.forEach((section) => {
+    ensureSpace(48);
     line(84, y + 14, 528, y + 14);
     textAt(section.title, 84, y, 13, "F2");
     y -= 22;
 
     section.rows.forEach(([label, value]) => {
+      ensureSpace(34);
       rect(84, y - 8, 444, 24, true);
       textAt(label.toUpperCase(), 96, y, 8, "F2");
       textAt(String(value), 252, y, 10);
@@ -130,7 +150,7 @@ export function buildLeaseSummaryPdfSource(lease: LandlordActiveLease) {
       words.forEach((word) => {
         const next = current ? `${current} ${word}` : word;
         if (next.length > 86) {
-          wrapped.push(current);
+          if (current) wrapped.push(current);
           current = word;
         } else {
           current = next;
@@ -138,6 +158,7 @@ export function buildLeaseSummaryPdfSource(lease: LandlordActiveLease) {
       });
       if (current) wrapped.push(current);
       wrapped.forEach((wrappedLine) => {
+        ensureSpace(18);
         textAt(wrappedLine, 96, y, 10);
         y -= 14;
       });
@@ -146,15 +167,21 @@ export function buildLeaseSummaryPdfSource(lease: LandlordActiveLease) {
     y -= 10;
   });
 
-  const stream = content.join("\n");
+  const pageObjectIds = pages.map((_, index) => 5 + index * 2);
+  const contentObjectIds = pages.map((_, index) => 6 + index * 2);
   const objects = [
     "1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n",
-    "2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n",
-    `3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 ${page.width} ${page.height}] /Resources << /Font << /F1 4 0 R /F2 6 0 R >> >> /Contents 5 0 R >> endobj\n`,
-    "4 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj\n",
-    `5 0 obj << /Length ${new TextEncoder().encode(stream).length} >> stream\n${stream}\nendstream endobj\n`,
-    "6 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >> endobj\n",
+    `2 0 obj << /Type /Pages /Kids [${pageObjectIds.map((id) => `${id} 0 R`).join(" ")}] /Count ${pages.length} >> endobj\n`,
+    "3 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj\n",
+    "4 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >> endobj\n",
   ];
+  pages.forEach((pageContent, index) => {
+    const stream = pageContent.join("\n");
+    objects.push(
+      `${pageObjectIds[index]} 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 ${page.width} ${page.height}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${contentObjectIds[index]} 0 R >> endobj\n`,
+      `${contentObjectIds[index]} 0 obj << /Length ${new TextEncoder().encode(stream).length} >> stream\n${stream}\nendstream endobj\n`
+    );
+  });
   let pdf = "%PDF-1.4\n";
   const offsets = [0];
   for (const object of objects) {

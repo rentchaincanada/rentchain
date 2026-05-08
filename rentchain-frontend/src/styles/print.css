@@ -9,12 +9,16 @@
   }
 
   .rc-print-area {
-    position: absolute;
-    left: 0;
-    top: 0;
+    position: static;
     width: 100%;
     padding: 24px;
     background: white;
+    box-sizing: border-box;
+    height: auto;
+    min-height: auto;
+    max-height: none;
+    overflow: visible;
+    transform: none;
   }
 
   .rc-print-clean {

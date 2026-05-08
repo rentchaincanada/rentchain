@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { useMobilePdfPreviewGuard } from "../../utils/pdfPreviewGuard";
 
 type Props = {
   open: boolean;
@@ -9,6 +10,7 @@ export function SamplePdfModal({ open, onClose }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const useMobileFallback = useMobilePdfPreviewGuard();
   const pdfUrl = "/sample/screening_report_sample.pdf?v=1";
 
   useEffect(() => {
@@ -99,13 +101,14 @@ export function SamplePdfModal({ open, onClose }: Props) {
         aria-label="Sample screening report"
         style={{
           width: "min(1024px, 95vw)",
-          height: isMobile ? "75vh" : "70vh",
+          minHeight: isMobile ? "auto" : 520,
+          maxHeight: isMobile ? "none" : "min(860px, 86dvh)",
           background: "#fff",
           borderRadius: 16,
           boxShadow: "0 30px 80px rgba(2,6,23,0.45)",
           display: "flex",
           flexDirection: "column",
-          overflow: "hidden",
+          overflow: "visible",
         }}
         onMouseDown={(event) => event.stopPropagation()}
         onKeyDown={trapFocus}
@@ -174,13 +177,28 @@ export function SamplePdfModal({ open, onClose }: Props) {
             </button>
           </div>
         </div>
-        <div style={{ flex: 1, position: "relative", background: "#f8fafc" }}>
+        <div style={{ flex: 1, position: "relative", background: "#f8fafc", overflow: "visible" }}>
           {loadError ? (
             <div style={{ padding: 16, fontSize: 14, color: "#b91c1c" }}>
               Unable to load the sample report.
               <div style={{ marginTop: 8 }}>
                 <a href={pdfUrl} target="_blank" rel="noreferrer">
                   Open in new tab
+                </a>
+              </div>
+            </div>
+          ) : useMobileFallback ? (
+            <div style={{ display: "grid", gap: 10, padding: 16, fontSize: 14, color: "#0f172a" }}>
+              <div style={{ fontWeight: 700 }}>Open the sample PDF</div>
+              <div style={{ color: "#475569" }}>
+                Mobile browsers handle PDF files more reliably in the browser viewer or download manager.
+              </div>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                <a href={pdfUrl} target="_blank" rel="noreferrer">
+                  Open PDF
+                </a>
+                <a href={pdfUrl} download>
+                  Download PDF
                 </a>
               </div>
             </div>
@@ -191,8 +209,10 @@ export function SamplePdfModal({ open, onClose }: Props) {
               className="w-full h-full rounded-xl"
               style={{
                 width: "100%",
-                height: "100%",
+                minHeight: 520,
+                height: "min(760px, 72dvh)",
                 border: "none",
+                display: "block",
               }}
               onError={() => setLoadError(true)}
             />

@@ -77,11 +77,15 @@ export const PrintApplicationView: React.FC<PrintApplicationViewProps> = ({
           }
           .print-application-view {
             display: block !important;
-            position: absolute;
-            inset: 0;
+            position: static;
             padding: 32px 36px;
             width: 100%;
-            min-height: 100vh;
+            height: auto;
+            min-height: auto;
+            max-height: none;
+            overflow: visible;
+            transform: none;
+            box-sizing: border-box;
             background: #fff;
             color: #000;
             font-family: "Helvetica Neue", Arial, sans-serif;
