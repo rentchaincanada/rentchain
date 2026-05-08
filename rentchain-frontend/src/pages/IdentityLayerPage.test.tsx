@@ -57,6 +57,34 @@ function profile() {
       portabilityStatus: "limited",
       blockedReasons: [],
     },
+    trustState: {
+      subjectType: "tenant",
+      subjectId: "tenant:tenant-1",
+      trustLevel: "platform_correlated",
+      trustLabel: "Platform-correlated signals present",
+      trustDescription: "Multiple RentChain operational records align, but they should not be treated as government-grade identity proof.",
+      manualReviewRequired: true,
+      providerIntegrationEnabled: false,
+      rawSensitivePayloadStored: false,
+      executionEligible: false,
+      externalSharingRequiresConsent: true,
+      signalSummary: {
+        totalSignals: 2,
+        assertedSignals: 0,
+        pendingSignals: 0,
+        verifiedSignals: 2,
+        providerAttestedSignals: 0,
+        expiredSignals: 0,
+        revokedSignals: 0,
+        reviewRequiredSignals: 0,
+      },
+      activeSignals: [],
+      missingSignals: ["identity"],
+      reviewReasons: [],
+      redactions: ["Trust state stores metadata-only verification signals."],
+      canonicalEvents: [],
+      generatedAt: "2026-05-06T00:00:00.000Z",
+    },
     lineageReferences: [],
     verificationReferences: [
       {
@@ -100,6 +128,7 @@ describe("IdentityLayerPage", () => {
     expect(screen.getByDisplayValue("tenant")).toBeInTheDocument();
     expect(screen.getByDisplayValue("tenant-1")).toBeInTheDocument();
     expect(screen.getByText("View verification lineage")).toBeInTheDocument();
+    expect(screen.getByText("Account trust state")).toBeInTheDocument();
     expect(screen.getByText("Payment account details are excluded.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /publish identity|share publicly|mint token|export identity publicly|autonomous verification|approve identity automatically/i })).not.toBeInTheDocument();
     expect(apiMocks.fetchIdentityLayerProfile).toHaveBeenCalledWith({ identityType: "tenant", identityId: "tenant-1" });

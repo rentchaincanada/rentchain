@@ -23,6 +23,83 @@ export type IdentityLayerReference = {
   blockedReason: string | null;
 };
 
+export type AccountTrustLevel =
+  | "asserted"
+  | "authenticated"
+  | "platform_correlated"
+  | "provider_attested"
+  | "institution_reviewed";
+
+export type VerificationSignalType =
+  | "account_access"
+  | "email"
+  | "phone"
+  | "screening"
+  | "payment_method"
+  | "lease_participation"
+  | "identity"
+  | "business"
+  | "property"
+  | "institution";
+
+export type VerificationSignal = {
+  signalId: string;
+  signalType: VerificationSignalType;
+  subjectType: "tenant" | "landlord" | "applicant" | "operator" | "organization" | "property";
+  subjectId: string;
+  status: "asserted" | "pending" | "verified" | "failed" | "expired" | "revoked" | "manual_review_required";
+  source: string;
+  evidenceType: string;
+  confidence: "low" | "medium" | "high";
+  providerKey: string | null;
+  evidenceRef: string | null;
+  issuedAt: string | null;
+  verifiedAt: string | null;
+  expiresAt: string | null;
+  revokedAt: string | null;
+  metadataOnly: true;
+  rawSensitivePayloadStored: false;
+  redacted: boolean;
+  reviewRequired: boolean;
+};
+
+export type AccountTrustStateSummary = {
+  subjectType: VerificationSignal["subjectType"];
+  subjectId: string;
+  trustLevel: AccountTrustLevel;
+  trustLabel: string;
+  trustDescription: string;
+  manualReviewRequired: true;
+  providerIntegrationEnabled: false;
+  rawSensitivePayloadStored: false;
+  executionEligible: false;
+  externalSharingRequiresConsent: true;
+  signalSummary: {
+    totalSignals: number;
+    assertedSignals: number;
+    pendingSignals: number;
+    verifiedSignals: number;
+    providerAttestedSignals: number;
+    expiredSignals: number;
+    revokedSignals: number;
+    reviewRequiredSignals: number;
+  };
+  activeSignals: VerificationSignal[];
+  missingSignals: VerificationSignalType[];
+  reviewReasons: string[];
+  redactions: string[];
+  canonicalEvents: Array<{
+    eventType: string;
+    action: string;
+    subjectType: VerificationSignal["subjectType"];
+    subjectId: string;
+    trustLevel: AccountTrustLevel;
+    summary: string;
+    metadataOnly: true;
+  }>;
+  generatedAt: string;
+};
+
 export type IdentityLayerProfile = {
   identityId: string;
   identityType: IdentityLayerType;
@@ -48,6 +125,7 @@ export type IdentityLayerProfile = {
     portabilityStatus: "ready" | "limited" | "not_ready";
     blockedReasons: string[];
   };
+  trustState: AccountTrustStateSummary;
   lineageReferences: IdentityLayerReference[];
   verificationReferences: IdentityLayerReference[];
   consentReferences: IdentityLayerReference[];

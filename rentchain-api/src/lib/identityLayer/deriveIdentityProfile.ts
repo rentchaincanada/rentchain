@@ -6,6 +6,7 @@ import type {
   IdentityLayerStatus,
   IdentityLayerType,
 } from "./identityLayerTypes";
+import { deriveAccountTrustState, verificationSignal, type VerificationSignal } from "../accountTrust";
 import { consentReference } from "./identityConsentModels";
 import { identityReference, isVerifiedReference } from "./identityVerificationModels";
 
@@ -69,6 +70,137 @@ function canonicalEvent(params: {
     resourceId: params.resourceId,
     summary: params.summary,
   };
+}
+
+function trustSubjectType(identityType: IdentityLayerType) {
+  if (identityType === "property") return "property" as const;
+  if (identityType === "organization") return "organization" as const;
+  if (identityType === "operator" || identityType === "review_actor") return "operator" as const;
+  return "tenant" as const;
+}
+
+function trustSignals(params: {
+  identityType: IdentityLayerType;
+  identityId: string;
+  sourceRecord: Record<string, unknown> | null | undefined;
+  verificationReferences: IdentityLayerReference[];
+  reviewReferences: IdentityLayerReference[];
+}): VerificationSignal[] {
+  const subjectType = trustSubjectType(params.identityType);
+  const subjectId = params.identityId.replace(/^[^:]+:/, "") || "unknown";
+  const signals: VerificationSignal[] = [];
+  const source = params.sourceRecord || null;
+
+  if (hasValue(source, ["email", "emailVerifiedAt"]) || source?.emailVerified === true) {
+    signals.push(
+      verificationSignal({
+        signalType: "email",
+        subjectType,
+        subjectId,
+        status: source?.emailVerified === true || hasValue(source, ["emailVerifiedAt"]) ? "verified" : "asserted",
+        source: source?.emailVerified === true || hasValue(source, ["emailVerifiedAt"]) ? "email_verification" : "self_asserted",
+        evidenceType: "metadata_only",
+        verifiedAt: source?.emailVerifiedAt,
+      })
+    );
+  }
+  if (hasValue(source, ["phone", "applicantPhone", "phoneVerifiedAt"]) || source?.phoneVerified === true) {
+    signals.push(
+      verificationSignal({
+        signalType: "phone",
+        subjectType,
+        subjectId,
+        status: source?.phoneVerified === true || hasValue(source, ["phoneVerifiedAt"]) ? "verified" : "asserted",
+        source: source?.phoneVerified === true || hasValue(source, ["phoneVerifiedAt"]) ? "phone_otp" : "self_asserted",
+        evidenceType: "metadata_only",
+        verifiedAt: source?.phoneVerifiedAt,
+      })
+    );
+  }
+
+  for (const reference of params.verificationReferences) {
+    if (reference.status !== "available" || reference.redacted) continue;
+    if (reference.referenceType === "screening") {
+      signals.push(
+        verificationSignal({
+          signalType: "screening",
+          subjectType,
+          subjectId,
+          status: "verified",
+          source: "screening_workflow",
+          evidenceType: "screening_order",
+          confidence: "medium",
+          evidenceRef: reference.referenceId,
+          verifiedAt: reference.occurredAt,
+        })
+      );
+    }
+    if (reference.referenceType === "property_registry") {
+      signals.push(
+        verificationSignal({
+          signalType: "property",
+          subjectType,
+          subjectId,
+          status: "verified",
+          source: "public_registry",
+          evidenceType: "registry_record",
+          confidence: "high",
+          providerKey: "public_registry",
+          evidenceRef: reference.referenceId,
+          verifiedAt: reference.occurredAt,
+        })
+      );
+    }
+    if (reference.referenceType === "tenant_profile" || reference.referenceType === "organization") {
+      signals.push(
+        verificationSignal({
+          signalType: "identity",
+          subjectType,
+          subjectId,
+          status: "asserted",
+          source: "self_asserted",
+          evidenceType: "metadata_only",
+          evidenceRef: reference.referenceId,
+          issuedAt: reference.occurredAt,
+        })
+      );
+    }
+  }
+
+  for (const reference of params.reviewReferences) {
+    if (reference.status !== "available" || reference.redacted) continue;
+    signals.push(
+      verificationSignal({
+        signalType: "institution",
+        subjectType,
+        subjectId,
+        status: "verified",
+        source: "operator_review",
+        evidenceType: "manual_review",
+        confidence: "medium",
+        evidenceRef: reference.referenceId,
+        verifiedAt: reference.occurredAt,
+        reviewRequired: true,
+      })
+    );
+  }
+
+  if (hasValue(source, ["identityVerificationId"]) || asString(source?.identityVerificationStatus, 80) === "pending") {
+    signals.push(
+      verificationSignal({
+        signalType: "identity",
+        subjectType,
+        subjectId,
+        status: "pending",
+        source: "future_identity_provider",
+        evidenceType: "metadata_only",
+        confidence: "low",
+        reviewRequired: true,
+      })
+    );
+  }
+
+  return signals;
 }
 
 function tenantReferences(input: DeriveIdentityProfileInput) {
@@ -240,6 +372,18 @@ export function deriveIdentityProfile(input: DeriveIdentityProfileInput): Identi
   const portabilityStatus = status === "verified" ? "ready" : verifiedReferences > 0 ? "limited" : "not_ready";
   const generatedAt = asString(input.generatedAt, 120) || new Date(0).toISOString();
   const lineageReferences = [...verificationReferences, ...consentReferences, ...reviewReferences, ...eventReferences];
+  const trustState = deriveAccountTrustState({
+    subjectType: trustSubjectType(identityType),
+    subjectId: identityId.replace(/^[^:]+:/, "") || "unknown",
+    generatedAt,
+    signals: trustSignals({
+      identityType,
+      identityId,
+      sourceRecord,
+      verificationReferences,
+      reviewReferences,
+    }),
+  });
 
   const canonicalEvents: IdentityLayerCanonicalEvent[] = [
     canonicalEvent({
@@ -321,6 +465,7 @@ export function deriveIdentityProfile(input: DeriveIdentityProfileInput): Identi
       portabilityStatus,
       blockedReasons: portabilityStatus === "not_ready" ? ["Identity portability requires verified references."] : [],
     },
+    trustState,
     lineageReferences,
     verificationReferences,
     consentReferences,

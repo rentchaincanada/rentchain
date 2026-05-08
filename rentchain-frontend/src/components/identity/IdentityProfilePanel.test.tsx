@@ -31,6 +31,34 @@ function profile(overrides: Partial<IdentityLayerProfile> = {}): IdentityLayerPr
       portabilityStatus: "ready",
       blockedReasons: [],
     },
+    trustState: {
+      subjectType: "tenant",
+      subjectId: "tenant:tenant-1",
+      trustLevel: "platform_correlated",
+      trustLabel: "Platform-correlated signals present",
+      trustDescription: "Multiple RentChain operational records align, but they should not be treated as government-grade identity proof.",
+      manualReviewRequired: true,
+      providerIntegrationEnabled: false,
+      rawSensitivePayloadStored: false,
+      executionEligible: false,
+      externalSharingRequiresConsent: true,
+      signalSummary: {
+        totalSignals: 2,
+        assertedSignals: 0,
+        pendingSignals: 0,
+        verifiedSignals: 2,
+        providerAttestedSignals: 0,
+        expiredSignals: 0,
+        revokedSignals: 0,
+        reviewRequiredSignals: 0,
+      },
+      activeSignals: [],
+      missingSignals: ["identity"],
+      reviewReasons: [],
+      redactions: ["Trust state stores metadata-only verification signals."],
+      canonicalEvents: [],
+      generatedAt: "2026-05-06T00:00:00.000Z",
+    },
     lineageReferences: [],
     verificationReferences: [
       {
@@ -81,6 +109,10 @@ describe("IdentityProfilePanel", () => {
     expect(screen.getByText(/Manual review remains required/i)).toBeInTheDocument();
     expect(screen.getByText(/No public identity sharing or tokenization is enabled/i)).toBeInTheDocument();
     expect(screen.getByText("View verification lineage")).toBeInTheDocument();
+    expect(screen.getByText("Account trust state")).toBeInTheDocument();
+    expect(screen.getByText("Platform-correlated signals present")).toBeInTheDocument();
+    expect(screen.getByText("Execution disabled")).toBeInTheDocument();
+    expect(screen.getByText("Metadata only")).toBeInTheDocument();
     expect(screen.getByText("Tenant profile reference")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "View context" })).toHaveAttribute("href", "/tenants");
     expect(screen.getByText("View consent lineage")).toBeInTheDocument();

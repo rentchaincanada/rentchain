@@ -154,6 +154,14 @@ describe("landlordIdentityLayerRoutes", () => {
     expect(serialized).not.toContain("sensitive-government-id-value");
     expect(serialized).not.toContain("sensitive-payment-account");
     expect(serialized).not.toContain("tenant-other");
+    expect(res.body.profile.trustState).toEqual(
+      expect.objectContaining({
+        manualReviewRequired: true,
+        rawSensitivePayloadStored: false,
+        providerIntegrationEnabled: false,
+        executionEligible: false,
+      })
+    );
   });
 
   it("returns property identity status with registry lineage", async () => {
@@ -177,6 +185,7 @@ describe("landlordIdentityLayerRoutes", () => {
         tokenizationEnabled: false,
       })
     );
+    expect(res.body.status).not.toHaveProperty("rawSensitivePayloadStored");
   });
 
   it("blocks non-landlord users", async () => {

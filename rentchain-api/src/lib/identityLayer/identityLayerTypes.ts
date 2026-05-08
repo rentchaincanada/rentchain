@@ -63,6 +63,7 @@ export type IdentityLayerProfile = {
     portabilityStatus: "ready" | "limited" | "not_ready";
     blockedReasons: string[];
   };
+  trustState: AccountTrustStateSummary;
   lineageReferences: IdentityLayerReference[];
   verificationReferences: IdentityLayerReference[];
   consentReferences: IdentityLayerReference[];
@@ -86,3 +87,4 @@ export type DeriveIdentityProfileInput = {
   canonicalEvents?: Array<Record<string, unknown>> | null;
   consentRecords?: Array<Record<string, unknown>> | null;
 };
+import type { AccountTrustStateSummary } from "../accountTrust";
