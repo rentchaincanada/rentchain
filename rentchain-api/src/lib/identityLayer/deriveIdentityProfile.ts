@@ -7,6 +7,10 @@ import type {
   IdentityLayerType,
 } from "./identityLayerTypes";
 import { deriveAccountTrustState, verificationSignal, type VerificationSignal } from "../accountTrust";
+import {
+  deriveIdentityAssuranceSummary,
+  identityAssuranceSignalsFromAttestations,
+} from "../identityAssurance";
 import { consentReference } from "./identityConsentModels";
 import { identityReference, isVerifiedReference } from "./identityVerificationModels";
 
@@ -372,17 +376,29 @@ export function deriveIdentityProfile(input: DeriveIdentityProfileInput): Identi
   const portabilityStatus = status === "verified" ? "ready" : verifiedReferences > 0 ? "limited" : "not_ready";
   const generatedAt = asString(input.generatedAt, 120) || new Date(0).toISOString();
   const lineageReferences = [...verificationReferences, ...consentReferences, ...reviewReferences, ...eventReferences];
+  const identityAssurance = deriveIdentityAssuranceSummary({
+    subjectType: trustSubjectType(identityType),
+    subjectId: identityId.replace(/^[^:]+:/, "") || "unknown",
+    attestations: input.identityAssuranceAttestations || [],
+    generatedAt,
+  });
   const trustState = deriveAccountTrustState({
     subjectType: trustSubjectType(identityType),
     subjectId: identityId.replace(/^[^:]+:/, "") || "unknown",
     generatedAt,
-    signals: trustSignals({
-      identityType,
-      identityId,
-      sourceRecord,
-      verificationReferences,
-      reviewReferences,
-    }),
+    signals: [
+      ...trustSignals({
+        identityType,
+        identityId,
+        sourceRecord,
+        verificationReferences,
+        reviewReferences,
+      }),
+      ...identityAssuranceSignalsFromAttestations({
+        attestations: input.identityAssuranceAttestations || [],
+        generatedAt,
+      }),
+    ],
   });
 
   const canonicalEvents: IdentityLayerCanonicalEvent[] = [
@@ -466,6 +482,7 @@ export function deriveIdentityProfile(input: DeriveIdentityProfileInput): Identi
       blockedReasons: portabilityStatus === "not_ready" ? ["Identity portability requires verified references."] : [],
     },
     trustState,
+    identityAssurance,
     lineageReferences,
     verificationReferences,
     consentReferences,

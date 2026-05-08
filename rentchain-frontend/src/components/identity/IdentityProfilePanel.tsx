@@ -1,6 +1,6 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import type { IdentityLayerProfile, IdentityLayerReference } from "@/api/identityLayerApi";
+import type { IdentityAssuranceSummary, IdentityLayerProfile, IdentityLayerReference } from "@/api/identityLayerApi";
 import { Card, Section } from "@/components/ui/Ui";
 
 function label(value: string) {
@@ -39,6 +39,56 @@ function Badge({ children, status }: { children: React.ReactNode; status: string
   );
 }
 
+function assuranceSubjectType(profile: IdentityLayerProfile): IdentityAssuranceSummary["subjectType"] {
+  if (profile.trustState.subjectType === "operator") return "property_operator";
+  return profile.trustState.subjectType;
+}
+
+function defaultIdentityAssurance(profile: IdentityLayerProfile): IdentityAssuranceSummary {
+  return {
+    subjectType: assuranceSubjectType(profile),
+    subjectId: profile.trustState.subjectId,
+    status: "not_started",
+    level: "not_assessed",
+    lifecycleState: "not_started",
+    assuranceLabel: "Identity assurance not started",
+    assuranceDescription: "No provider-neutral identity assurance attestation is present. Existing onboarding remains unblocked.",
+    providerCategory: "none",
+    consentRequired: true,
+    consentAvailable: false,
+    retentionClass: "assurance_metadata",
+    metadataOnly: true,
+    rawSensitivePayloadStored: false,
+    providerIntegrationEnabled: false,
+    onboardingBlocking: false,
+    publicShareable: false,
+    executionEligible: false,
+    reverificationRequired: false,
+    nextReverificationAt: null,
+    signalSummary: {
+      totalAttestations: 0,
+      completedAttestations: 0,
+      pendingAttestations: 0,
+      failedAttestations: 0,
+      expiredAttestations: 0,
+      revokedAttestations: 0,
+      reviewRequiredAttestations: 0,
+    },
+    supportSummary: {
+      visibleToSupport: true,
+      rawProviderPayloadVisible: false,
+      rawIdentityDocumentVisible: false,
+      biometricPayloadVisible: false,
+      identityDocumentNumberVisible: false,
+      attestations: [],
+    },
+    redactions: [],
+    reviewReasons: [],
+    canonicalEvents: [],
+    generatedAt: profile.generatedAt,
+  };
+}
+
 function ReferenceList({ title, references }: { title: string; references: IdentityLayerReference[] }) {
   return (
     <Section style={{ display: "grid", gap: 10 }}>
@@ -74,6 +124,8 @@ function ReferenceList({ title, references }: { title: string; references: Ident
 }
 
 export function IdentityProfilePanel({ profile }: { profile: IdentityLayerProfile }) {
+  const identityAssurance = profile.identityAssurance || defaultIdentityAssurance(profile);
+
   return (
     <div style={{ display: "grid", gap: 16 }}>
       <Section style={{ display: "grid", gap: 10 }}>
@@ -146,6 +198,64 @@ export function IdentityProfilePanel({ profile }: { profile: IdentityLayerProfil
           {profile.trustState.missingSignals.length ? (
             <div style={{ color: "#92400e", fontSize: 13, marginTop: 10 }}>
               Missing trust signals: {profile.trustState.missingSignals.map(label).join(", ")}.
+            </div>
+          ) : null}
+        </Card>
+      </Section>
+
+      <Section style={{ display: "grid", gap: 10 }}>
+        <div style={{ fontWeight: 900 }}>Identity assurance</div>
+        <Card style={{ borderRadius: 8, padding: 12 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+            <div>
+              <strong>{identityAssurance.assuranceLabel}</strong>
+              <div style={{ color: "#475569", fontSize: 13, marginTop: 4, lineHeight: 1.5 }}>
+                {identityAssurance.assuranceDescription}
+              </div>
+            </div>
+            <Badge status={identityAssurance.status}>{label(identityAssurance.status)}</Badge>
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+            <Badge status={identityAssurance.level}>{label(identityAssurance.level)}</Badge>
+            <Badge status={identityAssurance.providerCategory}>{label(identityAssurance.providerCategory)}</Badge>
+            <Badge status={identityAssurance.consentAvailable ? "available" : "review_required"}>
+              {identityAssurance.consentAvailable ? "Consent recorded" : "Consent required"}
+            </Badge>
+            <Badge status={identityAssurance.rawSensitivePayloadStored ? "blocked" : "available"}>Assurance metadata only</Badge>
+            <Badge status={identityAssurance.onboardingBlocking ? "blocked" : "available"}>Onboarding unblocked</Badge>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 8, marginTop: 12 }}>
+            {[
+              ["Attestations", identityAssurance.signalSummary.totalAttestations],
+              ["Completed", identityAssurance.signalSummary.completedAttestations],
+              ["Pending", identityAssurance.signalSummary.pendingAttestations],
+              ["Needs review", identityAssurance.signalSummary.reviewRequiredAttestations],
+            ].map(([name, value]) => (
+              <div key={String(name)} style={{ border: "1px solid #e2e8f0", borderRadius: 8, padding: 10 }}>
+                <div style={{ color: "#64748b", fontSize: 12, fontWeight: 800 }}>{name}</div>
+                <strong style={{ color: "#0f172a", fontSize: 18 }}>{String(value)}</strong>
+              </div>
+            ))}
+          </div>
+          {identityAssurance.nextReverificationAt ? (
+            <div style={{ color: "#92400e", fontSize: 13, marginTop: 10 }}>
+              Reverification date: {identityAssurance.nextReverificationAt}
+            </div>
+          ) : null}
+          {identityAssurance.supportSummary.attestations.length ? (
+            <div style={{ display: "grid", gap: 8, marginTop: 12 }}>
+              {identityAssurance.supportSummary.attestations.map((attestation) => (
+                <div key={attestation.attestationId} style={{ border: "1px solid #e2e8f0", borderRadius: 8, padding: 10 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                    <strong>{label(attestation.level)}</strong>
+                    <Badge status={attestation.lifecycleState}>{label(attestation.lifecycleState)}</Badge>
+                  </div>
+                  <div style={{ color: "#64748b", fontSize: 13, marginTop: 6 }}>
+                    Provider: {label(attestation.providerType)}
+                    {attestation.providerReferenceRedacted ? ` · Ref ${attestation.providerReferenceRedacted}` : ""}
+                  </div>
+                </div>
+              ))}
             </div>
           ) : null}
         </Card>

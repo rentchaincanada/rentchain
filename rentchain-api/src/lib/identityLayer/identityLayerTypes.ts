@@ -1,3 +1,6 @@
+import type { AccountTrustStateSummary } from "../accountTrust";
+import type { IdentityAssuranceAttestation, IdentityAssuranceSummary } from "../identityAssurance";
+
 export type IdentityLayerType = "tenant" | "property" | "organization" | "operator" | "review_actor";
 
 export type IdentityLayerStatus = "verified" | "partially_verified" | "review_required" | "blocked" | "unknown";
@@ -64,6 +67,7 @@ export type IdentityLayerProfile = {
     blockedReasons: string[];
   };
   trustState: AccountTrustStateSummary;
+  identityAssurance: IdentityAssuranceSummary;
   lineageReferences: IdentityLayerReference[];
   verificationReferences: IdentityLayerReference[];
   consentReferences: IdentityLayerReference[];
@@ -86,5 +90,5 @@ export type DeriveIdentityProfileInput = {
   reviewSessions?: Array<Record<string, unknown>> | null;
   canonicalEvents?: Array<Record<string, unknown>> | null;
   consentRecords?: Array<Record<string, unknown>> | null;
+  identityAssuranceAttestations?: IdentityAssuranceAttestation[] | null;
 };
-import type { AccountTrustStateSummary } from "../accountTrust";
