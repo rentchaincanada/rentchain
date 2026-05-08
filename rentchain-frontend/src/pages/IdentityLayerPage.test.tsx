@@ -85,6 +85,48 @@ function profile() {
       canonicalEvents: [],
       generatedAt: "2026-05-06T00:00:00.000Z",
     },
+    identityAssurance: {
+      subjectType: "tenant",
+      subjectId: "tenant:tenant-1",
+      status: "not_started",
+      level: "not_assessed",
+      lifecycleState: "not_started",
+      assuranceLabel: "Identity assurance not started",
+      assuranceDescription: "No provider-neutral identity assurance attestation is present. Existing onboarding remains unblocked.",
+      providerCategory: "none",
+      consentRequired: true,
+      consentAvailable: false,
+      retentionClass: "assurance_metadata",
+      metadataOnly: true,
+      rawSensitivePayloadStored: false,
+      providerIntegrationEnabled: false,
+      onboardingBlocking: false,
+      publicShareable: false,
+      executionEligible: false,
+      reverificationRequired: false,
+      nextReverificationAt: null,
+      signalSummary: {
+        totalAttestations: 0,
+        completedAttestations: 0,
+        pendingAttestations: 0,
+        failedAttestations: 0,
+        expiredAttestations: 0,
+        revokedAttestations: 0,
+        reviewRequiredAttestations: 0,
+      },
+      supportSummary: {
+        visibleToSupport: true,
+        rawProviderPayloadVisible: false,
+        rawIdentityDocumentVisible: false,
+        biometricPayloadVisible: false,
+        identityDocumentNumberVisible: false,
+        attestations: [],
+      },
+      redactions: ["Raw provider identity payloads are excluded."],
+      reviewReasons: [],
+      canonicalEvents: [],
+      generatedAt: "2026-05-06T00:00:00.000Z",
+    },
     lineageReferences: [],
     verificationReferences: [
       {
@@ -129,6 +171,9 @@ describe("IdentityLayerPage", () => {
     expect(screen.getByDisplayValue("tenant-1")).toBeInTheDocument();
     expect(screen.getByText("View verification lineage")).toBeInTheDocument();
     expect(screen.getByText("Account trust state")).toBeInTheDocument();
+    expect(screen.getByText("Identity assurance")).toBeInTheDocument();
+    expect(screen.getByText("Identity assurance not started")).toBeInTheDocument();
+    expect(screen.getByText("Onboarding unblocked")).toBeInTheDocument();
     expect(screen.getByText("Payment account details are excluded.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /publish identity|share publicly|mint token|export identity publicly|autonomous verification|approve identity automatically/i })).not.toBeInTheDocument();
     expect(apiMocks.fetchIdentityLayerProfile).toHaveBeenCalledWith({ identityType: "tenant", identityId: "tenant-1" });

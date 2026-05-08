@@ -32,6 +32,14 @@ describe("deriveIdentityProfile", () => {
         executionEligible: false,
       })
     );
+    expect(profile.identityAssurance).toEqual(
+      expect.objectContaining({
+        status: "not_started",
+        level: "not_assessed",
+        rawSensitivePayloadStored: false,
+        onboardingBlocking: false,
+      })
+    );
     expect(profile.consentSummary.consentAvailable).toBe(true);
     expect(profile.reviewReferences).toHaveLength(1);
     expect(profile.canonicalEvents).toEqual(
@@ -112,5 +120,71 @@ describe("deriveIdentityProfile", () => {
     expect(serialized).not.toContain("sensitive-payment-account");
     expect(profile.redactions).toEqual(expect.arrayContaining(["Raw screening and credit bureau payloads are excluded."]));
     expect(profile.trustState.redactions).toEqual(expect.arrayContaining(["Raw government identity documents are excluded."]));
+  });
+
+  it("aligns provider-neutral identity assurance with account trust without exposing raw provider references", () => {
+    const profile = deriveIdentityProfile({
+      identityType: "tenant",
+      identityId: "tenant-assured",
+      generatedAt: "2026-05-08T00:00:00.000Z",
+      tenant: { id: "tenant-assured", createdAt: "2026-05-01T00:00:00.000Z" },
+      consentRecords: [{ id: "consent-assurance", scope: "identity assurance consent" }],
+      identityAssuranceAttestations: [
+        {
+          attestationId: "attestation-1",
+          subjectType: "tenant",
+          subjectId: "tenant-assured",
+          level: "provider_identity_attested",
+          status: "completed",
+          lifecycleState: "completed",
+          providerType: "identity_provider",
+          providerKey: "future_provider",
+          providerReferenceId: "provider-reference-sensitive",
+          evidenceRef: "evidence-reference-sensitive",
+          confidence: "high",
+          consentScope: {
+            consentId: "consent-assurance",
+            purpose: "identity_assurance",
+            grantedAt: "2026-05-01T00:00:00.000Z",
+            expiresAt: "2026-11-01T00:00:00.000Z",
+            revokedAt: null,
+            institutionRecipientType: "none",
+            attributeScopes: ["identity_status", "assurance_level"],
+          },
+          retentionClass: "provider_reference",
+          issuedAt: "2026-05-01T00:00:00.000Z",
+          completedAt: "2026-05-01T00:10:00.000Z",
+          expiresAt: "2026-11-01T00:00:00.000Z",
+          revokedAt: null,
+          nextReverificationAt: "2026-10-01T00:00:00.000Z",
+          auditEventRef: "event-1",
+          metadataOnly: true,
+          rawSensitivePayloadStored: false,
+          supportVisible: true,
+          publicShareable: false,
+          reviewRequired: false,
+          redacted: false,
+        },
+      ],
+    });
+
+    expect(profile.identityAssurance).toEqual(
+      expect.objectContaining({
+        status: "completed",
+        level: "provider_identity_attested",
+        providerIntegrationEnabled: false,
+        onboardingBlocking: false,
+        publicShareable: false,
+      })
+    );
+    expect(profile.trustState.trustLevel).toBe("provider_attested");
+    expect(profile.identityAssurance.supportSummary.attestations[0]).toEqual(
+      expect.objectContaining({
+        providerReferenceRedacted: "***tive",
+        evidenceRefRedacted: "***tive",
+      })
+    );
+    expect(JSON.stringify(profile)).not.toContain("provider-reference-sensitive");
+    expect(JSON.stringify(profile)).not.toContain("evidence-reference-sensitive");
   });
 });

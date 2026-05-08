@@ -100,6 +100,114 @@ export type AccountTrustStateSummary = {
   generatedAt: string;
 };
 
+export type IdentityAssuranceLevel =
+  | "not_assessed"
+  | "account_controlled"
+  | "platform_correlated"
+  | "provider_identity_attested"
+  | "business_attested"
+  | "property_authority_attested"
+  | "institution_reviewed";
+
+export type IdentityAssuranceStatus =
+  | "not_started"
+  | "requested"
+  | "pending"
+  | "completed"
+  | "failed"
+  | "expired"
+  | "revoked"
+  | "manual_review_required";
+
+export type IdentityAssuranceLifecycleState =
+  | "not_started"
+  | "consent_required"
+  | "ready_to_start"
+  | "in_progress"
+  | "completed"
+  | "reverification_required"
+  | "manual_review_required"
+  | "failed"
+  | "revoked";
+
+export type IdentityAssuranceProviderType =
+  | "none"
+  | "identity_provider"
+  | "business_verification_provider"
+  | "property_registry"
+  | "financial_identity_provider"
+  | "government_digital_credential"
+  | "institution_review"
+  | "operator_review"
+  | "future_provider";
+
+export type IdentityAssuranceSummary = {
+  subjectType: "tenant" | "landlord" | "applicant" | "property_operator" | "business_entity" | "organization" | "property";
+  subjectId: string;
+  status: IdentityAssuranceStatus;
+  level: IdentityAssuranceLevel;
+  lifecycleState: IdentityAssuranceLifecycleState;
+  assuranceLabel: string;
+  assuranceDescription: string;
+  providerCategory: IdentityAssuranceProviderType;
+  consentRequired: true;
+  consentAvailable: boolean;
+  retentionClass: "assurance_metadata" | "provider_reference" | "support_diagnostics" | "audit_record";
+  metadataOnly: true;
+  rawSensitivePayloadStored: false;
+  providerIntegrationEnabled: false;
+  onboardingBlocking: false;
+  publicShareable: false;
+  executionEligible: false;
+  reverificationRequired: boolean;
+  nextReverificationAt: string | null;
+  signalSummary: {
+    totalAttestations: number;
+    completedAttestations: number;
+    pendingAttestations: number;
+    failedAttestations: number;
+    expiredAttestations: number;
+    revokedAttestations: number;
+    reviewRequiredAttestations: number;
+  };
+  supportSummary: {
+    visibleToSupport: true;
+    rawProviderPayloadVisible: false;
+    rawIdentityDocumentVisible: false;
+    biometricPayloadVisible: false;
+    identityDocumentNumberVisible: false;
+    attestations: Array<{
+      attestationId: string;
+      level: IdentityAssuranceLevel;
+      status: IdentityAssuranceStatus;
+      lifecycleState: IdentityAssuranceLifecycleState;
+      providerType: IdentityAssuranceProviderType;
+      providerKey: string | null;
+      providerReferenceRedacted: string | null;
+      evidenceRefRedacted: string | null;
+      consentPurpose: string;
+      retentionClass: string;
+      completedAt: string | null;
+      expiresAt: string | null;
+      nextReverificationAt: string | null;
+      reviewRequired: boolean;
+    }>;
+  };
+  redactions: string[];
+  reviewReasons: string[];
+  canonicalEvents: Array<{
+    eventType: string;
+    action: string;
+    subjectType: string;
+    subjectId: string;
+    status: IdentityAssuranceStatus;
+    level: IdentityAssuranceLevel;
+    summary: string;
+    metadataOnly: true;
+  }>;
+  generatedAt: string;
+};
+
 export type IdentityLayerProfile = {
   identityId: string;
   identityType: IdentityLayerType;
@@ -126,6 +234,7 @@ export type IdentityLayerProfile = {
     blockedReasons: string[];
   };
   trustState: AccountTrustStateSummary;
+  identityAssurance: IdentityAssuranceSummary;
   lineageReferences: IdentityLayerReference[];
   verificationReferences: IdentityLayerReference[];
   consentReferences: IdentityLayerReference[];
