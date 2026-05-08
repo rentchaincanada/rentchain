@@ -93,6 +93,12 @@ describe("telemetryRoutes", () => {
     });
     expect(stored[0].eventProps.tenantName).toBeUndefined();
     expect(stored[0].eventProps.documentText).toBeUndefined();
+    expect(stored[0].governance).toMatchObject({
+      sensitivity: "confidential",
+      retentionCategory: "export_metadata",
+      metadataOnly: true,
+      redactionApplied: true,
+    });
   });
 
   it("continues rejecting unrelated telemetry event families", async () => {

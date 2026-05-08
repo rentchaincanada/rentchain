@@ -219,10 +219,18 @@ describe("buildSupportConsoleResource", () => {
         domainsPresent: ["application", "policy", "screening", "system"],
         identifiers: expect.objectContaining({
           propertyId: "prop-1",
-          checkoutSessionId: "cs_123",
+          checkoutSessionId: "***_123",
+          quoteId: "***te-1",
+          screeningOrderId: "***er-1",
         }),
       })
     );
+    expect(result?.governance).toEqual({
+      sensitivity: "restricted",
+      metadataOnly: true,
+      retentionCategory: "support_diagnostics",
+      redactionApplied: true,
+    });
   });
 
   it("builds a maintenance console without reconciliation", async () => {
@@ -347,6 +355,12 @@ describe("buildSupportConsoleResource", () => {
         canonicalEventCount: 0,
         domainsPresent: [],
         identifiers: {},
+      },
+      governance: {
+        sensitivity: "restricted",
+        metadataOnly: true,
+        retentionCategory: "support_diagnostics",
+        redactionApplied: true,
       },
     });
   });

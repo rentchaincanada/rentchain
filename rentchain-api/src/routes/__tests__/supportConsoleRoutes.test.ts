@@ -24,6 +24,9 @@ const { collections, dbMock } = vi.hoisted(() => {
               data: () => ensureCollection(name).get(String(id)),
             };
           },
+          async set(payload: any) {
+            ensureCollection(name).set(String(id), payload);
+          },
         }),
         async get() {
           const docs = Array.from(ensureCollection(name).entries()).map(([id, data]) => ({
@@ -164,8 +167,28 @@ describe("supportConsoleRoutes", () => {
         debug: expect.objectContaining({
           canonicalEventCount: 1,
         }),
+        governance: expect.objectContaining({
+          sensitivity: "restricted",
+          retentionCategory: "support_diagnostics",
+          redactionApplied: true,
+        }),
       })
     );
+    const auditEvents = Array.from(collections.get("canonicalEvents")?.values() || []).filter(
+      (event: any) => event.type === "system.support_console_accessed"
+    );
+    expect(auditEvents).toEqual([
+      expect.objectContaining({
+        action: "support_console_accessed",
+        visibility: "system",
+        metadata: expect.objectContaining({
+          resourceType: "application",
+          metadataOnly: true,
+          redactionApplied: true,
+          retentionCategory: "support_diagnostics",
+        }),
+      }),
+    ]);
   });
 
   it("returns maintenance data without reconciliation", async () => {
@@ -294,7 +317,7 @@ describe("supportConsoleRoutes", () => {
       user: { id: "landlord-1", role: "landlord" },
     });
     expect(forbidden.status).toBe(403);
-    expect(forbidden.body?.error).toBe("FORBIDDEN");
+    expect(forbidden.body?.error).toBe("Forbidden");
 
     const invalid = await invokeRouter(router, {
       method: "GET",

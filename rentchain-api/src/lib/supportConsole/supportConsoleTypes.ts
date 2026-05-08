@@ -49,4 +49,10 @@ export type SupportConsoleResourceResponse = {
     domainsPresent: string[];
     identifiers?: Record<string, string | null | undefined>;
   };
+  governance?: {
+    sensitivity: "restricted";
+    metadataOnly: true;
+    retentionCategory: "support_diagnostics";
+    redactionApplied: true;
+  };
 };

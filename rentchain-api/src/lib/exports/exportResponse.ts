@@ -1,3 +1,5 @@
+import { governanceMetadata, type GovernanceSensitivity } from "../governance/platformGovernance";
+
 export type ExportFormat = "csv" | "xls" | "pdf";
 
 function isoDateStamp(date: Date): string {
@@ -31,8 +33,16 @@ export function setAttachmentExportHeaders(
   params: {
     filename: string;
     format: ExportFormat;
+    sensitivity?: GovernanceSensitivity;
   }
 ): void {
   res.setHeader("Content-Type", getExportContentType(params.format));
   res.setHeader("Content-Disposition", `attachment; filename="${params.filename}"`);
+  const governance = governanceMetadata({
+    sensitivity: params.sensitivity || "confidential",
+    retentionCategory: "export_metadata",
+  });
+  res.setHeader("X-RentChain-Governance", "metadata-only");
+  res.setHeader("X-RentChain-Export-Sensitivity", governance.sensitivity);
+  res.setHeader("X-RentChain-Retention-Category", governance.retentionCategory);
 }
