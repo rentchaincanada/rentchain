@@ -139,6 +139,7 @@ const RentalDebtPage = lazy(() => import("./pages/RentalDebtPage"));
 const CourtDisputeLineagePage = lazy(() => import("./pages/CourtDisputeLineagePage"));
 const OnboardingHardeningPage = lazy(() => import("./pages/OnboardingHardeningPage"));
 const SupportOperationsPage = lazy(() => import("./pages/SupportOperationsPage"));
+const PdfExportObservabilityPage = lazy(() => import("./pages/PdfExportObservabilityPage"));
 const SettlementReadinessPage = lazy(() => import("./pages/SettlementReadinessPage"));
 const RegulatoryProfilePage = lazy(() => import("./pages/RegulatoryProfilePage"));
 const AssetTokenizationReadinessPage = lazy(() => import("./pages/AssetTokenizationReadinessPage"));
@@ -1332,6 +1333,14 @@ function App() {
               element={
                 <RequireAdmin>
                   <AdminObservabilityPage />
+                </RequireAdmin>
+              }
+            />
+            <Route
+              path="/admin/pdf-export-observability"
+              element={
+                <RequireAdmin>
+                  <PdfExportObservabilityPage />
                 </RequireAdmin>
               }
             />

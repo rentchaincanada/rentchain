@@ -2,6 +2,14 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SamplePdfModal } from "./SamplePdfModal";
 
+const telemetryMocks = vi.hoisted(() => ({
+  logTelemetryEvent: vi.fn(),
+}));
+
+vi.mock("../../api/telemetryApi", () => ({
+  logTelemetryEvent: telemetryMocks.logTelemetryEvent,
+}));
+
 function mockViewport(options: { width: number; coarsePointer: boolean }) {
   Object.defineProperty(window, "innerWidth", {
     configurable: true,
@@ -41,6 +49,16 @@ describe("SamplePdfModal", () => {
     render(<SamplePdfModal open onClose={vi.fn()} />);
 
     await waitFor(() => expect(screen.getByText("Open the sample PDF")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(telemetryMocks.logTelemetryEvent).toHaveBeenCalledWith(
+        "pdf_mobile_fallback_used",
+        expect.objectContaining({
+          exportType: "sample_screening_report",
+          renderingPath: "mobile_fallback",
+          fallbackMode: "mobile_open_download",
+        })
+      )
+    );
     expect(screen.queryByTitle("Sample screening report PDF")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open PDF" })).toHaveAttribute(
       "href",

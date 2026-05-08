@@ -1,6 +1,7 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { Card } from "../components/ui/Ui";
+import { recordPdfExportEvent } from "../lib/pdfExportObservability";
 import { spacing } from "../styles/tokens";
 import { useMobilePdfPreviewGuard } from "../utils/pdfPreviewGuard";
 
@@ -10,6 +11,16 @@ const PdfSamplePage: React.FC = () => {
   const navigate = useNavigate();
   const [loaded, setLoaded] = React.useState(false);
   const useMobileFallback = useMobilePdfPreviewGuard();
+
+  React.useEffect(() => {
+    if (!useMobileFallback) return;
+    recordPdfExportEvent("pdf_mobile_fallback_used", {
+      exportType: "sample_screening_report",
+      renderingPath: "mobile_fallback",
+      status: "fallback_used",
+      fallbackMode: "mobile_open_download",
+    });
+  }, [useMobileFallback]);
 
   return (
     <div style={{ display: "grid", gap: spacing.md }}>
@@ -45,6 +56,13 @@ const PdfSamplePage: React.FC = () => {
               href={pdfUrl}
               target="_blank"
               rel="noreferrer"
+              onClick={() =>
+                recordPdfExportEvent("pdf_download_triggered", {
+                  exportType: "sample_screening_report",
+                  renderingPath: "signed_url",
+                  status: "download_triggered",
+                })
+              }
               style={{
                 padding: "8px 12px",
                 borderRadius: 10,
@@ -60,6 +78,13 @@ const PdfSamplePage: React.FC = () => {
             <a
               href={pdfUrl}
               download
+              onClick={() =>
+                recordPdfExportEvent("pdf_download_triggered", {
+                  exportType: "sample_screening_report",
+                  renderingPath: "browser_download",
+                  status: "download_triggered",
+                })
+              }
               style={{
                 padding: "8px 12px",
                 borderRadius: 10,
@@ -83,10 +108,35 @@ const PdfSamplePage: React.FC = () => {
               Mobile browsers handle PDF files more reliably in the browser viewer or download manager.
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <a href={pdfUrl} target="_blank" rel="noreferrer" style={{ color: "#0f172a", fontWeight: 700 }}>
+              <a
+                href={pdfUrl}
+                target="_blank"
+                rel="noreferrer"
+                onClick={() =>
+                  recordPdfExportEvent("pdf_download_triggered", {
+                    exportType: "sample_screening_report",
+                    renderingPath: "mobile_fallback",
+                    status: "download_triggered",
+                    fallbackMode: "mobile_open_download",
+                  })
+                }
+                style={{ color: "#0f172a", fontWeight: 700 }}
+              >
                 Open PDF
               </a>
-              <a href={pdfUrl} download style={{ color: "#0f172a", fontWeight: 700 }}>
+              <a
+                href={pdfUrl}
+                download
+                onClick={() =>
+                  recordPdfExportEvent("pdf_download_triggered", {
+                    exportType: "sample_screening_report",
+                    renderingPath: "mobile_fallback",
+                    status: "download_triggered",
+                    fallbackMode: "mobile_open_download",
+                  })
+                }
+                style={{ color: "#0f172a", fontWeight: 700 }}
+              >
                 Download PDF
               </a>
             </div>
@@ -104,7 +154,14 @@ const PdfSamplePage: React.FC = () => {
                 border: "none",
                 display: "block",
               }}
-              onLoad={() => setLoaded(true)}
+              onLoad={() => {
+                setLoaded(true);
+                recordPdfExportEvent("pdf_export_completed", {
+                  exportType: "sample_screening_report",
+                  renderingPath: "desktop_iframe",
+                  status: "completed",
+                });
+              }}
             />
           </>
         )}

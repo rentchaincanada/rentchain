@@ -16,6 +16,7 @@ import {
 import { patchDecisionAction } from "@/api/decisionApi";
 import { getAuthToken } from "../lib/authToken";
 import { getFirebaseIdToken } from "../lib/firebaseAuthToken";
+import { createPdfExportTimer, errorCodeFromUnknown, recordPdfExportEvent } from "../lib/pdfExportObservability";
 import {
   archiveLeaseRecord,
   createLeaseNote,
@@ -606,6 +607,15 @@ export default function LeaseLedgerPage() {
   }
 
   async function exportLedger(format: "csv" | "pdf") {
+    const isPdf = format === "pdf";
+    const timer = createPdfExportTimer();
+    if (isPdf) {
+      recordPdfExportEvent("pdf_export_started", {
+        exportType: "lease_ledger",
+        renderingPath: "backend_pdfkit",
+        status: "started",
+      });
+    }
     try {
       const token = (await getFirebaseIdToken()) || getAuthToken();
       const authHeader = token ? { Authorization: `Bearer ${token}` } : {};
@@ -621,6 +631,15 @@ export default function LeaseLedgerPage() {
       });
       if (!res.ok) throw new Error(`Export failed (${res.status})`);
       const blob = await res.blob();
+      if (isPdf) {
+        recordPdfExportEvent("pdf_export_completed", {
+          exportType: "lease_ledger",
+          renderingPath: "backend_pdfkit",
+          status: "completed",
+          durationMs: timer.durationMs(),
+          byteSize: blob.size,
+        });
+      }
       const objectUrl = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = objectUrl;
@@ -630,6 +649,15 @@ export default function LeaseLedgerPage() {
       a.remove();
       URL.revokeObjectURL(objectUrl);
     } catch (err: unknown) {
+      if (isPdf) {
+        recordPdfExportEvent("pdf_export_failed", {
+          exportType: "lease_ledger",
+          renderingPath: "backend_pdfkit",
+          status: "failed",
+          durationMs: timer.durationMs(),
+          errorCode: errorCodeFromUnknown(err),
+        });
+      }
       setError(errorMessage(err, `Failed to export ${format.toUpperCase()}`));
     }
   }

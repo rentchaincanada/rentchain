@@ -4,7 +4,21 @@ import { requireAuth } from "../middleware/requireAuth";
 
 const router = Router();
 
-const REDACT_KEYS = ["email", "phone", "address", "name", "fullName", "tenantEmail", "tenantName"];
+const REDACT_KEYS = [
+  "email",
+  "phone",
+  "address",
+  "name",
+  "fullName",
+  "tenantEmail",
+  "tenantName",
+  "documentText",
+  "documentBody",
+  "pdfContent",
+  "screeningPayload",
+  "paymentAccount",
+];
+const ALLOWED_EVENT_PREFIXES = ["nudge_", "pdf_"];
 
 function sanitizeValue(value: any, depth = 0): any {
   if (depth > 3) return null;
@@ -29,7 +43,7 @@ router.post("/telemetry", requireAuth, async (req: any, res) => {
   if (!userId) return res.status(401).json({ ok: false, error: "Unauthorized" });
 
   const eventName = String(req.body?.eventName || "").trim().toLowerCase();
-  if (!eventName || !eventName.startsWith("nudge_")) {
+  if (!eventName || !ALLOWED_EVENT_PREFIXES.some((prefix) => eventName.startsWith(prefix))) {
     return res.status(400).json({ ok: false, error: "invalid_event_name" });
   }
 

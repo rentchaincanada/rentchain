@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Card, Section, Button } from "../../components/ui/Ui";
+import { createPdfExportTimer, errorCodeFromUnknown, recordPdfExportEvent } from "../../lib/pdfExportObservability";
 import { spacing, text, colors, radius } from "../../styles/tokens";
 
 const ScreeningReportPage: React.FC = () => {
@@ -17,6 +18,12 @@ const ScreeningReportPage: React.FC = () => {
     }
     setLoading(true);
     setError(null);
+    const timer = createPdfExportTimer();
+    recordPdfExportEvent("pdf_export_started", {
+      exportType: "screening_report",
+      renderingPath: "backend_pdfkit",
+      status: "started",
+    });
     try {
       const res = await fetch(
         `/api/screening/report?exportId=${encodeURIComponent(exportId)}&token=${encodeURIComponent(token)}`
@@ -30,6 +37,13 @@ const ScreeningReportPage: React.FC = () => {
         throw new Error("This link is invalid or has been revoked.");
       }
       const blob = await res.blob();
+      recordPdfExportEvent("pdf_export_completed", {
+        exportType: "screening_report",
+        renderingPath: "backend_pdfkit",
+        status: "completed",
+        durationMs: timer.durationMs(),
+        byteSize: blob.size,
+      });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
@@ -39,6 +53,13 @@ const ScreeningReportPage: React.FC = () => {
       link.remove();
       window.URL.revokeObjectURL(url);
     } catch (err: any) {
+      recordPdfExportEvent("pdf_export_failed", {
+        exportType: "screening_report",
+        renderingPath: "backend_pdfkit",
+        status: "failed",
+        durationMs: timer.durationMs(),
+        errorCode: errorCodeFromUnknown(err),
+      });
       setError(err?.message || "Unable to download report.");
     } finally {
       setLoading(false);

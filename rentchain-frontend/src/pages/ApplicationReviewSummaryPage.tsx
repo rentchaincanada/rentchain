@@ -17,6 +17,7 @@ import {
   ReviewSummaryApiError,
 } from "../api/reviewSummaryApi";
 import { useToast } from "../components/ui/ToastProvider";
+import { createPdfExportTimer, errorCodeFromUnknown, recordPdfExportEvent } from "../lib/pdfExportObservability";
 import { buildLandlordIntakeAlignmentView } from "./applicationReviewIntakeAlignment";
 import { buildLandlordReviewGuidance } from "./landlordReviewGuidance";
 import { buildTenantLandlordInteractionLoop } from "./tenantLandlordInteractionLoop";
@@ -381,10 +382,29 @@ function ApplicationReviewSummaryPageBody() {
       });
       return;
     }
+    const timer = createPdfExportTimer();
+    recordPdfExportEvent("pdf_export_started", {
+      exportType: "application_review_summary",
+      renderingPath: "signed_url",
+      status: "started",
+    });
     try {
       const url = await fetchReviewSummaryPdfSignedUrl(id);
+      recordPdfExportEvent("pdf_export_completed", {
+        exportType: "application_review_summary",
+        renderingPath: "signed_url",
+        status: "completed",
+        durationMs: timer.durationMs(),
+      });
       window.open(url, "_blank", "noopener,noreferrer");
     } catch (err: any) {
+      recordPdfExportEvent("pdf_export_failed", {
+        exportType: "application_review_summary",
+        renderingPath: "signed_url",
+        status: "failed",
+        durationMs: timer.durationMs(),
+        errorCode: errorCodeFromUnknown(err),
+      });
       showToast({
         message: "Unable to open PDF",
         description: err?.message || "Failed to load review summary PDF.",

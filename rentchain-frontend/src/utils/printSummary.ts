@@ -1,3 +1,5 @@
+import { recordPdfExportEvent } from "../lib/pdfExportObservability";
+
 type PrintSummaryMode = "summary" | "lease-renewals" | "application";
 
 const PRINT_SELECTOR_BY_MODE: Record<PrintSummaryMode, string> = {
@@ -47,6 +49,11 @@ export async function printSummaryDocument(mode: PrintSummaryMode = "summary"): 
       });
     });
 
+    recordPdfExportEvent("pdf_print_opened", {
+      exportType: "print_summary",
+      renderingPath: "window_print",
+      status: "print_opened",
+    });
     window.print();
   } finally {
     window.setTimeout(cleanup, 250);

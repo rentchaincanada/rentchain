@@ -1,5 +1,6 @@
 import { apiJson, getAuthToken, resolveApiUrl } from "@/lib/apiClient";
 import { getFirebaseIdToken } from "@/lib/firebaseAuthToken";
+import { createPdfExportTimer, errorCodeFromUnknown, recordPdfExportEvent } from "@/lib/pdfExportObservability";
 import { apiFetch } from "./http";
 
 type TenantListResponse = TenantApiModel[] | { tenants?: TenantApiModel[] };
@@ -69,6 +70,12 @@ export async function fetchTenants(): Promise<TenantApiModel[]> {
 }
 
 export async function downloadTenantReport(tenantId: string): Promise<{ filename: string; blob: Blob }> {
+  const timer = createPdfExportTimer();
+  recordPdfExportEvent("pdf_export_started", {
+    exportType: "tenant_report",
+    renderingPath: "backend_pdfkit",
+    status: "started",
+  });
   const path = `/tenants/${encodeURIComponent(tenantId)}/report`;
   const url = resolveApiUrl(path);
   const bearerToken = getAuthToken();
@@ -84,37 +91,55 @@ export async function downloadTenantReport(tenantId: string): Promise<{ filename
     headers.set("Authorization", `Bearer ${token}`);
   }
 
-  const response = await fetch(url, {
-    method: "GET",
-    headers,
-    credentials: "include",
-  });
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      headers,
+      credentials: "include",
+    });
 
-  const contentType = response.headers.get("content-type") || "";
-  if (!response.ok) {
-    const payload: unknown = contentType.includes("application/json")
-      ? await response.json().catch(() => null)
-      : await response.text().catch(() => "");
-    const payloadRecord =
-      payload && typeof payload === "object" ? (payload as Record<string, unknown>) : null;
-    const message =
-      payloadRecord?.message ||
-      payloadRecord?.error ||
-      payloadRecord?.code ||
-      (typeof payload === "string" ? payload : "") ||
-      `Tenant report download failed (${response.status})`;
-    const err: ApiErrorShape = new Error(String(message));
-    err.payload = payload;
-    err.status = response.status;
-    throw err;
+    const contentType = response.headers.get("content-type") || "";
+    if (!response.ok) {
+      const payload: unknown = contentType.includes("application/json")
+        ? await response.json().catch(() => null)
+        : await response.text().catch(() => "");
+      const payloadRecord =
+        payload && typeof payload === "object" ? (payload as Record<string, unknown>) : null;
+      const message =
+        payloadRecord?.message ||
+        payloadRecord?.error ||
+        payloadRecord?.code ||
+        (typeof payload === "string" ? payload : "") ||
+        `Tenant report download failed (${response.status})`;
+      const err: ApiErrorShape = new Error(String(message));
+      err.payload = payload;
+      err.status = response.status;
+      throw err;
+    }
+
+    const blob = await response.blob();
+    const disposition = response.headers.get("content-disposition") || "";
+    const match = disposition.match(/filename="?([^"]+)"?/i);
+    const filename = match?.[1] || `tenant-summary-${tenantId}.pdf`;
+    recordPdfExportEvent("pdf_export_completed", {
+      exportType: "tenant_report",
+      renderingPath: "backend_pdfkit",
+      status: "completed",
+      durationMs: timer.durationMs(),
+      byteSize: blob.size,
+    });
+
+    return { filename, blob };
+  } catch (error) {
+    recordPdfExportEvent("pdf_export_failed", {
+      exportType: "tenant_report",
+      renderingPath: "backend_pdfkit",
+      status: "failed",
+      durationMs: timer.durationMs(),
+      errorCode: errorCodeFromUnknown(error),
+    });
+    throw error;
   }
-
-  const blob = await response.blob();
-  const disposition = response.headers.get("content-disposition") || "";
-  const match = disposition.match(/filename="?([^"]+)"?/i);
-  const filename = match?.[1] || `tenant-summary-${tenantId}.pdf`;
-
-  return { filename, blob };
 }
 
 export async function fetchTenantTenancies(tenantId: string): Promise<TenancyApiModel[]> {
