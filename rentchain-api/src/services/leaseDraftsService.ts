@@ -1,9 +1,13 @@
 import crypto from "crypto";
 import { db } from "../config/firebase";
+import {
+  composeScheduleALegalDocument,
+  NS_SCHEDULE_A_TEMPLATE_VERSION,
+} from "../lib/legalDocuments/scheduleAComposition";
 import { createSignedUrl, putPdfObject } from "../storage/pdfStore";
 import { generateScheduleAPdfBuffer } from "./leasePdf/scheduleAPdf";
 
-export const NS_TEMPLATE_VERSION = "ns-schedule-a-v1";
+export const NS_TEMPLATE_VERSION = NS_SCHEDULE_A_TEMPLATE_VERSION;
 export const NS_PROVINCE = "NS";
 
 export type LeaseDraftStatus = "draft" | "generated" | "activated";
@@ -206,15 +210,6 @@ export function applyPatch(
   };
 }
 
-function formatMoney(cents: number | null | undefined): string {
-  const value = Number(cents || 0) / 100;
-  return new Intl.NumberFormat("en-CA", {
-    style: "currency",
-    currency: "CAD",
-    minimumFractionDigits: 2,
-  }).format(value);
-}
-
 function escapeHtml(input: string): string {
   return input
     .replace(/&/g, "&amp;")
@@ -232,25 +227,30 @@ export function renderNsScheduleAHtml(input: {
   propertyAddressLine: string;
   unitLabel: string;
 }): string {
-  const { draft } = input;
-  const termLabel =
-    draft.termType === "fixed"
-      ? "Fixed term"
-      : draft.termType === "year-to-year"
-      ? "Year-to-year"
-      : "Month-to-month";
-  const utilities = draft.utilitiesIncluded.length
-    ? draft.utilitiesIncluded.map(escapeHtml).join(", ")
-    : "None listed";
-  const clauses = draft.additionalClauses
-    ? escapeHtml(draft.additionalClauses).replace(/\n/g, "<br />")
-    : "No additional clauses provided.";
+  const documentDefinition = composeScheduleALegalDocument(input);
+  const fieldsBySection = new Map(
+    documentDefinition.sections.map((section) => [section.id, section.fields])
+  );
+  const leaseSummaryFields = fieldsBySection.get("lease-summary") || [];
+  const termFields = fieldsBySection.get("term") || [];
+  const paymentFields = fieldsBySection.get("payments") || [];
+  const clauses = escapeHtml(
+    documentDefinition.sections.find((section) => section.id === "additional-clauses")?.body ||
+      "No additional clauses provided."
+  ).replace(/\n/g, "<br />");
+  const renderGridFields = (fields: Array<{ label: string; value: string }>) =>
+    fields
+      .map(
+        (item) =>
+          `<div><div class="key">${escapeHtml(item.label)}</div><div class="value">${escapeHtml(item.value)}</div></div>`
+      )
+      .join("\n        ");
 
   return `<!doctype html>
 <html lang="en-CA">
   <head>
     <meta charset="utf-8" />
-    <title>Schedule A addendum</title>
+    <title>${escapeHtml(documentDefinition.heading.title)}</title>
     <style>
       @page { size: Letter; margin: 0.6in; }
       body { font-family: Arial, sans-serif; color: #111827; font-size: 12px; line-height: 1.45; }
@@ -265,42 +265,30 @@ export function renderNsScheduleAHtml(input: {
     </style>
   </head>
   <body>
-    <h1>Schedule A addendum</h1>
-    <div class="muted">Province: Nova Scotia (NS) • Template version: ${NS_TEMPLATE_VERSION}</div>
-    <div class="muted">Reference: Nova Scotia Standard Form of Lease (Form P). Review base lease terms.</div>
+    <h1>${escapeHtml(documentDefinition.heading.title)}</h1>
+    <div class="muted">${escapeHtml(documentDefinition.heading.subtitle || "Province: Nova Scotia (NS)")} • Template version: ${escapeHtml(documentDefinition.metadata.version)}</div>
+    <div class="muted">${escapeHtml(documentDefinition.heading.description || "")}</div>
     <div class="card">
       <div class="grid">
-        <div><div class="key">Landlord</div><div class="value">${escapeHtml(input.landlordDisplayName || "Landlord")}</div></div>
-        <div><div class="key">Tenant(s)</div><div class="value">${escapeHtml(input.tenantDisplayNames.join(", ") || "Tenant")}</div></div>
-        <div><div class="key">Property</div><div class="value">${escapeHtml(input.propertyAddressLine || input.draft.propertyId)}</div></div>
-        <div><div class="key">Unit</div><div class="value">${escapeHtml(input.unitLabel || input.draft.unitId)}</div></div>
-        <div><div class="key">Draft ID</div><div class="value">${escapeHtml(input.draftId)}</div></div>
+        ${renderGridFields(leaseSummaryFields)}
         <div><div class="key">Generated</div><div class="value">${new Date().toISOString().slice(0, 10)}</div></div>
       </div>
     </div>
 
     <h2>Term</h2>
     <div class="grid">
-      <div><div class="key">Term type</div><div class="value">${escapeHtml(termLabel)}</div></div>
-      <div><div class="key">Start date</div><div class="value">${escapeHtml(draft.startDate)}</div></div>
-      <div><div class="key">End date</div><div class="value">${escapeHtml(draft.endDate || "Not specified")}</div></div>
-      <div><div class="key">Rent due day</div><div class="value">${draft.dueDay}</div></div>
+      ${renderGridFields(termFields)}
     </div>
 
     <h2>Payments</h2>
     <div class="grid">
-      <div><div class="key">Base rent</div><div class="value">${formatMoney(draft.baseRentCents)}</div></div>
-      <div><div class="key">Parking</div><div class="value">${formatMoney(draft.parkingCents)}</div></div>
-      <div><div class="key">Deposit</div><div class="value">${draft.depositCents != null ? formatMoney(draft.depositCents) : "Not specified"}</div></div>
-      <div><div class="key">NSF fee</div><div class="value">${draft.nsfFeeCents != null ? formatMoney(draft.nsfFeeCents) : "Not specified"}</div></div>
-      <div><div class="key">Payment method</div><div class="value">${escapeHtml(draft.paymentMethod)}</div></div>
-      <div><div class="key">Utilities included</div><div class="value">${utilities}</div></div>
+      ${renderGridFields(paymentFields)}
     </div>
 
     <h2>Additional clauses</h2>
     <div class="card">${clauses}</div>
 
-    <p class="footer">This Schedule A addendum supplements Form P and does not replace the base lease form.</p>
+    <p class="footer">${escapeHtml(documentDefinition.footer || "")}</p>
   </body>
 </html>`;
 }

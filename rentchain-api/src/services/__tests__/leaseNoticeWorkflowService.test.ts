@@ -46,6 +46,7 @@ vi.mock("../../config/firebase", () => ({
 }));
 
 import {
+  buildPreview,
   deriveLandlordVisibleExpiringLeases,
   deriveLeaseNoticeExecutionInputSnapshot,
   normalizeLeaseRecord,
@@ -125,6 +126,43 @@ describe("leaseNoticeWorkflowService renewal operator inputs", () => {
     ).toEqual({
       ok: false,
       error: "PROPOSED_RENT_NOT_ALLOWED_FOR_RENT_CHANGE_MODE",
+    });
+  });
+
+  it("attaches legal document metadata to notice previews", () => {
+    const lease = normalizeLeaseRecord("lease-1", {
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      leaseType: "fixed_term",
+      province: "NS",
+      currentRent: 1650,
+      leaseEndDate: "2026-05-10",
+      status: "active",
+    });
+
+    const previewResult = buildPreview(lease, {
+      rentChangeMode: "increase",
+      proposedRent: 1750,
+      newTermType: "fixed_term",
+      newLeaseStartDate: "2026-05-11",
+      newLeaseEndDate: "2027-05-10",
+      responseDeadlineAt: Date.UTC(2026, 4, 1, 12, 0, 0, 0),
+    });
+
+    expect(previewResult.ok).toBe(true);
+    if (!previewResult.ok) return;
+    expect(previewResult.preview.summary).toEqual({
+      title: "Lease notice preview",
+      body: "Proposed rent: 1750 CAD",
+    });
+    expect(previewResult.preview.legalDocumentMetadata).toMatchObject({
+      documentKind: "lease_notice",
+      province: "NS",
+      templateKey: "ns.fixed_term.renewal_offer.v1",
+      version: "ns-v1",
+      sensitivity: "restricted",
     });
   });
 

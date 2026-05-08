@@ -1,5 +1,6 @@
 import type { LandlordActiveLease } from "@/api/leasesApi";
 import { shouldStartNewPage, triggerDocumentDownload, wrapTextForPdf } from "@/lib/documentRendering";
+import { composeLeaseSummaryLegalDocument } from "@/lib/legalDocumentComposition";
 import { createPdfExportTimer, recordPdfExportEvent } from "@/lib/pdfExportObservability";
 
 function formatCurrency(value: number | null | undefined) {
@@ -29,63 +30,11 @@ function escapePdfText(value: string) {
 }
 
 export function buildLeaseSummaryPdfSource(lease: LandlordActiveLease) {
-  const sections = [
-    {
-      title: "Property and Unit",
-      rows: [
-        ["Property", lease.propertyName || lease.propertyLabel || lease.propertyAddress || "Property"],
-        ["Unit", lease.unitNumber || "—"],
-        ["Lease reference", lease.id],
-      ],
-    },
-    {
-      title: "Landlord and Tenant",
-      rows: [
-        ["Tenant", lease.tenantName || "Tenant not linked"],
-        ["Tenant email", lease.tenantEmail || "No email on file"],
-        ["Landlord record", "Current RentChain landlord account"],
-      ],
-    },
-    {
-      title: "Lease Term",
-      rows: [
-        ["Start date", formatDate(lease.startDate)],
-        ["End date", formatDate(lease.endDate)],
-        ["Current status", prettyLeaseStatus(lease.status)],
-      ],
-    },
-    {
-      title: "Rent and Payment Terms",
-      rows: [
-        ["Monthly rent", formatCurrency(lease.monthlyRent)],
-        ["Payment readiness", lease.paymentReadiness?.readinessLabel || "Payment readiness unavailable"],
-        ["Rent collection", lease.rentPaymentSummary?.paymentRail.enabled ? "Enabled" : "Not enabled"],
-      ],
-      note: lease.paymentReadiness?.readinessDescription || null,
-    },
-    {
-      title: "Clauses and Additional Terms",
-      rows: [],
-      note:
-        "Full legal clauses remain in the attached lease document when one is available. This fallback view summarizes the landlord-visible lease record so the lease is still reviewable when no separate file is attached.",
-    },
-  ];
-  if (lease.leaseExecution || lease.leaseLifecycleSummary) {
-    sections.push({
-      title: "Audit and Events",
-      rows: [],
-      note: [
-        lease.leaseExecution
-          ? `${lease.leaseExecution.executionLabel}: ${lease.leaseExecution.executionDescription}`
-          : "",
-        lease.leaseLifecycleSummary
-          ? `${lease.leaseLifecycleSummary.lifecycleLabel}: ${lease.leaseLifecycleSummary.lifecycleDescription}`
-          : "",
-      ]
-        .filter(Boolean)
-        .join(" "),
-    });
-  }
+  const documentDefinition = composeLeaseSummaryLegalDocument(lease, {
+    currency: formatCurrency,
+    date: formatDate,
+    status: prettyLeaseStatus,
+  });
 
   const page = { width: 612, height: 792 };
   const docX = 54;
@@ -124,24 +73,24 @@ export function buildLeaseSummaryPdfSource(lease: LandlordActiveLease) {
 
   addPage();
   drawPageFrame();
-  textAt("RentChain lease record", 236, y, 10, "F2");
+  textAt(documentDefinition.eyebrow, 236, y, 10, "F2");
   y -= 24;
-  textAt("Residential Lease Pack", 193, y, 20, "F2");
+  textAt(documentDefinition.title, 193, y, 20, "F2");
   y -= 18;
-  textAt("Document-style summary generated from the current landlord lease record.", 128, y, 10);
+  textAt(documentDefinition.description, 128, y, 10);
   y -= 30;
 
-  sections.forEach((section) => {
+  documentDefinition.sections.forEach((section) => {
     ensureSpace(48);
     line(84, y + 14, 528, y + 14);
     textAt(section.title, 84, y, 13, "F2");
     y -= 22;
 
-    section.rows.forEach(([label, value]) => {
+    section.fields.forEach((field) => {
       ensureSpace(34);
       rect(84, y - 8, 444, 24, true);
-      textAt(label.toUpperCase(), 96, y, 8, "F2");
-      textAt(String(value), 252, y, 10);
+      textAt(field.label.toUpperCase(), 96, y, 8, "F2");
+      textAt(field.value, 252, y, 10);
       y -= 28;
     });
 
