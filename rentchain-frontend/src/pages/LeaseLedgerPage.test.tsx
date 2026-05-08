@@ -56,6 +56,9 @@ describe("LeaseLedgerPage", () => {
     global.fetch = vi.fn(async () => ({
       ok: true,
       blob: async () => new Blob(["%PDF-1.4"], { type: "application/pdf" }),
+      headers: {
+        get: () => null,
+      },
     })) as unknown as typeof fetch;
     mocks.fetchLeaseLedger.mockResolvedValue({
       ok: true,
@@ -644,8 +647,13 @@ describe("LeaseLedgerPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Export PDF" }));
 
     await waitFor(() => {
-      expect(mocks.leaseLedgerExportUrl).toHaveBeenCalledWith("lease-1", undefined, undefined, "pdf");
-      expect(global.fetch).toHaveBeenCalledWith("https://example.com/export.pdf", expect.any(Object));
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining("/api/leases/lease-1/ledger/export.pdf"),
+        expect.objectContaining({
+          method: "GET",
+          credentials: "include",
+        })
+      );
       expect(HTMLAnchorElement.prototype.click).toHaveBeenCalledTimes(1);
     });
     expect(createdAnchors[createdAnchors.length - 1]?.download).toBe("lease-ledger-lease-1.pdf");

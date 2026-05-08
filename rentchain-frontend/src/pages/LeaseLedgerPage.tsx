@@ -4,7 +4,6 @@ import {
   addLeaseCharge,
   addLeasePayment,
   fetchLeaseLedger,
-  leaseLedgerExportUrl,
   type DelinquencySignalType,
   type LeaseObligationLedgerRow,
   type LeaseObligationLedgerSummary,
@@ -13,10 +12,9 @@ import {
   type LeaseLedgerEntry,
   type PaymentObligationStatus,
 } from "../api/leaseLedgerApi";
+import { downloadAuthenticatedExport } from "../api/exportDownload";
 import { patchDecisionAction } from "@/api/decisionApi";
-import { getAuthToken } from "../lib/authToken";
-import { getFirebaseIdToken } from "../lib/firebaseAuthToken";
-import { createPdfExportTimer, errorCodeFromUnknown, recordPdfExportEvent } from "../lib/pdfExportObservability";
+import { triggerDocumentDownload } from "../lib/documentRendering";
 import {
   archiveLeaseRecord,
   createLeaseNote,
@@ -608,56 +606,25 @@ export default function LeaseLedgerPage() {
 
   async function exportLedger(format: "csv" | "pdf") {
     const isPdf = format === "pdf";
-    const timer = createPdfExportTimer();
-    if (isPdf) {
-      recordPdfExportEvent("pdf_export_started", {
-        exportType: "lease_ledger",
-        renderingPath: "backend_pdfkit",
-        status: "started",
-      });
-    }
     try {
-      const token = (await getFirebaseIdToken()) || getAuthToken();
-      const authHeader = token ? { Authorization: `Bearer ${token}` } : {};
-      const url = leaseLedgerExportUrl(leaseId, from || undefined, to || undefined, format);
-      const res = await fetch(url, {
-        method: "GET",
-        headers: {
-          ...authHeader,
-          "x-api-client": "web",
-          "x-rc-auth": token ? "bearer" : "missing",
-        },
-        credentials: "include",
+      const query = new URLSearchParams();
+      if (from) query.set("from", from);
+      if (to) query.set("to", to);
+      const queryString = query.toString();
+      const path = `/leases/${encodeURIComponent(leaseId)}/ledger/export.${format}${queryString ? `?${queryString}` : ""}`;
+      const { blob, filename } = await downloadAuthenticatedExport({
+        path,
+        fallbackFilename: `lease-ledger-${leaseId}.${format}`,
+        errorMessage: `Failed to export ${format.toUpperCase()}`,
+        observability: isPdf
+          ? {
+              exportType: "lease_ledger",
+              renderingPath: "backend_pdfkit",
+            }
+          : undefined,
       });
-      if (!res.ok) throw new Error(`Export failed (${res.status})`);
-      const blob = await res.blob();
-      if (isPdf) {
-        recordPdfExportEvent("pdf_export_completed", {
-          exportType: "lease_ledger",
-          renderingPath: "backend_pdfkit",
-          status: "completed",
-          durationMs: timer.durationMs(),
-          byteSize: blob.size,
-        });
-      }
-      const objectUrl = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = objectUrl;
-      a.download = `lease-ledger-${leaseId}.${format}`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(objectUrl);
+      triggerDocumentDownload({ blob, filename, urlApi: URL });
     } catch (err: unknown) {
-      if (isPdf) {
-        recordPdfExportEvent("pdf_export_failed", {
-          exportType: "lease_ledger",
-          renderingPath: "backend_pdfkit",
-          status: "failed",
-          durationMs: timer.durationMs(),
-          errorCode: errorCodeFromUnknown(err),
-        });
-      }
       setError(errorMessage(err, `Failed to export ${format.toUpperCase()}`));
     }
   }

@@ -15,6 +15,20 @@ describe("print PDF guardrails", () => {
     expect(printCss).not.toMatch(/\.rc-print-area[\s\S]*overflow:\s*hidden/i);
   });
 
+  it("routes print helpers through the shared document-rendering foundation", () => {
+    const printSummary = readFileSync(resolve(srcRoot, "utils/printSummary.ts"), "utf8");
+    const leaseSummaryPdf = readFileSync(resolve(srcRoot, "utils/leaseSummaryPdf.ts"), "utf8");
+    const samplePdfModal = readFileSync(resolve(srcRoot, "components/billing/SamplePdfModal.tsx"), "utf8");
+    const samplePdfPage = readFileSync(resolve(srcRoot, "pages/PdfSamplePage.tsx"), "utf8");
+
+    expect(printSummary).toMatch(/createPrintRoot/);
+    expect(printSummary).toMatch(/PRINT_ROOT_ACTIVE_ATTRIBUTE/);
+    expect(leaseSummaryPdf).toMatch(/shouldStartNewPage/);
+    expect(leaseSummaryPdf).toMatch(/wrapTextForPdf/);
+    expect(samplePdfModal).toMatch(/PdfPreviewBoundary/);
+    expect(samplePdfPage).toMatch(/PdfPreviewBoundary/);
+  });
+
   it("keeps application print view from reserving a viewport-height phantom page", () => {
     const source = readFileSync(
       resolve(srcRoot, "components/applications/PrintApplicationView.tsx"),

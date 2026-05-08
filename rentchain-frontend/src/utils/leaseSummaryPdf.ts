@@ -1,4 +1,5 @@
 import type { LandlordActiveLease } from "@/api/leasesApi";
+import { shouldStartNewPage, triggerDocumentDownload, wrapTextForPdf } from "@/lib/documentRendering";
 import { createPdfExportTimer, recordPdfExportEvent } from "@/lib/pdfExportObservability";
 
 function formatCurrency(value: number | null | undefined) {
@@ -116,7 +117,7 @@ export function buildLeaseSummaryPdfSource(lease: LandlordActiveLease) {
     rect(docX, docY, docWidth, docHeight);
   };
   const ensureSpace = (neededHeight: number) => {
-    if (y - neededHeight >= bottomY) return;
+    if (!shouldStartNewPage({ cursorY: y, neededHeight, bottomY })) return;
     addPage();
     drawPageFrame();
   };
@@ -145,19 +146,7 @@ export function buildLeaseSummaryPdfSource(lease: LandlordActiveLease) {
     });
 
     if (section.note) {
-      const words = String(section.note).split(/\s+/);
-      let current = "";
-      const wrapped: string[] = [];
-      words.forEach((word) => {
-        const next = current ? `${current} ${word}` : word;
-        if (next.length > 86) {
-          if (current) wrapped.push(current);
-          current = word;
-        } else {
-          current = next;
-        }
-      });
-      if (current) wrapped.push(current);
+      const wrapped = wrapTextForPdf(String(section.note), 86);
       wrapped.forEach((wrappedLine) => {
         ensureSpace(18);
         textAt(wrappedLine, 96, y, 10);
@@ -217,12 +206,9 @@ export function downloadLeaseSummaryPdf(lease: LandlordActiveLease) {
     durationMs: timer.durationMs(),
     byteSize: blob.size,
   });
-  const url = window.URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = `lease-${lease.unitNumber || lease.id}.pdf`;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  window.URL.revokeObjectURL(url);
+  triggerDocumentDownload({
+    blob,
+    filename: `lease-${lease.unitNumber || lease.id}.pdf`,
+    urlApi: window.URL,
+  });
 }
