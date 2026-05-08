@@ -59,7 +59,7 @@ async function buildProfile(req: any) {
   const identityType = requestedIdentityType(req.query?.identityType);
   const identityId = asString(req.query?.identityId, 400);
 
-  const [tenants, properties, organizations, reviews, events, consents, registryStatuses] = await Promise.all([
+  const [tenants, properties, organizations, reviews, events, consents, registryStatuses, propertyVerificationAttestations] = await Promise.all([
     loadLandlordCollection("tenants", landlordId),
     loadLandlordCollection("properties", landlordId),
     loadLandlordCollection("organizations", landlordId),
@@ -67,6 +67,7 @@ async function buildProfile(req: any) {
     loadLandlordCollection("events", landlordId),
     loadLandlordCollection("consents", landlordId),
     loadLandlordCollection("propertyRegistryStatuses", landlordId),
+    loadLandlordCollection("propertyVerificationAttestations", landlordId),
   ]);
 
   const tenant = selectRecord(tenants, identityId, ["tenantId", "profileId"]);
@@ -78,6 +79,12 @@ async function buildProfile(req: any) {
   const consentRecords = relatedRecords(consents, identityId, ["identityId", "tenantId", "propertyId", "userId"]);
   const reviewSessions = relatedRecords(reviews, identityId, ["scopeId", "tenantId", "propertyId", "actorId", "openedById"]);
   const canonicalEvents = relatedRecords(events, identityId, ["resourceId", "tenantId", "propertyId", "actorId"]);
+  const relatedPropertyVerificationAttestations = relatedRecords(propertyVerificationAttestations, identityId, [
+    "subjectId",
+    "propertyId",
+    "accountId",
+    "businessId",
+  ]);
 
   return deriveIdentityProfile({
     identityType,
@@ -90,6 +97,7 @@ async function buildProfile(req: any) {
     consentRecords,
     reviewSessions,
     canonicalEvents,
+    propertyVerificationAttestations: relatedPropertyVerificationAttestations,
   });
 }
 

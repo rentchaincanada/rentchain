@@ -1,6 +1,11 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import type { IdentityAssuranceSummary, IdentityLayerProfile, IdentityLayerReference } from "@/api/identityLayerApi";
+import type {
+  IdentityAssuranceSummary,
+  IdentityLayerProfile,
+  IdentityLayerReference,
+  PropertyTrustSummary,
+} from "@/api/identityLayerApi";
 import { Card, Section } from "@/components/ui/Ui";
 
 function label(value: string) {
@@ -89,6 +94,67 @@ function defaultIdentityAssurance(profile: IdentityLayerProfile): IdentityAssura
   };
 }
 
+function propertyTrustSubjectType(profile: IdentityLayerProfile): PropertyTrustSummary["subjectType"] {
+  if (profile.identityType === "property") return "property";
+  if (profile.identityType === "organization") return "organization";
+  if (profile.identityType === "operator" || profile.identityType === "review_actor") return "operator";
+  return "landlord";
+}
+
+function defaultPropertyTrust(profile: IdentityLayerProfile): PropertyTrustSummary {
+  return {
+    subjectType: propertyTrustSubjectType(profile),
+    subjectId: profile.trustState.subjectId,
+    propertyId: profile.identityType === "property" ? profile.identityId.replace(/^[^:]+:/, "") : null,
+    accountId: null,
+    businessId: null,
+    businessStatus: "not_started",
+    propertyStatus: "not_started",
+    operatorAuthorityStatus: "not_asserted",
+    registryLinkStatus: "not_linked",
+    relationshipType: "none",
+    authorityConfidence: "none",
+    trustLabel: "Property authority not verified",
+    trustDescription:
+      "No provider-neutral business, property, or operator authority attestation is present. Onboarding remains unblocked.",
+    providerCategory: "none",
+    consentRequired: true,
+    consentAvailable: false,
+    retentionClass: "authority_metadata",
+    metadataOnly: true,
+    rawSensitivePayloadStored: false,
+    liveRegistryIntegrationEnabled: false,
+    onboardingBlocking: false,
+    publicShareable: false,
+    executionEligible: false,
+    legalOwnershipConclusion: false,
+    reverificationRequired: false,
+    nextReverificationAt: null,
+    signalSummary: {
+      totalAttestations: 0,
+      businessCompletedAttestations: 0,
+      propertyCompletedAttestations: 0,
+      operatorAuthorityAttestations: 0,
+      registryLinkedAttestations: 0,
+      expiredAttestations: 0,
+      revokedAttestations: 0,
+      reviewRequiredAttestations: 0,
+    },
+    supportSummary: {
+      visibleToSupport: true,
+      rawTitleDocumentVisible: false,
+      rawRegistryPayloadVisible: false,
+      rawBankingPayloadVisible: false,
+      legalOwnershipConclusionVisible: false,
+      attestations: [],
+    },
+    redactions: [],
+    reviewReasons: [],
+    canonicalEvents: [],
+    generatedAt: profile.generatedAt,
+  };
+}
+
 function ReferenceList({ title, references }: { title: string; references: IdentityLayerReference[] }) {
   return (
     <Section style={{ display: "grid", gap: 10 }}>
@@ -125,6 +191,7 @@ function ReferenceList({ title, references }: { title: string; references: Ident
 
 export function IdentityProfilePanel({ profile }: { profile: IdentityLayerProfile }) {
   const identityAssurance = profile.identityAssurance || defaultIdentityAssurance(profile);
+  const propertyTrust = profile.propertyTrust || defaultPropertyTrust(profile);
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
@@ -249,6 +316,58 @@ export function IdentityProfilePanel({ profile }: { profile: IdentityLayerProfil
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
                     <strong>{label(attestation.level)}</strong>
                     <Badge status={attestation.lifecycleState}>{label(attestation.lifecycleState)}</Badge>
+                  </div>
+                  <div style={{ color: "#64748b", fontSize: 13, marginTop: 6 }}>
+                    Provider: {label(attestation.providerType)}
+                    {attestation.providerReferenceRedacted ? ` · Ref ${attestation.providerReferenceRedacted}` : ""}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </Card>
+      </Section>
+
+      <Section style={{ display: "grid", gap: 10 }}>
+        <div style={{ fontWeight: 900 }}>Business and property authority</div>
+        <Card style={{ borderRadius: 8, padding: 12 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+            <div>
+              <strong>{propertyTrust.trustLabel}</strong>
+              <div style={{ color: "#475569", fontSize: 13, marginTop: 4, lineHeight: 1.5 }}>
+                {propertyTrust.trustDescription}
+              </div>
+            </div>
+            <Badge status={propertyTrust.authorityConfidence}>{label(propertyTrust.authorityConfidence)}</Badge>
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+            <Badge status={propertyTrust.businessStatus}>Business {label(propertyTrust.businessStatus)}</Badge>
+            <Badge status={propertyTrust.propertyStatus}>Property {label(propertyTrust.propertyStatus)}</Badge>
+            <Badge status={propertyTrust.operatorAuthorityStatus}>Authority {label(propertyTrust.operatorAuthorityStatus)}</Badge>
+            <Badge status={propertyTrust.registryLinkStatus}>Registry {label(propertyTrust.registryLinkStatus)}</Badge>
+            <Badge status={propertyTrust.legalOwnershipConclusion ? "blocked" : "available"}>No ownership conclusion</Badge>
+            <Badge status={propertyTrust.liveRegistryIntegrationEnabled ? "blocked" : "available"}>Live integrations disabled</Badge>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 8, marginTop: 12 }}>
+            {[
+              ["Attestations", propertyTrust.signalSummary.totalAttestations],
+              ["Business", propertyTrust.signalSummary.businessCompletedAttestations],
+              ["Property", propertyTrust.signalSummary.propertyCompletedAttestations],
+              ["Authority", propertyTrust.signalSummary.operatorAuthorityAttestations],
+            ].map(([name, value]) => (
+              <div key={String(name)} style={{ border: "1px solid #e2e8f0", borderRadius: 8, padding: 10 }}>
+                <div style={{ color: "#64748b", fontSize: 12, fontWeight: 800 }}>{name}</div>
+                <strong style={{ color: "#0f172a", fontSize: 18 }}>{String(value)}</strong>
+              </div>
+            ))}
+          </div>
+          {propertyTrust.supportSummary.attestations.length ? (
+            <div style={{ display: "grid", gap: 8, marginTop: 12 }}>
+              {propertyTrust.supportSummary.attestations.map((attestation) => (
+                <div key={attestation.attestationId} style={{ border: "1px solid #e2e8f0", borderRadius: 8, padding: 10 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                    <strong>{label(attestation.relationshipType)}</strong>
+                    <Badge status={attestation.operatorAuthorityStatus}>{label(attestation.operatorAuthorityStatus)}</Badge>
                   </div>
                   <div style={{ color: "#64748b", fontSize: 13, marginTop: 6 }}>
                     Provider: {label(attestation.providerType)}

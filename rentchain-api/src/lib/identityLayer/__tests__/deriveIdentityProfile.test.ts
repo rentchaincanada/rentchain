@@ -40,6 +40,14 @@ describe("deriveIdentityProfile", () => {
         onboardingBlocking: false,
       })
     );
+    expect(profile.propertyTrust).toEqual(
+      expect.objectContaining({
+        propertyStatus: "not_started",
+        operatorAuthorityStatus: "not_asserted",
+        legalOwnershipConclusion: false,
+        onboardingBlocking: false,
+      })
+    );
     expect(profile.consentSummary.consentAvailable).toBe(true);
     expect(profile.reviewReferences).toHaveLength(1);
     expect(profile.canonicalEvents).toEqual(
@@ -186,5 +194,85 @@ describe("deriveIdentityProfile", () => {
     );
     expect(JSON.stringify(profile)).not.toContain("provider-reference-sensitive");
     expect(JSON.stringify(profile)).not.toContain("evidence-reference-sensitive");
+  });
+
+  it("aligns property authority metadata with account trust without ownership claims", () => {
+    const profile = deriveIdentityProfile({
+      identityType: "property",
+      identityId: "property-authority",
+      generatedAt: "2026-05-08T00:00:00.000Z",
+      property: {
+        id: "property-authority",
+        landlordId: "landlord-1",
+        createdAt: "2026-05-01T00:00:00.000Z",
+      },
+      registryStatus: { id: "registry-1", status: "verified", verifiedAt: "2026-05-02T00:00:00.000Z" },
+      consentRecords: [{ id: "consent-property", scope: "property authority review" }],
+      propertyVerificationAttestations: [
+        {
+          attestationId: "property-trust-1",
+          subjectType: "property",
+          subjectId: "property-authority",
+          propertyId: "property-authority",
+          accountId: "landlord-1",
+          businessId: "business-1",
+          relationshipType: "registry_linked",
+          businessStatus: "completed",
+          propertyStatus: "registry_linked",
+          operatorAuthorityStatus: "partially_supported",
+          registryLinkStatus: "linked",
+          evidenceType: "registry_record",
+          providerType: "public_registry",
+          providerKey: "halifax_r400",
+          providerReferenceId: "registry-reference-sensitive",
+          evidenceRef: "property-evidence-sensitive",
+          confidence: "medium",
+          consentScope: {
+            consentId: "consent-property",
+            purpose: "property_verification",
+            grantedAt: "2026-05-01T00:00:00.000Z",
+            expiresAt: "2026-11-01T00:00:00.000Z",
+            revokedAt: null,
+            institutionRecipientType: "none",
+            attributeScopes: ["registry_status", "authority_summary"],
+          },
+          retentionClass: "registry_reference",
+          issuedAt: "2026-05-01T00:00:00.000Z",
+          completedAt: "2026-05-01T00:10:00.000Z",
+          expiresAt: "2026-11-01T00:00:00.000Z",
+          revokedAt: null,
+          nextReverificationAt: "2026-10-01T00:00:00.000Z",
+          auditEventRef: "event-property",
+          metadataOnly: true,
+          rawSensitivePayloadStored: false,
+          supportVisible: true,
+          publicShareable: false,
+          onboardingBlocking: false,
+          executionEligible: false,
+          legalOwnershipConclusion: false,
+          reviewRequired: false,
+          redacted: false,
+        },
+      ],
+    });
+
+    expect(profile.propertyTrust).toEqual(
+      expect.objectContaining({
+        propertyStatus: "registry_linked",
+        registryLinkStatus: "linked",
+        legalOwnershipConclusion: false,
+        publicShareable: false,
+        executionEligible: false,
+      })
+    );
+    expect(profile.trustState.trustLevel).toBe("provider_attested");
+    expect(profile.propertyTrust.supportSummary.attestations[0]).toEqual(
+      expect.objectContaining({
+        providerReferenceRedacted: "***tive",
+        evidenceRefRedacted: "***tive",
+      })
+    );
+    expect(JSON.stringify(profile)).not.toContain("registry-reference-sensitive");
+    expect(JSON.stringify(profile)).not.toContain("property-evidence-sensitive");
   });
 });
