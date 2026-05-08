@@ -7,7 +7,7 @@ export async function logTelemetryEvent(
 ): Promise<void> {
   if (!isTelemetryEnabled()) return;
   const normalized = String(eventName || "").trim().toLowerCase();
-  if (!normalized.startsWith("nudge_")) return;
+  if (!normalized.startsWith("nudge_") && !normalized.startsWith("pdf_")) return;
   try {
     await apiFetch("/telemetry", {
       method: "POST",

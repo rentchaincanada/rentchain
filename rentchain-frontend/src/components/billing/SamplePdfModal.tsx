@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { recordPdfExportEvent } from "../../lib/pdfExportObservability";
 import { useMobilePdfPreviewGuard } from "../../utils/pdfPreviewGuard";
 
 type Props = {
@@ -53,6 +54,16 @@ export function SamplePdfModal({ open, onClose }: Props) {
     );
     focusable?.focus();
   }, [open]);
+
+  useEffect(() => {
+    if (!open || !useMobileFallback) return;
+    recordPdfExportEvent("pdf_mobile_fallback_used", {
+      exportType: "sample_screening_report",
+      renderingPath: "mobile_fallback",
+      status: "fallback_used",
+      fallbackMode: "mobile_open_download",
+    });
+  }, [open, useMobileFallback]);
 
   if (!open) return null;
 
@@ -128,6 +139,11 @@ export function SamplePdfModal({ open, onClose }: Props) {
             <button
               type="button"
               onClick={() => {
+                recordPdfExportEvent("pdf_download_triggered", {
+                  exportType: "sample_screening_report",
+                  renderingPath: "signed_url",
+                  status: "download_triggered",
+                });
                 if (typeof window !== "undefined") {
                   window.location.assign(pdfUrl);
                 }
@@ -149,6 +165,13 @@ export function SamplePdfModal({ open, onClose }: Props) {
               href={pdfUrl}
               target="_blank"
               rel="noreferrer"
+              onClick={() =>
+                recordPdfExportEvent("pdf_download_triggered", {
+                  exportType: "sample_screening_report",
+                  renderingPath: "signed_url",
+                  status: "download_triggered",
+                })
+              }
               style={{
                 fontSize: 13,
                 color: "#0f172a",
@@ -194,10 +217,33 @@ export function SamplePdfModal({ open, onClose }: Props) {
                 Mobile browsers handle PDF files more reliably in the browser viewer or download manager.
               </div>
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                <a href={pdfUrl} target="_blank" rel="noreferrer">
+                <a
+                  href={pdfUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={() =>
+                    recordPdfExportEvent("pdf_download_triggered", {
+                      exportType: "sample_screening_report",
+                      renderingPath: "mobile_fallback",
+                      status: "download_triggered",
+                      fallbackMode: "mobile_open_download",
+                    })
+                  }
+                >
                   Open PDF
                 </a>
-                <a href={pdfUrl} download>
+                <a
+                  href={pdfUrl}
+                  download
+                  onClick={() =>
+                    recordPdfExportEvent("pdf_download_triggered", {
+                      exportType: "sample_screening_report",
+                      renderingPath: "mobile_fallback",
+                      status: "download_triggered",
+                      fallbackMode: "mobile_open_download",
+                    })
+                  }
+                >
                   Download PDF
                 </a>
               </div>
@@ -214,7 +260,22 @@ export function SamplePdfModal({ open, onClose }: Props) {
                 border: "none",
                 display: "block",
               }}
-              onError={() => setLoadError(true)}
+              onLoad={() =>
+                recordPdfExportEvent("pdf_export_completed", {
+                  exportType: "sample_screening_report",
+                  renderingPath: "desktop_iframe",
+                  status: "completed",
+                })
+              }
+              onError={() => {
+                setLoadError(true);
+                recordPdfExportEvent("pdf_export_failed", {
+                  exportType: "sample_screening_report",
+                  renderingPath: "desktop_iframe",
+                  status: "failed",
+                  errorCode: "iframe_load_error",
+                });
+              }}
             />
           )}
         </div>

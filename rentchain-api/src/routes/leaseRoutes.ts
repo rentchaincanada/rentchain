@@ -1,5 +1,6 @@
 import { Router, Request, Response } from "express";
 import PDFDocument from "pdfkit";
+import { recordPdfExportTelemetry } from "../lib/pdfExportObservability/recordPdfExportTelemetry";
 import {
   CreateLeasePayload,
   leaseService,
@@ -2687,6 +2688,7 @@ router.get("/:leaseId/ledger/export.csv", async (req: any, res: Response) => {
 });
 
 router.get("/:leaseId/ledger/export.pdf", async (req: any, res: Response) => {
+  const startedAt = Date.now();
   try {
     const landlordId = req.user?.landlordId || req.user?.id;
     if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
@@ -2706,8 +2708,26 @@ router.get("/:leaseId/ledger/export.pdf", async (req: any, res: Response) => {
       "Content-Disposition",
       `attachment; filename=\"lease-ledger-${leaseId}.pdf\"`
     );
+    void recordPdfExportTelemetry({
+      eventName: "pdf_export_completed",
+      req,
+      exportType: "lease_ledger",
+      renderingPath: "backend_pdfkit",
+      status: "completed",
+      durationMs: Date.now() - startedAt,
+      byteSize: pdf.byteLength,
+    });
     return res.status(200).send(pdf);
   } catch (err) {
+    void recordPdfExportTelemetry({
+      eventName: "pdf_export_failed",
+      req,
+      exportType: "lease_ledger",
+      renderingPath: "backend_pdfkit",
+      status: "failed",
+      durationMs: Date.now() - startedAt,
+      errorCode: err instanceof Error ? err.message : "lease_ledger_pdf_failed",
+    });
     console.error("[GET /api/leases/:leaseId/ledger/export.pdf] error", err);
     return res.status(500).json({ ok: false, error: "Failed to export lease ledger PDF" });
   }

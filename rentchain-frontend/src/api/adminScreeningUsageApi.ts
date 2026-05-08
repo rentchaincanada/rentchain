@@ -3,6 +3,7 @@ import { getAuthToken } from "../lib/authToken";
 import { getFirebaseIdToken } from "../lib/firebaseAuthToken";
 import { apiFetch } from "./apiFetch";
 import { parseContentDispositionFilename } from "./exportDownload";
+import { createPdfExportTimer, errorCodeFromUnknown, recordPdfExportEvent } from "../lib/pdfExportObservability";
 
 export type TransUnionUsageReport = {
   ok: true;
@@ -94,32 +95,56 @@ export async function fetchAdminTransUnionUsage(params?: TransUnionUsageReportPa
 }
 
 export async function downloadAdminTransUnionUsagePdf(params?: TransUnionUsageReportParams) {
+  const timer = createPdfExportTimer();
+  recordPdfExportEvent("pdf_export_started", {
+    exportType: "transunion_usage",
+    renderingPath: "backend_pdfkit",
+    status: "started",
+  });
   const token = getAuthToken() || (await getFirebaseIdToken()) || "";
   const path = `/admin/screening/transunion-usage/pdf${buildTransUnionUsageQuery(params)}`;
-  const response = await fetch(apiUrl(path), {
-    method: "GET",
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-    credentials: "include",
-  });
+  try {
+    const response = await fetch(apiUrl(path), {
+      method: "GET",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      credentials: "include",
+    });
 
-  if (!response.ok) {
-    const text = await response.text().catch(() => "");
-    let message = text || "Failed to export PDF report";
-    try {
-      const json = text ? JSON.parse(text) : null;
-      message = json?.message || json?.error || message;
-    } catch {
-      // Ignore non-JSON error responses.
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      let message = text || "Failed to export PDF report";
+      try {
+        const json = text ? JSON.parse(text) : null;
+        message = json?.message || json?.error || message;
+      } catch {
+        // Ignore non-JSON error responses.
+      }
+      throw new Error(message);
     }
-    throw new Error(message);
-  }
 
-  const blob = await response.blob();
-  return {
-    blob,
-    filename: parseContentDispositionFilename(
-      response.headers.get("Content-Disposition"),
-      "rentchain-transunion-usage-summary-v1.pdf"
-    ),
-  };
+    const blob = await response.blob();
+    recordPdfExportEvent("pdf_export_completed", {
+      exportType: "transunion_usage",
+      renderingPath: "backend_pdfkit",
+      status: "completed",
+      durationMs: timer.durationMs(),
+      byteSize: blob.size,
+    });
+    return {
+      blob,
+      filename: parseContentDispositionFilename(
+        response.headers.get("Content-Disposition"),
+        "rentchain-transunion-usage-summary-v1.pdf"
+      ),
+    };
+  } catch (error) {
+    recordPdfExportEvent("pdf_export_failed", {
+      exportType: "transunion_usage",
+      renderingPath: "backend_pdfkit",
+      status: "failed",
+      durationMs: timer.durationMs(),
+      errorCode: errorCodeFromUnknown(error),
+    });
+    throw error;
+  }
 }

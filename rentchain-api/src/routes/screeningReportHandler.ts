@@ -1,7 +1,9 @@
 import { getReportExport, getExportPdfBuffer, validateToken } from "../services/screening/reportExportService";
 import { requireCapability } from "../services/capabilityGuard";
+import { recordPdfExportTelemetry } from "../lib/pdfExportObservability/recordPdfExportTelemetry";
 
 export async function handleScreeningReport(req: any, res: any) {
+  const startedAt = Date.now();
   try {
     const exportId = String(req.query?.exportId || "").trim();
     const token = String(req.query?.token || "").trim();
@@ -56,8 +58,26 @@ export async function handleScreeningReport(req: any, res: any) {
 
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename=\"screening_${exportId}.pdf\"`);
+    void recordPdfExportTelemetry({
+      eventName: "pdf_export_completed",
+      req,
+      exportType: "screening_report",
+      renderingPath: "backend_pdfkit",
+      status: "completed",
+      durationMs: Date.now() - startedAt,
+      byteSize: pdfBuffer.byteLength,
+    });
     return res.status(200).send(pdfBuffer);
   } catch (err: any) {
+    void recordPdfExportTelemetry({
+      eventName: "pdf_export_failed",
+      req,
+      exportType: "screening_report",
+      renderingPath: "backend_pdfkit",
+      status: "failed",
+      durationMs: Date.now() - startedAt,
+      errorCode: err?.message || "screening_report_failed",
+    });
     console.error("[screening_report] read failed", err?.message || err);
     return res.status(500).json({ ok: false, error: "SCREENING_REPORT_FAILED" });
   }

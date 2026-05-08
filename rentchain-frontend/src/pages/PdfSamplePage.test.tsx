@@ -3,6 +3,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import PdfSamplePage from "./PdfSamplePage";
 
+const telemetryMocks = vi.hoisted(() => ({
+  logTelemetryEvent: vi.fn(),
+}));
+
+vi.mock("../api/telemetryApi", () => ({
+  logTelemetryEvent: telemetryMocks.logTelemetryEvent,
+}));
+
 function mockViewport(options: { width: number; coarsePointer: boolean }) {
   Object.defineProperty(window, "innerWidth", {
     configurable: true,
@@ -50,6 +58,16 @@ describe("PdfSamplePage", () => {
     );
 
     await waitFor(() => expect(screen.getByText("Open the sample PDF")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(telemetryMocks.logTelemetryEvent).toHaveBeenCalledWith(
+        "pdf_mobile_fallback_used",
+        expect.objectContaining({
+          exportType: "sample_screening_report",
+          renderingPath: "mobile_fallback",
+          fallbackMode: "mobile_open_download",
+        })
+      )
+    );
     expect(screen.queryByTitle("Sample screening report")).not.toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: "Open PDF" })[0]).toHaveAttribute(
       "href",

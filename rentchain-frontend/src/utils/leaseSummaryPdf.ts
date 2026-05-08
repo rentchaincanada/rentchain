@@ -1,4 +1,5 @@
 import type { LandlordActiveLease } from "@/api/leasesApi";
+import { createPdfExportTimer, recordPdfExportEvent } from "@/lib/pdfExportObservability";
 
 function formatCurrency(value: number | null | undefined) {
   const amount = typeof value === "number" ? value : 0;
@@ -202,7 +203,20 @@ export function buildLeaseSummaryPdf(lease: LandlordActiveLease) {
 }
 
 export function downloadLeaseSummaryPdf(lease: LandlordActiveLease) {
+  const timer = createPdfExportTimer();
+  recordPdfExportEvent("pdf_export_started", {
+    exportType: "lease_summary",
+    renderingPath: "frontend_pdf_builder",
+    status: "started",
+  });
   const blob = buildLeaseSummaryPdf(lease);
+  recordPdfExportEvent("pdf_export_completed", {
+    exportType: "lease_summary",
+    renderingPath: "frontend_pdf_builder",
+    status: "completed",
+    durationMs: timer.durationMs(),
+    byteSize: blob.size,
+  });
   const url = window.URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;

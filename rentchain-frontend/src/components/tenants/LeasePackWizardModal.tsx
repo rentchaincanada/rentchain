@@ -12,6 +12,7 @@ import {
 import type { Lease } from "@/api/leasesApi";
 import { useToast } from "../ui/ToastProvider";
 import { apiJson } from "@/api/http";
+import { createPdfExportTimer, errorCodeFromUnknown, recordPdfExportEvent } from "@/lib/pdfExportObservability";
 import { normalizeProvinceCode, provinceLabelFromCode, type ProvinceCode } from "@/lib/provinces";
 import { LeaseRiskCard } from "@/components/leases/LeaseRiskCard";
 
@@ -227,6 +228,12 @@ export const LeasePackWizardModal: React.FC<Props> = ({
     }
     setGenerating(true);
     setError("");
+    const timer = createPdfExportTimer();
+    recordPdfExportEvent("pdf_export_started", {
+      exportType: "schedule_a",
+      renderingPath: "backend_pdfkit",
+      status: "started",
+    });
     try {
       let nextDraftId = draftId;
       if (!nextDraftId) {
@@ -243,7 +250,20 @@ export const LeasePackWizardModal: React.FC<Props> = ({
       });
       setSnapshotId(generated.snapshotId);
       setDownloadUrl(generated.scheduleAUrl);
+      recordPdfExportEvent("pdf_export_completed", {
+        exportType: "schedule_a",
+        renderingPath: "backend_pdfkit",
+        status: "completed",
+        durationMs: timer.durationMs(),
+      });
     } catch (err: any) {
+      recordPdfExportEvent("pdf_export_failed", {
+        exportType: "schedule_a",
+        renderingPath: "backend_pdfkit",
+        status: "failed",
+        durationMs: timer.durationMs(),
+        errorCode: errorCodeFromUnknown(err),
+      });
       setError(err?.message || "Failed to generate Schedule A PDF.");
     } finally {
       setGenerating(false);

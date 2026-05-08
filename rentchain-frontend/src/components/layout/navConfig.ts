@@ -181,6 +181,13 @@ export const NAV_ITEMS: NavItem[] = [
     showInDrawer: true,
   },
   {
+    id: "pdf-export-observability",
+    label: "PDF Observability",
+    to: "/admin/pdf-export-observability",
+    requiresAdmin: true,
+    showInDrawer: true,
+  },
+  {
     id: "production-integrations",
     label: "Production Integrations",
     to: "/admin/production-integrations",
