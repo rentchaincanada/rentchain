@@ -35,6 +35,7 @@ export type SupportConsoleResourceResponse = {
   sla?: SlaEvaluationV1 | null;
   assignment?: AssignmentRecordV1 | null;
   resolution?: ResolutionRecordV1 | null;
+  institutionAccessDiagnostic?: SupportInstitutionAccessDiagnosticSummary | null;
   watch?: {
     version: "v1";
     id: string;
@@ -55,6 +56,75 @@ export type SupportConsoleResourceResponse = {
     domainsPresent: string[];
     identifiers?: Record<string, string | null | undefined>;
   };
+};
+
+export type SupportInstitutionAccessDiagnosticSummary = {
+  schemaVersion: "support_institution_access_diagnostics.v1";
+  grantId: string;
+  lifecycle: string;
+  audience: string;
+  purpose: string;
+  recipient: {
+    redactedEmail: string;
+    organizationName: string | null;
+    authenticationRequirement: string;
+  };
+  tenant: {
+    redactedTenantId: string | null;
+  };
+  consent: {
+    granted: boolean;
+    consentVersion: string;
+    grantedAt: string | null;
+    expiresAt: string | null;
+    revokedAt: string | null;
+  };
+  access: {
+    recipientAuthenticationRequired: true;
+    sessionBound: true;
+    publicAccessEnabled: false;
+    publicProfileEnabled: false;
+    externalSubmissionEnabled: false;
+    downloadEnabled: false;
+  };
+  package: {
+    status: string;
+    blockedReasonCount: number;
+    exportSummaryCount: number;
+  };
+  audit: {
+    totalEvents: number;
+    openedReviewCount: number;
+    blockedReviewCount: number;
+    revokedAccessCount: number;
+    expiredAccessCount: number;
+    lastActivityAt: string | null;
+    lastOpenedAt: string | null;
+    lastBlockedAt: string | null;
+    lastOutcome: string | null;
+    lastReason: string | null;
+    reasonCategories: string[];
+  };
+  payloadSafety: {
+    metadataOnly: true;
+    supportSafe: true;
+    trustPayloadIncluded: false;
+    portableAttestationContentsIncluded: false;
+    rawProviderPayloadIncluded: false;
+    rawIdentityPayloadIncluded: false;
+    rawPropertyPayloadIncluded: false;
+    supportMetadataIncluded: false;
+    unsafePortablePayloadDetected: boolean;
+  };
+  timeline: Array<{
+    eventType: string;
+    occurredAt: string;
+    actorType: string;
+    outcome: string;
+    status: string;
+    reason: string;
+    metadataOnly: true;
+  }>;
 };
 
 export type ResolutionStatus = "open" | "acknowledged" | "in_progress" | "resolved" | "dismissed";

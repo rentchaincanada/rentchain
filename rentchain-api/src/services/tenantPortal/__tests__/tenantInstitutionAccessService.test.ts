@@ -364,4 +364,63 @@ describe("tenantInstitutionAccessService", () => {
       expect.arrayContaining(["grant_blocked"])
     );
   });
+
+  it("builds support-safe institution access diagnostics without trust payload exposure", async () => {
+    const service = await import("../tenantInstitutionAccessService");
+
+    const grant = await service.createTenantInstitutionAccessGrant({
+      tenantId: "tenant-1",
+      audience: "insurer",
+      recipient: { email: "reviewer@example.com", organizationName: "Example Insurance" },
+      expiresInDays: 7,
+      consentAccepted: true,
+    });
+
+    await service.getRecipientTrustReview({
+      grantId: grant?.grantId || "",
+      recipientEmail: "other@example.com",
+    });
+    await service.getRecipientTrustReview({
+      grantId: grant?.grantId || "",
+      recipientEmail: "reviewer@example.com",
+    });
+
+    const diagnostic = await service.getSupportInstitutionAccessDiagnostic({ grantId: grant?.grantId || "" });
+    expect(diagnostic).toEqual(
+      expect.objectContaining({
+        schemaVersion: "support_institution_access_diagnostics.v1",
+        lifecycle: "active",
+        audience: "insurer",
+        purpose: "insurance_review",
+        recipient: expect.objectContaining({
+          redactedEmail: "re***@example.com",
+          organizationName: "Example Insurance",
+        }),
+        audit: expect.objectContaining({
+          openedReviewCount: 1,
+          blockedReviewCount: 1,
+          reasonCategories: expect.arrayContaining(["access_granted", "recipient_email_mismatch", "review_available"]),
+        }),
+        payloadSafety: expect.objectContaining({
+          metadataOnly: true,
+          supportSafe: true,
+          trustPayloadIncluded: false,
+          portableAttestationContentsIncluded: false,
+          rawProviderPayloadIncluded: false,
+          rawIdentityPayloadIncluded: false,
+          rawPropertyPayloadIncluded: false,
+          supportMetadataIncluded: false,
+        }),
+      })
+    );
+
+    const payload = JSON.stringify(diagnostic || {});
+    expect(payload).not.toContain("tenant-1");
+    expect(payload).not.toContain("reviewer@example.com");
+    expect(payload).not.toContain("includedClaims");
+    expect(payload).not.toContain("exportSummaries");
+    expect(payload).not.toContain("policyDecisions");
+    expect(payload).not.toContain("supportMetadataIncluded\":true");
+    expect(payload).not.toContain("rawProviderPayloadIncluded\":true");
+  });
 });

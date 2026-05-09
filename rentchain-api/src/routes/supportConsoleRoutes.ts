@@ -11,16 +11,23 @@ function asString(value: unknown, max = 240) {
   return String(value || "").trim().slice(0, max);
 }
 
+function isInstitutionAccessResourceType(value: unknown) {
+  const raw = asString(value, 120).toLowerCase();
+  return raw === "institution_access" || raw === "tenant_institution_access" || raw === "tenant_institution_access_grant";
+}
+
 async function recordSupportConsoleAccess(req: any, input: { resourceType: string; resourceId: string }) {
   try {
     const actor = actorFromRequest(req);
     const now = new Date().toISOString();
+    const institutionAccess = isInstitutionAccessResourceType(input.resourceType);
+    const action = institutionAccess ? "institution_access_diagnostics_opened" : "support_console_accessed";
     await writeCanonicalEvent({
-      id: `support_console_accessed:${input.resourceType}:${input.resourceId}:${actor.actorId || "unknown"}:${Date.now()}`
+      id: `${action}:${input.resourceType}:${input.resourceId}:${actor.actorId || "unknown"}:${Date.now()}`
         .toLowerCase()
         .replace(/[^a-z0-9_.:-]+/g, "_"),
       domain: "system",
-      action: "support_console_accessed",
+      action,
       status: "completed",
       actor: {
         type: actor.actorRole === "admin" ? "admin" : "user",
@@ -28,21 +35,28 @@ async function recordSupportConsoleAccess(req: any, input: { resourceType: strin
         role: actor.actorRole,
       },
       resource: {
-        type: "support_console_resource",
+        type: institutionAccess ? "tenant_institution_access_grant" : "support_console_resource",
         id: input.resourceId,
         parentType: input.resourceType,
         parentId: input.resourceId,
       },
       occurredAt: now,
       visibility: "system",
-      summary: "Support console resource accessed with redacted diagnostic identifiers.",
+      summary: institutionAccess
+        ? "Institution access diagnostics opened with redacted metadata-only view."
+        : "Support console resource accessed with redacted diagnostic identifiers.",
       metadata: {
         resourceType: input.resourceType,
         metadataOnly: true,
         redactionApplied: true,
         retentionCategory: "support_diagnostics",
+        trustPayloadIncluded: false,
+        rawProviderPayloadIncluded: false,
+        downloadEnabled: false,
       },
-      tags: ["support_console", "governance"],
+      tags: institutionAccess
+        ? ["support_console", "institution_access_diagnostics", "governance"]
+        : ["support_console", "governance"],
     });
   } catch (err: any) {
     console.warn("[support-console] access audit skipped", err?.message || err);

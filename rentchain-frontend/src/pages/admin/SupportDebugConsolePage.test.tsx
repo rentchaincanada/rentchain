@@ -240,4 +240,119 @@ describe("SupportDebugConsolePage", () => {
     expect(screen.queryByText(/^Reconciliation$/i)).not.toBeInTheDocument();
     expect(screen.getByText(/No resolution record exists yet for this resource/i)).toBeInTheDocument();
   });
+
+  it("renders support-safe institution access diagnostics without raw trust data", async () => {
+    const { fetchSupportConsoleResource } = await import("../../api/supportConsoleApi");
+    vi.mocked(fetchSupportConsoleResource).mockResolvedValue({
+      resource: {
+        type: "institution_access",
+        id: "grant-1",
+        title: "Institution access for Example Insurance",
+        subtitle: "Audience insurer • Purpose insurance_review",
+        status: "active",
+      },
+      timeline: [],
+      insight: {
+        lifecycle: "active",
+        audience: "insurer",
+        purpose: "insurance_review",
+        lastOutcome: "blocked",
+        lastReason: "recipient_email_mismatch",
+      },
+      policyDecisions: [],
+      automation: [],
+      reconciliation: null,
+      sla: null,
+      assignment: null,
+      resolution: null,
+      institutionAccessDiagnostic: {
+        schemaVersion: "support_institution_access_diagnostics.v1",
+        grantId: "grant-1",
+        lifecycle: "active",
+        audience: "insurer",
+        purpose: "insurance_review",
+        recipient: {
+          redactedEmail: "re***@example.com",
+          organizationName: "Example Insurance",
+          authenticationRequirement: "recipient_email_session_required",
+        },
+        tenant: { redactedTenantId: "***nt-1" },
+        consent: {
+          granted: true,
+          consentVersion: "tenant_institution_access_consent.v1",
+          grantedAt: "2026-05-01T00:00:00.000Z",
+          expiresAt: "2026-06-01T00:00:00.000Z",
+          revokedAt: null,
+        },
+        access: {
+          recipientAuthenticationRequired: true,
+          sessionBound: true,
+          publicAccessEnabled: false,
+          publicProfileEnabled: false,
+          externalSubmissionEnabled: false,
+          downloadEnabled: false,
+        },
+        package: {
+          status: "export_ready",
+          blockedReasonCount: 0,
+          exportSummaryCount: 1,
+        },
+        audit: {
+          totalEvents: 2,
+          openedReviewCount: 1,
+          blockedReviewCount: 1,
+          revokedAccessCount: 0,
+          expiredAccessCount: 0,
+          lastActivityAt: "2026-05-02T00:00:00.000Z",
+          lastOpenedAt: "2026-05-02T00:00:00.000Z",
+          lastBlockedAt: "2026-05-01T00:00:00.000Z",
+          lastOutcome: "opened",
+          lastReason: "review_available",
+          reasonCategories: ["recipient_email_mismatch", "review_available"],
+        },
+        payloadSafety: {
+          metadataOnly: true,
+          supportSafe: true,
+          trustPayloadIncluded: false,
+          portableAttestationContentsIncluded: false,
+          rawProviderPayloadIncluded: false,
+          rawIdentityPayloadIncluded: false,
+          rawPropertyPayloadIncluded: false,
+          supportMetadataIncluded: false,
+          unsafePortablePayloadDetected: false,
+        },
+        timeline: [
+          {
+            eventType: "recipient_trust_review_blocked",
+            occurredAt: "2026-05-01T00:00:00.000Z",
+            actorType: "recipient",
+            outcome: "blocked",
+            status: "recipient_mismatch",
+            reason: "recipient_email_mismatch",
+            metadataOnly: true,
+          },
+        ],
+      },
+      debug: {
+        canonicalEventCount: 0,
+        domainsPresent: [],
+        identifiers: { grantId: "***nt-1" },
+      },
+    } as any);
+
+    renderPage();
+    fireEvent.change(screen.getByLabelText(/Resource type/i), { target: { value: "institution_access" } });
+    fireEvent.change(screen.getByLabelText(/Resource ID/i), { target: { value: "grant-1" } });
+    fireEvent.click(screen.getByRole("button", { name: /Inspect resource/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Institution access diagnostics/i)).toBeInTheDocument();
+    });
+    expect(screen.getByText(/re\*\*\*@example\.com/i)).toBeInTheDocument();
+    expect(screen.getByText(/recipient_email_mismatch, review_available/i)).toBeInTheDocument();
+    expect(screen.getByText(/Trust payloads, portable attestation contents, provider payloads/i)).toBeInTheDocument();
+    expect(screen.queryByText(/reviewer@example\.com/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/includedClaims/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/exportSummaries/i)).not.toBeInTheDocument();
+  });
 });

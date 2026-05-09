@@ -3,6 +3,7 @@ import type { AssignmentRecordV1 } from "../assignment/assignmentTypes";
 import type { ResolutionRecordV1 } from "../resolution/resolutionTypes";
 import type { SlaEvaluationV1 } from "../sla/slaTypes";
 import type { WatchlistEntryV1 } from "../watchlist/watchlistTypes";
+import type { SupportInstitutionAccessDiagnosticSummary } from "../../services/tenantPortal/tenantInstitutionAccessService";
 
 export type SupportConsoleResourceSummary = {
   type: string;
@@ -44,6 +45,7 @@ export type SupportConsoleResourceResponse = {
   assignment?: AssignmentRecordV1 | null;
   resolution?: ResolutionRecordV1 | null;
   watch?: WatchlistEntryV1 | null;
+  institutionAccessDiagnostic?: SupportInstitutionAccessDiagnosticSummary | null;
   debug: {
     canonicalEventCount: number;
     domainsPresent: string[];

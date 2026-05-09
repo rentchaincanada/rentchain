@@ -221,6 +221,144 @@ describe("supportConsoleRoutes", () => {
     expect(response.body?.reconciliation).toBeNull();
   });
 
+  it("returns support-safe institution access diagnostics and audits operator access", async () => {
+    seedDoc("tenantInstitutionAccessGrants", "grant-1", {
+      grantId: "grant-1",
+      tenantId: "tenant-1",
+      schemaVersion: "tenant_institution_access.v1",
+      audience: "insurer",
+      purpose: "insurance_review",
+      lifecycle: "active",
+      recipient: {
+        email: "reviewer@example.com",
+        organizationName: "Example Insurance",
+        authenticationRequirement: "recipient_email_session_required",
+      },
+      consent: {
+        required: true,
+        granted: true,
+        consentId: "consent-1",
+        consentVersion: "tenant_institution_access_consent.v1",
+        grantedAt: "2026-05-01T00:00:00.000Z",
+        expiresAt: "2026-06-01T00:00:00.000Z",
+        revokedAt: null,
+        audience: "insurer",
+        purpose: "insurance_review",
+        recipientEmail: "reviewer@example.com",
+        claimCategories: ["account_trust"],
+        summary: "Tenant consent is required before RentChain prepares this non-public, metadata-only institution access grant.",
+      },
+      expiresAt: "2026-06-01T00:00:00.000Z",
+      revokedAt: null,
+      generatedAt: "2026-05-01T00:00:00.000Z",
+      metadataOnly: true,
+      policyGated: true,
+      publicAccessEnabled: false,
+      publicProfileEnabled: false,
+      externalSubmissionEnabled: false,
+      providerIntegrationEnabled: false,
+      automatedDecisioningEnabled: false,
+      recipientAccess: {
+        enabled: false,
+        accessUrl: null,
+        accessTokenIssued: false,
+        recipientAuthenticationRequired: true,
+        sessionBound: true,
+        downloadEnabled: false,
+      },
+      package: {
+        status: "export_ready",
+        exportSummaries: [{ claimCategory: "account_trust", metadataOnly: true }],
+        blockedReasons: [],
+      },
+      includedClaims: [{ claimCategory: "account_trust", claimLabel: "Account trust" }],
+      excludedClaims: [],
+      createdAt: "2026-05-01T00:00:00.000Z",
+      updatedAt: "2026-05-01T00:00:00.000Z",
+      events: [
+        {
+          eventType: "tenant_institution_access_granted",
+          occurredAt: "2026-05-01T00:00:00.000Z",
+          actorType: "tenant",
+          metadataOnly: true,
+          outcome: "granted",
+          status: "granted",
+          reason: "access_granted",
+        },
+        {
+          eventType: "recipient_trust_review_blocked",
+          occurredAt: "2026-05-02T00:00:00.000Z",
+          actorType: "recipient",
+          metadataOnly: true,
+          outcome: "blocked",
+          status: "recipient_mismatch",
+          reason: "recipient_email_mismatch",
+        },
+      ],
+    });
+
+    const router = (await import("../supportConsoleRoutes")).default;
+    const response = await invokeRouter(router, {
+      method: "GET",
+      url: "/support-console/resource?resourceType=institution_access&resourceId=grant-1",
+      user: { id: "admin-1", role: "admin" },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body?.resource).toEqual(
+      expect.objectContaining({
+        type: "institution_access",
+        id: "grant-1",
+        status: "active",
+      })
+    );
+    expect(response.body?.institutionAccessDiagnostic).toEqual(
+      expect.objectContaining({
+        schemaVersion: "support_institution_access_diagnostics.v1",
+        recipient: expect.objectContaining({
+          redactedEmail: "re***@example.com",
+        }),
+        audit: expect.objectContaining({
+          totalEvents: 2,
+          blockedReviewCount: 1,
+          reasonCategories: expect.arrayContaining(["access_granted", "recipient_email_mismatch"]),
+        }),
+        payloadSafety: expect.objectContaining({
+          trustPayloadIncluded: false,
+          rawProviderPayloadIncluded: false,
+          supportMetadataIncluded: false,
+        }),
+      })
+    );
+    const payload = JSON.stringify(response.body);
+    expect(payload).not.toContain("tenant-1");
+    expect(payload).not.toContain("reviewer@example.com");
+    expect(payload).not.toContain("includedClaims");
+    expect(payload).not.toContain("exportSummaries");
+
+    const auditEvents = Array.from(collections.get("canonicalEvents")?.values() || []).filter(
+      (event: any) => event.type === "system.institution_access_diagnostics_opened"
+    );
+    expect(auditEvents).toEqual([
+      expect.objectContaining({
+        action: "institution_access_diagnostics_opened",
+        resource: expect.objectContaining({
+          type: "tenant_institution_access_grant",
+          id: "grant-1",
+        }),
+        visibility: "system",
+        metadata: expect.objectContaining({
+          resourceType: "institution_access",
+          metadataOnly: true,
+          redactionApplied: true,
+          trustPayloadIncluded: false,
+          rawProviderPayloadIncluded: false,
+          downloadEnabled: false,
+        }),
+      }),
+    ]);
+  });
+
   it("extracts policy and automation histories", async () => {
     seedDoc("leases", "lease-1", {
       tenantName: "Taylor Tenant",

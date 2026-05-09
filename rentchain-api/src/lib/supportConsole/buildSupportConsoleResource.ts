@@ -9,19 +9,24 @@ import { deriveSlaState } from "../sla/deriveSlaState";
 import { deriveAdminTriageQueue } from "../triage/deriveAdminTriageQueue";
 import { loadWatchlistEntries } from "../watchlist/loadWatchlistEntries";
 import { canonicalEventToTimelineItem } from "../timeline/timelineAdapter";
-import { redactIdentifierMap } from "../governance/platformGovernance";
+import { redactIdentifier, redactIdentifierMap } from "../governance/platformGovernance";
+import { getSupportInstitutionAccessDiagnostic } from "../../services/tenantPortal/tenantInstitutionAccessService";
 import type {
   SupportConsoleAutomationItem,
   SupportConsolePolicyDecision,
   SupportConsoleResourceResponse,
 } from "./supportConsoleTypes";
 
-type SupportedResourceType = "application" | "maintenance" | "lease";
+type SupportedResourceType = "application" | "maintenance" | "lease" | "institution_access";
 
 type NormalizedResourceSpec = {
   requestedType: SupportedResourceType;
-  canonicalType: "rental_application" | "maintenance_request" | "lease";
-  collectionName: "rentalApplications" | "maintenanceRequests" | "leases";
+  canonicalType:
+    | "rental_application"
+    | "maintenance_request"
+    | "lease"
+    | "tenant_institution_access_grant";
+  collectionName: "rentalApplications" | "maintenanceRequests" | "leases" | "tenantInstitutionAccessGrants";
 };
 
 function asString(value: unknown, max = 240) {
@@ -61,6 +66,17 @@ function normalizeResourceType(value: unknown): NormalizedResourceSpec | null {
       requestedType: "lease",
       canonicalType: "lease",
       collectionName: "leases",
+    };
+  }
+  if (
+    raw === "institution_access" ||
+    raw === "tenant_institution_access" ||
+    raw === "tenant_institution_access_grant"
+  ) {
+    return {
+      requestedType: "institution_access",
+      canonicalType: "tenant_institution_access_grant",
+      collectionName: "tenantInstitutionAccessGrants",
     };
   }
   return null;
@@ -112,9 +128,20 @@ function matchesLeaseResource(resourceId: string, event: CanonicalEventV1) {
   );
 }
 
+function matchesInstitutionAccessResource(resourceId: string, event: CanonicalEventV1) {
+  return (
+    (asString(event.resource?.type, 120) === "tenant_institution_access_grant" &&
+      asString(event.resource?.id, 240) === resourceId) ||
+    asString(event.resource?.parentId, 240) === resourceId ||
+    asString(event.metadata?.grantId, 240) === resourceId ||
+    asString(event.metadata?.resourceId, 240) === resourceId
+  );
+}
+
 function isRelatedResource(spec: NormalizedResourceSpec, resourceId: string, event: CanonicalEventV1) {
   if (spec.requestedType === "application") return matchesApplicationResource(resourceId, event);
   if (spec.requestedType === "maintenance") return matchesMaintenanceResource(resourceId, event);
+  if (spec.requestedType === "institution_access") return matchesInstitutionAccessResource(resourceId, event);
   return matchesLeaseResource(resourceId, event);
 }
 
@@ -125,6 +152,7 @@ function preferredInsightDomain(spec: NormalizedResourceSpec, events: CanonicalE
     return "application";
   }
   if (spec.requestedType === "maintenance") return "maintenance";
+  if (spec.requestedType === "institution_access") return "system";
   return "lease";
 }
 
@@ -226,7 +254,32 @@ function buildLeaseHeader(resourceId: string, lease: any) {
   };
 }
 
+function buildInstitutionAccessHeader(resourceId: string, doc: any, diagnostic: any) {
+  const audience = asOptionalString(diagnostic?.audience || doc?.audience, 80);
+  const purpose = asOptionalString(diagnostic?.purpose || doc?.purpose, 120);
+  const organizationName = asOptionalString(diagnostic?.recipient?.organizationName || doc?.recipient?.organizationName, 160);
+  return {
+    type: "institution_access",
+    id: resourceId,
+    title: organizationName ? `Institution access for ${organizationName}` : `Institution access ${resourceId}`,
+    subtitle: [audience ? `Audience ${audience}` : null, purpose ? `Purpose ${purpose}` : null]
+      .filter(Boolean)
+      .join(" • ") || null,
+    status: asOptionalString(diagnostic?.lifecycle || doc?.lifecycle, 120),
+    parentType: "tenant",
+    parentId: asOptionalString(diagnostic?.tenant?.redactedTenantId, 120),
+  };
+}
+
 function buildDebugIdentifiers(spec: NormalizedResourceSpec, doc: any, reconciliation: any) {
+  if (spec.requestedType === "institution_access") {
+    return {
+      grantReference: redactIdentifier(doc?.grantId),
+      tenantReference: redactIdentifier(doc?.tenantId),
+      recipientEmail: asOptionalString(doc?.recipient?.email, 240),
+    };
+  }
+
   const identifiers: Record<string, string | null | undefined> = {
     landlordId: asOptionalString(doc?.landlordId, 120),
     propertyId: asOptionalString(doc?.propertyId, 120),
@@ -321,6 +374,43 @@ export async function buildSupportConsoleResource(input: {
   const canonicalEvents = await loadCanonicalEvents();
   const relatedEvents = canonicalEvents.filter((event) => isRelatedResource(spec, resourceId, event));
   const sortedEvents = [...relatedEvents].sort(compareEventsDescending);
+
+  if (spec.requestedType === "institution_access") {
+    const diagnostic = await getSupportInstitutionAccessDiagnostic({ grantId: resourceId });
+    return {
+      resource: buildInstitutionAccessHeader(resourceId, doc, diagnostic),
+      timeline: sortedEvents.map(canonicalEventToTimelineItem),
+      insight: diagnostic
+        ? {
+            lifecycle: diagnostic.lifecycle,
+            audience: diagnostic.audience,
+            purpose: diagnostic.purpose,
+            lastOutcome: diagnostic.audit.lastOutcome,
+            lastReason: diagnostic.audit.lastReason,
+          }
+        : null,
+      policyDecisions: [],
+      automation: [],
+      reconciliation: null,
+      sla: null,
+      assignment: null,
+      resolution: null,
+      watch: null,
+      institutionAccessDiagnostic: diagnostic,
+      debug: {
+        canonicalEventCount: relatedEvents.length,
+        domainsPresent: domainsPresent(relatedEvents),
+        identifiers: redactIdentifierMap(buildDebugIdentifiers(spec, doc, null)),
+      },
+      governance: {
+        sensitivity: "restricted",
+        metadataOnly: true,
+        retentionCategory: "support_diagnostics",
+        redactionApplied: true,
+      },
+    };
+  }
+
   const insight = deriveInsightForResource(relatedEvents, {
     resourceType: spec.canonicalType,
     resourceId,
