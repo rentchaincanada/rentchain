@@ -10,7 +10,10 @@ export type RecipientTrustReviewStatus =
   | "blocked"
   | "consent_required"
   | "reverification_required"
-  | "policy_denied";
+  | "policy_denied"
+  | "session_expired"
+  | "session_revoked"
+  | "reauthentication_required";
 
 export type RecipientTrustReviewDecision = {
   allowed: boolean;
@@ -54,6 +57,23 @@ export type RecipientTrustReviewSummary = {
   generatedAt: string;
   expiresAt: string | null;
   reviewedAt: string;
+  session: {
+    schemaVersion: "recipient_review_session.v1";
+    sessionId: string;
+    lifecycle: "active" | "expired" | "revoked" | "blocked";
+    issuedAt: string;
+    expiresAt: string;
+    lastValidatedAt: string;
+    grantId: string;
+    audience: string;
+    purpose: string;
+    metadataOnly: true;
+    authenticated: true;
+    viewOnly: true;
+    downloadEnabled: false;
+    publicAccessEnabled: false;
+    reauthenticationRequiredAt: string;
+  };
   metadataOnly: true;
   policyGated: true;
   includedClaims: Array<{
@@ -76,9 +96,14 @@ export type RecipientTrustReviewResponse = {
   summary: RecipientTrustReviewSummary | null;
 };
 
-export async function getRecipientTrustReview(grantId: string): Promise<RecipientTrustReviewResponse> {
+export async function getRecipientTrustReview(
+  grantId: string,
+  recipientSessionId?: string | null
+): Promise<RecipientTrustReviewResponse> {
+  const headers = recipientSessionId ? { "x-recipient-review-session-id": recipientSessionId } : undefined;
   const res = await apiFetch<{ ok: boolean; data: RecipientTrustReviewResponse }>(
-    `/recipient/trust-reviews/${encodeURIComponent(grantId)}`
+    `/recipient/trust-reviews/${encodeURIComponent(grantId)}`,
+    headers ? { headers } : undefined
   );
   return res.data;
 }

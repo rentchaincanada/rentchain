@@ -98,6 +98,8 @@ export type SupportInstitutionAccessDiagnosticSummary = {
     blockedReviewCount: number;
     revokedAccessCount: number;
     expiredAccessCount: number;
+    sessionStartedCount: number;
+    sessionExpiredCount: number;
     lastActivityAt: string | null;
     lastOpenedAt: string | null;
     lastBlockedAt: string | null;
