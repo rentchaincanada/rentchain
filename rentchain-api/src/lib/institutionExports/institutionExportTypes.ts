@@ -1,3 +1,6 @@
+import type { InstitutionalTrustExportPackage } from "../institutionTrustExports/institutionTrustExportTypes";
+import type { PortableAttestation } from "../portableAttestations/portableAttestationTypes";
+
 export type InstitutionExportPackageType =
   | "lender_due_diligence"
   | "insurance_review"
@@ -18,7 +21,8 @@ export type InstitutionExportSectionKey =
   | "decision_summary"
   | "delinquency_summary"
   | "maintenance_summary"
-  | "audit_event_summary";
+  | "audit_event_summary"
+  | "portable_trust_summary";
 
 export type InstitutionExportSection = {
   sectionKey: InstitutionExportSectionKey;
@@ -45,6 +49,7 @@ export type InstitutionExportPackage = {
   blockedReasons: string[];
   redactions: InstitutionExportRedaction[];
   payloadPreview: Record<string, unknown>;
+  trustExport: InstitutionalTrustExportPackage | null;
 };
 
 export type InstitutionExportPropertyInput = {
@@ -100,4 +105,5 @@ export type DeriveInstitutionExportPackageInput = {
   maintenanceRequests?: InstitutionExportMaintenanceInput[] | null;
   decisionItems?: InstitutionExportDecisionInput[] | null;
   auditEvents?: unknown[] | null;
+  portableAttestations?: PortableAttestation[] | null;
 };

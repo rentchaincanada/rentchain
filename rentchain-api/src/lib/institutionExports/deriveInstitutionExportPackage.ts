@@ -8,6 +8,10 @@ import type {
   InstitutionExportSectionKey,
   InstitutionExportSectionStatus,
 } from "./institutionExportTypes";
+import {
+  deriveInstitutionalTrustExportPackage,
+  institutionalTrustExportMappingForPackageType,
+} from "../institutionTrustExports/deriveInstitutionalTrustExportPackage";
 
 const PACKAGE_AUDIENCE: Record<InstitutionExportPackageType, InstitutionExportAudience> = {
   lender_due_diligence: "lender",
@@ -178,6 +182,7 @@ export function deriveInstitutionExportPackage(input: DeriveInstitutionExportPac
   const maintenanceRequests = arrayOf(input.maintenanceRequests) as Array<Record<string, unknown>>;
   const decisionItems = arrayOf(input.decisionItems) as Array<Record<string, any>>;
   const auditEvents = arrayOf(input.auditEvents);
+  const portableAttestations = Array.isArray(input.portableAttestations) ? input.portableAttestations : null;
 
   const blockedReasons: string[] = [];
   if (!landlordId) blockedReasons.push("Landlord context is required before an institution export preview can be prepared.");
@@ -243,6 +248,27 @@ export function deriveInstitutionExportPackage(input: DeriveInstitutionExportPac
     ),
   ];
 
+  const trustExport = portableAttestations
+    ? deriveInstitutionalTrustExportPackage({
+        exportId: `institutional_trust_export:${packageType}:${landlordId || "missing_landlord"}`,
+        ...institutionalTrustExportMappingForPackageType(packageType),
+        generatedAt,
+        attestations: portableAttestations,
+      })
+    : null;
+
+  if (trustExport) {
+    sections.push(
+      section(
+        "portable_trust_summary",
+        "Portable trust summary",
+        trustExport.status === "export_ready" ? "included" : trustExport.status === "blocked" ? "blocked" : "unavailable",
+        trustExport.exportSummaries.length,
+        trustExport.blockedReasons
+      )
+    );
+  }
+
   return {
     packageId: cleanId(`institution_export:${packageType}:${landlordId || "missing_landlord"}`),
     packageType,
@@ -254,6 +280,7 @@ export function deriveInstitutionExportPackage(input: DeriveInstitutionExportPac
     sections,
     blockedReasons,
     redactions: DEFAULT_REDACTIONS,
+    trustExport,
     payloadPreview: {
       packageType,
       audience,
@@ -285,6 +312,19 @@ export function deriveInstitutionExportPackage(input: DeriveInstitutionExportPac
       auditEventSummary: {
         total: auditEvents.length,
       },
+      portableTrustSummary: trustExport
+        ? {
+            status: trustExport.status,
+            audience: trustExport.audience,
+            purpose: trustExport.purpose,
+            exportableAttestationCount: trustExport.auditMetadata.exportableAttestationCount,
+            blockedAttestationCount: trustExport.auditMetadata.blockedAttestationCount,
+            policyDecisionCount: trustExport.auditMetadata.policyDecisionCount,
+            metadataOnly: true,
+            publicAccessEnabled: false,
+            externalSubmissionEnabled: false,
+          }
+        : null,
     },
   };
 }

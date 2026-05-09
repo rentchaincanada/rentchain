@@ -208,6 +208,7 @@ This framework does not:
 - Institution-specific packet signing, revocation notification, and recipient policy matrices remain future work.
 - Property authority attestations must continue to carry non-ownership disclaimers.
 - The policy gate is currently a pure helper; future route/service adoption must still prove it is called before any external projection.
+- Institution Trust Export Framework v1 adds the first package-level composer for policy-gated portable trust summaries, but routes still must explicitly opt into supplying portable attestations.
 
 ## Verification
 
