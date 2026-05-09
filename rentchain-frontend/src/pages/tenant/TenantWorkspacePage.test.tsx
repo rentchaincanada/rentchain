@@ -72,6 +72,13 @@ const tenantTrustExportsApi = vi.hoisted(() => ({
   revokeTenantTrustExport: vi.fn(),
 }));
 
+const tenantInstitutionAccessApi = vi.hoisted(() => ({
+  listTenantInstitutionAccessGrants: vi.fn(),
+  previewTenantInstitutionAccess: vi.fn(),
+  createTenantInstitutionAccessGrant: vi.fn(),
+  revokeTenantInstitutionAccessGrant: vi.fn(),
+}));
+
 vi.mock("../../api/tenantPortal", () => tenantPortalApi);
 vi.mock("../../api/tenantApplicationCompletion", () => tenantApplicationCompletionApi);
 vi.mock("../../api/tenantAccess", () => tenantAccessApi);
@@ -88,6 +95,7 @@ vi.mock("../../api/tenantScreeningApi", async () => {
 });
 vi.mock("../../api/tenantSharePackages", () => tenantSharePackagesApi);
 vi.mock("../../api/tenantTrustExports", () => tenantTrustExportsApi);
+vi.mock("../../api/tenantInstitutionAccess", () => tenantInstitutionAccessApi);
 vi.mock("../../api/maintenanceWorkflowApi", async () => {
   const actual = await vi.importActual<any>("../../api/maintenanceWorkflowApi");
   return {
@@ -685,6 +693,120 @@ describe("tenant workspace frontend shell", () => {
       exportId,
       lifecycle: "revoked",
       revokedAt: "2026-05-10T00:00:00.000Z",
+    }));
+    tenantInstitutionAccessApi.listTenantInstitutionAccessGrants.mockResolvedValue([]);
+    const institutionAccessPreview = {
+      grantId: null,
+      schemaVersion: "tenant_institution_access.v1",
+      audience: "insurer",
+      purpose: "insurance_review",
+      lifecycle: "consent_required",
+      recipient: {
+        email: "reviewer@example.com",
+        displayName: null,
+        organizationName: "Example Insurance",
+        authenticationRequirement: "recipient_email_session_required",
+      },
+      consent: {
+        required: true,
+        granted: false,
+        consentId: null,
+        consentVersion: "tenant_institution_access_consent.v1",
+        grantedAt: null,
+        expiresAt: "2026-05-23T00:00:00.000Z",
+        revokedAt: null,
+        audience: "insurer",
+        purpose: "insurance_review",
+        recipientEmail: "reviewer@example.com",
+        claimCategories: ["tenant_portability"],
+        summary:
+          "Tenant consent is required before RentChain prepares this non-public, metadata-only institution access grant.",
+      },
+      expiresAt: "2026-05-23T00:00:00.000Z",
+      revokedAt: null,
+      generatedAt: "2026-05-09T00:00:00.000Z",
+      metadataOnly: true,
+      policyGated: true,
+      publicAccessEnabled: false,
+      publicProfileEnabled: false,
+      externalSubmissionEnabled: false,
+      providerIntegrationEnabled: false,
+      automatedDecisioningEnabled: false,
+      recipientAccess: {
+        enabled: false,
+        accessUrl: null,
+        accessTokenIssued: false,
+        recipientAuthenticationRequired: true,
+        sessionBound: true,
+        downloadEnabled: false,
+        summary:
+          "Recipient access is modeled for controlled future review only; no public link or external delivery is created by this grant.",
+      },
+      package: {
+        status: "blocked",
+        blockedReasons: ["tenant_trust:tenant_portability: consent_missing"],
+        exportSummaries: [],
+      },
+      includedClaims: [],
+      excludedClaims: [
+        {
+          attestationId: "tenant_trust:tenant_portability",
+          claimCategory: "tenant_portability",
+          claimLabel: "tenant portability",
+          reasons: ["consent_missing"],
+        },
+      ],
+      redactions: ["Support/internal metadata is excluded.", "Public trust profiles and public links are not created."],
+      disclaimers: ["This access grant is tenant-mediated and metadata-only."],
+    };
+    const institutionAccessGrant = {
+      ...institutionAccessPreview,
+      grantId: "grant-1",
+      lifecycle: "active",
+      consent: {
+        ...institutionAccessPreview.consent,
+        granted: true,
+        consentId: "consent-1",
+        grantedAt: "2026-05-09T00:00:00.000Z",
+      },
+      package: {
+        status: "export_ready",
+        blockedReasons: [],
+        exportSummaries: [],
+      },
+      includedClaims: [
+        {
+          attestationId: "tenant_trust:tenant_portability",
+          claimCategory: "tenant_portability",
+          claimLabel: "Tenant portability metadata available",
+          lifecycleState: "export_ready",
+          consentExpiresAt: "2026-05-23T00:00:00.000Z",
+        },
+      ],
+      excludedClaims: [],
+      createdAt: "2026-05-09T00:00:00.000Z",
+      updatedAt: "2026-05-09T00:00:00.000Z",
+      events: [
+        {
+          eventType: "tenant_institution_access_granted",
+          occurredAt: "2026-05-09T00:00:00.000Z",
+          actorType: "tenant",
+          metadataOnly: true,
+        },
+      ],
+    };
+    tenantInstitutionAccessApi.previewTenantInstitutionAccess.mockResolvedValue(institutionAccessPreview);
+    tenantInstitutionAccessApi.createTenantInstitutionAccessGrant.mockResolvedValue(institutionAccessGrant);
+    tenantInstitutionAccessApi.revokeTenantInstitutionAccessGrant.mockImplementation(async (grantId: string) => ({
+      ...institutionAccessGrant,
+      grantId,
+      lifecycle: "revoked",
+      revokedAt: "2026-05-10T00:00:00.000Z",
+      consent: {
+        ...institutionAccessGrant.consent,
+        granted: false,
+        revokedAt: "2026-05-10T00:00:00.000Z",
+      },
     }));
     tenantSharePackagesApi.createTenantSharePackage.mockResolvedValue({
       id: "share-1",
@@ -1344,6 +1466,59 @@ describe("tenant workspace frontend shell", () => {
     fireEvent.click(screen.getByRole("button", { name: /Revoke export/i }));
     await waitFor(() => {
       expect(tenantTrustExportsApi.revokeTenantTrustExport).toHaveBeenCalledWith("export-1");
+    });
+  });
+
+  it("requires tenant consent before creating institution access grants", async () => {
+    render(
+      <MemoryRouter>
+        <TenantWorkspacePage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Tenant-mediated institution access/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Create access grant/i })).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText(/Recipient email/i), {
+      target: { value: "reviewer@example.com" },
+    });
+    fireEvent.change(screen.getByLabelText(/Organization/i), {
+      target: { value: "Example Insurance" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Preview access/i }));
+    await waitFor(() => {
+      expect(tenantInstitutionAccessApi.previewTenantInstitutionAccess).toHaveBeenCalledWith(
+        expect.objectContaining({
+          audience: "insurer",
+          recipient: expect.objectContaining({ email: "reviewer@example.com" }),
+          expiresInDays: 14,
+          consentAccepted: false,
+        })
+      );
+    });
+    expect(await screen.findByText(/No claims are accessible until consent and policy checks pass/i)).toBeInTheDocument();
+    expect(screen.getByText(/Public trust profiles and public links are not created/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText(/I consent to preparing metadata-only institution access/i));
+    fireEvent.click(screen.getByRole("button", { name: /Create access grant/i }));
+    await waitFor(() => {
+      expect(tenantInstitutionAccessApi.createTenantInstitutionAccessGrant).toHaveBeenCalledWith(
+        expect.objectContaining({
+          audience: "insurer",
+          consentAccepted: true,
+          recipient: expect.objectContaining({ email: "reviewer@example.com" }),
+        })
+      );
+    });
+    expect(await screen.findByText(/Tenant portability metadata available/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Not created/i).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/verified tenant/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/reputation/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /send to institution/i })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Revoke access/i }));
+    await waitFor(() => {
+      expect(tenantInstitutionAccessApi.revokeTenantInstitutionAccessGrant).toHaveBeenCalledWith("grant-1");
     });
   });
 

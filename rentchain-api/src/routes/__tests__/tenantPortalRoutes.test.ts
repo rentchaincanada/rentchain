@@ -1470,6 +1470,118 @@ describe("tenantPortalRoutes foundation", () => {
     expect(ensureCollection("tenantSharePackages").size).toBe(0);
   });
 
+  it("creates tenant-mediated institution access grants only after scoped consent", async () => {
+    const router = (await import("../tenantPortalRoutes")).default;
+    const headers = {
+      "x-test-user": JSON.stringify({
+        id: "user-1",
+        email: "tenant@example.com",
+        role: "tenant",
+        tenantId: "tenant-1",
+      }),
+    };
+
+    const missingConsent = await invokeRouter(router, {
+      method: "POST",
+      url: "/institution-access/grants",
+      body: {
+        audience: "insurer",
+        recipient: { email: "reviewer@example.com", organizationName: "Example Insurance" },
+        expiresInDays: 7,
+        consentAccepted: false,
+      },
+      headers,
+    });
+    expect(missingConsent.status).toBe(400);
+    expect(missingConsent.body?.error).toBe("TENANT_INSTITUTION_ACCESS_CONSENT_REQUIRED");
+
+    const preview = await invokeRouter(router, {
+      method: "POST",
+      url: "/institution-access/preview",
+      body: {
+        audience: "insurer",
+        recipient: { email: "reviewer@example.com", organizationName: "Example Insurance" },
+        expiresInDays: 7,
+        consentAccepted: false,
+      },
+      headers,
+    });
+    expect(preview.status).toBe(200);
+    expect(preview.body?.data?.lifecycle).toBe("consent_required");
+    expect(preview.body?.data?.recipientAccess?.enabled).toBe(false);
+    expect(preview.body?.data?.publicAccessEnabled).toBe(false);
+    expect(preview.body?.data?.externalSubmissionEnabled).toBe(false);
+
+    const grant = await invokeRouter(router, {
+      method: "POST",
+      url: "/institution-access/grants",
+      body: {
+        audience: "insurer",
+        recipient: { email: "reviewer@example.com", organizationName: "Example Insurance" },
+        expiresInDays: 7,
+        consentAccepted: true,
+      },
+      headers,
+    });
+    expect(grant.status).toBe(200);
+    expect(grant.body?.data?.lifecycle).toBe("active");
+    expect(grant.body?.data?.consent?.granted).toBe(true);
+    expect(grant.body?.data?.package?.status).toBe("export_ready");
+    expect(grant.body?.data?.recipientAccess?.accessUrl).toBe(null);
+    expect(grant.body?.data?.recipientAccess?.accessTokenIssued).toBe(false);
+    const payload = JSON.stringify(grant.body?.data || {});
+    expect(payload).not.toContain("drawnDataUrl");
+    expect(payload).not.toContain("documentUrl");
+    expect(payload).not.toContain("paymentMethod");
+    expect(payload).not.toContain("supportMetadataIncluded\":true");
+    expect(payload).not.toContain("publicAccessEnabled\":true");
+    expect(payload).not.toContain("externalSubmissionEnabled\":true");
+    expect(payload).not.toContain("tenant-1");
+    expect(ensureCollection("tenantSharePackages").size).toBe(0);
+  });
+
+  it("lists and revokes tenant-mediated institution access grants for the owning tenant", async () => {
+    const router = (await import("../tenantPortalRoutes")).default;
+    const headers = {
+      "x-test-user": JSON.stringify({
+        id: "user-1",
+        email: "tenant@example.com",
+        role: "tenant",
+        tenantId: "tenant-1",
+      }),
+    };
+    const created = await invokeRouter(router, {
+      method: "POST",
+      url: "/institution-access/grants",
+      body: {
+        audience: "lender",
+        recipient: { email: "underwriter@example.com", organizationName: "Example Lender" },
+        expiresInDays: 14,
+        consentAccepted: true,
+      },
+      headers,
+    });
+    const grantId = created.body?.data?.grantId;
+
+    const listed = await invokeRouter(router, {
+      method: "GET",
+      url: "/institution-access/grants",
+      headers,
+    });
+    expect(listed.status).toBe(200);
+    expect(listed.body?.data?.items?.[0]?.grantId).toBe(grantId);
+
+    const revoked = await invokeRouter(router, {
+      method: "POST",
+      url: `/institution-access/grants/${encodeURIComponent(grantId)}/revoke`,
+      headers,
+    });
+    expect(revoked.status).toBe(200);
+    expect(revoked.body?.data?.lifecycle).toBe("revoked");
+    expect(revoked.body?.data?.consent?.granted).toBe(false);
+    expect(revoked.body?.data?.recipientAccess?.enabled).toBe(false);
+  });
+
   it("creates a tenant-owned metadata-only institutional handoff draft safely", async () => {
     const router = (await import("../tenantPortalRoutes")).default;
     const res = await invokeRouter(router, {

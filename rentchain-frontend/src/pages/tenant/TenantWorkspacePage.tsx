@@ -37,6 +37,15 @@ import {
   type TenantTrustExportRecord,
 } from "../../api/tenantTrustExports";
 import {
+  createTenantInstitutionAccessGrant,
+  listTenantInstitutionAccessGrants,
+  previewTenantInstitutionAccess,
+  revokeTenantInstitutionAccessGrant,
+  type TenantInstitutionAccessAudience,
+  type TenantInstitutionAccessGrant,
+  type TenantInstitutionAccessPreview,
+} from "../../api/tenantInstitutionAccess";
+import {
   TenantEmptyState,
   TenantErrorState,
   TenantInfoCard,
@@ -171,6 +180,27 @@ function prettyTrustExportLifecycle(value: string | null | undefined) {
     case "preview":
     default:
       return "Preview";
+  }
+}
+
+function institutionAccessPurposeForAudience(audience: TenantInstitutionAccessAudience) {
+  if (audience === "lender") return "lender_review" as const;
+  if (audience === "institutional_landlord") return "institutional_landlord_review" as const;
+  if (audience === "auditor") return "auditor_review" as const;
+  return "insurance_review" as const;
+}
+
+function prettyInstitutionAccessAudience(value: TenantInstitutionAccessAudience | null | undefined) {
+  switch (value) {
+    case "lender":
+      return "Lender review";
+    case "institutional_landlord":
+      return "Institutional landlord review";
+    case "auditor":
+      return "Auditor review";
+    case "insurer":
+    default:
+      return "Insurer review";
   }
 }
 
@@ -327,6 +357,14 @@ export default function TenantWorkspacePage() {
   const [trustExportConsentAccepted, setTrustExportConsentAccepted] = React.useState(false);
   const [trustExportBusy, setTrustExportBusy] = React.useState(false);
   const [trustExportError, setTrustExportError] = React.useState<string | null>(null);
+  const [institutionAccessGrants, setInstitutionAccessGrants] = React.useState<TenantInstitutionAccessGrant[]>([]);
+  const [institutionAccessPreview, setInstitutionAccessPreview] = React.useState<TenantInstitutionAccessPreview | null>(null);
+  const [institutionAccessAudience, setInstitutionAccessAudience] = React.useState<TenantInstitutionAccessAudience>("insurer");
+  const [institutionAccessRecipientEmail, setInstitutionAccessRecipientEmail] = React.useState("");
+  const [institutionAccessOrganization, setInstitutionAccessOrganization] = React.useState("");
+  const [institutionAccessConsentAccepted, setInstitutionAccessConsentAccepted] = React.useState(false);
+  const [institutionAccessBusy, setInstitutionAccessBusy] = React.useState(false);
+  const [institutionAccessError, setInstitutionAccessError] = React.useState<string | null>(null);
   const [freshShareUrl, setFreshShareUrl] = React.useState<string | null>(null);
   const [shareBusy, setShareBusy] = React.useState(false);
   const [shareError, setShareError] = React.useState<string | null>(null);
@@ -363,6 +401,7 @@ export default function TenantWorkspacePage() {
         screeningsResult,
         sharePackagesResult,
         trustExportsResult,
+        institutionAccessGrantsResult,
         handoffDraftsResult,
       ] = await Promise.allSettled([
         getTenantWorkspace(),
@@ -374,6 +413,7 @@ export default function TenantWorkspacePage() {
         listTenantScreenings(),
         listTenantSharePackages(),
         listTenantTrustExports(),
+        listTenantInstitutionAccessGrants(),
         listInstitutionalHandoffDrafts(),
       ]);
 
@@ -394,6 +434,9 @@ export default function TenantWorkspacePage() {
       );
       setSharePackages(sharePackagesResult.status === "fulfilled" ? sharePackagesResult.value : []);
       setTrustExports(trustExportsResult.status === "fulfilled" ? trustExportsResult.value : []);
+      setInstitutionAccessGrants(
+        institutionAccessGrantsResult.status === "fulfilled" ? institutionAccessGrantsResult.value : []
+      );
       setHandoffDrafts(handoffDraftsResult.status === "fulfilled" ? handoffDraftsResult.value : []);
     } catch (err: any) {
       setData(null);
@@ -405,6 +448,7 @@ export default function TenantWorkspacePage() {
       setScreenings([]);
       setSharePackages([]);
       setTrustExports([]);
+      setInstitutionAccessGrants([]);
       setHandoffDrafts([]);
       setError(err?.payload?.error || err?.message || "Unable to load your tenant workspace.");
     } finally {
@@ -606,6 +650,71 @@ export default function TenantWorkspacePage() {
       URL.revokeObjectURL(url);
     } catch {
       setTrustExportError("Trust export JSON download is unavailable in this browser right now.");
+    }
+  }, []);
+
+  const institutionAccessRequest = React.useCallback(
+    (consentAccepted: boolean) => ({
+      audience: institutionAccessAudience,
+      purpose: institutionAccessPurposeForAudience(institutionAccessAudience),
+      recipient: {
+        email: institutionAccessRecipientEmail,
+        organizationName: institutionAccessOrganization,
+      },
+      expiresInDays: 14,
+      consentAccepted,
+    }),
+    [institutionAccessAudience, institutionAccessOrganization, institutionAccessRecipientEmail],
+  );
+
+  const handlePreviewInstitutionAccess = React.useCallback(async () => {
+    try {
+      setInstitutionAccessBusy(true);
+      setInstitutionAccessError(null);
+      const next = await previewTenantInstitutionAccess(institutionAccessRequest(institutionAccessConsentAccepted));
+      setInstitutionAccessPreview(next);
+    } catch (err: any) {
+      setInstitutionAccessError(
+        err?.payload?.error === "TENANT_INSTITUTION_ACCESS_RECIPIENT_REQUIRED"
+          ? "Enter a recipient email before previewing institution access."
+          : err?.payload?.error || err?.message || "Unable to preview institution access right now."
+      );
+    } finally {
+      setInstitutionAccessBusy(false);
+    }
+  }, [institutionAccessConsentAccepted, institutionAccessRequest]);
+
+  const handleCreateInstitutionAccessGrant = React.useCallback(async () => {
+    try {
+      setInstitutionAccessBusy(true);
+      setInstitutionAccessError(null);
+      const created = await createTenantInstitutionAccessGrant(institutionAccessRequest(institutionAccessConsentAccepted));
+      setInstitutionAccessPreview(created);
+      setInstitutionAccessGrants((current) => [created, ...current.filter((entry) => entry.grantId !== created.grantId)]);
+    } catch (err: any) {
+      setInstitutionAccessError(
+        err?.payload?.error === "TENANT_INSTITUTION_ACCESS_CONSENT_REQUIRED"
+          ? "Confirm consent before creating institution access."
+          : err?.payload?.error === "TENANT_INSTITUTION_ACCESS_RECIPIENT_REQUIRED"
+          ? "Enter a recipient email before creating institution access."
+          : err?.payload?.error || err?.message || "Unable to create institution access right now."
+      );
+    } finally {
+      setInstitutionAccessBusy(false);
+    }
+  }, [institutionAccessConsentAccepted, institutionAccessRequest]);
+
+  const handleRevokeInstitutionAccessGrant = React.useCallback(async (grantId: string) => {
+    try {
+      setInstitutionAccessBusy(true);
+      setInstitutionAccessError(null);
+      const revoked = await revokeTenantInstitutionAccessGrant(grantId);
+      setInstitutionAccessGrants((current) => current.map((entry) => (entry.grantId === grantId ? revoked : entry)));
+      setInstitutionAccessPreview((current) => (current?.grantId === grantId ? revoked : current));
+    } catch (err: any) {
+      setInstitutionAccessError(err?.payload?.error || err?.message || "Unable to revoke institution access right now.");
+    } finally {
+      setInstitutionAccessBusy(false);
     }
   }, []);
 
@@ -1601,6 +1710,166 @@ export default function TenantWorkspacePage() {
               ) : (
                 <div style={{ color: textTokens.secondary }}>
                   Prepared trust exports will appear here. They remain tenant-controlled and non-public.
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div
+            style={{
+              border: "1px solid rgba(15,23,42,0.08)",
+              borderRadius: 12,
+              padding: "12px 14px",
+              display: "grid",
+              gap: 10,
+            }}
+          >
+            <div style={{ fontWeight: 700, color: textTokens.primary }}>Tenant-mediated institution access</div>
+            <div style={{ color: textTokens.secondary, lineHeight: 1.6 }}>
+              Prepare a controlled, non-public access grant for a specific recipient. This does not create a public profile, does not send data to an institution, and does not enable automatic decisions.
+            </div>
+
+            <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
+              <label style={{ display: "grid", gap: 6 }}>
+                <span style={{ fontWeight: 600, color: textTokens.primary }}>Recipient email</span>
+                <input
+                  value={institutionAccessRecipientEmail}
+                  onChange={(event) => {
+                    setInstitutionAccessRecipientEmail(event.target.value);
+                    setInstitutionAccessPreview(null);
+                  }}
+                  placeholder="reviewer@example.com"
+                />
+              </label>
+              <label style={{ display: "grid", gap: 6 }}>
+                <span style={{ fontWeight: 600, color: textTokens.primary }}>Organization</span>
+                <input
+                  value={institutionAccessOrganization}
+                  onChange={(event) => {
+                    setInstitutionAccessOrganization(event.target.value);
+                    setInstitutionAccessPreview(null);
+                  }}
+                  placeholder="Optional"
+                />
+              </label>
+              <label style={{ display: "grid", gap: 6 }}>
+                <span style={{ fontWeight: 600, color: textTokens.primary }}>Audience</span>
+                <select
+                  value={institutionAccessAudience}
+                  onChange={(event) => {
+                    setInstitutionAccessAudience(event.target.value as TenantInstitutionAccessAudience);
+                    setInstitutionAccessPreview(null);
+                  }}
+                >
+                  <option value="insurer">Insurer review</option>
+                  <option value="lender">Lender review</option>
+                  <option value="institutional_landlord">Institutional landlord review</option>
+                  <option value="auditor">Auditor review</option>
+                </select>
+              </label>
+              <div style={{ color: textTokens.secondary, lineHeight: 1.6 }}>
+                Purpose: {prettyStatus(institutionAccessPurposeForAudience(institutionAccessAudience))}
+                <br />
+                Expires: 14 days after grant
+              </div>
+            </div>
+
+            <label style={{ display: "flex", gap: 10, alignItems: "flex-start", color: textTokens.secondary, lineHeight: 1.5 }}>
+              <input
+                type="checkbox"
+                checked={institutionAccessConsentAccepted}
+                onChange={(event) => {
+                  setInstitutionAccessConsentAccepted(event.target.checked);
+                  setInstitutionAccessPreview(null);
+                }}
+                style={{ marginTop: 4 }}
+              />
+              <span>
+                I consent to preparing metadata-only institution access for {prettyInstitutionAccessAudience(institutionAccessAudience)}. I understand recipient access requires controlled future authentication, no public link is created, and this is not an eligibility or approval decision.
+              </span>
+            </label>
+
+            <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
+              <button type="button" onClick={() => void handlePreviewInstitutionAccess()} disabled={institutionAccessBusy}>
+                {institutionAccessBusy ? "Checking..." : "Preview access"}
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleCreateInstitutionAccessGrant()}
+                disabled={institutionAccessBusy || !institutionAccessConsentAccepted}
+              >
+                Create access grant
+              </button>
+            </div>
+
+            {institutionAccessError ? <div style={{ color: "#b91c1c" }}>{institutionAccessError}</div> : null}
+
+            {institutionAccessPreview ? (
+              <div style={{ border: "1px solid rgba(15,23,42,0.08)", borderRadius: 12, padding: "12px 14px", display: "grid", gap: 10 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: spacing.sm, flexWrap: "wrap" }}>
+                  <div style={{ fontWeight: 800, color: textTokens.primary }}>Institution access preview</div>
+                  <div style={{ color: textTokens.secondary }}>{prettyTrustExportLifecycle(institutionAccessPreview.lifecycle)}</div>
+                </div>
+                <TenantKeyValueGrid
+                  rows={[
+                    { label: "Recipient", value: institutionAccessPreview.recipient.email },
+                    { label: "Audience", value: prettyInstitutionAccessAudience(institutionAccessPreview.audience) },
+                    { label: "Consent", value: institutionAccessPreview.consent.granted ? "Granted for this access grant" : "Required" },
+                    { label: "Policy status", value: prettyStatus(institutionAccessPreview.package.status) },
+                    { label: "Included claims", value: String(institutionAccessPreview.includedClaims.length) },
+                    { label: "Public access", value: institutionAccessPreview.publicAccessEnabled ? "Enabled" : "Disabled" },
+                    { label: "Recipient URL", value: institutionAccessPreview.recipientAccess.accessUrl || "Not created" },
+                    { label: "Expires", value: formatDate(institutionAccessPreview.expiresAt) },
+                  ]}
+                />
+                <div style={{ display: "grid", gap: 6 }}>
+                  <div style={{ fontWeight: 700, color: textTokens.primary }}>Included metadata</div>
+                  {institutionAccessPreview.includedClaims.length ? (
+                    institutionAccessPreview.includedClaims.map((claim) => (
+                      <div key={claim.attestationId} style={{ color: textTokens.secondary }}>
+                        {claim.claimLabel} - {prettyStatus(claim.claimCategory)}
+                      </div>
+                    ))
+                  ) : (
+                    <div style={{ color: textTokens.secondary }}>No claims are accessible until consent and policy checks pass.</div>
+                  )}
+                </div>
+                <div style={{ display: "grid", gap: 6 }}>
+                  <div style={{ fontWeight: 700, color: textTokens.primary }}>Always excluded</div>
+                  {institutionAccessPreview.redactions.map((item) => (
+                    <div key={item} style={{ color: textTokens.secondary }}>
+                      {item}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            <div style={{ display: "grid", gap: 8 }}>
+              <div style={{ fontWeight: 700, color: textTokens.primary }}>Institution access grants</div>
+              {institutionAccessGrants.length ? (
+                institutionAccessGrants.map((entry) => (
+                  <div key={entry.grantId} style={{ border: "1px solid rgba(15,23,42,0.08)", borderRadius: 12, padding: "12px 14px", display: "grid", gap: 8 }}>
+                    <TenantKeyValueGrid
+                      rows={[
+                        { label: "Recipient", value: entry.recipient.email },
+                        { label: "Audience", value: prettyInstitutionAccessAudience(entry.audience) },
+                        { label: "Status", value: prettyTrustExportLifecycle(entry.lifecycle) },
+                        { label: "Created", value: formatDate(entry.createdAt) },
+                        { label: "Expires", value: formatDate(entry.expiresAt) },
+                        { label: "Access URL", value: entry.recipientAccess.accessUrl || "Not created" },
+                      ]}
+                    />
+                    {entry.lifecycle === "active" ? (
+                      <button type="button" onClick={() => void handleRevokeInstitutionAccessGrant(entry.grantId)} disabled={institutionAccessBusy}>
+                        Revoke access
+                      </button>
+                    ) : null}
+                  </div>
+                ))
+              ) : (
+                <div style={{ color: textTokens.secondary }}>
+                  Institution access grants will appear here. They stay tenant-controlled, time-bound, and non-public.
                 </div>
               )}
             </div>
