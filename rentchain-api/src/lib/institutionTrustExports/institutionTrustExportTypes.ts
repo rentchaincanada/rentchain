@@ -29,6 +29,18 @@ export type InstitutionalTrustExportStatus = "export_ready" | "blocked" | "unava
 
 export type InstitutionalTrustExportLifecycle = "policy_evaluated" | "blocked" | "empty";
 
+export type InstitutionalTrustExportLifecycleControl = {
+  schemaVersion: "institutional_trust_export_lifecycle_control.v1";
+  state: "active" | "blocked" | "empty" | "expired" | "revoked" | "superseded" | "reverification_required" | "invalidated";
+  reasons: string[];
+  active: boolean;
+  shareable: boolean;
+  evaluatedAt: string;
+  metadataOnly: true;
+  publicAccessEnabled: false;
+  externalSubmissionEnabled: false;
+};
+
 export type InstitutionalTrustExportRedaction = {
   fieldCategory: string;
   reason: string;
@@ -65,6 +77,7 @@ export type InstitutionalTrustExportPackage = {
   status: InstitutionalTrustExportStatus;
   lifecycle: InstitutionalTrustExportLifecycle;
   generatedAt: string;
+  lifecycleControl: InstitutionalTrustExportLifecycleControl;
   metadataOnly: true;
   consentScoped: true;
   policyGated: true;

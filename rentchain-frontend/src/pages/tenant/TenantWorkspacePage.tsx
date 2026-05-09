@@ -175,6 +175,16 @@ function prettyTrustExportLifecycle(value: string | null | undefined) {
       return "Expired";
     case "blocked":
       return "Blocked";
+    case "superseded":
+      return "Superseded";
+    case "archived":
+      return "Archived";
+    case "reverification_required":
+      return "Reverification required";
+    case "invalidated":
+      return "Invalidated";
+    case "replaced":
+      return "Replaced";
     case "consent_required":
       return "Consent required";
     case "preview":
@@ -1660,6 +1670,10 @@ export default function TenantWorkspacePage() {
                     { label: "Audience", value: prettyTrustExportAudience(trustExportPreview.audience) },
                     { label: "Consent", value: trustExportPreview.consent.granted ? "Granted for this package" : "Required" },
                     { label: "Policy status", value: prettyStatus(trustExportPreview.package.status) },
+                    {
+                      label: "Lifecycle control",
+                      value: prettyTrustExportLifecycle(trustExportPreview.lifecycleControl?.state || trustExportPreview.lifecycle),
+                    },
                     { label: "Included claims", value: String(trustExportPreview.includedClaims.length) },
                     { label: "Blocked claims", value: String(trustExportPreview.excludedClaims.length) },
                     { label: "Public access", value: trustExportPreview.publicAccessEnabled ? "Enabled" : "Disabled" },
@@ -1712,15 +1726,24 @@ export default function TenantWorkspacePage() {
                       rows={[
                         { label: "Audience", value: prettyTrustExportAudience(entry.audience) },
                         { label: "Status", value: prettyTrustExportLifecycle(entry.lifecycle) },
+                        { label: "Lifecycle reason", value: entry.lifecycleControl?.reason ? prettyPolicyReason(entry.lifecycleControl.reason) : "Not available" },
                         { label: "Prepared", value: formatDate(entry.createdAt) },
                         { label: "Expires", value: formatDate(entry.expiresAt) },
+                        { label: "Invalidated", value: entry.invalidatedAt ? formatDate(entry.invalidatedAt) : "Not invalidated" },
                         { label: "Claims", value: String(entry.includedClaims.length) },
                       ]}
                     />
+                    {entry.lifecycle !== "prepared" ? (
+                      <div style={{ color: textTokens.secondary }}>
+                        This export is retained for audit history only and is not active or shareable.
+                      </div>
+                    ) : null}
                     <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
-                      <button type="button" onClick={() => handleDownloadTrustExportJson(entry)}>
-                        Download JSON
-                      </button>
+                      {entry.lifecycle === "prepared" && entry.downloadEnabled ? (
+                        <button type="button" onClick={() => handleDownloadTrustExportJson(entry)}>
+                          Download JSON
+                        </button>
+                      ) : null}
                       {entry.lifecycle === "prepared" ? (
                         <button type="button" onClick={() => void handleRevokeTrustExport(entry.exportId)} disabled={trustExportBusy}>
                           Revoke export

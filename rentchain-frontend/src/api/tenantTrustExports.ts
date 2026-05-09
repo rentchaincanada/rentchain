@@ -20,7 +20,12 @@ export type TenantTrustExportLifecycle =
   | "revoked"
   | "expired"
   | "blocked"
-  | "consent_required";
+  | "consent_required"
+  | "superseded"
+  | "archived"
+  | "reverification_required"
+  | "invalidated"
+  | "replaced";
 
 export type TenantTrustExportPreview = {
   exportId: string | null;
@@ -43,15 +48,58 @@ export type TenantTrustExportPreview = {
   };
   expiresAt: string | null;
   revokedAt: string | null;
+  supersededAt: string | null;
+  supersededByExportId: string | null;
+  archivedAt: string | null;
+  replacedByExportId: string | null;
+  invalidatedAt: string | null;
   generatedAt: string;
+  lifecycleControl: {
+    schemaVersion: "trust_export_lifecycle_control.v1";
+    state: Exclude<TenantTrustExportLifecycle, "preview" | "consent_required">;
+    reason: string;
+    active: boolean;
+    shareable: boolean;
+    evaluatedAt: string;
+    expiresAt: string | null;
+    revokedAt: string | null;
+    supersededAt: string | null;
+    supersededByExportId: string | null;
+    archivedAt: string | null;
+    replacedByExportId: string | null;
+    invalidatedAt: string | null;
+    sourceAttestationIds: string[];
+    metadataOnly: true;
+    publicAccessEnabled: false;
+    downloadEnabled: false;
+  };
+  lifecycleEvents: Array<{
+    eventType: string;
+    occurredAt: string;
+    actorType: "tenant" | "system";
+    reason: string;
+    metadataOnly: true;
+  }>;
   metadataOnly: true;
   publicAccessEnabled: false;
+  downloadEnabled: boolean;
   externalSubmissionEnabled: false;
   policyGated: true;
   package: {
     exportId: string;
     status: "export_ready" | "blocked" | "unavailable";
     lifecycle: "policy_evaluated" | "blocked" | "empty";
+    lifecycleControl?: {
+      schemaVersion: "institutional_trust_export_lifecycle_control.v1";
+      state: string;
+      reasons: string[];
+      active: boolean;
+      shareable: boolean;
+      evaluatedAt: string;
+      metadataOnly: true;
+      publicAccessEnabled: false;
+      externalSubmissionEnabled: false;
+    };
     blockedReasons: string[];
     exportSummaries: Array<{
       attestationId: string;
@@ -98,7 +146,7 @@ export type TenantTrustExportPreview = {
 
 export type TenantTrustExportRecord = TenantTrustExportPreview & {
   exportId: string;
-  lifecycle: "prepared" | "revoked" | "expired" | "blocked";
+  lifecycle: Exclude<TenantTrustExportLifecycle, "preview" | "consent_required">;
   createdAt: string;
   updatedAt: string;
 };

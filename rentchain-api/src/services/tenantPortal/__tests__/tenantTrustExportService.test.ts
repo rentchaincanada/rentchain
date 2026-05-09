@@ -125,6 +125,26 @@ describe("tenantTrustExportService", () => {
     });
 
     expect(prepared?.lifecycle).toBe("prepared");
+    expect(prepared?.lifecycleControl).toEqual(
+      expect.objectContaining({
+        schemaVersion: "trust_export_lifecycle_control.v1",
+        state: "prepared",
+        reason: "export_active",
+        active: true,
+        shareable: true,
+        metadataOnly: true,
+        publicAccessEnabled: false,
+        downloadEnabled: false,
+      })
+    );
+    expect(prepared?.lifecycleEvents?.[0]).toEqual(
+      expect.objectContaining({
+        eventType: "trust_export_prepared",
+        reason: "export_active",
+        metadataOnly: true,
+      })
+    );
+    expect(prepared?.downloadEnabled).toBe(true);
     expect(prepared?.consent.granted).toBe(true);
     expect(prepared?.package.status).toBe("export_ready");
     expect(prepared?.includedClaims.map((claim) => claim.claimCategory)).toEqual(
@@ -147,6 +167,112 @@ describe("tenantTrustExportService", () => {
     expect(payload).not.toContain("tenant-1");
     expect(ensureCollection("tenantTrustExports").size).toBe(1);
     expect(Array.from(ensureCollection("tenantTrustExports").values())[0]?.tenantId).toBe("tenant-1");
+  });
+
+  it("supersedes older active exports when a tenant prepares a replacement for the same audience and purpose", async () => {
+    const service = await import("../tenantTrustExportService");
+
+    const first = await service.prepareTenantTrustExport({
+      tenantId: "tenant-1",
+      audience: "insurer",
+      consentAccepted: true,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 2));
+    const second = await service.prepareTenantTrustExport({
+      tenantId: "tenant-1",
+      audience: "insurer",
+      consentAccepted: true,
+    });
+
+    expect(first?.exportId).toBeTruthy();
+    expect(second?.exportId).toBeTruthy();
+    expect(second?.exportId).not.toBe(first?.exportId);
+
+    const listed = await service.listTenantTrustExports({ tenantId: "tenant-1" });
+    const oldExport = listed.find((item) => item.exportId === first?.exportId);
+    const replacement = listed.find((item) => item.exportId === second?.exportId);
+    expect(oldExport?.lifecycle).toBe("superseded");
+    expect(oldExport?.lifecycleControl).toEqual(
+      expect.objectContaining({
+        state: "superseded",
+        reason: "export_superseded",
+        active: false,
+        shareable: false,
+        supersededByExportId: second?.exportId,
+        replacedByExportId: second?.exportId,
+      })
+    );
+    expect(oldExport?.downloadEnabled).toBe(false);
+    expect(oldExport?.lifecycleEvents.map((event) => event.eventType)).toEqual(
+      expect.arrayContaining(["trust_export_superseded", "trust_export_replaced"])
+    );
+    expect(replacement?.lifecycle).toBe("prepared");
+  });
+
+  it("invalidates stored exports when source summaries expire, revoke, supersede, or require reverification", async () => {
+    const service = await import("../tenantTrustExportService");
+
+    const prepared = await service.prepareTenantTrustExport({
+      tenantId: "tenant-1",
+      audience: "tenant_portability",
+      consentAccepted: true,
+    });
+    const stored = ensureCollection("tenantTrustExports").get(prepared?.exportId || "");
+    ensureCollection("tenantTrustExports").set(prepared?.exportId || "", {
+      ...stored,
+      package: {
+        ...stored.package,
+        exportSummaries: [
+          {
+            ...stored.package.exportSummaries[0],
+            status: "revoked",
+            revokedAt: "2026-05-10T00:00:00.000Z",
+          },
+        ],
+      },
+    });
+
+    const listed = await service.listTenantTrustExports({ tenantId: "tenant-1" });
+    expect(listed[0]?.lifecycle).toBe("invalidated");
+    expect(listed[0]?.lifecycleControl).toEqual(
+      expect.objectContaining({
+        state: "invalidated",
+        reason: "source_attestation_revoked",
+        active: false,
+        shareable: false,
+      })
+    );
+    expect(listed[0]?.lifecycleEvents.map((event) => event.eventType)).toContain("trust_export_invalidation_detected");
+    expect(JSON.stringify(listed[0])).not.toContain("supportMetadataIncluded\":true");
+    expect(JSON.stringify(listed[0])).not.toContain("rawProviderPayloadIncluded\":true");
+  });
+
+  it("keeps archived exports audit-visible but inactive and non-shareable", async () => {
+    const service = await import("../tenantTrustExportService");
+
+    const prepared = await service.prepareTenantTrustExport({
+      tenantId: "tenant-1",
+      audience: "auditor",
+      consentAccepted: true,
+    });
+    const archived = await service.archiveTenantTrustExport({
+      tenantId: "tenant-1",
+      exportId: prepared?.exportId || "",
+    });
+
+    expect(archived && archived.lifecycle).toBe("archived");
+    expect(archived && archived.downloadEnabled).toBe(false);
+    expect(archived && archived.lifecycleControl).toEqual(
+      expect.objectContaining({
+        state: "archived",
+        reason: "export_archived",
+        active: false,
+        shareable: false,
+      })
+    );
+    const listed = await service.listTenantTrustExports({ tenantId: "tenant-1" });
+    expect(listed[0]?.lifecycle).toBe("archived");
+    expect(listed[0]?.lifecycleEvents.map((event) => event.eventType)).toContain("trust_export_archived");
   });
 
   it("requires consent before preparation and lets the owning tenant revoke the record", async () => {
