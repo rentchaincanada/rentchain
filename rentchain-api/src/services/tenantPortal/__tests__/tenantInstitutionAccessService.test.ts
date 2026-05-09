@@ -188,6 +188,25 @@ describe("tenantInstitutionAccessService", () => {
     const listed = await service.listTenantInstitutionAccessGrants({ tenantId: "tenant-1" });
     expect(listed).toHaveLength(1);
     expect(listed[0].grantId).toBe(grant?.grantId);
+    expect(listed[0].auditSummary).toEqual(
+      expect.objectContaining({
+        schemaVersion: "recipient_access_audit.v1",
+        metadataOnly: true,
+        totalEvents: 1,
+        openedReviewCount: 0,
+        blockedReviewCount: 0,
+      })
+    );
+    expect(listed[0].auditSummary.visibility).toEqual(
+      expect.objectContaining({
+        tenantVisible: true,
+        trustPayloadIncluded: false,
+        supportMetadataIncluded: false,
+        rawProviderPayloadIncluded: false,
+        publicAccessEnabled: false,
+        downloadEnabled: false,
+      })
+    );
 
     const blocked = await service.revokeTenantInstitutionAccessGrant({
       tenantId: "tenant-2",
@@ -246,6 +265,23 @@ describe("tenantInstitutionAccessService", () => {
       })
     );
     expect(review.summary?.includedClaims.length).toBeGreaterThan(0);
+    const listed = await service.listTenantInstitutionAccessGrants({ tenantId: "tenant-1" });
+    expect(listed[0].auditSummary.openedReviewCount).toBe(1);
+    expect(listed[0].auditSummary.blockedReviewCount).toBe(1);
+    expect(listed[0].auditTimeline.map((event) => event.reason)).toEqual(
+      expect.arrayContaining(["review_available", "recipient_email_mismatch", "access_granted"])
+    );
+    expect(listed[0].auditSummary.recipientIdentifier.redactedEmail).toBe("re***@example.com");
+    const auditPayload = JSON.stringify({
+      auditSummary: listed[0].auditSummary,
+      auditTimeline: listed[0].auditTimeline,
+    });
+    expect(auditPayload).not.toContain("tenant-1");
+    expect(auditPayload).not.toContain("policyDecisions");
+    expect(auditPayload).not.toContain("supportMetadataIncluded\":true");
+    expect(auditPayload).not.toContain("rawProviderPayloadIncluded\":true");
+    expect(auditPayload).not.toContain("publicAccessEnabled\":true");
+    expect(auditPayload).not.toContain("downloadEnabled\":true");
     const payload = JSON.stringify(review.summary || {});
     expect(payload).not.toContain("tenant-1");
     expect(payload).not.toContain("policyDecisions");
@@ -310,5 +346,22 @@ describe("tenantInstitutionAccessService", () => {
     });
     expect(blocked.decision.allowed).toBe(false);
     expect(blocked.decision.status).toBe("blocked");
+
+    const grants = await service.listTenantInstitutionAccessGrants({ tenantId: "tenant-1" });
+    const revokedAudit = grants.find((entry) => entry.grantId === revokedGrant?.grantId)?.auditSummary;
+    const expiredAudit = grants.find((entry) => entry.grantId === activeGrant?.grantId)?.auditSummary;
+    const blockedAudit = grants.find((entry) => entry.grantId === blockedGrant?.grantId)?.auditSummary;
+    expect(revokedAudit?.revokedAccessCount).toBeGreaterThan(0);
+    expect(grants.find((entry) => entry.grantId === revokedGrant?.grantId)?.auditTimeline.map((event) => event.reason)).toEqual(
+      expect.arrayContaining(["access_revoked", "grant_revoked"])
+    );
+    expect(expiredAudit?.expiredAccessCount).toBe(1);
+    expect(grants.find((entry) => entry.grantId === activeGrant?.grantId)?.auditTimeline.map((event) => event.reason)).toEqual(
+      expect.arrayContaining(["grant_expired"])
+    );
+    expect(blockedAudit?.blockedReviewCount).toBe(1);
+    expect(grants.find((entry) => entry.grantId === blockedGrant?.grantId)?.auditTimeline.map((event) => event.reason)).toEqual(
+      expect.arrayContaining(["grant_blocked"])
+    );
   });
 });

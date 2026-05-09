@@ -208,6 +208,28 @@ function prettyPolicyReason(value: string) {
   return value.replace(/_/g, " ");
 }
 
+function prettyAccessAuditOutcome(value: string | null | undefined) {
+  switch (value) {
+    case "opened":
+      return "Review opened";
+    case "blocked":
+      return "Review blocked";
+    case "revoked":
+      return "Access revoked";
+    case "expired":
+      return "Access expired";
+    case "granted":
+      return "Access granted";
+    default:
+      return "No activity yet";
+  }
+}
+
+function prettyAccessAuditReason(value: string | null | undefined) {
+  if (!value) return "No recent reason";
+  return prettyPolicyReason(value);
+}
+
 function prettyInstitutionType(
   value: "bank" | "lender" | "insurer" | "regulator" | "internal_review" | null | undefined
 ) {
@@ -1860,6 +1882,55 @@ export default function TenantWorkspacePage() {
                         { label: "Access URL", value: entry.recipientAccess.accessUrl || "Not created" },
                       ]}
                     />
+                    <div style={{ borderTop: "1px solid rgba(15,23,42,0.08)", paddingTop: 8, display: "grid", gap: 8 }}>
+                      <div style={{ fontWeight: 700, color: textTokens.primary }}>Access activity</div>
+                      <TenantKeyValueGrid
+                        rows={[
+                          {
+                            label: "Recipient reference",
+                            value: entry.auditSummary?.recipientIdentifier?.redactedEmail || "Not available",
+                          },
+                          {
+                            label: "Last activity",
+                            value: entry.auditSummary?.lastActivityAt ? formatDate(entry.auditSummary.lastActivityAt) : "No recipient activity yet",
+                          },
+                          {
+                            label: "Last outcome",
+                            value: prettyAccessAuditOutcome(entry.auditSummary?.lastOutcome),
+                          },
+                          {
+                            label: "Last reason",
+                            value: prettyAccessAuditReason(entry.auditSummary?.lastReason),
+                          },
+                          {
+                            label: "Opened reviews",
+                            value: String(entry.auditSummary?.openedReviewCount || 0),
+                          },
+                          {
+                            label: "Blocked attempts",
+                            value: String(entry.auditSummary?.blockedReviewCount || 0),
+                          },
+                          {
+                            label: "Revoked/expired events",
+                            value: String((entry.auditSummary?.revokedAccessCount || 0) + (entry.auditSummary?.expiredAccessCount || 0)),
+                          },
+                        ]}
+                      />
+                      {entry.auditTimeline?.length ? (
+                        <div style={{ display: "grid", gap: 6 }}>
+                          <div style={{ color: textTokens.secondary, fontWeight: 700 }}>Recent access events</div>
+                          {entry.auditTimeline.slice(0, 3).map((event, index) => (
+                            <div key={`${event.eventType}-${event.occurredAt}-${index}`} style={{ color: textTokens.secondary }}>
+                              {prettyAccessAuditOutcome(event.outcome)} - {formatDate(event.occurredAt)} - {prettyAccessAuditReason(event.reason)}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div style={{ color: textTokens.secondary }}>
+                          Recipient review activity will appear here after authenticated review attempts. Trust payloads and support/internal metadata are never shown in this activity summary.
+                        </div>
+                      )}
+                    </div>
                     {entry.lifecycle === "active" ? (
                       <button type="button" onClick={() => void handleRevokeInstitutionAccessGrant(entry.grantId)} disabled={institutionAccessBusy}>
                         Revoke access

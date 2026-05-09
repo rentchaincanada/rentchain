@@ -106,11 +106,67 @@ export type TenantInstitutionAccessGrant = TenantInstitutionAccessPreview & {
       | "tenant_institution_access_granted"
       | "tenant_institution_access_revoked"
       | "tenant_institution_access_expired"
-      | "tenant_institution_access_blocked";
+      | "tenant_institution_access_blocked"
+      | "recipient_trust_review_opened"
+      | "recipient_trust_review_blocked"
+      | "recipient_trust_review_expired"
+      | "recipient_trust_review_revoked";
     occurredAt: string;
-    actorType: "tenant" | "system";
+    actorType: "tenant" | "system" | "recipient";
     metadataOnly: true;
+    outcome?: "granted" | "opened" | "blocked" | "revoked" | "expired";
+    reason?: string;
+    status?: string;
   }>;
+  auditSummary: TenantInstitutionAccessAuditSummary;
+  auditTimeline: TenantInstitutionAccessAuditEvent[];
+};
+
+export type TenantInstitutionAccessAuditEvent = {
+  eventType:
+    | "tenant_institution_access_granted"
+    | "tenant_institution_access_revoked"
+    | "tenant_institution_access_expired"
+    | "tenant_institution_access_blocked"
+    | "recipient_trust_review_opened"
+    | "recipient_trust_review_blocked"
+    | "recipient_trust_review_expired"
+    | "recipient_trust_review_revoked";
+  occurredAt: string;
+  actorType: "tenant" | "system" | "recipient";
+  outcome: "granted" | "opened" | "blocked" | "revoked" | "expired";
+  status: string;
+  reason: string;
+  metadataOnly: true;
+};
+
+export type TenantInstitutionAccessAuditSummary = {
+  schemaVersion: "recipient_access_audit.v1";
+  metadataOnly: true;
+  totalEvents: number;
+  openedReviewCount: number;
+  blockedReviewCount: number;
+  revokedAccessCount: number;
+  expiredAccessCount: number;
+  lastActivityAt: string | null;
+  lastOpenedAt: string | null;
+  lastBlockedAt: string | null;
+  lastOutcome: "granted" | "opened" | "blocked" | "revoked" | "expired" | null;
+  lastReason: string | null;
+  recipientIdentifier: {
+    email: string;
+    redactedEmail: string;
+    organizationName: string | null;
+  };
+  visibility: {
+    tenantVisible: true;
+    supportSafe: true;
+    trustPayloadIncluded: false;
+    supportMetadataIncluded: false;
+    rawProviderPayloadIncluded: false;
+    publicAccessEnabled: false;
+    downloadEnabled: false;
+  };
 };
 
 export type TenantInstitutionAccessRequest = {

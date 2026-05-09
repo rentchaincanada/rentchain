@@ -99,29 +99,36 @@ export type TenantInstitutionAccessPreview = {
   disclaimers: string[];
 };
 
-export type TenantInstitutionAccessGrant = TenantInstitutionAccessPreview & {
+export type TenantInstitutionAccessGrantEvent = {
+  eventType:
+    | "tenant_institution_access_granted"
+    | "tenant_institution_access_revoked"
+    | "tenant_institution_access_expired"
+    | "tenant_institution_access_blocked"
+    | "recipient_trust_review_opened"
+    | "recipient_trust_review_blocked"
+    | "recipient_trust_review_expired"
+    | "recipient_trust_review_revoked";
+  occurredAt: string;
+  actorType: "tenant" | "system" | "recipient";
+  metadataOnly: true;
+  outcome?: "granted" | "opened" | "blocked" | "revoked" | "expired";
+  reason?: RecipientTrustReviewAccessDecision["reason"] | "access_granted" | "access_revoked";
+  status?: RecipientTrustReviewStatus | "granted";
+};
+
+type TenantInstitutionAccessStoredGrant = TenantInstitutionAccessPreview & {
   grantId: string;
   lifecycle: "active" | "revoked" | "expired" | "blocked" | "reverification_required";
   createdAt: string;
   updatedAt: string;
-  events: Array<{
-    eventType:
-      | "tenant_institution_access_granted"
-      | "tenant_institution_access_revoked"
-      | "tenant_institution_access_expired"
-      | "tenant_institution_access_blocked"
-      | "recipient_trust_review_opened"
-      | "recipient_trust_review_blocked"
-      | "recipient_trust_review_expired"
-      | "recipient_trust_review_revoked";
-    occurredAt: string;
-    actorType: "tenant" | "system" | "recipient";
-    metadataOnly: true;
-  }>;
+  events: TenantInstitutionAccessGrantEvent[];
+  tenantId: string;
 };
 
-type TenantInstitutionAccessStoredGrant = TenantInstitutionAccessGrant & {
-  tenantId: string;
+export type TenantInstitutionAccessGrant = Omit<TenantInstitutionAccessStoredGrant, "tenantId"> & {
+  auditSummary: TenantInstitutionAccessAuditSummary;
+  auditTimeline: TenantInstitutionAccessAuditEvent[];
 };
 
 export type RecipientTrustReviewStatus =
@@ -202,6 +209,58 @@ export type RecipientTrustReviewResult = {
   summary: RecipientTrustReviewSummary | null;
 };
 
+export type TenantInstitutionAccessAuditOutcome = "granted" | "opened" | "blocked" | "revoked" | "expired";
+
+export type TenantInstitutionAccessAuditEvent = {
+  eventType: TenantInstitutionAccessGrantEvent["eventType"];
+  occurredAt: string;
+  actorType: "tenant" | "system" | "recipient";
+  outcome: TenantInstitutionAccessAuditOutcome;
+  status: RecipientTrustReviewStatus | "granted" | "revoked" | "expired" | "blocked";
+  reason:
+    | RecipientTrustReviewAccessDecision["reason"]
+    | "access_granted"
+    | "access_revoked"
+    | "access_expired"
+    | "access_blocked";
+  metadataOnly: true;
+};
+
+export type TenantInstitutionAccessAuditSummary = {
+  schemaVersion: "recipient_access_audit.v1";
+  metadataOnly: true;
+  totalEvents: number;
+  openedReviewCount: number;
+  blockedReviewCount: number;
+  revokedAccessCount: number;
+  expiredAccessCount: number;
+  lastActivityAt: string | null;
+  lastOpenedAt: string | null;
+  lastBlockedAt: string | null;
+  lastOutcome: TenantInstitutionAccessAuditOutcome | null;
+  lastReason:
+    | RecipientTrustReviewAccessDecision["reason"]
+    | "access_granted"
+    | "access_revoked"
+    | "access_expired"
+    | "access_blocked"
+    | null;
+  recipientIdentifier: {
+    email: string;
+    redactedEmail: string;
+    organizationName: string | null;
+  };
+  visibility: {
+    tenantVisible: true;
+    supportSafe: true;
+    trustPayloadIncluded: false;
+    supportMetadataIncluded: false;
+    rawProviderPayloadIncluded: false;
+    publicAccessEnabled: false;
+    downloadEnabled: false;
+  };
+};
+
 function asString(value: unknown, max = 240): string | null {
   const next = String(value ?? "").trim().slice(0, max);
   return next || null;
@@ -257,6 +316,14 @@ function normalizeRecipient(input: unknown): TenantInstitutionAccessRecipient | 
     organizationName: asString(data?.organizationName, 160),
     authenticationRequirement: "recipient_email_session_required",
   };
+}
+
+function redactEmail(value: string | null | undefined) {
+  const email = normalizeEmail(value);
+  if (!email) return "not available";
+  const [local, domain] = email.split("@");
+  const visible = local.length <= 2 ? local.slice(0, 1) : `${local.slice(0, 2)}***`;
+  return `${visible}@${domain}`;
 }
 
 function grantIdFor(params: {
@@ -402,9 +469,99 @@ function accessPreviewFromTrustPackage(params: {
   };
 }
 
+function outcomeForEventType(eventType: TenantInstitutionAccessAuditEvent["eventType"]): TenantInstitutionAccessAuditOutcome {
+  if (eventType === "tenant_institution_access_granted") return "granted";
+  if (eventType === "tenant_institution_access_revoked" || eventType === "recipient_trust_review_revoked") return "revoked";
+  if (eventType === "tenant_institution_access_expired" || eventType === "recipient_trust_review_expired") return "expired";
+  if (eventType === "recipient_trust_review_opened") return "opened";
+  return "blocked";
+}
+
+function statusForAuditEvent(event: TenantInstitutionAccessStoredGrant["events"][number]): TenantInstitutionAccessAuditEvent["status"] {
+  if (event.status) return event.status as TenantInstitutionAccessAuditEvent["status"];
+  if (event.eventType === "tenant_institution_access_granted") return "granted";
+  if (event.eventType === "tenant_institution_access_revoked" || event.eventType === "recipient_trust_review_revoked") return "revoked";
+  if (event.eventType === "tenant_institution_access_expired" || event.eventType === "recipient_trust_review_expired") return "expired";
+  if (event.eventType === "recipient_trust_review_opened") return "available";
+  return "blocked";
+}
+
+function reasonForAuditEvent(event: TenantInstitutionAccessStoredGrant["events"][number]): TenantInstitutionAccessAuditEvent["reason"] {
+  if (event.reason) return event.reason as TenantInstitutionAccessAuditEvent["reason"];
+  if (event.eventType === "tenant_institution_access_granted") return "access_granted";
+  if (event.eventType === "tenant_institution_access_revoked" || event.eventType === "recipient_trust_review_revoked") {
+    return "access_revoked";
+  }
+  if (event.eventType === "tenant_institution_access_expired" || event.eventType === "recipient_trust_review_expired") {
+    return "access_expired";
+  }
+  if (event.eventType === "recipient_trust_review_opened") return "review_available";
+  return "grant_blocked";
+}
+
+function auditEventFromGrantEvent(event: TenantInstitutionAccessStoredGrant["events"][number]): TenantInstitutionAccessAuditEvent | null {
+  const occurredAt = asString(event?.occurredAt, 80);
+  if (!occurredAt || event?.metadataOnly !== true) return null;
+  const eventType = event.eventType;
+  return {
+    eventType,
+    occurredAt,
+    actorType: event.actorType === "tenant" || event.actorType === "system" ? event.actorType : "recipient",
+    outcome: outcomeForEventType(eventType),
+    status: statusForAuditEvent(event),
+    reason: reasonForAuditEvent(event),
+    metadataOnly: true,
+  };
+}
+
+function buildAccessAudit(record: TenantInstitutionAccessStoredGrant): {
+  auditSummary: TenantInstitutionAccessAuditSummary;
+  auditTimeline: TenantInstitutionAccessAuditEvent[];
+} {
+  const auditTimeline = (Array.isArray(record.events) ? record.events : [])
+    .map(auditEventFromGrantEvent)
+    .filter(Boolean) as TenantInstitutionAccessAuditEvent[];
+  auditTimeline.sort((left, right) => Date.parse(right.occurredAt) - Date.parse(left.occurredAt));
+  const last = auditTimeline[0] || null;
+  const lastOpened = auditTimeline.find((event) => event.outcome === "opened") || null;
+  const lastBlocked = auditTimeline.find((event) => event.outcome === "blocked") || null;
+  return {
+    auditTimeline,
+    auditSummary: {
+      schemaVersion: "recipient_access_audit.v1",
+      metadataOnly: true,
+      totalEvents: auditTimeline.length,
+      openedReviewCount: auditTimeline.filter((event) => event.outcome === "opened").length,
+      blockedReviewCount: auditTimeline.filter((event) => event.outcome === "blocked").length,
+      revokedAccessCount: auditTimeline.filter((event) => event.outcome === "revoked").length,
+      expiredAccessCount: auditTimeline.filter((event) => event.outcome === "expired").length,
+      lastActivityAt: last?.occurredAt || null,
+      lastOpenedAt: lastOpened?.occurredAt || null,
+      lastBlockedAt: lastBlocked?.occurredAt || null,
+      lastOutcome: last?.outcome || null,
+      lastReason: last?.reason || null,
+      recipientIdentifier: {
+        email: record.recipient?.email || "",
+        redactedEmail: redactEmail(record.recipient?.email),
+        organizationName: record.recipient?.organizationName || null,
+      },
+      visibility: {
+        tenantVisible: true,
+        supportSafe: true,
+        trustPayloadIncluded: false,
+        supportMetadataIncluded: false,
+        rawProviderPayloadIncluded: false,
+        publicAccessEnabled: false,
+        downloadEnabled: false,
+      },
+    },
+  };
+}
+
 function publicGrant(record: TenantInstitutionAccessStoredGrant): TenantInstitutionAccessGrant {
   const { tenantId: _tenantId, ...rest } = record;
-  return rest;
+  const { auditSummary, auditTimeline } = buildAccessAudit(record);
+  return { ...rest, auditSummary, auditTimeline };
 }
 
 function asGrant(id: string, data: any): TenantInstitutionAccessStoredGrant {
@@ -532,6 +689,8 @@ async function appendRecipientReviewEvent(params: {
     | "recipient_trust_review_expired"
     | "recipient_trust_review_revoked";
   occurredAt: string;
+  status: RecipientTrustReviewStatus;
+  reason: RecipientTrustReviewAccessDecision["reason"];
 }) {
   const ref = db.collection(COLLECTION).doc(params.grant.grantId);
   const events = [
@@ -541,6 +700,9 @@ async function appendRecipientReviewEvent(params: {
       occurredAt: params.occurredAt,
       actorType: "recipient" as const,
       metadataOnly: true as const,
+      outcome: outcomeForEventType(params.eventType),
+      status: params.status,
+      reason: params.reason,
     },
   ].slice(-50);
   await ref.set({ events, updatedAt: params.occurredAt }, { merge: true });
@@ -561,11 +723,18 @@ export async function getRecipientTrustReview(params: {
   if (!snap.exists) return denyRecipientReview("not_found", "grant_not_found");
 
   const grant = asGrant(grantId, snap.data?.() || {});
+  const reviewedAt = nowIso();
   if (normalizeRecipientEmailForReview(grant.recipient?.email) !== recipientEmail) {
+    await appendRecipientReviewEvent({
+      grant,
+      eventType: "recipient_trust_review_blocked",
+      occurredAt: reviewedAt,
+      status: "recipient_mismatch",
+      reason: "recipient_email_mismatch",
+    });
     return denyRecipientReview("recipient_mismatch", "recipient_email_mismatch");
   }
 
-  const reviewedAt = nowIso();
   const denyWithEvent = async (
     status: RecipientTrustReviewStatus,
     reason: RecipientTrustReviewAccessDecision["reason"],
@@ -574,7 +743,7 @@ export async function getRecipientTrustReview(params: {
       | "recipient_trust_review_expired"
       | "recipient_trust_review_revoked" = "recipient_trust_review_blocked"
   ) => {
-    await appendRecipientReviewEvent({ grant, eventType, occurredAt: reviewedAt });
+    await appendRecipientReviewEvent({ grant, eventType, occurredAt: reviewedAt, status, reason });
     return denyRecipientReview(status, reason);
   };
 
@@ -598,7 +767,13 @@ export async function getRecipientTrustReview(params: {
     return denyWithEvent("policy_denied", "policy_gated_summary_unavailable");
   }
 
-  await appendRecipientReviewEvent({ grant, eventType: "recipient_trust_review_opened", occurredAt: reviewedAt });
+  await appendRecipientReviewEvent({
+    grant,
+    eventType: "recipient_trust_review_opened",
+    occurredAt: reviewedAt,
+    status: "available",
+    reason: "review_available",
+  });
 
   return {
     decision: {
@@ -690,6 +865,9 @@ export async function createTenantInstitutionAccessGrant(params: {
         occurredAt: createdAt,
         actorType: "tenant",
         metadataOnly: true,
+        outcome: "granted",
+        status: "granted",
+        reason: "access_granted",
       },
     ],
   };
@@ -724,6 +902,9 @@ export async function revokeTenantInstitutionAccessGrant(params: { tenantId: str
       occurredAt: updatedAt,
       actorType: "tenant" as const,
       metadataOnly: true as const,
+      outcome: "revoked" as const,
+      status: "revoked" as const,
+      reason: "access_revoked" as const,
     },
   ];
   await ref.set(
