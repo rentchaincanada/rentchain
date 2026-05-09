@@ -185,6 +185,12 @@ async function loadDocument(collectionName: string, docId: string | null) {
   }
 }
 
+async function loadApplicationDocument(docId: string | null) {
+  const id = asString(docId);
+  if (!id) return null;
+  return (await loadDocument("applications", id)) || (await loadDocument("rentalApplications", id));
+}
+
 async function queryFirst(
   collectionName: string,
   field: string,
@@ -201,6 +207,14 @@ async function queryFirst(
   } catch {
     return null;
   }
+}
+
+async function queryFirstApplication(
+  field: string,
+  value: string | null,
+  operator: "==" | "array-contains" = "=="
+) {
+  return (await queryFirst("applications", field, value, operator)) || (await queryFirst("rentalApplications", field, value, operator));
 }
 
 async function queryMany(
@@ -223,18 +237,27 @@ async function queryMany(
 async function loadWorkspaceDocuments(context: TenancyContext) {
   const property = await loadDocument("properties", context.propertyId);
 
-  let application = await loadDocument("applications", context.applicationId);
+  let application = await loadApplicationDocument(context.applicationId);
   if (!application && context.tenantId) {
-    application = await queryFirst("applications", "tenantId", context.tenantId);
+    application =
+      (await queryFirstApplication("tenantId", context.tenantId)) ||
+      (await queryFirstApplication("convertedTenantId", context.tenantId)) ||
+      (await queryFirstApplication("applicantTenantId", context.tenantId));
   }
   if (!application && context.invitedEmail) {
-    const match = await queryFirst("applications", "applicantEmail", context.invitedEmail);
+    const match = await queryFirstApplication("applicantEmail", context.invitedEmail);
     if (match && String(match.data?.propertyId || "") === String(context.propertyId || "")) {
       application = match;
     }
   }
   if (!application && context.invitedEmail) {
-    const match = await queryFirst("applications", "email", context.invitedEmail);
+    const match = await queryFirstApplication("email", context.invitedEmail);
+    if (match && String(match.data?.propertyId || "") === String(context.propertyId || "")) {
+      application = match;
+    }
+  }
+  if (!application && context.invitedEmail) {
+    const match = await queryFirstApplication("applicant.email", context.invitedEmail);
     if (match && String(match.data?.propertyId || "") === String(context.propertyId || "")) {
       application = match;
     }
@@ -243,6 +266,12 @@ async function loadWorkspaceDocuments(context: TenancyContext) {
   let lease = await loadDocument("leases", context.leaseId);
   if (!lease && context.tenantId) {
     const match = await queryFirst("leases", "tenantId", context.tenantId);
+    if (match && String(match.data?.propertyId || "") === String(context.propertyId || "")) {
+      lease = match;
+    }
+  }
+  if (!lease && context.tenantId) {
+    const match = await queryFirst("leases", "tenantIds", context.tenantId, "array-contains");
     if (match && String(match.data?.propertyId || "") === String(context.propertyId || "")) {
       lease = match;
     }
@@ -262,12 +291,16 @@ async function loadApplicationReuseSource(params: { context: TenancyContext; use
 
   let application = workspace.application;
   if (!application && userEmail) {
-    const byApplicantEmail = await queryFirst("applications", "applicantEmail", normalizeEmail(userEmail));
+    const byApplicantEmail = await queryFirstApplication("applicantEmail", normalizeEmail(userEmail));
     application = byApplicantEmail || application;
   }
   if (!application && userEmail) {
-    const byEmail = await queryFirst("applications", "email", normalizeEmail(userEmail));
+    const byEmail = await queryFirstApplication("email", normalizeEmail(userEmail));
     application = byEmail || application;
+  }
+  if (!application && userEmail) {
+    const byNestedEmail = await queryFirstApplication("applicant.email", normalizeEmail(userEmail));
+    application = byNestedEmail || application;
   }
 
   return {
@@ -349,6 +382,9 @@ function deriveScreeningStatusFromVisibleStatus(status: TenantVisibleStatus): Te
 
 async function loadTenantLeaseHistorySignals(context: TenancyContext, userEmail?: string | null) {
   let leases = context.tenantId ? await queryMany("leases", "tenantId", context.tenantId) : [];
+  if (!leases.length && context.tenantId) {
+    leases = await queryMany("leases", "tenantIds", context.tenantId, "array-contains");
+  }
   if (!leases.length && userEmail) {
     leases = await queryMany("leases", "tenantEmail", normalizeEmail(userEmail));
   }

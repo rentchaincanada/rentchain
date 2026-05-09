@@ -57,6 +57,7 @@ vi.mock("../../config/firebase", () => ({
   db: dbMock,
   FieldValue: {
     serverTimestamp: () => "__server_timestamp__",
+    arrayUnion: (...values: any[]) => values,
   },
 }));
 
@@ -166,6 +167,61 @@ describe("auth onboard tenant invites", () => {
     const storedInvite = ensureCollection("tenancy_invites").get(created.invite.id);
     expect(storedInvite?.status).toBe("redeemed");
     expect(storedInvite?.token).toBeUndefined();
+  });
+
+  it("reuses the converted application tenant and links tenant portal identity on invite acceptance", async () => {
+    ensureCollection("rentalApplications").set("app-linked", {
+      id: "app-linked",
+      landlordId: "landlord-1",
+      propertyId: "property-1",
+      unitId: "unit-1",
+      convertedTenantId: "converted-tenant-1",
+      applicantEmail: "tenant@example.com",
+      applicantPhone: "902-555-0101",
+      applicantFullName: "Tenant Name",
+      status: "converted",
+    });
+
+    const { createTenancyInvite } = await import("../../services/tenantPortal/tenantInviteService");
+    const created = await createTenancyInvite({
+      landlordId: "landlord-1",
+      propertyId: "property-1",
+      applicationId: "app-linked",
+      unitId: "unit-1",
+      invitedEmail: "tenant@example.com",
+      invitedName: "Tenant Name",
+      createdBy: "landlord-1",
+    });
+
+    const router = (await import("../authRoutes")).default;
+    const acceptRes = await invokeRouter(router, {
+      method: "POST",
+      url: "/onboard/accept",
+      body: { source: "tenant", token: created.token },
+    });
+
+    expect(acceptRes.status).toBe(200);
+    expect(acceptRes.body?.tenantToken).toBeTruthy();
+
+    const deterministicTenantId = "b334fd63bd8fce4e5d74faea";
+    expect(ensureCollection("tenants").has(deterministicTenantId)).toBe(false);
+    expect(ensureCollection("tenants").get("converted-tenant-1")).toMatchObject({
+      tenantId: "converted-tenant-1",
+      applicationId: "app-linked",
+      phone: "902-555-0101",
+      propertyId: "property-1",
+      unitId: "unit-1",
+    });
+    expect(ensureCollection("rentalApplications").get("app-linked")).toMatchObject({
+      tenantId: "converted-tenant-1",
+      applicantTenantId: "converted-tenant-1",
+      convertedTenantId: "converted-tenant-1",
+    });
+    expect(ensureCollection("applications").get("app-linked")).toMatchObject({
+      tenantId: "converted-tenant-1",
+      applicantTenantId: "converted-tenant-1",
+      convertedTenantId: "converted-tenant-1",
+    });
   });
 
   it("reports replaced tenancy_invites tokens as expired instead of not found", async () => {
