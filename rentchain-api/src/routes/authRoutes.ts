@@ -33,6 +33,7 @@ import {
   resolveTenancyInviteByToken,
 } from "../services/tenantPortal/tenantInviteService";
 import { createTenancyIfMissing } from "../services/tenanciesService";
+import { syncPropertyUnitOccupancyForTenantContext } from "../services/tenantPortal/tenantOccupancySyncService";
 
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET || "dev-secret";
@@ -225,9 +226,28 @@ async function normalizeTenantInviteIdentity(input: {
       applicantUserId: input.uid,
       source: "invite",
       updatedAt: now,
-    },
+      },
     { merge: true }
   );
+
+  try {
+    await syncPropertyUnitOccupancyForTenantContext({
+      tenantId: input.tenantId,
+      leaseId,
+      applicationId,
+      landlordId,
+      propertyId,
+      unitId,
+    });
+  } catch (error) {
+    console.warn("[auth.onboard.tenant_occupancy_sync_failed]", {
+      applicationId,
+      leaseId,
+      propertyId,
+      unitId,
+      reason: error instanceof Error ? error.message : "unknown",
+    });
+  }
 }
 
 function normalizeUserRole(req: any): string {

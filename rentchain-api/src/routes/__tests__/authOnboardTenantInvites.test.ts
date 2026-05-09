@@ -224,6 +224,127 @@ describe("auth onboard tenant invites", () => {
     });
   });
 
+  it("does not mark a unit occupied from an approved application without lease context", async () => {
+    ensureCollection("rentalApplications").set("app-no-lease", {
+      id: "app-no-lease",
+      landlordId: "landlord-1",
+      propertyId: "property-1",
+      unitId: "unit-1",
+      convertedTenantId: "converted-tenant-1",
+      applicantEmail: "tenant@example.com",
+      applicantFullName: "Tenant Name",
+      status: "converted",
+    });
+    ensureCollection("units").set("unit-doc-1", {
+      id: "unit-doc-1",
+      landlordId: "landlord-1",
+      propertyId: "property-1",
+      unitNumber: "unit-1",
+      status: "vacant",
+      occupancyStatus: "vacant",
+    });
+    ensureCollection("properties").set("property-1", {
+      id: "property-1",
+      units: [{ id: "unit-doc-1", unitNumber: "unit-1", status: "vacant", occupancyStatus: "vacant" }],
+    });
+
+    const { createTenancyInvite } = await import("../../services/tenantPortal/tenantInviteService");
+    const created = await createTenancyInvite({
+      landlordId: "landlord-1",
+      propertyId: "property-1",
+      applicationId: "app-no-lease",
+      unitId: "unit-1",
+      invitedEmail: "tenant@example.com",
+      invitedName: "Tenant Name",
+      createdBy: "landlord-1",
+    });
+
+    const router = (await import("../authRoutes")).default;
+    const acceptRes = await invokeRouter(router, {
+      method: "POST",
+      url: "/onboard/accept",
+      body: { source: "tenant", token: created.token },
+    });
+
+    expect(acceptRes.status).toBe(200);
+    expect(ensureCollection("units").get("unit-doc-1")).toMatchObject({
+      status: "vacant",
+      occupancyStatus: "vacant",
+    });
+    expect(ensureCollection("properties").get("property-1").units[0]).toMatchObject({
+      status: "vacant",
+      occupancyStatus: "vacant",
+    });
+  });
+
+  it("syncs property and unit occupancy from an active lease after invite acceptance", async () => {
+    ensureCollection("rentalApplications").set("app-with-lease", {
+      id: "app-with-lease",
+      landlordId: "landlord-1",
+      propertyId: "property-1",
+      unitId: "unit-1",
+      leaseId: "lease-1",
+      convertedTenantId: "converted-tenant-1",
+      applicantEmail: "tenant@example.com",
+      applicantFullName: "Tenant Name",
+      status: "converted",
+    });
+    ensureCollection("leases").set("lease-1", {
+      id: "lease-1",
+      landlordId: "landlord-1",
+      propertyId: "property-1",
+      unitId: "unit-1",
+      status: "active",
+    });
+    ensureCollection("units").set("unit-doc-1", {
+      id: "unit-doc-1",
+      landlordId: "landlord-1",
+      propertyId: "property-1",
+      unitNumber: "unit-1",
+      status: "vacant",
+      occupancyStatus: "vacant",
+    });
+    ensureCollection("properties").set("property-1", {
+      id: "property-1",
+      units: [{ id: "unit-doc-1", unitNumber: "unit-1", status: "vacant", occupancyStatus: "vacant" }],
+    });
+
+    const { createTenancyInvite } = await import("../../services/tenantPortal/tenantInviteService");
+    const created = await createTenancyInvite({
+      landlordId: "landlord-1",
+      propertyId: "property-1",
+      applicationId: "app-with-lease",
+      unitId: "unit-1",
+      leaseId: "lease-1",
+      invitedEmail: "tenant@example.com",
+      invitedName: "Tenant Name",
+      createdBy: "landlord-1",
+    });
+
+    const router = (await import("../authRoutes")).default;
+    const acceptRes = await invokeRouter(router, {
+      method: "POST",
+      url: "/onboard/accept",
+      body: { source: "tenant", token: created.token },
+    });
+
+    expect(acceptRes.status).toBe(200);
+    expect(ensureCollection("units").get("unit-doc-1")).toMatchObject({
+      status: "occupied",
+      occupancyStatus: "occupied",
+      tenantId: "converted-tenant-1",
+      leaseId: "lease-1",
+      occupancySource: "canonical_lease",
+    });
+    expect(ensureCollection("properties").get("property-1").units[0]).toMatchObject({
+      status: "occupied",
+      occupancyStatus: "occupied",
+      tenantId: "converted-tenant-1",
+      leaseId: "lease-1",
+      occupancySource: "canonical_lease",
+    });
+  });
+
   it("reports replaced tenancy_invites tokens as expired instead of not found", async () => {
     const { createReplacementTenancyInvite } = await import("../../services/tenantPortal/tenantInviteService");
     const first = await createReplacementTenancyInvite({
