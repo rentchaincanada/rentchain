@@ -68,6 +68,12 @@ import {
   previewTenantTrustExport,
   revokeTenantTrustExport,
 } from "../services/tenantPortal/tenantTrustExportService";
+import {
+  createTenantInstitutionAccessGrant,
+  listTenantInstitutionAccessGrants,
+  previewTenantInstitutionAccess,
+  revokeTenantInstitutionAccessGrant,
+} from "../services/tenantPortal/tenantInstitutionAccessService";
 import { recordSystemObservabilityEvent } from "../services/observability/recordSystemObservabilityEvent";
 import { buildLeasePaymentProjection } from "../services/projections/buildLeasePaymentProjection";
 
@@ -3277,6 +3283,133 @@ router.post("/trust-exports/:id/revoke", requireTenantWorkspaceIdentity, async (
       message: err?.message || "failed",
     });
     return res.status(500).json({ ok: false, error: "TENANT_TRUST_EXPORT_REVOKE_FAILED" });
+  }
+});
+
+router.get("/institution-access/grants", requireTenantWorkspaceIdentity, async (req: any, res) => {
+  const context = await resolveWorkspaceContextOrRespond(req, res);
+  if (!context) return;
+
+  const tenantId = String(req.user?.tenantId || context.tenantId || "").trim();
+  if (!tenantId) {
+    return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+  }
+
+  try {
+    const items = await listTenantInstitutionAccessGrants({ tenantId });
+    return res.json({ ok: true, data: { items } });
+  } catch (err: any) {
+    console.error("[tenant/institution-access:list] failed", {
+      tenantId,
+      message: err?.message || "failed",
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_INSTITUTION_ACCESS_LIST_FAILED" });
+  }
+});
+
+router.post("/institution-access/preview", requireTenantWorkspaceIdentity, async (req: any, res) => {
+  const context = await resolveWorkspaceContextOrRespond(req, res);
+  if (!context) return;
+
+  const tenantId = String(req.user?.tenantId || context.tenantId || "").trim();
+  if (!tenantId) {
+    return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+  }
+
+  try {
+    const preview = await previewTenantInstitutionAccess({
+      tenantId,
+      audience: req.body?.audience,
+      purpose: req.body?.purpose,
+      recipient: req.body?.recipient,
+      expiresInDays: req.body?.expiresInDays,
+      consentAccepted: req.body?.consentAccepted === true,
+    });
+    if (!preview) {
+      return res.status(404).json({ ok: false, error: "TENANT_INSTITUTION_ACCESS_UNAVAILABLE" });
+    }
+    return res.json({ ok: true, data: preview });
+  } catch (err: any) {
+    if (err?.message === "tenant_institution_access_recipient_required") {
+      return res.status(400).json({ ok: false, error: "TENANT_INSTITUTION_ACCESS_RECIPIENT_REQUIRED" });
+    }
+    if (err?.message === "tenant_institution_access_expiration_required") {
+      return res.status(400).json({ ok: false, error: "TENANT_INSTITUTION_ACCESS_EXPIRATION_REQUIRED" });
+    }
+    console.error("[tenant/institution-access:preview] failed", {
+      tenantId,
+      message: err?.message || "failed",
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_INSTITUTION_ACCESS_PREVIEW_FAILED" });
+  }
+});
+
+router.post("/institution-access/grants", requireTenantWorkspaceIdentity, async (req: any, res) => {
+  const context = await resolveWorkspaceContextOrRespond(req, res);
+  if (!context) return;
+
+  const tenantId = String(req.user?.tenantId || context.tenantId || "").trim();
+  if (!tenantId) {
+    return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+  }
+
+  try {
+    const grant = await createTenantInstitutionAccessGrant({
+      tenantId,
+      audience: req.body?.audience,
+      purpose: req.body?.purpose,
+      recipient: req.body?.recipient,
+      expiresInDays: req.body?.expiresInDays,
+      consentAccepted: req.body?.consentAccepted === true,
+    });
+    if (!grant) {
+      return res.status(404).json({ ok: false, error: "TENANT_INSTITUTION_ACCESS_UNAVAILABLE" });
+    }
+    return res.json({ ok: true, data: grant });
+  } catch (err: any) {
+    if (err?.message === "tenant_institution_access_consent_required") {
+      return res.status(400).json({ ok: false, error: "TENANT_INSTITUTION_ACCESS_CONSENT_REQUIRED" });
+    }
+    if (err?.message === "tenant_institution_access_recipient_required") {
+      return res.status(400).json({ ok: false, error: "TENANT_INSTITUTION_ACCESS_RECIPIENT_REQUIRED" });
+    }
+    if (err?.message === "tenant_institution_access_expiration_required") {
+      return res.status(400).json({ ok: false, error: "TENANT_INSTITUTION_ACCESS_EXPIRATION_REQUIRED" });
+    }
+    if (err?.message === "tenant_institution_access_policy_blocked") {
+      return res.status(400).json({ ok: false, error: "TENANT_INSTITUTION_ACCESS_POLICY_BLOCKED" });
+    }
+    console.error("[tenant/institution-access:create] failed", {
+      tenantId,
+      message: err?.message || "failed",
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_INSTITUTION_ACCESS_CREATE_FAILED" });
+  }
+});
+
+router.post("/institution-access/grants/:id/revoke", requireTenantWorkspaceIdentity, async (req: any, res) => {
+  const context = await resolveWorkspaceContextOrRespond(req, res);
+  if (!context) return;
+
+  const tenantId = String(req.user?.tenantId || context.tenantId || "").trim();
+  const grantId = String(req.params?.id || "").trim();
+  if (!tenantId || !grantId) {
+    return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+  }
+
+  try {
+    const revoked = await revokeTenantInstitutionAccessGrant({ tenantId, grantId });
+    if (!revoked) {
+      return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+    }
+    return res.json({ ok: true, data: revoked });
+  } catch (err: any) {
+    console.error("[tenant/institution-access:revoke] failed", {
+      tenantId,
+      grantId,
+      message: err?.message || "failed",
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_INSTITUTION_ACCESS_REVOKE_FAILED" });
   }
 });
 

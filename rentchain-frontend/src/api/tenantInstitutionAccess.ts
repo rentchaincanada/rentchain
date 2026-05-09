@@ -1,0 +1,169 @@
+import { tenantApiFetch } from "./tenantApiFetch";
+
+export type TenantInstitutionAccessAudience = "insurer" | "lender" | "institutional_landlord" | "auditor";
+
+export type TenantInstitutionAccessPurpose =
+  | "insurance_review"
+  | "lender_review"
+  | "institutional_landlord_review"
+  | "auditor_review";
+
+export type TenantInstitutionAccessLifecycle =
+  | "preview"
+  | "active"
+  | "revoked"
+  | "expired"
+  | "blocked"
+  | "consent_required"
+  | "reverification_required";
+
+export type TenantInstitutionAccessRecipient = {
+  email: string;
+  displayName: string | null;
+  organizationName: string | null;
+  authenticationRequirement: "recipient_email_session_required";
+};
+
+export type TenantInstitutionAccessPreview = {
+  grantId: string | null;
+  schemaVersion: "tenant_institution_access.v1";
+  audience: TenantInstitutionAccessAudience;
+  purpose: TenantInstitutionAccessPurpose;
+  lifecycle: TenantInstitutionAccessLifecycle;
+  recipient: TenantInstitutionAccessRecipient;
+  consent: {
+    required: true;
+    granted: boolean;
+    consentId: string | null;
+    consentVersion: "tenant_institution_access_consent.v1";
+    grantedAt: string | null;
+    expiresAt: string | null;
+    revokedAt: string | null;
+    audience: TenantInstitutionAccessAudience;
+    purpose: TenantInstitutionAccessPurpose;
+    recipientEmail: string | null;
+    claimCategories: string[];
+    summary: string;
+  };
+  expiresAt: string | null;
+  revokedAt: string | null;
+  generatedAt: string;
+  metadataOnly: true;
+  policyGated: true;
+  publicAccessEnabled: false;
+  publicProfileEnabled: false;
+  externalSubmissionEnabled: false;
+  providerIntegrationEnabled: false;
+  automatedDecisioningEnabled: false;
+  recipientAccess: {
+    enabled: false;
+    accessUrl: null;
+    accessTokenIssued: false;
+    recipientAuthenticationRequired: true;
+    sessionBound: true;
+    downloadEnabled: false;
+    summary: string;
+  };
+  package: {
+    status: "export_ready" | "blocked" | "unavailable";
+    blockedReasons: string[];
+    exportSummaries: Array<{
+      attestationId: string;
+      claimCategory: string;
+      claimLabel: string;
+      metadataOnly: true;
+      rawEvidenceIncluded: false;
+      rawProviderPayloadIncluded: false;
+      supportMetadataIncluded: false;
+      publicAccessEnabled: false;
+      externalSubmissionEnabled: false;
+    }>;
+  };
+  includedClaims: Array<{
+    attestationId: string;
+    claimCategory: string;
+    claimLabel: string;
+    lifecycleState: string;
+    consentExpiresAt: string | null;
+  }>;
+  excludedClaims: Array<{
+    attestationId: string;
+    claimCategory: string;
+    claimLabel: string;
+    reasons: string[];
+  }>;
+  redactions: string[];
+  disclaimers: string[];
+};
+
+export type TenantInstitutionAccessGrant = TenantInstitutionAccessPreview & {
+  grantId: string;
+  lifecycle: "active" | "revoked" | "expired" | "blocked" | "reverification_required";
+  createdAt: string;
+  updatedAt: string;
+  events: Array<{
+    eventType:
+      | "tenant_institution_access_granted"
+      | "tenant_institution_access_revoked"
+      | "tenant_institution_access_expired"
+      | "tenant_institution_access_blocked";
+    occurredAt: string;
+    actorType: "tenant" | "system";
+    metadataOnly: true;
+  }>;
+};
+
+export type TenantInstitutionAccessRequest = {
+  audience: TenantInstitutionAccessAudience;
+  purpose?: TenantInstitutionAccessPurpose;
+  recipient: {
+    email: string;
+    displayName?: string;
+    organizationName?: string;
+  };
+  expiresInDays: number;
+  consentAccepted?: boolean;
+};
+
+export async function listTenantInstitutionAccessGrants(): Promise<TenantInstitutionAccessGrant[]> {
+  const res = await tenantApiFetch<{ ok: boolean; data: { items: TenantInstitutionAccessGrant[] } }>(
+    "/tenant/institution-access/grants"
+  );
+  return Array.isArray(res?.data?.items) ? res.data.items : [];
+}
+
+export async function previewTenantInstitutionAccess(
+  request: TenantInstitutionAccessRequest
+): Promise<TenantInstitutionAccessPreview> {
+  const res = await tenantApiFetch<{ ok: boolean; data: TenantInstitutionAccessPreview }>(
+    "/tenant/institution-access/preview",
+    {
+      method: "POST",
+      body: request,
+    }
+  );
+  return res.data;
+}
+
+export async function createTenantInstitutionAccessGrant(
+  request: TenantInstitutionAccessRequest
+): Promise<TenantInstitutionAccessGrant> {
+  const res = await tenantApiFetch<{ ok: boolean; data: TenantInstitutionAccessGrant }>(
+    "/tenant/institution-access/grants",
+    {
+      method: "POST",
+      body: request,
+    }
+  );
+  return res.data;
+}
+
+export async function revokeTenantInstitutionAccessGrant(grantId: string): Promise<TenantInstitutionAccessGrant> {
+  const res = await tenantApiFetch<{ ok: boolean; data: TenantInstitutionAccessGrant }>(
+    `/tenant/institution-access/grants/${encodeURIComponent(grantId)}/revoke`,
+    {
+      method: "POST",
+    }
+  );
+  return res.data;
+}
