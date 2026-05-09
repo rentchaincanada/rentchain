@@ -82,6 +82,49 @@ function renderInstitutionAccessDiagnostics(payload: SupportConsoleResourceRespo
   );
 }
 
+function renderOperatorAuditTimeline(payload: SupportConsoleResourceResponse) {
+  const timeline = payload.operatorAuditTimeline;
+  if (!timeline) return null;
+  return (
+    <SupportConsoleSection title="Operator audit timeline">
+      <div style={{ display: "grid", gap: 12 }}>
+        <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
+          <div><strong>Events</strong>: {timeline.eventCount}</div>
+          <div><strong>Lifecycle transitions</strong>: {timeline.lifecycleTransitionCount}</div>
+          <div><strong>Revocations</strong>: {timeline.revocationCount}</div>
+          <div><strong>Expirations</strong>: {timeline.expirationCount}</div>
+          <div><strong>Supersessions</strong>: {timeline.supersessionCount}</div>
+          <div><strong>Policy denied</strong>: {timeline.policyDeniedCount}</div>
+          <div><strong>Session events</strong>: {timeline.sessionEventCount}</div>
+          <div><strong>Operator interactions</strong>: {timeline.operatorInteractionCount}</div>
+        </div>
+        <div style={{ color: "#475569" }}>
+          Support-only metadata timeline. Trust payloads, provider payloads, raw identity or property data, support metadata, public access, and downloads are excluded.
+        </div>
+        <div style={{ display: "grid", gap: 8 }}>
+          {timeline.events.length ? (
+            timeline.events.slice(0, 20).map((event) => (
+              <div key={event.eventId} style={{ borderTop: "1px solid #e2e8f0", paddingTop: 8 }}>
+                <strong>{event.eventType}</strong> · {event.category} · {event.reason || event.outcome || "no reason"}
+                <div style={{ color: "#64748b" }}>
+                  {event.occurredAt} · {event.actorType} · {event.lifecycleState || event.status || "no lifecycle"}
+                </div>
+                {event.operator ? (
+                  <div style={{ color: "#64748b" }}>
+                    Operator: {event.operator.redactedOperatorId || "redacted"} · {event.operator.role || "role unavailable"}
+                  </div>
+                ) : null}
+              </div>
+            ))
+          ) : (
+            <div style={{ color: "#64748b" }}>No operator audit timeline events are available.</div>
+          )}
+        </div>
+      </div>
+    </SupportConsoleSection>
+  );
+}
+
 export default function SupportDebugConsolePage() {
   const { showToast } = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -191,6 +234,7 @@ export default function SupportDebugConsolePage() {
             <SupportConsoleHeader resource={payload.resource} />
 
             {renderInstitutionAccessDiagnostics(payload)}
+            {renderOperatorAuditTimeline(payload)}
 
             <SupportConsoleSection title="Derived insight">
               {renderKeyValueList(payload.insight || null)}

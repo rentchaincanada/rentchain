@@ -11,6 +11,7 @@ import { loadWatchlistEntries } from "../watchlist/loadWatchlistEntries";
 import { canonicalEventToTimelineItem } from "../timeline/timelineAdapter";
 import { redactIdentifier, redactIdentifierMap } from "../governance/platformGovernance";
 import { getSupportInstitutionAccessDiagnostic } from "../../services/tenantPortal/tenantInstitutionAccessService";
+import { buildOperatorAuditTimeline } from "./operatorAuditTimeline";
 import type {
   SupportConsoleAutomationItem,
   SupportConsolePolicyDecision,
@@ -323,6 +324,28 @@ async function loadFinancialTransactions(applicationId: string) {
     .filter((tx: any) => asString(tx?.applicationId, 240) === applicationId);
 }
 
+async function loadTenantTrustExportsForInstitutionGrant(doc: any) {
+  const tenantId = asString(doc?.tenantId, 240);
+  const audience = asString(doc?.audience, 120);
+  const purpose = asString(doc?.purpose, 120);
+  if (!tenantId) return [];
+  const collection = db.collection("tenantTrustExports") as any;
+  const tenantQuery =
+    typeof collection.where === "function"
+      ? collection.where("tenantId", "==", tenantId)
+      : collection;
+  const limitedQuery = typeof tenantQuery.limit === "function" ? tenantQuery.limit(50) : tenantQuery;
+  const snap = await limitedQuery.get();
+  return (snap.docs || [])
+    .map((exportDoc: any) => ({ exportId: String(exportDoc.id || ""), ...(exportDoc.data?.() || {}) }))
+    .filter((record: any) => {
+      if (asString(record?.tenantId, 240) !== tenantId) return false;
+      if (audience && asString(record?.audience, 120) !== audience) return false;
+      if (purpose && asString(record?.purpose, 120) !== purpose) return false;
+      return true;
+    });
+}
+
 function emptyResponse(spec: NormalizedResourceSpec, resourceId: string): SupportConsoleResourceResponse {
   return {
     resource: {
@@ -377,6 +400,14 @@ export async function buildSupportConsoleResource(input: {
 
   if (spec.requestedType === "institution_access") {
     const diagnostic = await getSupportInstitutionAccessDiagnostic({ grantId: resourceId });
+    const tenantTrustExports = await loadTenantTrustExportsForInstitutionGrant(doc);
+    const operatorAuditTimeline = buildOperatorAuditTimeline({
+      grantId: resourceId,
+      grant: doc,
+      diagnostic,
+      canonicalEvents: sortedEvents,
+      tenantTrustExports,
+    });
     return {
       resource: buildInstitutionAccessHeader(resourceId, doc, diagnostic),
       timeline: sortedEvents.map(canonicalEventToTimelineItem),
@@ -397,6 +428,7 @@ export async function buildSupportConsoleResource(input: {
       resolution: null,
       watch: null,
       institutionAccessDiagnostic: diagnostic,
+      operatorAuditTimeline,
       debug: {
         canonicalEventCount: relatedEvents.length,
         domainsPresent: domainsPresent(relatedEvents),
