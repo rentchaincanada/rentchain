@@ -109,15 +109,97 @@ export type TenantInstitutionAccessGrant = TenantInstitutionAccessPreview & {
       | "tenant_institution_access_granted"
       | "tenant_institution_access_revoked"
       | "tenant_institution_access_expired"
-      | "tenant_institution_access_blocked";
+      | "tenant_institution_access_blocked"
+      | "recipient_trust_review_opened"
+      | "recipient_trust_review_blocked"
+      | "recipient_trust_review_expired"
+      | "recipient_trust_review_revoked";
     occurredAt: string;
-    actorType: "tenant" | "system";
+    actorType: "tenant" | "system" | "recipient";
     metadataOnly: true;
   }>;
 };
 
 type TenantInstitutionAccessStoredGrant = TenantInstitutionAccessGrant & {
   tenantId: string;
+};
+
+export type RecipientTrustReviewStatus =
+  | "available"
+  | "unauthenticated"
+  | "not_found"
+  | "recipient_mismatch"
+  | "expired"
+  | "revoked"
+  | "blocked"
+  | "consent_required"
+  | "reverification_required"
+  | "policy_denied";
+
+export type RecipientTrustReviewAccessDecision = {
+  allowed: boolean;
+  status: RecipientTrustReviewStatus;
+  reason:
+    | "review_available"
+    | "recipient_authentication_required"
+    | "grant_not_found"
+    | "recipient_email_mismatch"
+    | "grant_expired"
+    | "grant_revoked"
+    | "grant_blocked"
+    | "tenant_consent_missing"
+    | "trust_reverification_required"
+    | "policy_gated_summary_unavailable";
+  metadataOnly: true;
+  publicAccessEnabled: false;
+  downloadEnabled: false;
+};
+
+export type RecipientTrustReviewSummary = {
+  schemaVersion: "recipient_trust_review.v1";
+  grantId: string;
+  audience: TenantInstitutionAccessAudience;
+  purpose: TenantInstitutionAccessPurpose;
+  lifecycle: "active";
+  recipient: Pick<TenantInstitutionAccessRecipient, "email" | "displayName" | "organizationName">;
+  consent: Pick<
+    TenantInstitutionAccessConsentState,
+    "granted" | "consentVersion" | "grantedAt" | "expiresAt" | "audience" | "purpose"
+  >;
+  access: {
+    authenticated: true;
+    sessionBound: true;
+    viewOnly: true;
+    downloadEnabled: false;
+    publicAccessEnabled: false;
+    publicProfileEnabled: false;
+    externalSubmissionEnabled: false;
+    providerIntegrationEnabled: false;
+    automatedDecisioningEnabled: false;
+  };
+  generatedAt: string;
+  expiresAt: string | null;
+  reviewedAt: string;
+  metadataOnly: true;
+  policyGated: true;
+  includedClaims: Array<{
+    claimCategory: PortableAttestationClaimCategory;
+    claimLabel: string;
+    lifecycleState: string;
+    consentExpiresAt: string | null;
+  }>;
+  excludedClaims: Array<{
+    claimCategory: PortableAttestationClaimCategory;
+    claimLabel: string;
+    reasons: string[];
+  }>;
+  redactions: string[];
+  disclaimers: string[];
+};
+
+export type RecipientTrustReviewResult = {
+  decision: RecipientTrustReviewAccessDecision;
+  summary: RecipientTrustReviewSummary | null;
 };
 
 function asString(value: unknown, max = 240): string | null {
@@ -342,6 +424,195 @@ function asGrant(id: string, data: any): TenantInstitutionAccessStoredGrant {
   } as TenantInstitutionAccessStoredGrant;
 }
 
+function normalizeRecipientEmailForReview(value: unknown) {
+  return normalizeEmail(value);
+}
+
+function denyRecipientReview(
+  status: RecipientTrustReviewStatus,
+  reason: RecipientTrustReviewAccessDecision["reason"]
+): RecipientTrustReviewResult {
+  return {
+    decision: {
+      allowed: false,
+      status,
+      reason,
+      metadataOnly: true,
+      publicAccessEnabled: false,
+      downloadEnabled: false,
+    },
+    summary: null,
+  };
+}
+
+function hasUnsafeRecipientPayload(grant: TenantInstitutionAccessStoredGrant) {
+  const payload = JSON.stringify({
+    package: grant.package,
+    includedClaims: grant.includedClaims,
+    excludedClaims: grant.excludedClaims,
+    recipientAccess: grant.recipientAccess,
+  });
+  return (
+    payload.includes("rawProviderPayloadIncluded\":true") ||
+    payload.includes("rawEvidenceIncluded\":true") ||
+    payload.includes("supportMetadataIncluded\":true") ||
+    payload.includes("rawSensitivePayloadStored\":true") ||
+    payload.includes("publicAccessEnabled\":true") ||
+    payload.includes("externalSubmissionEnabled\":true") ||
+    payload.includes("accessTokenIssued\":true") ||
+    payload.includes("downloadEnabled\":true")
+  );
+}
+
+function recipientSummaryFromGrant(
+  grant: TenantInstitutionAccessStoredGrant,
+  reviewedAt: string
+): RecipientTrustReviewSummary {
+  return {
+    schemaVersion: "recipient_trust_review.v1",
+    grantId: grant.grantId,
+    audience: grant.audience,
+    purpose: grant.purpose,
+    lifecycle: "active",
+    recipient: {
+      email: grant.recipient.email,
+      displayName: grant.recipient.displayName,
+      organizationName: grant.recipient.organizationName,
+    },
+    consent: {
+      granted: true,
+      consentVersion: grant.consent.consentVersion,
+      grantedAt: grant.consent.grantedAt,
+      expiresAt: grant.consent.expiresAt,
+      audience: grant.consent.audience,
+      purpose: grant.consent.purpose,
+    },
+    access: {
+      authenticated: true,
+      sessionBound: true,
+      viewOnly: true,
+      downloadEnabled: false,
+      publicAccessEnabled: false,
+      publicProfileEnabled: false,
+      externalSubmissionEnabled: false,
+      providerIntegrationEnabled: false,
+      automatedDecisioningEnabled: false,
+    },
+    generatedAt: grant.generatedAt,
+    expiresAt: grant.expiresAt,
+    reviewedAt,
+    metadataOnly: true,
+    policyGated: true,
+    includedClaims: (grant.includedClaims || []).map((claim) => ({
+      claimCategory: claim.claimCategory,
+      claimLabel: claim.claimLabel,
+      lifecycleState: claim.lifecycleState,
+      consentExpiresAt: claim.consentExpiresAt,
+    })),
+    excludedClaims: (grant.excludedClaims || []).map((claim) => ({
+      claimCategory: claim.claimCategory,
+      claimLabel: claim.claimLabel,
+      reasons: Array.isArray(claim.reasons) ? claim.reasons : [],
+    })),
+    redactions: grant.redactions || [],
+    disclaimers: [
+      "This review is tenant-authorized, metadata-only, and view-only.",
+      "This review is not a credit, insurance, subsidy, ownership, government, or automated eligibility decision.",
+      "Raw identity documents, raw provider payloads, support/internal metadata, public profiles, and downloads are excluded.",
+      ...(grant.disclaimers || []),
+    ],
+  };
+}
+
+async function appendRecipientReviewEvent(params: {
+  grant: TenantInstitutionAccessStoredGrant;
+  eventType:
+    | "recipient_trust_review_opened"
+    | "recipient_trust_review_blocked"
+    | "recipient_trust_review_expired"
+    | "recipient_trust_review_revoked";
+  occurredAt: string;
+}) {
+  const ref = db.collection(COLLECTION).doc(params.grant.grantId);
+  const events = [
+    ...(Array.isArray(params.grant.events) ? params.grant.events : []),
+    {
+      eventType: params.eventType,
+      occurredAt: params.occurredAt,
+      actorType: "recipient" as const,
+      metadataOnly: true as const,
+    },
+  ].slice(-50);
+  await ref.set({ events, updatedAt: params.occurredAt }, { merge: true });
+}
+
+export async function getRecipientTrustReview(params: {
+  grantId: string;
+  recipientEmail?: unknown;
+}): Promise<RecipientTrustReviewResult> {
+  const grantId = asString(params.grantId);
+  const recipientEmail = normalizeRecipientEmailForReview(params.recipientEmail);
+  if (!recipientEmail) {
+    return denyRecipientReview("unauthenticated", "recipient_authentication_required");
+  }
+  if (!grantId) return denyRecipientReview("not_found", "grant_not_found");
+
+  const snap = await db.collection(COLLECTION).doc(grantId).get();
+  if (!snap.exists) return denyRecipientReview("not_found", "grant_not_found");
+
+  const grant = asGrant(grantId, snap.data?.() || {});
+  if (normalizeRecipientEmailForReview(grant.recipient?.email) !== recipientEmail) {
+    return denyRecipientReview("recipient_mismatch", "recipient_email_mismatch");
+  }
+
+  const reviewedAt = nowIso();
+  const denyWithEvent = async (
+    status: RecipientTrustReviewStatus,
+    reason: RecipientTrustReviewAccessDecision["reason"],
+    eventType:
+      | "recipient_trust_review_blocked"
+      | "recipient_trust_review_expired"
+      | "recipient_trust_review_revoked" = "recipient_trust_review_blocked"
+  ) => {
+    await appendRecipientReviewEvent({ grant, eventType, occurredAt: reviewedAt });
+    return denyRecipientReview(status, reason);
+  };
+
+  if (grant.lifecycle === "revoked" || grant.revokedAt || grant.consent?.revokedAt) {
+    return denyWithEvent("revoked", "grant_revoked", "recipient_trust_review_revoked");
+  }
+  if (grant.lifecycle === "expired" || (grant.expiresAt && Date.parse(grant.expiresAt) <= Date.now())) {
+    return denyWithEvent("expired", "grant_expired", "recipient_trust_review_expired");
+  }
+  if (grant.lifecycle === "blocked") return denyWithEvent("blocked", "grant_blocked");
+  if (grant.lifecycle === "reverification_required") {
+    return denyWithEvent("reverification_required", "trust_reverification_required");
+  }
+  if (grant.consent?.granted !== true || !grant.consent?.consentId) {
+    return denyWithEvent("consent_required", "tenant_consent_missing");
+  }
+  if (grant.package?.status !== "export_ready" || !Array.isArray(grant.package?.exportSummaries) || !grant.package.exportSummaries.length) {
+    return denyWithEvent("policy_denied", "policy_gated_summary_unavailable");
+  }
+  if (hasUnsafeRecipientPayload(grant)) {
+    return denyWithEvent("policy_denied", "policy_gated_summary_unavailable");
+  }
+
+  await appendRecipientReviewEvent({ grant, eventType: "recipient_trust_review_opened", occurredAt: reviewedAt });
+
+  return {
+    decision: {
+      allowed: true,
+      status: "available",
+      reason: "review_available",
+      metadataOnly: true,
+      publicAccessEnabled: false,
+      downloadEnabled: false,
+    },
+    summary: recipientSummaryFromGrant(grant, reviewedAt),
+  };
+}
+
 export async function previewTenantInstitutionAccess(params: {
   tenantId: string;
   audience?: unknown;
@@ -496,4 +767,3 @@ export async function revokeTenantInstitutionAccessGrant(params: { tenantId: str
     },
   });
 }
-
