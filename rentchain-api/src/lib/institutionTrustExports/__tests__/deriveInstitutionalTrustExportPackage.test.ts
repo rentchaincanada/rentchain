@@ -83,6 +83,15 @@ describe("deriveInstitutionalTrustExportPackage", () => {
         purpose: "insurance_review",
         status: "export_ready",
         lifecycle: "policy_evaluated",
+        lifecycleControl: expect.objectContaining({
+          schemaVersion: "institutional_trust_export_lifecycle_control.v1",
+          state: "active",
+          active: true,
+          shareable: true,
+          metadataOnly: true,
+          publicAccessEnabled: false,
+          externalSubmissionEnabled: false,
+        }),
         metadataOnly: true,
         consentScoped: true,
         policyGated: true,
@@ -124,6 +133,8 @@ describe("deriveInstitutionalTrustExportPackage", () => {
       ])
     );
     expect(pkg.auditMetadata.blockedAttestationCount).toBe(3);
+    expect(pkg.lifecycleControl.state).toBe("reverification_required");
+    expect(pkg.lifecycleControl.active).toBe(false);
   });
 
   it("enforces audience restrictions and excludes raw/internal references from export payloads", () => {

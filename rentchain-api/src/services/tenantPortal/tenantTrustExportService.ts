@@ -47,7 +47,62 @@ export type TenantTrustExportLifecycle =
   | "revoked"
   | "expired"
   | "blocked"
-  | "consent_required";
+  | "consent_required"
+  | "superseded"
+  | "archived"
+  | "reverification_required"
+  | "invalidated"
+  | "replaced";
+
+export type TrustExportLifecycleReason =
+  | "export_active"
+  | "export_expired"
+  | "export_revoked"
+  | "export_superseded"
+  | "export_archived"
+  | "export_replaced"
+  | "export_blocked"
+  | "source_attestation_revoked"
+  | "source_attestation_expired"
+  | "source_attestation_superseded"
+  | "source_reverification_required"
+  | "policy_gate_blocked";
+
+export type TrustExportLifecycleControl = {
+  schemaVersion: "trust_export_lifecycle_control.v1";
+  state: Exclude<TenantTrustExportLifecycle, "preview" | "consent_required">;
+  reason: TrustExportLifecycleReason;
+  active: boolean;
+  shareable: boolean;
+  evaluatedAt: string;
+  expiresAt: string | null;
+  revokedAt: string | null;
+  supersededAt: string | null;
+  supersededByExportId: string | null;
+  archivedAt: string | null;
+  replacedByExportId: string | null;
+  invalidatedAt: string | null;
+  sourceAttestationIds: string[];
+  metadataOnly: true;
+  publicAccessEnabled: false;
+  downloadEnabled: false;
+};
+
+export type TrustExportLifecycleEvent = {
+  eventType:
+    | "trust_export_prepared"
+    | "trust_export_expired"
+    | "trust_export_revoked"
+    | "trust_export_superseded"
+    | "trust_export_archived"
+    | "trust_export_replaced"
+    | "trust_export_invalidation_detected"
+    | "trust_export_reverification_required";
+  occurredAt: string;
+  actorType: "tenant" | "system";
+  reason: TrustExportLifecycleReason;
+  metadataOnly: true;
+};
 
 export type TenantTrustExportConsentState = {
   required: true;
@@ -73,9 +128,17 @@ export type TenantTrustExportPreview = {
   consent: TenantTrustExportConsentState;
   expiresAt: string | null;
   revokedAt: string | null;
+  supersededAt: string | null;
+  supersededByExportId: string | null;
+  archivedAt: string | null;
+  replacedByExportId: string | null;
+  invalidatedAt: string | null;
   generatedAt: string;
+  lifecycleControl: TrustExportLifecycleControl;
+  lifecycleEvents: TrustExportLifecycleEvent[];
   metadataOnly: true;
   publicAccessEnabled: false;
+  downloadEnabled: boolean;
   externalSubmissionEnabled: false;
   policyGated: true;
   package: InstitutionalTrustExportPackage;
@@ -98,7 +161,7 @@ export type TenantTrustExportPreview = {
 
 export type TenantTrustExportRecord = TenantTrustExportPreview & {
   exportId: string;
-  lifecycle: "prepared" | "revoked" | "expired" | "blocked";
+  lifecycle: Exclude<TenantTrustExportLifecycle, "preview" | "consent_required">;
   createdAt: string;
   updatedAt: string;
 };
@@ -131,6 +194,13 @@ function nowIso() {
 
 function addDaysIso(start: string, days: number) {
   return new Date(Date.parse(start) + days * 24 * 60 * 60 * 1000).toISOString();
+}
+
+function timestampAtOrBefore(value: string | null | undefined, comparedAt: string) {
+  if (!value) return false;
+  const candidate = Date.parse(value);
+  const now = Date.parse(comparedAt);
+  return Number.isFinite(candidate) && Number.isFinite(now) && candidate <= now;
 }
 
 function clampExpiresInDays(value: unknown) {
@@ -214,6 +284,125 @@ function exportIdFor(params: {
   ]
     .join(":")
     .replace(/[^a-zA-Z0-9_.:-]+/g, "_");
+}
+
+function sourceAttestationIds(record: Pick<TenantTrustExportPreview, "package">) {
+  return Array.from(
+    new Set((record.package?.exportSummaries || []).map((summary: any) => asString(summary?.attestationId)).filter(Boolean) as string[])
+  );
+}
+
+function lifecycleEvent(params: {
+  eventType: TrustExportLifecycleEvent["eventType"];
+  occurredAt: string;
+  reason: TrustExportLifecycleReason;
+  actorType?: TrustExportLifecycleEvent["actorType"];
+}): TrustExportLifecycleEvent {
+  return {
+    eventType: params.eventType,
+    occurredAt: params.occurredAt,
+    actorType: params.actorType || "system",
+    reason: params.reason,
+    metadataOnly: true,
+  };
+}
+
+function lifecycleControl(params: {
+  state: TrustExportLifecycleControl["state"];
+  reason: TrustExportLifecycleReason;
+  evaluatedAt: string;
+  record: Partial<TenantTrustExportPreview>;
+  supersededByExportId?: string | null;
+  replacedByExportId?: string | null;
+  invalidatedAt?: string | null;
+}): TrustExportLifecycleControl {
+  const active = params.state === "prepared";
+  return {
+    schemaVersion: "trust_export_lifecycle_control.v1",
+    state: params.state,
+    reason: params.reason,
+    active,
+    shareable: active,
+    evaluatedAt: params.evaluatedAt,
+    expiresAt: params.record.expiresAt || null,
+    revokedAt: params.record.revokedAt || null,
+    supersededAt: params.record.supersededAt || null,
+    supersededByExportId: params.supersededByExportId ?? params.record.supersededByExportId ?? null,
+    archivedAt: params.record.archivedAt || null,
+    replacedByExportId: params.replacedByExportId ?? params.record.replacedByExportId ?? null,
+    invalidatedAt: params.invalidatedAt ?? params.record.invalidatedAt ?? null,
+    sourceAttestationIds: params.record.package ? sourceAttestationIds(params.record as TenantTrustExportPreview) : [],
+    metadataOnly: true,
+    publicAccessEnabled: false,
+    downloadEnabled: false,
+  };
+}
+
+function evaluateStoredExportLifecycle(
+  record: TenantTrustExportStoredRecord,
+  evaluatedAt = nowIso()
+): { state: TrustExportLifecycleControl["state"]; reason: TrustExportLifecycleReason; invalidatedAt: string | null } {
+  if (record.lifecycle === "revoked" || record.revokedAt || record.consent?.revokedAt) {
+    return { state: "revoked", reason: "export_revoked", invalidatedAt: record.revokedAt || record.consent?.revokedAt || evaluatedAt };
+  }
+  if (record.lifecycle === "archived" || record.archivedAt) {
+    return { state: "archived", reason: "export_archived", invalidatedAt: record.archivedAt || evaluatedAt };
+  }
+  if (record.lifecycle === "superseded" || record.supersededAt) {
+    return { state: "superseded", reason: "export_superseded", invalidatedAt: record.supersededAt || evaluatedAt };
+  }
+  if (record.lifecycle === "replaced" || record.replacedByExportId) {
+    return { state: "replaced", reason: "export_replaced", invalidatedAt: evaluatedAt };
+  }
+  if (timestampAtOrBefore(record.expiresAt, evaluatedAt) || timestampAtOrBefore(record.consent?.expiresAt, evaluatedAt)) {
+    return { state: "expired", reason: "export_expired", invalidatedAt: record.expiresAt || record.consent?.expiresAt || evaluatedAt };
+  }
+
+  for (const summary of record.package?.exportSummaries || []) {
+    if (summary?.status === "revoked" || summary?.revokedAt) {
+      return { state: "invalidated", reason: "source_attestation_revoked", invalidatedAt: summary.revokedAt || evaluatedAt };
+    }
+    if (summary?.status === "superseded" || summary?.supersededAt || summary?.lifecycleState === "superseded") {
+      return { state: "superseded", reason: "source_attestation_superseded", invalidatedAt: summary.supersededAt || evaluatedAt };
+    }
+    if (
+      summary?.status === "expired" ||
+      summary?.lifecycleState === "expired" ||
+      timestampAtOrBefore(summary?.expiresAt, evaluatedAt) ||
+      timestampAtOrBefore(summary?.consentExpiresAt, evaluatedAt)
+    ) {
+      return { state: "expired", reason: "source_attestation_expired", invalidatedAt: summary?.expiresAt || summary?.consentExpiresAt || evaluatedAt };
+    }
+    if (
+      summary?.status === "reverification_required" ||
+      summary?.lifecycleState === "reverification_required" ||
+      timestampAtOrBefore(summary?.nextReverificationAt, evaluatedAt)
+    ) {
+      return { state: "reverification_required", reason: "source_reverification_required", invalidatedAt: summary?.nextReverificationAt || evaluatedAt };
+    }
+  }
+
+  if (record.package?.status !== "export_ready") {
+    return { state: "blocked", reason: "policy_gate_blocked", invalidatedAt: evaluatedAt };
+  }
+
+  return { state: "prepared", reason: "export_active", invalidatedAt: null };
+}
+
+function lifecycleEventTypeForDecision(
+  state: TrustExportLifecycleControl["state"],
+  reason: TrustExportLifecycleReason
+): TrustExportLifecycleEvent["eventType"] | null {
+  if (state === "prepared") return null;
+  if (state === "expired") return "trust_export_expired";
+  if (state === "revoked") return "trust_export_revoked";
+  if (state === "superseded") return "trust_export_superseded";
+  if (state === "archived") return "trust_export_archived";
+  if (state === "replaced") return "trust_export_replaced";
+  if (state === "reverification_required" || reason === "source_reverification_required") {
+    return "trust_export_reverification_required";
+  }
+  return "trust_export_invalidation_detected";
 }
 
 async function resolveTenantTrustContext(tenantId: string): Promise<TenantTrustContext | null> {
@@ -552,9 +741,31 @@ function tenantPreviewFromPackage(params: {
     }),
     expiresAt: params.expiresAt,
     revokedAt: null,
+    supersededAt: null,
+    supersededByExportId: null,
+    archivedAt: null,
+    replacedByExportId: null,
+    invalidatedAt: null,
     generatedAt: params.generatedAt,
+    lifecycleControl: lifecycleControl({
+      state: lifecycle === "preview" ? "prepared" : "blocked",
+      reason: lifecycle === "preview" ? "export_active" : "policy_gate_blocked",
+      evaluatedAt: params.generatedAt,
+      record: {
+        expiresAt: params.expiresAt,
+        revokedAt: null,
+        supersededAt: null,
+        supersededByExportId: null,
+        archivedAt: null,
+        replacedByExportId: null,
+        invalidatedAt: null,
+        package: params.package,
+      },
+    }),
+    lifecycleEvents: [],
     metadataOnly: true,
     publicAccessEnabled: false,
+    downloadEnabled: lifecycle === "preview",
     externalSubmissionEnabled: false,
     policyGated: true,
     package: params.package,
@@ -570,6 +781,7 @@ function tenantPreviewFromPackage(params: {
       "This export is prepared for tenant review and manual use only.",
       "No institution receives this package automatically.",
       "Revocation affects RentChain-controlled state and future preparation, not files already downloaded.",
+      "Expired, revoked, superseded, archived, or reverification-required exports are not active or shareable.",
       "This package is not a credit, insurance, subsidy, ownership, or automated eligibility decision.",
     ],
   };
@@ -629,26 +841,115 @@ async function buildTenantTrustExportPreview(params: {
 }
 
 function asRecord(id: string, data: any): TenantTrustExportStoredRecord {
-  const expiresAt = asString(data?.expiresAt);
-  const now = Date.now();
-  const lifecycle =
-    data?.lifecycle === "revoked"
-      ? "revoked"
-      : expiresAt && Date.parse(expiresAt) <= now
-      ? "expired"
-      : data?.package?.status === "export_ready"
-      ? "prepared"
-      : "blocked";
-  return {
+  const base = {
     ...(data || {}),
     exportId: id,
-    lifecycle,
+    supersededAt: asString(data?.supersededAt),
+    supersededByExportId: asString(data?.supersededByExportId),
+    archivedAt: asString(data?.archivedAt),
+    replacedByExportId: asString(data?.replacedByExportId),
+    invalidatedAt: asString(data?.invalidatedAt),
+    lifecycleEvents: Array.isArray(data?.lifecycleEvents) ? data.lifecycleEvents : [],
+    downloadEnabled: data?.downloadEnabled === true,
+  } as TenantTrustExportStoredRecord;
+  const decision = evaluateStoredExportLifecycle(base);
+  const eventType = lifecycleEventTypeForDecision(decision.state, decision.reason);
+  const lifecycleEvents =
+    eventType && !(base.lifecycleEvents || []).some((event) => event.eventType === eventType && event.reason === decision.reason)
+      ? [
+          ...(base.lifecycleEvents || []),
+          lifecycleEvent({
+            eventType,
+            occurredAt: decision.invalidatedAt || nowIso(),
+            reason: decision.reason,
+          }),
+        ].slice(-50)
+      : base.lifecycleEvents || [];
+  return {
+    ...base,
+    lifecycle: decision.state,
+    invalidatedAt: base.invalidatedAt || decision.invalidatedAt,
+    lifecycleEvents,
+    lifecycleControl: lifecycleControl({
+      state: decision.state,
+      reason: decision.reason,
+      evaluatedAt: nowIso(),
+      record: {
+        ...base,
+        invalidatedAt: base.invalidatedAt || decision.invalidatedAt,
+      },
+    }),
+    downloadEnabled: decision.state === "prepared",
   } as TenantTrustExportStoredRecord;
 }
 
 function publicRecord(record: TenantTrustExportStoredRecord): TenantTrustExportRecord {
   const { tenantId: _tenantId, ...rest } = record;
   return rest;
+}
+
+async function supersedeActiveTenantTrustExports(params: {
+  tenantId: string;
+  audience: TenantTrustExportAudience;
+  purpose: TenantTrustExportPurpose;
+  replacementExportId: string;
+  occurredAt: string;
+}) {
+  const snap = await db.collection(COLLECTION).where("tenantId", "==", params.tenantId).limit(50).get();
+  await Promise.all(
+    (snap.docs || []).map(async (doc: any) => {
+      const current = asRecord(String(doc.id || ""), doc.data?.() || {});
+      if (
+        current.exportId === params.replacementExportId ||
+        current.audience !== params.audience ||
+        current.purpose !== params.purpose ||
+        current.lifecycle !== "prepared"
+      ) {
+        return;
+      }
+      const events = [
+        ...(Array.isArray(current.lifecycleEvents) ? current.lifecycleEvents : []),
+        lifecycleEvent({
+          eventType: "trust_export_superseded",
+          occurredAt: params.occurredAt,
+          reason: "export_superseded",
+        }),
+        lifecycleEvent({
+          eventType: "trust_export_replaced",
+          occurredAt: params.occurredAt,
+          reason: "export_replaced",
+        }),
+      ].slice(-50);
+      const nextControl = lifecycleControl({
+        state: "superseded",
+        reason: "export_superseded",
+        evaluatedAt: params.occurredAt,
+        record: {
+          ...current,
+          supersededAt: params.occurredAt,
+          supersededByExportId: params.replacementExportId,
+          replacedByExportId: params.replacementExportId,
+        },
+        supersededByExportId: params.replacementExportId,
+        replacedByExportId: params.replacementExportId,
+        invalidatedAt: params.occurredAt,
+      });
+      await db.collection(COLLECTION).doc(current.exportId).set(
+        {
+          lifecycle: "superseded",
+          supersededAt: params.occurredAt,
+          supersededByExportId: params.replacementExportId,
+          replacedByExportId: params.replacementExportId,
+          invalidatedAt: params.occurredAt,
+          updatedAt: params.occurredAt,
+          downloadEnabled: false,
+          lifecycleControl: nextControl,
+          lifecycleEvents: events,
+        },
+        { merge: true }
+      );
+    })
+  );
 }
 
 export async function previewTenantTrustExport(params: {
@@ -687,11 +988,42 @@ export async function prepareTenantTrustExport(params: {
   });
   if (!preview) return null;
 
+  await supersedeActiveTenantTrustExports({
+    tenantId,
+    audience,
+    purpose,
+    replacementExportId: exportId,
+    occurredAt: generatedAt,
+  });
+
+  const initialLifecycle: TenantTrustExportRecord["lifecycle"] =
+    preview.package.status === "export_ready" ? "prepared" : "blocked";
+  const initialReason: TrustExportLifecycleReason =
+    initialLifecycle === "prepared" ? "export_active" : "policy_gate_blocked";
   const record: TenantTrustExportStoredRecord = {
     ...preview,
     exportId,
     tenantId,
-    lifecycle: preview.package.status === "export_ready" ? "prepared" : "blocked",
+    lifecycle: initialLifecycle,
+    lifecycleControl: lifecycleControl({
+      state: initialLifecycle,
+      reason: initialReason,
+      evaluatedAt: generatedAt,
+      record: {
+        ...preview,
+        exportId,
+        lifecycle: initialLifecycle,
+      },
+    }),
+    lifecycleEvents: [
+      lifecycleEvent({
+        eventType: "trust_export_prepared",
+        occurredAt: generatedAt,
+        reason: initialReason,
+        actorType: "tenant",
+      }),
+    ],
+    downloadEnabled: initialLifecycle === "prepared",
     createdAt: generatedAt,
     updatedAt: generatedAt,
   };
@@ -719,11 +1051,35 @@ export async function revokeTenantTrustExport(params: { tenantId: string; export
   const current = asRecord(exportId, snap.data?.() || {});
   if (current.tenantId !== tenantId) return false;
   const updatedAt = nowIso();
+  const lifecycleEvents = [
+    ...(Array.isArray(current.lifecycleEvents) ? current.lifecycleEvents : []),
+    lifecycleEvent({
+      eventType: "trust_export_revoked",
+      occurredAt: updatedAt,
+      reason: "export_revoked",
+      actorType: "tenant",
+    }),
+  ].slice(-50);
+  const nextControl = lifecycleControl({
+    state: "revoked",
+    reason: "export_revoked",
+    evaluatedAt: updatedAt,
+    record: {
+      ...current,
+      revokedAt: updatedAt,
+      invalidatedAt: updatedAt,
+    },
+    invalidatedAt: updatedAt,
+  });
   await ref.set(
     {
       lifecycle: "revoked",
       revokedAt: updatedAt,
+      invalidatedAt: updatedAt,
       updatedAt,
+      downloadEnabled: false,
+      lifecycleControl: nextControl,
+      lifecycleEvents,
       consent: {
         ...current.consent,
         granted: false,
@@ -736,11 +1092,69 @@ export async function revokeTenantTrustExport(params: { tenantId: string; export
     ...current,
     lifecycle: "revoked" as const,
     revokedAt: updatedAt,
+    invalidatedAt: updatedAt,
     updatedAt,
+    downloadEnabled: false,
+    lifecycleControl: nextControl,
+    lifecycleEvents,
     consent: {
       ...current.consent,
       granted: false,
       revokedAt: updatedAt,
     },
+  });
+}
+
+export async function archiveTenantTrustExport(params: { tenantId: string; exportId: string }) {
+  const tenantId = asString(params.tenantId);
+  const exportId = asString(params.exportId);
+  if (!tenantId || !exportId) return null;
+  const ref = db.collection(COLLECTION).doc(exportId);
+  const snap = await ref.get();
+  if (!snap.exists) return null;
+  const current = asRecord(exportId, snap.data?.() || {});
+  if (current.tenantId !== tenantId) return false;
+  const archivedAt = nowIso();
+  const lifecycleEvents = [
+    ...(Array.isArray(current.lifecycleEvents) ? current.lifecycleEvents : []),
+    lifecycleEvent({
+      eventType: "trust_export_archived",
+      occurredAt: archivedAt,
+      reason: "export_archived",
+      actorType: "tenant",
+    }),
+  ].slice(-50);
+  const nextControl = lifecycleControl({
+    state: "archived",
+    reason: "export_archived",
+    evaluatedAt: archivedAt,
+    record: {
+      ...current,
+      archivedAt,
+      invalidatedAt: archivedAt,
+    },
+    invalidatedAt: archivedAt,
+  });
+  await ref.set(
+    {
+      lifecycle: "archived",
+      archivedAt,
+      invalidatedAt: archivedAt,
+      updatedAt: archivedAt,
+      downloadEnabled: false,
+      lifecycleControl: nextControl,
+      lifecycleEvents,
+    },
+    { merge: true }
+  );
+  return publicRecord({
+    ...current,
+    lifecycle: "archived" as const,
+    archivedAt,
+    invalidatedAt: archivedAt,
+    updatedAt: archivedAt,
+    downloadEnabled: false,
+    lifecycleControl: nextControl,
+    lifecycleEvents,
   });
 }

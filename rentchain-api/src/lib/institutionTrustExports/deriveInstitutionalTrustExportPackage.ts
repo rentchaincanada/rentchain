@@ -8,6 +8,7 @@ import type {
   DeriveInstitutionalTrustExportPackageInput,
   InstitutionalTrustExportAudience,
   InstitutionalTrustExportAudienceMapping,
+  InstitutionalTrustExportLifecycleControl,
   InstitutionalTrustExportPackage,
   InstitutionalTrustExportPurpose,
   InstitutionalTrustExportRedaction,
@@ -131,6 +132,44 @@ function policyReasonLines(decisions: AttestationPolicyDecision[]) {
   );
 }
 
+function lifecycleControlFor(params: {
+  status: InstitutionalTrustExportPackage["status"];
+  lifecycle: InstitutionalTrustExportPackage["lifecycle"];
+  generatedAt: string;
+  blockedReasons: string[];
+  exportSummaryCount: number;
+}): InstitutionalTrustExportLifecycleControl {
+  const joined = params.blockedReasons.join(" ");
+  const state: InstitutionalTrustExportLifecycleControl["state"] =
+    params.status === "export_ready" && params.exportSummaryCount > 0
+      ? "active"
+      : params.lifecycle === "empty"
+      ? "empty"
+      : joined.includes("reverification_required")
+      ? "reverification_required"
+      : joined.includes("revoked")
+      ? "revoked"
+      : joined.includes("superseded")
+      ? "superseded"
+      : joined.includes("expired")
+      ? "expired"
+      : joined.includes("raw_payload_blocked") || joined.includes("support_metadata_blocked")
+      ? "invalidated"
+      : "blocked";
+  const active = state === "active";
+  return {
+    schemaVersion: "institutional_trust_export_lifecycle_control.v1",
+    state,
+    reasons: active ? ["export_active"] : params.blockedReasons,
+    active,
+    shareable: active,
+    evaluatedAt: params.generatedAt,
+    metadataOnly: true,
+    publicAccessEnabled: false,
+    externalSubmissionEnabled: false,
+  };
+}
+
 export function deriveInstitutionalTrustExportPackage(
   input: DeriveInstitutionalTrustExportPackageInput
 ): InstitutionalTrustExportPackage {
@@ -170,6 +209,13 @@ export function deriveInstitutionalTrustExportPackage(
   const uniqueBlockedReasons = Array.from(new Set(blockedReasons));
   const status = exportSummaries.length ? "export_ready" : uniqueBlockedReasons.length ? "blocked" : "unavailable";
   const lifecycle = status === "export_ready" ? "policy_evaluated" : attestations.length ? "blocked" : "empty";
+  const lifecycleControl = lifecycleControlFor({
+    status,
+    lifecycle,
+    generatedAt,
+    blockedReasons: uniqueBlockedReasons,
+    exportSummaryCount: exportSummaries.length,
+  });
 
   return {
     exportId,
@@ -179,6 +225,7 @@ export function deriveInstitutionalTrustExportPackage(
     status,
     lifecycle,
     generatedAt,
+    lifecycleControl,
     metadataOnly: true,
     consentScoped: true,
     policyGated: true,
