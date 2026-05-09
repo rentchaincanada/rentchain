@@ -36,6 +36,7 @@ export type SupportConsoleResourceResponse = {
   assignment?: AssignmentRecordV1 | null;
   resolution?: ResolutionRecordV1 | null;
   institutionAccessDiagnostic?: SupportInstitutionAccessDiagnosticSummary | null;
+  operatorAuditTimeline?: OperatorAuditTimelineSummary | null;
   watch?: {
     version: "v1";
     id: string;
@@ -55,6 +56,70 @@ export type SupportConsoleResourceResponse = {
     canonicalEventCount: number;
     domainsPresent: string[];
     identifiers?: Record<string, string | null | undefined>;
+  };
+};
+
+export type OperatorAuditTimelineSummary = {
+  schemaVersion: "operator_audit_timeline.v1";
+  metadataOnly: true;
+  supportSafe: true;
+  eventCount: number;
+  lifecycleTransitionCount: number;
+  revocationCount: number;
+  expirationCount: number;
+  supersessionCount: number;
+  policyDeniedCount: number;
+  sessionEventCount: number;
+  operatorInteractionCount: number;
+  firstEventAt: string | null;
+  lastEventAt: string | null;
+  events: Array<{
+    schemaVersion: "operator_audit_timeline_event.v1";
+    eventId: string;
+    source: string;
+    category: string;
+    eventType: string;
+    occurredAt: string;
+    actorType: string;
+    status: string | null;
+    outcome: string | null;
+    reason: string | null;
+    lifecycleState: string | null;
+    audience: string | null;
+    purpose: string | null;
+    resource: {
+      type: string;
+      id: string | null;
+      redactedId: string | null;
+    };
+    operator?: {
+      redactedOperatorId: string | null;
+      role: string | null;
+    };
+    metadataOnly: true;
+    visibility: {
+      supportVisible: true;
+      tenantVisible: false;
+      recipientVisible: false;
+      portableVisible: false;
+      trustPayloadIncluded: false;
+      providerPayloadIncluded: false;
+      rawIdentityPayloadIncluded: false;
+      rawPropertyPayloadIncluded: false;
+      supportMetadataIncluded: false;
+      downloadEnabled: false;
+      publicAccessEnabled: false;
+    };
+  }>;
+  payloadSafety: {
+    trustPayloadIncluded: false;
+    portableAttestationContentsIncluded: false;
+    rawProviderPayloadIncluded: false;
+    rawIdentityPayloadIncluded: false;
+    rawPropertyPayloadIncluded: false;
+    supportMetadataIncluded: false;
+    downloadableArtifactIncluded: false;
+    publicAccessEnabled: false;
   };
 };
 

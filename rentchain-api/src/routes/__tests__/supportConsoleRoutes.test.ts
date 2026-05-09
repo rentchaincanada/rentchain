@@ -268,6 +268,18 @@ describe("supportConsoleRoutes", () => {
       },
       package: {
         status: "export_ready",
+        generatedAt: "2026-05-01T00:00:00.000Z",
+        lifecycleControl: {
+          schemaVersion: "institutional_trust_export_lifecycle_control.v1",
+          state: "active",
+          reasons: ["export_active"],
+          active: true,
+          shareable: true,
+          evaluatedAt: "2026-05-01T00:00:00.000Z",
+          metadataOnly: true,
+          publicAccessEnabled: false,
+          externalSubmissionEnabled: false,
+        },
         exportSummaries: [{ claimCategory: "account_trust", metadataOnly: true }],
         blockedReasons: [],
       },
@@ -295,6 +307,51 @@ describe("supportConsoleRoutes", () => {
           reason: "recipient_email_mismatch",
         },
       ],
+    });
+    seedDoc("tenantTrustExports", "trust-export-1", {
+      exportId: "trust-export-1",
+      tenantId: "tenant-1",
+      audience: "insurer",
+      purpose: "insurance_review",
+      lifecycle: "superseded",
+      lifecycleControl: {
+        schemaVersion: "trust_export_lifecycle_control.v1",
+        state: "superseded",
+        reason: "export_superseded",
+        active: false,
+        shareable: false,
+        evaluatedAt: "2026-05-03T00:00:00.000Z",
+        metadataOnly: true,
+        publicAccessEnabled: false,
+        downloadEnabled: false,
+      },
+      lifecycleEvents: [
+        {
+          eventType: "trust_export_superseded",
+          occurredAt: "2026-05-03T00:00:00.000Z",
+          actorType: "system",
+          reason: "export_superseded",
+          metadataOnly: true,
+        },
+      ],
+    });
+    seedDoc("canonicalEvents", "operator-previous", {
+      version: "v1",
+      type: "system.institution_access_diagnostics_opened",
+      domain: "system",
+      action: "institution_access_diagnostics_opened",
+      status: "completed",
+      actor: { type: "admin", role: "admin", id: "operator-1" },
+      resource: { type: "tenant_institution_access_grant", id: "grant-1" },
+      occurredAt: "2026-05-04T00:00:00.000Z",
+      recordedAt: "2026-05-04T00:00:00.000Z",
+      visibility: "system",
+      summary: "Institution access diagnostics opened with redacted metadata-only view.",
+      metadata: {
+        metadataOnly: true,
+        redactionApplied: true,
+        retentionCategory: "support_diagnostics",
+      },
     });
 
     const router = (await import("../supportConsoleRoutes")).default;
@@ -335,9 +392,44 @@ describe("supportConsoleRoutes", () => {
     expect(payload).not.toContain("reviewer@example.com");
     expect(payload).not.toContain("includedClaims");
     expect(payload).not.toContain("exportSummaries");
+    expect(response.body?.operatorAuditTimeline).toEqual(
+      expect.objectContaining({
+        schemaVersion: "operator_audit_timeline.v1",
+        metadataOnly: true,
+        supportSafe: true,
+        eventCount: 5,
+        lifecycleTransitionCount: 2,
+        supersessionCount: 1,
+        operatorInteractionCount: 1,
+        payloadSafety: expect.objectContaining({
+          trustPayloadIncluded: false,
+          rawProviderPayloadIncluded: false,
+          supportMetadataIncluded: false,
+          publicAccessEnabled: false,
+        }),
+      })
+    );
+    expect(response.body?.operatorAuditTimeline?.events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          eventType: "trust_export_superseded",
+          source: "tenant_trust_export",
+          category: "trust_export_lifecycle",
+        }),
+        expect.objectContaining({
+          eventType: "system.institution_access_diagnostics_opened",
+          source: "operator_interaction",
+          category: "operator_access",
+          operator: expect.objectContaining({
+            redactedOperatorId: expect.any(String),
+            role: "admin",
+          }),
+        }),
+      ])
+    );
 
     const auditEvents = Array.from(collections.get("canonicalEvents")?.values() || []).filter(
-      (event: any) => event.type === "system.institution_access_diagnostics_opened"
+      (event: any) => event.type === "system.institution_access_diagnostics_opened" && event.actor?.id === "admin-1"
     );
     expect(auditEvents).toEqual([
       expect.objectContaining({
