@@ -129,6 +129,7 @@ const LandlordInboxPage = lazy(() => import("./pages/landlord/LandlordInboxPage"
 const DecisionInboxPage = lazy(() => import("./pages/DecisionInboxPage"));
 const AgentSupervisionPage = lazy(() => import("./pages/AgentSupervisionPage"));
 const InstitutionExportsPage = lazy(() => import("./pages/InstitutionExportsPage"));
+const RecipientTrustReviewPage = lazy(() => import("./pages/RecipientTrustReviewPage"));
 const AuditCompliancePage = lazy(() => import("./pages/AuditCompliancePage"));
 const EvidencePackPage = lazy(() => import("./pages/EvidencePackPage"));
 const ReviewTimelinePage = lazy(() => import("./pages/ReviewTimelinePage"));
@@ -1590,6 +1591,14 @@ function App() {
         <Route
           path="/tenant/dashboard"
           element={renderTenantShell(suspensePage(<TenantWorkspacePage />))}
+        />
+        <Route
+          path="/recipient/trust-review/:grantId"
+          element={
+            <RequireAuth>
+              {suspensePage(<RecipientTrustReviewPage />)}
+            </RequireAuth>
+          }
         />
         <Route
           path="/tenant/application"

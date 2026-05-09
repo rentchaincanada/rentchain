@@ -35,6 +35,7 @@ import tenantSignalsRoutes from "./routes/tenantSignalsRoutes";
 import reportingRoutes from "./routes/reportingRoutes";
 import tenantInvitesRoutes from "./routes/tenantInvitesRoutes";
 import tenantPortalRoutes from "./routes/tenantPortalRoutes";
+import recipientTrustReviewRoutes from "./routes/recipientTrustReviewRoutes";
 import tenantParticipationRoutes from "./routes/tenantParticipationRoutes";
 import tenantOnboardingHardeningRoutes from "./routes/tenantOnboardingHardeningRoutes";
 import tenantInviteAliasesRoutes from "./routes/tenantInviteAliasesRoutes";
@@ -432,6 +433,7 @@ app.use(
 );
 app.use("/api/tenant-invites", tenantInvitesRoutes);
 app.use("/api/tenant", tenantPortalRoutes);
+app.use("/api/recipient", routeSource("recipientTrustReviewRoutes.ts"), recipientTrustReviewRoutes);
 app.use("/api/tenant", tenantParticipationRoutes);
 app.use("/api/tenant", tenantOnboardingHardeningRoutes);
 app.use("/api", routeSource("tenantInviteAliasesRoutes"), tenantInviteAliasesRoutes);
