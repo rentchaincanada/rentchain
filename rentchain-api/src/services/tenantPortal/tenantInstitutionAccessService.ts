@@ -2,6 +2,7 @@ import crypto from "crypto";
 import { db } from "../../config/firebase";
 import type { InstitutionalTrustExportPackage } from "../../lib/institutionTrustExports";
 import type { PortableAttestationClaimCategory } from "../../lib/portableAttestations";
+import { redactIdentifier } from "../../lib/governance/platformGovernance";
 import {
   previewTenantTrustExport,
   type TenantTrustExportAudience,
@@ -259,6 +260,83 @@ export type TenantInstitutionAccessAuditSummary = {
     publicAccessEnabled: false;
     downloadEnabled: false;
   };
+};
+
+export type SupportInstitutionAccessDiagnosticEvent = {
+  eventType: TenantInstitutionAccessAuditEvent["eventType"];
+  occurredAt: string;
+  actorType: TenantInstitutionAccessAuditEvent["actorType"];
+  outcome: TenantInstitutionAccessAuditEvent["outcome"];
+  status: TenantInstitutionAccessAuditEvent["status"];
+  reason: TenantInstitutionAccessAuditEvent["reason"];
+  metadataOnly: true;
+  visibility: {
+    supportVisible: true;
+    trustPayloadIncluded: false;
+    rawProviderPayloadIncluded: false;
+    supportMetadataIncluded: false;
+  };
+};
+
+export type SupportInstitutionAccessDiagnosticSummary = {
+  schemaVersion: "support_institution_access_diagnostics.v1";
+  grantId: string;
+  lifecycle: TenantInstitutionAccessLifecycle;
+  audience: TenantInstitutionAccessAudience;
+  purpose: TenantInstitutionAccessPurpose;
+  recipient: {
+    redactedEmail: string;
+    organizationName: string | null;
+    authenticationRequirement: TenantInstitutionAccessRecipient["authenticationRequirement"];
+  };
+  tenant: {
+    redactedTenantId: string | null;
+  };
+  consent: {
+    granted: boolean;
+    consentVersion: typeof CONSENT_VERSION;
+    grantedAt: string | null;
+    expiresAt: string | null;
+    revokedAt: string | null;
+  };
+  access: {
+    recipientAuthenticationRequired: true;
+    sessionBound: true;
+    publicAccessEnabled: false;
+    publicProfileEnabled: false;
+    externalSubmissionEnabled: false;
+    downloadEnabled: false;
+  };
+  package: {
+    status: string;
+    blockedReasonCount: number;
+    exportSummaryCount: number;
+  };
+  audit: {
+    totalEvents: number;
+    openedReviewCount: number;
+    blockedReviewCount: number;
+    revokedAccessCount: number;
+    expiredAccessCount: number;
+    lastActivityAt: string | null;
+    lastOpenedAt: string | null;
+    lastBlockedAt: string | null;
+    lastOutcome: TenantInstitutionAccessAuditSummary["lastOutcome"];
+    lastReason: TenantInstitutionAccessAuditSummary["lastReason"];
+    reasonCategories: string[];
+  };
+  payloadSafety: {
+    metadataOnly: true;
+    supportSafe: true;
+    trustPayloadIncluded: false;
+    portableAttestationContentsIncluded: false;
+    rawProviderPayloadIncluded: false;
+    rawIdentityPayloadIncluded: false;
+    rawPropertyPayloadIncluded: false;
+    supportMetadataIncluded: false;
+    unsafePortablePayloadDetected: boolean;
+  };
+  timeline: SupportInstitutionAccessDiagnosticEvent[];
 };
 
 function asString(value: unknown, max = 240): string | null {
@@ -564,6 +642,81 @@ function publicGrant(record: TenantInstitutionAccessStoredGrant): TenantInstitut
   return { ...rest, auditSummary, auditTimeline };
 }
 
+function supportDiagnosticFromGrant(record: TenantInstitutionAccessStoredGrant): SupportInstitutionAccessDiagnosticSummary {
+  const { auditSummary, auditTimeline } = buildAccessAudit(record);
+  const reasonCategories = Array.from(new Set(auditTimeline.map((event) => event.reason).filter(Boolean))).sort();
+  const timeline = auditTimeline.map((event) => ({
+    ...event,
+    visibility: {
+      supportVisible: true as const,
+      trustPayloadIncluded: false as const,
+      rawProviderPayloadIncluded: false as const,
+      supportMetadataIncluded: false as const,
+    },
+  }));
+
+  return {
+    schemaVersion: "support_institution_access_diagnostics.v1",
+    grantId: record.grantId,
+    lifecycle: record.lifecycle,
+    audience: record.audience,
+    purpose: record.purpose,
+    recipient: {
+      redactedEmail: redactEmail(record.recipient?.email),
+      organizationName: record.recipient?.organizationName || null,
+      authenticationRequirement: "recipient_email_session_required",
+    },
+    tenant: {
+      redactedTenantId: redactIdentifier(record.tenantId),
+    },
+    consent: {
+      granted: record.consent?.granted === true,
+      consentVersion: CONSENT_VERSION,
+      grantedAt: record.consent?.grantedAt || null,
+      expiresAt: record.consent?.expiresAt || null,
+      revokedAt: record.consent?.revokedAt || null,
+    },
+    access: {
+      recipientAuthenticationRequired: true,
+      sessionBound: true,
+      publicAccessEnabled: false,
+      publicProfileEnabled: false,
+      externalSubmissionEnabled: false,
+      downloadEnabled: false,
+    },
+    package: {
+      status: String(record.package?.status || "unknown").slice(0, 120),
+      blockedReasonCount: Array.isArray(record.package?.blockedReasons) ? record.package.blockedReasons.length : 0,
+      exportSummaryCount: Array.isArray(record.package?.exportSummaries) ? record.package.exportSummaries.length : 0,
+    },
+    audit: {
+      totalEvents: auditSummary.totalEvents,
+      openedReviewCount: auditSummary.openedReviewCount,
+      blockedReviewCount: auditSummary.blockedReviewCount,
+      revokedAccessCount: auditSummary.revokedAccessCount,
+      expiredAccessCount: auditSummary.expiredAccessCount,
+      lastActivityAt: auditSummary.lastActivityAt,
+      lastOpenedAt: auditSummary.lastOpenedAt,
+      lastBlockedAt: auditSummary.lastBlockedAt,
+      lastOutcome: auditSummary.lastOutcome,
+      lastReason: auditSummary.lastReason,
+      reasonCategories,
+    },
+    payloadSafety: {
+      metadataOnly: true,
+      supportSafe: true,
+      trustPayloadIncluded: false,
+      portableAttestationContentsIncluded: false,
+      rawProviderPayloadIncluded: false,
+      rawIdentityPayloadIncluded: false,
+      rawPropertyPayloadIncluded: false,
+      supportMetadataIncluded: false,
+      unsafePortablePayloadDetected: hasUnsafeRecipientPayload(record),
+    },
+    timeline,
+  };
+}
+
 function asGrant(id: string, data: any): TenantInstitutionAccessStoredGrant {
   const expiresAt = asString(data?.expiresAt);
   const lifecycle =
@@ -786,6 +939,15 @@ export async function getRecipientTrustReview(params: {
     },
     summary: recipientSummaryFromGrant(grant, reviewedAt),
   };
+}
+
+export async function getSupportInstitutionAccessDiagnostic(params: { grantId: string }) {
+  const grantId = asString(params.grantId);
+  if (!grantId) return null;
+  const snap = await db.collection(COLLECTION).doc(grantId).get();
+  if (!snap.exists) return null;
+  const grant = asGrant(grantId, snap.data?.() || {});
+  return supportDiagnosticFromGrant(grant);
 }
 
 export async function previewTenantInstitutionAccess(params: {

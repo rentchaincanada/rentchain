@@ -17,6 +17,7 @@ const RESOURCE_OPTIONS = [
   { label: "Application", value: "application" },
   { label: "Maintenance", value: "maintenance" },
   { label: "Lease", value: "lease" },
+  { label: "Institution access", value: "institution_access" },
 ];
 
 function renderKeyValueList(value: Record<string, unknown> | null | undefined) {
@@ -30,6 +31,54 @@ function renderKeyValueList(value: Record<string, unknown> | null | undefined) {
         </div>
       ))}
     </div>
+  );
+}
+
+function renderInstitutionAccessDiagnostics(payload: SupportConsoleResourceResponse) {
+  const diagnostic = payload.institutionAccessDiagnostic;
+  if (!diagnostic) return null;
+  return (
+    <SupportConsoleSection title="Institution access diagnostics">
+      <div style={{ display: "grid", gap: 12 }}>
+        <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
+          <div><strong>Lifecycle</strong>: {diagnostic.lifecycle}</div>
+          <div><strong>Audience</strong>: {diagnostic.audience}</div>
+          <div><strong>Purpose</strong>: {diagnostic.purpose}</div>
+          <div><strong>Recipient</strong>: {diagnostic.recipient.redactedEmail}</div>
+          <div><strong>Organization</strong>: {diagnostic.recipient.organizationName || "Not provided"}</div>
+          <div><strong>Consent</strong>: {diagnostic.consent.granted ? "Granted" : "Not granted"}</div>
+          <div><strong>Expires</strong>: {diagnostic.consent.expiresAt || "No expiration available"}</div>
+          <div><strong>Package status</strong>: {diagnostic.package.status}</div>
+        </div>
+        <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
+          <div><strong>Opened reviews</strong>: {diagnostic.audit.openedReviewCount}</div>
+          <div><strong>Blocked reviews</strong>: {diagnostic.audit.blockedReviewCount}</div>
+          <div><strong>Revoked events</strong>: {diagnostic.audit.revokedAccessCount}</div>
+          <div><strong>Expired events</strong>: {diagnostic.audit.expiredAccessCount}</div>
+          <div><strong>Last outcome</strong>: {diagnostic.audit.lastOutcome || "None"}</div>
+          <div><strong>Last reason</strong>: {diagnostic.audit.lastReason || "None"}</div>
+        </div>
+        <div>
+          <strong>Reason categories</strong>:{" "}
+          {diagnostic.audit.reasonCategories.length ? diagnostic.audit.reasonCategories.join(", ") : "None"}
+        </div>
+        <div style={{ color: "#475569" }}>
+          Metadata-only diagnostic. Trust payloads, portable attestation contents, provider payloads, raw identity or property data, support metadata, public links, and downloads are excluded.
+        </div>
+        <div style={{ display: "grid", gap: 8 }}>
+          {diagnostic.timeline.length ? (
+            diagnostic.timeline.map((event) => (
+              <div key={`${event.eventType}-${event.occurredAt}-${event.reason}`} style={{ borderTop: "1px solid #e2e8f0", paddingTop: 8 }}>
+                <strong>{event.eventType}</strong> · {event.outcome} · {event.reason}
+                <div style={{ color: "#64748b" }}>{event.occurredAt}</div>
+              </div>
+            ))
+          ) : (
+            <div style={{ color: "#64748b" }}>No institution access events are available.</div>
+          )}
+        </div>
+      </div>
+    </SupportConsoleSection>
   );
 }
 
@@ -140,6 +189,8 @@ export default function SupportDebugConsolePage() {
         {!loading && !error && payload ? (
           <>
             <SupportConsoleHeader resource={payload.resource} />
+
+            {renderInstitutionAccessDiagnostics(payload)}
 
             <SupportConsoleSection title="Derived insight">
               {renderKeyValueList(payload.insight || null)}
