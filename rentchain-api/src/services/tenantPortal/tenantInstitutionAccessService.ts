@@ -10,9 +10,11 @@ import {
 } from "./tenantTrustExportService";
 
 const COLLECTION = "tenantInstitutionAccessGrants";
+const SESSION_COLLECTION = "recipientTrustReviewSessions";
 const CONSENT_VERSION = "tenant_institution_access_consent.v1";
 const DEFAULT_EXPIRES_DAYS = 14;
 const MAX_EXPIRES_DAYS = 30;
+const RECIPIENT_REVIEW_SESSION_TTL_MS = 30 * 60 * 1000;
 
 export type TenantInstitutionAccessAudience = "insurer" | "lender" | "institutional_landlord" | "auditor";
 
@@ -109,13 +111,18 @@ export type TenantInstitutionAccessGrantEvent = {
     | "recipient_trust_review_opened"
     | "recipient_trust_review_blocked"
     | "recipient_trust_review_expired"
-    | "recipient_trust_review_revoked";
+    | "recipient_trust_review_revoked"
+    | "recipient_review_session_started"
+    | "recipient_review_session_expired"
+    | "recipient_review_session_revoked"
+    | "recipient_review_session_blocked"
+    | "recipient_review_session_reauthenticated";
   occurredAt: string;
   actorType: "tenant" | "system" | "recipient";
   metadataOnly: true;
-  outcome?: "granted" | "opened" | "blocked" | "revoked" | "expired";
-  reason?: RecipientTrustReviewAccessDecision["reason"] | "access_granted" | "access_revoked";
-  status?: RecipientTrustReviewStatus | "granted";
+  outcome?: "granted" | "opened" | "blocked" | "revoked" | "expired" | "session_started" | "reauthenticated";
+  reason?: RecipientTrustReviewAccessDecision["reason"] | "access_granted" | "access_revoked" | "session_started";
+  status?: RecipientTrustReviewStatus | "granted" | "active";
 };
 
 type TenantInstitutionAccessStoredGrant = TenantInstitutionAccessPreview & {
@@ -142,7 +149,10 @@ export type RecipientTrustReviewStatus =
   | "blocked"
   | "consent_required"
   | "reverification_required"
-  | "policy_denied";
+  | "policy_denied"
+  | "session_expired"
+  | "session_revoked"
+  | "reauthentication_required";
 
 export type RecipientTrustReviewAccessDecision = {
   allowed: boolean;
@@ -157,10 +167,33 @@ export type RecipientTrustReviewAccessDecision = {
     | "grant_blocked"
     | "tenant_consent_missing"
     | "trust_reverification_required"
-    | "policy_gated_summary_unavailable";
+    | "policy_gated_summary_unavailable"
+    | "recipient_session_expired"
+    | "recipient_session_revoked"
+    | "recipient_session_reauthentication_required";
   metadataOnly: true;
   publicAccessEnabled: false;
   downloadEnabled: false;
+};
+
+export type RecipientReviewSessionLifecycle = "active" | "expired" | "revoked" | "blocked";
+
+export type RecipientReviewSessionSummary = {
+  schemaVersion: "recipient_review_session.v1";
+  sessionId: string;
+  lifecycle: RecipientReviewSessionLifecycle;
+  issuedAt: string;
+  expiresAt: string;
+  lastValidatedAt: string;
+  grantId: string;
+  audience: TenantInstitutionAccessAudience;
+  purpose: TenantInstitutionAccessPurpose;
+  metadataOnly: true;
+  authenticated: true;
+  viewOnly: true;
+  downloadEnabled: false;
+  publicAccessEnabled: false;
+  reauthenticationRequiredAt: string;
 };
 
 export type RecipientTrustReviewSummary = {
@@ -188,6 +221,7 @@ export type RecipientTrustReviewSummary = {
   generatedAt: string;
   expiresAt: string | null;
   reviewedAt: string;
+  session: RecipientReviewSessionSummary;
   metadataOnly: true;
   policyGated: true;
   includedClaims: Array<{
@@ -210,20 +244,31 @@ export type RecipientTrustReviewResult = {
   summary: RecipientTrustReviewSummary | null;
 };
 
-export type TenantInstitutionAccessAuditOutcome = "granted" | "opened" | "blocked" | "revoked" | "expired";
+export type TenantInstitutionAccessAuditOutcome =
+  | "granted"
+  | "opened"
+  | "blocked"
+  | "revoked"
+  | "expired"
+  | "session_started"
+  | "reauthenticated";
 
 export type TenantInstitutionAccessAuditEvent = {
   eventType: TenantInstitutionAccessGrantEvent["eventType"];
   occurredAt: string;
   actorType: "tenant" | "system" | "recipient";
   outcome: TenantInstitutionAccessAuditOutcome;
-  status: RecipientTrustReviewStatus | "granted" | "revoked" | "expired" | "blocked";
+  status: RecipientTrustReviewStatus | "granted" | "revoked" | "expired" | "blocked" | "active";
   reason:
     | RecipientTrustReviewAccessDecision["reason"]
     | "access_granted"
     | "access_revoked"
     | "access_expired"
-    | "access_blocked";
+    | "access_blocked"
+    | "session_started"
+    | "recipient_session_expired"
+    | "recipient_session_revoked"
+    | "recipient_session_reauthentication_required";
   metadataOnly: true;
 };
 
@@ -235,17 +280,13 @@ export type TenantInstitutionAccessAuditSummary = {
   blockedReviewCount: number;
   revokedAccessCount: number;
   expiredAccessCount: number;
+  sessionStartedCount: number;
+  sessionExpiredCount: number;
   lastActivityAt: string | null;
   lastOpenedAt: string | null;
   lastBlockedAt: string | null;
   lastOutcome: TenantInstitutionAccessAuditOutcome | null;
-  lastReason:
-    | RecipientTrustReviewAccessDecision["reason"]
-    | "access_granted"
-    | "access_revoked"
-    | "access_expired"
-    | "access_blocked"
-    | null;
+  lastReason: TenantInstitutionAccessAuditEvent["reason"] | null;
   recipientIdentifier: {
     email: string;
     redactedEmail: string;
@@ -318,6 +359,8 @@ export type SupportInstitutionAccessDiagnosticSummary = {
     blockedReviewCount: number;
     revokedAccessCount: number;
     expiredAccessCount: number;
+    sessionStartedCount: number;
+    sessionExpiredCount: number;
     lastActivityAt: string | null;
     lastOpenedAt: string | null;
     lastBlockedAt: string | null;
@@ -337,6 +380,27 @@ export type SupportInstitutionAccessDiagnosticSummary = {
     unsafePortablePayloadDetected: boolean;
   };
   timeline: SupportInstitutionAccessDiagnosticEvent[];
+};
+
+type RecipientReviewSessionRecord = {
+  schemaVersion: "recipient_review_session.v1";
+  sessionId: string;
+  grantId: string;
+  recipientEmailHash: string;
+  recipientUserId: string | null;
+  audience: TenantInstitutionAccessAudience;
+  purpose: TenantInstitutionAccessPurpose;
+  lifecycle: RecipientReviewSessionLifecycle;
+  issuedAt: string;
+  expiresAt: string;
+  lastValidatedAt: string;
+  revokedAt: string | null;
+  blockedAt: string | null;
+  metadataOnly: true;
+  authenticated: true;
+  viewOnly: true;
+  downloadEnabled: false;
+  publicAccessEnabled: false;
 };
 
 function asString(value: unknown, max = 240): string | null {
@@ -550,8 +614,16 @@ function accessPreviewFromTrustPackage(params: {
 function outcomeForEventType(eventType: TenantInstitutionAccessAuditEvent["eventType"]): TenantInstitutionAccessAuditOutcome {
   if (eventType === "tenant_institution_access_granted") return "granted";
   if (eventType === "tenant_institution_access_revoked" || eventType === "recipient_trust_review_revoked") return "revoked";
-  if (eventType === "tenant_institution_access_expired" || eventType === "recipient_trust_review_expired") return "expired";
+  if (
+    eventType === "tenant_institution_access_expired" ||
+    eventType === "recipient_trust_review_expired" ||
+    eventType === "recipient_review_session_expired"
+  ) {
+    return "expired";
+  }
   if (eventType === "recipient_trust_review_opened") return "opened";
+  if (eventType === "recipient_review_session_started") return "session_started";
+  if (eventType === "recipient_review_session_reauthenticated") return "reauthenticated";
   return "blocked";
 }
 
@@ -559,7 +631,15 @@ function statusForAuditEvent(event: TenantInstitutionAccessStoredGrant["events"]
   if (event.status) return event.status as TenantInstitutionAccessAuditEvent["status"];
   if (event.eventType === "tenant_institution_access_granted") return "granted";
   if (event.eventType === "tenant_institution_access_revoked" || event.eventType === "recipient_trust_review_revoked") return "revoked";
-  if (event.eventType === "tenant_institution_access_expired" || event.eventType === "recipient_trust_review_expired") return "expired";
+  if (
+    event.eventType === "tenant_institution_access_expired" ||
+    event.eventType === "recipient_trust_review_expired" ||
+    event.eventType === "recipient_review_session_expired"
+  ) {
+    return "expired";
+  }
+  if (event.eventType === "recipient_review_session_revoked") return "session_revoked";
+  if (event.eventType === "recipient_review_session_started") return "active";
   if (event.eventType === "recipient_trust_review_opened") return "available";
   return "blocked";
 }
@@ -570,7 +650,14 @@ function reasonForAuditEvent(event: TenantInstitutionAccessStoredGrant["events"]
   if (event.eventType === "tenant_institution_access_revoked" || event.eventType === "recipient_trust_review_revoked") {
     return "access_revoked";
   }
-  if (event.eventType === "tenant_institution_access_expired" || event.eventType === "recipient_trust_review_expired") {
+  if (event.eventType === "recipient_review_session_revoked") return "recipient_session_revoked";
+  if (event.eventType === "recipient_review_session_expired") return "recipient_session_expired";
+  if (event.eventType === "recipient_review_session_blocked") return "recipient_session_reauthentication_required";
+  if (event.eventType === "recipient_review_session_started") return "session_started";
+  if (
+    event.eventType === "tenant_institution_access_expired" ||
+    event.eventType === "recipient_trust_review_expired"
+  ) {
     return "access_expired";
   }
   if (event.eventType === "recipient_trust_review_opened") return "review_available";
@@ -613,6 +700,10 @@ function buildAccessAudit(record: TenantInstitutionAccessStoredGrant): {
       blockedReviewCount: auditTimeline.filter((event) => event.outcome === "blocked").length,
       revokedAccessCount: auditTimeline.filter((event) => event.outcome === "revoked").length,
       expiredAccessCount: auditTimeline.filter((event) => event.outcome === "expired").length,
+      sessionStartedCount: auditTimeline.filter((event) => event.outcome === "session_started").length,
+      sessionExpiredCount: auditTimeline.filter(
+        (event) => event.eventType === "recipient_review_session_expired"
+      ).length,
       lastActivityAt: last?.occurredAt || null,
       lastOpenedAt: lastOpened?.occurredAt || null,
       lastBlockedAt: lastBlocked?.occurredAt || null,
@@ -695,6 +786,8 @@ function supportDiagnosticFromGrant(record: TenantInstitutionAccessStoredGrant):
       blockedReviewCount: auditSummary.blockedReviewCount,
       revokedAccessCount: auditSummary.revokedAccessCount,
       expiredAccessCount: auditSummary.expiredAccessCount,
+      sessionStartedCount: auditSummary.sessionStartedCount,
+      sessionExpiredCount: auditSummary.sessionExpiredCount,
       lastActivityAt: auditSummary.lastActivityAt,
       lastOpenedAt: auditSummary.lastOpenedAt,
       lastBlockedAt: auditSummary.lastBlockedAt,
@@ -738,6 +831,82 @@ function normalizeRecipientEmailForReview(value: unknown) {
   return normalizeEmail(value);
 }
 
+function recipientEmailHash(value: unknown) {
+  const email = normalizeRecipientEmailForReview(value) || "";
+  return crypto.createHash("sha256").update(email).digest("hex");
+}
+
+function recipientReviewSessionId(params: {
+  grantId: string;
+  recipientEmail: string;
+  recipientUserId?: string | null;
+  issuedAt: string;
+}) {
+  const entropy = crypto.randomUUID();
+  const digest = crypto
+    .createHash("sha256")
+    .update([params.grantId, params.recipientEmail, params.recipientUserId || "", params.issuedAt, entropy].join(":"))
+    .digest("hex")
+    .slice(0, 24);
+  return `recipient_review_session:${digest}`;
+}
+
+function sessionSummaryFromRecord(record: RecipientReviewSessionRecord): RecipientReviewSessionSummary {
+  return {
+    schemaVersion: "recipient_review_session.v1",
+    sessionId: record.sessionId,
+    lifecycle: record.lifecycle,
+    issuedAt: record.issuedAt,
+    expiresAt: record.expiresAt,
+    lastValidatedAt: record.lastValidatedAt,
+    grantId: record.grantId,
+    audience: record.audience,
+    purpose: record.purpose,
+    metadataOnly: true,
+    authenticated: true,
+    viewOnly: true,
+    downloadEnabled: false,
+    publicAccessEnabled: false,
+    reauthenticationRequiredAt: record.expiresAt,
+  };
+}
+
+function sessionExpiryForGrant(grant: TenantInstitutionAccessStoredGrant, issuedAt: string) {
+  const candidates = [Date.parse(issuedAt) + RECIPIENT_REVIEW_SESSION_TTL_MS];
+  const grantExpiry = grant.expiresAt ? Date.parse(grant.expiresAt) : NaN;
+  if (Number.isFinite(grantExpiry)) candidates.push(grantExpiry);
+  const consentExpiry = grant.consent?.expiresAt ? Date.parse(grant.consent.expiresAt) : NaN;
+  if (Number.isFinite(consentExpiry)) candidates.push(consentExpiry);
+  return new Date(Math.min(...candidates)).toISOString();
+}
+
+async function appendGrantEvent(params: {
+  grant: TenantInstitutionAccessStoredGrant;
+  eventType: TenantInstitutionAccessGrantEvent["eventType"];
+  occurredAt: string;
+  actorType?: TenantInstitutionAccessGrantEvent["actorType"];
+  outcome?: TenantInstitutionAccessGrantEvent["outcome"];
+  status: TenantInstitutionAccessGrantEvent["status"];
+  reason: TenantInstitutionAccessGrantEvent["reason"];
+}) {
+  const ref = db.collection(COLLECTION).doc(params.grant.grantId);
+  const events = [
+    ...(Array.isArray(params.grant.events) ? params.grant.events : []),
+    {
+      eventType: params.eventType,
+      occurredAt: params.occurredAt,
+      actorType: params.actorType || ("recipient" as const),
+      metadataOnly: true as const,
+      outcome: params.outcome || outcomeForEventType(params.eventType),
+      status: params.status,
+      reason: params.reason,
+    },
+  ].slice(-50);
+  await ref.set({ events, updatedAt: params.occurredAt }, { merge: true });
+  params.grant.events = events;
+  params.grant.updatedAt = params.occurredAt;
+}
+
 function denyRecipientReview(
   status: RecipientTrustReviewStatus,
   reason: RecipientTrustReviewAccessDecision["reason"]
@@ -776,7 +945,8 @@ function hasUnsafeRecipientPayload(grant: TenantInstitutionAccessStoredGrant) {
 
 function recipientSummaryFromGrant(
   grant: TenantInstitutionAccessStoredGrant,
-  reviewedAt: string
+  reviewedAt: string,
+  session: RecipientReviewSessionSummary
 ): RecipientTrustReviewSummary {
   return {
     schemaVersion: "recipient_trust_review.v1",
@@ -811,6 +981,7 @@ function recipientSummaryFromGrant(
     generatedAt: grant.generatedAt,
     expiresAt: grant.expiresAt,
     reviewedAt,
+    session,
     metadataOnly: true,
     policyGated: true,
     includedClaims: (grant.includedClaims || []).map((claim) => ({
@@ -834,36 +1005,180 @@ function recipientSummaryFromGrant(
   };
 }
 
-async function appendRecipientReviewEvent(params: {
+async function startRecipientReviewSession(params: {
   grant: TenantInstitutionAccessStoredGrant;
-  eventType:
-    | "recipient_trust_review_opened"
-    | "recipient_trust_review_blocked"
-    | "recipient_trust_review_expired"
-    | "recipient_trust_review_revoked";
-  occurredAt: string;
-  status: RecipientTrustReviewStatus;
-  reason: RecipientTrustReviewAccessDecision["reason"];
+  recipientEmail: string;
+  recipientUserId?: string | null;
+  now: string;
 }) {
-  const ref = db.collection(COLLECTION).doc(params.grant.grantId);
-  const events = [
-    ...(Array.isArray(params.grant.events) ? params.grant.events : []),
-    {
-      eventType: params.eventType,
-      occurredAt: params.occurredAt,
-      actorType: "recipient" as const,
-      metadataOnly: true as const,
-      outcome: outcomeForEventType(params.eventType),
-      status: params.status,
-      reason: params.reason,
-    },
-  ].slice(-50);
-  await ref.set({ events, updatedAt: params.occurredAt }, { merge: true });
+  const session: RecipientReviewSessionRecord = {
+    schemaVersion: "recipient_review_session.v1",
+    sessionId: recipientReviewSessionId({
+      grantId: params.grant.grantId,
+      recipientEmail: params.recipientEmail,
+      recipientUserId: params.recipientUserId,
+      issuedAt: params.now,
+    }),
+    grantId: params.grant.grantId,
+    recipientEmailHash: recipientEmailHash(params.recipientEmail),
+    recipientUserId: asString(params.recipientUserId, 160),
+    audience: params.grant.audience,
+    purpose: params.grant.purpose,
+    lifecycle: "active",
+    issuedAt: params.now,
+    expiresAt: sessionExpiryForGrant(params.grant, params.now),
+    lastValidatedAt: params.now,
+    revokedAt: null,
+    blockedAt: null,
+    metadataOnly: true,
+    authenticated: true,
+    viewOnly: true,
+    downloadEnabled: false,
+    publicAccessEnabled: false,
+  };
+  await db.collection(SESSION_COLLECTION).doc(session.sessionId).set(session);
+  await appendGrantEvent({
+    grant: params.grant,
+    eventType: "recipient_review_session_started",
+    occurredAt: params.now,
+    status: "active",
+    reason: "session_started",
+    outcome: "session_started",
+  });
+  return sessionSummaryFromRecord(session);
+}
+
+async function blockRecipientReviewSession(params: {
+  sessionId: string | null;
+  lifecycle: Exclude<RecipientReviewSessionLifecycle, "active">;
+  now: string;
+}) {
+  if (!params.sessionId) return;
+  const patch: Partial<RecipientReviewSessionRecord> = {
+    lifecycle: params.lifecycle,
+    lastValidatedAt: params.now,
+  };
+  if (params.lifecycle === "expired") patch.expiresAt = params.now;
+  if (params.lifecycle === "revoked") patch.revokedAt = params.now;
+  if (params.lifecycle === "blocked") patch.blockedAt = params.now;
+  await db.collection(SESSION_COLLECTION).doc(params.sessionId).set(patch, { merge: true });
+}
+
+async function invalidateActiveSessionsForGrant(params: { grantId: string; lifecycle: "revoked" | "expired" | "blocked"; now: string }) {
+  const snap = await db.collection(SESSION_COLLECTION).where("grantId", "==", params.grantId).limit(50).get();
+  await Promise.all(
+    (snap.docs || []).map(async (doc: any) => {
+      const data = doc.data?.() || {};
+      if (data.lifecycle !== "active") return;
+      await blockRecipientReviewSession({
+        sessionId: String(doc.id || data.sessionId || ""),
+        lifecycle: params.lifecycle,
+        now: params.now,
+      });
+    })
+  );
+}
+
+async function validateRecipientReviewSession(params: {
+  grant: TenantInstitutionAccessStoredGrant;
+  recipientEmail: string;
+  recipientUserId?: string | null;
+  sessionId?: unknown;
+  now: string;
+}): Promise<
+  | { ok: true; session: RecipientReviewSessionSummary }
+  | {
+      ok: false;
+      status: RecipientTrustReviewStatus;
+      reason: RecipientTrustReviewAccessDecision["reason"];
+      eventType: "recipient_review_session_expired" | "recipient_review_session_revoked" | "recipient_review_session_blocked";
+      sessionId: string | null;
+    }
+> {
+  const sessionId = asString(params.sessionId, 180);
+  if (!sessionId) {
+    const session = await startRecipientReviewSession({
+      grant: params.grant,
+      recipientEmail: params.recipientEmail,
+      recipientUserId: params.recipientUserId,
+      now: params.now,
+    });
+    return { ok: true, session };
+  }
+
+  const snap = await db.collection(SESSION_COLLECTION).doc(sessionId).get();
+  if (!snap.exists) {
+    return {
+      ok: false,
+      status: "reauthentication_required",
+      reason: "recipient_session_reauthentication_required",
+      eventType: "recipient_review_session_blocked",
+      sessionId,
+    };
+  }
+
+  const session = { sessionId, ...(snap.data?.() || {}) } as RecipientReviewSessionRecord;
+  const expectedEmailHash = recipientEmailHash(params.recipientEmail);
+  const userId = asString(params.recipientUserId, 160);
+  if (
+    session.grantId !== params.grant.grantId ||
+    session.recipientEmailHash !== expectedEmailHash ||
+    (session.recipientUserId || null) !== (userId || null) ||
+    session.audience !== params.grant.audience ||
+    session.purpose !== params.grant.purpose
+  ) {
+    await blockRecipientReviewSession({ sessionId, lifecycle: "blocked", now: params.now });
+    return {
+      ok: false,
+      status: "reauthentication_required",
+      reason: "recipient_session_reauthentication_required",
+      eventType: "recipient_review_session_blocked",
+      sessionId,
+    };
+  }
+
+  if (session.lifecycle === "revoked") {
+    return {
+      ok: false,
+      status: "session_revoked",
+      reason: "recipient_session_revoked",
+      eventType: "recipient_review_session_revoked",
+      sessionId,
+    };
+  }
+  if (session.lifecycle === "expired" || Date.parse(session.expiresAt) <= Date.parse(params.now)) {
+    await blockRecipientReviewSession({ sessionId, lifecycle: "expired", now: params.now });
+    return {
+      ok: false,
+      status: "session_expired",
+      reason: "recipient_session_expired",
+      eventType: "recipient_review_session_expired",
+      sessionId,
+    };
+  }
+  if (session.lifecycle === "blocked") {
+    return {
+      ok: false,
+      status: "reauthentication_required",
+      reason: "recipient_session_reauthentication_required",
+      eventType: "recipient_review_session_blocked",
+      sessionId,
+    };
+  }
+
+  const refreshed = {
+    ...session,
+    lastValidatedAt: params.now,
+  };
+  await db.collection(SESSION_COLLECTION).doc(sessionId).set({ lastValidatedAt: params.now }, { merge: true });
+  return { ok: true, session: sessionSummaryFromRecord(refreshed) };
 }
 
 export async function getRecipientTrustReview(params: {
   grantId: string;
   recipientEmail?: unknown;
+  recipientUserId?: unknown;
+  recipientSessionId?: unknown;
 }): Promise<RecipientTrustReviewResult> {
   const grantId = asString(params.grantId);
   const recipientEmail = normalizeRecipientEmailForReview(params.recipientEmail);
@@ -878,7 +1193,7 @@ export async function getRecipientTrustReview(params: {
   const grant = asGrant(grantId, snap.data?.() || {});
   const reviewedAt = nowIso();
   if (normalizeRecipientEmailForReview(grant.recipient?.email) !== recipientEmail) {
-    await appendRecipientReviewEvent({
+    await appendGrantEvent({
       grant,
       eventType: "recipient_trust_review_blocked",
       occurredAt: reviewedAt,
@@ -894,21 +1209,33 @@ export async function getRecipientTrustReview(params: {
     eventType:
       | "recipient_trust_review_blocked"
       | "recipient_trust_review_expired"
-      | "recipient_trust_review_revoked" = "recipient_trust_review_blocked"
+      | "recipient_trust_review_revoked"
+      | "recipient_review_session_expired"
+      | "recipient_review_session_revoked"
+      | "recipient_review_session_blocked" = "recipient_trust_review_blocked",
+    sessionLifecycle?: Exclude<RecipientReviewSessionLifecycle, "active">,
+    sessionId?: string | null
   ) => {
-    await appendRecipientReviewEvent({ grant, eventType, occurredAt: reviewedAt, status, reason });
+    if (sessionLifecycle) {
+      if (sessionId) {
+        await blockRecipientReviewSession({ sessionId, lifecycle: sessionLifecycle, now: reviewedAt });
+      } else {
+        await invalidateActiveSessionsForGrant({ grantId: grant.grantId, lifecycle: sessionLifecycle, now: reviewedAt });
+      }
+    }
+    await appendGrantEvent({ grant, eventType, occurredAt: reviewedAt, status, reason });
     return denyRecipientReview(status, reason);
   };
 
   if (grant.lifecycle === "revoked" || grant.revokedAt || grant.consent?.revokedAt) {
-    return denyWithEvent("revoked", "grant_revoked", "recipient_trust_review_revoked");
+    return denyWithEvent("revoked", "grant_revoked", "recipient_trust_review_revoked", "revoked");
   }
   if (grant.lifecycle === "expired" || (grant.expiresAt && Date.parse(grant.expiresAt) <= Date.now())) {
-    return denyWithEvent("expired", "grant_expired", "recipient_trust_review_expired");
+    return denyWithEvent("expired", "grant_expired", "recipient_trust_review_expired", "expired");
   }
-  if (grant.lifecycle === "blocked") return denyWithEvent("blocked", "grant_blocked");
+  if (grant.lifecycle === "blocked") return denyWithEvent("blocked", "grant_blocked", "recipient_trust_review_blocked", "blocked");
   if (grant.lifecycle === "reverification_required") {
-    return denyWithEvent("reverification_required", "trust_reverification_required");
+    return denyWithEvent("reverification_required", "trust_reverification_required", "recipient_trust_review_blocked", "blocked");
   }
   if (grant.consent?.granted !== true || !grant.consent?.consentId) {
     return denyWithEvent("consent_required", "tenant_consent_missing");
@@ -920,7 +1247,24 @@ export async function getRecipientTrustReview(params: {
     return denyWithEvent("policy_denied", "policy_gated_summary_unavailable");
   }
 
-  await appendRecipientReviewEvent({
+  const sessionDecision = await validateRecipientReviewSession({
+    grant,
+    recipientEmail,
+    recipientUserId: asString(params.recipientUserId, 160),
+    sessionId: params.recipientSessionId,
+    now: reviewedAt,
+  });
+  if (!sessionDecision.ok) {
+    return denyWithEvent(
+      sessionDecision.status,
+      sessionDecision.reason,
+      sessionDecision.eventType,
+      sessionDecision.status === "session_expired" ? "expired" : sessionDecision.status === "session_revoked" ? "revoked" : "blocked",
+      sessionDecision.sessionId
+    );
+  }
+
+  await appendGrantEvent({
     grant,
     eventType: "recipient_trust_review_opened",
     occurredAt: reviewedAt,
@@ -937,7 +1281,7 @@ export async function getRecipientTrustReview(params: {
       publicAccessEnabled: false,
       downloadEnabled: false,
     },
-    summary: recipientSummaryFromGrant(grant, reviewedAt),
+    summary: recipientSummaryFromGrant(grant, reviewedAt, sessionDecision.session),
   };
 }
 
@@ -1090,6 +1434,7 @@ export async function revokeTenantInstitutionAccessGrant(params: { tenantId: str
     },
     { merge: true }
   );
+  await invalidateActiveSessionsForGrant({ grantId, lifecycle: "revoked", now: updatedAt });
   return publicGrant({
     ...current,
     lifecycle: "revoked",

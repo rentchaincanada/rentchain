@@ -254,6 +254,16 @@ describe("tenantInstitutionAccessService", () => {
     });
     expect(review.decision.allowed).toBe(true);
     expect(review.summary?.schemaVersion).toBe("recipient_trust_review.v1");
+    expect(review.summary?.session).toEqual(
+      expect.objectContaining({
+        schemaVersion: "recipient_review_session.v1",
+        lifecycle: "active",
+        authenticated: true,
+        viewOnly: true,
+        downloadEnabled: false,
+        publicAccessEnabled: false,
+      })
+    );
     expect(review.summary?.access).toEqual(
       expect.objectContaining({
         authenticated: true,
@@ -268,8 +278,9 @@ describe("tenantInstitutionAccessService", () => {
     const listed = await service.listTenantInstitutionAccessGrants({ tenantId: "tenant-1" });
     expect(listed[0].auditSummary.openedReviewCount).toBe(1);
     expect(listed[0].auditSummary.blockedReviewCount).toBe(1);
+    expect(listed[0].auditSummary.sessionStartedCount).toBe(1);
     expect(listed[0].auditTimeline.map((event) => event.reason)).toEqual(
-      expect.arrayContaining(["review_available", "recipient_email_mismatch", "access_granted"])
+      expect.arrayContaining(["review_available", "recipient_email_mismatch", "access_granted", "session_started"])
     );
     expect(listed[0].auditSummary.recipientIdentifier.redactedEmail).toBe("re***@example.com");
     const auditPayload = JSON.stringify({
@@ -291,6 +302,63 @@ describe("tenantInstitutionAccessService", () => {
     expect(payload).not.toContain("publicAccessEnabled\":true");
     expect(payload).not.toContain("downloadEnabled\":true");
     expect(payload).not.toContain("accessTokenIssued");
+  });
+
+  it("enforces recipient review session expiration and revocation", async () => {
+    const service = await import("../tenantInstitutionAccessService");
+
+    const grant = await service.createTenantInstitutionAccessGrant({
+      tenantId: "tenant-1",
+      audience: "insurer",
+      recipient: { email: "reviewer@example.com", organizationName: "Example Insurance" },
+      expiresInDays: 7,
+      consentAccepted: true,
+    });
+
+    const firstReview = await service.getRecipientTrustReview({
+      grantId: grant?.grantId || "",
+      recipientEmail: "reviewer@example.com",
+      recipientUserId: "recipient-1",
+    });
+    const sessionId = firstReview.summary?.session.sessionId || "";
+    expect(sessionId).toBeTruthy();
+
+    ensureCollection("recipientTrustReviewSessions").set(sessionId, {
+      ...ensureCollection("recipientTrustReviewSessions").get(sessionId),
+      expiresAt: "2020-01-01T00:00:00.000Z",
+    });
+
+    const expiredSession = await service.getRecipientTrustReview({
+      grantId: grant?.grantId || "",
+      recipientEmail: "reviewer@example.com",
+      recipientUserId: "recipient-1",
+      recipientSessionId: sessionId,
+    });
+    expect(expiredSession.decision.allowed).toBe(false);
+    expect(expiredSession.decision.status).toBe("session_expired");
+    expect(expiredSession.decision.reason).toBe("recipient_session_expired");
+    expect(ensureCollection("recipientTrustReviewSessions").get(sessionId)?.lifecycle).toBe("expired");
+
+    const secondReview = await service.getRecipientTrustReview({
+      grantId: grant?.grantId || "",
+      recipientEmail: "reviewer@example.com",
+      recipientUserId: "recipient-1",
+    });
+    const activeSessionId = secondReview.summary?.session.sessionId || "";
+    expect(activeSessionId).toBeTruthy();
+
+    await service.revokeTenantInstitutionAccessGrant({ tenantId: "tenant-1", grantId: grant?.grantId || "" });
+    expect(ensureCollection("recipientTrustReviewSessions").get(activeSessionId)?.lifecycle).toBe("revoked");
+
+    const revoked = await service.getRecipientTrustReview({
+      grantId: grant?.grantId || "",
+      recipientEmail: "reviewer@example.com",
+      recipientUserId: "recipient-1",
+      recipientSessionId: activeSessionId,
+    });
+    expect(revoked.decision.allowed).toBe(false);
+    expect(revoked.decision.status).toBe("revoked");
+    expect(revoked.summary).toBeNull();
   });
 
   it("blocks recipient review for revoked, expired, and policy-denied grants", async () => {

@@ -24,6 +24,7 @@ describe("RecipientTrustReviewPage", () => {
   beforeEach(() => {
     cleanup();
     vi.clearAllMocks();
+    window.sessionStorage.clear();
   });
 
   it("renders a conservative metadata-only view-only trust review", async () => {
@@ -69,6 +70,23 @@ describe("RecipientTrustReviewPage", () => {
         generatedAt: "2026-05-01T00:00:00.000Z",
         expiresAt: "2026-06-01T00:00:00.000Z",
         reviewedAt: "2026-05-02T00:00:00.000Z",
+        session: {
+          schemaVersion: "recipient_review_session.v1",
+          sessionId: "session-1",
+          lifecycle: "active",
+          issuedAt: "2026-05-02T00:00:00.000Z",
+          expiresAt: "2026-05-02T00:30:00.000Z",
+          lastValidatedAt: "2026-05-02T00:00:00.000Z",
+          grantId: "grant-1",
+          audience: "insurer",
+          purpose: "insurance_review",
+          metadataOnly: true,
+          authenticated: true,
+          viewOnly: true,
+          downloadEnabled: false,
+          publicAccessEnabled: false,
+          reauthenticationRequiredAt: "2026-05-02T00:30:00.000Z",
+        },
         metadataOnly: true,
         policyGated: true,
         includedClaims: [
@@ -90,6 +108,7 @@ describe("RecipientTrustReviewPage", () => {
     expect(await screen.findByText(/Metadata-only recipient review/i)).toBeInTheDocument();
     expect(screen.getByText("reviewer@example.com")).toBeInTheDocument();
     expect(screen.getByText("Account trust")).toBeInTheDocument();
+    expect(screen.getByText(/Review session expires/i)).toBeInTheDocument();
     expect(screen.getByText(/Recipient downloads are disabled/i)).toBeInTheDocument();
     expect(screen.getByText(/Public profiles and public trust URLs are not created/i)).toBeInTheDocument();
     expect(screen.getByText(/not an approval, eligibility, credit, insurance, subsidy, ownership, government, or automated decision/i)).toBeInTheDocument();
@@ -108,5 +127,23 @@ describe("RecipientTrustReviewPage", () => {
     await waitFor(() => {
       expect(screen.queryByText(/Account trust/i)).not.toBeInTheDocument();
     });
+  });
+
+  it("clears stored recipient review session when reauthentication is required", async () => {
+    window.sessionStorage.setItem("recipientTrustReviewSession:grant-1", "session-1");
+    const err: any = new Error("reauthentication");
+    err.body = {
+      decision: {
+        status: "session_expired",
+        reason: "recipient_session_expired",
+      },
+    };
+    recipientTrustReviewApi.getRecipientTrustReview.mockRejectedValue(err);
+
+    renderPage();
+
+    expect(await screen.findByText(/Review unavailable/i)).toBeInTheDocument();
+    expect(screen.getByText(/recipient session expired/i)).toBeInTheDocument();
+    expect(window.sessionStorage.getItem("recipientTrustReviewSession:grant-1")).toBeNull();
   });
 });

@@ -114,7 +114,7 @@ export type TenantInstitutionAccessGrant = TenantInstitutionAccessPreview & {
     occurredAt: string;
     actorType: "tenant" | "system" | "recipient";
     metadataOnly: true;
-    outcome?: "granted" | "opened" | "blocked" | "revoked" | "expired";
+    outcome?: "granted" | "opened" | "blocked" | "revoked" | "expired" | "session_started" | "reauthenticated";
     reason?: string;
     status?: string;
   }>;
@@ -131,10 +131,15 @@ export type TenantInstitutionAccessAuditEvent = {
     | "recipient_trust_review_opened"
     | "recipient_trust_review_blocked"
     | "recipient_trust_review_expired"
-    | "recipient_trust_review_revoked";
+    | "recipient_trust_review_revoked"
+    | "recipient_review_session_started"
+    | "recipient_review_session_expired"
+    | "recipient_review_session_revoked"
+    | "recipient_review_session_blocked"
+    | "recipient_review_session_reauthenticated";
   occurredAt: string;
   actorType: "tenant" | "system" | "recipient";
-  outcome: "granted" | "opened" | "blocked" | "revoked" | "expired";
+  outcome: "granted" | "opened" | "blocked" | "revoked" | "expired" | "session_started" | "reauthenticated";
   status: string;
   reason: string;
   metadataOnly: true;
@@ -148,10 +153,12 @@ export type TenantInstitutionAccessAuditSummary = {
   blockedReviewCount: number;
   revokedAccessCount: number;
   expiredAccessCount: number;
+  sessionStartedCount: number;
+  sessionExpiredCount: number;
   lastActivityAt: string | null;
   lastOpenedAt: string | null;
   lastBlockedAt: string | null;
-  lastOutcome: "granted" | "opened" | "blocked" | "revoked" | "expired" | null;
+  lastOutcome: "granted" | "opened" | "blocked" | "revoked" | "expired" | "session_started" | "reauthenticated" | null;
   lastReason: string | null;
   recipientIdentifier: {
     email: string;

@@ -14,6 +14,19 @@ function clone(value: any) {
 
 const dbMock = {
   collection: (name: string) => ({
+    where: (field: string, op: string, expected: any) => ({
+      limit: (_count: number) => ({
+        async get() {
+          const docs = Array.from(ensureCollection(name).entries())
+            .filter(([, value]) => op === "==" && value?.[field] === expected)
+            .map(([id, value]) => ({
+              id,
+              data: () => clone(value),
+            }));
+          return { docs };
+        },
+      }),
+    }),
     doc: (id?: string) => {
       const docId = id || `doc_${ensureCollection(name).size + 1}`;
       return {
@@ -201,6 +214,16 @@ describe("recipientTrustReviewRoutes", () => {
         externalSubmissionEnabled: false,
       })
     );
+    expect(res.body?.data?.summary?.session).toEqual(
+      expect.objectContaining({
+        schemaVersion: "recipient_review_session.v1",
+        lifecycle: "active",
+        authenticated: true,
+        viewOnly: true,
+        downloadEnabled: false,
+        publicAccessEnabled: false,
+      })
+    );
     const payload = JSON.stringify(res.body?.data || {});
     expect(payload).not.toContain("tenant-1");
     expect(payload).not.toContain("policyDecisions");
@@ -218,8 +241,80 @@ describe("recipientTrustReviewRoutes", () => {
           status: "available",
           reason: "review_available",
         }),
+        expect.objectContaining({
+          eventType: "recipient_review_session_started",
+          metadataOnly: true,
+          status: "active",
+          reason: "session_started",
+        }),
       ])
     );
+  });
+
+  it("requires reauthentication for expired or mismatched recipient review sessions", async () => {
+    const router = (await import("../recipientTrustReviewRoutes")).default;
+    seedGrant();
+    ensureCollection("recipientTrustReviewSessions").set("session-1", {
+      schemaVersion: "recipient_review_session.v1",
+      sessionId: "session-1",
+      grantId: "grant-1",
+      recipientEmailHash: "wrong",
+      recipientUserId: "recipient-1",
+      audience: "insurer",
+      purpose: "insurance_review",
+      lifecycle: "active",
+      issuedAt: "2026-05-01T00:00:00.000Z",
+      expiresAt: "2026-06-01T00:00:00.000Z",
+      lastValidatedAt: "2026-05-01T00:00:00.000Z",
+      metadataOnly: true,
+      authenticated: true,
+      viewOnly: true,
+      downloadEnabled: false,
+      publicAccessEnabled: false,
+    });
+
+    const mismatched = await invokeRouter(router, {
+      method: "GET",
+      url: "/trust-reviews/grant-1",
+      headers: {
+        "x-test-user": JSON.stringify({ id: "recipient-1", email: "reviewer@example.com", role: "landlord" }),
+        "x-recipient-review-session-id": "session-1",
+      },
+    });
+    expect(mismatched.status).toBe(401);
+    expect(mismatched.body?.decision?.status).toBe("reauthentication_required");
+    expect(mismatched.body?.decision?.reason).toBe("recipient_session_reauthentication_required");
+
+    ensureCollection("recipientTrustReviewSessions").set("session-2", {
+      schemaVersion: "recipient_review_session.v1",
+      sessionId: "session-2",
+      grantId: "grant-1",
+      recipientEmailHash: "18717f7f1f60f92207bd02972c16aec92f52b31c2a8442444df988d8e8503c5e",
+      recipientUserId: "recipient-1",
+      audience: "insurer",
+      purpose: "insurance_review",
+      lifecycle: "active",
+      issuedAt: "2020-01-01T00:00:00.000Z",
+      expiresAt: "2020-01-01T00:00:00.000Z",
+      lastValidatedAt: "2020-01-01T00:00:00.000Z",
+      metadataOnly: true,
+      authenticated: true,
+      viewOnly: true,
+      downloadEnabled: false,
+      publicAccessEnabled: false,
+    });
+    const expired = await invokeRouter(router, {
+      method: "GET",
+      url: "/trust-reviews/grant-1",
+      headers: {
+        "x-test-user": JSON.stringify({ id: "recipient-1", email: "reviewer@example.com", role: "landlord" }),
+        "x-recipient-review-session-id": "session-2",
+      },
+    });
+    expect(expired.status).toBe(401);
+    expect(expired.body?.decision?.status).toBe("session_expired");
+    expect(expired.body?.decision?.reason).toBe("recipient_session_expired");
+    expect(ensureCollection("recipientTrustReviewSessions").get("session-2")?.lifecycle).toBe("expired");
   });
 
   it("blocks revoked, expired, and policy-denied grants", async () => {
