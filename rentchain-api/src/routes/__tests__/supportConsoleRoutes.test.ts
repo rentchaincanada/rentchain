@@ -380,6 +380,15 @@ describe("supportConsoleRoutes", () => {
           blockedReviewCount: 1,
           reasonCategories: expect.arrayContaining(["access_granted", "recipient_email_mismatch"]),
         }),
+        institutionReviewSession: expect.objectContaining({
+          schemaVersion: "institution_review_session.v1",
+          audience: "insurer",
+          purpose: "insurance_review",
+          recipientRole: "insurance_reviewer",
+          metadataOnly: true,
+          publicAccessEnabled: false,
+          downloadEnabled: false,
+        }),
         payloadSafety: expect.objectContaining({
           trustPayloadIncluded: false,
           rawProviderPayloadIncluded: false,
@@ -397,8 +406,9 @@ describe("supportConsoleRoutes", () => {
         schemaVersion: "operator_audit_timeline.v1",
         metadataOnly: true,
         supportSafe: true,
-        eventCount: 5,
+        eventCount: 6,
         lifecycleTransitionCount: 2,
+        sessionEventCount: 1,
         supersessionCount: 1,
         operatorInteractionCount: 1,
         payloadSafety: expect.objectContaining({
@@ -415,6 +425,11 @@ describe("supportConsoleRoutes", () => {
           eventType: "trust_export_superseded",
           source: "tenant_trust_export",
           category: "trust_export_lifecycle",
+        }),
+        expect.objectContaining({
+          eventType: "institution_review_session_created",
+          source: "institution_review_session",
+          category: "institution_review_session",
         }),
         expect.objectContaining({
           eventType: "system.institution_access_diagnostics_opened",

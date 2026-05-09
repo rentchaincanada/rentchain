@@ -264,6 +264,30 @@ describe("tenantInstitutionAccessService", () => {
         publicAccessEnabled: false,
       })
     );
+    expect(review.summary?.institutionReviewSession).toEqual(
+      expect.objectContaining({
+        schemaVersion: "institution_review_session.v1",
+        audience: "insurer",
+        purpose: "insurance_review",
+        recipientRole: "insurance_reviewer",
+        lifecycle: "active",
+        tenantMediated: true,
+        metadataOnly: true,
+        viewOnly: true,
+        downloadEnabled: false,
+        publicAccessEnabled: false,
+      })
+    );
+    expect(review.summary?.institutionReviewSession.lifecycleLinkage).toEqual(
+      expect.objectContaining({
+        grantLifecycleLinked: true,
+        trustExportLifecycleLinked: true,
+        recipientSessionLinked: true,
+        revocationPropagates: true,
+        expirationPropagates: true,
+        reverificationPropagates: true,
+      })
+    );
     expect(review.summary?.access).toEqual(
       expect.objectContaining({
         authenticated: true,
@@ -463,6 +487,16 @@ describe("tenantInstitutionAccessService", () => {
         recipient: expect.objectContaining({
           redactedEmail: "re***@example.com",
           organizationName: "Example Insurance",
+        }),
+        institutionReviewSession: expect.objectContaining({
+          schemaVersion: "institution_review_session.v1",
+          audience: "insurer",
+          purpose: "insurance_review",
+          recipientRole: "insurance_reviewer",
+          lifecycle: "active",
+          metadataOnly: true,
+          publicAccessEnabled: false,
+          downloadEnabled: false,
         }),
         audit: expect.objectContaining({
           openedReviewCount: 1,

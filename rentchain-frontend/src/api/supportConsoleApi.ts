@@ -157,6 +157,27 @@ export type SupportInstitutionAccessDiagnosticSummary = {
     blockedReasonCount: number;
     exportSummaryCount: number;
   };
+  institutionReviewSession?: {
+    schemaVersion: "institution_review_session.v1";
+    sessionId: string;
+    accessGrantId: string;
+    recipientReviewSessionId: string | null;
+    audience: string;
+    purpose: string;
+    recipientRole: string;
+    lifecycle: string;
+    tenantMediated: true;
+    consentScoped: true;
+    policyGated: true;
+    metadataOnly: true;
+    viewOnly: true;
+    publicAccessEnabled: false;
+    publicProfileEnabled: false;
+    externalSubmissionEnabled: false;
+    providerIntegrationEnabled: false;
+    automatedDecisioningEnabled: false;
+    downloadEnabled: false;
+  };
   audit: {
     totalEvents: number;
     openedReviewCount: number;
