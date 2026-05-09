@@ -2213,27 +2213,44 @@ async function loadDocument(collectionName: string, docId: string | null) {
   return { id: snap.id, data: snap.data() as any };
 }
 
+async function loadApplicationDocument(docId: string | null) {
+  const id = String(docId || "").trim();
+  if (!id) return null;
+  return (await loadDocument("applications", id)) || (await loadDocument("rentalApplications", id));
+}
+
+async function queryFirstApplicationDocument(field: string, value: string | null) {
+  const normalized = String(value || "").trim();
+  if (!normalized) return null;
+  for (const collectionName of ["applications", "rentalApplications"]) {
+    try {
+      const snap = await db.collection(collectionName).where(field, "==", normalized).limit(5).get();
+      const doc = snap.docs?.[0];
+      if (doc) return { id: doc.id, data: doc.data() as any };
+    } catch {
+      // keep looking in the next application collection
+    }
+  }
+  return null;
+}
+
 async function loadTenantWorkspaceData(context: Awaited<ReturnType<typeof resolveTenancyContext>>) {
   const propertyDoc = await loadDocument("properties", context.propertyId);
 
-  let applicationDoc = await loadDocument("applications", context.applicationId);
+  let applicationDoc = await loadApplicationDocument(context.applicationId);
   if (!applicationDoc && context.tenantId) {
-    try {
-      const snap = await db.collection("applications").where("tenantId", "==", context.tenantId).limit(1).get();
-      if (!snap.empty) {
-        applicationDoc = { id: snap.docs[0].id, data: snap.docs[0].data() as any };
-      }
-    } catch {
-      applicationDoc = null;
-    }
+    applicationDoc =
+      (await queryFirstApplicationDocument("tenantId", context.tenantId)) ||
+      (await queryFirstApplicationDocument("convertedTenantId", context.tenantId)) ||
+      (await queryFirstApplicationDocument("applicantTenantId", context.tenantId));
   }
   if (!applicationDoc && context.invitedEmail) {
-    try {
-      const snap = await db.collection("applications").where("applicantEmail", "==", context.invitedEmail).limit(5).get();
-      const match = snap.docs.find((doc) => String((doc.data() as any)?.propertyId || "") === String(context.propertyId || ""));
-      if (match) applicationDoc = { id: match.id, data: match.data() as any };
-    } catch {
-      applicationDoc = null;
+    for (const field of ["applicantEmail", "email", "applicant.email"]) {
+      const match = await queryFirstApplicationDocument(field, context.invitedEmail);
+      if (match && String(match.data?.propertyId || "") === String(context.propertyId || "")) {
+        applicationDoc = match;
+        break;
+      }
     }
   }
 
@@ -2246,6 +2263,18 @@ async function loadTenantWorkspaceData(context: Awaited<ReturnType<typeof resolv
         return String(data?.propertyId || "") === String(context.propertyId || "");
       });
       if (directMatch) leaseDoc = { id: directMatch.id, data: directMatch.data() as any };
+    } catch {
+      leaseDoc = null;
+    }
+  }
+  if (!leaseDoc && context.tenantId) {
+    try {
+      const snap = await db.collection("leases").where("tenantIds", "array-contains", context.tenantId).limit(5).get();
+      const match = snap.docs.find((doc) => {
+        const data = doc.data() as any;
+        return String(data?.propertyId || "") === String(context.propertyId || "");
+      });
+      if (match) leaseDoc = { id: match.id, data: match.data() as any };
     } catch {
       leaseDoc = null;
     }

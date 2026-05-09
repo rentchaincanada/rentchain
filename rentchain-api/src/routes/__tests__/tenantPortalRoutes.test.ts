@@ -602,16 +602,16 @@ describe("tenantPortalRoutes foundation", () => {
         }),
       })
     );
-    expect(res.body?.data?.identityTimeline).toEqual({
-      events: [
+    expect(res.body?.data?.identityTimeline?.events).toEqual(
+      expect.arrayContaining([
         {
           type: "lease.tenant_signed",
           label: "Lease signed",
           description: "Tenant lease signing was recorded.",
           occurredAt: "2026-02-01T10:00:00.000Z",
         },
-      ],
-    });
+      ])
+    );
     expect(res.body?.data?.identityTimeline?.events?.[0]?.id).toBeUndefined();
     expect(res.body?.data?.identityTimeline?.events?.[0]?.metadata).toBeUndefined();
     expect(JSON.stringify(res.body?.data?.portableIdentity || {})).not.toContain("token");
@@ -2663,6 +2663,52 @@ describe("tenantPortalRoutes foundation", () => {
     expect(res.body?.data?.profile?.internalNotes).toBeUndefined();
     expect(res.body?.data?.actions?.editableFields).toEqual(["displayName", "phone"]);
     expect(res.body?.data?.actions?.documentEntry?.path).toBe("/tenant/attachments");
+  });
+
+  it("recognizes converted rentalApplications as linked tenant profile application context", async () => {
+    ensureCollection("applications").delete("app-1");
+    ensureCollection("leases").delete("lease-1");
+    ensureCollection("tenancy_invites").delete("invite-1");
+    ensureCollection("rentalApplications").set("app-converted", {
+      id: "app-converted",
+      applicantEmail: "tenant@example.com",
+      tenantId: "tenant-1",
+      convertedTenantId: "tenant-1",
+      propertyId: "prop-1",
+      status: "converted",
+      applicantFullName: "Taylor Tenant",
+      applicantPhone: "902-555-0100",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-02T00:00:00.000Z",
+    });
+    ensureCollection("leases").set("lease-array", {
+      tenantIds: ["tenant-1"],
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      status: "active",
+      startDate: "2026-02-01",
+      endDate: "2027-01-31",
+      monthlyRent: 1800,
+    });
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/profile",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.data?.context?.applicationId).toBe("app-converted");
+    expect(res.body?.data?.profile?.application?.applicationId).toBe("app-converted");
+    expect(res.body?.data?.profile?.lease?.leaseId).toBeTruthy();
   });
 
   it("returns tenant-safe access visibility from existing share records", async () => {

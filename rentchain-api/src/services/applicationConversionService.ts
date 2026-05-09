@@ -1,7 +1,6 @@
 // @ts-nocheck
 import crypto from "crypto";
 import { addConvertedTenant } from "./tenantDetailsService";
-import { propertyService } from "./propertyService";
 import { runScreeningWithCredits } from "./screeningsService";
 import { logAuditEvent } from "./auditEventsService";
 import { db } from "../config/firebase";
@@ -9,6 +8,7 @@ import { sendEmail } from "./emailService";
 import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
 import { createTenancyIfMissing } from "./tenanciesService";
 import { createReplacementTenancyInvite } from "./tenantPortal/tenantInviteService";
+import { syncPropertyUnitOccupancyForTenantContext } from "./tenantPortal/tenantOccupancySyncService";
 
 async function loadApplicationForConversion(applicationId: string): Promise<{ application: any; collectionName: string } | null> {
   const rentalSnap = await db.collection("rentalApplications").doc(applicationId).get();
@@ -125,16 +125,17 @@ export async function convertApplicationToTenant(params: {
     console.warn("[applicationConversion] tenancy backfill failed", err);
   }
 
-  if (application.propertyId && unitId) {
-    const property = propertyService.getById(application.propertyId);
-    if (property?.units) {
-      const unit = property.units.find(
-        (u) => u.unitNumber === unitId
-      );
-      if (unit) {
-        unit.status = "occupied";
-      }
-    }
+  try {
+    await syncPropertyUnitOccupancyForTenantContext({
+      tenantId,
+      leaseId: application.leaseId ?? application.currentLeaseId ?? null,
+      applicationId: application.id,
+      landlordId: params.landlordId,
+      propertyId: application.propertyId ?? null,
+      unitId,
+    });
+  } catch (err) {
+    console.warn("[applicationConversion] occupancy sync skipped", err);
   }
 
   const invitation = await createAndEmailInvite({

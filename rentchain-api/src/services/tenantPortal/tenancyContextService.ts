@@ -71,6 +71,20 @@ async function safeGetDocs(collectionName: string, field: string, value: string,
   }
 }
 
+async function safeGetApplicationDocs(field: string, value: string, operator: "==" | "array-contains" = "==") {
+  const [applications, rentalApplications] = await Promise.all([
+    safeGetDocs("applications", field, value, operator),
+    safeGetDocs("rentalApplications", field, value, operator),
+  ]);
+  const seen = new Set<string>();
+  return [...applications, ...rentalApplications].filter((doc: any) => {
+    const key = doc?.id || "";
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 async function resolveTenantRecordMatch(identity: TenantWorkspaceIdentity): Promise<TenantRecordMatch | null> {
   const tenantId = asString(identity.tenantId);
   const email = normalizeEmail(identity.email);
@@ -189,11 +203,13 @@ export async function resolveTenancyContext(identity: TenantWorkspaceIdentity): 
   }
 
   const applicationDocs = [
-    ...(email ? await safeGetDocs("applications", "applicantEmail", email) : []),
-    ...(email ? await safeGetDocs("applications", "email", email) : []),
-    ...(uid ? await safeGetDocs("applications", "applicantUserId", uid) : []),
-    ...(uid ? await safeGetDocs("applications", "userId", uid) : []),
-    ...(tenantRecordId ? await safeGetDocs("applications", "tenantId", tenantRecordId) : []),
+    ...(email ? await safeGetApplicationDocs("applicantEmail", email) : []),
+    ...(email ? await safeGetApplicationDocs("email", email) : []),
+    ...(email ? await safeGetApplicationDocs("applicant.email", email) : []),
+    ...(uid ? await safeGetApplicationDocs("applicantUserId", uid) : []),
+    ...(uid ? await safeGetApplicationDocs("userId", uid) : []),
+    ...(tenantRecordId ? await safeGetApplicationDocs("tenantId", tenantRecordId) : []),
+    ...(tenantRecordId ? await safeGetApplicationDocs("convertedTenantId", tenantRecordId) : []),
   ];
 
   for (const doc of applicationDocs) {
@@ -310,14 +326,32 @@ export async function resolveTenancyContext(identity: TenantWorkspaceIdentity): 
 
   allCandidates.sort((left, right) => right.score - left.score);
   const winner = allCandidates[0];
+  const linkedApplication =
+    winner.applicationId
+      ? null
+      : allCandidates.find(
+          (candidate) =>
+            candidate.propertyId === winner.propertyId &&
+            candidate.applicationId &&
+            (!candidate.tenantId || !winner.tenantId || candidate.tenantId === winner.tenantId)
+        );
+  const linkedLease =
+    winner.leaseId
+      ? null
+      : allCandidates.find(
+          (candidate) =>
+            candidate.propertyId === winner.propertyId &&
+            candidate.leaseId &&
+            (!candidate.tenantId || !winner.tenantId || candidate.tenantId === winner.tenantId)
+        );
 
   return {
     ok: true,
     authority: winner.authority,
     propertyId: winner.propertyId,
     rc_prop_id: await resolveRcPropId(winner.propertyId),
-    applicationId: winner.applicationId,
-    leaseId: winner.leaseId,
+    applicationId: winner.applicationId || linkedApplication?.applicationId || null,
+    leaseId: winner.leaseId || linkedLease?.leaseId || null,
     tenantId: winner.tenantId,
     unitId: winner.unitId,
     invitedEmail: winner.invitedEmail,

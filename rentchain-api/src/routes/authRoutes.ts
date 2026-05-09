@@ -23,7 +23,7 @@ import { signAuthToken, verifyAuthToken } from "../auth/jwt";
 import { validateLandlordCredentials } from "../services/authService";
 import { getOrCreateAccount } from "../services/accountService";
 import { getOrCreateLandlordProfile } from "../services/landlordProfileService";
-import { db } from "../config/firebase";
+import { db, FieldValue } from "../config/firebase";
 import { rateLimitAuth, rateLimitSimple } from "../middleware/rateLimit";
 import { requireAuth } from "../middleware/requireAuth";
 import { buildCanonicalSessionUserFromClaims } from "../services/sessionUserService";
@@ -32,6 +32,8 @@ import {
   redeemTenancyInvite,
   resolveTenancyInviteByToken,
 } from "../services/tenantPortal/tenantInviteService";
+import { createTenancyIfMissing } from "../services/tenanciesService";
+import { syncPropertyUnitOccupancyForTenantContext } from "../services/tenantPortal/tenantOccupancySyncService";
 
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET || "dev-secret";
@@ -96,6 +98,156 @@ function tokenFingerprint(value: string): string {
 
 function hashToken(input: string) {
   return crypto.createHash("sha256").update(String(input || "").trim()).digest("hex");
+}
+
+function asOnboardString(value: unknown): string | null {
+  const next = String(value || "").trim();
+  return next || null;
+}
+
+function normalizeOnboardEmail(value: unknown): string | null {
+  const next = String(value || "").trim().toLowerCase();
+  return next || null;
+}
+
+async function loadApplicationForTenantInvite(applicationId: string | null) {
+  const id = asOnboardString(applicationId);
+  if (!id) return null;
+  for (const collectionName of ["applications", "rentalApplications"]) {
+    const snap = await db.collection(collectionName).doc(id).get();
+    if (snap.exists) {
+      return { id: snap.id, collectionName, data: (snap.data() as any) || {} };
+    }
+  }
+  return null;
+}
+
+async function normalizeTenantInviteIdentity(input: {
+  tenantId: string;
+  uid: string;
+  email: string;
+  invite: any;
+  application: { id: string; collectionName: string; data: any } | null;
+}) {
+  const now = Date.now();
+  const applicationId = asOnboardString(input.invite?.applicationId || input.application?.id);
+  const leaseId =
+    asOnboardString(input.invite?.leaseId) ||
+    asOnboardString(input.application?.data?.leaseId) ||
+    asOnboardString(input.application?.data?.currentLeaseId);
+  const propertyId = asOnboardString(input.invite?.propertyId || input.application?.data?.propertyId);
+  const unitId =
+    asOnboardString(input.invite?.unitId) ||
+    asOnboardString(input.application?.data?.unitId) ||
+    asOnboardString(input.application?.data?.unitApplied) ||
+    asOnboardString(input.application?.data?.unit);
+  const landlordId = asOnboardString(input.invite?.landlordId || input.application?.data?.landlordId);
+  const tenantName =
+    asOnboardString(input.invite?.invitedName) ||
+    asOnboardString(input.application?.data?.applicantFullName) ||
+    asOnboardString(input.application?.data?.applicantName) ||
+    asOnboardString(input.application?.data?.fullName) ||
+    [asOnboardString(input.application?.data?.applicant?.firstName || input.application?.data?.firstName), asOnboardString(input.application?.data?.applicant?.lastName || input.application?.data?.lastName)]
+      .filter(Boolean)
+      .join(" ") ||
+    null;
+  const phone =
+    asOnboardString(input.application?.data?.applicantPhone) ||
+    asOnboardString(input.application?.data?.phone) ||
+    asOnboardString(input.application?.data?.applicant?.phoneHome) ||
+    asOnboardString(input.application?.data?.applicant?.phoneWork);
+
+  if (input.application) {
+    const applicationPatch = {
+      tenantId: input.tenantId,
+      applicantTenantId: input.tenantId,
+      convertedTenantId: input.tenantId,
+      applicantUserId: input.uid,
+      userId: input.uid,
+      email: normalizeOnboardEmail(input.application.data?.email) || input.email,
+      applicantEmail: normalizeOnboardEmail(input.application.data?.applicantEmail || input.application.data?.applicant?.email) || input.email,
+      leaseId: leaseId || input.application.data?.leaseId || null,
+      updatedAt: now,
+    };
+    await db.collection(input.application.collectionName).doc(input.application.id).set(applicationPatch, { merge: true });
+    if (input.application.collectionName !== "applications") {
+      await db.collection("applications").doc(input.application.id).set(
+        {
+          ...input.application.data,
+          ...applicationPatch,
+          id: input.application.id,
+        },
+        { merge: true }
+      );
+    }
+  }
+
+  if (leaseId) {
+    await db.collection("leases").doc(leaseId).set(
+      {
+        tenantId: input.tenantId,
+        tenantIds: FieldValue.arrayUnion(input.tenantId),
+        primaryTenantId: input.tenantId,
+        applicationId: applicationId || null,
+        updatedAt: now,
+      },
+      { merge: true }
+    );
+  }
+
+  if (landlordId) {
+    await createTenancyIfMissing({
+      tenantId: input.tenantId,
+      landlordId,
+      propertyId,
+      unitId,
+      unitLabel: unitId,
+      moveInAt:
+        asOnboardString(input.application?.data?.leaseStartDate) ||
+        asOnboardString(input.application?.data?.moveInDate) ||
+        null,
+    });
+  }
+
+  await db.collection("tenants").doc(input.tenantId).set(
+    {
+      id: input.tenantId,
+      tenantId: input.tenantId,
+      landlordId,
+      email: input.email,
+      fullName: tenantName,
+      phone: phone || null,
+      propertyId,
+      unitId,
+      unit: unitId,
+      leaseId,
+      currentLeaseId: leaseId || null,
+      applicationId,
+      applicantUserId: input.uid,
+      source: "invite",
+      updatedAt: now,
+      },
+    { merge: true }
+  );
+
+  try {
+    await syncPropertyUnitOccupancyForTenantContext({
+      tenantId: input.tenantId,
+      leaseId,
+      applicationId,
+      landlordId,
+      propertyId,
+      unitId,
+    });
+  } catch (error) {
+    console.warn("[auth.onboard.tenant_occupancy_sync_failed]", {
+      applicationId,
+      leaseId,
+      propertyId,
+      unitId,
+      reason: error instanceof Error ? error.message : "unknown",
+    });
+  }
 }
 
 function normalizeUserRole(req: any): string {
@@ -1139,8 +1291,11 @@ router.post("/onboard/accept", async (req: any, res) => {
           });
         }
 
+        const linkedApplication = await loadApplicationForTenantInvite(tenancyInvite.applicationId);
         const tenantId =
-          String(tenancyInvite.redeemedByUid || "").trim() ||
+          asOnboardString(linkedApplication?.data?.convertedTenantId) ||
+          asOnboardString(linkedApplication?.data?.tenantId) ||
+          asOnboardString(tenancyInvite.redeemedByUid) ||
           crypto
             .createHash("sha256")
             .update(`${tenancyInvite.landlordId}:${email}`.toLowerCase())
@@ -1148,6 +1303,13 @@ router.post("/onboard/accept", async (req: any, res) => {
             .slice(0, 24);
 
         if (tenancyInvite.status === "redeemed") {
+          await normalizeTenantInviteIdentity({
+            tenantId,
+            uid: String(requestUser?.id || tenantId).trim() || tenantId,
+            email,
+            invite: tenancyInvite,
+            application: linkedApplication,
+          });
           const tenantToken = signTenantJwt({
             sub: tenantId,
             role: "tenant",
@@ -1196,23 +1358,13 @@ router.post("/onboard/accept", async (req: any, res) => {
           });
         }
 
-        await db.collection("tenants").doc(tenantId).set(
-          {
-            id: tenantId,
-            tenantId,
-            landlordId: tenancyInvite.landlordId,
-            email,
-            fullName: tenancyInvite.invitedName || null,
-            propertyId: tenancyInvite.propertyId || null,
-            unitId: tenancyInvite.unitId || null,
-            leaseId: tenancyInvite.leaseId || null,
-            applicationId: tenancyInvite.applicationId || null,
-            source: "invite",
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-          },
-          { merge: true }
-        );
+        await normalizeTenantInviteIdentity({
+          tenantId,
+          uid: String(requestUser?.id || tenantId).trim() || tenantId,
+          email,
+          invite: tenancyInvite,
+          application: linkedApplication,
+        });
 
         const tenantToken = signTenantJwt({
           sub: tenantId,

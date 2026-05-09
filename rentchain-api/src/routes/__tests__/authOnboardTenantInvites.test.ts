@@ -57,6 +57,7 @@ vi.mock("../../config/firebase", () => ({
   db: dbMock,
   FieldValue: {
     serverTimestamp: () => "__server_timestamp__",
+    arrayUnion: (...values: any[]) => values,
   },
 }));
 
@@ -166,6 +167,182 @@ describe("auth onboard tenant invites", () => {
     const storedInvite = ensureCollection("tenancy_invites").get(created.invite.id);
     expect(storedInvite?.status).toBe("redeemed");
     expect(storedInvite?.token).toBeUndefined();
+  });
+
+  it("reuses the converted application tenant and links tenant portal identity on invite acceptance", async () => {
+    ensureCollection("rentalApplications").set("app-linked", {
+      id: "app-linked",
+      landlordId: "landlord-1",
+      propertyId: "property-1",
+      unitId: "unit-1",
+      convertedTenantId: "converted-tenant-1",
+      applicantEmail: "tenant@example.com",
+      applicantPhone: "902-555-0101",
+      applicantFullName: "Tenant Name",
+      status: "converted",
+    });
+
+    const { createTenancyInvite } = await import("../../services/tenantPortal/tenantInviteService");
+    const created = await createTenancyInvite({
+      landlordId: "landlord-1",
+      propertyId: "property-1",
+      applicationId: "app-linked",
+      unitId: "unit-1",
+      invitedEmail: "tenant@example.com",
+      invitedName: "Tenant Name",
+      createdBy: "landlord-1",
+    });
+
+    const router = (await import("../authRoutes")).default;
+    const acceptRes = await invokeRouter(router, {
+      method: "POST",
+      url: "/onboard/accept",
+      body: { source: "tenant", token: created.token },
+    });
+
+    expect(acceptRes.status).toBe(200);
+    expect(acceptRes.body?.tenantToken).toBeTruthy();
+
+    const deterministicTenantId = "b334fd63bd8fce4e5d74faea";
+    expect(ensureCollection("tenants").has(deterministicTenantId)).toBe(false);
+    expect(ensureCollection("tenants").get("converted-tenant-1")).toMatchObject({
+      tenantId: "converted-tenant-1",
+      applicationId: "app-linked",
+      phone: "902-555-0101",
+      propertyId: "property-1",
+      unitId: "unit-1",
+    });
+    expect(ensureCollection("rentalApplications").get("app-linked")).toMatchObject({
+      tenantId: "converted-tenant-1",
+      applicantTenantId: "converted-tenant-1",
+      convertedTenantId: "converted-tenant-1",
+    });
+    expect(ensureCollection("applications").get("app-linked")).toMatchObject({
+      tenantId: "converted-tenant-1",
+      applicantTenantId: "converted-tenant-1",
+      convertedTenantId: "converted-tenant-1",
+    });
+  });
+
+  it("does not mark a unit occupied from an approved application without lease context", async () => {
+    ensureCollection("rentalApplications").set("app-no-lease", {
+      id: "app-no-lease",
+      landlordId: "landlord-1",
+      propertyId: "property-1",
+      unitId: "unit-1",
+      convertedTenantId: "converted-tenant-1",
+      applicantEmail: "tenant@example.com",
+      applicantFullName: "Tenant Name",
+      status: "converted",
+    });
+    ensureCollection("units").set("unit-doc-1", {
+      id: "unit-doc-1",
+      landlordId: "landlord-1",
+      propertyId: "property-1",
+      unitNumber: "unit-1",
+      status: "vacant",
+      occupancyStatus: "vacant",
+    });
+    ensureCollection("properties").set("property-1", {
+      id: "property-1",
+      units: [{ id: "unit-doc-1", unitNumber: "unit-1", status: "vacant", occupancyStatus: "vacant" }],
+    });
+
+    const { createTenancyInvite } = await import("../../services/tenantPortal/tenantInviteService");
+    const created = await createTenancyInvite({
+      landlordId: "landlord-1",
+      propertyId: "property-1",
+      applicationId: "app-no-lease",
+      unitId: "unit-1",
+      invitedEmail: "tenant@example.com",
+      invitedName: "Tenant Name",
+      createdBy: "landlord-1",
+    });
+
+    const router = (await import("../authRoutes")).default;
+    const acceptRes = await invokeRouter(router, {
+      method: "POST",
+      url: "/onboard/accept",
+      body: { source: "tenant", token: created.token },
+    });
+
+    expect(acceptRes.status).toBe(200);
+    expect(ensureCollection("units").get("unit-doc-1")).toMatchObject({
+      status: "vacant",
+      occupancyStatus: "vacant",
+    });
+    expect(ensureCollection("properties").get("property-1").units[0]).toMatchObject({
+      status: "vacant",
+      occupancyStatus: "vacant",
+    });
+  });
+
+  it("syncs property and unit occupancy from an active lease after invite acceptance", async () => {
+    ensureCollection("rentalApplications").set("app-with-lease", {
+      id: "app-with-lease",
+      landlordId: "landlord-1",
+      propertyId: "property-1",
+      unitId: "unit-1",
+      leaseId: "lease-1",
+      convertedTenantId: "converted-tenant-1",
+      applicantEmail: "tenant@example.com",
+      applicantFullName: "Tenant Name",
+      status: "converted",
+    });
+    ensureCollection("leases").set("lease-1", {
+      id: "lease-1",
+      landlordId: "landlord-1",
+      propertyId: "property-1",
+      unitId: "unit-1",
+      status: "active",
+    });
+    ensureCollection("units").set("unit-doc-1", {
+      id: "unit-doc-1",
+      landlordId: "landlord-1",
+      propertyId: "property-1",
+      unitNumber: "unit-1",
+      status: "vacant",
+      occupancyStatus: "vacant",
+    });
+    ensureCollection("properties").set("property-1", {
+      id: "property-1",
+      units: [{ id: "unit-doc-1", unitNumber: "unit-1", status: "vacant", occupancyStatus: "vacant" }],
+    });
+
+    const { createTenancyInvite } = await import("../../services/tenantPortal/tenantInviteService");
+    const created = await createTenancyInvite({
+      landlordId: "landlord-1",
+      propertyId: "property-1",
+      applicationId: "app-with-lease",
+      unitId: "unit-1",
+      leaseId: "lease-1",
+      invitedEmail: "tenant@example.com",
+      invitedName: "Tenant Name",
+      createdBy: "landlord-1",
+    });
+
+    const router = (await import("../authRoutes")).default;
+    const acceptRes = await invokeRouter(router, {
+      method: "POST",
+      url: "/onboard/accept",
+      body: { source: "tenant", token: created.token },
+    });
+
+    expect(acceptRes.status).toBe(200);
+    expect(ensureCollection("units").get("unit-doc-1")).toMatchObject({
+      status: "occupied",
+      occupancyStatus: "occupied",
+      tenantId: "converted-tenant-1",
+      leaseId: "lease-1",
+      occupancySource: "canonical_lease",
+    });
+    expect(ensureCollection("properties").get("property-1").units[0]).toMatchObject({
+      status: "occupied",
+      occupancyStatus: "occupied",
+      tenantId: "converted-tenant-1",
+      leaseId: "lease-1",
+      occupancySource: "canonical_lease",
+    });
   });
 
   it("reports replaced tenancy_invites tokens as expired instead of not found", async () => {
