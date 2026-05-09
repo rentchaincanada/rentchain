@@ -22,8 +22,8 @@ const dbMock = {
     if (name === "tenancy_invites") {
       return {
         doc: (id: string) => ({
-          set: async (value: any) => {
-            invites.set(id, value);
+          set: async (value: any, opts?: { merge?: boolean }) => {
+            invites.set(id, opts?.merge ? { ...(invites.get(id) || {}), ...value } : value);
           },
           get: async () => ({
             exists: invites.has(id),
@@ -31,14 +31,18 @@ const dbMock = {
             id,
           }),
         }),
-        where: (field: string, op: string, value: any) => ({
-          get: async () => {
-            const docs = Array.from(invites.entries())
-              .filter(([, data]) => (op === "==" ? data?.[field] === value : false))
-              .map(([docId, data]) => ({ id: docId, data: () => data, exists: true }));
-            return { docs, empty: docs.length === 0 };
-          },
-        }),
+        where: (field: string, op: string, value: any) => {
+          const query = {
+            get: async () => {
+              const docs = Array.from(invites.entries())
+                .filter(([, data]) => (op === "==" ? data?.[field] === value : false))
+                .map(([docId, data]) => ({ id: docId, data: () => data, exists: true }));
+              return { docs, empty: docs.length === 0 };
+            },
+            limit: (_count: number) => query,
+          };
+          return query;
+        },
       };
     }
     if (name === "event_log") {
@@ -163,5 +167,39 @@ describe("POST /api/tenant-invites", () => {
     expect(String(res.body?.inviteUrl || "")).toContain("/tenant/invite/");
     expect(res.body?.error).toBeUndefined();
     expect(invites.size).toBe(1);
+  }, 30000);
+
+  it("replaces an active duplicate invite deterministically", async () => {
+    const router = (await import("../tenantInvitesRoutes")).default;
+    const first = await invokeRouter(router, {
+      method: "POST",
+      url: "/",
+      body: {
+        tenantEmail: "tenant@example.com",
+        tenantName: "Tenant Name",
+        propertyId: "property-1",
+        unitId: "unit-1",
+        applicationId: "app-1",
+      },
+    });
+    const second = await invokeRouter(router, {
+      method: "POST",
+      url: "/",
+      body: {
+        tenantEmail: "tenant@example.com",
+        tenantName: "Tenant Name",
+        propertyId: "property-1",
+        unitId: "unit-1",
+        applicationId: "app-1",
+      },
+    });
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect(second.body?.replacedInviteId).toBeTruthy();
+    expect(String(second.body?.inviteUrl || "")).toContain("/tenant/invite/");
+    expect(invites.size).toBe(2);
+    const oldInvite = invites.get(second.body.replacedInviteId);
+    expect(oldInvite?.status).toBe("superseded");
   }, 30000);
 });

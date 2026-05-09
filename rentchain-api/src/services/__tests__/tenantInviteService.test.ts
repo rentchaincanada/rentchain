@@ -37,6 +37,14 @@ const dbMock = {
       };
     },
     where: (field: string, op: string, value: any) => ({
+      limit: (_count: number) => ({
+        get: async () => {
+          const docs = Array.from(ensureCollection(name).entries())
+            .filter(([, data]) => applyWhereFilter(data, field, op, value))
+            .map(([id, data]) => ({ id, exists: true, data: () => clone(data) }));
+          return { docs, empty: docs.length === 0 };
+        },
+      }),
       get: async () => {
         const docs = Array.from(ensureCollection(name).entries())
           .filter(([, data]) => applyWhereFilter(data, field, op, value))
@@ -120,5 +128,44 @@ describe("tenantInviteService", () => {
 
     expect(result.ok).toBe(false);
     expect(result.error).toBe("invite_expired");
+  });
+
+  it("replaces an active matching invite without retaining the raw token", async () => {
+    const { createReplacementTenancyInvite, redeemTenancyInvite } = await import("../tenantPortal/tenantInviteService");
+    const first = await createReplacementTenancyInvite({
+      landlordId: "landlord-4",
+      propertyId: "prop-4",
+      applicationId: "app-4",
+      unitId: "unit-4",
+      invitedEmail: "tenant4@example.com",
+      createdBy: "landlord-4",
+    });
+    const second = await createReplacementTenancyInvite({
+      landlordId: "landlord-4",
+      propertyId: "prop-4",
+      applicationId: "app-4",
+      unitId: "unit-4",
+      invitedEmail: "tenant4@example.com",
+      createdBy: "landlord-4",
+    });
+
+    expect(second.replacedInviteId).toBe(first.invite.id);
+    expect(ensureCollection("tenancy_invites").get(first.invite.id)?.status).toBe("superseded");
+    expect(ensureCollection("tenancy_invites").get(first.invite.id)?.token).toBeUndefined();
+
+    const oldRedeem = await redeemTenancyInvite({
+      token: first.token,
+      redeemedByUid: "user-4",
+      redeemedByEmail: "tenant4@example.com",
+    });
+    const newRedeem = await redeemTenancyInvite({
+      token: second.token,
+      redeemedByUid: "user-4",
+      redeemedByEmail: "tenant4@example.com",
+    });
+
+    expect(oldRedeem.ok).toBe(false);
+    expect(oldRedeem.error).toBe("invite_expired");
+    expect(newRedeem.ok).toBe(true);
   });
 });

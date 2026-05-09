@@ -33,7 +33,7 @@ export type TenancyInviteRecord = {
   leaseId: string | null;
   invitedEmail: string | null;
   invitedName: string | null;
-  status: "pending" | "redeemed" | "expired";
+  status: "pending" | "redeemed" | "expired" | "superseded";
   createdAt: number | null;
   expiresAt: number | null;
   redeemedAt: number | null;
@@ -71,12 +71,75 @@ function mapInvite(docId: string, data: any): TenancyInviteRecord {
     leaseId: String(data?.lease_id || data?.leaseId || "").trim() || null,
     invitedEmail: normalizeEmail(data?.invited_email || data?.invitedEmail),
     invitedName: String(data?.invited_name || data?.invitedName || "").trim() || null,
-    status: data?.status === "redeemed" ? "redeemed" : data?.status === "expired" ? "expired" : "pending",
+    status:
+      data?.status === "redeemed"
+        ? "redeemed"
+        : data?.status === "expired"
+        ? "expired"
+        : data?.status === "superseded"
+        ? "superseded"
+        : "pending",
     createdAt: typeof data?.created_at === "number" ? data.created_at : typeof data?.createdAt === "number" ? data.createdAt : null,
     expiresAt: typeof data?.expires_at === "number" ? data.expires_at : typeof data?.expiresAt === "number" ? data.expiresAt : null,
     redeemedAt: typeof data?.redeemed_at === "number" ? data.redeemed_at : typeof data?.redeemedAt === "number" ? data.redeemedAt : null,
     redeemedByUid: String(data?.redeemed_by_uid || data?.redeemedByUid || "").trim() || null,
   };
+}
+
+async function findPendingInviteForContext(input: CreateTenancyInviteInput): Promise<TenancyInviteRecord | null> {
+  const landlordId = String(input.landlordId || "").trim();
+  const propertyId = String(input.propertyId || "").trim();
+  const invitedEmail = normalizeEmail(input.invitedEmail);
+  if (!landlordId || !propertyId || !invitedEmail) return null;
+
+  const snap = await db.collection("tenancy_invites").where("landlord_id", "==", landlordId).get();
+  const now = nowMillis();
+  const matches = snap.docs
+    .map((doc: any) => mapInvite(doc.id, doc.data() as any))
+    .filter((invite) => {
+      if (invite.status !== "pending") return false;
+      if (invite.expiresAt && invite.expiresAt <= now) return false;
+      return (
+        invite.propertyId === propertyId &&
+        invite.invitedEmail === invitedEmail &&
+        String(invite.applicationId || "") === String(input.applicationId || "") &&
+        String(invite.unitId || "") === String(input.unitId || "") &&
+        String(invite.leaseId || "") === String(input.leaseId || "")
+      );
+    })
+    .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
+
+  return matches[0] || null;
+}
+
+async function supersedeInvite(invite: TenancyInviteRecord, replacementTokenPreview: string, actorId: string) {
+  const now = nowMillis();
+  await db.collection("tenancy_invites").doc(invite.id).set(
+    {
+      status: "superseded",
+      superseded_at: now,
+      superseded_by_token_preview: replacementTokenPreview,
+      updated_at: FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+
+  await recordTenantEvent({
+    eventType: "tenant_invite_superseded",
+    entityType: "tenancy_invite",
+    entityId: invite.id,
+    createdBy: actorId,
+    context: {
+      rc_prop_id: invite.rc_prop_id,
+      propertyId: invite.propertyId,
+      applicationId: invite.applicationId,
+    },
+    payload: {
+      invitedEmail: invite.invitedEmail,
+      tokenPreview: invite.tokenPreview,
+      replacementTokenPreview,
+    },
+  });
 }
 
 export async function createTenancyInvite(input: CreateTenancyInviteInput): Promise<{
@@ -132,6 +195,26 @@ export async function createTenancyInvite(input: CreateTenancyInviteInput): Prom
   };
 }
 
+export async function createReplacementTenancyInvite(input: CreateTenancyInviteInput): Promise<{
+  token: string;
+  invite: TenancyInviteRecord;
+  replacedInviteId: string | null;
+}> {
+  const existing = await findPendingInviteForContext(input);
+  const created = await createTenancyInvite(input);
+  if (existing) {
+    await supersedeInvite(existing, created.invite.tokenPreview, String(input.createdBy || input.landlordId || "system"));
+  }
+  return { ...created, replacedInviteId: existing?.id || null };
+}
+
+export async function resolveTenancyInviteByToken(token: string): Promise<TenancyInviteRecord | null> {
+  const tokenHash = hashTenancyInviteToken(token);
+  const snap = await db.collection("tenancy_invites").doc(tokenHash).get();
+  if (!snap.exists) return null;
+  return mapInvite(snap.id, snap.data() as any);
+}
+
 export async function listTenancyInvitesForLandlord(landlordId: string): Promise<TenancyInviteRecord[]> {
   const snap = await db.collection("tenancy_invites").where("landlord_id", "==", String(landlordId || "").trim()).get();
   return snap.docs
@@ -158,6 +241,9 @@ export async function redeemTenancyInvite(input: RedeemTenancyInviteInput): Prom
   }
   if (invite.status === "redeemed") {
     return { ok: false, error: "invite_used" };
+  }
+  if (invite.status === "superseded" || invite.status === "expired") {
+    return { ok: false, error: "invite_expired" };
   }
 
   const redeemedEmail = normalizeEmail(input.redeemedByEmail);

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 type StoredDoc = { id: string; data: any };
 
-const { dbMock, resetDb, seedCollection, savedDocs } = vi.hoisted(() => {
+const { dbMock, resetDb, seedCollection, savedDocs, sendEmailMock, buildEmailTextMock, buildEmailHtmlMock } = vi.hoisted(() => {
   const collections = new Map<string, Map<string, StoredDoc>>();
   let generatedId = 0;
 
@@ -58,15 +58,26 @@ const { dbMock, resetDb, seedCollection, savedDocs } = vi.hoisted(() => {
     resetDb: () => {
       collections.clear();
       generatedId = 0;
+      sendEmailMock.mockReset();
+      buildEmailTextMock.mockReset();
+      buildEmailHtmlMock.mockReset();
     },
     seedCollection: (name: string, id: string, data: any) => {
       ensureCollection(name).set(id, { id, data });
     },
     savedDocs: collections,
+    sendEmailMock: vi.fn(async () => undefined),
+    buildEmailTextMock: vi.fn(() => "email-text"),
+    buildEmailHtmlMock: vi.fn(() => "<p>email</p>"),
   };
 });
 
 vi.mock("../../config/firebase", () => ({ db: dbMock }));
+vi.mock("../../services/emailService", () => ({ sendEmail: sendEmailMock }));
+vi.mock("../../email/templates/baseEmailTemplate", () => ({
+  buildEmailText: buildEmailTextMock,
+  buildEmailHtml: buildEmailHtmlMock,
+}));
 vi.mock("../../middleware/rateLimit", () => ({
   rateLimitPublicApply: (_req: any, _res: any, next: any) => next(),
 }));
@@ -184,6 +195,20 @@ describe("publicApplicationLinksRoutes", () => {
       propertyId: "property-1",
       unitId: "unit-1",
     });
+    seedCollection("landlords", "landlord-1", {
+      id: "landlord-1",
+      email: "owner@example.com",
+    });
+    seedCollection("properties", "property-1", {
+      id: "property-1",
+      name: "Harbour View",
+    });
+    seedCollection("units", "unit-1", {
+      id: "unit-1",
+      unitNumber: "4B",
+    });
+    process.env.EMAIL_FROM = "noreply@rentchain.test";
+    process.env.PUBLIC_APP_URL = "https://www.rentchain.test";
   });
 
   it("persists currentLeaseStatus on application create", async () => {
@@ -225,6 +250,35 @@ describe("publicApplicationLinksRoutes", () => {
     const rentalApplications = savedDocs.get("rentalApplications");
     const stored = Array.from(rentalApplications?.values() || [])[0]?.data;
     expect(stored.currentLeaseStatus).toBeNull();
+  });
+
+  it("notifies the landlord when an applicant completes an application", async () => {
+    const router = await createApp();
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/rental-applications",
+      body: buildBody(),
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.data?.landlordNotification).toEqual({ emailed: true, error: null });
+    expect(sendEmailMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: "owner@example.com",
+        subject: "Application completed — Jordan Lee",
+      })
+    );
+    expect(buildEmailTextMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        intro: expect.stringContaining("Harbour View, Unit 4B"),
+        ctaUrl: expect.stringContaining("/applications?applicationId="),
+      })
+    );
+    expect(buildEmailTextMock).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        intro: expect.stringContaining("property-1"),
+      })
+    );
   });
 
   it("stores only safe partial progress metadata", async () => {

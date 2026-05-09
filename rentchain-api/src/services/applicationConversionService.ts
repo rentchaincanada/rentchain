@@ -1,9 +1,5 @@
 // @ts-nocheck
 import crypto from "crypto";
-import {
-  getApplicationByIdAsync,
-  saveApplicationAsync,
-} from "./applicationsService";
 import { addConvertedTenant } from "./tenantDetailsService";
 import { propertyService } from "./propertyService";
 import { runScreeningWithCredits } from "./screeningsService";
@@ -12,6 +8,26 @@ import { db } from "../config/firebase";
 import { sendEmail } from "./emailService";
 import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
 import { createTenancyIfMissing } from "./tenanciesService";
+import { createReplacementTenancyInvite } from "./tenantPortal/tenantInviteService";
+
+async function loadApplicationForConversion(applicationId: string): Promise<{ application: any; collectionName: string } | null> {
+  const rentalSnap = await db.collection("rentalApplications").doc(applicationId).get();
+  if (rentalSnap.exists) {
+    return { application: { id: rentalSnap.id, ...(rentalSnap.data() as any) }, collectionName: "rentalApplications" };
+  }
+  const legacySnap = await db.collection("applications").doc(applicationId).get();
+  if (legacySnap.exists) {
+    return { application: { id: legacySnap.id, ...(legacySnap.data() as any) }, collectionName: "applications" };
+  }
+  return null;
+}
+
+async function saveConvertedApplication(collectionName: string, updated: any) {
+  await db.collection(collectionName).doc(String(updated.id)).set(updated, { merge: true });
+  if (collectionName !== "applications") {
+    await db.collection("applications").doc(String(updated.id)).set(updated, { merge: true });
+  }
+}
 
 export async function convertApplicationToTenant(params: {
   landlordId: string;
@@ -25,13 +41,22 @@ export async function convertApplicationToTenant(params: {
   inviteUrl?: string | null;
   inviteEmailed?: boolean;
 }> {
-  const application = await getApplicationByIdAsync(params.applicationId);
-  if (!application) {
+  const loaded = await loadApplicationForConversion(params.applicationId);
+  if (!loaded) {
     throw new Error("Application not found");
   }
+  const application = loaded.application;
   if (application.landlordId && application.landlordId !== params.landlordId) {
     throw new Error("Forbidden");
   }
+  const applicantFirstName = String(application?.applicant?.firstName || application?.firstName || "").trim();
+  const applicantLastName = String(application?.applicant?.lastName || application?.lastName || "").trim();
+  const applicantFullName =
+    String(application?.applicantFullName || application?.fullName || "").trim() ||
+    `${applicantFirstName} ${applicantLastName}`.trim();
+  const applicantEmail = String(application?.applicantEmail || application?.email || application?.applicant?.email || "").trim().toLowerCase();
+  const applicantPhone = String(application?.applicantPhone || application?.phone || application?.applicant?.phoneHome || application?.applicant?.phoneWork || "").trim();
+  const unitId = application.unitId ?? application.unitApplied ?? application.unit ?? null;
 
   if (application.convertedTenantId) {
     await logAuditEvent({
@@ -60,15 +85,14 @@ export async function convertApplicationToTenant(params: {
     id: tenantId,
     landlordId: params.landlordId,
     fullName:
-      application.applicantFullName ||
-      application.fullName ||
+      applicantFullName ||
       "Converted Applicant",
-    email: application.applicantEmail ?? application.email ?? null,
-    phone: application.applicantPhone ?? application.phone ?? null,
+    email: applicantEmail || null,
+    phone: applicantPhone || null,
     propertyName: application.propertyName ?? null,
     propertyId: application.propertyId ?? null,
-    unitId: application.unitApplied ?? application.unit ?? null,
-    unit: application.unitApplied ?? application.unit ?? null,
+    unitId,
+    unit: unitId,
     leaseStart: application.leaseStartDate ?? application.moveInDate ?? null,
     leaseEnd: null,
     monthlyRent: application.requestedRent ?? null,
@@ -93,19 +117,19 @@ export async function convertApplicationToTenant(params: {
       tenantId,
       landlordId: params.landlordId,
       propertyId: application.propertyId ?? null,
-      unitId: application.unitApplied ?? application.unit ?? null,
-      unitLabel: application.unitApplied ?? application.unit ?? null,
+      unitId,
+      unitLabel: unitId,
       moveInAt: application.leaseStartDate ?? application.moveInDate ?? null,
     });
   } catch (err) {
     console.warn("[applicationConversion] tenancy backfill failed", err);
   }
 
-  if (application.propertyId && application.unitApplied) {
+  if (application.propertyId && unitId) {
     const property = propertyService.getById(application.propertyId);
     if (property?.units) {
       const unit = property.units.find(
-        (u) => u.unitNumber === application.unitApplied
+        (u) => u.unitNumber === unitId
       );
       if (unit) {
         unit.status = "occupied";
@@ -117,9 +141,11 @@ export async function convertApplicationToTenant(params: {
     landlordId: params.landlordId,
     tenantId,
     propertyId: application.propertyId ?? null,
-    unitId: application.unitApplied ?? application.unit ?? null,
-    tenantEmail: application.applicantEmail ?? application.email ?? null,
-    tenantName: application.applicantFullName ?? application.fullName ?? null,
+    unitId,
+    applicationId: application.id,
+    tenantEmail: applicantEmail || null,
+    tenantName: applicantFullName || null,
+    createdBy: params.actorUserId || params.landlordId,
   });
 
   const updated = {
@@ -162,7 +188,7 @@ export async function convertApplicationToTenant(params: {
     }
   }
 
-  await saveApplicationAsync(updated);
+  await saveConvertedApplication(loaded.collectionName, updated);
 
   await logAuditEvent({
     landlordId: params.landlordId,
@@ -188,29 +214,29 @@ async function createAndEmailInvite(opts: {
   tenantId: string;
   propertyId?: string | null;
   unitId?: string | null;
+  applicationId?: string | null;
   tenantEmail?: string | null;
   tenantName?: string | null;
+  createdBy?: string | null;
 }): Promise<{ inviteUrl: string | null; inviteEmailed: boolean }> {
   const tenantEmail = (opts.tenantEmail || "").trim();
   const hasEmail = !!tenantEmail;
-  const token = crypto.randomBytes(24).toString("hex");
-  const now = Date.now();
-  const expiresAt = now + 1000 * 60 * 60 * 24 * 7;
-  const baseUrl = (process.env.PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "");
-  const inviteUrl = `${baseUrl}/tenant/invite/${token}`;
-
-  await db.collection("tenantInvites").doc(token).set({
-    token,
+  if (!opts.propertyId) {
+    console.warn("[applicationConversion] missing propertyId, skipping tenant invite");
+    return { inviteUrl: null, inviteEmailed: false };
+  }
+  const created = await createReplacementTenancyInvite({
     landlordId: opts.landlordId,
-    tenantEmail: hasEmail ? tenantEmail : null,
-    tenantName: opts.tenantName || null,
-    propertyId: opts.propertyId || null,
+    propertyId: opts.propertyId,
+    applicationId: opts.applicationId || null,
+    invitedEmail: tenantEmail || null,
+    invitedName: opts.tenantName || null,
     unitId: opts.unitId || null,
-    tenantId: opts.tenantId || null,
-    status: "pending",
-    createdAt: now,
-    expiresAt,
+    leaseId: null,
+    createdBy: opts.createdBy || opts.landlordId,
   });
+  const baseUrl = (process.env.PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "");
+  const inviteUrl = `${baseUrl}/tenant/invite/${created.token}`;
 
   if (!hasEmail) {
     return { inviteUrl, inviteEmailed: false };
