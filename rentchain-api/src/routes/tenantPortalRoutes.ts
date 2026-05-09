@@ -62,6 +62,12 @@ import {
   revokeTenantShareVerificationRequest,
   revokeTenantSharePackage,
 } from "../services/tenantPortal/tenantSharePackageService";
+import {
+  listTenantTrustExports,
+  prepareTenantTrustExport,
+  previewTenantTrustExport,
+  revokeTenantTrustExport,
+} from "../services/tenantPortal/tenantTrustExportService";
 import { recordSystemObservabilityEvent } from "../services/observability/recordSystemObservabilityEvent";
 import { buildLeasePaymentProjection } from "../services/projections/buildLeasePaymentProjection";
 
@@ -3162,6 +3168,116 @@ router.post("/identity/export", requireTenantWorkspaceIdentity, async (req: any,
     ok: true,
     data: institutionalIdentityPackage,
   });
+});
+
+router.get("/trust-exports", requireTenantWorkspaceIdentity, async (req: any, res) => {
+  const context = await resolveWorkspaceContextOrRespond(req, res);
+  if (!context) return;
+
+  const tenantId = String(req.user?.tenantId || context.tenantId || "").trim();
+  if (!tenantId) {
+    return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+  }
+
+  try {
+    const items = await listTenantTrustExports({ tenantId });
+    return res.json({ ok: true, data: { items } });
+  } catch (err: any) {
+    console.error("[tenant/trust-exports:list] failed", {
+      tenantId,
+      message: err?.message || "failed",
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_TRUST_EXPORT_LIST_FAILED" });
+  }
+});
+
+router.post("/trust-exports/preview", requireTenantWorkspaceIdentity, async (req: any, res) => {
+  const context = await resolveWorkspaceContextOrRespond(req, res);
+  if (!context) return;
+
+  const tenantId = String(req.user?.tenantId || context.tenantId || "").trim();
+  if (!tenantId) {
+    return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+  }
+
+  try {
+    const preview = await previewTenantTrustExport({
+      tenantId,
+      audience: req.body?.audience,
+      purpose: req.body?.purpose,
+      expiresInDays: req.body?.expiresInDays,
+      consentAccepted: req.body?.consentAccepted === true,
+    });
+    if (!preview) {
+      return res.status(404).json({ ok: false, error: "TENANT_TRUST_EXPORT_UNAVAILABLE" });
+    }
+    return res.json({ ok: true, data: preview });
+  } catch (err: any) {
+    console.error("[tenant/trust-exports:preview] failed", {
+      tenantId,
+      message: err?.message || "failed",
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_TRUST_EXPORT_PREVIEW_FAILED" });
+  }
+});
+
+router.post("/trust-exports", requireTenantWorkspaceIdentity, async (req: any, res) => {
+  const context = await resolveWorkspaceContextOrRespond(req, res);
+  if (!context) return;
+
+  const tenantId = String(req.user?.tenantId || context.tenantId || "").trim();
+  if (!tenantId) {
+    return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+  }
+
+  try {
+    const prepared = await prepareTenantTrustExport({
+      tenantId,
+      audience: req.body?.audience,
+      purpose: req.body?.purpose,
+      expiresInDays: req.body?.expiresInDays,
+      consentAccepted: req.body?.consentAccepted === true,
+    });
+    if (!prepared) {
+      return res.status(404).json({ ok: false, error: "TENANT_TRUST_EXPORT_UNAVAILABLE" });
+    }
+    return res.json({ ok: true, data: prepared });
+  } catch (err: any) {
+    if (err?.message === "tenant_trust_export_consent_required") {
+      return res.status(400).json({ ok: false, error: "TENANT_TRUST_EXPORT_CONSENT_REQUIRED" });
+    }
+    console.error("[tenant/trust-exports:prepare] failed", {
+      tenantId,
+      message: err?.message || "failed",
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_TRUST_EXPORT_PREPARE_FAILED" });
+  }
+});
+
+router.post("/trust-exports/:id/revoke", requireTenantWorkspaceIdentity, async (req: any, res) => {
+  const context = await resolveWorkspaceContextOrRespond(req, res);
+  if (!context) return;
+
+  const tenantId = String(req.user?.tenantId || context.tenantId || "").trim();
+  const exportId = String(req.params?.id || "").trim();
+  if (!tenantId || !exportId) {
+    return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+  }
+
+  try {
+    const revoked = await revokeTenantTrustExport({ tenantId, exportId });
+    if (!revoked) {
+      return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+    }
+    return res.json({ ok: true, data: revoked });
+  } catch (err: any) {
+    console.error("[tenant/trust-exports:revoke] failed", {
+      tenantId,
+      exportId,
+      message: err?.message || "failed",
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_TRUST_EXPORT_REVOKE_FAILED" });
+  }
 });
 
 router.post("/institutional/handoffs", requireTenantWorkspaceIdentity, async (req: any, res: any) => {

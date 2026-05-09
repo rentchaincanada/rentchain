@@ -28,6 +28,15 @@ import {
   type TenantSharePackageLink,
 } from "../../api/tenantSharePackages";
 import {
+  listTenantTrustExports,
+  prepareTenantTrustExport,
+  previewTenantTrustExport,
+  revokeTenantTrustExport,
+  type TenantTrustExportAudience,
+  type TenantTrustExportPreview,
+  type TenantTrustExportRecord,
+} from "../../api/tenantTrustExports";
+import {
   TenantEmptyState,
   TenantErrorState,
   TenantInfoCard,
@@ -121,6 +130,52 @@ function prettyComplianceCheckStatus(value: "pass" | "warning" | "missing" | nul
     default:
       return "Missing";
   }
+}
+
+function trustExportPurposeForAudience(audience: TenantTrustExportAudience) {
+  if (audience === "insurer") return "insurance_review" as const;
+  if (audience === "lender") return "lender_review" as const;
+  if (audience === "institutional_landlord") return "institutional_landlord_review" as const;
+  if (audience === "auditor") return "auditor_review" as const;
+  return "tenant_controlled_portability" as const;
+}
+
+function prettyTrustExportAudience(value: TenantTrustExportAudience | null | undefined) {
+  switch (value) {
+    case "insurer":
+      return "Insurer review";
+    case "lender":
+      return "Lender review";
+    case "institutional_landlord":
+      return "Institutional landlord review";
+    case "auditor":
+      return "Auditor review";
+    case "tenant_portability":
+    default:
+      return "Tenant portability";
+  }
+}
+
+function prettyTrustExportLifecycle(value: string | null | undefined) {
+  switch (value) {
+    case "prepared":
+      return "Prepared";
+    case "revoked":
+      return "Revoked";
+    case "expired":
+      return "Expired";
+    case "blocked":
+      return "Blocked";
+    case "consent_required":
+      return "Consent required";
+    case "preview":
+    default:
+      return "Preview";
+  }
+}
+
+function prettyPolicyReason(value: string) {
+  return value.replace(/_/g, " ");
 }
 
 function prettyInstitutionType(
@@ -266,6 +321,12 @@ export default function TenantWorkspacePage() {
   const [communications, setCommunications] = React.useState<Awaited<ReturnType<typeof getTenantCommunicationsWorkspace>> | null>(null);
   const [screenings, setScreenings] = React.useState<TenantScreeningRequest[]>([]);
   const [sharePackages, setSharePackages] = React.useState<TenantSharePackageLink[]>([]);
+  const [trustExports, setTrustExports] = React.useState<TenantTrustExportRecord[]>([]);
+  const [trustExportPreview, setTrustExportPreview] = React.useState<TenantTrustExportPreview | null>(null);
+  const [trustExportAudience, setTrustExportAudience] = React.useState<TenantTrustExportAudience>("tenant_portability");
+  const [trustExportConsentAccepted, setTrustExportConsentAccepted] = React.useState(false);
+  const [trustExportBusy, setTrustExportBusy] = React.useState(false);
+  const [trustExportError, setTrustExportError] = React.useState<string | null>(null);
   const [freshShareUrl, setFreshShareUrl] = React.useState<string | null>(null);
   const [shareBusy, setShareBusy] = React.useState(false);
   const [shareError, setShareError] = React.useState<string | null>(null);
@@ -301,6 +362,7 @@ export default function TenantWorkspacePage() {
         communicationsResult,
         screeningsResult,
         sharePackagesResult,
+        trustExportsResult,
         handoffDraftsResult,
       ] = await Promise.allSettled([
         getTenantWorkspace(),
@@ -311,6 +373,7 @@ export default function TenantWorkspacePage() {
         getTenantCommunicationsWorkspace(),
         listTenantScreenings(),
         listTenantSharePackages(),
+        listTenantTrustExports(),
         listInstitutionalHandoffDrafts(),
       ]);
 
@@ -330,6 +393,7 @@ export default function TenantWorkspacePage() {
           : [],
       );
       setSharePackages(sharePackagesResult.status === "fulfilled" ? sharePackagesResult.value : []);
+      setTrustExports(trustExportsResult.status === "fulfilled" ? trustExportsResult.value : []);
       setHandoffDrafts(handoffDraftsResult.status === "fulfilled" ? handoffDraftsResult.value : []);
     } catch (err: any) {
       setData(null);
@@ -340,6 +404,7 @@ export default function TenantWorkspacePage() {
       setCommunications(null);
       setScreenings([]);
       setSharePackages([]);
+      setTrustExports([]);
       setHandoffDrafts([]);
       setError(err?.payload?.error || err?.message || "Unable to load your tenant workspace.");
     } finally {
@@ -470,6 +535,79 @@ export default function TenantWorkspacePage() {
       setExportError("JSON download is unavailable in this browser right now.");
     }
   }, [institutionalPackage]);
+
+  const handlePreviewTrustExport = React.useCallback(async () => {
+    try {
+      setTrustExportBusy(true);
+      setTrustExportError(null);
+      const next = await previewTenantTrustExport({
+        audience: trustExportAudience,
+        purpose: trustExportPurposeForAudience(trustExportAudience),
+        expiresInDays: 14,
+        consentAccepted: trustExportConsentAccepted,
+      });
+      setTrustExportPreview(next);
+    } catch (err: any) {
+      setTrustExportError(err?.payload?.error || err?.message || "Unable to preview this trust export right now.");
+    } finally {
+      setTrustExportBusy(false);
+    }
+  }, [trustExportAudience, trustExportConsentAccepted]);
+
+  const handlePrepareTrustExport = React.useCallback(async () => {
+    try {
+      setTrustExportBusy(true);
+      setTrustExportError(null);
+      const prepared = await prepareTenantTrustExport({
+        audience: trustExportAudience,
+        purpose: trustExportPurposeForAudience(trustExportAudience),
+        expiresInDays: 14,
+        consentAccepted: trustExportConsentAccepted,
+      });
+      setTrustExportPreview(prepared);
+      setTrustExports((current) => [prepared, ...current.filter((entry) => entry.exportId !== prepared.exportId)]);
+    } catch (err: any) {
+      setTrustExportError(
+        err?.payload?.error === "TENANT_TRUST_EXPORT_CONSENT_REQUIRED"
+          ? "Confirm consent before preparing a trust export."
+          : err?.payload?.error || err?.message || "Unable to prepare this trust export right now."
+      );
+    } finally {
+      setTrustExportBusy(false);
+    }
+  }, [trustExportAudience, trustExportConsentAccepted]);
+
+  const handleRevokeTrustExport = React.useCallback(async (exportId: string) => {
+    try {
+      setTrustExportBusy(true);
+      setTrustExportError(null);
+      const revoked = await revokeTenantTrustExport(exportId);
+      setTrustExports((current) => current.map((entry) => (entry.exportId === exportId ? revoked : entry)));
+      setTrustExportPreview((current) => (current?.exportId === exportId ? revoked : current));
+    } catch (err: any) {
+      setTrustExportError(err?.payload?.error || err?.message || "Unable to revoke this trust export right now.");
+    } finally {
+      setTrustExportBusy(false);
+    }
+  }, []);
+
+  const handleDownloadTrustExportJson = React.useCallback((record: TenantTrustExportPreview | TenantTrustExportRecord) => {
+    try {
+      const blob = new Blob([JSON.stringify(record, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "rentchain-tenant-controlled-trust-export.json";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      setTrustExportError("Trust export JSON download is unavailable in this browser right now.");
+    }
+  }, []);
 
   const handleCreateInstitutionalHandoff = React.useCallback(async () => {
     try {
@@ -1306,6 +1444,167 @@ export default function TenantWorkspacePage() {
               ) : null}
             </div>
           ) : null}
+
+          <div
+            style={{
+              border: "1px solid rgba(15,23,42,0.08)",
+              borderRadius: 12,
+              padding: "12px 14px",
+              display: "grid",
+              gap: 10,
+            }}
+          >
+            <div style={{ fontWeight: 700, color: textTokens.primary }}>Tenant-controlled trust export</div>
+            <div style={{ color: textTokens.secondary, lineHeight: 1.6 }}>
+              Prepare a non-public, metadata-only trust export for tenant review. No data is sent automatically, no public profile is created, and support/internal metadata stays excluded.
+            </div>
+
+            <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
+              <label style={{ display: "grid", gap: 6 }}>
+                <span style={{ fontWeight: 600, color: textTokens.primary }}>Intended audience</span>
+                <select
+                  value={trustExportAudience}
+                  onChange={(event) => {
+                    setTrustExportAudience(event.target.value as TenantTrustExportAudience);
+                    setTrustExportPreview(null);
+                  }}
+                >
+                  <option value="tenant_portability">Tenant portability</option>
+                  <option value="insurer">Insurer review</option>
+                  <option value="lender">Lender review</option>
+                  <option value="institutional_landlord">Institutional landlord review</option>
+                  <option value="auditor">Auditor review</option>
+                </select>
+              </label>
+              <div style={{ color: textTokens.secondary, lineHeight: 1.6 }}>
+                Purpose: {prettyStatus(trustExportPurposeForAudience(trustExportAudience))}
+                <br />
+                Expires: 14 days after preparation
+              </div>
+            </div>
+
+            <label style={{ display: "flex", gap: 10, alignItems: "flex-start", color: textTokens.secondary, lineHeight: 1.5 }}>
+              <input
+                type="checkbox"
+                checked={trustExportConsentAccepted}
+                onChange={(event) => {
+                  setTrustExportConsentAccepted(event.target.checked);
+                  setTrustExportPreview(null);
+                }}
+                style={{ marginTop: 4 }}
+              />
+              <span>
+                I consent to preparing a metadata-only trust export for {prettyTrustExportAudience(trustExportAudience)}. I understand this does not prove eligibility, does not send data automatically, and revocation cannot recall files already downloaded or shared outside RentChain.
+              </span>
+            </label>
+
+            <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
+              <button type="button" onClick={() => void handlePreviewTrustExport()} disabled={trustExportBusy}>
+                {trustExportBusy ? "Checking..." : "Preview trust export"}
+              </button>
+              <button
+                type="button"
+                onClick={() => void handlePrepareTrustExport()}
+                disabled={trustExportBusy || !trustExportConsentAccepted}
+              >
+                Prepare export
+              </button>
+              {trustExportPreview?.package?.status === "export_ready" ? (
+                <button type="button" onClick={() => handleDownloadTrustExportJson(trustExportPreview)}>
+                  Download preview JSON
+                </button>
+              ) : null}
+            </div>
+
+            {trustExportError ? <div style={{ color: "#b91c1c" }}>{trustExportError}</div> : null}
+
+            {trustExportPreview ? (
+              <div style={{ border: "1px solid rgba(15,23,42,0.08)", borderRadius: 12, padding: "12px 14px", display: "grid", gap: 10 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: spacing.sm, flexWrap: "wrap" }}>
+                  <div style={{ fontWeight: 800, color: textTokens.primary }}>Trust export preview</div>
+                  <div style={{ color: textTokens.secondary }}>{prettyTrustExportLifecycle(trustExportPreview.lifecycle)}</div>
+                </div>
+                <TenantKeyValueGrid
+                  rows={[
+                    { label: "Audience", value: prettyTrustExportAudience(trustExportPreview.audience) },
+                    { label: "Consent", value: trustExportPreview.consent.granted ? "Granted for this package" : "Required" },
+                    { label: "Policy status", value: prettyStatus(trustExportPreview.package.status) },
+                    { label: "Included claims", value: String(trustExportPreview.includedClaims.length) },
+                    { label: "Blocked claims", value: String(trustExportPreview.excludedClaims.length) },
+                    { label: "Public access", value: trustExportPreview.publicAccessEnabled ? "Enabled" : "Disabled" },
+                    { label: "External submission", value: trustExportPreview.externalSubmissionEnabled ? "Enabled" : "Disabled" },
+                    { label: "Expires", value: formatDate(trustExportPreview.expiresAt) },
+                  ]}
+                />
+
+                <div style={{ display: "grid", gap: 6 }}>
+                  <div style={{ fontWeight: 700, color: textTokens.primary }}>Included metadata</div>
+                  {trustExportPreview.includedClaims.length ? (
+                    trustExportPreview.includedClaims.map((claim) => (
+                      <div key={claim.attestationId} style={{ color: textTokens.secondary }}>
+                        {claim.claimLabel} - {prettyStatus(claim.claimCategory)}
+                      </div>
+                    ))
+                  ) : (
+                    <div style={{ color: textTokens.secondary }}>No claims are exportable until consent and policy checks pass.</div>
+                  )}
+                </div>
+
+                {trustExportPreview.excludedClaims.length ? (
+                  <div style={{ display: "grid", gap: 6 }}>
+                    <div style={{ fontWeight: 700, color: textTokens.primary }}>Excluded metadata</div>
+                    {trustExportPreview.excludedClaims.map((claim) => (
+                      <div key={claim.attestationId} style={{ color: textTokens.secondary }}>
+                        {claim.claimLabel}: {claim.reasons.map(prettyPolicyReason).join(", ")}
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+
+                <div style={{ display: "grid", gap: 6 }}>
+                  <div style={{ fontWeight: 700, color: textTokens.primary }}>Always excluded</div>
+                  {trustExportPreview.redactions.map((item) => (
+                    <div key={item} style={{ color: textTokens.secondary }}>
+                      {item}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            <div style={{ display: "grid", gap: 8 }}>
+              <div style={{ fontWeight: 700, color: textTokens.primary }}>Prepared trust exports</div>
+              {trustExports.length ? (
+                trustExports.map((entry) => (
+                  <div key={entry.exportId} style={{ border: "1px solid rgba(15,23,42,0.08)", borderRadius: 12, padding: "12px 14px", display: "grid", gap: 8 }}>
+                    <TenantKeyValueGrid
+                      rows={[
+                        { label: "Audience", value: prettyTrustExportAudience(entry.audience) },
+                        { label: "Status", value: prettyTrustExportLifecycle(entry.lifecycle) },
+                        { label: "Prepared", value: formatDate(entry.createdAt) },
+                        { label: "Expires", value: formatDate(entry.expiresAt) },
+                        { label: "Claims", value: String(entry.includedClaims.length) },
+                      ]}
+                    />
+                    <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
+                      <button type="button" onClick={() => handleDownloadTrustExportJson(entry)}>
+                        Download JSON
+                      </button>
+                      {entry.lifecycle === "prepared" ? (
+                        <button type="button" onClick={() => void handleRevokeTrustExport(entry.exportId)} disabled={trustExportBusy}>
+                          Revoke export
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div style={{ color: textTokens.secondary }}>
+                  Prepared trust exports will appear here. They remain tenant-controlled and non-public.
+                </div>
+              )}
+            </div>
+          </div>
 
           <div
             style={{
