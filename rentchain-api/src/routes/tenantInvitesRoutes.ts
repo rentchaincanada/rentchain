@@ -7,7 +7,7 @@ import { sendEmail } from "../services/emailService";
 import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
 import { requireCapability } from "../services/capabilityGuard";
 import {
-  createTenancyInvite,
+  createReplacementTenancyInvite,
   listTenancyInvitesForLandlord,
   redeemTenancyInvite,
 } from "../services/tenantPortal/tenantInviteService";
@@ -73,7 +73,7 @@ router.post("/", requireAuth, requireLandlordOrAdmin, rateLimitTenantInvitesUser
       rcPropId = null;
     }
 
-    const created = await createTenancyInvite({
+    const created = await createReplacementTenancyInvite({
       landlordId,
       rcPropId,
       propertyId: String(propertyId),
@@ -95,6 +95,7 @@ router.post("/", requireAuth, requireLandlordOrAdmin, rateLimitTenantInvitesUser
         inviteUrl,
         expiresAt: created.invite.expiresAt,
         invite: created.invite,
+        replacedInviteId: created.replacedInviteId,
         emailed: false,
         emailError: "EMAIL_NOT_CONFIGURED",
       });
@@ -136,6 +137,7 @@ router.post("/", requireAuth, requireLandlordOrAdmin, rateLimitTenantInvitesUser
       inviteUrl,
       expiresAt: created.invite.expiresAt,
       invite: created.invite,
+      replacedInviteId: created.replacedInviteId,
       emailed,
       emailError,
     });

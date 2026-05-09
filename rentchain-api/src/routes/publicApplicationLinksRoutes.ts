@@ -2,6 +2,8 @@ import { Router } from "express";
 import { createHash } from "crypto";
 import { db } from "../config/firebase";
 import { rateLimitPublicApply } from "../middleware/rateLimit";
+import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
+import { sendEmail } from "../services/emailService";
 
 const router = Router();
 
@@ -103,6 +105,94 @@ function sanitizePartialProgressInput(input: any) {
       viewingChoice,
     },
   };
+}
+
+function buildContextLabel(propertyName?: string | null, unitLabel?: string | null) {
+  const property = String(propertyName || "").trim();
+  const unit = String(unitLabel || "").trim();
+  const normalizedUnit = /^unit\s+/i.test(unit) ? unit : unit ? `Unit ${unit}` : "";
+  if (property && normalizedUnit) return `${property}, ${normalizedUnit}`;
+  if (property) return property;
+  if (normalizedUnit) return normalizedUnit;
+  return "your property";
+}
+
+async function loadApplicationContextLabel(link: any) {
+  let propertyName: string | null = null;
+  let unitLabel: string | null = null;
+
+  if (link?.propertyId) {
+    try {
+      const propSnap = await db.collection("properties").doc(String(link.propertyId)).get();
+      if (propSnap.exists) {
+        const data = propSnap.data() as any;
+        propertyName = data?.name || data?.addressLine1 || data?.address || null;
+      }
+    } catch {
+      propertyName = null;
+    }
+  }
+
+  if (link?.unitId) {
+    try {
+      const unitSnap = await db.collection("units").doc(String(link.unitId)).get();
+      if (unitSnap.exists) {
+        const data = unitSnap.data() as any;
+        unitLabel = data?.unitNumber || data?.name || data?.label || null;
+      }
+    } catch {
+      unitLabel = null;
+    }
+  }
+
+  return buildContextLabel(propertyName, unitLabel);
+}
+
+async function notifyLandlordApplicationSubmitted(params: {
+  landlordId?: string | null;
+  applicationId: string;
+  applicantName: string;
+  propertyLabel: string;
+}) {
+  const landlordId = String(params.landlordId || "").trim();
+  if (!landlordId) return { emailed: false, error: "LANDLORD_MISSING" };
+
+  const from = String(process.env.EMAIL_FROM || process.env.FROM_EMAIL || "").trim();
+  if (!from) return { emailed: false, error: "EMAIL_NOT_CONFIGURED" };
+
+  let landlordEmail = "";
+  try {
+    const landlordSnap = await db.collection("landlords").doc(landlordId).get();
+    const landlord = landlordSnap.exists ? (landlordSnap.data() as any) : null;
+    landlordEmail = String(landlord?.email || "").trim();
+  } catch {
+    landlordEmail = "";
+  }
+  if (!landlordEmail) return { emailed: false, error: "LANDLORD_EMAIL_MISSING" };
+
+  const baseUrl = String(process.env.PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "");
+  const applicationUrl = `${baseUrl}/applications?applicationId=${encodeURIComponent(params.applicationId)}`;
+  await sendEmail({
+    to: landlordEmail,
+    from,
+    subject: `Application completed — ${params.applicantName}`,
+    text: buildEmailText({
+      intro: `${params.applicantName} completed a rental application for ${params.propertyLabel}.`,
+      bullets: ["Open the Applications dashboard to review the submission."],
+      ctaText: "Review application",
+      ctaUrl: applicationUrl,
+      footerNote: "This notification was generated after the applicant submitted the application.",
+    }),
+    html: buildEmailHtml({
+      title: "Application completed",
+      intro: `${params.applicantName} completed a rental application for ${params.propertyLabel}.`,
+      bullets: ["Open the Applications dashboard to review the submission."],
+      ctaText: "Review application",
+      ctaUrl: applicationUrl,
+      footerNote: "This notification was generated after the applicant submitted the application.",
+    }),
+  });
+  return { emailed: true, error: null };
 }
 
 function normalizeStoredPartialProgress(input: any): StoredPartialProgress {
@@ -492,6 +582,22 @@ router.post("/rental-applications", rateLimitPublicApply, async (req: any, res) 
     };
 
     await appRef.set(payload, { merge: true });
+    let landlordNotification: { emailed: boolean; error: string | null } = { emailed: false, error: null };
+    try {
+      landlordNotification = await notifyLandlordApplicationSubmitted({
+        landlordId: link.landlordId || null,
+        applicationId,
+        applicantName: `${firstName} ${lastName}`.trim(),
+        propertyLabel: await loadApplicationContextLabel(link),
+      });
+    } catch (err: any) {
+      landlordNotification = { emailed: false, error: String(err?.message || "SEND_FAILED") };
+      console.error("[public applications] landlord notification failed", {
+        applicationId,
+        landlordId: link.landlordId || null,
+        error: landlordNotification.error,
+      });
+    }
     await db.collection("applicationLinks").doc(link.id).set(
       {
         partialProgress: buildPartialProgressPatch(link.partialProgress, {
@@ -510,7 +616,7 @@ router.post("/rental-applications", rateLimitPublicApply, async (req: any, res) 
       { merge: true }
     );
 
-    return res.json({ ok: true, data: { applicationId } });
+    return res.json({ ok: true, data: { applicationId, landlordNotification } });
   } catch (err: any) {
     console.error("[public applications] create failed", err?.message || err);
     return res.status(500).json({ ok: false, error: "Failed to submit application" });

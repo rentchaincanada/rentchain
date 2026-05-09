@@ -28,6 +28,10 @@ import { rateLimitAuth, rateLimitSimple } from "../middleware/rateLimit";
 import { requireAuth } from "../middleware/requireAuth";
 import { buildCanonicalSessionUserFromClaims } from "../services/sessionUserService";
 import { sendEmail, sendLandlordWelcomeEmail } from "../services/emailService";
+import {
+  redeemTenancyInvite,
+  resolveTenancyInviteByToken,
+} from "../services/tenantPortal/tenantInviteService";
 
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET || "dev-secret";
@@ -247,6 +251,50 @@ async function resolveOnboardToken(token: string, sourceHint = ""): Promise<Onbo
     }
 
     if (source === "tenant") {
+      const tenancyInvite = await resolveTenancyInviteByToken(tokenValue);
+      if (tenancyInvite) {
+        const expired = Boolean(tenancyInvite.expiresAt && now >= tenancyInvite.expiresAt);
+        const accepted = tenancyInvite.status === "redeemed";
+        const unavailable = tenancyInvite.status === "superseded" || tenancyInvite.status === "expired";
+        const status = accepted ? "accepted" : expired || unavailable ? "expired" : "valid";
+        return {
+          ok: status === "valid" || status === "accepted",
+          token: tokenValue,
+          inviteType: "tenant",
+          role: "tenant",
+          email: tenancyInvite.invitedEmail,
+          maskedEmail: tenancyInvite.invitedEmail ? maskEmail(tenancyInvite.invitedEmail) : null,
+          status,
+          requiresAuth: false,
+          requiresSignup: false,
+          requiresExistingAccount: false,
+          alreadyAccepted: status === "accepted",
+          workspaceId: tenancyInvite.landlordId || null,
+          propertyId: tenancyInvite.propertyId || null,
+          inviteId: tenancyInvite.id,
+          redirectTo: "/tenant",
+          suggestedAuthMethod: "password_or_magic",
+          copy:
+            status === "expired"
+              ? {
+                  title: "Invite expired",
+                  description: "This invite has expired or was replaced. Request a new invite to continue.",
+                  cta: "Request a new invite",
+                }
+              : status === "accepted"
+              ? {
+                  title: "Invite already accepted",
+                  description: "This tenant invite has already been accepted.",
+                  cta: "Continue",
+                }
+              : {
+                  title: "You’re invited to join RentChain",
+                  description: "Accept this invite to access your tenant portal.",
+                  cta: "Accept invite",
+                },
+        };
+      }
+
       const doc = await db.collection("tenantInvites").doc(tokenValue).get();
       if (doc.exists) {
         const item = doc.data() as any;
@@ -1071,6 +1119,129 @@ router.post("/onboard/accept", async (req: any, res) => {
           expectedEmail: resolved.email,
           maskedExpectedEmail: resolved.maskedEmail,
           message: "This invite belongs to a different exact email address.",
+        });
+      }
+
+      const tenancyInvite = await resolveTenancyInviteByToken(token);
+      if (tenancyInvite) {
+        const email = String(tenancyInvite.invitedEmail || "").trim().toLowerCase();
+        if (!email || !ONBOARD_EMAIL_RE.test(email)) {
+          return res.status(400).json({ ok: false, code: "invite_invalid", message: "Invite invalid." });
+        }
+        const requestEmail = String(requestUser?.email || "").trim().toLowerCase();
+        if (requestEmail && email !== requestEmail) {
+          return res.status(409).json({
+            ok: false,
+            code: "wrong_account",
+            expectedEmail: email,
+            maskedExpectedEmail: maskEmail(email),
+            message: "This invite belongs to a different exact email address.",
+          });
+        }
+
+        const tenantId =
+          String(tenancyInvite.redeemedByUid || "").trim() ||
+          crypto
+            .createHash("sha256")
+            .update(`${tenancyInvite.landlordId}:${email}`.toLowerCase())
+            .digest("hex")
+            .slice(0, 24);
+
+        if (tenancyInvite.status === "redeemed") {
+          const tenantToken = signTenantJwt({
+            sub: tenantId,
+            role: "tenant",
+            tenantId,
+            landlordId: tenancyInvite.landlordId,
+            email,
+            propertyId: tenancyInvite.propertyId || null,
+            unitId: tenancyInvite.unitId || null,
+            leaseId: tenancyInvite.leaseId || null,
+          });
+          return res.json({
+            ok: true,
+            accepted: true,
+            role: "tenant",
+            redirectTo: "/tenant",
+            workspaceId: tenancyInvite.landlordId || null,
+            propertyId: tenancyInvite.propertyId || null,
+            tenantToken,
+            message: "Invite already accepted.",
+          });
+        }
+
+        const redeemed = await redeemTenancyInvite({
+          token,
+          redeemedByUid: String(requestUser?.id || tenantId).trim() || tenantId,
+          redeemedByEmail: requestEmail || email,
+        });
+        if (!redeemed.ok) {
+          const status =
+            redeemed.error === "invite_not_found" ? 404 : redeemed.error === "invite_used" ? 409 : 410;
+          const code =
+            redeemed.error === "invite_expired"
+              ? "expired"
+              : redeemed.error === "invite_used"
+              ? "accepted"
+              : "invalid";
+          return res.status(status).json({
+            ok: false,
+            code,
+            message:
+              redeemed.error === "invite_expired"
+                ? "Invite expired."
+                : redeemed.error === "invite_used"
+                ? "Invite already accepted."
+                : "Invite not found.",
+          });
+        }
+
+        await db.collection("tenants").doc(tenantId).set(
+          {
+            id: tenantId,
+            tenantId,
+            landlordId: tenancyInvite.landlordId,
+            email,
+            fullName: tenancyInvite.invitedName || null,
+            propertyId: tenancyInvite.propertyId || null,
+            unitId: tenancyInvite.unitId || null,
+            leaseId: tenancyInvite.leaseId || null,
+            applicationId: tenancyInvite.applicationId || null,
+            source: "invite",
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          },
+          { merge: true }
+        );
+
+        const tenantToken = signTenantJwt({
+          sub: tenantId,
+          role: "tenant",
+          tenantId,
+          landlordId: tenancyInvite.landlordId,
+          email,
+          propertyId: tenancyInvite.propertyId || null,
+          unitId: tenancyInvite.unitId || null,
+          leaseId: tenancyInvite.leaseId || null,
+        });
+        onboardLog("tenant_session_issued", {
+          token: tokenFingerprint(token),
+          inviteType: "tenant",
+          inviteStatus: "tenancy_invite_redeemed",
+          tenantId,
+          issuedRole: "tenant",
+          hasTenantToken: true,
+        });
+        onboardLog("accept_succeeded", { token: tokenFingerprint(token), inviteType: "tenant", inviteId: tenancyInvite.id });
+        return res.json({
+          ok: true,
+          accepted: true,
+          role: "tenant",
+          redirectTo: "/tenant",
+          workspaceId: tenancyInvite.landlordId || null,
+          propertyId: tenancyInvite.propertyId || null,
+          tenantToken,
+          message: "Invite accepted successfully.",
         });
       }
 

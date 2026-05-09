@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 type StoredDoc = { id: string; data: any };
 
-const { dbMock, resetDb, upsertDoc, sendEmailMock, buildEmailHtmlMock, buildEmailTextMock, recordRiskDecisionAuditMock } = vi.hoisted(() => {
+const { dbMock, resetDb, upsertDoc, sendEmailMock, buildEmailHtmlMock, buildEmailTextMock, recordRiskDecisionAuditMock, convertApplicationToTenantMock } = vi.hoisted(() => {
   const collections = new Map<string, Map<string, StoredDoc>>();
   let autoId = 0;
 
@@ -85,6 +85,12 @@ const { dbMock, resetDb, upsertDoc, sendEmailMock, buildEmailHtmlMock, buildEmai
       id: "audit-1",
       createdAt: "2026-04-01T00:00:00.000Z",
       ...payload,
+    })),
+    convertApplicationToTenantMock: vi.fn(async () => ({
+      tenantId: "tenant-1",
+      alreadyConverted: false,
+      inviteUrl: "https://www.rentchain.test/tenant/invite/token-1",
+      inviteEmailed: true,
     })),
   };
 });
@@ -247,6 +253,10 @@ vi.mock("../../services/riskAgent/riskDecisionAuditService", () => ({
   recordRiskDecisionAudit: recordRiskDecisionAuditMock,
 }));
 
+vi.mock("../../services/applicationConversionService", () => ({
+  convertApplicationToTenant: convertApplicationToTenantMock,
+}));
+
 async function invokeRouter(router: any, options: { method: string; url: string; body?: any; headers?: Record<string, string> }) {
   return await new Promise<{ status: number; body: any }>((resolve, reject) => {
     const req: any = {
@@ -302,6 +312,7 @@ describe("rentalApplications decision actions", () => {
     buildEmailHtmlMock.mockReturnValue("<p>email</p>");
     buildEmailTextMock.mockReset();
     buildEmailTextMock.mockReturnValue("email");
+    convertApplicationToTenantMock.mockClear();
     process.env.EMAIL_FROM = "noreply@rentchain.test";
     process.env.PUBLIC_APP_URL = "https://www.rentchain.test";
     upsertDoc("rentalApplications", "app-1", {
@@ -309,6 +320,8 @@ describe("rentalApplications decision actions", () => {
       landlordId: "landlord-1",
       propertyId: "prop-1",
       propertyName: "Harbour View",
+      unitId: "unit-1",
+      monthlyRent: 2200,
       status: "SUBMITTED",
       applicant: {
         firstName: "Jamie",
@@ -319,6 +332,11 @@ describe("rentalApplications decision actions", () => {
     upsertDoc("landlords", "landlord-1", {
       id: "landlord-1",
       email: "payments@example.com",
+    });
+    upsertDoc("units", "unit-1", {
+      id: "unit-1",
+      unitNumber: "4B",
+      monthlyRent: 2200,
     });
   });
 
@@ -351,7 +369,7 @@ describe("rentalApplications decision actions", () => {
     );
   });
 
-  it("approves the application and includes the configured landlord payment email", async () => {
+  it("approves the application, sends hardened approval email, and creates tenant invite", async () => {
     const router = await createRouter();
     const res = await invokeRouter(router, {
       method: "POST",
@@ -366,11 +384,38 @@ describe("rentalApplications decision actions", () => {
     expect(res.status).toBe(200);
     expect(res.body?.data?.status).toBe("APPROVED");
     expect(res.body?.action?.paymentEmail).toBe("payments@example.com");
+    expect(res.body?.action?.tenantInviteUrl).toContain("/tenant/invite/");
+    expect(res.body?.action?.tenantInviteEmailed).toBe(true);
     expect(sendEmailMock).toHaveBeenCalledWith(
       expect.objectContaining({
         to: "jamie@example.com",
         replyTo: "payments@example.com",
         subject: expect.stringMatching(/approved/i),
+      })
+    );
+    expect(buildEmailTextMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        intro: expect.stringContaining("Harbour View, Unit 4B"),
+      })
+    );
+    expect(buildEmailTextMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        intro: expect.stringContaining("$1,100"),
+        bullets: expect.arrayContaining([
+          expect.stringContaining("tenant onboarding invite"),
+        ]),
+      })
+    );
+    expect(buildEmailTextMock).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        intro: expect.stringContaining("prop-1"),
+      })
+    );
+    expect(convertApplicationToTenantMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        landlordId: "landlord-1",
+        applicationId: "app-1",
+        runScreening: false,
       })
     );
   });

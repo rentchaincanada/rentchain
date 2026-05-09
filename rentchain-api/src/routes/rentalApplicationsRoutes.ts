@@ -47,6 +47,7 @@ import { recordRiskDecisionAudit } from "../services/riskAgent/riskDecisionAudit
 import { rateLimitScreeningIp, rateLimitScreeningUser } from "../middleware/rateLimit";
 import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
 import { sendEmail } from "../services/emailService";
+import { convertApplicationToTenant } from "../services/applicationConversionService";
 import { recordScreeningPaymentInitiated } from "../services/screeningPaymentTransactionService";
 import {
   executeScreeningCheckout,
@@ -181,6 +182,107 @@ async function resolveLandlordContactEmail(landlordId: string, fallbackEmail?: s
   }
 }
 
+function centsFromValue(value: unknown): number | null {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  if (n > 10_000) return Math.round(n);
+  return Math.round(n * 100);
+}
+
+function formatCadAmount(cents: number | null): string | null {
+  if (!cents || cents <= 0) return null;
+  return new Intl.NumberFormat("en-CA", {
+    style: "currency",
+    currency: "CAD",
+    minimumFractionDigits: cents % 100 === 0 ? 0 : 2,
+  }).format(cents / 100);
+}
+
+function resolveApplicationDepositCents(application: any): number | null {
+  const direct =
+    centsFromValue(application?.holdingDepositCents) ||
+    centsFromValue(application?.depositCents) ||
+    centsFromValue(application?.requiredDepositCents) ||
+    centsFromValue(application?.holdingDepositAmountCents) ||
+    centsFromValue(application?.depositAmountCents);
+  if (direct) return direct;
+
+  const amount =
+    centsFromValue(application?.holdingDepositAmount) ||
+    centsFromValue(application?.depositAmount) ||
+    centsFromValue(application?.requiredDepositAmount);
+  if (amount) return amount;
+
+  const rent =
+    centsFromValue(application?.monthlyRent) ||
+    centsFromValue(application?.requestedRent) ||
+    centsFromValue(application?.rentAmount) ||
+    centsFromValue(application?.rent);
+  return rent ? Math.round(rent / 2) : null;
+}
+
+function buildPropertyUnitLabel(application: any): string {
+  const propertyName = String(
+    application?.propertyName ||
+      application?.property?.name ||
+      application?.propertyAddress ||
+      application?.address ||
+      ""
+  ).trim();
+  const unitLabel = String(
+    application?.unitLabel ||
+      application?.unitName ||
+      application?.unitNumber ||
+      application?.unitApplied ||
+      application?.unit ||
+      ""
+  ).trim();
+  const normalizedUnit = /^unit\s+/i.test(unitLabel) ? unitLabel : unitLabel ? `Unit ${unitLabel}` : "";
+  if (propertyName && normalizedUnit) return `${propertyName}, ${normalizedUnit}`;
+  if (propertyName) return propertyName;
+  if (normalizedUnit) return normalizedUnit;
+  return "the property";
+}
+
+async function hydrateApplicationDisplayContext(application: any) {
+  const next = { ...(application || {}) };
+  if (!next.propertyName && next.propertyId) {
+    try {
+      const propSnap = await db.collection("properties").doc(String(next.propertyId)).get();
+      if (propSnap.exists) {
+        const prop = propSnap.data() as any;
+        next.propertyName = prop?.name || prop?.addressLine1 || prop?.address || null;
+      }
+    } catch {
+      // best-effort display context only
+    }
+  }
+  const unitId = String(next.unitId || next.unitApplied || next.unit || "").trim();
+  if (!next.unitLabel && unitId) {
+    try {
+      const unitSnap = await db.collection("units").doc(unitId).get();
+      if (unitSnap.exists) {
+        const unit = unitSnap.data() as any;
+        next.unitLabel = unit?.unitNumber || unit?.name || unit?.label || unitId;
+      }
+    } catch {
+      next.unitLabel = next.unitLabel || unitId;
+    }
+  }
+  if (!next.monthlyRent && !next.requestedRent && unitId) {
+    try {
+      const unitSnap = await db.collection("units").doc(unitId).get();
+      if (unitSnap.exists) {
+        const unit = unitSnap.data() as any;
+        next.monthlyRent = unit?.monthlyRent || unit?.rent || unit?.marketRent || null;
+      }
+    } catch {
+      // best-effort display context only
+    }
+  }
+  return next;
+}
+
 async function sendRentalApplicationDecisionEmail(params: {
   action: (typeof APPLICATION_DECISION_ACTIONS)[number];
   application: any;
@@ -196,7 +298,7 @@ async function sendRentalApplicationDecisionEmail(params: {
   const applicantFirstName = String(params.application?.applicant?.firstName || "").trim() || "there";
   const applicantLastName = String(params.application?.applicant?.lastName || "").trim();
   const applicantName = `${applicantFirstName} ${applicantLastName}`.trim();
-  const propertyLabel = String(params.application?.propertyName || params.application?.propertyId || "the property").trim();
+  const propertyLabel = buildPropertyUnitLabel(params.application);
   const publicAppBaseUrl = getPublicAppBaseUrl();
   const ctaUrl = params.landlordEmail ? `mailto:${encodeURIComponent(params.landlordEmail)}` : `${publicAppBaseUrl}/login`;
   const replyTo = params.landlordEmail || undefined;
@@ -212,11 +314,16 @@ async function sendRentalApplicationDecisionEmail(params: {
     if (!paymentEmail) {
       throw new Error("LANDLORD_PAYMENT_EMAIL_MISSING");
     }
-    const intro = `Hi ${applicantFirstName}, your rental application for ${propertyLabel} has been approved. To hold the unit, please send an e-transfer for one half of one month's rent to ${paymentEmail}.`;
+    const depositAmount = formatCadAmount(resolveApplicationDepositCents(params.application));
+    const depositText = depositAmount
+      ? `The required holding deposit is ${depositAmount}.`
+      : "The landlord will confirm the required holding deposit amount.";
+    const intro = `Hi ${applicantFirstName}, your rental application for ${propertyLabel} has been approved. ${depositText}`;
     const bullets = [
-      `Send the e-transfer to ${paymentEmail}.`,
-      "Include your full name and the property or unit reference in the transfer note.",
-      "Reply to this email if you need to confirm the next leasing steps.",
+      `If your landlord has asked for an e-transfer, send it to ${paymentEmail}.`,
+      `Include your full name and ${propertyLabel} in the transfer note.`,
+      "You will receive a separate RentChain tenant onboarding invite for the next leasing step.",
+      "Reply to this email before sending funds if you need to confirm payment instructions.",
     ];
     await sendEmail({
       to: applicantEmail,
@@ -1431,11 +1538,21 @@ router.post("/rental-applications/:id/decision-action", async (req: any, res) =>
 
     const emailResult = await sendRentalApplicationDecisionEmail({
       action: action as (typeof APPLICATION_DECISION_ACTIONS)[number],
-      application: data,
+      application: await hydrateApplicationDisplayContext(data),
       landlordEmail,
       requestInfoItems: requestedItems,
       customMessage: note,
     });
+
+    let tenantInviteResult: Awaited<ReturnType<typeof convertApplicationToTenant>> | null = null;
+    if (action === "approve") {
+      tenantInviteResult = await convertApplicationToTenant({
+        landlordId: applicationLandlordId || fallbackLandlordId,
+        applicationId: id,
+        runScreening: false,
+        actorUserId: actorUserId || undefined,
+      });
+    }
 
     const now = Date.now();
     const nextStatus =
@@ -1451,6 +1568,8 @@ router.post("/rental-applications/:id/decision-action", async (req: any, res) =>
         actorRole: role,
         emailSentAt: now,
         paymentEmail: emailResult?.paymentEmail || null,
+        tenantInviteUrl: tenantInviteResult?.inviteUrl || null,
+        tenantInviteEmailed: tenantInviteResult?.inviteEmailed ?? null,
         note,
         requestedItems: action === "request_info" ? requestedItems : [],
       },
@@ -1487,6 +1606,8 @@ router.post("/rental-applications/:id/decision-action", async (req: any, res) =>
         status: nextStatus,
         emailSent: true,
         paymentEmail: emailResult?.paymentEmail || null,
+        tenantInviteUrl: tenantInviteResult?.inviteUrl || null,
+        tenantInviteEmailed: tenantInviteResult?.inviteEmailed ?? null,
       },
     });
   } catch (err: any) {
