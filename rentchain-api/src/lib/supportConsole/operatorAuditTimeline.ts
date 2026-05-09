@@ -6,6 +6,7 @@ type OperatorAuditTimelineSource =
   | "tenant_institution_access"
   | "recipient_review"
   | "recipient_session"
+  | "institution_review_session"
   | "tenant_trust_export"
   | "institutional_trust_export"
   | "operator_interaction";
@@ -14,6 +15,7 @@ type OperatorAuditTimelineCategory =
   | "access_grant"
   | "recipient_review"
   | "recipient_session"
+  | "institution_review_session"
   | "trust_export_lifecycle"
   | "institutional_export_lifecycle"
   | "operator_access"
@@ -165,6 +167,42 @@ function eventFromAccessTimeline(params: {
   };
 }
 
+function eventFromInstitutionReviewSession(params: {
+  grantId: string | null;
+  event: any;
+  session: any;
+}): OperatorAuditTimelineEvent | null {
+  const occurredAt = asString(params.event?.occurredAt, 120);
+  const eventType = asString(params.event?.eventType, 160);
+  if (!occurredAt || !eventType || params.event?.metadataOnly !== true) return null;
+  const reason = asString(params.event?.reason, 160);
+  return {
+    schemaVersion: "operator_audit_timeline_event.v1",
+    eventId: stableId(["institution-review-session", params.grantId, eventType, occurredAt, reason]),
+    source: "institution_review_session",
+    category: "institution_review_session",
+    eventType,
+    occurredAt,
+    actorType:
+      params.event.actorType === "tenant" || params.event.actorType === "recipient" || params.event.actorType === "system"
+        ? params.event.actorType
+        : "system",
+    status: asString(params.session?.lifecycle, 120),
+    outcome: asString(params.event?.lifecycleState, 120),
+    reason,
+    lifecycleState: asString(params.event?.lifecycleState, 120),
+    audience: asString(params.session?.audience, 120),
+    purpose: asString(params.session?.purpose, 120),
+    resource: {
+      type: "institution_review_session",
+      id: asString(params.session?.sessionId, 240),
+      redactedId: redactIdentifier(params.session?.sessionId),
+    },
+    metadataOnly: true,
+    visibility: visibility(),
+  };
+}
+
 function eventFromTrustExport(params: {
   grantId: string | null;
   audience: string | null;
@@ -296,6 +334,15 @@ export function buildOperatorAuditTimeline(input: {
     if (next) events.push(next);
   }
 
+  for (const event of input.diagnostic?.institutionReviewSession?.events || []) {
+    const next = eventFromInstitutionReviewSession({
+      grantId,
+      event,
+      session: input.diagnostic?.institutionReviewSession,
+    });
+    if (next) events.push(next);
+  }
+
   const packageEvent = eventFromInstitutionalPackage({
     grantId,
     audience,
@@ -327,7 +374,9 @@ export function buildOperatorAuditTimeline(input: {
     expirationCount: sorted.filter((event) => event.reason?.includes("expired") || event.eventType.includes("expired")).length,
     supersessionCount: sorted.filter((event) => event.reason?.includes("superseded") || event.eventType.includes("superseded")).length,
     policyDeniedCount: sorted.filter((event) => event.category === "policy_denial" || event.reason?.includes("policy")).length,
-    sessionEventCount: sorted.filter((event) => event.category === "recipient_session").length,
+    sessionEventCount: sorted.filter(
+      (event) => event.category === "recipient_session" || event.category === "institution_review_session"
+    ).length,
     operatorInteractionCount: sorted.filter((event) => event.category === "operator_access").length,
     firstEventAt: sorted.length ? sorted[sorted.length - 1].occurredAt : null,
     lastEventAt: sorted[0]?.occurredAt || null,

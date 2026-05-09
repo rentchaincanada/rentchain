@@ -1,5 +1,9 @@
 import crypto from "crypto";
 import { db } from "../../config/firebase";
+import {
+  deriveInstitutionReviewSession,
+  type InstitutionReviewSessionSummary,
+} from "../../lib/institutionReviewSessions";
 import type { InstitutionalTrustExportPackage } from "../../lib/institutionTrustExports";
 import type { PortableAttestationClaimCategory } from "../../lib/portableAttestations";
 import { redactIdentifier } from "../../lib/governance/platformGovernance";
@@ -222,6 +226,7 @@ export type RecipientTrustReviewSummary = {
   expiresAt: string | null;
   reviewedAt: string;
   session: RecipientReviewSessionSummary;
+  institutionReviewSession: InstitutionReviewSessionSummary;
   metadataOnly: true;
   policyGated: true;
   includedClaims: Array<{
@@ -353,6 +358,7 @@ export type SupportInstitutionAccessDiagnosticSummary = {
     blockedReasonCount: number;
     exportSummaryCount: number;
   };
+  institutionReviewSession: InstitutionReviewSessionSummary;
   audit: {
     totalEvents: number;
     openedReviewCount: number;
@@ -736,6 +742,23 @@ function publicGrant(record: TenantInstitutionAccessStoredGrant): TenantInstitut
 function supportDiagnosticFromGrant(record: TenantInstitutionAccessStoredGrant): SupportInstitutionAccessDiagnosticSummary {
   const { auditSummary, auditTimeline } = buildAccessAudit(record);
   const reasonCategories = Array.from(new Set(auditTimeline.map((event) => event.reason).filter(Boolean))).sort();
+  const latestSessionEvent = auditTimeline.find((event) => event.eventType.startsWith("recipient_review_session_"));
+  const latestOpenedEvent = auditTimeline.find((event) => event.eventType === "recipient_trust_review_opened");
+  const reviewSessionForSummary =
+    latestSessionEvent || latestOpenedEvent
+      ? {
+          sessionId: null,
+          lifecycle:
+            latestSessionEvent?.eventType === "recipient_review_session_expired"
+              ? "expired"
+              : latestSessionEvent?.eventType === "recipient_review_session_revoked"
+              ? "revoked"
+              : latestSessionEvent?.eventType === "recipient_review_session_blocked"
+              ? "blocked"
+              : "active",
+          lastValidatedAt: latestSessionEvent?.occurredAt || latestOpenedEvent?.occurredAt || record.updatedAt,
+        }
+      : null;
   const timeline = auditTimeline.map((event) => ({
     ...event,
     visibility: {
@@ -780,6 +803,11 @@ function supportDiagnosticFromGrant(record: TenantInstitutionAccessStoredGrant):
       blockedReasonCount: Array.isArray(record.package?.blockedReasons) ? record.package.blockedReasons.length : 0,
       exportSummaryCount: Array.isArray(record.package?.exportSummaries) ? record.package.exportSummaries.length : 0,
     },
+    institutionReviewSession: deriveInstitutionReviewSession({
+      accessGrant: record,
+      recipientReviewSession: reviewSessionForSummary,
+      generatedAt: record.updatedAt || record.generatedAt,
+    }),
     audit: {
       totalEvents: auditSummary.totalEvents,
       openedReviewCount: auditSummary.openedReviewCount,
@@ -948,6 +976,11 @@ function recipientSummaryFromGrant(
   reviewedAt: string,
   session: RecipientReviewSessionSummary
 ): RecipientTrustReviewSummary {
+  const institutionReviewSession = deriveInstitutionReviewSession({
+    accessGrant: grant,
+    recipientReviewSession: session,
+    generatedAt: reviewedAt,
+  });
   return {
     schemaVersion: "recipient_trust_review.v1",
     grantId: grant.grantId,
@@ -982,6 +1015,7 @@ function recipientSummaryFromGrant(
     expiresAt: grant.expiresAt,
     reviewedAt,
     session,
+    institutionReviewSession,
     metadataOnly: true,
     policyGated: true,
     includedClaims: (grant.includedClaims || []).map((claim) => ({
