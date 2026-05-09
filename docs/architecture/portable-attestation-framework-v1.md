@@ -66,7 +66,7 @@ Reverification-required summaries may still be projected so recipients can see t
 
 ## Export-Safe Summaries
 
-`derivePortableAttestationSummary` produces export-safe summaries only when all privacy and consent guards pass.
+`derivePortableAttestationSummary` produces export-safe summaries only when all privacy, consent, and policy guards pass. `buildPolicySafeExportSummary` is the reusable gate future adoption points should call before any share package, institution export, insurer workflow, lender workflow, subsidy workflow, or government workflow uses portable attestation metadata.
 
 Export summaries include:
 
@@ -95,6 +95,62 @@ Export summaries do not include:
 - internal governance notes
 - public access controls
 - external submission behavior
+
+## Attestation Policy Gate
+
+Attestation Policy Gate v1 adds deterministic deny-by-default policy evaluation through:
+
+- `AttestationPolicyContext`
+- `AttestationPolicyDecision`
+- `AttestationPolicyReason`
+- `evaluateAttestationPolicy`
+- `assertPortableAttestationShareable`
+- `buildPolicySafeExportSummary`
+
+The gate evaluates the requested operation, audience, purpose, sensitivity context, lifecycle state, consent state, retention class, evidence safety, source alignment, and internal-vs-portable metadata boundaries.
+
+Allowed export or sharing requires:
+
+- active attestation status
+- `export_ready` lifecycle
+- active claim-level consent
+- requested audience matching both the attestation and consent audience
+- requested purpose matching the consent purpose
+- claim category included in consent scope
+- portable retention class
+- non-public context
+- non-internal sensitivity context
+- no raw, provider, evidence, support, public-access, or external-submission payload flags
+- matching evidence and source systems
+
+Blocked decisions include machine-readable reasons such as:
+
+- `consent_missing`
+- `consent_expired`
+- `consent_revoked`
+- `consent_scope_insufficient`
+- `audience_missing`
+- `audience_mismatch`
+- `purpose_missing`
+- `purpose_mismatch`
+- `expired`
+- `revoked`
+- `superseded`
+- `blocked`
+- `reverification_required`
+- `retention_not_portable`
+- `sensitivity_blocked`
+- `unsupported_claim`
+- `raw_payload_blocked`
+- `support_metadata_blocked`
+- `public_exposure_blocked`
+- `external_submission_blocked`
+- `unsafe_evidence_summary`
+- `source_mismatch`
+- `share_allowed`
+- `export_allowed`
+
+`reverification_required` is intentionally blocked by policy even though the underlying framework can represent it. A stale claim may be visible internally for review, but it is not exportable until refreshed.
 
 ## Support/Admin Separation
 
@@ -143,6 +199,7 @@ This framework does not:
 - create reputation scores
 - automate institutional decisions
 - create ownership, identity, creditworthiness, subsidy, or approval conclusions
+- wire portable attestations into tenant share packages or institution exports
 
 ## Regression Risks
 
@@ -150,6 +207,7 @@ This framework does not:
 - Broad "verified" copy in other surfaces can still be overread unless future integrations use the portable schema language.
 - Institution-specific packet signing, revocation notification, and recipient policy matrices remain future work.
 - Property authority attestations must continue to carry non-ownership disclaimers.
+- The policy gate is currently a pure helper; future route/service adoption must still prove it is called before any external projection.
 
 ## Verification
 
@@ -163,3 +221,6 @@ Tests cover:
 - internal/support metadata separation
 - raw source/provider/reference exclusion from export summaries
 - source alignment with identity assurance and property trust foundations
+- deny-by-default policy evaluation
+- consent, audience, purpose, lifecycle, retention, sensitivity, raw payload, support metadata, public exposure, and source-alignment blocking
+- policy-safe export summary generation

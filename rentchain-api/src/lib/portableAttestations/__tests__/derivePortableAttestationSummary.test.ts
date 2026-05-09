@@ -68,6 +68,8 @@ describe("derivePortableAttestationSummary", () => {
   it("derives export-safe summaries only from consent-scoped metadata-only attestations", () => {
     const summary = derivePortableAttestationSummary({
       attestations: [attestation()],
+      requestedAudience: "insurer",
+      requestedPurpose: "insurance_review",
       generatedAt: "2026-05-08T00:00:00.000Z",
     });
 
@@ -106,15 +108,21 @@ describe("derivePortableAttestationSummary", () => {
           },
         }),
       ],
+      requestedAudience: "insurer",
+      requestedPurpose: "insurance_review",
       generatedAt: "2026-05-08T00:00:00.000Z",
     });
 
     expect(summary.exportReady).toBe(false);
     expect(summary.exportSummaries).toHaveLength(0);
     expect(summary.supportSummaries[0].status).toBe("pending_consent");
-    expect(summary.blockedReasons).toEqual([
-      "portable-attestation-1: active claim-level consent is required before portability.",
-    ]);
+    expect(summary.policyDecisions[0].reasons).toContain("consent_missing");
+    expect(summary.blockedReasons).toEqual(
+      expect.arrayContaining([
+        "portable-attestation-1: active claim-level consent is required before portability.",
+        "portable-attestation-1: consent_missing",
+      ])
+    );
   });
 
   it("blocks raw payload, public exposure, support metadata, and unsupported claim attempts", () => {
@@ -125,6 +133,8 @@ describe("derivePortableAttestationSummary", () => {
         attestation({ attestationId: "support-attempt", supportMetadataIncluded: true as false }),
         attestation({ attestationId: "unsupported-claim", unsupportedClaim: true as false }),
       ],
+      requestedAudience: "insurer",
+      requestedPurpose: "insurance_review",
       generatedAt: "2026-05-08T00:00:00.000Z",
     });
 
@@ -163,11 +173,16 @@ describe("derivePortableAttestationSummary", () => {
         attestation({ attestationId: "reverify", nextReverificationAt: "2026-05-01T00:00:00.000Z" }),
       ],
       generatedAt: "2026-05-08T00:00:00.000Z",
+      requestedAudience: "insurer",
+      requestedPurpose: "insurance_review",
     });
 
-    expect(summary.exportSummaries).toEqual([
-      expect.objectContaining({ attestationId: "reverify", status: "reverification_required" }),
-    ]);
+    expect(summary.exportSummaries).toHaveLength(0);
+    expect(summary.policyDecisions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ attestationId: "reverify", reasons: expect.arrayContaining(["reverification_required"]) }),
+      ])
+    );
     expect(summary.supportSummaries).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ attestationId: "revoked", lifecycleState: "revoked" }),
@@ -182,6 +197,8 @@ describe("derivePortableAttestationSummary", () => {
   it("keeps support visibility separate and redacted", () => {
     const summary = derivePortableAttestationSummary({
       attestations: [attestation()],
+      requestedAudience: "insurer",
+      requestedPurpose: "insurance_review",
       generatedAt: "2026-05-08T00:00:00.000Z",
     });
 
@@ -231,6 +248,8 @@ describe("derivePortableAttestationSummary", () => {
           nonAuthorityDisclaimers: ["Property authority metadata is not a legal ownership conclusion."],
         }),
       ],
+      requestedAudience: "insurer",
+      requestedPurpose: "insurance_review",
       generatedAt: "2026-05-08T00:00:00.000Z",
     });
 

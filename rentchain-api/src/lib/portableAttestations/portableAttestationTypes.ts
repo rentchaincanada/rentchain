@@ -240,6 +240,7 @@ export type PortableAttestationSummary = {
   metadataOnly: true;
   rawSensitivePayloadStored: false;
   blockedReasons: string[];
+  policyDecisions: AttestationPolicyDecision[];
   exportSummaries: PortableAttestationExportSummary[];
   supportSummaries: PortableAttestationSupportSummary[];
   redactions: string[];
@@ -248,4 +249,75 @@ export type PortableAttestationSummary = {
 export type DerivePortableAttestationSummaryInput = {
   attestations?: PortableAttestation[] | null;
   generatedAt?: unknown;
+  requestedAudience?: PortableAttestationAudience | null;
+  requestedPurpose?: PortableAttestationPurpose | null;
+  sensitivity?: PortableAttestationPolicySensitivity | null;
+  publicRequest?: boolean | null;
+};
+
+export type PortableAttestationPolicySensitivity =
+  | "internal"
+  | "confidential"
+  | "restricted"
+  | "public";
+
+export type AttestationPolicyOperation = "share" | "export";
+
+export type AttestationPolicyReason =
+  | "deny_by_default"
+  | "consent_missing"
+  | "consent_expired"
+  | "consent_revoked"
+  | "consent_scope_insufficient"
+  | "audience_missing"
+  | "audience_mismatch"
+  | "purpose_missing"
+  | "purpose_mismatch"
+  | "expired"
+  | "revoked"
+  | "superseded"
+  | "blocked"
+  | "reverification_required"
+  | "retention_not_portable"
+  | "sensitivity_blocked"
+  | "unsupported_claim"
+  | "raw_payload_blocked"
+  | "support_metadata_blocked"
+  | "public_exposure_blocked"
+  | "external_submission_blocked"
+  | "unsafe_evidence_summary"
+  | "source_mismatch"
+  | "share_allowed"
+  | "export_allowed";
+
+export type AttestationPolicyContext = {
+  operation: AttestationPolicyOperation;
+  requestedAudience?: PortableAttestationAudience | null;
+  requestedPurpose?: PortableAttestationPurpose | null;
+  generatedAt?: unknown;
+  sensitivity?: PortableAttestationPolicySensitivity | null;
+  publicRequest?: boolean | null;
+  allowedRetentionClasses?: PortableAttestationRetentionClass[] | null;
+};
+
+export type AttestationPolicyDecision = {
+  allowed: boolean;
+  shareable: boolean;
+  exportable: boolean;
+  operation: AttestationPolicyOperation;
+  attestationId: string;
+  requestedAudience: PortableAttestationAudience | null;
+  requestedPurpose: PortableAttestationPurpose | null;
+  status: PortableAttestationStatus;
+  lifecycleState: PortableAttestationLifecycleState;
+  reasons: AttestationPolicyReason[];
+  generatedAt: string;
+  metadataOnly: true;
+  publicAccessEnabled: false;
+  externalSubmissionEnabled: false;
+};
+
+export type PolicySafeExportSummaryResult = {
+  decision: AttestationPolicyDecision;
+  exportSummary: PortableAttestationExportSummary | null;
 };

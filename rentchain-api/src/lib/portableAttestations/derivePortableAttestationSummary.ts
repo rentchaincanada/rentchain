@@ -1,8 +1,9 @@
 import { redactIdentifier } from "../governance/platformGovernance";
+import { buildPolicySafeExportSummary } from "./attestationPolicyGate";
 import type {
+  AttestationPolicyDecision,
   DerivePortableAttestationSummaryInput,
   PortableAttestation,
-  PortableAttestationExportSummary,
   PortableAttestationLifecycleState,
   PortableAttestationStatus,
   PortableAttestationSummary,
@@ -86,59 +87,6 @@ function lifecycleFromStatus(status: PortableAttestationStatus): PortableAttesta
   return "export_ready";
 }
 
-function isExportReady(status: PortableAttestationStatus) {
-  return status === "active" || status === "reverification_required";
-}
-
-function toExportSummary(
-  attestation: PortableAttestation,
-  status: PortableAttestationStatus
-): PortableAttestationExportSummary | null {
-  if (!isExportReady(status)) return null;
-  const consentId = attestation.consentScope.consentId;
-  const grantedAt = attestation.consentScope.grantedAt;
-  if (!consentId || !grantedAt) return null;
-
-  return {
-    attestationId: attestation.attestationId,
-    schemaVersion: "portable_attestation.v1",
-    attestationType: attestation.attestationType,
-    subjectType: attestation.subjectType,
-    subjectId: attestation.subjectId,
-    claimCategory: attestation.claimCategory,
-    claimLabel: attestation.claimLabel,
-    claimDescription: attestation.claimDescription,
-    status,
-    lifecycleState: lifecycleFromStatus(status),
-    issuerCategory: attestation.issuerCategory,
-    audience: attestation.audience,
-    permittedPurpose: attestation.consentScope.purpose,
-    consentReferenceId: consentId,
-    consentGrantedAt: grantedAt,
-    consentExpiresAt: attestation.consentScope.expiresAt,
-    retentionClass: attestation.retentionClass,
-    evidenceCategory: attestation.evidenceSummary.evidenceCategory,
-    sourceSystem: attestation.evidenceSummary.sourceSystem,
-    sourceCategory: attestation.evidenceSummary.sourceCategory,
-    confidence: attestation.confidence,
-    issuedAt: attestation.issuedAt,
-    effectiveAt: attestation.effectiveAt,
-    expiresAt: attestation.expiresAt,
-    revokedAt: attestation.revokedAt,
-    supersededAt: attestation.supersededAt,
-    nextReverificationAt: attestation.nextReverificationAt,
-    jurisdiction: attestation.jurisdiction,
-    redactionProfile: attestation.redactionProfile,
-    metadataOnly: true,
-    rawEvidenceIncluded: false,
-    rawProviderPayloadIncluded: false,
-    supportMetadataIncluded: false,
-    publicAccessEnabled: false,
-    externalSubmissionEnabled: false,
-    nonAuthorityDisclaimers: attestation.nonAuthorityDisclaimers,
-  };
-}
-
 function toSupportSummary(
   attestation: PortableAttestation,
   status: PortableAttestationStatus
@@ -180,12 +128,19 @@ function blockedReason(attestation: PortableAttestation, status: PortableAttesta
   return null;
 }
 
+function policyBlockedReasons(decision: AttestationPolicyDecision) {
+  return decision.allowed
+    ? []
+    : decision.reasons.map((reason) => `${decision.attestationId}: ${reason}`);
+}
+
 export function derivePortableAttestationSummary(
   input: DerivePortableAttestationSummaryInput = {}
 ): PortableAttestationSummary {
   const generatedAt = nowIso(input.generatedAt);
   const attestations = Array.isArray(input.attestations) ? input.attestations : [];
-  const exportSummaries: PortableAttestationExportSummary[] = [];
+  const policyDecisions: AttestationPolicyDecision[] = [];
+  const exportSummaries: PortableAttestationSummary["exportSummaries"] = [];
   const supportSummaries: PortableAttestationSupportSummary[] = [];
   const blockedReasons: string[] = [];
 
@@ -194,10 +149,19 @@ export function derivePortableAttestationSummary(
     const reason = blockedReason(attestation, status, generatedAt);
     if (reason) blockedReasons.push(reason);
 
-    const exportSummary = toExportSummary(attestation, status);
+    const { decision, exportSummary } = buildPolicySafeExportSummary(attestation, {
+      operation: "export",
+      requestedAudience: input.requestedAudience || null,
+      requestedPurpose: input.requestedPurpose || null,
+      generatedAt,
+      sensitivity: input.sensitivity || "confidential",
+      publicRequest: input.publicRequest === true,
+    });
+    policyDecisions.push(decision);
+    blockedReasons.push(...policyBlockedReasons(decision));
     if (exportSummary) exportSummaries.push(exportSummary);
 
-    const supportSummary = toSupportSummary(attestation, status);
+    const supportSummary = toSupportSummary(attestation, decision.status);
     if (supportSummary) supportSummaries.push(supportSummary);
   }
 
@@ -210,7 +174,8 @@ export function derivePortableAttestationSummary(
     externalSubmissionEnabled: false,
     metadataOnly: true,
     rawSensitivePayloadStored: false,
-    blockedReasons,
+    blockedReasons: Array.from(new Set(blockedReasons)),
+    policyDecisions,
     exportSummaries,
     supportSummaries,
     redactions: REDACTIONS,
