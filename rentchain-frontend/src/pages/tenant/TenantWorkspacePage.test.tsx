@@ -65,6 +65,13 @@ const tenantSharePackagesApi = vi.hoisted(() => ({
   revokeTenantShareVerificationRequest: vi.fn(),
 }));
 
+const tenantTrustExportsApi = vi.hoisted(() => ({
+  listTenantTrustExports: vi.fn(),
+  previewTenantTrustExport: vi.fn(),
+  prepareTenantTrustExport: vi.fn(),
+  revokeTenantTrustExport: vi.fn(),
+}));
+
 vi.mock("../../api/tenantPortal", () => tenantPortalApi);
 vi.mock("../../api/tenantApplicationCompletion", () => tenantApplicationCompletionApi);
 vi.mock("../../api/tenantAccess", () => tenantAccessApi);
@@ -80,6 +87,7 @@ vi.mock("../../api/tenantScreeningApi", async () => {
   };
 });
 vi.mock("../../api/tenantSharePackages", () => tenantSharePackagesApi);
+vi.mock("../../api/tenantTrustExports", () => tenantTrustExportsApi);
 vi.mock("../../api/maintenanceWorkflowApi", async () => {
   const actual = await vi.importActual<any>("../../api/maintenanceWorkflowApi");
   return {
@@ -554,6 +562,130 @@ describe("tenant workspace frontend shell", () => {
       updatedAt: 1710000000000,
     });
     tenantSharePackagesApi.listTenantSharePackages.mockResolvedValue([]);
+    tenantTrustExportsApi.listTenantTrustExports.mockResolvedValue([]);
+    tenantTrustExportsApi.previewTenantTrustExport.mockResolvedValue({
+      exportId: null,
+      schemaVersion: "tenant_trust_export.v1",
+      audience: "tenant_portability",
+      purpose: "tenant_controlled_portability",
+      lifecycle: "consent_required",
+      consent: {
+        required: true,
+        granted: false,
+        consentId: null,
+        consentVersion: "tenant_trust_export_consent.v1",
+        grantedAt: null,
+        expiresAt: "2026-05-23T00:00:00.000Z",
+        revokedAt: null,
+        audience: "tenant_portability",
+        purpose: "tenant_controlled_portability",
+        claimCategories: ["tenant_portability"],
+        summary:
+          "Tenant consent is required before RentChain prepares this non-public, metadata-only trust export package.",
+      },
+      expiresAt: "2026-05-23T00:00:00.000Z",
+      revokedAt: null,
+      generatedAt: "2026-05-09T00:00:00.000Z",
+      metadataOnly: true,
+      publicAccessEnabled: false,
+      externalSubmissionEnabled: false,
+      policyGated: true,
+      package: {
+        exportId: "tenant_trust_export_preview",
+        status: "blocked",
+        lifecycle: "blocked",
+        blockedReasons: ["tenant_trust:tenant_portability: consent_missing"],
+        exportSummaries: [],
+        auditMetadata: {
+          exportId: "tenant_trust_export_preview",
+          consentScoped: true,
+          policyGated: true,
+          manualOnly: true,
+          publicAccessEnabled: false,
+          externalSubmissionEnabled: false,
+          portableAttestationCount: 1,
+          exportableAttestationCount: 0,
+          blockedAttestationCount: 1,
+        },
+      },
+      includedClaims: [],
+      excludedClaims: [
+        {
+          attestationId: "tenant_trust:tenant_portability",
+          claimCategory: "tenant_portability",
+          claimLabel: "tenant portability",
+          reasons: ["consent_missing"],
+        },
+      ],
+      redactions: ["Support/internal metadata is excluded."],
+      disclaimers: ["No institution receives this package automatically."],
+    });
+    tenantTrustExportsApi.prepareTenantTrustExport.mockResolvedValue({
+      exportId: "export-1",
+      schemaVersion: "tenant_trust_export.v1",
+      audience: "tenant_portability",
+      purpose: "tenant_controlled_portability",
+      lifecycle: "prepared",
+      consent: {
+        required: true,
+        granted: true,
+        consentId: "consent-1",
+        consentVersion: "tenant_trust_export_consent.v1",
+        grantedAt: "2026-05-09T00:00:00.000Z",
+        expiresAt: "2026-05-23T00:00:00.000Z",
+        revokedAt: null,
+        audience: "tenant_portability",
+        purpose: "tenant_controlled_portability",
+        claimCategories: ["tenant_portability"],
+        summary:
+          "Tenant consent is required before RentChain prepares this non-public, metadata-only trust export package.",
+      },
+      expiresAt: "2026-05-23T00:00:00.000Z",
+      revokedAt: null,
+      generatedAt: "2026-05-09T00:00:00.000Z",
+      createdAt: "2026-05-09T00:00:00.000Z",
+      updatedAt: "2026-05-09T00:00:00.000Z",
+      metadataOnly: true,
+      publicAccessEnabled: false,
+      externalSubmissionEnabled: false,
+      policyGated: true,
+      package: {
+        exportId: "export-1",
+        status: "export_ready",
+        lifecycle: "policy_evaluated",
+        blockedReasons: [],
+        exportSummaries: [],
+        auditMetadata: {
+          exportId: "export-1",
+          consentScoped: true,
+          policyGated: true,
+          manualOnly: true,
+          publicAccessEnabled: false,
+          externalSubmissionEnabled: false,
+          portableAttestationCount: 1,
+          exportableAttestationCount: 1,
+          blockedAttestationCount: 0,
+        },
+      },
+      includedClaims: [
+        {
+          attestationId: "tenant_trust:tenant_portability",
+          claimCategory: "tenant_portability",
+          claimLabel: "Tenant portability metadata available",
+          lifecycleState: "export_ready",
+          consentExpiresAt: "2026-05-23T00:00:00.000Z",
+        },
+      ],
+      excludedClaims: [],
+      redactions: ["Support/internal metadata is excluded."],
+      disclaimers: ["No institution receives this package automatically."],
+    });
+    tenantTrustExportsApi.revokeTenantTrustExport.mockImplementation(async (exportId: string) => ({
+      ...(await tenantTrustExportsApi.prepareTenantTrustExport()),
+      exportId,
+      lifecycle: "revoked",
+      revokedAt: "2026-05-10T00:00:00.000Z",
+    }));
     tenantSharePackagesApi.createTenantSharePackage.mockResolvedValue({
       id: "share-1",
       createdAt: 1710000000000,
@@ -1169,6 +1301,52 @@ describe("tenant workspace frontend shell", () => {
     expect(global.URL.createObjectURL).toHaveBeenCalledTimes(1);
   });
 
+  it("requires consent before preparing a tenant-controlled trust export", async () => {
+    render(
+      <MemoryRouter>
+        <TenantWorkspacePage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Tenant-controlled trust export/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Prepare export/i })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: /Preview trust export/i }));
+    await waitFor(() => {
+      expect(tenantTrustExportsApi.previewTenantTrustExport).toHaveBeenCalledWith(
+        expect.objectContaining({
+          audience: "tenant_portability",
+          consentAccepted: false,
+        })
+      );
+    });
+    expect(await screen.findByText(/No claims are exportable until consent and policy checks pass/i)).toBeInTheDocument();
+    expect(screen.getByText(/Support\/internal metadata is excluded/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText(/I consent to preparing a metadata-only trust export/i));
+    fireEvent.click(screen.getByRole("button", { name: /Prepare export/i }));
+
+    await waitFor(() => {
+      expect(tenantTrustExportsApi.prepareTenantTrustExport).toHaveBeenCalledWith(
+        expect.objectContaining({
+          audience: "tenant_portability",
+          consentAccepted: true,
+        })
+      );
+    });
+    expect(await screen.findByText(/Tenant portability metadata available/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Public access/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Disabled/i).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/verified tenant/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/reputation/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/send to insurer/i)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Revoke export/i }));
+    await waitFor(() => {
+      expect(tenantTrustExportsApi.revokeTenantTrustExport).toHaveBeenCalledWith("export-1");
+    });
+  });
+
   it("lets tenants prepare and void metadata-only institutional handoff drafts", async () => {
     render(
       <MemoryRouter>
@@ -1177,7 +1355,7 @@ describe("tenant workspace frontend shell", () => {
     );
 
     expect((await screen.findAllByText(/Institutional handoff drafts/i)).length).toBeGreaterThan(0);
-    expect(screen.getByText(/No data is sent automatically/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/No data is sent automatically/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Institution connections are not enabled yet/i)).toBeInTheDocument();
     expect(screen.getByText(/tenant-managed manual-release preparation only/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /send/i })).not.toBeInTheDocument();

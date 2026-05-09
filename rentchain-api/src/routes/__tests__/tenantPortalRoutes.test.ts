@@ -1331,6 +1331,145 @@ describe("tenantPortalRoutes foundation", () => {
     });
   });
 
+  it("prepares tenant-controlled trust exports only after scoped consent", async () => {
+    const router = (await import("../tenantPortalRoutes")).default;
+    const missingConsent = await invokeRouter(router, {
+      method: "POST",
+      url: "/trust-exports",
+      body: {
+        audience: "tenant_portability",
+        consentAccepted: false,
+      },
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+
+    expect(missingConsent.status).toBe(400);
+    expect(missingConsent.body?.error).toBe("TENANT_TRUST_EXPORT_CONSENT_REQUIRED");
+
+    const preview = await invokeRouter(router, {
+      method: "POST",
+      url: "/trust-exports/preview",
+      body: {
+        audience: "tenant_portability",
+        consentAccepted: false,
+      },
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+
+    expect(preview.status).toBe(200);
+    expect(preview.body?.data?.lifecycle).toBe("consent_required");
+    expect(preview.body?.data?.includedClaims).toEqual([]);
+    expect(preview.body?.data?.publicAccessEnabled).toBe(false);
+    expect(preview.body?.data?.externalSubmissionEnabled).toBe(false);
+
+    const prepared = await invokeRouter(router, {
+      method: "POST",
+      url: "/trust-exports",
+      body: {
+        audience: "tenant_portability",
+        consentAccepted: true,
+      },
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+
+    expect(prepared.status).toBe(200);
+    expect(prepared.body?.data?.lifecycle).toBe("prepared");
+    expect(prepared.body?.data?.consent?.granted).toBe(true);
+    expect(prepared.body?.data?.package?.status).toBe("export_ready");
+    expect(prepared.body?.data?.package?.auditMetadata).toEqual(
+      expect.objectContaining({
+        consentScoped: true,
+        policyGated: true,
+        manualOnly: true,
+        publicAccessEnabled: false,
+        externalSubmissionEnabled: false,
+      })
+    );
+    const payload = JSON.stringify(prepared.body?.data || {});
+    expect(payload).not.toContain("drawnDataUrl");
+    expect(payload).not.toContain("documentUrl");
+    expect(payload).not.toContain("paymentMethod");
+    expect(payload).not.toContain("supportMetadataIncluded\":true");
+    expect(payload).not.toContain("publicAccessEnabled\":true");
+    expect(payload).not.toContain("externalSubmissionEnabled\":true");
+    expect(payload).not.toContain("tenant-1");
+  });
+
+  it("lists and revokes tenant-controlled trust exports without widening public share packages", async () => {
+    const router = (await import("../tenantPortalRoutes")).default;
+    const prepared = await invokeRouter(router, {
+      method: "POST",
+      url: "/trust-exports",
+      body: {
+        audience: "insurer",
+        consentAccepted: true,
+      },
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+    const exportId = prepared.body?.data?.exportId;
+
+    const listed = await invokeRouter(router, {
+      method: "GET",
+      url: "/trust-exports",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+    expect(listed.status).toBe(200);
+    expect(listed.body?.data?.items?.[0]?.exportId).toBe(exportId);
+
+    const revoked = await invokeRouter(router, {
+      method: "POST",
+      url: `/trust-exports/${encodeURIComponent(exportId)}/revoke`,
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+
+    expect(revoked.status).toBe(200);
+    expect(revoked.body?.data?.lifecycle).toBe("revoked");
+    expect(revoked.body?.data?.consent?.granted).toBe(false);
+    expect(ensureCollection("tenantSharePackages").size).toBe(0);
+  });
+
   it("creates a tenant-owned metadata-only institutional handoff draft safely", async () => {
     const router = (await import("../tenantPortalRoutes")).default;
     const res = await invokeRouter(router, {
