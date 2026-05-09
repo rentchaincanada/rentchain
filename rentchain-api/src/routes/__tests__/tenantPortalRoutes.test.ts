@@ -1529,6 +1529,21 @@ describe("tenantPortalRoutes foundation", () => {
     expect(grant.body?.data?.package?.status).toBe("export_ready");
     expect(grant.body?.data?.recipientAccess?.accessUrl).toBe(null);
     expect(grant.body?.data?.recipientAccess?.accessTokenIssued).toBe(false);
+    expect(grant.body?.data?.auditSummary).toEqual(
+      expect.objectContaining({
+        schemaVersion: "recipient_access_audit.v1",
+        metadataOnly: true,
+        openedReviewCount: 0,
+        blockedReviewCount: 0,
+      })
+    );
+    expect(grant.body?.data?.auditTimeline?.[0]).toEqual(
+      expect.objectContaining({
+        eventType: "tenant_institution_access_granted",
+        reason: "access_granted",
+        metadataOnly: true,
+      })
+    );
     const payload = JSON.stringify(grant.body?.data || {});
     expect(payload).not.toContain("drawnDataUrl");
     expect(payload).not.toContain("documentUrl");
@@ -1537,6 +1552,8 @@ describe("tenantPortalRoutes foundation", () => {
     expect(payload).not.toContain("publicAccessEnabled\":true");
     expect(payload).not.toContain("externalSubmissionEnabled\":true");
     expect(payload).not.toContain("tenant-1");
+    expect(payload).not.toContain("supportMetadataIncluded\":true");
+    expect(payload).not.toContain("rawProviderPayloadIncluded\":true");
     expect(ensureCollection("tenantSharePackages").size).toBe(0);
   });
 

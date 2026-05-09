@@ -208,6 +208,18 @@ describe("recipientTrustReviewRoutes", () => {
     expect(payload).not.toContain("publicAccessEnabled\":true");
     expect(payload).not.toContain("downloadEnabled\":true");
     expect(payload).not.toContain("accessTokenIssued");
+
+    const stored = ensureCollection("tenantInstitutionAccessGrants").get("grant-1");
+    expect(stored.events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          eventType: "recipient_trust_review_opened",
+          metadataOnly: true,
+          status: "available",
+          reason: "review_available",
+        }),
+      ])
+    );
   });
 
   it("blocks revoked, expired, and policy-denied grants", async () => {

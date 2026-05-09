@@ -792,6 +792,84 @@ describe("tenant workspace frontend shell", () => {
           occurredAt: "2026-05-09T00:00:00.000Z",
           actorType: "tenant",
           metadataOnly: true,
+          outcome: "granted",
+          status: "granted",
+          reason: "access_granted",
+        },
+        {
+          eventType: "recipient_trust_review_opened",
+          occurredAt: "2026-05-09T01:00:00.000Z",
+          actorType: "recipient",
+          metadataOnly: true,
+          outcome: "opened",
+          status: "available",
+          reason: "review_available",
+        },
+        {
+          eventType: "recipient_trust_review_blocked",
+          occurredAt: "2026-05-09T02:00:00.000Z",
+          actorType: "recipient",
+          metadataOnly: true,
+          outcome: "blocked",
+          status: "recipient_mismatch",
+          reason: "recipient_email_mismatch",
+        },
+      ],
+      auditSummary: {
+        schemaVersion: "recipient_access_audit.v1",
+        metadataOnly: true,
+        totalEvents: 3,
+        openedReviewCount: 1,
+        blockedReviewCount: 1,
+        revokedAccessCount: 0,
+        expiredAccessCount: 0,
+        lastActivityAt: "2026-05-09T02:00:00.000Z",
+        lastOpenedAt: "2026-05-09T01:00:00.000Z",
+        lastBlockedAt: "2026-05-09T02:00:00.000Z",
+        lastOutcome: "blocked",
+        lastReason: "recipient_email_mismatch",
+        recipientIdentifier: {
+          email: "reviewer@example.com",
+          redactedEmail: "re***@example.com",
+          organizationName: "Example Insurance",
+        },
+        visibility: {
+          tenantVisible: true,
+          supportSafe: true,
+          trustPayloadIncluded: false,
+          supportMetadataIncluded: false,
+          rawProviderPayloadIncluded: false,
+          publicAccessEnabled: false,
+          downloadEnabled: false,
+        },
+      },
+      auditTimeline: [
+        {
+          eventType: "recipient_trust_review_blocked",
+          occurredAt: "2026-05-09T02:00:00.000Z",
+          actorType: "recipient",
+          outcome: "blocked",
+          status: "recipient_mismatch",
+          reason: "recipient_email_mismatch",
+          metadataOnly: true,
+        },
+        {
+          eventType: "recipient_trust_review_opened",
+          occurredAt: "2026-05-09T01:00:00.000Z",
+          actorType: "recipient",
+          outcome: "opened",
+          status: "available",
+          reason: "review_available",
+          metadataOnly: true,
+        },
+        {
+          eventType: "tenant_institution_access_granted",
+          occurredAt: "2026-05-09T00:00:00.000Z",
+          actorType: "tenant",
+          outcome: "granted",
+          status: "granted",
+          reason: "access_granted",
+          metadataOnly: true,
         },
       ],
     };
@@ -806,6 +884,13 @@ describe("tenant workspace frontend shell", () => {
         ...institutionAccessGrant.consent,
         granted: false,
         revokedAt: "2026-05-10T00:00:00.000Z",
+      },
+      auditSummary: {
+        ...institutionAccessGrant.auditSummary,
+        revokedAccessCount: 1,
+        lastActivityAt: "2026-05-10T00:00:00.000Z",
+        lastOutcome: "revoked",
+        lastReason: "access_revoked",
       },
     }));
     tenantSharePackagesApi.createTenantSharePackage.mockResolvedValue({
@@ -1512,6 +1597,16 @@ describe("tenant workspace frontend shell", () => {
     });
     expect(await screen.findByText(/Tenant portability metadata available/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Not created/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Access activity/i)).toBeInTheDocument();
+    expect(screen.getByText(/re\*\*\*@example.com/i)).toBeInTheDocument();
+    expect(screen.getByText(/Opened reviews/i)).toBeInTheDocument();
+    expect(screen.getByText(/Blocked attempts/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/recipient email mismatch/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Review opened/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Review blocked/i).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/policyDecisions/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/rawProviderPayload/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/supportMetadataIncluded/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/verified tenant/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/reputation/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /send to institution/i })).not.toBeInTheDocument();
