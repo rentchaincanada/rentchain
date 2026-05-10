@@ -21,6 +21,7 @@ const CONSENT_VERSION = "tenant_institution_access_consent.v1";
 const DEFAULT_EXPIRES_DAYS = 14;
 const MAX_EXPIRES_DAYS = 30;
 const RECIPIENT_REVIEW_SESSION_TTL_MS = 30 * 60 * 1000;
+const RECIPIENT_REVIEW_SESSION_STALE_MS = 15 * 60 * 1000;
 
 export type TenantInstitutionAccessAudience = "insurer" | "lender" | "institutional_landlord" | "auditor";
 
@@ -156,6 +157,8 @@ export type TenantInstitutionAccessGrantEvent = {
     | "recipient_review_session_revoked"
     | "recipient_review_session_blocked"
     | "recipient_review_session_reauthenticated"
+    | "institution_review_session_invalidated"
+    | "institution_review_session_replay_blocked"
     | "institution_review_invite_created"
     | "institution_review_invite_sent"
     | "institution_review_invite_opened"
@@ -237,7 +240,10 @@ export type RecipientTrustReviewAccessDecision = {
     | "policy_gated_summary_unavailable"
     | "recipient_session_expired"
     | "recipient_session_revoked"
-    | "recipient_session_reauthentication_required";
+    | "recipient_session_reauthentication_required"
+    | "recipient_session_stale"
+    | "recipient_session_replay_blocked"
+    | "trust_export_lifecycle_inactive";
   metadataOnly: true;
   publicAccessEnabled: false;
   downloadEnabled: false;
@@ -261,6 +267,14 @@ export type RecipientReviewSessionSummary = {
   downloadEnabled: false;
   publicAccessEnabled: false;
   reauthenticationRequiredAt: string;
+  continuity: {
+    schemaVersion: "institution_review_session_continuity.v1";
+    state: "active" | "stale" | "invalidated";
+    replayProtected: true;
+    staleAfter: string;
+    reauthenticationRequired: boolean;
+    invalidationReason: string | null;
+  };
 };
 
 export type RecipientTrustReviewSummary = {
@@ -481,6 +495,9 @@ type RecipientReviewSessionRecord = {
   issuedAt: string;
   expiresAt: string;
   lastValidatedAt: string;
+  continuityFingerprint: string;
+  staleAfter: string;
+  invalidationReason: string | null;
   revokedAt: string | null;
   blockedAt: string | null;
   metadataOnly: true;
@@ -1045,6 +1062,66 @@ function recipientReviewSessionId(params: {
   return `recipient_review_session:${digest}`;
 }
 
+function addMsIso(start: string, ms: number) {
+  return new Date(Date.parse(start) + ms).toISOString();
+}
+
+function continuityFingerprintForGrant(grant: TenantInstitutionAccessStoredGrant) {
+  const lifecycleControl = grant.package?.lifecycleControl || {};
+  const invite = grant.institutionReviewInvite || null;
+  return crypto
+    .createHash("sha256")
+    .update(
+      JSON.stringify({
+        grantId: grant.grantId,
+        audience: grant.audience,
+        purpose: grant.purpose,
+        lifecycle: grant.lifecycle,
+        expiresAt: grant.expiresAt || null,
+        revokedAt: grant.revokedAt || grant.consent?.revokedAt || null,
+        consent: {
+          granted: grant.consent?.granted === true,
+          consentId: grant.consent?.consentId || null,
+          expiresAt: grant.consent?.expiresAt || null,
+          revokedAt: grant.consent?.revokedAt || null,
+        },
+        package: {
+          status: grant.package?.status || null,
+          lifecycle: grant.package?.lifecycle || null,
+          lifecycleState: lifecycleControl.state || null,
+          active: lifecycleControl.active === true,
+          shareable: lifecycleControl.shareable === true,
+          evaluatedAt: lifecycleControl.evaluatedAt || null,
+        },
+        invite: {
+          status: invite?.status || null,
+          createdAt: invite?.createdAt || null,
+          sentAt: invite?.sentAt || null,
+          expiresAt: invite?.expiresAt || null,
+          revokedAt: invite?.revokedAt || null,
+          bearerAccessEnabled: Boolean((invite as any)?.bearerAccessEnabled),
+          inviteTokenIssued: Boolean((invite as any)?.inviteTokenIssued),
+        },
+      })
+    )
+    .digest("hex");
+}
+
+function lifecycleControlBlocksReview(grant: TenantInstitutionAccessStoredGrant) {
+  const control = grant.package?.lifecycleControl;
+  if (!control) return null;
+  const state = asString(control.state, 80);
+  if (control.active === true && control.shareable === true && state === "active") return null;
+  if (state === "expired") return "grant_expired" as const;
+  if (state === "revoked") return "grant_revoked" as const;
+  if (state === "reverification_required") return "trust_reverification_required" as const;
+  if (state === "superseded" || state === "archived" || state === "invalidated") {
+    return "trust_export_lifecycle_inactive" as const;
+  }
+  if (control.active === false || control.shareable === false) return "trust_export_lifecycle_inactive" as const;
+  return null;
+}
+
 function sessionSummaryFromRecord(record: RecipientReviewSessionRecord): RecipientReviewSessionSummary {
   return {
     schemaVersion: "recipient_review_session.v1",
@@ -1062,6 +1139,14 @@ function sessionSummaryFromRecord(record: RecipientReviewSessionRecord): Recipie
     downloadEnabled: false,
     publicAccessEnabled: false,
     reauthenticationRequiredAt: record.expiresAt,
+    continuity: {
+      schemaVersion: "institution_review_session_continuity.v1",
+      state: record.lifecycle === "active" ? "active" : record.lifecycle === "expired" ? "stale" : "invalidated",
+      replayProtected: true,
+      staleAfter: record.staleAfter,
+      reauthenticationRequired: record.lifecycle !== "active",
+      invalidationReason: record.invalidationReason || null,
+    },
   };
 }
 
@@ -1211,6 +1296,14 @@ async function startRecipientReviewSession(params: {
   recipientUserId?: string | null;
   now: string;
 }) {
+  const emailHash = recipientEmailHash(params.recipientEmail);
+  await invalidateActiveSessionsForGrant({
+    grantId: params.grant.grantId,
+    lifecycle: "blocked",
+    now: params.now,
+    recipientEmailHash: emailHash,
+    reason: "recipient_session_reauthentication_required",
+  });
   const session: RecipientReviewSessionRecord = {
     schemaVersion: "recipient_review_session.v1",
     sessionId: recipientReviewSessionId({
@@ -1220,7 +1313,7 @@ async function startRecipientReviewSession(params: {
       issuedAt: params.now,
     }),
     grantId: params.grant.grantId,
-    recipientEmailHash: recipientEmailHash(params.recipientEmail),
+    recipientEmailHash: emailHash,
     recipientUserId: asString(params.recipientUserId, 160),
     audience: params.grant.audience,
     purpose: params.grant.purpose,
@@ -1228,6 +1321,9 @@ async function startRecipientReviewSession(params: {
     issuedAt: params.now,
     expiresAt: sessionExpiryForGrant(params.grant, params.now),
     lastValidatedAt: params.now,
+    continuityFingerprint: continuityFingerprintForGrant(params.grant),
+    staleAfter: addMsIso(params.now, RECIPIENT_REVIEW_SESSION_STALE_MS),
+    invalidationReason: null,
     revokedAt: null,
     blockedAt: null,
     metadataOnly: true,
@@ -1252,11 +1348,13 @@ async function blockRecipientReviewSession(params: {
   sessionId: string | null;
   lifecycle: Exclude<RecipientReviewSessionLifecycle, "active">;
   now: string;
+  reason?: RecipientTrustReviewAccessDecision["reason"];
 }) {
   if (!params.sessionId) return;
   const patch: Partial<RecipientReviewSessionRecord> = {
     lifecycle: params.lifecycle,
     lastValidatedAt: params.now,
+    invalidationReason: params.reason || null,
   };
   if (params.lifecycle === "expired") patch.expiresAt = params.now;
   if (params.lifecycle === "revoked") patch.revokedAt = params.now;
@@ -1264,16 +1362,24 @@ async function blockRecipientReviewSession(params: {
   await db.collection(SESSION_COLLECTION).doc(params.sessionId).set(patch, { merge: true });
 }
 
-async function invalidateActiveSessionsForGrant(params: { grantId: string; lifecycle: "revoked" | "expired" | "blocked"; now: string }) {
+async function invalidateActiveSessionsForGrant(params: {
+  grantId: string;
+  lifecycle: "revoked" | "expired" | "blocked";
+  now: string;
+  recipientEmailHash?: string | null;
+  reason?: RecipientTrustReviewAccessDecision["reason"];
+}) {
   const snap = await db.collection(SESSION_COLLECTION).where("grantId", "==", params.grantId).limit(50).get();
   await Promise.all(
     (snap.docs || []).map(async (doc: any) => {
       const data = doc.data?.() || {};
       if (data.lifecycle !== "active") return;
+      if (params.recipientEmailHash && data.recipientEmailHash !== params.recipientEmailHash) return;
       await blockRecipientReviewSession({
         sessionId: String(doc.id || data.sessionId || ""),
         lifecycle: params.lifecycle,
         now: params.now,
+        reason: params.reason,
       });
     })
   );
@@ -1327,7 +1433,12 @@ async function validateRecipientReviewSession(params: {
     session.audience !== params.grant.audience ||
     session.purpose !== params.grant.purpose
   ) {
-    await blockRecipientReviewSession({ sessionId, lifecycle: "blocked", now: params.now });
+    await blockRecipientReviewSession({
+      sessionId,
+      lifecycle: "blocked",
+      now: params.now,
+      reason: "recipient_session_reauthentication_required",
+    });
     return {
       ok: false,
       status: "reauthentication_required",
@@ -1347,7 +1458,7 @@ async function validateRecipientReviewSession(params: {
     };
   }
   if (session.lifecycle === "expired" || Date.parse(session.expiresAt) <= Date.parse(params.now)) {
-    await blockRecipientReviewSession({ sessionId, lifecycle: "expired", now: params.now });
+    await blockRecipientReviewSession({ sessionId, lifecycle: "expired", now: params.now, reason: "recipient_session_expired" });
     return {
       ok: false,
       status: "session_expired",
@@ -1365,12 +1476,45 @@ async function validateRecipientReviewSession(params: {
       sessionId,
     };
   }
+  if (Date.parse(session.staleAfter) <= Date.parse(params.now)) {
+    await blockRecipientReviewSession({ sessionId, lifecycle: "blocked", now: params.now, reason: "recipient_session_stale" });
+    return {
+      ok: false,
+      status: "reauthentication_required",
+      reason: "recipient_session_stale",
+      eventType: "recipient_review_session_blocked",
+      sessionId,
+    };
+  }
+  if (!session.continuityFingerprint || session.continuityFingerprint !== continuityFingerprintForGrant(params.grant)) {
+    await blockRecipientReviewSession({
+      sessionId,
+      lifecycle: "blocked",
+      now: params.now,
+      reason: "recipient_session_replay_blocked",
+    });
+    return {
+      ok: false,
+      status: "reauthentication_required",
+      reason: "recipient_session_replay_blocked",
+      eventType: "recipient_review_session_blocked",
+      sessionId,
+    };
+  }
 
   const refreshed = {
     ...session,
     lastValidatedAt: params.now,
+    staleAfter: addMsIso(params.now, RECIPIENT_REVIEW_SESSION_STALE_MS),
   };
-  await db.collection(SESSION_COLLECTION).doc(sessionId).set({ lastValidatedAt: params.now }, { merge: true });
+  await db.collection(SESSION_COLLECTION).doc(sessionId).set(
+    {
+      lastValidatedAt: params.now,
+      staleAfter: refreshed.staleAfter,
+      invalidationReason: null,
+    },
+    { merge: true }
+  );
   return { ok: true, session: sessionSummaryFromRecord(refreshed) };
 }
 
@@ -1418,9 +1562,9 @@ export async function getRecipientTrustReview(params: {
   ) => {
     if (sessionLifecycle) {
       if (sessionId) {
-        await blockRecipientReviewSession({ sessionId, lifecycle: sessionLifecycle, now: reviewedAt });
+        await blockRecipientReviewSession({ sessionId, lifecycle: sessionLifecycle, now: reviewedAt, reason });
       } else {
-        await invalidateActiveSessionsForGrant({ grantId: grant.grantId, lifecycle: sessionLifecycle, now: reviewedAt });
+        await invalidateActiveSessionsForGrant({ grantId: grant.grantId, lifecycle: sessionLifecycle, now: reviewedAt, reason });
       }
     }
     await appendGrantEvent({ grant, eventType, occurredAt: reviewedAt, status, reason });
@@ -1436,6 +1580,27 @@ export async function getRecipientTrustReview(params: {
   if (grant.lifecycle === "blocked") return denyWithEvent("blocked", "grant_blocked", "recipient_trust_review_blocked", "blocked");
   if (grant.lifecycle === "reverification_required") {
     return denyWithEvent("reverification_required", "trust_reverification_required", "recipient_trust_review_blocked", "blocked");
+  }
+  const lifecycleBlockReason = lifecycleControlBlocksReview(grant);
+  if (lifecycleBlockReason) {
+    const status =
+      lifecycleBlockReason === "grant_expired"
+        ? "expired"
+        : lifecycleBlockReason === "grant_revoked"
+        ? "revoked"
+        : lifecycleBlockReason === "trust_reverification_required"
+        ? "reverification_required"
+        : "blocked";
+    return denyWithEvent(
+      status,
+      lifecycleBlockReason,
+      lifecycleBlockReason === "grant_expired"
+        ? "recipient_trust_review_expired"
+        : lifecycleBlockReason === "grant_revoked"
+        ? "recipient_trust_review_revoked"
+        : "recipient_trust_review_blocked",
+      lifecycleBlockReason === "grant_expired" ? "expired" : lifecycleBlockReason === "grant_revoked" ? "revoked" : "blocked"
+    );
   }
   if (grant.consent?.granted !== true || !grant.consent?.consentId) {
     return denyWithEvent("consent_required", "tenant_consent_missing");
