@@ -37,7 +37,7 @@ import {
   type TenantTrustExportRecord,
 } from "../../api/tenantTrustExports";
 import {
-  createTenantInstitutionAccessGrant,
+  createInstitutionReviewInvite,
   listTenantInstitutionAccessGrants,
   previewTenantInstitutionAccess,
   revokeTenantInstitutionAccessGrant,
@@ -220,6 +220,14 @@ function prettyPolicyReason(value: string) {
 
 function prettyAccessAuditOutcome(value: string | null | undefined) {
   switch (value) {
+    case "invite_created":
+      return "Invite created";
+    case "invite_sent":
+      return "Invite sent";
+    case "invite_opened":
+      return "Invite opened";
+    case "invite_authenticated":
+      return "Invite authenticated";
     case "opened":
       return "Review opened";
     case "blocked":
@@ -720,7 +728,7 @@ export default function TenantWorkspacePage() {
     try {
       setInstitutionAccessBusy(true);
       setInstitutionAccessError(null);
-      const created = await createTenantInstitutionAccessGrant(institutionAccessRequest(institutionAccessConsentAccepted));
+      const created = await createInstitutionReviewInvite(institutionAccessRequest(institutionAccessConsentAccepted));
       setInstitutionAccessPreview(created);
       setInstitutionAccessGrants((current) => [created, ...current.filter((entry) => entry.grantId !== created.grantId)]);
     } catch (err: any) {
@@ -728,8 +736,8 @@ export default function TenantWorkspacePage() {
         err?.payload?.error === "TENANT_INSTITUTION_ACCESS_CONSENT_REQUIRED"
           ? "Confirm consent before creating institution access."
           : err?.payload?.error === "TENANT_INSTITUTION_ACCESS_RECIPIENT_REQUIRED"
-          ? "Enter a recipient email before creating institution access."
-          : err?.payload?.error || err?.message || "Unable to create institution access right now."
+          ? "Enter a recipient email before creating the review invite."
+          : err?.payload?.error || err?.message || "Unable to create institution review invite right now."
       );
     } finally {
       setInstitutionAccessBusy(false);
@@ -1769,9 +1777,9 @@ export default function TenantWorkspacePage() {
               gap: 10,
             }}
           >
-            <div style={{ fontWeight: 700, color: textTokens.primary }}>Tenant-mediated institution access</div>
+            <div style={{ fontWeight: 700, color: textTokens.primary }}>Institution review invites</div>
             <div style={{ color: textTokens.secondary, lineHeight: 1.6 }}>
-              Prepare a controlled, non-public access grant for a specific recipient. This does not create a public profile, does not send data to an institution, and does not enable automatic decisions.
+              Invite a specific recipient to an authenticated, non-public, metadata-only trust review. This does not create a public profile, downloadable export, or automatic decision.
             </div>
 
             <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
@@ -1830,7 +1838,7 @@ export default function TenantWorkspacePage() {
                 style={{ marginTop: 4 }}
               />
               <span>
-                I consent to preparing metadata-only institution access for {prettyInstitutionAccessAudience(institutionAccessAudience)}. I understand recipient access requires controlled future authentication, no public link is created, and this is not an eligibility or approval decision.
+                I consent to inviting this recipient to a metadata-only trust review for {prettyInstitutionAccessAudience(institutionAccessAudience)}. I understand the recipient must authenticate, access is time-bound and revocable, and this is not an eligibility or approval decision.
               </span>
             </label>
 
@@ -1843,7 +1851,7 @@ export default function TenantWorkspacePage() {
                 onClick={() => void handleCreateInstitutionAccessGrant()}
                 disabled={institutionAccessBusy || !institutionAccessConsentAccepted}
               >
-                Create access grant
+                Send review invite
               </button>
             </div>
 
@@ -1852,7 +1860,7 @@ export default function TenantWorkspacePage() {
             {institutionAccessPreview ? (
               <div style={{ border: "1px solid rgba(15,23,42,0.08)", borderRadius: 12, padding: "12px 14px", display: "grid", gap: 10 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: spacing.sm, flexWrap: "wrap" }}>
-                  <div style={{ fontWeight: 800, color: textTokens.primary }}>Institution access preview</div>
+                  <div style={{ fontWeight: 800, color: textTokens.primary }}>Institution review invite preview</div>
                   <div style={{ color: textTokens.secondary }}>{prettyTrustExportLifecycle(institutionAccessPreview.lifecycle)}</div>
                 </div>
                 <TenantKeyValueGrid
@@ -1863,7 +1871,7 @@ export default function TenantWorkspacePage() {
                     { label: "Policy status", value: prettyStatus(institutionAccessPreview.package.status) },
                     { label: "Included claims", value: String(institutionAccessPreview.includedClaims.length) },
                     { label: "Public access", value: institutionAccessPreview.publicAccessEnabled ? "Enabled" : "Disabled" },
-                    { label: "Recipient URL", value: institutionAccessPreview.recipientAccess.accessUrl || "Not created" },
+                    { label: "Recipient review", value: institutionAccessPreview.recipientAccess.accessUrl || "Created only after invite is sent" },
                     { label: "Expires", value: formatDate(institutionAccessPreview.expiresAt) },
                   ]}
                 />
@@ -1891,7 +1899,7 @@ export default function TenantWorkspacePage() {
             ) : null}
 
             <div style={{ display: "grid", gap: 8 }}>
-              <div style={{ fontWeight: 700, color: textTokens.primary }}>Institution access grants</div>
+              <div style={{ fontWeight: 700, color: textTokens.primary }}>Institution review invites</div>
               {institutionAccessGrants.length ? (
                 institutionAccessGrants.map((entry) => (
                   <div key={entry.grantId} style={{ border: "1px solid rgba(15,23,42,0.08)", borderRadius: 12, padding: "12px 14px", display: "grid", gap: 8 }}>
@@ -1900,9 +1908,11 @@ export default function TenantWorkspacePage() {
                         { label: "Recipient", value: entry.recipient.email },
                         { label: "Audience", value: prettyInstitutionAccessAudience(entry.audience) },
                         { label: "Status", value: prettyTrustExportLifecycle(entry.lifecycle) },
+                        { label: "Invite", value: entry.institutionReviewInvite?.status ? prettyStatus(entry.institutionReviewInvite.status) : "Not created" },
                         { label: "Created", value: formatDate(entry.createdAt) },
                         { label: "Expires", value: formatDate(entry.expiresAt) },
-                        { label: "Access URL", value: entry.recipientAccess.accessUrl || "Not created" },
+                        { label: "Authentication", value: "Required before review" },
+                        { label: "Downloads", value: entry.institutionReviewInvite?.downloadEnabled ? "Enabled" : "Disabled" },
                       ]}
                     />
                     <div style={{ borderTop: "1px solid rgba(15,23,42,0.08)", paddingTop: 8, display: "grid", gap: 8 }}>
@@ -1963,7 +1973,7 @@ export default function TenantWorkspacePage() {
                 ))
               ) : (
                 <div style={{ color: textTokens.secondary }}>
-                  Institution access grants will appear here. They stay tenant-controlled, time-bound, and non-public.
+                  Institution review invites will appear here. They stay tenant-controlled, authenticated, time-bound, and non-public.
                 </div>
               )}
             </div>

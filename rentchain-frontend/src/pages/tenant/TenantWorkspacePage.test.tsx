@@ -75,7 +75,7 @@ const tenantTrustExportsApi = vi.hoisted(() => ({
 const tenantInstitutionAccessApi = vi.hoisted(() => ({
   listTenantInstitutionAccessGrants: vi.fn(),
   previewTenantInstitutionAccess: vi.fn(),
-  createTenantInstitutionAccessGrant: vi.fn(),
+  createInstitutionReviewInvite: vi.fn(),
   revokeTenantInstitutionAccessGrant: vi.fn(),
 }));
 
@@ -874,7 +874,32 @@ describe("tenant workspace frontend shell", () => {
       ],
     };
     tenantInstitutionAccessApi.previewTenantInstitutionAccess.mockResolvedValue(institutionAccessPreview);
-    tenantInstitutionAccessApi.createTenantInstitutionAccessGrant.mockResolvedValue(institutionAccessGrant);
+    tenantInstitutionAccessApi.createInstitutionReviewInvite.mockResolvedValue({
+      ...institutionAccessGrant,
+      institutionReviewInvite: {
+        schemaVersion: "institution_review_invite.v1",
+        status: "invited",
+        recipientEmail: "reviewer@example.com",
+        redactedRecipientEmail: "re***@example.com",
+        organizationName: "Example Insurance",
+        audience: "insurer",
+        purpose: "insurance_review",
+        reviewUrl: "https://www.rentchain.test/recipient/trust-review/grant-1",
+        createdAt: "2026-05-09T00:00:00.000Z",
+        sentAt: "2026-05-09T00:01:00.000Z",
+        openedAt: null,
+        authenticatedAt: null,
+        expiresAt: "2026-05-16T00:00:00.000Z",
+        revokedAt: null,
+        recipientAuthenticationRequired: true,
+        inviteTokenIssued: false,
+        bearerAccessEnabled: false,
+        publicAccessEnabled: false,
+        downloadEnabled: false,
+        metadataOnly: true,
+        summary: "This invitation points the recipient to an authenticated review.",
+      },
+    });
     tenantInstitutionAccessApi.revokeTenantInstitutionAccessGrant.mockImplementation(async (grantId: string) => ({
       ...institutionAccessGrant,
       grantId,
@@ -1554,15 +1579,15 @@ describe("tenant workspace frontend shell", () => {
     });
   });
 
-  it("requires tenant consent before creating institution access grants", async () => {
+  it("requires tenant consent before creating institution review invites", async () => {
     render(
       <MemoryRouter>
         <TenantWorkspacePage />
       </MemoryRouter>
     );
 
-    expect(await screen.findByText(/Tenant-mediated institution access/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Create access grant/i })).toBeDisabled();
+    expect((await screen.findAllByText(/Institution review invites/i)).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: /Send review invite/i })).toBeDisabled();
 
     fireEvent.change(screen.getByLabelText(/Recipient email/i), {
       target: { value: "reviewer@example.com" },
@@ -1584,10 +1609,10 @@ describe("tenant workspace frontend shell", () => {
     expect(await screen.findByText(/No claims are accessible until consent and policy checks pass/i)).toBeInTheDocument();
     expect(screen.getByText(/Public trust profiles and public links are not created/i)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByLabelText(/I consent to preparing metadata-only institution access/i));
-    fireEvent.click(screen.getByRole("button", { name: /Create access grant/i }));
+    fireEvent.click(screen.getByLabelText(/I consent to inviting this recipient/i));
+    fireEvent.click(screen.getByRole("button", { name: /Send review invite/i }));
     await waitFor(() => {
-      expect(tenantInstitutionAccessApi.createTenantInstitutionAccessGrant).toHaveBeenCalledWith(
+      expect(tenantInstitutionAccessApi.createInstitutionReviewInvite).toHaveBeenCalledWith(
         expect.objectContaining({
           audience: "insurer",
           consentAccepted: true,
@@ -1596,7 +1621,7 @@ describe("tenant workspace frontend shell", () => {
       );
     });
     expect(await screen.findByText(/Tenant portability metadata available/i)).toBeInTheDocument();
-    expect(screen.getAllByText(/Not created/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Invited/i)).toBeInTheDocument();
     expect(screen.getByText(/Access activity/i)).toBeInTheDocument();
     expect(screen.getByText(/re\*\*\*@example.com/i)).toBeInTheDocument();
     expect(screen.getByText(/Opened reviews/i)).toBeInTheDocument();
@@ -1628,7 +1653,7 @@ describe("tenant workspace frontend shell", () => {
     expect(screen.getAllByText(/No data is sent automatically/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Institution connections are not enabled yet/i)).toBeInTheDocument();
     expect(screen.getByText(/tenant-managed manual-release preparation only/i)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /send/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /send to institution/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /submit to bank/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /connect institution/i })).not.toBeInTheDocument();
 
