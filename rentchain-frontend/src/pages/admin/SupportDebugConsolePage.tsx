@@ -62,6 +62,23 @@ function renderInstitutionAccessDiagnostics(payload: SupportConsoleResourceRespo
           <strong>Reason categories</strong>:{" "}
           {diagnostic.audit.reasonCategories.length ? diagnostic.audit.reasonCategories.join(", ") : "None"}
         </div>
+        {diagnostic.securityTelemetry ? (
+          <div style={{ display: "grid", gap: 8 }}>
+            <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
+              <div><strong>Security events</strong>: {diagnostic.securityTelemetry.eventCount}</div>
+              <div><strong>Blocked attempts</strong>: {diagnostic.securityTelemetry.blockedAttemptCount}</div>
+              <div><strong>Wrong recipient attempts</strong>: {diagnostic.securityTelemetry.wrongRecipientAttemptCount}</div>
+              <div><strong>Revoked attempts</strong>: {diagnostic.securityTelemetry.revokedAttemptCount}</div>
+              <div><strong>Expired attempts</strong>: {diagnostic.securityTelemetry.expiredAttemptCount}</div>
+              <div><strong>Replay blocks</strong>: {diagnostic.securityTelemetry.replayBlockedCount}</div>
+              <div><strong>Unique request origins</strong>: {diagnostic.securityTelemetry.uniqueIpHashCount}</div>
+              <div><strong>Last signal</strong>: {diagnostic.securityTelemetry.lastSignal || "None"}</div>
+            </div>
+            <div style={{ color: "#475569" }}>
+              Internal-only security telemetry. IP addresses are hash-only, user agents are reduced to family/hash form, and telemetry is non-portable and non-exportable.
+            </div>
+          </div>
+        ) : null}
         {diagnostic.pilotOperation ? (
           <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
             <div><strong>Pilot status</strong>: {diagnostic.pilotOperation.statusLabel}</div>

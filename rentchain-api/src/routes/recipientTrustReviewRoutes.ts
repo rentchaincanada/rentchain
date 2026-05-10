@@ -4,6 +4,17 @@ import { getRecipientTrustReview } from "../services/tenantPortal/tenantInstitut
 
 const router = Router();
 
+function requestSecurityContext(req: any) {
+  const forwardedFor = String(req.headers?.["x-forwarded-for"] || "")
+    .split(",")[0]
+    .trim();
+  return {
+    ipAddress: forwardedFor || String(req.ip || req.socket?.remoteAddress || "").trim() || null,
+    userAgent: String(req.get?.("user-agent") || req.headers?.["user-agent"] || "").trim() || null,
+    requestId: String(req.headers?.["x-request-id"] || req.headers?.["x-correlation-id"] || "").trim() || null,
+  };
+}
+
 function statusForDecision(status: string) {
   if (status === "unauthenticated") return 401;
   if (status === "session_expired" || status === "reauthentication_required") return 401;
@@ -24,7 +35,13 @@ router.get("/trust-reviews/:grantId", requireAuth, async (req: any, res) => {
   ).trim();
 
   try {
-    const result = await getRecipientTrustReview({ grantId, recipientEmail, recipientUserId, recipientSessionId });
+    const result = await getRecipientTrustReview({
+      grantId,
+      recipientEmail,
+      recipientUserId,
+      recipientSessionId,
+      requestContext: requestSecurityContext(req),
+    });
     if (!result.decision.allowed) {
       return res.status(statusForDecision(result.decision.status)).json({
         ok: false,

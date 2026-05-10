@@ -23,6 +23,114 @@ const MAX_EXPIRES_DAYS = 30;
 const RECIPIENT_REVIEW_SESSION_TTL_MS = 30 * 60 * 1000;
 const RECIPIENT_REVIEW_SESSION_STALE_MS = 15 * 60 * 1000;
 
+export type SecuritySessionTelemetryActorType = "recipient" | "operator" | "system";
+
+export type SecuritySessionTelemetrySignal =
+  | "recipient_review_opened"
+  | "recipient_review_blocked"
+  | "wrong_recipient_attempt"
+  | "revoked_access_attempt"
+  | "expired_access_attempt"
+  | "policy_denied_attempt"
+  | "stale_session_attempt"
+  | "replay_blocked_attempt"
+  | "recipient_session_started"
+  | "operator_diagnostics_access";
+
+export type SecuritySessionRequestContext = {
+  ipAddress?: string | null;
+  userAgent?: string | null;
+  requestId?: string | null;
+};
+
+export type SecuritySessionTelemetryEvent = {
+  schemaVersion: "security_session_telemetry.v1";
+  recordedAt: string;
+  actorType: SecuritySessionTelemetryActorType;
+  workflow: "recipient_trust_review" | "support_diagnostics";
+  signal: SecuritySessionTelemetrySignal;
+  lifecycleState: string | null;
+  reasonCode: string | null;
+  subject: {
+    grantIdRedacted: string | null;
+    recipientReferenceRedacted: string | null;
+    sessionReferenceRedacted: string | null;
+    userReferenceRedacted: string | null;
+  };
+  request: {
+    ipHash: string | null;
+    ipFamily: "ipv4" | "ipv6" | "unknown";
+    userAgentHash: string | null;
+    userAgentFamily: string;
+    requestReferenceRedacted: string | null;
+  };
+  retention: {
+    classification: "security_session_internal";
+    internalOnly: true;
+    portableVisible: false;
+    tenantVisible: false;
+    recipientVisible: false;
+    publicVisible: false;
+    exportable: false;
+  };
+  payloadSafety: {
+    metadataOnly: true;
+    trustPayloadIncluded: false;
+    rawProviderPayloadIncluded: false;
+    rawIdentityPayloadIncluded: false;
+    rawPropertyPayloadIncluded: false;
+    preciseGeolocationIncluded: false;
+    deviceFingerprintingIncluded: false;
+    behavioralProfileIncluded: false;
+    riskScoreIncluded: false;
+  };
+};
+
+export type SupportSafeSecuritySessionTelemetrySummary = {
+  schemaVersion: "support_safe_security_session_telemetry.v1";
+  internalOnly: true;
+  metadataOnly: true;
+  eventCount: number;
+  blockedAttemptCount: number;
+  wrongRecipientAttemptCount: number;
+  revokedAttemptCount: number;
+  expiredAttemptCount: number;
+  replayBlockedCount: number;
+  staleSessionCount: number;
+  uniqueIpHashCount: number;
+  userAgentFamilies: string[];
+  lastSignal: SecuritySessionTelemetrySignal | null;
+  lastRecordedAt: string | null;
+  signals: SecuritySessionTelemetrySignal[];
+  retention: {
+    classification: "security_session_internal";
+    nonPortable: true;
+    nonExportable: true;
+  };
+  redaction: {
+    ipAddressMode: "hash_only";
+    userAgentMode: "family_and_hash";
+    rawIpVisible: false;
+    rawUserAgentVisible: false;
+    preciseGeolocationIncluded: false;
+    deviceFingerprintingIncluded: false;
+    behavioralProfileIncluded: false;
+    riskScoreIncluded: false;
+  };
+  visibility: {
+    supportSafe: true;
+    operatorVisible: true;
+    tenantVisible: false;
+    recipientVisible: false;
+    portableVisible: false;
+    publicVisible: false;
+    trustPayloadIncluded: false;
+    providerPayloadIncluded: false;
+    rawIdentityPayloadIncluded: false;
+    rawPropertyPayloadIncluded: false;
+  };
+};
+
 export type TenantInstitutionAccessAudience = "insurer" | "lender" | "institutional_landlord" | "auditor";
 
 export type TenantInstitutionAccessPurpose =
@@ -435,6 +543,7 @@ export type TenantInstitutionAccessGrantEvent = {
     | "authenticated"
     | "send_failed"
     | InstitutionReviewDeliveryStatus;
+  securityTelemetry?: SecuritySessionTelemetryEvent;
 };
 
 type TenantInstitutionAccessStoredGrant = TenantInstitutionAccessPreview & {
@@ -725,6 +834,7 @@ export type SupportInstitutionAccessDiagnosticSummary = {
     lastReason: TenantInstitutionAccessAuditSummary["lastReason"];
     reasonCategories: string[];
   };
+  securityTelemetry: SupportSafeSecuritySessionTelemetrySummary;
   pilotOperation: PilotInstitutionReviewOperation;
   observability: InstitutionReviewObservabilitySummary;
   payloadSafety: {
@@ -828,6 +938,168 @@ function redactEmail(value: string | null | undefined) {
   const [local, domain] = email.split("@");
   const visible = local.length <= 2 ? local.slice(0, 1) : `${local.slice(0, 2)}***`;
   return `${visible}@${domain}`;
+}
+
+function telemetryHash(value: unknown) {
+  const raw = asString(value, 500);
+  if (!raw) return null;
+  return crypto.createHash("sha256").update(raw).digest("hex").slice(0, 20);
+}
+
+function ipFamily(value: unknown): SecuritySessionTelemetryEvent["request"]["ipFamily"] {
+  const raw = asString(value, 120) || "";
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(raw)) return "ipv4";
+  if (raw.includes(":")) return "ipv6";
+  return "unknown";
+}
+
+function userAgentFamily(value: unknown) {
+  const raw = (asString(value, 500) || "").toLowerCase();
+  if (!raw) return "unknown";
+  if (raw.includes("edg/") || raw.includes("edge/")) return "edge";
+  if (raw.includes("chrome/") || raw.includes("chromium/")) return "chrome";
+  if (raw.includes("safari/") && !raw.includes("chrome/")) return "safari";
+  if (raw.includes("firefox/")) return "firefox";
+  if (raw.includes("bot") || raw.includes("crawler") || raw.includes("spider")) return "automated_client";
+  return "other";
+}
+
+function signalForGrantEvent(params: {
+  eventType: TenantInstitutionAccessGrantEvent["eventType"];
+  reason: TenantInstitutionAccessGrantEvent["reason"];
+}): SecuritySessionTelemetrySignal {
+  if (params.eventType === "recipient_trust_review_opened") return "recipient_review_opened";
+  if (params.eventType === "recipient_review_session_started") return "recipient_session_started";
+  if (params.reason === "recipient_email_mismatch") return "wrong_recipient_attempt";
+  if (params.reason === "grant_revoked" || params.eventType === "recipient_trust_review_revoked") return "revoked_access_attempt";
+  if (params.reason === "grant_expired" || params.eventType === "recipient_trust_review_expired") return "expired_access_attempt";
+  if (params.reason === "recipient_session_replay_blocked") return "replay_blocked_attempt";
+  if (params.reason === "recipient_session_stale") return "stale_session_attempt";
+  if (params.reason === "policy_gated_summary_unavailable" || params.reason === "trust_export_lifecycle_inactive") {
+    return "policy_denied_attempt";
+  }
+  return "recipient_review_blocked";
+}
+
+function buildSecurityTelemetryEvent(params: {
+  grant: TenantInstitutionAccessStoredGrant;
+  eventType: TenantInstitutionAccessGrantEvent["eventType"];
+  occurredAt: string;
+  actorType?: TenantInstitutionAccessGrantEvent["actorType"];
+  status: TenantInstitutionAccessGrantEvent["status"];
+  reason: TenantInstitutionAccessGrantEvent["reason"];
+  recipientEmail?: string | null;
+  recipientUserId?: string | null;
+  recipientSessionId?: string | null;
+  requestContext?: SecuritySessionRequestContext | null;
+}): SecuritySessionTelemetryEvent | undefined {
+  const signal = signalForGrantEvent({ eventType: params.eventType, reason: params.reason });
+  if (!params.requestContext && signal !== "wrong_recipient_attempt" && signal !== "revoked_access_attempt" && signal !== "expired_access_attempt") {
+    return undefined;
+  }
+  const ip = asString(params.requestContext?.ipAddress, 120);
+  const userAgent = asString(params.requestContext?.userAgent, 500);
+  return {
+    schemaVersion: "security_session_telemetry.v1",
+    recordedAt: params.occurredAt,
+    actorType: params.actorType === "system" ? "system" : "recipient",
+    workflow: "recipient_trust_review",
+    signal,
+    lifecycleState: asString(params.status, 80),
+    reasonCode: asString(params.reason, 120),
+    subject: {
+      grantIdRedacted: redactIdentifier(params.grant.grantId),
+      recipientReferenceRedacted: redactIdentifier(params.recipientEmail || params.grant.recipient?.email || null),
+      sessionReferenceRedacted: redactIdentifier(params.recipientSessionId || null),
+      userReferenceRedacted: redactIdentifier(params.recipientUserId || null),
+    },
+    request: {
+      ipHash: telemetryHash(ip),
+      ipFamily: ipFamily(ip),
+      userAgentHash: telemetryHash(userAgent),
+      userAgentFamily: userAgentFamily(userAgent),
+      requestReferenceRedacted: redactIdentifier(params.requestContext?.requestId || null),
+    },
+    retention: {
+      classification: "security_session_internal",
+      internalOnly: true,
+      portableVisible: false,
+      tenantVisible: false,
+      recipientVisible: false,
+      publicVisible: false,
+      exportable: false,
+    },
+    payloadSafety: {
+      metadataOnly: true,
+      trustPayloadIncluded: false,
+      rawProviderPayloadIncluded: false,
+      rawIdentityPayloadIncluded: false,
+      rawPropertyPayloadIncluded: false,
+      preciseGeolocationIncluded: false,
+      deviceFingerprintingIncluded: false,
+      behavioralProfileIncluded: false,
+      riskScoreIncluded: false,
+    },
+  };
+}
+
+function publicGrantEvent(event: TenantInstitutionAccessGrantEvent): TenantInstitutionAccessGrantEvent {
+  const { securityTelemetry: _securityTelemetry, ...safeEvent } = event;
+  return safeEvent;
+}
+
+function buildSupportSafeSecurityTelemetrySummary(record: TenantInstitutionAccessStoredGrant): SupportSafeSecuritySessionTelemetrySummary {
+  const telemetry = (Array.isArray(record.events) ? record.events : [])
+    .map((event) => event.securityTelemetry)
+    .filter(Boolean) as SecuritySessionTelemetryEvent[];
+  telemetry.sort((left, right) => Date.parse(right.recordedAt) - Date.parse(left.recordedAt));
+  const signals = Array.from(new Set(telemetry.map((event) => event.signal))).sort() as SecuritySessionTelemetrySignal[];
+  const ipHashes = new Set(telemetry.map((event) => event.request.ipHash).filter(Boolean));
+  const userAgentFamilies = Array.from(new Set(telemetry.map((event) => event.request.userAgentFamily).filter(Boolean))).sort();
+  return {
+    schemaVersion: "support_safe_security_session_telemetry.v1",
+    internalOnly: true,
+    metadataOnly: true,
+    eventCount: telemetry.length,
+    blockedAttemptCount: telemetry.filter((event) => event.signal.endsWith("_attempt") || event.signal === "recipient_review_blocked").length,
+    wrongRecipientAttemptCount: telemetry.filter((event) => event.signal === "wrong_recipient_attempt").length,
+    revokedAttemptCount: telemetry.filter((event) => event.signal === "revoked_access_attempt").length,
+    expiredAttemptCount: telemetry.filter((event) => event.signal === "expired_access_attempt").length,
+    replayBlockedCount: telemetry.filter((event) => event.signal === "replay_blocked_attempt").length,
+    staleSessionCount: telemetry.filter((event) => event.signal === "stale_session_attempt").length,
+    uniqueIpHashCount: ipHashes.size,
+    userAgentFamilies,
+    lastSignal: telemetry[0]?.signal || null,
+    lastRecordedAt: telemetry[0]?.recordedAt || null,
+    signals,
+    retention: {
+      classification: "security_session_internal",
+      nonPortable: true,
+      nonExportable: true,
+    },
+    redaction: {
+      ipAddressMode: "hash_only",
+      userAgentMode: "family_and_hash",
+      rawIpVisible: false,
+      rawUserAgentVisible: false,
+      preciseGeolocationIncluded: false,
+      deviceFingerprintingIncluded: false,
+      behavioralProfileIncluded: false,
+      riskScoreIncluded: false,
+    },
+    visibility: {
+      supportSafe: true,
+      operatorVisible: true,
+      tenantVisible: false,
+      recipientVisible: false,
+      portableVisible: false,
+      publicVisible: false,
+      trustPayloadIncluded: false,
+      providerPayloadIncluded: false,
+      rawIdentityPayloadIncluded: false,
+      rawPropertyPayloadIncluded: false,
+    },
+  };
 }
 
 function grantIdFor(params: {
@@ -1603,6 +1875,7 @@ function publicGrant(record: TenantInstitutionAccessStoredGrant): TenantInstitut
   const { auditSummary, auditTimeline } = buildAccessAudit(record);
   const normalizedRecord = {
     ...rest,
+    events: (Array.isArray(record.events) ? record.events : []).map(publicGrantEvent),
     institutionReviewInvite: record.institutionReviewInvite || inviteSummaryForGrant({ grant: record, status: "not_created", reviewUrl: null }),
     institutionReviewDelivery:
       record.institutionReviewDelivery ||
@@ -1711,6 +1984,7 @@ function supportDiagnosticFromGrant(record: TenantInstitutionAccessStoredGrant):
       lastReason: auditSummary.lastReason,
       reasonCategories,
     },
+    securityTelemetry: buildSupportSafeSecurityTelemetrySummary(record),
     pilotOperation,
     observability,
     payloadSafety: {
@@ -1881,8 +2155,24 @@ async function appendGrantEvent(params: {
   outcome?: TenantInstitutionAccessGrantEvent["outcome"];
   status: TenantInstitutionAccessGrantEvent["status"];
   reason: TenantInstitutionAccessGrantEvent["reason"];
+  recipientEmail?: string | null;
+  recipientUserId?: string | null;
+  recipientSessionId?: string | null;
+  requestContext?: SecuritySessionRequestContext | null;
 }) {
   const ref = db.collection(COLLECTION).doc(params.grant.grantId);
+  const securityTelemetry = buildSecurityTelemetryEvent({
+    grant: params.grant,
+    eventType: params.eventType,
+    occurredAt: params.occurredAt,
+    actorType: params.actorType,
+    status: params.status,
+    reason: params.reason,
+    recipientEmail: params.recipientEmail,
+    recipientUserId: params.recipientUserId,
+    recipientSessionId: params.recipientSessionId,
+    requestContext: params.requestContext,
+  });
   const events = [
     ...(Array.isArray(params.grant.events) ? params.grant.events : []),
     {
@@ -1893,6 +2183,7 @@ async function appendGrantEvent(params: {
       outcome: params.outcome || outcomeForEventType(params.eventType),
       status: params.status,
       reason: params.reason,
+      ...(securityTelemetry ? { securityTelemetry } : {}),
     },
   ].slice(-50);
   await ref.set({ events, updatedAt: params.occurredAt }, { merge: true });
@@ -2009,6 +2300,7 @@ async function startRecipientReviewSession(params: {
   recipientEmail: string;
   recipientUserId?: string | null;
   now: string;
+  requestContext?: SecuritySessionRequestContext | null;
 }) {
   const emailHash = recipientEmailHash(params.recipientEmail);
   await invalidateActiveSessionsForGrant({
@@ -2054,6 +2346,10 @@ async function startRecipientReviewSession(params: {
     status: "active",
     reason: "session_started",
     outcome: "session_started",
+    recipientEmail: params.recipientEmail,
+    recipientUserId: params.recipientUserId,
+    recipientSessionId: session.sessionId,
+    requestContext: params.requestContext,
   });
   return sessionSummaryFromRecord(session);
 }
@@ -2105,6 +2401,7 @@ async function validateRecipientReviewSession(params: {
   recipientUserId?: string | null;
   sessionId?: unknown;
   now: string;
+  requestContext?: SecuritySessionRequestContext | null;
 }): Promise<
   | { ok: true; session: RecipientReviewSessionSummary }
   | {
@@ -2122,6 +2419,7 @@ async function validateRecipientReviewSession(params: {
       recipientEmail: params.recipientEmail,
       recipientUserId: params.recipientUserId,
       now: params.now,
+      requestContext: params.requestContext,
     });
     return { ok: true, session };
   }
@@ -2237,6 +2535,7 @@ export async function getRecipientTrustReview(params: {
   recipientEmail?: unknown;
   recipientUserId?: unknown;
   recipientSessionId?: unknown;
+  requestContext?: SecuritySessionRequestContext | null;
 }): Promise<RecipientTrustReviewResult> {
   const grantId = asString(params.grantId);
   const recipientEmail = normalizeRecipientEmailForReview(params.recipientEmail);
@@ -2257,6 +2556,10 @@ export async function getRecipientTrustReview(params: {
       occurredAt: reviewedAt,
       status: "recipient_mismatch",
       reason: "recipient_email_mismatch",
+      recipientEmail,
+      recipientUserId: asString(params.recipientUserId, 160),
+      recipientSessionId: asString(params.recipientSessionId, 180),
+      requestContext: params.requestContext,
     });
     return denyRecipientReview("recipient_mismatch", "recipient_email_mismatch");
   }
@@ -2281,7 +2584,17 @@ export async function getRecipientTrustReview(params: {
         await invalidateActiveSessionsForGrant({ grantId: grant.grantId, lifecycle: sessionLifecycle, now: reviewedAt, reason });
       }
     }
-    await appendGrantEvent({ grant, eventType, occurredAt: reviewedAt, status, reason });
+    await appendGrantEvent({
+      grant,
+      eventType,
+      occurredAt: reviewedAt,
+      status,
+      reason,
+      recipientEmail,
+      recipientUserId: asString(params.recipientUserId, 160),
+      recipientSessionId: sessionId || asString(params.recipientSessionId, 180),
+      requestContext: params.requestContext,
+    });
     return denyRecipientReview(status, reason);
   };
 
@@ -2332,6 +2645,7 @@ export async function getRecipientTrustReview(params: {
     recipientUserId: asString(params.recipientUserId, 160),
     sessionId: params.recipientSessionId,
     now: reviewedAt,
+    requestContext: params.requestContext,
   });
   if (!sessionDecision.ok) {
     return denyWithEvent(
@@ -2349,6 +2663,10 @@ export async function getRecipientTrustReview(params: {
     occurredAt: reviewedAt,
     status: "available",
     reason: "review_available",
+    recipientEmail,
+    recipientUserId: asString(params.recipientUserId, 160),
+    recipientSessionId: sessionDecision.session.sessionId,
+    requestContext: params.requestContext,
   });
   if (grant.institutionReviewInvite) {
     await appendGrantEvent({

@@ -67,6 +67,11 @@ async function invokeRouter(router: any, options: { method: string; url: string;
       path: options.url,
       params: {},
       headers: options.headers || {},
+      ip: "203.0.113.30",
+      socket: { remoteAddress: "203.0.113.31" },
+      get(name: string) {
+        return this.headers[String(name).toLowerCase()];
+      },
     };
     const match = options.url.match(/^\/trust-reviews\/([^/?#]+)/);
     if (match) req.params.grantId = decodeURIComponent(match[1]);
@@ -199,7 +204,7 @@ describe("recipientTrustReviewRoutes", () => {
     const res = await invokeRouter(router, {
       method: "GET",
       url: "/trust-reviews/grant-1",
-      headers: { "x-test-user": JSON.stringify({ id: "recipient-1", email: "reviewer@example.com", role: "landlord" }) },
+    headers: { "x-test-user": JSON.stringify({ id: "recipient-1", email: "reviewer@example.com", role: "landlord" }) },
     });
 
     expect(res.status).toBe(200);
@@ -249,6 +254,38 @@ describe("recipientTrustReviewRoutes", () => {
         }),
       ])
     );
+    const securityTelemetry = stored.events
+      .map((event: any) => event.securityTelemetry)
+      .filter(Boolean);
+    expect(securityTelemetry).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          schemaVersion: "security_session_telemetry.v1",
+          workflow: "recipient_trust_review",
+          signal: "recipient_review_opened",
+          retention: expect.objectContaining({
+            classification: "security_session_internal",
+            internalOnly: true,
+            portableVisible: false,
+            exportable: false,
+          }),
+          request: expect.objectContaining({
+            ipHash: expect.any(String),
+            ipFamily: "ipv4",
+            userAgentFamily: "unknown",
+          }),
+          payloadSafety: expect.objectContaining({
+            trustPayloadIncluded: false,
+            preciseGeolocationIncluded: false,
+            deviceFingerprintingIncluded: false,
+            behavioralProfileIncluded: false,
+            riskScoreIncluded: false,
+          }),
+        }),
+      ])
+    );
+    expect(JSON.stringify(res.body?.data || {})).not.toContain("securityTelemetry");
+    expect(JSON.stringify(securityTelemetry)).not.toContain("203.0.113");
   });
 
   it("requires reauthentication for expired or mismatched recipient review sessions", async () => {

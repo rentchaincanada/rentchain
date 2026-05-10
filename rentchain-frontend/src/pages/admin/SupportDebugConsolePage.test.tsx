@@ -303,12 +303,58 @@ describe("SupportDebugConsolePage", () => {
           blockedReviewCount: 1,
           revokedAccessCount: 0,
           expiredAccessCount: 0,
+          sessionStartedCount: 1,
+          sessionExpiredCount: 0,
           lastActivityAt: "2026-05-02T00:00:00.000Z",
           lastOpenedAt: "2026-05-02T00:00:00.000Z",
           lastBlockedAt: "2026-05-01T00:00:00.000Z",
           lastOutcome: "opened",
           lastReason: "review_available",
           reasonCategories: ["recipient_email_mismatch", "review_available"],
+        },
+        securityTelemetry: {
+          schemaVersion: "support_safe_security_session_telemetry.v1",
+          internalOnly: true,
+          metadataOnly: true,
+          eventCount: 3,
+          blockedAttemptCount: 1,
+          wrongRecipientAttemptCount: 1,
+          revokedAttemptCount: 0,
+          expiredAttemptCount: 0,
+          replayBlockedCount: 0,
+          staleSessionCount: 0,
+          uniqueIpHashCount: 1,
+          userAgentFamilies: ["chrome"],
+          lastSignal: "recipient_review_opened",
+          lastRecordedAt: "2026-05-02T00:00:00.000Z",
+          signals: ["recipient_review_opened", "recipient_session_started", "wrong_recipient_attempt"],
+          retention: {
+            classification: "security_session_internal",
+            nonPortable: true,
+            nonExportable: true,
+          },
+          redaction: {
+            ipAddressMode: "hash_only",
+            userAgentMode: "family_and_hash",
+            rawIpVisible: false,
+            rawUserAgentVisible: false,
+            preciseGeolocationIncluded: false,
+            deviceFingerprintingIncluded: false,
+            behavioralProfileIncluded: false,
+            riskScoreIncluded: false,
+          },
+          visibility: {
+            supportSafe: true,
+            operatorVisible: true,
+            tenantVisible: false,
+            recipientVisible: false,
+            portableVisible: false,
+            publicVisible: false,
+            trustPayloadIncluded: false,
+            providerPayloadIncluded: false,
+            rawIdentityPayloadIncluded: false,
+            rawPropertyPayloadIncluded: false,
+          },
         },
         pilotOperation: {
           schemaVersion: "pilot_institution_review_operation.v1",
@@ -588,7 +634,10 @@ describe("SupportDebugConsolePage", () => {
     expect(screen.getByText(/recipient_followup/i)).toBeInTheDocument();
     expect(screen.getByText(/Review health/i)).toBeInTheDocument();
     expect(screen.getByText(/attention_required/i)).toBeInTheDocument();
-    expect(screen.getByText(/Replay blocks/i)).toBeInTheDocument();
+    expect(screen.getByText(/Security events/i)).toBeInTheDocument();
+    expect(screen.getByText(/Wrong recipient attempts/i)).toBeInTheDocument();
+    expect(screen.getByText(/Internal-only security telemetry/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Replay blocks/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Completion evidence/i)).toBeInTheDocument();
     expect(screen.getByText(/Trust payloads, portable attestation contents, provider payloads/i)).toBeInTheDocument();
     expect(screen.getByText(/Operator audit timeline/i)).toBeInTheDocument();

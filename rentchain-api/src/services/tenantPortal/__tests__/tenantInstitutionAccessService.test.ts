@@ -244,6 +244,7 @@ describe("tenantInstitutionAccessService", () => {
     const wrongRecipient = await service.getRecipientTrustReview({
       grantId: grant?.grantId || "",
       recipientEmail: "other@example.com",
+      requestContext: { ipAddress: "203.0.113.10", userAgent: "Mozilla/5.0 Chrome/120.0", requestId: "req-1" },
     });
     expect(wrongRecipient.decision.allowed).toBe(false);
     expect(wrongRecipient.decision.status).toBe("recipient_mismatch");
@@ -251,6 +252,8 @@ describe("tenantInstitutionAccessService", () => {
     const review = await service.getRecipientTrustReview({
       grantId: grant?.grantId || "",
       recipientEmail: "Reviewer@Example.com",
+      recipientUserId: "recipient-1",
+      requestContext: { ipAddress: "203.0.113.10", userAgent: "Mozilla/5.0 Chrome/120.0", requestId: "req-2" },
     });
     expect(review.decision.allowed).toBe(true);
     expect(review.summary?.schemaVersion).toBe("recipient_trust_review.v1");
@@ -312,6 +315,9 @@ describe("tenantInstitutionAccessService", () => {
       auditTimeline: listed[0].auditTimeline,
     });
     expect(auditPayload).not.toContain("tenant-1");
+    expect(auditPayload).not.toContain("securityTelemetry");
+    expect(auditPayload).not.toContain("203.0.113.10");
+    expect(auditPayload).not.toContain("Mozilla");
     expect(auditPayload).not.toContain("policyDecisions");
     expect(auditPayload).not.toContain("supportMetadataIncluded\":true");
     expect(auditPayload).not.toContain("rawProviderPayloadIncluded\":true");
@@ -319,6 +325,9 @@ describe("tenantInstitutionAccessService", () => {
     expect(auditPayload).not.toContain("downloadEnabled\":true");
     const payload = JSON.stringify(review.summary || {});
     expect(payload).not.toContain("tenant-1");
+    expect(payload).not.toContain("securityTelemetry");
+    expect(payload).not.toContain("203.0.113.10");
+    expect(payload).not.toContain("Mozilla");
     expect(payload).not.toContain("policyDecisions");
     expect(payload).not.toContain("rawProviderPayloadIncluded\":true");
     expect(payload).not.toContain("rawEvidenceIncluded\":true");
@@ -471,10 +480,13 @@ describe("tenantInstitutionAccessService", () => {
     await service.getRecipientTrustReview({
       grantId: grant?.grantId || "",
       recipientEmail: "other@example.com",
+      requestContext: { ipAddress: "198.51.100.20", userAgent: "Mozilla/5.0 Firefox/120.0" },
     });
     await service.getRecipientTrustReview({
       grantId: grant?.grantId || "",
       recipientEmail: "reviewer@example.com",
+      recipientUserId: "recipient-1",
+      requestContext: { ipAddress: "198.51.100.20", userAgent: "Mozilla/5.0 Firefox/120.0" },
     });
 
     const diagnostic = await service.getSupportInstitutionAccessDiagnostic({ grantId: grant?.grantId || "" });
@@ -502,6 +514,37 @@ describe("tenantInstitutionAccessService", () => {
           openedReviewCount: 1,
           blockedReviewCount: 1,
           reasonCategories: expect.arrayContaining(["access_granted", "recipient_email_mismatch", "review_available"]),
+        }),
+        securityTelemetry: expect.objectContaining({
+          schemaVersion: "support_safe_security_session_telemetry.v1",
+          internalOnly: true,
+          metadataOnly: true,
+          eventCount: 3,
+          blockedAttemptCount: 1,
+          wrongRecipientAttemptCount: 1,
+          uniqueIpHashCount: 1,
+          userAgentFamilies: ["firefox"],
+          signals: expect.arrayContaining(["recipient_review_opened", "recipient_session_started", "wrong_recipient_attempt"]),
+          retention: expect.objectContaining({
+            classification: "security_session_internal",
+            nonPortable: true,
+            nonExportable: true,
+          }),
+          redaction: expect.objectContaining({
+            ipAddressMode: "hash_only",
+            rawIpVisible: false,
+            rawUserAgentVisible: false,
+            preciseGeolocationIncluded: false,
+            deviceFingerprintingIncluded: false,
+            riskScoreIncluded: false,
+          }),
+          visibility: expect.objectContaining({
+            supportSafe: true,
+            tenantVisible: false,
+            recipientVisible: false,
+            portableVisible: false,
+            trustPayloadIncluded: false,
+          }),
         }),
         observability: expect.objectContaining({
           schemaVersion: "institution_review_observability.v1",
@@ -548,6 +591,9 @@ describe("tenantInstitutionAccessService", () => {
     const payload = JSON.stringify(diagnostic || {});
     expect(payload).not.toContain("tenant-1");
     expect(payload).not.toContain("reviewer@example.com");
+    expect(payload).not.toContain("198.51.100.20");
+    expect(payload).not.toContain("Mozilla");
+    expect(payload).not.toContain("Firefox/120.0");
     expect(payload).not.toContain("includedClaims");
     expect(payload).not.toContain("exportSummaries");
     expect(payload).not.toContain("policyDecisions");
