@@ -1650,6 +1650,18 @@ describe("tenantPortalRoutes foundation", () => {
         metadataOnly: true,
       })
     );
+    expect(invited.body?.data?.institutionReviewDelivery).toEqual(
+      expect.objectContaining({
+        schemaVersion: "institution_review_delivery.v1",
+        status: "sent",
+        attemptCount: 1,
+        recipientAuthenticationRequired: true,
+        bearerAccessEnabled: false,
+        publicAccessEnabled: false,
+        downloadEnabled: false,
+        metadataOnly: true,
+      })
+    );
     expect(invited.body?.data?.recipientAccess).toEqual(
       expect.objectContaining({
         enabled: true,
@@ -1683,9 +1695,87 @@ describe("tenantPortalRoutes foundation", () => {
       expect.arrayContaining([
         expect.objectContaining({ eventType: "institution_review_invite_sent", reason: "invite_sent" }),
         expect.objectContaining({ eventType: "institution_review_invite_created", reason: "invite_created" }),
+        expect.objectContaining({ eventType: "institution_review_delivery_sent", reason: "delivery_sent" }),
+        expect.objectContaining({ eventType: "institution_review_delivery_prepared", reason: "delivery_prepared" }),
       ])
     );
     expect(ensureCollection("tenantSharePackages").size).toBe(0);
+  });
+
+  it("resends institution review delivery deterministically and blocks revoked delivery", async () => {
+    process.env.PUBLIC_APP_URL = "https://www.rentchain.test";
+    const router = (await import("../tenantPortalRoutes")).default;
+    const headers = {
+      "x-test-user": JSON.stringify({
+        id: "user-1",
+        email: "tenant@example.com",
+        role: "tenant",
+        tenantId: "tenant-1",
+      }),
+    };
+
+    const invited = await invokeRouter(router, {
+      method: "POST",
+      url: "/institution-access/invites",
+      body: {
+        audience: "lender",
+        recipient: { email: "underwriter@example.com", organizationName: "Example Lender" },
+        expiresInDays: 7,
+        consentAccepted: true,
+      },
+      headers,
+    });
+    const grantId = invited.body?.data?.grantId;
+    expect(sendEmailMock).toHaveBeenCalledTimes(1);
+
+    const resent = await invokeRouter(router, {
+      method: "POST",
+      url: `/institution-access/grants/${encodeURIComponent(grantId)}/delivery/resend`,
+      headers,
+    });
+    expect(resent.status).toBe(200);
+    expect(sendEmailMock).toHaveBeenCalledTimes(2);
+    expect(resent.body?.data?.institutionReviewDelivery).toEqual(
+      expect.objectContaining({
+        status: "resent",
+        attemptCount: 2,
+        recipientAuthenticationRequired: true,
+        bearerAccessEnabled: false,
+        publicAccessEnabled: false,
+        downloadEnabled: false,
+        metadataOnly: true,
+      })
+    );
+    expect(resent.body?.data?.auditTimeline).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ eventType: "institution_review_delivery_resent", reason: "delivery_resent" }),
+        expect.objectContaining({ eventType: "institution_review_delivery_prepared", reason: "delivery_prepared" }),
+      ])
+    );
+
+    const revoked = await invokeRouter(router, {
+      method: "POST",
+      url: `/institution-access/grants/${encodeURIComponent(grantId)}/revoke`,
+      headers,
+    });
+    expect(revoked.status).toBe(200);
+    expect(revoked.body?.data?.institutionReviewDelivery).toEqual(
+      expect.objectContaining({
+        status: "revoked",
+        bearerAccessEnabled: false,
+        publicAccessEnabled: false,
+        downloadEnabled: false,
+      })
+    );
+
+    const blocked = await invokeRouter(router, {
+      method: "POST",
+      url: `/institution-access/grants/${encodeURIComponent(grantId)}/delivery/resend`,
+      headers,
+    });
+    expect(blocked.status).toBe(400);
+    expect(blocked.body?.error).toBe("TENANT_INSTITUTION_DELIVERY_BLOCKED");
+    expect(sendEmailMock).toHaveBeenCalledTimes(2);
   });
 
   it("creates a tenant-owned metadata-only institutional handoff draft safely", async () => {

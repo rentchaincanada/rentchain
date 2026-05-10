@@ -73,6 +73,7 @@ import {
   createTenantInstitutionAccessGrant,
   listTenantInstitutionAccessGrants,
   previewTenantInstitutionAccess,
+  resendInstitutionReviewDelivery,
   revokeTenantInstitutionAccessGrant,
 } from "../services/tenantPortal/tenantInstitutionAccessService";
 import { recordSystemObservabilityEvent } from "../services/observability/recordSystemObservabilityEvent";
@@ -3409,6 +3410,9 @@ router.post("/institution-access/grants", requireTenantWorkspaceIdentity, async 
     if (err?.message === "tenant_institution_access_policy_blocked") {
       return res.status(400).json({ ok: false, error: "TENANT_INSTITUTION_ACCESS_POLICY_BLOCKED" });
     }
+    if (String(err?.message || "").startsWith("tenant_institution_delivery_blocked")) {
+      return res.status(400).json({ ok: false, error: "TENANT_INSTITUTION_DELIVERY_BLOCKED" });
+    }
     console.error("[tenant/institution-access:create] failed", {
       tenantId,
       message: err?.message || "failed",
@@ -3452,11 +3456,49 @@ router.post("/institution-access/invites", requireTenantWorkspaceIdentity, async
     if (err?.message === "tenant_institution_access_policy_blocked") {
       return res.status(400).json({ ok: false, error: "TENANT_INSTITUTION_ACCESS_POLICY_BLOCKED" });
     }
+    if (String(err?.message || "").startsWith("tenant_institution_delivery_blocked")) {
+      return res.status(400).json({ ok: false, error: "TENANT_INSTITUTION_DELIVERY_BLOCKED" });
+    }
     console.error("[tenant/institution-access:invite] failed", {
       tenantId,
       message: err?.message || "failed",
     });
     return res.status(500).json({ ok: false, error: "TENANT_INSTITUTION_ACCESS_INVITE_FAILED" });
+  }
+});
+
+router.post("/institution-access/grants/:id/delivery/resend", requireTenantWorkspaceIdentity, async (req: any, res) => {
+  const context = await resolveWorkspaceContextOrRespond(req, res);
+  if (!context) return;
+
+  const tenantId = String(req.user?.tenantId || context.tenantId || "").trim();
+  const grantId = String(req.params?.id || "").trim();
+  if (!tenantId || !grantId) {
+    return res.status(404).json({ ok: false, error: "NOT_FOUND" });
+  }
+
+  try {
+    const delivered = await resendInstitutionReviewDelivery({ tenantId, grantId });
+    if (!delivered) {
+      return res.status(404).json({ ok: false, error: "TENANT_INSTITUTION_ACCESS_NOT_FOUND" });
+    }
+    if ((delivered as unknown) === false) {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+    return res.json({ ok: true, data: delivered });
+  } catch (err: any) {
+    if (err?.message === "tenant_institution_delivery_invite_required") {
+      return res.status(400).json({ ok: false, error: "TENANT_INSTITUTION_DELIVERY_INVITE_REQUIRED" });
+    }
+    if (String(err?.message || "").startsWith("tenant_institution_delivery_blocked")) {
+      return res.status(400).json({ ok: false, error: "TENANT_INSTITUTION_DELIVERY_BLOCKED" });
+    }
+    console.error("[tenant/institution-access:delivery-resend] failed", {
+      tenantId,
+      grantId,
+      message: err?.message || "failed",
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_INSTITUTION_DELIVERY_RESEND_FAILED" });
   }
 });
 

@@ -40,6 +40,7 @@ import {
   createInstitutionReviewInvite,
   listTenantInstitutionAccessGrants,
   previewTenantInstitutionAccess,
+  resendInstitutionReviewDelivery,
   revokeTenantInstitutionAccessGrant,
   type TenantInstitutionAccessAudience,
   type TenantInstitutionAccessGrant,
@@ -228,6 +229,14 @@ function prettyAccessAuditOutcome(value: string | null | undefined) {
       return "Invite opened";
     case "invite_authenticated":
       return "Invite authenticated";
+    case "delivery_prepared":
+      return "Delivery prepared";
+    case "delivery_sent":
+      return "Delivery sent";
+    case "delivery_failed":
+      return "Delivery failed";
+    case "delivery_resent":
+      return "Delivery resent";
     case "opened":
       return "Review opened";
     case "blocked":
@@ -753,6 +762,24 @@ export default function TenantWorkspacePage() {
       setInstitutionAccessPreview((current) => (current?.grantId === grantId ? revoked : current));
     } catch (err: any) {
       setInstitutionAccessError(err?.payload?.error || err?.message || "Unable to revoke institution access right now.");
+    } finally {
+      setInstitutionAccessBusy(false);
+    }
+  }, []);
+
+  const handleResendInstitutionDelivery = React.useCallback(async (grantId: string) => {
+    try {
+      setInstitutionAccessBusy(true);
+      setInstitutionAccessError(null);
+      const delivered = await resendInstitutionReviewDelivery(grantId);
+      setInstitutionAccessGrants((current) => current.map((entry) => (entry.grantId === grantId ? delivered : entry)));
+      setInstitutionAccessPreview((current) => (current?.grantId === grantId ? delivered : current));
+    } catch (err: any) {
+      setInstitutionAccessError(
+        err?.payload?.error === "TENANT_INSTITUTION_DELIVERY_BLOCKED"
+          ? "This delivery cannot be resent because access is revoked, expired, policy-blocked, or lifecycle-invalid."
+          : err?.payload?.error || err?.message || "Unable to resend this institution review delivery right now."
+      );
     } finally {
       setInstitutionAccessBusy(false);
     }
@@ -1909,6 +1936,18 @@ export default function TenantWorkspacePage() {
                         { label: "Audience", value: prettyInstitutionAccessAudience(entry.audience) },
                         { label: "Status", value: prettyTrustExportLifecycle(entry.lifecycle) },
                         { label: "Invite", value: entry.institutionReviewInvite?.status ? prettyStatus(entry.institutionReviewInvite.status) : "Not created" },
+                        {
+                          label: "Delivery",
+                          value: entry.institutionReviewDelivery?.status ? prettyStatus(entry.institutionReviewDelivery.status) : "Not prepared",
+                        },
+                        {
+                          label: "Delivery attempts",
+                          value: String(entry.institutionReviewDelivery?.attemptCount || 0),
+                        },
+                        {
+                          label: "Last sent",
+                          value: entry.institutionReviewDelivery?.lastSentAt ? formatDate(entry.institutionReviewDelivery.lastSentAt) : "Not sent",
+                        },
                         { label: "Created", value: formatDate(entry.createdAt) },
                         { label: "Expires", value: formatDate(entry.expiresAt) },
                         { label: "Authentication", value: "Required before review" },
@@ -1963,11 +2002,24 @@ export default function TenantWorkspacePage() {
                           Recipient review activity will appear here after authenticated review attempts. Trust payloads and support/internal metadata are never shown in this activity summary.
                         </div>
                       )}
+                      <div style={{ color: textTokens.secondary, lineHeight: 1.5 }}>
+                        Delivery emails contain only the review context and sign-in requirement. They do not include
+                        trust payloads, raw IDs, downloads, approval language, or bearer-token access.
+                      </div>
                     </div>
                     {entry.lifecycle === "active" ? (
-                      <button type="button" onClick={() => void handleRevokeInstitutionAccessGrant(entry.grantId)} disabled={institutionAccessBusy}>
-                        Revoke access
-                      </button>
+                      <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
+                        <button
+                          type="button"
+                          onClick={() => void handleResendInstitutionDelivery(entry.grantId)}
+                          disabled={institutionAccessBusy}
+                        >
+                          Resend delivery
+                        </button>
+                        <button type="button" onClick={() => void handleRevokeInstitutionAccessGrant(entry.grantId)} disabled={institutionAccessBusy}>
+                          Revoke access
+                        </button>
+                      </div>
                     ) : null}
                   </div>
                 ))

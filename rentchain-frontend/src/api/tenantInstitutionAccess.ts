@@ -124,7 +124,14 @@ export type TenantInstitutionAccessGrant = TenantInstitutionAccessPreview & {
       | "institution_review_invite_authenticated"
       | "institution_review_invite_revoked"
       | "institution_review_invite_expired"
-      | "institution_review_invite_blocked";
+      | "institution_review_invite_blocked"
+      | "institution_review_delivery_prepared"
+      | "institution_review_delivery_sent"
+      | "institution_review_delivery_failed"
+      | "institution_review_delivery_blocked"
+      | "institution_review_delivery_resent"
+      | "institution_review_delivery_revoked"
+      | "institution_review_delivery_expired";
     occurredAt: string;
     actorType: "tenant" | "system" | "recipient";
     metadataOnly: true;
@@ -133,6 +140,10 @@ export type TenantInstitutionAccessGrant = TenantInstitutionAccessPreview & {
       | "invite_sent"
       | "invite_opened"
       | "invite_authenticated"
+      | "delivery_prepared"
+      | "delivery_sent"
+      | "delivery_failed"
+      | "delivery_resent"
       | "granted"
       | "opened"
       | "blocked"
@@ -168,6 +179,27 @@ export type TenantInstitutionAccessGrant = TenantInstitutionAccessPreview & {
     metadataOnly: true;
     summary: string;
   };
+  institutionReviewDelivery?: {
+    schemaVersion: "institution_review_delivery.v1";
+    status: "not_prepared" | "prepared" | "sent" | "failed" | "blocked" | "resent" | "revoked" | "expired";
+    attemptCount: number;
+    lastAttemptAt: string | null;
+    lastSentAt: string | null;
+    lastFailedAt: string | null;
+    lastFailureReason: string | null;
+    recipientEmail: string;
+    redactedRecipientEmail: string;
+    audience: TenantInstitutionAccessAudience;
+    purpose: TenantInstitutionAccessPurpose;
+    reviewUrl: string | null;
+    tenantAuthorized: true;
+    recipientAuthenticationRequired: true;
+    bearerAccessEnabled: false;
+    publicAccessEnabled: false;
+    downloadEnabled: false;
+    metadataOnly: true;
+    summary: string;
+  };
 };
 
 export type TenantInstitutionAccessAuditEvent = {
@@ -193,7 +225,14 @@ export type TenantInstitutionAccessAuditEvent = {
     | "institution_review_invite_authenticated"
     | "institution_review_invite_revoked"
     | "institution_review_invite_expired"
-    | "institution_review_invite_blocked";
+    | "institution_review_invite_blocked"
+    | "institution_review_delivery_prepared"
+    | "institution_review_delivery_sent"
+    | "institution_review_delivery_failed"
+    | "institution_review_delivery_blocked"
+    | "institution_review_delivery_resent"
+    | "institution_review_delivery_revoked"
+    | "institution_review_delivery_expired";
   occurredAt: string;
   actorType: "tenant" | "system" | "recipient";
   outcome:
@@ -201,6 +240,10 @@ export type TenantInstitutionAccessAuditEvent = {
     | "invite_sent"
     | "invite_opened"
     | "invite_authenticated"
+    | "delivery_prepared"
+    | "delivery_sent"
+    | "delivery_failed"
+    | "delivery_resent"
     | "granted"
     | "opened"
     | "blocked"
@@ -309,6 +352,16 @@ export async function createInstitutionReviewInvite(
     {
       method: "POST",
       body: request,
+    }
+  );
+  return res.data;
+}
+
+export async function resendInstitutionReviewDelivery(grantId: string): Promise<TenantInstitutionAccessGrant> {
+  const res = await tenantApiFetch<{ ok: boolean; data: TenantInstitutionAccessGrant }>(
+    `/tenant/institution-access/grants/${encodeURIComponent(grantId)}/delivery/resend`,
+    {
+      method: "POST",
     }
   );
   return res.data;
