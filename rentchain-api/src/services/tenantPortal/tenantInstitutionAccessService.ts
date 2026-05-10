@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { db } from "../../config/firebase";
+import { buildEmailHtml, buildEmailText } from "../../email/templates/baseEmailTemplate";
 import {
   deriveInstitutionReviewSession,
   type InstitutionReviewSessionSummary,
@@ -12,6 +13,7 @@ import {
   type TenantTrustExportAudience,
   type TenantTrustExportPurpose,
 } from "./tenantTrustExportService";
+import { sendEmail } from "../emailService";
 
 const COLLECTION = "tenantInstitutionAccessGrants";
 const SESSION_COLLECTION = "recipientTrustReviewSessions";
@@ -79,14 +81,13 @@ export type TenantInstitutionAccessPreview = {
   providerIntegrationEnabled: false;
   automatedDecisioningEnabled: false;
   recipientAccess: {
-    enabled: false;
-    accessUrl: null;
+    enabled: boolean;
+    accessUrl: string | null;
     accessTokenIssued: false;
     recipientAuthenticationRequired: true;
     sessionBound: true;
     downloadEnabled: false;
-    summary:
-      "Recipient access is modeled for controlled future review only; no public link or external delivery is created by this grant.";
+    summary: string;
   };
   package: InstitutionalTrustExportPackage;
   includedClaims: Array<{
@@ -106,6 +107,40 @@ export type TenantInstitutionAccessPreview = {
   disclaimers: string[];
 };
 
+export type InstitutionReviewInviteStatus =
+  | "not_created"
+  | "invited"
+  | "viewed"
+  | "authenticated"
+  | "expired"
+  | "revoked"
+  | "blocked"
+  | "send_failed";
+
+export type InstitutionReviewInviteSummary = {
+  schemaVersion: "institution_review_invite.v1";
+  status: InstitutionReviewInviteStatus;
+  recipientEmail: string;
+  redactedRecipientEmail: string;
+  organizationName: string | null;
+  audience: TenantInstitutionAccessAudience;
+  purpose: TenantInstitutionAccessPurpose;
+  reviewUrl: string | null;
+  createdAt: string | null;
+  sentAt: string | null;
+  openedAt: string | null;
+  authenticatedAt: string | null;
+  expiresAt: string | null;
+  revokedAt: string | null;
+  recipientAuthenticationRequired: true;
+  inviteTokenIssued: false;
+  bearerAccessEnabled: false;
+  publicAccessEnabled: false;
+  downloadEnabled: false;
+  metadataOnly: true;
+  summary: string;
+};
+
 export type TenantInstitutionAccessGrantEvent = {
   eventType:
     | "tenant_institution_access_granted"
@@ -120,13 +155,39 @@ export type TenantInstitutionAccessGrantEvent = {
     | "recipient_review_session_expired"
     | "recipient_review_session_revoked"
     | "recipient_review_session_blocked"
-    | "recipient_review_session_reauthenticated";
+    | "recipient_review_session_reauthenticated"
+    | "institution_review_invite_created"
+    | "institution_review_invite_sent"
+    | "institution_review_invite_opened"
+    | "institution_review_invite_authenticated"
+    | "institution_review_invite_revoked"
+    | "institution_review_invite_expired"
+    | "institution_review_invite_blocked";
   occurredAt: string;
   actorType: "tenant" | "system" | "recipient";
   metadataOnly: true;
-  outcome?: "granted" | "opened" | "blocked" | "revoked" | "expired" | "session_started" | "reauthenticated";
-  reason?: RecipientTrustReviewAccessDecision["reason"] | "access_granted" | "access_revoked" | "session_started";
-  status?: RecipientTrustReviewStatus | "granted" | "active";
+  outcome?:
+    | "invite_created"
+    | "invite_sent"
+    | "invite_opened"
+    | "invite_authenticated"
+    | "granted"
+    | "opened"
+    | "blocked"
+    | "revoked"
+    | "expired"
+    | "session_started"
+    | "reauthenticated";
+  reason?:
+    | RecipientTrustReviewAccessDecision["reason"]
+    | "access_granted"
+    | "access_revoked"
+    | "session_started"
+    | "invite_created"
+    | "invite_sent"
+    | "invite_opened"
+    | "invite_authenticated";
+  status?: RecipientTrustReviewStatus | "granted" | "active" | "invited" | "viewed" | "authenticated" | "send_failed";
 };
 
 type TenantInstitutionAccessStoredGrant = TenantInstitutionAccessPreview & {
@@ -136,11 +197,13 @@ type TenantInstitutionAccessStoredGrant = TenantInstitutionAccessPreview & {
   updatedAt: string;
   events: TenantInstitutionAccessGrantEvent[];
   tenantId: string;
+  institutionReviewInvite?: InstitutionReviewInviteSummary;
 };
 
 export type TenantInstitutionAccessGrant = Omit<TenantInstitutionAccessStoredGrant, "tenantId"> & {
   auditSummary: TenantInstitutionAccessAuditSummary;
   auditTimeline: TenantInstitutionAccessAuditEvent[];
+  institutionReviewSession: InstitutionReviewSessionSummary;
 };
 
 export type RecipientTrustReviewStatus =
@@ -250,6 +313,10 @@ export type RecipientTrustReviewResult = {
 };
 
 export type TenantInstitutionAccessAuditOutcome =
+  | "invite_created"
+  | "invite_sent"
+  | "invite_opened"
+  | "invite_authenticated"
   | "granted"
   | "opened"
   | "blocked"
@@ -263,13 +330,27 @@ export type TenantInstitutionAccessAuditEvent = {
   occurredAt: string;
   actorType: "tenant" | "system" | "recipient";
   outcome: TenantInstitutionAccessAuditOutcome;
-  status: RecipientTrustReviewStatus | "granted" | "revoked" | "expired" | "blocked" | "active";
+  status:
+    | RecipientTrustReviewStatus
+    | "granted"
+    | "revoked"
+    | "expired"
+    | "blocked"
+    | "active"
+    | "invited"
+    | "viewed"
+    | "authenticated"
+    | "send_failed";
   reason:
     | RecipientTrustReviewAccessDecision["reason"]
     | "access_granted"
     | "access_revoked"
     | "access_expired"
     | "access_blocked"
+    | "invite_created"
+    | "invite_sent"
+    | "invite_opened"
+    | "invite_authenticated"
     | "session_started"
     | "recipient_session_expired"
     | "recipient_session_revoked"
@@ -617,13 +698,67 @@ function accessPreviewFromTrustPackage(params: {
   };
 }
 
+function institutionReviewUrl(grantId: string) {
+  const base = String(process.env.PUBLIC_APP_URL || process.env.VITE_PUBLIC_APP_URL || "https://www.rentchain.ai").replace(
+    /\/$/,
+    ""
+  );
+  return `${base}/recipient/trust-review/${encodeURIComponent(grantId)}`;
+}
+
+function inviteSummaryForGrant(params: {
+  grant: TenantInstitutionAccessStoredGrant;
+  status?: InstitutionReviewInviteStatus;
+  reviewUrl?: string | null;
+  createdAt?: string | null;
+  sentAt?: string | null;
+  openedAt?: string | null;
+  authenticatedAt?: string | null;
+}) {
+  const existing = params.grant.institutionReviewInvite || null;
+  const revoked = params.grant.lifecycle === "revoked" || Boolean(params.grant.revokedAt || params.grant.consent?.revokedAt);
+  const expired = params.grant.lifecycle === "expired" || Boolean(params.grant.expiresAt && Date.parse(params.grant.expiresAt) <= Date.now());
+  const status =
+    params.status ||
+    (revoked ? "revoked" : expired ? "expired" : existing?.status && existing.status !== "not_created" ? existing.status : "invited");
+  return {
+    schemaVersion: "institution_review_invite.v1" as const,
+    status,
+    recipientEmail: params.grant.recipient?.email || "",
+    redactedRecipientEmail: redactEmail(params.grant.recipient?.email),
+    organizationName: params.grant.recipient?.organizationName || null,
+    audience: params.grant.audience,
+    purpose: params.grant.purpose,
+    reviewUrl: params.reviewUrl === undefined ? existing?.reviewUrl || institutionReviewUrl(params.grant.grantId) : params.reviewUrl,
+    createdAt: params.createdAt === undefined ? existing?.createdAt || params.grant.createdAt || null : params.createdAt,
+    sentAt: params.sentAt === undefined ? existing?.sentAt || null : params.sentAt,
+    openedAt: params.openedAt === undefined ? existing?.openedAt || null : params.openedAt,
+    authenticatedAt: params.authenticatedAt === undefined ? existing?.authenticatedAt || null : params.authenticatedAt,
+    expiresAt: params.grant.expiresAt || null,
+    revokedAt: params.grant.revokedAt || params.grant.consent?.revokedAt || null,
+    recipientAuthenticationRequired: true as const,
+    inviteTokenIssued: false as const,
+    bearerAccessEnabled: false as const,
+    publicAccessEnabled: false as const,
+    downloadEnabled: false as const,
+    metadataOnly: true as const,
+    summary:
+      "This invitation points the recipient to an authenticated, tenant-authorized, metadata-only trust review. The invite link is not bearer authorization.",
+  };
+}
+
 function outcomeForEventType(eventType: TenantInstitutionAccessAuditEvent["eventType"]): TenantInstitutionAccessAuditOutcome {
+  if (eventType === "institution_review_invite_created") return "invite_created";
+  if (eventType === "institution_review_invite_sent") return "invite_sent";
+  if (eventType === "institution_review_invite_opened") return "invite_opened";
+  if (eventType === "institution_review_invite_authenticated") return "invite_authenticated";
   if (eventType === "tenant_institution_access_granted") return "granted";
   if (eventType === "tenant_institution_access_revoked" || eventType === "recipient_trust_review_revoked") return "revoked";
   if (
     eventType === "tenant_institution_access_expired" ||
     eventType === "recipient_trust_review_expired" ||
-    eventType === "recipient_review_session_expired"
+    eventType === "recipient_review_session_expired" ||
+    eventType === "institution_review_invite_expired"
   ) {
     return "expired";
   }
@@ -635,12 +770,22 @@ function outcomeForEventType(eventType: TenantInstitutionAccessAuditEvent["event
 
 function statusForAuditEvent(event: TenantInstitutionAccessStoredGrant["events"][number]): TenantInstitutionAccessAuditEvent["status"] {
   if (event.status) return event.status as TenantInstitutionAccessAuditEvent["status"];
+  if (event.eventType === "institution_review_invite_created" || event.eventType === "institution_review_invite_sent") return "invited";
+  if (event.eventType === "institution_review_invite_opened") return "viewed";
+  if (event.eventType === "institution_review_invite_authenticated") return "authenticated";
   if (event.eventType === "tenant_institution_access_granted") return "granted";
-  if (event.eventType === "tenant_institution_access_revoked" || event.eventType === "recipient_trust_review_revoked") return "revoked";
+  if (
+    event.eventType === "tenant_institution_access_revoked" ||
+    event.eventType === "recipient_trust_review_revoked" ||
+    event.eventType === "institution_review_invite_revoked"
+  ) {
+    return "revoked";
+  }
   if (
     event.eventType === "tenant_institution_access_expired" ||
     event.eventType === "recipient_trust_review_expired" ||
-    event.eventType === "recipient_review_session_expired"
+    event.eventType === "recipient_review_session_expired" ||
+    event.eventType === "institution_review_invite_expired"
   ) {
     return "expired";
   }
@@ -652,8 +797,16 @@ function statusForAuditEvent(event: TenantInstitutionAccessStoredGrant["events"]
 
 function reasonForAuditEvent(event: TenantInstitutionAccessStoredGrant["events"][number]): TenantInstitutionAccessAuditEvent["reason"] {
   if (event.reason) return event.reason as TenantInstitutionAccessAuditEvent["reason"];
+  if (event.eventType === "institution_review_invite_created") return "invite_created";
+  if (event.eventType === "institution_review_invite_sent") return "invite_sent";
+  if (event.eventType === "institution_review_invite_opened") return "invite_opened";
+  if (event.eventType === "institution_review_invite_authenticated") return "invite_authenticated";
   if (event.eventType === "tenant_institution_access_granted") return "access_granted";
-  if (event.eventType === "tenant_institution_access_revoked" || event.eventType === "recipient_trust_review_revoked") {
+  if (
+    event.eventType === "tenant_institution_access_revoked" ||
+    event.eventType === "recipient_trust_review_revoked" ||
+    event.eventType === "institution_review_invite_revoked"
+  ) {
     return "access_revoked";
   }
   if (event.eventType === "recipient_review_session_revoked") return "recipient_session_revoked";
@@ -662,7 +815,8 @@ function reasonForAuditEvent(event: TenantInstitutionAccessStoredGrant["events"]
   if (event.eventType === "recipient_review_session_started") return "session_started";
   if (
     event.eventType === "tenant_institution_access_expired" ||
-    event.eventType === "recipient_trust_review_expired"
+    event.eventType === "recipient_trust_review_expired" ||
+    event.eventType === "institution_review_invite_expired"
   ) {
     return "access_expired";
   }
@@ -736,7 +890,19 @@ function buildAccessAudit(record: TenantInstitutionAccessStoredGrant): {
 function publicGrant(record: TenantInstitutionAccessStoredGrant): TenantInstitutionAccessGrant {
   const { tenantId: _tenantId, ...rest } = record;
   const { auditSummary, auditTimeline } = buildAccessAudit(record);
-  return { ...rest, auditSummary, auditTimeline };
+  const normalizedRecord = {
+    ...rest,
+    institutionReviewInvite: record.institutionReviewInvite || inviteSummaryForGrant({ grant: record, status: "not_created", reviewUrl: null }),
+  };
+  return {
+    ...normalizedRecord,
+    auditSummary,
+    auditTimeline,
+    institutionReviewSession: deriveInstitutionReviewSession({
+      accessGrant: record,
+      generatedAt: record.updatedAt || record.generatedAt,
+    }),
+  };
 }
 
 function supportDiagnosticFromGrant(record: TenantInstitutionAccessStoredGrant): SupportInstitutionAccessDiagnosticSummary {
@@ -1305,6 +1471,24 @@ export async function getRecipientTrustReview(params: {
     status: "available",
     reason: "review_available",
   });
+  if (grant.institutionReviewInvite) {
+    await appendGrantEvent({
+      grant,
+      eventType: "institution_review_invite_authenticated",
+      occurredAt: reviewedAt,
+      status: "authenticated",
+      reason: "invite_authenticated",
+      outcome: "invite_authenticated",
+    });
+    const invite = inviteSummaryForGrant({
+      grant,
+      status: "authenticated",
+      openedAt: grant.institutionReviewInvite.openedAt || reviewedAt,
+      authenticatedAt: reviewedAt,
+    });
+    await db.collection(COLLECTION).doc(grant.grantId).set({ institutionReviewInvite: invite, updatedAt: reviewedAt }, { merge: true });
+    grant.institutionReviewInvite = invite;
+  }
 
   return {
     decision: {
@@ -1415,6 +1599,204 @@ export async function createTenantInstitutionAccessGrant(params: {
   return publicGrant(record);
 }
 
+async function findReusableInviteGrant(params: {
+  tenantId: string;
+  audience: TenantInstitutionAccessAudience;
+  purpose: TenantInstitutionAccessPurpose;
+  recipientEmail: string;
+}) {
+  const snap = await db.collection(COLLECTION).where("tenantId", "==", params.tenantId).limit(25).get();
+  const now = Date.now();
+  const match = (snap.docs || [])
+    .map((doc: any) => asGrant(String(doc.id || ""), doc.data?.() || {}))
+    .find((grant) => {
+      const expiresAt = grant.expiresAt ? Date.parse(grant.expiresAt) : 0;
+      return (
+        grant.audience === params.audience &&
+        grant.purpose === params.purpose &&
+        normalizeEmail(grant.recipient?.email) === params.recipientEmail &&
+        grant.lifecycle === "active" &&
+        grant.consent?.granted === true &&
+        (!expiresAt || expiresAt > now) &&
+        grant.package?.status === "export_ready"
+      );
+    });
+  return match || null;
+}
+
+async function sendInstitutionReviewInviteEmail(params: {
+  grant: TenantInstitutionAccessStoredGrant;
+  reviewUrl: string;
+}) {
+  const audienceLabel = params.grant.audience.replace(/_/g, " ");
+  const purposeLabel = params.grant.purpose.replace(/_/g, " ");
+  const organization = params.grant.recipient.organizationName
+    ? ` for ${params.grant.recipient.organizationName}`
+    : "";
+  const intro = `A RentChain tenant has authorized a limited institution trust review${organization}. You must sign in with ${params.grant.recipient.email} before any review summary can be shown.`;
+  const bullets = [
+    `Audience: ${audienceLabel}`,
+    `Purpose: ${purposeLabel}`,
+    `Expires: ${params.grant.expiresAt || "Time-bound access"}`,
+    "The review is metadata-only, view-only, and tenant-mediated.",
+    "This is not an approval, eligibility decision, credit report, public profile, or automated decision.",
+    "Raw identity documents, provider payloads, support/internal notes, and downloads are not included.",
+  ];
+  await sendEmail({
+    to: params.grant.recipient.email,
+    from: process.env.EMAIL_FROM || process.env.FROM_EMAIL,
+    subject: "RentChain tenant-authorized trust review invitation",
+    text: buildEmailText({
+      intro,
+      bullets,
+      ctaText: "Sign in to review",
+      ctaUrl: params.reviewUrl,
+      footerNote:
+        "This invitation does not grant access by itself. Recipient authentication and tenant authorization are required before review.",
+    }),
+    html: buildEmailHtml({
+      title: "Tenant-authorized trust review",
+      intro,
+      bullets,
+      ctaText: "Sign in to review",
+      ctaUrl: params.reviewUrl,
+      preheader: "A tenant has authorized a limited metadata-only RentChain trust review.",
+      footerNote:
+        "This invitation does not grant access by itself. Recipient authentication and tenant authorization are required before review.",
+    }),
+  });
+}
+
+export async function createInstitutionReviewInvite(params: {
+  tenantId: string;
+  audience?: unknown;
+  purpose?: unknown;
+  recipient?: unknown;
+  expiresInDays?: unknown;
+  consentAccepted?: boolean;
+}) {
+  const tenantId = asString(params.tenantId);
+  if (!tenantId) return null;
+  if (params.consentAccepted !== true) throw new Error("tenant_institution_access_consent_required");
+  const recipient = normalizeRecipient(params.recipient);
+  if (!recipient) throw new Error("tenant_institution_access_recipient_required");
+  const expiresInDays = clampExpiresInDays(params.expiresInDays);
+  if (!expiresInDays) throw new Error("tenant_institution_access_expiration_required");
+  const audience = sanitizeAudience(params.audience);
+  const purpose = purposeForAudience(audience);
+  const reusable = await findReusableInviteGrant({ tenantId, audience, purpose, recipientEmail: recipient.email });
+  const created = reusable || (await createTenantInstitutionAccessGrant({ ...params, tenantId, consentAccepted: true }));
+  if (!created) return null;
+
+  const ref = db.collection(COLLECTION).doc(created.grantId);
+  const snap = await ref.get();
+  const grant = asGrant(created.grantId, snap.data?.() || created);
+  if (grant.lifecycle !== "active" || grant.package?.status !== "export_ready") {
+    throw new Error("tenant_institution_access_policy_blocked");
+  }
+
+  const now = nowIso();
+  const reviewUrl = institutionReviewUrl(grant.grantId);
+  const createdInvite = inviteSummaryForGrant({
+    grant,
+    status: "invited",
+    reviewUrl,
+    createdAt: grant.institutionReviewInvite?.createdAt || now,
+  });
+  const createdEvent: TenantInstitutionAccessGrantEvent = {
+    eventType: "institution_review_invite_created",
+    occurredAt: now,
+    actorType: "tenant",
+    metadataOnly: true,
+    outcome: "invite_created",
+    status: "invited",
+    reason: "invite_created",
+  };
+  const eventsBeforeSend = [...(Array.isArray(grant.events) ? grant.events : []), createdEvent].slice(-50);
+  await ref.set(
+    {
+      institutionReviewInvite: createdInvite,
+      recipientAccess: {
+        ...grant.recipientAccess,
+        enabled: true,
+        accessUrl: reviewUrl,
+        accessTokenIssued: false,
+        recipientAuthenticationRequired: true,
+        sessionBound: true,
+        downloadEnabled: false,
+        summary:
+          "Recipient access requires authentication and matching recipient identity; the invite link is not bearer authorization.",
+      },
+      events: eventsBeforeSend,
+      updatedAt: now,
+    },
+    { merge: true }
+  );
+  grant.institutionReviewInvite = createdInvite;
+  grant.recipientAccess = {
+    ...grant.recipientAccess,
+    enabled: true,
+    accessUrl: reviewUrl,
+    accessTokenIssued: false,
+    recipientAuthenticationRequired: true,
+    sessionBound: true,
+    downloadEnabled: false,
+    summary:
+      "Recipient access requires authentication and matching recipient identity; the invite link is not bearer authorization.",
+  };
+  grant.events = eventsBeforeSend;
+  grant.updatedAt = now;
+
+  try {
+    await sendInstitutionReviewInviteEmail({ grant, reviewUrl });
+  } catch (error) {
+    const failedAt = nowIso();
+    const failedInvite = inviteSummaryForGrant({ grant, status: "send_failed", reviewUrl, createdAt: createdInvite.createdAt });
+    const failedEvents = [
+      ...eventsBeforeSend,
+      {
+        eventType: "institution_review_invite_blocked" as const,
+        occurredAt: failedAt,
+        actorType: "system" as const,
+        metadataOnly: true as const,
+        outcome: "blocked" as const,
+        status: "send_failed" as const,
+        reason: "grant_blocked" as const,
+      },
+    ].slice(-50);
+    await ref.set({ institutionReviewInvite: failedInvite, events: failedEvents, updatedAt: failedAt }, { merge: true });
+    throw error;
+  }
+
+  const sentAt = nowIso();
+  const sentInvite = inviteSummaryForGrant({
+    grant,
+    status: "invited",
+    reviewUrl,
+    createdAt: createdInvite.createdAt,
+    sentAt,
+  });
+  const sentEvents = [
+    ...eventsBeforeSend,
+    {
+      eventType: "institution_review_invite_sent" as const,
+      occurredAt: sentAt,
+      actorType: "system" as const,
+      metadataOnly: true as const,
+      outcome: "invite_sent" as const,
+      status: "invited" as const,
+      reason: "invite_sent" as const,
+    },
+  ].slice(-50);
+  await ref.set({ institutionReviewInvite: sentInvite, events: sentEvents, updatedAt: sentAt }, { merge: true });
+  return publicGrant({
+    ...grant,
+    institutionReviewInvite: sentInvite,
+    events: sentEvents,
+    updatedAt: sentAt,
+  });
+}
+
 export async function listTenantInstitutionAccessGrants(params: { tenantId: string }) {
   const tenantId = asString(params.tenantId);
   if (!tenantId) return [];
@@ -1446,13 +1828,26 @@ export async function revokeTenantInstitutionAccessGrant(params: { tenantId: str
       status: "revoked" as const,
       reason: "access_revoked" as const,
     },
+    {
+      eventType: "institution_review_invite_revoked" as const,
+      occurredAt: updatedAt,
+      actorType: "tenant" as const,
+      metadataOnly: true as const,
+      outcome: "revoked" as const,
+      status: "revoked" as const,
+      reason: "access_revoked" as const,
+    },
   ];
+  const institutionReviewInvite = current.institutionReviewInvite
+    ? inviteSummaryForGrant({ grant: { ...current, lifecycle: "revoked", revokedAt: updatedAt }, status: "revoked" })
+    : undefined;
   await ref.set(
     {
       lifecycle: "revoked",
       revokedAt: updatedAt,
       updatedAt,
       events,
+      ...(institutionReviewInvite ? { institutionReviewInvite } : {}),
       consent: {
         ...current.consent,
         granted: false,
@@ -1475,6 +1870,7 @@ export async function revokeTenantInstitutionAccessGrant(params: { tenantId: str
     revokedAt: updatedAt,
     updatedAt,
     events,
+    ...(institutionReviewInvite ? { institutionReviewInvite } : {}),
     consent: {
       ...current.consent,
       granted: false,

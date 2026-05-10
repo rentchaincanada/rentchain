@@ -69,6 +69,7 @@ import {
   revokeTenantTrustExport,
 } from "../services/tenantPortal/tenantTrustExportService";
 import {
+  createInstitutionReviewInvite,
   createTenantInstitutionAccessGrant,
   listTenantInstitutionAccessGrants,
   previewTenantInstitutionAccess,
@@ -3413,6 +3414,49 @@ router.post("/institution-access/grants", requireTenantWorkspaceIdentity, async 
       message: err?.message || "failed",
     });
     return res.status(500).json({ ok: false, error: "TENANT_INSTITUTION_ACCESS_CREATE_FAILED" });
+  }
+});
+
+router.post("/institution-access/invites", requireTenantWorkspaceIdentity, async (req: any, res) => {
+  const context = await resolveWorkspaceContextOrRespond(req, res);
+  if (!context) return;
+
+  const tenantId = String(req.user?.tenantId || context.tenantId || "").trim();
+  if (!tenantId) {
+    return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+  }
+
+  try {
+    const invite = await createInstitutionReviewInvite({
+      tenantId,
+      audience: req.body?.audience,
+      purpose: req.body?.purpose,
+      recipient: req.body?.recipient,
+      expiresInDays: req.body?.expiresInDays,
+      consentAccepted: req.body?.consentAccepted === true,
+    });
+    if (!invite) {
+      return res.status(404).json({ ok: false, error: "TENANT_INSTITUTION_ACCESS_UNAVAILABLE" });
+    }
+    return res.json({ ok: true, data: invite });
+  } catch (err: any) {
+    if (err?.message === "tenant_institution_access_consent_required") {
+      return res.status(400).json({ ok: false, error: "TENANT_INSTITUTION_ACCESS_CONSENT_REQUIRED" });
+    }
+    if (err?.message === "tenant_institution_access_recipient_required") {
+      return res.status(400).json({ ok: false, error: "TENANT_INSTITUTION_ACCESS_RECIPIENT_REQUIRED" });
+    }
+    if (err?.message === "tenant_institution_access_expiration_required") {
+      return res.status(400).json({ ok: false, error: "TENANT_INSTITUTION_ACCESS_EXPIRATION_REQUIRED" });
+    }
+    if (err?.message === "tenant_institution_access_policy_blocked") {
+      return res.status(400).json({ ok: false, error: "TENANT_INSTITUTION_ACCESS_POLICY_BLOCKED" });
+    }
+    console.error("[tenant/institution-access:invite] failed", {
+      tenantId,
+      message: err?.message || "failed",
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_INSTITUTION_ACCESS_INVITE_FAILED" });
   }
 });
 

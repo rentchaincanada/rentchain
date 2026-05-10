@@ -56,8 +56,8 @@ export type TenantInstitutionAccessPreview = {
   providerIntegrationEnabled: false;
   automatedDecisioningEnabled: false;
   recipientAccess: {
-    enabled: false;
-    accessUrl: null;
+    enabled: boolean;
+    accessUrl: string | null;
     accessTokenIssued: false;
     recipientAuthenticationRequired: true;
     sessionBound: true;
@@ -110,16 +110,62 @@ export type TenantInstitutionAccessGrant = TenantInstitutionAccessPreview & {
       | "recipient_trust_review_opened"
       | "recipient_trust_review_blocked"
       | "recipient_trust_review_expired"
-      | "recipient_trust_review_revoked";
+      | "recipient_trust_review_revoked"
+      | "recipient_review_session_started"
+      | "recipient_review_session_expired"
+      | "recipient_review_session_revoked"
+      | "recipient_review_session_blocked"
+      | "recipient_review_session_reauthenticated"
+      | "institution_review_invite_created"
+      | "institution_review_invite_sent"
+      | "institution_review_invite_opened"
+      | "institution_review_invite_authenticated"
+      | "institution_review_invite_revoked"
+      | "institution_review_invite_expired"
+      | "institution_review_invite_blocked";
     occurredAt: string;
     actorType: "tenant" | "system" | "recipient";
     metadataOnly: true;
-    outcome?: "granted" | "opened" | "blocked" | "revoked" | "expired" | "session_started" | "reauthenticated";
+    outcome?:
+      | "invite_created"
+      | "invite_sent"
+      | "invite_opened"
+      | "invite_authenticated"
+      | "granted"
+      | "opened"
+      | "blocked"
+      | "revoked"
+      | "expired"
+      | "session_started"
+      | "reauthenticated";
     reason?: string;
     status?: string;
   }>;
   auditSummary: TenantInstitutionAccessAuditSummary;
   auditTimeline: TenantInstitutionAccessAuditEvent[];
+  institutionReviewInvite?: {
+    schemaVersion: "institution_review_invite.v1";
+    status: "not_created" | "invited" | "viewed" | "authenticated" | "expired" | "revoked" | "blocked" | "send_failed";
+    recipientEmail: string;
+    redactedRecipientEmail: string;
+    organizationName: string | null;
+    audience: TenantInstitutionAccessAudience;
+    purpose: TenantInstitutionAccessPurpose;
+    reviewUrl: string | null;
+    createdAt: string | null;
+    sentAt: string | null;
+    openedAt: string | null;
+    authenticatedAt: string | null;
+    expiresAt: string | null;
+    revokedAt: string | null;
+    recipientAuthenticationRequired: true;
+    inviteTokenIssued: false;
+    bearerAccessEnabled: false;
+    publicAccessEnabled: false;
+    downloadEnabled: false;
+    metadataOnly: true;
+    summary: string;
+  };
 };
 
 export type TenantInstitutionAccessAuditEvent = {
@@ -136,10 +182,28 @@ export type TenantInstitutionAccessAuditEvent = {
     | "recipient_review_session_expired"
     | "recipient_review_session_revoked"
     | "recipient_review_session_blocked"
-    | "recipient_review_session_reauthenticated";
+    | "recipient_review_session_reauthenticated"
+    | "institution_review_invite_created"
+    | "institution_review_invite_sent"
+    | "institution_review_invite_opened"
+    | "institution_review_invite_authenticated"
+    | "institution_review_invite_revoked"
+    | "institution_review_invite_expired"
+    | "institution_review_invite_blocked";
   occurredAt: string;
   actorType: "tenant" | "system" | "recipient";
-  outcome: "granted" | "opened" | "blocked" | "revoked" | "expired" | "session_started" | "reauthenticated";
+  outcome:
+    | "invite_created"
+    | "invite_sent"
+    | "invite_opened"
+    | "invite_authenticated"
+    | "granted"
+    | "opened"
+    | "blocked"
+    | "revoked"
+    | "expired"
+    | "session_started"
+    | "reauthenticated";
   status: string;
   reason: string;
   metadataOnly: true;
@@ -158,7 +222,19 @@ export type TenantInstitutionAccessAuditSummary = {
   lastActivityAt: string | null;
   lastOpenedAt: string | null;
   lastBlockedAt: string | null;
-  lastOutcome: "granted" | "opened" | "blocked" | "revoked" | "expired" | "session_started" | "reauthenticated" | null;
+  lastOutcome:
+    | "invite_created"
+    | "invite_sent"
+    | "invite_opened"
+    | "invite_authenticated"
+    | "granted"
+    | "opened"
+    | "blocked"
+    | "revoked"
+    | "expired"
+    | "session_started"
+    | "reauthenticated"
+    | null;
   lastReason: string | null;
   recipientIdentifier: {
     email: string;
@@ -213,6 +289,19 @@ export async function createTenantInstitutionAccessGrant(
 ): Promise<TenantInstitutionAccessGrant> {
   const res = await tenantApiFetch<{ ok: boolean; data: TenantInstitutionAccessGrant }>(
     "/tenant/institution-access/grants",
+    {
+      method: "POST",
+      body: request,
+    }
+  );
+  return res.data;
+}
+
+export async function createInstitutionReviewInvite(
+  request: TenantInstitutionAccessRequest
+): Promise<TenantInstitutionAccessGrant> {
+  const res = await tenantApiFetch<{ ok: boolean; data: TenantInstitutionAccessGrant }>(
+    "/tenant/institution-access/invites",
     {
       method: "POST",
       body: request,

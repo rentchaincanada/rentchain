@@ -1599,6 +1599,95 @@ describe("tenantPortalRoutes foundation", () => {
     expect(revoked.body?.data?.recipientAccess?.enabled).toBe(false);
   });
 
+  it("creates institution review invites with conservative email and authenticated review linkage", async () => {
+    process.env.PUBLIC_APP_URL = "https://www.rentchain.test";
+    const router = (await import("../tenantPortalRoutes")).default;
+    const headers = {
+      "x-test-user": JSON.stringify({
+        id: "user-1",
+        email: "tenant@example.com",
+        role: "tenant",
+        tenantId: "tenant-1",
+      }),
+    };
+
+    const missingConsent = await invokeRouter(router, {
+      method: "POST",
+      url: "/institution-access/invites",
+      body: {
+        audience: "insurer",
+        recipient: { email: "reviewer@example.com", organizationName: "Example Insurance" },
+        expiresInDays: 7,
+        consentAccepted: false,
+      },
+      headers,
+    });
+    expect(missingConsent.status).toBe(400);
+    expect(missingConsent.body?.error).toBe("TENANT_INSTITUTION_ACCESS_CONSENT_REQUIRED");
+
+    const invited = await invokeRouter(router, {
+      method: "POST",
+      url: "/institution-access/invites",
+      body: {
+        audience: "insurer",
+        recipient: { email: "reviewer@example.com", organizationName: "Example Insurance" },
+        expiresInDays: 7,
+        consentAccepted: true,
+      },
+      headers,
+    });
+
+    expect(invited.status).toBe(200);
+    expect(invited.body?.data?.lifecycle).toBe("active");
+    expect(invited.body?.data?.institutionReviewInvite).toEqual(
+      expect.objectContaining({
+        status: "invited",
+        recipientAuthenticationRequired: true,
+        inviteTokenIssued: false,
+        bearerAccessEnabled: false,
+        publicAccessEnabled: false,
+        downloadEnabled: false,
+        metadataOnly: true,
+      })
+    );
+    expect(invited.body?.data?.recipientAccess).toEqual(
+      expect.objectContaining({
+        enabled: true,
+        accessTokenIssued: false,
+        recipientAuthenticationRequired: true,
+        sessionBound: true,
+        downloadEnabled: false,
+      })
+    );
+    expect(invited.body?.data?.institutionReviewSession).toEqual(
+      expect.objectContaining({
+        accessGrantId: invited.body?.data?.grantId,
+        lifecycle: "pending",
+        metadataOnly: true,
+        downloadEnabled: false,
+      })
+    );
+    expect(sendEmailMock).toHaveBeenCalledTimes(1);
+    const email = sendEmailMock.mock.calls[0]?.[0] || {};
+    expect(email.to).toBe("reviewer@example.com");
+    expect(email.subject).toMatch(/trust review invitation/i);
+    const emailPayload = JSON.stringify(email);
+    expect(emailPayload).toContain("/recipient/trust-review/");
+    expect(emailPayload).toContain("must sign in");
+    expect(emailPayload).toContain("metadata-only");
+    expect(emailPayload).not.toContain("verified tenant");
+    expect(emailPayload).toContain("not an approval");
+    expect(emailPayload).not.toContain("prop-1");
+    expect(emailPayload).not.toContain("rawProviderPayload");
+    expect(invited.body?.data?.auditTimeline).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ eventType: "institution_review_invite_sent", reason: "invite_sent" }),
+        expect.objectContaining({ eventType: "institution_review_invite_created", reason: "invite_created" }),
+      ])
+    );
+    expect(ensureCollection("tenantSharePackages").size).toBe(0);
+  });
+
   it("creates a tenant-owned metadata-only institutional handoff draft safely", async () => {
     const router = (await import("../tenantPortalRoutes")).default;
     const res = await invokeRouter(router, {
