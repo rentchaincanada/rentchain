@@ -96,6 +96,20 @@ export type SecurityAccessForensicSummary = {
         type: string;
         redactedId: string | null;
       };
+      retention: {
+        schemaVersion: "security_telemetry_retention_decision.v1";
+        policyVersion: "security_telemetry_retention.v1";
+        classification: "security_session_internal";
+        lifecycleState: "active" | "archived" | "retention_expired" | "purge_pending" | "purged";
+        reason: string;
+        activeSupportSignalsIncluded: boolean;
+        forensicChainIncluded: boolean;
+        supportSummaryIncluded: boolean;
+        purgeEligible: boolean;
+        internalOnly: true;
+        nonPortable: true;
+        nonExportable: true;
+      };
       metadataOnly: true;
       visibility: {
         supportVisible: true;
@@ -133,8 +147,29 @@ export type SecurityAccessForensicSummary = {
     classification: "security_session_internal";
     nonPortable: true;
     nonExportable: true;
-    retentionJobImplemented: false;
-    futureEnforcementMission: "feat/security-telemetry-retention-enforcement-v1";
+    retentionEnforced: true;
+    retentionJobImplemented: true;
+    destructivePurgeJobImplemented: false;
+    retentionLifecycle: {
+      schemaVersion: "security_telemetry_retention_summary.v1";
+      policyVersion: "security_telemetry_retention.v1";
+      classification: "security_session_internal";
+      activeRetentionDays: number;
+      archiveAfterDays: number;
+      purgeAfterDays: number;
+      purgePendingGraceDays: number;
+      evaluatedAt: string;
+      activeCount: number;
+      archivedCount: number;
+      retentionExpiredCount: number;
+      purgePendingCount: number;
+      purgedCount: number;
+      totalEvaluatedCount: number;
+      nonPortable: true;
+      nonExportable: true;
+      internalOnly: true;
+      destructivePurgeJobImplemented: false;
+    };
   };
   prohibitedFields: Record<string, false>;
 };
@@ -293,6 +328,33 @@ export type SupportInstitutionAccessDiagnosticSummary = {
       classification: string;
       nonPortable: true;
       nonExportable: true;
+      policyVersion?: "security_telemetry_retention.v1";
+      activeRetentionDays?: number;
+      archiveAfterDays?: number;
+      purgeAfterDays?: number;
+      purgePendingGraceDays?: number;
+      retentionEnforced?: true;
+      destructivePurgeJobImplemented?: false;
+    };
+    retentionLifecycle?: {
+      schemaVersion: "security_telemetry_retention_summary.v1";
+      policyVersion: "security_telemetry_retention.v1";
+      classification: "security_session_internal";
+      activeRetentionDays: number;
+      archiveAfterDays: number;
+      purgeAfterDays: number;
+      purgePendingGraceDays: number;
+      evaluatedAt: string;
+      activeCount: number;
+      archivedCount: number;
+      retentionExpiredCount: number;
+      purgePendingCount: number;
+      purgedCount: number;
+      totalEvaluatedCount: number;
+      nonPortable: true;
+      nonExportable: true;
+      internalOnly: true;
+      destructivePurgeJobImplemented: false;
     };
     redaction: {
       ipAddressMode: string;

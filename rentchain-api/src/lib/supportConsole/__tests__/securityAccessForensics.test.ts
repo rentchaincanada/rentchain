@@ -97,6 +97,33 @@ function diagnostic(): SupportInstitutionAccessDiagnosticSummary {
         classification: "security_session_internal",
         nonPortable: true,
         nonExportable: true,
+        policyVersion: "security_telemetry_retention.v1",
+        activeRetentionDays: 180,
+        archiveAfterDays: 180,
+        purgeAfterDays: 365,
+        purgePendingGraceDays: 30,
+        retentionEnforced: true,
+        destructivePurgeJobImplemented: false,
+      },
+      retentionLifecycle: {
+        schemaVersion: "security_telemetry_retention_summary.v1",
+        policyVersion: "security_telemetry_retention.v1",
+        classification: "security_session_internal",
+        activeRetentionDays: 180,
+        archiveAfterDays: 180,
+        purgeAfterDays: 365,
+        purgePendingGraceDays: 30,
+        evaluatedAt: "2026-05-10T00:00:00.000Z",
+        activeCount: 6,
+        archivedCount: 0,
+        retentionExpiredCount: 0,
+        purgePendingCount: 0,
+        purgedCount: 0,
+        totalEvaluatedCount: 6,
+        nonPortable: true,
+        nonExportable: true,
+        internalOnly: true,
+        destructivePurgeJobImplemented: false,
       },
       redaction: {
         ipAddressMode: "hash_only",
@@ -283,8 +310,18 @@ describe("buildSecurityAccessForensics", () => {
           userAgentFamilies: ["chrome", "safari"],
         }),
         retention: expect.objectContaining({
-          futureEnforcementMission: "feat/security-telemetry-retention-enforcement-v1",
-          retentionJobImplemented: false,
+          retentionEnforced: true,
+          retentionJobImplemented: true,
+          destructivePurgeJobImplemented: false,
+          retentionLifecycle: expect.objectContaining({
+            policyVersion: "security_telemetry_retention.v1",
+            classification: "security_session_internal",
+            activeCount: expect.any(Number),
+            archivedCount: expect.any(Number),
+            retentionExpiredCount: expect.any(Number),
+            nonPortable: true,
+            nonExportable: true,
+          }),
         }),
         visibility: expect.objectContaining({
           tenantVisible: false,
@@ -321,5 +358,50 @@ describe("buildSecurityAccessForensics", () => {
     expect(payload).not.toContain("provider-secret");
     expect(payload).not.toContain('"score"');
     expect(payload).not.toContain('"profile"');
+  });
+
+  it("excludes retention-expired telemetry from forensic chains", () => {
+    const nextDiagnostic = diagnostic();
+    nextDiagnostic.timeline = [
+      {
+        schemaVersion: "support_institution_access_diagnostic_event.v1",
+        eventType: "recipient_trust_review_blocked",
+        occurredAt: "2025-01-01T00:00:00.000Z",
+        actorType: "recipient",
+        metadataOnly: true,
+        outcome: "blocked",
+        reason: "recipient_email_mismatch",
+        status: "recipient_mismatch",
+        visibility,
+      },
+    ];
+    nextDiagnostic.securityTelemetry = {
+      ...nextDiagnostic.securityTelemetry,
+      eventCount: 0,
+      blockedAttemptCount: 0,
+      wrongRecipientAttemptCount: 0,
+      uniqueIpHashCount: 0,
+      userAgentFamilies: [],
+      signals: [],
+      lastSignal: null,
+      lastRecordedAt: null,
+      retentionLifecycle: {
+        ...nextDiagnostic.securityTelemetry.retentionLifecycle,
+        activeCount: 0,
+        archivedCount: 0,
+        retentionExpiredCount: 1,
+        totalEvaluatedCount: 1,
+      },
+    };
+
+    const summary = buildSecurityAccessForensics({
+      grantId: "grant-sensitive-1",
+      diagnostic: nextDiagnostic,
+      operatorAuditTimeline: null,
+    });
+
+    expect(summary?.chains.find((item) => item.type === "recipient_access_chain")?.eventCount).toBe(0);
+    expect(summary?.incidents.find((item) => item.type === "wrong_recipient_attempts_observed")?.observed).toBe(false);
+    expect(summary?.retention.retentionLifecycle.retentionExpiredCount).toBe(1);
   });
 });

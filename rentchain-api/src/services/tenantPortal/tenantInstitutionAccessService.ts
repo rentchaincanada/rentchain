@@ -9,6 +9,11 @@ import type { InstitutionalTrustExportPackage } from "../../lib/institutionTrust
 import type { PortableAttestationClaimCategory } from "../../lib/portableAttestations";
 import { redactIdentifier } from "../../lib/governance/platformGovernance";
 import {
+  evaluateSecurityTelemetryRetention,
+  summarizeSecurityTelemetryRetention,
+  type SecurityTelemetryRetentionSummary,
+} from "../../lib/securityTelemetry/securityTelemetryRetention";
+import {
   previewTenantTrustExport,
   type TenantTrustExportAudience,
   type TenantTrustExportPurpose,
@@ -106,7 +111,15 @@ export type SupportSafeSecuritySessionTelemetrySummary = {
     classification: "security_session_internal";
     nonPortable: true;
     nonExportable: true;
+    policyVersion: "security_telemetry_retention.v1";
+    activeRetentionDays: number;
+    archiveAfterDays: number;
+    purgeAfterDays: number;
+    purgePendingGraceDays: number;
+    retentionEnforced: true;
+    destructivePurgeJobImplemented: false;
   };
+  retentionLifecycle: SecurityTelemetryRetentionSummary;
   redaction: {
     ipAddressMode: "hash_only";
     userAgentMode: "family_and_hash";
@@ -1053,29 +1066,51 @@ function buildSupportSafeSecurityTelemetrySummary(record: TenantInstitutionAcces
     .map((event) => event.securityTelemetry)
     .filter(Boolean) as SecuritySessionTelemetryEvent[];
   telemetry.sort((left, right) => Date.parse(right.recordedAt) - Date.parse(left.recordedAt));
-  const signals = Array.from(new Set(telemetry.map((event) => event.signal))).sort() as SecuritySessionTelemetrySignal[];
-  const ipHashes = new Set(telemetry.map((event) => event.request.ipHash).filter(Boolean));
-  const userAgentFamilies = Array.from(new Set(telemetry.map((event) => event.request.userAgentFamily).filter(Boolean))).sort();
+  const evaluatedAt = new Date();
+  const telemetryWithRetention = telemetry.map((event) => ({
+    event,
+    decision: evaluateSecurityTelemetryRetention({ recordedAt: event.recordedAt, evaluatedAt }),
+  }));
+  const retentionLifecycle = summarizeSecurityTelemetryRetention(
+    telemetryWithRetention.map((entry) => entry.decision),
+    evaluatedAt
+  );
+  const activeTelemetry = telemetryWithRetention
+    .filter((entry) => entry.decision.activeSupportSignalsIncluded)
+    .map((entry) => entry.event);
+  const signals = Array.from(new Set(activeTelemetry.map((event) => event.signal))).sort() as SecuritySessionTelemetrySignal[];
+  const ipHashes = new Set(activeTelemetry.map((event) => event.request.ipHash).filter(Boolean));
+  const userAgentFamilies = Array.from(new Set(activeTelemetry.map((event) => event.request.userAgentFamily).filter(Boolean))).sort();
   return {
     schemaVersion: "support_safe_security_session_telemetry.v1",
     internalOnly: true,
     metadataOnly: true,
-    eventCount: telemetry.length,
-    blockedAttemptCount: telemetry.filter((event) => event.signal.endsWith("_attempt") || event.signal === "recipient_review_blocked").length,
-    wrongRecipientAttemptCount: telemetry.filter((event) => event.signal === "wrong_recipient_attempt").length,
-    revokedAttemptCount: telemetry.filter((event) => event.signal === "revoked_access_attempt").length,
-    expiredAttemptCount: telemetry.filter((event) => event.signal === "expired_access_attempt").length,
-    replayBlockedCount: telemetry.filter((event) => event.signal === "replay_blocked_attempt").length,
-    staleSessionCount: telemetry.filter((event) => event.signal === "stale_session_attempt").length,
+    eventCount: activeTelemetry.length,
+    blockedAttemptCount: activeTelemetry.filter((event) => event.signal.endsWith("_attempt") || event.signal === "recipient_review_blocked").length,
+    wrongRecipientAttemptCount: activeTelemetry.filter((event) => event.signal === "wrong_recipient_attempt").length,
+    revokedAttemptCount: activeTelemetry.filter((event) => event.signal === "revoked_access_attempt").length,
+    expiredAttemptCount: activeTelemetry.filter((event) => event.signal === "expired_access_attempt").length,
+    replayBlockedCount: activeTelemetry.filter((event) => event.signal === "replay_blocked_attempt").length,
+    staleSessionCount: activeTelemetry.filter((event) => event.signal === "stale_session_attempt").length,
     uniqueIpHashCount: ipHashes.size,
     userAgentFamilies,
-    lastSignal: telemetry[0]?.signal || null,
-    lastRecordedAt: telemetry[0]?.recordedAt || null,
+    lastSignal: activeTelemetry[0]?.signal || null,
+    lastRecordedAt: activeTelemetry[0]?.recordedAt || null,
     signals,
     retention: {
       classification: "security_session_internal",
       nonPortable: true,
       nonExportable: true,
+      policyVersion: retentionLifecycle.policyVersion,
+      activeRetentionDays: retentionLifecycle.activeRetentionDays,
+      archiveAfterDays: retentionLifecycle.archiveAfterDays,
+      purgeAfterDays: retentionLifecycle.purgeAfterDays,
+      purgePendingGraceDays: retentionLifecycle.purgePendingGraceDays,
+      retentionEnforced: true,
+      destructivePurgeJobImplemented: false,
+    },
+    retentionLifecycle: {
+      ...retentionLifecycle,
     },
     redaction: {
       ipAddressMode: "hash_only",
