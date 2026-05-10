@@ -1948,6 +1948,16 @@ export default function TenantWorkspacePage() {
                           label: "Last sent",
                           value: entry.institutionReviewDelivery?.lastSentAt ? formatDate(entry.institutionReviewDelivery.lastSentAt) : "Not sent",
                         },
+                        {
+                          label: "Pilot status",
+                          value: entry.pilotOperation?.statusLabel || "Pending review",
+                        },
+                        {
+                          label: "Operational follow-up",
+                          value: entry.pilotOperation?.coordination?.reviewNeedsFollowUp
+                            ? prettyStatus(entry.pilotOperation.escalation.primaryReason)
+                            : "None",
+                        },
                         { label: "Created", value: formatDate(entry.createdAt) },
                         { label: "Expires", value: formatDate(entry.expiresAt) },
                         { label: "Authentication", value: "Required before review" },

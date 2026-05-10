@@ -200,6 +200,63 @@ export type TenantInstitutionAccessGrant = TenantInstitutionAccessPreview & {
     metadataOnly: true;
     summary: string;
   };
+  pilotOperation?: {
+    schemaVersion: "pilot_institution_review_operation.v1";
+    status:
+      | "pending_review"
+      | "active_review"
+      | "awaiting_authentication"
+      | "review_opened"
+      | "review_blocked"
+      | "review_escalated"
+      | "review_completed"
+      | "review_expired"
+      | "review_revoked"
+      | "review_superseded";
+    statusLabel: string;
+    escalation: {
+      required: boolean;
+      reasons: string[];
+      primaryReason: string;
+    };
+    coordination: {
+      reviewNeedsFollowUp: boolean;
+      nextOperationalAction: string;
+      supportOnly: true;
+      freeformNotesEnabled: false;
+    };
+    continuity: {
+      grantLifecycle: string;
+      inviteStatus: string;
+      deliveryStatus: string;
+      sessionState: "not_started" | "active" | "stale" | "invalidated";
+      trustExportLifecycle: string | null;
+      revocationVisible: boolean;
+      expirationVisible: boolean;
+      supersessionVisible: boolean;
+      policyDeniedVisible: boolean;
+    };
+    reporting: {
+      openedReviewCount: number;
+      blockedReviewCount: number;
+      sessionStartedCount: number;
+      deliveryAttemptCount: number;
+      lastActivityAt: string | null;
+    };
+    visibility: {
+      tenantVisible: true;
+      supportSafe: true;
+      operatorVisible: true;
+      recipientVisible: false;
+      portableVisible: false;
+      metadataOnly: true;
+      trustPayloadIncluded: false;
+      providerPayloadIncluded: false;
+      supportMetadataIncluded: false;
+      publicAccessEnabled: false;
+      downloadEnabled: false;
+    };
+  };
 };
 
 export type TenantInstitutionAccessAuditEvent = {

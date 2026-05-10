@@ -310,6 +310,53 @@ describe("SupportDebugConsolePage", () => {
           lastReason: "review_available",
           reasonCategories: ["recipient_email_mismatch", "review_available"],
         },
+        pilotOperation: {
+          schemaVersion: "pilot_institution_review_operation.v1",
+          status: "review_escalated",
+          statusLabel: "Review escalated",
+          escalation: {
+            required: true,
+            reasons: ["recipient_access_issue"],
+            primaryReason: "recipient_access_issue",
+          },
+          coordination: {
+            reviewNeedsFollowUp: true,
+            nextOperationalAction: "recipient_followup",
+            supportOnly: true,
+            freeformNotesEnabled: false,
+          },
+          continuity: {
+            grantLifecycle: "active",
+            inviteStatus: "invited",
+            deliveryStatus: "sent",
+            sessionState: "active",
+            trustExportLifecycle: "active",
+            revocationVisible: false,
+            expirationVisible: false,
+            supersessionVisible: false,
+            policyDeniedVisible: false,
+          },
+          reporting: {
+            openedReviewCount: 1,
+            blockedReviewCount: 1,
+            sessionStartedCount: 1,
+            deliveryAttemptCount: 1,
+            lastActivityAt: "2026-05-02T00:00:00.000Z",
+          },
+          visibility: {
+            tenantVisible: true,
+            supportSafe: true,
+            operatorVisible: true,
+            recipientVisible: false,
+            portableVisible: false,
+            metadataOnly: true,
+            trustPayloadIncluded: false,
+            providerPayloadIncluded: false,
+            supportMetadataIncluded: false,
+            publicAccessEnabled: false,
+            downloadEnabled: false,
+          },
+        },
         payloadSafety: {
           metadataOnly: true,
           supportSafe: true,
@@ -468,6 +515,9 @@ describe("SupportDebugConsolePage", () => {
     });
     expect(screen.getByText(/re\*\*\*@example\.com/i)).toBeInTheDocument();
     expect(screen.getByText(/recipient_email_mismatch, review_available/i)).toBeInTheDocument();
+    expect(screen.getByText(/Pilot status/i)).toBeInTheDocument();
+    expect(screen.getByText(/Review escalated/i)).toBeInTheDocument();
+    expect(screen.getByText(/recipient_followup/i)).toBeInTheDocument();
     expect(screen.getByText(/Trust payloads, portable attestation contents, provider payloads/i)).toBeInTheDocument();
     expect(screen.getByText(/Operator audit timeline/i)).toBeInTheDocument();
     expect(screen.getByText(/trust_export_superseded/i)).toBeInTheDocument();

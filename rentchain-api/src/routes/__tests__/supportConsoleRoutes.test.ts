@@ -394,6 +394,25 @@ describe("supportConsoleRoutes", () => {
           rawProviderPayloadIncluded: false,
           supportMetadataIncluded: false,
         }),
+        pilotOperation: expect.objectContaining({
+          schemaVersion: "pilot_institution_review_operation.v1",
+          status: "review_escalated",
+          escalation: expect.objectContaining({
+            required: true,
+            reasons: expect.arrayContaining(["recipient_access_issue"]),
+          }),
+          coordination: expect.objectContaining({
+            reviewNeedsFollowUp: true,
+            nextOperationalAction: "recipient_followup",
+            freeformNotesEnabled: false,
+          }),
+          visibility: expect.objectContaining({
+            supportSafe: true,
+            recipientVisible: false,
+            trustPayloadIncluded: false,
+            downloadEnabled: false,
+          }),
+        }),
       })
     );
     const payload = JSON.stringify(response.body);
@@ -406,7 +425,7 @@ describe("supportConsoleRoutes", () => {
         schemaVersion: "operator_audit_timeline.v1",
         metadataOnly: true,
         supportSafe: true,
-        eventCount: 6,
+        eventCount: 9,
         lifecycleTransitionCount: 2,
         sessionEventCount: 1,
         supersessionCount: 1,
@@ -430,6 +449,12 @@ describe("supportConsoleRoutes", () => {
           eventType: "institution_review_session_created",
           source: "institution_review_session",
           category: "institution_review_session",
+        }),
+        expect.objectContaining({
+          eventType: "pilot_institution_review_escalated",
+          source: "pilot_institution_review",
+          category: "pilot_review",
+          reason: "recipient_access_issue",
         }),
         expect.objectContaining({
           eventType: "system.institution_access_diagnostics_opened",

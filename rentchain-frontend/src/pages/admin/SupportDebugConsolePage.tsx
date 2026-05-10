@@ -62,6 +62,16 @@ function renderInstitutionAccessDiagnostics(payload: SupportConsoleResourceRespo
           <strong>Reason categories</strong>:{" "}
           {diagnostic.audit.reasonCategories.length ? diagnostic.audit.reasonCategories.join(", ") : "None"}
         </div>
+        {diagnostic.pilotOperation ? (
+          <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
+            <div><strong>Pilot status</strong>: {diagnostic.pilotOperation.statusLabel}</div>
+            <div><strong>Follow-up</strong>: {diagnostic.pilotOperation.coordination.reviewNeedsFollowUp ? "Required" : "Not required"}</div>
+            <div><strong>Next action</strong>: {diagnostic.pilotOperation.coordination.nextOperationalAction}</div>
+            <div><strong>Escalation</strong>: {diagnostic.pilotOperation.escalation.primaryReason}</div>
+            <div><strong>Session continuity</strong>: {diagnostic.pilotOperation.continuity.sessionState}</div>
+            <div><strong>Delivery status</strong>: {diagnostic.pilotOperation.continuity.deliveryStatus}</div>
+          </div>
+        ) : null}
         <div style={{ color: "#475569" }}>
           Metadata-only diagnostic. Trust payloads, portable attestation contents, provider payloads, raw identity or property data, support metadata, public links, and downloads are excluded.
         </div>
