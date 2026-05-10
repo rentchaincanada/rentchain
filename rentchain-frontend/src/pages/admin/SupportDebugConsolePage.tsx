@@ -126,6 +126,59 @@ function renderInstitutionAccessDiagnostics(payload: SupportConsoleResourceRespo
   );
 }
 
+function renderSecurityAccessForensics(payload: SupportConsoleResourceResponse) {
+  const forensics = payload.securityAccessForensics;
+  if (!forensics) return null;
+  const observedIncidents = forensics.incidents.filter((incident) => incident.observed);
+  return (
+    <SupportConsoleSection title="Security access forensics">
+      <div style={{ display: "grid", gap: 12 }}>
+        <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
+          <div><strong>Observed incident types</strong>: {forensics.incidentCount}</div>
+          <div><strong>Forensic chain events</strong>: {forensics.chainEventCount}</div>
+          <div><strong>Request origin references</strong>: {forensics.requestOriginSummary.uniqueIpHashCount}</div>
+          <div><strong>User-agent families</strong>: {forensics.requestOriginSummary.userAgentFamilies.length ? forensics.requestOriginSummary.userAgentFamilies.join(", ") : "None"}</div>
+          <div><strong>Operator diagnostic accesses</strong>: {forensics.operatorCorrelation.operatorDiagnosticAccessCount}</div>
+          <div><strong>Last operator access</strong>: {forensics.operatorCorrelation.lastOperatorAccessAt || "None"}</div>
+        </div>
+        <div style={{ color: "#475569" }}>
+          Support-only forensic reconstruction. Request origins are summarized as hash counts, raw IP addresses and full user agents are hidden, and telemetry is non-portable and non-exportable.
+        </div>
+        <div style={{ color: "#475569" }}>
+          Retention follow-up: {forensics.retention.futureEnforcementMission}.
+        </div>
+        <div style={{ display: "grid", gap: 8 }}>
+          {observedIncidents.length ? (
+            observedIncidents.map((incident) => (
+              <div key={incident.type} style={{ borderTop: "1px solid #e2e8f0", paddingTop: 8 }}>
+                <strong>{incident.label}</strong> · {incident.count}
+                <div style={{ color: "#64748b" }}>
+                  {incident.followUpSuggested ? "Follow-up suggested" : "Monitor"} · Last observed {incident.lastObservedAt || "unknown"}
+                </div>
+              </div>
+            ))
+          ) : (
+            <div style={{ color: "#64748b" }}>No security-relevant access incidents are currently summarized.</div>
+          )}
+        </div>
+        <div style={{ display: "grid", gap: 8 }}>
+          {forensics.chains.map((chain) => (
+            <div key={chain.type} style={{ borderTop: "1px solid #e2e8f0", paddingTop: 8 }}>
+              <strong>{chain.label}</strong> · {chain.eventCount} events
+              <div style={{ color: "#64748b" }}>Last event {chain.lastEventAt || "none"}</div>
+              {chain.events.slice(0, 5).map((event) => (
+                <div key={event.eventId} style={{ color: "#475569", marginTop: 4 }}>
+                  {event.eventType} · {event.category} · {event.reason || event.outcome || "no reason"}
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+    </SupportConsoleSection>
+  );
+}
+
 function renderOperatorAuditTimeline(payload: SupportConsoleResourceResponse) {
   const timeline = payload.operatorAuditTimeline;
   if (!timeline) return null;
@@ -278,6 +331,7 @@ export default function SupportDebugConsolePage() {
             <SupportConsoleHeader resource={payload.resource} />
 
             {renderInstitutionAccessDiagnostics(payload)}
+            {renderSecurityAccessForensics(payload)}
             {renderOperatorAuditTimeline(payload)}
 
             <SupportConsoleSection title="Derived insight">

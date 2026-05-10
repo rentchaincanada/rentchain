@@ -322,6 +322,50 @@ describe("supportConsoleRoutes", () => {
           outcome: "blocked",
           status: "recipient_mismatch",
           reason: "recipient_email_mismatch",
+          securityTelemetry: {
+            schemaVersion: "security_session_telemetry.v1",
+            recordedAt: "2026-05-02T00:00:00.000Z",
+            actorType: "recipient",
+            workflow: "recipient_trust_review",
+            signal: "wrong_recipient_attempt",
+            lifecycleState: "active",
+            reasonCode: "recipient_email_mismatch",
+            subject: {
+              grantIdRedacted: "***nt-1",
+              recipientReferenceRedacted: "re***@example.com",
+              sessionReferenceRedacted: "***on-1",
+              userReferenceRedacted: "***er-1",
+            },
+            request: {
+              ipHash: "hash-only-reference",
+              ipFamily: "ipv4",
+              userAgentHash: "ua-hash-only-reference",
+              userAgentFamily: "chrome",
+              requestReferenceRedacted: "***st-1",
+            },
+            retention: {
+              classification: "security_session_internal",
+              internalOnly: true,
+              portableVisible: false,
+              tenantVisible: false,
+              recipientVisible: false,
+              publicVisible: false,
+              exportable: false,
+            },
+            payloadSafety: {
+              metadataOnly: true,
+              trustPayloadIncluded: false,
+              rawProviderPayloadIncluded: false,
+              rawIdentityPayloadIncluded: false,
+              rawPropertyPayloadIncluded: false,
+              rawIpIncluded: false,
+              fullUserAgentIncluded: false,
+              preciseGeolocationIncluded: false,
+              deviceFingerprintingIncluded: false,
+              behavioralProfileIncluded: false,
+              riskScoreIncluded: false,
+            },
+          },
         },
       ],
     });
@@ -514,6 +558,51 @@ describe("supportConsoleRoutes", () => {
         }),
       ])
     );
+    expect(response.body?.securityAccessForensics).toEqual(
+      expect.objectContaining({
+        schemaVersion: "security_access_forensics.v1",
+        internalOnly: true,
+        supportSafe: true,
+        metadataOnly: true,
+        incidentCount: expect.any(Number),
+        requestOriginSummary: expect.objectContaining({
+          uniqueIpHashCount: 1,
+          ipHashValuesVisible: false,
+          rawIpVisible: false,
+          userAgentFamilies: ["chrome"],
+          rawUserAgentVisible: false,
+        }),
+        operatorCorrelation: expect.objectContaining({
+          operatorDiagnosticAccessCount: 1,
+        }),
+        retention: expect.objectContaining({
+          classification: "security_session_internal",
+          retentionJobImplemented: false,
+          futureEnforcementMission: "feat/security-telemetry-retention-enforcement-v1",
+        }),
+        visibility: expect.objectContaining({
+          tenantVisible: false,
+          recipientVisible: false,
+          institutionVisible: false,
+          portableVisible: false,
+          rawIpIncluded: false,
+          trustPayloadIncluded: false,
+          riskScoreIncluded: false,
+        }),
+      })
+    );
+    expect(response.body?.securityAccessForensics?.incidents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "wrong_recipient_attempts_observed", count: 1 }),
+        expect.objectContaining({ type: "operator_diagnostic_access_observed", count: 1 }),
+      ])
+    );
+    expect(response.body?.securityAccessForensics?.chains).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "recipient_access_chain", eventCount: 1 }),
+        expect.objectContaining({ type: "operator_diagnostic_chain", eventCount: 1 }),
+      ])
+    );
 
     const auditEvents = Array.from(collections.get("canonicalEvents")?.values() || []).filter(
       (event: any) => event.type === "system.institution_access_diagnostics_opened" && event.actor?.id === "admin-1"
@@ -536,6 +625,9 @@ describe("supportConsoleRoutes", () => {
         }),
       }),
     ]);
+    expect(JSON.stringify(response.body?.securityAccessForensics)).not.toContain("hash-only-reference");
+    expect(JSON.stringify(response.body?.securityAccessForensics)).not.toContain("ua-hash-only-reference");
+    expect(JSON.stringify(response.body?.securityAccessForensics)).not.toContain("203.0.113");
   });
 
   it("extracts policy and automation histories", async () => {
