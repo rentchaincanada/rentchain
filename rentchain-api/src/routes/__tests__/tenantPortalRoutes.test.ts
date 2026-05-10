@@ -1662,6 +1662,25 @@ describe("tenantPortalRoutes foundation", () => {
         metadataOnly: true,
       })
     );
+    expect(invited.body?.data?.pilotOperation).toEqual(
+      expect.objectContaining({
+        schemaVersion: "pilot_institution_review_operation.v1",
+        status: "awaiting_authentication",
+        statusLabel: "Awaiting authentication",
+        escalation: expect.objectContaining({
+          required: false,
+          primaryReason: "none",
+        }),
+        visibility: expect.objectContaining({
+          tenantVisible: true,
+          supportSafe: true,
+          recipientVisible: false,
+          trustPayloadIncluded: false,
+          publicAccessEnabled: false,
+          downloadEnabled: false,
+        }),
+      })
+    );
     expect(invited.body?.data?.recipientAccess).toEqual(
       expect.objectContaining({
         enabled: true,
@@ -1746,6 +1765,17 @@ describe("tenantPortalRoutes foundation", () => {
         metadataOnly: true,
       })
     );
+    expect(resent.body?.data?.pilotOperation).toEqual(
+      expect.objectContaining({
+        status: "awaiting_authentication",
+        reporting: expect.objectContaining({
+          deliveryAttemptCount: 2,
+        }),
+        continuity: expect.objectContaining({
+          deliveryStatus: "resent",
+        }),
+      })
+    );
     expect(resent.body?.data?.auditTimeline).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ eventType: "institution_review_delivery_resent", reason: "delivery_resent" }),
@@ -1765,6 +1795,17 @@ describe("tenantPortalRoutes foundation", () => {
         bearerAccessEnabled: false,
         publicAccessEnabled: false,
         downloadEnabled: false,
+      })
+    );
+    expect(revoked.body?.data?.pilotOperation).toEqual(
+      expect.objectContaining({
+        status: "review_revoked",
+        escalation: expect.objectContaining({
+          reasons: expect.arrayContaining(["revoked_review_inquiry"]),
+        }),
+        continuity: expect.objectContaining({
+          revocationVisible: true,
+        }),
       })
     );
 

@@ -188,6 +188,111 @@ export type InstitutionReviewDeliverySummary = {
   summary: string;
 };
 
+export type PilotInstitutionReviewStatus =
+  | "pending_review"
+  | "active_review"
+  | "awaiting_authentication"
+  | "review_opened"
+  | "review_blocked"
+  | "review_escalated"
+  | "review_completed"
+  | "review_expired"
+  | "review_revoked"
+  | "review_superseded";
+
+export type PilotInstitutionReviewEscalation =
+  | "none"
+  | "recipient_access_issue"
+  | "expired_review_needs_renewal"
+  | "revoked_review_inquiry"
+  | "lifecycle_mismatch_detected"
+  | "policy_denied_review"
+  | "stale_session_reauthentication"
+  | "delivery_failure_followup";
+
+export type PilotInstitutionReviewEvent = {
+  eventType:
+    | "pilot_institution_review_created"
+    | "pilot_institution_review_escalated"
+    | "pilot_institution_review_completed"
+    | "pilot_institution_review_revoked"
+    | "pilot_institution_review_expired"
+    | "pilot_institution_review_blocked"
+    | "pilot_institution_review_followup_requested";
+  occurredAt: string;
+  actorType: "tenant" | "system" | "operator";
+  status: PilotInstitutionReviewStatus;
+  reason: PilotInstitutionReviewEscalation;
+  metadataOnly: true;
+  visibility: {
+    supportVisible: true;
+    tenantVisible: boolean;
+    recipientVisible: false;
+    portableVisible: false;
+    trustPayloadIncluded: false;
+    rawProviderPayloadIncluded: false;
+    supportMetadataIncluded: false;
+    publicAccessEnabled: false;
+    downloadEnabled: false;
+  };
+};
+
+export type PilotInstitutionReviewOperation = {
+  schemaVersion: "pilot_institution_review_operation.v1";
+  status: PilotInstitutionReviewStatus;
+  statusLabel: string;
+  escalation: {
+    required: boolean;
+    reasons: PilotInstitutionReviewEscalation[];
+    primaryReason: PilotInstitutionReviewEscalation;
+  };
+  coordination: {
+    reviewNeedsFollowUp: boolean;
+    nextOperationalAction:
+      | "none"
+      | "recipient_followup"
+      | "renew_access"
+      | "review_lifecycle_state"
+      | "review_policy_block"
+      | "confirm_revocation"
+      | "retry_delivery";
+    supportOnly: true;
+    freeformNotesEnabled: false;
+  };
+  continuity: {
+    grantLifecycle: TenantInstitutionAccessLifecycle;
+    inviteStatus: InstitutionReviewInviteStatus | "not_created";
+    deliveryStatus: InstitutionReviewDeliveryStatus | "not_prepared";
+    sessionState: "not_started" | "active" | "stale" | "invalidated";
+    trustExportLifecycle: string | null;
+    revocationVisible: boolean;
+    expirationVisible: boolean;
+    supersessionVisible: boolean;
+    policyDeniedVisible: boolean;
+  };
+  reporting: {
+    openedReviewCount: number;
+    blockedReviewCount: number;
+    sessionStartedCount: number;
+    deliveryAttemptCount: number;
+    lastActivityAt: string | null;
+  };
+  visibility: {
+    tenantVisible: true;
+    supportSafe: true;
+    operatorVisible: true;
+    recipientVisible: false;
+    portableVisible: false;
+    metadataOnly: true;
+    trustPayloadIncluded: false;
+    providerPayloadIncluded: false;
+    supportMetadataIncluded: false;
+    publicAccessEnabled: false;
+    downloadEnabled: false;
+  };
+  events: PilotInstitutionReviewEvent[];
+};
+
 export type TenantInstitutionAccessGrantEvent = {
   eventType:
     | "tenant_institution_access_granted"
@@ -278,6 +383,7 @@ export type TenantInstitutionAccessGrant = Omit<TenantInstitutionAccessStoredGra
   auditSummary: TenantInstitutionAccessAuditSummary;
   auditTimeline: TenantInstitutionAccessAuditEvent[];
   institutionReviewSession: InstitutionReviewSessionSummary;
+  pilotOperation: PilotInstitutionReviewOperation;
 };
 
 export type RecipientTrustReviewStatus =
@@ -550,6 +656,7 @@ export type SupportInstitutionAccessDiagnosticSummary = {
     lastReason: TenantInstitutionAccessAuditSummary["lastReason"];
     reasonCategories: string[];
   };
+  pilotOperation: PilotInstitutionReviewOperation;
   payloadSafety: {
     metadataOnly: true;
     supportSafe: true;
@@ -1055,6 +1162,257 @@ function buildAccessAudit(record: TenantInstitutionAccessStoredGrant): {
   };
 }
 
+function pilotEventVisibility(tenantVisible: boolean): PilotInstitutionReviewEvent["visibility"] {
+  return {
+    supportVisible: true,
+    tenantVisible,
+    recipientVisible: false,
+    portableVisible: false,
+    trustPayloadIncluded: false,
+    rawProviderPayloadIncluded: false,
+    supportMetadataIncluded: false,
+    publicAccessEnabled: false,
+    downloadEnabled: false,
+  };
+}
+
+function pilotStatusLabel(status: PilotInstitutionReviewStatus) {
+  if (status === "pending_review") return "Pending review";
+  if (status === "active_review") return "Active review";
+  if (status === "awaiting_authentication") return "Awaiting authentication";
+  if (status === "review_opened") return "Review opened";
+  if (status === "review_blocked") return "Review blocked";
+  if (status === "review_escalated") return "Review escalated";
+  if (status === "review_completed") return "Review completed";
+  if (status === "review_expired") return "Review expired";
+  if (status === "review_revoked") return "Review revoked";
+  return "Review superseded";
+}
+
+function pilotEscalationsFor(params: {
+  record: TenantInstitutionAccessStoredGrant;
+  auditTimeline: TenantInstitutionAccessAuditEvent[];
+}): PilotInstitutionReviewEscalation[] {
+  const reasons = new Set<PilotInstitutionReviewEscalation>();
+  const packageState = asString(params.record.package?.lifecycleControl?.state, 120);
+  const deliveryStatus = params.record.institutionReviewDelivery?.status || null;
+
+  for (const event of params.auditTimeline) {
+    if (event.reason === "recipient_email_mismatch") reasons.add("recipient_access_issue");
+    if (event.reason === "recipient_session_stale" || event.reason === "recipient_session_replay_blocked") {
+      reasons.add("stale_session_reauthentication");
+    }
+    if (event.reason === "policy_gated_summary_unavailable") reasons.add("policy_denied_review");
+    if (event.reason === "trust_export_lifecycle_inactive" || event.reason === "trust_reverification_required") {
+      reasons.add("lifecycle_mismatch_detected");
+    }
+    if (event.reason === "access_expired" || event.reason === "grant_expired" || event.status === "expired") {
+      reasons.add("expired_review_needs_renewal");
+    }
+    if (event.reason === "access_revoked" || event.reason === "grant_revoked" || event.status === "revoked") {
+      reasons.add("revoked_review_inquiry");
+    }
+    if (event.reason === "email_delivery_failed" || event.status === "failed") {
+      reasons.add("delivery_failure_followup");
+    }
+  }
+
+  if (params.record.lifecycle === "expired") reasons.add("expired_review_needs_renewal");
+  if (params.record.lifecycle === "revoked") reasons.add("revoked_review_inquiry");
+  if (packageState === "superseded" || packageState === "archived" || packageState === "invalidated") {
+    reasons.add("lifecycle_mismatch_detected");
+  }
+  if (packageState === "blocked" || params.record.package?.status === "blocked") reasons.add("policy_denied_review");
+  if (deliveryStatus === "failed") reasons.add("delivery_failure_followup");
+
+  const ordered: PilotInstitutionReviewEscalation[] = [
+    "delivery_failure_followup",
+    "recipient_access_issue",
+    "stale_session_reauthentication",
+    "policy_denied_review",
+    "lifecycle_mismatch_detected",
+    "expired_review_needs_renewal",
+    "revoked_review_inquiry",
+  ];
+  return ordered.filter((reason) => reasons.has(reason));
+}
+
+function pilotNextAction(primaryReason: PilotInstitutionReviewEscalation): PilotInstitutionReviewOperation["coordination"]["nextOperationalAction"] {
+  if (primaryReason === "recipient_access_issue" || primaryReason === "stale_session_reauthentication") return "recipient_followup";
+  if (primaryReason === "expired_review_needs_renewal") return "renew_access";
+  if (primaryReason === "revoked_review_inquiry") return "confirm_revocation";
+  if (primaryReason === "lifecycle_mismatch_detected") return "review_lifecycle_state";
+  if (primaryReason === "policy_denied_review") return "review_policy_block";
+  if (primaryReason === "delivery_failure_followup") return "retry_delivery";
+  return "none";
+}
+
+function pilotStatusFor(params: {
+  record: TenantInstitutionAccessStoredGrant;
+  auditSummary: TenantInstitutionAccessAuditSummary;
+  escalations: PilotInstitutionReviewEscalation[];
+}): PilotInstitutionReviewStatus {
+  const packageState = asString(params.record.package?.lifecycleControl?.state, 120);
+  if (params.record.lifecycle === "revoked" || params.record.revokedAt || params.record.consent?.revokedAt) return "review_revoked";
+  if (params.record.lifecycle === "expired" || (params.record.expiresAt && Date.parse(params.record.expiresAt) <= Date.now())) {
+    return "review_expired";
+  }
+  if (packageState === "superseded" || packageState === "archived" || packageState === "invalidated") return "review_superseded";
+  if (params.escalations.length > 0) return "review_escalated";
+  if (params.auditSummary.blockedReviewCount > 0) return "review_blocked";
+  if (params.auditSummary.openedReviewCount > 0) return "review_opened";
+  if (
+    params.record.institutionReviewInvite?.status === "invited" ||
+    params.record.institutionReviewDelivery?.status === "sent" ||
+    params.record.institutionReviewDelivery?.status === "resent"
+  ) {
+    return "awaiting_authentication";
+  }
+  if (params.record.lifecycle === "active") return "active_review";
+  return "pending_review";
+}
+
+function pilotEventFor(params: {
+  eventType: PilotInstitutionReviewEvent["eventType"];
+  occurredAt: string | null;
+  actorType?: PilotInstitutionReviewEvent["actorType"];
+  status: PilotInstitutionReviewStatus;
+  reason: PilotInstitutionReviewEscalation;
+  tenantVisible?: boolean;
+}): PilotInstitutionReviewEvent | null {
+  if (!params.occurredAt) return null;
+  return {
+    eventType: params.eventType,
+    occurredAt: params.occurredAt,
+    actorType: params.actorType || "system",
+    status: params.status,
+    reason: params.reason,
+    metadataOnly: true,
+    visibility: pilotEventVisibility(params.tenantVisible === true),
+  };
+}
+
+function buildPilotOperation(record: TenantInstitutionAccessStoredGrant): PilotInstitutionReviewOperation {
+  const { auditSummary, auditTimeline } = buildAccessAudit(record);
+  const escalations = pilotEscalationsFor({ record, auditTimeline });
+  const primaryReason = escalations[0] || "none";
+  const status = pilotStatusFor({ record, auditSummary, escalations });
+  const packageState = asString(record.package?.lifecycleControl?.state, 120);
+  const latestBlocked = auditTimeline.find((event) => event.outcome === "blocked") || null;
+  const latestEscalation = latestBlocked || auditTimeline.find((event) => event.status === "failed") || null;
+  const createdAt = record.createdAt || record.generatedAt || record.updatedAt || null;
+  const sessionState: PilotInstitutionReviewOperation["continuity"]["sessionState"] =
+    auditTimeline.some((event) => event.reason === "recipient_session_stale" || event.reason === "recipient_session_replay_blocked")
+      ? "stale"
+      : auditTimeline.some((event) => event.eventType === "recipient_review_session_revoked" || event.eventType === "recipient_review_session_blocked")
+      ? "invalidated"
+      : auditSummary.sessionStartedCount > 0
+      ? "active"
+      : "not_started";
+  const events = [
+    pilotEventFor({
+      eventType: "pilot_institution_review_created",
+      occurredAt: createdAt,
+      actorType: "tenant",
+      status: "pending_review",
+      reason: "none",
+      tenantVisible: true,
+    }),
+    primaryReason !== "none"
+      ? pilotEventFor({
+          eventType: "pilot_institution_review_escalated",
+          occurredAt: latestEscalation?.occurredAt || auditSummary.lastActivityAt || record.updatedAt || createdAt,
+          status,
+          reason: primaryReason,
+        })
+      : null,
+    status === "review_revoked"
+      ? pilotEventFor({
+          eventType: "pilot_institution_review_revoked",
+          occurredAt: record.revokedAt || record.consent?.revokedAt || auditSummary.lastActivityAt,
+          actorType: "tenant",
+          status,
+          reason: primaryReason === "none" ? "revoked_review_inquiry" : primaryReason,
+          tenantVisible: true,
+        })
+      : null,
+    status === "review_expired"
+      ? pilotEventFor({
+          eventType: "pilot_institution_review_expired",
+          occurredAt: record.expiresAt || auditSummary.lastActivityAt,
+          status,
+          reason: primaryReason === "none" ? "expired_review_needs_renewal" : primaryReason,
+          tenantVisible: true,
+        })
+      : null,
+    status === "review_blocked" || status === "review_superseded"
+      ? pilotEventFor({
+          eventType: "pilot_institution_review_blocked",
+          occurredAt: latestBlocked?.occurredAt || auditSummary.lastActivityAt || record.updatedAt,
+          status,
+          reason: primaryReason === "none" ? "lifecycle_mismatch_detected" : primaryReason,
+        })
+      : null,
+    primaryReason !== "none"
+      ? pilotEventFor({
+          eventType: "pilot_institution_review_followup_requested",
+          occurredAt: latestEscalation?.occurredAt || auditSummary.lastActivityAt || record.updatedAt || createdAt,
+          status,
+          reason: primaryReason,
+        })
+      : null,
+  ].filter(Boolean) as PilotInstitutionReviewEvent[];
+
+  return {
+    schemaVersion: "pilot_institution_review_operation.v1",
+    status,
+    statusLabel: pilotStatusLabel(status),
+    escalation: {
+      required: primaryReason !== "none",
+      reasons: primaryReason === "none" ? ["none"] : escalations,
+      primaryReason,
+    },
+    coordination: {
+      reviewNeedsFollowUp: primaryReason !== "none",
+      nextOperationalAction: pilotNextAction(primaryReason),
+      supportOnly: true,
+      freeformNotesEnabled: false,
+    },
+    continuity: {
+      grantLifecycle: record.lifecycle,
+      inviteStatus: record.institutionReviewInvite?.status || "not_created",
+      deliveryStatus: record.institutionReviewDelivery?.status || "not_prepared",
+      sessionState,
+      trustExportLifecycle: packageState,
+      revocationVisible: record.lifecycle === "revoked" || Boolean(record.revokedAt || record.consent?.revokedAt),
+      expirationVisible: record.lifecycle === "expired" || Boolean(record.expiresAt && Date.parse(record.expiresAt) <= Date.now()),
+      supersessionVisible: packageState === "superseded" || packageState === "archived" || packageState === "invalidated",
+      policyDeniedVisible: record.package?.status === "blocked" || auditTimeline.some((event) => event.reason === "policy_gated_summary_unavailable"),
+    },
+    reporting: {
+      openedReviewCount: auditSummary.openedReviewCount,
+      blockedReviewCount: auditSummary.blockedReviewCount,
+      sessionStartedCount: auditSummary.sessionStartedCount,
+      deliveryAttemptCount: Math.max(0, Number(record.institutionReviewDelivery?.attemptCount || 0)),
+      lastActivityAt: auditSummary.lastActivityAt,
+    },
+    visibility: {
+      tenantVisible: true,
+      supportSafe: true,
+      operatorVisible: true,
+      recipientVisible: false,
+      portableVisible: false,
+      metadataOnly: true,
+      trustPayloadIncluded: false,
+      providerPayloadIncluded: false,
+      supportMetadataIncluded: false,
+      publicAccessEnabled: false,
+      downloadEnabled: false,
+    },
+    events,
+  };
+}
+
 function publicGrant(record: TenantInstitutionAccessStoredGrant): TenantInstitutionAccessGrant {
   const { tenantId: _tenantId, ...rest } = record;
   const { auditSummary, auditTimeline } = buildAccessAudit(record);
@@ -1073,6 +1431,7 @@ function publicGrant(record: TenantInstitutionAccessStoredGrant): TenantInstitut
       accessGrant: record,
       generatedAt: record.updatedAt || record.generatedAt,
     }),
+    pilotOperation: buildPilotOperation(record),
   };
 }
 
@@ -1105,6 +1464,7 @@ function supportDiagnosticFromGrant(record: TenantInstitutionAccessStoredGrant):
       supportMetadataIncluded: false as const,
     },
   }));
+  const pilotOperation = buildPilotOperation(record);
 
   return {
     schemaVersion: "support_institution_access_diagnostics.v1",
@@ -1160,6 +1520,7 @@ function supportDiagnosticFromGrant(record: TenantInstitutionAccessStoredGrant):
       lastReason: auditSummary.lastReason,
       reasonCategories,
     },
+    pilotOperation,
     payloadSafety: {
       metadataOnly: true,
       supportSafe: true,

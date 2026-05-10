@@ -873,6 +873,53 @@ describe("tenant workspace frontend shell", () => {
           metadataOnly: true,
         },
       ],
+      pilotOperation: {
+        schemaVersion: "pilot_institution_review_operation.v1",
+        status: "review_escalated",
+        statusLabel: "Review escalated",
+        escalation: {
+          required: true,
+          reasons: ["recipient_access_issue"],
+          primaryReason: "recipient_access_issue",
+        },
+        coordination: {
+          reviewNeedsFollowUp: true,
+          nextOperationalAction: "recipient_followup",
+          supportOnly: true,
+          freeformNotesEnabled: false,
+        },
+        continuity: {
+          grantLifecycle: "active",
+          inviteStatus: "invited",
+          deliveryStatus: "sent",
+          sessionState: "active",
+          trustExportLifecycle: "active",
+          revocationVisible: false,
+          expirationVisible: false,
+          supersessionVisible: false,
+          policyDeniedVisible: false,
+        },
+        reporting: {
+          openedReviewCount: 1,
+          blockedReviewCount: 1,
+          sessionStartedCount: 1,
+          deliveryAttemptCount: 1,
+          lastActivityAt: "2026-05-09T02:00:00.000Z",
+        },
+        visibility: {
+          tenantVisible: true,
+          supportSafe: true,
+          operatorVisible: true,
+          recipientVisible: false,
+          portableVisible: false,
+          metadataOnly: true,
+          trustPayloadIncluded: false,
+          providerPayloadIncluded: false,
+          supportMetadataIncluded: false,
+          publicAccessEnabled: false,
+          downloadEnabled: false,
+        },
+      },
     };
     tenantInstitutionAccessApi.previewTenantInstitutionAccess.mockResolvedValue(institutionAccessPreview);
     tenantInstitutionAccessApi.createInstitutionReviewInvite.mockResolvedValue({
@@ -1672,6 +1719,9 @@ describe("tenant workspace frontend shell", () => {
     expect(screen.getAllByText(/Delivery/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Sent/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Delivery attempts/i)).toBeInTheDocument();
+    expect(screen.getByText(/Pilot status/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Review escalated/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Operational follow-up/i)).toBeInTheDocument();
     expect(screen.getByText(/Delivery emails contain only the review context and sign-in requirement/i)).toBeInTheDocument();
     expect(screen.getByText(/Access activity/i)).toBeInTheDocument();
     expect(screen.getByText(/re\*\*\*@example.com/i)).toBeInTheDocument();

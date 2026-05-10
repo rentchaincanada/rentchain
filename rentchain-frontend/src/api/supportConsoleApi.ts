@@ -193,6 +193,53 @@ export type SupportInstitutionAccessDiagnosticSummary = {
     lastReason: string | null;
     reasonCategories: string[];
   };
+  pilotOperation?: {
+    schemaVersion: "pilot_institution_review_operation.v1";
+    status: string;
+    statusLabel: string;
+    escalation: {
+      required: boolean;
+      reasons: string[];
+      primaryReason: string;
+    };
+    coordination: {
+      reviewNeedsFollowUp: boolean;
+      nextOperationalAction: string;
+      supportOnly: true;
+      freeformNotesEnabled: false;
+    };
+    continuity: {
+      grantLifecycle: string;
+      inviteStatus: string;
+      deliveryStatus: string;
+      sessionState: string;
+      trustExportLifecycle: string | null;
+      revocationVisible: boolean;
+      expirationVisible: boolean;
+      supersessionVisible: boolean;
+      policyDeniedVisible: boolean;
+    };
+    reporting: {
+      openedReviewCount: number;
+      blockedReviewCount: number;
+      sessionStartedCount: number;
+      deliveryAttemptCount: number;
+      lastActivityAt: string | null;
+    };
+    visibility: {
+      tenantVisible: true;
+      supportSafe: true;
+      operatorVisible: true;
+      recipientVisible: false;
+      portableVisible: false;
+      metadataOnly: true;
+      trustPayloadIncluded: false;
+      providerPayloadIncluded: false;
+      supportMetadataIncluded: false;
+      publicAccessEnabled: false;
+      downloadEnabled: false;
+    };
+  };
   payloadSafety: {
     metadataOnly: true;
     supportSafe: true;

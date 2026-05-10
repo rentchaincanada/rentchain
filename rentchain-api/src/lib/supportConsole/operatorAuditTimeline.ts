@@ -7,6 +7,7 @@ type OperatorAuditTimelineSource =
   | "recipient_review"
   | "recipient_session"
   | "institution_review_session"
+  | "pilot_institution_review"
   | "tenant_trust_export"
   | "institutional_trust_export"
   | "operator_interaction";
@@ -16,6 +17,7 @@ type OperatorAuditTimelineCategory =
   | "recipient_review"
   | "recipient_session"
   | "institution_review_session"
+  | "pilot_review"
   | "trust_export_lifecycle"
   | "institutional_export_lifecycle"
   | "operator_access"
@@ -203,6 +205,43 @@ function eventFromInstitutionReviewSession(params: {
   };
 }
 
+function eventFromPilotOperation(params: {
+  grantId: string | null;
+  audience: string | null;
+  purpose: string | null;
+  event: any;
+}): OperatorAuditTimelineEvent | null {
+  const occurredAt = asString(params.event?.occurredAt, 120);
+  const eventType = asString(params.event?.eventType, 160);
+  if (!occurredAt || !eventType || params.event?.metadataOnly !== true) return null;
+  const reason = asString(params.event?.reason, 160);
+  return {
+    schemaVersion: "operator_audit_timeline_event.v1",
+    eventId: stableId(["pilot-institution-review", params.grantId, eventType, occurredAt, reason]),
+    source: "pilot_institution_review",
+    category: "pilot_review",
+    eventType,
+    occurredAt,
+    actorType:
+      params.event.actorType === "tenant" || params.event.actorType === "operator" || params.event.actorType === "system"
+        ? params.event.actorType
+        : "system",
+    status: asString(params.event?.status, 120),
+    outcome: asString(params.event?.status, 120),
+    reason,
+    lifecycleState: asString(params.event?.status, 120),
+    audience: params.audience,
+    purpose: params.purpose,
+    resource: {
+      type: "pilot_institution_review_operation",
+      id: params.grantId,
+      redactedId: redactIdentifier(params.grantId),
+    },
+    metadataOnly: true,
+    visibility: visibility(),
+  };
+}
+
 function eventFromTrustExport(params: {
   grantId: string | null;
   audience: string | null;
@@ -340,6 +379,11 @@ export function buildOperatorAuditTimeline(input: {
       event,
       session: input.diagnostic?.institutionReviewSession,
     });
+    if (next) events.push(next);
+  }
+
+  for (const event of input.diagnostic?.pilotOperation?.events || []) {
+    const next = eventFromPilotOperation({ grantId, audience, purpose, event });
     if (next) events.push(next);
   }
 
