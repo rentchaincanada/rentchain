@@ -293,6 +293,75 @@ export type PilotInstitutionReviewOperation = {
   events: PilotInstitutionReviewEvent[];
 };
 
+export type InstitutionReviewObservabilitySummary = {
+  schemaVersion: "institution_review_observability.v1";
+  operationalHealth: "healthy" | "attention_required" | "blocked" | "inactive";
+  lifecycleMetrics: {
+    pendingReviewCount: number;
+    activeReviewCount: number;
+    awaitingAuthenticationCount: number;
+    openedReviewCount: number;
+    blockedReviewCount: number;
+    expiredReviewCount: number;
+    revokedReviewCount: number;
+    supersededReviewCount: number;
+    completedReviewCount: number;
+  };
+  sessionHealth: {
+    sessionStartedCount: number;
+    sessionExpiredCount: number;
+    staleSessionDetected: boolean;
+    replayBlockedCount: number;
+    reauthenticationRequiredCount: number;
+    invalidatedSessionCount: number;
+    continuityState: "not_started" | "active" | "stale" | "invalidated";
+  };
+  bottlenecks: {
+    awaitingAuthentication: boolean;
+    reviewNeverOpened: boolean;
+    deliveryNotSent: boolean;
+    unresolvedBlockedReview: boolean;
+    lifecycleBlocked: boolean;
+    policyDenied: boolean;
+    staleReview: boolean;
+  };
+  escalation: {
+    followUpRequired: boolean;
+    primaryReason: PilotInstitutionReviewEscalation;
+    reasons: PilotInstitutionReviewEscalation[];
+    nextOperationalAction: PilotInstitutionReviewOperation["coordination"]["nextOperationalAction"];
+  };
+  conversion: {
+    deliveryAttemptCount: number;
+    deliverySent: boolean;
+    reviewOpened: boolean;
+    authenticatedReviewObserved: boolean;
+    completionEvidence: "none" | "opened_only" | "explicit_completion";
+  };
+  auditAlignment: {
+    sourceEventCount: number;
+    pilotEventCount: number;
+    lastActivityAt: string | null;
+    lastObservedReason: TenantInstitutionAccessAuditEvent["reason"] | PilotInstitutionReviewEscalation | null;
+    metadataOnly: true;
+  };
+  visibility: {
+    supportSafe: true;
+    operatorVisible: true;
+    tenantVisible: false;
+    recipientVisible: false;
+    portableVisible: false;
+    metadataOnly: true;
+    trustPayloadIncluded: false;
+    providerPayloadIncluded: false;
+    rawIdentityPayloadIncluded: false;
+    rawPropertyPayloadIncluded: false;
+    supportMetadataIncluded: false;
+    publicAccessEnabled: false;
+    downloadEnabled: false;
+  };
+};
+
 export type TenantInstitutionAccessGrantEvent = {
   eventType:
     | "tenant_institution_access_granted"
@@ -657,6 +726,7 @@ export type SupportInstitutionAccessDiagnosticSummary = {
     reasonCategories: string[];
   };
   pilotOperation: PilotInstitutionReviewOperation;
+  observability: InstitutionReviewObservabilitySummary;
   payloadSafety: {
     metadataOnly: true;
     supportSafe: true;
@@ -1413,6 +1483,121 @@ function buildPilotOperation(record: TenantInstitutionAccessStoredGrant): PilotI
   };
 }
 
+function observabilityHealth(params: {
+  pilotOperation: PilotInstitutionReviewOperation;
+  lifecycleBlocked: boolean;
+}): InstitutionReviewObservabilitySummary["operationalHealth"] {
+  if (
+    params.pilotOperation.status === "review_revoked" ||
+    params.pilotOperation.status === "review_expired" ||
+    params.pilotOperation.status === "review_superseded"
+  ) {
+    return "inactive";
+  }
+  if (params.lifecycleBlocked || params.pilotOperation.status === "review_blocked") return "blocked";
+  if (params.pilotOperation.escalation.required || params.pilotOperation.continuity.sessionState === "stale") {
+    return "attention_required";
+  }
+  return "healthy";
+}
+
+function buildInstitutionReviewObservability(params: {
+  record: TenantInstitutionAccessStoredGrant;
+  auditSummary: TenantInstitutionAccessAuditSummary;
+  auditTimeline: TenantInstitutionAccessAuditEvent[];
+  pilotOperation: PilotInstitutionReviewOperation;
+}): InstitutionReviewObservabilitySummary {
+  const replayBlockedCount = params.auditTimeline.filter((event) => event.reason === "recipient_session_replay_blocked").length;
+  const reauthenticationRequiredCount = params.auditTimeline.filter(
+    (event) => event.reason === "recipient_session_reauthentication_required" || event.reason === "recipient_session_stale"
+  ).length;
+  const invalidatedSessionCount = params.auditTimeline.filter(
+    (event) => event.eventType === "recipient_review_session_revoked" || event.eventType === "recipient_review_session_blocked"
+  ).length;
+  const authenticatedReviewObserved = params.auditTimeline.some(
+    (event) => event.eventType === "institution_review_invite_authenticated" || event.outcome === "opened"
+  );
+  const lifecycleState = asString(params.record.package?.lifecycleControl?.state, 120);
+  const lifecycleBlocked =
+    params.record.lifecycle === "blocked" ||
+    params.record.package?.status === "blocked" ||
+    lifecycleState === "blocked" ||
+    params.pilotOperation.continuity.policyDeniedVisible;
+  const deliveryStatus = params.pilotOperation.continuity.deliveryStatus;
+  const deliverySent = deliveryStatus === "sent" || deliveryStatus === "resent";
+  const reviewOpened = params.auditSummary.openedReviewCount > 0;
+  const status = params.pilotOperation.status;
+
+  return {
+    schemaVersion: "institution_review_observability.v1",
+    operationalHealth: observabilityHealth({ pilotOperation: params.pilotOperation, lifecycleBlocked }),
+    lifecycleMetrics: {
+      pendingReviewCount: status === "pending_review" ? 1 : 0,
+      activeReviewCount: status === "active_review" ? 1 : 0,
+      awaitingAuthenticationCount: status === "awaiting_authentication" ? 1 : 0,
+      openedReviewCount: params.auditSummary.openedReviewCount,
+      blockedReviewCount: params.auditSummary.blockedReviewCount,
+      expiredReviewCount: status === "review_expired" || params.auditSummary.expiredAccessCount > 0 ? 1 : 0,
+      revokedReviewCount: status === "review_revoked" || params.auditSummary.revokedAccessCount > 0 ? 1 : 0,
+      supersededReviewCount: status === "review_superseded" ? 1 : 0,
+      completedReviewCount: status === "review_completed" ? 1 : 0,
+    },
+    sessionHealth: {
+      sessionStartedCount: params.auditSummary.sessionStartedCount,
+      sessionExpiredCount: params.auditSummary.sessionExpiredCount,
+      staleSessionDetected: params.pilotOperation.continuity.sessionState === "stale",
+      replayBlockedCount,
+      reauthenticationRequiredCount,
+      invalidatedSessionCount,
+      continuityState: params.pilotOperation.continuity.sessionState,
+    },
+    bottlenecks: {
+      awaitingAuthentication: status === "awaiting_authentication",
+      reviewNeverOpened: deliverySent && !reviewOpened,
+      deliveryNotSent: params.pilotOperation.reporting.deliveryAttemptCount === 0 || deliveryStatus === "failed",
+      unresolvedBlockedReview: params.auditSummary.blockedReviewCount > 0 && params.pilotOperation.escalation.required,
+      lifecycleBlocked,
+      policyDenied: params.pilotOperation.continuity.policyDeniedVisible,
+      staleReview: params.pilotOperation.continuity.sessionState === "stale",
+    },
+    escalation: {
+      followUpRequired: params.pilotOperation.coordination.reviewNeedsFollowUp,
+      primaryReason: params.pilotOperation.escalation.primaryReason,
+      reasons: params.pilotOperation.escalation.reasons,
+      nextOperationalAction: params.pilotOperation.coordination.nextOperationalAction,
+    },
+    conversion: {
+      deliveryAttemptCount: params.pilotOperation.reporting.deliveryAttemptCount,
+      deliverySent,
+      reviewOpened,
+      authenticatedReviewObserved,
+      completionEvidence: status === "review_completed" ? "explicit_completion" : reviewOpened ? "opened_only" : "none",
+    },
+    auditAlignment: {
+      sourceEventCount: params.auditSummary.totalEvents,
+      pilotEventCount: params.pilotOperation.events.length,
+      lastActivityAt: params.auditSummary.lastActivityAt || params.pilotOperation.reporting.lastActivityAt,
+      lastObservedReason: params.auditSummary.lastReason || params.pilotOperation.escalation.primaryReason,
+      metadataOnly: true,
+    },
+    visibility: {
+      supportSafe: true,
+      operatorVisible: true,
+      tenantVisible: false,
+      recipientVisible: false,
+      portableVisible: false,
+      metadataOnly: true,
+      trustPayloadIncluded: false,
+      providerPayloadIncluded: false,
+      rawIdentityPayloadIncluded: false,
+      rawPropertyPayloadIncluded: false,
+      supportMetadataIncluded: false,
+      publicAccessEnabled: false,
+      downloadEnabled: false,
+    },
+  };
+}
+
 function publicGrant(record: TenantInstitutionAccessStoredGrant): TenantInstitutionAccessGrant {
   const { tenantId: _tenantId, ...rest } = record;
   const { auditSummary, auditTimeline } = buildAccessAudit(record);
@@ -1465,6 +1650,12 @@ function supportDiagnosticFromGrant(record: TenantInstitutionAccessStoredGrant):
     },
   }));
   const pilotOperation = buildPilotOperation(record);
+  const observability = buildInstitutionReviewObservability({
+    record,
+    auditSummary,
+    auditTimeline,
+    pilotOperation,
+  });
 
   return {
     schemaVersion: "support_institution_access_diagnostics.v1",
@@ -1521,6 +1712,7 @@ function supportDiagnosticFromGrant(record: TenantInstitutionAccessStoredGrant):
       reasonCategories,
     },
     pilotOperation,
+    observability,
     payloadSafety: {
       metadataOnly: true,
       supportSafe: true,

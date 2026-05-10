@@ -413,6 +413,36 @@ describe("supportConsoleRoutes", () => {
             downloadEnabled: false,
           }),
         }),
+        observability: expect.objectContaining({
+          schemaVersion: "institution_review_observability.v1",
+          operationalHealth: "attention_required",
+          lifecycleMetrics: expect.objectContaining({
+            blockedReviewCount: 1,
+            openedReviewCount: 0,
+          }),
+          sessionHealth: expect.objectContaining({
+            continuityState: "not_started",
+            staleSessionDetected: false,
+          }),
+          bottlenecks: expect.objectContaining({
+            unresolvedBlockedReview: true,
+            reviewNeverOpened: false,
+            policyDenied: false,
+          }),
+          escalation: expect.objectContaining({
+            followUpRequired: true,
+            primaryReason: "recipient_access_issue",
+            nextOperationalAction: "recipient_followup",
+          }),
+          visibility: expect.objectContaining({
+            supportSafe: true,
+            recipientVisible: false,
+            trustPayloadIncluded: false,
+            providerPayloadIncluded: false,
+            publicAccessEnabled: false,
+            downloadEnabled: false,
+          }),
+        }),
       })
     );
     const payload = JSON.stringify(response.body);

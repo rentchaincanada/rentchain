@@ -240,6 +240,74 @@ export type SupportInstitutionAccessDiagnosticSummary = {
       downloadEnabled: false;
     };
   };
+  observability?: {
+    schemaVersion: "institution_review_observability.v1";
+    operationalHealth: string;
+    lifecycleMetrics: {
+      pendingReviewCount: number;
+      activeReviewCount: number;
+      awaitingAuthenticationCount: number;
+      openedReviewCount: number;
+      blockedReviewCount: number;
+      expiredReviewCount: number;
+      revokedReviewCount: number;
+      supersededReviewCount: number;
+      completedReviewCount: number;
+    };
+    sessionHealth: {
+      sessionStartedCount: number;
+      sessionExpiredCount: number;
+      staleSessionDetected: boolean;
+      replayBlockedCount: number;
+      reauthenticationRequiredCount: number;
+      invalidatedSessionCount: number;
+      continuityState: string;
+    };
+    bottlenecks: {
+      awaitingAuthentication: boolean;
+      reviewNeverOpened: boolean;
+      deliveryNotSent: boolean;
+      unresolvedBlockedReview: boolean;
+      lifecycleBlocked: boolean;
+      policyDenied: boolean;
+      staleReview: boolean;
+    };
+    escalation: {
+      followUpRequired: boolean;
+      primaryReason: string;
+      reasons: string[];
+      nextOperationalAction: string;
+    };
+    conversion: {
+      deliveryAttemptCount: number;
+      deliverySent: boolean;
+      reviewOpened: boolean;
+      authenticatedReviewObserved: boolean;
+      completionEvidence: string;
+    };
+    auditAlignment: {
+      sourceEventCount: number;
+      pilotEventCount: number;
+      lastActivityAt: string | null;
+      lastObservedReason: string | null;
+      metadataOnly: true;
+    };
+    visibility: {
+      supportSafe: true;
+      operatorVisible: true;
+      tenantVisible: false;
+      recipientVisible: false;
+      portableVisible: false;
+      metadataOnly: true;
+      trustPayloadIncluded: false;
+      providerPayloadIncluded: false;
+      rawIdentityPayloadIncluded: false;
+      rawPropertyPayloadIncluded: false;
+      supportMetadataIncluded: false;
+      publicAccessEnabled: false;
+      downloadEnabled: false;
+    };
+  };
   payloadSafety: {
     metadataOnly: true;
     supportSafe: true;
