@@ -503,6 +503,35 @@ describe("tenantInstitutionAccessService", () => {
           blockedReviewCount: 1,
           reasonCategories: expect.arrayContaining(["access_granted", "recipient_email_mismatch", "review_available"]),
         }),
+        observability: expect.objectContaining({
+          schemaVersion: "institution_review_observability.v1",
+          operationalHealth: "attention_required",
+          lifecycleMetrics: expect.objectContaining({
+            openedReviewCount: 1,
+            blockedReviewCount: 1,
+          }),
+          sessionHealth: expect.objectContaining({
+            sessionStartedCount: 1,
+            continuityState: "active",
+            staleSessionDetected: false,
+          }),
+          bottlenecks: expect.objectContaining({
+            unresolvedBlockedReview: true,
+            reviewNeverOpened: false,
+          }),
+          escalation: expect.objectContaining({
+            followUpRequired: true,
+            primaryReason: "recipient_access_issue",
+            nextOperationalAction: "recipient_followup",
+          }),
+          visibility: expect.objectContaining({
+            supportSafe: true,
+            recipientVisible: false,
+            trustPayloadIncluded: false,
+            publicAccessEnabled: false,
+            downloadEnabled: false,
+          }),
+        }),
         payloadSafety: expect.objectContaining({
           metadataOnly: true,
           supportSafe: true,

@@ -357,6 +357,74 @@ describe("SupportDebugConsolePage", () => {
             downloadEnabled: false,
           },
         },
+        observability: {
+          schemaVersion: "institution_review_observability.v1",
+          operationalHealth: "attention_required",
+          lifecycleMetrics: {
+            pendingReviewCount: 0,
+            activeReviewCount: 0,
+            awaitingAuthenticationCount: 0,
+            openedReviewCount: 1,
+            blockedReviewCount: 1,
+            expiredReviewCount: 0,
+            revokedReviewCount: 0,
+            supersededReviewCount: 0,
+            completedReviewCount: 0,
+          },
+          sessionHealth: {
+            sessionStartedCount: 1,
+            sessionExpiredCount: 0,
+            staleSessionDetected: false,
+            replayBlockedCount: 0,
+            reauthenticationRequiredCount: 0,
+            invalidatedSessionCount: 0,
+            continuityState: "active",
+          },
+          bottlenecks: {
+            awaitingAuthentication: false,
+            reviewNeverOpened: false,
+            deliveryNotSent: false,
+            unresolvedBlockedReview: true,
+            lifecycleBlocked: false,
+            policyDenied: false,
+            staleReview: false,
+          },
+          escalation: {
+            followUpRequired: true,
+            primaryReason: "recipient_access_issue",
+            reasons: ["recipient_access_issue"],
+            nextOperationalAction: "recipient_followup",
+          },
+          conversion: {
+            deliveryAttemptCount: 1,
+            deliverySent: true,
+            reviewOpened: true,
+            authenticatedReviewObserved: true,
+            completionEvidence: "opened_only",
+          },
+          auditAlignment: {
+            sourceEventCount: 2,
+            pilotEventCount: 2,
+            lastActivityAt: "2026-05-02T00:00:00.000Z",
+            lastObservedReason: "review_available",
+            metadataOnly: true,
+          },
+          visibility: {
+            supportSafe: true,
+            operatorVisible: true,
+            tenantVisible: false,
+            recipientVisible: false,
+            portableVisible: false,
+            metadataOnly: true,
+            trustPayloadIncluded: false,
+            providerPayloadIncluded: false,
+            rawIdentityPayloadIncluded: false,
+            rawPropertyPayloadIncluded: false,
+            supportMetadataIncluded: false,
+            publicAccessEnabled: false,
+            downloadEnabled: false,
+          },
+        },
         payloadSafety: {
           metadataOnly: true,
           supportSafe: true,
@@ -518,6 +586,10 @@ describe("SupportDebugConsolePage", () => {
     expect(screen.getByText(/Pilot status/i)).toBeInTheDocument();
     expect(screen.getByText(/Review escalated/i)).toBeInTheDocument();
     expect(screen.getByText(/recipient_followup/i)).toBeInTheDocument();
+    expect(screen.getByText(/Review health/i)).toBeInTheDocument();
+    expect(screen.getByText(/attention_required/i)).toBeInTheDocument();
+    expect(screen.getByText(/Replay blocks/i)).toBeInTheDocument();
+    expect(screen.getByText(/Completion evidence/i)).toBeInTheDocument();
     expect(screen.getByText(/Trust payloads, portable attestation contents, provider payloads/i)).toBeInTheDocument();
     expect(screen.getByText(/Operator audit timeline/i)).toBeInTheDocument();
     expect(screen.getByText(/trust_export_superseded/i)).toBeInTheDocument();

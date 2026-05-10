@@ -72,6 +72,23 @@ function renderInstitutionAccessDiagnostics(payload: SupportConsoleResourceRespo
             <div><strong>Delivery status</strong>: {diagnostic.pilotOperation.continuity.deliveryStatus}</div>
           </div>
         ) : null}
+        {diagnostic.observability ? (
+          <div style={{ display: "grid", gap: 8 }}>
+            <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
+              <div><strong>Review health</strong>: {diagnostic.observability.operationalHealth}</div>
+              <div><strong>Stale session</strong>: {diagnostic.observability.sessionHealth.staleSessionDetected ? "Detected" : "Not detected"}</div>
+              <div><strong>Replay blocks</strong>: {diagnostic.observability.sessionHealth.replayBlockedCount}</div>
+              <div><strong>Reauthentication required</strong>: {diagnostic.observability.sessionHealth.reauthenticationRequiredCount}</div>
+              <div><strong>Lifecycle blocked</strong>: {diagnostic.observability.bottlenecks.lifecycleBlocked ? "Yes" : "No"}</div>
+              <div><strong>Review never opened</strong>: {diagnostic.observability.bottlenecks.reviewNeverOpened ? "Yes" : "No"}</div>
+              <div><strong>Delivery attempts</strong>: {diagnostic.observability.conversion.deliveryAttemptCount}</div>
+              <div><strong>Completion evidence</strong>: {diagnostic.observability.conversion.completionEvidence}</div>
+            </div>
+            <div style={{ color: "#475569" }}>
+              Observability is support-safe operational metadata only. It does not include trust payloads, provider payloads, raw identity or property data, public access, or downloads.
+            </div>
+          </div>
+        ) : null}
         <div style={{ color: "#475569" }}>
           Metadata-only diagnostic. Trust payloads, portable attestation contents, provider payloads, raw identity or property data, support metadata, public links, and downloads are excluded.
         </div>
