@@ -612,6 +612,146 @@ describe("SupportDebugConsolePage", () => {
           publicAccessEnabled: false,
         },
       },
+      securityAccessForensics: {
+        schemaVersion: "security_access_forensics.v1",
+        internalOnly: true,
+        supportSafe: true,
+        metadataOnly: true,
+        grantId: "grant-1",
+        incidentCount: 2,
+        chainEventCount: 2,
+        incidents: [
+          {
+            type: "wrong_recipient_attempts_observed",
+            label: "Wrong recipient attempts observed",
+            count: 1,
+            observed: true,
+            followUpSuggested: true,
+            lastObservedAt: "2026-05-01T00:00:00.000Z",
+          },
+          {
+            type: "operator_diagnostic_access_observed",
+            label: "Operator diagnostic access observed",
+            count: 1,
+            observed: true,
+            followUpSuggested: true,
+            lastObservedAt: "2026-05-04T00:00:00.000Z",
+          },
+        ],
+        chains: [
+          {
+            type: "recipient_access_chain",
+            label: "Recipient access chain",
+            eventCount: 1,
+            lastEventAt: "2026-05-01T00:00:00.000Z",
+            events: [
+              {
+                schemaVersion: "security_access_forensic_event.v1",
+                eventId: "recipient-1",
+                source: "recipient_access_timeline",
+                category: "wrong_recipient",
+                eventType: "recipient_trust_review_blocked",
+                occurredAt: "2026-05-01T00:00:00.000Z",
+                actorType: "recipient",
+                outcome: "blocked",
+                reason: "recipient_email_mismatch",
+                lifecycleState: "recipient_mismatch",
+                resource: { type: "tenant_institution_access_grant", redactedId: "***nt-1" },
+                metadataOnly: true,
+                visibility: {
+                  supportVisible: true,
+                  operatorVisible: true,
+                  tenantVisible: false,
+                  recipientVisible: false,
+                  institutionVisible: false,
+                  portableVisible: false,
+                  publicVisible: false,
+                  exportable: false,
+                  downloadable: false,
+                  trustPayloadIncluded: false,
+                  providerPayloadIncluded: false,
+                  rawIdentityPayloadIncluded: false,
+                  rawPropertyPayloadIncluded: false,
+                  rawIpIncluded: false,
+                  fullUserAgentIncluded: false,
+                  behavioralProfileIncluded: false,
+                  riskScoreIncluded: false,
+                },
+              },
+            ],
+          },
+          {
+            type: "operator_diagnostic_chain",
+            label: "Operator diagnostic access chain",
+            eventCount: 1,
+            lastEventAt: "2026-05-04T00:00:00.000Z",
+            events: [
+              {
+                schemaVersion: "security_access_forensic_event.v1",
+                eventId: "operator-1",
+                source: "operator_audit_timeline",
+                category: "operator_access",
+                eventType: "system.institution_access_diagnostics_opened",
+                occurredAt: "2026-05-04T00:00:00.000Z",
+                actorType: "operator",
+                outcome: "completed",
+                reason: "support_diagnostics",
+                lifecycleState: null,
+                resource: { type: "tenant_institution_access_grant", redactedId: "***nt-1" },
+                metadataOnly: true,
+                visibility: {
+                  supportVisible: true,
+                  operatorVisible: true,
+                  tenantVisible: false,
+                  recipientVisible: false,
+                  institutionVisible: false,
+                  portableVisible: false,
+                  publicVisible: false,
+                  exportable: false,
+                  downloadable: false,
+                  trustPayloadIncluded: false,
+                  providerPayloadIncluded: false,
+                  rawIdentityPayloadIncluded: false,
+                  rawPropertyPayloadIncluded: false,
+                  rawIpIncluded: false,
+                  fullUserAgentIncluded: false,
+                  behavioralProfileIncluded: false,
+                  riskScoreIncluded: false,
+                },
+              },
+            ],
+          },
+        ],
+        requestOriginSummary: {
+          uniqueIpHashCount: 1,
+          ipHashValuesVisible: false,
+          rawIpVisible: false,
+          userAgentFamilies: ["chrome"],
+          rawUserAgentVisible: false,
+        },
+        operatorCorrelation: {
+          operatorDiagnosticAccessCount: 1,
+          lastOperatorAccessAt: "2026-05-04T00:00:00.000Z",
+        },
+        retention: {
+          classification: "security_session_internal",
+          nonPortable: true,
+          nonExportable: true,
+          retentionJobImplemented: false,
+          futureEnforcementMission: "feat/security-telemetry-retention-enforcement-v1",
+        },
+        prohibitedFields: {
+          rawTrustPayloads: false,
+          rawProviderPayloads: false,
+          rawIdentityDocuments: false,
+          rawPropertyPayloads: false,
+          rawIpAddresses: false,
+          fullUserAgents: false,
+          preciseGeolocation: false,
+          behavioralProfiles: false,
+          riskScores: false,
+        },
+      },
       debug: {
         canonicalEventCount: 0,
         domainsPresent: [],
@@ -635,12 +775,17 @@ describe("SupportDebugConsolePage", () => {
     expect(screen.getByText(/Review health/i)).toBeInTheDocument();
     expect(screen.getByText(/attention_required/i)).toBeInTheDocument();
     expect(screen.getByText(/Security events/i)).toBeInTheDocument();
-    expect(screen.getByText(/Wrong recipient attempts/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Wrong recipient attempts/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Internal-only security telemetry/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Replay blocks/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Completion evidence/i)).toBeInTheDocument();
     expect(screen.getByText(/Trust payloads, portable attestation contents, provider payloads/i)).toBeInTheDocument();
     expect(screen.getByText(/Operator audit timeline/i)).toBeInTheDocument();
+    expect(screen.getByText(/Security access forensics/i)).toBeInTheDocument();
+    expect(screen.getByText(/Wrong recipient attempts observed/i)).toBeInTheDocument();
+    expect(screen.getByText(/Operator diagnostic access observed/i)).toBeInTheDocument();
+    expect(screen.getByText(/Request origins are summarized as hash counts/i)).toBeInTheDocument();
+    expect(screen.getByText(/feat\/security-telemetry-retention-enforcement-v1/i)).toBeInTheDocument();
     expect(screen.getByText(/trust_export_superseded/i)).toBeInTheDocument();
     expect(screen.getByText(/Operator: \*\*\*or-1 · admin/i)).toBeInTheDocument();
     expect(screen.queryByText(/reviewer@example\.com/i)).not.toBeInTheDocument();

@@ -5,6 +5,7 @@ import type { SlaEvaluationV1 } from "../sla/slaTypes";
 import type { WatchlistEntryV1 } from "../watchlist/watchlistTypes";
 import type { SupportInstitutionAccessDiagnosticSummary } from "../../services/tenantPortal/tenantInstitutionAccessService";
 import type { OperatorAuditTimelineSummary } from "./operatorAuditTimeline";
+import type { SecurityAccessForensicSummary } from "./securityAccessForensics";
 
 export type SupportConsoleResourceSummary = {
   type: string;
@@ -48,6 +49,7 @@ export type SupportConsoleResourceResponse = {
   watch?: WatchlistEntryV1 | null;
   institutionAccessDiagnostic?: SupportInstitutionAccessDiagnosticSummary | null;
   operatorAuditTimeline?: OperatorAuditTimelineSummary | null;
+  securityAccessForensics?: SecurityAccessForensicSummary | null;
   debug: {
     canonicalEventCount: number;
     domainsPresent: string[];

@@ -37,6 +37,7 @@ export type SupportConsoleResourceResponse = {
   resolution?: ResolutionRecordV1 | null;
   institutionAccessDiagnostic?: SupportInstitutionAccessDiagnosticSummary | null;
   operatorAuditTimeline?: OperatorAuditTimelineSummary | null;
+  securityAccessForensics?: SecurityAccessForensicSummary | null;
   watch?: {
     version: "v1";
     id: string;
@@ -57,6 +58,85 @@ export type SupportConsoleResourceResponse = {
     domainsPresent: string[];
     identifiers?: Record<string, string | null | undefined>;
   };
+};
+
+export type SecurityAccessForensicSummary = {
+  schemaVersion: "security_access_forensics.v1";
+  internalOnly: true;
+  supportSafe: true;
+  metadataOnly: true;
+  grantId: string;
+  incidentCount: number;
+  chainEventCount: number;
+  incidents: Array<{
+    type: string;
+    label: string;
+    count: number;
+    observed: boolean;
+    followUpSuggested: boolean;
+    lastObservedAt: string | null;
+  }>;
+  chains: Array<{
+    type: string;
+    label: string;
+    eventCount: number;
+    lastEventAt: string | null;
+    events: Array<{
+      schemaVersion: "security_access_forensic_event.v1";
+      eventId: string;
+      source: string;
+      category: string;
+      eventType: string;
+      occurredAt: string;
+      actorType: string;
+      outcome: string | null;
+      reason: string | null;
+      lifecycleState: string | null;
+      resource: {
+        type: string;
+        redactedId: string | null;
+      };
+      metadataOnly: true;
+      visibility: {
+        supportVisible: true;
+        operatorVisible: true;
+        tenantVisible: false;
+        recipientVisible: false;
+        institutionVisible: false;
+        portableVisible: false;
+        publicVisible: false;
+        exportable: false;
+        downloadable: false;
+        trustPayloadIncluded: false;
+        providerPayloadIncluded: false;
+        rawIdentityPayloadIncluded: false;
+        rawPropertyPayloadIncluded: false;
+        rawIpIncluded: false;
+        fullUserAgentIncluded: false;
+        behavioralProfileIncluded: false;
+        riskScoreIncluded: false;
+      };
+    }>;
+  }>;
+  requestOriginSummary: {
+    uniqueIpHashCount: number;
+    ipHashValuesVisible: false;
+    rawIpVisible: false;
+    userAgentFamilies: string[];
+    rawUserAgentVisible: false;
+  };
+  operatorCorrelation: {
+    operatorDiagnosticAccessCount: number;
+    lastOperatorAccessAt: string | null;
+  };
+  retention: {
+    classification: "security_session_internal";
+    nonPortable: true;
+    nonExportable: true;
+    retentionJobImplemented: false;
+    futureEnforcementMission: "feat/security-telemetry-retention-enforcement-v1";
+  };
+  prohibitedFields: Record<string, false>;
 };
 
 export type OperatorAuditTimelineSummary = {

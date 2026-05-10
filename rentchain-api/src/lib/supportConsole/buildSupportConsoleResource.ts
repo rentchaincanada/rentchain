@@ -12,6 +12,7 @@ import { canonicalEventToTimelineItem } from "../timeline/timelineAdapter";
 import { redactIdentifier, redactIdentifierMap } from "../governance/platformGovernance";
 import { getSupportInstitutionAccessDiagnostic } from "../../services/tenantPortal/tenantInstitutionAccessService";
 import { buildOperatorAuditTimeline } from "./operatorAuditTimeline";
+import { buildSecurityAccessForensics } from "./securityAccessForensics";
 import type {
   SupportConsoleAutomationItem,
   SupportConsolePolicyDecision,
@@ -408,6 +409,11 @@ export async function buildSupportConsoleResource(input: {
       canonicalEvents: sortedEvents,
       tenantTrustExports,
     });
+    const securityAccessForensics = buildSecurityAccessForensics({
+      grantId: resourceId,
+      diagnostic,
+      operatorAuditTimeline,
+    });
     return {
       resource: buildInstitutionAccessHeader(resourceId, doc, diagnostic),
       timeline: sortedEvents.map(canonicalEventToTimelineItem),
@@ -429,6 +435,7 @@ export async function buildSupportConsoleResource(input: {
       watch: null,
       institutionAccessDiagnostic: diagnostic,
       operatorAuditTimeline,
+      securityAccessForensics,
       debug: {
         canonicalEventCount: relatedEvents.length,
         domainsPresent: domainsPresent(relatedEvents),
