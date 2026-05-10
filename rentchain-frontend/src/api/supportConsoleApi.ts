@@ -193,6 +193,50 @@ export type SupportInstitutionAccessDiagnosticSummary = {
     lastReason: string | null;
     reasonCategories: string[];
   };
+  securityTelemetry?: {
+    schemaVersion: "support_safe_security_session_telemetry.v1";
+    internalOnly: true;
+    metadataOnly: true;
+    eventCount: number;
+    blockedAttemptCount: number;
+    wrongRecipientAttemptCount: number;
+    revokedAttemptCount: number;
+    expiredAttemptCount: number;
+    replayBlockedCount: number;
+    staleSessionCount: number;
+    uniqueIpHashCount: number;
+    userAgentFamilies: string[];
+    lastSignal: string | null;
+    lastRecordedAt: string | null;
+    signals: string[];
+    retention: {
+      classification: string;
+      nonPortable: true;
+      nonExportable: true;
+    };
+    redaction: {
+      ipAddressMode: string;
+      userAgentMode: string;
+      rawIpVisible: false;
+      rawUserAgentVisible: false;
+      preciseGeolocationIncluded: false;
+      deviceFingerprintingIncluded: false;
+      behavioralProfileIncluded: false;
+      riskScoreIncluded: false;
+    };
+    visibility: {
+      supportSafe: true;
+      operatorVisible: true;
+      tenantVisible: false;
+      recipientVisible: false;
+      portableVisible: false;
+      publicVisible: false;
+      trustPayloadIncluded: false;
+      providerPayloadIncluded: false;
+      rawIdentityPayloadIncluded: false;
+      rawPropertyPayloadIncluded: false;
+    };
+  };
   pilotOperation?: {
     schemaVersion: "pilot_institution_review_operation.v1";
     status: string;

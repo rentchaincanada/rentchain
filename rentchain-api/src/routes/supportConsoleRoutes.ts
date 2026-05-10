@@ -1,4 +1,5 @@
 import { Router } from "express";
+import crypto from "crypto";
 import { requireAuth } from "../middleware/requireAuth";
 import { requirePermission } from "../middleware/requireAuthz";
 import { buildSupportConsoleResource } from "../lib/supportConsole/buildSupportConsoleResource";
@@ -9,6 +10,50 @@ const router = Router();
 
 function asString(value: unknown, max = 240) {
   return String(value || "").trim().slice(0, max);
+}
+
+function telemetryHash(value: unknown) {
+  const raw = asString(value, 500);
+  if (!raw) return null;
+  return crypto.createHash("sha256").update(raw).digest("hex").slice(0, 20);
+}
+
+function requestSecurityTelemetry(req: any) {
+  const ip = String(req.headers?.["x-forwarded-for"] || "")
+    .split(",")[0]
+    .trim() || asString(req.ip || req.socket?.remoteAddress, 120);
+  const userAgent = asString(req.get?.("user-agent") || req.headers?.["user-agent"], 500);
+  const userAgentLower = String(userAgent || "").toLowerCase();
+  const userAgentFamily = userAgentLower.includes("edg/")
+    ? "edge"
+    : userAgentLower.includes("chrome/")
+    ? "chrome"
+    : userAgentLower.includes("safari/")
+    ? "safari"
+    : userAgentLower.includes("firefox/")
+    ? "firefox"
+    : userAgentLower
+    ? "other"
+    : "unknown";
+  return {
+    schemaVersion: "security_session_telemetry.v1",
+    workflow: "support_diagnostics",
+    signal: "operator_diagnostics_access",
+    internalOnly: true,
+    metadataOnly: true,
+    ipHash: telemetryHash(ip),
+    userAgentHash: telemetryHash(userAgent),
+    userAgentFamily,
+    retentionClassification: "security_session_internal",
+    rawIpVisible: false,
+    rawUserAgentVisible: false,
+    preciseGeolocationIncluded: false,
+    deviceFingerprintingIncluded: false,
+    behavioralProfileIncluded: false,
+    riskScoreIncluded: false,
+    portableVisible: false,
+    exportable: false,
+  };
 }
 
 function isInstitutionAccessResourceType(value: unknown) {
@@ -53,6 +98,7 @@ async function recordSupportConsoleAccess(req: any, input: { resourceType: strin
         trustPayloadIncluded: false,
         rawProviderPayloadIncluded: false,
         downloadEnabled: false,
+        securityTelemetry: requestSecurityTelemetry(req),
       },
       tags: institutionAccess
         ? ["support_console", "institution_access_diagnostics", "governance"]

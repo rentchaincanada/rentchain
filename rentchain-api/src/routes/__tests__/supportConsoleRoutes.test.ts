@@ -53,7 +53,7 @@ vi.mock("../../middleware/requireAuth", () => ({
 
 async function invokeRouter(
   router: any,
-  options: { method: string; url: string; user?: Record<string, unknown> | null }
+  options: { method: string; url: string; user?: Record<string, unknown> | null; headers?: Record<string, string> }
 ) {
   return await new Promise<{ status: number; body: any }>((resolve, reject) => {
     const [path, queryString] = options.url.split("?");
@@ -66,7 +66,9 @@ async function invokeRouter(
       user: options.user ?? null,
       query: Object.fromEntries(query.entries()),
       params: {},
-      headers: {},
+      headers: options.headers || {},
+      ip: "203.0.113.40",
+      socket: { remoteAddress: "203.0.113.41" },
       get(name: string) {
         return this.headers[String(name).toLowerCase()];
       },
@@ -186,9 +188,24 @@ describe("supportConsoleRoutes", () => {
           metadataOnly: true,
           redactionApplied: true,
           retentionCategory: "support_diagnostics",
+          securityTelemetry: expect.objectContaining({
+            schemaVersion: "security_session_telemetry.v1",
+            workflow: "support_diagnostics",
+            signal: "operator_diagnostics_access",
+            internalOnly: true,
+            metadataOnly: true,
+            ipHash: expect.any(String),
+            userAgentFamily: "unknown",
+            rawIpVisible: false,
+            rawUserAgentVisible: false,
+            portableVisible: false,
+            exportable: false,
+            riskScoreIncluded: false,
+          }),
         }),
       }),
     ]);
+    expect(JSON.stringify(auditEvents)).not.toContain("203.0.113.40");
   });
 
   it("returns maintenance data without reconciliation", async () => {
