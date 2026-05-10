@@ -33,6 +33,10 @@ router.get("/trust-reviews/:grantId", requireAuth, async (req: any, res) => {
       req.query?.recipientSessionId ||
       ""
   ).trim();
+  const onboardingAcknowledged =
+    String(req.headers?.["x-institution-review-onboarding-acknowledged"] || req.query?.onboardingAcknowledged || "")
+      .trim()
+      .toLowerCase() === "true";
 
   try {
     const result = await getRecipientTrustReview({
@@ -40,6 +44,7 @@ router.get("/trust-reviews/:grantId", requireAuth, async (req: any, res) => {
       recipientEmail,
       recipientUserId,
       recipientSessionId,
+      onboardingAcknowledged,
       requestContext: requestSecurityContext(req),
     });
     if (!result.decision.allowed) {

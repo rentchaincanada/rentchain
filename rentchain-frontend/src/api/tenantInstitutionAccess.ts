@@ -131,7 +131,11 @@ export type TenantInstitutionAccessGrant = TenantInstitutionAccessPreview & {
       | "institution_review_delivery_blocked"
       | "institution_review_delivery_resent"
       | "institution_review_delivery_revoked"
-      | "institution_review_delivery_expired";
+      | "institution_review_delivery_expired"
+      | "institution_review_onboarding_started"
+      | "institution_review_onboarding_acknowledged"
+      | "institution_review_onboarding_blocked"
+      | "institution_review_onboarding_completed";
     occurredAt: string;
     actorType: "tenant" | "system" | "recipient";
     metadataOnly: true;
@@ -144,6 +148,10 @@ export type TenantInstitutionAccessGrant = TenantInstitutionAccessPreview & {
       | "delivery_sent"
       | "delivery_failed"
       | "delivery_resent"
+      | "onboarding_started"
+      | "onboarding_acknowledged"
+      | "onboarding_blocked"
+      | "onboarding_completed"
       | "granted"
       | "opened"
       | "blocked"
@@ -289,7 +297,11 @@ export type TenantInstitutionAccessAuditEvent = {
     | "institution_review_delivery_blocked"
     | "institution_review_delivery_resent"
     | "institution_review_delivery_revoked"
-    | "institution_review_delivery_expired";
+    | "institution_review_delivery_expired"
+    | "institution_review_onboarding_started"
+    | "institution_review_onboarding_acknowledged"
+    | "institution_review_onboarding_blocked"
+    | "institution_review_onboarding_completed";
   occurredAt: string;
   actorType: "tenant" | "system" | "recipient";
   outcome:
@@ -301,6 +313,10 @@ export type TenantInstitutionAccessAuditEvent = {
     | "delivery_sent"
     | "delivery_failed"
     | "delivery_resent"
+    | "onboarding_started"
+    | "onboarding_acknowledged"
+    | "onboarding_blocked"
+    | "onboarding_completed"
     | "granted"
     | "opened"
     | "blocked"
@@ -331,6 +347,10 @@ export type TenantInstitutionAccessAuditSummary = {
     | "invite_sent"
     | "invite_opened"
     | "invite_authenticated"
+    | "onboarding_started"
+    | "onboarding_acknowledged"
+    | "onboarding_blocked"
+    | "onboarding_completed"
     | "granted"
     | "opened"
     | "blocked"

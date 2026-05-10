@@ -513,7 +513,11 @@ export type TenantInstitutionAccessGrantEvent = {
     | "institution_review_delivery_blocked"
     | "institution_review_delivery_resent"
     | "institution_review_delivery_revoked"
-    | "institution_review_delivery_expired";
+    | "institution_review_delivery_expired"
+    | "institution_review_onboarding_started"
+    | "institution_review_onboarding_acknowledged"
+    | "institution_review_onboarding_blocked"
+    | "institution_review_onboarding_completed";
   occurredAt: string;
   actorType: "tenant" | "system" | "recipient";
   metadataOnly: true;
@@ -526,6 +530,10 @@ export type TenantInstitutionAccessGrantEvent = {
     | "delivery_sent"
     | "delivery_failed"
     | "delivery_resent"
+    | "onboarding_started"
+    | "onboarding_acknowledged"
+    | "onboarding_blocked"
+    | "onboarding_completed"
     | "granted"
     | "opened"
     | "blocked"
@@ -546,6 +554,9 @@ export type TenantInstitutionAccessGrantEvent = {
     | "delivery_sent"
     | "delivery_failed"
     | "delivery_resent"
+    | "institution_review_onboarding_required"
+    | "institution_review_onboarding_acknowledged"
+    | "institution_review_onboarding_completed"
     | InstitutionReviewDeliveryFailureReason;
   status?:
     | RecipientTrustReviewStatus
@@ -590,7 +601,8 @@ export type RecipientTrustReviewStatus =
   | "policy_denied"
   | "session_expired"
   | "session_revoked"
-  | "reauthentication_required";
+  | "reauthentication_required"
+  | "onboarding_required";
 
 export type RecipientTrustReviewAccessDecision = {
   allowed: boolean;
@@ -611,7 +623,8 @@ export type RecipientTrustReviewAccessDecision = {
     | "recipient_session_reauthentication_required"
     | "recipient_session_stale"
     | "recipient_session_replay_blocked"
-    | "trust_export_lifecycle_inactive";
+    | "trust_export_lifecycle_inactive"
+    | "institution_review_onboarding_required";
   metadataOnly: true;
   publicAccessEnabled: false;
   downloadEnabled: false;
@@ -645,6 +658,31 @@ export type RecipientReviewSessionSummary = {
   };
 };
 
+export type InstitutionReviewOnboardingSummary = {
+  schemaVersion: "institution_review_onboarding.v1";
+  status: "required" | "acknowledged";
+  acknowledgementRequired: true;
+  acknowledged: boolean;
+  tenantMediated: true;
+  authenticatedRecipientRequired: true;
+  metadataOnly: true;
+  viewOnly: true;
+  timeBound: true;
+  revocable: true;
+  policyGated: true;
+  publicAccessEnabled: false;
+  downloadEnabled: false;
+  institutionAccountCreated: false;
+  automatedDecisioningEnabled: false;
+  copy: {
+    title: string;
+    intro: string;
+    bullets: string[];
+    acknowledgement: string;
+    supportGuidance: string[];
+  };
+};
+
 export type RecipientTrustReviewSummary = {
   schemaVersion: "recipient_trust_review.v1";
   grantId: string;
@@ -672,6 +710,7 @@ export type RecipientTrustReviewSummary = {
   reviewedAt: string;
   session: RecipientReviewSessionSummary;
   institutionReviewSession: InstitutionReviewSessionSummary;
+  onboarding: InstitutionReviewOnboardingSummary;
   metadataOnly: true;
   policyGated: true;
   includedClaims: Array<{
@@ -703,6 +742,10 @@ export type TenantInstitutionAccessAuditOutcome =
   | "delivery_sent"
   | "delivery_failed"
   | "delivery_resent"
+  | "onboarding_started"
+  | "onboarding_acknowledged"
+  | "onboarding_blocked"
+  | "onboarding_completed"
   | "granted"
   | "opened"
   | "blocked"
@@ -742,6 +785,9 @@ export type TenantInstitutionAccessAuditEvent = {
     | "delivery_sent"
     | "delivery_failed"
     | "delivery_resent"
+    | "institution_review_onboarding_required"
+    | "institution_review_onboarding_acknowledged"
+    | "institution_review_onboarding_completed"
     | InstitutionReviewDeliveryFailureReason
     | "session_started"
     | "recipient_session_expired"
@@ -983,6 +1029,13 @@ function signalForGrantEvent(params: {
 }): SecuritySessionTelemetrySignal {
   if (params.eventType === "recipient_trust_review_opened") return "recipient_review_opened";
   if (params.eventType === "recipient_review_session_started") return "recipient_session_started";
+  if (
+    params.eventType === "institution_review_onboarding_started" ||
+    params.eventType === "institution_review_onboarding_acknowledged" ||
+    params.eventType === "institution_review_onboarding_completed"
+  ) {
+    return "recipient_review_opened";
+  }
   if (params.reason === "recipient_email_mismatch") return "wrong_recipient_attempt";
   if (params.reason === "grant_revoked" || params.eventType === "recipient_trust_review_revoked") return "revoked_access_attempt";
   if (params.reason === "grant_expired" || params.eventType === "recipient_trust_review_expired") return "expired_access_attempt";
@@ -1383,6 +1436,10 @@ function outcomeForEventType(eventType: TenantInstitutionAccessAuditEvent["event
   if (eventType === "institution_review_delivery_sent") return "delivery_sent";
   if (eventType === "institution_review_delivery_failed") return "delivery_failed";
   if (eventType === "institution_review_delivery_resent") return "delivery_resent";
+  if (eventType === "institution_review_onboarding_started") return "onboarding_started";
+  if (eventType === "institution_review_onboarding_acknowledged") return "onboarding_acknowledged";
+  if (eventType === "institution_review_onboarding_completed") return "onboarding_completed";
+  if (eventType === "institution_review_onboarding_blocked") return "onboarding_blocked";
   if (eventType === "tenant_institution_access_granted") return "granted";
   if (
     eventType === "tenant_institution_access_revoked" ||
@@ -1437,6 +1494,10 @@ function statusForAuditEvent(event: TenantInstitutionAccessStoredGrant["events"]
   if (event.eventType === "recipient_review_session_revoked") return "session_revoked";
   if (event.eventType === "recipient_review_session_started") return "active";
   if (event.eventType === "recipient_trust_review_opened") return "available";
+  if (event.eventType === "institution_review_onboarding_started") return "onboarding_required";
+  if (event.eventType === "institution_review_onboarding_acknowledged" || event.eventType === "institution_review_onboarding_completed") {
+    return "available";
+  }
   return "blocked";
 }
 
@@ -1464,6 +1525,9 @@ function reasonForAuditEvent(event: TenantInstitutionAccessStoredGrant["events"]
   if (event.eventType === "recipient_review_session_expired") return "recipient_session_expired";
   if (event.eventType === "recipient_review_session_blocked") return "recipient_session_reauthentication_required";
   if (event.eventType === "recipient_review_session_started") return "session_started";
+  if (event.eventType === "institution_review_onboarding_started") return "institution_review_onboarding_required";
+  if (event.eventType === "institution_review_onboarding_acknowledged") return "institution_review_onboarding_acknowledged";
+  if (event.eventType === "institution_review_onboarding_completed") return "institution_review_onboarding_completed";
   if (
     event.eventType === "tenant_institution_access_expired" ||
     event.eventType === "recipient_trust_review_expired" ||
@@ -2265,7 +2329,8 @@ function hasUnsafeRecipientPayload(grant: TenantInstitutionAccessStoredGrant) {
 function recipientSummaryFromGrant(
   grant: TenantInstitutionAccessStoredGrant,
   reviewedAt: string,
-  session: RecipientReviewSessionSummary
+  session: RecipientReviewSessionSummary,
+  options: { onboardingAcknowledged?: boolean } = {}
 ): RecipientTrustReviewSummary {
   const institutionReviewSession = deriveInstitutionReviewSession({
     accessGrant: grant,
@@ -2307,14 +2372,51 @@ function recipientSummaryFromGrant(
     reviewedAt,
     session,
     institutionReviewSession,
+    onboarding: {
+      schemaVersion: "institution_review_onboarding.v1",
+      status: options.onboardingAcknowledged ? "acknowledged" : "required",
+      acknowledgementRequired: true,
+      acknowledged: options.onboardingAcknowledged === true,
+      tenantMediated: true,
+      authenticatedRecipientRequired: true,
+      metadataOnly: true,
+      viewOnly: true,
+      timeBound: true,
+      revocable: true,
+      policyGated: true,
+      publicAccessEnabled: false,
+      downloadEnabled: false,
+      institutionAccountCreated: false,
+      automatedDecisioningEnabled: false,
+      copy: {
+        title: "Institution review orientation",
+        intro:
+          "A tenant authorized this limited RentChain review for the invited recipient, audience, and purpose shown here.",
+        bullets: [
+          "You must remain signed in with the invited recipient email before review metadata can be shown.",
+          "The review is metadata-only and view-only; raw trust payloads, provider payloads, identity documents, support/internal notes, public profiles, and downloads are excluded.",
+          "Access is time-bound, policy-gated, lifecycle-governed, and may be revoked by the tenant.",
+          "RentChain is not making an approval, eligibility, credit, insurance, subsidy, government, or automated decision.",
+        ],
+        acknowledgement:
+          "I understand this is a tenant-authorized, metadata-only, revocable, time-bound review and not an approval or eligibility decision.",
+        supportGuidance: [
+          "If you are not the intended recipient, ask the tenant to send a new invitation to the correct email.",
+          "If access is expired or revoked, the tenant must re-authorize review before metadata can be shown again.",
+          "If authentication fails, sign in with the invited recipient email before retrying.",
+        ],
+      },
+    },
     metadataOnly: true,
     policyGated: true,
-    includedClaims: (grant.includedClaims || []).map((claim) => ({
-      claimCategory: claim.claimCategory,
-      claimLabel: claim.claimLabel,
-      lifecycleState: claim.lifecycleState,
-      consentExpiresAt: claim.consentExpiresAt,
-    })),
+    includedClaims: options.onboardingAcknowledged
+      ? (grant.includedClaims || []).map((claim) => ({
+          claimCategory: claim.claimCategory,
+          claimLabel: claim.claimLabel,
+          lifecycleState: claim.lifecycleState,
+          consentExpiresAt: claim.consentExpiresAt,
+        }))
+      : [],
     excludedClaims: (grant.excludedClaims || []).map((claim) => ({
       claimCategory: claim.claimCategory,
       claimLabel: claim.claimLabel,
@@ -2570,6 +2672,7 @@ export async function getRecipientTrustReview(params: {
   recipientEmail?: unknown;
   recipientUserId?: unknown;
   recipientSessionId?: unknown;
+  onboardingAcknowledged?: boolean;
   requestContext?: SecuritySessionRequestContext | null;
 }): Promise<RecipientTrustReviewResult> {
   const grantId = asString(params.grantId);
@@ -2692,6 +2795,44 @@ export async function getRecipientTrustReview(params: {
     );
   }
 
+  if (params.onboardingAcknowledged !== true) {
+    await appendGrantEvent({
+      grant,
+      eventType: "institution_review_onboarding_started",
+      occurredAt: reviewedAt,
+      status: "onboarding_required",
+      reason: "institution_review_onboarding_required",
+      outcome: "onboarding_started",
+      recipientEmail,
+      recipientUserId: asString(params.recipientUserId, 160),
+      recipientSessionId: sessionDecision.session.sessionId,
+      requestContext: params.requestContext,
+    });
+    return {
+      decision: {
+        allowed: true,
+        status: "onboarding_required",
+        reason: "institution_review_onboarding_required",
+        metadataOnly: true,
+        publicAccessEnabled: false,
+        downloadEnabled: false,
+      },
+      summary: recipientSummaryFromGrant(grant, reviewedAt, sessionDecision.session, { onboardingAcknowledged: false }),
+    };
+  }
+
+  await appendGrantEvent({
+    grant,
+    eventType: "institution_review_onboarding_acknowledged",
+    occurredAt: reviewedAt,
+    status: "available",
+    reason: "institution_review_onboarding_acknowledged",
+    outcome: "onboarding_acknowledged",
+    recipientEmail,
+    recipientUserId: asString(params.recipientUserId, 160),
+    recipientSessionId: sessionDecision.session.sessionId,
+    requestContext: params.requestContext,
+  });
   await appendGrantEvent({
     grant,
     eventType: "recipient_trust_review_opened",
@@ -2721,6 +2862,18 @@ export async function getRecipientTrustReview(params: {
     await db.collection(COLLECTION).doc(grant.grantId).set({ institutionReviewInvite: invite, updatedAt: reviewedAt }, { merge: true });
     grant.institutionReviewInvite = invite;
   }
+  await appendGrantEvent({
+    grant,
+    eventType: "institution_review_onboarding_completed",
+    occurredAt: reviewedAt,
+    status: "available",
+    reason: "institution_review_onboarding_completed",
+    outcome: "onboarding_completed",
+    recipientEmail,
+    recipientUserId: asString(params.recipientUserId, 160),
+    recipientSessionId: sessionDecision.session.sessionId,
+    requestContext: params.requestContext,
+  });
 
   return {
     decision: {
@@ -2731,7 +2884,7 @@ export async function getRecipientTrustReview(params: {
       publicAccessEnabled: false,
       downloadEnabled: false,
     },
-    summary: recipientSummaryFromGrant(grant, reviewedAt, sessionDecision.session),
+    summary: recipientSummaryFromGrant(grant, reviewedAt, sessionDecision.session, { onboardingAcknowledged: true }),
   };
 }
 

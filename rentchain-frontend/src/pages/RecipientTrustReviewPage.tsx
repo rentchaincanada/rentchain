@@ -93,11 +93,13 @@ export default function RecipientTrustReviewPage() {
     data: RecipientTrustReviewResponse | null;
     error: string | null;
   }>({ loading: true, data: null, error: null });
+  const [acknowledged, setAcknowledged] = React.useState(false);
+  const [acknowledging, setAcknowledging] = React.useState(false);
 
   React.useEffect(() => {
     let cancelled = false;
     setState({ loading: true, data: null, error: null });
-    getRecipientTrustReview(grantId, loadStoredSessionId(grantId))
+    getRecipientTrustReview(grantId, loadStoredSessionId(grantId), false)
       .then((data) => {
         if (!cancelled) {
           storeSessionId(grantId, data.summary?.session?.sessionId);
@@ -124,6 +126,29 @@ export default function RecipientTrustReviewPage() {
   }, [grantId]);
 
   const summary = state.data?.summary || null;
+  const onboardingRequired = summary?.onboarding?.acknowledgementRequired && !summary.onboarding.acknowledged;
+
+  function acknowledgeOnboarding() {
+    setAcknowledging(true);
+    getRecipientTrustReview(grantId, loadStoredSessionId(grantId), true)
+      .then((data) => {
+        storeSessionId(grantId, data.summary?.session?.sessionId);
+        setState({ loading: false, data, error: null });
+      })
+      .catch((err: any) => {
+        const decision = err?.body?.decision;
+        const reason = decision?.reason || err?.body?.error || err?.message || "Unable to complete this onboarding step.";
+        if (
+          decision?.status === "session_expired" ||
+          decision?.status === "session_revoked" ||
+          decision?.status === "reauthentication_required"
+        ) {
+          clearStoredSessionId(grantId);
+        }
+        setState({ loading: false, data: null, error: pretty(reason) });
+      })
+      .finally(() => setAcknowledging(false));
+  }
 
   return (
     <main style={pageStyle}>
@@ -148,6 +173,34 @@ export default function RecipientTrustReviewPage() {
           </section>
         ) : summary ? (
           <>
+            {onboardingRequired ? (
+              <section style={panelStyle}>
+                <h2 style={{ marginTop: 0, fontSize: 20 }}>{summary.onboarding.copy.title}</h2>
+                <p style={{ marginTop: 0, color: "#475569", lineHeight: 1.6 }}>{summary.onboarding.copy.intro}</p>
+                <ul style={{ margin: 0, paddingLeft: 20, color: "#475569", lineHeight: 1.7 }}>
+                  {summary.onboarding.copy.bullets.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+                <div style={{ marginTop: 16, display: "grid", gap: 12 }}>
+                  <label style={{ display: "flex", gap: 10, alignItems: "flex-start", color: "#334155", lineHeight: 1.5 }}>
+                    <input
+                      type="checkbox"
+                      checked={acknowledged}
+                      onChange={(event) => setAcknowledged(event.target.checked)}
+                      style={{ marginTop: 4 }}
+                    />
+                    <span>{summary.onboarding.copy.acknowledgement}</span>
+                  </label>
+                  <button type="button" disabled={!acknowledged || acknowledging} onClick={acknowledgeOnboarding}>
+                    {acknowledging ? "Preparing review..." : "Continue to metadata review"}
+                  </button>
+                </div>
+                <div style={{ marginTop: 16, color: "#64748b", lineHeight: 1.6 }}>
+                  {summary.onboarding.copy.supportGuidance.join(" ")}
+                </div>
+              </section>
+            ) : null}
             <section style={panelStyle}>
               <h2 style={{ marginTop: 0, fontSize: 20 }}>Review scope</h2>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
@@ -174,10 +227,12 @@ export default function RecipientTrustReviewPage() {
               </div>
             </section>
 
-            <section style={panelStyle}>
-              <h2 style={{ marginTop: 0, fontSize: 20 }}>Included metadata</h2>
-              <MetadataList summary={summary} />
-            </section>
+            {!onboardingRequired ? (
+              <section style={panelStyle}>
+                <h2 style={{ marginTop: 0, fontSize: 20 }}>Included metadata</h2>
+                <MetadataList summary={summary} />
+              </section>
+            ) : null}
 
             <section style={panelStyle}>
               <h2 style={{ marginTop: 0, fontSize: 20 }}>Excluded metadata</h2>

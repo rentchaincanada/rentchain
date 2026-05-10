@@ -13,7 +13,8 @@ export type RecipientTrustReviewStatus =
   | "policy_denied"
   | "session_expired"
   | "session_revoked"
-  | "reauthentication_required";
+  | "reauthentication_required"
+  | "onboarding_required";
 
 export type RecipientTrustReviewDecision = {
   allowed: boolean;
@@ -103,6 +104,30 @@ export type RecipientTrustReviewSummary = {
     automatedDecisioningEnabled: false;
     downloadEnabled: false;
   };
+  onboarding: {
+    schemaVersion: "institution_review_onboarding.v1";
+    status: "required" | "acknowledged";
+    acknowledgementRequired: true;
+    acknowledged: boolean;
+    tenantMediated: true;
+    authenticatedRecipientRequired: true;
+    metadataOnly: true;
+    viewOnly: true;
+    timeBound: true;
+    revocable: true;
+    policyGated: true;
+    publicAccessEnabled: false;
+    downloadEnabled: false;
+    institutionAccountCreated: false;
+    automatedDecisioningEnabled: false;
+    copy: {
+      title: string;
+      intro: string;
+      bullets: string[];
+      acknowledgement: string;
+      supportGuidance: string[];
+    };
+  };
   metadataOnly: true;
   policyGated: true;
   includedClaims: Array<{
@@ -127,12 +152,15 @@ export type RecipientTrustReviewResponse = {
 
 export async function getRecipientTrustReview(
   grantId: string,
-  recipientSessionId?: string | null
+  recipientSessionId?: string | null,
+  onboardingAcknowledged = false
 ): Promise<RecipientTrustReviewResponse> {
-  const headers = recipientSessionId ? { "x-recipient-review-session-id": recipientSessionId } : undefined;
+  const headers: Record<string, string> = {};
+  if (recipientSessionId) headers["x-recipient-review-session-id"] = recipientSessionId;
+  if (onboardingAcknowledged) headers["x-institution-review-onboarding-acknowledged"] = "true";
   const res = await apiFetch<{ ok: boolean; data: RecipientTrustReviewResponse }>(
     `/recipient/trust-reviews/${encodeURIComponent(grantId)}`,
-    headers ? { headers } : undefined
+    Object.keys(headers).length ? { headers } : undefined
   );
   return res.data;
 }

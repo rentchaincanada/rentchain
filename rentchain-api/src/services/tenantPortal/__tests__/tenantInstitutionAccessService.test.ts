@@ -253,6 +253,7 @@ describe("tenantInstitutionAccessService", () => {
       grantId: grant?.grantId || "",
       recipientEmail: "Reviewer@Example.com",
       recipientUserId: "recipient-1",
+      onboardingAcknowledged: true,
       requestContext: { ipAddress: "203.0.113.10", userAgent: "Mozilla/5.0 Chrome/120.0", requestId: "req-2" },
     });
     expect(review.decision.allowed).toBe(true);
@@ -365,6 +366,7 @@ describe("tenantInstitutionAccessService", () => {
       grantId: grant?.grantId || "",
       recipientEmail: "reviewer@example.com",
       recipientUserId: "recipient-1",
+      onboardingAcknowledged: true,
       recipientSessionId: sessionId,
     });
     expect(expiredSession.decision.allowed).toBe(false);
@@ -387,6 +389,7 @@ describe("tenantInstitutionAccessService", () => {
       grantId: grant?.grantId || "",
       recipientEmail: "reviewer@example.com",
       recipientUserId: "recipient-1",
+      onboardingAcknowledged: true,
       recipientSessionId: activeSessionId,
     });
     expect(revoked.decision.allowed).toBe(false);
@@ -486,6 +489,7 @@ describe("tenantInstitutionAccessService", () => {
       grantId: grant?.grantId || "",
       recipientEmail: "reviewer@example.com",
       recipientUserId: "recipient-1",
+      onboardingAcknowledged: true,
       requestContext: { ipAddress: "198.51.100.20", userAgent: "Mozilla/5.0 Firefox/120.0" },
     });
 
@@ -513,13 +517,19 @@ describe("tenantInstitutionAccessService", () => {
         audit: expect.objectContaining({
           openedReviewCount: 1,
           blockedReviewCount: 1,
-          reasonCategories: expect.arrayContaining(["access_granted", "recipient_email_mismatch", "review_available"]),
+          reasonCategories: expect.arrayContaining([
+            "access_granted",
+            "institution_review_onboarding_acknowledged",
+            "institution_review_onboarding_completed",
+            "recipient_email_mismatch",
+            "review_available",
+          ]),
         }),
         securityTelemetry: expect.objectContaining({
           schemaVersion: "support_safe_security_session_telemetry.v1",
           internalOnly: true,
           metadataOnly: true,
-          eventCount: 3,
+          eventCount: 5,
           blockedAttemptCount: 1,
           wrongRecipientAttemptCount: 1,
           uniqueIpHashCount: 1,

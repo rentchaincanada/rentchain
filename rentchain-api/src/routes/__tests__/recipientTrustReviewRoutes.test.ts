@@ -204,7 +204,10 @@ describe("recipientTrustReviewRoutes", () => {
     const res = await invokeRouter(router, {
       method: "GET",
       url: "/trust-reviews/grant-1",
-    headers: { "x-test-user": JSON.stringify({ id: "recipient-1", email: "reviewer@example.com", role: "landlord" }) },
+      headers: {
+        "x-test-user": JSON.stringify({ id: "recipient-1", email: "reviewer@example.com", role: "landlord" }),
+        "x-institution-review-onboarding-acknowledged": "true",
+      },
     });
 
     expect(res.status).toBe(200);
@@ -286,6 +289,61 @@ describe("recipientTrustReviewRoutes", () => {
     );
     expect(JSON.stringify(res.body?.data || {})).not.toContain("securityTelemetry");
     expect(JSON.stringify(securityTelemetry)).not.toContain("203.0.113");
+  });
+
+  it("returns onboarding orientation before exposing review claim metadata", async () => {
+    const router = (await import("../recipientTrustReviewRoutes")).default;
+    seedGrant();
+
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/trust-reviews/grant-1",
+      headers: { "x-test-user": JSON.stringify({ id: "recipient-1", email: "reviewer@example.com", role: "landlord" }) },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.data?.decision).toEqual(
+      expect.objectContaining({
+        allowed: true,
+        status: "onboarding_required",
+        reason: "institution_review_onboarding_required",
+        metadataOnly: true,
+        publicAccessEnabled: false,
+        downloadEnabled: false,
+      })
+    );
+    expect(res.body?.data?.summary?.onboarding).toEqual(
+      expect.objectContaining({
+        schemaVersion: "institution_review_onboarding.v1",
+        status: "required",
+        acknowledgementRequired: true,
+        acknowledged: false,
+        tenantMediated: true,
+        authenticatedRecipientRequired: true,
+        metadataOnly: true,
+        viewOnly: true,
+        revocable: true,
+        timeBound: true,
+        policyGated: true,
+        publicAccessEnabled: false,
+        downloadEnabled: false,
+        institutionAccountCreated: false,
+        automatedDecisioningEnabled: false,
+      })
+    );
+    expect(res.body?.data?.summary?.includedClaims).toEqual([]);
+    expect(JSON.stringify(res.body?.data || {})).not.toContain("attestation-1");
+    expect(JSON.stringify(res.body?.data || {})).not.toContain("policyDecisions");
+    expect(ensureCollection("tenantInstitutionAccessGrants").get("grant-1")?.events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          eventType: "institution_review_onboarding_started",
+          metadataOnly: true,
+          status: "onboarding_required",
+          reason: "institution_review_onboarding_required",
+        }),
+      ])
+    );
   });
 
   it("requires reauthentication for expired or mismatched recipient review sessions", async () => {
