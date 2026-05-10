@@ -73,6 +73,14 @@ export type RecipientTrustReviewSummary = {
     downloadEnabled: false;
     publicAccessEnabled: false;
     reauthenticationRequiredAt: string;
+    continuity: {
+      schemaVersion: "institution_review_session_continuity.v1";
+      state: "active" | "stale" | "invalidated";
+      replayProtected: true;
+      staleAfter: string;
+      reauthenticationRequired: boolean;
+      invalidationReason: string | null;
+    };
   };
   institutionReviewSession?: {
     schemaVersion: "institution_review_session.v1";

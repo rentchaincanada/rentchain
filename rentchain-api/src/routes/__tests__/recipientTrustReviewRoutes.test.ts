@@ -349,4 +349,180 @@ describe("recipientTrustReviewRoutes", () => {
     expect(blocked.status).toBe(403);
     expect(blocked.body?.decision?.status).toBe("blocked");
   });
+
+  it("invalidates stale recipient review sessions and requires reauthentication", async () => {
+    const router = (await import("../recipientTrustReviewRoutes")).default;
+    seedGrant();
+
+    const opened = await invokeRouter(router, {
+      method: "GET",
+      url: "/trust-reviews/grant-1",
+      headers: { "x-test-user": JSON.stringify({ id: "recipient-1", email: "reviewer@example.com", role: "landlord" }) },
+    });
+    const sessionId = opened.body?.data?.summary?.session?.sessionId;
+    expect(sessionId).toBeTruthy();
+    ensureCollection("recipientTrustReviewSessions").set(sessionId, {
+      ...ensureCollection("recipientTrustReviewSessions").get(sessionId),
+      staleAfter: "2020-01-01T00:00:00.000Z",
+    });
+
+    const stale = await invokeRouter(router, {
+      method: "GET",
+      url: "/trust-reviews/grant-1",
+      headers: {
+        "x-test-user": JSON.stringify({ id: "recipient-1", email: "reviewer@example.com", role: "landlord" }),
+        "x-recipient-review-session-id": sessionId,
+      },
+    });
+
+    expect(stale.status).toBe(401);
+    expect(stale.body?.decision?.reason).toBe("recipient_session_stale");
+    expect(ensureCollection("recipientTrustReviewSessions").get(sessionId)?.lifecycle).toBe("blocked");
+    expect(ensureCollection("tenantInstitutionAccessGrants").get("grant-1")?.events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          eventType: "recipient_review_session_blocked",
+          reason: "recipient_session_stale",
+          metadataOnly: true,
+        }),
+      ])
+    );
+  });
+
+  it("blocks replayed recipient sessions after invite or package continuity changes", async () => {
+    const router = (await import("../recipientTrustReviewRoutes")).default;
+    seedGrant({
+      institutionReviewInvite: {
+        schemaVersion: "institution_review_invite.v1",
+        status: "invited",
+        recipientEmail: "reviewer@example.com",
+        redactedRecipientEmail: "re***@example.com",
+        organizationName: "Example Insurance",
+        audience: "insurer",
+        purpose: "insurance_review",
+        reviewUrl: "https://www.rentchain.test/recipient/trust-review/grant-1",
+        createdAt: "2026-05-01T00:00:00.000Z",
+        sentAt: "2026-05-01T00:00:00.000Z",
+        openedAt: null,
+        authenticatedAt: null,
+        expiresAt: "2026-06-01T00:00:00.000Z",
+        revokedAt: null,
+        recipientAuthenticationRequired: true,
+        inviteTokenIssued: false,
+        bearerAccessEnabled: false,
+        publicAccessEnabled: false,
+        downloadEnabled: false,
+        metadataOnly: true,
+        summary: "Authenticated metadata-only review.",
+      },
+    });
+
+    const opened = await invokeRouter(router, {
+      method: "GET",
+      url: "/trust-reviews/grant-1",
+      headers: { "x-test-user": JSON.stringify({ id: "recipient-1", email: "reviewer@example.com", role: "landlord" }) },
+    });
+    const sessionId = opened.body?.data?.summary?.session?.sessionId;
+    expect(sessionId).toBeTruthy();
+
+    const grant = ensureCollection("tenantInstitutionAccessGrants").get("grant-1");
+    ensureCollection("tenantInstitutionAccessGrants").set("grant-1", {
+      ...grant,
+      institutionReviewInvite: {
+        ...grant.institutionReviewInvite,
+        sentAt: "2026-05-02T00:00:00.000Z",
+      },
+    });
+
+    const replayed = await invokeRouter(router, {
+      method: "GET",
+      url: "/trust-reviews/grant-1",
+      headers: {
+        "x-test-user": JSON.stringify({ id: "recipient-1", email: "reviewer@example.com", role: "landlord" }),
+        "x-recipient-review-session-id": sessionId,
+      },
+    });
+
+    expect(replayed.status).toBe(401);
+    expect(replayed.body?.decision?.reason).toBe("recipient_session_replay_blocked");
+    expect(ensureCollection("recipientTrustReviewSessions").get(sessionId)?.lifecycle).toBe("blocked");
+  });
+
+  it("invalidates older active sessions when a new recipient session starts", async () => {
+    const router = (await import("../recipientTrustReviewRoutes")).default;
+    seedGrant();
+
+    const first = await invokeRouter(router, {
+      method: "GET",
+      url: "/trust-reviews/grant-1",
+      headers: { "x-test-user": JSON.stringify({ id: "recipient-1", email: "reviewer@example.com", role: "landlord" }) },
+    });
+    const firstSessionId = first.body?.data?.summary?.session?.sessionId;
+    expect(firstSessionId).toBeTruthy();
+
+    const second = await invokeRouter(router, {
+      method: "GET",
+      url: "/trust-reviews/grant-1",
+      headers: { "x-test-user": JSON.stringify({ id: "recipient-1", email: "reviewer@example.com", role: "landlord" }) },
+    });
+    const secondSessionId = second.body?.data?.summary?.session?.sessionId;
+    expect(secondSessionId).toBeTruthy();
+    expect(secondSessionId).not.toBe(firstSessionId);
+    expect(ensureCollection("recipientTrustReviewSessions").get(firstSessionId)?.lifecycle).toBe("blocked");
+
+    const oldSession = await invokeRouter(router, {
+      method: "GET",
+      url: "/trust-reviews/grant-1",
+      headers: {
+        "x-test-user": JSON.stringify({ id: "recipient-1", email: "reviewer@example.com", role: "landlord" }),
+        "x-recipient-review-session-id": firstSessionId,
+      },
+    });
+    expect(oldSession.status).toBe(401);
+    expect(oldSession.body?.decision?.reason).toBe("recipient_session_reauthentication_required");
+  });
+
+  it("blocks superseded or inactive trust export lifecycle controls before review", async () => {
+    const router = (await import("../recipientTrustReviewRoutes")).default;
+    seedGrant({
+      package: {
+        status: "export_ready",
+        lifecycleControl: {
+          schemaVersion: "institutional_trust_export_lifecycle_control.v1",
+          state: "superseded",
+          reasons: ["export_superseded"],
+          active: false,
+          shareable: false,
+          evaluatedAt: "2026-05-02T00:00:00.000Z",
+          metadataOnly: true,
+          publicAccessEnabled: false,
+          externalSubmissionEnabled: false,
+        },
+        exportSummaries: [
+          {
+            attestationId: "attestation-1",
+            claimCategory: "account_trust",
+            claimLabel: "Account trust",
+            metadataOnly: true,
+            rawEvidenceIncluded: false,
+            rawProviderPayloadIncluded: false,
+            supportMetadataIncluded: false,
+            publicAccessEnabled: false,
+            externalSubmissionEnabled: false,
+          },
+        ],
+        blockedReasons: [],
+      },
+    });
+
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/trust-reviews/grant-1",
+      headers: { "x-test-user": JSON.stringify({ id: "recipient-1", email: "reviewer@example.com", role: "landlord" }) },
+    });
+
+    expect(res.status).toBe(403);
+    expect(res.body?.decision?.reason).toBe("trust_export_lifecycle_inactive");
+    expect(ensureCollection("recipientTrustReviewSessions").size).toBe(0);
+  });
 });
