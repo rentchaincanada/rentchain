@@ -76,6 +76,7 @@ const tenantInstitutionAccessApi = vi.hoisted(() => ({
   listTenantInstitutionAccessGrants: vi.fn(),
   previewTenantInstitutionAccess: vi.fn(),
   createInstitutionReviewInvite: vi.fn(),
+  resendInstitutionReviewDelivery: vi.fn(),
   revokeTenantInstitutionAccessGrant: vi.fn(),
 }));
 
@@ -899,7 +900,53 @@ describe("tenant workspace frontend shell", () => {
         metadataOnly: true,
         summary: "This invitation points the recipient to an authenticated review.",
       },
+      institutionReviewDelivery: {
+        schemaVersion: "institution_review_delivery.v1",
+        status: "sent",
+        attemptCount: 1,
+        lastAttemptAt: "2026-05-09T00:00:30.000Z",
+        lastSentAt: "2026-05-09T00:01:00.000Z",
+        lastFailedAt: null,
+        lastFailureReason: null,
+        recipientEmail: "reviewer@example.com",
+        redactedRecipientEmail: "re***@example.com",
+        audience: "insurer",
+        purpose: "insurance_review",
+        reviewUrl: "https://www.rentchain.test/recipient/trust-review/grant-1",
+        tenantAuthorized: true,
+        recipientAuthenticationRequired: true,
+        bearerAccessEnabled: false,
+        publicAccessEnabled: false,
+        downloadEnabled: false,
+        metadataOnly: true,
+        summary: "Delivery is tenant-authorized and metadata-only.",
+      },
     });
+    tenantInstitutionAccessApi.resendInstitutionReviewDelivery.mockImplementation(async (grantId: string) => ({
+      ...institutionAccessGrant,
+      grantId,
+      institutionReviewDelivery: {
+        schemaVersion: "institution_review_delivery.v1",
+        status: "resent",
+        attemptCount: 2,
+        lastAttemptAt: "2026-05-09T03:00:00.000Z",
+        lastSentAt: "2026-05-09T03:00:05.000Z",
+        lastFailedAt: null,
+        lastFailureReason: null,
+        recipientEmail: "reviewer@example.com",
+        redactedRecipientEmail: "re***@example.com",
+        audience: "insurer",
+        purpose: "insurance_review",
+        reviewUrl: "https://www.rentchain.test/recipient/trust-review/grant-1",
+        tenantAuthorized: true,
+        recipientAuthenticationRequired: true,
+        bearerAccessEnabled: false,
+        publicAccessEnabled: false,
+        downloadEnabled: false,
+        metadataOnly: true,
+        summary: "Delivery is tenant-authorized and metadata-only.",
+      },
+    }));
     tenantInstitutionAccessApi.revokeTenantInstitutionAccessGrant.mockImplementation(async (grantId: string) => ({
       ...institutionAccessGrant,
       grantId,
@@ -1622,6 +1669,10 @@ describe("tenant workspace frontend shell", () => {
     });
     expect(await screen.findByText(/Tenant portability metadata available/i)).toBeInTheDocument();
     expect(screen.getByText(/Invited/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Delivery/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Sent/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Delivery attempts/i)).toBeInTheDocument();
+    expect(screen.getByText(/Delivery emails contain only the review context and sign-in requirement/i)).toBeInTheDocument();
     expect(screen.getByText(/Access activity/i)).toBeInTheDocument();
     expect(screen.getByText(/re\*\*\*@example.com/i)).toBeInTheDocument();
     expect(screen.getByText(/Opened reviews/i)).toBeInTheDocument();
@@ -1635,6 +1686,12 @@ describe("tenant workspace frontend shell", () => {
     expect(screen.queryByText(/verified tenant/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/reputation/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /send to institution/i })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Resend delivery/i }));
+    await waitFor(() => {
+      expect(tenantInstitutionAccessApi.resendInstitutionReviewDelivery).toHaveBeenCalledWith("grant-1");
+    });
+    expect(await screen.findByText(/^Resent$/i)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Revoke access/i }));
     await waitFor(() => {
