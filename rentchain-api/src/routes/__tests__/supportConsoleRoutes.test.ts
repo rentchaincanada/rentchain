@@ -577,8 +577,17 @@ describe("supportConsoleRoutes", () => {
         }),
         retention: expect.objectContaining({
           classification: "security_session_internal",
-          retentionJobImplemented: false,
-          futureEnforcementMission: "feat/security-telemetry-retention-enforcement-v1",
+          retentionEnforced: true,
+          retentionJobImplemented: true,
+          destructivePurgeJobImplemented: false,
+          retentionLifecycle: expect.objectContaining({
+            policyVersion: "security_telemetry_retention.v1",
+            activeCount: expect.any(Number),
+            archivedCount: expect.any(Number),
+            retentionExpiredCount: expect.any(Number),
+            nonPortable: true,
+            nonExportable: true,
+          }),
         }),
         visibility: expect.objectContaining({
           tenantVisible: false,

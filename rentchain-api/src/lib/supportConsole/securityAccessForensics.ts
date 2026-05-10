@@ -1,5 +1,11 @@
 import type { SupportInstitutionAccessDiagnosticSummary } from "../../services/tenantPortal/tenantInstitutionAccessService";
 import { redactIdentifier } from "../governance/platformGovernance";
+import {
+  evaluateSecurityTelemetryRetention,
+  summarizeSecurityTelemetryRetention,
+  type SecurityTelemetryRetentionDecision,
+  type SecurityTelemetryRetentionSummary,
+} from "../securityTelemetry/securityTelemetryRetention";
 import type { OperatorAuditTimelineEvent, OperatorAuditTimelineSummary } from "./operatorAuditTimeline";
 
 type ForensicIncidentType =
@@ -46,6 +52,7 @@ export type SecurityAccessForensicEvent = {
     userAgentFamily: string | null;
     rawUserAgentVisible: false;
   };
+  retention: SecurityTelemetryRetentionDecision;
   metadataOnly: true;
   visibility: SecurityAccessForensicVisibility;
 };
@@ -112,8 +119,10 @@ export type SecurityAccessForensicSummary = {
     classification: "security_session_internal";
     nonPortable: true;
     nonExportable: true;
-    retentionJobImplemented: false;
-    futureEnforcementMission: "feat/security-telemetry-retention-enforcement-v1";
+    retentionEnforced: true;
+    retentionJobImplemented: true;
+    destructivePurgeJobImplemented: false;
+    retentionLifecycle: SecurityTelemetryRetentionSummary;
   };
   prohibitedFields: {
     rawTrustPayloads: false;
@@ -193,6 +202,8 @@ function eventFromAccessTimeline(params: {
   const eventType = asString(params.event.eventType, 160);
   const occurredAt = asString(params.event.occurredAt, 120);
   if (!category || !eventType || !occurredAt || params.event.metadataOnly !== true) return null;
+  const retention = evaluateSecurityTelemetryRetention({ recordedAt: occurredAt });
+  if (!retention.forensicChainIncluded) return null;
   return {
     schemaVersion: "security_access_forensic_event.v1",
     eventId: `recipient:${params.grantId}:${eventType}:${occurredAt}:${asString(params.event.reason, 160) || "none"}`,
@@ -208,6 +219,7 @@ function eventFromAccessTimeline(params: {
       type: "tenant_institution_access_grant",
       redactedId: redactIdentifier(params.grantId),
     },
+    retention,
     metadataOnly: true,
     visibility: visibility(),
   };
@@ -226,6 +238,8 @@ function eventFromOperatorTimeline(event: OperatorAuditTimelineEvent): SecurityA
   const eventType = asString(event.eventType, 160);
   const occurredAt = asString(event.occurredAt, 120);
   if (!eventType || !occurredAt) return null;
+  const retention = evaluateSecurityTelemetryRetention({ recordedAt: occurredAt });
+  if (!retention.forensicChainIncluded) return null;
   const category = categoryFromOperatorEvent(event);
   if (category !== "operator_access" && category !== "revoked_access" && category !== "expired_access" && category !== "lifecycle_context") {
     return null;
@@ -245,6 +259,7 @@ function eventFromOperatorTimeline(event: OperatorAuditTimelineEvent): SecurityA
       type: event.resource.type,
       redactedId: event.resource.redactedId,
     },
+    retention,
     metadataOnly: true,
     visibility: visibility(),
   };
@@ -301,6 +316,8 @@ export function buildSecurityAccessForensics(input: {
   const replayEvents = accessEvents.filter((event) => event.category === "replay_blocked");
   const staleEvents = accessEvents.filter((event) => event.category === "stale_session");
   const operatorDiagnosticEvents = operatorEvents.filter((event) => event.category === "operator_access");
+  const retentionLifecycle =
+    telemetry?.retentionLifecycle || summarizeSecurityTelemetryRetention([...accessEvents, ...operatorEvents].map((event) => event.retention));
 
   const blockedCount = Math.max(telemetry?.blockedAttemptCount || 0, input.diagnostic?.audit.blockedReviewCount || 0, blockedEvents.length);
   const wrongRecipientCount = Math.max(telemetry?.wrongRecipientAttemptCount || 0, wrongRecipientEvents.length);
@@ -391,8 +408,10 @@ export function buildSecurityAccessForensics(input: {
       classification: "security_session_internal",
       nonPortable: true,
       nonExportable: true,
-      retentionJobImplemented: false,
-      futureEnforcementMission: "feat/security-telemetry-retention-enforcement-v1",
+      retentionEnforced: true,
+      retentionJobImplemented: true,
+      destructivePurgeJobImplemented: false,
+      retentionLifecycle,
     },
     prohibitedFields: {
       rawTrustPayloads: false,

@@ -77,6 +77,11 @@ function renderInstitutionAccessDiagnostics(payload: SupportConsoleResourceRespo
             <div style={{ color: "#475569" }}>
               Internal-only security telemetry. IP addresses are hash-only, user agents are reduced to family/hash form, and telemetry is non-portable and non-exportable.
             </div>
+            {diagnostic.securityTelemetry.retentionLifecycle ? (
+              <div style={{ color: "#475569" }}>
+                Retention: {diagnostic.securityTelemetry.retentionLifecycle.activeCount} active, {diagnostic.securityTelemetry.retentionLifecycle.archivedCount} archived, {diagnostic.securityTelemetry.retentionLifecycle.retentionExpiredCount + diagnostic.securityTelemetry.retentionLifecycle.purgePendingCount + diagnostic.securityTelemetry.retentionLifecycle.purgedCount} expired or purged.
+              </div>
+            ) : null}
           </div>
         ) : null}
         {diagnostic.pilotOperation ? (
@@ -130,6 +135,7 @@ function renderSecurityAccessForensics(payload: SupportConsoleResourceResponse) 
   const forensics = payload.securityAccessForensics;
   if (!forensics) return null;
   const observedIncidents = forensics.incidents.filter((incident) => incident.observed);
+  const retentionLifecycle = forensics.retention.retentionLifecycle;
   return (
     <SupportConsoleSection title="Security access forensics">
       <div style={{ display: "grid", gap: 12 }}>
@@ -145,7 +151,9 @@ function renderSecurityAccessForensics(payload: SupportConsoleResourceResponse) 
           Support-only forensic reconstruction. Request origins are summarized as hash counts, raw IP addresses and full user agents are hidden, and telemetry is non-portable and non-exportable.
         </div>
         <div style={{ color: "#475569" }}>
-          Retention follow-up: {forensics.retention.futureEnforcementMission}.
+          {retentionLifecycle
+            ? `Retention enforcement active: ${retentionLifecycle.activeCount} active, ${retentionLifecycle.archivedCount} archived, ${retentionLifecycle.retentionExpiredCount + retentionLifecycle.purgePendingCount + retentionLifecycle.purgedCount} expired or purged. Destructive purge job: ${forensics.retention.destructivePurgeJobImplemented ? "enabled" : "not enabled"}.`
+            : "Retention enforcement pending."}
         </div>
         <div style={{ display: "grid", gap: 8 }}>
           {observedIncidents.length ? (

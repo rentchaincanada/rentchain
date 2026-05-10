@@ -332,6 +332,33 @@ describe("SupportDebugConsolePage", () => {
             classification: "security_session_internal",
             nonPortable: true,
             nonExportable: true,
+            policyVersion: "security_telemetry_retention.v1",
+            activeRetentionDays: 180,
+            archiveAfterDays: 180,
+            purgeAfterDays: 365,
+            purgePendingGraceDays: 30,
+            retentionEnforced: true,
+            destructivePurgeJobImplemented: false,
+          },
+          retentionLifecycle: {
+            schemaVersion: "security_telemetry_retention_summary.v1",
+            policyVersion: "security_telemetry_retention.v1",
+            classification: "security_session_internal",
+            activeRetentionDays: 180,
+            archiveAfterDays: 180,
+            purgeAfterDays: 365,
+            purgePendingGraceDays: 30,
+            evaluatedAt: "2026-05-10T00:00:00.000Z",
+            activeCount: 3,
+            archivedCount: 0,
+            retentionExpiredCount: 0,
+            purgePendingCount: 0,
+            purgedCount: 0,
+            totalEvaluatedCount: 3,
+            nonPortable: true,
+            nonExportable: true,
+            internalOnly: true,
+            destructivePurgeJobImplemented: false,
           },
           redaction: {
             ipAddressMode: "hash_only",
@@ -737,8 +764,29 @@ describe("SupportDebugConsolePage", () => {
           classification: "security_session_internal",
           nonPortable: true,
           nonExportable: true,
-          retentionJobImplemented: false,
-          futureEnforcementMission: "feat/security-telemetry-retention-enforcement-v1",
+          retentionEnforced: true,
+          retentionJobImplemented: true,
+          destructivePurgeJobImplemented: false,
+          retentionLifecycle: {
+            schemaVersion: "security_telemetry_retention_summary.v1",
+            policyVersion: "security_telemetry_retention.v1",
+            classification: "security_session_internal",
+            activeRetentionDays: 180,
+            archiveAfterDays: 180,
+            purgeAfterDays: 365,
+            purgePendingGraceDays: 30,
+            evaluatedAt: "2026-05-10T00:00:00.000Z",
+            activeCount: 2,
+            archivedCount: 0,
+            retentionExpiredCount: 0,
+            purgePendingCount: 0,
+            purgedCount: 0,
+            totalEvaluatedCount: 2,
+            nonPortable: true,
+            nonExportable: true,
+            internalOnly: true,
+            destructivePurgeJobImplemented: false,
+          },
         },
         prohibitedFields: {
           rawTrustPayloads: false,
@@ -785,7 +833,7 @@ describe("SupportDebugConsolePage", () => {
     expect(screen.getByText(/Wrong recipient attempts observed/i)).toBeInTheDocument();
     expect(screen.getByText(/Operator diagnostic access observed/i)).toBeInTheDocument();
     expect(screen.getByText(/Request origins are summarized as hash counts/i)).toBeInTheDocument();
-    expect(screen.getByText(/feat\/security-telemetry-retention-enforcement-v1/i)).toBeInTheDocument();
+    expect(screen.getByText(/Retention enforcement active/i)).toBeInTheDocument();
     expect(screen.getByText(/trust_export_superseded/i)).toBeInTheDocument();
     expect(screen.getByText(/Operator: \*\*\*or-1 · admin/i)).toBeInTheDocument();
     expect(screen.queryByText(/reviewer@example\.com/i)).not.toBeInTheDocument();
