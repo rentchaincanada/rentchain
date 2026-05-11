@@ -1,0 +1,25 @@
+{
+  "model": "claude-sonnet-4-20250514",
+  "env": {
+    "CLAUDE_CODE_SUBAGENT_MODEL": "claude-haiku-4-5"
+  },
+  "permissions": {
+    "allow": [
+      "Read(**)",
+      "Write(rentchain-frontend/src/**)",
+      "Write(rentchain-api/src/**)"
+    ],
+    "deny": [
+      "Write(*.tf)",
+      "Write(cloudbuild.yaml)",
+      "Write(Dockerfile*)",
+      "Write(vercel.json)",
+      "Write(package.json)",
+      "Write(*.lock)",
+      "Write(.env*)",
+      "Write(rentchain-ai-agent/**)",
+      "Write(agent-system/**)",
+      "Write(governance/**)"
+    ]
+  }
+}
