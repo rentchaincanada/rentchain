@@ -172,21 +172,6 @@ vi.mock("@/components/applications/ApplicationDecisionSummaryCard", () => ({
   ),
 }));
 
-vi.mock("@/components/integrations/TransUnionConnectionCard", () => ({
-  TransUnionConnectionCard: (props: any) => (
-    <div>
-      <div>TransUnion Connection</div>
-      <div>{props.readyToScreen ? "Ready to screen now" : "Choose an applicant first"}</div>
-      <button type="button" onClick={() => props.onStartScreening?.()}>
-        Connection Primary Action
-      </button>
-      <button type="button" onClick={() => props.onChooseApplicant?.()}>
-        Choose Applicant
-      </button>
-    </div>
-  ),
-}));
-
 vi.mock("@/components/integrations/GetTransUnionAccessModal", () => ({
   GetTransUnionAccessModal: ({ open }: any) => (open ? <div>Get TransUnion Access Modal</div> : null),
 }));
@@ -533,7 +518,7 @@ describe("ApplicationsPage", () => {
     expect(screen.queryByText(/Cancelled Applicant/)).not.toBeInTheDocument();
   });
 
-  it("renders without crashing for a free-tier landlord", async () => {
+  it("renders provider-neutral screening setup copy for a free-tier landlord", async () => {
     render(
       <MemoryRouter>
         <ApplicationsPage />
@@ -547,7 +532,11 @@ describe("ApplicationsPage", () => {
     });
 
     expect(screen.getByRole("button", { name: "Send screening invite" })).toBeInTheDocument();
-    expect(screen.getByText("TransUnion Connection")).toBeInTheDocument();
+    expect(screen.getAllByText("Tenant Screening Setup").length).toBeGreaterThan(0);
+    expect(screen.getByText("Screening Provider")).toBeInTheDocument();
+    expect(screen.getAllByText("Screening provider not connected").length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: "Provider credentials" }).length).toBeGreaterThan(0);
+    expect(screen.queryByText("TransUnion Connection")).not.toBeInTheDocument();
     expect(screen.getByText("Application Funnel")).toBeInTheDocument();
     expect(screen.getByText("40%")).toBeInTheDocument();
   });
@@ -703,14 +692,18 @@ describe("ApplicationsPage", () => {
     );
 
     await screen.findAllByRole("heading", { name: "Applications" });
-    expect(screen.getAllByText("Choose an applicant first").length).toBeGreaterThan(0);
-    fireEvent.click(screen.getAllByRole("button", { name: "Connection Primary Action" })[0]);
+    expect(
+      screen.getAllByText("Next step: choose an applicant, then start screening from that application.").length
+    ).toBeGreaterThan(0);
+    fireEvent.click(screen.getAllByRole("button", { name: "Choose applicant" })[0]);
 
     expect(mocks.showToast).not.toHaveBeenCalledWith(
       expect.objectContaining({ message: "Select an application to start screening." })
     );
-    expect(screen.getAllByText("Choose an applicant first").length).toBeGreaterThan(0);
-    expect(screen.getAllByRole("button", { name: "Choose Applicant" }).length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText("Next step: choose an applicant, then start screening from that application.").length
+    ).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: "Choose applicant" }).length).toBeGreaterThan(0);
   });
 
   it("shows Starter-aligned screening upgrade copy instead of the old Pro gate", async () => {
