@@ -380,8 +380,14 @@ describe("leaseRoutes GET /active", () => {
       landlordId: "landlord-1",
       propertyId: "prop-1",
       unitNumber: "101",
+      label: "Unit 101",
       status: "vacant",
       occupancyStatus: "vacant",
+    });
+    seedDoc("tenants", "tenant-1", {
+      landlordId: "landlord-1",
+      fullName: "Jane Tenant",
+      email: "jane@example.com",
     });
 
     const router = (await import("../leaseRoutes")).default;
@@ -400,6 +406,44 @@ describe("leaseRoutes GET /active", () => {
     expect(res.status).toBe(201);
     const leaseId = String(res.body?.lease?.id || "");
     expect(leaseId).toBeTruthy();
+    expect(res.body?.lease).toEqual(
+      expect.objectContaining({
+        unitId: "unit-1",
+        unitNumber: "101",
+        unitLabel: "101",
+      })
+    );
+
+    const leaseSnap = await fakeDb.collection("leases").doc(leaseId).get();
+    expect(leaseSnap.data()).toEqual(
+      expect.objectContaining({
+        unitId: "unit-1",
+        unitNumber: "101",
+        unitLabel: "101",
+      })
+    );
+
+    const summaryRes = await invokeRouter(router, { method: "GET", url: `/${leaseId}` });
+    expect(summaryRes.status).toBe(200);
+    expect(summaryRes.body?.lease).toEqual(
+      expect.objectContaining({
+        unitId: "unit-1",
+        unitNumber: "101",
+        unitLabel: "101",
+      })
+    );
+    expect(JSON.stringify(summaryRes.body?.lease || {})).not.toContain("Unit unit-1");
+
+    const tenantLeasesRes = await invokeRouter(router, { method: "GET", url: "/tenant/tenant-1" });
+    expect(tenantLeasesRes.status).toBe(200);
+    expect(tenantLeasesRes.body?.leases?.[0]).toEqual(
+      expect.objectContaining({
+        unitId: "unit-1",
+        unitNumber: "101",
+        unitLabel: "101",
+      })
+    );
+
     const propertySnap = await fakeDb.collection("properties").doc("prop-1").get();
     expect(propertySnap.data()?.units).toEqual([
       expect.objectContaining({
@@ -408,6 +452,9 @@ describe("leaseRoutes GET /active", () => {
         occupancyStatus: "occupied",
         currentTenantId: "tenant-1",
         currentLeaseId: leaseId,
+        tenantName: "Jane Tenant",
+        tenantFullName: "Jane Tenant",
+        currentTenantName: "Jane Tenant",
       }),
       expect.objectContaining({ id: "unit-2", status: "vacant" }),
     ]);
@@ -418,6 +465,9 @@ describe("leaseRoutes GET /active", () => {
         occupancyStatus: "occupied",
         currentTenantId: "tenant-1",
         currentLeaseId: leaseId,
+        tenantName: "Jane Tenant",
+        tenantFullName: "Jane Tenant",
+        currentTenantName: "Jane Tenant",
         occupancySource: "canonical_lease",
       })
     );

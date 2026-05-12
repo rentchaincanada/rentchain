@@ -107,6 +107,24 @@ async function updateEmbeddedPropertyUnit(propertyId: string, unitId: string, pa
   return true;
 }
 
+async function loadTenantDisplayFields(tenantId: string): Promise<Record<string, string>> {
+  const snap = await db.collection("tenants").doc(tenantId).get().catch(() => null);
+  if (!snap?.exists) return {};
+  const tenant = snap.data() || {};
+  const displayName = asString(
+    (tenant as any)?.fullName ||
+      (tenant as any)?.name ||
+      (tenant as any)?.tenantName ||
+      (tenant as any)?.displayName
+  );
+  if (!displayName) return {};
+  return {
+    tenantName: displayName,
+    tenantFullName: displayName,
+    currentTenantName: displayName,
+  };
+}
+
 export async function syncPropertyUnitOccupancyForTenantContext(
   input: OccupancySyncInput
 ): Promise<OccupancySyncResult> {
@@ -135,6 +153,7 @@ export async function syncPropertyUnitOccupancyForTenantContext(
   const unitReference = leaseUnitId || unitId;
 
   const now = Date.now();
+  const tenantDisplayFields = await loadTenantDisplayFields(tenantId);
   const occupancyPatch = {
     status: "occupied",
     occupancyStatus: "occupied",
@@ -143,6 +162,7 @@ export async function syncPropertyUnitOccupancyForTenantContext(
     leaseId,
     currentLeaseId: leaseId,
     applicationId: asString(input.applicationId),
+    ...tenantDisplayFields,
     occupancySource: "canonical_lease",
     occupancyUpdatedAt: now,
     updatedAt: now,

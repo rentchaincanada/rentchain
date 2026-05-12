@@ -577,6 +577,61 @@ async function loadUnitLeaseDocumentForResponse(raw: any) {
   }
 }
 
+function getCanonicalUnitLabel(unit: any): string | null {
+  const unitId = String(unit?.id || "").trim().toLowerCase();
+  const candidates = [
+    unit?.unitNumber,
+    unit?.label,
+    unit?.raw?.unitNumber,
+    unit?.raw?.label,
+    unit?.raw?.displayLabel,
+    unit?.raw?.unitLabel,
+    unit?.raw?.name,
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
+  return candidates.find((value) => value.toLowerCase() !== unitId) || candidates[0] || null;
+}
+
+async function resolveLeaseUnitSelection(input: {
+  landlordId: string;
+  propertyId: string;
+  unitReference: string;
+}): Promise<{ unitId: string; unitLabel: string }> {
+  const units = await loadUnitsForProperty(db as any, input.propertyId, input.landlordId || null).catch(() => []);
+  const resolution = resolveUnitReference(units, input.unitReference);
+  if (!resolution.ambiguous && resolution.unit) {
+    return {
+      unitId: resolution.unit.id,
+      unitLabel: getCanonicalUnitLabel(resolution.unit) || input.unitReference,
+    };
+  }
+  return {
+    unitId: input.unitReference,
+    unitLabel: input.unitReference,
+  };
+}
+
+async function hydrateLeaseUnitDisplayFields<T extends Record<string, any>>(
+  lease: T,
+  landlordId: string | null
+): Promise<T> {
+  const propertyId = String(lease?.propertyId || "").trim();
+  const unitReference = String(lease?.unitId || lease?.unitNumber || lease?.unit || "").trim();
+  if (!propertyId || !unitReference) return lease;
+  const units = await loadUnitsForProperty(db as any, propertyId, landlordId || null).catch(() => []);
+  const resolution = resolveUnitReference(units, unitReference);
+  if (resolution.ambiguous || !resolution.unit) return lease;
+  const unitLabel = getCanonicalUnitLabel(resolution.unit);
+  if (!unitLabel) return lease;
+  return {
+    ...lease,
+    unitId: String(lease?.unitId || resolution.unit.id || "").trim() || resolution.unit.id,
+    unitNumber: unitLabel,
+    unitLabel,
+  };
+}
+
 async function enrichLeaseRow(raw: any) {
   const lease = normalizeLeaseRow(raw.id, raw);
   const propertyId = String(lease.propertyId || "").trim();
@@ -623,7 +678,7 @@ async function enrichLeaseRow(raw: any) {
   const rentPaymentSummary = leasePaymentProjection.rentPaymentSummary;
 
   return {
-    ...lease,
+    ...(await hydrateLeaseUnitDisplayFields(lease, String(lease.landlordId || "").trim() || null)),
     propertyName,
     tenantName,
     tenantEmail,
@@ -2116,18 +2171,21 @@ router.get("/tenant/:tenantId", requireLandlord, async (req: any, res: Response)
     const propertyMap = new Map<string, { propertyName: string | null; propertyAddress: string | null } | null>(
       propertyEntries
     );
-    const displayLeases = firestoreLeases.map((lease: any) => {
-      const propertyData = propertyMap.get(String(lease.propertyId || "").trim()) || null;
-      const propertyName = lease._rawPropertyName || propertyData?.propertyName || null;
-      const propertyAddress = lease._rawPropertyAddress || propertyData?.propertyAddress || null;
-      const { _rawPropertyName, _rawPropertyAddress, ...rest } = lease;
-      return {
-        ...rest,
-        propertyName,
-        propertyAddress,
-        propertyLabel: propertyName,
-      };
-    });
+    const displayLeases = await Promise.all(
+      firestoreLeases.map(async (lease: any) => {
+        const propertyData = propertyMap.get(String(lease.propertyId || "").trim()) || null;
+        const propertyName = lease._rawPropertyName || propertyData?.propertyName || null;
+        const propertyAddress = lease._rawPropertyAddress || propertyData?.propertyAddress || null;
+        const { _rawPropertyName, _rawPropertyAddress, ...rest } = lease;
+        const hydrated = await hydrateLeaseUnitDisplayFields(rest, landlordId || null);
+        return {
+          ...hydrated,
+          propertyName,
+          propertyAddress,
+          propertyLabel: propertyName,
+        };
+      })
+    );
     return res.status(200).json({ ok: true, leases: mergeLeaseRows([...memoryLeases, ...displayLeases]) });
   } catch {
     return res.status(200).json({ ok: true, leases: memoryLeases });
@@ -2236,11 +2294,16 @@ router.post("/", async (req: Request, res: Response) => {
     const tenantIds = Array.isArray((body as any)?.tenantIds)
       ? (body as any).tenantIds.map((value: any) => String(value || "").trim()).filter(Boolean)
       : [String(body.tenantId || "").trim()].filter(Boolean);
+    const unitSelection = await resolveLeaseUnitSelection({
+      landlordId,
+      propertyId: String(body.propertyId || "").trim(),
+      unitReference: String(body.unitNumber || "").trim(),
+    });
 
     const conflicts = await assertNoConflictingActiveAgreement({
       landlordId,
       propertyId: body.propertyId,
-      unitId: body.unitNumber,
+      unitId: unitSelection.unitId,
       tenantIds,
       startDate: body.startDate,
       endDate: body.endDate,
@@ -2257,7 +2320,7 @@ router.post("/", async (req: Request, res: Response) => {
     const riskSnapshot = await computeLeaseRiskSnapshot({
       landlordId,
       propertyId: body.propertyId,
-      unitId: body.unitNumber,
+      unitId: unitSelection.unitId,
       tenantIds,
       monthlyRent: Number(body.monthlyRent),
     });
@@ -2271,7 +2334,7 @@ router.post("/", async (req: Request, res: Response) => {
       tenantIds,
       primaryTenantId: tenantIds[0] || body.tenantId,
       propertyId: body.propertyId,
-      unitNumber: body.unitNumber,
+      unitNumber: unitSelection.unitLabel,
       monthlyRent: Number(body.monthlyRent),
       startDate: body.startDate,
       endDate: body.endDate,
@@ -2287,8 +2350,9 @@ router.post("/", async (req: Request, res: Response) => {
         tenantIds,
         primaryTenantId: tenantIds[0] || body.tenantId,
         propertyId: lease.propertyId,
-        unitId: body.unitNumber,
-        unitNumber: lease.unitNumber,
+        unitId: unitSelection.unitId,
+        unitNumber: unitSelection.unitLabel,
+        unitLabel: unitSelection.unitLabel,
         monthlyRent: lease.monthlyRent,
         startDate: lease.startDate,
         endDate: lease.endDate ?? null,
@@ -2317,13 +2381,20 @@ router.post("/", async (req: Request, res: Response) => {
             leaseId: lease.id,
             landlordId,
             propertyId: String(lease.propertyId || body.propertyId || "").trim(),
-            unitId: String(body.unitNumber || lease.unitNumber || "").trim(),
+            unitId: unitSelection.unitId,
           },
           "[POST /api/leases]"
         );
       }
     }
-    res.status(201).json({ lease });
+    res.status(201).json({
+      lease: {
+        ...lease,
+        unitId: unitSelection.unitId,
+        unitNumber: unitSelection.unitLabel,
+        unitLabel: unitSelection.unitLabel,
+      },
+    });
   } catch (err) {
     console.error("[POST /api/leases] error", err);
     res.status(500).json({ error: "Failed to process lease" });
