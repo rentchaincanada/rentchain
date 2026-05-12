@@ -76,7 +76,6 @@ import {
   type TransUnionIntegration,
 } from "@/api/integrationsApi";
 import { fetchLandlordApplicationFunnel, type LandlordApplicationFunnelAnalytics } from "@/api/landlordAnalyticsApi";
-import { TransUnionConnectionCard } from "@/components/integrations/TransUnionConnectionCard";
 import { GetTransUnionAccessModal } from "@/components/integrations/GetTransUnionAccessModal";
 import { ConnectTransUnionModal } from "@/components/integrations/ConnectTransUnionModal";
 import { UpdateTransUnionCredentialsModal } from "@/components/integrations/UpdateTransUnionCredentialsModal";
@@ -194,6 +193,152 @@ const formatScreeningProviderLabel = (value?: string | null) => {
   if (normalized === "transunion" || normalized === "transunion_manual") return "TransUnion";
   return String(value);
 };
+
+function ScreeningProviderSetupCard({
+  integration,
+  loading,
+  readyToScreen,
+  selectedApplicationLabel,
+  screeningsCompletedCount,
+  lastScreeningDate,
+  onGetAccess,
+  onConnectExisting,
+  onEnterDetails,
+  onViewInstructions,
+  onUpdateCredentials,
+  onDisconnect,
+  onStartScreening,
+  onChooseApplicant,
+}: {
+  integration: TransUnionIntegration;
+  loading: boolean;
+  readyToScreen: boolean;
+  selectedApplicationLabel?: string | null;
+  screeningsCompletedCount?: number | null;
+  lastScreeningDate?: string | number | null;
+  onGetAccess: () => void;
+  onConnectExisting: () => void;
+  onEnterDetails: () => void;
+  onViewInstructions: () => void;
+  onUpdateCredentials: () => void;
+  onDisconnect: () => void;
+  onStartScreening?: () => void;
+  onChooseApplicant?: () => void;
+}) {
+  const status = integration.status;
+  const connected = status === "connected";
+  const pending = status === "pending_credentialing";
+  const error = status === "connection_error";
+  const completedCount = Number.isFinite(Number(screeningsCompletedCount))
+    ? Number(screeningsCompletedCount)
+    : null;
+  const safeSelectedApplicationLabel = String(selectedApplicationLabel || "").trim();
+  const updatedAt = integration.updatedAt || integration.lastValidatedAt || integration.connectedAt;
+  const formattedLastScreeningDate =
+    lastScreeningDate == null || Number.isNaN(new Date(lastScreeningDate).getTime())
+      ? null
+      : new Date(lastScreeningDate).toLocaleDateString();
+
+  const body = loading
+    ? "Loading screening provider connection..."
+    : connected
+      ? readyToScreen
+        ? "Screening Provider is connected and ready for the selected application."
+        : "Screening Provider is connected. Choose an applicant to start the tenant screening workflow."
+      : pending
+        ? "Tenant Screening Setup is in progress. Finish provider credentialing, then return to enter Provider credentials."
+        : error
+          ? "Screening provider not connected. Review Provider credentials and try again."
+          : "Screening provider not connected. Start setup or enter Provider credentials before requesting tenant screening.";
+  const nextStep = connected
+    ? readyToScreen
+      ? `Next step: start screening${safeSelectedApplicationLabel ? ` for ${safeSelectedApplicationLabel}` : ""}.`
+      : "Next step: choose an applicant, then start screening from that application."
+    : pending
+      ? "Next step: complete Tenant Screening Setup, then enter Provider credentials."
+      : "Next step: connect Provider credentials or start Tenant Screening Setup.";
+
+  return (
+    <Card elevated data-testid="screening-provider-setup-card" style={{ display: "grid", gap: spacing.md }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: spacing.md, flexWrap: "wrap" }}>
+        <div style={{ display: "grid", gap: spacing.xs }}>
+          <div style={{ fontWeight: 700, fontSize: "1.05rem" }}>Tenant Screening Setup</div>
+          <div style={{ color: text.subtle, fontSize: "0.88rem", fontWeight: 700 }}>Screening Provider</div>
+          <div style={{ color: text.muted, lineHeight: 1.6 }}>{body}</div>
+        </div>
+        <Pill tone={connected ? "accent" : "muted"}>{connected ? "Connected" : "Screening provider not connected"}</Pill>
+      </div>
+
+      {!loading ? (
+        <div
+          style={{
+            border: `1px solid ${colors.border}`,
+            borderRadius: radius.md,
+            padding: spacing.sm,
+            background: colors.bg,
+            fontSize: "0.94rem",
+            display: "grid",
+            gap: 4,
+          }}
+        >
+          {connected ? (
+            <>
+              <div>Provider credentials: Stored securely</div>
+              <div>Last updated date: {updatedAt ? new Date(updatedAt).toLocaleDateString() : "Not available"}</div>
+              {completedCount != null ? <div>Screenings completed: {completedCount}</div> : null}
+              {formattedLastScreeningDate ? <div>Last screening date: {formattedLastScreeningDate}</div> : null}
+            </>
+          ) : (
+            <div>Provider credentials are required before screening can begin.</div>
+          )}
+          <div>{nextStep}</div>
+        </div>
+      ) : null}
+
+      {!loading ? (
+        <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
+          {connected ? (
+            <>
+              <Button type="button" variant="secondary" onClick={onUpdateCredentials}>
+                Provider credentials
+              </Button>
+              <Button type="button" variant="ghost" onClick={onDisconnect}>
+                Disconnect
+              </Button>
+              {readyToScreen && onStartScreening ? (
+                <Button type="button" onClick={onStartScreening}>
+                  {completedCount && completedCount > 0 ? "Start next screening" : "Start first screening"}
+                </Button>
+              ) : onChooseApplicant ? (
+                <Button type="button" onClick={onChooseApplicant}>
+                  Choose applicant
+                </Button>
+              ) : null}
+            </>
+          ) : pending ? (
+            <>
+              <Button type="button" onClick={onEnterDetails}>
+                Provider credentials
+              </Button>
+              <Button type="button" variant="secondary" onClick={onViewInstructions}>
+                Tenant Screening Setup
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button type="button" onClick={onGetAccess}>
+                Tenant Screening Setup
+              </Button>
+              <Button type="button" variant="secondary" onClick={onConnectExisting}>
+                Provider credentials
+              </Button>
+            </>
+          )}
+        </div>
+      ) : null}
+    </Card>
+  );
+}
 
 const formatUnitLabel = (value?: string | null) => {
   const raw = String(value || "").trim();
@@ -2136,7 +2281,7 @@ const ApplicationsPage: React.FC = () => {
         ) : null}
       </Card>
 
-      <TransUnionConnectionCard
+      <ScreeningProviderSetupCard
         integration={transUnionIntegration}
         loading={transUnionLoading}
         readyToScreen={Boolean(detail)}
