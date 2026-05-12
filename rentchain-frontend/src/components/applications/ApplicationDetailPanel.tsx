@@ -11,7 +11,7 @@ import { colors, text, radius, shadows, spacing } from "../../styles/tokens";
 import { updateApplicationDetails, updateApplicationReferences } from "@/api/applicationsApi";
 import { useToast } from "../ui/ToastProvider";
 import { ConvertToTenantButton } from "./ConvertToTenantButton";
-import { SCREENING_ENABLED } from "../../config/screening";
+import { getUiLocale, SCREENING_ENABLED, screeningComingSoonLabel, screeningComingSoonNotice } from "../../config/screening";
 
 type ApplicationDetailPanelProps = {
   application: Application | null;
@@ -77,6 +77,7 @@ export const ApplicationDetailPanel: React.FC<ApplicationDetailPanelProps> = ({
   const [selectedApplicantIndex, setSelectedApplicantIndex] = useState(0);
   const { features } = useSubscription();
   const canUseAiScreening = features.hasTenantAI;
+  const uiLocale = getUiLocale();
   const [timelineOpen, setTimelineOpen] = useState(false);
   const [requiredFields, setRequiredFields] = useState({
     unitApplied: "",
@@ -1176,29 +1177,30 @@ export const ApplicationDetailPanel: React.FC<ApplicationDetailPanelProps> = ({
 
       {/* Screening */}
       {!SCREENING_ENABLED ? (
-<div
-  style={{
-    marginTop: 12,
-    borderRadius: 14,
-    padding: 12,
-    background: colors.panel,
-    border: `1px solid ${colors.border}`,
-  }}
->
-  <div
-    style={{
-      fontSize: 13,
-      color: text.primary,
-      fontWeight: 600,
-      marginBottom: 6,
-    }}
-  >
-    Credit screening — coming soon
-  </div>
-  <div style={{ fontSize: 13, color: text.muted }}>
-    Screening will be available soon. You&apos;ll be able to request tenant consent and run screening from here.
-  </div>
-</div>
+        <div
+          style={{
+            marginTop: 12,
+            borderRadius: 14,
+            padding: 12,
+            background: colors.panel,
+            border: `1px solid ${colors.border}`,
+          }}
+        >
+          <div
+            style={{
+              fontSize: 13,
+              color: text.primary,
+              fontWeight: 600,
+              marginBottom: 6,
+            }}
+          >
+            {screeningComingSoonLabel(uiLocale)}
+          </div>
+          <div style={{ fontSize: 13, color: text.muted }}>{screeningComingSoonNotice(uiLocale)}</div>
+        </div>
+      ) : canUseAiScreening ? (
+        <div
+          style={{
             borderRadius: 14,
             padding: 12,
             background: colors.panel,

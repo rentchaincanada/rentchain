@@ -28,7 +28,7 @@ describe("ScreeningStatusCard", () => {
     cleanup();
   });
 
-  it("renders blocked TransUnion state", () => {
+  it("renders provider-neutral blocked setup state", () => {
     render(
       <ScreeningStatusCard
         status={buildStatus({
@@ -39,8 +39,10 @@ describe("ScreeningStatusCard", () => {
     );
 
     expect(screen.getByText("Next step required")).toBeInTheDocument();
-    expect(screen.getByText(/We'll help you complete screening step by step/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Connect TransUnion" })).toBeInTheDocument();
+    expect(screen.getByText(/Connect the configured screening provider to continue/i)).toBeInTheDocument();
+    expect(screen.getByText(/Connect provider access, request screening/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Connect screening provider" })).toBeInTheDocument();
+    expect(screen.queryByText(/Connect TransUnion/i)).not.toBeInTheDocument();
   });
 
   it("renders requested state", () => {

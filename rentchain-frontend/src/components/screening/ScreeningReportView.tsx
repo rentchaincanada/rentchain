@@ -86,6 +86,13 @@ function statusLabel(value: string) {
   return value.replace(/_/g, " ");
 }
 
+function providerLabel(value?: string | null) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (!normalized) return "Configured screening provider";
+  if (normalized === "transunion" || normalized === "transunion_manual") return "TransUnion";
+  return value || "Configured screening provider";
+}
+
 export function ScreeningReportView({
   applicantName,
   propertyLabel,
@@ -132,7 +139,7 @@ export function ScreeningReportView({
           </div>
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap", fontSize: 12, color: text.subtle }}>
             <span>Status: {statusLabel(status)}</span>
-            <span>Provider: {provider || "TransUnion manual"}</span>
+            <span>Provider: {providerLabel(provider)}</span>
             {completedLabel ? <span>Completed: {completedLabel}</span> : null}
           </div>
         </div>
