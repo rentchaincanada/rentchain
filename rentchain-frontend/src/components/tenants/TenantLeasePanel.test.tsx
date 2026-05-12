@@ -128,4 +128,30 @@ describe("TenantLeasePanel", () => {
     expect(screen.queryByText(/prop-raw-1/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/prop-raw-2/i)).not.toBeInTheDocument();
   });
+
+  it("formats lease date-only values without shifting to the previous day", async () => {
+    mocks.getLeaseAutomationTasks.mockResolvedValue({ tasks: [] });
+    mocks.getLeasesForTenant.mockResolvedValue({
+      leases: [
+        {
+          id: "lease-1",
+          propertyId: "prop-1",
+          propertyName: "Harbour View",
+          unitNumber: "101",
+          monthlyRent: 1800,
+          startDate: "2026-05-01",
+          endDate: "2026-06-01",
+          status: "active",
+          automationEnabled: true,
+        },
+      ],
+    });
+
+    render(<TenantLeasePanel tenantId="tenant-1" />);
+
+    expect(await screen.findByText(/May 1, 2026/)).toBeInTheDocument();
+    expect(screen.getByText(/Jun 1, 2026/)).toBeInTheDocument();
+    expect(screen.queryByText(/Apr 30, 2026/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/May 31, 2026/)).not.toBeInTheDocument();
+  });
 });

@@ -48,12 +48,24 @@ const riskBorderMap: Record<string, string> = {
 };
 
 const RECENT_LEASE_LEDGER_ENTRY_LIMIT = 10;
+const DATE_ONLY_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 function formatDateLabel(value?: string | number | null) {
   if (!value) return "--";
+  if (typeof value === "string") {
+    const dateOnlyMatch = DATE_ONLY_PATTERN.exec(value.trim());
+    if (dateOnlyMatch) {
+      const [, year, month, day] = dateOnlyMatch;
+      return new Date(Number(year), Number(month) - 1, Number(day)).toLocaleDateString("en-CA", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      });
+    }
+  }
   const parsed = new Date(typeof value === "number" ? value : String(value));
   if (Number.isNaN(parsed.getTime())) return String(value);
-  return parsed.toLocaleDateString(undefined, {
+  return parsed.toLocaleDateString("en-CA", {
     month: "short",
     day: "numeric",
     year: "numeric",

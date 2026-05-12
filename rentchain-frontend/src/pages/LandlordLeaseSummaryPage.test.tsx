@@ -95,6 +95,66 @@ describe("LandlordLeaseSummaryPage", () => {
     expect(screen.getByRole("link", { name: "Back to leases" })).toHaveAttribute("href", "/leases");
   });
 
+  it("renders date-only lease summary dates without UTC timezone rollback", async () => {
+    mocks.getLeaseById.mockResolvedValue({
+      lease: {
+        id: "lease-1",
+        propertyId: "prop-1",
+        propertyName: "Coburg Rd",
+        unitNumber: "3",
+        monthlyRent: 2100,
+        startDate: "2026-05-01",
+        endDate: "2026-06-01",
+        status: "active",
+        tenantName: "Tony Wenpeng",
+        tenantEmail: "tony@example.com",
+        documentUrl: null,
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/leases/lease-1/summary"]}>
+        <Routes>
+          <Route path="/leases/:leaseId/summary" element={<LandlordLeaseSummaryPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("May 1, 2026")).toBeInTheDocument();
+    expect(screen.getByText("June 1, 2026")).toBeInTheDocument();
+    expect(screen.queryByText("April 30, 2026")).not.toBeInTheDocument();
+    expect(screen.queryByText("May 31, 2026")).not.toBeInTheDocument();
+  });
+
+  it("continues to render ISO datetime lease summary dates", async () => {
+    mocks.getLeaseById.mockResolvedValue({
+      lease: {
+        id: "lease-1",
+        propertyId: "prop-1",
+        propertyName: "Coburg Rd",
+        unitNumber: "3",
+        monthlyRent: 2100,
+        startDate: "2026-05-01T12:00:00.000Z",
+        endDate: "2026-06-01T12:00:00.000Z",
+        status: "active",
+        tenantName: "Tony Wenpeng",
+        tenantEmail: "tony@example.com",
+        documentUrl: null,
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/leases/lease-1/summary"]}>
+        <Routes>
+          <Route path="/leases/:leaseId/summary" element={<LandlordLeaseSummaryPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("May 1, 2026")).toBeInTheDocument();
+    expect(screen.getByText("June 1, 2026")).toBeInTheDocument();
+  });
+
   it("saves missing-document lease summaries as PDFs instead of raw text", async () => {
     const realCreateElement = document.createElement.bind(document);
     const createdAnchors: HTMLAnchorElement[] = [];

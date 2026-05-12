@@ -13,6 +13,13 @@ import { useUpgrade } from "@/context/UpgradeContext";
 import { upgradeStarterButtonStyle } from "@/lib/upgradeButtonStyles";
 import { LeaseRiskCard } from "@/components/leases/LeaseRiskCard";
 
+const DATE_ONLY_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
+const DATE_FORMAT_OPTIONS: Intl.DateTimeFormatOptions = {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+};
+
 function isNotFound(err: any): boolean {
   return (
     err?.status === 404 ||
@@ -203,9 +210,14 @@ export const TenantLeasePanel: React.FC<TenantLeasePanelProps> = ({ tenantId }) 
 
   const formatDate = (value?: string) => {
     if (!value) return "--";
+    const dateOnlyMatch = DATE_ONLY_PATTERN.exec(value.trim());
+    if (dateOnlyMatch) {
+      const [, year, month, day] = dateOnlyMatch;
+      return new Date(Number(year), Number(month) - 1, Number(day)).toLocaleDateString("en-CA", DATE_FORMAT_OPTIONS);
+    }
     const d = new Date(value);
     if (Number.isNaN(d.getTime())) return value;
-    return d.toLocaleDateString();
+    return d.toLocaleDateString("en-CA", DATE_FORMAT_OPTIONS);
   };
 
   const formatCurrency = (value: number) =>

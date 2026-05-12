@@ -195,6 +195,48 @@ describe("LandlordActiveLeasesPage", () => {
     expect(mocks.printSummaryDocument).toHaveBeenCalledWith("summary");
   });
 
+  it("renders date-only lease dates without shifting them backward across timezones", async () => {
+    mocks.getActiveLeasesForLandlord.mockResolvedValue({
+      leases: [
+        {
+          id: "lease-may",
+          propertyId: "prop-1",
+          propertyName: "Harbour View",
+          unitNumber: "101",
+          monthlyRent: 1850,
+          startDate: "2026-05-01",
+          endDate: "2026-06-01",
+          status: "active",
+          tenantName: "Jane Tenant",
+          tenantEmail: "jane@example.com",
+        },
+        {
+          id: "lease-iso",
+          propertyId: "prop-2",
+          propertyName: "Dockside",
+          unitNumber: "202",
+          monthlyRent: 1950,
+          startDate: "2026-05-01T12:00:00.000Z",
+          endDate: "2026-06-01T12:00:00.000Z",
+          status: "active",
+          tenantName: "Mark Harbor",
+          tenantEmail: "mark@example.com",
+        },
+      ],
+    });
+
+    render(
+      <MemoryRouter>
+        <LandlordActiveLeasesPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findAllByText("May 1, 2026")).not.toHaveLength(0);
+    expect(screen.getAllByText(/June 1, 2026/)).not.toHaveLength(0);
+    expect(screen.queryByText("April 30, 2026")).not.toBeInTheDocument();
+    expect(screen.queryByText("May 31, 2026")).not.toBeInTheDocument();
+  });
+
   it("shows landlord-safe payment visibility without retry or receipt actions", async () => {
     mocks.getActiveLeasesForLandlord.mockResolvedValue({
       leases: [
