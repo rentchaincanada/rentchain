@@ -22,7 +22,13 @@ import {
   getLeaseAutomationTasks,
   regenerateLeaseAutomationTasks,
 } from "../services/automationScheduler/leaseAutomationTaskStore";
-import { CURRENT_LEASE_STATUSES, loadCanonicalPropertyLeases, loadUnitsForProperty, toCanonicalLeaseRecord } from "../services/leaseCanonicalizationService";
+import {
+  CURRENT_LEASE_STATUSES,
+  loadCanonicalPropertyLeases,
+  loadUnitsForProperty,
+  resolveUnitReference,
+  toCanonicalLeaseRecord,
+} from "../services/leaseCanonicalizationService";
 import { evaluateSameLeaseAgreement, groupLeaseAgreementCandidates, pickAgreementWinner } from "../services/leasePartyConsolidationService";
 import { loadPropertyLeaseIntegrityDiagnostics } from "../services/leaseIntegrityService";
 import { buildLeaseRiskPersistenceFields, computeLeaseRiskSnapshot } from "../services/risk/recomputeLeaseRisk";
@@ -58,6 +64,7 @@ import { buildLeasePaymentProjection } from "../services/projections/buildLeaseP
 import { computeNoResponseState } from "../services/leaseNoticeWorkflowService";
 import { deriveLeaseLifecycleSummary } from "../services/leaseLifecycle/deriveLeaseLifecycleSummary";
 import { deriveLeaseLifecycleState } from "../lib/leases/leaseLifecycle";
+import { syncPropertyUnitOccupancyForTenantContext } from "../services/tenantPortal/tenantOccupancySyncService";
 
 const router = Router();
 const LEDGER_COLLECTION = "ledgerEntries";
@@ -305,16 +312,79 @@ async function resolvePropertyUnitForLease(lease: any, errorPrefix: string) {
 
 async function reconcilePropertyUnitVacancyForLeaseEnd(lease: any) {
   const { propertyRef, units, unitIndex } = await resolvePropertyUnitForLease(lease, "lease_end");
+  const nowIso = new Date().toISOString();
   const nextUnits = units.map((unit: any, index: number) =>
     index === unitIndex ? { ...unit, status: "vacant" } : unit
   );
   await propertyRef.set(
     {
       units: nextUnits,
-      updatedAt: new Date().toISOString(),
+      updatedAt: nowIso,
     },
     { merge: true }
   );
+
+  const unitDocId = await resolveStandaloneUnitDocIdForLeaseEnd(lease);
+  if (unitDocId) {
+    await db.collection("units").doc(unitDocId).set(
+      {
+        status: "vacant",
+        occupancyStatus: "vacant",
+        tenantId: null,
+        currentTenantId: null,
+        leaseId: null,
+        currentLeaseId: null,
+        occupancySource: "lease_end",
+        occupancyUpdatedAt: nowIso,
+        updatedAt: nowIso,
+      },
+      { merge: true }
+    );
+  }
+}
+
+async function resolveStandaloneUnitDocIdForLeaseEnd(lease: any): Promise<string | null> {
+  const propertyId = String(lease?.propertyId || "").trim();
+  const landlordId = String(lease?.landlordId || "").trim();
+  if (!propertyId) return null;
+
+  const canonicalUnits = await loadUnitsForProperty(db as any, propertyId, landlordId || null);
+  const leaseUnitId = String(lease?.unitId || "").trim();
+  const leaseUnitNumber = String(lease?.unitNumber || lease?.unit || "").trim();
+  const byId = resolveUnitReference(canonicalUnits, leaseUnitId);
+  if (byId.ambiguous) return null;
+  if (byId.unit) return byId.unit.id;
+
+  const byLabel = resolveUnitReference(canonicalUnits, leaseUnitNumber);
+  if (byLabel.ambiguous) return null;
+  return byLabel.unit?.id || null;
+}
+
+async function syncOccupancyAfterActiveLeaseWrite(
+  input: {
+    tenantId: string;
+    leaseId: string;
+    landlordId: string;
+    propertyId: string;
+    unitId: string;
+  },
+  logPrefix: string
+) {
+  try {
+    const result = await syncPropertyUnitOccupancyForTenantContext(input);
+    if (!result.updated) {
+      console.warn(`${logPrefix} occupancy sync skipped`, {
+        leaseId: input.leaseId,
+        tenantId: input.tenantId,
+        landlordId: input.landlordId,
+        propertyId: input.propertyId,
+        unitId: input.unitId,
+        reason: result.reason,
+      });
+    }
+  } catch (syncErr) {
+    console.warn(`${logPrefix} occupancy sync failed`, syncErr);
+  }
 }
 
 async function reconcilePropertyUnitOccupancyForLeaseRestore(lease: any) {
@@ -1605,6 +1675,16 @@ router.post("/drafts/:draftId/activate", requireLandlord, async (req: any, res: 
       updatedAt: now,
     };
     await leaseRef.set(leaseRecord, { merge: false });
+    await syncOccupancyAfterActiveLeaseWrite(
+      {
+        tenantId,
+        leaseId: leaseRef.id,
+        landlordId,
+        propertyId,
+        unitId,
+      },
+      "[POST /api/leases/drafts/:draftId/activate]"
+    );
 
     // Keep in-memory lease service in sync for existing automation/toggle flows.
     leaseService.getAll().push({
@@ -2223,9 +2303,25 @@ router.post("/", async (req: Request, res: Response) => {
         createdAt: lease.createdAt,
         updatedAt: lease.updatedAt,
       };
-      await db.collection("leases").doc(lease.id).set(firestoreLeaseRecord, { merge: false }).catch((error: any) => {
+      let firestoreLeaseWritten = false;
+      try {
+        await db.collection("leases").doc(lease.id).set(firestoreLeaseRecord, { merge: false });
+        firestoreLeaseWritten = true;
+      } catch (error: any) {
         console.warn("[POST /api/leases] firestore lease write failed", error);
-      });
+      }
+      if (firestoreLeaseWritten) {
+        await syncOccupancyAfterActiveLeaseWrite(
+          {
+            tenantId: String(lease.tenantId || body.tenantId || "").trim(),
+            leaseId: lease.id,
+            landlordId,
+            propertyId: String(lease.propertyId || body.propertyId || "").trim(),
+            unitId: String(body.unitNumber || lease.unitNumber || "").trim(),
+          },
+          "[POST /api/leases]"
+        );
+      }
     }
     res.status(201).json({ lease });
   } catch (err) {

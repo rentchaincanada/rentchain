@@ -82,9 +82,9 @@ async function findUnitDoc(propertyId: string, landlordId: string | null, unitId
   const snap = await db.collection("units").where("propertyId", "==", propertyId).get();
   const matches = snap.docs
     .map((doc: any) => ({ id: doc.id, data: doc.data() || {} }))
-    .filter(({ data }: any) => {
+    .filter(({ id, data }: any) => {
       if (landlordId && asString(data?.landlordId) && asString(data?.landlordId) !== landlordId) return false;
-      return unitMatches({ id: data?.id || data?.unitId, ...data }, unitId);
+      return unitMatches({ ...data, id: data?.id || data?.unitId || id }, unitId);
     });
   if (matches.length !== 1) return null;
   return matches[0];
