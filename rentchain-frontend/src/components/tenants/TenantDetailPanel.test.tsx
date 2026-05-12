@@ -239,4 +239,44 @@ describe("TenantDetailPanel", () => {
     await waitFor(() => expect(mocks.fetchLedger).toHaveBeenCalledWith({ tenantId: "tenant-1", limit: 50 }));
     await waitFor(() => expect(mocks.fetchTenantFinancialActivity).toHaveBeenCalledWith("tenant-1"));
   });
+
+  it("formats current lease date-only values without shifting to the previous day", async () => {
+    mocks.useTenantDetail.mockReturnValue({
+      loading: false,
+      error: null,
+      bundle: {
+        tenant: {
+          id: "tenant-1",
+          fullName: "Taylor Tenant",
+          propertyName: "Harbour View",
+          unit: "101",
+        },
+        currentLease: {
+          id: "lease-1",
+          tenantId: "tenant-1",
+          propertyName: "Harbour View",
+          unit: "101",
+          leaseStart: "2026-05-01",
+          leaseEnd: "2027-04-30",
+          monthlyRent: 1850,
+          status: "active",
+        },
+        property: { id: "prop-1", name: "Harbour View", addressLine1: "123 Harbour St", city: "Halifax", province: "NS" },
+        unit: { id: "unit-1", unitNumber: "101" },
+        moveInReadiness: null,
+      },
+    });
+
+    render(
+      <MemoryRouter>
+        <TenantDetailPanel tenantId="tenant-1" />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("May 1, 2026")).toBeInTheDocument();
+    expect(screen.getByText("Apr 30, 2027")).toBeInTheDocument();
+    expect(screen.queryByText("Apr 30, 2026")).not.toBeInTheDocument();
+    expect(screen.queryByText("Apr 29, 2027")).not.toBeInTheDocument();
+    await waitFor(() => expect(mocks.fetchLeaseLedger).toHaveBeenCalledWith("lease-1"));
+  });
 });
