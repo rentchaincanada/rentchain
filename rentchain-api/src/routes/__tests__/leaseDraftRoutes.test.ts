@@ -16,26 +16,57 @@ const { store, fakeDb, resetFakeDb } = vi.hoisted(() => {
     return store.get(name)!;
   }
 
-  const fakeDb = {
-    collection: (name: string) => ({
-      doc: (id?: string) => {
-        const actualId = id || `doc_${++idSeq}`;
-        const col = ensureCollection(name);
+  function matches(doc: DocShape, filters: Array<{ field: string; op: string; value: any }>) {
+    return filters.every(({ field, op, value }) => {
+      const actual = doc?.data?.[field];
+      if (op === "==") return actual === value;
+      if (op === "array-contains") return Array.isArray(actual) && actual.includes(value);
+      return false;
+    });
+  }
+
+  function makeQuery(name: string, filters: Array<{ field: string; op: string; value: any }> = []) {
+    return {
+      where: (field: string, op: string, value: any) => makeQuery(name, [...filters, { field, op, value }]),
+      orderBy: () => makeQuery(name, filters),
+      limit: () => makeQuery(name, filters),
+      get: async () => {
+        const docs = Array.from(ensureCollection(name).values())
+          .filter((doc) => matches(doc, filters))
+          .map((doc) => ({ id: doc.id, exists: true, data: () => doc.data }));
+        return { docs, empty: docs.length === 0, size: docs.length };
+      },
+      doc: (id?: string) => makeDoc(name, id),
+    };
+  }
+
+  function makeDoc(name: string, id?: string) {
+    const actualId = id || `doc_${++idSeq}`;
+    const col = ensureCollection(name);
+    return {
+      id: actualId,
+      set: async (value: any, options?: { merge?: boolean }) => {
+        const current = col.get(actualId)?.data || {};
+        col.set(actualId, { id: actualId, data: options?.merge ? { ...current, ...value } : value });
+      },
+      get: async () => {
+        const entry = col.get(actualId);
         return {
           id: actualId,
-          set: async (value: any) => {
-            col.set(actualId, { id: actualId, data: value });
-          },
-          get: async () => {
-            const entry = col.get(actualId);
-            return {
-              id: actualId,
-              exists: Boolean(entry),
-              data: () => entry?.data,
-            };
-          },
+          exists: Boolean(entry),
+          data: () => entry?.data,
         };
       },
+    };
+  }
+
+  const fakeDb = {
+    collection: (name: string) => ({
+      where: (field: string, op: string, value: any) => makeQuery(name, [{ field, op, value }]),
+      orderBy: () => makeQuery(name),
+      limit: () => makeQuery(name),
+      get: async () => makeQuery(name).get(),
+      doc: (id?: string) => makeDoc(name, id),
     }),
   };
 
@@ -238,6 +269,21 @@ describe("lease draft routes", () => {
     const app = express();
     app.use(express.json());
     app.use(router);
+    await fakeDb.collection("properties").doc("prop-1").set({
+      landlordId: "landlord-1",
+      name: "Harbour View",
+      units: [
+        { id: "unit-1", unitNumber: "101", status: "vacant", occupancyStatus: "vacant" },
+        { id: "unit-2", unitNumber: "102", status: "vacant", occupancyStatus: "vacant" },
+      ],
+    });
+    await fakeDb.collection("units").doc("unit-1").set({
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitNumber: "101",
+      status: "vacant",
+      occupancyStatus: "vacant",
+    });
 
     const createRes = await request(app).post("/drafts").set(auth).send(payload);
     expect(createRes.status).toBe(201);
@@ -249,13 +295,36 @@ describe("lease draft routes", () => {
       .send({});
     expect(activateRes.status).toBe(200);
     expect(activateRes.body?.ok).toBe(true);
-    expect(String(activateRes.body?.leaseId || "")).toBeTruthy();
+    const leaseId = String(activateRes.body?.leaseId || "");
+    expect(leaseId).toBeTruthy();
 
     const leasesRes = await request(app).get("/tenant/tenant-1").set(auth);
     expect(leasesRes.status).toBe(200);
     expect(leasesRes.body?.ok).toBe(true);
     expect(Array.isArray(leasesRes.body?.leases)).toBe(true);
     expect(leasesRes.body.leases.length).toBeGreaterThan(0);
+
+    const propertySnap = await fakeDb.collection("properties").doc("prop-1").get();
+    expect(propertySnap.data()?.units).toEqual([
+      expect.objectContaining({
+        id: "unit-1",
+        status: "occupied",
+        occupancyStatus: "occupied",
+        currentTenantId: "tenant-1",
+        currentLeaseId: leaseId,
+      }),
+      expect.objectContaining({ id: "unit-2", status: "vacant" }),
+    ]);
+    const unitSnap = await fakeDb.collection("units").doc("unit-1").get();
+    expect(unitSnap.data()).toEqual(
+      expect.objectContaining({
+        status: "occupied",
+        occupancyStatus: "occupied",
+        currentTenantId: "tenant-1",
+        currentLeaseId: leaseId,
+        occupancySource: "canonical_lease",
+      })
+    );
   });
 
   it("returns 401 for activate when unauthorized", async () => {

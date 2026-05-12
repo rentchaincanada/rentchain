@@ -22,7 +22,13 @@ import {
   getLeaseAutomationTasks,
   regenerateLeaseAutomationTasks,
 } from "../services/automationScheduler/leaseAutomationTaskStore";
-import { CURRENT_LEASE_STATUSES, loadCanonicalPropertyLeases, loadUnitsForProperty, toCanonicalLeaseRecord } from "../services/leaseCanonicalizationService";
+import {
+  CURRENT_LEASE_STATUSES,
+  loadCanonicalPropertyLeases,
+  loadUnitsForProperty,
+  resolveUnitReference,
+  toCanonicalLeaseRecord,
+} from "../services/leaseCanonicalizationService";
 import { evaluateSameLeaseAgreement, groupLeaseAgreementCandidates, pickAgreementWinner } from "../services/leasePartyConsolidationService";
 import { loadPropertyLeaseIntegrityDiagnostics } from "../services/leaseIntegrityService";
 import { buildLeaseRiskPersistenceFields, computeLeaseRiskSnapshot } from "../services/risk/recomputeLeaseRisk";
@@ -58,6 +64,7 @@ import { buildLeasePaymentProjection } from "../services/projections/buildLeaseP
 import { computeNoResponseState } from "../services/leaseNoticeWorkflowService";
 import { deriveLeaseLifecycleSummary } from "../services/leaseLifecycle/deriveLeaseLifecycleSummary";
 import { deriveLeaseLifecycleState } from "../lib/leases/leaseLifecycle";
+import { syncPropertyUnitOccupancyForTenantContext } from "../services/tenantPortal/tenantOccupancySyncService";
 
 const router = Router();
 const LEDGER_COLLECTION = "ledgerEntries";
@@ -305,16 +312,79 @@ async function resolvePropertyUnitForLease(lease: any, errorPrefix: string) {
 
 async function reconcilePropertyUnitVacancyForLeaseEnd(lease: any) {
   const { propertyRef, units, unitIndex } = await resolvePropertyUnitForLease(lease, "lease_end");
+  const nowIso = new Date().toISOString();
   const nextUnits = units.map((unit: any, index: number) =>
     index === unitIndex ? { ...unit, status: "vacant" } : unit
   );
   await propertyRef.set(
     {
       units: nextUnits,
-      updatedAt: new Date().toISOString(),
+      updatedAt: nowIso,
     },
     { merge: true }
   );
+
+  const unitDocId = await resolveStandaloneUnitDocIdForLeaseEnd(lease);
+  if (unitDocId) {
+    await db.collection("units").doc(unitDocId).set(
+      {
+        status: "vacant",
+        occupancyStatus: "vacant",
+        tenantId: null,
+        currentTenantId: null,
+        leaseId: null,
+        currentLeaseId: null,
+        occupancySource: "lease_end",
+        occupancyUpdatedAt: nowIso,
+        updatedAt: nowIso,
+      },
+      { merge: true }
+    );
+  }
+}
+
+async function resolveStandaloneUnitDocIdForLeaseEnd(lease: any): Promise<string | null> {
+  const propertyId = String(lease?.propertyId || "").trim();
+  const landlordId = String(lease?.landlordId || "").trim();
+  if (!propertyId) return null;
+
+  const canonicalUnits = await loadUnitsForProperty(db as any, propertyId, landlordId || null);
+  const leaseUnitId = String(lease?.unitId || "").trim();
+  const leaseUnitNumber = String(lease?.unitNumber || lease?.unit || "").trim();
+  const byId = resolveUnitReference(canonicalUnits, leaseUnitId);
+  if (byId.ambiguous) return null;
+  if (byId.unit) return byId.unit.id;
+
+  const byLabel = resolveUnitReference(canonicalUnits, leaseUnitNumber);
+  if (byLabel.ambiguous) return null;
+  return byLabel.unit?.id || null;
+}
+
+async function syncOccupancyAfterActiveLeaseWrite(
+  input: {
+    tenantId: string;
+    leaseId: string;
+    landlordId: string;
+    propertyId: string;
+    unitId: string;
+  },
+  logPrefix: string
+) {
+  try {
+    const result = await syncPropertyUnitOccupancyForTenantContext(input);
+    if (!result.updated) {
+      console.warn(`${logPrefix} occupancy sync skipped`, {
+        leaseId: input.leaseId,
+        tenantId: input.tenantId,
+        landlordId: input.landlordId,
+        propertyId: input.propertyId,
+        unitId: input.unitId,
+        reason: result.reason,
+      });
+    }
+  } catch (syncErr) {
+    console.warn(`${logPrefix} occupancy sync failed`, syncErr);
+  }
 }
 
 async function reconcilePropertyUnitOccupancyForLeaseRestore(lease: any) {
@@ -507,6 +577,61 @@ async function loadUnitLeaseDocumentForResponse(raw: any) {
   }
 }
 
+function getCanonicalUnitLabel(unit: any): string | null {
+  const unitId = String(unit?.id || "").trim().toLowerCase();
+  const candidates = [
+    unit?.unitNumber,
+    unit?.label,
+    unit?.raw?.unitNumber,
+    unit?.raw?.label,
+    unit?.raw?.displayLabel,
+    unit?.raw?.unitLabel,
+    unit?.raw?.name,
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
+  return candidates.find((value) => value.toLowerCase() !== unitId) || candidates[0] || null;
+}
+
+async function resolveLeaseUnitSelection(input: {
+  landlordId: string;
+  propertyId: string;
+  unitReference: string;
+}): Promise<{ unitId: string; unitLabel: string }> {
+  const units = await loadUnitsForProperty(db as any, input.propertyId, input.landlordId || null).catch(() => []);
+  const resolution = resolveUnitReference(units, input.unitReference);
+  if (!resolution.ambiguous && resolution.unit) {
+    return {
+      unitId: resolution.unit.id,
+      unitLabel: getCanonicalUnitLabel(resolution.unit) || input.unitReference,
+    };
+  }
+  return {
+    unitId: input.unitReference,
+    unitLabel: input.unitReference,
+  };
+}
+
+async function hydrateLeaseUnitDisplayFields<T extends Record<string, any>>(
+  lease: T,
+  landlordId: string | null
+): Promise<T> {
+  const propertyId = String(lease?.propertyId || "").trim();
+  const unitReference = String(lease?.unitId || lease?.unitNumber || lease?.unit || "").trim();
+  if (!propertyId || !unitReference) return lease;
+  const units = await loadUnitsForProperty(db as any, propertyId, landlordId || null).catch(() => []);
+  const resolution = resolveUnitReference(units, unitReference);
+  if (resolution.ambiguous || !resolution.unit) return lease;
+  const unitLabel = getCanonicalUnitLabel(resolution.unit);
+  if (!unitLabel) return lease;
+  return {
+    ...lease,
+    unitId: String(lease?.unitId || resolution.unit.id || "").trim() || resolution.unit.id,
+    unitNumber: unitLabel,
+    unitLabel,
+  };
+}
+
 async function enrichLeaseRow(raw: any) {
   const lease = normalizeLeaseRow(raw.id, raw);
   const propertyId = String(lease.propertyId || "").trim();
@@ -553,7 +678,7 @@ async function enrichLeaseRow(raw: any) {
   const rentPaymentSummary = leasePaymentProjection.rentPaymentSummary;
 
   return {
-    ...lease,
+    ...(await hydrateLeaseUnitDisplayFields(lease, String(lease.landlordId || "").trim() || null)),
     propertyName,
     tenantName,
     tenantEmail,
@@ -1605,6 +1730,16 @@ router.post("/drafts/:draftId/activate", requireLandlord, async (req: any, res: 
       updatedAt: now,
     };
     await leaseRef.set(leaseRecord, { merge: false });
+    await syncOccupancyAfterActiveLeaseWrite(
+      {
+        tenantId,
+        leaseId: leaseRef.id,
+        landlordId,
+        propertyId,
+        unitId,
+      },
+      "[POST /api/leases/drafts/:draftId/activate]"
+    );
 
     // Keep in-memory lease service in sync for existing automation/toggle flows.
     leaseService.getAll().push({
@@ -2036,18 +2171,21 @@ router.get("/tenant/:tenantId", requireLandlord, async (req: any, res: Response)
     const propertyMap = new Map<string, { propertyName: string | null; propertyAddress: string | null } | null>(
       propertyEntries
     );
-    const displayLeases = firestoreLeases.map((lease: any) => {
-      const propertyData = propertyMap.get(String(lease.propertyId || "").trim()) || null;
-      const propertyName = lease._rawPropertyName || propertyData?.propertyName || null;
-      const propertyAddress = lease._rawPropertyAddress || propertyData?.propertyAddress || null;
-      const { _rawPropertyName, _rawPropertyAddress, ...rest } = lease;
-      return {
-        ...rest,
-        propertyName,
-        propertyAddress,
-        propertyLabel: propertyName,
-      };
-    });
+    const displayLeases = await Promise.all(
+      firestoreLeases.map(async (lease: any) => {
+        const propertyData = propertyMap.get(String(lease.propertyId || "").trim()) || null;
+        const propertyName = lease._rawPropertyName || propertyData?.propertyName || null;
+        const propertyAddress = lease._rawPropertyAddress || propertyData?.propertyAddress || null;
+        const { _rawPropertyName, _rawPropertyAddress, ...rest } = lease;
+        const hydrated = await hydrateLeaseUnitDisplayFields(rest, landlordId || null);
+        return {
+          ...hydrated,
+          propertyName,
+          propertyAddress,
+          propertyLabel: propertyName,
+        };
+      })
+    );
     return res.status(200).json({ ok: true, leases: mergeLeaseRows([...memoryLeases, ...displayLeases]) });
   } catch {
     return res.status(200).json({ ok: true, leases: memoryLeases });
@@ -2156,11 +2294,16 @@ router.post("/", async (req: Request, res: Response) => {
     const tenantIds = Array.isArray((body as any)?.tenantIds)
       ? (body as any).tenantIds.map((value: any) => String(value || "").trim()).filter(Boolean)
       : [String(body.tenantId || "").trim()].filter(Boolean);
+    const unitSelection = await resolveLeaseUnitSelection({
+      landlordId,
+      propertyId: String(body.propertyId || "").trim(),
+      unitReference: String(body.unitNumber || "").trim(),
+    });
 
     const conflicts = await assertNoConflictingActiveAgreement({
       landlordId,
       propertyId: body.propertyId,
-      unitId: body.unitNumber,
+      unitId: unitSelection.unitId,
       tenantIds,
       startDate: body.startDate,
       endDate: body.endDate,
@@ -2177,7 +2320,7 @@ router.post("/", async (req: Request, res: Response) => {
     const riskSnapshot = await computeLeaseRiskSnapshot({
       landlordId,
       propertyId: body.propertyId,
-      unitId: body.unitNumber,
+      unitId: unitSelection.unitId,
       tenantIds,
       monthlyRent: Number(body.monthlyRent),
     });
@@ -2191,7 +2334,7 @@ router.post("/", async (req: Request, res: Response) => {
       tenantIds,
       primaryTenantId: tenantIds[0] || body.tenantId,
       propertyId: body.propertyId,
-      unitNumber: body.unitNumber,
+      unitNumber: unitSelection.unitLabel,
       monthlyRent: Number(body.monthlyRent),
       startDate: body.startDate,
       endDate: body.endDate,
@@ -2207,8 +2350,9 @@ router.post("/", async (req: Request, res: Response) => {
         tenantIds,
         primaryTenantId: tenantIds[0] || body.tenantId,
         propertyId: lease.propertyId,
-        unitId: body.unitNumber,
-        unitNumber: lease.unitNumber,
+        unitId: unitSelection.unitId,
+        unitNumber: unitSelection.unitLabel,
+        unitLabel: unitSelection.unitLabel,
         monthlyRent: lease.monthlyRent,
         startDate: lease.startDate,
         endDate: lease.endDate ?? null,
@@ -2223,11 +2367,34 @@ router.post("/", async (req: Request, res: Response) => {
         createdAt: lease.createdAt,
         updatedAt: lease.updatedAt,
       };
-      await db.collection("leases").doc(lease.id).set(firestoreLeaseRecord, { merge: false }).catch((error: any) => {
+      let firestoreLeaseWritten = false;
+      try {
+        await db.collection("leases").doc(lease.id).set(firestoreLeaseRecord, { merge: false });
+        firestoreLeaseWritten = true;
+      } catch (error: any) {
         console.warn("[POST /api/leases] firestore lease write failed", error);
-      });
+      }
+      if (firestoreLeaseWritten) {
+        await syncOccupancyAfterActiveLeaseWrite(
+          {
+            tenantId: String(lease.tenantId || body.tenantId || "").trim(),
+            leaseId: lease.id,
+            landlordId,
+            propertyId: String(lease.propertyId || body.propertyId || "").trim(),
+            unitId: unitSelection.unitId,
+          },
+          "[POST /api/leases]"
+        );
+      }
     }
-    res.status(201).json({ lease });
+    res.status(201).json({
+      lease: {
+        ...lease,
+        unitId: unitSelection.unitId,
+        unitNumber: unitSelection.unitLabel,
+        unitLabel: unitSelection.unitLabel,
+      },
+    });
   } catch (err) {
     console.error("[POST /api/leases] error", err);
     res.status(500).json({ error: "Failed to process lease" });

@@ -89,6 +89,17 @@ describe("applicationConversionService", () => {
       },
       status: "APPROVED",
     });
+    ensureCollection("properties").set("property-1", {
+      landlordId: "landlord-1",
+      units: [{ id: "unit-1", unitNumber: "101", status: "vacant", occupancyStatus: "vacant" }],
+    });
+    ensureCollection("units").set("unit-1", {
+      landlordId: "landlord-1",
+      propertyId: "property-1",
+      unitNumber: "101",
+      status: "vacant",
+      occupancyStatus: "vacant",
+    });
 
     const { convertApplicationToTenant } = await import("../applicationConversionService");
     const result = await convertApplicationToTenant({
@@ -115,6 +126,12 @@ describe("applicationConversionService", () => {
       source: "application_conversion",
     });
     expect(ensureCollection("rentalApplications").get("app-1")?.convertedTenantId).toBe(result.tenantId);
+    expect(ensureCollection("properties").get("property-1")?.units).toEqual([
+      expect.objectContaining({ id: "unit-1", status: "vacant", occupancyStatus: "vacant" }),
+    ]);
+    expect(ensureCollection("units").get("unit-1")).toEqual(
+      expect.objectContaining({ status: "vacant", occupancyStatus: "vacant" })
+    );
   });
 
   it("does not create another tenant when conversion is repeated for the same application", async () => {
