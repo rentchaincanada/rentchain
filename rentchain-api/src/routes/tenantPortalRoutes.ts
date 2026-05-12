@@ -123,6 +123,22 @@ function asString(value: unknown): string | null {
   return next || null;
 }
 
+function displayStringUnlessId(value: unknown, rawId?: unknown): string | null {
+  const next = asString(value);
+  if (!next) return null;
+  const id = asString(rawId);
+  return id && next === id ? null : next;
+}
+
+function firstDisplayString(values: unknown[], rawIds: unknown[] = []): string | null {
+  const raw = new Set(rawIds.map((value) => asString(value)).filter(Boolean) as string[]);
+  for (const value of values) {
+    const next = asString(value);
+    if (next && !raw.has(next)) return next;
+  }
+  return null;
+}
+
 function makeCorrelationId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -2331,6 +2347,110 @@ async function loadTenantWorkspaceData(context: Awaited<ReturnType<typeof resolv
   };
 }
 
+async function buildTenantWorkspaceDisplayProjection(
+  context: Awaited<ReturnType<typeof resolveTenancyContext>>,
+  workspace: Awaited<ReturnType<typeof loadTenantWorkspaceData>>,
+  req: any
+) {
+  const tenantId = asString(context.tenantId) || asString(req.user?.tenantId);
+  const propertyId = asString(context.propertyId);
+  const unitId = asString(context.unitId) || asString(req.user?.unitId);
+
+  const [tenantDoc, propertyDoc, unitDoc] = await Promise.all([
+    loadDocument("tenants", tenantId),
+    loadDocument("properties", propertyId),
+    loadDocument("units", unitId),
+  ]);
+
+  const tenantData = tenantDoc?.data || {};
+  const propertyData = propertyDoc?.data || {};
+  let unitData = unitDoc?.data || {};
+  const tenantUnitId = asString(tenantData?.unitId) || asString(tenantData?.unit);
+  if (
+    tenantUnitId &&
+    tenantUnitId !== unitId &&
+    !firstDisplayString([unitData?.unitNumber, unitData?.label, unitData?.name], [unitId])
+  ) {
+    const tenantUnitDoc = await loadDocument("units", tenantUnitId);
+    if (tenantUnitDoc?.data) {
+      unitData = tenantUnitDoc.data;
+    }
+  }
+  const tenantRawIds = [tenantId];
+  const propertyRawIds = [propertyId, asString(context.rc_prop_id)];
+  const unitRawIds = [unitId, tenantUnitId];
+
+  const propertyName = firstDisplayString(
+    [
+      tenantData?.propertyName,
+      tenantData?.propertyLabel,
+      tenantData?.property,
+      propertyData?.name,
+      propertyData?.addressLine1,
+      propertyData?.street1,
+      propertyData?.address,
+      workspace.property?.street1,
+    ],
+    propertyRawIds
+  );
+
+  const unitLabel = firstDisplayString(
+    [
+      tenantData?.unitLabel,
+      tenantData?.unitNumber,
+      tenantData?.unit,
+      unitData?.unitNumber,
+      unitData?.label,
+      unitData?.name,
+    ],
+    unitRawIds
+  );
+
+  const landlordId =
+    asString(tenantData?.landlordId) ||
+    asString(propertyData?.landlordId) ||
+    asString(propertyData?.ownerId) ||
+    asString(propertyData?.owner) ||
+    asString(unitData?.landlordId) ||
+    asString(req.user?.landlordId);
+  const landlordDoc = await loadDocument("landlords", landlordId);
+  const landlordData = landlordDoc?.data || {};
+  const landlordName = firstDisplayString(
+    [landlordData?.name, landlordData?.fullName, landlordData?.company, landlordData?.email],
+    [landlordId]
+  );
+  const tenantName = firstDisplayString(
+    [tenantData?.fullName, tenantData?.displayName, tenantData?.name],
+    tenantRawIds
+  );
+
+  return {
+    tenant: {
+      id: tenantId,
+      shortId: tenantId ? tenantId.slice(0, 8) : "",
+      name: tenantName,
+      email: asString(tenantData?.email) || asString(req.user?.email),
+      joinedAt: toMillis(tenantData?.redeemedAt ?? tenantData?.createdAt ?? null),
+      status: "Active",
+    },
+    landlord: { name: landlordName },
+    property: {
+      ...(workspace.property || {
+        propertyId: propertyId || "",
+        rc_prop_id: asString(context.rc_prop_id),
+        street1: null,
+        street2: null,
+        city: null,
+        province: null,
+        postalCode: null,
+        features: [],
+      }),
+      name: propertyName ?? (propertyId ? "Selected property" : null),
+    },
+    unit: { label: unitLabel ?? (unitId ? "Assigned unit" : null) },
+  };
+}
+
 async function buildInstitutionalSchemaV2ExportForTenant(
   req: any,
   context: Awaited<ReturnType<typeof resolveTenancyContext>>
@@ -3112,6 +3232,7 @@ async function handleTenantWorkspaceSummary(req: any, res: any) {
       hasIdentityTimeline: Array.isArray(identityTimeline?.events) && identityTimeline.events.length > 0,
     },
   });
+  const displayProjection = await buildTenantWorkspaceDisplayProjection(context, workspace, req);
   await recordTenantEvent({
     eventType: "tenant_workspace_viewed",
     entityType: "tenant_workspace",
@@ -3133,7 +3254,10 @@ async function handleTenantWorkspaceSummary(req: any, res: any) {
     ok: true,
     data: {
       context,
-      property: workspace.property,
+      tenant: displayProjection.tenant,
+      landlord: displayProjection.landlord,
+      property: displayProjection.property,
+      unit: displayProjection.unit,
       application: workspace.application,
       lease: workspace.lease,
       maintenance: workspace.maintenance,
@@ -4794,13 +4918,16 @@ router.get("/me", requireTenant, async (req: any, res) => {
       }
     }
 
-    let unitLabel: string | null = tenantData.unit ?? null;
+    let unitLabel: string | null =
+      asString(tenantData.unitLabel) ||
+      asString(tenantData.unitNumber) ||
+      displayStringUnlessId(tenantData.unit, unitId);
     if (unitId) {
       try {
         const unitSnap = await db.collection("units").doc(unitId).get();
         if (unitSnap.exists) {
           const unit = unitSnap.data() as any;
-          unitLabel = unit?.unitNumber ?? unit?.label ?? unitLabel ?? null;
+          unitLabel = unit?.unitNumber ?? unit?.label ?? unit?.name ?? unitLabel ?? null;
           propertyId = propertyId ?? unit?.propertyId ?? null;
           landlordId = landlordId ?? unit?.landlordId ?? null;
         }
@@ -4808,7 +4935,7 @@ router.get("/me", requireTenant, async (req: any, res) => {
         unitLabel = unitLabel ?? null;
       }
       if (!unitLabel && propertyName) {
-        unitLabel = typeof tenantData.unit === "string" ? tenantData.unit : null;
+        unitLabel = displayStringUnlessId(tenantData.unit, unitId);
       }
     }
 
@@ -4864,7 +4991,11 @@ router.get("/me", requireTenant, async (req: any, res) => {
       propertyId = propertyId ?? tenancySnapshot.propertyId ?? null;
       unitId = unitId ?? tenancySnapshot.unitId ?? null;
       landlordId = landlordId ?? tenancySnapshot.landlordId ?? null;
-      unitLabel = unitLabel ?? tenancySnapshot.unitLabel ?? null;
+      unitLabel =
+        unitLabel ??
+        asString(tenancySnapshot.unitLabel) ??
+        asString(tenancySnapshot.unitNumber) ??
+        displayStringUnlessId(tenancySnapshot.unit, unitId);
     }
 
     const leaseStart = toMillis(
@@ -4909,8 +5040,8 @@ router.get("/me", requireTenant, async (req: any, res) => {
           status: "Active",
         },
         landlord: { name: landlordName },
-        property: { name: propertyName ?? null },
-        unit: { label: unitLabel ?? null },
+        property: { name: propertyName ?? (propertyId ? "Selected property" : null) },
+        unit: { label: unitLabel ?? (unitId ? "Assigned unit" : null) },
         lease: {
           status: leaseStatus,
           startDate: hasLeaseContext ? leaseStart : null,

@@ -51,8 +51,7 @@ function areMessagesEquivalent(current: Message[], next: Message[]) {
 
 function displayTenantName(conversation: Conversation | null) {
   const tenantName = String(conversation?.tenantDisplayName || "").trim();
-  const tenantId = String(conversation?.tenantId || "").trim();
-  return tenantName || (tenantId ? `Tenant ${tenantId}` : "Tenant");
+  return tenantName || "Tenant";
 }
 
 function hasTenantDisplayName(conversation: Conversation | null) {
@@ -68,15 +67,12 @@ function displayUnitContext(conversation: Conversation | null) {
 function displayConversationContext(conversation: Conversation | null) {
   const propertyLabel = String(conversation?.propertyDisplayLabel || "").trim();
   const unitLabel = displayUnitContext(conversation);
-  const propertyId = String(conversation?.propertyId || "").trim();
-  const unitId = String(conversation?.unitId || "").trim();
   if (propertyLabel && unitLabel) return `${propertyLabel} / ${unitLabel}`;
   if (unitLabel) return unitLabel;
   if (propertyLabel) return propertyLabel;
-  if (propertyId && unitId) return `Property ${propertyId} / Unit ${unitId}`;
-  if (propertyId) return `Property ${propertyId}`;
-  if (unitId) return `Unit ${unitId}`;
-  return "Conversation";
+  if (conversation?.unitId) return "Assigned unit";
+  if (conversation?.propertyId) return "Selected property";
+  return "Tenant conversation";
 }
 
 function buildTenantInitials(conversation: Conversation | null) {

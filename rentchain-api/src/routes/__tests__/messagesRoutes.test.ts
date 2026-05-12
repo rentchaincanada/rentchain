@@ -248,6 +248,79 @@ describe("messagesRoutes notifications", () => {
     );
   });
 
+  it("hydrates sparse message conversations from tenant email and current lease context", async () => {
+    ensureCollection("conversations").set("conv-lease", {
+      landlordId: "landlord-1",
+      tenantId: "tenant-lease",
+      propertyId: null,
+      unitId: null,
+    });
+    ensureCollection("tenants").set("tenant-lease", {
+      email: "lease.tenant@example.com",
+      currentLeaseId: "lease-1",
+    });
+    ensureCollection("leases").set("lease-1", {
+      landlordId: "landlord-1",
+      tenantId: "tenant-lease",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      status: "active",
+    });
+
+    const router = await createRouter();
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/landlord/messages/conversations",
+      headers: { "x-test-user": JSON.stringify({ id: "landlord-1", landlordId: "landlord-1", role: "landlord" }) },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.conversations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "conv-lease",
+          tenantDisplayName: "lease.tenant@example.com",
+          propertyDisplayLabel: "Harbour View",
+          unitDisplayLabel: "Unit 2A",
+        }),
+      ])
+    );
+  });
+
+  it("hydrates landlord conversations from tenant email and unit records when tenantId is an auth id", async () => {
+    ensureCollection("conversations").set("conv-auth", {
+      landlordId: "landlord-1",
+      tenantId: "auth-user-1",
+      tenantEmail: "tenant@example.com",
+      propertyId: null,
+      unitId: null,
+    });
+    ensureCollection("tenants").set("tenant-1", {
+      email: "tenant@example.com",
+      fullName: "Taylor Tenant",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+    });
+
+    const router = await createRouter();
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/landlord/messages/conversations",
+      headers: { "x-test-user": JSON.stringify({ id: "landlord-1", landlordId: "landlord-1", role: "landlord" }) },
+    });
+
+    expect(res.status).toBe(200);
+    const conversation = res.body?.conversations?.find((item: any) => item.id === "conv-auth");
+    expect(conversation).toEqual(
+      expect.objectContaining({
+        tenantDisplayName: "Taylor Tenant",
+        propertyDisplayLabel: "Harbour View",
+        unitDisplayLabel: "Unit 2A",
+      })
+    );
+    expect(`${conversation?.tenantDisplayName} • ${conversation?.unitDisplayLabel}`).not.toBe("Tenant • Assigned unit");
+  });
+
   it("stores deterministic property context when tenant conversation is created", async () => {
     const router = await createRouter();
     const res = await invokeRouter(router, {

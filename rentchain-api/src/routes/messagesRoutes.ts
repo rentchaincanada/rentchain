@@ -32,8 +32,14 @@ function normalizeConversation(doc: any) {
     id,
     landlordId: data.landlordId || null,
     tenantId: data.tenantId || null,
+    tenantEmail: data.tenantEmail || data.applicantEmail || data.email || null,
+    tenantName: data.tenantName || data.tenantDisplayName || data.applicantName || null,
     propertyId: data.propertyId || null,
     unitId: data.unitId || null,
+    applicationId: data.applicationId || null,
+    leaseId: data.leaseId || data.currentLeaseId || null,
+    propertySnapshotLabel: data.propertyDisplayLabel || data.propertyName || data.propertyLabel || null,
+    unitSnapshotLabel: data.unitDisplayLabel || data.unitLabel || data.unitNumber || null,
     lastMessageAt: toMillis(data.lastMessageAt) || null,
     lastReadAtLandlord: toMillis(data.lastReadAtLandlord) || null,
     lastReadAtTenant: toMillis(data.lastReadAtTenant) || null,
@@ -52,7 +58,7 @@ function buildPropertyLabel(property: any) {
 }
 
 function buildTenantLabel(tenant: any) {
-  return stringOrNull(tenant?.fullName) || stringOrNull(tenant?.name) || null;
+  return stringOrNull(tenant?.fullName) || stringOrNull(tenant?.name) || stringOrNull(tenant?.email) || null;
 }
 
 async function lookupPropertyIdForUnit(unitId: string | null) {
@@ -67,52 +73,177 @@ async function lookupPropertyIdForUnit(unitId: string | null) {
   }
 }
 
+async function loadCurrentLeaseForTenant(tenantId: string | null, hintedLeaseId?: string | null) {
+  const targetTenantId = stringOrNull(tenantId);
+  const targetLeaseId = stringOrNull(hintedLeaseId);
+  try {
+    if (targetLeaseId) {
+      const snap = await db.collection("leases").doc(targetLeaseId).get();
+      if (snap.exists) return { id: snap.id, raw: snap.data() as any };
+    }
+  } catch {
+    // continue to tenant-based lookups
+  }
+  if (!targetTenantId) return null;
+
+  const candidates: Array<{ id: string; raw: any }> = [];
+  try {
+    const directSnap = await db.collection("leases").where("tenantId", "==", targetTenantId).limit(10).get();
+    for (const doc of directSnap.docs || []) candidates.push({ id: doc.id, raw: doc.data() as any });
+  } catch {
+    // ignore lookup failures
+  }
+  try {
+    const arraySnap = await db.collection("leases").where("tenantIds", "array-contains", targetTenantId).limit(10).get();
+    for (const doc of arraySnap.docs || []) {
+      if (!candidates.some((candidate) => candidate.id === doc.id)) {
+        candidates.push({ id: doc.id, raw: doc.data() as any });
+      }
+    }
+  } catch {
+    // ignore lookup failures
+  }
+
+  candidates.sort((left, right) => {
+    const currentScore = (raw: any) =>
+      ["active", "current", "signed", "notice_pending", "renewal_pending", "renewal_accepted"].includes(
+        String(raw?.status || "").trim().toLowerCase()
+      )
+        ? 1
+        : 0;
+    const statusDiff = currentScore(right.raw) - currentScore(left.raw);
+    if (statusDiff !== 0) return statusDiff;
+    return (toMillis(right.raw?.updatedAt || right.raw?.createdAt) || 0) - (toMillis(left.raw?.updatedAt || left.raw?.createdAt) || 0);
+  });
+
+  return candidates[0] || null;
+}
+
+async function loadTenantForConversation(conversation: ReturnType<typeof normalizeConversation>) {
+  const tenantId = stringOrNull(conversation.tenantId);
+  const tenantEmail = String(conversation.tenantEmail || "").trim().toLowerCase();
+
+  if (tenantId) {
+    try {
+      const directSnap = await db.collection("tenants").doc(tenantId).get();
+      if (directSnap.exists) return { id: directSnap.id, raw: directSnap.data() as any };
+    } catch {
+      // continue through alternate tenant identifiers
+    }
+
+    for (const field of ["tenantId", "userId", "uid"]) {
+      try {
+        const snap = await db.collection("tenants").where(field, "==", tenantId).limit(2).get();
+        const doc = snap.docs?.[0];
+        if (doc) return { id: doc.id, raw: doc.data() as any };
+      } catch {
+        // continue through alternate tenant identifiers
+      }
+    }
+  }
+
+  if (tenantEmail && emailRegex.test(tenantEmail)) {
+    for (const field of ["email", "applicantEmail"]) {
+      try {
+        const snap = await db.collection("tenants").where(field, "==", tenantEmail).limit(2).get();
+        const doc = snap.docs?.[0];
+        if (doc) return { id: doc.id, raw: doc.data() as any };
+      } catch {
+        // continue through alternate email fields
+      }
+    }
+  }
+
+  return null;
+}
+
 async function enrichConversationDisplay<T extends ReturnType<typeof normalizeConversation>>(conversations: T[]) {
-  const unitIds = Array.from(
-    new Set(conversations.map((conversation) => stringOrNull(conversation.unitId)).filter(Boolean))
-  ) as string[];
+  const tenantEntries = await Promise.all(
+    conversations.map(async (conversation) => [conversation.id, await loadTenantForConversation(conversation)] as const)
+  );
 
-  const tenantIds = Array.from(
-    new Set(conversations.map((conversation) => stringOrNull(conversation.tenantId)).filter(Boolean))
-  ) as string[];
-
-  const [tenants, units] = await Promise.all([
-    Promise.all(
-      tenantIds.map(async (tenantId) => {
-        const snap = await db.collection("tenants").doc(tenantId).get();
-        const raw = snap.exists ? (snap.data() as any) : null;
-        return [
-          tenantId,
-          {
-            raw,
-            label: raw ? buildTenantLabel(raw) : null,
-            unitLabel: raw ? normalizeUnitLabel(raw?.unitLabel || raw?.unit) : null,
-            unitId: raw ? stringOrNull(raw?.unitId) : null,
-            propertyId: raw ? stringOrNull(raw?.propertyId) : null,
-          },
-        ] as const;
-      })
-    ),
-    Promise.all(
-      unitIds.map(async (unitId) => {
-        const snap = await db.collection("units").doc(unitId).get();
-        const raw = snap.exists ? (snap.data() as any) : null;
-        return [
-          unitId,
-          {
-            raw,
-            label: raw ? normalizeUnitLabel(raw?.unitNumber || raw?.unitLabel || raw?.label || raw?.name) : null,
-          },
-        ] as const;
-      })
-    ),
-  ]);
-
-  const tenantById = new Map<
+  const tenantByConversationId = new Map<
     string,
-    { raw: any; label: string | null; unitLabel: string | null; unitId: string | null; propertyId: string | null }
-  >(tenants);
+    {
+      raw: any;
+      label: string | null;
+      unitLabel: string | null;
+      unitId: string | null;
+      propertyId: string | null;
+      currentLeaseId: string | null;
+    }
+  >(
+    tenantEntries.map(([conversationId, tenant]) => [
+      conversationId,
+      {
+        raw: tenant?.raw || null,
+        label: tenant?.raw ? buildTenantLabel(tenant.raw) : null,
+        unitLabel: tenant?.raw ? normalizeUnitLabel(tenant.raw?.unitLabel || tenant.raw?.unitNumber || tenant.raw?.unit) : null,
+        unitId: tenant?.raw ? stringOrNull(tenant.raw?.unitId) : null,
+        propertyId: tenant?.raw ? stringOrNull(tenant.raw?.propertyId) : null,
+        currentLeaseId: tenant?.raw ? stringOrNull(tenant.raw?.currentLeaseId || tenant.raw?.leaseId) : null,
+      },
+    ])
+  );
+  const unitIds = Array.from(
+    new Set(
+      conversations
+        .flatMap((conversation) => [
+          stringOrNull(conversation.unitId),
+          stringOrNull(tenantByConversationId.get(conversation.id)?.unitId),
+        ])
+        .filter(Boolean)
+    )
+  ) as string[];
+  const units = await Promise.all(
+    unitIds.map(async (unitId) => {
+      const snap = await db.collection("units").doc(unitId).get();
+      const raw = snap.exists ? (snap.data() as any) : null;
+      return [
+        unitId,
+        {
+          raw,
+          label: raw ? normalizeUnitLabel(raw?.unitNumber || raw?.unitLabel || raw?.label || raw?.name) : null,
+        },
+      ] as const;
+    })
+  );
   const unitById = new Map<string, { raw: any; label: string | null }>(units);
+  const leaseEntries = await Promise.all(
+    conversations.map(async (conversation) => {
+      const tenant = tenantByConversationId.get(conversation.id);
+      return [
+        conversation.id,
+        await loadCurrentLeaseForTenant(
+          stringOrNull(conversation.tenantId),
+          stringOrNull(conversation.leaseId) || tenant?.currentLeaseId
+        ),
+      ] as const;
+    })
+  );
+  const leaseByConversationId = new Map<string, Awaited<ReturnType<typeof loadCurrentLeaseForTenant>>>(leaseEntries);
+  const leaseUnitIds = Array.from(
+    new Set(
+      leaseEntries
+        .map(([, lease]) => stringOrNull(lease?.raw?.unitId))
+        .filter((unitId): unitId is string => typeof unitId === "string" && unitId.length > 0 && !unitById.has(unitId))
+    )
+  );
+  await Promise.all(
+    leaseUnitIds.map(async (unitId) => {
+      try {
+        const snap = await db.collection("units").doc(unitId).get();
+        if (!snap.exists) return;
+        const raw = snap.data() as any;
+        unitById.set(unitId, {
+          raw,
+          label: normalizeUnitLabel(raw?.unitNumber || raw?.unitLabel || raw?.label || raw?.name),
+        });
+      } catch {
+        // ignore unit hydration failures
+      }
+    })
+  );
   const propertyIds = Array.from(
     new Set(
       conversations
@@ -121,8 +252,9 @@ async function enrichConversationDisplay<T extends ReturnType<typeof normalizeCo
           if (direct) return direct;
           const unitId = stringOrNull(conversation.unitId);
           if (unitId) return stringOrNull(unitById.get(unitId)?.raw?.propertyId);
-          const tenantId = stringOrNull(conversation.tenantId);
-          return tenantId ? stringOrNull(tenantById.get(tenantId)?.propertyId) : null;
+          const tenant = tenantByConversationId.get(conversation.id);
+          const lease = leaseByConversationId.get(conversation.id);
+          return stringOrNull(tenant?.propertyId) || stringOrNull(lease?.raw?.propertyId);
         })
         .filter(Boolean)
     )
@@ -137,30 +269,45 @@ async function enrichConversationDisplay<T extends ReturnType<typeof normalizeCo
 
   return conversations.map((conversation) => {
     const unitId = stringOrNull(conversation.unitId);
-    const tenantId = stringOrNull(conversation.tenantId);
-    const resolvedTenant = tenantId ? tenantById.get(tenantId) : null;
+    const resolvedTenant = tenantByConversationId.get(conversation.id);
+    const resolvedLease = leaseByConversationId.get(conversation.id);
     const resolvedUnit = unitId ? unitById.get(unitId) : null;
+    const leaseUnitId = stringOrNull(resolvedLease?.raw?.unitId);
+    const leaseUnitLabel = normalizeUnitLabel(
+      resolvedLease?.raw?.unitLabel ||
+        resolvedLease?.raw?.unitNumber ||
+        resolvedLease?.raw?.unit
+    );
     const propertyId =
       stringOrNull((conversation as any).propertyId) ||
       stringOrNull(resolvedUnit?.raw?.propertyId) ||
-      stringOrNull(resolvedTenant?.propertyId);
+      stringOrNull(resolvedTenant?.propertyId) ||
+      stringOrNull(resolvedLease?.raw?.propertyId);
     const property = propertyId ? propertyById.get(propertyId) : null;
     const fallbackUnitFromProperty = Array.isArray(property?.units)
       ? property.units.find((unit: any) => {
           const candidateId = stringOrNull(unit?.id) || stringOrNull(unit?.unitId) || stringOrNull(unit?.uid);
           if (candidateId && unitId && candidateId === unitId) return true;
+          if (candidateId && leaseUnitId && candidateId === leaseUnitId) return true;
           const candidateLabel = normalizeUnitLabel(unit?.unitNumber || unit?.label || unit?.name);
-          return Boolean(candidateLabel && resolvedTenant?.unitLabel && candidateLabel === resolvedTenant.unitLabel);
+          return Boolean(
+            candidateLabel &&
+              [resolvedTenant?.unitLabel, leaseUnitLabel].filter(Boolean).includes(candidateLabel)
+          );
         })
       : null;
 
     return {
       ...conversation,
-      tenantDisplayName: resolvedTenant?.label || null,
-      propertyDisplayLabel: buildPropertyLabel(property),
+      tenantDisplayName: resolvedTenant?.label || stringOrNull(conversation.tenantName) || stringOrNull(conversation.tenantEmail),
+      propertyDisplayLabel: buildPropertyLabel(property) || stringOrNull(conversation.propertySnapshotLabel),
       unitDisplayLabel:
         resolvedUnit?.label ||
+        (resolvedTenant?.unitId ? unitById.get(resolvedTenant.unitId)?.label : null) ||
+        (leaseUnitId ? unitById.get(leaseUnitId)?.label : null) ||
         resolvedTenant?.unitLabel ||
+        leaseUnitLabel ||
+        normalizeUnitLabel(conversation.unitSnapshotLabel) ||
         normalizeUnitLabel(
           fallbackUnitFromProperty?.unitNumber ||
             fallbackUnitFromProperty?.label ||

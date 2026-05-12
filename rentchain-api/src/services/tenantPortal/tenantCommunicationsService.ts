@@ -99,6 +99,65 @@ function buildConversationId(params: {
   return `${params.landlordId}__${scopeId}__${asString(params.context.unitId) || "na"}`;
 }
 
+function conversationMatchesContext(conversation: any, context: TenancyContext, landlordId: string) {
+  if (asString(conversation?.landlordId) !== landlordId) return false;
+  const tenantId = asString(context.tenantId);
+  const applicationId = asString(context.applicationId);
+  const leaseId = asString(context.leaseId);
+  const propertyId = asString(context.propertyId);
+  const unitId = asString(context.unitId);
+  if (tenantId && asString(conversation?.tenantId) === tenantId) return true;
+  if (applicationId && asString(conversation?.applicationId) === applicationId) return true;
+  if (leaseId && asString(conversation?.leaseId) === leaseId) return true;
+  return Boolean(
+    propertyId &&
+      unitId &&
+      asString(conversation?.propertyId) === propertyId &&
+      asString(conversation?.unitId) === unitId
+  );
+}
+
+async function resolveTenantConversation(params: {
+  landlordId: string;
+  context: TenancyContext;
+  userId: string;
+}) {
+  const deterministicId = buildConversationId(params);
+  const deterministicSnap = await db.collection("conversations").doc(deterministicId).get();
+  const candidates: Array<{ id: string; data: any }> = [];
+  if (deterministicSnap.exists) {
+    candidates.push({
+      id: deterministicSnap.id,
+      data: (deterministicSnap.data() as any) || {},
+    });
+  }
+
+  const tenantId = asString(params.context.tenantId);
+  if (tenantId) {
+    try {
+      const snap = await db.collection("conversations").where("tenantId", "==", tenantId).limit(25).get();
+      for (const doc of snap.docs || []) {
+        if (!candidates.some((candidate) => candidate.id === doc.id)) {
+          candidates.push({ id: doc.id, data: (doc.data() as any) || {} });
+        }
+      }
+    } catch {
+      // fall back to deterministic conversation id
+    }
+  }
+
+  const matches = candidates.filter((entry) =>
+    entry.id === deterministicId || conversationMatchesContext(entry.data, params.context, params.landlordId)
+  );
+  matches.sort((left, right) => (toMillis(right.data?.lastMessageAt) || 0) - (toMillis(left.data?.lastMessageAt) || 0));
+  if (matches[0]) return matches[0];
+
+  return {
+    id: deterministicId,
+    data: null,
+  };
+}
+
 export async function loadTenantCommunicationsWorkspace(params: {
   context: TenancyContext;
   userId: string;
@@ -117,21 +176,13 @@ export async function loadTenantCommunicationsWorkspace(params: {
     };
   }
 
-  const conversationId = buildConversationId({
+  const conversation = await resolveTenantConversation({
     landlordId,
     context: params.context,
     userId: params.userId,
   });
-
-  let conversationData: any = null;
-  try {
-    const conversationSnap = await db.collection("conversations").doc(conversationId).get();
-    if (conversationSnap.exists) {
-      conversationData = (conversationSnap.data() as any) || {};
-    }
-  } catch {
-    conversationData = null;
-  }
+  const conversationId = conversation.id;
+  const conversationData = conversation.data;
 
   let messages: TenantThreadMessage[] = [];
   try {
@@ -202,9 +253,15 @@ export async function sendTenantCommunicationMessage(params: {
     context: params.context,
     userId: params.userId,
   });
+  const existingConversation = await resolveTenantConversation({
+    landlordId,
+    context: params.context,
+    userId: params.userId,
+  });
+  const targetConversationId = existingConversation.id || conversationId;
   const now = Date.now();
 
-  await db.collection("conversations").doc(conversationId).set(
+  await db.collection("conversations").doc(targetConversationId).set(
     {
       landlordId,
       tenantId: asString(params.context.tenantId),
@@ -221,7 +278,7 @@ export async function sendTenantCommunicationMessage(params: {
 
   const messageRef = db.collection("messages").doc();
   await messageRef.set({
-    conversationId,
+    conversationId: targetConversationId,
     senderRole: "tenant",
     body,
     createdAt: FieldValue.serverTimestamp(),
@@ -231,7 +288,7 @@ export async function sendTenantCommunicationMessage(params: {
   await recordTenantEvent({
     eventType: "tenant_message_sent",
     entityType: "conversation",
-    entityId: conversationId,
+    entityId: targetConversationId,
     createdBy: params.userId,
     context: {
       propertyId: params.context.propertyId,
@@ -276,7 +333,7 @@ export async function sendTenantCommunicationMessage(params: {
   } catch (error: any) {
     console.error("[tenant-communications] email send failed", {
       landlordId,
-      conversationId,
+      conversationId: targetConversationId,
       message: error?.message || "send_failed",
     });
   }
@@ -306,7 +363,12 @@ export async function markTenantCommunicationsRead(params: {
     context: params.context,
     userId: params.userId,
   });
-  await db.collection("conversations").doc(conversationId).set(
+  const existingConversation = await resolveTenantConversation({
+    landlordId,
+    context: params.context,
+    userId: params.userId,
+  });
+  await db.collection("conversations").doc(existingConversation.id || conversationId).set(
     {
       lastReadAtTenant: FieldValue.serverTimestamp(),
     },
