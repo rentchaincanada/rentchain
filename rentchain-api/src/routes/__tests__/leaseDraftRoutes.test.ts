@@ -6,6 +6,7 @@ import { clearLeaseAutomationTasks } from "../../services/automationScheduler/le
 import * as leaseDraftsService from "../../services/leaseDraftsService";
 
 type DocShape = { id: string; data: any };
+const sendEmailMock = vi.fn(async () => undefined);
 
 const { store, fakeDb, resetFakeDb } = vi.hoisted(() => {
   const store = new Map<string, Map<string, DocShape>>();
@@ -120,11 +121,18 @@ vi.mock("../../services/leaseDraftsService", async () => {
   };
 });
 
+vi.mock("../../services/emailService", () => ({
+  sendEmail: sendEmailMock,
+}));
+
 describe("lease draft routes", () => {
   beforeEach(() => {
     resetFakeDb();
     leaseService.getAll().splice(0);
     clearLeaseAutomationTasks();
+    sendEmailMock.mockClear();
+    sendEmailMock.mockResolvedValue(undefined);
+    process.env.EMAIL_FROM = "noreply@example.com";
   });
 
   const payload = {
@@ -284,6 +292,11 @@ describe("lease draft routes", () => {
       status: "vacant",
       occupancyStatus: "vacant",
     });
+    await fakeDb.collection("tenants").doc("tenant-1").set({
+      landlordId: "landlord-1",
+      fullName: "Tenant One",
+      email: "tenant@example.com",
+    });
 
     const createRes = await request(app).post("/drafts").set(auth).send(payload);
     expect(createRes.status).toBe(201);
@@ -297,6 +310,13 @@ describe("lease draft routes", () => {
     expect(activateRes.body?.ok).toBe(true);
     const leaseId = String(activateRes.body?.leaseId || "");
     expect(leaseId).toBeTruthy();
+    expect(activateRes.body?.leaseNotification).toEqual(expect.objectContaining({ attempted: true, sent: true }));
+    expect(sendEmailMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: "tenant@example.com",
+        subject: "Lease available in RentChain",
+      })
+    );
 
     const leasesRes = await request(app).get("/tenant/tenant-1").set(auth);
     expect(leasesRes.status).toBe(200);

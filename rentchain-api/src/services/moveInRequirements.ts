@@ -161,11 +161,12 @@ export function buildMoveInRequirements(params: MoveInRequirementsParams): MoveI
 
   const hasLeaseContext = Boolean(lease || leaseRaw || tenancy);
 
-  const leaseSignedAt = firstIso(leaseRaw, ["tenantSignedAt", "fullySignedAt", "signedAt", "signatureCompletedAt"]);
+  const leaseSignedAt =
+    firstIso((leaseRaw as any)?.tenantSignature, ["signedAt"]) ||
+    firstIso(leaseRaw, ["tenantSignedAt", "tenantSignatureCompletedAt", "fullySignedAt", "signatureCompletedAt"]);
   const leaseSigned = Boolean(
     leaseSignedAt ||
-      firstBoolean(leaseRaw, ["leaseSigned", "isSigned", "signed"]) ||
-      ["signed", "active"].includes(String((leaseRaw as any)?.status || (lease as any)?.status || "").trim().toLowerCase())
+      firstBoolean(leaseRaw, ["leaseSigned", "isSigned", "signed"])
   );
 
   const portalInviteUpdatedAt = latestIso([invite?.sentAt, invite?.createdAt]);

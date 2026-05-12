@@ -49,6 +49,22 @@ describe("buildMoveInRequirements", () => {
     expect(requirements.items.find((item) => item.key === "deposit_received")?.state).toBe("pending");
   });
 
+  it("does not mark an active lease signed without signature evidence", () => {
+    const requirements = buildMoveInRequirements({
+      lease: { status: "active" },
+      leaseRaw: {
+        status: "active",
+        startDate: "2026-05-01",
+        signedAt: "2026-05-09T12:00:00.000Z",
+      },
+    });
+
+    const leaseSigned = requirements.items.find((item) => item.key === "lease_signed");
+    expect(leaseSigned?.state).toBe("pending");
+    expect(leaseSigned?.updatedAt).toBeNull();
+    expect(leaseSigned?.source).toBe("lease_status");
+  });
+
   it("returns unknown when there is no move-in context", () => {
     const requirements = buildMoveInRequirements({ tenant: { id: "tenant-1" } });
 

@@ -108,8 +108,18 @@ export function deriveLeaseExecution(input: DeriveLeaseExecutionInput): LeaseExe
   const tenantSignedAt =
     firstIso(raw?.tenantSignature, ["signedAt"]) ||
     firstIso(raw, ["tenantSignedAt", "tenantSignatureCompletedAt"]);
-  const landlordSignedAt = firstIso(raw, ["landlordSignedAt", "landlordSignatureCompletedAt"]);
-  const fullyExecutedAt = firstIso(raw, ["fullyExecutedAt", "fullySignedAt", "signatureCompletedAt"]);
+  const landlordSignedAt =
+    firstIso(raw?.landlordSignature, ["signedAt"]) ||
+    firstIso(raw, ["landlordSignedAt", "landlordSignatureCompletedAt"]);
+  const fullyExecutedAt = firstIso(raw, ["fullyExecutedAt"]);
+  const signatureWorkflowStartedAt = firstIso(raw, [
+    "sentAt",
+    "sharedAt",
+    "leaseSentAt",
+    "leaseSharedAt",
+    "signatureRequestedAt",
+    "tenantSignatureRequestedAt",
+  ]);
 
   const hasCoreLeaseDetails = Boolean(leaseId && startDate && typeof monthlyRent === "number" && monthlyRent > 0);
   const tenantSignatureCaptured = Boolean(tenantSignedAt);
@@ -126,11 +136,17 @@ export function deriveLeaseExecution(input: DeriveLeaseExecutionInput): LeaseExe
     "pending_landlord_signature",
     "signed_by_tenant",
   ].includes(normalizedStatus);
-  const statusImpliesLandlordSigned = ["landlord_signed", "signed_by_landlord"].includes(normalizedStatus);
-  const statusImpliesExecuted = ["signed", "active", "current", "fully_signed", "completed"].includes(normalizedStatus);
+  const hasExplicitSignatureWorkflow = Boolean(
+    signatureWorkflowStartedAt ||
+      statusImpliesReadyForTenant ||
+      statusImpliesReadyForLandlord ||
+      tenantSignatureCaptured ||
+      landlordSignatureCaptured ||
+      fullyExecutedAt
+  );
 
-  const executed = Boolean(fullyExecutedAt || statusImpliesExecuted);
-  const landlordSigned = Boolean(!executed && (landlordSignatureCaptured || statusImpliesLandlordSigned));
+  const executed = Boolean(tenantSignatureCaptured && landlordSignatureCaptured);
+  const landlordSigned = Boolean(!executed && landlordSignatureCaptured);
   const readyForLandlord = Boolean(!executed && !landlordSigned && statusImpliesReadyForLandlord);
   const tenantSigned = Boolean(
     !executed && !landlordSigned && !readyForLandlord && tenantSignatureCaptured
@@ -141,7 +157,8 @@ export function deriveLeaseExecution(input: DeriveLeaseExecutionInput): LeaseExe
       !readyForLandlord &&
       !tenantSigned &&
       documentUrl &&
-      (statusImpliesReadyForTenant || hasCoreLeaseDetails)
+      statusImpliesReadyForTenant &&
+      hasExplicitSignatureWorkflow
   );
 
   const pdfStatus: LeaseExecutionPdfStatus = (() => {
@@ -165,7 +182,8 @@ export function deriveLeaseExecution(input: DeriveLeaseExecutionInput): LeaseExe
 
   const tenantSignatureStatus: LeaseExecutionSignatureStatus = (() => {
     if (!leaseId) return "blocked";
-    if (tenantSigned || readyForLandlord || landlordSigned || executed) return "completed";
+    if (tenantSigned || readyForLandlord || executed) return "completed";
+    if (landlordSigned) return "needed";
     if (readyForTenant) return "needed";
     if (hasCoreLeaseDetails) return "blocked";
     return "not_required";
@@ -202,8 +220,10 @@ export function deriveLeaseExecution(input: DeriveLeaseExecutionInput): LeaseExe
       return {
         executionStatus,
         executionLabel: "Landlord signature completed",
-        executionDescription: "Landlord signature appears complete. Review the signed lease details to confirm the current file is settled.",
-        requiredNextAction: "review_signed_lease",
+        executionDescription: tenantSignatureCaptured
+          ? "Landlord signature is recorded. Review the signed lease details to confirm the current file is settled."
+          : "Landlord signature is recorded. Tenant signature is still required before the lease is fully executed.",
+        requiredNextAction: tenantSignatureCaptured ? "review_signed_lease" : "tenant_signature",
         tenantSignatureStatus,
         landlordSignatureStatus,
         pdfStatus,

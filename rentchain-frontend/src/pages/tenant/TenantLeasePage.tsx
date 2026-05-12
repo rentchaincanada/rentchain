@@ -117,8 +117,15 @@ export default function TenantLeasePage() {
     blockedReason: paymentSummary?.paymentRail.blockedReason || null,
     paymentRailEnabled: paymentSummary?.paymentRail.enabled ?? null,
   });
+  const executionStatus = String(execution?.executionStatus || "").trim();
+  const signatureWorkflowVisible =
+    Boolean(data?.tenantSignature?.signedAt) ||
+    ["ready_for_tenant_signature", "tenant_signed", "ready_for_landlord_signature", "landlord_signed", "fully_executed"].includes(
+      executionStatus
+    );
   const timelineRows = execution
-    ? [
+    ? signatureWorkflowVisible
+      ? [
         {
           label: "Lease details",
           value:
@@ -149,10 +156,24 @@ export default function TenantLeasePage() {
               : "Not required",
         },
         {
-          label: "Fully executed",
-          value: execution.executionStatus === "fully_executed" ? "Completed" : "Pending",
+          label: "Execution",
+          value: execution.executionStatus === "fully_executed" ? "Completed" : "Not completed",
         },
       ]
+      : [
+          {
+            label: "Lease details",
+            value: execution.executionStatus === "blocked" ? "Needs attention" : "Ready",
+          },
+          {
+            label: "Signature workflow",
+            value: "Not started",
+          },
+          {
+            label: "Execution",
+            value: "Not completed",
+          },
+        ]
     : [];
 
   return (
@@ -338,11 +359,17 @@ export default function TenantLeasePage() {
           </TenantInfoCard>
 
           {execution ? (
-            <TenantInfoCard heading="Lease Execution" accent="#0f172a">
+            <TenantInfoCard heading={signatureWorkflowVisible ? "Lease Execution" : "Signature workflow"} accent="#0f172a">
               <div style={{ display: "grid", gap: 12 }}>
                 <div style={{ display: "grid", gap: 6 }}>
-                  <div style={{ fontWeight: 800 }}>{execution.executionLabel}</div>
-                  <div style={{ color: "var(--text-muted, #64748b)" }}>{execution.executionDescription}</div>
+                  <div style={{ fontWeight: 800 }}>
+                    {signatureWorkflowVisible ? execution.executionLabel : "Signature workflow not started"}
+                  </div>
+                  <div style={{ color: "var(--text-muted, #64748b)" }}>
+                    {signatureWorkflowVisible
+                      ? execution.executionDescription
+                      : "Lease details are visible, but no tenant-safe signature workflow or execution evidence is available yet."}
+                  </div>
                 </div>
 
                 <TenantKeyValueGrid rows={timelineRows} />
