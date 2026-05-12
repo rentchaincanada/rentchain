@@ -130,4 +130,32 @@ describe("getTenantsList", () => {
 
     expect(tenants.map((tenant) => tenant.id)).toEqual(["tenant-visible"]);
   });
+
+  it("returns persisted converted tenants without appending in-memory duplicates", async () => {
+    tenantDocs.clear();
+    tenantDocs.set("converted-tenant-1", {
+      landlordId: "landlord-1",
+      fullName: "Converted Tenant",
+      applicationId: "app-1",
+      source: "application_conversion",
+      createdAt: "2026-01-05T00:00:00.000Z",
+    });
+
+    const { getTenantsList } = await import("../tenantDetailsService");
+    const first = await getTenantsList({ landlordId: "landlord-1" });
+    const second = await getTenantsList({ landlordId: "landlord-1" });
+
+    expect(first.map((tenant) => tenant.id)).toEqual(["converted-tenant-1"]);
+    expect(second.map((tenant) => tenant.id)).toEqual(["converted-tenant-1"]);
+    expect(second.filter((tenant) => tenant.applicationId === "app-1")).toHaveLength(1);
+  });
+
+  it("preserves fallback tenants when no tenant records exist outside landlord scope", async () => {
+    tenantDocs.clear();
+
+    const { getTenantsList } = await import("../tenantDetailsService");
+    const tenants = await getTenantsList();
+
+    expect(tenants.map((tenant) => tenant.id)).toEqual(["t1", "t2", "t3"]);
+  });
 });

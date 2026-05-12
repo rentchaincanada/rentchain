@@ -6,6 +6,7 @@ export type CreateTenancyInviteInput = {
   landlordId: string;
   rcPropId?: string | null;
   propertyId: string;
+  tenantId?: string | null;
   applicationId?: string | null;
   invitedEmail?: string | null;
   invitedName?: string | null;
@@ -28,6 +29,7 @@ export type TenancyInviteRecord = {
   landlordId: string;
   rc_prop_id: string | null;
   propertyId: string;
+  tenantId: string | null;
   applicationId: string | null;
   unitId: string | null;
   leaseId: string | null;
@@ -66,6 +68,7 @@ function mapInvite(docId: string, data: any): TenancyInviteRecord {
     landlordId: String(data?.landlord_id || data?.landlordId || ""),
     rc_prop_id: String(data?.rc_prop_id || "").trim() || null,
     propertyId: String(data?.property_id || data?.propertyId || ""),
+    tenantId: String(data?.tenant_id || data?.tenantId || "").trim() || null,
     applicationId: String(data?.application_id || data?.applicationId || "").trim() || null,
     unitId: String(data?.unit_id || data?.unitId || "").trim() || null,
     leaseId: String(data?.lease_id || data?.leaseId || "").trim() || null,
@@ -132,10 +135,12 @@ async function supersedeInvite(invite: TenancyInviteRecord, replacementTokenPrev
     context: {
       rc_prop_id: invite.rc_prop_id,
       propertyId: invite.propertyId,
+      tenantId: invite.tenantId,
       applicationId: invite.applicationId,
     },
     payload: {
       invitedEmail: invite.invitedEmail,
+      tenantId: invite.tenantId,
       tokenPreview: invite.tokenPreview,
       replacementTokenPreview,
     },
@@ -157,6 +162,7 @@ export async function createTenancyInvite(input: CreateTenancyInviteInput): Prom
     landlord_id: String(input.landlordId || "").trim(),
     rc_prop_id: String(input.rcPropId || "").trim() || null,
     property_id: String(input.propertyId || "").trim(),
+    tenant_id: String(input.tenantId || "").trim() || null,
     application_id: String(input.applicationId || "").trim() || null,
     unit_id: String(input.unitId || "").trim() || null,
     lease_id: String(input.leaseId || "").trim() || null,
@@ -180,10 +186,12 @@ export async function createTenancyInvite(input: CreateTenancyInviteInput): Prom
     context: {
       rc_prop_id: payload.rc_prop_id,
       propertyId: payload.property_id,
+      tenantId: payload.tenant_id,
       applicationId: payload.application_id,
     },
     payload: {
       invitedEmail: payload.invited_email,
+      tenantId: payload.tenant_id,
       expiresAt,
       tokenPreview: payload.token_preview,
     },
@@ -268,11 +276,13 @@ export async function redeemTenancyInvite(input: RedeemTenancyInviteInput): Prom
     createdBy: String(input.redeemedByUid || "").trim(),
     context: {
       propertyId: invite.propertyId,
+      tenantId: invite.tenantId,
       applicationId: invite.applicationId,
       rc_prop_id: invite.rc_prop_id,
     },
     payload: {
       invitedEmail: invite.invitedEmail,
+      tenantId: invite.tenantId,
       redeemedByUid: input.redeemedByUid,
       tokenPreview: invite.tokenPreview,
     },

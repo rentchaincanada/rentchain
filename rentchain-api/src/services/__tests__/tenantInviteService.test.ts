@@ -84,6 +84,22 @@ describe("tenantInviteService", () => {
     expect(doc?.invited_email).toBe("tenant@example.com");
   });
 
+  it("stores and maps the canonical tenant id when provided", async () => {
+    const { createTenancyInvite } = await import("../tenantPortal/tenantInviteService");
+    const created = await createTenancyInvite({
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      tenantId: "converted-tenant-1",
+      applicationId: "app-1",
+      invitedEmail: "tenant@example.com",
+      createdBy: "landlord-1",
+    });
+
+    const doc = ensureCollection("tenancy_invites").get(created.invite.id);
+    expect(doc?.tenant_id).toBe("converted-tenant-1");
+    expect(created.invite.tenantId).toBe("converted-tenant-1");
+  });
+
   it("redeems an invite exactly once", async () => {
     const { createTenancyInvite, redeemTenancyInvite } = await import("../tenantPortal/tenantInviteService");
     const created = await createTenancyInvite({

@@ -4739,6 +4739,7 @@ router.post("/invite/redeem", requireTenantWorkspaceIdentity, async (req: any, r
     data: {
       inviteId: redeemed.invite?.id || null,
       propertyId: redeemed.invite?.propertyId || null,
+      tenantId: redeemed.invite?.tenantId || null,
       applicationId: redeemed.invite?.applicationId || null,
       rc_prop_id: redeemed.invite?.rc_prop_id || null,
       status: redeemed.invite?.status || null,

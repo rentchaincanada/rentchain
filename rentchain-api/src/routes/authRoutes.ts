@@ -1293,6 +1293,7 @@ router.post("/onboard/accept", async (req: any, res) => {
 
         const linkedApplication = await loadApplicationForTenantInvite(tenancyInvite.applicationId);
         const tenantId =
+          asOnboardString(tenancyInvite.tenantId) ||
           asOnboardString(linkedApplication?.data?.convertedTenantId) ||
           asOnboardString(linkedApplication?.data?.tenantId) ||
           asOnboardString(tenancyInvite.redeemedByUid) ||

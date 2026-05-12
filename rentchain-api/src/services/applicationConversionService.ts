@@ -1,6 +1,5 @@
 // @ts-nocheck
 import crypto from "crypto";
-import { addConvertedTenant } from "./tenantDetailsService";
 import { runScreeningWithCredits } from "./screeningsService";
 import { logAuditEvent } from "./auditEventsService";
 import { db } from "../config/firebase";
@@ -103,8 +102,6 @@ export async function convertApplicationToTenant(params: {
     applicationId: application.id,
     createdAt,
   };
-
-  addConvertedTenant(tenantRecord);
 
   try {
     await db.collection("tenants").doc(tenantId).set(tenantRecord, { merge: true });
@@ -229,6 +226,7 @@ async function createAndEmailInvite(opts: {
   const created = await createReplacementTenancyInvite({
     landlordId: opts.landlordId,
     propertyId: opts.propertyId,
+    tenantId: opts.tenantId,
     applicationId: opts.applicationId || null,
     invitedEmail: tenantEmail || null,
     invitedName: opts.tenantName || null,

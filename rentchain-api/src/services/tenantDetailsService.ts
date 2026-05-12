@@ -38,6 +38,7 @@ export interface TenantRecord {
   cleanupReason?: string | null;
   cleanupBatch?: string | null;
   propertyId?: string | null;
+  applicationId?: string | null;
   unitId?: string | null;
   propertyName?: string;
   unit?: string;
@@ -140,8 +141,6 @@ const FALLBACK_TENANTS: TenantRecord[] = [
   },
 ];
 
-const CONVERTED_TENANTS: TenantRecord[] = [];
-
 type TenantQueryOptions = {
   landlordId?: string | null;
   excludeHiddenFromActiveLists?: boolean;
@@ -208,6 +207,7 @@ function mapTenant(docId: string, data: any): TenantRecord {
     cleanupReason: data.cleanupReason ?? null,
     cleanupBatch: data.cleanupBatch ?? null,
     propertyId: data.propertyId ?? null,
+    applicationId: data.applicationId ?? data.application_id ?? null,
     unitId: data.unitId ?? data.unit ?? null,
     propertyName: data.propertyName ?? data.property ?? null,
     unit: data.unit ?? data.unitLabel ?? null,
@@ -424,10 +424,6 @@ async function loadLatestTenantInviteState(tenant: TenantRecord | null, landlord
   }
 }
 
-export function addConvertedTenant(tenant: TenantRecord): void {
-  CONVERTED_TENANTS.push(tenant);
-}
-
 export async function getTenantsList(opts: TenantQueryOptions = {}): Promise<TenantRecord[]> {
   const landlordId = opts.landlordId?.trim?.() ? String(opts.landlordId).trim() : null;
   const excludeHiddenFromActiveLists = opts.excludeHiddenFromActiveLists === true;
@@ -454,14 +450,14 @@ export async function getTenantsList(opts: TenantQueryOptions = {}): Promise<Ten
 
     if (out.length === 0 && !landlordId) {
       console.warn("[tenantDetailsService] No tenants collection, using FALLBACK_TENANTS");
-      return [...FALLBACK_TENANTS, ...CONVERTED_TENANTS];
+      return [...FALLBACK_TENANTS];
     }
 
-    return [...out, ...CONVERTED_TENANTS.filter((t) => !landlordId || t.landlordId === landlordId)];
+    return out;
   } catch (err) {
     console.error("[tenantDetailsService] getTenantsList error", err);
     if (landlordId) return [];
-    return [...FALLBACK_TENANTS, ...CONVERTED_TENANTS];
+    return [...FALLBACK_TENANTS];
   }
 }
 
@@ -471,7 +467,6 @@ export async function getTenantDetailBundle(tenantId: string, opts: TenantQueryO
   let tenant = await loadTenantRecord(tenantId, landlordId);
   if (!tenant && !landlordId) {
     tenant =
-      CONVERTED_TENANTS.find((t) => t.id === tenantId) ??
       FALLBACK_TENANTS.find((t) => t.id === tenantId) ??
       FALLBACK_TENANTS[0];
   }
