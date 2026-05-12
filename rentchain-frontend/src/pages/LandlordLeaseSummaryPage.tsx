@@ -14,13 +14,6 @@ function formatCurrency(value: number | null | undefined) {
   return amount.toLocaleString(undefined, { style: "currency", currency: "CAD" });
 }
 
-function formatDate(value: string | null | undefined) {
-  if (!value) return "—";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleDateString();
-}
-
 function prettyLeaseStatus(value: string | null | undefined) {
   const normalized = String(value || "").trim().toLowerCase();
   if (!normalized) return "Unknown";
