@@ -2885,6 +2885,41 @@ describe("tenantPortalRoutes foundation", () => {
     expect(res.body?.data?.actions?.documentEntry?.path).toBe("/tenant/attachments");
   });
 
+  it("hydrates tenant me unit labels without exposing raw unit ids", async () => {
+    ensureCollection("tenants").set("tenant-1", {
+      email: "tenant@example.com",
+      fullName: "Taylor Tenant",
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitId: "unit-raw-1",
+      unit: "unit-raw-1",
+      status: "active",
+    });
+    ensureCollection("units").set("unit-raw-1", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitNumber: "4B",
+    });
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/me",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.data?.unit?.label).toBe("4B");
+    expect(JSON.stringify(res.body?.data?.unit)).not.toContain("unit-raw-1");
+  });
+
   it("recognizes converted rentalApplications as linked tenant profile application context", async () => {
     ensureCollection("applications").delete("app-1");
     ensureCollection("leases").delete("lease-1");

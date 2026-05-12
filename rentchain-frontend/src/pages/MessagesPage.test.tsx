@@ -127,7 +127,7 @@ describe("MessagesPage", () => {
     expect(mocks.markLandlordConversationReadMock).toHaveBeenCalledTimes(1);
   });
 
-  it("uses safe context fallbacks and deterministic initials for Taylor Tenant", async () => {
+  it("uses conservative context fallbacks and deterministic initials for Taylor Tenant", async () => {
     mocks.fetchLandlordConversationsMock.mockResolvedValue([
       {
         id: "conv-2",
@@ -156,7 +156,8 @@ describe("MessagesPage", () => {
 
     await flushAsync();
     expect(screen.getAllByText("Taylor Tenant")[0]).toBeInTheDocument();
-    expect(screen.getAllByText("Taylor Tenant • Property prop-raw-1 / Unit unit-raw-1").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Taylor Tenant • Assigned unit").length).toBeGreaterThan(0);
+    expect(screen.queryByText(/prop-raw-1|unit-raw-1/i)).not.toBeInTheDocument();
     expect(screen.queryByText("Tenant conversation • Unit unavailable")).not.toBeInTheDocument();
     expect(screen.getAllByText("TT")[0]).toBeInTheDocument();
     expect(screen.queryByText(/unavailable/i)).not.toBeInTheDocument();
@@ -203,7 +204,7 @@ describe("MessagesPage", () => {
     expect(screen.queryByText(/unavailable/i)).not.toBeInTheDocument();
   });
 
-  it("uses explicit ids instead of unavailable labels when only ids are present", async () => {
+  it("uses conservative labels instead of raw ids when only ids are present", async () => {
     mocks.fetchLandlordConversationsMock.mockResolvedValue([
       {
         id: "conv-5",
@@ -229,7 +230,8 @@ describe("MessagesPage", () => {
     );
 
     await flushAsync();
-    expect(screen.getAllByText("Tenant tenant-raw-5 • Property prop-raw-5 / Unit unit-raw-5").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Tenant • Assigned unit").length).toBeGreaterThan(0);
+    expect(screen.queryByText(/tenant-raw-5|prop-raw-5|unit-raw-5/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/unavailable/i)).not.toBeInTheDocument();
   });
 
