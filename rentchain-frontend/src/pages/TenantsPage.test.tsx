@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => ({
   fetchTenantTenanciesMock: vi.fn(),
   updateTenantRecordMock: vi.fn(),
   updateTenancyMock: vi.fn(),
+  useTenantDetailMock: vi.fn(),
   createTenantEventMock: vi.fn(),
   hydrateTenantSummariesBatchMock: vi.fn(),
   getCachedTenantSummaryMock: vi.fn(),
@@ -51,6 +52,10 @@ vi.mock("@/api/tenantsApi", () => ({
   fetchTenantTenancies: mocks.fetchTenantTenanciesMock,
   updateTenantRecord: mocks.updateTenantRecordMock,
   updateTenancy: mocks.updateTenancyMock,
+}));
+
+vi.mock("@/hooks/useTenantDetail", () => ({
+  useTenantDetail: mocks.useTenantDetailMock,
 }));
 
 vi.mock("@/api/tenantEventsWriteApi", () => ({
@@ -123,6 +128,7 @@ describe("TenantsPage", () => {
     mocks.fetchTenantTenanciesMock.mockResolvedValue([]);
     mocks.updateTenantRecordMock.mockResolvedValue({});
     mocks.updateTenancyMock.mockResolvedValue({});
+    mocks.useTenantDetailMock.mockReturnValue({ bundle: null, loading: false, error: null });
     mocks.createTenantEventMock.mockResolvedValue({ ok: true });
     mocks.hydrateTenantSummariesBatchMock.mockResolvedValue(undefined);
     mocks.getCachedTenantSummaryMock.mockReturnValue(null);
@@ -176,6 +182,95 @@ describe("TenantsPage", () => {
     expect(screen.getByRole("button", { name: "Add note" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Send tenant invite" })).toBeInTheDocument();
     expect(screen.getByText("lease-1")).toBeInTheDocument();
+  });
+
+  it("shows the current lease from tenant detail when the list row has no currentLeaseId", async () => {
+    mocks.useCapabilitiesMock.mockReturnValue({
+      features: { tenant_invites: true },
+    });
+    mocks.fetchTenantsMock.mockResolvedValue([
+      {
+        id: "tenant-1",
+        fullName: "Taylor Tenant",
+        email: "tenant@example.com",
+        propertyName: "Main Street",
+        propertyId: "property-1",
+        unit: "Unit 4",
+        unitId: "unit-4",
+        currentLeaseId: null,
+      },
+    ]);
+    mocks.fetchTenantTenanciesMock.mockResolvedValue([
+      { id: "tenancy-1", tenantId: "tenant-1", status: "active", unitLabel: "Unit 4" },
+    ]);
+    mocks.useTenantDetailMock.mockReturnValue({
+      bundle: {
+        tenant: { id: "tenant-1", fullName: "Taylor Tenant" },
+        currentLease: {
+          id: "lease-active-1",
+          tenantId: "tenant-1",
+          propertyId: "property-1",
+          propertyName: "Main Street",
+          unitId: "unit-4",
+          unit: "Unit 4",
+          leaseStart: "2026-01-01",
+          leaseEnd: null,
+          monthlyRent: 1850,
+          status: "active",
+        },
+      },
+      loading: false,
+      error: null,
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/tenants?tenantId=tenant-1"]}>
+        <TenantsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Tenant actions")).toBeInTheDocument();
+    expect(screen.getByText("lease-active-1")).toBeInTheDocument();
+    expect(screen.queryByText("No current lease linked")).not.toBeInTheDocument();
+  });
+
+  it("shows no current lease linked when neither list nor detail has a current lease", async () => {
+    mocks.useCapabilitiesMock.mockReturnValue({
+      features: { tenant_invites: true },
+    });
+    mocks.fetchTenantsMock.mockResolvedValue([
+      {
+        id: "tenant-1",
+        fullName: "Taylor Tenant",
+        email: "tenant@example.com",
+        propertyName: "Main Street",
+        propertyId: "property-1",
+        unit: "Unit 4",
+        unitId: "unit-4",
+        currentLeaseId: null,
+      },
+    ]);
+    mocks.fetchTenantTenanciesMock.mockResolvedValue([
+      { id: "tenancy-1", tenantId: "tenant-1", status: "active", unitLabel: "Unit 4" },
+    ]);
+    mocks.useTenantDetailMock.mockReturnValue({
+      bundle: {
+        tenant: { id: "tenant-1", fullName: "Taylor Tenant" },
+        currentLease: null,
+        lease: null,
+      },
+      loading: false,
+      error: null,
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/tenants?tenantId=tenant-1"]}>
+        <TenantsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Tenant actions")).toBeInTheDocument();
+    expect(screen.getByText("No current lease linked")).toBeInTheDocument();
   });
 
   it("fails closed by hiding the targeted cleanup tenant ids from the landlord list", async () => {

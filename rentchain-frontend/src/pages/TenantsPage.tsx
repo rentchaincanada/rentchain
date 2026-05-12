@@ -22,8 +22,10 @@ import { TenantScorePill } from "../components/tenant/TenantScorePill";
 import { hydrateTenantSummariesBatch, getCachedTenantSummary } from "../lib/tenantSummaryCache";
 import { track } from "../lib/analytics";
 import { useCapabilities } from "@/hooks/useCapabilities";
+import { useTenantDetail } from "@/hooks/useTenantDetail";
 import { openUpgradeFlow } from "@/billing/openUpgradeFlow";
 import { isTargetedHiddenTenantId } from "@/lib/testDataVisibilityTargets";
+import type { TenantLeaseSummary } from "@/api/tenantDetail";
 import "./TenantsPage.css";
 
 type TenantWithTenancies = TenantApiModel & { tenancies?: TenancyApiModel[] };
@@ -137,12 +139,16 @@ function getErrorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
-function describeTenantLinkage(tenant: TenantApiModel & { tenancies?: TenancyApiModel[] }) {
+function describeTenantLinkage(
+  tenant: TenantApiModel & { tenancies?: TenancyApiModel[] },
+  currentLease?: TenantLeaseSummary | null
+) {
   const tenancies = Array.isArray(tenant.tenancies) ? tenant.tenancies : [];
   const activeTenancies = tenancies.filter((tenancy) => tenancy.status !== "inactive");
   const primaryProperty = tenant.propertyName || tenant.propertyId || "No property linked";
   const primaryUnit = tenant.unit || tenant.unitLabel || tenant.unitId || "No unit linked";
-  const leaseState = tenant.currentLeaseId ? tenant.currentLeaseId : "No current lease linked";
+  const currentLeaseId = String(currentLease?.id || tenant.currentLeaseId || "").trim();
+  const leaseState = currentLeaseId || "No current lease linked";
 
   return {
     propertyLabel: primaryProperty,
@@ -150,7 +156,7 @@ function describeTenantLinkage(tenant: TenantApiModel & { tenancies?: TenancyApi
     leaseLabel: leaseState,
     activeTenancyCount: activeTenancies.length,
     linkageNote:
-      !tenant.propertyId && !tenant.unitId && !tenant.currentLeaseId
+      !tenant.propertyId && !tenant.unitId && !currentLeaseId
         ? "This tenant record has no canonical property, unit, or current lease linkage yet."
         : activeTenancies.length === 0
         ? "No active tenancy registrations are linked to this tenant."
@@ -444,7 +450,12 @@ const loadTenants = useCallback(async () => {
     ? tenants.find((t) => t.id === selectedTenantId) || null
     : null;
   const tenantExists = Boolean(selectedTenant);
-  const selectedTenantLinkage = selectedTenant ? describeTenantLinkage(selectedTenant) : null;
+  const { bundle: selectedTenantDetailBundle } = useTenantDetail(tenantExists ? selectedTenantId : null);
+  const selectedCurrentLease =
+    selectedTenantDetailBundle?.currentLease || selectedTenantDetailBundle?.lease || null;
+  const selectedTenantLinkage = selectedTenant
+    ? describeTenantLinkage(selectedTenant, selectedCurrentLease)
+    : null;
 
   const filteredTenants = useMemo(() => {
     const base = tenants || [];
