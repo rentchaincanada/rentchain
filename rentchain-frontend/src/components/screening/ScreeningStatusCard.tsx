@@ -38,7 +38,7 @@ function getBadge(status: ScreeningStatusView["status"]) {
 function getDescription(status: ScreeningStatusView["status"]) {
   switch (status) {
     case "blocked_transunion_not_connected":
-      return "Connect TransUnion to continue. We'll help you complete screening step by step once your membership is linked.";
+      return "Connect the configured screening provider to continue. We'll help you complete screening step by step once provider access is linked.";
     case "requested":
       return "Your screening request is in the queue. We’ll guide it through the remaining internal review steps.";
     case "in_progress":
@@ -50,6 +50,11 @@ function getDescription(status: ScreeningStatusView["status"]) {
     default:
       return "Start screening when you're ready. We’ll help you complete each step from request to review.";
   }
+}
+
+function getActionLabel(status: ScreeningStatusView): string {
+  if (status.status === "blocked_transunion_not_connected") return "Connect screening provider";
+  return status.actionLabel;
 }
 
 export function ScreeningStatusCard({
@@ -109,7 +114,7 @@ export function ScreeningStatusCard({
         ) : null}
         {status.status === "blocked_transunion_not_connected" ? (
           <div style={{ color: text.primary }}>
-            <strong>Step-by-step:</strong> Connect TransUnion, request screening, then review the completed result here.
+            <strong>Step-by-step:</strong> Connect provider access, request screening, then review the completed result here.
           </div>
         ) : null}
         {status.reportAvailable ? (
@@ -119,7 +124,7 @@ export function ScreeningStatusCard({
 
       <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
         <Button type="button" onClick={onPrimaryAction} disabled={actionLoading}>
-          {actionLoading ? "Working..." : status.actionLabel}
+          {actionLoading ? "Working..." : getActionLabel(status)}
         </Button>
       </div>
     </Card>

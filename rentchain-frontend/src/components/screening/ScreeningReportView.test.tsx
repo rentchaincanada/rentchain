@@ -42,4 +42,21 @@ describe("ScreeningReportView", () => {
     expect(screen.getByRole("button", { name: "Download" })).toBeInTheDocument();
     expect(screen.getByText(/Completed:/i)).toBeInTheDocument();
   });
+
+  it("uses provider-neutral fallback copy when no provider is present", () => {
+    render(
+      <ScreeningReportView
+        applicantName="Jordan Lee"
+        status="pending"
+        provider={null}
+        recommendation="Pending"
+        findings={[]}
+        flags={[]}
+        recommendedActions={[]}
+      />
+    );
+
+    expect(screen.getByText("Provider: Configured screening provider")).toBeInTheDocument();
+    expect(screen.queryByText(/TransUnion manual/i)).not.toBeInTheDocument();
+  });
 });

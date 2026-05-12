@@ -87,7 +87,7 @@ const mapErrorMessage = (code?: string | null) => {
     return "This application isn't ready for screening yet.";
   }
   if (normalized === "transunion_not_connected") {
-    return "Connect your TransUnion membership before starting screening.";
+    return "Connect the configured screening provider before starting screening.";
   }
   return "Unable to start screening checkout. Please try again.";
 };
@@ -110,7 +110,7 @@ const mapErrorTitle = (code?: string | null) => {
     return "Screening unavailable";
   }
   if (normalized === "transunion_not_connected") {
-    return "Connect TransUnion to start screening";
+    return "Connect screening provider to start screening";
   }
   return "Unable to start screening checkout";
 };
@@ -466,25 +466,25 @@ const ScreeningStartPage: React.FC = () => {
                 }}
               >
                 <div style={{ fontWeight: 700, fontSize: "1rem" }}>
-                  Connect TransUnion to start screening
+                  Connect screening provider to start screening
                 </div>
                 <div style={{ color: text.muted, fontSize: "0.95rem" }}>
-                  Before you can screen a tenant in RentChain, connect your TransUnion membership
-                  credentials.
+                  Before you can screen a tenant in RentChain, connect the configured screening
+                  provider credentials.
                 </div>
                 <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
                   <Button
                     type="button"
                     onClick={() => navigate("/applications?openTransUnionConnect=1")}
                   >
-                    Connect TransUnion
+                    Connect provider
                   </Button>
                   <Button
                     type="button"
                     variant="secondary"
                     onClick={() => navigate("/applications?openTransUnionAccess=1")}
                   >
-                    Get Access
+                    Get provider access
                   </Button>
                 </div>
               </div>

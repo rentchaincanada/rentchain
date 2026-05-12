@@ -61,6 +61,7 @@ import {
   SCREENING_ENABLED,
   getUiLocale,
   screeningComingSoonLabel,
+  screeningComingSoonNotice,
   screeningUnavailableMessage,
 } from "../config/screening";
 import { ApplicationDecisionSummaryCard } from "@/components/applications/ApplicationDecisionSummaryCard";
@@ -185,6 +186,13 @@ const REQUEST_INFO_OPTIONS: Array<{ value: RequestInfoChecklistItem; label: stri
 const formatScreeningStatus = (value?: string | null) => {
   if (!value) return "unknown";
   return value.replace(/_/g, " ");
+};
+
+const formatScreeningProviderLabel = (value?: string | null) => {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (!normalized) return "Configured screening provider";
+  if (normalized === "transunion" || normalized === "transunion_manual") return "TransUnion";
+  return String(value);
 };
 
 const formatUnitLabel = (value?: string | null) => {
@@ -421,10 +429,7 @@ const ApplicationsPage: React.FC = () => {
   }, []);
   const uiLocale = getUiLocale();
   const screeningComingSoonText = screeningComingSoonLabel(uiLocale);
-  const screeningComingSoonDetailText =
-    uiLocale === "fr"
-      ? "Verification de credit - bientot disponible."
-      : "Credit screening - coming soon.";
+  const screeningComingSoonDetailText = screeningComingSoonNotice(uiLocale);
   const CONSENT_VERSION = "v1.0";
   const onboarding = useOnboardingState();
   const propertiesCount = propertyRecords.length;
@@ -560,7 +565,7 @@ const ApplicationsPage: React.FC = () => {
       setTransUnionIntegration(data);
     } catch (err: any) {
       showToast({
-        message: "Unable to load TransUnion connection",
+        message: "Unable to load screening provider connection",
         description: err?.message || "",
         variant: "error",
       });
@@ -1840,8 +1845,8 @@ const ApplicationsPage: React.FC = () => {
     } catch (err: any) {
       if (String(err?.message || "").includes("transunion_not_connected")) {
         showToast({
-          message: "Connect TransUnion",
-          description: "Connect your TransUnion membership before starting screening.",
+          message: "Connect screening provider",
+          description: "Connect the configured screening provider before starting screening.",
           variant: "warning",
         });
         setTransUnionConnectOpen(true);
@@ -2412,8 +2417,8 @@ const ApplicationsPage: React.FC = () => {
                         Ready to start your first screening
                       </div>
                       <div style={{ color: text.muted, lineHeight: 1.6 }}>
-                        Your TransUnion connection is active. Next step: choose an applicant from this
-                        list, then open screening from that application.
+                        Your screening provider connection is active. Next step: choose an applicant
+                        from this list, then open screening from that application.
                       </div>
                       <div style={{ color: text.subtle, fontSize: "0.9rem" }}>
                         Start with the most review-ready applicant to reach your first completed
@@ -2849,7 +2854,7 @@ const ApplicationsPage: React.FC = () => {
                         width: "fit-content",
                       }}
                     >
-                      Powered by TransUnion
+                      Powered by RentChain screening workflow
                       <span style={{ fontWeight: 400, color: text.subtle }}>Soft inquiry (no score impact)</span>
                     </div>
                     <div className="rc-wrap-row">
@@ -2866,7 +2871,9 @@ const ApplicationsPage: React.FC = () => {
                         <span style={{ fontSize: 12, color: text.subtle }}>Refreshing…</span>
                       ) : null}
                       {screeningStatus?.provider ? (
-                        <span style={{ fontSize: 12, color: text.subtle }}>Provider: {screeningStatus.provider}</span>
+                        <span style={{ fontSize: 12, color: text.subtle }}>
+                          Provider: {formatScreeningProviderLabel(screeningStatus.provider)}
+                        </span>
                       ) : null}
                     </div>
                     <div style={{ fontSize: 13, color: text.muted }}>
@@ -2956,7 +2963,7 @@ const ApplicationsPage: React.FC = () => {
                     Screening is unavailable on your current plan.
                   </div>
                 ) : transUnionLoading ? (
-                  <div style={{ color: text.muted }}>Loading TransUnion connection…</div>
+                  <div style={{ color: text.muted }}>Loading screening provider connection...</div>
                 ) : !isTransUnionConnected ? (
                   <Card
                     style={{
@@ -2967,19 +2974,19 @@ const ApplicationsPage: React.FC = () => {
                     }}
                   >
                     <div style={{ fontWeight: 700, fontSize: "1rem" }}>
-                      Connect TransUnion to continue
+                      Connect screening provider to continue
                     </div>
                     <div style={{ color: text.muted, lineHeight: 1.6 }}>
-                      Before you can screen a tenant in RentChain, connect your TransUnion
-                      membership credentials. If you are still waiting on credentialing, start with
+                      Before you can screen a tenant in RentChain, connect the configured screening
+                      provider credentials. If you are still waiting on provider access, start with
                       the guided access steps here.
                     </div>
                     <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
                       <Button type="button" onClick={() => setTransUnionConnectOpen(true)}>
-                        Connect TransUnion to Continue
+                        Connect provider to continue
                       </Button>
                       <Button type="button" variant="secondary" onClick={() => openTransUnionAccess("applications_page")}>
-                        Get TransUnion Access
+                        Get provider access
                       </Button>
                     </div>
                   </Card>
@@ -3168,7 +3175,7 @@ const ApplicationsPage: React.FC = () => {
                   <div style={{ display: "grid", gap: 6, fontSize: 12 }}>
                     <div style={{ fontWeight: 700, fontSize: 13 }}>Screening receipt</div>
                     {receiptStatusLabel ? <div>Status: {receiptStatusLabel}</div> : null}
-                    <div>Provider: {screeningReceipt.provider || "TransUnion"}</div>
+                    <div>Provider: {formatScreeningProviderLabel(screeningReceipt.provider)}</div>
                     <div>Inquiry type: {screeningReceipt.inquiryType || "Soft inquiry (no score impact)"}</div>
                     <div>
                       Consent: {screeningReceipt.consentVersion || CONSENT_VERSION}

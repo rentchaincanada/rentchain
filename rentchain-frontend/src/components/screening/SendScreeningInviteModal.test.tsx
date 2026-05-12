@@ -58,6 +58,9 @@ describe("SendScreeningInviteModal", () => {
 
     render(<SendScreeningInviteModal open onClose={vi.fn()} />);
 
+    expect(screen.getByText("Powered by RentChain screening workflow")).toBeInTheDocument();
+    expect(screen.queryByText("Powered by TransUnion")).not.toBeInTheDocument();
+
     fireEvent.click(screen.getByRole("button", { name: "Send invite" }));
 
     expect(openUpgrade).toHaveBeenCalled();

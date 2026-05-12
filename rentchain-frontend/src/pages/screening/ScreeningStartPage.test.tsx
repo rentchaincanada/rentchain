@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 vi.mock("../../api/apiFetch", () => ({
   apiFetch: vi.fn(async () => ({
     error: "transunion_not_connected",
-    message: "Connect your TransUnion membership before starting screening.",
+    message: "Connect the configured screening provider before starting screening.",
   })),
 }));
 
@@ -42,21 +42,22 @@ afterEach(() => {
 });
 
 describe("ScreeningStartPage", () => {
-  it("shows the TransUnion interstitial when TransUnion is not connected", async () => {
+  it("shows the provider-neutral interstitial when provider access is not connected", async () => {
     render(
       <MemoryRouter initialEntries={["/screening/start?applicationId=app-1"]}>
         <ScreeningStartPage />
       </MemoryRouter>
     );
 
-    expect((await screen.findAllByText("Connect TransUnion to start screening")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("Connect screening provider to start screening")).length).toBeGreaterThan(0);
     expect(
       screen.getByText(
-        "Before you can screen a tenant in RentChain, connect your TransUnion membership credentials."
+        "Before you can screen a tenant in RentChain, connect the configured screening provider credentials."
       )
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Connect TransUnion" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Get Access" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Connect provider" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Get provider access" })).toBeInTheDocument();
+    expect(screen.queryByText(/Connect TransUnion/i)).not.toBeInTheDocument();
   });
 });
 

@@ -273,7 +273,7 @@ export function SendScreeningInviteModal({
             width: "fit-content",
           }}
         >
-          Powered by TransUnion
+          Powered by RentChain screening workflow
           <span style={{ fontWeight: 400, color: text.subtle }}>Soft inquiry (no score impact)</span>
         </div>
         <div style={{ fontSize: 12, color: text.subtle }}>

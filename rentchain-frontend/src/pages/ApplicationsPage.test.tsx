@@ -250,6 +250,7 @@ vi.mock("../config/screening", () => ({
   SCREENING_ENABLED: true,
   getUiLocale: () => "en",
   screeningComingSoonLabel: () => "Credit screening - coming soon.",
+  screeningComingSoonNotice: () => "Credit screening is coming soon. We'll notify you when it's available.",
   screeningUnavailableMessage: () => "Screening unavailable.",
 }));
 
