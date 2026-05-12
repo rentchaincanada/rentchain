@@ -54,6 +54,7 @@ export interface TenantRecord {
   tenantScoreGrade?: RiskGrade | null;
   tenantScoreConfidence?: number | null;
   tenantScoreTimeline?: TenantScoreTimelineEntry[];
+  source?: string | null;
   createdAt?: string | number | null;
 }
 
@@ -183,6 +184,15 @@ function pickString(...values: any[]): string | null {
   return null;
 }
 
+function normalizeIdentityString(value: any): string {
+  return String(value || "").trim().toLowerCase();
+}
+
+function normalizeTenantEmail(value: any): string | null {
+  const next = normalizeIdentityString(value);
+  return next && next.includes("@") ? next : null;
+}
+
 function isHiddenFromActiveLists(tenant: Pick<TenantRecord, "id" | "hiddenFromActiveLists">) {
   return tenant.hiddenFromActiveLists === true || isTargetedHiddenTenantId(tenant.id);
 }
@@ -207,7 +217,7 @@ function mapTenant(docId: string, data: any): TenantRecord {
     cleanupReason: data.cleanupReason ?? null,
     cleanupBatch: data.cleanupBatch ?? null,
     propertyId: data.propertyId ?? null,
-    applicationId: data.applicationId ?? data.application_id ?? null,
+    applicationId: data.applicationId ?? data.application_id ?? data.sourceApplication ?? null,
     unitId: data.unitId ?? data.unit ?? null,
     propertyName: data.propertyName ?? data.property ?? null,
     unit: data.unit ?? data.unitLabel ?? null,
@@ -223,8 +233,67 @@ function mapTenant(docId: string, data: any): TenantRecord {
     tenantScoreGrade: data.tenantScoreGrade ?? data.tenantScore?.grade ?? null,
     tenantScoreConfidence: data.tenantScoreConfidence ?? data.tenantScore?.confidence ?? null,
     tenantScoreTimeline: Array.isArray(data.tenantScoreTimeline) ? data.tenantScoreTimeline : [],
+    source: data.source ?? null,
     createdAt: createdAtIso ?? createdAt ?? null,
   };
+}
+
+function tenantIdentityKeys(tenant: TenantRecord): string[] {
+  const landlordId = normalizeIdentityString(tenant.landlordId);
+  if (!landlordId) return [`tenant:${tenant.id}`];
+
+  const applicationId = normalizeIdentityString(tenant.applicationId);
+  const email = normalizeTenantEmail(tenant.email);
+  const propertyId = normalizeIdentityString(tenant.propertyId);
+  const unitId = normalizeIdentityString(tenant.unitId || tenant.unit);
+  const keys: string[] = [];
+
+  if (applicationId) keys.push(`application:${landlordId}:${applicationId}`);
+  if (email && propertyId && unitId) keys.push(`unit_email:${landlordId}:${email}:${propertyId}:${unitId}`);
+  if (email && applicationId) keys.push(`application_email:${landlordId}:${email}:${applicationId}`);
+
+  return keys.length ? keys : [`tenant:${tenant.id}`];
+}
+
+function tenantCanonicalRank(tenant: TenantRecord): number {
+  const source = normalizeIdentityString((tenant as any).source);
+  let score = 0;
+  if (source === "application_conversion") score += 1000;
+  if (tenant.applicationId) score += 300;
+  if (source === "invite") score -= 100;
+  if (tenant.currentLeaseId) score += 80;
+  if (tenant.propertyId) score += 20;
+  if (tenant.unitId) score += 20;
+  if (tenant.propertyName) score += 5;
+  if (tenant.unit && normalizeIdentityString(tenant.unit) !== normalizeIdentityString(tenant.unitId)) score += 5;
+  score += Math.min(toMillis(tenant.createdAt) ?? 0, 9_999_999_999_999) / 1_000_000_000_000;
+  return score;
+}
+
+function pickCanonicalTenant(left: TenantRecord, right: TenantRecord): TenantRecord {
+  const leftRank = tenantCanonicalRank(left);
+  const rightRank = tenantCanonicalRank(right);
+  if (rightRank > leftRank) return right;
+  if (rightRank < leftRank) return left;
+  return String(right.id).localeCompare(String(left.id)) < 0 ? right : left;
+}
+
+function dedupeTenantRecords(tenants: TenantRecord[]): TenantRecord[] {
+  const groupByKey = new Map<string, string>();
+  const groups = new Map<string, TenantRecord[]>();
+
+  for (const tenant of tenants) {
+    const keys = tenantIdentityKeys(tenant);
+    const groupId = keys.map((key) => groupByKey.get(key)).find(Boolean) || keys[0];
+    const group = groups.get(groupId) || [];
+    group.push(tenant);
+    groups.set(groupId, group);
+    for (const key of keys) groupByKey.set(key, groupId);
+  }
+
+  return Array.from(groups.values()).map((group) =>
+    group.reduce((winner, candidate) => pickCanonicalTenant(winner, candidate))
+  );
 }
 
 async function loadTenantRecord(tenantId: string, landlordId?: string | null): Promise<TenantRecord | null> {
@@ -334,11 +403,16 @@ async function loadPropertyRecord(propertyId: string | null | undefined) {
   }
 }
 
-async function loadUnitRecord(propertyId: string | null | undefined, unitId: string | null | undefined, unitLabel?: string | null) {
+async function loadUnitRecord(
+  propertyId: string | null | undefined,
+  unitId: string | null | undefined,
+  unitLabel?: string | null,
+  landlordId?: string | null
+) {
   const propertyKey = String(propertyId || "").trim();
   if (!propertyKey) return null;
   try {
-    const units = await loadUnitsForProperty(db as any, propertyKey);
+    const units = await loadUnitsForProperty(db as any, propertyKey, landlordId);
     const candidates = [
       resolveUnitReference(units, unitId),
       resolveUnitReference(units, unitLabel),
@@ -442,23 +516,52 @@ export async function getTenantsList(opts: TenantQueryOptions = {}): Promise<Ten
       out.push(tenant);
     });
 
-    out.sort((a, b) => {
+    const deduped = dedupeTenantRecords(out);
+    const hydrated = await Promise.all(
+      deduped.map((tenant) => hydrateTenantDisplayFields(tenant, landlordId))
+    );
+
+    hydrated.sort((a, b) => {
       const aTs = toMillis(a.createdAt);
       const bTs = toMillis(b.createdAt);
       return (bTs ?? 0) - (aTs ?? 0);
     });
 
-    if (out.length === 0 && !landlordId) {
+    if (hydrated.length === 0 && !landlordId) {
       console.warn("[tenantDetailsService] No tenants collection, using FALLBACK_TENANTS");
       return [...FALLBACK_TENANTS];
     }
 
-    return out;
+    return hydrated;
   } catch (err) {
     console.error("[tenantDetailsService] getTenantsList error", err);
     if (landlordId) return [];
     return [...FALLBACK_TENANTS];
   }
+}
+
+async function hydrateTenantDisplayFields(tenant: TenantRecord, landlordId?: string | null): Promise<TenantRecord> {
+  const hydrated: TenantRecord = { ...tenant };
+  const property = await loadPropertyRecord(hydrated.propertyId || null);
+  const unit = await loadUnitRecord(
+    hydrated.propertyId || null,
+    hydrated.unitId || null,
+    hydrated.unit || null,
+    landlordId
+  );
+
+  const propertyName = pickString(hydrated.propertyName, property?.name);
+  if (propertyName) hydrated.propertyName = propertyName;
+
+  const resolvedUnitLabel = pickString(
+    unit?.unitNumber,
+    unit?.label,
+    unit?.name,
+    normalizeIdentityString(hydrated.unit) !== normalizeIdentityString(hydrated.unitId) ? hydrated.unit : null
+  );
+  if (resolvedUnitLabel) hydrated.unit = resolvedUnitLabel;
+
+  return hydrated;
 }
 
 export async function getTenantDetailBundle(tenantId: string, opts: TenantQueryOptions = {}) {
@@ -485,7 +588,8 @@ export async function getTenantDetailBundle(tenantId: string, opts: TenantQueryO
   const unit = await loadUnitRecord(
     currentLeaseRecord?.propertyId || tenant?.propertyId || null,
     currentLeaseRecord?.unitId || tenant?.unitId || tenant?.unit || null,
-    currentLeaseRecord?.unitLabel || tenant?.unit || null
+    currentLeaseRecord?.unitLabel || tenant?.unit || null,
+    landlordId
   );
   const latestLeaseNoticeSummary = await loadLatestLeaseNoticeSummary(currentLeaseRecord?.id || null, currentLeaseRecord?.status || null);
 
@@ -509,9 +613,14 @@ export async function getTenantDetailBundle(tenantId: string, opts: TenantQueryO
     ? {
         tenantId: tenant.id,
         propertyId: tenant.propertyId || null,
-        propertyName: tenant.propertyName ?? "Unknown Property",
+        propertyName: property?.name || tenant.propertyName || "Unknown Property",
         unitId: tenant.unitId || null,
-        unit: tenant.unit ?? "N/A",
+        unit: pickString(
+          unit?.unitNumber,
+          unit?.label,
+          unit?.name,
+          normalizeIdentityString(tenant.unit) !== normalizeIdentityString(tenant.unitId) ? tenant.unit : null
+        ) || "N/A",
         leaseStart: tenant.leaseStart ?? null,
         leaseEnd: tenant.leaseEnd ?? null,
         monthlyRent: Number(tenant.monthlyRent ?? 0),
