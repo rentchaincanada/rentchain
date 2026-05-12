@@ -5,6 +5,17 @@ import { colors, radius, spacing, text as textTokens } from "../../styles/tokens
 
 export function formatDate(value?: string | number | null) {
   if (!value) return "—";
+  if (typeof value === "string") {
+    const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+    if (dateOnly) {
+      const [, year, month, day] = dateOnly;
+      return new Date(Number(year), Number(month) - 1, Number(day)).toLocaleDateString(undefined, {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      });
+    }
+  }
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "—";
   return date.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });

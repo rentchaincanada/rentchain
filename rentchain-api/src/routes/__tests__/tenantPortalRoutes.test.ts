@@ -94,6 +94,11 @@ const dbMock = {
       };
     },
     where: (field: string, op: string, value: any) => ({
+      orderBy: () => ({
+        limit: (count: number) => ({
+          get: async () => queryCollection(name, [{ field, op, value }], count),
+        }),
+      }),
       limit: (count: number) => ({
         get: async () => queryCollection(name, [{ field, op, value }], count),
       }),
@@ -2918,6 +2923,56 @@ describe("tenantPortalRoutes foundation", () => {
     expect(res.status).toBe(200);
     expect(res.body?.data?.unit?.label).toBe("4B");
     expect(JSON.stringify(res.body?.data?.unit)).not.toContain("unit-raw-1");
+  });
+
+  it("shows existing tenancy-scoped landlord replies in the tenant communications workspace", async () => {
+    ensureCollection("conversations").set("landlord-1__tenant-1__unit-1", {
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      leaseId: "lease-1",
+      lastMessageAt: null,
+    });
+    ensureCollection("conversations").set("landlord-thread-1", {
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      leaseId: "lease-1",
+      lastMessageAt: 1800,
+    });
+    ensureCollection("messages").set("message-1", {
+      conversationId: "landlord-thread-1",
+      senderRole: "landlord",
+      body: "Please confirm your move-in time.",
+      createdAtMs: 1800,
+    });
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/communications",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.data?.thread?.id).toBe("landlord-thread-1");
+    expect(res.body?.data?.thread?.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          senderRole: "landlord",
+          body: "Please confirm your move-in time.",
+        }),
+      ])
+    );
   });
 
   it("recognizes converted rentalApplications as linked tenant profile application context", async () => {

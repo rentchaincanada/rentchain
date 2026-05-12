@@ -5,6 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 import TenantProfilePage from "./TenantProfilePage";
 import TenantMessagesCenterPage from "./TenantMessagesCenterPage";
 import TenantActivityPage from "./TenantActivityPage";
+import { formatDate } from "./TenantWorkspaceShared";
 import { TenantNav } from "../../components/layout/TenantNav";
 
 const tenantProfileApi = vi.hoisted(() => ({
@@ -157,7 +158,7 @@ describe("tenant profile and communications pages", () => {
     );
 
     expect(await screen.findByText(/Tenant Profile/i)).toBeInTheDocument();
-    expect(screen.getByText(/This is your organized rental profile space/i)).toBeInTheDocument();
+    expect(screen.getByText(/rental profile space|tenant-safe projections only/i)).toBeInTheDocument();
     expect(screen.getByText(/Profile completion/i)).toBeInTheDocument();
     expect(await screen.findByDisplayValue(/Taylor Tenant/i)).toBeInTheDocument();
     expect((await screen.findAllByText(/Verification is still in progress/i)).length).toBeGreaterThan(0);
@@ -171,6 +172,11 @@ describe("tenant profile and communications pages", () => {
     expect(screen.getByRole("link", { name: /Open document vault/i })).toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: /Review requested documents/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("link", { name: /Open documents|Review documents/i }).length).toBeGreaterThan(0);
+  });
+
+  it("formats tenant rental record date-only lease dates without shifting backward", () => {
+    expect(formatDate("2026-05-01")).toBe("May 1, 2026");
+    expect(formatDate("2027-04-30")).toBe("Apr 30, 2027");
   });
 
   it("tenant profile page saves bounded profile edits safely", async () => {
