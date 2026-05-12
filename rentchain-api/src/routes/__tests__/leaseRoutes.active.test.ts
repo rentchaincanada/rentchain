@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { leaseService } from "../../services/leaseService";
 
 const getSignedDownloadUrlMock = vi.fn(async () => "https://signed.example.com/lease.pdf");
 
@@ -148,6 +149,7 @@ async function invokeRouter(router: any, options: {
 describe("leaseRoutes GET /active", () => {
   beforeEach(() => {
     resetFakeDb();
+    leaseService.getAll().splice(0);
     getSignedDownloadUrlMock.mockClear();
   });
 
@@ -365,6 +367,130 @@ describe("leaseRoutes GET /active", () => {
     expect(res.body?.leases.map((lease: { id: string }) => lease.id)).toEqual(["lease-visible"]);
   });
 
+  it("marks a direct created active lease unit occupied in embedded and standalone storage", async () => {
+    seedDoc("properties", "prop-1", {
+      landlordId: "landlord-1",
+      name: "Harbour View",
+      units: [
+        { id: "unit-1", unitNumber: "101", status: "vacant", occupancyStatus: "vacant" },
+        { id: "unit-2", unitNumber: "102", status: "vacant", occupancyStatus: "vacant" },
+      ],
+    });
+    seedDoc("units", "unit-1", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitNumber: "101",
+      label: "Unit 101",
+      status: "vacant",
+      occupancyStatus: "vacant",
+    });
+    seedDoc("tenants", "tenant-1", {
+      landlordId: "landlord-1",
+      fullName: "Jane Tenant",
+      email: "jane@example.com",
+    });
+
+    const router = (await import("../leaseRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/",
+      body: {
+        tenantId: "tenant-1",
+        propertyId: "prop-1",
+        unitNumber: "unit-1",
+        monthlyRent: 1850,
+        startDate: "2026-01-01",
+      },
+    });
+
+    expect(res.status).toBe(201);
+    const leaseId = String(res.body?.lease?.id || "");
+    expect(leaseId).toBeTruthy();
+    expect(res.body?.lease).toEqual(
+      expect.objectContaining({
+        unitId: "unit-1",
+        unitNumber: "101",
+        unitLabel: "101",
+      })
+    );
+
+    const leaseSnap = await fakeDb.collection("leases").doc(leaseId).get();
+    expect(leaseSnap.data()).toEqual(
+      expect.objectContaining({
+        unitId: "unit-1",
+        unitNumber: "101",
+        unitLabel: "101",
+      })
+    );
+
+    const summaryRes = await invokeRouter(router, { method: "GET", url: `/${leaseId}` });
+    expect(summaryRes.status).toBe(200);
+    expect(summaryRes.body?.lease).toEqual(
+      expect.objectContaining({
+        unitId: "unit-1",
+        unitNumber: "101",
+        unitLabel: "101",
+      })
+    );
+    expect(JSON.stringify(summaryRes.body?.lease || {})).not.toContain("Unit unit-1");
+
+    const tenantLeasesRes = await invokeRouter(router, { method: "GET", url: "/tenant/tenant-1" });
+    expect(tenantLeasesRes.status).toBe(200);
+    expect(tenantLeasesRes.body?.leases?.[0]).toEqual(
+      expect.objectContaining({
+        unitId: "unit-1",
+        unitNumber: "101",
+        unitLabel: "101",
+      })
+    );
+
+    const propertySnap = await fakeDb.collection("properties").doc("prop-1").get();
+    expect(propertySnap.data()?.units).toEqual([
+      expect.objectContaining({
+        id: "unit-1",
+        status: "occupied",
+        occupancyStatus: "occupied",
+        currentTenantId: "tenant-1",
+        currentLeaseId: leaseId,
+        tenantName: "Jane Tenant",
+        tenantFullName: "Jane Tenant",
+        currentTenantName: "Jane Tenant",
+      }),
+      expect.objectContaining({ id: "unit-2", status: "vacant" }),
+    ]);
+    const unitSnap = await fakeDb.collection("units").doc("unit-1").get();
+    expect(unitSnap.data()).toEqual(
+      expect.objectContaining({
+        status: "occupied",
+        occupancyStatus: "occupied",
+        currentTenantId: "tenant-1",
+        currentLeaseId: leaseId,
+        tenantName: "Jane Tenant",
+        tenantFullName: "Jane Tenant",
+        currentTenantName: "Jane Tenant",
+        occupancySource: "canonical_lease",
+      })
+    );
+  });
+
+  it("does not block direct lease creation when occupancy sync cannot find a unit", async () => {
+    const router = (await import("../leaseRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/",
+      body: {
+        tenantId: "tenant-1",
+        propertyId: "prop-missing",
+        unitNumber: "unit-missing",
+        monthlyRent: 1850,
+        startDate: "2026-01-01",
+      },
+    });
+
+    expect(res.status).toBe(201);
+    expect(res.body?.lease?.id).toBeTruthy();
+  });
+
   it("enables rent collection for an owned eligible lease", async () => {
     seedDoc("leases", "lease-1", {
       landlordId: "landlord-1",
@@ -553,6 +679,17 @@ describe("leaseRoutes GET /active", () => {
       createdAt: 1,
       updatedAt: 2,
     });
+    seedDoc("units", "unit-1", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitNumber: "101",
+      status: "occupied",
+      occupancyStatus: "occupied",
+      tenantId: "tenant-1",
+      currentTenantId: "tenant-1",
+      leaseId: "lease-1",
+      currentLeaseId: "lease-1",
+    });
 
     const router = (await import("../leaseRoutes")).default;
     const res = await invokeRouter(router, { method: "POST", url: "/lease-1/end", body: {} });
@@ -563,6 +700,18 @@ describe("leaseRoutes GET /active", () => {
       expect.objectContaining({ id: "unit-1", unitNumber: "101", status: "vacant" }),
       expect.objectContaining({ id: "unit-2", unitNumber: "102", status: "occupied" }),
     ]);
+    const unitSnap = await fakeDb.collection("units").doc("unit-1").get();
+    expect(unitSnap.data()).toEqual(
+      expect.objectContaining({
+        status: "vacant",
+        occupancyStatus: "vacant",
+        tenantId: null,
+        currentTenantId: null,
+        leaseId: null,
+        currentLeaseId: null,
+        occupancySource: "lease_end",
+      })
+    );
   });
 
   it("restores an ended firestore lease and marks the matched unit occupied", async () => {

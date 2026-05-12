@@ -82,9 +82,9 @@ async function findUnitDoc(propertyId: string, landlordId: string | null, unitId
   const snap = await db.collection("units").where("propertyId", "==", propertyId).get();
   const matches = snap.docs
     .map((doc: any) => ({ id: doc.id, data: doc.data() || {} }))
-    .filter(({ data }: any) => {
+    .filter(({ id, data }: any) => {
       if (landlordId && asString(data?.landlordId) && asString(data?.landlordId) !== landlordId) return false;
-      return unitMatches({ id: data?.id || data?.unitId, ...data }, unitId);
+      return unitMatches({ ...data, id: data?.id || data?.unitId || id }, unitId);
     });
   if (matches.length !== 1) return null;
   return matches[0];
@@ -105,6 +105,24 @@ async function updateEmbeddedPropertyUnit(propertyId: string, unitId: string, pa
   );
   await propertyRef.set({ units: nextUnits, updatedAt: Date.now() }, { merge: true });
   return true;
+}
+
+async function loadTenantDisplayFields(tenantId: string): Promise<Record<string, string>> {
+  const snap = await db.collection("tenants").doc(tenantId).get().catch(() => null);
+  if (!snap?.exists) return {};
+  const tenant = snap.data() || {};
+  const displayName = asString(
+    (tenant as any)?.fullName ||
+      (tenant as any)?.name ||
+      (tenant as any)?.tenantName ||
+      (tenant as any)?.displayName
+  );
+  if (!displayName) return {};
+  return {
+    tenantName: displayName,
+    tenantFullName: displayName,
+    currentTenantName: displayName,
+  };
 }
 
 export async function syncPropertyUnitOccupancyForTenantContext(
@@ -135,6 +153,7 @@ export async function syncPropertyUnitOccupancyForTenantContext(
   const unitReference = leaseUnitId || unitId;
 
   const now = Date.now();
+  const tenantDisplayFields = await loadTenantDisplayFields(tenantId);
   const occupancyPatch = {
     status: "occupied",
     occupancyStatus: "occupied",
@@ -143,6 +162,7 @@ export async function syncPropertyUnitOccupancyForTenantContext(
     leaseId,
     currentLeaseId: leaseId,
     applicationId: asString(input.applicationId),
+    ...tenantDisplayFields,
     occupancySource: "canonical_lease",
     occupancyUpdatedAt: now,
     updatedAt: now,

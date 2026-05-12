@@ -116,6 +116,20 @@ vi.mock("../../services/leaseCanonicalizationService", () => ({
       label: String(doc.data()?.unitNumber || "").trim(),
     }));
   }),
+  resolveUnitReference: vi.fn((units: any[], reference: any) => {
+    const target = String(reference || "").trim().toLowerCase();
+    const unit = units.find((candidate) =>
+      [candidate.id, candidate.unitNumber, candidate.label]
+        .map((value) => String(value || "").trim().toLowerCase())
+        .includes(target)
+    );
+    return {
+      unit: unit || null,
+      matchedBy: unit ? "test" : null,
+      ambiguous: false,
+      candidateIds: unit ? [unit.id] : [],
+    };
+  }),
   toCanonicalLeaseRecord: vi.fn((id: string, raw: any) => ({
     id,
     status: String(raw?.status || "").trim().toLowerCase(),
