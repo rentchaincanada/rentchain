@@ -12,9 +12,8 @@ function clone(value: any) {
   return JSON.parse(JSON.stringify(value));
 }
 
-const { sendEmailMock, addConvertedTenantMock, logAuditEventMock, createTenancyIfMissingMock } = vi.hoisted(() => ({
+const { sendEmailMock, logAuditEventMock, createTenancyIfMissingMock } = vi.hoisted(() => ({
   sendEmailMock: vi.fn(async () => undefined),
-  addConvertedTenantMock: vi.fn(),
   logAuditEventMock: vi.fn(async () => undefined),
   createTenancyIfMissingMock: vi.fn(async () => undefined),
 }));
@@ -54,7 +53,6 @@ vi.mock("../../config/firebase", () => ({
   },
 }));
 
-vi.mock("../tenantDetailsService", () => ({ addConvertedTenant: addConvertedTenantMock }));
 vi.mock("../propertyService", () => ({ propertyService: { getById: vi.fn(() => null) } }));
 vi.mock("../screeningsService", () => ({ runScreeningWithCredits: vi.fn() }));
 vi.mock("../auditEventsService", () => ({ logAuditEvent: logAuditEventMock }));
@@ -72,7 +70,6 @@ describe("applicationConversionService", () => {
   beforeEach(() => {
     collections.clear();
     sendEmailMock.mockClear();
-    addConvertedTenantMock.mockClear();
     logAuditEventMock.mockClear();
     createTenancyIfMissingMock.mockClear();
     process.env.EMAIL_FROM = "noreply@rentchain.test";
@@ -109,6 +106,44 @@ describe("applicationConversionService", () => {
     expect(invites[0]?.token_hash).toBeTruthy();
     expect(invites[0]?.token).toBeUndefined();
     expect(invites[0]?.application_id).toBe("app-1");
+    expect(invites[0]?.tenant_id).toBe(result.tenantId);
+    expect(ensureCollection("tenants").size).toBe(1);
+    expect(ensureCollection("tenants").get(result.tenantId)).toMatchObject({
+      id: result.tenantId,
+      landlordId: "landlord-1",
+      applicationId: "app-1",
+      source: "application_conversion",
+    });
     expect(ensureCollection("rentalApplications").get("app-1")?.convertedTenantId).toBe(result.tenantId);
+  });
+
+  it("does not create another tenant when conversion is repeated for the same application", async () => {
+    ensureCollection("rentalApplications").set("app-repeat", {
+      id: "app-repeat",
+      landlordId: "landlord-1",
+      propertyId: "property-1",
+      unitId: "unit-1",
+      applicantEmail: "repeat@example.com",
+      applicantFullName: "Repeat Tenant",
+      status: "APPROVED",
+    });
+
+    const { convertApplicationToTenant } = await import("../applicationConversionService");
+    const first = await convertApplicationToTenant({
+      landlordId: "landlord-1",
+      applicationId: "app-repeat",
+      runScreening: false,
+      actorUserId: "landlord-1",
+    });
+    const second = await convertApplicationToTenant({
+      landlordId: "landlord-1",
+      applicationId: "app-repeat",
+      runScreening: false,
+      actorUserId: "landlord-1",
+    });
+
+    expect(second).toMatchObject({ tenantId: first.tenantId, alreadyConverted: true });
+    expect(ensureCollection("tenants").size).toBe(1);
+    expect(ensureCollection("tenancy_invites").size).toBe(1);
   });
 });

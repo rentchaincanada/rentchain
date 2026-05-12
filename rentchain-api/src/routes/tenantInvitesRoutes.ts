@@ -188,6 +188,7 @@ router.post("/redeem", requireAuth, async (req: any, res) => {
     invite: redeemed.invite,
     linked: {
       propertyId: redeemed.invite?.propertyId || null,
+      tenantId: redeemed.invite?.tenantId || null,
       applicationId: redeemed.invite?.applicationId || null,
       leaseId: redeemed.invite?.leaseId || null,
       rc_prop_id: redeemed.invite?.rc_prop_id || null,
