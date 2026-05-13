@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { leaseService } from "../../services/leaseService";
 
 const getSignedDownloadUrlMock = vi.fn(async () => "https://signed.example.com/lease.pdf");
+const sendEmailMock = vi.fn(async () => undefined);
 
 const { fakeDb, resetFakeDb, seedDoc } = vi.hoisted(() => {
   const store = new Map<string, Map<string, any>>();
@@ -101,6 +102,10 @@ vi.mock("../../lib/gcsSignedUrl", () => ({
   getSignedDownloadUrl: getSignedDownloadUrlMock,
 }));
 
+vi.mock("../../services/emailService", () => ({
+  sendEmail: sendEmailMock,
+}));
+
 vi.mock("../../services/stripeService", () => ({
   isStripeConfigured: () => true,
 }));
@@ -151,6 +156,9 @@ describe("leaseRoutes GET /active", () => {
     resetFakeDb();
     leaseService.getAll().splice(0);
     getSignedDownloadUrlMock.mockClear();
+    sendEmailMock.mockClear();
+    sendEmailMock.mockResolvedValue(undefined);
+    process.env.EMAIL_FROM = "noreply@example.com";
   });
 
   it("returns landlord-scoped active leases with tenant and document details", async () => {
@@ -179,6 +187,9 @@ describe("leaseRoutes GET /active", () => {
         signatureMethod: "typed",
         signatureDisplayName: "Jane Tenant",
         drawnDataUrl: "data:image/png;base64,should-not-leak",
+      },
+      landlordSignature: {
+        signedAt: "2026-01-05T13:00:00.000Z",
       },
       sourceDraftId: "draft-1",
       createdAt: 1,
@@ -265,6 +276,119 @@ describe("leaseRoutes GET /active", () => {
     );
     expect(res.body?.leases?.[0]?.tenantSignature?.drawnDataUrl).toBeUndefined();
     expect(res.body?.leases?.[0]?.paymentMethod).toBeUndefined();
+  });
+
+  it("does not project an active lease as signed without signature metadata", async () => {
+    seedDoc("properties", "prop-1", { landlordId: "landlord-1", name: "Harbour View" });
+    seedDoc("tenants", "tenant-1", { landlordId: "landlord-1", fullName: "Jane Tenant", email: "jane@example.com" });
+    seedDoc("leaseDrafts", "draft-1", { landlordId: "landlord-1", lastGeneratedSnapshotId: "snapshot-1" });
+    seedDoc("leaseSnapshots", "snapshot-1", {
+      landlordId: "landlord-1",
+      generatedFiles: [{ url: "https://files.example.com/lease.pdf" }],
+    });
+    seedDoc("leases", "lease-1", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      tenantId: "tenant-1",
+      tenantIds: ["tenant-1"],
+      primaryTenantId: "tenant-1",
+      unitId: "unit-1",
+      unitNumber: "101",
+      monthlyRent: 1850,
+      startDate: "2026-01-01",
+      endDate: "2099-12-31",
+      status: "active",
+      sourceDraftId: "draft-1",
+    });
+
+    const router = (await import("../leaseRoutes")).default;
+    const res = await invokeRouter(router, { method: "GET", url: "/active" });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.leases?.[0]).toEqual(
+      expect.objectContaining({
+        signatureStatus: "not_started",
+        signatureReadinessLabel: "Lease available",
+        leaseExecution: expect.objectContaining({
+          executionStatus: "draft",
+          requiredNextAction: "complete_lease_details",
+        }),
+      })
+    );
+  });
+
+  it("sends a non-blocking lease available email after creating a persisted lease", async () => {
+    seedDoc("properties", "prop-1", {
+      landlordId: "landlord-1",
+      name: "Harbour View",
+      units: [{ id: "unit-1", unitNumber: "101", status: "vacant", occupancyStatus: "vacant" }],
+    });
+    seedDoc("units", "unit-1", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitNumber: "101",
+      status: "vacant",
+      occupancyStatus: "vacant",
+    });
+    seedDoc("tenants", "tenant-1", { landlordId: "landlord-1", fullName: "Jane Tenant", email: "jane@example.com" });
+
+    const router = (await import("../leaseRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/",
+      body: {
+        tenantId: "tenant-1",
+        propertyId: "prop-1",
+        unitNumber: "101",
+        monthlyRent: 1850,
+        startDate: "2026-05-01",
+        endDate: "2027-04-30",
+      },
+    });
+
+    expect(res.status).toBe(201);
+    expect(res.body?.leaseNotification).toEqual(expect.objectContaining({ attempted: true, sent: true }));
+    expect(sendEmailMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: "jane@example.com",
+        subject: "Lease available in RentChain",
+      })
+    );
+  });
+
+  it("does not send lease creation email when recipient context is missing", async () => {
+    seedDoc("properties", "prop-1", {
+      landlordId: "landlord-1",
+      name: "Harbour View",
+      units: [{ id: "unit-1", unitNumber: "101", status: "vacant", occupancyStatus: "vacant" }],
+    });
+    seedDoc("units", "unit-1", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitNumber: "101",
+      status: "vacant",
+      occupancyStatus: "vacant",
+    });
+    seedDoc("tenants", "tenant-1", { landlordId: "landlord-1", fullName: "Jane Tenant" });
+
+    const router = (await import("../leaseRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/",
+      body: {
+        tenantId: "tenant-1",
+        propertyId: "prop-1",
+        unitNumber: "101",
+        monthlyRent: 1850,
+        startDate: "2026-05-01",
+      },
+    });
+
+    expect(res.status).toBe(201);
+    expect(res.body?.leaseNotification).toEqual(
+      expect.objectContaining({ attempted: false, sent: false, reason: "tenant_email_missing" })
+    );
+    expect(sendEmailMock).not.toHaveBeenCalled();
   });
 
   it("returns landlord lease payment history and no landlord actions from the lease payment status route", async () => {

@@ -246,6 +246,9 @@ describe("tenantPortalRoutes foundation", () => {
         signatureDisplayName: "Taylor Tenant",
         drawnDataUrl: "data:image/png;base64,should-not-leak",
       },
+      landlordSignature: {
+        signedAt: "2026-02-01T11:00:00.000Z",
+      },
       confidentialNotes: "private",
     });
     ensureCollection("tenants").set("tenant-1", {
@@ -762,6 +765,99 @@ describe("tenantPortalRoutes foundation", () => {
       paidAt: "2026-04-27T10:02:00.000Z",
       leaseReference: "lease-1",
     });
+  });
+
+  it("does not show lease signing complete for an active lease without signature metadata", async () => {
+    ensureCollection("leases").set("lease-1", {
+      ...(ensureCollection("leases").get("lease-1") || {}),
+      status: "active",
+      tenantSignature: null,
+      tenantSignedAt: null,
+      tenantSignatureCompletedAt: null,
+      landlordSignature: null,
+      landlordSignedAt: null,
+      landlordSignatureCompletedAt: null,
+      fullyExecutedAt: "2026-05-09T12:00:00.000Z",
+      fullySignedAt: "2026-05-09T12:00:00.000Z",
+      signatureCompletedAt: "2026-05-09T12:00:00.000Z",
+      documentUrl: "https://example.com/lease.pdf",
+    });
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/lease",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.data?.signatureStatus).toBe("not_started");
+    expect(res.body?.data?.signatureReadinessLabel).toBe("Lease available");
+    expect(res.body?.data?.leaseExecution).toEqual(
+      expect.objectContaining({
+        executionStatus: "draft",
+        requiredNextAction: "complete_lease_details",
+      })
+    );
+  });
+
+  it("does not pair missing lease document with completed execution semantics", async () => {
+    ensureCollection("leases").set("lease-1", {
+      ...(ensureCollection("leases").get("lease-1") || {}),
+      status: "active",
+      tenantSignature: null,
+      tenantSignedAt: null,
+      tenantSignatureCompletedAt: null,
+      landlordSignature: null,
+      landlordSignedAt: null,
+      landlordSignatureCompletedAt: null,
+      fullyExecutedAt: "2026-05-09T12:00:00.000Z",
+      fullySignedAt: "2026-05-09T12:00:00.000Z",
+      signatureCompletedAt: "2026-05-09T12:00:00.000Z",
+      documentUrl: null,
+      approvedDocumentUrl: null,
+      documentRef: null,
+      documentStatus: null,
+      leaseDocumentStatus: null,
+      pdfStatus: null,
+      generationStatus: null,
+    });
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/lease",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.data?.leasePdfStatus).toBe("not_available");
+    expect(res.body?.data?.leasePdfLabel).toBe("Lease document not available");
+    expect(res.body?.data?.signatureStatus).toBe("not_started");
+    expect(res.body?.data?.signatureReadinessLabel).toBe("Lease available");
+    expect(res.body?.data?.leaseExecution).toEqual(
+      expect.objectContaining({
+        executionStatus: "draft",
+        executionLabel: "Lease details ready",
+        tenantSignatureStatus: "blocked",
+        landlordSignatureStatus: "blocked",
+        completedAt: null,
+      })
+    );
   });
 
   it("creates a tenant rent payment checkout only for an eligible enabled lease", async () => {
