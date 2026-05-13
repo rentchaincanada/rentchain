@@ -231,6 +231,10 @@ type TenantDocumentItem = {
   title: string | null;
   purpose: string | null;
   purposeLabel: string | null;
+  tenantId: string | null;
+  leaseId: string | null;
+  draftId: string | null;
+  ledgerItemId: string | null;
   url: string | null;
   uploadedAt: number | null;
   nextAction: string | null;
@@ -2739,12 +2743,56 @@ function documentNextActionCopy(status: TenantDocumentStatus, nextAction: string
   }
 }
 
+function isVisibleLeaseDocumentAttachment(raw: any): boolean {
+  const category = String(raw?.category || "").trim().toLowerCase();
+  const purpose = String(raw?.purpose || "").trim().toUpperCase();
+  const purposeLabel = String(raw?.purposeLabel || "").trim().toLowerCase();
+  const title = String(raw?.title || "").trim().toLowerCase();
+  return category === "lease" || purpose === "LEASE" || purposeLabel === "lease" || title === "lease document";
+}
+
+function visibleLeaseDocumentDedupeKeys(raw: any): string[] {
+  if (!isVisibleLeaseDocumentAttachment(raw)) return [];
+  const tenantId = String(raw?.tenantId || "").trim();
+  if (!tenantId) return [];
+
+  const leaseId = String(raw?.leaseId || "").trim();
+  return [
+    `${tenantId}|lease:current|LEASE`,
+    leaseId ? `${tenantId}|lease:${leaseId}|LEASE` : null,
+  ].filter((value): value is string => Boolean(value));
+}
+
+function dedupeTenantVisibleLeaseAttachments(attachments: any[]): any[] {
+  const output: any[] = [];
+  const leaseKeySets: Set<string>[] = [];
+
+  attachments.forEach((item) => {
+    const keys = visibleLeaseDocumentDedupeKeys(item);
+    if (!keys.length) {
+      output.push(item);
+      return;
+    }
+
+    const existingIndex = leaseKeySets.findIndex((knownKeys) => keys.some((key) => knownKeys.has(key)));
+    if (existingIndex >= 0) {
+      keys.forEach((key) => leaseKeySets[existingIndex].add(key));
+      return;
+    }
+
+    output.push(item);
+    leaseKeySets.push(new Set(keys));
+  });
+
+  return output;
+}
+
 function buildTenantDocumentWorkspace(params: {
   attachments: Array<any>;
   profile: Awaited<ReturnType<typeof loadTenantProfileProjection>>;
 }) {
   const checklist = Array.isArray(params.profile?.identity?.documentChecklist) ? params.profile.identity.documentChecklist : [];
-  const attachments = Array.isArray(params.attachments) ? params.attachments : [];
+  const attachments = dedupeTenantVisibleLeaseAttachments(Array.isArray(params.attachments) ? params.attachments : []);
 
   const normalizedAttachmentMap = new Map<string, any[]>();
   attachments.forEach((item) => {
@@ -2791,6 +2839,10 @@ function buildTenantDocumentWorkspace(params: {
       title: matchedAttachment?.title ? String(matchedAttachment.title) : null,
       purpose: matchedAttachment?.purpose ? String(matchedAttachment.purpose) : null,
       purposeLabel: matchedAttachment?.purposeLabel ? String(matchedAttachment.purposeLabel) : null,
+      tenantId: matchedAttachment?.tenantId ? String(matchedAttachment.tenantId) : null,
+      leaseId: matchedAttachment?.leaseId ? String(matchedAttachment.leaseId) : null,
+      draftId: matchedAttachment?.draftId ? String(matchedAttachment.draftId) : null,
+      ledgerItemId: matchedAttachment?.ledgerItemId ? String(matchedAttachment.ledgerItemId) : null,
       url: matchedAttachment?.url ? String(matchedAttachment.url) : null,
       uploadedAt: Number(matchedAttachment?.createdAt || 0) || null,
       nextAction: documentNextActionCopy(status, String(entry?.nextStep || ""), Boolean(matchedAttachment?.url)),
@@ -2814,6 +2866,10 @@ function buildTenantDocumentWorkspace(params: {
       title: item?.title ? String(item.title) : null,
       purpose: item?.purpose ? String(item.purpose) : null,
       purposeLabel: item?.purposeLabel ? String(item.purposeLabel) : null,
+      tenantId: item?.tenantId ? String(item.tenantId) : null,
+      leaseId: item?.leaseId ? String(item.leaseId) : null,
+      draftId: item?.draftId ? String(item.draftId) : null,
+      ledgerItemId: item?.ledgerItemId ? String(item.ledgerItemId) : null,
       url: item?.url ? String(item.url) : null,
       uploadedAt: Number(item?.createdAt || 0) || null,
       nextAction: "This file has been added to your record.",

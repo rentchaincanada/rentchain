@@ -2992,6 +2992,119 @@ describe("tenantPortalRoutes foundation", () => {
     ).toBe(true);
   });
 
+  it("dedupes duplicate visible Lease attachments in the tenant document vault", async () => {
+    ensureCollection("ledgerAttachments").set("lease-generated-draft-only", {
+      tenantId: "tenant-1",
+      landlordId: "landlord-1",
+      leaseId: null,
+      draftId: "draft-1",
+      leaseSnapshotId: "snapshot-draft",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      ledgerItemId: "leaseDraft:draft-1",
+      title: "Lease document",
+      fileName: "schedule-a-v1.pdf",
+      category: "Lease",
+      purpose: "LEASE",
+      purposeLabel: "Lease",
+      url: "https://example.com/generated-lease-draft.pdf",
+      createdAt: 500,
+      source: "lease_pdf_generation",
+    });
+    ensureCollection("ledgerAttachments").set("lease-generated-old", {
+      tenantId: "tenant-1",
+      landlordId: "landlord-1",
+      leaseId: "lease-1",
+      draftId: "draft-1",
+      leaseSnapshotId: "snapshot-old",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      ledgerItemId: "lease-1",
+      title: "Lease document",
+      fileName: "schedule-a-v1.pdf",
+      category: "Lease",
+      purpose: "LEASE",
+      purposeLabel: "Lease",
+      url: "https://example.com/generated-lease-old.pdf",
+      createdAt: 600,
+      source: "lease_pdf_generation",
+    });
+    ensureCollection("ledgerAttachments").set("lease-generated-new", {
+      tenantId: "tenant-1",
+      landlordId: "landlord-1",
+      leaseId: "lease-1",
+      draftId: "draft-1",
+      leaseSnapshotId: "snapshot-new",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      ledgerItemId: "lease-1",
+      title: "Lease document",
+      fileName: "schedule-a-v1.pdf",
+      category: "Lease",
+      purpose: "LEASE",
+      purposeLabel: "Lease",
+      url: "https://example.com/generated-lease-new.pdf",
+      createdAt: 700,
+      source: "lease_pdf_generation",
+    });
+    ensureCollection("ledgerAttachments").set("lease-generated-lease-only", {
+      tenantId: "tenant-1",
+      landlordId: "landlord-1",
+      leaseId: "lease-1",
+      leaseSnapshotId: "snapshot-lease-only",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      ledgerItemId: "lease-1",
+      title: "Lease document",
+      fileName: "schedule-a-v1.pdf",
+      category: "Lease",
+      purpose: "LEASE",
+      purposeLabel: "Lease",
+      url: "https://example.com/generated-lease-current.pdf",
+      createdAt: 800,
+      source: "lease_pdf_generation",
+    });
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/attachments",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    const visibleLeaseItems = res.body?.data?.filter((item: any) => item.category === "Lease" && item.purpose === "LEASE");
+    expect(visibleLeaseItems).toHaveLength(1);
+    expect(visibleLeaseItems[0]).toEqual(
+      expect.objectContaining({
+        fileName: "schedule-a-v1.pdf",
+        url: "https://example.com/generated-lease-current.pdf",
+      })
+    );
+    expect(res.body?.summary).toEqual(
+      expect.objectContaining({
+        total: 2,
+        uploaded: 2,
+      })
+    );
+    expect(res.body?.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          title: "Government ID",
+          fileName: "id-card.pdf",
+          url: "https://example.com/id-card.pdf",
+        }),
+      ])
+    );
+  });
+
   it("rejects unauthorized tenant attachments access", async () => {
     const router = (await import("../tenantPortalRoutes")).default;
     const res = await invokeRouter(router, {

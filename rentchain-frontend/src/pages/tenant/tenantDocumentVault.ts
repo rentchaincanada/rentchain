@@ -39,6 +39,50 @@ function needsAttention(item: TenantAttachment): boolean {
   return item.status === "missing" || item.status === "needs_attention" || item.status === "reupload_requested";
 }
 
+function isVisibleLeaseAttachment(item: TenantAttachment): boolean {
+  const category = String(item.category || "").trim().toLowerCase();
+  const purpose = String(item.purpose || "").trim().toUpperCase();
+  const purposeLabel = String(item.purposeLabel || "").trim().toLowerCase();
+  const title = String(item.title || "").trim().toLowerCase();
+  const label = String(item.label || "").trim().toLowerCase();
+  return category === "lease" || purpose === "LEASE" || purposeLabel === "lease" || title === "lease document" || label.includes("lease");
+}
+
+function visibleLeaseKeys(item: TenantAttachment): string[] {
+  if (!isVisibleLeaseAttachment(item)) return [];
+  const tenantId = String(item.tenantId || "").trim() || "tenant";
+  const leaseId = String(item.leaseId || "").trim();
+  return [
+    `${tenantId}|lease:current|LEASE`,
+    leaseId ? `${tenantId}|lease:${leaseId}|LEASE` : null,
+  ].filter((value): value is string => Boolean(value));
+}
+
+function dedupeVisibleLeaseItems(items: TenantAttachment[]): TenantAttachment[] {
+  const sortedItems = [...items].sort((a, b) => Number(b.uploadedAt || b.createdAt || 0) - Number(a.uploadedAt || a.createdAt || 0));
+  const output: TenantAttachment[] = [];
+  const leaseKeySets: Set<string>[] = [];
+
+  sortedItems.forEach((item) => {
+    const keys = visibleLeaseKeys(item);
+    if (!keys.length) {
+      output.push(item);
+      return;
+    }
+
+    const existingIndex = leaseKeySets.findIndex((knownKeys) => keys.some((key) => knownKeys.has(key)));
+    if (existingIndex >= 0) {
+      keys.forEach((key) => leaseKeySets[existingIndex].add(key));
+      return;
+    }
+
+    output.push(item);
+    leaseKeySets.push(new Set(keys));
+  });
+
+  return output;
+}
+
 function statusRank(status?: TenantAttachment["status"]): number {
   switch (status) {
     case "reupload_requested":
@@ -107,8 +151,7 @@ export function buildTenantDocumentVaultView(params: {
   updatedAt?: number | null;
   access?: TenantAccessWorkspace | null;
 }): TenantDocumentVaultView {
-  const items = Array.isArray(params.items) ? [...params.items] : [];
-  const summary = params.summary;
+  const items = dedupeVisibleLeaseItems(Array.isArray(params.items) ? [...params.items] : []);
   const readyItems = items.filter(isReadyToShare);
   const missingItems = items.filter(needsAttention);
   const recentItems = [...items]
@@ -141,7 +184,7 @@ export function buildTenantDocumentVaultView(params: {
   const metrics: VaultMetric[] = [
     {
       label: "In your vault",
-      value: summary?.total ?? items.length,
+      value: items.length,
       accent: "#0f766e",
       hint: "Documents already connected to your tenant profile.",
     },
