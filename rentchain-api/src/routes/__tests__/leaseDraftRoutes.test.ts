@@ -178,6 +178,18 @@ describe("lease draft routes", () => {
     expect(generateRes.body?.ok).toBe(true);
     expect(generateRes.body?.scheduleAUrl).toContain("https://example.invalid");
     expect(String(generateRes.body?.snapshotId || "")).toBeTruthy();
+    const generatedSnapshot = store.get("leaseSnapshots")?.get(String(generateRes.body?.snapshotId || ""))?.data;
+    expect(generatedSnapshot).toEqual(
+      expect.objectContaining({
+        draftId,
+        sourceDraftId: draftId,
+        generatedFiles: [
+          expect.objectContaining({
+            url: "https://example.invalid/schedule-a.pdf",
+          }),
+        ],
+      })
+    );
 
     const attachmentDocsAfterGenerate = Array.from(store.get("ledgerAttachments")?.values() || []).map((doc) => doc.data);
     expect(attachmentDocsAfterGenerate).toEqual([
@@ -217,6 +229,130 @@ describe("lease draft routes", () => {
       })
     );
   }, 30000);
+
+  it("activates a draft using the latest durable generated snapshot when the draft pointer is missing", async () => {
+    const router = (await import("../leaseRoutes")).default;
+    const app = express();
+    app.use(express.json());
+    app.use(router);
+
+    const draftId = "draft_without_pointer";
+    await fakeDb.collection("leaseDrafts").doc(draftId).set({
+      ...payload,
+      landlordId: "landlord-1",
+      status: "generated",
+      updatedAt: 100,
+    });
+    await fakeDb.collection("leaseSnapshots").doc("snapshot-old").set({
+      ...payload,
+      landlordId: "landlord-1",
+      draftId,
+      sourceDraftId: draftId,
+      generatedAt: 100,
+      generatedFiles: [{ kind: "schedule-a-pdf", url: "https://example.invalid/old-schedule-a.pdf" }],
+    });
+    await fakeDb.collection("leaseSnapshots").doc("snapshot-new").set({
+      ...payload,
+      landlordId: "landlord-1",
+      draftId,
+      sourceDraftId: draftId,
+      generatedAt: 200,
+      generatedFiles: [{ kind: "schedule-a-pdf", url: "https://example.invalid/new-schedule-a.pdf" }],
+    });
+
+    const activateRes = await request(app).post(`/drafts/${encodeURIComponent(draftId)}/activate`).set(auth).send({});
+    expect(activateRes.status).toBe(200);
+    expect(activateRes.body?.lease).toEqual(
+      expect.objectContaining({
+        documentUrl: "https://example.invalid/new-schedule-a.pdf",
+        approvedDocumentUrl: "https://example.invalid/new-schedule-a.pdf",
+        documentRef: "https://example.invalid/new-schedule-a.pdf",
+        latestLeaseSnapshotId: "snapshot-new",
+      })
+    );
+
+    const attachmentDocs = Array.from(store.get("ledgerAttachments")?.values() || []).map((doc) => doc.data);
+    expect(attachmentDocs).toHaveLength(1);
+    expect(attachmentDocs[0]).toEqual(
+      expect.objectContaining({
+        tenantId: "tenant-1",
+        leaseId: String(activateRes.body?.leaseId || ""),
+        draftId,
+        leaseSnapshotId: "snapshot-new",
+        category: "Lease",
+        purpose: "LEASE",
+        purposeLabel: "Lease",
+        title: "Lease document",
+        fileName: "schedule-a-v1.pdf",
+        url: "https://example.invalid/new-schedule-a.pdf",
+        source: "lease_pdf_generation",
+      })
+    );
+  });
+
+  it("repairs existing activated draft document linkage without duplicating the Lease attachment", async () => {
+    const router = (await import("../leaseRoutes")).default;
+    const app = express();
+    app.use(express.json());
+    app.use(router);
+
+    const draftId = "draft_existing_lease";
+    const leaseId = "lease-existing";
+    await fakeDb.collection("leaseDrafts").doc(draftId).set({
+      ...payload,
+      landlordId: "landlord-1",
+      leaseId,
+      status: "active",
+    });
+    await fakeDb.collection("leases").doc(leaseId).set({
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      tenantIds: ["tenant-1"],
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      status: "active",
+      sourceDraftId: draftId,
+      startDate: "2026-03-01",
+      endDate: "2027-02-28",
+    });
+    await fakeDb.collection("leaseSnapshots").doc("snapshot-existing").set({
+      ...payload,
+      landlordId: "landlord-1",
+      draftId,
+      sourceDraftId: draftId,
+      generatedAt: 300,
+      generatedFiles: [{ kind: "schedule-a-pdf", url: "https://example.invalid/existing-schedule-a.pdf" }],
+    });
+
+    const firstRes = await request(app).post(`/drafts/${encodeURIComponent(draftId)}/activate`).set(auth).send({});
+    expect(firstRes.status).toBe(200);
+    expect(firstRes.body?.leaseId).toBe(leaseId);
+    expect(firstRes.body?.lease).toEqual(
+      expect.objectContaining({
+        documentUrl: "https://example.invalid/existing-schedule-a.pdf",
+        approvedDocumentUrl: "https://example.invalid/existing-schedule-a.pdf",
+        documentRef: "https://example.invalid/existing-schedule-a.pdf",
+        latestLeaseSnapshotId: "snapshot-existing",
+      })
+    );
+
+    const secondRes = await request(app).post(`/drafts/${encodeURIComponent(draftId)}/activate`).set(auth).send({});
+    expect(secondRes.status).toBe(200);
+    expect(secondRes.body?.leaseId).toBe(leaseId);
+
+    const attachmentDocs = Array.from(store.get("ledgerAttachments")?.values() || []).map((doc) => doc.data);
+    expect(attachmentDocs).toHaveLength(1);
+    expect(attachmentDocs[0]).toEqual(
+      expect.objectContaining({
+        tenantId: "tenant-1",
+        leaseId,
+        draftId,
+        leaseSnapshotId: "snapshot-existing",
+        category: "Lease",
+        url: "https://example.invalid/existing-schedule-a.pdf",
+      })
+    );
+  });
 
   it("returns inline PDF when storage upload is unavailable", async () => {
     vi.spyOn(leaseDraftsService, "generateScheduleA").mockResolvedValueOnce({
