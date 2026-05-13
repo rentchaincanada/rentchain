@@ -644,6 +644,101 @@ async function loadLeaseDocumentUrlForLease(raw: any): Promise<string | null> {
   }
 }
 
+function firstGeneratedLeasePdfFile(generatedFiles: any[]): any | null {
+  return (
+    (Array.isArray(generatedFiles) ? generatedFiles : []).find((item: any) => {
+      const url = String(item?.url || "").trim();
+      const kind = String(item?.kind || "").trim().toLowerCase();
+      return url.startsWith("https://") && (!kind || kind.includes("pdf") || kind.includes("schedule"));
+    }) || null
+  );
+}
+
+function safeAttachmentDocumentId(parts: string[]) {
+  return parts
+    .map((part) => String(part || "").trim().replace(/[^A-Za-z0-9_-]+/g, "_"))
+    .filter(Boolean)
+    .join("_")
+    .slice(0, 240);
+}
+
+async function linkGeneratedLeasePdfToTenantWorkspace(params: {
+  draft: any;
+  draftId: string;
+  landlordId: string;
+  snapshotId: string;
+  file: any;
+  actorId: string | null;
+}) {
+  const url = String(params.file?.url || "").trim();
+  if (!url.startsWith("https://")) return;
+
+  const leaseId = String(params.draft?.leaseId || "").trim() || null;
+  const propertyId = String(params.draft?.propertyId || "").trim() || null;
+  const unitId = String(params.draft?.unitId || "").trim() || null;
+  const tenantIds = Array.isArray(params.draft?.tenantIds)
+    ? params.draft.tenantIds.map((value: any) => String(value || "").trim()).filter(Boolean)
+    : [];
+  const now = Date.now();
+  const fileName = "schedule-a-v1.pdf";
+
+  if (leaseId) {
+    await db
+      .collection("leases")
+      .doc(leaseId)
+      .set(
+        {
+          documentUrl: url,
+          approvedDocumentUrl: url,
+          documentRef: url,
+          documentGeneratedAt: now,
+          leaseDocumentGeneratedAt: now,
+          latestLeaseSnapshotId: params.snapshotId,
+          updatedAt: now,
+        },
+        { merge: true }
+      );
+  }
+
+  await Promise.all(
+    tenantIds.map(async (tenantId: string) => {
+      const attachmentId = safeAttachmentDocumentId([
+        "lease",
+        params.snapshotId,
+        tenantId,
+      ]);
+      await db
+        .collection("ledgerAttachments")
+        .doc(attachmentId)
+        .set(
+          {
+            landlordId: params.landlordId,
+            tenantId,
+            leaseId,
+            draftId: params.draftId,
+            leaseSnapshotId: params.snapshotId,
+            propertyId,
+            unitId,
+            ledgerItemId: leaseId || `leaseDraft:${params.draftId}`,
+            url,
+            title: "Lease document",
+            fileName,
+            category: "Lease",
+            purpose: "LEASE",
+            purposeLabel: "Lease",
+            source: "lease_pdf_generation",
+            generatedFileKind: String(params.file?.kind || "schedule-a-pdf"),
+            sha256: String(params.file?.sha256 || "").trim() || null,
+            sizeBytes: Number(params.file?.sizeBytes || 0) || null,
+            createdAt: now,
+            createdBy: params.actorId,
+          },
+          { merge: true }
+        );
+    })
+  );
+}
+
 async function loadUnitLeaseDocumentForResponse(raw: any) {
   const leaseDocument = raw?.leaseDocument;
   if (!leaseDocument || typeof leaseDocument !== "object") return raw;
@@ -1676,13 +1771,26 @@ router.post("/drafts/:id/generate", requireLandlord, async (req: any, res: Respo
 
     const now = Date.now();
     const snapshotRef = db.collection("leaseSnapshots").doc();
+    const generatedFiles = [file];
     const snapshotDoc = {
       ...draft,
       status: "generated",
       generatedAt: now,
-      generatedFiles: [file],
+      generatedFiles,
     };
     await snapshotRef.set(snapshotDoc, { merge: false });
+
+    const generatedLeaseFile = firstGeneratedLeasePdfFile(generatedFiles);
+    if (generatedLeaseFile) {
+      await linkGeneratedLeasePdfToTenantWorkspace({
+        draft,
+        draftId: id,
+        landlordId,
+        snapshotId: snapshotRef.id,
+        file: generatedLeaseFile,
+        actorId: String(req.user?.id || req.user?.email || landlordId).trim() || null,
+      });
+    }
 
     await ref.set(
       {
@@ -1690,6 +1798,7 @@ router.post("/drafts/:id/generate", requireLandlord, async (req: any, res: Respo
         status: "generated",
         updatedAt: now,
         lastGeneratedSnapshotId: snapshotRef.id,
+        lastGeneratedDocumentUrl: generatedLeaseFile ? String(generatedLeaseFile.url || "").trim() : null,
       },
       { merge: false }
     );
@@ -1709,7 +1818,7 @@ router.post("/drafts/:id/generate", requireLandlord, async (req: any, res: Respo
       ok: true,
       snapshotId: snapshotRef.id,
       scheduleAUrl: generated.file?.url || file.url,
-      generatedFiles: [file],
+      generatedFiles,
     });
   } catch (err: any) {
     console.error("[POST /api/leases/drafts/:id/generate] error", {
@@ -1846,7 +1955,31 @@ router.post("/drafts/:draftId/activate", requireLandlord, async (req: any, res: 
       createdAt: now,
       updatedAt: now,
     };
+    const draftDocumentUrl = await loadLeaseDocumentUrlForLease({ sourceDraftId: draftId });
+    if (draftDocumentUrl) {
+      leaseRecord.documentUrl = draftDocumentUrl;
+      leaseRecord.approvedDocumentUrl = draftDocumentUrl;
+      leaseRecord.documentRef = draftDocumentUrl;
+      leaseRecord.documentGeneratedAt = now;
+      leaseRecord.leaseDocumentGeneratedAt = now;
+      leaseRecord.latestLeaseSnapshotId = String(draft?.lastGeneratedSnapshotId || "").trim() || null;
+    }
     await leaseRef.set(leaseRecord, { merge: false });
+    if (draftDocumentUrl) {
+      const snapshotId = String(draft?.lastGeneratedSnapshotId || "").trim();
+      const generatedFile = {
+        kind: "schedule-a-pdf",
+        url: draftDocumentUrl,
+      };
+      await linkGeneratedLeasePdfToTenantWorkspace({
+        draft: { ...draft, leaseId: leaseRef.id },
+        draftId,
+        landlordId,
+        snapshotId: snapshotId || `activated_${leaseRef.id}`,
+        file: generatedFile,
+        actorId: String(req.user?.id || req.user?.email || landlordId).trim() || null,
+      });
+    }
     await syncOccupancyAfterActiveLeaseWrite(
       {
         tenantId,

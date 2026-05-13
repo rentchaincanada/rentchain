@@ -2926,6 +2926,25 @@ describe("tenantPortalRoutes foundation", () => {
   });
 
   it("returns tenant-safe document states and completion guidance", async () => {
+    ensureCollection("ledgerAttachments").set("lease-generated-attachment", {
+      tenantId: "tenant-1",
+      landlordId: "landlord-1",
+      leaseId: "lease-1",
+      draftId: "draft-1",
+      leaseSnapshotId: "snapshot-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      ledgerItemId: "lease-1",
+      title: "Lease document",
+      fileName: "schedule-a-v1.pdf",
+      category: "Lease",
+      purpose: "LEASE",
+      purposeLabel: "Lease",
+      url: "https://example.com/generated-lease.pdf",
+      createdAt: 600,
+      source: "lease_pdf_generation",
+    });
+
     const router = (await import("../tenantPortalRoutes")).default;
     const res = await invokeRouter(router, {
       method: "GET",
@@ -2946,6 +2965,16 @@ describe("tenantPortalRoutes foundation", () => {
     expect(res.body?.summary?.pendingReview).toBeTypeOf("number");
     expect(res.body?.guidance?.headline).toBeTypeOf("string");
     expect(res.body?.data?.[0]?.internalNotes).toBeUndefined();
+    expect(res.body?.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          label: "LEASE — Lease",
+          category: "Lease",
+          fileName: "schedule-a-v1.pdf",
+          url: "https://example.com/generated-lease.pdf",
+        }),
+      ])
+    );
     expect(
       res.body?.data?.some((item: any) =>
         ["uploaded", "missing", "pending_review", "verified", "needs_attention", "reupload_requested"].includes(item.status)

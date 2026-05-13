@@ -159,7 +159,7 @@ describe("tenant profile and communications pages", () => {
 
     expect(await screen.findByText(/Tenant Profile/i)).toBeInTheDocument();
     expect(screen.getByText(/rental profile space|tenant-safe projections only/i)).toBeInTheDocument();
-    expect(screen.getByText(/Profile completion/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Profile completion/i)).toBeInTheDocument();
     expect(await screen.findByDisplayValue(/Taylor Tenant/i)).toBeInTheDocument();
     expect((await screen.findAllByText(/Verification is still in progress/i)).length).toBeGreaterThan(0);
     expect(screen.getByRole("textbox", { name: /Display name/i })).toBeInTheDocument();
@@ -177,6 +177,55 @@ describe("tenant profile and communications pages", () => {
   it("formats tenant rental record date-only lease dates without shifting backward", () => {
     expect(formatDate("2026-05-01")).toBe("May 1, 2026");
     expect(formatDate("2027-04-30")).toBe("Apr 30, 2027");
+  });
+
+  it("shows generated lease documents as available in the rental record", async () => {
+    tenantProfileApi.getTenantProfile.mockResolvedValue({
+      context: { authority: "active_tenant" },
+      profile: {
+        displayName: "Taylor Tenant",
+        email: "tenant@example.com",
+        phone: "902-555-0100",
+        application: { status: "converted" },
+        lease: {
+          status: "active",
+          monthlyRent: 1800,
+          startDate: "2026-05-01",
+          endDate: "2027-04-30",
+          documentUrl: "https://example.com/generated-lease.pdf",
+        },
+      },
+      identity: {
+        overallStatus: "verified",
+        identityVerification: {
+          status: "verified",
+          label: "Verified",
+          note: "Verified.",
+          updatedAt: "2026-01-05T00:00:00.000Z",
+        },
+        documentChecklist: [],
+        nextSteps: [],
+      },
+      actions: {
+        editableFields: ["displayName", "phone"],
+        documentEntry: {
+          available: true,
+          path: "/tenant/attachments",
+          label: "Open documents",
+          note: "Open your tenant documents area.",
+        },
+      },
+    });
+
+    render(
+      <MemoryRouter>
+        <TenantProfilePage />
+      </MemoryRouter>
+    );
+
+    expect((await screen.findAllByText(/Rental record/i)).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Available").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Not shared yet")).not.toBeInTheDocument();
   });
 
   it("tenant profile page saves bounded profile edits safely", async () => {
