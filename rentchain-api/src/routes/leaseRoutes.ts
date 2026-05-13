@@ -746,6 +746,54 @@ function safeAttachmentDocumentId(parts: string[]) {
     .slice(0, 240);
 }
 
+function isVisibleLeaseAttachment(raw: any): boolean {
+  const category = String(raw?.category || "").trim().toLowerCase();
+  const purpose = String(raw?.purpose || "").trim().toUpperCase();
+  const purposeLabel = String(raw?.purposeLabel || "").trim().toLowerCase();
+  const title = String(raw?.title || "").trim().toLowerCase();
+  return category === "lease" || purpose === "LEASE" || purposeLabel === "lease" || title === "lease document";
+}
+
+async function resolveLeaseAttachmentRef(params: {
+  tenantId: string;
+  leaseId: string | null;
+  draftId: string;
+}) {
+  const tenantId = String(params.tenantId || "").trim();
+  const leaseId = String(params.leaseId || "").trim();
+  const draftId = String(params.draftId || "").trim();
+
+  const existingSnap = await db
+    .collection("ledgerAttachments")
+    .where("tenantId", "==", tenantId)
+    .limit(50)
+    .get()
+    .catch(() => null as any);
+
+  const existingDocs = Array.isArray(existingSnap?.docs) ? existingSnap.docs : [];
+  const matchingDoc = existingDocs.find((doc: any) => {
+    const data = (doc.data() as any) || {};
+    if (!isVisibleLeaseAttachment(data)) return false;
+    const candidateLeaseId = String(data?.leaseId || "").trim();
+    const candidateDraftId = String(data?.draftId || "").trim();
+    if (leaseId && candidateLeaseId === leaseId) return true;
+    if (draftId && candidateDraftId === draftId) return true;
+    return false;
+  });
+
+  if (matchingDoc?.id) {
+    return db.collection("ledgerAttachments").doc(matchingDoc.id);
+  }
+
+  const attachmentId = safeAttachmentDocumentId([
+    "lease",
+    tenantId,
+    leaseId || draftId,
+    "LEASE",
+  ]);
+  return db.collection("ledgerAttachments").doc(attachmentId);
+}
+
 async function linkGeneratedLeasePdfToTenantWorkspace(params: {
   draft: any;
   draftId: string;
@@ -786,39 +834,36 @@ async function linkGeneratedLeasePdfToTenantWorkspace(params: {
 
   await Promise.all(
     tenantIds.map(async (tenantId: string) => {
-      const attachmentId = safeAttachmentDocumentId([
-        "lease",
-        params.snapshotId,
+      const attachmentRef = await resolveLeaseAttachmentRef({
         tenantId,
-      ]);
-      await db
-        .collection("ledgerAttachments")
-        .doc(attachmentId)
-        .set(
-          {
-            landlordId: params.landlordId,
-            tenantId,
-            leaseId,
-            draftId: params.draftId,
-            leaseSnapshotId: params.snapshotId,
-            propertyId,
-            unitId,
-            ledgerItemId: leaseId || `leaseDraft:${params.draftId}`,
-            url,
-            title: "Lease document",
-            fileName,
-            category: "Lease",
-            purpose: "LEASE",
-            purposeLabel: "Lease",
-            source: "lease_pdf_generation",
-            generatedFileKind: String(params.file?.kind || "schedule-a-pdf"),
-            sha256: String(params.file?.sha256 || "").trim() || null,
-            sizeBytes: Number(params.file?.sizeBytes || 0) || null,
-            createdAt: now,
-            createdBy: params.actorId,
-          },
-          { merge: true }
-        );
+        leaseId,
+        draftId: params.draftId,
+      });
+      await attachmentRef.set(
+        {
+          landlordId: params.landlordId,
+          tenantId,
+          leaseId,
+          draftId: params.draftId,
+          leaseSnapshotId: params.snapshotId,
+          propertyId,
+          unitId,
+          ledgerItemId: leaseId || `leaseDraft:${params.draftId}`,
+          url,
+          title: "Lease document",
+          fileName,
+          category: "Lease",
+          purpose: "LEASE",
+          purposeLabel: "Lease",
+          source: "lease_pdf_generation",
+          generatedFileKind: String(params.file?.kind || "schedule-a-pdf"),
+          sha256: String(params.file?.sha256 || "").trim() || null,
+          sizeBytes: Number(params.file?.sizeBytes || 0) || null,
+          createdAt: now,
+          createdBy: params.actorId,
+        },
+        { merge: true }
+      );
     })
   );
 }

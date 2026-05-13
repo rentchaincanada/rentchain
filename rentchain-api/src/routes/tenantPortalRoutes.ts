@@ -2739,12 +2739,43 @@ function documentNextActionCopy(status: TenantDocumentStatus, nextAction: string
   }
 }
 
+function isVisibleLeaseDocumentAttachment(raw: any): boolean {
+  const category = String(raw?.category || "").trim().toLowerCase();
+  const purpose = String(raw?.purpose || "").trim().toUpperCase();
+  const purposeLabel = String(raw?.purposeLabel || "").trim().toLowerCase();
+  const title = String(raw?.title || "").trim().toLowerCase();
+  return category === "lease" || purpose === "LEASE" || purposeLabel === "lease" || title === "lease document";
+}
+
+function visibleLeaseDocumentDedupeKey(raw: any): string | null {
+  if (!isVisibleLeaseDocumentAttachment(raw)) return null;
+  const tenantId = String(raw?.tenantId || "").trim();
+  const leaseId = String(raw?.leaseId || "").trim();
+  const draftId = String(raw?.draftId || "").trim();
+  const ledgerItemId = String(raw?.ledgerItemId || "").trim();
+  const url = String(raw?.url || "").trim();
+  const visibleLeaseId = leaseId || draftId || ledgerItemId || url;
+  if (!tenantId || !visibleLeaseId) return null;
+  return [tenantId, visibleLeaseId, "LEASE"].join("|");
+}
+
+function dedupeTenantVisibleLeaseAttachments(attachments: any[]): any[] {
+  const seen = new Set<string>();
+  return attachments.filter((item) => {
+    const key = visibleLeaseDocumentDedupeKey(item);
+    if (!key) return true;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function buildTenantDocumentWorkspace(params: {
   attachments: Array<any>;
   profile: Awaited<ReturnType<typeof loadTenantProfileProjection>>;
 }) {
   const checklist = Array.isArray(params.profile?.identity?.documentChecklist) ? params.profile.identity.documentChecklist : [];
-  const attachments = Array.isArray(params.attachments) ? params.attachments : [];
+  const attachments = dedupeTenantVisibleLeaseAttachments(Array.isArray(params.attachments) ? params.attachments : []);
 
   const normalizedAttachmentMap = new Map<string, any[]>();
   attachments.forEach((item) => {

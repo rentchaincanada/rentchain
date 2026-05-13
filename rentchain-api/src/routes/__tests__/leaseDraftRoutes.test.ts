@@ -230,6 +230,51 @@ describe("lease draft routes", () => {
     );
   }, 30000);
 
+  it("updates one visible Lease attachment across repeated draft PDF generation", async () => {
+    const router = (await import("../leaseRoutes")).default;
+    const app = express();
+    app.use(express.json());
+    app.use(router);
+
+    const createRes = await request(app).post("/drafts").set(auth).send(payload);
+    expect(createRes.status).toBe(201);
+    const draftId = String(createRes.body?.draftId || "");
+
+    const firstGenerateRes = await request(app)
+      .post(`/drafts/${encodeURIComponent(draftId)}/generate`)
+      .set(auth)
+      .send({
+        tenantNames: ["Tenant One"],
+        propertyAddress: "123 Main St, Halifax, NS",
+        unitLabel: "Unit 2A",
+      });
+    expect(firstGenerateRes.status).toBe(201);
+
+    const secondGenerateRes = await request(app)
+      .post(`/drafts/${encodeURIComponent(draftId)}/generate`)
+      .set(auth)
+      .send({
+        tenantNames: ["Tenant One"],
+        propertyAddress: "123 Main St, Halifax, NS",
+        unitLabel: "Unit 2A",
+      });
+    expect(secondGenerateRes.status).toBe(201);
+
+    const attachmentDocs = Array.from(store.get("ledgerAttachments")?.values() || []).map((doc) => doc.data);
+    expect(attachmentDocs).toHaveLength(1);
+    expect(attachmentDocs[0]).toEqual(
+      expect.objectContaining({
+        tenantId: "tenant-1",
+        leaseId: null,
+        draftId,
+        leaseSnapshotId: String(secondGenerateRes.body?.snapshotId || ""),
+        category: "Lease",
+        purpose: "LEASE",
+        url: "https://example.invalid/schedule-a.pdf",
+      })
+    );
+  });
+
   it("activates a draft using the latest durable generated snapshot when the draft pointer is missing", async () => {
     const router = (await import("../leaseRoutes")).default;
     const app = express();
@@ -336,6 +381,15 @@ describe("lease draft routes", () => {
       })
     );
 
+    await fakeDb.collection("leaseSnapshots").doc("snapshot-existing-new").set({
+      ...payload,
+      landlordId: "landlord-1",
+      draftId,
+      sourceDraftId: draftId,
+      generatedAt: 400,
+      generatedFiles: [{ kind: "schedule-a-pdf", url: "https://example.invalid/existing-schedule-a-new.pdf" }],
+    });
+
     const secondRes = await request(app).post(`/drafts/${encodeURIComponent(draftId)}/activate`).set(auth).send({});
     expect(secondRes.status).toBe(200);
     expect(secondRes.body?.leaseId).toBe(leaseId);
@@ -347,9 +401,9 @@ describe("lease draft routes", () => {
         tenantId: "tenant-1",
         leaseId,
         draftId,
-        leaseSnapshotId: "snapshot-existing",
+        leaseSnapshotId: "snapshot-existing-new",
         category: "Lease",
-        url: "https://example.invalid/existing-schedule-a.pdf",
+        url: "https://example.invalid/existing-schedule-a-new.pdf",
       })
     );
   });
