@@ -615,6 +615,47 @@ describe("leaseRoutes GET /active", () => {
     expect(res.body?.lease?.id).toBeTruthy();
   });
 
+  it("hydrates property lease rows with canonical unit labels for display", async () => {
+    seedDoc("properties", "prop-1", {
+      landlordId: "landlord-1",
+      name: "Harbour View",
+      units: [{ id: "unit-raw-id-123456", unitNumber: "101", label: "Unit 101", status: "occupied" }],
+    });
+    seedDoc("units", "unit-raw-id-123456", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitNumber: "101",
+      label: "Unit 101",
+      status: "occupied",
+      occupancyStatus: "occupied",
+    });
+    seedDoc("leases", "lease-1", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      tenantId: "tenant-1",
+      tenantIds: ["tenant-1"],
+      primaryTenantId: "tenant-1",
+      unitId: "unit-raw-id-123456",
+      unitNumber: "unit-raw-id-123456",
+      monthlyRent: 1850,
+      startDate: "2026-01-01",
+      endDate: "2026-12-31",
+      status: "active",
+    });
+
+    const router = (await import("../leaseRoutes")).default;
+    const res = await invokeRouter(router, { method: "GET", url: "/property/prop-1" });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.leases?.[0]).toEqual(
+      expect.objectContaining({
+        unitId: "unit-raw-id-123456",
+        unitNumber: "101",
+        unitLabel: "101",
+      })
+    );
+  });
+
   it("enables rent collection for an owned eligible lease", async () => {
     seedDoc("leases", "lease-1", {
       landlordId: "landlord-1",

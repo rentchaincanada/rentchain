@@ -32,6 +32,7 @@ export interface Lease {
   propertyName?: string | null;
   propertyLabel?: string | null;
   unitId?: string | null;
+  unitLabel?: string | null;
   unitNumber: string;
   monthlyRent: number;
   startDate: string;

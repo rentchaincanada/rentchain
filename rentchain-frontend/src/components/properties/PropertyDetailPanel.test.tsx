@@ -383,6 +383,108 @@ describe("PropertyDetailPanel", () => {
     expect((await screen.findAllByText("Occupied")).length).toBeGreaterThan(0);
   });
 
+  it("hydrates lease risk unit labels from property units instead of showing raw unit ids", async () => {
+    mocks.fetchUnitsForProperty.mockResolvedValue([
+      {
+        id: "wzECCdkACeLm2yWdV9b3",
+        unitNumber: "101",
+        status: "occupied",
+        rent: 1850,
+      },
+    ]);
+    mocks.getLeasesForProperty.mockResolvedValue({
+      leases: [
+        {
+          id: "lease-1",
+          tenantId: "tenant-1",
+          propertyId: "prop-1",
+          unitId: "wzECCdkACeLm2yWdV9b3",
+          unitNumber: "wzECCdkACeLm2yWdV9b3",
+          monthlyRent: 1850,
+          startDate: "2026-01-01",
+          endDate: "2026-12-31",
+          status: "active",
+          riskScore: 72,
+          riskGrade: "B",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+      credibilitySummary: null,
+    });
+
+    render(
+      <MemoryRouter>
+        <PropertyDetailPanel
+          property={{
+            id: "prop-1",
+            name: "Harbour View",
+            addressLine1: "12 Wharf Street",
+            city: "Halifax",
+            province: "NS",
+            postalCode: "B3H 1A1",
+            country: "Canada",
+            totalUnits: 1,
+            amenities: [],
+            units: [],
+            createdAt: new Date().toISOString(),
+          }}
+          onRefresh={vi.fn()}
+        />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Lease risk overview")).toBeInTheDocument();
+    expect(screen.getAllByText("Unit 101").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Unit wzECCdkACeLm2yWdV9b3")).not.toBeInTheDocument();
+  });
+
+  it("uses a conservative lease risk fallback when no unit label exists", async () => {
+    mocks.fetchUnitsForProperty.mockResolvedValue([]);
+    mocks.getLeasesForProperty.mockResolvedValue({
+      leases: [
+        {
+          id: "lease-1",
+          tenantId: "tenant-1",
+          propertyId: "prop-1",
+          unitId: "t9Xs0CLL7erK1j3pWQVa",
+          unitNumber: "t9Xs0CLL7erK1j3pWQVa",
+          monthlyRent: 1850,
+          startDate: "2026-01-01",
+          endDate: "2026-12-31",
+          status: "active",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+      credibilitySummary: null,
+    });
+
+    render(
+      <MemoryRouter>
+        <PropertyDetailPanel
+          property={{
+            id: "prop-1",
+            name: "Harbour View",
+            addressLine1: "12 Wharf Street",
+            city: "Halifax",
+            province: "NS",
+            postalCode: "B3H 1A1",
+            country: "Canada",
+            totalUnits: 1,
+            amenities: [],
+            units: [],
+            createdAt: new Date().toISOString(),
+          }}
+          onRefresh={vi.fn()}
+        />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Assigned unit")).toBeInTheDocument();
+    expect(screen.queryByText("Unit t9Xs0CLL7erK1j3pWQVa")).not.toBeInTheDocument();
+  });
+
   it("shows upcoming and notice-period occupancy from lease lifecycle", async () => {
     mocks.fetchUnitsForProperty.mockResolvedValue([
       {
