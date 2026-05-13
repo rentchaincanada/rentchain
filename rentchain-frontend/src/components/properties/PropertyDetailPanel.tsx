@@ -58,6 +58,51 @@ import { safeLocaleNumber } from "@/utils/format";
 
 const formatCurrency = (value: number): string => `$${safeLocaleNumber(value)}`;
 
+const RAW_ID_PATTERN = /^[A-Za-z0-9_-]{16,}$/;
+
+function cleanLabel(value: unknown): string {
+  return String(value || "").trim();
+}
+
+function isRawUnitIdLabel(value: string, rawIds: string[]) {
+  if (!value) return false;
+  const normalized = value.toLowerCase();
+  if (rawIds.some((id) => id && id.toLowerCase() === normalized)) return true;
+  return RAW_ID_PATTERN.test(value) && /[A-Za-z]/.test(value) && /\d/.test(value);
+}
+
+function resolveLeaseRiskUnitLabel(lease: Lease, unitsForDisplay: any[]): string {
+  const rawIds = [cleanLabel(lease.unitId), cleanLabel((lease as any).id)].filter(Boolean);
+  const unitReference = cleanLabel(lease.unitId || lease.unitNumber || lease.unitLabel);
+  const matchedUnit = unitsForDisplay.find((unit: any) => {
+    const candidates = [
+      unit?.id,
+      unit?.unitId,
+      unit?.uid,
+      unit?.unitNumber,
+      unit?.label,
+      unit?.name,
+      unit?.unit,
+    ]
+      .map(cleanLabel)
+      .filter(Boolean);
+    return candidates.some((candidate) => candidate.toLowerCase() === unitReference.toLowerCase());
+  });
+  const candidates = [
+    matchedUnit?.unitNumber,
+    matchedUnit?.label,
+    matchedUnit?.name,
+    matchedUnit?.unit,
+    lease.unitLabel,
+    lease.unitNumber,
+  ]
+    .map(cleanLabel)
+    .filter((value) => value && !isRawUnitIdLabel(value, rawIds));
+  const label = candidates[0];
+  if (!label) return "Assigned unit";
+  return /^unit\b/i.test(label) ? label : `Unit ${label}`;
+}
+
 function unitOccupancyTone(status: UnitOccupancyStatus) {
   if (status === "occupied") {
     return { background: "rgba(34,197,94,0.1)", color: "#166534", dot: "#22c55e" };
@@ -1260,7 +1305,9 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                 }}
               >
                 <div style={{ display: "grid", gap: 2 }}>
-                  <div style={{ color: "#0f172a", fontWeight: 700 }}>Unit {lease.unitNumber || lease.unitId || "--"}</div>
+                  <div style={{ color: "#0f172a", fontWeight: 700 }}>
+                    {resolveLeaseRiskUnitLabel(lease, displayedUnits)}
+                  </div>
                   <div style={{ color: "#475569", fontSize: 12 }}>
                     {formatCurrency(lease.monthlyRent)} / month
                     {lease.riskConfidence != null ? " • " + Math.round(lease.riskConfidence * 100) + "% confidence" : ""}

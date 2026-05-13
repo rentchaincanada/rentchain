@@ -719,6 +719,25 @@ async function hydrateLeaseUnitDisplayFields<T extends Record<string, any>>(
   };
 }
 
+function hydrateLeaseUnitDisplayFieldsFromUnits<T extends Record<string, any>>(
+  lease: T,
+  units: any[]
+): T {
+  const propertyId = String(lease?.propertyId || "").trim();
+  const unitReference = String(lease?.unitId || lease?.unitNumber || lease?.unitLabel || lease?.unit || "").trim();
+  if (!propertyId || !unitReference) return lease;
+  const resolution = resolveUnitReference(units, unitReference);
+  if (resolution.ambiguous || !resolution.unit) return lease;
+  const unitLabel = getCanonicalUnitLabel(resolution.unit);
+  if (!unitLabel) return lease;
+  return {
+    ...lease,
+    unitId: String(lease?.unitId || resolution.unit.id || "").trim() || resolution.unit.id,
+    unitNumber: unitLabel,
+    unitLabel,
+  };
+}
+
 async function enrichLeaseRow(raw: any) {
   const lease = normalizeLeaseRow(raw.id, raw);
   const propertyId = String(lease.propertyId || "").trim();
@@ -2361,7 +2380,8 @@ router.get("/property/:propertyId", requireLandlord, async (req: any, res: Respo
 
     // Occupancy and rent roll consumers must operate on lease agreements, not per-tenant rows.
     const summaryLeases = mergeLeaseRows(combinedRows.filter((lease) => winnerIds.has(lease.id)));
-    const response: any = { leases: summaryLeases };
+    const displayLeases = summaryLeases.map((lease) => hydrateLeaseUnitDisplayFieldsFromUnits(lease, units));
+    const response: any = { leases: displayLeases };
     response.credibilitySummary = await loadPropertyCredibilitySummary({
       firestore: db as any,
       propertyId,
