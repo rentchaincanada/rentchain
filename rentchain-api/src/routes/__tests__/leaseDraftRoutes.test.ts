@@ -178,6 +178,44 @@ describe("lease draft routes", () => {
     expect(generateRes.body?.ok).toBe(true);
     expect(generateRes.body?.scheduleAUrl).toContain("https://example.invalid");
     expect(String(generateRes.body?.snapshotId || "")).toBeTruthy();
+
+    const attachmentDocsAfterGenerate = Array.from(store.get("ledgerAttachments")?.values() || []).map((doc) => doc.data);
+    expect(attachmentDocsAfterGenerate).toEqual([
+      expect.objectContaining({
+        tenantId: "tenant-1",
+        landlordId: "landlord-1",
+        leaseId: null,
+        draftId,
+        propertyId: "prop-1",
+        category: "Lease",
+        purpose: "LEASE",
+        purposeLabel: "Lease",
+        url: "https://example.invalid/schedule-a.pdf",
+      }),
+    ]);
+
+    const activateRes = await request(app).post(`/drafts/${encodeURIComponent(draftId)}/activate`).set(auth).send({});
+    expect(activateRes.status).toBe(200);
+    expect(activateRes.body?.lease).toEqual(
+      expect.objectContaining({
+        documentUrl: "https://example.invalid/schedule-a.pdf",
+        approvedDocumentUrl: "https://example.invalid/schedule-a.pdf",
+        documentRef: "https://example.invalid/schedule-a.pdf",
+      })
+    );
+
+    const attachmentDocsAfterActivate = Array.from(store.get("ledgerAttachments")?.values() || []).map((doc) => doc.data);
+    expect(attachmentDocsAfterActivate).toHaveLength(1);
+    expect(attachmentDocsAfterActivate[0]).toEqual(
+      expect.objectContaining({
+        tenantId: "tenant-1",
+        landlordId: "landlord-1",
+        leaseId: String(activateRes.body?.leaseId || ""),
+        draftId,
+        propertyId: "prop-1",
+        category: "Lease",
+      })
+    );
   }, 30000);
 
   it("returns inline PDF when storage upload is unavailable", async () => {
