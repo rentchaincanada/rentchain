@@ -2771,14 +2771,27 @@ function visibleLeaseDocumentDedupeKeys(raw: any): string[] {
 }
 
 function dedupeTenantVisibleLeaseAttachments(attachments: any[]): any[] {
-  const seen = new Set<string>();
-  return attachments.filter((item) => {
+  const output: any[] = [];
+  const leaseKeySets: Set<string>[] = [];
+
+  attachments.forEach((item) => {
     const keys = visibleLeaseDocumentDedupeKeys(item);
-    if (!keys.length) return true;
-    if (keys.some((key) => seen.has(key))) return false;
-    keys.forEach((key) => seen.add(key));
-    return true;
+    if (!keys.length) {
+      output.push(item);
+      return;
+    }
+
+    const existingIndex = leaseKeySets.findIndex((knownKeys) => keys.some((key) => knownKeys.has(key)));
+    if (existingIndex >= 0) {
+      keys.forEach((key) => leaseKeySets[existingIndex].add(key));
+      return;
+    }
+
+    output.push(item);
+    leaseKeySets.push(new Set(keys));
   });
+
+  return output;
 }
 
 function buildTenantDocumentWorkspace(params: {

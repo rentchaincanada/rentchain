@@ -3047,6 +3047,23 @@ describe("tenantPortalRoutes foundation", () => {
       createdAt: 700,
       source: "lease_pdf_generation",
     });
+    ensureCollection("ledgerAttachments").set("lease-generated-lease-only", {
+      tenantId: "tenant-1",
+      landlordId: "landlord-1",
+      leaseId: "lease-1",
+      leaseSnapshotId: "snapshot-lease-only",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      ledgerItemId: "lease-1",
+      title: "Lease document",
+      fileName: "schedule-a-v1.pdf",
+      category: "Lease",
+      purpose: "LEASE",
+      purposeLabel: "Lease",
+      url: "https://example.com/generated-lease-current.pdf",
+      createdAt: 800,
+      source: "lease_pdf_generation",
+    });
 
     const router = (await import("../tenantPortalRoutes")).default;
     const res = await invokeRouter(router, {
@@ -3068,7 +3085,7 @@ describe("tenantPortalRoutes foundation", () => {
     expect(visibleLeaseItems[0]).toEqual(
       expect.objectContaining({
         fileName: "schedule-a-v1.pdf",
-        url: "https://example.com/generated-lease-new.pdf",
+        url: "https://example.com/generated-lease-current.pdf",
       })
     );
     expect(res.body?.summary).toEqual(

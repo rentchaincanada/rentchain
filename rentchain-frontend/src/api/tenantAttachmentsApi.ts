@@ -3,12 +3,15 @@ import { tenantApiFetch } from "./tenantApiFetch";
 export type TenantAttachment = {
   id: string;
   tenantId?: string | null;
+  leaseId?: string | null;
+  draftId?: string | null;
   ledgerItemId?: string | null;
   title?: string | null;
   url?: string | null;
   purpose?: string | null;
   purposeLabel?: string | null;
   fileName?: string | null;
+  sha256?: string | null;
   createdAt?: number | null;
   label?: string | null;
   category?: string | null;
