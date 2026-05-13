@@ -54,8 +54,12 @@ describe("tenant profile and communications pages", () => {
         applicationId: "app-1",
         leaseId: "lease-1",
         tenantId: "tenant-1",
-        unitId: "unit-2",
+        unitId: "iXHTFgm8ay3iuUptfI4I",
         invitedEmail: "tenant@example.com",
+      },
+      unit: {
+        unitId: "iXHTFgm8ay3iuUptfI4I",
+        label: "1",
       },
     });
     tenantAttachmentsApi.getTenantAttachments.mockResolvedValue({
@@ -110,6 +114,47 @@ describe("tenant profile and communications pages", () => {
     expect(screen.getByRole("link", { name: /Profile/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Access/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /History/i })).toBeInTheDocument();
+  });
+
+  it("tenant nav shows the hydrated unit label instead of the raw unit id", async () => {
+    render(
+      <MemoryRouter>
+        <TenantNav>
+          <div>Tenant content</div>
+        </TenantNav>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText((content) => content.includes("tenant@example.com") && content.includes("Unit 1"))).toBeInTheDocument();
+    expect(screen.queryByText(/iXHTFgm8ay3iuUptfI4I/)).not.toBeInTheDocument();
+  });
+
+  it("tenant nav omits the unit when the hydrated label is missing", async () => {
+    tenantPortalApi.getTenantWorkspace.mockResolvedValueOnce({
+      context: {
+        authority: "active_tenant",
+        propertyId: "prop-1",
+        rc_prop_id: "rc-prop-1",
+        applicationId: "app-1",
+        leaseId: "lease-1",
+        tenantId: "tenant-1",
+        unitId: "raw-internal-unit-id",
+        invitedEmail: "tenant@example.com",
+      },
+      unit: null,
+    });
+
+    render(
+      <MemoryRouter>
+        <TenantNav>
+          <div>Tenant content</div>
+        </TenantNav>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("tenant@example.com")).toBeInTheDocument();
+    expect(screen.queryByText(/raw-internal-unit-id/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Unit raw-internal-unit-id/)).not.toBeInTheDocument();
   });
 
   it("tenant profile page renders safe projected profile data and identity states", async () => {

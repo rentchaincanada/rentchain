@@ -40,7 +40,7 @@ export const TenantNav: React.FC<Props> = ({ children }) => {
         const workspace = await getTenantWorkspace();
         const name = String(workspace?.context?.invitedEmail || "").trim();
         const email = String(workspace?.context?.invitedEmail || "").trim();
-        const unit = String(workspace?.context?.unitId || "").trim();
+        const unit = String(workspace?.unit?.label || "").trim();
         if (!cancelled) {
           setTenantName(name ? name.split("@")[0] : "Tenant workspace");
           setTenantEmail(email || null);
