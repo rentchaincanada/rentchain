@@ -758,10 +758,12 @@ async function resolveLeaseAttachmentRef(params: {
   tenantId: string;
   leaseId: string | null;
   draftId: string;
+  url: string;
 }) {
   const tenantId = String(params.tenantId || "").trim();
   const leaseId = String(params.leaseId || "").trim();
   const draftId = String(params.draftId || "").trim();
+  const url = String(params.url || "").trim();
 
   const existingSnap = await db
     .collection("ledgerAttachments")
@@ -776,8 +778,12 @@ async function resolveLeaseAttachmentRef(params: {
     if (!isVisibleLeaseAttachment(data)) return false;
     const candidateLeaseId = String(data?.leaseId || "").trim();
     const candidateDraftId = String(data?.draftId || "").trim();
+    const candidateLedgerItemId = String(data?.ledgerItemId || "").trim();
+    const candidateUrl = String(data?.url || "").trim();
     if (leaseId && candidateLeaseId === leaseId) return true;
+    if (leaseId && candidateLedgerItemId === leaseId) return true;
     if (draftId && candidateDraftId === draftId) return true;
+    if (url && candidateUrl === url) return true;
     return false;
   });
 
@@ -838,6 +844,7 @@ async function linkGeneratedLeasePdfToTenantWorkspace(params: {
         tenantId,
         leaseId,
         draftId: params.draftId,
+        url,
       });
       await attachmentRef.set(
         {

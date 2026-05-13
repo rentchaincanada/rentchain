@@ -275,6 +275,55 @@ describe("lease draft routes", () => {
     );
   });
 
+  it("updates a legacy same-url Lease attachment instead of creating a visible duplicate", async () => {
+    const router = (await import("../leaseRoutes")).default;
+    const app = express();
+    app.use(express.json());
+    app.use(router);
+
+    await fakeDb.collection("ledgerAttachments").doc("legacy-same-url-lease").set({
+      tenantId: "tenant-1",
+      landlordId: "landlord-1",
+      ledgerItemId: "legacy-ledger-item",
+      title: "Lease document",
+      fileName: "schedule-a-v1.pdf",
+      category: "Lease",
+      purpose: "LEASE",
+      purposeLabel: "Lease",
+      url: "https://example.invalid/schedule-a.pdf",
+      createdAt: 100,
+      source: "lease_pdf_generation",
+    });
+
+    const createRes = await request(app).post("/drafts").set(auth).send(payload);
+    expect(createRes.status).toBe(201);
+    const draftId = String(createRes.body?.draftId || "");
+
+    const generateRes = await request(app)
+      .post(`/drafts/${encodeURIComponent(draftId)}/generate`)
+      .set(auth)
+      .send({
+        tenantNames: ["Tenant One"],
+        propertyAddress: "123 Main St, Halifax, NS",
+        unitLabel: "Unit 2A",
+      });
+    expect(generateRes.status).toBe(201);
+
+    const attachmentDocs = Array.from(store.get("ledgerAttachments")?.entries() || []);
+    expect(attachmentDocs).toHaveLength(1);
+    expect(attachmentDocs[0][0]).toBe("legacy-same-url-lease");
+    expect(attachmentDocs[0][1].data).toEqual(
+      expect.objectContaining({
+        tenantId: "tenant-1",
+        leaseId: null,
+        draftId,
+        category: "Lease",
+        purpose: "LEASE",
+        url: "https://example.invalid/schedule-a.pdf",
+      })
+    );
+  });
+
   it("activates a draft using the latest durable generated snapshot when the draft pointer is missing", async () => {
     const router = (await import("../leaseRoutes")).default;
     const app = express();

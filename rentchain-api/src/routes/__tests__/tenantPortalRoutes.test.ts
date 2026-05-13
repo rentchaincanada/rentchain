@@ -2993,6 +2993,24 @@ describe("tenantPortalRoutes foundation", () => {
   });
 
   it("dedupes duplicate visible Lease attachments in the tenant document vault", async () => {
+    ensureCollection("ledgerAttachments").set("lease-generated-draft-only", {
+      tenantId: "tenant-1",
+      landlordId: "landlord-1",
+      leaseId: null,
+      draftId: "draft-1",
+      leaseSnapshotId: "snapshot-draft",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      ledgerItemId: "leaseDraft:draft-1",
+      title: "Lease document",
+      fileName: "schedule-a-v1.pdf",
+      category: "Lease",
+      purpose: "LEASE",
+      purposeLabel: "Lease",
+      url: "https://example.com/generated-lease-draft.pdf",
+      createdAt: 500,
+      source: "lease_pdf_generation",
+    });
     ensureCollection("ledgerAttachments").set("lease-generated-old", {
       tenantId: "tenant-1",
       landlordId: "landlord-1",
@@ -3052,6 +3070,21 @@ describe("tenantPortalRoutes foundation", () => {
         fileName: "schedule-a-v1.pdf",
         url: "https://example.com/generated-lease-new.pdf",
       })
+    );
+    expect(res.body?.summary).toEqual(
+      expect.objectContaining({
+        total: 2,
+        uploaded: 2,
+      })
+    );
+    expect(res.body?.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          title: "Government ID",
+          fileName: "id-card.pdf",
+          url: "https://example.com/id-card.pdf",
+        }),
+      ])
     );
   });
 

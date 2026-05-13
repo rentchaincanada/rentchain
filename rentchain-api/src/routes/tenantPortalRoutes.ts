@@ -2747,25 +2747,36 @@ function isVisibleLeaseDocumentAttachment(raw: any): boolean {
   return category === "lease" || purpose === "LEASE" || purposeLabel === "lease" || title === "lease document";
 }
 
-function visibleLeaseDocumentDedupeKey(raw: any): string | null {
-  if (!isVisibleLeaseDocumentAttachment(raw)) return null;
+function visibleLeaseDocumentDedupeKeys(raw: any): string[] {
+  if (!isVisibleLeaseDocumentAttachment(raw)) return [];
   const tenantId = String(raw?.tenantId || "").trim();
+  if (!tenantId) return [];
+
   const leaseId = String(raw?.leaseId || "").trim();
   const draftId = String(raw?.draftId || "").trim();
   const ledgerItemId = String(raw?.ledgerItemId || "").trim();
   const url = String(raw?.url || "").trim();
-  const visibleLeaseId = leaseId || draftId || ledgerItemId || url;
-  if (!tenantId || !visibleLeaseId) return null;
-  return [tenantId, visibleLeaseId, "LEASE"].join("|");
+  const sha256 = String(raw?.sha256 || "").trim();
+  const fileName = String(raw?.fileName || "").trim();
+  const keys = [
+    leaseId ? `${tenantId}|lease:${leaseId}|LEASE` : null,
+    draftId ? `${tenantId}|draft:${draftId}|LEASE` : null,
+    ledgerItemId ? `${tenantId}|ledger:${ledgerItemId}|LEASE` : null,
+    url ? `${tenantId}|url:${url}|LEASE` : null,
+    sha256 ? `${tenantId}|sha256:${sha256}|LEASE` : null,
+    !leaseId && !draftId && !ledgerItemId && !url && fileName ? `${tenantId}|file:${fileName}|LEASE` : null,
+  ].filter((value): value is string => Boolean(value));
+
+  return keys.length ? keys : [`${tenantId}|unidentified|LEASE`];
 }
 
 function dedupeTenantVisibleLeaseAttachments(attachments: any[]): any[] {
   const seen = new Set<string>();
   return attachments.filter((item) => {
-    const key = visibleLeaseDocumentDedupeKey(item);
-    if (!key) return true;
-    if (seen.has(key)) return false;
-    seen.add(key);
+    const keys = visibleLeaseDocumentDedupeKeys(item);
+    if (!keys.length) return true;
+    if (keys.some((key) => seen.has(key))) return false;
+    keys.forEach((key) => seen.add(key));
     return true;
   });
 }
