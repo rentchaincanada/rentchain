@@ -450,7 +450,7 @@ describe("tenantPortalRoutes foundation", () => {
           id: "user-1",
           email: "tenant@example.com",
           role: "tenant",
-          tenantId: "tenant-1",
+          tenantId: "auth-tenant-claim",
         }),
       },
     });
@@ -2962,6 +2962,7 @@ describe("tenantPortalRoutes foundation", () => {
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body?.data)).toBe(true);
     expect(res.body?.summary?.total).toBeGreaterThan(0);
+    expect(res.body?.summary?.uploaded).toBeGreaterThanOrEqual(2);
     expect(res.body?.summary?.pendingReview).toBeTypeOf("number");
     expect(res.body?.guidance?.headline).toBeTypeOf("string");
     expect(res.body?.data?.[0]?.internalNotes).toBeUndefined();
@@ -2972,6 +2973,15 @@ describe("tenantPortalRoutes foundation", () => {
           category: "Lease",
           fileName: "schedule-a-v1.pdf",
           url: "https://example.com/generated-lease.pdf",
+        }),
+      ])
+    );
+    expect(res.body?.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          title: "Government ID",
+          fileName: "id-card.pdf",
+          url: "https://example.com/id-card.pdf",
         }),
       ])
     );

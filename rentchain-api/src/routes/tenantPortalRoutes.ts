@@ -6226,7 +6226,7 @@ router.get("/attachments", requireTenantWorkspaceIdentity, async (req: any, res)
   if (!context) return;
 
   try {
-    const tenantId = req.user?.tenantId;
+    const tenantId = String(context.tenantId || "").trim();
     if (!tenantId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
 
     const [snap, profile] = await Promise.all([
@@ -6255,7 +6255,7 @@ router.get("/attachments", requireTenantWorkspaceIdentity, async (req: any, res)
     });
   } catch (err) {
     console.error("[tenant/attachments] failed", {
-      tenantId: req.user?.tenantId,
+      tenantId: context.tenantId,
       err: (err as any)?.message,
       code: (err as any)?.code,
     });
