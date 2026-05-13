@@ -187,4 +187,65 @@ describe("buildTenantDocumentVaultView", () => {
     expect(result.groupedItems.find((group) => group.category === "Identity")?.items).toHaveLength(1);
     expect(result.recentItems.map((item) => item.id)).toEqual(["lease-generated-url", "identity-doc"]);
   });
+
+  it("collapses generated Lease rows that only differ by URL when lease metadata is absent", () => {
+    const result = buildTenantDocumentVaultView({
+      items: [
+        {
+          id: "lease-snapshot-1",
+          label: "LEASE — Lease",
+          title: "Lease document",
+          category: "Lease",
+          purpose: "LEASE",
+          purposeLabel: "Lease",
+          fileName: "schedule-a-v1.pdf",
+          url: "https://example.com/snapshot-1.pdf",
+          status: "uploaded",
+          uploadedAt: 100,
+        },
+        {
+          id: "lease-snapshot-2",
+          label: "LEASE — Lease",
+          title: "Lease document",
+          category: "Lease",
+          purpose: "LEASE",
+          purposeLabel: "Lease",
+          fileName: "schedule-a-v1.pdf",
+          url: "https://example.com/snapshot-2.pdf",
+          status: "uploaded",
+          uploadedAt: 200,
+        },
+        {
+          id: "lease-snapshot-3",
+          label: "LEASE — Lease",
+          title: "Lease document",
+          category: "Lease",
+          purpose: "LEASE",
+          purposeLabel: "Lease",
+          fileName: "schedule-a-v1.pdf",
+          url: "https://example.com/snapshot-3.pdf",
+          status: "uploaded",
+          uploadedAt: 300,
+        },
+        {
+          id: "lease-snapshot-4",
+          label: "LEASE — Lease",
+          title: "Lease document",
+          category: "Lease",
+          purpose: "LEASE",
+          purposeLabel: "Lease",
+          fileName: "schedule-a-v1.pdf",
+          url: "https://example.com/snapshot-4.pdf",
+          status: "uploaded",
+          uploadedAt: 400,
+        },
+      ],
+    });
+
+    expect(result.metrics.map((item) => item.value).slice(0, 3)).toEqual([1, 1, 0]);
+    expect(result.readyItems.map((item) => item.id)).toEqual(["lease-snapshot-4"]);
+    expect(result.groupedItems).toHaveLength(1);
+    expect(result.groupedItems[0].items.map((item) => item.id)).toEqual(["lease-snapshot-4"]);
+    expect(result.recentItems.map((item) => item.id)).toEqual(["lease-snapshot-4"]);
+  });
 });

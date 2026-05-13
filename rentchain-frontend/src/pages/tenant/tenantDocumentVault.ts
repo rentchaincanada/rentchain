@@ -52,20 +52,10 @@ function visibleLeaseKeys(item: TenantAttachment): string[] {
   if (!isVisibleLeaseAttachment(item)) return [];
   const tenantId = String(item.tenantId || "").trim() || "tenant";
   const leaseId = String(item.leaseId || "").trim();
-  const draftId = String(item.draftId || "").trim();
-  const ledgerItemId = String(item.ledgerItemId || "").trim();
-  const url = String(item.url || "").trim();
-  const sha256 = String(item.sha256 || "").trim();
-  const fileName = String(item.fileName || "").trim();
-  const keys = [
+  return [
+    `${tenantId}|lease:current|LEASE`,
     leaseId ? `${tenantId}|lease:${leaseId}|LEASE` : null,
-    draftId ? `${tenantId}|draft:${draftId}|LEASE` : null,
-    ledgerItemId ? `${tenantId}|ledger:${ledgerItemId}|LEASE` : null,
-    url ? `${tenantId}|url:${url}|LEASE` : null,
-    sha256 ? `${tenantId}|sha256:${sha256}|LEASE` : null,
-    !leaseId && !draftId && !ledgerItemId && !url && fileName ? `${tenantId}|file:${fileName}|LEASE` : null,
   ].filter((value): value is string => Boolean(value));
-  return keys.length ? keys : [`${tenantId}|unidentified|LEASE`];
 }
 
 function dedupeVisibleLeaseItems(items: TenantAttachment[]): TenantAttachment[] {

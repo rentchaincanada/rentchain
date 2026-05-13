@@ -231,6 +231,10 @@ type TenantDocumentItem = {
   title: string | null;
   purpose: string | null;
   purposeLabel: string | null;
+  tenantId: string | null;
+  leaseId: string | null;
+  draftId: string | null;
+  ledgerItemId: string | null;
   url: string | null;
   uploadedAt: number | null;
   nextAction: string | null;
@@ -2753,21 +2757,10 @@ function visibleLeaseDocumentDedupeKeys(raw: any): string[] {
   if (!tenantId) return [];
 
   const leaseId = String(raw?.leaseId || "").trim();
-  const draftId = String(raw?.draftId || "").trim();
-  const ledgerItemId = String(raw?.ledgerItemId || "").trim();
-  const url = String(raw?.url || "").trim();
-  const sha256 = String(raw?.sha256 || "").trim();
-  const fileName = String(raw?.fileName || "").trim();
-  const keys = [
+  return [
+    `${tenantId}|lease:current|LEASE`,
     leaseId ? `${tenantId}|lease:${leaseId}|LEASE` : null,
-    draftId ? `${tenantId}|draft:${draftId}|LEASE` : null,
-    ledgerItemId ? `${tenantId}|ledger:${ledgerItemId}|LEASE` : null,
-    url ? `${tenantId}|url:${url}|LEASE` : null,
-    sha256 ? `${tenantId}|sha256:${sha256}|LEASE` : null,
-    !leaseId && !draftId && !ledgerItemId && !url && fileName ? `${tenantId}|file:${fileName}|LEASE` : null,
   ].filter((value): value is string => Boolean(value));
-
-  return keys.length ? keys : [`${tenantId}|unidentified|LEASE`];
 }
 
 function dedupeTenantVisibleLeaseAttachments(attachments: any[]): any[] {
@@ -2846,6 +2839,10 @@ function buildTenantDocumentWorkspace(params: {
       title: matchedAttachment?.title ? String(matchedAttachment.title) : null,
       purpose: matchedAttachment?.purpose ? String(matchedAttachment.purpose) : null,
       purposeLabel: matchedAttachment?.purposeLabel ? String(matchedAttachment.purposeLabel) : null,
+      tenantId: matchedAttachment?.tenantId ? String(matchedAttachment.tenantId) : null,
+      leaseId: matchedAttachment?.leaseId ? String(matchedAttachment.leaseId) : null,
+      draftId: matchedAttachment?.draftId ? String(matchedAttachment.draftId) : null,
+      ledgerItemId: matchedAttachment?.ledgerItemId ? String(matchedAttachment.ledgerItemId) : null,
       url: matchedAttachment?.url ? String(matchedAttachment.url) : null,
       uploadedAt: Number(matchedAttachment?.createdAt || 0) || null,
       nextAction: documentNextActionCopy(status, String(entry?.nextStep || ""), Boolean(matchedAttachment?.url)),
@@ -2869,6 +2866,10 @@ function buildTenantDocumentWorkspace(params: {
       title: item?.title ? String(item.title) : null,
       purpose: item?.purpose ? String(item.purpose) : null,
       purposeLabel: item?.purposeLabel ? String(item.purposeLabel) : null,
+      tenantId: item?.tenantId ? String(item.tenantId) : null,
+      leaseId: item?.leaseId ? String(item.leaseId) : null,
+      draftId: item?.draftId ? String(item.draftId) : null,
+      ledgerItemId: item?.ledgerItemId ? String(item.ledgerItemId) : null,
       url: item?.url ? String(item.url) : null,
       uploadedAt: Number(item?.createdAt || 0) || null,
       nextAction: "This file has been added to your record.",
