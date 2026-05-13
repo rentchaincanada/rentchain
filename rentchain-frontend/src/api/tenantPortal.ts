@@ -23,6 +23,11 @@ export type TenantWorkspaceProperty = {
   features: string[];
 };
 
+export type TenantWorkspaceUnit = {
+  unitId?: string | null;
+  label: string | null;
+};
+
 export type TenantWorkspaceApplication = {
   applicationId: string;
   status: string | null;
@@ -503,6 +508,7 @@ export type InstitutionalHandoffSummary = {
 export type TenantWorkspaceSummary = {
   context: TenantWorkspaceContext;
   property: TenantWorkspaceProperty | null;
+  unit: TenantWorkspaceUnit | null;
   application: TenantWorkspaceApplication | null;
   lease: TenantWorkspaceLease | null;
   maintenance: TenantWorkspaceMaintenance[];
