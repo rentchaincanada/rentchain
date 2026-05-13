@@ -654,6 +654,90 @@ function firstGeneratedLeasePdfFile(generatedFiles: any[]): any | null {
   );
 }
 
+type GeneratedLeaseDocument = {
+  url: string;
+  snapshotId: string | null;
+  file: any;
+};
+
+async function loadGeneratedLeaseDocumentForDraft(draftId: string, draft: any): Promise<GeneratedLeaseDocument | null> {
+  const normalizedDraftId = String(draftId || "").trim();
+  if (!normalizedDraftId) return null;
+
+  const candidates: Array<GeneratedLeaseDocument & { generatedAt: number }> = [];
+  const seenSnapshotIds = new Set<string>();
+
+  const addCandidate = (snapshotId: string | null, file: any, generatedAt: number) => {
+    const leaseFile = firstGeneratedLeasePdfFile([file]);
+    const url = String(leaseFile?.url || "").trim();
+    if (!url.startsWith("https://")) return;
+    candidates.push({
+      url,
+      snapshotId: snapshotId || null,
+      file: leaseFile,
+      generatedAt: Number(generatedAt || 0) || 0,
+    });
+  };
+
+  const loadSnapshot = async (snapshotId: string | null) => {
+    const normalizedSnapshotId = String(snapshotId || "").trim();
+    if (!normalizedSnapshotId || seenSnapshotIds.has(normalizedSnapshotId)) return;
+    seenSnapshotIds.add(normalizedSnapshotId);
+    const snapshotSnap = await db.collection("leaseSnapshots").doc(normalizedSnapshotId).get().catch(() => null as any);
+    if (!snapshotSnap?.exists) return;
+    const snapshot = (snapshotSnap.data() as any) || {};
+    const generatedFiles = Array.isArray(snapshot?.generatedFiles) ? snapshot.generatedFiles : [];
+    const leaseFile = firstGeneratedLeasePdfFile(generatedFiles);
+    if (!leaseFile) return;
+    addCandidate(
+      normalizedSnapshotId,
+      leaseFile,
+      Number(snapshot?.generatedAt || snapshot?.createdAt || snapshot?.updatedAt || 0)
+    );
+  };
+
+  await loadSnapshot(String(draft?.lastGeneratedSnapshotId || "").trim() || null);
+  await loadSnapshot(String(draft?.latestLeaseSnapshotId || "").trim() || null);
+
+  const directUrl = String(draft?.lastGeneratedDocumentUrl || draft?.documentUrl || draft?.approvedDocumentUrl || draft?.documentRef || "").trim();
+  if (directUrl.startsWith("https://")) {
+    addCandidate(
+      String(draft?.lastGeneratedSnapshotId || draft?.latestLeaseSnapshotId || "").trim() || null,
+      { kind: "schedule-a-pdf", url: directUrl },
+      Number(draft?.generatedAt || draft?.updatedAt || draft?.createdAt || 0)
+    );
+  }
+
+  const queryGeneratedSnapshots = async (field: string) => {
+    const snap = await db.collection("leaseSnapshots").where(field, "==", normalizedDraftId).get().catch(() => null as any);
+    const docs = Array.isArray(snap?.docs) ? snap.docs : [];
+    for (const doc of docs) {
+      if (!doc?.id || seenSnapshotIds.has(doc.id)) continue;
+      seenSnapshotIds.add(doc.id);
+      const snapshot = (doc.data() as any) || {};
+      const leaseFile = firstGeneratedLeasePdfFile(Array.isArray(snapshot?.generatedFiles) ? snapshot.generatedFiles : []);
+      if (!leaseFile) continue;
+      addCandidate(
+        doc.id,
+        leaseFile,
+        Number(snapshot?.generatedAt || snapshot?.createdAt || snapshot?.updatedAt || 0)
+      );
+    }
+  };
+
+  await queryGeneratedSnapshots("sourceDraftId");
+  await queryGeneratedSnapshots("draftId");
+
+  candidates.sort((left, right) => right.generatedAt - left.generatedAt);
+  const latest = candidates[0];
+  if (!latest) return null;
+  return {
+    url: latest.url,
+    snapshotId: latest.snapshotId,
+    file: latest.file,
+  };
+}
+
 function safeAttachmentDocumentId(parts: string[]) {
   return parts
     .map((part) => String(part || "").trim().replace(/[^A-Za-z0-9_-]+/g, "_"))
@@ -1774,6 +1858,8 @@ router.post("/drafts/:id/generate", requireLandlord, async (req: any, res: Respo
     const generatedFiles = [file];
     const snapshotDoc = {
       ...draft,
+      draftId: id,
+      sourceDraftId: id,
       status: "generated",
       generatedAt: now,
       generatedFiles,
@@ -1883,6 +1969,36 @@ router.post("/drafts/:draftId/activate", requireLandlord, async (req: any, res: 
       return res.status(400).json({ ok: false, error: "payment_method_required" });
     }
 
+    const generatedLeaseDocument = await loadGeneratedLeaseDocumentForDraft(draftId, draft);
+
+    if (String(draft?.leaseId || "").trim()) {
+      const existingLeaseId = String(draft.leaseId).trim();
+      const existingLeaseSnap = await db.collection("leases").doc(existingLeaseId).get();
+      if (existingLeaseSnap.exists) {
+        if (generatedLeaseDocument) {
+          await linkGeneratedLeasePdfToTenantWorkspace({
+            draft: { ...draft, leaseId: existingLeaseId },
+            draftId,
+            landlordId,
+            snapshotId: generatedLeaseDocument.snapshotId || `activated_${existingLeaseId}`,
+            file: generatedLeaseDocument.file,
+            actorId: String(req.user?.id || req.user?.email || landlordId).trim() || null,
+          });
+          const repairedLeaseSnap = await db.collection("leases").doc(existingLeaseId).get();
+          return res.status(200).json({
+            ok: true,
+            leaseId: existingLeaseId,
+            lease: { id: existingLeaseId, ...(repairedLeaseSnap.data() as any) },
+          });
+        }
+        return res.status(200).json({
+          ok: true,
+          leaseId: existingLeaseId,
+          lease: { id: existingLeaseId, ...(existingLeaseSnap.data() as any) },
+        });
+      }
+    }
+
     const conflicts = await assertNoConflictingActiveAgreement({
       landlordId,
       propertyId,
@@ -1894,18 +2010,6 @@ router.post("/drafts/:draftId/activate", requireLandlord, async (req: any, res: 
     });
     if (conflicts.length) {
       return res.status(409).json({ ok: false, error: "conflicting_active_lease_agreement", conflictLeaseIds: conflicts.map((entry: any) => entry.lease.id) });
-    }
-
-    if (String(draft?.leaseId || "").trim()) {
-      const existingLeaseId = String(draft.leaseId).trim();
-      const existingLeaseSnap = await db.collection("leases").doc(existingLeaseId).get();
-      if (existingLeaseSnap.exists) {
-        return res.status(200).json({
-          ok: true,
-          leaseId: existingLeaseId,
-          lease: { id: existingLeaseId, ...(existingLeaseSnap.data() as any) },
-        });
-      }
     }
 
     const now = Date.now();
@@ -1955,28 +2059,22 @@ router.post("/drafts/:draftId/activate", requireLandlord, async (req: any, res: 
       createdAt: now,
       updatedAt: now,
     };
-    const draftDocumentUrl = await loadLeaseDocumentUrlForLease({ sourceDraftId: draftId });
-    if (draftDocumentUrl) {
-      leaseRecord.documentUrl = draftDocumentUrl;
-      leaseRecord.approvedDocumentUrl = draftDocumentUrl;
-      leaseRecord.documentRef = draftDocumentUrl;
+    if (generatedLeaseDocument) {
+      leaseRecord.documentUrl = generatedLeaseDocument.url;
+      leaseRecord.approvedDocumentUrl = generatedLeaseDocument.url;
+      leaseRecord.documentRef = generatedLeaseDocument.url;
       leaseRecord.documentGeneratedAt = now;
       leaseRecord.leaseDocumentGeneratedAt = now;
-      leaseRecord.latestLeaseSnapshotId = String(draft?.lastGeneratedSnapshotId || "").trim() || null;
+      leaseRecord.latestLeaseSnapshotId = generatedLeaseDocument.snapshotId;
     }
     await leaseRef.set(leaseRecord, { merge: false });
-    if (draftDocumentUrl) {
-      const snapshotId = String(draft?.lastGeneratedSnapshotId || "").trim();
-      const generatedFile = {
-        kind: "schedule-a-pdf",
-        url: draftDocumentUrl,
-      };
+    if (generatedLeaseDocument) {
       await linkGeneratedLeasePdfToTenantWorkspace({
         draft: { ...draft, leaseId: leaseRef.id },
         draftId,
         landlordId,
-        snapshotId: snapshotId || `activated_${leaseRef.id}`,
-        file: generatedFile,
+        snapshotId: generatedLeaseDocument.snapshotId || `activated_${leaseRef.id}`,
+        file: generatedLeaseDocument.file,
         actorId: String(req.user?.id || req.user?.email || landlordId).trim() || null,
       });
     }
