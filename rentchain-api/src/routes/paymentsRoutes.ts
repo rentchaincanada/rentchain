@@ -30,6 +30,8 @@ function landlordIdForReq(req: any): string {
 }
 
 const PAYMENT_OWNER_FIELDS = ["landlordId", "ownerId", "userId", "createdByLandlordId"] as const;
+const LEGACY_DEMO_TENANT_IDS = new Set(["t1", "t2", "t3", "t-001"]);
+const LEGACY_DEMO_PROPERTY_IDS = new Set(["p-main"]);
 
 type PaymentOwnershipContext = {
   tenantIds: Set<string>;
@@ -58,6 +60,12 @@ function hasLinkedPaymentOwnership(raw: any, ownership: PaymentOwnershipContext)
     (propertyId && ownership.propertyIds.has(propertyId)) ||
     (leaseId && ownership.leaseIds.has(leaseId))
   );
+}
+
+function isBlockedLegacyDemoPayment(raw: any): boolean {
+  const tenantId = String(raw?.tenantId || "").trim().toLowerCase();
+  const propertyId = String(raw?.propertyId || "").trim().toLowerCase();
+  return LEGACY_DEMO_TENANT_IDS.has(tenantId) || LEGACY_DEMO_PROPERTY_IDS.has(propertyId);
 }
 
 function hasProvenPaymentOwnership(raw: any, landlordId: string, ownership: PaymentOwnershipContext): boolean {
@@ -233,6 +241,7 @@ async function listPersistedPayments(
     });
 
     return Array.from(docsById.entries())
+      .filter(([, raw]) => !isBlockedLegacyDemoPayment(raw))
       .filter(([, raw]) => hasProvenPaymentOwnership(raw, landlordId, ownership))
       .map(([docId, raw]) => normalizePersistedPayment(docId, raw, landlordId, ownership))
       .sort((a, b) => paymentDateMillis(b) - paymentDateMillis(a));
@@ -444,8 +453,8 @@ function preferPaymentRecord(current: ReturnType<typeof normalizePersistedPaymen
   const currentDate = paymentDateMillis(current);
   const incomingDate = paymentDateMillis(incoming);
   if (incomingDate !== currentDate) return incomingDate > currentDate ? incoming : current;
+  if ((incoming as any).source === "ledgerEntries" && (current as any).source !== "ledgerEntries") return incoming;
   if ((incoming as any).source === "rentPayments" && (current as any).source !== "rentPayments") return incoming;
-  if ((incoming as any).source === "ledgerEntries" && (current as any).source === "payments") return incoming;
   return current;
 }
 
@@ -485,12 +494,12 @@ async function listVisiblePayments(
   landlordId: string,
   tenantId?: string
 ): Promise<Array<ReturnType<typeof normalizePersistedPayment>>> {
-  const [legacyPayments, rentPayments, ledgerEntryPayments] = await Promise.all([
-    listPersistedPayments(landlordId, tenantId),
-    listRentPayments(landlordId, tenantId),
+  const [ledgerEntryPayments, rentPayments, legacyPayments] = await Promise.all([
     listLedgerEntryPayments(landlordId, tenantId),
+    listRentPayments(landlordId, tenantId),
+    listPersistedPayments(landlordId, tenantId),
   ]);
-  return mergeVisiblePayments([...legacyPayments, ...rentPayments, ...ledgerEntryPayments]);
+  return mergeVisiblePayments([...ledgerEntryPayments, ...rentPayments, ...legacyPayments]);
 }
 
 async function getPersistedPaymentById(paymentId: string) {

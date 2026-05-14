@@ -597,6 +597,44 @@ describe("paymentsRoutes exports", () => {
     expect(res.body.map((payment: any) => payment.id)).toEqual(["payment-1"]);
   });
 
+  it("excludes generic legacy demo rows even when accidental ownership linkage exists", async () => {
+    ensureCollection("tenants").set("t1", {
+      landlordId: "landlord-1",
+      fullName: "Demo Tenant",
+    });
+    ensureCollection("properties").set("p-main", {
+      landlordId: "landlord-1",
+      name: "Demo Property",
+    });
+    ensureCollection("payments").set("legacy-demo-direct-owned", {
+      landlordId: "landlord-1",
+      tenantId: "t1",
+      propertyId: "p-main",
+      amount: 1000,
+      paidAt: "2026-05-07",
+      method: "seed",
+    });
+    ensureCollection("payments").set("legacy-demo-linked-owned", {
+      tenantId: "t-001",
+      propertyId: "p-main",
+      amount: 1200,
+      paidAt: "2026-05-08",
+      method: "seed",
+    });
+
+    const router = (await import("../paymentsRoutes")).default;
+    const res = await invokeRouter(router, { method: "GET", url: "/payments" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.map((payment: any) => payment.id)).toEqual(["payment-1"]);
+    expect(res.body).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "legacy-demo-direct-owned" }),
+        expect.objectContaining({ id: "legacy-demo-linked-owned" }),
+      ])
+    );
+  });
+
   it("includes legacy payments without landlordId only when property ownership is proven", async () => {
     ensureCollection("properties").set("prop-owned", {
       landlordId: "landlord-1",
@@ -825,6 +863,44 @@ describe("paymentsRoutes exports", () => {
         id: "rent-payment-dup",
         amount: 1800,
         source: "rentPayments",
+      })
+    );
+  });
+
+  it("prefers canonical ledger payment rows over matching legacy compatibility rows", async () => {
+    ensureCollection("payments").set("legacy-ledger-duplicate", {
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      leaseId: "lease-1",
+      propertyId: "prop-1",
+      amount: 1800,
+      paidAt: "2026-04-01T00:00:00.000Z",
+      method: "cash",
+      status: "Recorded",
+    });
+    ensureCollection("ledgerEntries").set("ledger-payment-duplicate", {
+      landlordId: "landlord-1",
+      leaseId: "lease-1",
+      propertyId: "prop-1",
+      entryType: "payment",
+      amountCents: 180000,
+      effectiveDate: "2026-04-01",
+      method: "cash",
+      createdAt: 1775001600000,
+    });
+
+    const router = (await import("../paymentsRoutes")).default;
+    const res = await invokeRouter(router, { method: "GET", url: "/payments?tenantId=tenant-1" });
+
+    expect(res.status).toBe(200);
+    const duplicateRows = res.body.filter((payment: any) =>
+      ["legacy-ledger-duplicate", "ledger-payment-duplicate"].includes(payment.id)
+    );
+    expect(duplicateRows).toHaveLength(1);
+    expect(duplicateRows[0]).toEqual(
+      expect.objectContaining({
+        id: "ledger-payment-duplicate",
+        source: "ledgerEntries",
       })
     );
   });
