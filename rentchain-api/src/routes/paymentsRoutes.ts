@@ -976,4 +976,4 @@ router.delete("/payments/:paymentId", requireAuth, requirePermission("payments.e
 export default router;
 
 // Export for testing
-export { createPaymentAdjustmentEntry, paymentsEditRouter };
+export { createPaymentAdjustmentEntry, handlePaymentEdit, paymentsEditRouter };

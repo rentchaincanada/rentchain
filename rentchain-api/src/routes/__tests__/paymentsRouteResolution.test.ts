@@ -117,10 +117,26 @@ async function invokeApp(app: any, options: { method: string; url: string; body?
 describe("payments route resolution", () => {
   async function buildApp() {
     const paymentsRoutesModule = await import("../paymentsRoutes");
+    const { requireAuth } = await import("../../middleware/requireAuth");
+    const { requirePermission } = await import("../../middleware/requireAuthz");
     const screeningJobsAdminRoutes = (await import("../screeningJobsAdminRoutes")).default;
 
     const app = express();
     app.use(express.json());
+    app.put(
+      "/api/payments/:paymentId",
+      routeSource("paymentsRoutes.ts"),
+      requireAuth,
+      requirePermission("payments.edit"),
+      paymentsRoutesModule.handlePaymentEdit
+    );
+    app.patch(
+      "/api/payments/:paymentId",
+      routeSource("paymentsRoutes.ts"),
+      requireAuth,
+      requirePermission("payments.edit"),
+      paymentsRoutesModule.handlePaymentEdit
+    );
     app.use("/api/payments", routeSource("paymentsRoutes.ts"), paymentsRoutesModule.paymentsEditRouter);
     app.use("/api", routeSource("paymentsRoutes.ts"), paymentsRoutesModule.default);
     app.use("/api/payments", routeSource("paymentsRoutes.ts"), (_req, res) => {
