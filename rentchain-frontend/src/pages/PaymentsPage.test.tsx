@@ -10,20 +10,24 @@ const mocks = vi.hoisted(() => ({
   printSummaryDocument: vi.fn(),
 }));
 
+function paymentEditId(payment: any) {
+  const source = String(payment?.source || "").trim().toLowerCase();
+  const status = String(payment?.status || "").trim().toLowerCase();
+  if (["checkout_created", "provider_checkout", "checkout"].includes(status)) return "";
+  if (source === "rentpayments" || source === "ledgerentries") return "";
+  const explicitCanonicalId = String(payment?.canonicalPaymentId || payment?.paymentDocumentId || "").trim();
+  if (explicitCanonicalId) return explicitCanonicalId;
+  if (source && source !== "payments") return "";
+  return source === "payments" ? String(payment?.id || "").trim() : "";
+}
+
 vi.mock("../hooks/usePayments", () => ({
   usePayments: mocks.usePayments,
 }));
 
 vi.mock("../api/paymentsApi", () => ({
-  getCanonicalPaymentEditId: (payment: any) =>
-    String(payment?.source || "").trim() === "payments" &&
-    String(payment?.status || "").trim().toLowerCase() !== "checkout_created"
-      ? String(payment?.canonicalPaymentId || payment?.paymentDocumentId || payment?.id || "").trim()
-      : "",
-  isEditablePaymentRecord: (payment: any) =>
-    String(payment?.source || "").trim() === "payments" &&
-    String(payment?.status || "").trim().toLowerCase() !== "checkout_created" &&
-    Boolean(String(payment?.canonicalPaymentId || payment?.paymentDocumentId || payment?.id || "").trim()),
+  getCanonicalPaymentEditId: (payment: any) => paymentEditId(payment),
+  isEditablePaymentRecord: (payment: any) => Boolean(paymentEditId(payment)),
   updatePayment: mocks.updatePayment,
 }));
 
@@ -245,5 +249,38 @@ describe("PaymentsPage", () => {
       })
     );
     prompt.mockRestore();
+  });
+
+  it("shows Edit when the row has an explicit canonical payment id even if source is absent", async () => {
+    mocks.usePayments.mockReturnValue({
+      payments: [
+        {
+          id: "display-row-2",
+          paymentDocumentId: "canonical-payment-doc-2",
+          tenantId: "tenant-1",
+          propertyId: "prop-1",
+          amount: 1800,
+          paidAt: "2026-04-01",
+          method: "e-transfer",
+          status: "Recorded",
+        },
+        {
+          id: "unknown-row-with-id-only",
+          tenantId: "tenant-1",
+          propertyId: "prop-1",
+          amount: 1800,
+          paidAt: "2026-04-02",
+          method: "manual",
+          status: "Recorded",
+        },
+      ],
+      loading: false,
+      error: null,
+    });
+
+    render(<PaymentsPage />);
+
+    await screen.findAllByText("Taylor Tenant");
+    expect(await screen.findAllByRole("button", { name: "Edit" })).toHaveLength(1);
   });
 });

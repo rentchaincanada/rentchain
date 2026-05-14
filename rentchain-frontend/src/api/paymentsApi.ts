@@ -30,17 +30,18 @@ export interface UpdatePaymentPayload {
 }
 
 export function getCanonicalPaymentEditId(payment: PaymentRecord): string {
-  const source = String(payment.source || "").trim();
-  if (source !== "payments") return "";
-
+  const source = String(payment.source || "").trim().toLowerCase();
   const status = String(payment.status || "").trim().toLowerCase();
   if (status === "checkout_created" || status === "provider_checkout" || status === "checkout") return "";
+  if (source === "rentpayments" || source === "ledgerentries") return "";
 
-  return (
+  const explicitCanonicalId =
     String(payment.canonicalPaymentId || "").trim() ||
-    String(payment.paymentDocumentId || "").trim() ||
-    String(payment.id || "").trim()
-  );
+    String(payment.paymentDocumentId || "").trim();
+  if (explicitCanonicalId) return explicitCanonicalId;
+  if (source && source !== "payments") return "";
+
+  return source === "payments" ? String(payment.id || "").trim() : "";
 }
 
 export function isEditablePaymentRecord(payment: PaymentRecord): boolean {
