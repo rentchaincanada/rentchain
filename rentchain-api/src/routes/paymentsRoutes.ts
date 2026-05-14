@@ -14,6 +14,7 @@ import { buildDatedExportFilename, setAttachmentExportHeaders } from "../lib/exp
 import { db } from "../config/firebase";
 
 const router = Router();
+const paymentsEditRouter = Router();
 
 const csvEscape = (value: unknown) => {
   const text = String(value ?? "");
@@ -944,6 +945,9 @@ router.put("/payments/:paymentId", requireAuth, requirePermission("payments.edit
 // PATCH /api/payments/:paymentId
 router.patch("/payments/:paymentId", requireAuth, requirePermission("payments.edit"), handlePaymentEdit);
 
+paymentsEditRouter.put("/:paymentId", requireAuth, requirePermission("payments.edit"), handlePaymentEdit);
+paymentsEditRouter.patch("/:paymentId", requireAuth, requirePermission("payments.edit"), handlePaymentEdit);
+
 // DELETE /api/payments/:paymentId
 router.delete("/payments/:paymentId", requireAuth, requirePermission("payments.edit"), async (req: any, res: Response) => {
   const { paymentId } = req.params;
@@ -972,4 +976,4 @@ router.delete("/payments/:paymentId", requireAuth, requirePermission("payments.e
 export default router;
 
 // Export for testing
-export { createPaymentAdjustmentEntry };
+export { createPaymentAdjustmentEntry, paymentsEditRouter };
