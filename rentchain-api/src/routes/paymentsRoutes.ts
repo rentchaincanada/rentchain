@@ -25,6 +25,63 @@ const csvEscape = (value: unknown) => {
 
 const roleForReq = (req: any) => String(req.user?.actorRole || req.user?.role || "").trim().toLowerCase();
 
+function landlordIdForReq(req: any): string {
+  return String(req.user?.landlordId || req.user?.id || "").trim();
+}
+
+const PAYMENT_OWNER_FIELDS = ["landlordId", "ownerId", "userId", "createdByLandlordId"] as const;
+const LEGACY_DEMO_TENANT_IDS = new Set(["t1", "t2", "t3", "t-001"]);
+const LEGACY_DEMO_PROPERTY_IDS = new Set(["p-main"]);
+
+type PaymentOwnershipContext = {
+  tenantIds: Set<string>;
+  propertyIds: Set<string>;
+  leaseIds: Set<string>;
+};
+
+const emptyPaymentOwnershipContext = (): PaymentOwnershipContext => ({
+  tenantIds: new Set(),
+  propertyIds: new Set(),
+  leaseIds: new Set(),
+});
+
+function hasSafeLandlordOwnership(raw: any, landlordId: string): boolean {
+  const expected = String(landlordId || "").trim();
+  if (!expected) return false;
+  return PAYMENT_OWNER_FIELDS.some((field) => String(raw?.[field] || "").trim() === expected);
+}
+
+function hasLinkedPaymentOwnership(raw: any, ownership: PaymentOwnershipContext): boolean {
+  const tenantId = String(raw?.tenantId || "").trim();
+  const propertyId = String(raw?.propertyId || "").trim();
+  const leaseId = String(raw?.leaseId || "").trim();
+  return (
+    (tenantId && ownership.tenantIds.has(tenantId)) ||
+    (propertyId && ownership.propertyIds.has(propertyId)) ||
+    (leaseId && ownership.leaseIds.has(leaseId))
+  );
+}
+
+function isBlockedLegacyDemoPayment(raw: any): boolean {
+  const tenantId = String(raw?.tenantId || "").trim().toLowerCase();
+  const propertyId = String(raw?.propertyId || "").trim().toLowerCase();
+  return LEGACY_DEMO_TENANT_IDS.has(tenantId) || LEGACY_DEMO_PROPERTY_IDS.has(propertyId);
+}
+
+function hasProvenPaymentOwnership(raw: any, landlordId: string, ownership: PaymentOwnershipContext): boolean {
+  return hasSafeLandlordOwnership(raw, landlordId) || hasLinkedPaymentOwnership(raw, ownership);
+}
+
+function resolvedLandlordIdForRecord(
+  raw: any,
+  landlordId?: string,
+  ownership: PaymentOwnershipContext = emptyPaymentOwnershipContext()
+): string | null {
+  const scopedLandlordId = String(landlordId || "").trim();
+  if (scopedLandlordId && hasProvenPaymentOwnership(raw, scopedLandlordId, ownership)) return scopedLandlordId;
+  return String(raw?.landlordId || "").trim() || null;
+}
+
 function resolveTenantLabel(raw: any): string {
   return (
     String(raw?.fullName || raw?.name || raw?.displayName || "").trim() ||
@@ -73,13 +130,19 @@ function isSameYearMonth(value: any, year: number, month: number) {
   return parsed.getUTCFullYear() === year && parsed.getUTCMonth() + 1 === month;
 }
 
-function normalizePersistedPayment(docId: string, raw: any): Payment & {
+function normalizePersistedPayment(
+  docId: string,
+  raw: any,
+  landlordId?: string,
+  ownership: PaymentOwnershipContext = emptyPaymentOwnershipContext()
+): Payment & {
   status?: string;
   createdAt?: string | null;
   updatedAt?: string | null;
 } {
   return {
     id: docId,
+    landlordId: resolvedLandlordIdForRecord(raw, landlordId, ownership),
     tenantId: String(raw?.tenantId || "").trim(),
     propertyId: String(raw?.propertyId || "").trim() || null,
     amount: Number(raw?.amount ?? 0),
@@ -89,16 +152,354 @@ function normalizePersistedPayment(docId: string, raw: any): Payment & {
     status: String(raw?.status || "").trim() || "Recorded",
     createdAt: toIsoString(raw?.createdAt),
     updatedAt: toIsoString(raw?.updatedAt),
+    leaseId: String(raw?.leaseId || "").trim() || null,
+    unitId: String(raw?.unitId || "").trim() || null,
+    paymentIntentId: String(raw?.paymentIntentId || "").trim() || null,
+    processorPaymentIntentId: String(raw?.processorPaymentIntentId || raw?.stripePaymentIntentId || "").trim() || null,
+    processorCheckoutSessionId: String(raw?.processorCheckoutSessionId || raw?.stripeCheckoutSessionId || "").trim() || null,
+    source: "payments",
   };
 }
 
-async function listPersistedPayments(tenantId?: string): Promise<Array<ReturnType<typeof normalizePersistedPayment>>> {
+async function collectOwnedEntityIds(collectionName: string, landlordId: string): Promise<Set<string>> {
+  const ids = new Set<string>();
+  const collection = db.collection(collectionName);
+  await Promise.all(
+    PAYMENT_OWNER_FIELDS.map(async (field) => {
+      const snap = await collection.where(field, "==", landlordId).limit(1000).get();
+      snap.docs.forEach((doc: any) => {
+        const data = doc.data() as any;
+        if (hasSafeLandlordOwnership(data, landlordId)) ids.add(doc.id);
+      });
+    })
+  );
+  return ids;
+}
+
+async function buildPaymentOwnershipContext(landlordId: string): Promise<PaymentOwnershipContext> {
+  const [tenantIds, propertyIds, leaseIds] = await Promise.all([
+    collectOwnedEntityIds("tenants", landlordId),
+    collectOwnedEntityIds("properties", landlordId),
+    collectOwnedEntityIds("leases", landlordId),
+  ]);
+  return { tenantIds, propertyIds, leaseIds };
+}
+
+async function collectPaymentsByField(
+  field: "tenantId" | "propertyId" | "leaseId",
+  values: Set<string>,
+  tenantId?: string
+): Promise<Map<string, any>> {
+  const docsById = new Map<string, any>();
   const base = db.collection("payments");
+  const filteredValues =
+    field === "tenantId" && tenantId
+      ? values.has(tenantId)
+        ? [tenantId]
+        : []
+      : Array.from(values);
+
+  await Promise.all(
+    filteredValues.map(async (value) => {
+      const snap = await base.where(field, "==", value).limit(500).get();
+      snap.docs.forEach((doc: any) => {
+        const raw = doc.data() as any;
+        if (tenantId && String(raw?.tenantId || "").trim() !== tenantId) return;
+        docsById.set(doc.id, raw);
+      });
+    })
+  );
+  return docsById;
+}
+
+async function listPersistedPayments(
+  landlordId?: string,
+  tenantId?: string
+): Promise<Array<ReturnType<typeof normalizePersistedPayment>>> {
+  const base = db.collection("payments");
+  if (landlordId) {
+    const ownership = await buildPaymentOwnershipContext(landlordId);
+    const docsById = new Map<string, any>();
+    await Promise.all(
+      PAYMENT_OWNER_FIELDS.map(async (field) => {
+        const snap = await base.where(field, "==", landlordId).limit(500).get();
+        snap.docs.forEach((doc: any) => {
+          const raw = doc.data() as any;
+          if (tenantId && String(raw?.tenantId || "").trim() !== tenantId) return;
+          docsById.set(doc.id, raw);
+        });
+      })
+    );
+
+    const [tenantLinked, propertyLinked, leaseLinked] = await Promise.all([
+      collectPaymentsByField("tenantId", ownership.tenantIds, tenantId),
+      collectPaymentsByField("propertyId", ownership.propertyIds, tenantId),
+      collectPaymentsByField("leaseId", ownership.leaseIds, tenantId),
+    ]);
+    [tenantLinked, propertyLinked, leaseLinked].forEach((linkedDocs) => {
+      linkedDocs.forEach((raw, docId) => docsById.set(docId, raw));
+    });
+
+    return Array.from(docsById.entries())
+      .filter(([, raw]) => !isBlockedLegacyDemoPayment(raw))
+      .filter(([, raw]) => hasProvenPaymentOwnership(raw, landlordId, ownership))
+      .map(([docId, raw]) => normalizePersistedPayment(docId, raw, landlordId, ownership))
+      .sort((a, b) => paymentDateMillis(b) - paymentDateMillis(a));
+  }
+
   const query = tenantId
     ? base.where("tenantId", "==", tenantId).orderBy("paidAt", "desc").limit(200)
     : base.orderBy("paidAt", "desc").limit(500);
   const snap = await query.get();
   return snap.docs.map((doc: any) => normalizePersistedPayment(doc.id, doc.data() as any));
+}
+
+function normalizeRentPayment(
+  docId: string,
+  raw: any,
+  landlordId: string
+): ReturnType<typeof normalizePersistedPayment> | null {
+  if (!hasSafeLandlordOwnership(raw, landlordId)) return null;
+  const tenantId = String(raw?.tenantId || "").trim();
+  if (!tenantId) return null;
+
+  const rawAmountCents = Number(raw?.amountCents);
+  const amount =
+    Number.isFinite(rawAmountCents) && rawAmountCents > 0
+      ? rawAmountCents / 100
+      : Number(raw?.amount ?? 0);
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+
+  const paidAt = toIsoString(raw?.paidAt) || toIsoString(raw?.updatedAt) || toIsoString(raw?.createdAt);
+  if (!paidAt) return null;
+
+  const processor = String(raw?.processor || "").trim();
+  return {
+    id: docId,
+    landlordId: resolvedLandlordIdForRecord(raw, landlordId),
+    tenantId,
+    propertyId: String(raw?.propertyId || "").trim() || null,
+    amount,
+    paidAt,
+    method: String(raw?.method || processor || "stripe").trim(),
+    notes: raw?.notes ?? null,
+    status: String(raw?.status || "").trim() || "Recorded",
+    createdAt: toIsoString(raw?.createdAt),
+    updatedAt: toIsoString(raw?.updatedAt),
+    leaseId: String(raw?.leaseId || "").trim() || null,
+    unitId: String(raw?.unitId || "").trim() || null,
+    rentPaymentId: String(raw?.rentPaymentId || raw?.id || docId || "").trim() || null,
+    paymentIntentId: String(raw?.paymentIntentId || "").trim() || null,
+    processorPaymentIntentId: String(raw?.processorPaymentIntentId || raw?.stripePaymentIntentId || "").trim() || null,
+    processorCheckoutSessionId: String(raw?.processorCheckoutSessionId || raw?.stripeCheckoutSessionId || "").trim() || null,
+    source: "rentPayments",
+  };
+}
+
+async function loadLeasePaymentContexts(leaseIds: string[]): Promise<Map<string, any>> {
+  const contexts = new Map<string, any>();
+  const uniqueLeaseIds = Array.from(new Set(leaseIds.map((id) => String(id || "").trim()).filter(Boolean)));
+  await Promise.all(
+    uniqueLeaseIds.map(async (leaseId) => {
+      const snap = await db.collection("leases").doc(leaseId).get();
+      if (!snap.exists) return;
+      contexts.set(leaseId, snap.data() as any);
+    })
+  );
+  return contexts;
+}
+
+function normalizeLedgerEntryPayment(
+  docId: string,
+  raw: any,
+  landlordId: string,
+  lease: any | null = null
+): ReturnType<typeof normalizePersistedPayment> | null {
+  if (String(raw?.landlordId || "").trim() !== landlordId) return null;
+  if (String(raw?.entryType || "").trim().toLowerCase() !== "payment") return null;
+
+  const amountCents = Math.abs(Math.trunc(Number(raw?.amountCents || 0)));
+  if (!Number.isFinite(amountCents) || amountCents <= 0) return null;
+
+  const paidAt = toIsoString(raw?.effectiveDate) || toIsoString(raw?.paidAt) || toIsoString(raw?.createdAt);
+  if (!paidAt) return null;
+
+  const leaseTenantIds = Array.isArray(lease?.tenantIds) ? lease.tenantIds : [];
+  const tenantId = String(raw?.tenantId || lease?.tenantId || lease?.primaryTenantId || leaseTenantIds[0] || "").trim();
+  const propertyId = String(raw?.propertyId || lease?.propertyId || "").trim() || null;
+  const leaseId = String(raw?.leaseId || "").trim() || null;
+  const unitId = String(raw?.unitId || lease?.unitId || lease?.unitNumber || "").trim() || null;
+  const reference = String(raw?.reference || "").trim();
+
+  return {
+    id: docId,
+    landlordId,
+    tenantId,
+    propertyId,
+    amount: amountCents / 100,
+    paidAt,
+    method: String(raw?.method || "manual").trim(),
+    notes: raw?.notes ?? null,
+    status: String(raw?.status || "").trim() || "Recorded",
+    createdAt: toIsoString(raw?.createdAt),
+    updatedAt: toIsoString(raw?.updatedAt),
+    leaseId,
+    unitId,
+    rentPaymentId: String(raw?.rentPaymentId || raw?.paymentId || "").trim() || null,
+    paymentIntentId: String(raw?.paymentIntentId || "").trim() || null,
+    processorPaymentIntentId: String(raw?.processorPaymentIntentId || raw?.stripePaymentIntentId || "").trim() || null,
+    processorCheckoutSessionId: String(raw?.processorCheckoutSessionId || raw?.stripeCheckoutSessionId || "").trim() || null,
+    reference: reference || null,
+    source: "ledgerEntries",
+  };
+}
+
+async function listRentPayments(
+  landlordId: string,
+  tenantId?: string
+): Promise<Array<ReturnType<typeof normalizePersistedPayment>>> {
+  const base = db.collection("rentPayments");
+  const docsById = new Map<string, any>();
+  await Promise.all(
+    PAYMENT_OWNER_FIELDS.map(async (field) => {
+      const snap = await base.where(field, "==", landlordId).limit(1000).get();
+      snap.docs.forEach((doc: any) => {
+        const raw = doc.data() as any;
+        if (tenantId && String(raw?.tenantId || "").trim() !== tenantId) return;
+        docsById.set(doc.id, raw);
+      });
+    })
+  );
+
+  return Array.from(docsById.entries())
+    .map(([docId, raw]) => normalizeRentPayment(docId, raw, landlordId))
+    .filter((payment: any): payment is ReturnType<typeof normalizePersistedPayment> => Boolean(payment));
+}
+
+async function listLedgerEntryPayments(
+  landlordId: string,
+  tenantId?: string
+): Promise<Array<ReturnType<typeof normalizePersistedPayment>>> {
+  const snap = await db
+    .collection("ledgerEntries")
+    .where("landlordId", "==", landlordId)
+    .where("entryType", "==", "payment")
+    .limit(1000)
+    .get();
+  const rawEntries = snap.docs.map((doc: any) => ({ docId: doc.id, raw: doc.data() as any }));
+  const leaseContexts = await loadLeasePaymentContexts(rawEntries.map(({ raw }) => raw?.leaseId));
+  return rawEntries
+    .map(({ docId, raw }) =>
+      normalizeLedgerEntryPayment(
+        docId,
+        raw,
+        landlordId,
+        String(raw?.leaseId || "").trim() ? leaseContexts.get(String(raw.leaseId).trim()) || null : null
+      )
+    )
+    .filter((payment: any): payment is ReturnType<typeof normalizePersistedPayment> => Boolean(payment))
+    .filter((payment) => !tenantId || String(payment.tenantId || "").trim() === tenantId);
+}
+
+function paymentDateMillis(payment: Payment): number {
+  return toMillis((payment as any).paidAt) || toMillis((payment as any).updatedAt) || toMillis((payment as any).createdAt) || 0;
+}
+
+function amountCentsForPayment(payment: Payment): number {
+  return Math.round(Number(payment.amount || 0) * 100);
+}
+
+function externalDedupeKeysForPayment(payment: Payment): string[] {
+  const record = payment as any;
+  const landlordId = String(record.landlordId || "").trim();
+  return [
+    ["rentPaymentId", record.rentPaymentId],
+    ["paymentIntentId", record.paymentIntentId],
+    ["processorPaymentIntentId", record.processorPaymentIntentId],
+    ["processorCheckoutSessionId", record.processorCheckoutSessionId],
+  ]
+    .map(([label, value]) => {
+      const normalized = String(value || "").trim();
+      return normalized && landlordId ? `${label}:${landlordId}:${normalized}` : "";
+    })
+    .filter(Boolean);
+}
+
+function fallbackDedupeKeysForPayment(payment: Payment): string[] {
+  const record = payment as any;
+  const landlordId = String(record.landlordId || "").trim();
+  const tenantId = String(payment.tenantId || "").trim();
+  const propertyId = String(payment.propertyId || "").trim();
+  const leaseId = String(record.leaseId || "").trim();
+  const paidAt = String(toIsoString((payment as any).paidAt) || "").trim();
+  const paidDate = paidAt.slice(0, 10);
+  const amountCents = amountCentsForPayment(payment);
+  const keys: string[] = [];
+
+  if (landlordId && tenantId && paidDate && amountCents > 0) {
+    if (propertyId) keys.push(`tenant-property-date-amount:${landlordId}:${tenantId}:${propertyId}:${paidDate}:${amountCents}`);
+    if (leaseId) keys.push(`tenant-lease-date-amount:${landlordId}:${tenantId}:${leaseId}:${paidDate}:${amountCents}`);
+    keys.push(`tenant-date-amount:${landlordId}:${tenantId}:${paidDate}:${amountCents}`);
+  }
+
+  return keys;
+}
+
+function dedupeKeysForPayment(payment: Payment): string[] {
+  return [...externalDedupeKeysForPayment(payment), ...fallbackDedupeKeysForPayment(payment)];
+}
+
+function preferPaymentRecord(current: ReturnType<typeof normalizePersistedPayment>, incoming: ReturnType<typeof normalizePersistedPayment>) {
+  const currentDate = paymentDateMillis(current);
+  const incomingDate = paymentDateMillis(incoming);
+  if (incomingDate !== currentDate) return incomingDate > currentDate ? incoming : current;
+  if ((incoming as any).source === "ledgerEntries" && (current as any).source !== "ledgerEntries") return incoming;
+  if ((incoming as any).source === "rentPayments" && (current as any).source !== "rentPayments") return incoming;
+  return current;
+}
+
+function mergeVisiblePayments(
+  payments: Array<ReturnType<typeof normalizePersistedPayment>>
+): Array<ReturnType<typeof normalizePersistedPayment>> {
+  const rows: Array<ReturnType<typeof normalizePersistedPayment>> = [];
+  const keyToIndex = new Map<string, number>();
+
+  payments.forEach((payment) => {
+    const externalKeys = externalDedupeKeysForPayment(payment);
+    const fallbackKeys = fallbackDedupeKeysForPayment(payment);
+    const externalIndex = externalKeys
+      .map((key) => keyToIndex.get(key))
+      .find((index): index is number => index != null);
+    const fallbackIndex = fallbackKeys
+      .map((key) => keyToIndex.get(key))
+      .find((index): index is number => index != null && (rows[index] as any)?.source !== (payment as any).source);
+    const existingIndex = externalIndex ?? fallbackIndex;
+    const keys = [...externalKeys, ...fallbackKeys];
+    if (existingIndex == null) {
+      const nextIndex = rows.length;
+      rows.push(payment);
+      keys.forEach((key) => keyToIndex.set(key, nextIndex));
+      return;
+    }
+
+    const preferred = preferPaymentRecord(rows[existingIndex], payment);
+    rows[existingIndex] = preferred;
+    dedupeKeysForPayment(preferred).forEach((key) => keyToIndex.set(key, existingIndex));
+  });
+
+  return rows.sort((a, b) => paymentDateMillis(b) - paymentDateMillis(a));
+}
+
+async function listVisiblePayments(
+  landlordId: string,
+  tenantId?: string
+): Promise<Array<ReturnType<typeof normalizePersistedPayment>>> {
+  const [ledgerEntryPayments, rentPayments, legacyPayments] = await Promise.all([
+    listLedgerEntryPayments(landlordId, tenantId),
+    listRentPayments(landlordId, tenantId),
+    listPersistedPayments(landlordId, tenantId),
+  ]);
+  return mergeVisiblePayments([...ledgerEntryPayments, ...rentPayments, ...legacyPayments]);
 }
 
 async function getPersistedPaymentById(paymentId: string) {
@@ -186,11 +587,17 @@ const parseYearMonth = (req: Request): { year: number; month: number } | null =>
 };
 
 // GET /api/payments?tenantId=...
-router.get("/payments", async (req: Request, res: Response) => {
+router.get("/payments", requireAuth, async (req: any, res: Response) => {
   res.setHeader("x-route-source", "paymentsRoutes.ts");
+  res.setHeader("x-payments-route-version", "pr897-real-payment-sources-v4");
+  res.setHeader("cache-control", "no-store");
   const tenantId = (req.query.tenantId as string | undefined) ?? undefined;
+  const landlordId = landlordIdForReq(req);
+  res.setHeader("x-payments-auth-scope", landlordId ? "landlord-resolved" : "landlord-unresolved");
+  if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
   try {
-    const results = await listPersistedPayments(tenantId);
+    const results = await listVisiblePayments(landlordId, tenantId);
+    res.setHeader("x-payments-result-count", String(results.length));
     return res.json(results);
   } catch (err) {
     console.error("[paymentsRoutes] list failed", err);
@@ -332,7 +739,7 @@ router.get("/payments/tenant/:tenantId/monthly", async (req: Request, res: Respo
     return res.json({ payments: [], total: 0 });
   }
   try {
-    const payments = (await listPersistedPayments(tenantId)).filter((payment) =>
+    const payments = (await listPersistedPayments(undefined, tenantId)).filter((payment) =>
       isSameYearMonth(payment.paidAt, parsed.year, parsed.month)
     );
     const total = payments.reduce((sum, p) => sum + (typeof p.amount === "number" ? p.amount : 0), 0);

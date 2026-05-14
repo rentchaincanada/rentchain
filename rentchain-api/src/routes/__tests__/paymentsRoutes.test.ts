@@ -1,10 +1,46 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const collections = new Map<string, Map<string, any>>();
+const authState = vi.hoisted(() => ({
+  user: { id: "landlord-1", landlordId: "landlord-1", role: "landlord" } as any,
+}));
 
 function ensureCollection(name: string) {
   if (!collections.has(name)) collections.set(name, new Map());
   return collections.get(name)!;
+}
+
+function buildQuery(name: string, filters: Array<{ field: string; value: any }> = []) {
+  const applyFilters = () =>
+    Array.from(ensureCollection(name).entries()).filter(([, data]) =>
+      filters.every((filter) => data?.[filter.field] === filter.value)
+    );
+  return {
+    where: (field: string, _op: string, value: any) =>
+      buildQuery(name, [...filters, { field, value }]),
+    limit: (_count?: number) => ({
+      get: async () => {
+        const docs = applyFilters().map(([docId, data]) => ({
+          id: docId,
+          data: () => data,
+        }));
+        return { docs };
+      },
+    }),
+    orderBy: (_orderField?: string, _direction?: string) => ({
+      limit: (_count?: number) => ({
+        get: async () => {
+          const docs = applyFilters()
+            .sort((a, b) => String(b[1]?.paidAt || "").localeCompare(String(a[1]?.paidAt || "")))
+            .map(([docId, data]) => ({
+              id: docId,
+              data: () => data,
+            }));
+          return { docs };
+        },
+      }),
+    }),
+  };
 }
 
 vi.mock("../../config/firebase", () => ({
@@ -32,42 +68,19 @@ vi.mock("../../config/firebase", () => ({
         ensureCollection(name).set(id, value);
         return { id };
       },
-      where: (field: string, _op: string, value: any) => ({
-        orderBy: (_orderField?: string, _direction?: string) => ({
-          limit: (_count?: number) => ({
-            get: async () => {
-              const docs = Array.from(ensureCollection(name).entries())
-                .filter(([, data]) => data?.[field] === value)
-                .sort((a, b) => String(b[1]?.paidAt || "").localeCompare(String(a[1]?.paidAt || "")))
-                .map(([docId, data]) => ({
-                  id: docId,
-                  data: () => data,
-                }));
-              return { docs };
-            },
-          }),
-        }),
-      }),
-      orderBy: (_field: string, _direction?: string) => ({
-        limit: (_count?: number) => ({
-          get: async () => {
-            const docs = Array.from(ensureCollection(name).entries())
-              .sort((a, b) => String(b[1]?.paidAt || "").localeCompare(String(a[1]?.paidAt || "")))
-              .map(([docId, data]) => ({
-                id: docId,
-                data: () => data,
-              }));
-            return { docs };
-          },
-        }),
-      }),
+      where: (field: string, _op: string, value: any) => buildQuery(name, [{ field, value }]),
+      limit: buildQuery(name).limit,
+      orderBy: buildQuery(name).orderBy,
     }),
   },
 }));
 
 vi.mock("../../middleware/requireAuth", () => ({
   requireAuth: (req: any, _res: any, next: any) => {
-    req.user = { id: "landlord-1", landlordId: "landlord-1", role: "landlord" };
+    if (!authState.user) {
+      return _res.status(401).json({ ok: false, error: "unauthenticated" });
+    }
+    req.user = authState.user;
     next();
   },
 }));
@@ -87,6 +100,7 @@ vi.mock("../../services/leaseService", () => ({
 describe("paymentsRoutes exports", () => {
   beforeEach(async () => {
     collections.clear();
+    authState.user = { id: "landlord-1", landlordId: "landlord-1", role: "landlord" };
     ensureCollection("tenants").set("tenant-1", {
       id: "tenant-1",
       fullName: "Taylor Tenant",
@@ -95,7 +109,15 @@ describe("paymentsRoutes exports", () => {
       id: "prop-1",
       name: "123 Main St",
     });
+    ensureCollection("leases").set("lease-1", {
+      id: "lease-1",
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+    });
     ensureCollection("payments").set("payment-1", {
+      landlordId: "landlord-1",
       tenantId: "tenant-1",
       propertyId: "prop-1",
       amount: 1800,
@@ -198,6 +220,10 @@ describe("paymentsRoutes exports", () => {
     const res = await invokeRouter(router, { method: "GET", url: "/payments?tenantId=tenant-1" });
 
     expect(res.status).toBe(200);
+    expect(res.headers["x-route-source"]).toBe("paymentsRoutes.ts");
+    expect(res.headers["x-payments-route-version"]).toBe("pr897-real-payment-sources-v4");
+    expect(res.headers["x-payments-auth-scope"]).toBe("landlord-resolved");
+    expect(res.headers["x-payments-result-count"]).toBe("1");
     expect(res.body).toEqual([
       expect.objectContaining({
         id: "payment-1",
@@ -210,6 +236,702 @@ describe("paymentsRoutes exports", () => {
         status: "Recorded",
       }),
     ]);
+  });
+
+  it("returns unauthorized instead of global payments when auth is missing", async () => {
+    authState.user = null;
+    ensureCollection("payments").set("global-seed-t1", {
+      tenantId: "t1",
+      propertyId: "p-main",
+      amount: 1000,
+      paidAt: "2026-05-07",
+      method: "seed",
+    });
+
+    const router = (await import("../paymentsRoutes")).default;
+    const res = await invokeRouter(router, { method: "GET", url: "/payments" });
+
+    expect(res.status).toBe(401);
+    expect(res.body).toEqual({ ok: false, error: "unauthenticated" });
+  });
+
+  it("returns unauthorized instead of global payments when landlord context is unresolved", async () => {
+    authState.user = { role: "landlord" };
+    ensureCollection("payments").set("global-seed-t2", {
+      tenantId: "t2",
+      propertyId: "p-main",
+      amount: 1200,
+      paidAt: "2026-05-08",
+      method: "seed",
+    });
+
+    const router = (await import("../paymentsRoutes")).default;
+    const res = await invokeRouter(router, { method: "GET", url: "/payments" });
+
+    expect(res.status).toBe(401);
+    expect(res.headers["x-payments-auth-scope"]).toBe("landlord-unresolved");
+    expect(res.body).toEqual({ ok: false, error: "Unauthorized" });
+  });
+
+  it("lists legacy payments and modern rentPayments for a tenant", async () => {
+    ensureCollection("rentPayments").set("rent-payment-2026", {
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      leaseId: "lease-1",
+      propertyId: "prop-1",
+      amountCents: 195000,
+      currency: "cad",
+      status: "paid",
+      processor: "stripe",
+      paidAt: "2026-05-03T12:00:00.000Z",
+      createdAt: "2026-05-03T11:55:00.000Z",
+      updatedAt: "2026-05-03T12:00:00.000Z",
+    });
+
+    const router = (await import("../paymentsRoutes")).default;
+    const res = await invokeRouter(router, { method: "GET", url: "/payments?tenantId=tenant-1" });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual([
+      expect.objectContaining({
+        id: "rent-payment-2026",
+        tenantId: "tenant-1",
+        leaseId: "lease-1",
+        propertyId: "prop-1",
+        amount: 1950,
+        paidAt: "2026-05-03T12:00:00.000Z",
+        method: "stripe",
+        status: "paid",
+        source: "rentPayments",
+      }),
+      expect.objectContaining({
+        id: "payment-1",
+        tenantId: "tenant-1",
+        amount: 1800,
+        paidAt: "2026-04-01",
+        source: "payments",
+      }),
+    ]);
+  });
+
+  it("includes landlord-owned lease ledger payment rows", async () => {
+    ensureCollection("ledgerEntries").set("ledger-payment-1", {
+      landlordId: "landlord-1",
+      leaseId: "lease-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      entryType: "payment",
+      category: "payment",
+      amountCents: 205000,
+      effectiveDate: "2026-05-15",
+      method: "etransfer",
+      reference: "manual-ref-1",
+      notes: "May ledger payment",
+      createdAt: 1778846400000,
+    });
+    ensureCollection("ledgerEntries").set("ledger-charge-ignored", {
+      landlordId: "landlord-1",
+      leaseId: "lease-1",
+      entryType: "charge",
+      amountCents: 205000,
+      effectiveDate: "2026-05-15",
+    });
+
+    const router = (await import("../paymentsRoutes")).default;
+    const res = await invokeRouter(router, { method: "GET", url: "/payments?tenantId=tenant-1" });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "ledger-payment-1",
+          landlordId: "landlord-1",
+          tenantId: "tenant-1",
+          leaseId: "lease-1",
+          propertyId: "prop-1",
+          unitId: "unit-1",
+          amount: 2050,
+          paidAt: "2026-05-15",
+          method: "etransfer",
+          notes: "May ledger payment",
+          status: "Recorded",
+          source: "ledgerEntries",
+        }),
+      ])
+    );
+    expect(res.body.map((payment: any) => payment.id)).not.toContain("ledger-charge-ignored");
+  });
+
+  it("excludes ledger payment rows for other landlords", async () => {
+    ensureCollection("leases").set("lease-b", {
+      id: "lease-b",
+      landlordId: "landlord-2",
+      tenantId: "tenant-b",
+      propertyId: "prop-b",
+    });
+    ensureCollection("ledgerEntries").set("ledger-payment-a", {
+      landlordId: "landlord-1",
+      leaseId: "lease-1",
+      entryType: "payment",
+      amountCents: 180000,
+      effectiveDate: "2026-05-01",
+      method: "cash",
+    });
+    ensureCollection("ledgerEntries").set("ledger-payment-b", {
+      landlordId: "landlord-2",
+      leaseId: "lease-b",
+      entryType: "payment",
+      amountCents: 180000,
+      effectiveDate: "2026-05-01",
+      method: "cash",
+    });
+
+    const router = (await import("../paymentsRoutes")).default;
+    const landlordARes = await invokeRouter(router, { method: "GET", url: "/payments" });
+    authState.user = { id: "landlord-2", landlordId: "landlord-2", role: "landlord" };
+    const landlordBRes = await invokeRouter(router, { method: "GET", url: "/payments" });
+
+    expect(landlordARes.status).toBe(200);
+    expect(landlordARes.body.map((payment: any) => payment.id)).toEqual([
+      "ledger-payment-a",
+      "payment-1",
+    ]);
+    expect(landlordBRes.status).toBe(200);
+    expect(landlordBRes.body.map((payment: any) => payment.id)).toEqual(["ledger-payment-b"]);
+  });
+
+  it("scopes landlord A payments to landlord A legacy and rentPayments records", async () => {
+    ensureCollection("payments").set("payment-landlord-b", {
+      landlordId: "landlord-2",
+      tenantId: "tenant-b",
+      propertyId: "prop-b",
+      amount: 2200,
+      paidAt: "2026-05-01",
+      method: "e-transfer",
+    });
+    ensureCollection("rentPayments").set("rent-payment-a", {
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+      amountCents: 190000,
+      status: "paid",
+      processor: "stripe",
+      paidAt: "2026-05-02T00:00:00.000Z",
+      updatedAt: "2026-05-02T00:00:00.000Z",
+    });
+    ensureCollection("rentPayments").set("rent-payment-b", {
+      landlordId: "landlord-2",
+      tenantId: "tenant-b",
+      propertyId: "prop-b",
+      amountCents: 220000,
+      status: "paid",
+      processor: "stripe",
+      paidAt: "2026-05-03T00:00:00.000Z",
+      updatedAt: "2026-05-03T00:00:00.000Z",
+    });
+
+    const router = (await import("../paymentsRoutes")).default;
+    const res = await invokeRouter(router, { method: "GET", url: "/payments" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.map((payment: any) => payment.id)).toEqual(["rent-payment-a", "payment-1"]);
+    expect(res.body).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "payment-1", landlordId: "landlord-1", source: "payments" }),
+        expect.objectContaining({ id: "rent-payment-a", landlordId: "landlord-1", source: "rentPayments" }),
+      ])
+    );
+    expect(res.body).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ landlordId: "landlord-2" }),
+      ])
+    );
+  });
+
+  it("scopes landlord B payments to landlord B legacy and rentPayments records", async () => {
+    authState.user = { id: "landlord-2", landlordId: "landlord-2", role: "landlord" };
+    ensureCollection("payments").set("payment-landlord-b", {
+      landlordId: "landlord-2",
+      tenantId: "tenant-b",
+      propertyId: "prop-b",
+      amount: 2200,
+      paidAt: "2026-05-01",
+      method: "e-transfer",
+    });
+    ensureCollection("rentPayments").set("rent-payment-a", {
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+      amountCents: 190000,
+      status: "paid",
+      processor: "stripe",
+      paidAt: "2026-05-02T00:00:00.000Z",
+      updatedAt: "2026-05-02T00:00:00.000Z",
+    });
+    ensureCollection("rentPayments").set("rent-payment-b", {
+      landlordId: "landlord-2",
+      tenantId: "tenant-b",
+      propertyId: "prop-b",
+      amountCents: 220000,
+      status: "paid",
+      processor: "stripe",
+      paidAt: "2026-05-03T00:00:00.000Z",
+      updatedAt: "2026-05-03T00:00:00.000Z",
+    });
+
+    const router = (await import("../paymentsRoutes")).default;
+    const res = await invokeRouter(router, { method: "GET", url: "/payments" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.map((payment: any) => payment.id)).toEqual(["rent-payment-b", "payment-landlord-b"]);
+    expect(res.body).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "payment-landlord-b", landlordId: "landlord-2", source: "payments" }),
+        expect.objectContaining({ id: "rent-payment-b", landlordId: "landlord-2", source: "rentPayments" }),
+      ])
+    );
+    expect(res.body).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ landlordId: "landlord-1" }),
+      ])
+    );
+  });
+
+  it("does not leak or dedupe same tenant date amount rows across landlords", async () => {
+    ensureCollection("leases").set("lease-b", {
+      landlordId: "landlord-2",
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+    });
+    ensureCollection("payments").set("payment-landlord-b-same", {
+      landlordId: "landlord-2",
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+      amount: 1800,
+      paidAt: "2026-04-01",
+      method: "e-transfer",
+    });
+    ensureCollection("rentPayments").set("rent-payment-landlord-b-same", {
+      landlordId: "landlord-2",
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+      amountCents: 180000,
+      status: "paid",
+      processor: "stripe",
+      paidAt: "2026-04-01T00:00:00.000Z",
+      updatedAt: "2026-04-01T00:00:00.000Z",
+    });
+    ensureCollection("ledgerEntries").set("ledger-payment-landlord-a-same", {
+      landlordId: "landlord-1",
+      leaseId: "lease-1",
+      entryType: "payment",
+      amountCents: 180000,
+      effectiveDate: "2026-04-01",
+      method: "cash",
+    });
+    ensureCollection("ledgerEntries").set("ledger-payment-landlord-b-same", {
+      landlordId: "landlord-2",
+      leaseId: "lease-b",
+      entryType: "payment",
+      amountCents: 180000,
+      effectiveDate: "2026-04-01",
+      method: "cash",
+    });
+
+    const router = (await import("../paymentsRoutes")).default;
+    const landlordARes = await invokeRouter(router, { method: "GET", url: "/payments?tenantId=tenant-1" });
+    authState.user = { id: "landlord-2", landlordId: "landlord-2", role: "landlord" };
+    const landlordBRes = await invokeRouter(router, { method: "GET", url: "/payments?tenantId=tenant-1" });
+
+    expect(landlordARes.status).toBe(200);
+    expect(landlordARes.body.map((payment: any) => payment.id)).toEqual(["ledger-payment-landlord-a-same"]);
+    expect(landlordBRes.status).toBe(200);
+    expect(landlordBRes.body.map((payment: any) => payment.id)).toEqual([
+      "rent-payment-landlord-b-same",
+    ]);
+  });
+
+  it("excludes records without landlord ownership from the landlord payments response", async () => {
+    ensureCollection("payments").set("payment-without-landlord", {
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+      amount: 1800,
+      paidAt: "2026-05-01",
+      method: "cash",
+    });
+    ensureCollection("rentPayments").set("rent-payment-without-landlord", {
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+      amountCents: 200000,
+      processor: "stripe",
+      updatedAt: "2026-05-01T00:00:00.000Z",
+    });
+
+    const router = (await import("../paymentsRoutes")).default;
+    const res = await invokeRouter(router, { method: "GET", url: "/payments?tenantId=tenant-1" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.map((payment: any) => payment.id)).toEqual(["payment-1"]);
+  });
+
+  it("excludes legacy payments without direct or linked landlord ownership", async () => {
+    ensureCollection("payments").set("global-seed-t1", {
+      tenantId: "t1",
+      propertyId: "p-main",
+      amount: 1000,
+      paidAt: "2026-05-07",
+      method: "seed",
+    });
+    ensureCollection("payments").set("global-seed-t-001", {
+      tenantId: "t-001",
+      propertyId: "p-main",
+      amount: 1200,
+      paidAt: "2026-05-08",
+      method: "seed",
+    });
+
+    const router = (await import("../paymentsRoutes")).default;
+    const res = await invokeRouter(router, { method: "GET", url: "/payments" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.map((payment: any) => payment.id)).toEqual(["payment-1"]);
+  });
+
+  it("excludes generic legacy demo rows even when accidental ownership linkage exists", async () => {
+    ensureCollection("tenants").set("t1", {
+      landlordId: "landlord-1",
+      fullName: "Demo Tenant",
+    });
+    ensureCollection("properties").set("p-main", {
+      landlordId: "landlord-1",
+      name: "Demo Property",
+    });
+    ensureCollection("payments").set("legacy-demo-direct-owned", {
+      landlordId: "landlord-1",
+      tenantId: "t1",
+      propertyId: "p-main",
+      amount: 1000,
+      paidAt: "2026-05-07",
+      method: "seed",
+    });
+    ensureCollection("payments").set("legacy-demo-linked-owned", {
+      tenantId: "t-001",
+      propertyId: "p-main",
+      amount: 1200,
+      paidAt: "2026-05-08",
+      method: "seed",
+    });
+
+    const router = (await import("../paymentsRoutes")).default;
+    const res = await invokeRouter(router, { method: "GET", url: "/payments" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.map((payment: any) => payment.id)).toEqual(["payment-1"]);
+    expect(res.body).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "legacy-demo-direct-owned" }),
+        expect.objectContaining({ id: "legacy-demo-linked-owned" }),
+      ])
+    );
+  });
+
+  it("includes legacy payments without landlordId only when property ownership is proven", async () => {
+    ensureCollection("properties").set("prop-owned", {
+      landlordId: "landlord-1",
+      name: "Owned Property",
+    });
+    ensureCollection("properties").set("prop-other", {
+      landlordId: "landlord-2",
+      name: "Other Property",
+    });
+    ensureCollection("payments").set("legacy-owned-property-payment", {
+      tenantId: "tenant-linked",
+      propertyId: "prop-owned",
+      amount: 2300,
+      paidAt: "2026-05-08",
+      method: "cheque",
+    });
+    ensureCollection("payments").set("legacy-other-property-payment", {
+      tenantId: "tenant-linked",
+      propertyId: "prop-other",
+      amount: 2400,
+      paidAt: "2026-05-09",
+      method: "cheque",
+    });
+
+    const router = (await import("../paymentsRoutes")).default;
+    const res = await invokeRouter(router, { method: "GET", url: "/payments" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.map((payment: any) => payment.id)).toEqual([
+      "legacy-owned-property-payment",
+      "payment-1",
+    ]);
+    expect(res.body).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "legacy-owned-property-payment",
+          landlordId: "landlord-1",
+          source: "payments",
+        }),
+      ])
+    );
+    expect(res.body).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "legacy-other-property-payment" }),
+      ])
+    );
+  });
+
+  it("includes legacy payments without landlordId only when tenant or lease ownership is proven", async () => {
+    ensureCollection("tenants").set("tenant-owned", {
+      landlordId: "landlord-1",
+      fullName: "Owned Tenant",
+    });
+    ensureCollection("leases").set("lease-owned", {
+      landlordId: "landlord-1",
+      tenantId: "tenant-lease",
+    });
+    ensureCollection("payments").set("legacy-owned-tenant-payment", {
+      tenantId: "tenant-owned",
+      propertyId: "prop-unlinked",
+      amount: 2500,
+      paidAt: "2026-05-10",
+      method: "cash",
+    });
+    ensureCollection("payments").set("legacy-owned-lease-payment", {
+      tenantId: "tenant-lease",
+      leaseId: "lease-owned",
+      amount: 2600,
+      paidAt: "2026-05-11",
+      method: "cash",
+    });
+    ensureCollection("payments").set("legacy-unlinked-payment", {
+      tenantId: "tenant-unlinked",
+      leaseId: "lease-unlinked",
+      amount: 2700,
+      paidAt: "2026-05-12",
+      method: "cash",
+    });
+
+    const router = (await import("../paymentsRoutes")).default;
+    const res = await invokeRouter(router, { method: "GET", url: "/payments" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.map((payment: any) => payment.id)).toEqual([
+      "legacy-owned-lease-payment",
+      "legacy-owned-tenant-payment",
+      "payment-1",
+    ]);
+    expect(res.body).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "legacy-unlinked-payment" }),
+      ])
+    );
+    expect(res.body).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "legacy-owned-tenant-payment", landlordId: "landlord-1" }),
+        expect.objectContaining({ id: "legacy-owned-lease-payment", landlordId: "landlord-1" }),
+      ])
+    );
+  });
+
+  it("accepts only explicit owner fields when landlordId is absent", async () => {
+    ensureCollection("payments").set("payment-owned-by-owner-id", {
+      ownerId: "landlord-1",
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+      amount: 1750,
+      paidAt: "2026-05-04",
+      method: "e-transfer",
+    });
+    ensureCollection("rentPayments").set("rent-payment-owned-by-created-by", {
+      createdByLandlordId: "landlord-1",
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+      amountCents: 210000,
+      processor: "stripe",
+      paidAt: "2026-05-05T00:00:00.000Z",
+    });
+    ensureCollection("rentPayments").set("rent-payment-unowned-same-tenant", {
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+      amountCents: 220000,
+      processor: "stripe",
+      paidAt: "2026-05-06T00:00:00.000Z",
+    });
+
+    const router = (await import("../paymentsRoutes")).default;
+    const res = await invokeRouter(router, { method: "GET", url: "/payments?tenantId=tenant-1" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.map((payment: any) => payment.id)).toEqual([
+      "rent-payment-owned-by-created-by",
+      "payment-owned-by-owner-id",
+      "payment-1",
+    ]);
+    expect(res.body).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "rent-payment-unowned-same-tenant" }),
+      ])
+    );
+    expect(res.body).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "payment-owned-by-owner-id", landlordId: "landlord-1" }),
+        expect.objectContaining({ id: "rent-payment-owned-by-created-by", landlordId: "landlord-1" }),
+      ])
+    );
+  });
+
+  it("sorts unified payments by payment date descending across both sources", async () => {
+    ensureCollection("payments").set("payment-old", {
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+      amount: 1700,
+      paidAt: "2026-02-01",
+      method: "cheque",
+    });
+    ensureCollection("rentPayments").set("rent-payment-new", {
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+      amountCents: 200000,
+      status: "paid",
+      processor: "stripe",
+      paidAt: "2026-06-01T00:00:00.000Z",
+      createdAt: "2026-06-01T00:00:00.000Z",
+      updatedAt: "2026-06-01T00:00:00.000Z",
+    });
+    ensureCollection("ledgerEntries").set("ledger-payment-middle", {
+      landlordId: "landlord-1",
+      leaseId: "lease-1",
+      entryType: "payment",
+      amountCents: 190000,
+      effectiveDate: "2026-05-15",
+      method: "cash",
+      createdAt: 1778846400000,
+    });
+
+    const router = (await import("../paymentsRoutes")).default;
+    const res = await invokeRouter(router, { method: "GET", url: "/payments?tenantId=tenant-1" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.map((payment: any) => payment.id)).toEqual([
+      "rent-payment-new",
+      "ledger-payment-middle",
+      "payment-1",
+      "payment-old",
+    ]);
+  });
+
+  it("deduplicates the same payment when it exists in payments and rentPayments", async () => {
+    ensureCollection("payments").set("legacy-stripe-payment", {
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+      amount: 1800,
+      paidAt: "2026-04-01T00:00:00.000Z",
+      method: "stripe",
+      status: "Recorded",
+      paymentIntentId: "intent-dup-1",
+    });
+    ensureCollection("rentPayments").set("rent-payment-dup", {
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      leaseId: "lease-1",
+      propertyId: "prop-1",
+      amountCents: 180000,
+      status: "paid",
+      processor: "stripe",
+      paymentIntentId: "intent-dup-1",
+      paidAt: "2026-04-01T00:00:00.000Z",
+      createdAt: "2026-04-01T00:00:00.000Z",
+      updatedAt: "2026-04-01T00:00:00.000Z",
+    });
+
+    const router = (await import("../paymentsRoutes")).default;
+    const res = await invokeRouter(router, { method: "GET", url: "/payments?tenantId=tenant-1" });
+
+    expect(res.status).toBe(200);
+    const duplicateRows = res.body.filter((payment: any) =>
+      ["legacy-stripe-payment", "rent-payment-dup"].includes(payment.id)
+    );
+    expect(duplicateRows).toHaveLength(1);
+    expect(duplicateRows[0]).toEqual(
+      expect.objectContaining({
+        id: "rent-payment-dup",
+        amount: 1800,
+        source: "rentPayments",
+      })
+    );
+  });
+
+  it("prefers canonical ledger payment rows over matching legacy compatibility rows", async () => {
+    ensureCollection("payments").set("legacy-ledger-duplicate", {
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      leaseId: "lease-1",
+      propertyId: "prop-1",
+      amount: 1800,
+      paidAt: "2026-04-01T00:00:00.000Z",
+      method: "cash",
+      status: "Recorded",
+    });
+    ensureCollection("ledgerEntries").set("ledger-payment-duplicate", {
+      landlordId: "landlord-1",
+      leaseId: "lease-1",
+      propertyId: "prop-1",
+      entryType: "payment",
+      amountCents: 180000,
+      effectiveDate: "2026-04-01",
+      method: "cash",
+      createdAt: 1775001600000,
+    });
+
+    const router = (await import("../paymentsRoutes")).default;
+    const res = await invokeRouter(router, { method: "GET", url: "/payments?tenantId=tenant-1" });
+
+    expect(res.status).toBe(200);
+    const duplicateRows = res.body.filter((payment: any) =>
+      ["legacy-ledger-duplicate", "ledger-payment-duplicate"].includes(payment.id)
+    );
+    expect(duplicateRows).toHaveLength(1);
+    expect(duplicateRows[0]).toEqual(
+      expect.objectContaining({
+        id: "ledger-payment-duplicate",
+        source: "ledgerEntries",
+      })
+    );
+  });
+
+  it("normalizes rentPayments with missing optional fields without crashing", async () => {
+    ensureCollection("rentPayments").set("rent-payment-minimal", {
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      amountCents: 210000,
+      processor: "stripe",
+      updatedAt: "2026-07-01T00:00:00.000Z",
+    });
+
+    const router = (await import("../paymentsRoutes")).default;
+    const res = await invokeRouter(router, { method: "GET", url: "/payments?tenantId=tenant-1" });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "rent-payment-minimal",
+          tenantId: "tenant-1",
+          propertyId: null,
+          amount: 2100,
+          paidAt: "2026-07-01T00:00:00.000Z",
+          method: "stripe",
+          status: "Recorded",
+          source: "rentPayments",
+        }),
+      ])
+    );
   });
 
   it("returns monthly totals from the persisted payments source", async () => {

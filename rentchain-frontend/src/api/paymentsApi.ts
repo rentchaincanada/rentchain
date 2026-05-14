@@ -31,6 +31,7 @@ export async function fetchPayments(tenantId?: string): Promise<PaymentRecord[]>
   try {
     const data = await apiFetch<any>(`/payments${qs.toString() ? `?${qs.toString()}` : ""}`, {
       allowStatuses: [404],
+      cache: "no-store",
     });
     if (Array.isArray(data)) return data as PaymentRecord[];
     if (Array.isArray(data?.items)) return data.items as PaymentRecord[];

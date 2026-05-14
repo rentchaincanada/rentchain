@@ -12,6 +12,18 @@ const ALLOWED_ORIGINS = new Set<string>([
 ]);
 
 const ALLOWED_LOCALHOST_PORTS = new Set<string>(["5173", "4173", "4174", "3000"]);
+const LAN_VITE_PORTS = new Set<string>(["5173"]);
+
+function isNonProduction(): boolean {
+  return String(process.env.NODE_ENV || "").trim().toLowerCase() !== "production";
+}
+
+function isLanHostname(hostname: string): boolean {
+  if (/^192\.168\.\d{1,3}\.\d{1,3}$/.test(hostname)) return true;
+  if (/^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)) return true;
+  if (/^172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}$/.test(hostname)) return true;
+  return false;
+}
 
 export function isOriginAllowed(origin?: string | null): boolean {
   if (!origin) return true; // same-origin or non-browser request
@@ -25,6 +37,9 @@ export function isOriginAllowed(origin?: string | null): boolean {
   const hostname = url.hostname.toLowerCase();
   if (hostname === "localhost" || hostname === "127.0.0.1") {
     return ALLOWED_LOCALHOST_PORTS.has(url.port || "80");
+  }
+  if (isNonProduction() && url.protocol === "http:" && isLanHostname(hostname)) {
+    return LAN_VITE_PORTS.has(url.port || "80");
   }
   if (hostname.endsWith(".vercel.app")) {
     return true;
