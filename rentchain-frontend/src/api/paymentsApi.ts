@@ -39,24 +39,22 @@ function normalizePaymentSource(value: unknown): string {
 export function getCanonicalPaymentEditId(payment: PaymentRecord): string {
   const source = normalizePaymentSource(payment.source);
   const status = String(payment.status || "").trim().toLowerCase();
-  if (status === "checkout_created" || status === "provider_checkout" || status === "checkout") return "";
-  if (source === "rentpayments" || source === "rentpayment" || source === "ledgerentries" || source === "ledgerentry") {
+  if (
+    status === "checkout_created" ||
+    status === "provider_checkout" ||
+    status === "checkout" ||
+    status === "voided" ||
+    status === "system_generated" ||
+    status === "system-generated"
+  ) {
     return "";
   }
+  if (source === "rentpayments" || source === "rentpayment") return "";
 
   const explicitCanonicalId =
     String(payment.canonicalPaymentId || "").trim() ||
     String(payment.paymentDocumentId || "").trim();
-  if (explicitCanonicalId) return explicitCanonicalId;
-
-  const isCanonicalSource =
-    source === "payments" ||
-    source === "payment" ||
-    source === "canonicalpayments" ||
-    source === "canonicalpayment" ||
-    source === "legacypayments" ||
-    source === "legacypayment";
-  return isCanonicalSource ? String(payment.id || "").trim() : "";
+  return explicitCanonicalId;
 }
 
 export function isEditablePaymentRecord(payment: PaymentRecord): boolean {
