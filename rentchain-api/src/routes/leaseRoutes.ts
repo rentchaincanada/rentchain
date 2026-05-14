@@ -3208,14 +3208,44 @@ router.post("/:leaseId/ledger/payment", async (req: any, res: Response) => {
     }
 
     const lease = leaseCheck.lease as any;
+    const tenantIds = Array.isArray(lease?.tenantIds) ? lease.tenantIds : [];
+    const tenantId = String(lease?.tenantId || lease?.primaryTenantId || tenantIds[0] || "").trim();
+    if (!tenantId) {
+      return res.status(409).json({ ok: false, error: "Lease is missing tenant context" });
+    }
+
     const now = Date.now();
+    const nowIso = new Date(now).toISOString();
+    const propertyId = String(req.body?.propertyId || lease?.propertyId || "").trim() || null;
+    const unitId = String(req.body?.unitId || lease?.unitId || lease?.unitNumber || "").trim() || null;
+    const paymentRef = db.collection("payments").doc();
     const entryRef = db.collection(LEDGER_COLLECTION).doc();
+    const payment = {
+      id: paymentRef.id,
+      landlordId,
+      tenantId,
+      leaseId,
+      propertyId,
+      unitId,
+      amount: amountCents / 100,
+      amountCents,
+      paidAt: effectiveDate,
+      effectiveDate,
+      method,
+      status: "recorded",
+      reference: req.body?.reference ? String(req.body.reference).trim().slice(0, 120) : null,
+      notes: req.body?.notes ? String(req.body.notes).trim().slice(0, 5000) : null,
+      ledgerEntryId: entryRef.id,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+      createdBy,
+    };
     const entry = {
       id: entryRef.id,
       landlordId,
-      propertyId: String(req.body?.propertyId || lease?.propertyId || "").trim() || null,
-      unitId:
-        String(req.body?.unitId || lease?.unitId || lease?.unitNumber || "").trim() || null,
+      tenantId,
+      propertyId,
+      unitId,
       leaseId,
       entryType: "payment" as LedgerEntryType,
       category: "payment",
@@ -3224,11 +3254,15 @@ router.post("/:leaseId/ledger/payment", async (req: any, res: Response) => {
       method,
       reference: req.body?.reference ? String(req.body.reference).trim().slice(0, 120) : null,
       notes: req.body?.notes ? String(req.body.notes).trim().slice(0, 5000) : null,
+      paymentDocumentId: paymentRef.id,
       createdAt: now,
       createdBy,
     };
-    await entryRef.set(entry, { merge: false });
-    return res.status(201).json({ ok: true, entry });
+    await db.runTransaction(async (transaction: any) => {
+      transaction.set(paymentRef, payment, { merge: false });
+      transaction.set(entryRef, entry, { merge: false });
+    });
+    return res.status(201).json({ ok: true, payment, entry });
   } catch (err) {
     console.error("[POST /api/leases/:leaseId/ledger/payment] error", err);
     return res.status(500).json({ ok: false, error: "Failed to record payment" });
@@ -3348,7 +3382,6 @@ router.get("/:leaseId/ledger/export.pdf", async (req: any, res: Response) => {
 });
 
 export default router;
-
 
 
 

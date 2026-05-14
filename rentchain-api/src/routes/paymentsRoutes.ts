@@ -141,6 +141,14 @@ function normalizePersistedPayment(
   createdAt?: string | null;
   updatedAt?: string | null;
 } {
+  const rawAmount = Number(raw?.amount);
+  const rawAmountCents = Number(raw?.amountCents);
+  const amount =
+    Number.isFinite(rawAmount) && rawAmount > 0
+      ? rawAmount
+      : Number.isFinite(rawAmountCents) && rawAmountCents > 0
+      ? rawAmountCents / 100
+      : 0;
   return {
     id: docId,
     canonicalPaymentId: docId,
@@ -148,7 +156,7 @@ function normalizePersistedPayment(
     landlordId: resolvedLandlordIdForRecord(raw, landlordId, ownership),
     tenantId: String(raw?.tenantId || "").trim(),
     propertyId: String(raw?.propertyId || "").trim() || null,
-    amount: Number(raw?.amount ?? 0),
+    amount,
     paidAt: String(toIsoString(raw?.paidAt) || "").trim(),
     method: String(raw?.method || "").trim(),
     notes: raw?.notes ?? null,
@@ -336,6 +344,8 @@ function normalizeLedgerEntryPayment(
 
   return {
     id: docId,
+    canonicalPaymentId: String(raw?.canonicalPaymentId || raw?.paymentDocumentId || "").trim(),
+    paymentDocumentId: String(raw?.paymentDocumentId || raw?.canonicalPaymentId || "").trim(),
     landlordId,
     tenantId,
     propertyId,

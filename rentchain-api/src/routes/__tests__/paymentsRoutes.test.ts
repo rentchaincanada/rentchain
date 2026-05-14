@@ -921,6 +921,54 @@ describe("paymentsRoutes exports", () => {
     );
   });
 
+  it("surfaces cents-native canonical payments with editable document ids", async () => {
+    ensureCollection("payments").set("canonical-cents-payment", {
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      leaseId: "lease-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      amountCents: 185000,
+      paidAt: "2026-05-14",
+      effectiveDate: "2026-05-14",
+      method: "etransfer",
+      status: "recorded",
+      ledgerEntryId: "ledger-linked-payment",
+    });
+    ensureCollection("ledgerEntries").set("ledger-linked-payment", {
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      leaseId: "lease-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      entryType: "payment",
+      category: "payment",
+      amountCents: 185000,
+      effectiveDate: "2026-05-14",
+      method: "etransfer",
+      paymentDocumentId: "canonical-cents-payment",
+      createdAt: 1778716800000,
+    });
+
+    const router = (await import("../paymentsRoutes")).default;
+    const res = await invokeRouter(router, { method: "GET", url: "/payments?tenantId=tenant-1" });
+
+    expect(res.status).toBe(200);
+    const duplicateRows = res.body.filter((payment: any) =>
+      ["canonical-cents-payment", "ledger-linked-payment"].includes(payment.id)
+    );
+    expect(duplicateRows).toHaveLength(1);
+    expect(duplicateRows[0]).toEqual(
+      expect.objectContaining({
+        id: "canonical-cents-payment",
+        canonicalPaymentId: "canonical-cents-payment",
+        paymentDocumentId: "canonical-cents-payment",
+        amount: 1850,
+        source: "payments",
+      })
+    );
+  });
+
   it("normalizes rentPayments with missing optional fields without crashing", async () => {
     ensureCollection("rentPayments").set("rent-payment-minimal", {
       landlordId: "landlord-1",

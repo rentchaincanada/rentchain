@@ -130,4 +130,34 @@ describe("tenantEventsWriteRoutes", () => {
     expect(createdEvents[0]?.severity).toBe("neutral");
     expect(createdEvents[0]?.title).toBe("Note added");
   });
+
+  it("keeps tenant payment activity separate from ledger and payments writes", async () => {
+    const router = (await import("../tenantEventsWriteRoutes")).default;
+    const result = await invokeRouter(router, {
+      method: "POST",
+      url: "/tenant-events",
+      body: {
+        tenantId: "tenant-1",
+        type: "RENT_PAID",
+        amountCents: 185000,
+        currency: "CAD",
+        purpose: "RENT",
+        description: "Timeline note only.",
+      },
+    });
+
+    expect(result.status).toBe(200);
+    expect(result.body?.ok).toBe(true);
+    expect(createdEvents).toHaveLength(1);
+    expect(createdEvents[0]).toEqual(
+      expect.objectContaining({
+        tenantId: "tenant-1",
+        landlordId: "landlord-1",
+        type: "RENT_PAID",
+        title: "Rent paid",
+        amountCents: 185000,
+        currency: "CAD",
+      })
+    );
+  });
 });
