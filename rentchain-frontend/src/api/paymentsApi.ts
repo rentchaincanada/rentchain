@@ -29,19 +29,34 @@ export interface UpdatePaymentPayload {
   notes?: string;
 }
 
+function normalizePaymentSource(value: unknown): string {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_-]+/g, "");
+}
+
 export function getCanonicalPaymentEditId(payment: PaymentRecord): string {
-  const source = String(payment.source || "").trim().toLowerCase();
+  const source = normalizePaymentSource(payment.source);
   const status = String(payment.status || "").trim().toLowerCase();
   if (status === "checkout_created" || status === "provider_checkout" || status === "checkout") return "";
-  if (source === "rentpayments" || source === "ledgerentries") return "";
+  if (source === "rentpayments" || source === "rentpayment" || source === "ledgerentries" || source === "ledgerentry") {
+    return "";
+  }
 
   const explicitCanonicalId =
     String(payment.canonicalPaymentId || "").trim() ||
     String(payment.paymentDocumentId || "").trim();
   if (explicitCanonicalId) return explicitCanonicalId;
-  if (source && source !== "payments") return "";
 
-  return source === "payments" ? String(payment.id || "").trim() : "";
+  const isCanonicalSource =
+    source === "payments" ||
+    source === "payment" ||
+    source === "canonicalpayments" ||
+    source === "canonicalpayment" ||
+    source === "legacypayments" ||
+    source === "legacypayment";
+  return isCanonicalSource ? String(payment.id || "").trim() : "";
 }
 
 export function isEditablePaymentRecord(payment: PaymentRecord): boolean {

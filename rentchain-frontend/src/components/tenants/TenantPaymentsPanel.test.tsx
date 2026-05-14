@@ -9,14 +9,15 @@ const mocks = vi.hoisted(() => ({
 }));
 
 function paymentEditId(payment: any) {
-  const source = String(payment?.source || "").trim().toLowerCase();
+  const source = String(payment?.source || "").trim().toLowerCase().replace(/[\s_-]+/g, "");
   const status = String(payment?.status || "").trim().toLowerCase();
   if (["checkout_created", "provider_checkout", "checkout"].includes(status)) return "";
-  if (source === "rentpayments" || source === "ledgerentries") return "";
+  if (["rentpayments", "rentpayment", "ledgerentries", "ledgerentry"].includes(source)) return "";
   const explicitCanonicalId = String(payment?.canonicalPaymentId || payment?.paymentDocumentId || "").trim();
   if (explicitCanonicalId) return explicitCanonicalId;
-  if (source && source !== "payments") return "";
-  return source === "payments" ? String(payment?.id || "").trim() : "";
+  return ["payments", "payment", "canonicalpayments", "canonicalpayment", "legacypayments", "legacypayment"].includes(source)
+    ? String(payment?.id || "").trim()
+    : "";
 }
 
 vi.mock("@/api/paymentsApi", () => ({

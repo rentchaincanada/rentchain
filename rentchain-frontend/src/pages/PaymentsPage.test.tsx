@@ -11,14 +11,15 @@ const mocks = vi.hoisted(() => ({
 }));
 
 function paymentEditId(payment: any) {
-  const source = String(payment?.source || "").trim().toLowerCase();
+  const source = String(payment?.source || "").trim().toLowerCase().replace(/[\s_-]+/g, "");
   const status = String(payment?.status || "").trim().toLowerCase();
   if (["checkout_created", "provider_checkout", "checkout"].includes(status)) return "";
-  if (source === "rentpayments" || source === "ledgerentries") return "";
+  if (["rentpayments", "rentpayment", "ledgerentries", "ledgerentry"].includes(source)) return "";
   const explicitCanonicalId = String(payment?.canonicalPaymentId || payment?.paymentDocumentId || "").trim();
   if (explicitCanonicalId) return explicitCanonicalId;
-  if (source && source !== "payments") return "";
-  return source === "payments" ? String(payment?.id || "").trim() : "";
+  return ["payments", "payment", "canonicalpayments", "canonicalpayment", "legacypayments", "legacypayment"].includes(source)
+    ? String(payment?.id || "").trim()
+    : "";
 }
 
 vi.mock("../hooks/usePayments", () => ({
@@ -272,6 +273,30 @@ describe("PaymentsPage", () => {
           paidAt: "2026-04-02",
           method: "manual",
           status: "Recorded",
+        },
+      ],
+      loading: false,
+      error: null,
+    });
+
+    render(<PaymentsPage />);
+
+    await screen.findAllByText("Taylor Tenant");
+    expect(await screen.findAllByRole("button", { name: "Edit" })).toHaveLength(1);
+  });
+
+  it("shows Edit when a canonical row uses a singular payment source alias", async () => {
+    mocks.usePayments.mockReturnValue({
+      payments: [
+        {
+          id: "canonical-payment-doc-3",
+          tenantId: "tenant-1",
+          propertyId: "prop-1",
+          amount: 1800,
+          paidAt: "2026-04-01",
+          method: "e-transfer",
+          status: "Recorded",
+          source: "payment",
         },
       ],
       loading: false,
