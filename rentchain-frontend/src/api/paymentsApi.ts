@@ -3,12 +3,15 @@ import { downloadAuthenticatedExport } from "./exportDownload";
 
 export interface PaymentRecord {
   id: string;
+  canonicalPaymentId?: string | null;
+  paymentDocumentId?: string | null;
   tenantId?: string | null;
   propertyId?: string | null;
   amount: number;
   paidAt?: string | null;
   method?: string;
   notes?: string | null;
+  status?: string | null;
   monthlyRent?: number | null;
   dueDate?: string | null;
   createdAt?: string | null;

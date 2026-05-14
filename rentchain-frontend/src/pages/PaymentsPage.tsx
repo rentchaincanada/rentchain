@@ -26,6 +26,24 @@ function propertyLabelFromValue(value: any): string {
   );
 }
 
+function getCanonicalPaymentEditId(payment: PaymentRecord): string {
+  const source = String(payment.source || "").trim();
+  if (source !== "payments") return "";
+
+  const status = String(payment.status || "").trim().toLowerCase();
+  if (status === "checkout_created" || status === "provider_checkout" || status === "checkout") return "";
+
+  return (
+    String(payment.canonicalPaymentId || "").trim() ||
+    String(payment.paymentDocumentId || "").trim() ||
+    String(payment.id || "").trim()
+  );
+}
+
+function isEditablePayment(payment: PaymentRecord): boolean {
+  return Boolean(getCanonicalPaymentEditId(payment));
+}
+
 const PaymentsPage: React.FC = () => {
   const { payments, loading, error } = usePayments();
   const [rows, setRows] = useState<PaymentRecord[]>([]);
@@ -133,7 +151,8 @@ const PaymentsPage: React.FC = () => {
   };
 
   const handleEditPayment = async (p: PaymentRecord) => {
-    if (!p.id) return;
+    const paymentEditId = getCanonicalPaymentEditId(p);
+    if (!paymentEditId) return;
 
     try {
       const currentAmount = p.amount != null ? String(p.amount) : "";
@@ -183,7 +202,7 @@ const PaymentsPage: React.FC = () => {
         return; // nothing to update
       }
 
-      const updated: any = await updatePayment(p.id, payload);
+      const updated: any = await updatePayment(paymentEditId, payload);
 
       setRows((prev) => prev.map((row) => (row.id === p.id ? { ...row, ...updated } : row)));
     } catch (err) {
@@ -304,13 +323,15 @@ const PaymentsPage: React.FC = () => {
                       >
                         {p.method || "Unspecified"}
                       </span>
-                      <Button
-                        variant="secondary"
-                        onClick={() => void handleEditPayment(p)}
-                        style={{ padding: "0.35rem 0.6rem", fontSize: "0.85rem" }}
-                      >
-                        Edit
-                      </Button>
+                      {isEditablePayment(p) ? (
+                        <Button
+                          variant="secondary"
+                          onClick={() => void handleEditPayment(p)}
+                          style={{ padding: "0.35rem 0.6rem", fontSize: "0.85rem" }}
+                        >
+                          Edit
+                        </Button>
+                      ) : null}
                     </td>
                   </tr>
                 ))}
