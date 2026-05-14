@@ -279,10 +279,69 @@ function normalizeRentPayment(
     updatedAt: toIsoString(raw?.updatedAt),
     leaseId: String(raw?.leaseId || "").trim() || null,
     unitId: String(raw?.unitId || "").trim() || null,
+    rentPaymentId: String(raw?.rentPaymentId || raw?.id || docId || "").trim() || null,
     paymentIntentId: String(raw?.paymentIntentId || "").trim() || null,
     processorPaymentIntentId: String(raw?.processorPaymentIntentId || raw?.stripePaymentIntentId || "").trim() || null,
     processorCheckoutSessionId: String(raw?.processorCheckoutSessionId || raw?.stripeCheckoutSessionId || "").trim() || null,
     source: "rentPayments",
+  };
+}
+
+async function loadLeasePaymentContexts(leaseIds: string[]): Promise<Map<string, any>> {
+  const contexts = new Map<string, any>();
+  const uniqueLeaseIds = Array.from(new Set(leaseIds.map((id) => String(id || "").trim()).filter(Boolean)));
+  await Promise.all(
+    uniqueLeaseIds.map(async (leaseId) => {
+      const snap = await db.collection("leases").doc(leaseId).get();
+      if (!snap.exists) return;
+      contexts.set(leaseId, snap.data() as any);
+    })
+  );
+  return contexts;
+}
+
+function normalizeLedgerEntryPayment(
+  docId: string,
+  raw: any,
+  landlordId: string,
+  lease: any | null = null
+): ReturnType<typeof normalizePersistedPayment> | null {
+  if (String(raw?.landlordId || "").trim() !== landlordId) return null;
+  if (String(raw?.entryType || "").trim().toLowerCase() !== "payment") return null;
+
+  const amountCents = Math.abs(Math.trunc(Number(raw?.amountCents || 0)));
+  if (!Number.isFinite(amountCents) || amountCents <= 0) return null;
+
+  const paidAt = toIsoString(raw?.effectiveDate) || toIsoString(raw?.paidAt) || toIsoString(raw?.createdAt);
+  if (!paidAt) return null;
+
+  const leaseTenantIds = Array.isArray(lease?.tenantIds) ? lease.tenantIds : [];
+  const tenantId = String(raw?.tenantId || lease?.tenantId || lease?.primaryTenantId || leaseTenantIds[0] || "").trim();
+  const propertyId = String(raw?.propertyId || lease?.propertyId || "").trim() || null;
+  const leaseId = String(raw?.leaseId || "").trim() || null;
+  const unitId = String(raw?.unitId || lease?.unitId || lease?.unitNumber || "").trim() || null;
+  const reference = String(raw?.reference || "").trim();
+
+  return {
+    id: docId,
+    landlordId,
+    tenantId,
+    propertyId,
+    amount: amountCents / 100,
+    paidAt,
+    method: String(raw?.method || "manual").trim(),
+    notes: raw?.notes ?? null,
+    status: String(raw?.status || "").trim() || "Recorded",
+    createdAt: toIsoString(raw?.createdAt),
+    updatedAt: toIsoString(raw?.updatedAt),
+    leaseId,
+    unitId,
+    rentPaymentId: String(raw?.rentPaymentId || raw?.paymentId || "").trim() || null,
+    paymentIntentId: String(raw?.paymentIntentId || "").trim() || null,
+    processorPaymentIntentId: String(raw?.processorPaymentIntentId || raw?.stripePaymentIntentId || "").trim() || null,
+    processorCheckoutSessionId: String(raw?.processorCheckoutSessionId || raw?.stripeCheckoutSessionId || "").trim() || null,
+    reference: reference || null,
+    source: "ledgerEntries",
   };
 }
 
@@ -308,6 +367,31 @@ async function listRentPayments(
     .filter((payment: any): payment is ReturnType<typeof normalizePersistedPayment> => Boolean(payment));
 }
 
+async function listLedgerEntryPayments(
+  landlordId: string,
+  tenantId?: string
+): Promise<Array<ReturnType<typeof normalizePersistedPayment>>> {
+  const snap = await db
+    .collection("ledgerEntries")
+    .where("landlordId", "==", landlordId)
+    .where("entryType", "==", "payment")
+    .limit(1000)
+    .get();
+  const rawEntries = snap.docs.map((doc: any) => ({ docId: doc.id, raw: doc.data() as any }));
+  const leaseContexts = await loadLeasePaymentContexts(rawEntries.map(({ raw }) => raw?.leaseId));
+  return rawEntries
+    .map(({ docId, raw }) =>
+      normalizeLedgerEntryPayment(
+        docId,
+        raw,
+        landlordId,
+        String(raw?.leaseId || "").trim() ? leaseContexts.get(String(raw.leaseId).trim()) || null : null
+      )
+    )
+    .filter((payment: any): payment is ReturnType<typeof normalizePersistedPayment> => Boolean(payment))
+    .filter((payment) => !tenantId || String(payment.tenantId || "").trim() === tenantId);
+}
+
 function paymentDateMillis(payment: Payment): number {
   return toMillis((payment as any).paidAt) || toMillis((payment as any).updatedAt) || toMillis((payment as any).createdAt) || 0;
 }
@@ -320,6 +404,7 @@ function externalDedupeKeysForPayment(payment: Payment): string[] {
   const record = payment as any;
   const landlordId = String(record.landlordId || "").trim();
   return [
+    ["rentPaymentId", record.rentPaymentId],
     ["paymentIntentId", record.paymentIntentId],
     ["processorPaymentIntentId", record.processorPaymentIntentId],
     ["processorCheckoutSessionId", record.processorCheckoutSessionId],
@@ -360,6 +445,7 @@ function preferPaymentRecord(current: ReturnType<typeof normalizePersistedPaymen
   const incomingDate = paymentDateMillis(incoming);
   if (incomingDate !== currentDate) return incomingDate > currentDate ? incoming : current;
   if ((incoming as any).source === "rentPayments" && (current as any).source !== "rentPayments") return incoming;
+  if ((incoming as any).source === "ledgerEntries" && (current as any).source === "payments") return incoming;
   return current;
 }
 
@@ -399,11 +485,12 @@ async function listVisiblePayments(
   landlordId: string,
   tenantId?: string
 ): Promise<Array<ReturnType<typeof normalizePersistedPayment>>> {
-  const [legacyPayments, rentPayments] = await Promise.all([
+  const [legacyPayments, rentPayments, ledgerEntryPayments] = await Promise.all([
     listPersistedPayments(landlordId, tenantId),
     listRentPayments(landlordId, tenantId),
+    listLedgerEntryPayments(landlordId, tenantId),
   ]);
-  return mergeVisiblePayments([...legacyPayments, ...rentPayments]);
+  return mergeVisiblePayments([...legacyPayments, ...rentPayments, ...ledgerEntryPayments]);
 }
 
 async function getPersistedPaymentById(paymentId: string) {
@@ -493,7 +580,7 @@ const parseYearMonth = (req: Request): { year: number; month: number } | null =>
 // GET /api/payments?tenantId=...
 router.get("/payments", requireAuth, async (req: any, res: Response) => {
   res.setHeader("x-route-source", "paymentsRoutes.ts");
-  res.setHeader("x-payments-route-version", "pr897-landlord-owned-payments-v3");
+  res.setHeader("x-payments-route-version", "pr897-real-payment-sources-v4");
   res.setHeader("cache-control", "no-store");
   const tenantId = (req.query.tenantId as string | undefined) ?? undefined;
   const landlordId = landlordIdForReq(req);
