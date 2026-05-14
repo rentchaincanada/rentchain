@@ -13,6 +13,8 @@ export interface PaymentRecord {
   dueDate?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
+  source?: "payments" | "rentPayments" | "ledgerEntries" | string | null;
+  rentPaymentId?: string | null;
 }
 
 export interface Payment extends PaymentRecord {}

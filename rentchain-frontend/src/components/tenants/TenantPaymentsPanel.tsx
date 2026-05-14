@@ -34,6 +34,12 @@ function formatMoney(n?: number | null) {
   return v.toLocaleString(undefined, { style: "currency", currency: "CAD" });
 }
 
+function isEditablePayment(payment: PaymentRecord): boolean {
+  const source = String((payment as any)?.source || "").trim();
+  const status = String((payment as any)?.status || "").trim().toLowerCase();
+  return source === "payments" && status !== "checkout_created";
+}
+
 export function TenantPaymentsPanel({ tenantId }: Props) {
   const safeTenantId = tenantId ?? undefined;
 
@@ -251,9 +257,13 @@ export function TenantPaymentsPanel({ tenantId }: Props) {
                       {String(p.status ?? "--")}
                     </td>
                     <td style={{ padding: "8px 6px", borderBottom: "1px solid #f3f3f3" }}>
-                      <button onClick={() => beginEdit(p)} disabled={busy} style={{ padding: "4px 8px" }}>
-                        Edit
-                      </button>
+                      {isEditablePayment(p) ? (
+                        <button onClick={() => beginEdit(p)} disabled={busy} style={{ padding: "4px 8px" }}>
+                          Edit
+                        </button>
+                      ) : (
+                        <span style={{ opacity: 0.65 }}>--</span>
+                      )}
                     </td>
                   </tr>
                 ))}

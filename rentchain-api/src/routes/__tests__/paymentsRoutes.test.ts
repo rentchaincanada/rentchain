@@ -45,6 +45,11 @@ function buildQuery(name: string, filters: Array<{ field: string; value: any }> 
 
 vi.mock("../../config/firebase", () => ({
   db: {
+    runTransaction: async (handler: any) =>
+      handler({
+        get: async (ref: any) => ref.get(),
+        set: async (ref: any, value: any, opts?: { merge?: boolean }) => ref.set(value, opts),
+      }),
     collection: (name: string) => ({
       doc: (id: string) => ({
         get: async () => {
@@ -133,6 +138,7 @@ describe("paymentsRoutes exports", () => {
     options: {
       method: string;
       url: string;
+      body?: any;
     }
   ) {
     return await new Promise<{ status: number; body: any; headers: Record<string, string> }>((resolve, reject) => {
@@ -143,7 +149,7 @@ describe("paymentsRoutes exports", () => {
         originalUrl: options.url,
         path: parsed.pathname,
         headers: {},
-        body: {},
+        body: options.body ?? {},
         query: Object.fromEntries(parsed.searchParams.entries()),
         params: {},
       };
@@ -932,6 +938,88 @@ describe("paymentsRoutes exports", () => {
         }),
       ])
     );
+  });
+
+  it("patches canonical payments through the same edit handler as put", async () => {
+    ensureCollection("payments").set("payment-put", {
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+      amount: 1800,
+      paidAt: "2026-04-01",
+      method: "e-transfer",
+      notes: "Original",
+      status: "Recorded",
+    });
+    ensureCollection("payments").set("payment-patch", {
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+      amount: 1800,
+      paidAt: "2026-04-01",
+      method: "e-transfer",
+      notes: "Original",
+      status: "Recorded",
+    });
+
+    const router = (await import("../paymentsRoutes")).default;
+    const putRes = await invokeRouter(router, {
+      method: "PUT",
+      url: "/payments/payment-put",
+      body: { amount: 1900, notes: "Updated" },
+    });
+    const patchRes = await invokeRouter(router, {
+      method: "PATCH",
+      url: "/payments/payment-patch",
+      body: { amount: 1900, notes: "Updated" },
+    });
+
+    expect(putRes.status).toBe(200);
+    expect(patchRes.status).toBe(200);
+    expect(ensureCollection("payments").get("payment-put")).toEqual(
+      expect.objectContaining({ amount: 1900, notes: "Updated" })
+    );
+    expect(ensureCollection("payments").get("payment-patch")).toEqual(
+      expect.objectContaining({ amount: 1900, notes: "Updated" })
+    );
+  });
+
+  it("does not create or update persisted payments when patch receives a rentPayments uuid", async () => {
+    const rentPaymentId = "f871db5d-16b3-4818-92e6-99c43d0f58e3";
+    ensureCollection("rentPayments").set(rentPaymentId, {
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      amountCents: 180000,
+      processor: "stripe",
+      status: "checkout_created",
+      updatedAt: "2026-07-01T00:00:00.000Z",
+    });
+
+    const router = (await import("../paymentsRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "PATCH",
+      url: `/payments/${rentPaymentId}`,
+      body: { amount: 1900 },
+    });
+
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({ ok: false, code: "PAYMENT_NOT_FOUND", error: "Payment not found" });
+    expect(ensureCollection("payments").has(rentPaymentId)).toBe(false);
+    expect(ensureCollection("rentPayments").get(rentPaymentId)).toEqual(
+      expect.objectContaining({ amountCents: 180000, status: "checkout_created" })
+    );
+  });
+
+  it("returns a clear 404 for unsupported payment edit ids", async () => {
+    const router = (await import("../paymentsRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "PATCH",
+      url: "/payments/not-a-payment-id",
+      body: { amount: 1900 },
+    });
+
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({ ok: false, code: "PAYMENT_NOT_FOUND", error: "Payment not found" });
   });
 
   it("returns monthly totals from the persisted payments source", async () => {

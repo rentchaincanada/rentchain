@@ -1,5 +1,5 @@
-import { render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TenantPaymentsPanel } from "./TenantPaymentsPanel";
 
 const mocks = vi.hoisted(() => ({
@@ -15,6 +15,10 @@ vi.mock("@/api/paymentsApi", () => ({
 }));
 
 describe("TenantPaymentsPanel", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.fetchPayments.mockResolvedValue([
@@ -24,6 +28,7 @@ describe("TenantPaymentsPanel", () => {
         amount: 1850,
         paidAt: "2026-04-03",
         status: "Recorded",
+        source: "payments",
       },
     ]);
     mocks.getTenantMonthlyPayments.mockResolvedValue({
@@ -34,6 +39,7 @@ describe("TenantPaymentsPanel", () => {
           amount: 1850,
           paidAt: "2026-04-03",
           status: "Recorded",
+          source: "payments",
         },
       ],
       total: 1850,
@@ -64,5 +70,40 @@ describe("TenantPaymentsPanel", () => {
     render(<TenantPaymentsPanel tenantId="tenant-1" />);
 
     expect(await screen.findByText("No payments yet.")).toBeInTheDocument();
+  });
+
+  it("shows edit only for canonical payments rows", async () => {
+    mocks.fetchPayments.mockResolvedValue([
+      {
+        id: "payment-1",
+        tenantId: "tenant-1",
+        amount: 1850,
+        paidAt: "2026-04-03",
+        status: "Recorded",
+        source: "payments",
+      },
+      {
+        id: "f871db5d-16b3-4818-92e6-99c43d0f58e3",
+        tenantId: "tenant-1",
+        amount: 1850,
+        paidAt: "2026-04-04",
+        status: "checkout_created",
+        source: "rentPayments",
+      },
+      {
+        id: "ledger-payment-1",
+        tenantId: "tenant-1",
+        amount: 1850,
+        paidAt: "2026-04-05",
+        status: "Recorded",
+        source: "ledgerEntries",
+      },
+    ]);
+    mocks.getTenantMonthlyPayments.mockResolvedValue({ payments: [], total: 0 });
+
+    render(<TenantPaymentsPanel tenantId="tenant-1" />);
+
+    await screen.findByText("checkout_created");
+    expect(screen.getAllByRole("button", { name: "Edit" })).toHaveLength(1);
   });
 });

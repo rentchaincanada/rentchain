@@ -846,13 +846,12 @@ router.get("/payments/property/:propertyId/monthly", requireAuth, (req: any, res
   });
 });
 
-// PUT /api/payments/:paymentId
-router.put("/payments/:paymentId", requireAuth, requirePermission("payments.edit"), async (req: any, res: Response) => {
+async function handlePaymentEdit(req: any, res: Response) {
   const { paymentId } = req.params;
   const { amount, notes } = req.body as Partial<Payment>;
   const existing = await getPersistedPaymentById(paymentId);
   if (!existing) {
-    return res.status(404).json({ error: "Payment not found" });
+    return res.status(404).json({ ok: false, code: "PAYMENT_NOT_FOUND", error: "Payment not found" });
   }
 
   const updatedAmount =
@@ -937,7 +936,13 @@ router.put("/payments/:paymentId", requireAuth, requirePermission("payments.edit
   }
 
   return res.status(200).json(updated);
-});
+}
+
+// PUT /api/payments/:paymentId
+router.put("/payments/:paymentId", requireAuth, requirePermission("payments.edit"), handlePaymentEdit);
+
+// PATCH /api/payments/:paymentId
+router.patch("/payments/:paymentId", requireAuth, requirePermission("payments.edit"), handlePaymentEdit);
 
 // DELETE /api/payments/:paymentId
 router.delete("/payments/:paymentId", requireAuth, requirePermission("payments.edit"), async (req: any, res: Response) => {
