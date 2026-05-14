@@ -862,36 +862,77 @@ router.put("/payments/:paymentId", requireAuth, requirePermission("payments.edit
     notes: notes ?? existing.notes ?? null,
     updatedAt: new Date().toISOString(),
   };
-  await db.collection("payments").doc(paymentId).set(updatedPayload, { merge: true });
+  const delta = updatedAmount - existing.amount;
+  const landlordId = (req as any).user?.id;
+  const userId = (req as any).user?.id || (req as any).user?.email;
+
+  // Use transaction for atomic payment update + adjustment entry
+  await db.runTransaction(async (transaction) => {
+    const paymentRef = db.collection("payments").doc(paymentId);
+
+    // Read current payment state within transaction for consistency
+    const currentPaymentSnap = await transaction.get(paymentRef);
+    if (!currentPaymentSnap.exists) {
+      throw new Error("Payment not found");
+    }
+    const currentPayment = currentPaymentSnap.data() as any;
+    const currentAmount = Number(currentPayment?.amount || 0);
+    const transactionDelta = updatedAmount - currentAmount;
+
+    // Update payment record
+    transaction.set(paymentRef, updatedPayload, { merge: true });
+
+    // Create adjustment entry if amount actually changed and lease context exists
+    if (transactionDelta !== 0 && (existing as any).leaseId) {
+      const adjustmentRef = db.collection("ledgerEntries").doc();
+      const amountDeltaCents = Math.round(transactionDelta * 100);
+      const originalAmountCents = Math.round(currentAmount * 100);
+      const newAmountCents = Math.round(updatedAmount * 100);
+      const now = Date.now();
+
+      const adjustmentEntry = {
+        id: adjustmentRef.id,
+        landlordId,
+        tenantId: existing.tenantId,
+        leaseId: (existing as any).leaseId,
+        propertyId: String(existing.propertyId || "").trim() || null,
+        unitId: String((existing as any).unitId || "").trim() || null,
+        entryType: "adjustment" as const,
+        category: "payment_adjustment",
+        amountCents: amountDeltaCents,
+        effectiveDate: new Date().toISOString(),
+        method: String(existing.method || "").trim() || null,
+        reference: existing.id,
+        notes: `Payment adjustment: ${amountDeltaCents > 0 ? '+' : amountDeltaCents < 0 ? '-' : ''}$${Math.abs(amountDeltaCents / 100).toFixed(2)} (${(originalAmountCents / 100).toFixed(2)} → ${(newAmountCents / 100).toFixed(2)})`,
+        createdAt: now,
+        createdBy: String(userId || "").trim() || null,
+        sourceType: "payment_edit",
+        referencePaymentId: existing.id,
+        originalAmountCents,
+        newAmountCents,
+        amountDeltaCents,
+      };
+
+      transaction.set(adjustmentRef, adjustmentEntry, { merge: false });
+      console.log(`[paymentEdit] Creating adjustment entry ${adjustmentRef.id} for payment ${existing.id}: ${amountDeltaCents} cents`);
+    }
+  });
+
   const updated = {
     ...existing,
     ...updatedPayload,
   };
 
-  const delta = updatedAmount - existing.amount;
+  // Record payment event after successful transaction (use original delta for event tracking)
   if (delta !== 0) {
     recordPaymentEvent({
-      landlordId: (req as any).user?.id,
+      landlordId,
       type: "payment_updated",
       tenantId: existing.tenantId,
       amountDelta: delta,
       referenceId: existing.id,
       method: existing.method,
       notes: updated.notes ?? undefined,
-    });
-
-    // Create adjustment ledger entry if payment has lease context
-    await createPaymentAdjustmentEntry({
-      paymentId: existing.id,
-      landlordId: (req as any).user?.id,
-      tenantId: existing.tenantId,
-      leaseId: (existing as any).leaseId,
-      propertyId: existing.propertyId,
-      unitId: (existing as any).unitId,
-      originalAmountCents: Math.round(existing.amount * 100),
-      newAmountCents: Math.round(updatedAmount * 100),
-      method: existing.method,
-      createdBy: (req as any).user?.id || (req as any).user?.email,
     });
   }
 
