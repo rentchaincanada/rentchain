@@ -1,7 +1,12 @@
 // rentchain-frontend/src/pages/PaymentsPage.tsx
 import React, { useEffect, useState } from "react";
 import { usePayments } from "../hooks/usePayments";
-import { updatePayment, type PaymentRecord } from "@/api/paymentsApi";
+import {
+  getCanonicalPaymentEditId,
+  isEditablePaymentRecord,
+  updatePayment,
+  type PaymentRecord,
+} from "@/api/paymentsApi";
 import { Card, Button } from "../components/ui/Ui";
 import { spacing, text, colors } from "../styles/tokens";
 import { fetchProperties } from "../api/propertiesApi";
@@ -24,24 +29,6 @@ function propertyLabelFromValue(value: any): string {
     String(value?.name || value?.addressLine1 || value?.address || value?.displayName || value?.propertyName || "").trim() ||
     ""
   );
-}
-
-function getCanonicalPaymentEditId(payment: PaymentRecord): string {
-  const source = String(payment.source || "").trim();
-  if (source !== "payments") return "";
-
-  const status = String(payment.status || "").trim().toLowerCase();
-  if (status === "checkout_created" || status === "provider_checkout" || status === "checkout") return "";
-
-  return (
-    String(payment.canonicalPaymentId || "").trim() ||
-    String(payment.paymentDocumentId || "").trim() ||
-    String(payment.id || "").trim()
-  );
-}
-
-function isEditablePayment(payment: PaymentRecord): boolean {
-  return Boolean(getCanonicalPaymentEditId(payment));
 }
 
 const PaymentsPage: React.FC = () => {
@@ -323,7 +310,7 @@ const PaymentsPage: React.FC = () => {
                       >
                         {p.method || "Unspecified"}
                       </span>
-                      {isEditablePayment(p) ? (
+                      {isEditablePaymentRecord(p) ? (
                         <Button
                           variant="secondary"
                           onClick={() => void handleEditPayment(p)}

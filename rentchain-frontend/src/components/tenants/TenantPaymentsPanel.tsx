@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   fetchPayments,
+  getCanonicalPaymentEditId,
   getTenantMonthlyPayments,
+  isEditablePaymentRecord,
   updatePayment,
   type Payment,
   type PaymentRecord,
@@ -32,12 +34,6 @@ function formatDate(value?: string | number | null) {
 function formatMoney(n?: number | null) {
   const v = typeof n === "number" && Number.isFinite(n) ? n : 0;
   return v.toLocaleString(undefined, { style: "currency", currency: "CAD" });
-}
-
-function isEditablePayment(payment: PaymentRecord): boolean {
-  const source = String((payment as any)?.source || "").trim();
-  const status = String((payment as any)?.status || "").trim().toLowerCase();
-  return source === "payments" && status !== "checkout_created";
 }
 
 export function TenantPaymentsPanel({ tenantId }: Props) {
@@ -108,7 +104,9 @@ export function TenantPaymentsPanel({ tenantId }: Props) {
   }, [safeTenantId, year, month]);
 
   function beginEdit(p: any) {
-    setEditingId(String(p?.id ?? ""));
+    const paymentEditId = getCanonicalPaymentEditId(p);
+    if (!paymentEditId) return;
+    setEditingId(paymentEditId);
     setEditAmount(p?.amount != null ? String(p.amount) : "");
     setEditStatus(p?.status != null ? String(p.status) : "");
   }
@@ -257,7 +255,7 @@ export function TenantPaymentsPanel({ tenantId }: Props) {
                       {String(p.status ?? "--")}
                     </td>
                     <td style={{ padding: "8px 6px", borderBottom: "1px solid #f3f3f3" }}>
-                      {isEditablePayment(p) ? (
+                      {isEditablePaymentRecord(p) ? (
                         <button onClick={() => beginEdit(p)} disabled={busy} style={{ padding: "4px 8px" }}>
                           Edit
                         </button>

@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TenantPaymentsPanel } from "./TenantPaymentsPanel";
 
@@ -10,7 +10,16 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/api/paymentsApi", () => ({
   fetchPayments: mocks.fetchPayments,
+  getCanonicalPaymentEditId: (payment: any) =>
+    String(payment?.source || "").trim() === "payments" &&
+    String(payment?.status || "").trim().toLowerCase() !== "checkout_created"
+      ? String(payment?.canonicalPaymentId || payment?.paymentDocumentId || payment?.id || "").trim()
+      : "",
   getTenantMonthlyPayments: mocks.getTenantMonthlyPayments,
+  isEditablePaymentRecord: (payment: any) =>
+    String(payment?.source || "").trim() === "payments" &&
+    String(payment?.status || "").trim().toLowerCase() !== "checkout_created" &&
+    Boolean(String(payment?.canonicalPaymentId || payment?.paymentDocumentId || payment?.id || "").trim()),
   updatePayment: mocks.updatePayment,
 }));
 
@@ -105,5 +114,35 @@ describe("TenantPaymentsPanel", () => {
 
     await screen.findByText("checkout_created");
     expect(screen.getAllByRole("button", { name: "Edit" })).toHaveLength(1);
+  });
+
+  it("uses the canonical payment document id when saving edits", async () => {
+    mocks.fetchPayments.mockResolvedValue([
+      {
+        id: "display-payment-1",
+        paymentDocumentId: "canonical-payment-doc-1",
+        tenantId: "tenant-1",
+        amount: 1850,
+        paidAt: "2026-04-03",
+        status: "Recorded",
+        source: "payments",
+      },
+    ]);
+    mocks.getTenantMonthlyPayments.mockResolvedValue({ payments: [], total: 0 });
+    mocks.updatePayment.mockResolvedValue({});
+
+    render(<TenantPaymentsPanel tenantId="tenant-1" />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    const amountInput = await screen.findByPlaceholderText("e.g. 1500");
+    fireEvent.change(amountInput, { target: { value: "1800" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(mocks.updatePayment).toHaveBeenCalledWith("canonical-payment-doc-1", {
+        amount: 1800,
+        status: "Recorded",
+      })
+    );
   });
 });

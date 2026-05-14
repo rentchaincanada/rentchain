@@ -15,6 +15,15 @@ vi.mock("../hooks/usePayments", () => ({
 }));
 
 vi.mock("../api/paymentsApi", () => ({
+  getCanonicalPaymentEditId: (payment: any) =>
+    String(payment?.source || "").trim() === "payments" &&
+    String(payment?.status || "").trim().toLowerCase() !== "checkout_created"
+      ? String(payment?.canonicalPaymentId || payment?.paymentDocumentId || payment?.id || "").trim()
+      : "",
+  isEditablePaymentRecord: (payment: any) =>
+    String(payment?.source || "").trim() === "payments" &&
+    String(payment?.status || "").trim().toLowerCase() !== "checkout_created" &&
+    Boolean(String(payment?.canonicalPaymentId || payment?.paymentDocumentId || payment?.id || "").trim()),
   updatePayment: mocks.updatePayment,
 }));
 

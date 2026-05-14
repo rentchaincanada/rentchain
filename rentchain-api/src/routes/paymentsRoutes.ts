@@ -143,6 +143,8 @@ function normalizePersistedPayment(
 } {
   return {
     id: docId,
+    canonicalPaymentId: docId,
+    paymentDocumentId: docId,
     landlordId: resolvedLandlordIdForRecord(raw, landlordId, ownership),
     tenantId: String(raw?.tenantId || "").trim(),
     propertyId: String(raw?.propertyId || "").trim() || null,
@@ -451,6 +453,8 @@ function dedupeKeysForPayment(payment: Payment): string[] {
 }
 
 function preferPaymentRecord(current: ReturnType<typeof normalizePersistedPayment>, incoming: ReturnType<typeof normalizePersistedPayment>) {
+  if ((incoming as any).source === "payments" && (current as any).source !== "payments") return incoming;
+  if ((current as any).source === "payments" && (incoming as any).source !== "payments") return current;
   const currentDate = paymentDateMillis(current);
   const incomingDate = paymentDateMillis(incoming);
   if (incomingDate !== currentDate) return incomingDate > currentDate ? incoming : current;

@@ -550,10 +550,16 @@ describe("paymentsRoutes exports", () => {
     const landlordBRes = await invokeRouter(router, { method: "GET", url: "/payments?tenantId=tenant-1" });
 
     expect(landlordARes.status).toBe(200);
-    expect(landlordARes.body.map((payment: any) => payment.id)).toEqual(["ledger-payment-landlord-a-same"]);
+    expect(landlordARes.body.map((payment: any) => payment.id)).toEqual(["payment-1"]);
+    expect(landlordARes.body).toEqual([
+      expect.objectContaining({ landlordId: "landlord-1", source: "payments" }),
+    ]);
     expect(landlordBRes.status).toBe(200);
     expect(landlordBRes.body.map((payment: any) => payment.id)).toEqual([
-      "rent-payment-landlord-b-same",
+      "payment-landlord-b-same",
+    ]);
+    expect(landlordBRes.body).toEqual([
+      expect.objectContaining({ landlordId: "landlord-2", source: "payments" }),
     ]);
   });
 
@@ -831,13 +837,13 @@ describe("paymentsRoutes exports", () => {
     ]);
   });
 
-  it("deduplicates the same payment when it exists in payments and rentPayments", async () => {
+  it("deduplicates the same payment and keeps canonical payments editable when it exists in payments and rentPayments", async () => {
     ensureCollection("payments").set("legacy-stripe-payment", {
       landlordId: "landlord-1",
       tenantId: "tenant-1",
       propertyId: "prop-1",
-      amount: 1800,
-      paidAt: "2026-04-01T00:00:00.000Z",
+      amount: 1900,
+      paidAt: "2026-04-02T00:00:00.000Z",
       method: "stripe",
       status: "Recorded",
       paymentIntentId: "intent-dup-1",
@@ -847,13 +853,13 @@ describe("paymentsRoutes exports", () => {
       tenantId: "tenant-1",
       leaseId: "lease-1",
       propertyId: "prop-1",
-      amountCents: 180000,
+      amountCents: 190000,
       status: "paid",
       processor: "stripe",
       paymentIntentId: "intent-dup-1",
-      paidAt: "2026-04-01T00:00:00.000Z",
-      createdAt: "2026-04-01T00:00:00.000Z",
-      updatedAt: "2026-04-01T00:00:00.000Z",
+      paidAt: "2026-04-02T00:00:00.000Z",
+      createdAt: "2026-04-02T00:00:00.000Z",
+      updatedAt: "2026-04-02T00:00:00.000Z",
     });
 
     const router = (await import("../paymentsRoutes")).default;
@@ -866,14 +872,16 @@ describe("paymentsRoutes exports", () => {
     expect(duplicateRows).toHaveLength(1);
     expect(duplicateRows[0]).toEqual(
       expect.objectContaining({
-        id: "rent-payment-dup",
-        amount: 1800,
-        source: "rentPayments",
+        id: "legacy-stripe-payment",
+        canonicalPaymentId: "legacy-stripe-payment",
+        paymentDocumentId: "legacy-stripe-payment",
+        amount: 1900,
+        source: "payments",
       })
     );
   });
 
-  it("prefers canonical ledger payment rows over matching legacy compatibility rows", async () => {
+  it("deduplicates matching ledger payment rows while keeping canonical payments editable", async () => {
     ensureCollection("payments").set("legacy-ledger-duplicate", {
       landlordId: "landlord-1",
       tenantId: "tenant-1",
@@ -905,8 +913,10 @@ describe("paymentsRoutes exports", () => {
     expect(duplicateRows).toHaveLength(1);
     expect(duplicateRows[0]).toEqual(
       expect.objectContaining({
-        id: "ledger-payment-duplicate",
-        source: "ledgerEntries",
+        id: "legacy-ledger-duplicate",
+        canonicalPaymentId: "legacy-ledger-duplicate",
+        paymentDocumentId: "legacy-ledger-duplicate",
+        source: "payments",
       })
     );
   });
