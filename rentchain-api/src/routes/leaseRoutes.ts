@@ -74,7 +74,7 @@ const LEASE_NOTES_COLLECTION = "leaseNotes";
 const PAYMENT_METHODS = new Set(["cash", "etransfer", "cheque", "bank", "card", "other"]);
 const CHARGE_CATEGORIES = new Set(["rent", "fee", "adjustment"]);
 
-type LedgerEntryType = "charge" | "payment";
+type LedgerEntryType = "charge" | "payment" | "adjustment";
 type ReconciliationPropertyState = {
   propertyName: string;
   isArchived: boolean;

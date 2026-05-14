@@ -577,6 +577,75 @@ function renderPaymentsSpreadsheetTable(rows: Array<Record<string, string>>) {
 </html>`;
 }
 
+async function createPaymentAdjustmentEntry(options: {
+  paymentId: string;
+  landlordId: string;
+  tenantId: string;
+  leaseId?: string | null;
+  propertyId?: string | null;
+  unitId?: string | null;
+  originalAmountCents: number;
+  newAmountCents: number;
+  method?: string;
+  createdBy?: string;
+}): Promise<void> {
+  const {
+    paymentId,
+    landlordId,
+    tenantId,
+    leaseId,
+    propertyId,
+    unitId,
+    originalAmountCents,
+    newAmountCents,
+    method,
+    createdBy,
+  } = options;
+
+  // Only create ledger entry if we have lease context
+  if (!leaseId) {
+    console.log(`[createPaymentAdjustmentEntry] Skipping adjustment entry for payment ${paymentId}: no leaseId`);
+    return;
+  }
+
+  const amountDeltaCents = newAmountCents - originalAmountCents;
+  const now = Date.now();
+  const entryRef = db.collection("ledgerEntries").doc();
+
+  const adjustmentEntry = {
+    id: entryRef.id,
+    landlordId,
+    tenantId,
+    leaseId,
+    propertyId: String(propertyId || "").trim() || null,
+    unitId: String(unitId || "").trim() || null,
+    entryType: "adjustment" as const,
+    category: "payment_adjustment",
+    amountCents: amountDeltaCents,
+    effectiveDate: new Date().toISOString(),
+    method: String(method || "").trim() || null,
+    reference: paymentId,
+    notes: `Payment adjustment: ${amountDeltaCents > 0 ? '+' : amountDeltaCents < 0 ? '-' : ''}$${Math.abs(amountDeltaCents / 100).toFixed(2)} (${(originalAmountCents / 100).toFixed(2)} → ${(newAmountCents / 100).toFixed(2)})`,
+    createdAt: now,
+    createdBy: String(createdBy || "").trim() || null,
+
+    // Additional metadata for audit trail
+    sourceType: "payment_edit",
+    referencePaymentId: paymentId,
+    originalAmountCents,
+    newAmountCents,
+    amountDeltaCents,
+  };
+
+  try {
+    await entryRef.set(adjustmentEntry, { merge: false });
+    console.log(`[createPaymentAdjustmentEntry] Created adjustment entry ${entryRef.id} for payment ${paymentId}: ${amountDeltaCents} cents`);
+  } catch (error) {
+    console.error(`[createPaymentAdjustmentEntry] Failed to create adjustment entry for payment ${paymentId}:`, error);
+    // Don't throw - preserve existing payment edit behavior
+  }
+}
+
 const parseYearMonth = (req: Request): { year: number; month: number } | null => {
   const year = Number((req.query.year as string) ?? "");
   const month = Number((req.query.month as string) ?? "");
@@ -810,6 +879,20 @@ router.put("/payments/:paymentId", requireAuth, requirePermission("payments.edit
       method: existing.method,
       notes: updated.notes ?? undefined,
     });
+
+    // Create adjustment ledger entry if payment has lease context
+    await createPaymentAdjustmentEntry({
+      paymentId: existing.id,
+      landlordId: (req as any).user?.id,
+      tenantId: existing.tenantId,
+      leaseId: (existing as any).leaseId,
+      propertyId: existing.propertyId,
+      unitId: (existing as any).unitId,
+      originalAmountCents: Math.round(existing.amount * 100),
+      newAmountCents: Math.round(updatedAmount * 100),
+      method: existing.method,
+      createdBy: (req as any).user?.id || (req as any).user?.email,
+    });
   }
 
   return res.status(200).json(updated);
@@ -841,3 +924,6 @@ router.delete("/payments/:paymentId", requireAuth, requirePermission("payments.e
 });
 
 export default router;
+
+// Export for testing
+export { createPaymentAdjustmentEntry };
