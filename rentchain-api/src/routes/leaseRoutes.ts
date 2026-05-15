@@ -3188,6 +3188,8 @@ router.post("/:leaseId/ledger/charge", async (req: any, res: Response) => {
 });
 
 router.post("/:leaseId/ledger/payment", async (req: any, res: Response) => {
+  res.setHeader("x-route-source", "leaseRoutes.ts");
+  res.setHeader("x-lease-payment-write-version", "canonical-payments-ledger-link-v1");
   try {
     const landlordId = req.user?.landlordId || req.user?.id;
     const createdBy = req.user?.id || req.user?.email || landlordId;
@@ -3262,7 +3264,13 @@ router.post("/:leaseId/ledger/payment", async (req: any, res: Response) => {
       transaction.set(paymentRef, payment, { merge: false });
       transaction.set(entryRef, entry, { merge: false });
     });
-    return res.status(201).json({ ok: true, payment, entry });
+    return res.status(201).json({
+      ok: true,
+      routeSource: "leaseRoutes.ts",
+      writeVersion: "canonical-payments-ledger-link-v1",
+      payment,
+      entry,
+    });
   } catch (err) {
     console.error("[POST /api/leases/:leaseId/ledger/payment] error", err);
     return res.status(500).json({ ok: false, error: "Failed to record payment" });
@@ -3382,7 +3390,6 @@ router.get("/:leaseId/ledger/export.pdf", async (req: any, res: Response) => {
 });
 
 export default router;
-
 
 
 

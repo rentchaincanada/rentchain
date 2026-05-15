@@ -856,6 +856,10 @@ describe("leaseRoutes GET /active", () => {
 
     expect(res.status).toBe(201);
     expect(res.body?.ok).toBe(true);
+    expect(res.headers["x-route-source"]).toBe("leaseRoutes.ts");
+    expect(res.headers["x-lease-payment-write-version"]).toBe("canonical-payments-ledger-link-v1");
+    expect(res.body?.routeSource).toBe("leaseRoutes.ts");
+    expect(res.body?.writeVersion).toBe("canonical-payments-ledger-link-v1");
 
     const paymentsSnap = await fakeDb.collection("payments").get();
     const ledgerSnap = await fakeDb.collection("ledgerEntries").get();
