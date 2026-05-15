@@ -165,6 +165,21 @@ describe("TenantsPage", () => {
         unit: "Unit 4",
         unitId: "unit-4",
         currentLeaseId: "lease-1",
+        lifecycle: {
+          lifecycleState: "active",
+          lifecycleLabel: "Active",
+          lifecycleReason: "active_tenancy_or_lease_signal",
+          confidence: "high",
+          sourceFields: { leaseStatus: "active" },
+          flags: {
+            hasActiveLease: true,
+            hasPendingLease: false,
+            hasCompletedScreening: false,
+            isArchived: false,
+            isPastTenant: false,
+            hasStateConflict: false,
+          },
+        },
       },
     ]);
     mocks.fetchTenantTenanciesMock.mockResolvedValue([
@@ -181,6 +196,7 @@ describe("TenantsPage", () => {
     expect(screen.getByRole("button", { name: "Edit tenant" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Add note" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Send tenant invite" })).toBeInTheDocument();
+    expect(screen.getAllByText("Active").length).toBeGreaterThan(0);
     expect(screen.getByText("lease-1")).toBeInTheDocument();
   });
 

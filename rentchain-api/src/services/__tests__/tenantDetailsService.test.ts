@@ -253,6 +253,10 @@ describe("getTenantsList", () => {
       id: "converted-tenant-1",
       propertyName: "Harbour View",
       unit: "302",
+      lifecycle: expect.objectContaining({
+        lifecycleState: "active",
+        lifecycleLabel: "Active",
+      }),
     });
   });
 

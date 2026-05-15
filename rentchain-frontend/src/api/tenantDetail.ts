@@ -1,5 +1,5 @@
 // rentchain-frontend/src/api/tenantDetail.ts
-import type { TenantApiModel } from "./tenants";
+import type { TenantApiModel, TenantLifecycle } from "./tenants";
 import type { CredibilityInsights } from "@/types/credibilityInsights";
 import { apiFetch } from "./http";
 
@@ -240,6 +240,7 @@ export interface TenantDetailBundle {
   credibilityInsights?: CredibilityInsights | null;
   moveInRequirements?: MoveInRequirements | null;
   moveInReadiness?: MoveInReadiness | null;
+  lifecycle?: TenantLifecycle | null;
 }
 
 export async function fetchTenantDetail(tenantId: string): Promise<TenantDetailBundle> {

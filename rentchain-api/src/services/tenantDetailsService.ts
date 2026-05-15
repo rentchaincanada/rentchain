@@ -27,6 +27,10 @@ import { buildDerivedTenancyFromTenant, listTenanciesByTenantId } from "./tenanc
 import type { TenantScore, TenantScoreTimelineEntry } from "./risk/tenantScoreTypes";
 import type { RiskGrade } from "./risk/riskTypes";
 import { isTargetedHiddenTenantId } from "../lib/testDataVisibilityTargets";
+import {
+  deriveTenantLifecycle,
+  type TenantLifecycleResult,
+} from "../lib/tenants/deriveTenantLifecycle";
 
 export interface TenantRecord {
   id: string;
@@ -56,6 +60,7 @@ export interface TenantRecord {
   tenantScoreTimeline?: TenantScoreTimelineEntry[];
   source?: string | null;
   createdAt?: string | number | null;
+  lifecycle?: TenantLifecycleResult;
 }
 
 export interface TenantLease {
@@ -540,6 +545,20 @@ export async function getTenantsList(opts: TenantQueryOptions = {}): Promise<Ten
   }
 }
 
+async function loadApplicationRawById(applicationId: string | null | undefined) {
+  const target = String(applicationId || "").trim();
+  if (!target) return null;
+  try {
+    const rentalSnap = await db.collection("rentalApplications").doc(target).get();
+    if (rentalSnap.exists) return { id: rentalSnap.id, ...(rentalSnap.data() || {}) } as Record<string, unknown>;
+    const legacySnap = await db.collection("applications").doc(target).get();
+    if (legacySnap.exists) return { id: legacySnap.id, ...(legacySnap.data() || {}) } as Record<string, unknown>;
+  } catch (err) {
+    console.error("[tenantDetailsService] loadApplicationRawById error", err);
+  }
+  return null;
+}
+
 async function hydrateTenantDisplayFields(tenant: TenantRecord, landlordId?: string | null): Promise<TenantRecord> {
   const hydrated: TenantRecord = { ...tenant };
   const property = await loadPropertyRecord(hydrated.propertyId || null);
@@ -561,6 +580,14 @@ async function hydrateTenantDisplayFields(tenant: TenantRecord, landlordId?: str
   );
   if (resolvedUnitLabel) hydrated.unit = resolvedUnitLabel;
 
+  hydrated.lifecycle = deriveTenantLifecycle({
+    tenantStatus: hydrated.status,
+    applicationId: hydrated.applicationId,
+    currentLeaseId: hydrated.currentLeaseId,
+    source: hydrated.source,
+    hiddenFromActiveLists: hydrated.hiddenFromActiveLists,
+  });
+
   return hydrated;
 }
 
@@ -576,12 +603,13 @@ export async function getTenantDetailBundle(tenantId: string, opts: TenantQueryO
 
   const currentLeaseRecord = await loadCurrentLeaseSnapshot(tenant, landlordId);
   const currentLeaseRaw = await loadLeaseRawById(currentLeaseRecord?.id || null);
-  const [tenantInviteState, tenantTenancies] = await Promise.all([
+  const [tenantInviteState, tenantTenancies, applicationRaw] = await Promise.all([
     loadLatestTenantInviteState(tenant, landlordId),
     tenant ? listTenanciesByTenantId(tenant.id, { landlordId }).catch((err) => {
       console.error("[tenantDetailsService] listTenanciesByTenantId error", err);
       return [];
     }) : Promise.resolve([]),
+    loadApplicationRawById(tenant?.applicationId || null),
   ]);
   const currentTenancy = tenantTenancies[0] || buildDerivedTenancyFromTenant(tenant);
   const property = await loadPropertyRecord(currentLeaseRecord?.propertyId || tenant?.propertyId || null);
@@ -637,6 +665,24 @@ export async function getTenantDetailBundle(tenantId: string, opts: TenantQueryO
     tenant.leaseEnd = lease.leaseEnd || tenant.leaseEnd || null;
     tenant.monthlyRent = asNumber(lease.monthlyRent) ?? tenant.monthlyRent ?? null;
   }
+
+  const lifecycle = deriveTenantLifecycle({
+    tenantStatus: tenant?.status,
+    applicantStatus: (applicationRaw as any)?.status,
+    screeningStatus: (applicationRaw as any)?.screeningStatus,
+    leaseStatus: lease?.status || (currentLeaseRaw as any)?.status,
+    occupancyStatus: currentTenancy?.status || unit?.occupancyStatus || unit?.status,
+    currentLeaseId: tenant?.currentLeaseId || lease?.id,
+    leaseId: lease?.id,
+    applicationId: tenant?.applicationId || (applicationRaw as any)?.id,
+    tenantId: tenant?.id,
+    source: tenant?.source,
+    archivedAt: (tenant as any)?.archivedAt || (currentLeaseRaw as any)?.archivedAt,
+    isArchived: (tenant as any)?.isArchived || (currentLeaseRaw as any)?.isArchived,
+    hiddenFromActiveLists: tenant?.hiddenFromActiveLists,
+    hasMoveOutDate: Boolean(currentTenancy?.moveOutAt),
+  });
+  if (tenant) tenant.lifecycle = lifecycle;
 
   let payments: TenantPaymentDto[] = [];
   try {
@@ -717,5 +763,6 @@ export async function getTenantDetailBundle(tenantId: string, opts: TenantQueryO
     moveInRequirements,
     moveInReadiness,
     ledgerSummary,
+    lifecycle,
   };
 }

@@ -148,6 +148,7 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityR
 
   const tenant = bundle.tenant || bundle;
   const lease = bundle.currentLease || bundle.lease;
+  const lifecycle = bundle.lifecycle || tenant.lifecycle || null;
   const property = bundle.property || null;
   const unit = bundle.unit || null;
   const latestLeaseNoticeSummary = bundle.latestLeaseNoticeSummary || null;
@@ -405,7 +406,7 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityR
             }}
           >
             {tenant.fullName || tenant.name || tenant.email || "Tenant"}
-            {tenant.status ? (
+            {lifecycle?.lifecycleLabel ? (
               <span
                 style={{
                   padding: "0.15rem 0.45rem",
@@ -416,7 +417,7 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityR
                   color: text.primary,
                 }}
               >
-                {tenant.status}
+                {lifecycle.lifecycleLabel}
               </span>
             ) : null}
           </div>
@@ -562,6 +563,7 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityR
           }
         />
         <DetailField label="Lease Status" value={formatLeaseStatus(lease?.status)} />
+        <DetailField label="Lifecycle" value={lifecycle?.lifecycleLabel ?? "--"} />
         <DetailField
           label="Current Balance"
           value={
@@ -569,6 +571,9 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityR
           }
         />
         <DetailField label="Tenant Status" value={tenant.status ?? "--"} />
+        {lifecycle?.flags?.hasStateConflict ? (
+          <DetailField label="Lifecycle Review" value="Source status conflict detected" />
+        ) : null}
       </div>
 
       <CredibilityInsightsCard insights={credibilityInsights} />

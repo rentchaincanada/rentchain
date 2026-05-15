@@ -33,6 +33,46 @@ export interface TenancyApiModel {
   moveOutReasonNote?: string | null;
 }
 
+export type TenantLifecycleState =
+  | "applicant"
+  | "screening_pending"
+  | "screening_in_progress"
+  | "screening_completed"
+  | "approved"
+  | "lease_pending"
+  | "lease_sent"
+  | "lease_signed"
+  | "active"
+  | "notice_pending"
+  | "moving_out"
+  | "past"
+  | "archived"
+  | "rejected"
+  | "withdrawn"
+  | "unknown";
+
+export interface TenantLifecycle {
+  lifecycleState: TenantLifecycleState;
+  lifecycleLabel: string;
+  lifecycleReason: string;
+  confidence: "high" | "medium" | "low";
+  sourceFields: {
+    tenantStatus?: string;
+    applicantStatus?: string;
+    screeningStatus?: string;
+    leaseStatus?: string;
+    occupancyStatus?: string;
+  };
+  flags: {
+    hasActiveLease: boolean;
+    hasPendingLease: boolean;
+    hasCompletedScreening: boolean;
+    isArchived: boolean;
+    isPastTenant: boolean;
+    hasStateConflict: boolean;
+  };
+}
+
 export interface TenantApiModel {
   id: string;
   name?: string;
@@ -49,6 +89,7 @@ export interface TenantApiModel {
   balance?: number;
   hiddenFromActiveLists?: boolean;
   tenancies?: TenancyApiModel[];
+  lifecycle?: TenantLifecycle;
 }
 
 /**

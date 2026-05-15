@@ -119,6 +119,10 @@ function tenancyStatusLabel(status?: string | null): "Active" | "Inactive" {
   return String(status || "").toLowerCase() === "inactive" ? "Inactive" : "Active";
 }
 
+function tenantLifecycleLabel(tenant?: TenantApiModel | null): string {
+  return tenant?.lifecycle?.lifecycleLabel || tenant?.status || "Unknown";
+}
+
 function buildPropertyLink(tenancy: TenancyApiModel): string | null {
   if (!tenancy.propertyId) return null;
   const propertyId = encodeURIComponent(String(tenancy.propertyId));
@@ -723,6 +727,21 @@ const loadTenants = useCallback(async () => {
                         </span>
                         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                           <TenantScorePill compact score={summary?.scoreV1 ?? null} tier={summary?.tierV1 ?? null} />
+                          <span
+                            style={{
+                              fontSize: 10,
+                              fontWeight: 700,
+                              borderRadius: radius.pill,
+                              border: `1px solid ${tenant.lifecycle?.flags?.hasStateConflict ? "rgba(245,158,11,0.45)" : colors.border}`,
+                              padding: "2px 7px",
+                              background: tenant.lifecycle?.flags?.hasStateConflict
+                                ? "rgba(245,158,11,0.10)"
+                                : colors.panel,
+                              color: text.primary,
+                            }}
+                          >
+                            {tenantLifecycleLabel(tenant)}
+                          </span>
                         </div>
                       </button>
 
@@ -906,6 +925,12 @@ const loadTenants = useCallback(async () => {
                         gap: 10,
                       }}
                     >
+                      <Card>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: text.muted }}>Lifecycle</div>
+                        <div style={{ marginTop: 4, fontSize: 14, color: text.primary }}>
+                          {tenantLifecycleLabel(selectedTenant)}
+                        </div>
+                      </Card>
                       <Card>
                         <div style={{ fontSize: 11, fontWeight: 700, color: text.muted }}>Property</div>
                         <div style={{ marginTop: 4, fontSize: 14, color: text.primary }}>
