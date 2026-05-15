@@ -61,6 +61,11 @@ const { fakeDb, resetFakeDb, seedDoc } = vi.hoisted(() => {
     },
     seedDoc: (name: string, id: string, data: any) => ensureCollection(name).set(id, { id, data }),
     fakeDb: {
+      runTransaction: async (callback: any) =>
+        callback({
+          get: async (ref: any) => ref.get(),
+          set: async (ref: any, value: any, options?: any) => ref.set(value, options),
+        }),
       collection: (name: string) => ({
         where: (field: string, op: string, value: any) => makeQuery(name, [{ field, op, value }]),
         orderBy: () => makeQuery(name),
@@ -818,6 +823,91 @@ describe("leaseRoutes GET /active", () => {
         },
       },
     });
+  });
+
+  it("records lease payments as linked canonical payments and immutable ledger entries", async () => {
+    seedDoc("leases", "lease-1", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      tenantId: "tenant-1",
+      tenantIds: ["tenant-1"],
+      primaryTenantId: "tenant-1",
+      unitId: "unit-1",
+      unitNumber: "101",
+      monthlyRent: 1850,
+      dueDay: 1,
+      startDate: "2026-01-01",
+      endDate: "2026-12-31",
+      status: "active",
+    });
+
+    const router = (await import("../leaseRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/lease-1/ledger/payment",
+      body: {
+        amountCents: 185000,
+        date: "2026-05-14",
+        method: "etransfer",
+        reference: "May rent",
+        notes: "Received in full",
+      },
+    });
+
+    expect(res.status).toBe(201);
+    expect(res.body?.ok).toBe(true);
+    expect(res.headers["x-route-source"]).toBe("leaseRoutes.ts");
+    expect(res.headers["x-lease-payment-write-version"]).toBe("canonical-payments-ledger-link-v1");
+    expect(res.body?.routeSource).toBe("leaseRoutes.ts");
+    expect(res.body?.writeVersion).toBe("canonical-payments-ledger-link-v1");
+
+    const paymentsSnap = await fakeDb.collection("payments").get();
+    const ledgerSnap = await fakeDb.collection("ledgerEntries").get();
+    expect(paymentsSnap.docs).toHaveLength(1);
+    expect(ledgerSnap.docs).toHaveLength(1);
+
+    const paymentDoc = paymentsSnap.docs[0];
+    const ledgerDoc = ledgerSnap.docs[0];
+    const payment = paymentDoc.data();
+    const entry = ledgerDoc.data();
+
+    expect(paymentDoc.id).toBe(res.body.payment.id);
+    expect(ledgerDoc.id).toBe(res.body.entry.id);
+    expect(payment).toEqual(
+      expect.objectContaining({
+        id: paymentDoc.id,
+        landlordId: "landlord-1",
+        tenantId: "tenant-1",
+        leaseId: "lease-1",
+        propertyId: "prop-1",
+        unitId: "unit-1",
+        amount: 1850,
+        amountCents: 185000,
+        method: "etransfer",
+        paidAt: "2026-05-14",
+        effectiveDate: "2026-05-14",
+        status: "recorded",
+        ledgerEntryId: ledgerDoc.id,
+        createdBy: "landlord-1",
+      })
+    );
+    expect(entry).toEqual(
+      expect.objectContaining({
+        id: ledgerDoc.id,
+        landlordId: "landlord-1",
+        tenantId: "tenant-1",
+        leaseId: "lease-1",
+        propertyId: "prop-1",
+        unitId: "unit-1",
+        entryType: "payment",
+        category: "payment",
+        amountCents: 185000,
+        effectiveDate: "2026-05-14",
+        method: "etransfer",
+        paymentDocumentId: paymentDoc.id,
+        createdBy: "landlord-1",
+      })
+    );
   });
 
   it("reconciles the affected property unit to vacant when ending a lease", async () => {
