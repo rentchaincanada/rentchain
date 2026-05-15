@@ -14,6 +14,7 @@ import { buildDatedExportFilename, setAttachmentExportHeaders } from "../lib/exp
 import { db } from "../config/firebase";
 
 const router = Router();
+const paymentsEditRouter = Router();
 
 const csvEscape = (value: unknown) => {
   const text = String(value ?? "");
@@ -142,6 +143,8 @@ function normalizePersistedPayment(
 } {
   return {
     id: docId,
+    canonicalPaymentId: docId,
+    paymentDocumentId: docId,
     landlordId: resolvedLandlordIdForRecord(raw, landlordId, ownership),
     tenantId: String(raw?.tenantId || "").trim(),
     propertyId: String(raw?.propertyId || "").trim() || null,
@@ -450,6 +453,8 @@ function dedupeKeysForPayment(payment: Payment): string[] {
 }
 
 function preferPaymentRecord(current: ReturnType<typeof normalizePersistedPayment>, incoming: ReturnType<typeof normalizePersistedPayment>) {
+  if ((incoming as any).source === "payments" && (current as any).source !== "payments") return incoming;
+  if ((current as any).source === "payments" && (incoming as any).source !== "payments") return current;
   const currentDate = paymentDateMillis(current);
   const incomingDate = paymentDateMillis(incoming);
   if (incomingDate !== currentDate) return incomingDate > currentDate ? incoming : current;
@@ -575,6 +580,75 @@ function renderPaymentsSpreadsheetTable(rows: Array<Record<string, string>>) {
     </table>
   </body>
 </html>`;
+}
+
+async function createPaymentAdjustmentEntry(options: {
+  paymentId: string;
+  landlordId: string;
+  tenantId: string;
+  leaseId?: string | null;
+  propertyId?: string | null;
+  unitId?: string | null;
+  originalAmountCents: number;
+  newAmountCents: number;
+  method?: string;
+  createdBy?: string;
+}): Promise<void> {
+  const {
+    paymentId,
+    landlordId,
+    tenantId,
+    leaseId,
+    propertyId,
+    unitId,
+    originalAmountCents,
+    newAmountCents,
+    method,
+    createdBy,
+  } = options;
+
+  // Only create ledger entry if we have lease context
+  if (!leaseId) {
+    console.log(`[createPaymentAdjustmentEntry] Skipping adjustment entry for payment ${paymentId}: no leaseId`);
+    return;
+  }
+
+  const amountDeltaCents = newAmountCents - originalAmountCents;
+  const now = Date.now();
+  const entryRef = db.collection("ledgerEntries").doc();
+
+  const adjustmentEntry = {
+    id: entryRef.id,
+    landlordId,
+    tenantId,
+    leaseId,
+    propertyId: String(propertyId || "").trim() || null,
+    unitId: String(unitId || "").trim() || null,
+    entryType: "adjustment" as const,
+    category: "payment_adjustment",
+    amountCents: amountDeltaCents,
+    effectiveDate: new Date().toISOString(),
+    method: String(method || "").trim() || null,
+    reference: paymentId,
+    notes: `Payment adjustment: ${amountDeltaCents > 0 ? '+' : amountDeltaCents < 0 ? '-' : ''}$${Math.abs(amountDeltaCents / 100).toFixed(2)} (${(originalAmountCents / 100).toFixed(2)} → ${(newAmountCents / 100).toFixed(2)})`,
+    createdAt: now,
+    createdBy: String(createdBy || "").trim() || null,
+
+    // Additional metadata for audit trail
+    sourceType: "payment_edit",
+    referencePaymentId: paymentId,
+    originalAmountCents,
+    newAmountCents,
+    amountDeltaCents,
+  };
+
+  try {
+    await entryRef.set(adjustmentEntry, { merge: false });
+    console.log(`[createPaymentAdjustmentEntry] Created adjustment entry ${entryRef.id} for payment ${paymentId}: ${amountDeltaCents} cents`);
+  } catch (error) {
+    console.error(`[createPaymentAdjustmentEntry] Failed to create adjustment entry for payment ${paymentId}:`, error);
+    // Don't throw - preserve existing payment edit behavior
+  }
 }
 
 const parseYearMonth = (req: Request): { year: number; month: number } | null => {
@@ -777,13 +851,12 @@ router.get("/payments/property/:propertyId/monthly", requireAuth, (req: any, res
   });
 });
 
-// PUT /api/payments/:paymentId
-router.put("/payments/:paymentId", requireAuth, requirePermission("payments.edit"), async (req: any, res: Response) => {
+async function handlePaymentEdit(req: any, res: Response) {
   const { paymentId } = req.params;
   const { amount, notes } = req.body as Partial<Payment>;
   const existing = await getPersistedPaymentById(paymentId);
   if (!existing) {
-    return res.status(404).json({ error: "Payment not found" });
+    return res.status(404).json({ ok: false, code: "PAYMENT_NOT_FOUND", error: "Payment not found" });
   }
 
   const updatedAmount =
@@ -793,16 +866,71 @@ router.put("/payments/:paymentId", requireAuth, requirePermission("payments.edit
     notes: notes ?? existing.notes ?? null,
     updatedAt: new Date().toISOString(),
   };
-  await db.collection("payments").doc(paymentId).set(updatedPayload, { merge: true });
+  const delta = updatedAmount - existing.amount;
+  const landlordId = (req as any).user?.id;
+  const userId = (req as any).user?.id || (req as any).user?.email;
+
+  // Use transaction for atomic payment update + adjustment entry
+  await db.runTransaction(async (transaction) => {
+    const paymentRef = db.collection("payments").doc(paymentId);
+
+    // Read current payment state within transaction for consistency
+    const currentPaymentSnap = await transaction.get(paymentRef);
+    if (!currentPaymentSnap.exists) {
+      throw new Error("Payment not found");
+    }
+    const currentPayment = currentPaymentSnap.data() as any;
+    const currentAmount = Number(currentPayment?.amount || 0);
+    const transactionDelta = updatedAmount - currentAmount;
+
+    // Update payment record
+    transaction.set(paymentRef, updatedPayload, { merge: true });
+
+    // Create adjustment entry if amount actually changed and lease context exists
+    if (transactionDelta !== 0 && (existing as any).leaseId) {
+      const adjustmentRef = db.collection("ledgerEntries").doc();
+      const amountDeltaCents = Math.round(transactionDelta * 100);
+      const originalAmountCents = Math.round(currentAmount * 100);
+      const newAmountCents = Math.round(updatedAmount * 100);
+      const now = Date.now();
+
+      const adjustmentEntry = {
+        id: adjustmentRef.id,
+        landlordId,
+        tenantId: existing.tenantId,
+        leaseId: (existing as any).leaseId,
+        propertyId: String(existing.propertyId || "").trim() || null,
+        unitId: String((existing as any).unitId || "").trim() || null,
+        entryType: "adjustment" as const,
+        category: "payment_adjustment",
+        amountCents: amountDeltaCents,
+        effectiveDate: new Date().toISOString(),
+        method: String(existing.method || "").trim() || null,
+        reference: existing.id,
+        notes: `Payment adjustment: ${amountDeltaCents > 0 ? '+' : amountDeltaCents < 0 ? '-' : ''}$${Math.abs(amountDeltaCents / 100).toFixed(2)} (${(originalAmountCents / 100).toFixed(2)} → ${(newAmountCents / 100).toFixed(2)})`,
+        createdAt: now,
+        createdBy: String(userId || "").trim() || null,
+        sourceType: "payment_edit",
+        referencePaymentId: existing.id,
+        originalAmountCents,
+        newAmountCents,
+        amountDeltaCents,
+      };
+
+      transaction.set(adjustmentRef, adjustmentEntry, { merge: false });
+      console.log(`[paymentEdit] Creating adjustment entry ${adjustmentRef.id} for payment ${existing.id}: ${amountDeltaCents} cents`);
+    }
+  });
+
   const updated = {
     ...existing,
     ...updatedPayload,
   };
 
-  const delta = updatedAmount - existing.amount;
+  // Record payment event after successful transaction (use original delta for event tracking)
   if (delta !== 0) {
     recordPaymentEvent({
-      landlordId: (req as any).user?.id,
+      landlordId,
       type: "payment_updated",
       tenantId: existing.tenantId,
       amountDelta: delta,
@@ -813,7 +941,16 @@ router.put("/payments/:paymentId", requireAuth, requirePermission("payments.edit
   }
 
   return res.status(200).json(updated);
-});
+}
+
+// PUT /api/payments/:paymentId
+router.put("/payments/:paymentId", requireAuth, requirePermission("payments.edit"), handlePaymentEdit);
+
+// PATCH /api/payments/:paymentId
+router.patch("/payments/:paymentId", requireAuth, requirePermission("payments.edit"), handlePaymentEdit);
+
+paymentsEditRouter.put("/:paymentId", requireAuth, requirePermission("payments.edit"), handlePaymentEdit);
+paymentsEditRouter.patch("/:paymentId", requireAuth, requirePermission("payments.edit"), handlePaymentEdit);
 
 // DELETE /api/payments/:paymentId
 router.delete("/payments/:paymentId", requireAuth, requirePermission("payments.edit"), async (req: any, res: Response) => {
@@ -841,3 +978,6 @@ router.delete("/payments/:paymentId", requireAuth, requirePermission("payments.e
 });
 
 export default router;
+
+// Export for testing
+export { createPaymentAdjustmentEntry, handlePaymentEdit, paymentsEditRouter };

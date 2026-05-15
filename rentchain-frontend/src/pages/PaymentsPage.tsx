@@ -1,7 +1,12 @@
 // rentchain-frontend/src/pages/PaymentsPage.tsx
 import React, { useEffect, useState } from "react";
 import { usePayments } from "../hooks/usePayments";
-import { updatePayment, type PaymentRecord } from "@/api/paymentsApi";
+import {
+  getCanonicalPaymentEditId,
+  isEditablePaymentRecord,
+  updatePayment,
+  type PaymentRecord,
+} from "@/api/paymentsApi";
 import { Card, Button } from "../components/ui/Ui";
 import { spacing, text, colors } from "../styles/tokens";
 import { fetchProperties } from "../api/propertiesApi";
@@ -133,7 +138,8 @@ const PaymentsPage: React.FC = () => {
   };
 
   const handleEditPayment = async (p: PaymentRecord) => {
-    if (!p.id) return;
+    const paymentEditId = getCanonicalPaymentEditId(p);
+    if (!paymentEditId) return;
 
     try {
       const currentAmount = p.amount != null ? String(p.amount) : "";
@@ -183,7 +189,7 @@ const PaymentsPage: React.FC = () => {
         return; // nothing to update
       }
 
-      const updated: any = await updatePayment(p.id, payload);
+      const updated: any = await updatePayment(paymentEditId, payload);
 
       setRows((prev) => prev.map((row) => (row.id === p.id ? { ...row, ...updated } : row)));
     } catch (err) {
@@ -304,13 +310,15 @@ const PaymentsPage: React.FC = () => {
                       >
                         {p.method || "Unspecified"}
                       </span>
-                      <Button
-                        variant="secondary"
-                        onClick={() => void handleEditPayment(p)}
-                        style={{ padding: "0.35rem 0.6rem", fontSize: "0.85rem" }}
-                      >
-                        Edit
-                      </Button>
+                      {isEditablePaymentRecord(p) ? (
+                        <Button
+                          variant="secondary"
+                          onClick={() => void handleEditPayment(p)}
+                          style={{ padding: "0.35rem 0.6rem", fontSize: "0.85rem" }}
+                        >
+                          Edit
+                        </Button>
+                      ) : null}
                     </td>
                   </tr>
                 ))}

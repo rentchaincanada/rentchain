@@ -74,7 +74,7 @@ const LEASE_NOTES_COLLECTION = "leaseNotes";
 const PAYMENT_METHODS = new Set(["cash", "etransfer", "cheque", "bank", "card", "other"]);
 const CHARGE_CATEGORIES = new Set(["rent", "fee", "adjustment"]);
 
-type LedgerEntryType = "charge" | "payment";
+type LedgerEntryType = "charge" | "payment" | "adjustment";
 type ReconciliationPropertyState = {
   propertyName: string;
   isArchived: boolean;
@@ -1431,6 +1431,8 @@ async function renderLeaseLedgerPdf(params: {
   for (const row of params.rows) {
     const signedAmount = row?.entryType === "payment"
       ? -Math.abs(Number(row?.amountCents || 0))
+      : row?.entryType === "adjustment"
+      ? Number(row?.amountCents || 0) // Adjustments can be positive or negative
       : Math.abs(Number(row?.amountCents || 0));
     runningBalance += signedAmount;
     const description =
@@ -3075,13 +3077,25 @@ router.get("/:leaseId/ledger", async (req: any, res: Response) => {
     const rows = entries.map((rawEntry: any) => {
       const entry = enrichLeaseLedgerEntryWithPaymentIntent(rawEntry, paymentIntentLinks);
       const signedAmountCents =
-        entry.entryType === "payment" ? -Math.abs(Number(entry.amountCents || 0)) : Math.abs(Number(entry.amountCents || 0));
+        entry.entryType === "payment"
+          ? -Math.abs(Number(entry.amountCents || 0))
+          : entry.entryType === "adjustment"
+          ? Number(entry.amountCents || 0) // Adjustments can be positive or negative
+          : Math.abs(Number(entry.amountCents || 0));
       runningBalanceCents += signedAmountCents;
       const monthKey = String(entry.effectiveDate || "").slice(0, 7);
       if (monthKey) {
         monthlyTotals[monthKey] ||= { chargesCents: 0, paymentsCents: 0, netCents: 0 };
         if (entry.entryType === "payment") {
           monthlyTotals[monthKey].paymentsCents += Math.abs(Number(entry.amountCents || 0));
+        } else if (entry.entryType === "adjustment") {
+          // Adjustments can be positive (charges) or negative (payment corrections)
+          const adjustmentAmount = Number(entry.amountCents || 0);
+          if (adjustmentAmount > 0) {
+            monthlyTotals[monthKey].chargesCents += adjustmentAmount;
+          } else {
+            monthlyTotals[monthKey].paymentsCents += Math.abs(adjustmentAmount);
+          }
         } else {
           monthlyTotals[monthKey].chargesCents += Math.abs(Number(entry.amountCents || 0));
         }
@@ -3102,9 +3116,15 @@ router.get("/:leaseId/ledger", async (req: any, res: Response) => {
       totals: {
         chargesCents: rows
           .filter((row) => row.entryType === "charge")
-          .reduce((sum, row) => sum + Math.abs(Number(row.amountCents || 0)), 0),
+          .reduce((sum, row) => sum + Math.abs(Number(row.amountCents || 0)), 0) +
+          rows
+          .filter((row) => row.entryType === "adjustment" && Number(row.amountCents || 0) > 0)
+          .reduce((sum, row) => sum + Number(row.amountCents || 0), 0),
         paymentsCents: rows
           .filter((row) => row.entryType === "payment")
+          .reduce((sum, row) => sum + Math.abs(Number(row.amountCents || 0)), 0) +
+          rows
+          .filter((row) => row.entryType === "adjustment" && Number(row.amountCents || 0) < 0)
           .reduce((sum, row) => sum + Math.abs(Number(row.amountCents || 0)), 0),
         balanceCents: runningBalanceCents,
       },
@@ -3245,7 +3265,11 @@ router.get("/:leaseId/ledger/export.csv", async (req: any, res: Response) => {
       "createdAt",
     ];
     const rows = entries.map((entry: any) => {
-      const signed = entry.entryType === "payment" ? -Math.abs(Number(entry.amountCents || 0)) : Math.abs(Number(entry.amountCents || 0));
+      const signed = entry.entryType === "payment"
+        ? -Math.abs(Number(entry.amountCents || 0))
+        : entry.entryType === "adjustment"
+        ? Number(entry.amountCents || 0) // Adjustments can be positive or negative
+        : Math.abs(Number(entry.amountCents || 0));
       runningBalance += signed;
       return [
         entry.effectiveDate,

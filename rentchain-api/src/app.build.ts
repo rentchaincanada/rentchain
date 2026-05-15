@@ -11,7 +11,7 @@ import { resolveCanonicalPlan } from "./services/entitlements/planCapabilities";
 import publicRoutes from "./routes/publicRoutes";
 import authRoutes from "./routes/authRoutes";
 
-import paymentsRoutes from "./routes/paymentsRoutes";
+import paymentsRoutes, { handlePaymentEdit, paymentsEditRouter } from "./routes/paymentsRoutes";
 import applicationsRoutes from "./routes/applicationsRoutes";
 import applicationsConversionRoutes from "./routes/applicationsConversionRoutes";
 import leaseRoutes from "./routes/leaseRoutes";
@@ -86,6 +86,7 @@ import stripeScreeningOrdersWebhookRoutes, {
 } from "./routes/stripeScreeningOrdersWebhookRoutes";
 import { transunionWebhookHandler } from "./routes/transunionWebhookRoutes";
 import { requireAuth } from "./middleware/requireAuth";
+import { requirePermission } from "./middleware/requireAuthz";
 import screeningJobsAdminRoutes from "./routes/screeningJobsAdminRoutes";
 import adminRoutes from "./routes/adminRoutes";
 import adminRegistryRoutes from "./routes/adminRegistryRoutes";
@@ -247,7 +248,13 @@ app.get("/api/__routes", (_req, res) => {
 // Billing routes
 app.use("/api/billing", routeSource("billingRoutes.ts"), billingRoutes);
 console.log("[boot] mounted billingRoutes at /api/billing");
+app.put("/api/payments/:paymentId", routeSource("paymentsRoutes.ts"), requireAuth, requirePermission("payments.edit"), handlePaymentEdit);
+app.patch("/api/payments/:paymentId", routeSource("paymentsRoutes.ts"), requireAuth, requirePermission("payments.edit"), handlePaymentEdit);
+app.use("/api/payments", routeSource("paymentsRoutes.ts"), paymentsEditRouter);
 app.use("/api", routeSource("paymentsRoutes.ts"), paymentsRoutes);
+app.use("/api/payments", routeSource("paymentsRoutes.ts"), (_req, res) => {
+  return res.status(404).json({ ok: false, code: "PAYMENTS_ROUTE_NOT_FOUND", error: "Not Found" });
+});
 
 // Public + Auth (MUST be before authenticateJwt)
 app.use("/api", routeSource("publicRoutes.ts"), publicRoutes);

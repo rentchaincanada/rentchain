@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import PaymentsPage from "./PaymentsPage";
 
 const mocks = vi.hoisted(() => ({
@@ -10,11 +10,25 @@ const mocks = vi.hoisted(() => ({
   printSummaryDocument: vi.fn(),
 }));
 
+function paymentEditId(payment: any) {
+  const source = String(payment?.source || "").trim().toLowerCase().replace(/[\s_-]+/g, "");
+  const status = String(payment?.status || "").trim().toLowerCase();
+  if (["checkout_created", "provider_checkout", "checkout"].includes(status)) return "";
+  if (["rentpayments", "rentpayment", "ledgerentries", "ledgerentry"].includes(source)) return "";
+  const explicitCanonicalId = String(payment?.canonicalPaymentId || payment?.paymentDocumentId || "").trim();
+  if (explicitCanonicalId) return explicitCanonicalId;
+  return ["payments", "payment", "canonicalpayments", "canonicalpayment", "legacypayments", "legacypayment"].includes(source)
+    ? String(payment?.id || "").trim()
+    : "";
+}
+
 vi.mock("../hooks/usePayments", () => ({
   usePayments: mocks.usePayments,
 }));
 
 vi.mock("../api/paymentsApi", () => ({
+  getCanonicalPaymentEditId: (payment: any) => paymentEditId(payment),
+  isEditablePaymentRecord: (payment: any) => Boolean(paymentEditId(payment)),
   updatePayment: mocks.updatePayment,
 }));
 
@@ -31,6 +45,10 @@ vi.mock("../utils/printSummary", () => ({
 }));
 
 describe("PaymentsPage", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.usePayments.mockReturnValue({
@@ -44,6 +62,8 @@ describe("PaymentsPage", () => {
           paidAt: "2026-04-01",
           method: "e-transfer",
           notes: "April rent",
+          status: "Recorded",
+          source: "payments",
         },
       ],
       loading: false,
@@ -125,6 +145,8 @@ describe("PaymentsPage", () => {
           paidAt: "2026-04-02",
           method: "cash",
           notes: "",
+          status: "Recorded",
+          source: "payments",
         },
       ],
       loading: false,
@@ -138,5 +160,152 @@ describe("PaymentsPage", () => {
     expect((await screen.findAllByText("Tenant tenant-2")).length).toBeGreaterThan(0);
     expect((await screen.findAllByText("Property prop-2")).length).toBeGreaterThan(0);
     expect(screen.queryByText(/unavailable/i)).not.toBeInTheDocument();
+  });
+
+  it("shows Edit only for canonical payments rows", async () => {
+    mocks.usePayments.mockReturnValue({
+      payments: [
+        {
+          id: "canonical-payment-1",
+          tenantId: "tenant-1",
+          propertyId: "prop-1",
+          amount: 1800,
+          paidAt: "2026-04-01",
+          method: "e-transfer",
+          status: "Recorded",
+          source: "payments",
+        },
+        {
+          id: "38r6fSwiPSDke0rEGKkx",
+          tenantId: "tenant-1",
+          propertyId: "prop-1",
+          amount: 1800,
+          paidAt: "2026-04-02",
+          method: "manual",
+          status: "Recorded",
+          source: "ledgerEntries",
+        },
+        {
+          id: "f871db5d-16b3-4818-92e6-99c43d0f58e3",
+          tenantId: "tenant-1",
+          propertyId: "prop-1",
+          amount: 1800,
+          paidAt: "2026-04-03",
+          method: "stripe",
+          status: "checkout_created",
+          source: "rentPayments",
+        },
+      ],
+      loading: false,
+      error: null,
+    });
+
+    render(<PaymentsPage />);
+
+    await screen.findAllByText("Taylor Tenant");
+    expect(await screen.findAllByRole("button", { name: "Edit" })).toHaveLength(1);
+  });
+
+  it("updates canonical payments using the canonical document id", async () => {
+    mocks.usePayments.mockReturnValue({
+      payments: [
+        {
+          id: "display-row-1",
+          paymentDocumentId: "canonical-payment-doc-1",
+          tenantId: "tenant-1",
+          propertyId: "prop-1",
+          amount: 1800,
+          paidAt: "2026-04-01",
+          method: "e-transfer",
+          notes: "April rent",
+          status: "Recorded",
+          source: "payments",
+        },
+      ],
+      loading: false,
+      error: null,
+    });
+    mocks.updatePayment.mockResolvedValue({
+      id: "canonical-payment-doc-1",
+      amount: 1750,
+      paidAt: "2026-04-01",
+      method: "e-transfer",
+      notes: "April rent adjusted",
+    });
+    const prompt = vi
+      .spyOn(window, "prompt")
+      .mockReturnValueOnce("1750")
+      .mockReturnValueOnce("2026-04-01")
+      .mockReturnValueOnce("e-transfer")
+      .mockReturnValueOnce("April rent adjusted");
+
+    render(<PaymentsPage />);
+
+    fireEvent.click((await screen.findAllByRole("button", { name: "Edit" }))[0]);
+
+    await waitFor(() =>
+      expect(mocks.updatePayment).toHaveBeenCalledWith("canonical-payment-doc-1", {
+        amount: 1750,
+        notes: "April rent adjusted",
+      })
+    );
+    prompt.mockRestore();
+  });
+
+  it("shows Edit when the row has an explicit canonical payment id even if source is absent", async () => {
+    mocks.usePayments.mockReturnValue({
+      payments: [
+        {
+          id: "display-row-2",
+          paymentDocumentId: "canonical-payment-doc-2",
+          tenantId: "tenant-1",
+          propertyId: "prop-1",
+          amount: 1800,
+          paidAt: "2026-04-01",
+          method: "e-transfer",
+          status: "Recorded",
+        },
+        {
+          id: "unknown-row-with-id-only",
+          tenantId: "tenant-1",
+          propertyId: "prop-1",
+          amount: 1800,
+          paidAt: "2026-04-02",
+          method: "manual",
+          status: "Recorded",
+        },
+      ],
+      loading: false,
+      error: null,
+    });
+
+    render(<PaymentsPage />);
+
+    await screen.findAllByText("Taylor Tenant");
+    expect(await screen.findAllByRole("button", { name: "Edit" })).toHaveLength(1);
+  });
+
+  it("shows Edit when a canonical row uses a singular payment source alias", async () => {
+    mocks.usePayments.mockReturnValue({
+      payments: [
+        {
+          id: "canonical-payment-doc-3",
+          tenantId: "tenant-1",
+          propertyId: "prop-1",
+          amount: 1800,
+          paidAt: "2026-04-01",
+          method: "e-transfer",
+          status: "Recorded",
+          source: "payment",
+        },
+      ],
+      loading: false,
+      error: null,
+    });
+
+    render(<PaymentsPage />);
+
+    await screen.findAllByText("Taylor Tenant");
+    expect(await screen.findAllByRole("button", { name: "Edit" })).toHaveLength(1);
   });
 });

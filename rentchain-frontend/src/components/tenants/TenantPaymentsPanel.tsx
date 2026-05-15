@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   fetchPayments,
+  getCanonicalPaymentEditId,
   getTenantMonthlyPayments,
+  isEditablePaymentRecord,
   updatePayment,
   type Payment,
   type PaymentRecord,
@@ -102,7 +104,9 @@ export function TenantPaymentsPanel({ tenantId }: Props) {
   }, [safeTenantId, year, month]);
 
   function beginEdit(p: any) {
-    setEditingId(String(p?.id ?? ""));
+    const paymentEditId = getCanonicalPaymentEditId(p);
+    if (!paymentEditId) return;
+    setEditingId(paymentEditId);
     setEditAmount(p?.amount != null ? String(p.amount) : "");
     setEditStatus(p?.status != null ? String(p.status) : "");
   }
@@ -251,9 +255,13 @@ export function TenantPaymentsPanel({ tenantId }: Props) {
                       {String(p.status ?? "--")}
                     </td>
                     <td style={{ padding: "8px 6px", borderBottom: "1px solid #f3f3f3" }}>
-                      <button onClick={() => beginEdit(p)} disabled={busy} style={{ padding: "4px 8px" }}>
-                        Edit
-                      </button>
+                      {isEditablePaymentRecord(p) ? (
+                        <button onClick={() => beginEdit(p)} disabled={busy} style={{ padding: "4px 8px" }}>
+                          Edit
+                        </button>
+                      ) : (
+                        <span style={{ opacity: 0.65 }}>--</span>
+                      )}
                     </td>
                   </tr>
                 ))}

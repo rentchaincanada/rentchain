@@ -3,16 +3,21 @@ import { downloadAuthenticatedExport } from "./exportDownload";
 
 export interface PaymentRecord {
   id: string;
+  canonicalPaymentId?: string | null;
+  paymentDocumentId?: string | null;
   tenantId?: string | null;
   propertyId?: string | null;
   amount: number;
   paidAt?: string | null;
   method?: string;
   notes?: string | null;
+  status?: string | null;
   monthlyRent?: number | null;
   dueDate?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
+  source?: "payments" | "rentPayments" | "ledgerEntries" | string | null;
+  rentPaymentId?: string | null;
 }
 
 export interface Payment extends PaymentRecord {}
@@ -22,6 +27,38 @@ export interface UpdatePaymentPayload {
   paidAt?: string;
   method?: string;
   notes?: string;
+}
+
+function normalizePaymentSource(value: unknown): string {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_-]+/g, "");
+}
+
+export function getCanonicalPaymentEditId(payment: PaymentRecord): string {
+  const source = normalizePaymentSource(payment.source);
+  const status = String(payment.status || "").trim().toLowerCase();
+  if (
+    status === "checkout_created" ||
+    status === "provider_checkout" ||
+    status === "checkout" ||
+    status === "voided" ||
+    status === "system_generated" ||
+    status === "system-generated"
+  ) {
+    return "";
+  }
+  if (source === "rentpayments" || source === "rentpayment") return "";
+
+  const explicitCanonicalId =
+    String(payment.canonicalPaymentId || "").trim() ||
+    String(payment.paymentDocumentId || "").trim();
+  return explicitCanonicalId;
+}
+
+export function isEditablePaymentRecord(payment: PaymentRecord): boolean {
+  return Boolean(getCanonicalPaymentEditId(payment));
 }
 
 export async function fetchPayments(tenantId?: string): Promise<PaymentRecord[]> {
