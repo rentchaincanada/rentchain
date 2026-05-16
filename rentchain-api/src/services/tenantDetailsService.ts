@@ -23,6 +23,7 @@ import {
   listMoveInReadinessEvents,
   type MoveInReadinessRecord as MoveInReadiness,
 } from "./tenantMoveInReadinessService";
+import { deriveLeaseExecution } from "./leaseExecution/deriveLeaseExecution";
 import { buildDerivedTenancyFromTenant, listTenanciesByTenantId } from "./tenanciesService";
 import type { TenantScore, TenantScoreTimelineEntry } from "./risk/tenantScoreTypes";
 import type { RiskGrade } from "./risk/riskTypes";
@@ -31,6 +32,7 @@ import {
   deriveTenantLifecycle,
   type TenantLifecycleResult,
 } from "../lib/tenants/deriveTenantLifecycle";
+import { deriveLeaseOccupancyCoherence } from "../lib/leases/deriveLeaseOccupancyCoherence";
 
 export interface TenantRecord {
   id: string;
@@ -713,6 +715,34 @@ export async function getTenantDetailBundle(tenantId: string, opts: TenantQueryO
     await import("./ledgerEventsService");
   const ledger = toLedgerEntries(listEventsForTenant(tenantId));
   const ledgerSummary = getLedgerSummaryForTenant(tenantId);
+  const leaseExecution = currentLeaseRaw
+    ? deriveLeaseExecution({
+        leaseId: currentLeaseRecord?.id || lease?.id || null,
+        startDate: lease?.leaseStart || (currentLeaseRaw as any)?.startDate || (currentLeaseRaw as any)?.leaseStart,
+        monthlyRent: lease?.monthlyRent ?? (currentLeaseRaw as any)?.monthlyRent ?? null,
+        status: lease?.status || (currentLeaseRaw as any)?.status,
+        raw: currentLeaseRaw,
+      })
+    : null;
+  const stateCoherence = deriveLeaseOccupancyCoherence({
+    leaseStatus: lease?.status || (currentLeaseRaw as any)?.status,
+    leaseExecutionStatus:
+      leaseExecution?.executionStatus ||
+      (currentLeaseRaw as any)?.leaseExecution?.executionStatus ||
+      (currentLeaseRaw as any)?.executionStatus ||
+      null,
+    unitStatus: unit?.status,
+    occupancyStatus: unit?.occupancyStatus,
+    tenancyStatus: currentTenancy?.status,
+    tenantStatus: tenant?.status,
+    tenantLifecycleState: lifecycle.lifecycleState,
+    paymentReadinessStatus: null,
+    ledgerPaymentCount: ledger.filter((entry: any) =>
+      String(entry?.type || entry?.entryType || "").trim().toLowerCase().includes("payment")
+    ).length,
+    archivedAt: (tenant as any)?.archivedAt || (currentLeaseRaw as any)?.archivedAt,
+    isArchived: (tenant as any)?.isArchived || (currentLeaseRaw as any)?.isArchived,
+  });
   const insights: any[] = [];
   const credibilityInsights = buildCredibilityInsights({ tenant, leaseRaw: currentLeaseRaw });
   const moveInRequirements = buildMoveInRequirements({
@@ -764,5 +794,6 @@ export async function getTenantDetailBundle(tenantId: string, opts: TenantQueryO
     moveInReadiness,
     ledgerSummary,
     lifecycle,
+    stateCoherence,
   };
 }

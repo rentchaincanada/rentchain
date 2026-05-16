@@ -120,6 +120,42 @@ function statusBadge(status: string | null | undefined) {
   );
 }
 
+function formatCoherenceToken(value: string | null | undefined) {
+  const normalized = String(value || "").trim();
+  if (!normalized) return "Unknown";
+  return normalized.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function renderStateCoherence(lease: LandlordActiveLease) {
+  const coherence = lease.stateCoherence;
+  if (!coherence) return null;
+  const needsReview = coherence.flags?.requiresReview || coherence.coherenceStatus === "review_required";
+  const paymentActivityLabel =
+    coherence.paymentReadinessState === "recorded_activity_present"
+      ? "Recorded ledger payment activity present"
+      : null;
+  if (!needsReview && !paymentActivityLabel) return null;
+  return (
+    <div
+      style={{
+        display: "grid",
+        gap: 3,
+        marginTop: 6,
+        color: needsReview ? "#92400e" : "#475569",
+        fontSize: 12,
+      }}
+    >
+      {needsReview ? (
+        <div style={{ fontWeight: 800 }}>
+          Needs review: {formatCoherenceToken(coherence.leaseOperationalState)} lease ·{" "}
+          {formatCoherenceToken(coherence.occupancyState)} occupancy
+        </div>
+      ) : null}
+      {paymentActivityLabel ? <div>{paymentActivityLabel}</div> : null}
+    </div>
+  );
+}
+
 function executionNextActionLabel(value: string | null | undefined) {
   switch (String(value || "").trim().toLowerCase()) {
     case "tenant_signature":
@@ -694,6 +730,7 @@ export default function LandlordActiveLeasesPage() {
                         </div>
                       ) : null}
                       {renderLifecycleSummary(lease)}
+                      {renderStateCoherence(lease)}
                       {lease.archivedAt ? (
                         <div style={{ color: "#64748b", fontSize: 12, marginTop: 4 }}>
                           Archived {formatDate(lease.archivedAt)}
@@ -821,6 +858,7 @@ export default function LandlordActiveLeasesPage() {
               {lease.paymentReadiness ? (
                 <div style={{ color: "#64748b", fontSize: 12 }}>{paymentReadinessChecklist(lease)}</div>
               ) : null}
+              {renderStateCoherence(lease)}
               {renderLeaseActions(lease)}
             </div>
           ))}

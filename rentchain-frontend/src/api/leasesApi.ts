@@ -48,6 +48,63 @@ export interface Lease {
   updatedAt: string;
 }
 
+export type LeaseStateCoherence = {
+  coherenceStatus: "coherent" | "review_required" | "unknown";
+  coherenceLabel: string;
+  coherenceReason: string;
+  leaseExecutionState:
+    | "not_started"
+    | "in_progress"
+    | "executed"
+    | "blocked"
+    | "unknown";
+  leaseOperationalState:
+    | "draft"
+    | "pending_execution"
+    | "executed_future"
+    | "active"
+    | "notice_period"
+    | "past"
+    | "archived"
+    | "review_required"
+    | "unknown";
+  occupancyState:
+    | "occupied"
+    | "vacant"
+    | "upcoming"
+    | "notice_period"
+    | "review_required"
+    | "unknown";
+  tenantOperationalState:
+    | "applicant"
+    | "pending_activation"
+    | "active"
+    | "past"
+    | "archived"
+    | "review_required"
+    | "unknown";
+  paymentReadinessState:
+    | "not_started"
+    | "provider_pending"
+    | "provider_paid"
+    | "recorded_activity_present"
+    | "ready_to_configure"
+    | "not_ready"
+    | "blocked"
+    | "review_required"
+    | "unknown";
+  sourceFields: Record<string, string | number | null | undefined>;
+  flags: {
+    leaseMarkedActiveBeforeExecution: boolean;
+    activeLeaseOnVacantUnit: boolean;
+    occupiedUnitWithoutActiveExecutedLease: boolean;
+    tenantActiveWithoutExecutedOccupancy: boolean;
+    paymentActivityWithoutProviderSetup: boolean;
+    hasStateConflict: boolean;
+    requiresReview: boolean;
+  };
+};
+
 export interface LandlordActiveLease extends Lease {
   propertyName: string;
   tenantName?: string | null;
@@ -123,6 +180,7 @@ export interface LandlordActiveLease extends Lease {
     paymentExperience: PaymentExperience;
   } | null;
   leaseLifecycleSummary?: LeaseLifecycleSummary;
+  stateCoherence?: LeaseStateCoherence | null;
   hiddenFromActiveLists?: boolean;
   cleanupReason?: string | null;
   cleanupBatch?: string | null;

@@ -78,6 +78,12 @@ function formatLeaseStatus(value?: string | null) {
   return normalized.replace(/_/g, " ").replace(/\b\w/g, (match) => match.toUpperCase());
 }
 
+function formatCoherenceToken(value?: string | null) {
+  const normalized = String(value || "").trim();
+  if (!normalized) return "Unknown";
+  return normalized.replace(/_/g, " ").replace(/\b\w/g, (match) => match.toUpperCase());
+}
+
 function formatNoticeResponse(value?: string | null, noResponse?: boolean) {
   if (noResponse) return "No Response";
   const normalized = String(value || "pending").trim().toLowerCase();
@@ -149,6 +155,7 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityR
   const tenant = bundle.tenant || bundle;
   const lease = bundle.currentLease || bundle.lease;
   const lifecycle = bundle.lifecycle || tenant.lifecycle || null;
+  const stateCoherence = bundle.stateCoherence || null;
   const property = bundle.property || null;
   const unit = bundle.unit || null;
   const latestLeaseNoticeSummary = bundle.latestLeaseNoticeSummary || null;
@@ -564,6 +571,18 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityR
         />
         <DetailField label="Lease Status" value={formatLeaseStatus(lease?.status)} />
         <DetailField label="Lifecycle" value={lifecycle?.lifecycleLabel ?? "--"} />
+        {stateCoherence ? (
+          <DetailField
+            label="State Coherence"
+            value={
+              stateCoherence.flags?.requiresReview
+                ? `Needs review: ${formatCoherenceToken(stateCoherence.leaseOperationalState)} lease / ${formatCoherenceToken(
+                    stateCoherence.occupancyState
+                  )} occupancy`
+                : stateCoherence.coherenceLabel
+            }
+          />
+        ) : null}
         <DetailField
           label="Current Balance"
           value={
