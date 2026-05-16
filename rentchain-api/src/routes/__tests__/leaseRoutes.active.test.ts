@@ -267,6 +267,16 @@ describe("leaseRoutes GET /active", () => {
             },
           },
         }),
+        stateCoherence: expect.objectContaining({
+          coherenceStatus: "coherent",
+          leaseExecutionState: "executed",
+          leaseOperationalState: "active",
+          occupancyState: "occupied",
+          flags: expect.objectContaining({
+            hasStateConflict: false,
+            requiresReview: false,
+          }),
+        }),
         leaseLifecycleSummary: expect.objectContaining({
           lifecycleStatus: "active",
           lifecycleLabel: "Active",
@@ -317,6 +327,65 @@ describe("leaseRoutes GET /active", () => {
         leaseExecution: expect.objectContaining({
           executionStatus: "draft",
           requiredNextAction: "complete_lease_details",
+        }),
+        stateCoherence: expect.objectContaining({
+          coherenceStatus: "review_required",
+          coherenceReason: "lease_status_active_but_execution_incomplete",
+          leaseOperationalState: "draft",
+          flags: expect.objectContaining({
+            leaseMarkedActiveBeforeExecution: true,
+          }),
+        }),
+      })
+    );
+  });
+
+  it("surfaces ledger payment activity separately from provider payment setup", async () => {
+    seedDoc("properties", "prop-1", { landlordId: "landlord-1", name: "Harbour View" });
+    seedDoc("tenants", "tenant-1", { landlordId: "landlord-1", fullName: "Jane Tenant", status: "active" });
+    seedDoc("units", "unit-1", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitNumber: "101",
+      status: "occupied",
+      occupancyStatus: "occupied",
+    });
+    seedDoc("leases", "lease-1", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      tenantId: "tenant-1",
+      primaryTenantId: "tenant-1",
+      unitId: "unit-1",
+      unitNumber: "101",
+      monthlyRent: 1850,
+      dueDay: 1,
+      startDate: "2026-01-01",
+      endDate: "2099-12-31",
+      status: "active",
+      tenantSignature: { signedAt: "2026-01-05T12:00:00.000Z" },
+      landlordSignature: { signedAt: "2026-01-05T13:00:00.000Z" },
+      createdAt: 1,
+      updatedAt: 2,
+    });
+    seedDoc("ledgerEntries", "ledger-payment-1", {
+      landlordId: "landlord-1",
+      leaseId: "lease-1",
+      entryType: "payment",
+      amountCents: 15000,
+      effectiveDate: "2026-05-15",
+    });
+
+    const router = (await import("../leaseRoutes")).default;
+    const res = await invokeRouter(router, { method: "GET", url: "/active" });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.leases?.[0]?.stateCoherence).toEqual(
+      expect.objectContaining({
+        paymentReadinessState: "recorded_activity_present",
+        coherenceReason: "ledger_payment_activity_without_provider_payment_setup",
+        flags: expect.objectContaining({
+          paymentActivityWithoutProviderSetup: true,
+          requiresReview: true,
         }),
       })
     );

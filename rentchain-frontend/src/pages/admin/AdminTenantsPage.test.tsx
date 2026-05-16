@@ -55,6 +55,21 @@ describe("AdminTenantsPage", () => {
           currentLeaseEndDate: "2026-12-31",
           createdAt: "2026-03-01T00:00:00.000Z",
           updatedAt: "2026-03-05T00:00:00.000Z",
+          lifecycle: {
+            lifecycleState: "active",
+            lifecycleLabel: "Active",
+            lifecycleReason: "active_tenancy_or_lease_signal",
+            confidence: "high",
+            sourceFields: { leaseStatus: "active", screeningStatus: "complete" },
+            flags: {
+              hasActiveLease: true,
+              hasPendingLease: false,
+              hasCompletedScreening: true,
+              isArchived: false,
+              isPastTenant: false,
+              hasStateConflict: false,
+            },
+          },
           flags: {
             missingLeaseLink: false,
             missingPropertyLink: false,
@@ -92,6 +107,7 @@ describe("AdminTenantsPage", () => {
     });
 
     expect(screen.getByText("Jane Tenant")).toBeInTheDocument();
+    expect(screen.getAllByText("Active").length).toBeGreaterThan(0);
   });
 
   it("opens the tenant detail drawer when a row is selected", async () => {

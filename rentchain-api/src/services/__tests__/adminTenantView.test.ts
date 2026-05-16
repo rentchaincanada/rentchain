@@ -133,8 +133,29 @@ describe("adminTenantView", () => {
     expect(result.items[0]).toHaveProperty("leaseStatus");
     expect(result.items[0]).toHaveProperty("screeningStatus");
     expect(result.items[0]).toHaveProperty("moveInStatus");
+    expect(result.items[0]).toHaveProperty("lifecycle");
     expect(result.items[0]).toHaveProperty("flags");
     expect(result.items[0]).not.toHaveProperty("inviteToken");
+  });
+
+  it("derives a canonical lifecycle state from linked lease and screening fields", async () => {
+    const { listAdminTenants } = await import("../admin/adminTenantView");
+    const result = await listAdminTenants({ firestore: fakeDb as any, q: "jane", page: 1, pageSize: 25 });
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]?.lifecycle).toMatchObject({
+      lifecycleState: "active",
+      lifecycleLabel: "Active",
+      sourceFields: {
+        screeningStatus: "complete",
+        leaseStatus: "active",
+        occupancyStatus: "ready",
+      },
+      flags: expect.objectContaining({
+        hasActiveLease: true,
+        hasCompletedScreening: true,
+      }),
+    });
   });
 
   it("supports search across tenant and property fields", async () => {

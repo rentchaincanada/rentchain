@@ -1,4 +1,8 @@
 import { db } from "../../config/firebase";
+import {
+  deriveTenantLifecycle,
+  type TenantLifecycleResult,
+} from "../../lib/tenants/deriveTenantLifecycle";
 
 type FirestoreLike = Pick<FirebaseFirestore.Firestore, "collection">;
 
@@ -22,6 +26,7 @@ export type AdminTenantView = {
   currentLeaseEndDate: string | null;
   createdAt: string | number | null;
   updatedAt: string | number | null;
+  lifecycle: TenantLifecycleResult;
   flags: {
     missingLeaseLink: boolean;
     missingPropertyLink: boolean;
@@ -223,6 +228,21 @@ function buildView(
     null;
   const currentScreeningStatus = screeningStatus(tenant.raw);
   const currentMoveInStatus = moveInStatus(tenant.raw);
+  const lifecycle = deriveTenantLifecycle({
+    tenantStatus: tenant.raw.status,
+    applicantStatus: tenant.raw.applicantStatus || tenant.raw.applicationStatus,
+    screeningStatus: currentScreeningStatus,
+    leaseStatus: currentLeaseStatus,
+    occupancyStatus: currentMoveInStatus || tenant.raw.occupancyStatus,
+    currentLeaseId: tenant.raw.currentLeaseId || tenant.raw.leaseId,
+    leaseId,
+    applicationId: tenant.raw.applicationId || tenant.raw.sourceApplication,
+    tenantId: tenant.id,
+    source: tenant.raw.source,
+    archivedAt: tenant.raw.archivedAt || linkedLease?.raw.archivedAt,
+    isArchived: tenant.raw.isArchived || linkedLease?.raw.isArchived,
+    hiddenFromActiveLists: tenant.raw.hiddenFromActiveLists,
+  });
 
   return {
     id: tenant.id,
@@ -253,6 +273,7 @@ function buildView(
       normalizeDate(tenant.raw.leaseEnd),
     createdAt: safeValue(tenant.raw.createdAt ?? tenant.raw.created_at),
     updatedAt: safeValue(tenant.raw.updatedAt ?? tenant.raw.updated_at),
+    lifecycle,
     flags: {
       missingLeaseLink: !!asTrimmedString(tenant.raw.currentLeaseId || tenant.raw.leaseId) && !linkedLease,
       missingPropertyLink: !propertyId || !propertyName,

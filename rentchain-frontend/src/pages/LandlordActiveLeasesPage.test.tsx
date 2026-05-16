@@ -317,6 +317,55 @@ describe("LandlordActiveLeasesPage", () => {
     expect(screen.queryByRole("button", { name: /Print \/ Save payment summary/i })).not.toBeInTheDocument();
   });
 
+  it("shows review-safe coherence flags without changing lease actions", async () => {
+    mocks.getActiveLeasesForLandlord.mockResolvedValue({
+      leases: [
+        {
+          id: "lease-review",
+          propertyId: "prop-1",
+          propertyName: "Harbour View",
+          unitNumber: "101",
+          monthlyRent: 1850,
+          startDate: "2026-01-01",
+          endDate: "2026-12-31",
+          status: "active",
+          tenantName: "Jane Tenant",
+          tenantEmail: "jane@example.com",
+          stateCoherence: {
+            coherenceStatus: "review_required",
+            coherenceLabel: "Needs review",
+            coherenceReason: "lease_status_active_but_execution_incomplete",
+            leaseExecutionState: "not_started",
+            leaseOperationalState: "draft",
+            occupancyState: "review_required",
+            tenantOperationalState: "review_required",
+            paymentReadinessState: "recorded_activity_present",
+            sourceFields: {},
+            flags: {
+              leaseMarkedActiveBeforeExecution: true,
+              activeLeaseOnVacantUnit: false,
+              occupiedUnitWithoutActiveExecutedLease: true,
+              tenantActiveWithoutExecutedOccupancy: true,
+              paymentActivityWithoutProviderSetup: true,
+              hasStateConflict: true,
+              requiresReview: true,
+            },
+          },
+        },
+      ],
+    });
+
+    render(
+      <MemoryRouter>
+        <LandlordActiveLeasesPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Needs review: Draft lease · Review Required occupancy/i)).toBeInTheDocument();
+    expect(screen.getByText("Recorded ledger payment activity present")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Ledger" })).toHaveAttribute("href", "/leases/lease-review/ledger");
+  });
+
   it("maps landlord payment blockers without exposing raw codes", async () => {
     mocks.getActiveLeasesForLandlord.mockResolvedValue({
       leases: [

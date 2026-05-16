@@ -3,6 +3,7 @@ import { API_BASE_URL } from "./config";
 import { getAuthToken } from "../lib/authToken";
 import { getFirebaseIdToken } from "../lib/firebaseAuthToken";
 import { parseContentDispositionFilename } from "./exportDownload";
+import type { TenantLifecycle } from "./tenantsApi";
 
 export type AdminPropertyView = {
   id: string;
@@ -58,6 +59,7 @@ export type AdminTenantView = {
   currentLeaseEndDate: string | null;
   createdAt: string | number | null;
   updatedAt: string | number | null;
+  lifecycle: TenantLifecycle;
   flags: {
     missingLeaseLink: boolean;
     missingPropertyLink: boolean;

@@ -150,6 +150,21 @@ describe("TenantDetailPanel", () => {
           currentLeaseId: "lease-1",
           propertyName: "Harbour View",
           unit: "101",
+          lifecycle: {
+            lifecycleState: "active",
+            lifecycleLabel: "Active",
+            lifecycleReason: "active_tenancy_or_lease_signal",
+            confidence: "high",
+            sourceFields: { leaseStatus: "active" },
+            flags: {
+              hasActiveLease: true,
+              hasPendingLease: false,
+              hasCompletedScreening: false,
+              isArchived: false,
+              isPastTenant: false,
+              hasStateConflict: false,
+            },
+          },
         },
         currentLease: {
           id: "lease-1",
@@ -160,6 +175,26 @@ describe("TenantDetailPanel", () => {
           leaseEnd: "2026-12-31",
           monthlyRent: 1850,
           status: "active",
+        },
+        stateCoherence: {
+          coherenceStatus: "review_required",
+          coherenceLabel: "Needs review",
+          coherenceReason: "lease_status_active_but_execution_incomplete",
+          leaseExecutionState: "not_started",
+          leaseOperationalState: "draft",
+          occupancyState: "review_required",
+          tenantOperationalState: "review_required",
+          paymentReadinessState: "recorded_activity_present",
+          sourceFields: {},
+          flags: {
+            leaseMarkedActiveBeforeExecution: true,
+            activeLeaseOnVacantUnit: false,
+            occupiedUnitWithoutActiveExecutedLease: true,
+            tenantActiveWithoutExecutedOccupancy: true,
+            paymentActivityWithoutProviderSetup: true,
+            hasStateConflict: true,
+            requiresReview: true,
+          },
         },
         property: { id: "prop-1", name: "Harbour View", addressLine1: "123 Harbour St", city: "Halifax", province: "NS" },
         unit: { id: "unit-1", unitNumber: "101" },
@@ -174,6 +209,8 @@ describe("TenantDetailPanel", () => {
     );
 
     expect(await screen.findByText("Recent current lease ledger entries")).toBeInTheDocument();
+    expect(screen.getAllByText("Active").length).toBeGreaterThan(0);
+    expect(screen.getByText("Needs review: Draft lease / Review Required occupancy")).toBeInTheDocument();
     expect(screen.getByText("Showing the most recent charges and payments from the current lease ledger.")).toBeInTheDocument();
     expect(screen.getByText("Use the current lease ledger to record charges and payments.")).toBeInTheDocument();
     expect(screen.getByText("Showing the latest 10 entries here. Open current lease ledger for the full history.")).toBeInTheDocument();

@@ -66,6 +66,7 @@ import { buildLeasePaymentProjection } from "../services/projections/buildLeaseP
 import { computeNoResponseState } from "../services/leaseNoticeWorkflowService";
 import { deriveLeaseLifecycleSummary } from "../services/leaseLifecycle/deriveLeaseLifecycleSummary";
 import { deriveLeaseLifecycleState } from "../lib/leases/leaseLifecycle";
+import { deriveLeaseOccupancyCoherence } from "../lib/leases/deriveLeaseOccupancyCoherence";
 import { syncPropertyUnitOccupancyForTenantContext } from "../services/tenantPortal/tenantOccupancySyncService";
 
 const router = Router();
@@ -950,6 +951,41 @@ async function hydrateLeaseUnitDisplayFields<T extends Record<string, any>>(
   };
 }
 
+async function loadLeaseUnitOccupancySnapshot(lease: Record<string, any>, landlordId: string | null) {
+  const propertyId = String(lease?.propertyId || "").trim();
+  const unitReference = String(lease?.unitId || lease?.unitNumber || lease?.unitLabel || lease?.unit || "").trim();
+  if (!propertyId || !unitReference) return null;
+  const units = await loadUnitsForProperty(db as any, propertyId, landlordId || null).catch(() => []);
+  const resolution = resolveUnitReference(units, unitReference);
+  if (resolution.ambiguous || !resolution.unit) return null;
+  const raw = (resolution.unit.raw || {}) as any;
+  return {
+    unitId: resolution.unit.id,
+    status: raw.status ?? null,
+    occupancyStatus: raw.occupancyStatus ?? null,
+  };
+}
+
+async function countLeaseLedgerPaymentActivity(leaseId: string, landlordId: string | null) {
+  const normalizedLeaseId = String(leaseId || "").trim();
+  const normalizedLandlordId = String(landlordId || "").trim();
+  if (!normalizedLeaseId || !normalizedLandlordId) return 0;
+  try {
+    const snap = await db
+      .collection(LEDGER_COLLECTION)
+      .where("landlordId", "==", normalizedLandlordId)
+      .where("leaseId", "==", normalizedLeaseId)
+      .get();
+    return (snap.docs || []).filter((doc: any) => {
+      const data = doc.data() as any;
+      return String(data?.entryType || data?.type || "").trim().toLowerCase() === "payment";
+    }).length;
+  } catch (err) {
+    console.error("[leaseRoutes] countLeaseLedgerPaymentActivity error", err);
+    return 0;
+  }
+}
+
 function hydrateLeaseUnitDisplayFieldsFromUnits<T extends Record<string, any>>(
   lease: T,
   units: any[]
@@ -1013,9 +1049,30 @@ async function enrichLeaseRow(raw: any) {
   const leaseReadiness = leasePaymentProjection.leaseReadiness;
   const paymentReadiness = leasePaymentProjection.paymentReadiness;
   const rentPaymentSummary = leasePaymentProjection.rentPaymentSummary;
+  const landlordId = String(lease.landlordId || "").trim() || null;
+  const [unitOccupancy, ledgerPaymentCount] = await Promise.all([
+    loadLeaseUnitOccupancySnapshot(lease, landlordId),
+    countLeaseLedgerPaymentActivity(lease.id, landlordId),
+  ]);
+  const coherence = deriveLeaseOccupancyCoherence({
+    leaseStatus: lease.status,
+    leaseLifecycleState: lease.derivedLifecycleState,
+    leaseExecutionStatus: leaseReadiness.leaseExecution.executionStatus,
+    unitStatus: unitOccupancy?.status,
+    occupancyStatus: unitOccupancy?.occupancyStatus,
+    tenantStatus: tenantSnap?.exists ? tenantSnap.data()?.status : null,
+    paymentReadinessStatus: paymentReadiness.readinessStatus,
+    rentPaymentStatus:
+      rentPaymentSummary.latestPayment?.status ||
+      rentPaymentSummary.paymentExperience?.history?.[0]?.status ||
+      null,
+    ledgerPaymentCount,
+    isArchived: Boolean(raw?.archivedAt),
+    archivedAt: raw?.archivedAt || null,
+  });
 
   return {
-    ...(await hydrateLeaseUnitDisplayFields(lease, String(lease.landlordId || "").trim() || null)),
+    ...(await hydrateLeaseUnitDisplayFields(lease, landlordId)),
     propertyName,
     tenantName,
     tenantEmail,
@@ -1023,6 +1080,7 @@ async function enrichLeaseRow(raw: any) {
     ...leaseReadiness,
     paymentReadiness,
     rentPaymentSummary,
+    stateCoherence: coherence,
     archivedAt: raw?.archivedAt || null,
     archivedByUserId: raw?.archivedByUserId || null,
     isArchived: Boolean(raw?.archivedAt),
@@ -3390,6 +3448,5 @@ router.get("/:leaseId/ledger/export.pdf", async (req: any, res: Response) => {
 });
 
 export default router;
-
 
 

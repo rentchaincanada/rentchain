@@ -28,6 +28,10 @@ function StatusPill({ value, tone = "default" }: { value: string | null; tone?: 
   return <Pill tone={tone}>{formatStatus(value)}</Pill>;
 }
 
+function lifecycleLabel(item: AdminTenantView | null) {
+  return item?.lifecycle?.lifecycleLabel || "Unknown";
+}
+
 export const AdminTenantsPage: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -278,7 +282,7 @@ export const AdminTenantsPage: React.FC = () => {
                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
                   <thead>
                     <tr style={{ textAlign: "left", borderBottom: "1px solid rgba(15, 23, 42, 0.08)" }}>
-                      {["Tenant", "Email", "Phone", "Property / Unit", "Landlord", "Lease Status", "Screening", "Move-In", "Updated"].map((label) => (
+                      {["Tenant", "Email", "Phone", "Property / Unit", "Landlord", "Lifecycle", "Lease Status", "Screening", "Move-In", "Updated"].map((label) => (
                         <th key={label} style={{ padding: "10px 12px", fontSize: 13, color: "#475569" }}>
                           {label}
                         </th>
@@ -303,6 +307,9 @@ export const AdminTenantsPage: React.FC = () => {
                           <div style={{ color: "#64748b", fontSize: 13 }}>{item.unitNumber ? `Unit ${item.unitNumber}` : "No unit"}</div>
                         </td>
                         <td style={{ padding: "12px" }}>{item.landlordId || "—"}</td>
+                        <td style={{ padding: "12px" }}>
+                          <StatusPill value={lifecycleLabel(item)} tone={item.lifecycle?.flags?.hasStateConflict ? "danger" : "accent"} />
+                        </td>
                         <td style={{ padding: "12px" }}>
                           <StatusPill value={item.leaseStatus} />
                         </td>
@@ -399,6 +406,12 @@ export const AdminTenantsPage: React.FC = () => {
 
           <Card style={{ display: "grid", gap: 8 }}>
             <div style={{ fontWeight: 600 }}>Status</div>
+            <div>
+              <StatusPill
+                value={lifecycleLabel(selectedTenant)}
+                tone={selectedTenant.lifecycle?.flags?.hasStateConflict ? "danger" : "accent"}
+              />
+            </div>
             <div>
               <StatusPill value={selectedTenant.screeningStatus} tone={selectedTenant.flags.hasScreening ? "accent" : "default"} />
             </div>
