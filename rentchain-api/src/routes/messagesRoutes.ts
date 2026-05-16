@@ -54,7 +54,14 @@ function normalizeUnitLabel(value: any) {
 }
 
 function buildPropertyLabel(property: any) {
-  return stringOrNull(property?.name) || stringOrNull(property?.addressLine1) || null;
+  return (
+    stringOrNull(property?.name) ||
+    stringOrNull(property?.propertyName) ||
+    stringOrNull(property?.propertyAddress) ||
+    stringOrNull(property?.addressLine1) ||
+    stringOrNull(property?.address) ||
+    null
+  );
 }
 
 function buildTenantLabel(tenant: any) {

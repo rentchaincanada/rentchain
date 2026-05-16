@@ -161,7 +161,7 @@ export async function downloadTenantReport(tenantId: string): Promise<{ filename
     const blob = await response.blob();
     const disposition = response.headers.get("content-disposition") || "";
     const match = disposition.match(/filename="?([^"]+)"?/i);
-    const filename = match?.[1] || `tenant-summary-${tenantId}.pdf`;
+    const filename = match?.[1] || "tenant-summary.pdf";
     recordPdfExportEvent("pdf_export_completed", {
       exportType: "tenant_report",
       renderingPath: "backend_pdfkit",

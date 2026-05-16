@@ -5,6 +5,7 @@ import { Button, Card, Pill, Section } from "../../components/ui/Ui";
 import { useToast } from "../../components/ui/ToastProvider";
 import { exportAdminIntegrityCsv, fetchAdminIntegrity, type AdminIntegrity } from "../../api/adminApi";
 import { AdminSavedFilters } from "../../components/admin/AdminSavedFilters";
+import { formatOperationalReference } from "@/lib/identityReferences";
 
 const EMPTY_INTEGRITY: AdminIntegrity = {
   sections: [
@@ -204,9 +205,9 @@ export const AdminIntegrityPage: React.FC = () => {
                             <div style={{ fontWeight: 600 }}>{sample.label}</div>
                             <div style={{ color: "#64748b", fontSize: 13 }}>
                               {sample.type}
-                              {sample.propertyId ? ` · Property ${sample.propertyId}` : ""}
-                              {sample.leaseId ? ` · Lease ${sample.leaseId}` : ""}
-                              {sample.tenantId ? ` · Tenant ${sample.tenantId}` : ""}
+                              {sample.propertyId ? ` · ${formatOperationalReference("property", sample.propertyId)}` : ""}
+                              {sample.leaseId ? ` · ${formatOperationalReference("lease", sample.leaseId)}` : ""}
+                              {sample.tenantId ? ` · ${formatOperationalReference("tenant", sample.tenantId)}` : ""}
                             </div>
                             {sample.relatedAdminPath ? (
                               <Link to={sample.relatedAdminPath} style={{ color: "#2563eb", fontWeight: 600, textDecoration: "none" }}>

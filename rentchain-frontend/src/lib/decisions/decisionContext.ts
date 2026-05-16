@@ -1,4 +1,5 @@
 import type { LeaseDelinquencySignal, LeaseObligationLedgerRow } from "@/api/leaseLedgerApi";
+import { formatInternalReference } from "@/lib/identityReferences";
 import type { DecisionItem } from "./decisionDisplay";
 
 export type DecisionContextLink = {
@@ -185,8 +186,12 @@ export function buildDecisionEvidenceItems(
   }
   if (lifecycleState) items.push({ label: "Lease lifecycle state", value: titleCase(lifecycleState) });
   if (lifecycleReasons) items.push({ label: "Lifecycle reason", value: lifecycleReasons });
-  if (decision.paymentIntentId) items.push({ label: "Payment intent reference", value: decision.paymentIntentId });
-  if (decision.rentPaymentId) items.push({ label: "Rent payment reference", value: decision.rentPaymentId });
+  if (decision.paymentIntentId) {
+    items.push({ label: "Provider payment reference", value: formatInternalReference("payment", decision.paymentIntentId) });
+  }
+  if (decision.rentPaymentId) {
+    items.push({ label: "Internal rent payment reference", value: formatInternalReference("payment", decision.rentPaymentId) });
+  }
   if (decision.latestAction) {
     items.push({
       label: "Last action",
@@ -196,4 +201,3 @@ export function buildDecisionEvidenceItems(
 
   return items;
 }
-

@@ -34,6 +34,7 @@ import { track } from "../lib/analytics";
 import { resolveReturnToParam } from "../lib/propertyGate";
 import { useCapabilities } from "../hooks/useCapabilities";
 import { deriveUnitOccupancyFromLeases } from "../lib/leases/leaseLifecycle";
+import { printSummaryDocument } from "../utils/printSummary";
 
 const PropertiesPage: React.FC = () => {
   const [properties, setProperties] = useState<Property[]>([]);
@@ -874,7 +875,7 @@ const PropertiesPage: React.FC = () => {
                     <Button
                       type="button"
                       className="no-print"
-                      onClick={() => window.print()}
+                      onClick={() => void printSummaryDocument("summary")}
                     >
                       Print / Save PDF
                     </Button>

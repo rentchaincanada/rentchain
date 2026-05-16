@@ -656,7 +656,7 @@ describe("LeaseLedgerPage", () => {
       );
       expect(HTMLAnchorElement.prototype.click).toHaveBeenCalledTimes(1);
     });
-    expect(createdAnchors[createdAnchors.length - 1]?.download).toBe("lease-ledger-lease-1.pdf");
+    expect(createdAnchors[createdAnchors.length - 1]?.download).toBe("lease-ledger-harbour-view-unit-101.pdf");
     expect(global.URL.createObjectURL).toHaveBeenCalled();
     expect(global.URL.revokeObjectURL).toHaveBeenCalled();
   });

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { getLedgerEventV2, LedgerEventV2 } from "../../api/ledgerV2";
 import { LedgerEventTypeBadge } from "./LedgerEventTypeBadge";
+import { formatInternalReference } from "@/lib/identityReferences";
 
 interface Props {
   eventId: string | null;
@@ -66,7 +67,8 @@ export const LedgerEventDrawer: React.FC<Props> = ({ eventId, onClose }) => {
           </div>
           {item.summary ? <div style={{ marginTop: 8 }}>{item.summary}</div> : null}
           <div style={{ marginTop: 10, fontSize: 12, color: "#4b5563" }}>
-            Property: {item.propertyId || "-"} • Tenant: {item.tenantId || "-"}
+            {item.propertyId ? formatInternalReference("property", item.propertyId) : "Property unavailable"} •{" "}
+            {item.tenantId ? formatInternalReference("tenant", item.tenantId) : "Tenant unavailable"}
           </div>
           <pre
             style={{

@@ -321,7 +321,7 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityR
       const url = URL.createObjectURL(report.blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = report.filename || `tenant-summary-${tenantId}.pdf`;
+      a.download = report.filename || "tenant-summary.pdf";
       document.body.appendChild(a);
       a.click();
       a.remove();

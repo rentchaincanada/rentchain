@@ -4,6 +4,7 @@ import { useCapabilities } from "@/hooks/useCapabilities";
 import { useUpgrade } from "@/context/UpgradeContext";
 import { colors, spacing } from "@/styles/tokens";
 import { upgradeStarterButtonStyle } from "@/lib/upgradeButtonStyles";
+import { formatInternalReference } from "@/lib/identityReferences";
 
 type Filters = {
   eventType: string;
@@ -262,7 +263,8 @@ export default function LedgerV2Page() {
             Occurred: {new Date(detail.occurredAt).toLocaleString()}
           </div>
           <div style={{ marginTop: 8, fontSize: 12 }}>
-            Property: {detail.propertyId || "-"} | Tenant: {detail.tenantId || "-"}
+            {detail.propertyId ? formatInternalReference("property", detail.propertyId) : "Property unavailable"} |{" "}
+            {detail.tenantId ? formatInternalReference("tenant", detail.tenantId) : "Tenant unavailable"}
           </div>
           <pre style={{ marginTop: 12, background: "#f9f9f9", padding: 8, borderRadius: 8, fontSize: 12 }}>
             {JSON.stringify(detail.metadata || {}, null, 2)}

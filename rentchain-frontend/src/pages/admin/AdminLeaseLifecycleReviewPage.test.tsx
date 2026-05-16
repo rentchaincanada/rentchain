@@ -121,7 +121,7 @@ describe("AdminLeaseLifecycleReviewPage", () => {
     expect(screen.getByText(/Expired lease conflicts with manual occupancy/i)).toBeInTheDocument();
     expect(screen.getByText(/unknown lifecycle/i)).toBeInTheDocument();
     expect(screen.getByText(/expired occupancy conflict/i)).toBeInTheDocument();
-    expect(screen.getByText(/Open lease record/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Open lease record/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Confirm occupancy manually/i)).toBeInTheDocument();
     expect(screen.getAllByText(/reviewed/i).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("button", { name: /Mark reviewed/i }).length).toBeGreaterThan(0);
@@ -139,7 +139,11 @@ describe("AdminLeaseLifecycleReviewPage", () => {
     expect(screen.getAllByText("Evidence").length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Occupancy/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Lease lifecycle indicates an occupancy conflict that needs review/i).length).toBeGreaterThan(0);
-    expect(screen.getByRole("link", { name: "lease-1" })).toHaveAttribute("href", "/admin/leases?q=lease-1");
+    expect(
+      screen
+        .getAllByRole("link", { name: "Open lease record" })
+        .some((link) => link.getAttribute("href") === "/admin/leases?q=lease-1")
+    ).toBe(true);
     expect(screen.queryByRole("button", { name: /fix/i })).not.toBeInTheDocument();
     expect(screen.queryByText(/Fix automatically/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /accept/i })).not.toBeInTheDocument();

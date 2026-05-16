@@ -16,6 +16,7 @@ import {
   updateMoveInReadinessItems,
 } from "../services/tenantMoveInReadinessService";
 import { requireCapability } from "../services/capabilityGuard";
+import { slugifyOperationalReference } from "../lib/identityReferences";
 
 const router = Router();
 
@@ -248,11 +249,15 @@ router.get("/:tenantId/report", async (req: any, res) => {
     }
 
     const buffer = await generateTenantReportPdfBuffer(tenantId);
+    const tenantName =
+      String((bundle.tenant as any)?.fullName || (bundle.tenant as any)?.name || (bundle.tenant as any)?.displayName || "").trim() ||
+      "tenant";
+    const filenameSlug = slugifyOperationalReference(["tenant-report", tenantName], "tenant-report");
 
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader(
       "Content-Disposition",
-      `attachment; filename=\"tenant-report-${tenantId}.pdf\"`
+      `attachment; filename=\"${filenameSlug}.pdf\"`
     );
     res.send(buffer);
   } catch (err: any) {

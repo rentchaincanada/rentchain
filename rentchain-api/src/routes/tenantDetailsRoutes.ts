@@ -80,7 +80,7 @@ router.get("/tenants/:tenantId/report", async (req, res) => {
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader(
       "Content-Disposition",
-      `attachment; filename=\"tenant-report-${tenantId}.pdf\"`
+      "attachment; filename=\"tenant-report.pdf\""
     );
     res.send(buffer);
   } catch (err) {

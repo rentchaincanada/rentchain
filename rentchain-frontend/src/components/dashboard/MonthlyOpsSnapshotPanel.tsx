@@ -1,6 +1,7 @@
 import React from "react";
 import { getMonthlyOpsSnapshot, type OpsMonthlySnapshot } from "../../api/opsSnapshot";
 import { TenantScorePill } from "../tenant/TenantScorePill";
+import { formatOperationalReference } from "@/lib/identityReferences";
 
 const TENANT_DETAIL_PATH = (tenantId: string) => `/tenants/${tenantId}`;
 
@@ -208,7 +209,7 @@ export default function MonthlyOpsSnapshotPanel() {
                       style={{ fontWeight: 950, color: "inherit", textDecoration: "underline", textUnderlineOffset: 3 }}
                       title="Open tenant"
                     >
-                      {t.tenantId}
+                      {formatOperationalReference("tenant", t.tenantId)}
                     </a>
 
                     <TenantScorePill score={t.scoreV1} tier={t.tierV1} compact />

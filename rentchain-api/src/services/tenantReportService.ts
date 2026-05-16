@@ -7,6 +7,7 @@ import {
 } from "./financialProjectionService";
 import { getTenantLedger } from "./tenantLedgerService";
 import { getTenantDetailBundle } from "./tenantDetailsService";
+import { formatInternalReference } from "../lib/identityReferences";
 
 export type TenantPaymentBehaviorSummary = {
   onTimeRate: number | null;
@@ -426,7 +427,7 @@ export async function generateTenantReportPdfBuffer(
       .fontSize(12)
       .fillColor("#000000")
       .text(`Tenant: ${data.tenantName}`, { continued: true })
-      .text(`   (ID: ${data.tenantId})`)
+      .text(`   (${formatInternalReference("tenant", data.tenantId)})`)
       .moveDown(0.25);
 
     if (data.propertyName || data.unitLabel) {

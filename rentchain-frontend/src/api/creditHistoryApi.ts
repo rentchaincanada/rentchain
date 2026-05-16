@@ -41,7 +41,7 @@ export async function downloadCreditHistory(tenantId: string, format: "csv" | "j
   const blob = await res.blob();
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = `credit-history-${tenantId}.${format}`;
+  a.download = `credit-history.${format}`;
   document.body.appendChild(a);
   a.click();
   a.remove();
