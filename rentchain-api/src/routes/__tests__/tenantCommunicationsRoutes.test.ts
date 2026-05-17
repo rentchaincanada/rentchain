@@ -219,6 +219,13 @@ describe("tenant communications routes", () => {
   });
 
   it("loads landlord messages from property and unit linked conversations without tenant ids", async () => {
+    ensureCollection("conversations").set("landlord-1__tenant-1__unit-1", {
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      lastMessageAt: "2026-01-06T00:00:00.000Z",
+    });
     ensureCollection("conversations").set("conv-linked-unit", {
       landlordId: "landlord-1",
       unitId: "unit-1",
@@ -263,6 +270,80 @@ describe("tenant communications routes", () => {
         }),
       ])
     );
+  });
+
+  it("keeps tenant and landlord replies on the same resolved conversation thread", async () => {
+    ensureCollection("conversations").set("conv-linked-unit", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      lastMessageAt: "2026-01-05T00:00:00.000Z",
+      lastReadAtTenant: "2026-01-04T00:00:00.000Z",
+    });
+    ensureCollection("leases").set("lease-1", {
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      status: "active",
+    });
+    ensureCollection("messages").set("msg-landlord-1", {
+      conversationId: "conv-linked-unit",
+      senderRole: "landlord",
+      body: "Can you confirm receipt?",
+      createdAtMs: Date.parse("2026-01-05T00:00:00.000Z"),
+    });
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const headers = {
+      "x-test-user": JSON.stringify({
+        id: "user-1",
+        email: "tenant@example.com",
+        role: "tenant",
+        tenantId: "tenant-1",
+        leaseId: "lease-1",
+      }),
+    };
+    const sendRes = await invokeRouter(router, {
+      method: "POST",
+      url: "/communications/messages",
+      headers,
+      body: {
+        body: "I received it.",
+      },
+    });
+    expect(sendRes.status).toBe(201);
+    const tenantMessage = Array.from(ensureCollection("messages").values()).find(
+      (entry) => entry?.body === "I received it."
+    );
+    expect(tenantMessage?.conversationId).toBe("conv-linked-unit");
+
+    ensureCollection("messages").set("msg-landlord-2", {
+      conversationId: "conv-linked-unit",
+      senderRole: "landlord",
+      body: "Thanks for confirming.",
+      createdAtMs: Date.parse("2026-01-06T00:00:00.000Z"),
+    });
+    ensureCollection("conversations").set("conv-linked-unit", {
+      ...ensureCollection("conversations").get("conv-linked-unit"),
+      lastMessageAt: "2026-01-06T00:00:00.000Z",
+    });
+
+    const loadRes = await invokeRouter(router, {
+      method: "GET",
+      url: "/communications",
+      headers,
+    });
+
+    expect(loadRes.status).toBe(200);
+    expect(loadRes.body?.data?.thread?.id).toBe("conv-linked-unit");
+    expect(loadRes.body?.data?.thread?.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ senderRole: "landlord", body: "Can you confirm receipt?" }),
+        expect.objectContaining({ senderRole: "tenant", body: "I received it." }),
+        expect.objectContaining({ senderRole: "landlord", body: "Thanks for confirming." }),
+      ])
+    );
+    expect(loadRes.body?.data?.thread?.unreadCount).toBe(2);
   });
 
   it("send path respects authority context and records a scoped message", async () => {

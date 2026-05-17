@@ -116,6 +116,25 @@ function conversationMatchesContext(conversation: any, context: TenancyContext, 
   );
 }
 
+async function loadLatestMessageMillis(conversationId: string): Promise<number | null> {
+  const id = asString(conversationId);
+  if (!id) return null;
+  try {
+    const snap = await db
+      .collection("messages")
+      .where("conversationId", "==", id)
+      .orderBy("createdAt", "desc")
+      .limit(1)
+      .get();
+    const doc = snap.docs?.[0];
+    if (!doc) return null;
+    const data = (doc.data() as any) || {};
+    return toMillis(data?.createdAt) || toMillis(data?.createdAtMs);
+  } catch {
+    return null;
+  }
+}
+
 async function resolveTenantConversation(params: {
   landlordId: string;
   context: TenancyContext;
@@ -159,11 +178,59 @@ async function resolveTenantConversation(params: {
     }
   }
 
+  const leaseId = asString(params.context.leaseId);
+  if (leaseId) {
+    try {
+      const snap = await db.collection("conversations").where("leaseId", "==", leaseId).limit(25).get();
+      for (const doc of snap.docs || []) {
+        if (!candidates.some((candidate) => candidate.id === doc.id)) {
+          candidates.push({ id: doc.id, data: (doc.data() as any) || {} });
+        }
+      }
+    } catch {
+      // fall back to deterministic conversation id
+    }
+  }
+
+  const applicationId = asString(params.context.applicationId);
+  if (applicationId) {
+    try {
+      const snap = await db.collection("conversations").where("applicationId", "==", applicationId).limit(25).get();
+      for (const doc of snap.docs || []) {
+        if (!candidates.some((candidate) => candidate.id === doc.id)) {
+          candidates.push({ id: doc.id, data: (doc.data() as any) || {} });
+        }
+      }
+    } catch {
+      // fall back to deterministic conversation id
+    }
+  }
+
   const matches = candidates.filter((entry) =>
     entry.id === deterministicId || conversationMatchesContext(entry.data, params.context, params.landlordId)
   );
-  matches.sort((left, right) => (toMillis(right.data?.lastMessageAt) || 0) - (toMillis(left.data?.lastMessageAt) || 0));
-  if (matches[0]) return matches[0];
+  const scoredMatches = await Promise.all(
+    matches.map(async (entry) => {
+      const latestMessageAt = await loadLatestMessageMillis(entry.id);
+      return {
+        ...entry,
+        latestMessageAt,
+        latestConversationAt: toMillis(entry.data?.lastMessageAt),
+      };
+    })
+  );
+  scoredMatches.sort((left, right) => {
+    const messagePresenceDiff = Number(Boolean(right.latestMessageAt)) - Number(Boolean(left.latestMessageAt));
+    if (messagePresenceDiff !== 0) return messagePresenceDiff;
+    const activityDiff =
+      (right.latestMessageAt || right.latestConversationAt || 0) -
+      (left.latestMessageAt || left.latestConversationAt || 0);
+    if (activityDiff !== 0) return activityDiff;
+    if (left.id === deterministicId) return -1;
+    if (right.id === deterministicId) return 1;
+    return left.id.localeCompare(right.id);
+  });
+  if (scoredMatches[0]) return scoredMatches[0];
 
   return {
     id: deterministicId,
