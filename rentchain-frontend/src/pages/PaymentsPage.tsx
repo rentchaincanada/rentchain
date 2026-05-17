@@ -34,7 +34,7 @@ function propertyLabelFromValue(value: any): string {
 }
 
 const PaymentsPage: React.FC = () => {
-  const { payments, loading, error } = usePayments();
+  const { payments, loading, error, refresh } = usePayments();
   const [rows, setRows] = useState<PaymentRecord[]>([]);
   const [exporting, setExporting] = useState<null | "csv" | "xls">(null);
   const [labelMap, setLabelMap] = useState<{ tenants: Map<string, string>; properties: Map<string, string> }>({
@@ -228,7 +228,7 @@ const PaymentsPage: React.FC = () => {
         </div>
       </Card>
 
-      <PaymentCsvImportPreviewCard />
+      <PaymentCsvImportPreviewCard onImportComplete={refresh} />
 
       <Card>
         <div style={{ display: "grid", gap: spacing.xs }}>

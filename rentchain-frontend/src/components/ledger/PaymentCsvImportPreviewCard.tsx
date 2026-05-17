@@ -1,6 +1,8 @@
 import React from "react";
 import {
+  confirmLedgerPaymentCsvImport,
   previewLedgerPaymentCsvImport,
+  type PaymentImportConfirmResponse,
   type PaymentImportPreviewResponse,
   type PaymentImportPreviewRow,
 } from "@/api/ledgerPaymentImportApi";
@@ -43,10 +45,21 @@ function matchBasisLabel(row: PaymentImportPreviewRow): string | null {
   return `Matched by: ${labels.join(" + ")}`;
 }
 
-export function PaymentCsvImportPreviewCard() {
+function isImportEligible(row: PaymentImportPreviewRow): boolean {
+  return row.matchStatus === "matched" && (row.confidence === "high" || row.confidence === "medium") && !row.duplicateInFile;
+}
+
+function shouldPreselect(row: PaymentImportPreviewRow): boolean {
+  return row.matchStatus === "matched" && row.confidence === "high" && !row.duplicateInFile;
+}
+
+export function PaymentCsvImportPreviewCard({ onImportComplete }: { onImportComplete?: () => void } = {}) {
   const [file, setFile] = React.useState<File | null>(null);
   const [preview, setPreview] = React.useState<PaymentImportPreviewResponse | null>(null);
+  const [selectedRowIds, setSelectedRowIds] = React.useState<Set<string>>(new Set());
+  const [confirmResult, setConfirmResult] = React.useState<PaymentImportConfirmResponse | null>(null);
   const [loading, setLoading] = React.useState(false);
+  const [confirming, setConfirming] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
   const rowsByProperty = React.useMemo(() => {
@@ -68,10 +81,52 @@ export function PaymentCsvImportPreviewCard() {
     try {
       const result = await previewLedgerPaymentCsvImport(file);
       setPreview(result);
+      setConfirmResult(null);
+      setSelectedRowIds(new Set(result.rows.filter(shouldPreselect).map((row) => row.rowId)));
     } catch (err) {
       setError(err instanceof Error && err.message ? err.message : "Failed to preview payment import.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  function toggleRow(row: PaymentImportPreviewRow) {
+    if (!isImportEligible(row)) return;
+    setSelectedRowIds((current) => {
+      const next = new Set(current);
+      if (next.has(row.rowId)) next.delete(row.rowId);
+      else next.add(row.rowId);
+      return next;
+    });
+  }
+
+  function selectAllEligible() {
+    if (!preview) return;
+    setSelectedRowIds(new Set(preview.rows.filter(isImportEligible).map((row) => row.rowId)));
+  }
+
+  function deselectAll() {
+    setSelectedRowIds(new Set());
+  }
+
+  async function handleConfirmImport() {
+    if (!preview || selectedRowIds.size === 0) {
+      setError("Select at least one eligible payment row to import.");
+      return;
+    }
+    setConfirming(true);
+    setError(null);
+    try {
+      const result = await confirmLedgerPaymentCsvImport({
+        importBatchId: preview.importBatchId,
+        selectedRowIds: Array.from(selectedRowIds),
+      });
+      setConfirmResult(result);
+      if (result.importedCount > 0) onImportComplete?.();
+    } catch (err) {
+      setError(err instanceof Error && err.message ? err.message : "Failed to import selected payments.");
+    } finally {
+      setConfirming(false);
     }
   }
 
@@ -136,6 +191,8 @@ export function PaymentCsvImportPreviewCard() {
             onChange={(event) => {
               setFile(event.target.files?.[0] || null);
               setPreview(null);
+              setConfirmResult(null);
+              setSelectedRowIds(new Set());
               setError(null);
             }}
           />
@@ -182,6 +239,45 @@ export function PaymentCsvImportPreviewCard() {
             {preview.summary.unmatchedRows + preview.summary.ambiguousRows + preview.summary.invalidRows} rows are blocked until the row-level issue is fixed.
           </div>
 
+          <div
+            style={{
+              border: "1px solid #bfdbfe",
+              borderRadius: 10,
+              background: "#fff",
+              padding: 10,
+              display: "flex",
+              justifyContent: "space-between",
+              gap: 12,
+              flexWrap: "wrap",
+              alignItems: "center",
+            }}
+          >
+            <div style={{ color: "#475569", fontSize: 13 }}>
+              This will create payment records and append ledger entries for selected rows. This cannot overwrite existing ledger history.
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <button type="button" onClick={selectAllEligible}>
+                Select all eligible
+              </button>
+              <button type="button" onClick={deselectAll}>
+                Deselect all
+              </button>
+              <button type="button" onClick={() => void handleConfirmImport()} disabled={confirming || selectedRowIds.size === 0}>
+                {confirming ? "Importing..." : `Import selected payments (${selectedRowIds.size})`}
+              </button>
+            </div>
+          </div>
+
+          {confirmResult ? (
+            <div style={{ border: "1px solid #bbf7d0", borderRadius: 10, background: "#f0fdf4", color: "#14532d", padding: 10 }}>
+              <div style={{ fontWeight: 800 }}>Import result</div>
+              <div style={{ fontSize: 13 }}>
+                Imported {confirmResult.importedCount} rows. Skipped duplicates {confirmResult.duplicateCount}. Failed {confirmResult.failedCount}.
+              </div>
+              <div style={{ fontSize: 13 }}>Next step: review imported rows on /payments or the relevant lease ledger.</div>
+            </div>
+          ) : null}
+
           <div style={{ border: "1px solid #bfdbfe", borderRadius: 10, background: "#fff", padding: 10 }}>
             <div style={{ fontWeight: 700, marginBottom: 8 }}>Rows grouped by property</div>
             <div style={{ display: "grid", gap: 6 }}>
@@ -200,6 +296,7 @@ export function PaymentCsvImportPreviewCard() {
             <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 920 }}>
               <thead>
                 <tr style={{ textAlign: "left", color: "#475569", fontSize: 12 }}>
+                  <th style={cellStyle}>Import</th>
                   <th style={cellStyle}>Status</th>
                   <th style={cellStyle}>Tenant</th>
                   <th style={cellStyle}>Property / Unit</th>
@@ -214,8 +311,18 @@ export function PaymentCsvImportPreviewCard() {
                   rows.map((row) => {
                     const tone = toneForRow(row);
                     const basisLabel = matchBasisLabel(row);
+                    const eligible = isImportEligible(row);
                     return (
                       <tr key={row.rowId} style={{ borderTop: "1px solid #e2e8f0" }}>
+                        <td style={cellStyle}>
+                          <input
+                            aria-label={`Select row ${row.sourceRowNumber}`}
+                            type="checkbox"
+                            checked={selectedRowIds.has(row.rowId)}
+                            disabled={!eligible}
+                            onChange={() => toggleRow(row)}
+                          />
+                        </td>
                         <td style={cellStyle}>
                           <span
                             style={{
@@ -261,7 +368,7 @@ export function PaymentCsvImportPreviewCard() {
           </div>
 
           <div style={{ color: "#475569", fontSize: 13 }}>
-            Preview only. Payment and ledger writes require a separate confirmation flow and are not enabled in this version.
+            Preview is read-only until you click Import selected payments. High-confidence rows are preselected. Review-required rows can be selected manually. Blocked, ambiguous, invalid, and duplicate rows are not imported.
           </div>
         </div>
       ) : null}

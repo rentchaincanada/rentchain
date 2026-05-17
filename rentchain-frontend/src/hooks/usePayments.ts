@@ -8,6 +8,7 @@ export function usePayments() {
   const [payments, setPayments] = useState<PaymentRecord[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [refreshNonce, setRefreshNonce] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -59,7 +60,8 @@ export function usePayments() {
     user?.id,
     user?.landlordId,
     user?.role,
+    refreshNonce,
   ]);
 
-  return { payments, loading, error };
+  return { payments, loading, error, refresh: () => setRefreshNonce((value) => value + 1) };
 }

@@ -66,6 +66,25 @@ export type PaymentImportPreviewResponse = {
   rows: PaymentImportPreviewRow[];
 };
 
+export type PaymentImportConfirmResultRow = {
+  rowId: string;
+  rowFingerprint: string;
+  status: "imported" | "duplicate" | "failed";
+  reason: string;
+  paymentDocumentId: string | null;
+  ledgerEntryId: string | null;
+};
+
+export type PaymentImportConfirmResponse = {
+  ok: true;
+  importBatchId: string;
+  importedCount: number;
+  duplicateCount: number;
+  failedCount: number;
+  results: PaymentImportConfirmResultRow[];
+  warnings: string[];
+};
+
 export async function previewLedgerPaymentCsvImport(file: File): Promise<PaymentImportPreviewResponse> {
   const form = new FormData();
   form.append("file", file);
@@ -74,5 +93,22 @@ export async function previewLedgerPaymentCsvImport(file: File): Promise<Payment
     body: form,
   });
   if (!res?.ok) throw new Error("Failed to preview payment import");
+  return res;
+}
+
+export async function confirmLedgerPaymentCsvImport(input: {
+  importBatchId: string;
+  selectedRowIds: string[];
+}): Promise<PaymentImportConfirmResponse> {
+  const res = await apiFetch<PaymentImportConfirmResponse>("/ledger/imports/payment-csv/confirm", {
+    method: "POST",
+    body: JSON.stringify({
+      importBatchId: input.importBatchId,
+      selectedRowIds: input.selectedRowIds,
+      clientConfirmedAt: new Date().toISOString(),
+    }),
+    headers: { "Content-Type": "application/json" },
+  });
+  if (!res?.ok) throw new Error("Failed to import selected payments");
   return res;
 }

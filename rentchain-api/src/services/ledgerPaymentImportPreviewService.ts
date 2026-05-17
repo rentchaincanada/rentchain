@@ -494,10 +494,10 @@ function resolveMatch(params: {
   if (nameOnly.length === 1) {
     return {
       status: "matched",
-      confidence: "low",
+      confidence: "medium",
       candidate: nameOnly[0],
       reason: "Tenant name matched one active lease, but property/unit context is incomplete.",
-      warning: "Name-only matches are not preselected for import.",
+      warning: "Tenant matched by name only. Please confirm before import.",
       matchBasis: ["tenant"],
     };
   }
