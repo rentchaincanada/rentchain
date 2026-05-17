@@ -181,6 +181,90 @@ describe("messagesRoutes notifications", () => {
 
     expect(res.status).toBe(201);
     expect(sendEmailMock).toHaveBeenCalledTimes(1);
+    expect(sendEmailMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: ["tenant@example.com"],
+        subject: expect.stringContaining("New message from your landlord"),
+      })
+    );
+  });
+
+  it("emails tenant when landlord replies to an auth-id conversation hydrated by tenant email", async () => {
+    ensureCollection("conversations").set("conv-auth-email", {
+      landlordId: "landlord-1",
+      tenantId: "auth-user-1",
+      tenantEmail: "tenant@example.com",
+      unitId: "unit-1",
+    });
+
+    const router = await createRouter();
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/landlord/messages/conversations/conv-auth-email",
+      headers: { "x-test-user": JSON.stringify({ id: "landlord-1", landlordId: "landlord-1", role: "landlord" }) },
+      body: { body: "Your landlord reply is ready." },
+    });
+
+    expect(res.status).toBe(201);
+    expect(sendEmailMock).toHaveBeenCalledTimes(1);
+    expect(sendEmailMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: ["tenant@example.com"],
+      })
+    );
+  });
+
+  it("emails tenant when landlord replies to a unit-linked conversation resolved through an active lease", async () => {
+    ensureCollection("conversations").set("conv-unit-only", {
+      landlordId: "landlord-1",
+      tenantId: null,
+      propertyId: null,
+      unitId: "unit-1",
+    });
+    ensureCollection("leases").set("lease-unit-only", {
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      status: "active",
+    });
+
+    const router = await createRouter();
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/landlord/messages/conversations/conv-unit-only",
+      headers: { "x-test-user": JSON.stringify({ id: "landlord-1", landlordId: "landlord-1", role: "landlord" }) },
+      body: { body: "Unit-linked reply." },
+    });
+
+    expect(res.status).toBe(201);
+    expect(sendEmailMock).toHaveBeenCalledTimes(1);
+    expect(sendEmailMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: ["tenant@example.com"],
+      })
+    );
+  });
+
+  it("does not fail landlord send when tenant email is missing", async () => {
+    ensureCollection("conversations").set("conv-no-email", {
+      landlordId: "landlord-1",
+      tenantId: "tenant-no-email",
+    });
+    ensureCollection("tenants").set("tenant-no-email", {
+      fullName: "No Email Tenant",
+    });
+
+    const router = await createRouter();
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/landlord/messages/conversations/conv-no-email",
+      headers: { "x-test-user": JSON.stringify({ id: "landlord-1", landlordId: "landlord-1", role: "landlord" }) },
+      body: { body: "This should persist without email." },
+    });
+
+    expect(res.status).toBe(201);
+    expect(sendEmailMock).not.toHaveBeenCalled();
   });
 
   it("emails landlord when tenant sends a message", async () => {

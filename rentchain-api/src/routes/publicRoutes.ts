@@ -579,6 +579,10 @@ function stringOrNull(value: any) {
   return next || null;
 }
 
+function isValidEmail(value: any) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
+}
+
 function normalizeUnitLabel(value: any) {
   const raw = String(value || "").trim();
   if (!raw) return null;
@@ -598,6 +602,15 @@ function buildPropertyLabel(property: any) {
 
 function buildTenantLabel(tenant: any) {
   return stringOrNull(tenant?.fullName) || stringOrNull(tenant?.name) || stringOrNull(tenant?.email) || null;
+}
+
+function buildTenantEmail(tenant: any) {
+  return (
+    stringOrNull(tenant?.email) ||
+    stringOrNull(tenant?.applicantEmail) ||
+    stringOrNull(tenant?.tenantEmail) ||
+    null
+  );
 }
 
 function normalizeConversation(doc: any) {
@@ -830,6 +843,14 @@ async function enrichPublicConversationDisplay<T extends ReturnType<typeof norma
         buildTenantLabel(tenant?.raw) ||
         stringOrNull(conversation.tenantName) ||
         stringOrNull(conversation.tenantEmail),
+      tenantId:
+        stringOrNull(conversation.tenantId) ||
+        stringOrNull(tenant?.id) ||
+        stringOrNull(lease?.raw?.tenantId),
+      tenantEmail:
+        stringOrNull(conversation.tenantEmail) ||
+        buildTenantEmail(tenant?.raw) ||
+        buildTenantEmail(lease?.raw),
       propertyId: propertyId || conversation.propertyId,
       unitId: unitId || conversation.unitId,
       leaseId: stringOrNull(conversation.leaseId) || stringOrNull(lease?.id),
@@ -863,6 +884,76 @@ async function addMessage(params: { conversationId: string; senderRole: "landlor
   return { id: docRef.id, conversationId, senderRole, body, createdAt: now, createdAtMs: now };
 }
 
+async function lookupUserEmail(userId: string | null) {
+  const id = stringOrNull(userId);
+  if (!id) return null;
+  try {
+    const userSnap = await db.collection("users").doc(id).get();
+    if (userSnap.exists) return stringOrNull((userSnap.data() as any)?.email);
+  } catch {
+    // ignore lookup failures
+  }
+  return null;
+}
+
+async function lookupLandlordRecipientEmail(landlordId: string | null) {
+  const direct = await lookupUserEmail(landlordId);
+  if (direct) return direct;
+  const id = stringOrNull(landlordId);
+  if (!id) return null;
+  try {
+    const landlordSnap = await db.collection("landlords").doc(id).get();
+    if (landlordSnap.exists) return stringOrNull((landlordSnap.data() as any)?.email);
+  } catch {
+    // ignore lookup failures
+  }
+  return null;
+}
+
+async function lookupTenantEmailById(tenantId: string | null) {
+  const id = stringOrNull(tenantId);
+  if (!id) return null;
+  try {
+    const tenantSnap = await db.collection("tenants").doc(id).get();
+    if (tenantSnap.exists) return buildTenantEmail(tenantSnap.data() as any);
+  } catch {
+    // continue through alternate tenant identifiers
+  }
+  for (const field of ["tenantId", "userId", "uid"]) {
+    try {
+      const snap = await db.collection("tenants").where(field, "==", id).limit(2).get();
+      const doc = snap.docs?.[0];
+      const email = doc ? buildTenantEmail(doc.data() as any) : null;
+      if (email) return email;
+    } catch {
+      // continue through alternate tenant identifiers
+    }
+  }
+  return null;
+}
+
+async function lookupApplicationTenantEmail(applicationId: string | null) {
+  const id = stringOrNull(applicationId);
+  if (!id) return null;
+  try {
+    const snap = await db.collection("rentalApplications").doc(id).get();
+    if (snap.exists) return buildTenantEmail(snap.data() as any);
+  } catch {
+    // ignore lookup failures
+  }
+  return null;
+}
+
+async function lookupTenantRecipientEmail(convo: any) {
+  const direct = buildTenantEmail(convo);
+  if (direct) return direct;
+  const byTenantId = await lookupTenantEmailById(convo?.tenantId);
+  if (byTenantId) return byTenantId;
+  const byApplication = await lookupApplicationTenantEmail(convo?.applicationId);
+  if (byApplication) return byApplication;
+  return null;
+}
+
 async function notifyMessageRecipient(params: {
   convo: any;
   senderRole: "landlord" | "tenant";
@@ -874,14 +965,6 @@ async function notifyMessageRecipient(params: {
     const recipientRole = senderRole === "landlord" ? "tenant" : "landlord";
     const now = Date.now();
 
-    const lastRead =
-      recipientRole === "tenant"
-        ? convo.lastReadAtTenant
-        : convo.lastReadAtLandlord;
-    if (lastRead && now - lastRead < 2 * 60 * 1000) {
-      return;
-    }
-
     const lastNotified =
       recipientRole === "tenant"
         ? convo.lastNotifiedAtTenantMs
@@ -890,42 +973,28 @@ async function notifyMessageRecipient(params: {
       return;
     }
 
-    const from =
-      String(process.env.SENDGRID_FROM_EMAIL || "").trim() ||
-      String(process.env.WAITLIST_FROM_EMAIL || "").trim();
+    const from = resolveEmailFromAddress() || String(process.env.WAITLIST_FROM_EMAIL || "").trim();
     if (!from) {
       return;
     }
 
     let toEmail: string | null = null;
     if (recipientRole === "tenant") {
-      toEmail = requestUser?.tenantEmail || requestUser?.email || null;
-      if (!toEmail && convo?.tenantId) {
-        try {
-          const tenSnap = await db.collection("tenants").doc(convo.tenantId).get();
-          if (tenSnap.exists) {
-            const data = tenSnap.data() as any;
-            toEmail = data?.email || data?.applicantEmail || null;
-          }
-        } catch {
-          // ignore lookup error
-        }
-      }
+      toEmail = await lookupTenantRecipientEmail(convo);
     } else {
-      toEmail = requestUser?.email || null;
-      if (!toEmail && convo?.landlordId) {
-        try {
-          const userSnap = await db.collection("users").doc(convo.landlordId).get();
-          if (userSnap.exists) {
-            const udata = userSnap.data() as any;
-            toEmail = udata?.email || null;
-          }
-        } catch {
-          // ignore
-        }
+      toEmail = await lookupLandlordRecipientEmail(convo?.landlordId);
+      if (!toEmail && requestUser?.role === "landlord") {
+        toEmail = stringOrNull(requestUser?.email);
       }
     }
-    if (!toEmail) return;
+    if (!toEmail || !isValidEmail(toEmail)) {
+      console.info("[messages notify] skipped", {
+        conversationId: convo?.id,
+        recipientRole,
+        reason: "recipient_email_missing",
+      });
+      return;
+    }
 
     const snippet = String(messageBody || "").slice(0, 140);
     const conversationId = convo.id;
