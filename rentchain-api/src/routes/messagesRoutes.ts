@@ -76,6 +76,15 @@ function buildTenantLabel(tenant: any) {
   return stringOrNull(tenant?.fullName) || stringOrNull(tenant?.name) || stringOrNull(tenant?.email) || null;
 }
 
+function buildTenantEmail(tenant: any) {
+  return (
+    stringOrNull(tenant?.email) ||
+    stringOrNull(tenant?.applicantEmail) ||
+    stringOrNull(tenant?.tenantEmail) ||
+    null
+  );
+}
+
 async function lookupPropertyIdForUnit(unitId: string | null) {
   const target = stringOrNull(unitId);
   if (!target) return null;
@@ -248,6 +257,7 @@ async function enrichConversationDisplay<T extends ReturnType<typeof normalizeCo
       id: string | null;
       raw: any;
       label: string | null;
+      email: string | null;
       unitLabel: string | null;
       unitId: string | null;
       propertyId: string | null;
@@ -260,6 +270,7 @@ async function enrichConversationDisplay<T extends ReturnType<typeof normalizeCo
         id: tenant?.id || null,
         raw: tenant?.raw || null,
         label: tenant?.raw ? buildTenantLabel(tenant.raw) : null,
+        email: tenant?.raw ? buildTenantEmail(tenant.raw) : null,
         unitLabel: tenant?.raw ? normalizeUnitLabel(tenant.raw?.unitLabel || tenant.raw?.unitNumber || tenant.raw?.unit) : null,
         unitId: tenant?.raw ? stringOrNull(tenant.raw?.unitId) : null,
         propertyId: tenant?.raw ? stringOrNull(tenant.raw?.propertyId) : null,
@@ -378,6 +389,14 @@ async function enrichConversationDisplay<T extends ReturnType<typeof normalizeCo
 
     return {
       ...conversation,
+      tenantId:
+        stringOrNull(conversation.tenantId) ||
+        stringOrNull(resolvedTenant?.id) ||
+        stringOrNull(resolvedLease?.raw?.tenantId),
+      tenantEmail:
+        stringOrNull(conversation.tenantEmail) ||
+        stringOrNull(resolvedTenant?.email) ||
+        buildTenantEmail(resolvedLease?.raw),
       tenantDisplayName: resolvedTenant?.label || stringOrNull(conversation.tenantName) || stringOrNull(conversation.tenantEmail),
       propertyDisplayLabel: buildPropertyLabel(property) || stringOrNull(conversation.propertySnapshotLabel),
       unitDisplayLabel:
@@ -456,6 +475,46 @@ async function lookupTenantEmail(tenantId: string | null) {
   return null;
 }
 
+async function lookupTenantEmailByAlternateId(tenantId: string | null) {
+  const id = stringOrNull(tenantId);
+  if (!id) return null;
+  for (const field of ["tenantId", "userId", "uid"]) {
+    try {
+      const snap = await db.collection("tenants").where(field, "==", id).limit(2).get();
+      const doc = snap.docs?.[0];
+      const email = doc ? buildTenantEmail(doc.data() as any) : null;
+      if (email) return email;
+    } catch {
+      // continue through alternate tenant identifiers
+    }
+  }
+  return null;
+}
+
+async function lookupApplicationTenantEmail(applicationId: string | null) {
+  const id = stringOrNull(applicationId);
+  if (!id) return null;
+  try {
+    const snap = await db.collection("rentalApplications").doc(id).get();
+    if (snap.exists) return buildTenantEmail(snap.data() as any);
+  } catch {
+    // ignore lookup failures
+  }
+  return null;
+}
+
+async function lookupTenantRecipientEmail(conversation: any) {
+  const direct = buildTenantEmail(conversation);
+  if (direct) return direct;
+  const byTenantDoc = await lookupTenantEmail(conversation?.tenantId);
+  if (byTenantDoc) return byTenantDoc;
+  const byAlternateTenantId = await lookupTenantEmailByAlternateId(conversation?.tenantId);
+  if (byAlternateTenantId) return byAlternateTenantId;
+  const byApplication = await lookupApplicationTenantEmail(conversation?.applicationId);
+  if (byApplication) return byApplication;
+  return null;
+}
+
 async function sendConversationMessageEmail(params: {
   conversation: any;
   senderRole: Role;
@@ -470,9 +529,31 @@ async function sendConversationMessageEmail(params: {
 
   const recipientEmail =
     params.senderRole === "landlord"
-      ? await lookupTenantEmail(params.conversation.tenantId)
+      ? await lookupTenantRecipientEmail(params.conversation)
       : await lookupLandlordEmail(params.conversation.landlordId);
-  if (!recipientEmail || !emailRegex.test(recipientEmail)) return;
+  if (!recipientEmail || !emailRegex.test(recipientEmail)) {
+    console.info("[messages] message email skipped", {
+      conversationId: params.conversation?.id,
+      recipientRole: params.senderRole === "landlord" ? "tenant" : "landlord",
+      reason: "recipient_email_missing",
+    });
+    return;
+  }
+
+  const recipientRole = params.senderRole === "landlord" ? "tenant" : "landlord";
+  const lastNotified =
+    recipientRole === "tenant"
+      ? toMillis(params.conversation?.lastNotifiedAtTenantMs)
+      : toMillis(params.conversation?.lastNotifiedAtLandlordMs);
+  const now = Date.now();
+  if (lastNotified && now - lastNotified < 10 * 60 * 1000) {
+    console.info("[messages] message email skipped", {
+      conversationId: params.conversation?.id,
+      recipientRole,
+      reason: "recently_notified",
+    });
+    return;
+  }
 
   const baseUrl = (process.env.PUBLIC_APP_URL || process.env.VITE_PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "");
   const threadPath = params.senderRole === "landlord" ? "/tenant/messages" : "/messages";
@@ -500,6 +581,13 @@ async function sendConversationMessageEmail(params: {
       ctaUrl: `${baseUrl}${threadPath}`,
     }),
   });
+
+  await db.collection("conversations").doc(params.conversation.id).set(
+    recipientRole === "tenant"
+      ? { lastNotifiedAtTenantMs: now }
+      : { lastNotifiedAtLandlordMs: now },
+    { merge: true }
+  );
 }
 
 async function addMessage(params: {

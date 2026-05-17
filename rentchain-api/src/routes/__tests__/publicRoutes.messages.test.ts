@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const { sendEmailMock } = vi.hoisted(() => ({
+  sendEmailMock: vi.fn(),
+}));
+
 const collections = new Map<string, Map<string, any>>();
 
 function ensureCollection(name: string) {
@@ -102,7 +106,7 @@ vi.mock("../../services/capabilityGuard", () => ({
   requireCapability: vi.fn(async () => ({ ok: true })),
 }));
 vi.mock("../../services/emailService", () => ({
-  sendEmail: vi.fn(),
+  sendEmail: sendEmailMock,
   sendWaitlistConfirmation: vi.fn(),
 }));
 vi.mock("../../services/tenantDetailsService", () => ({
@@ -185,6 +189,9 @@ async function invokeRouter(router: any, options: {
 describe("publicRoutes message endpoints", () => {
   beforeEach(() => {
     collections.clear();
+    sendEmailMock.mockReset();
+    sendEmailMock.mockResolvedValue(undefined);
+    process.env.EMAIL_FROM = "noreply@example.com";
     ensureCollection("conversations").set("conv-unit-only", {
       landlordId: "landlord-1",
       tenantId: null,
@@ -210,6 +217,9 @@ describe("publicRoutes message endpoints", () => {
       propertyId: "prop-1",
       unitNumber: "2A",
     });
+    ensureCollection("users").set("landlord-1", {
+      email: "landlord@example.com",
+    });
   });
 
   it("serves landlord messages through publicRoutes with active lease labels", async () => {
@@ -234,5 +244,52 @@ describe("publicRoutes message endpoints", () => {
         }),
       ])
     );
+  });
+
+  it("sends tenant email notifications for landlord replies on unit-linked conversations", async () => {
+    const router = (await import("../publicRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/landlord/messages/conversations/conv-unit-only",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "landlord-1",
+          landlordId: "landlord-1",
+          role: "landlord",
+          email: "landlord@example.com",
+        }),
+      },
+      body: { body: "Please review the latest message." },
+    });
+
+    expect(res.status).toBe(201);
+    expect(sendEmailMock).toHaveBeenCalledTimes(1);
+    expect(sendEmailMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: "tenant@example.com",
+        subject: "New message on RentChain",
+      })
+    );
+  });
+
+  it("does not send tenant notifications to the landlord request user email", async () => {
+    const router = (await import("../publicRoutes")).default;
+    await invokeRouter(router, {
+      method: "POST",
+      url: "/landlord/messages/conversations/conv-unit-only",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "landlord-1",
+          landlordId: "landlord-1",
+          role: "landlord",
+          email: "landlord@example.com",
+        }),
+      },
+      body: { body: "Recipient should be the tenant." },
+    });
+
+    expect(sendEmailMock).toHaveBeenCalledTimes(1);
+    expect(sendEmailMock.mock.calls[0]?.[0]?.to).toBe("tenant@example.com");
+    expect(sendEmailMock.mock.calls[0]?.[0]?.to).not.toBe("landlord@example.com");
   });
 });
