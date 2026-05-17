@@ -112,6 +112,42 @@ describe("ledgerPaymentImportPreviewService", () => {
     });
   });
 
+  it("accepts landlord spreadsheet headers and merges first and last name", () => {
+    const result = preview(
+      [
+        "Reference,Date,First Name,Last Name,Rent Amount,Property,Unit,Method",
+        "1001,2026-05-15,Bailey,Blinkers,1640,Harbour View,1,etransfer",
+      ].join("\n")
+    );
+
+    expect(result.rows[0]).toMatchObject({
+      tenantName: "Bailey Blinkers",
+      reference: "1001",
+      amountCents: 164000,
+      paymentDate: "2026-05-15",
+      method: "etransfer",
+      matchStatus: "matched",
+      confidence: "high",
+      preselected: true,
+    });
+  });
+
+  it("accepts suite, full name, paid date, and rent amount aliases", () => {
+    const result = preview(
+      "fullName,propertyName,suite,rentAmount,paidDate,ref\nBailey Blinkers,Harbour View,1,2000,2026-05-15,alias-ref"
+    );
+
+    expect(result.rows[0]).toMatchObject({
+      tenantName: "Bailey Blinkers",
+      unit: "1",
+      amountCents: 200000,
+      paymentDate: "2026-05-15",
+      reference: "alias-ref",
+      matchStatus: "matched",
+      confidence: "high",
+    });
+  });
+
   it("marks tenant name and property matches without unit as medium confidence", () => {
     const result = preview("tenantName,property,amount,paymentDate\nBailey Blinkers,Harbour View,150,2026-05-15");
     expect(result.rows[0]).toMatchObject({
@@ -144,6 +180,8 @@ describe("ledgerPaymentImportPreviewService", () => {
 
     expect(result.summary.invalidRows).toBe(2);
     expect(result.rows.every((row) => row.matchStatus === "invalid")).toBe(true);
+    expect(result.rows[0].reason).toContain("Amount is required");
+    expect(result.rows[1].reason).toContain("Payment date is required");
   });
 
   it("does not preselect duplicate rows from the same CSV", () => {

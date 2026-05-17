@@ -105,6 +105,8 @@ describe("PaymentCsvImportPreviewCard", () => {
 
     render(<PaymentCsvImportPreviewCard />);
 
+    expect(screen.getByText("Accepted columns: tenant name (or first/last name), amount, payment date. Property/unit recommended.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Payment CSV example")).toHaveTextContent("Reference,Date,First Name,Last Name,Rent Amount,Property,Unit,Method");
     const input = screen.getByLabelText("Payment CSV file") as HTMLInputElement;
     const file = new File(["tenantName,amount,paymentDate\nBailey Blinkers,150,2026-05-15"], "payments.csv", {
       type: "text/csv",
@@ -114,6 +116,7 @@ describe("PaymentCsvImportPreviewCard", () => {
 
     await waitFor(() => expect(mocks.previewLedgerPaymentCsvImportMock).toHaveBeenCalledWith(file));
     expect(await screen.findByText("$350.00")).toBeInTheDocument();
+    expect(screen.getByText("1 rows matched tenant lease records. 1 rows are blocked until the row-level issue is fixed.")).toBeInTheDocument();
     expect(screen.getAllByText("Harbour View").length).toBeGreaterThan(0);
     expect(screen.getByText("Bailey Blinkers")).toBeInTheDocument();
     expect(screen.getByText("Unknown Tenant")).toBeInTheDocument();
@@ -126,5 +129,20 @@ describe("PaymentCsvImportPreviewCard", () => {
     fireEvent.click(screen.getByRole("button", { name: "Preview CSV" }));
     expect(screen.getByText("Choose a CSV file first.")).toBeInTheDocument();
     expect(mocks.previewLedgerPaymentCsvImportMock).not.toHaveBeenCalled();
+  });
+
+  it("downloads a landlord-friendly CSV template", () => {
+    const createObjectURL = vi.fn(() => "blob:template");
+    const revokeObjectURL = vi.fn();
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    vi.stubGlobal("URL", { ...(window.URL || {}), createObjectURL, revokeObjectURL });
+
+    render(<PaymentCsvImportPreviewCard />);
+    fireEvent.click(screen.getByRole("button", { name: "Download CSV template" }));
+
+    expect(createObjectURL).toHaveBeenCalledTimes(1);
+    expect(click).toHaveBeenCalledTimes(1);
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:template");
+    click.mockRestore();
   });
 });

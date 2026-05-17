@@ -5,6 +5,12 @@ import {
   type PaymentImportPreviewRow,
 } from "@/api/ledgerPaymentImportApi";
 
+const TEMPLATE_CSV = [
+  "Reference,Date,First Name,Last Name,Rent Amount,Property,Unit,Method",
+  "1001,2026-05-05,John,Smith,1640,North Towers,101,etransfer",
+  "1002,2026-05-05,Bailey,Blinkers,2000,Center Suites,1,etransfer",
+].join("\n");
+
 function toneForRow(row: PaymentImportPreviewRow) {
   if (row.matchStatus === "invalid" || row.matchStatus === "ambiguous") {
     return { bg: "#fee2e2", color: "#991b1b", border: "#fecaca" };
@@ -56,6 +62,18 @@ export function PaymentCsvImportPreviewCard() {
     }
   }
 
+  function downloadTemplate() {
+    const blob = new Blob([TEMPLATE_CSV], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "rentchain-payment-import-template.csv";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <section
       aria-label="Payment CSV import assistant"
@@ -74,8 +92,30 @@ export function PaymentCsvImportPreviewCard() {
           <div style={{ color: "#475569", fontSize: 13, maxWidth: 760 }}>
             Upload tenant payment rows for review. This preview matches tenants and leases, but it does not write payments or ledger entries.
           </div>
+          <div style={{ color: "#475569", fontSize: 13, maxWidth: 760 }}>
+            Accepted columns: tenant name (or first/last name), amount, payment date. Property/unit recommended.
+          </div>
+          <pre
+            aria-label="Payment CSV example"
+            style={{
+              margin: "4px 0 0",
+              padding: 8,
+              borderRadius: 8,
+              background: "#fff",
+              border: "1px solid #bfdbfe",
+              color: "#334155",
+              fontSize: 12,
+              overflowX: "auto",
+              maxWidth: 760,
+            }}
+          >
+            {TEMPLATE_CSV}
+          </pre>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <button type="button" onClick={downloadTemplate}>
+            Download CSV template
+          </button>
           <input
             aria-label="Payment CSV file"
             type="file"
@@ -103,6 +143,10 @@ export function PaymentCsvImportPreviewCard() {
             <SummaryTile label="Needs review" value={String(preview.summary.mediumConfidenceRows + preview.summary.lowConfidenceRows)} />
             <SummaryTile label="Blocked" value={String(preview.summary.unmatchedRows + preview.summary.ambiguousRows + preview.summary.invalidRows)} />
             <SummaryTile label="Preselected" value={String(preview.summary.preselectedRows)} />
+          </div>
+          <div style={{ color: "#475569", fontSize: 13 }}>
+            {preview.summary.matchedRows} rows matched tenant lease records.{" "}
+            {preview.summary.unmatchedRows + preview.summary.ambiguousRows + preview.summary.invalidRows} rows are blocked until the row-level issue is fixed.
           </div>
 
           <div style={{ border: "1px solid #bfdbfe", borderRadius: 10, background: "#fff", padding: 10 }}>

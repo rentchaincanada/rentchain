@@ -115,14 +115,19 @@ type Candidate = {
 const HEADER_ALIASES: Record<string, string> = {
   tenantname: "tenantName",
   tenant: "tenantName",
+  fullname: "tenantName",
   name: "tenantName",
   renter: "tenantName",
+  firstname: "firstName",
+  lastname: "lastName",
   tenantemail: "tenantEmail",
   email: "tenantEmail",
   amount: "amount",
   paymentamount: "amount",
+  rentamount: "amount",
   paidamount: "amount",
   paymentdate: "paymentDate",
+  paiddate: "paymentDate",
   paidat: "paymentDate",
   date: "paymentDate",
   effectivedate: "paymentDate",
@@ -130,6 +135,7 @@ const HEADER_ALIASES: Record<string, string> = {
   propertyname: "property",
   address: "property",
   unit: "unit",
+  suite: "unit",
   unitnumber: "unit",
   unitlabel: "unit",
   method: "method",
@@ -244,6 +250,10 @@ function normalizeRawRow(raw: Record<string, unknown>): Record<string, string> {
   for (const [key, value] of Object.entries(raw || {})) {
     const normalized = HEADER_ALIASES[normalizeHeader(key)];
     if (normalized) out[normalized] = String(value ?? "").trim();
+  }
+  if (!out.tenantName) {
+    const fullName = [out.firstName, out.lastName].map((part) => String(part || "").trim()).filter(Boolean).join(" ");
+    if (fullName) out.tenantName = fullName;
   }
   return out;
 }
@@ -528,9 +538,9 @@ export function previewPaymentCsvImport(params: {
     });
 
     const validationErrors = [
-      !tenantNameValue ? "tenantName is required." : "",
-      !amountCents ? "amount must be a positive payment amount." : "",
-      !paymentDate ? "paymentDate is required and must be a valid date." : "",
+      !tenantNameValue ? "Tenant name is required. Use tenantName, tenant, fullName, name, or First Name + Last Name." : "",
+      !amountCents ? "Amount is required. Use amount, paymentAmount, rentAmount, or Rent Amount with a positive dollar value." : "",
+      !paymentDate ? "Payment date is required. Use paymentDate, paidDate, date, or Date with a valid date." : "",
     ].filter(Boolean);
 
     if (validationErrors.length) {
