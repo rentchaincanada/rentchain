@@ -15,6 +15,7 @@ import { printSummaryDocument } from "../utils/printSummary";
 import { triggerBlobDownload } from "../utils/downloadBlob";
 import { buildCsvBlob } from "../utils/csvExport";
 import { formatOperationalReference } from "@/lib/identityReferences";
+import { PaymentCsvImportPreviewCard } from "@/components/ledger/PaymentCsvImportPreviewCard";
 
 function tenantLabelFromValue(value: any): string {
   return (
@@ -226,6 +227,8 @@ const PaymentsPage: React.FC = () => {
           </div>
         </div>
       </Card>
+
+      <PaymentCsvImportPreviewCard />
 
       <Card>
         <div style={{ display: "grid", gap: spacing.xs }}>
