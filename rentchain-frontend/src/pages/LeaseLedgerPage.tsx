@@ -35,6 +35,7 @@ import {
   type DecisionSeverity,
 } from "@/lib/decisions/decisionDisplay";
 import { DecisionContextPanel } from "@/components/decisions/DecisionContextPanel";
+import { PaymentCsvImportPreviewCard } from "@/components/ledger/PaymentCsvImportPreviewCard";
 
 type ChargeType = "rent" | "fee" | "adjustment";
 type PaymentMethod = "cash" | "etransfer" | "cheque" | "bank" | "card" | "other";
@@ -697,6 +698,8 @@ export default function LeaseLedgerPage() {
           <strong>{formatCurrencyCents(totals.balanceCents)}</strong>
         </div>
       </div>
+
+      <PaymentCsvImportPreviewCard />
 
       {lease?.leaseExecution ? (
         <div style={{ border: "1px solid #e2e8f0", borderRadius: 10, padding: 12, background: "#fff", display: "grid", gap: 8 }}>

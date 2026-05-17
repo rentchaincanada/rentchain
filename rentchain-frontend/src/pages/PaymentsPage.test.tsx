@@ -44,6 +44,10 @@ vi.mock("../utils/printSummary", () => ({
   printSummaryDocument: (...args: unknown[]) => mocks.printSummaryDocument(...args),
 }));
 
+vi.mock("@/components/ledger/PaymentCsvImportPreviewCard", () => ({
+  PaymentCsvImportPreviewCard: () => <div>AI-assisted payment CSV import</div>,
+}));
+
 describe("PaymentsPage", () => {
   afterEach(() => {
     cleanup();
@@ -93,6 +97,7 @@ describe("PaymentsPage", () => {
     expect(await screen.findByRole("button", { name: "Export CSV" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Export Spreadsheet (.xls)" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Export PDF" })).toBeInTheDocument();
+    expect(screen.getByText("AI-assisted payment CSV import")).toBeInTheDocument();
     expect((await screen.findAllByText("Taylor Tenant")).length).toBeGreaterThan(0);
     expect(screen.getAllByText("123 Main St / Unit 3A").length).toBeGreaterThan(0);
     expect(screen.getAllByText("e-transfer").length).toBeGreaterThan(0);
