@@ -23,6 +23,8 @@ export type TenantCommunicationSummary = {
   unreadMaintenanceUpdates: number;
   unreadScreeningUpdates?: number;
   unreadTotal: number;
+  latestMessagePreview?: string | null;
+  latestMessageAt?: string | null;
 };
 
 export type TenantThreadMessage = {

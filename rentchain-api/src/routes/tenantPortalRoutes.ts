@@ -1228,13 +1228,63 @@ async function writeScreeningConsentCanonicalEvent(input: {
   });
 }
 
-async function getTenantConversationIds(tenantId: string): Promise<string[]> {
-  const snap = await db
-    .collection("conversations")
-    .where("tenantId", "==", tenantId)
-    .limit(20)
-    .get();
-  return snap.docs.map((doc) => doc.id);
+function tenantConversationMatchesContext(conversation: any, context: Awaited<ReturnType<typeof resolveTenancyContext>> | null) {
+  if (!context?.ok) return true;
+  const conversationTenantId = String(conversation?.tenantId || "").trim();
+  const conversationLeaseId = String(conversation?.leaseId || "").trim();
+  const conversationApplicationId = String(conversation?.applicationId || "").trim();
+  const conversationPropertyId = String(conversation?.propertyId || "").trim();
+  const conversationUnitId = String(conversation?.unitId || "").trim();
+  const tenantId = String(context.tenantId || "").trim();
+  const leaseId = String(context.leaseId || "").trim();
+  const applicationId = String(context.applicationId || "").trim();
+  const propertyId = String(context.propertyId || "").trim();
+  const unitId = String(context.unitId || "").trim();
+
+  if (tenantId && conversationTenantId === tenantId) return true;
+  if (leaseId && conversationLeaseId === leaseId) return true;
+  if (applicationId && conversationApplicationId === applicationId) return true;
+  if (unitId && conversationUnitId === unitId) {
+    return !propertyId || !conversationPropertyId || conversationPropertyId === propertyId;
+  }
+  return false;
+}
+
+async function addTenantConversationCandidates(
+  candidates: Map<string, any>,
+  field: string,
+  value: string | null | undefined,
+  context: Awaited<ReturnType<typeof resolveTenancyContext>> | null
+) {
+  const normalized = String(value || "").trim();
+  if (!normalized) return;
+  try {
+    const snap = await db.collection("conversations").where(field, "==", normalized).limit(25).get();
+    for (const doc of snap.docs || []) {
+      const data = (doc.data() as any) || {};
+      if (tenantConversationMatchesContext(data, context)) {
+        candidates.set(doc.id, data);
+      }
+    }
+  } catch {
+    // Keep the communications summary best-effort; a failed optional lookup must not break the tenant shell.
+  }
+}
+
+async function getTenantConversationIds(
+  tenantId: string,
+  context: Awaited<ReturnType<typeof resolveTenancyContext>> | null = null
+): Promise<string[]> {
+  const candidates = new Map<string, any>();
+  await addTenantConversationCandidates(candidates, "tenantId", tenantId, context);
+
+  if (context?.ok) {
+    await addTenantConversationCandidates(candidates, "unitId", context.unitId, context);
+    await addTenantConversationCandidates(candidates, "leaseId", context.leaseId, context);
+    await addTenantConversationCandidates(candidates, "applicationId", context.applicationId, context);
+  }
+
+  return Array.from(candidates.keys());
 }
 
 async function getMessageReadMap(tenantId: string): Promise<Map<string, number>> {
@@ -2064,9 +2114,12 @@ async function buildTenantNoticeItems(tenantId: string): Promise<TenantCommunica
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
 }
 
-async function buildTenantMessageItems(tenantId: string): Promise<TenantCommunicationItem[]> {
+async function buildTenantMessageItems(
+  tenantId: string,
+  context: Awaited<ReturnType<typeof resolveTenancyContext>> | null = null
+): Promise<TenantCommunicationItem[]> {
   const [conversationIds, readMap] = await Promise.all([
-    getTenantConversationIds(tenantId),
+    getTenantConversationIds(tenantId, context),
     getMessageReadMap(tenantId),
   ]);
 
@@ -2077,7 +2130,6 @@ async function buildTenantMessageItems(tenantId: string): Promise<TenantCommunic
       db
         .collection("messages")
         .where("conversationId", "==", conversationId)
-        .orderBy("createdAt", "desc")
         .limit(50)
         .get()
     )
@@ -5119,11 +5171,17 @@ router.get("/messages", requireTenant, async (req: any, res) => {
   try {
     const tenantId = String(req.user?.tenantId || "").trim();
     if (!tenantId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    const context = await resolveTenancyContext({
+      uid: String(req.user?.id || "").trim(),
+      email: String(req.user?.email || "").trim() || null,
+      tenantId,
+      leaseId: String(req.user?.leaseId || "").trim() || null,
+    });
 
     const includeMaintenance = String(req.query?.includeMaintenance ?? "1") !== "0";
     const includeScreening = String(req.query?.includeScreening ?? "1") !== "0";
     const [messageItems, maintenanceItems, screeningItems] = await Promise.all([
-      buildTenantMessageItems(tenantId),
+      buildTenantMessageItems(tenantId, context),
       includeMaintenance ? buildTenantMaintenanceUpdateItems(tenantId) : Promise.resolve([]),
       includeScreening ? buildTenantScreeningItems(tenantId) : Promise.resolve([]),
     ]);
@@ -5151,9 +5209,15 @@ router.post("/messages/read-all", requireTenant, async (req: any, res) => {
   try {
     const tenantId = String(req.user?.tenantId || "").trim();
     if (!tenantId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    const context = await resolveTenancyContext({
+      uid: String(req.user?.id || "").trim(),
+      email: String(req.user?.email || "").trim() || null,
+      tenantId,
+      leaseId: String(req.user?.leaseId || "").trim() || null,
+    });
 
     const [messageItems, maintenanceItems, screeningItems] = await Promise.all([
-      buildTenantMessageItems(tenantId),
+      buildTenantMessageItems(tenantId, context),
       buildTenantMaintenanceUpdateItems(tenantId),
       buildTenantScreeningItems(tenantId),
     ]);
@@ -6590,8 +6654,14 @@ router.get("/communication/summary", requireTenant, async (req: any, res) => {
   try {
     const tenantId = String(req.user?.tenantId || "").trim();
     if (!tenantId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    const context = await resolveTenancyContext({
+      uid: String(req.user?.id || "").trim(),
+      email: String(req.user?.email || "").trim() || null,
+      tenantId,
+      leaseId: String(req.user?.leaseId || "").trim() || null,
+    });
     const [messages, notices, maintenance, screening] = await Promise.all([
-      buildTenantMessageItems(tenantId),
+      buildTenantMessageItems(tenantId, context),
       buildTenantNoticeItems(tenantId),
       buildTenantMaintenanceUpdateItems(tenantId),
       buildTenantScreeningItems(tenantId),
@@ -6600,6 +6670,7 @@ router.get("/communication/summary", requireTenant, async (req: any, res) => {
     const unreadNotices = notices.filter((item) => !item.read).length;
     const unreadMaintenanceUpdates = maintenance.filter((item) => !item.read).length;
     const unreadScreeningUpdates = screening.filter((item) => !item.read).length;
+    const latestMessage = messages[0] || null;
     return res.json({
       ok: true,
       unreadMessages,
@@ -6607,6 +6678,8 @@ router.get("/communication/summary", requireTenant, async (req: any, res) => {
       unreadMaintenanceUpdates,
       unreadScreeningUpdates,
       unreadTotal: unreadMessages + unreadNotices + unreadMaintenanceUpdates + unreadScreeningUpdates,
+      latestMessagePreview: latestMessage?.body || null,
+      latestMessageAt: latestMessage?.createdAt || null,
     });
   } catch (err: any) {
     console.error("[tenant/communication/summary] failed", {
