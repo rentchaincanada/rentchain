@@ -85,6 +85,34 @@
   overflow-wrap: anywhere;
 }
 
+.rc-messages-tenant-profile-button {
+  border: 1px solid rgba(37, 99, 235, 0.35);
+  background: rgba(37, 99, 235, 0.08);
+  color: #1d4ed8;
+  border-radius: 999px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1;
+  padding: 5px 9px;
+  white-space: nowrap;
+}
+
+.rc-messages-tenant-profile-button:hover,
+.rc-messages-tenant-profile-button:focus-visible {
+  background: rgba(37, 99, 235, 0.14);
+  outline: 2px solid rgba(37, 99, 235, 0.25);
+  outline-offset: 2px;
+}
+
+.rc-messages-thread-title-content {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .rc-messages-list-item-meta {
   font-size: 0.8rem;
   color: #64748b;

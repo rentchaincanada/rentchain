@@ -1,5 +1,5 @@
-import { act, cleanup, render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import MessagesPage from "./MessagesPage";
 
@@ -39,6 +39,11 @@ vi.mock("@/components/layout/ResponsiveMasterDetail", () => ({
   ),
 }));
 
+function LocationProbe() {
+  const location = useLocation();
+  return <div data-testid="location">{`${location.pathname}${location.search}`}</div>;
+}
+
 describe("MessagesPage", () => {
   afterEach(() => {
     cleanup();
@@ -59,6 +64,7 @@ describe("MessagesPage", () => {
     mocks.fetchLandlordConversationsMock.mockResolvedValue([
       {
         id: "conv-1",
+        tenantId: "tenant-1",
         tenantDisplayName: "Taylor Tenant",
         propertyDisplayLabel: "Harbour View",
         unitDisplayLabel: "Unit 2A",
@@ -67,6 +73,7 @@ describe("MessagesPage", () => {
     mocks.fetchLandlordConversationMessagesMock.mockResolvedValue({
       conversation: {
         id: "conv-1",
+        tenantId: "tenant-1",
         tenantDisplayName: "Taylor Tenant",
         propertyDisplayLabel: "Harbour View",
         unitDisplayLabel: "Unit 2A",
@@ -99,8 +106,8 @@ describe("MessagesPage", () => {
     );
 
     await flushAsync();
-    expect(screen.getByText("Taylor Tenant")).toBeInTheDocument();
-    expect(screen.getByText("Harbour View / Unit 2A")).toBeInTheDocument();
+    expect(screen.getAllByText("Taylor Tenant").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Harbour View / Unit 2A").length).toBeGreaterThan(0);
     expect(screen.getByText("TT")).toBeInTheDocument();
     expect(screen.queryByText(/Tenant tenant-/i)).not.toBeInTheDocument();
   });
@@ -233,6 +240,109 @@ describe("MessagesPage", () => {
     expect(screen.getAllByText("Tenant • Linked property / linked unit").length).toBeGreaterThan(0);
     expect(screen.queryByText(/tenant-raw-5|prop-raw-5|unit-raw-5/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/unavailable/i)).not.toBeInTheDocument();
+  });
+
+  it("renders profile buttons that navigate to the tenant profile when tenantId is present", async () => {
+    render(
+      <MemoryRouter>
+        <LocationProbe />
+        <MessagesPage />
+      </MemoryRouter>
+    );
+
+    await flushAsync();
+    expect(screen.queryByRole("link", { name: "Taylor Tenant" })).not.toBeInTheDocument();
+    const buttons = screen.getAllByRole("button", { name: "Profile" });
+    expect(buttons.length).toBeGreaterThanOrEqual(2);
+
+    fireEvent.click(buttons[0]);
+    expect(screen.getByTestId("location")).toHaveTextContent("/tenants?tenantId=tenant-1");
+  });
+
+  it("keeps landlord message tenant names as plain text when tenantId is missing", async () => {
+    mocks.fetchLandlordConversationsMock.mockResolvedValue([
+      {
+        id: "conv-missing-tenant",
+        tenantDisplayName: "Taylor Tenant",
+        propertyDisplayLabel: "Harbour View",
+        unitDisplayLabel: "Unit 2A",
+      },
+    ]);
+    mocks.fetchLandlordConversationMessagesMock.mockResolvedValue({
+      conversation: {
+        id: "conv-missing-tenant",
+        tenantDisplayName: "Taylor Tenant",
+        propertyDisplayLabel: "Harbour View",
+        unitDisplayLabel: "Unit 2A",
+      },
+      messages: [],
+    });
+
+    render(
+      <MemoryRouter>
+        <MessagesPage />
+      </MemoryRouter>
+    );
+
+    await flushAsync();
+    expect(screen.getAllByText("Taylor Tenant").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("link", { name: "Taylor Tenant" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Profile" })).not.toBeInTheDocument();
+  });
+
+  it("keeps profile buttons from reselecting the message thread", async () => {
+    render(
+      <MemoryRouter>
+        <MessagesPage />
+      </MemoryRouter>
+    );
+
+    await flushAsync();
+    fireEvent.click(screen.getAllByRole("button", { name: "Profile" })[0]);
+
+    expect(mocks.fetchLandlordConversationMessagesMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the rest of a conversation row selectable when the profile button is present", async () => {
+    mocks.fetchLandlordConversationsMock.mockResolvedValue([
+      {
+        id: "conv-1",
+        tenantId: "tenant-1",
+        tenantDisplayName: "Taylor Tenant",
+        propertyDisplayLabel: "Harbour View",
+        unitDisplayLabel: "Unit 2A",
+      },
+      {
+        id: "conv-2",
+        tenantId: "tenant-2",
+        tenantDisplayName: "Jordan Tenant",
+        propertyDisplayLabel: "North Point",
+        unitDisplayLabel: "Unit 3",
+      },
+    ]);
+    mocks.fetchLandlordConversationMessagesMock.mockImplementation(async (id: string) => ({
+      conversation: {
+        id,
+        tenantId: id === "conv-2" ? "tenant-2" : "tenant-1",
+        tenantDisplayName: id === "conv-2" ? "Jordan Tenant" : "Taylor Tenant",
+        propertyDisplayLabel: id === "conv-2" ? "North Point" : "Harbour View",
+        unitDisplayLabel: id === "conv-2" ? "Unit 3" : "Unit 2A",
+      },
+      messages: [],
+    }));
+
+    render(
+      <MemoryRouter>
+        <LocationProbe />
+        <MessagesPage />
+      </MemoryRouter>
+    );
+
+    await flushAsync();
+    fireEvent.click(screen.getByText("North Point / Unit 3"));
+
+    expect(screen.getByTestId("location")).toHaveTextContent("/messages?threadId=conv-2");
+    expect(mocks.fetchLandlordConversationMessagesMock).toHaveBeenCalledWith("conv-2");
   });
 
   it("preserves the selected conversation across background refresh without blanking the thread", async () => {
