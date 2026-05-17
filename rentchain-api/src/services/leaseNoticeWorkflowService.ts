@@ -8,6 +8,11 @@ import {
   type RentChangeMode,
   resolveLeaseNoticeRule,
 } from "../config/leaseNoticeRules";
+import {
+  getJurisdictionWorkflowConfig,
+  toJurisdictionWorkflowSummary,
+  type JurisdictionWorkflowSummary,
+} from "../lib/jurisdiction/leaseWorkflowRegistry";
 import { toAutopilotPolicySummary } from "../lib/policy/policyEvaluator";
 import { loadUnitsForProperty, resolveUnitReference } from "./leaseCanonicalizationService";
 import { isTargetedHiddenLeaseId } from "../lib/testDataVisibilityTargets";
@@ -61,6 +66,7 @@ export type LeaseWorkflowLease = {
   unitLabel: string | null;
   propertyLabel: string | null;
   propertyAddress: string | null;
+  jurisdictionWorkflow: JurisdictionWorkflowSummary | null;
 };
 
 export type LeaseNoticePreviewInput = {
@@ -244,7 +250,8 @@ export function normalizeLeaseRecord(id: string, raw: any): LeaseWorkflowLease {
   const leaseEndDate =
     toDateOnly(raw?.leaseEndDate || raw?.endDate || raw?.leaseEnd || raw?.end_date || null) || null;
   const leaseType = asLeaseType(raw?.leaseType || raw?.termType || raw?.lease_type || null);
-  const province = String(raw?.province || raw?.jurisdiction || "").trim().toUpperCase() || "NS";
+  const workflowConfig = getJurisdictionWorkflowConfig(raw?.province || raw?.jurisdiction || null);
+  const province = workflowConfig?.province || String(raw?.province || raw?.jurisdiction || "").trim().toUpperCase() || "UNSET";
   const rule = resolveLeaseNoticeRule({ province, leaseType });
   const nextNoticeDueAt =
     toMillis(raw?.nextNoticeDueAt) || (leaseEndDate && rule ? minusDays(leaseEndDate, rule.noticeLeadDays) : null);
@@ -296,6 +303,7 @@ export function normalizeLeaseRecord(id: string, raw: any): LeaseWorkflowLease {
     unitLabel: String(raw?.unitLabel || raw?.unitNumber || raw?.unit || "").trim() || null,
     propertyLabel: String(raw?.propertyLabel || raw?.propertyName || "").trim() || null,
     propertyAddress: String(raw?.propertyAddress || raw?.propertyAddressLine1 || raw?.addressLine1 || raw?.propertyAddress1 || raw?.address || "").trim() || null,
+    jurisdictionWorkflow: workflowConfig ? toJurisdictionWorkflowSummary(workflowConfig) : null,
   };
 }
 

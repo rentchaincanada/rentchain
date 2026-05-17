@@ -21,4 +21,12 @@ export type ComplianceRules = {
   rentIncrease: RentIncreaseRules;
   leaseEnd: LeaseEndRules;
   notices: NoticeRules;
+  workflow: {
+    leaseTemplateType: string;
+    leaseRenewalReminderDays: number;
+    moveOutPreparationDays: number;
+    fixedTermContinuation: string;
+    supportedNoticeTypes: string[];
+    legalAdviceDisclaimer: string;
+  };
 };

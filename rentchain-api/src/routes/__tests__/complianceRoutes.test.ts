@@ -37,11 +37,24 @@ describe("compliance routes", () => {
     const app = await makeApp("allow");
     const res = await request(app).get("/api/compliance/rules?province=ON");
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({
+    expect(res.body).toMatchObject({
       ok: true,
       province: "ON",
       complianceVersion: "v1",
-      rules: expect.any(Object),
+      rules: {
+        rentIncrease: {
+          noticeDays: 90,
+        },
+        workflow: {
+          leaseTemplateType: "standard_residential_on",
+          fixedTermContinuation: "continues_periodic",
+        },
+      },
+      jurisdictionWorkflow: {
+        province: "ON",
+        leaseTemplateType: "standard_residential_on",
+        legalAdviceDisclaimer: expect.stringContaining("does not provide legal advice"),
+      },
     });
   });
 
@@ -78,5 +91,14 @@ describe("compliance routes", () => {
     const res = await request(app).get("/api/compliance/rules?province=Nova%20Scotia");
     expect(res.status).toBe(200);
     expect(res.body?.province).toBe("NS");
+    expect(res.body?.jurisdictionWorkflow).toMatchObject({
+      province: "NS",
+      noticePeriods: {
+        rentIncreaseDays: 120,
+      },
+      leaseLifecycleExpectations: {
+        fixedTermContinuation: "ends_on_term_end",
+      },
+    });
   });
 });
