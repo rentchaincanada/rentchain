@@ -24,7 +24,7 @@ import {
   type LandlordActiveLease,
   type LeaseNote,
 } from "@/api/leasesApi";
-import { formatInternalReference, formatOperationalLabel, formatOperationalReference, slugifyOperationalReference } from "@/lib/identityReferences";
+import { formatInternalReference, formatOperationalLabel, slugifyOperationalReference } from "@/lib/identityReferences";
 import {
   decisionDisplayCopy,
   decisionSeverityStyle,
@@ -242,23 +242,69 @@ function DecisionActionControls({
   );
 }
 
+function buildDecisionReviewContext(lease: LandlordActiveLease | null): Record<string, string> | null {
+  if (!lease) return null;
+  const propertyLabel = formatOperationalLabel({
+    kind: "property",
+    label: lease.propertyName || lease.propertyAddress || lease.propertyLabel,
+    fallbackLabel: "Property",
+    internalId: lease.propertyId,
+  });
+  const unitLabel = formatOperationalLabel({
+    kind: "unit",
+    label: lease.unitNumber ? `Unit ${lease.unitNumber}` : lease.unitLabel,
+    fallbackLabel: "Unit",
+    internalId: lease.unitId,
+  });
+  const tenantName = String(lease.tenantName || "").trim();
+  return {
+    propertyLabel,
+    unitLabel,
+    tenantName,
+    leaseLabel: `${propertyLabel} · ${unitLabel}`,
+  };
+}
+
+function withDecisionReviewContext(decision: DecisionItem, lease: LandlordActiveLease | null): DecisionItem {
+  const reviewContext = buildDecisionReviewContext(lease);
+  if (!reviewContext) return decision;
+  return {
+    ...decision,
+    metadata: {
+      ...(decision.metadata || {}),
+      reviewContext: {
+        ...(typeof decision.metadata?.reviewContext === "object" && decision.metadata.reviewContext ? decision.metadata.reviewContext : {}),
+        ...reviewContext,
+      },
+    },
+  };
+}
+
 function DecisionRow({
   decision,
+  lease,
   obligationRows,
   delinquencySignals,
   pending,
   onAction,
 }: {
   decision: DecisionItem;
+  lease: LandlordActiveLease | null;
   obligationRows: LeaseObligationLedgerRow[];
   delinquencySignals: LeaseDelinquencySignal[];
   pending: boolean;
   onAction: (decision: DecisionItem, actionType: DecisionActionType) => void;
 }) {
   const copy = decisionDisplayCopy[decision.decisionType];
+  const displayDecision = withDecisionReviewContext(decision, lease);
+  const reviewContext = displayDecision.metadata?.reviewContext as Record<string, string | undefined> | undefined;
+  const propertyUnitLabel =
+    reviewContext?.propertyLabel && reviewContext?.unitLabel
+      ? `${reviewContext.propertyLabel} · ${reviewContext.unitLabel}`
+      : reviewContext?.propertyLabel || reviewContext?.unitLabel || null;
   const context = [
-    decision.unitId ? formatOperationalReference("unit", decision.unitId) : null,
-    decision.tenantId ? formatOperationalReference("tenant", decision.tenantId) : null,
+    propertyUnitLabel,
+    reviewContext?.tenantName || (decision.tenantId ? "Tenant context available" : null),
   ].filter(Boolean);
   return (
     <div style={{ border: "1px solid #e2e8f0", borderRadius: 12, padding: 12, background: "#fff", display: "grid", gap: 6 }}>
@@ -274,7 +320,7 @@ function DecisionRow({
       {decision.latestAction ? (
         <div style={{ color: "#64748b", fontSize: 12 }}>Last action: {decisionStatusCopy[decision.latestAction.nextStatus]}</div>
       ) : null}
-      <DecisionContextPanel decision={decision} obligationRows={obligationRows} delinquencySignals={delinquencySignals} />
+      <DecisionContextPanel decision={displayDecision} obligationRows={obligationRows} delinquencySignals={delinquencySignals} />
       <DecisionActionControls decision={decision} pending={pending} onAction={onAction} />
     </div>
   );
@@ -755,6 +801,7 @@ export default function LeaseLedgerPage() {
                 <DecisionRow
                   key={decision.decisionId}
                   decision={decision}
+                  lease={lease}
                   obligationRows={obligationRows}
                   delinquencySignals={delinquencySignals}
                   pending={decisionActionPendingId === decision.decisionId}

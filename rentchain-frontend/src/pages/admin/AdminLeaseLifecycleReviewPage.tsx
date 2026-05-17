@@ -21,7 +21,7 @@ import {
 } from "@/lib/decisions/decisionDisplay";
 import { patchDecisionAction } from "@/api/decisionApi";
 import { DecisionContextPanel } from "@/components/decisions/DecisionContextPanel";
-import { formatInternalReference, formatOperationalReference } from "@/lib/identityReferences";
+import { formatInternalReference } from "@/lib/identityReferences";
 
 const emptySummary: AdminLeaseLifecycleReviewSummary = {
   total: 0,
@@ -119,8 +119,8 @@ function QueueItemRow({
           <Link to={`/admin/leases?q=${encodeURIComponent(item.leaseId)}`}>Open lease record</Link>
           <span style={{ color: "#64748b", fontSize: "0.85rem" }}>{formatInternalReference("lease", item.leaseId)}</span>
           <span style={{ color: "#64748b", fontSize: "0.9rem" }}>
-            {item.propertyId ? formatOperationalReference("property", item.propertyId) : "Property unavailable"} -{" "}
-            {item.unitId ? formatOperationalReference("unit", item.unitId) : "Unit unavailable"}
+            {item.propertyId ? formatInternalReference("property", item.propertyId) : "Property unavailable"} -{" "}
+            {item.unitId ? formatInternalReference("unit", item.unitId) : "Unit unavailable"}
           </span>
         </div>
       </td>
