@@ -97,6 +97,7 @@ describe("ledgerPaymentImportPreviewService", () => {
       preselected: true,
       matchedTenantId: "tenant-1",
       leaseId: "lease-1",
+      matchBasis: ["tenant", "property", "unit"],
       amountCents: 15000,
       paymentDate: "2026-05-15",
     });
@@ -108,6 +109,7 @@ describe("ledgerPaymentImportPreviewService", () => {
       matchStatus: "matched",
       confidence: "high",
       matchedTenantId: "tenant-2",
+      matchBasis: ["email"],
       preselected: true,
     });
   });
@@ -126,6 +128,7 @@ describe("ledgerPaymentImportPreviewService", () => {
       amountCents: 164000,
       paymentDate: "2026-05-15",
       method: "etransfer",
+      matchBasis: ["tenant", "property", "unit"],
       matchStatus: "matched",
       confidence: "high",
       preselected: true,
@@ -143,6 +146,7 @@ describe("ledgerPaymentImportPreviewService", () => {
       amountCents: 200000,
       paymentDate: "2026-05-15",
       reference: "alias-ref",
+      matchBasis: ["tenant", "property", "unit"],
       matchStatus: "matched",
       confidence: "high",
     });
@@ -161,6 +165,7 @@ describe("ledgerPaymentImportPreviewService", () => {
       reference: "receipt-safe",
       amountCents: 164000,
       paymentDate: "2026-05-15",
+      matchBasis: ["tenant", "property", "unit"],
       matchStatus: "matched",
       confidence: "high",
     });
@@ -203,6 +208,7 @@ describe("ledgerPaymentImportPreviewService", () => {
     expect(result.rows[0]).toMatchObject({
       matchStatus: "matched",
       confidence: "medium",
+      matchBasis: ["tenant", "property"],
       matchedTenantId: "tenant-1",
       preselected: false,
     });
@@ -213,6 +219,7 @@ describe("ledgerPaymentImportPreviewService", () => {
     expect(result.rows[0]).toMatchObject({
       matchStatus: "ambiguous",
       confidence: "low",
+      matchBasis: ["tenant"],
       preselected: false,
       matchedTenantId: null,
     });

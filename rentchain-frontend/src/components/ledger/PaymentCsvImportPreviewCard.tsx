@@ -30,6 +30,19 @@ function statusLabel(row: PaymentImportPreviewRow) {
   return "Low confidence";
 }
 
+function matchBasisLabel(row: PaymentImportPreviewRow): string | null {
+  const basis = row.matchBasis || [];
+  if (!basis.length) return null;
+  const labels = basis.map((item) => {
+    if (item === "tenant") return "Tenant";
+    if (item === "property") return "Property";
+    if (item === "unit") return "Unit";
+    if (item === "email") return "Email";
+    return item;
+  });
+  return `Matched by: ${labels.join(" + ")}`;
+}
+
 export function PaymentCsvImportPreviewCard() {
   const [file, setFile] = React.useState<File | null>(null);
   const [preview, setPreview] = React.useState<PaymentImportPreviewResponse | null>(null);
@@ -200,6 +213,7 @@ export function PaymentCsvImportPreviewCard() {
                 {rowsByProperty.flatMap(([, rows]) =>
                   rows.map((row) => {
                     const tone = toneForRow(row);
+                    const basisLabel = matchBasisLabel(row);
                     return (
                       <tr key={row.rowId} style={{ borderTop: "1px solid #e2e8f0" }}>
                         <td style={cellStyle}>
@@ -235,6 +249,7 @@ export function PaymentCsvImportPreviewCard() {
                         </td>
                         <td style={cellStyle}>
                           <div>{row.reason}</div>
+                          {basisLabel ? <div style={{ color: "#166534", fontSize: 12, fontWeight: 700 }}>{basisLabel}</div> : null}
                           {row.warning ? <div style={{ color: "#92400e", fontSize: 12 }}>{row.warning}</div> : null}
                         </td>
                       </tr>

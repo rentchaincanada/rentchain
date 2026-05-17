@@ -22,6 +22,7 @@ export type PaymentImportPreviewRow = {
   preselected: boolean;
   warning: string | null;
   reason: string;
+  matchBasis?: string[];
   matchedTenantId: string | null;
   matchedTenantName: string | null;
   leaseId: string | null;

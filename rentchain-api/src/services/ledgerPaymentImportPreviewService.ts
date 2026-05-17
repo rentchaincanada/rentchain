@@ -64,6 +64,7 @@ export type PaymentImportPreviewRow = {
   preselected: boolean;
   warning: string | null;
   reason: string;
+  matchBasis: string[];
   matchedTenantId: string | null;
   matchedTenantName: string | null;
   leaseId: string | null;
@@ -403,6 +404,7 @@ function resolveMatch(params: {
   candidate: Candidate | null;
   reason: string;
   warning: string | null;
+  matchBasis: string[];
 } {
   const activeCandidates = params.candidates.filter((candidate) => candidate.active);
 
@@ -414,6 +416,7 @@ function resolveMatch(params: {
       candidate: emailMatches[0],
       reason: "Email matched a tenant with an active lease.",
       warning: null,
+      matchBasis: ["email"],
     };
   }
   if (emailMatches.length > 1) {
@@ -423,6 +426,7 @@ function resolveMatch(params: {
       candidate: null,
       reason: "Tenant email matched multiple active lease records.",
       warning: "Ambiguous tenant match. Do not import this row until the tenant is resolved.",
+      matchBasis: ["email"],
     };
   }
 
@@ -443,6 +447,7 @@ function resolveMatch(params: {
       candidate: namePropertyUnit[0],
       reason: "Tenant name, property, and unit matched an active lease.",
       warning: null,
+      matchBasis: ["tenant", "property", "unit"],
     };
   }
   if (namePropertyUnit.length > 1) {
@@ -452,6 +457,7 @@ function resolveMatch(params: {
       candidate: null,
       reason: "Tenant name, property, and unit matched multiple active leases.",
       warning: "Ambiguous tenant match. Do not import this row until the tenant is resolved.",
+      matchBasis: ["tenant", "property", "unit"],
     };
   }
 
@@ -470,6 +476,7 @@ function resolveMatch(params: {
       candidate: nameProperty[0],
       reason: "Tenant name and property matched an active lease, but unit was missing or not resolved.",
       warning: "Review required before import because unit matching is incomplete.",
+      matchBasis: ["tenant", "property"],
     };
   }
   if (nameProperty.length > 1) {
@@ -479,6 +486,7 @@ function resolveMatch(params: {
       candidate: null,
       reason: "Tenant name and property matched multiple active leases.",
       warning: "Ambiguous tenant match. Do not import this row until the unit is resolved.",
+      matchBasis: ["tenant", "property"],
     };
   }
 
@@ -490,6 +498,7 @@ function resolveMatch(params: {
       candidate: nameOnly[0],
       reason: "Tenant name matched one active lease, but property/unit context is incomplete.",
       warning: "Name-only matches are not preselected for import.",
+      matchBasis: ["tenant"],
     };
   }
   if (nameOnly.length > 1) {
@@ -499,6 +508,7 @@ function resolveMatch(params: {
       candidate: null,
       reason: "Tenant name matched multiple active leases.",
       warning: "Ambiguous tenant match. Do not import this row until property and unit are resolved.",
+      matchBasis: ["tenant"],
     };
   }
 
@@ -514,6 +524,7 @@ function resolveMatch(params: {
       candidate: inactiveName[0],
       reason: "Tenant name matched only inactive or past lease context.",
       warning: "Inactive or past tenant context is blocked from import.",
+      matchBasis: ["tenant"],
     };
   }
 
@@ -523,6 +534,7 @@ function resolveMatch(params: {
     candidate: null,
     reason: "No active tenant lease match found.",
     warning: "Unmatched rows are not imported.",
+    matchBasis: [],
   };
 }
 
@@ -616,6 +628,7 @@ export function previewPaymentCsvImport(params: {
         preselected: false,
         warning: validationErrors.join(" "),
         reason: validationErrors.join(" "),
+        matchBasis: [],
         matchedTenantId: null,
         matchedTenantName: null,
         leaseId: null,
@@ -658,6 +671,7 @@ export function previewPaymentCsvImport(params: {
       preselected,
       warning: match.warning,
       reason: match.reason,
+      matchBasis: match.matchBasis,
       matchedTenantId: candidate?.tenant.id || null,
       matchedTenantName: candidate ? tenantName(candidate.tenant) : null,
       leaseId: candidate?.lease.id || null,

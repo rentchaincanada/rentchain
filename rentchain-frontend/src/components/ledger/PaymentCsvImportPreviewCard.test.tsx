@@ -69,6 +69,7 @@ describe("PaymentCsvImportPreviewCard", () => {
           preselected: true,
           warning: null,
           reason: "Tenant name, property, and unit matched an active lease.",
+          matchBasis: ["tenant", "property", "unit"],
           matchedTenantId: "tenant-1",
           matchedTenantName: "Bailey Blinkers",
           leaseId: "lease-1",
@@ -98,6 +99,7 @@ describe("PaymentCsvImportPreviewCard", () => {
           preselected: false,
           warning: "Unmatched rows are not imported.",
           reason: "No active tenant lease match found.",
+          matchBasis: [],
           matchedTenantId: null,
           matchedTenantName: null,
           leaseId: null,
@@ -127,6 +129,7 @@ describe("PaymentCsvImportPreviewCard", () => {
     expect(screen.getByText("Some columns were ignored because they are not needed for rent payment import.")).toBeInTheDocument();
     expect(screen.getByText("Sensitive banking columns were detected and omitted from preview/import.")).toBeInTheDocument();
     expect(screen.getByText("1 rows matched tenant lease records. 1 rows are blocked until the row-level issue is fixed.")).toBeInTheDocument();
+    expect(screen.getByText("Matched by: Tenant + Property + Unit")).toBeInTheDocument();
     expect(screen.getAllByText("Harbour View").length).toBeGreaterThan(0);
     expect(screen.getByText("Bailey Blinkers")).toBeInTheDocument();
     expect(screen.getByText("Unknown Tenant")).toBeInTheDocument();
