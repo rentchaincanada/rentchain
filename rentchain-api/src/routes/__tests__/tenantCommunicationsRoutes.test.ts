@@ -218,6 +218,54 @@ describe("tenant communications routes", () => {
     expect(res.body?.data?.thread?.unreadCount).toBe(1);
   });
 
+  it("loads landlord messages from property and unit linked conversations without tenant ids", async () => {
+    ensureCollection("conversations").set("conv-linked-unit", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      lastMessageAt: "2026-01-05T00:00:00.000Z",
+      lastReadAtTenant: "2026-01-04T00:00:00.000Z",
+    });
+    ensureCollection("leases").set("lease-1", {
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      status: "active",
+    });
+    ensureCollection("messages").set("msg-linked-unit", {
+      conversationId: "conv-linked-unit",
+      senderRole: "landlord",
+      body: "This landlord message should appear in the tenant workspace.",
+      createdAtMs: Date.parse("2026-01-05T00:00:00.000Z"),
+    });
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/communications",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+          leaseId: "lease-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.data?.thread?.id).toBe("conv-linked-unit");
+    expect(res.body?.data?.thread?.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          body: "This landlord message should appear in the tenant workspace.",
+          senderRole: "landlord",
+        }),
+      ])
+    );
+  });
+
   it("send path respects authority context and records a scoped message", async () => {
     const router = (await import("../tenantPortalRoutes")).default;
     const res = await invokeRouter(router, {

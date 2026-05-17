@@ -321,6 +321,40 @@ describe("messagesRoutes notifications", () => {
     expect(`${conversation?.tenantDisplayName} • ${conversation?.unitDisplayLabel}`).not.toBe("Tenant • Assigned unit");
   });
 
+  it("hydrates unit-linked landlord conversations from active lease context", async () => {
+    ensureCollection("conversations").set("conv-unit-only", {
+      landlordId: "landlord-1",
+      tenantId: null,
+      propertyId: null,
+      unitId: "unit-1",
+    });
+    ensureCollection("leases").set("lease-unit-only", {
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      status: "active",
+    });
+
+    const router = await createRouter();
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/landlord/messages/conversations",
+      headers: { "x-test-user": JSON.stringify({ id: "landlord-1", landlordId: "landlord-1", role: "landlord" }) },
+    });
+
+    expect(res.status).toBe(200);
+    const conversation = res.body?.conversations?.find((item: any) => item.id === "conv-unit-only");
+    expect(conversation).toEqual(
+      expect.objectContaining({
+        tenantDisplayName: "Taylor Tenant",
+        propertyDisplayLabel: "Harbour View",
+        unitDisplayLabel: "Unit 2A",
+      })
+    );
+    expect(`${conversation?.tenantDisplayName} • ${conversation?.unitDisplayLabel}`).not.toBe("Tenant • Linked unit");
+  });
+
   it("stores deterministic property context when tenant conversation is created", async () => {
     const router = await createRouter();
     const res = await invokeRouter(router, {

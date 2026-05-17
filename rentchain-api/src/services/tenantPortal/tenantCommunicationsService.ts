@@ -146,6 +146,20 @@ async function resolveTenantConversation(params: {
     }
   }
 
+  const unitId = asString(params.context.unitId);
+  if (unitId) {
+    try {
+      const snap = await db.collection("conversations").where("unitId", "==", unitId).limit(25).get();
+      for (const doc of snap.docs || []) {
+        if (!candidates.some((candidate) => candidate.id === doc.id)) {
+          candidates.push({ id: doc.id, data: (doc.data() as any) || {} });
+        }
+      }
+    } catch {
+      // fall back to deterministic conversation id
+    }
+  }
+
   const matches = candidates.filter((entry) =>
     entry.id === deterministicId || conversationMatchesContext(entry.data, params.context, params.landlordId)
   );
