@@ -110,10 +110,9 @@ function conversationMatchesContext(conversation: any, context: TenancyContext, 
   if (applicationId && asString(conversation?.applicationId) === applicationId) return true;
   if (leaseId && asString(conversation?.leaseId) === leaseId) return true;
   return Boolean(
-    propertyId &&
-      unitId &&
-      asString(conversation?.propertyId) === propertyId &&
-      asString(conversation?.unitId) === unitId
+    unitId &&
+      asString(conversation?.unitId) === unitId &&
+      (!propertyId || !asString(conversation?.propertyId) || asString(conversation?.propertyId) === propertyId)
   );
 }
 

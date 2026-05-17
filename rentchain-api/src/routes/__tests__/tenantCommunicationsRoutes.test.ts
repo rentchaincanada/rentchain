@@ -221,7 +221,6 @@ describe("tenant communications routes", () => {
   it("loads landlord messages from property and unit linked conversations without tenant ids", async () => {
     ensureCollection("conversations").set("conv-linked-unit", {
       landlordId: "landlord-1",
-      propertyId: "prop-1",
       unitId: "unit-1",
       lastMessageAt: "2026-01-05T00:00:00.000Z",
       lastReadAtTenant: "2026-01-04T00:00:00.000Z",

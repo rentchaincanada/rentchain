@@ -565,6 +565,41 @@ function toMillis(v: any): number | null {
   return null;
 }
 
+const MESSAGE_CURRENT_LEASE_STATUSES = new Set([
+  "active",
+  "current",
+  "signed",
+  "notice_pending",
+  "renewal_pending",
+  "renewal_accepted",
+]);
+
+function stringOrNull(value: any) {
+  const next = String(value || "").trim();
+  return next || null;
+}
+
+function normalizeUnitLabel(value: any) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  return /^unit\b/i.test(raw) ? raw : `Unit ${raw}`;
+}
+
+function buildPropertyLabel(property: any) {
+  return (
+    stringOrNull(property?.name) ||
+    stringOrNull(property?.propertyName) ||
+    stringOrNull(property?.propertyAddress) ||
+    stringOrNull(property?.addressLine1) ||
+    stringOrNull(property?.address) ||
+    null
+  );
+}
+
+function buildTenantLabel(tenant: any) {
+  return stringOrNull(tenant?.fullName) || stringOrNull(tenant?.name) || stringOrNull(tenant?.email) || null;
+}
+
 function normalizeConversation(doc: any) {
   const data = doc.data() as any;
   const id = doc.id;
@@ -572,7 +607,14 @@ function normalizeConversation(doc: any) {
     id,
     landlordId: data.landlordId || null,
     tenantId: data.tenantId || null,
+    tenantEmail: data.tenantEmail || data.applicantEmail || data.email || null,
+    tenantName: data.tenantName || data.tenantDisplayName || data.applicantName || null,
+    propertyId: data.propertyId || null,
     unitId: data.unitId || null,
+    applicationId: data.applicationId || null,
+    leaseId: data.leaseId || data.currentLeaseId || null,
+    propertySnapshotLabel: data.propertyDisplayLabel || data.propertyName || data.propertyLabel || null,
+    unitSnapshotLabel: data.unitDisplayLabel || data.unitLabel || data.unitNumber || null,
     lastMessageAt: toMillis(data.lastMessageAt) || null,
     lastReadAtLandlord: toMillis(data.lastReadAtLandlord) || null,
     lastReadAtTenant: toMillis(data.lastReadAtTenant) || null,
@@ -580,6 +622,225 @@ function normalizeConversation(doc: any) {
     lastNotifiedAtLandlordMs: toMillis(data.lastNotifiedAtLandlordMs) || null,
     lastNotifiedAtTenantMs: toMillis(data.lastNotifiedAtTenantMs) || null,
   };
+}
+
+function scoreMessageLease(raw: any) {
+  return MESSAGE_CURRENT_LEASE_STATUSES.has(String(raw?.status || "").trim().toLowerCase()) ? 1 : 0;
+}
+
+async function loadCurrentLeaseForPublicConversation(conversation: ReturnType<typeof normalizeConversation>) {
+  const leaseId = stringOrNull(conversation.leaseId);
+  if (leaseId) {
+    try {
+      const snap = await db.collection("leases").doc(leaseId).get();
+      if (snap.exists) return { id: snap.id, raw: snap.data() as any };
+    } catch {
+      // continue through tenant and unit lookups
+    }
+  }
+
+  const candidates: Array<{ id: string; raw: any }> = [];
+  const tenantId = stringOrNull(conversation.tenantId);
+  if (tenantId) {
+    try {
+      const snap = await db.collection("leases").where("tenantId", "==", tenantId).limit(10).get();
+      for (const doc of snap.docs || []) candidates.push({ id: doc.id, raw: doc.data() as any });
+    } catch {
+      // continue through unit lookup
+    }
+    try {
+      const snap = await db.collection("leases").where("tenantIds", "array-contains", tenantId).limit(10).get();
+      for (const doc of snap.docs || []) {
+        if (!candidates.some((candidate) => candidate.id === doc.id)) {
+          candidates.push({ id: doc.id, raw: doc.data() as any });
+        }
+      }
+    } catch {
+      // continue through unit lookup
+    }
+  }
+
+  const unitId = stringOrNull(conversation.unitId);
+  if (unitId) {
+    try {
+      const snap = await db.collection("leases").where("unitId", "==", unitId).limit(10).get();
+      for (const doc of snap.docs || []) {
+        if (!candidates.some((candidate) => candidate.id === doc.id)) {
+          candidates.push({ id: doc.id, raw: doc.data() as any });
+        }
+      }
+    } catch {
+      // ignore lease lookup failures
+    }
+  }
+
+  const filtered = candidates.filter((lease) => {
+    const leaseLandlordId = stringOrNull(lease.raw?.landlordId);
+    const leasePropertyId = stringOrNull(lease.raw?.propertyId);
+    if (leaseLandlordId && leaseLandlordId !== conversation.landlordId) return false;
+    if (conversation.propertyId && leasePropertyId && leasePropertyId !== conversation.propertyId) return false;
+    return true;
+  });
+  filtered.sort((left, right) => {
+    const statusDiff = scoreMessageLease(right.raw) - scoreMessageLease(left.raw);
+    if (statusDiff !== 0) return statusDiff;
+    return (toMillis(right.raw?.updatedAt || right.raw?.createdAt) || 0) - (toMillis(left.raw?.updatedAt || left.raw?.createdAt) || 0);
+  });
+  return filtered[0] || null;
+}
+
+async function loadTenantForPublicConversation(
+  conversation: ReturnType<typeof normalizeConversation>,
+  lease?: { id: string; raw: any } | null
+) {
+  const tenantIds = [
+    stringOrNull(conversation.tenantId),
+    stringOrNull(lease?.raw?.tenantId),
+  ].filter(Boolean) as string[];
+
+  for (const tenantId of tenantIds) {
+    try {
+      const directSnap = await db.collection("tenants").doc(tenantId).get();
+      if (directSnap.exists) return { id: directSnap.id, raw: directSnap.data() as any };
+    } catch {
+      // continue through alternate tenant identifiers
+    }
+    for (const field of ["tenantId", "userId", "uid"]) {
+      try {
+        const snap = await db.collection("tenants").where(field, "==", tenantId).limit(2).get();
+        const doc = snap.docs?.[0];
+        if (doc) return { id: doc.id, raw: doc.data() as any };
+      } catch {
+        // continue through alternate tenant identifiers
+      }
+    }
+  }
+
+  const tenantEmail = String(conversation.tenantEmail || "").trim().toLowerCase();
+  if (tenantEmail) {
+    for (const field of ["email", "applicantEmail"]) {
+      try {
+        const snap = await db.collection("tenants").where(field, "==", tenantEmail).limit(2).get();
+        const doc = snap.docs?.[0];
+        if (doc) return { id: doc.id, raw: doc.data() as any };
+      } catch {
+        // continue through alternate email fields
+      }
+    }
+  }
+
+  return null;
+}
+
+async function enrichPublicConversationDisplay<T extends ReturnType<typeof normalizeConversation>>(conversations: T[]) {
+  const leaseEntries = await Promise.all(
+    conversations.map(async (conversation) => [conversation.id, await loadCurrentLeaseForPublicConversation(conversation)] as const)
+  );
+  const leaseByConversationId = new Map<string, Awaited<ReturnType<typeof loadCurrentLeaseForPublicConversation>>>(leaseEntries);
+  const tenantEntries = await Promise.all(
+    conversations.map(async (conversation) => [
+      conversation.id,
+      await loadTenantForPublicConversation(conversation, leaseByConversationId.get(conversation.id)),
+    ] as const)
+  );
+  const tenantByConversationId = new Map<string, { id: string | null; raw: any }>(
+    tenantEntries.map(([conversationId, tenant]) => [
+      conversationId,
+      {
+        id: tenant?.id || null,
+        raw: tenant?.raw || null,
+      },
+    ])
+  );
+
+  const unitIds = Array.from(
+    new Set(
+      conversations
+        .flatMap((conversation) => {
+          const tenant = tenantByConversationId.get(conversation.id);
+          const lease = leaseByConversationId.get(conversation.id);
+          return [
+            stringOrNull(conversation.unitId),
+            stringOrNull(tenant?.raw?.unitId),
+            stringOrNull(lease?.raw?.unitId),
+          ];
+        })
+        .filter(Boolean)
+    )
+  ) as string[];
+  const units = await Promise.all(
+    unitIds.map(async (unitId) => {
+      try {
+        const snap = await db.collection("units").doc(unitId).get();
+        return [unitId, snap.exists ? (snap.data() as any) : null] as const;
+      } catch {
+        return [unitId, null] as const;
+      }
+    })
+  );
+  const unitById = new Map<string, any>(units);
+
+  const propertyIds = Array.from(
+    new Set(
+      conversations
+        .flatMap((conversation) => {
+          const tenant = tenantByConversationId.get(conversation.id);
+          const lease = leaseByConversationId.get(conversation.id);
+          const unit = stringOrNull(conversation.unitId) ? unitById.get(String(conversation.unitId)) : null;
+          return [
+            stringOrNull(conversation.propertyId),
+            stringOrNull(unit?.propertyId),
+            stringOrNull(tenant?.raw?.propertyId),
+            stringOrNull(lease?.raw?.propertyId),
+          ];
+        })
+        .filter(Boolean)
+    )
+  ) as string[];
+  const properties = await Promise.all(
+    propertyIds.map(async (propertyId) => {
+      try {
+        const snap = await db.collection("properties").doc(propertyId).get();
+        return [propertyId, snap.exists ? (snap.data() as any) : null] as const;
+      } catch {
+        return [propertyId, null] as const;
+      }
+    })
+  );
+  const propertyById = new Map<string, any>(properties);
+
+  return conversations.map((conversation) => {
+    const tenant = tenantByConversationId.get(conversation.id);
+    const lease = leaseByConversationId.get(conversation.id);
+    const unitId =
+      stringOrNull(conversation.unitId) ||
+      stringOrNull(tenant?.raw?.unitId) ||
+      stringOrNull(lease?.raw?.unitId);
+    const unit = unitId ? unitById.get(unitId) : null;
+    const propertyId =
+      stringOrNull(conversation.propertyId) ||
+      stringOrNull(unit?.propertyId) ||
+      stringOrNull(tenant?.raw?.propertyId) ||
+      stringOrNull(lease?.raw?.propertyId);
+    const property = propertyId ? propertyById.get(propertyId) : null;
+
+    return {
+      ...conversation,
+      tenantDisplayName:
+        buildTenantLabel(tenant?.raw) ||
+        stringOrNull(conversation.tenantName) ||
+        stringOrNull(conversation.tenantEmail),
+      propertyId: propertyId || conversation.propertyId,
+      unitId: unitId || conversation.unitId,
+      leaseId: stringOrNull(conversation.leaseId) || stringOrNull(lease?.id),
+      propertyDisplayLabel: buildPropertyLabel(property) || stringOrNull(conversation.propertySnapshotLabel),
+      unitDisplayLabel:
+        normalizeUnitLabel(unit?.unitNumber || unit?.unitLabel || unit?.label || unit?.name) ||
+        normalizeUnitLabel(tenant?.raw?.unitLabel || tenant?.raw?.unitNumber || tenant?.raw?.unit) ||
+        normalizeUnitLabel(lease?.raw?.unitLabel || lease?.raw?.unitNumber || lease?.raw?.unit) ||
+        normalizeUnitLabel(conversation.unitSnapshotLabel),
+    };
+  });
 }
 
 async function addMessage(params: { conversationId: string; senderRole: "landlord" | "tenant"; body: string }) {
@@ -796,7 +1057,7 @@ router.get("/landlord/messages/conversations", authenticateJwt, requireLandlord,
   try {
     const snap = await db.collection("conversations").where("landlordId", "==", landlordId).get();
 
-    const items = snap.docs.map(normalizeConversation);
+    const items = await enrichPublicConversationDisplay(snap.docs.map(normalizeConversation));
     items.sort((a: any, b: any) => {
       const aKey = a.lastMessageAt || a.createdAt || 0;
       const bKey = b.lastMessageAt || b.createdAt || 0;
@@ -833,7 +1094,7 @@ router.get("/landlord/messages/conversations/:id", authenticateJwt, requireLandl
   try {
     const convoSnap = await db.collection("conversations").doc(id).get();
     if (!convoSnap.exists) return res.status(404).json({ ok: false, error: "Conversation not found" });
-    const convo = normalizeConversation(convoSnap);
+    const convo = (await enrichPublicConversationDisplay([normalizeConversation(convoSnap)]))[0];
     if (convo.landlordId !== landlordId) return res.status(403).json({ ok: false, error: "Forbidden" });
 
     const msgSnap = await db.collection("messages").where("conversationId", "==", id).get();
@@ -868,7 +1129,7 @@ router.post("/landlord/messages/conversations/:id", authenticateJwt, requireLand
   try {
     const convoSnap = await db.collection("conversations").doc(id).get();
     if (!convoSnap.exists) return res.status(404).json({ ok: false, error: "Conversation not found" });
-    const convo = normalizeConversation(convoSnap);
+    const convo = (await enrichPublicConversationDisplay([normalizeConversation(convoSnap)]))[0];
     if (convo.landlordId !== landlordId) return res.status(403).json({ ok: false, error: "Forbidden" });
 
     const msg = await addMessage({ conversationId: id, senderRole: "landlord", body });
@@ -889,7 +1150,7 @@ router.post("/landlord/messages/conversations/:id/read", authenticateJwt, requir
   try {
     const convoSnap = await db.collection("conversations").doc(id).get();
     if (!convoSnap.exists) return res.status(404).json({ ok: false, error: "Conversation not found" });
-    const convo = normalizeConversation(convoSnap);
+    const convo = (await enrichPublicConversationDisplay([normalizeConversation(convoSnap)]))[0];
     if (convo.landlordId !== landlordId) return res.status(403).json({ ok: false, error: "Forbidden" });
 
     await db
@@ -930,9 +1191,11 @@ router.get("/tenant/messages/conversation", authenticateJwt, requireTenant, asyn
         lastNotifiedAtTenantMs: null,
       });
       const created = await ref.get();
-      return res.json({ ok: true, conversation: normalizeConversation(created) });
+      const createdConversation = (await enrichPublicConversationDisplay([normalizeConversation(created)]))[0];
+      return res.json({ ok: true, conversation: createdConversation });
     }
-    return res.json({ ok: true, conversation: normalizeConversation(snap) });
+    const conversation = (await enrichPublicConversationDisplay([normalizeConversation(snap)]))[0];
+    return res.json({ ok: true, conversation });
   } catch (err: any) {
     console.error("[publicRoutes] tenant get/create conversation error", err);
     return res.status(500).json({ ok: false, error: "Failed to load conversation" });
@@ -952,7 +1215,7 @@ router.get("/tenant/messages/conversation/:id", authenticateJwt, requireTenant, 
   try {
     const convoSnap = await db.collection("conversations").doc(id).get();
     if (!convoSnap.exists) return res.status(404).json({ ok: false, error: "Conversation not found" });
-    const convo = normalizeConversation(convoSnap);
+    const convo = (await enrichPublicConversationDisplay([normalizeConversation(convoSnap)]))[0];
     if (convo.tenantId !== ctx.tenantId || convo.landlordId !== ctx.landlordId) {
       return res.status(403).json({ ok: false, error: "Forbidden" });
     }
@@ -990,7 +1253,7 @@ router.post("/tenant/messages/conversation/:id", authenticateJwt, requireTenant,
   try {
     const convoSnap = await db.collection("conversations").doc(id).get();
     if (!convoSnap.exists) return res.status(404).json({ ok: false, error: "Conversation not found" });
-    const convo = normalizeConversation(convoSnap);
+    const convo = (await enrichPublicConversationDisplay([normalizeConversation(convoSnap)]))[0];
     if (convo.tenantId !== ctx.tenantId || convo.landlordId !== ctx.landlordId) {
       return res.status(403).json({ ok: false, error: "Forbidden" });
     }
@@ -1014,7 +1277,7 @@ router.post("/tenant/messages/conversation/:id/read", authenticateJwt, requireTe
   try {
     const convoSnap = await db.collection("conversations").doc(id).get();
     if (!convoSnap.exists) return res.status(404).json({ ok: false, error: "Conversation not found" });
-    const convo = normalizeConversation(convoSnap);
+    const convo = (await enrichPublicConversationDisplay([normalizeConversation(convoSnap)]))[0];
     if (convo.tenantId !== ctx.tenantId || convo.landlordId !== ctx.landlordId) {
       return res.status(403).json({ ok: false, error: "Forbidden" });
     }
