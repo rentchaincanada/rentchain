@@ -39,11 +39,11 @@ describe("PaymentCsvImportPreviewCard", () => {
         totalRows: 2,
         totalPaymentAmountCents: 35000,
         totalPaymentAmountDisplay: "$350.00",
-        matchedRows: 1,
+        matchedRows: 2,
         highConfidenceRows: 1,
-        mediumConfidenceRows: 0,
-        lowConfidenceRows: 1,
-        unmatchedRows: 1,
+        mediumConfidenceRows: 1,
+        lowConfidenceRows: 0,
+        unmatchedRows: 0,
         ambiguousRows: 0,
         invalidRows: 0,
         preselectedRows: 1,
@@ -97,18 +97,18 @@ describe("PaymentCsvImportPreviewCard", () => {
           method: null,
           reference: null,
           notes: null,
-          matchStatus: "unmatched",
-          confidence: "low",
+          matchStatus: "matched",
+          confidence: "medium",
           preselected: false,
-          warning: "Unmatched rows are not imported.",
-          reason: "No active tenant lease match found.",
-          matchBasis: [],
-          matchedTenantId: null,
-          matchedTenantName: null,
-          leaseId: null,
-          propertyId: null,
+          warning: "Tenant matched by name only. Please confirm before import.",
+          reason: "Tenant name matched one active lease, but property/unit context is incomplete.",
+          matchBasis: ["tenant"],
+          matchedTenantId: "tenant-2",
+          matchedTenantName: "Unknown Tenant",
+          leaseId: "lease-2",
+          propertyId: "property-1",
           propertyLabel: "Harbour View",
-          unitId: null,
+          unitId: "unit-2",
           unitLabel: "Unit 2",
           duplicateInFile: false,
           rowFingerprint: "def",
@@ -131,14 +131,17 @@ describe("PaymentCsvImportPreviewCard", () => {
     expect(await screen.findByText("$350.00")).toBeInTheDocument();
     expect(screen.getByText("Some columns were ignored because they are not needed for rent payment import.")).toBeInTheDocument();
     expect(screen.getByText("Sensitive banking columns were detected and omitted from preview/import.")).toBeInTheDocument();
-    expect(screen.getByText("1 rows matched tenant lease records. 1 rows are blocked until the row-level issue is fixed.")).toBeInTheDocument();
+    expect(screen.getByText("2 rows matched tenant lease records. 0 rows are blocked until the row-level issue is fixed.")).toBeInTheDocument();
     expect(screen.getByText("Matched by: Tenant + Property + Unit")).toBeInTheDocument();
+    expect(screen.getByText("Matched by: Tenant")).toBeInTheDocument();
+    expect(screen.getByText("Tenant matched by name only. Please confirm before import.")).toBeInTheDocument();
     expect(screen.getByLabelText("Select row 2")).toBeChecked();
-    expect(screen.getByLabelText("Select row 3")).toBeDisabled();
+    expect(screen.getByLabelText("Select row 3")).not.toBeChecked();
+    expect(screen.getByLabelText("Select row 3")).not.toBeDisabled();
     expect(screen.getAllByText("Harbour View").length).toBeGreaterThan(0);
     expect(screen.getByText("Bailey Blinkers")).toBeInTheDocument();
     expect(screen.getByText("Unknown Tenant")).toBeInTheDocument();
-    expect(screen.getByText("Preview is read-only until you click Import selected payments. Blocked, ambiguous, invalid, duplicate, and low-confidence rows are not imported.")).toBeInTheDocument();
+    expect(screen.getByText("Preview is read-only until you click Import selected payments. High-confidence rows are preselected. Review-required rows can be selected manually. Blocked, ambiguous, invalid, and duplicate rows are not imported.")).toBeInTheDocument();
   });
 
   it("requires a selected file before preview", () => {

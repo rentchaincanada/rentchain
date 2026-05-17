@@ -46,6 +46,10 @@ function matchBasisLabel(row: PaymentImportPreviewRow): string | null {
 }
 
 function isImportEligible(row: PaymentImportPreviewRow): boolean {
+  return row.matchStatus === "matched" && (row.confidence === "high" || row.confidence === "medium") && !row.duplicateInFile;
+}
+
+function shouldPreselect(row: PaymentImportPreviewRow): boolean {
   return row.matchStatus === "matched" && row.confidence === "high" && !row.duplicateInFile;
 }
 
@@ -78,7 +82,7 @@ export function PaymentCsvImportPreviewCard({ onImportComplete }: { onImportComp
       const result = await previewLedgerPaymentCsvImport(file);
       setPreview(result);
       setConfirmResult(null);
-      setSelectedRowIds(new Set(result.rows.filter(isImportEligible).map((row) => row.rowId)));
+      setSelectedRowIds(new Set(result.rows.filter(shouldPreselect).map((row) => row.rowId)));
     } catch (err) {
       setError(err instanceof Error && err.message ? err.message : "Failed to preview payment import.");
     } finally {
@@ -364,7 +368,7 @@ export function PaymentCsvImportPreviewCard({ onImportComplete }: { onImportComp
           </div>
 
           <div style={{ color: "#475569", fontSize: 13 }}>
-            Preview is read-only until you click Import selected payments. Blocked, ambiguous, invalid, duplicate, and low-confidence rows are not imported.
+            Preview is read-only until you click Import selected payments. High-confidence rows are preselected. Review-required rows can be selected manually. Blocked, ambiguous, invalid, and duplicate rows are not imported.
           </div>
         </div>
       ) : null}

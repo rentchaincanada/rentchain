@@ -71,7 +71,7 @@ function duplicateKeyFor(row: PaymentImportPreviewRow, landlordId: string): stri
 function rowIsImportEligible(row: PaymentImportPreviewRow): boolean {
   return Boolean(
     row.matchStatus === "matched" &&
-      row.confidence === "high" &&
+      (row.confidence === "high" || row.confidence === "medium") &&
       !row.duplicateInFile &&
       row.matchedTenantId &&
       row.leaseId &&
@@ -249,7 +249,7 @@ router.post(
             rowId: row.rowId,
             rowFingerprint: row.rowFingerprint,
             status: "failed",
-            reason: "Row is not eligible for import. Only high-confidence matched rows can be imported.",
+            reason: "Row is not eligible for import. Only matched reviewable rows can be imported.",
             paymentDocumentId: null,
             ledgerEntryId: null,
           });

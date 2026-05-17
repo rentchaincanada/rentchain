@@ -214,6 +214,18 @@ describe("ledgerPaymentImportPreviewService", () => {
     });
   });
 
+  it("marks exactly one tenant-only active lease match as review-required medium confidence", () => {
+    const result = preview("tenantName,amount,paymentDate\nBailey Blinkers,150,2026-05-15");
+    expect(result.rows[0]).toMatchObject({
+      matchStatus: "matched",
+      confidence: "medium",
+      matchBasis: ["tenant"],
+      matchedTenantId: "tenant-1",
+      preselected: false,
+      warning: "Tenant matched by name only. Please confirm before import.",
+    });
+  });
+
   it("blocks ambiguous tenant matches", () => {
     const result = preview("tenantName,amount,paymentDate\nSam Same,99,2026-05-15");
     expect(result.rows[0]).toMatchObject({

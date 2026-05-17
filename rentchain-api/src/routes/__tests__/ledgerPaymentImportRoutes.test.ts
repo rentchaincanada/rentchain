@@ -301,6 +301,44 @@ describe("ledger payment CSV import routes", () => {
     expect(writeTracker.ledgerEntryWrites).toBe(0);
   });
 
+  it("allows manual confirmation of single-candidate review-required rows", async () => {
+    const router = (await import("../ledgerRoutes")).default;
+    const app = buildApp(router);
+    const csv = "tenantName,amount,paymentDate,method,reference\nBailey Blinkers,150,2026-05-15,etransfer,manual-review";
+
+    const preview = await request(app)
+      .post("/api/ledger/imports/payment-csv/preview")
+      .attach("file", Buffer.from(csv), {
+        filename: "payments.csv",
+        contentType: "text/csv",
+      });
+
+    expect(preview.body.rows[0]).toMatchObject({
+      matchStatus: "matched",
+      confidence: "medium",
+      preselected: false,
+      warning: "Tenant matched by name only. Please confirm before import.",
+    });
+
+    const res = await request(app).post("/api/ledger/imports/payment-csv/confirm").send({
+      importBatchId: preview.body.importBatchId,
+      selectedRowIds: [preview.body.rows[0].rowId],
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ importedCount: 1, duplicateCount: 0, failedCount: 0 });
+    const payments = await fakeDb.collection("payments").get();
+    expect(payments.docs[0].data()).toEqual(
+      expect.objectContaining({
+        tenantId: "tenant-1",
+        leaseId: "lease-1",
+        propertyId: "property-1",
+        unitId: "unit-1",
+        amountCents: 15000,
+      })
+    );
+  });
+
   it("skips exact duplicates without mutating existing records", async () => {
     seedDoc("payments", "existing-payment", {
       landlordId: "landlord-1",
