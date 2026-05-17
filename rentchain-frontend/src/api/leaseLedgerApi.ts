@@ -35,6 +35,7 @@ export type LeaseObligationLedgerRow = {
   leaseId: string;
   paymentIntentId?: string | null;
   rentPaymentId?: string | null;
+  paymentDocumentId?: string | null;
   propertyId?: string | null;
   unitId?: string | null;
   tenantId?: string | null;
@@ -49,7 +50,7 @@ export type LeaseObligationLedgerRow = {
   rentPaymentStatus?: string | null;
   reconciliationStatus?: string | null;
   evidenceStatus?: "none" | "provider_received" | "reconciled" | "manual_review_required" | "failed" | "pending" | null;
-  source: "lease_lifecycle" | "payment_intent" | "rent_payment" | "reconciliation";
+  source: "lease_lifecycle" | "payment_intent" | "rent_payment" | "canonical_payment" | "reconciliation";
   reasons: string[];
 };
 

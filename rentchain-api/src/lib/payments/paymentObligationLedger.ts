@@ -18,6 +18,7 @@ export type PaymentObligationLedgerSource =
   | "lease_lifecycle"
   | "payment_intent"
   | "rent_payment"
+  | "canonical_payment"
   | "reconciliation";
 
 export type PaymentObligationLedgerRow = {
@@ -25,6 +26,7 @@ export type PaymentObligationLedgerRow = {
   leaseId: string;
   paymentIntentId?: string | null;
   rentPaymentId?: string | null;
+  paymentDocumentId?: string | null;
   propertyId: string | null;
   unitId?: string | null;
   tenantId?: string | null;
@@ -81,10 +83,30 @@ export type PaymentObligationReconciliationInput = {
   reasons?: string[] | null;
 };
 
+export type PaymentObligationCanonicalPaymentInput = {
+  id?: string | null;
+  paymentDocumentId?: string | null;
+  leaseId?: string | null;
+  tenantId?: string | null;
+  landlordId?: string | null;
+  propertyId?: string | null;
+  unitId?: string | null;
+  amountCents?: number | null;
+  currency?: string | null;
+  status?: string | null;
+  paidAt?: string | null;
+  effectiveDate?: string | null;
+  method?: string | null;
+  reference?: string | null;
+  source?: string | null;
+  ledgerEntryId?: string | null;
+};
+
 export type BuildPaymentObligationLedgerRowsInput = {
   leases?: PaymentObligationLeaseInput[];
   paymentIntents?: PaymentIntentRecord[];
   rentPayments?: RentPaymentRecord[];
+  canonicalPayments?: PaymentObligationCanonicalPaymentInput[];
   reconciliationRecords?: PaymentObligationReconciliationInput[];
 };
 
@@ -98,6 +120,7 @@ type StatusInput = {
   hasPaymentEvidence?: boolean;
   hasPaymentIntent?: boolean;
   hasRentPayment?: boolean;
+  hasCanonicalPayment?: boolean;
   hasLeaseObligation?: boolean;
 };
 
@@ -189,9 +212,41 @@ function evidenceStatusFor(input: StatusInput): PaymentObligationLedgerRow["evid
   if (reconciliationStatus === "reconciled") return "reconciled";
   if (reconciliationStatus && FAILED_RECONCILIATION_STATUSES.has(reconciliationStatus)) return "failed";
   if (reconciliationStatus && PENDING_RECONCILIATION_STATUSES.has(reconciliationStatus)) return "pending";
+  if (input.hasCanonicalPayment) return "reconciled";
   if (input.rentPaymentStatus && FAILED_RENT_PAYMENT_STATUSES.has(input.rentPaymentStatus)) return "failed";
   if (input.rentPaymentStatus || input.paymentIntentStatus) return "provider_received";
   return "none";
+}
+
+function dateOnlyMillis(value: unknown): number | null {
+  const raw = asString(value, 120);
+  if (!raw) return null;
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
+  if (dateOnly) {
+    const [, year, month, day] = dateOnly;
+    return Date.UTC(Number(year), Number(month) - 1, Number(day));
+  }
+  const parsed = Date.parse(raw);
+  if (!Number.isFinite(parsed)) return null;
+  const date = new Date(parsed);
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+}
+
+function paymentFallsWithinLeaseTerm(payment: PaymentObligationCanonicalPaymentInput, lease: PaymentObligationLeaseInput | null): boolean {
+  if (!lease) return false;
+  const paymentDate = dateOnlyMillis(payment.effectiveDate || payment.paidAt);
+  if (paymentDate === null) return true;
+  const start = dateOnlyMillis(lease.startDate);
+  const end = dateOnlyMillis(lease.endDate);
+  if (start !== null && paymentDate < start) return false;
+  if (end !== null && paymentDate > end) return false;
+  return true;
+}
+
+function canonicalPaymentCanReconcile(payment: PaymentObligationCanonicalPaymentInput): boolean {
+  const status = asString(payment.status, 80);
+  if (!status) return true;
+  return status === "recorded" || status === "paid" || status === "completed";
 }
 
 export function derivePaymentObligationStatus(input: StatusInput): {
@@ -268,6 +323,7 @@ export function buildPaymentObligationLedgerRows(
   const leases = input.leases || [];
   const leaseById = new Map(leases.map((lease) => [leaseIdOf(lease), lease]).filter(([id]) => Boolean(id)) as Array<[string, PaymentObligationLeaseInput]>);
   const rentPayments = input.rentPayments || [];
+  const canonicalPayments = input.canonicalPayments || [];
   const rentPaymentsByIntent = new Map<string, RentPaymentRecord[]>();
   const rentPaymentById = new Map<string, RentPaymentRecord>();
   const reconciliationRecords = input.reconciliationRecords || [];
@@ -284,6 +340,15 @@ export function buildPaymentObligationLedgerRows(
       group.push(rentPayment);
       rentPaymentsByIntent.set(paymentIntentId, group);
     }
+  }
+
+  const canonicalPaymentsByLease = new Map<string, PaymentObligationCanonicalPaymentInput[]>();
+  for (const payment of canonicalPayments) {
+    const leaseId = asString(payment.leaseId, 240);
+    if (!leaseId || !canonicalPaymentCanReconcile(payment)) continue;
+    const group = canonicalPaymentsByLease.get(leaseId) || [];
+    group.push(payment);
+    canonicalPaymentsByLease.set(leaseId, group);
   }
 
   for (const intent of input.paymentIntents || []) {
@@ -318,6 +383,7 @@ export function buildPaymentObligationLedgerRows(
       leaseId: asString(intent.leaseId || leaseIdOf(lease), 240) || "unknown",
       paymentIntentId: intent.paymentIntentId,
       rentPaymentId: latestRentPayment?.id || intent.rentPaymentId || null,
+      paymentDocumentId: null,
       propertyId: intent.propertyId || lease?.propertyId || null,
       unitId: intent.unitId || lease?.unitId || null,
       tenantId: intent.tenantId || lease?.tenantId || lease?.primaryTenantId || null,
@@ -358,6 +424,7 @@ export function buildPaymentObligationLedgerRows(
       leaseId: rentPayment.leaseId,
       paymentIntentId: rentPayment.paymentIntentId || null,
       rentPaymentId: rentPayment.id,
+      paymentDocumentId: null,
       propertyId: rentPayment.propertyId || lease?.propertyId || null,
       unitId: rentPayment.unitId || lease?.unitId || null,
       tenantId: rentPayment.tenantId || lease?.tenantId || lease?.primaryTenantId || null,
@@ -374,6 +441,54 @@ export function buildPaymentObligationLedgerRows(
       evidenceStatus: status.evidenceStatus,
       source: reconciliation ? "reconciliation" : "rent_payment",
       reasons: [...status.reasons, ...(reconciliation?.reasons || [])].filter(Boolean),
+    });
+  }
+
+  for (const [leaseId, payments] of canonicalPaymentsByLease.entries()) {
+    const lease = leaseById.get(leaseId) || null;
+    if (!lease || seenLeaseIds.has(leaseId) || !leaseLifecycleAllowsObligation(lease)) continue;
+    seenLeaseIds.add(leaseId);
+    const inWindowPayments = payments.filter((payment) => paymentFallsWithinLeaseTerm(payment, lease));
+    const outOfWindowPayments = payments.filter((payment) => !paymentFallsWithinLeaseTerm(payment, lease));
+    const paidAmountCents = inWindowPayments.reduce((sum, payment) => sum + normalizeAmountCents(payment.amountCents), 0);
+    const expectedAmountCents = normalizeAmountCents(lease.amountCents ?? lease.monthlyRent);
+    const status = derivePaymentObligationStatus({
+      expectedAmountCents,
+      paidAmountCents,
+      hasPaymentEvidence: inWindowPayments.length > 0,
+      hasCanonicalPayment: inWindowPayments.length > 0,
+      hasLeaseObligation: true,
+      requiresManualReview: outOfWindowPayments.length > 0 && inWindowPayments.length === 0,
+    });
+    rows.push({
+      rowId: rowIdFor(["canonical_payment", leaseId, inWindowPayments.map((payment) => payment.id || payment.paymentDocumentId).join("_")]),
+      leaseId,
+      paymentIntentId: null,
+      rentPaymentId: null,
+      paymentDocumentId:
+        inWindowPayments.length === 1
+          ? asString(inWindowPayments[0].paymentDocumentId || inWindowPayments[0].id, 240)
+          : null,
+      propertyId: inWindowPayments[0]?.propertyId || lease.propertyId || null,
+      unitId: inWindowPayments[0]?.unitId || lease.unitId || null,
+      tenantId: inWindowPayments[0]?.tenantId || lease.tenantId || lease.primaryTenantId || null,
+      periodStart: normalizeDate(lease.startDate),
+      periodEnd: normalizeDate(lease.endDate),
+      dueDate: normalizeDate(inWindowPayments[0]?.effectiveDate || inWindowPayments[0]?.paidAt || lease.dueDate),
+      expectedAmountCents,
+      paidAmountCents,
+      currency: normalizeCurrency(inWindowPayments[0]?.currency || lease.currency),
+      obligationStatus: status.obligationStatus,
+      paymentIntentStatus: null,
+      rentPaymentStatus: null,
+      reconciliationStatus: null,
+      evidenceStatus: status.evidenceStatus,
+      source: "canonical_payment",
+      reasons: [
+        ...status.reasons,
+        inWindowPayments.length > 0 ? "canonical_payment_recorded" : null,
+        outOfWindowPayments.length > 0 ? "canonical_payment_outside_lease_term" : null,
+      ].filter(Boolean) as string[],
     });
   }
 

@@ -44,6 +44,7 @@ import {
 import {
   buildPaymentObligationLedgerRows,
   summarizePaymentObligationLedger,
+  type PaymentObligationCanonicalPaymentInput,
 } from "../lib/payments/paymentObligationLedger";
 import {
   deriveDelinquencySignals,
@@ -1348,6 +1349,44 @@ async function loadLeasePaymentIntentsForObligationLedger(leaseId: string, landl
   return (snap?.docs || [])
     .map((doc: any) => ({ paymentIntentId: doc.id, ...((doc.data() as any) || {}) }))
     .filter((record: any) => String(record?.landlordId || "").trim() === landlordId);
+}
+
+async function loadLeaseCanonicalPaymentsForObligationLedger(
+  leaseId: string,
+  landlordId: string
+): Promise<PaymentObligationCanonicalPaymentInput[]> {
+  const snap = await db
+    .collection("payments")
+    .where("leaseId", "==", leaseId)
+    .get()
+    .catch(() => null);
+  return (snap?.docs || [])
+    .map((doc: any) => ({ id: doc.id, ...((doc.data() as any) || {}) }))
+    .filter((record: any) => String(record?.landlordId || "").trim() === landlordId)
+    .filter((record: any) => {
+      const source = String(record?.source || "").trim().toLowerCase();
+      const status = String(record?.status || "").trim().toLowerCase();
+      if (source === "rent_payment_checkout") return false;
+      return !status || status === "recorded" || status === "paid" || status === "completed";
+    })
+    .map((record: any) => ({
+      id: String(record?.id || "").trim(),
+      paymentDocumentId: String(record?.paymentDocumentId || record?.id || "").trim() || null,
+      leaseId: String(record?.leaseId || "").trim(),
+      tenantId: String(record?.tenantId || "").trim(),
+      landlordId: String(record?.landlordId || "").trim(),
+      propertyId: String(record?.propertyId || "").trim() || null,
+      unitId: String(record?.unitId || "").trim() || null,
+      amountCents: Math.max(0, Math.round(Number(record?.amountCents || 0))),
+      currency: String(record?.currency || "cad").trim().toLowerCase() || "cad",
+      status: String(record?.status || "recorded").trim().toLowerCase() || "recorded",
+      paidAt: String(record?.paidAt || "").trim() || null,
+      effectiveDate: String(record?.effectiveDate || record?.paidAt || "").trim() || null,
+      method: String(record?.method || "").trim() || null,
+      reference: String(record?.reference || "").trim() || null,
+      source: String(record?.source || "").trim() || null,
+      ledgerEntryId: String(record?.ledgerEntryId || "").trim() || null,
+    }));
 }
 
 async function loadLeaseReconciliationRecordsForObligationLedger(params: {
@@ -3133,6 +3172,7 @@ router.get("/:leaseId/ledger", async (req: any, res: Response) => {
     const paymentIntentLinks = await loadLeaseLedgerPaymentIntentLinks(leaseId, landlordId);
     const obligationRentPayments = await loadLeaseRentPaymentsForObligationLedger(leaseId, landlordId);
     const obligationPaymentIntents = await loadLeasePaymentIntentsForObligationLedger(leaseId, landlordId);
+    const obligationCanonicalPayments = await loadLeaseCanonicalPaymentsForObligationLedger(leaseId, landlordId);
     const obligationReconciliationRecords = await loadLeaseReconciliationRecordsForObligationLedger({
       leaseId,
       paymentIntentIds: obligationPaymentIntents.map((record: any) => String(record?.paymentIntentId || "").trim()),
@@ -3149,6 +3189,7 @@ router.get("/:leaseId/ledger", async (req: any, res: Response) => {
       ],
       paymentIntents: obligationPaymentIntents as any,
       rentPayments: obligationRentPayments,
+      canonicalPayments: obligationCanonicalPayments,
       reconciliationRecords: obligationReconciliationRecords,
     });
     const delinquencySignals = deriveDelinquencySignals(obligationRows);
