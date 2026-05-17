@@ -14,6 +14,7 @@ import { fetchTenants } from "../api/tenantsApi";
 import { printSummaryDocument } from "../utils/printSummary";
 import { triggerBlobDownload } from "../utils/downloadBlob";
 import { buildCsvBlob } from "../utils/csvExport";
+import { formatOperationalReference } from "@/lib/identityReferences";
 
 function tenantLabelFromValue(value: any): string {
   return (
@@ -92,7 +93,7 @@ const PaymentsPage: React.FC = () => {
       tenantLabelFromValue(record.tenantProfile) ||
       String(record.tenantName || record.tenantDisplayName || record.applicantName || "").trim() ||
       labelMap.tenants.get(String(payment.tenantId || "").trim()) ||
-      (payment.tenantId ? `Tenant ${payment.tenantId}` : "Tenant")
+      (payment.tenantId ? formatOperationalReference("tenant", payment.tenantId) : "Tenant")
     );
   };
   const getPropertyLabel = (payment: PaymentRecord) => {
@@ -108,9 +109,9 @@ const PaymentsPage: React.FC = () => {
     const propertyId = String(payment.propertyId || "").trim();
     const unitId = String(record.unitId || "").trim();
     if (propertyLabel || formattedUnit) return propertyLabel || formattedUnit;
-    if (propertyId && unitId) return `Property ${propertyId} / Unit ${unitId}`;
-    if (propertyId) return `Property ${propertyId}`;
-    if (unitId) return `Unit ${unitId}`;
+    if (propertyId && unitId) return `${formatOperationalReference("property", propertyId)} / ${formatOperationalReference("unit", unitId)}`;
+    if (propertyId) return formatOperationalReference("property", propertyId);
+    if (unitId) return formatOperationalReference("unit", unitId);
     return "Property";
   };
 
@@ -118,7 +119,7 @@ const PaymentsPage: React.FC = () => {
     try {
       setExporting(format);
       const blob = buildCsvBlob(
-        ["tenant", "property", "amount", "paid_date", "method", "notes"],
+        ["tenant", "property_unit", "amount", "paid_date", "method", "notes"],
         rows.map((payment) => [
           getTenantLabel(payment),
           getPropertyLabel(payment),
@@ -268,7 +269,7 @@ const PaymentsPage: React.FC = () => {
                   }}
                 >
                   <th style={{ padding: "0.5rem 0.4rem" }}>Tenant</th>
-                  <th style={{ padding: "0.5rem 0.4rem" }}>Property</th>
+                  <th style={{ padding: "0.5rem 0.4rem" }}>Property / Unit</th>
                   <th style={{ padding: "0.5rem 0.4rem", textAlign: "right" }}>Amount</th>
                   <th style={{ padding: "0.5rem 0.4rem" }}>Paid Date</th>
                   <th style={{ padding: "0.5rem 0.4rem", textAlign: "right" }}>Method</th>
@@ -341,7 +342,7 @@ const PaymentsPage: React.FC = () => {
           <thead>
             <tr>
               <th>Tenant</th>
-              <th>Property</th>
+              <th>Property / Unit</th>
               <th>Amount</th>
               <th>Paid date</th>
               <th>Method</th>

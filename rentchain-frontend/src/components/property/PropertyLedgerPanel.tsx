@@ -7,6 +7,7 @@ import {
   PropertyLedgerResponse,
 } from "../../types/ledger";
 import { API_BASE_URL } from "../../config/api";
+import { formatInternalReference } from "@/lib/identityReferences";
 
 interface PropertyLedgerPanelProps {
   propertyId: string;
@@ -96,7 +97,7 @@ export const PropertyLedgerPanel: React.FC<PropertyLedgerPanelProps> = ({
             whiteSpace: "nowrap",
           }}
         >
-          Property ID: {propertyId}
+          {formatInternalReference("property", propertyId)}
         </span>
       </div>
 

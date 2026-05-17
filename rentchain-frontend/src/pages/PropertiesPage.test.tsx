@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   useToastMock: vi.fn(),
   useAuthMock: vi.fn(),
   useCapabilitiesMock: vi.fn(),
+  printSummaryDocumentMock: vi.fn(),
 }));
 
 vi.mock("../api/propertiesApi", () => ({
@@ -99,6 +100,10 @@ vi.mock("../hooks/useCapabilities", () => ({
   useCapabilities: mocks.useCapabilitiesMock,
 }));
 
+vi.mock("../utils/printSummary", () => ({
+  printSummaryDocument: mocks.printSummaryDocumentMock,
+}));
+
 vi.mock("../lib/analytics", () => ({
   track: vi.fn(),
 }));
@@ -121,6 +126,7 @@ describe("PropertiesPage", () => {
       features: { tenant_invites: false },
       loading: false,
     });
+    mocks.printSummaryDocumentMock.mockResolvedValue(undefined);
   });
 
   it("renders active and archived property filters", async () => {
@@ -153,6 +159,21 @@ describe("PropertiesPage", () => {
     await waitFor(() => {
       expect(screen.getAllByRole("button", { name: "Print / Save PDF" }).length).toBeGreaterThan(0);
     });
+  });
+
+  it("routes property print through the shared summary print helper", async () => {
+    render(
+      <MemoryRouter>
+        <PropertiesPage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByRole("button", { name: "Print / Save PDF" }).length).toBeGreaterThan(0);
+    });
+    fireEvent.click(screen.getAllByRole("button", { name: "Print / Save PDF" })[0]);
+
+    expect(mocks.printSummaryDocumentMock).toHaveBeenCalledWith("summary");
   });
 
   it("shows a guided first-property empty state for new users", async () => {

@@ -7,6 +7,7 @@ import { useAutomationTimeline } from "./useAutomationTimeline";
 import type { AutomationEvent, AutomationEventType } from "./automationTimeline.types";
 import { canUseTimeline, canUseTimelineCsv, normalizeTimelinePlan } from "./timelineEntitlements";
 import { computeTimelineAnalytics } from "./timelineAnalytics";
+import { formatOperationalReference, type IdentityReferenceKind } from "@/lib/identityReferences";
 
 type FilterValue = "all" | AutomationEventType;
 
@@ -56,6 +57,36 @@ const entityOrder: Array<keyof NonNullable<AutomationEvent["entity"]>> = [
   "leaseId",
   "paymentId",
 ];
+
+const entityReferenceKinds: Record<keyof NonNullable<AutomationEvent["entity"]>, IdentityReferenceKind> = {
+  propertyId: "property",
+  unitId: "unit",
+  tenantId: "tenant",
+  applicationId: "application",
+  leaseId: "lease",
+  paymentId: "payment",
+};
+
+const entityReferenceLabels: Record<keyof NonNullable<AutomationEvent["entity"]>, string> = {
+  propertyId: "Property",
+  unitId: "Unit",
+  tenantId: "Tenant",
+  applicationId: "Application",
+  leaseId: "Lease",
+  paymentId: "Payment",
+};
+
+function formatEntityReference(key: keyof NonNullable<AutomationEvent["entity"]>, value: unknown): string {
+  return formatOperationalReference(entityReferenceKinds[key], value);
+}
+
+function normalizedEntityReferences(entity: AutomationEvent["entity"] | undefined) {
+  return Object.fromEntries(
+    entityOrder
+      .map((key) => [key.replace(/Id$/, "Reference"), entity?.[key] ? formatEntityReference(key, entity[key]) : ""] as const)
+      .filter((entry) => entry[1])
+  );
+}
 
 export default function AutomationTimelinePage() {
   const { user } = useAuth();
@@ -165,7 +196,16 @@ export default function AutomationTimelinePage() {
   const analytics = useMemo(() => computeTimelineAnalytics(visibleEvents), [visibleEvents]);
 
   const handleExport = () => {
-    const payload = JSON.stringify(visibleEvents, null, 2);
+    const exportEvents = visibleEvents.map((event) => ({
+      eventReference: formatOperationalReference("event", event.id),
+      type: event.type,
+      occurredAt: event.occurredAt,
+      title: event.title,
+      summary: event.summary || "",
+      entityReferences: normalizedEntityReferences(event.entity),
+      source: String((event.metadata as Record<string, unknown> | undefined)?.source || ""),
+    }));
+    const payload = JSON.stringify(exportEvents, null, 2);
     const blob = new Blob([payload], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -185,34 +225,34 @@ export default function AutomationTimelinePage() {
   const handleCsvExport = () => {
     try {
       const headers = [
-        "id",
+        "eventReference",
         "type",
         "occurredAt",
         "title",
         "summary",
-        "propertyId",
-        "unitId",
-        "tenantId",
-        "applicationId",
-        "leaseId",
-        "paymentId",
+        "propertyReference",
+        "unitReference",
+        "tenantReference",
+        "applicationReference",
+        "leaseReference",
+        "paymentReference",
         "source",
       ];
       const lines = [
         headers.join(","),
         ...visibleEvents.map((event) =>
           [
-            event.id,
+            formatOperationalReference("event", event.id),
             event.type,
             event.occurredAt,
             event.title,
             event.summary || "",
-            event.entity?.propertyId || "",
-            event.entity?.unitId || "",
-            event.entity?.tenantId || "",
-            event.entity?.applicationId || "",
-            event.entity?.leaseId || "",
-            event.entity?.paymentId || "",
+            event.entity?.propertyId ? formatEntityReference("propertyId", event.entity.propertyId) : "",
+            event.entity?.unitId ? formatEntityReference("unitId", event.entity.unitId) : "",
+            event.entity?.tenantId ? formatEntityReference("tenantId", event.entity.tenantId) : "",
+            event.entity?.applicationId ? formatEntityReference("applicationId", event.entity.applicationId) : "",
+            event.entity?.leaseId ? formatEntityReference("leaseId", event.entity.leaseId) : "",
+            event.entity?.paymentId ? formatEntityReference("paymentId", event.entity.paymentId) : "",
             String((event.metadata as Record<string, unknown> | undefined)?.source || ""),
           ]
             .map(csvEscape)
@@ -513,7 +553,7 @@ export default function AutomationTimelinePage() {
             <option value="">All properties</option>
             {propertyIds.map((id) => (
               <option key={id} value={id}>
-                {id}
+                {formatOperationalReference("property", id)}
               </option>
             ))}
           </select>
@@ -525,7 +565,7 @@ export default function AutomationTimelinePage() {
             <option value="">All units</option>
             {unitIds.map((id) => (
               <option key={id} value={id}>
-                {id}
+                {formatOperationalReference("unit", id)}
               </option>
             ))}
           </select>
@@ -537,7 +577,7 @@ export default function AutomationTimelinePage() {
             <option value="">All tenants</option>
             {tenantIds.map((id) => (
               <option key={id} value={id}>
-                {id}
+                {formatOperationalReference("tenant", id)}
               </option>
             ))}
           </select>
@@ -757,7 +797,7 @@ export default function AutomationTimelinePage() {
                             padding: "3px 8px",
                           }}
                         >
-                          {key}: {String(value)}
+                          {entityReferenceLabels[key]}: {formatEntityReference(key, value)}
                         </span>
                       ))}
                     </div>

@@ -85,7 +85,7 @@ router.get("/tenants/:tenantId/credit-history/export", async (req: any, res) => 
         "\n"
       );
       res.setHeader("Content-Type", "text/csv");
-      res.setHeader("Content-Disposition", `attachment; filename="credit-history-${tenantId}.csv"`);
+      res.setHeader("Content-Disposition", "attachment; filename=\"credit-history.csv\"");
       return res.send(csv);
     }
     res.setHeader("Content-Type", "application/json");

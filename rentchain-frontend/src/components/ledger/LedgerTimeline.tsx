@@ -3,6 +3,7 @@ import type { LedgerEventStored } from "@/api/ledgerApi";
 import { IntegrityBadge } from "./IntegrityBadge";
 import { AttachDocumentLinkModal } from "./AttachDocumentLinkModal";
 import { useToast } from "../ui/ToastProvider";
+import { formatInternalReference } from "@/lib/identityReferences";
 
 type Props = {
   items: LedgerEventStored[];
@@ -131,8 +132,8 @@ export function LedgerTimeline({ items, compact }: Props) {
                 }}
               >
                 <div>seq: {ev.seq}</div>
-                {ev.tenantId ? <div>tenantId: {ev.tenantId}</div> : null}
-                {ev.propertyId ? <div>propertyId: {ev.propertyId}</div> : null}
+                {ev.tenantId ? <div>{formatInternalReference("tenant", ev.tenantId)}</div> : null}
+                {ev.propertyId ? <div>{formatInternalReference("property", ev.propertyId)}</div> : null}
                 <div>hash: {ev.hash}</div>
                 <div>prevHash: {ev.prevHash ?? "null"}</div>
                 <div>payloadHash: {ev.payloadHash}</div>

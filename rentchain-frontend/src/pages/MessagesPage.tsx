@@ -70,8 +70,11 @@ function displayConversationContext(conversation: Conversation | null) {
   if (propertyLabel && unitLabel) return `${propertyLabel} / ${unitLabel}`;
   if (unitLabel) return unitLabel;
   if (propertyLabel) return propertyLabel;
-  if (conversation?.unitId) return "Assigned unit";
-  if (conversation?.propertyId) return "Selected property";
+  const propertyId = String(conversation?.propertyId || "").trim();
+  const unitId = String(conversation?.unitId || "").trim();
+  if (propertyId && unitId) return "Linked property / linked unit";
+  if (unitId) return "Linked unit";
+  if (propertyId) return "Linked property";
   return "Tenant conversation";
 }
 

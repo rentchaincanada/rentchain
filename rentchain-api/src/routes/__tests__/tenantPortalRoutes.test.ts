@@ -3223,6 +3223,93 @@ describe("tenantPortalRoutes foundation", () => {
     );
   });
 
+  it("summarizes unit-linked tenant messages without requiring a Firestore composite index", async () => {
+    ensureCollection("conversations").set("landlord-1__tenant-1__unit-1", {
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      leaseId: "lease-1",
+      lastMessageAt: 1900,
+    });
+    ensureCollection("conversations").set("landlord-thread-1", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      leaseId: "lease-1",
+      lastMessageAt: 2200,
+    });
+    ensureCollection("conversations").set("other-unit-thread", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitId: "unit-other",
+      lastMessageAt: 2400,
+    });
+    ensureCollection("messages").set("message-1", {
+      conversationId: "landlord-thread-1",
+      senderRole: "landlord",
+      body: "Please confirm your move-in time.",
+      createdAtMs: 2200,
+    });
+    ensureCollection("messages").set("message-other", {
+      conversationId: "other-unit-thread",
+      senderRole: "landlord",
+      body: "Should not leak",
+      createdAtMs: 2400,
+    });
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/communication/summary",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+          leaseId: "lease-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual(
+      expect.objectContaining({
+        ok: true,
+        unreadMessages: 1,
+        latestMessagePreview: "Please confirm your move-in time.",
+        latestMessageAt: new Date(2200).toISOString(),
+      })
+    );
+    expect(JSON.stringify(res.body)).not.toContain("Should not leak");
+
+    const messagesRes = await invokeRouter(router, {
+      method: "GET",
+      url: "/messages",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+          leaseId: "lease-1",
+        }),
+      },
+    });
+
+    expect(messagesRes.status).toBe(200);
+    expect(messagesRes.body?.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          body: "Please confirm your move-in time.",
+          type: "message",
+        }),
+      ])
+    );
+    expect(JSON.stringify(messagesRes.body)).not.toContain("Should not leak");
+  });
+
   it("recognizes converted rentalApplications as linked tenant profile application context", async () => {
     ensureCollection("applications").delete("app-1");
     ensureCollection("leases").delete("lease-1");

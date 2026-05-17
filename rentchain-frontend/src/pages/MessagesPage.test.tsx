@@ -156,7 +156,7 @@ describe("MessagesPage", () => {
 
     await flushAsync();
     expect(screen.getAllByText("Taylor Tenant")[0]).toBeInTheDocument();
-    expect(screen.getAllByText("Taylor Tenant • Assigned unit").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Taylor Tenant • Linked property / linked unit").length).toBeGreaterThan(0);
     expect(screen.queryByText(/prop-raw-1|unit-raw-1/i)).not.toBeInTheDocument();
     expect(screen.queryByText("Tenant conversation • Unit unavailable")).not.toBeInTheDocument();
     expect(screen.getAllByText("TT")[0]).toBeInTheDocument();
@@ -230,7 +230,7 @@ describe("MessagesPage", () => {
     );
 
     await flushAsync();
-    expect(screen.getAllByText("Tenant • Assigned unit").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Tenant • Linked property / linked unit").length).toBeGreaterThan(0);
     expect(screen.queryByText(/tenant-raw-5|prop-raw-5|unit-raw-5/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/unavailable/i)).not.toBeInTheDocument();
   });

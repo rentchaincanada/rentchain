@@ -24,6 +24,7 @@ import {
   type LandlordActiveLease,
   type LeaseNote,
 } from "@/api/leasesApi";
+import { formatInternalReference, formatOperationalLabel, formatOperationalReference, slugifyOperationalReference } from "@/lib/identityReferences";
 import {
   decisionDisplayCopy,
   decisionSeverityStyle,
@@ -255,8 +256,8 @@ function DecisionRow({
 }) {
   const copy = decisionDisplayCopy[decision.decisionType];
   const context = [
-    decision.unitId ? `Unit ${decision.unitId}` : null,
-    decision.tenantId ? `Tenant ${decision.tenantId}` : null,
+    decision.unitId ? formatOperationalReference("unit", decision.unitId) : null,
+    decision.tenantId ? formatOperationalReference("tenant", decision.tenantId) : null,
   ].filter(Boolean);
   return (
     <div style={{ border: "1px solid #e2e8f0", borderRadius: 12, padding: 12, background: "#fff", display: "grid", gap: 6 }}>
@@ -612,9 +613,17 @@ export default function LeaseLedgerPage() {
       if (to) query.set("to", to);
       const queryString = query.toString();
       const path = `/leases/${encodeURIComponent(leaseId)}/ledger/export.${format}${queryString ? `?${queryString}` : ""}`;
+      const exportSlug = slugifyOperationalReference(
+        [
+          "lease-ledger",
+          lease?.propertyName || lease?.propertyAddress || "property",
+          lease?.unitNumber ? `unit-${lease.unitNumber}` : lease?.unitLabel || "unit",
+        ],
+        "lease-ledger"
+      );
       const { blob, filename } = await downloadAuthenticatedExport({
         path,
-        fallbackFilename: `lease-ledger-${leaseId}.${format}`,
+        fallbackFilename: `${exportSlug}.${format}`,
         errorMessage: `Failed to export ${format.toUpperCase()}`,
         observability: isPdf
           ? {
@@ -634,12 +643,14 @@ export default function LeaseLedgerPage() {
       <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", justifyContent: "space-between" }}>
         <div>
           <h1 style={{ margin: 0, fontSize: "1.2rem" }}>Lease Ledger</h1>
-          <div style={{ color: "#475569", marginTop: 4 }}>Lease ID: {leaseId}</div>
+          <div style={{ color: "#475569", marginTop: 4 }}>
+            {lease
+              ? `${formatOperationalLabel({ kind: "property", label: lease.propertyName || lease.propertyAddress, fallbackLabel: "Property", internalId: lease.propertyId })} · ${formatOperationalLabel({ kind: "unit", label: lease.unitNumber ? `Unit ${lease.unitNumber}` : lease.unitLabel, fallbackLabel: "Unit", internalId: lease.unitId })}`
+              : "Lease ledger"}
+          </div>
+          <div style={{ color: "#64748b", marginTop: 2, fontSize: 12 }}>{formatInternalReference("lease", leaseId)}</div>
           {lease ? (
             <div style={{ color: "#334155", marginTop: 6, display: "grid", gap: 2 }}>
-              <div>
-                {lease.propertyName || "Property"} · Unit {lease.unitNumber || "—"}
-              </div>
               <div>
                 {lease.tenantName || "Tenant not linked"} · {prettyStatus(lease.status)}
                 {lease.archivedAt ? ` · Archived ${formatDate(lease.archivedAt)}` : ""}

@@ -93,12 +93,11 @@ describe("decisionContext", () => {
         { label: "Severity", value: "Critical" },
         { label: "Related delinquency signal", value: "Overdue" },
         { label: "Outstanding amount", value: "$1,450.00" },
-        { label: "Payment intent reference", value: "pi-1" },
-        { label: "Rent payment reference", value: "rp-1" },
+        { label: "Provider payment reference", value: "Internal payment ID: pi-1" },
+        { label: "Internal rent payment reference", value: "Internal payment ID: rp-1" },
         { label: "Last action", value: "Assigned by ops@example.com" },
       ])
     );
     expect(items.map((item) => item.value)).not.toContain("undefined");
   });
 });
-

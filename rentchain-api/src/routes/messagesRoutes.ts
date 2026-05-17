@@ -12,6 +12,14 @@ router.use(authenticateJwt);
 
 type Role = "landlord" | "tenant";
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const CURRENT_LEASE_STATUSES = new Set([
+  "active",
+  "current",
+  "signed",
+  "notice_pending",
+  "renewal_pending",
+  "renewal_accepted",
+]);
 
 function toMillis(v: any): number | null {
   if (!v) return null;
@@ -54,7 +62,14 @@ function normalizeUnitLabel(value: any) {
 }
 
 function buildPropertyLabel(property: any) {
-  return stringOrNull(property?.name) || stringOrNull(property?.addressLine1) || null;
+  return (
+    stringOrNull(property?.name) ||
+    stringOrNull(property?.propertyName) ||
+    stringOrNull(property?.propertyAddress) ||
+    stringOrNull(property?.addressLine1) ||
+    stringOrNull(property?.address) ||
+    null
+  );
 }
 
 function buildTenantLabel(tenant: any) {
@@ -119,6 +134,60 @@ async function loadCurrentLeaseForTenant(tenantId: string | null, hintedLeaseId?
   return candidates[0] || null;
 }
 
+function scoreLeaseForMessages(raw: any) {
+  return CURRENT_LEASE_STATUSES.has(String(raw?.status || "").trim().toLowerCase()) ? 1 : 0;
+}
+
+async function loadCurrentLeaseForConversation(
+  conversation: ReturnType<typeof normalizeConversation>,
+  tenant:
+    | {
+        id?: string | null;
+        raw: any;
+        currentLeaseId?: string | null;
+      }
+    | null
+) {
+  const tenantId =
+    stringOrNull(conversation.tenantId) ||
+    stringOrNull(tenant?.id) ||
+    stringOrNull(tenant?.raw?.tenantId) ||
+    stringOrNull(tenant?.raw?.userId) ||
+    stringOrNull(tenant?.raw?.uid);
+  const hintedLeaseId =
+    stringOrNull(conversation.leaseId) ||
+    stringOrNull(tenant?.currentLeaseId) ||
+    stringOrNull(tenant?.raw?.currentLeaseId) ||
+    stringOrNull(tenant?.raw?.leaseId);
+
+  const tenantLease = await loadCurrentLeaseForTenant(tenantId, hintedLeaseId);
+  if (tenantLease) return tenantLease;
+
+  const unitId = stringOrNull(conversation.unitId);
+  if (!unitId) return null;
+
+  try {
+    const snap = await db.collection("leases").where("unitId", "==", unitId).limit(10).get();
+    const candidates = (snap.docs || [])
+      .map((doc: any) => ({ id: doc.id, raw: doc.data() as any }))
+      .filter((lease: any) => {
+        const leaseLandlordId = stringOrNull(lease.raw?.landlordId);
+        const leasePropertyId = stringOrNull(lease.raw?.propertyId);
+        if (leaseLandlordId && leaseLandlordId !== conversation.landlordId) return false;
+        if (conversation.propertyId && leasePropertyId && leasePropertyId !== conversation.propertyId) return false;
+        return true;
+      });
+    candidates.sort((left, right) => {
+      const statusDiff = scoreLeaseForMessages(right.raw) - scoreLeaseForMessages(left.raw);
+      if (statusDiff !== 0) return statusDiff;
+      return (toMillis(right.raw?.updatedAt || right.raw?.createdAt) || 0) - (toMillis(left.raw?.updatedAt || left.raw?.createdAt) || 0);
+    });
+    return candidates[0] || null;
+  } catch {
+    return null;
+  }
+}
+
 async function loadTenantForConversation(conversation: ReturnType<typeof normalizeConversation>) {
   const tenantId = stringOrNull(conversation.tenantId);
   const tenantEmail = String(conversation.tenantEmail || "").trim().toLowerCase();
@@ -154,6 +223,17 @@ async function loadTenantForConversation(conversation: ReturnType<typeof normali
     }
   }
 
+  const lease = await loadCurrentLeaseForConversation(conversation, null);
+  const leaseTenantId = stringOrNull(lease?.raw?.tenantId);
+  if (leaseTenantId) {
+    try {
+      const tenantSnap = await db.collection("tenants").doc(leaseTenantId).get();
+      if (tenantSnap.exists) return { id: tenantSnap.id, raw: tenantSnap.data() as any };
+    } catch {
+      // fall back to unresolved tenant display
+    }
+  }
+
   return null;
 }
 
@@ -165,6 +245,7 @@ async function enrichConversationDisplay<T extends ReturnType<typeof normalizeCo
   const tenantByConversationId = new Map<
     string,
     {
+      id: string | null;
       raw: any;
       label: string | null;
       unitLabel: string | null;
@@ -176,6 +257,7 @@ async function enrichConversationDisplay<T extends ReturnType<typeof normalizeCo
     tenantEntries.map(([conversationId, tenant]) => [
       conversationId,
       {
+        id: tenant?.id || null,
         raw: tenant?.raw || null,
         label: tenant?.raw ? buildTenantLabel(tenant.raw) : null,
         unitLabel: tenant?.raw ? normalizeUnitLabel(tenant.raw?.unitLabel || tenant.raw?.unitNumber || tenant.raw?.unit) : null,
@@ -214,10 +296,7 @@ async function enrichConversationDisplay<T extends ReturnType<typeof normalizeCo
       const tenant = tenantByConversationId.get(conversation.id);
       return [
         conversation.id,
-        await loadCurrentLeaseForTenant(
-          stringOrNull(conversation.tenantId),
-          stringOrNull(conversation.leaseId) || tenant?.currentLeaseId
-        ),
+        await loadCurrentLeaseForConversation(conversation, tenant || null),
       ] as const;
     })
   );

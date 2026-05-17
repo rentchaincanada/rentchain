@@ -67,6 +67,7 @@ import { computeNoResponseState } from "../services/leaseNoticeWorkflowService";
 import { deriveLeaseLifecycleSummary } from "../services/leaseLifecycle/deriveLeaseLifecycleSummary";
 import { deriveLeaseLifecycleState } from "../lib/leases/leaseLifecycle";
 import { deriveLeaseOccupancyCoherence } from "../lib/leases/deriveLeaseOccupancyCoherence";
+import { formatInternalReference, slugifyOperationalReference } from "../lib/identityReferences";
 import { syncPropertyUnitOccupancyForTenantContext } from "../services/tenantPortal/tenantOccupancySyncService";
 
 const router = Router();
@@ -1404,10 +1405,28 @@ function enrichLeaseLedgerEntryWithPaymentIntent(
 
 async function resolveLeaseLedgerExportLabels(lease: any) {
   const propertyId = String(lease?.propertyId || "").trim();
+  const unitId = String(lease?.unitId || "").trim();
   const propertySnap = propertyId
     ? await db.collection("properties").doc(propertyId).get().catch(() => null)
     : null;
+  const unitSnap = unitId
+    ? await db.collection("units").doc(unitId).get().catch(() => null)
+    : null;
+  const unitQuerySnap =
+    propertyId && unitId && !unitSnap?.exists
+      ? await db.collection("units").where("propertyId", "==", propertyId).get().catch(() => null)
+      : null;
   const propertyData = propertySnap?.exists ? (propertySnap.data() as any) : null;
+  const unitData = unitSnap?.exists
+    ? (unitSnap.data() as any)
+    : (unitQuerySnap?.docs || [])
+        .map((doc: any) => ({ id: doc.id, ...(doc.data() as any) }))
+        .find((unit: any) => {
+          const candidates = [unit?.id, unit?.unitId, unit?.uid, unit?.unitNumber, unit?.unitLabel, unit?.label, unit?.name]
+            .map((value) => String(value || "").trim())
+            .filter(Boolean);
+          return candidates.includes(unitId);
+        }) || null;
   const property =
     String(propertyData?.propertyAddress || lease?.propertyAddress || "").trim() ||
     String(propertyData?.addressLine1 || propertyData?.address || lease?.addressLine1 || lease?.address || "").trim() ||
@@ -1415,9 +1434,17 @@ async function resolveLeaseLedgerExportLabels(lease: any) {
     String(propertyData?.name || lease?.name || "").trim() ||
     "Property";
   const unit =
+    String(unitData?.unitNumber || unitData?.unitLabel || unitData?.label || unitData?.name || "").trim() ||
     String(lease?.unitLabel || lease?.unitNumber || lease?.unit || "").trim() ||
     "Unit";
-  return { property, unit };
+  const filenameSlug = slugifyOperationalReference(["lease-ledger", property, unit], "lease-ledger");
+  return { property, unit, filenameSlug };
+}
+
+function formatUnitLabel(value: unknown): string {
+  const label = String(value || "").trim();
+  if (!label) return "Unit";
+  return /^unit\b/i.test(label) ? label : `Unit ${label}`;
 }
 
 function formatLedgerCurrency(centsValue: unknown): string {
@@ -1428,6 +1455,21 @@ function formatLedgerCurrency(centsValue: unknown): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
+}
+
+function formatLedgerExportLabel(value: unknown): string {
+  const raw = String(value || "").trim();
+  if (!raw) return "-";
+  return raw
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function signedLedgerAmountCents(entry: any): number {
+  if (entry?.entryType === "payment") return -Math.abs(Number(entry?.amountCents || 0));
+  if (entry?.entryType === "adjustment") return Number(entry?.amountCents || 0);
+  return Math.abs(Number(entry?.amountCents || 0));
 }
 
 async function renderLeaseLedgerPdf(params: {
@@ -1448,8 +1490,9 @@ async function renderLeaseLedgerPdf(params: {
   const rangeLabel = [params.from, params.to].filter(Boolean).join(" to ") || "All dates";
   doc.font("Helvetica-Bold").fontSize(18).fillColor("#0f172a").text("Lease Ledger");
   doc.moveDown(0.25);
-  doc.font("Helvetica").fontSize(10).fillColor("#475569").text(`${params.labels.property} · Unit ${params.labels.unit}`);
-  doc.text(`Lease ${params.leaseId} · ${rangeLabel} · ${params.rows.length} entries`);
+  doc.font("Helvetica").fontSize(10).fillColor("#475569").text(`${params.labels.property} · ${formatUnitLabel(params.labels.unit)}`);
+  doc.text(`${rangeLabel} · ${params.rows.length} entries`);
+  doc.text(`Support reference: ${formatInternalReference("lease", params.leaseId)}`);
   doc.moveDown(0.75);
 
   const tableX = 42;
@@ -1487,19 +1530,15 @@ async function renderLeaseLedgerPdf(params: {
   let runningBalance = 0;
 
   for (const row of params.rows) {
-    const signedAmount = row?.entryType === "payment"
-      ? -Math.abs(Number(row?.amountCents || 0))
-      : row?.entryType === "adjustment"
-      ? Number(row?.amountCents || 0) // Adjustments can be positive or negative
-      : Math.abs(Number(row?.amountCents || 0));
+    const signedAmount = signedLedgerAmountCents(row);
     runningBalance += signedAmount;
     const description =
       String(row?.notes || "").trim() ||
-      [row?.category, row?.method, row?.reference].map((value) => String(value || "").trim()).filter(Boolean).join(" · ") ||
+      [formatLedgerExportLabel(row?.category), row?.method, row?.reference].map((value) => String(value || "").trim()).filter((value) => value && value !== "-").join(" · ") ||
       "-";
     const values: Record<string, string> = {
       date: String(row?.effectiveDate || "-"),
-      type: String(row?.entryType || "-").replace(/_/g, " "),
+      type: formatLedgerExportLabel(row?.entryType),
       description,
       amount: formatLedgerCurrency(signedAmount),
       balance: formatLedgerCurrency(runningBalance),
@@ -3351,39 +3390,31 @@ router.get("/:leaseId/ledger/export.csv", async (req: any, res: Response) => {
     const labels = await resolveLeaseLedgerExportLabels(leaseCheck.lease);
     let runningBalance = 0;
     const header = [
-      "date",
-      "entryType",
-      "category",
-      "amountCents",
-      "signedAmountCents",
-      "balanceCents",
-      "method",
-      "reference",
-      "notes",
-      "property",
-      "unit",
-      "createdAt",
+      "Date",
+      "Type",
+      "Category",
+      "Amount",
+      "Balance",
+      "Method",
+      "Reference",
+      "Notes",
+      "Property",
+      "Unit",
     ];
     const rows = entries.map((entry: any) => {
-      const signed = entry.entryType === "payment"
-        ? -Math.abs(Number(entry.amountCents || 0))
-        : entry.entryType === "adjustment"
-        ? Number(entry.amountCents || 0) // Adjustments can be positive or negative
-        : Math.abs(Number(entry.amountCents || 0));
+      const signed = signedLedgerAmountCents(entry);
       runningBalance += signed;
       return [
-        entry.effectiveDate,
-        entry.entryType,
-        entry.category,
-        entry.amountCents,
-        signed,
-        runningBalance,
+        entry.effectiveDate || "",
+        formatLedgerExportLabel(entry.entryType),
+        formatLedgerExportLabel(entry.category),
+        formatLedgerCurrency(signed),
+        formatLedgerCurrency(runningBalance),
         entry.method || "",
         entry.reference || "",
         entry.notes || "",
         labels.property,
-        labels.unit,
-        entry.createdAt || "",
+        formatUnitLabel(labels.unit),
       ]
         .map(escapeCsvCell)
         .join(",");
@@ -3392,7 +3423,7 @@ router.get("/:leaseId/ledger/export.csv", async (req: any, res: Response) => {
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader(
       "Content-Disposition",
-      `attachment; filename=\"lease-ledger-${leaseId}.csv\"`
+      `attachment; filename=\"${labels.filenameSlug}.csv\"`
     );
     return res.status(200).send(csv);
   } catch (err) {
@@ -3420,7 +3451,7 @@ router.get("/:leaseId/ledger/export.pdf", async (req: any, res: Response) => {
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader(
       "Content-Disposition",
-      `attachment; filename=\"lease-ledger-${leaseId}.pdf\"`
+      `attachment; filename=\"${labels.filenameSlug}.pdf\"`
     );
     void recordPdfExportTelemetry({
       eventName: "pdf_export_completed",
@@ -3448,5 +3479,3 @@ router.get("/:leaseId/ledger/export.pdf", async (req: any, res: Response) => {
 });
 
 export default router;
-
-

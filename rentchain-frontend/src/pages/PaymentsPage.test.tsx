@@ -134,7 +134,7 @@ describe("PaymentsPage", () => {
     click.mockRestore();
   });
 
-  it("falls back to explicit IDs instead of unavailable labels when API labels are absent", async () => {
+  it("falls back to operational references instead of unavailable labels when API labels are absent", async () => {
     mocks.usePayments.mockReturnValue({
       payments: [
         {
@@ -157,8 +157,8 @@ describe("PaymentsPage", () => {
 
     render(<PaymentsPage />);
 
-    expect((await screen.findAllByText("Tenant tenant-2")).length).toBeGreaterThan(0);
-    expect((await screen.findAllByText("Property prop-2")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("Tenant ref tenant-2")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("Property ref prop-2")).length).toBeGreaterThan(0);
     expect(screen.queryByText(/unavailable/i)).not.toBeInTheDocument();
   });
 

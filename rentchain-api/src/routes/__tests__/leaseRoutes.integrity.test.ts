@@ -224,8 +224,22 @@ describe("leaseRoutes integrity repairs", () => {
       propertyId: "prop-1",
       tenantId: "tenant-1",
       unitId: "unit-1",
-      unitNumber: "101",
       status: "active",
+    });
+    seedDoc("units", "unit-1", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitNumber: "101",
+    });
+    seedDoc("units", "unit-1", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitNumber: "101",
+    });
+    seedDoc("units", "unit-1", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitNumber: "101",
     });
     seedDoc("ledgerEntries", "entry-1", {
       landlordId: "landlord-1",
@@ -406,8 +420,12 @@ describe("leaseRoutes integrity repairs", () => {
       propertyId: "prop-1",
       tenantId: "tenant-1",
       unitId: "unit-1",
-      unitNumber: "101",
       status: "active",
+    });
+    seedDoc("units", "unit-1", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitNumber: "101",
     });
     seedDoc("ledgerEntries", "entry-1", {
       landlordId: "landlord-1",
@@ -426,9 +444,16 @@ describe("leaseRoutes integrity repairs", () => {
 
     expect(res.status).toBe(200);
     expect(res.headers["content-type"]).toContain("text/csv");
-    expect(res.text).toContain("property,unit");
+    expect(res.text).toContain("Date,Type,Category,Amount,Balance,Method,Reference,Notes,Property,Unit");
+    expect(res.text).toContain("Charge");
+    expect(res.text).toContain("Rent");
+    expect(res.text).toContain("$1,800.00");
     expect(res.text).toContain("123 Main St");
     expect(res.text).toContain("101");
+    expect(res.text).not.toContain("amountCents");
+    expect(res.text).not.toContain("signedAmountCents");
+    expect(res.text).not.toContain("balanceCents");
+    expect(res.text).not.toContain("createdAt");
     expect(res.text).not.toContain("propertyId");
     expect(res.text).not.toContain("unitId");
     expect(res.text).not.toContain("prop-1");
@@ -446,8 +471,12 @@ describe("leaseRoutes integrity repairs", () => {
       propertyId: "prop-1",
       tenantId: "tenant-1",
       unitId: "unit-1",
-      unitNumber: "101",
       status: "active",
+    });
+    seedDoc("units", "unit-1", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitNumber: "101",
     });
     seedDoc("ledgerEntries", "entry-1", {
       landlordId: "landlord-1",
@@ -475,7 +504,7 @@ describe("leaseRoutes integrity repairs", () => {
 
     expect(res.status).toBe(200);
     expect(res.headers["content-type"]).toContain("application/pdf");
-    expect(res.headers["content-disposition"]).toContain("lease-ledger-lease-1.pdf");
+    expect(res.headers["content-disposition"]).toContain("lease-ledger-123-main-st-101.pdf");
     expect(Buffer.isBuffer(res.body)).toBe(true);
     expect(res.body.length).toBeGreaterThan(500);
   });
