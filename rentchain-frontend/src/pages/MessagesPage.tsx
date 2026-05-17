@@ -104,6 +104,60 @@ function buildConversationMeta(conversation: Conversation) {
   return displayConversationContext(conversation);
 }
 
+function tenantProfilePath(conversation: Conversation | null) {
+  const tenantId = String(conversation?.tenantId || "").trim();
+  return tenantId ? `/tenants?tenantId=${encodeURIComponent(tenantId)}` : null;
+}
+
+function TenantNameLabel({
+  conversation,
+  className,
+}: {
+  conversation: Conversation | null;
+  className?: string;
+}) {
+  const tenantName = displayTenantName(conversation);
+  return <span className={className}>{tenantName}</span>;
+}
+
+function TenantProfileButton({
+  conversation,
+  onClick,
+}: {
+  conversation: Conversation | null;
+  onClick?: React.MouseEventHandler<HTMLButtonElement>;
+}) {
+  const navigate = useNavigate();
+  const path = tenantProfilePath(conversation);
+  if (!path) return null;
+  return (
+    <button
+      type="button"
+      className="rc-messages-tenant-profile-button"
+      onClick={(event) => {
+        onClick?.(event);
+        if (event.defaultPrevented) return;
+        event.stopPropagation();
+        navigate(path);
+      }}
+    >
+      Profile
+    </button>
+  );
+}
+
+function ConversationHeaderTitle({ conversation }: { conversation: Conversation | null }) {
+  if (!conversation) return <>Conversation</>;
+  const locationLabel = displayConversationContext(conversation);
+  return (
+    <span className="rc-messages-thread-title-content">
+      <TenantNameLabel conversation={conversation} />
+      {locationLabel ? <span> • {locationLabel}</span> : null}
+      <TenantProfileButton conversation={conversation} />
+    </span>
+  );
+}
+
 export default function MessagesPage() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -390,10 +444,18 @@ export default function MessagesPage() {
                 conversations.map((c) => {
                   const isActive = c.id === selectedId;
                   return (
-                    <button
+                    <div
                       key={c.id}
                       className="rc-messages-list-item"
+                      role="button"
+                      tabIndex={0}
                       onClick={() => {
+                        setSelectedId(c.id);
+                        navigate(`/messages?threadId=${c.id}`);
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key !== "Enter" && event.key !== " ") return;
+                        event.preventDefault();
                         setSelectedId(c.id);
                         navigate(`/messages?threadId=${c.id}`);
                       }}
@@ -413,8 +475,9 @@ export default function MessagesPage() {
                         <div className="rc-messages-list-item-content">
                           <div className="rc-messages-list-item-row">
                             <div className="rc-messages-list-item-title">
-                              {displayTenantName(c)}
+                              <TenantNameLabel conversation={c} />
                             </div>
+                            <TenantProfileButton conversation={c} />
                             {c.hasUnread ? (
                               <span className="rc-messages-unread-dot" />
                             ) : null}
@@ -424,7 +487,7 @@ export default function MessagesPage() {
                           </div>
                         </div>
                       </div>
-                    </button>
+                    </div>
                   );
                 })
               )}
@@ -436,7 +499,7 @@ export default function MessagesPage() {
                 <>
                   <div className="rc-messages-thread-header">
                     <div className="rc-messages-thread-title">
-                      {selectedConversationTitle}
+                      <ConversationHeaderTitle conversation={selectedConversation} />
                     </div>
                   </div>
                   <div className="rc-messages-thread-body">
