@@ -66,7 +66,7 @@ export type JurisdictionWorkflowSummary = Pick<
   | "confidence"
 >;
 
-const LEGAL_ADVICE_DISCLAIMER =
+export const LEGAL_ADVICE_DISCLAIMER =
   "RentChain provides operational workflow guidance only. It does not provide legal advice, create legal conclusions, or replace review of current provincial forms and rules.";
 
 const WORKFLOW_REGISTRY: Record<SupportedLeaseWorkflowProvince, JurisdictionWorkflowConfig> = {

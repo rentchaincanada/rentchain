@@ -167,7 +167,7 @@ describe("leaseRoutes GET /active", () => {
   });
 
   it("returns landlord-scoped active leases with tenant and document details", async () => {
-    seedDoc("properties", "prop-1", { landlordId: "landlord-1", name: "Harbour View" });
+    seedDoc("properties", "prop-1", { landlordId: "landlord-1", name: "Harbour View", province: "NS" });
     seedDoc("tenants", "tenant-1", { landlordId: "landlord-1", fullName: "Jane Tenant", email: "jane@example.com" });
     seedDoc("leaseDrafts", "draft-1", { landlordId: "landlord-1", lastGeneratedSnapshotId: "snapshot-1" });
     seedDoc("leaseSnapshots", "snapshot-1", {
@@ -282,6 +282,14 @@ describe("leaseRoutes GET /active", () => {
           lifecycleLabel: "Active",
           requiredNextAction: "none",
         }),
+        jurisdictionProvince: "NS",
+        jurisdictionPolicies: expect.arrayContaining([
+          expect.objectContaining({
+            jurisdiction: "NS",
+            policyKey: "rent_increase_workflow_availability",
+            legalAdvice: false,
+          }),
+        ]),
         derivedLifecycleState: "active",
         derivedLifecycleReasons: ["signed_current_term"],
         derivedLifecycleRequiresReview: false,

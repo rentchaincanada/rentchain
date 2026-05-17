@@ -105,6 +105,20 @@ export type LeaseStateCoherence = {
   };
 };
 
+export type JurisdictionPolicyGuidance = {
+  jurisdiction: "NS" | "ON" | "UNKNOWN" | "UNSUPPORTED";
+  policyKey: string;
+  status: "ok" | "review" | "not_applicable" | "unknown";
+  severity: "info" | "warning" | "critical";
+  label: string;
+  reason: string;
+  recommendation: string;
+  sourceRuleKey: string;
+  confidence: "high" | "medium" | "low";
+  legalAdvice: false;
+  disclaimer: string;
+};
+
 export interface LandlordActiveLease extends Lease {
   propertyName: string;
   tenantName?: string | null;
@@ -181,6 +195,8 @@ export interface LandlordActiveLease extends Lease {
   } | null;
   leaseLifecycleSummary?: LeaseLifecycleSummary;
   stateCoherence?: LeaseStateCoherence | null;
+  jurisdictionProvince?: string | null;
+  jurisdictionPolicies?: JurisdictionPolicyGuidance[];
   hiddenFromActiveLists?: boolean;
   cleanupReason?: string | null;
   cleanupBatch?: string | null;
