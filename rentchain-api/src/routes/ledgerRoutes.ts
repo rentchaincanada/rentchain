@@ -9,6 +9,8 @@ import path from "path";
 import {
   previewPaymentCsvImport,
   type PaymentImportLease,
+  type PaymentImportPreviewRow,
+  type PaymentImportPreviewResult,
   type PaymentImportProperty,
   type PaymentImportTenant,
   type PaymentImportUnit,
@@ -42,6 +44,89 @@ function getLandlordId(req: any): string | null {
 async function listDocsForLandlord<T>(collection: string, landlordId: string): Promise<T[]> {
   const snap = await db.collection(collection).where("landlordId", "==", landlordId).get();
   return snap.docs.map((doc: any) => ({ id: doc.id, ...(doc.data() || {}) }) as T);
+}
+
+function cleanImportText(value: unknown, max = 500): string | null {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+  return raw.slice(0, max);
+}
+
+function normalizeMethod(value: unknown): string {
+  return String(value || "other").trim().toLowerCase().slice(0, 80) || "other";
+}
+
+function duplicateKeyFor(row: PaymentImportPreviewRow, landlordId: string): string {
+  return [
+    landlordId,
+    row.matchedTenantId || "",
+    row.leaseId || "",
+    row.paymentDate || "",
+    String(row.amountCents || 0),
+    normalizeMethod(row.method),
+    cleanImportText(row.reference, 120) || "",
+  ].join("|");
+}
+
+function rowIsImportEligible(row: PaymentImportPreviewRow): boolean {
+  return Boolean(
+    row.matchStatus === "matched" &&
+      row.confidence === "high" &&
+      !row.duplicateInFile &&
+      row.matchedTenantId &&
+      row.leaseId &&
+      row.propertyId &&
+      row.unitId &&
+      row.amountCents &&
+      row.amountCents > 0 &&
+      row.paymentDate
+  );
+}
+
+function buildPreviewBatch(params: {
+  landlordId: string;
+  createdBy: string;
+  filename: string;
+  preview: PaymentImportPreviewResult;
+}) {
+  const nowIso = new Date().toISOString();
+  return {
+    landlordId: params.landlordId,
+    createdBy: params.createdBy,
+    createdAt: nowIso,
+    updatedAt: nowIso,
+    source: "payment_csv",
+    status: "previewed",
+    filename: params.filename,
+    sanitizedSummary: params.preview.summary,
+    rowCount: params.preview.summary.totalRows,
+    selectedCount: 0,
+    importedCount: 0,
+    duplicateCount: 0,
+    failedCount: 0,
+    ignoredSensitiveColumnsDetected: Boolean(params.preview.notices.sensitiveColumnsOmitted),
+    ignoredColumnsDetected: Boolean(params.preview.notices.ignoredColumns),
+    notices: params.preview.notices,
+    rows: params.preview.rows,
+  };
+}
+
+async function hasDuplicatePayment(landlordId: string, row: PaymentImportPreviewRow): Promise<boolean> {
+  const snap = await db.collection("payments").where("landlordId", "==", landlordId).get();
+  const rowKey = duplicateKeyFor(row, landlordId);
+  return snap.docs.some((doc: any) => {
+    const data = doc.data?.() || {};
+    const existingRow: PaymentImportPreviewRow = {
+      ...row,
+      matchedTenantId: cleanImportText(data.tenantId, 160),
+      leaseId: cleanImportText(data.leaseId, 160),
+      amountCents: Number(data.amountCents || Math.round(Number(data.amount || 0) * 100)),
+      paymentDate: cleanImportText(data.effectiveDate || data.paidAt, 40),
+      method: cleanImportText(data.method, 80),
+      reference: cleanImportText(data.reference, 120),
+    } as PaymentImportPreviewRow;
+    return duplicateKeyFor(existingRow, landlordId) === rowKey;
+  });
 }
 
 router.post(
@@ -87,6 +172,16 @@ router.post(
           properties,
           units,
         });
+        const createdBy = req.user?.id || req.user?.email || landlordId;
+        await db.collection("ledgerImportBatches").doc(preview.importBatchId).set(
+          buildPreviewBatch({
+            landlordId,
+            createdBy,
+            filename: file.originalname || "payment-import.csv",
+            preview,
+          }),
+          { merge: false }
+        );
 
         return res.json(preview);
       } catch (err: any) {
@@ -94,6 +189,209 @@ router.post(
         return res.status(500).json({ ok: false, error: "PAYMENT_IMPORT_PREVIEW_FAILED" });
       }
     });
+  }
+);
+
+router.post(
+  "/imports/payment-csv/confirm",
+  requireAuth,
+  requirePermission(["ledger.record", "payments.record"]),
+  async (req: any, res) => {
+    res.setHeader("x-route-source", "ledgerRoutes.ts");
+    res.setHeader("x-payment-import-mode", "confirm");
+    try {
+      const landlordId = getLandlordId(req);
+      const createdBy = req.user?.id || req.user?.email || landlordId;
+      if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+
+      const importBatchId = String(req.body?.importBatchId || "").trim();
+      const selectedIds = new Set(
+        (Array.isArray(req.body?.selectedRowIds) ? req.body.selectedRowIds : [])
+          .map((value: any) => String(value || "").trim())
+          .filter(Boolean)
+      );
+      const selectedFingerprints = new Set(
+        (Array.isArray(req.body?.selectedRowFingerprints) ? req.body.selectedRowFingerprints : [])
+          .map((value: any) => String(value || "").trim())
+          .filter(Boolean)
+      );
+      if (!importBatchId) return res.status(400).json({ ok: false, error: "importBatchId is required" });
+      if (!selectedIds.size && !selectedFingerprints.size) {
+        return res.status(400).json({ ok: false, error: "At least one row must be selected" });
+      }
+
+      const batchRef = db.collection("ledgerImportBatches").doc(importBatchId);
+      const batchSnap = await batchRef.get();
+      if (!batchSnap.exists) return res.status(404).json({ ok: false, error: "IMPORT_BATCH_NOT_FOUND" });
+      const batch = batchSnap.data() || {};
+      if (batch.landlordId !== landlordId) return res.status(404).json({ ok: false, error: "IMPORT_BATCH_NOT_FOUND" });
+
+      const rows = Array.isArray(batch.rows) ? (batch.rows as PaymentImportPreviewRow[]) : [];
+      const selectedRows = rows.filter(
+        (row) => selectedIds.has(row.rowId) || selectedFingerprints.has(row.rowFingerprint)
+      );
+      if (!selectedRows.length) return res.status(400).json({ ok: false, error: "No selected rows were found in the import batch" });
+
+      const results: Array<{
+        rowId: string;
+        rowFingerprint: string;
+        status: "imported" | "duplicate" | "failed";
+        reason: string;
+        paymentDocumentId: string | null;
+        ledgerEntryId: string | null;
+      }> = [];
+      const now = Date.now();
+      const nowIso = new Date(now).toISOString();
+
+      for (const row of selectedRows) {
+        if (!rowIsImportEligible(row)) {
+          results.push({
+            rowId: row.rowId,
+            rowFingerprint: row.rowFingerprint,
+            status: "failed",
+            reason: "Row is not eligible for import. Only high-confidence matched rows can be imported.",
+            paymentDocumentId: null,
+            ledgerEntryId: null,
+          });
+          continue;
+        }
+
+        const leaseSnap = await db.collection("leases").doc(String(row.leaseId)).get();
+        const lease = leaseSnap.exists ? leaseSnap.data() || {} : null;
+        const leaseTenantIds = new Set(
+          [
+            lease?.tenantId,
+            lease?.primaryTenantId,
+            ...(Array.isArray(lease?.tenantIds) ? lease.tenantIds : []),
+          ].map((value: any) => String(value || "").trim()).filter(Boolean)
+        );
+        if (
+          !lease ||
+          lease.landlordId !== landlordId ||
+          !leaseTenantIds.has(String(row.matchedTenantId || "")) ||
+          String(lease.propertyId || "") !== row.propertyId ||
+          String(lease.unitId || "") !== row.unitId
+        ) {
+          results.push({
+            rowId: row.rowId,
+            rowFingerprint: row.rowFingerprint,
+            status: "failed",
+            reason: "Server-side lease context no longer matches the preview row.",
+            paymentDocumentId: null,
+            ledgerEntryId: null,
+          });
+          continue;
+        }
+
+        if (await hasDuplicatePayment(landlordId, row)) {
+          results.push({
+            rowId: row.rowId,
+            rowFingerprint: row.rowFingerprint,
+            status: "duplicate",
+            reason: "Exact payment duplicate already exists. Row was skipped.",
+            paymentDocumentId: null,
+            ledgerEntryId: null,
+          });
+          continue;
+        }
+
+        const paymentRef = db.collection("payments").doc();
+        const entryRef = db.collection("ledgerEntries").doc();
+        const method = normalizeMethod(row.method);
+        const reference = cleanImportText(row.reference, 120);
+        const notes = cleanImportText(row.notes, 5000);
+        const amountCents = Number(row.amountCents || 0);
+        const payment = {
+          id: paymentRef.id,
+          landlordId,
+          tenantId: row.matchedTenantId,
+          leaseId: row.leaseId,
+          propertyId: row.propertyId,
+          unitId: row.unitId,
+          amount: amountCents / 100,
+          amountCents,
+          paidAt: row.paymentDate,
+          effectiveDate: row.paymentDate,
+          method,
+          status: "recorded",
+          reference,
+          notes,
+          ledgerEntryId: entryRef.id,
+          createdAt: nowIso,
+          updatedAt: nowIso,
+          createdBy,
+          source: "payment_csv_import",
+          importBatchId,
+          importRowFingerprint: row.rowFingerprint,
+          duplicateKey: duplicateKeyFor(row, landlordId),
+        };
+        const entry = {
+          id: entryRef.id,
+          landlordId,
+          tenantId: row.matchedTenantId,
+          propertyId: row.propertyId,
+          unitId: row.unitId,
+          leaseId: row.leaseId,
+          entryType: "payment",
+          category: "payment",
+          amountCents,
+          effectiveDate: row.paymentDate,
+          method,
+          reference,
+          notes,
+          paymentDocumentId: paymentRef.id,
+          createdAt: now,
+          createdBy,
+          source: "payment_csv_import",
+          importBatchId,
+          importRowFingerprint: row.rowFingerprint,
+        };
+
+        await db.runTransaction(async (transaction: any) => {
+          transaction.set(paymentRef, payment, { merge: false });
+          transaction.set(entryRef, entry, { merge: false });
+        });
+        results.push({
+          rowId: row.rowId,
+          rowFingerprint: row.rowFingerprint,
+          status: "imported",
+          reason: "Payment and ledger entry created.",
+          paymentDocumentId: paymentRef.id,
+          ledgerEntryId: entryRef.id,
+        });
+      }
+
+      const importedCount = results.filter((row) => row.status === "imported").length;
+      const duplicateCount = results.filter((row) => row.status === "duplicate").length;
+      const failedCount = results.filter((row) => row.status === "failed").length;
+      const status = failedCount && importedCount ? "partially_imported" : failedCount && !importedCount ? "failed" : "imported";
+      await batchRef.set(
+        {
+          status,
+          selectedCount: selectedRows.length,
+          importedCount,
+          duplicateCount,
+          failedCount,
+          updatedAt: new Date().toISOString(),
+          importedAt: importedCount ? new Date().toISOString() : null,
+          resultSummary: { importedCount, duplicateCount, failedCount },
+        },
+        { merge: true }
+      );
+
+      return res.json({
+        ok: true,
+        importBatchId,
+        importedCount,
+        duplicateCount,
+        failedCount,
+        results,
+        warnings: duplicateCount ? ["Exact duplicate payments were skipped."] : [],
+      });
+    } catch (err: any) {
+      console.error("[ledger] payment csv confirm failed", err?.message || err);
+      return res.status(500).json({ ok: false, error: "PAYMENT_IMPORT_CONFIRM_FAILED" });
+    }
   }
 );
 

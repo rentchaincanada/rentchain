@@ -4,15 +4,18 @@ import { PaymentCsvImportPreviewCard } from "./PaymentCsvImportPreviewCard";
 
 const mocks = vi.hoisted(() => ({
   previewLedgerPaymentCsvImportMock: vi.fn(),
+  confirmLedgerPaymentCsvImportMock: vi.fn(),
 }));
 
 vi.mock("@/api/ledgerPaymentImportApi", () => ({
+  confirmLedgerPaymentCsvImport: mocks.confirmLedgerPaymentCsvImportMock,
   previewLedgerPaymentCsvImport: mocks.previewLedgerPaymentCsvImportMock,
 }));
 
 describe("PaymentCsvImportPreviewCard", () => {
   beforeEach(() => {
     mocks.previewLedgerPaymentCsvImportMock.mockReset();
+    mocks.confirmLedgerPaymentCsvImportMock.mockReset();
   });
 
   afterEach(() => {
@@ -130,11 +133,12 @@ describe("PaymentCsvImportPreviewCard", () => {
     expect(screen.getByText("Sensitive banking columns were detected and omitted from preview/import.")).toBeInTheDocument();
     expect(screen.getByText("1 rows matched tenant lease records. 1 rows are blocked until the row-level issue is fixed.")).toBeInTheDocument();
     expect(screen.getByText("Matched by: Tenant + Property + Unit")).toBeInTheDocument();
+    expect(screen.getByLabelText("Select row 2")).toBeChecked();
+    expect(screen.getByLabelText("Select row 3")).toBeDisabled();
     expect(screen.getAllByText("Harbour View").length).toBeGreaterThan(0);
     expect(screen.getByText("Bailey Blinkers")).toBeInTheDocument();
     expect(screen.getByText("Unknown Tenant")).toBeInTheDocument();
-    expect(screen.getByText("Preview only. Payment and ledger writes require a separate confirmation flow and are not enabled in this version.")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /confirm import/i })).not.toBeInTheDocument();
+    expect(screen.getByText("Preview is read-only until you click Import selected payments. Blocked, ambiguous, invalid, duplicate, and low-confidence rows are not imported.")).toBeInTheDocument();
   });
 
   it("requires a selected file before preview", () => {
@@ -157,5 +161,88 @@ describe("PaymentCsvImportPreviewCard", () => {
     expect(click).toHaveBeenCalledTimes(1);
     expect(revokeObjectURL).toHaveBeenCalledWith("blob:template");
     click.mockRestore();
+  });
+
+  it("confirms selected eligible rows and renders the import result", async () => {
+    const onImportComplete = vi.fn();
+    mocks.previewLedgerPaymentCsvImportMock.mockResolvedValue({
+      ok: true,
+      importBatchId: "batch-1",
+      filename: "payments.csv",
+      notices: { ignoredColumns: false, sensitiveColumnsOmitted: false, messages: [] },
+      summary: {
+        totalRows: 1,
+        totalPaymentAmountCents: 15000,
+        totalPaymentAmountDisplay: "$150.00",
+        matchedRows: 1,
+        highConfidenceRows: 1,
+        mediumConfidenceRows: 0,
+        lowConfidenceRows: 0,
+        unmatchedRows: 0,
+        ambiguousRows: 0,
+        invalidRows: 0,
+        preselectedRows: 1,
+        duplicateRows: 0,
+        groupedByProperty: [{ propertyLabel: "Harbour View", rowCount: 1, amountCents: 15000, amountDisplay: "$150.00" }],
+      },
+      rows: [
+        {
+          rowId: "row-1",
+          sourceRowNumber: 2,
+          sourceFileName: "payments.csv",
+          tenantName: "Bailey Blinkers",
+          tenantEmail: null,
+          property: "Harbour View",
+          unit: "1",
+          amountCents: 15000,
+          amountDisplay: "$150.00",
+          paymentDate: "2026-05-15",
+          method: "etransfer",
+          reference: "may",
+          notes: null,
+          matchStatus: "matched",
+          confidence: "high",
+          preselected: true,
+          warning: null,
+          reason: "Tenant name, property, and unit matched an active lease.",
+          matchBasis: ["tenant", "property", "unit"],
+          matchedTenantId: "tenant-1",
+          matchedTenantName: "Bailey Blinkers",
+          leaseId: "lease-1",
+          propertyId: "property-1",
+          propertyLabel: "Harbour View",
+          unitId: "unit-1",
+          unitLabel: "Unit 1",
+          duplicateInFile: false,
+          rowFingerprint: "abc",
+        },
+      ],
+    });
+    mocks.confirmLedgerPaymentCsvImportMock.mockResolvedValue({
+      ok: true,
+      importBatchId: "batch-1",
+      importedCount: 1,
+      duplicateCount: 0,
+      failedCount: 0,
+      results: [{ rowId: "row-1", rowFingerprint: "abc", status: "imported", reason: "ok", paymentDocumentId: "payment-1", ledgerEntryId: "entry-1" }],
+      warnings: [],
+    });
+
+    render(<PaymentCsvImportPreviewCard onImportComplete={onImportComplete} />);
+    const input = screen.getByLabelText("Payment CSV file") as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [new File(["csv"], "payments.csv", { type: "text/csv" })] } });
+    fireEvent.click(screen.getByRole("button", { name: "Preview CSV" }));
+    expect(await screen.findByRole("button", { name: "Import selected payments (1)" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Import selected payments (1)" }));
+
+    await waitFor(() =>
+      expect(mocks.confirmLedgerPaymentCsvImportMock).toHaveBeenCalledWith({
+        importBatchId: "batch-1",
+        selectedRowIds: ["row-1"],
+      })
+    );
+    expect(await screen.findByText("Import result")).toBeInTheDocument();
+    expect(screen.getByText("Imported 1 rows. Skipped duplicates 0. Failed 0.")).toBeInTheDocument();
+    expect(onImportComplete).toHaveBeenCalledTimes(1);
   });
 });
