@@ -1,3 +1,9 @@
+import {
+  getJurisdictionWorkflowConfig,
+  listJurisdictionWorkflowConfigs,
+  normalizeLeaseWorkflowProvince,
+} from "../lib/jurisdiction/leaseWorkflowRegistry";
+
 export type LeaseNoticeWorkflowFlag = {
   enabled: boolean;
   source: string;
@@ -31,38 +37,73 @@ export type LeaseNoticeRule = {
   ruleVersion: string;
 };
 
-const RULES: LeaseNoticeRule[] = [
-  {
-    province: "NS",
-    leaseType: "fixed_term",
-    noticeLeadDays: 90,
-    templateKey: "ns.fixed_term.renewal_offer.v1",
-    allowedNoticeTypes: ["renewal_offer", "end_of_term_notice"],
-    allowUndecidedRent: true,
-    requireTermDates: true,
-    ruleVersion: "ns-v1",
-  },
-  {
-    province: "NS",
-    leaseType: "year_to_year",
-    noticeLeadDays: 90,
-    templateKey: "ns.year_to_year.notice.v1",
-    allowedNoticeTypes: ["renewal_offer", "end_of_term_notice"],
-    allowUndecidedRent: true,
-    requireTermDates: true,
-    ruleVersion: "ns-v1",
-  },
-  {
-    province: "NS",
-    leaseType: "month_to_month",
-    noticeLeadDays: 30,
-    templateKey: "ns.month_to_month.notice.v1",
-    allowedNoticeTypes: ["month_to_month_notice", "non_renewal"],
-    allowUndecidedRent: true,
-    requireTermDates: false,
-    ruleVersion: "ns-v1",
-  },
-];
+function buildRules(): LeaseNoticeRule[] {
+  const rules: LeaseNoticeRule[] = [];
+  for (const workflow of listJurisdictionWorkflowConfigs()) {
+    if (workflow.province === "NS") {
+      rules.push(
+        {
+          province: "NS",
+          leaseType: "fixed_term",
+          noticeLeadDays: workflow.defaultWorkflow.leaseRenewalReminderDays,
+          templateKey: "ns.fixed_term.renewal_offer.v1",
+          allowedNoticeTypes: ["renewal_offer", "end_of_term_notice"],
+          allowUndecidedRent: true,
+          requireTermDates: true,
+          ruleVersion: "ns-v1",
+        },
+        {
+          province: "NS",
+          leaseType: "year_to_year",
+          noticeLeadDays: workflow.noticePeriods.leaseTerminationByLeaseType.year_to_year || 90,
+          templateKey: "ns.year_to_year.notice.v1",
+          allowedNoticeTypes: ["renewal_offer", "end_of_term_notice"],
+          allowUndecidedRent: true,
+          requireTermDates: true,
+          ruleVersion: "ns-v1",
+        },
+        {
+          province: "NS",
+          leaseType: "month_to_month",
+          noticeLeadDays: workflow.noticePeriods.leaseTerminationByLeaseType.month_to_month || 30,
+          templateKey: "ns.month_to_month.notice.v1",
+          allowedNoticeTypes: ["month_to_month_notice", "non_renewal"],
+          allowUndecidedRent: true,
+          requireTermDates: false,
+          ruleVersion: "ns-v1",
+        }
+      );
+    }
+
+    if (workflow.province === "ON") {
+      rules.push(
+        {
+          province: "ON",
+          leaseType: "fixed_term",
+          noticeLeadDays: workflow.defaultWorkflow.leaseRenewalReminderDays,
+          templateKey: "on.fixed_term.workflow_review.v1",
+          allowedNoticeTypes: ["renewal_offer", "end_of_term_notice"],
+          allowUndecidedRent: true,
+          requireTermDates: false,
+          ruleVersion: "on-v1",
+        },
+        {
+          province: "ON",
+          leaseType: "month_to_month",
+          noticeLeadDays: workflow.noticePeriods.leaseTerminationByLeaseType.month_to_month || 60,
+          templateKey: "on.month_to_month.workflow_review.v1",
+          allowedNoticeTypes: ["month_to_month_notice", "non_renewal"],
+          allowUndecidedRent: true,
+          requireTermDates: false,
+          ruleVersion: "on-v1",
+        }
+      );
+    }
+  }
+  return rules;
+}
+
+const RULES: LeaseNoticeRule[] = buildRules();
 
 export function getLeaseNoticeWorkflowFlag(): LeaseNoticeWorkflowFlag {
   const raw = String(process.env.LEASE_NOTICE_WORKFLOW_ENABLED || "").trim().toLowerCase();
@@ -76,7 +117,7 @@ export function resolveLeaseNoticeRule(input: {
   province?: string | null;
   leaseType?: string | null;
 }): LeaseNoticeRule | null {
-  const province = String(input.province || "").trim().toUpperCase();
+  const province = normalizeLeaseWorkflowProvince(input.province);
   const leaseType = String(input.leaseType || "").trim().toLowerCase();
   if (!province || !leaseType) return null;
   return (
@@ -86,4 +127,8 @@ export function resolveLeaseNoticeRule(input: {
 
 export function listSupportedLeaseNoticeRules() {
   return [...RULES];
+}
+
+export function resolveLeaseWorkflowConfig(input: { province?: string | null }) {
+  return getJurisdictionWorkflowConfig(input.province);
 }

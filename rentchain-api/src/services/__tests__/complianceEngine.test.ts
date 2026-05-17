@@ -10,15 +10,28 @@ describe("complianceEngine", () => {
     const rules = getComplianceRules("ON");
     expect(rules.province).toBe("ON");
     expect(rules.complianceVersion).toBe("v1");
-    expect(rules.rentIncrease.minMonthsBetweenIncreases).toBeGreaterThan(0);
-    expect(rules.rentIncrease.noticeDays).toBeGreaterThan(0);
-    expect(rules.notices.entryNoticeMinHours).toBeGreaterThan(0);
+    expect(rules.rentIncrease).toMatchObject({
+      minMonthsBetweenIncreases: 12,
+      noticeDays: 90,
+    });
+    expect(rules.notices.entryNoticeMinHours).toBe(24);
+    expect(rules.workflow).toMatchObject({
+      leaseTemplateType: "standard_residential_on",
+      fixedTermContinuation: "continues_periodic",
+      legalAdviceDisclaimer: expect.stringContaining("does not provide legal advice"),
+    });
   });
 
-  it("loads NS stub rules", () => {
+  it("loads Nova Scotia workflow rules", () => {
     const rules = getComplianceRules("NS");
     expect(rules.province).toBe("NS");
     expect(rules.complianceVersion).toBe("v1");
+    expect(rules.rentIncrease.noticeDays).toBe(120);
+    expect(rules.leaseEnd.renewalWindowDays).toBe(90);
+    expect(rules.workflow).toMatchObject({
+      leaseTemplateType: "standard_residential_ns_form_p",
+      fixedTermContinuation: "ends_on_term_end",
+    });
   });
 
   it("normalizes and validates province codes", () => {

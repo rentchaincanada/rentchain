@@ -5,6 +5,10 @@ import {
   getComplianceRules,
   listComplianceProvinces,
 } from "../services/complianceEngine";
+import {
+  getJurisdictionWorkflowConfig,
+  toJurisdictionWorkflowSummary,
+} from "../lib/jurisdiction/leaseWorkflowRegistry";
 
 const router = Router();
 
@@ -35,6 +39,7 @@ router.get("/rules", requireAuth, (req: any, res) => {
 
   const province = normalized as "ON" | "NS";
   const rules = getComplianceRules(province);
+  const workflow = getJurisdictionWorkflowConfig(province);
   return res.status(200).json({
     ok: true,
     province,
@@ -43,7 +48,9 @@ router.get("/rules", requireAuth, (req: any, res) => {
       rentIncrease: rules.rentIncrease,
       leaseEnd: rules.leaseEnd,
       notices: rules.notices,
+      workflow: rules.workflow,
     },
+    jurisdictionWorkflow: workflow ? toJurisdictionWorkflowSummary(workflow) : null,
   });
 });
 

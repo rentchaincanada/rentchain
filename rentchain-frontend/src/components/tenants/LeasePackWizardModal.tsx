@@ -14,6 +14,7 @@ import { useToast } from "../ui/ToastProvider";
 import { apiJson } from "@/api/http";
 import { createPdfExportTimer, errorCodeFromUnknown, recordPdfExportEvent } from "@/lib/pdfExportObservability";
 import { normalizeProvinceCode, provinceLabelFromCode, type ProvinceCode } from "@/lib/provinces";
+import { getJurisdictionWorkflow } from "@/lib/jurisdictionLeaseWorkflow";
 import { LeaseRiskCard } from "@/components/leases/LeaseRiskCard";
 
 interface Props {
@@ -154,6 +155,7 @@ export const LeasePackWizardModal: React.FC<Props> = ({
 
   const isNsProvince = provinceCode === "NS";
   const isOntario = provinceCode === "ON";
+  const jurisdictionWorkflow = getJurisdictionWorkflow(provinceCode);
   const provinceUnset = !provinceCode || provinceCode === "UNSET";
   const blockingProvinceError =
     !provinceLoading && provinceUnset ? "Set property province to generate lease pack" : "";
@@ -364,6 +366,41 @@ export const LeasePackWizardModal: React.FC<Props> = ({
           <a href="/help/templates" style={{ color: "#2563eb", textDecoration: "underline" }}>
             Templates
           </a>
+        </div>
+
+        <div
+          style={{
+            border: "1px solid #bfdbfe",
+            background: "#eff6ff",
+            color: "#1e3a8a",
+            padding: 10,
+            borderRadius: 8,
+            fontSize: 13,
+            display: "grid",
+            gap: 4,
+          }}
+        >
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+            <span
+              style={{
+                display: "inline-flex",
+                borderRadius: 999,
+                background: "#dbeafe",
+                color: "#1d4ed8",
+                padding: "3px 8px",
+                fontWeight: 800,
+                fontSize: 12,
+              }}
+            >
+              {jurisdictionWorkflow?.badgeLabel || "Jurisdiction review"}
+            </span>
+            <span>{jurisdictionWorkflow?.guidanceCopy || "Set property province to show workflow guidance."}</span>
+          </div>
+          {jurisdictionWorkflow ? (
+            <div style={{ color: "#475569" }}>
+              Template workflow: {jurisdictionWorkflow.leaseTemplateType.replace(/_/g, " ")}
+            </div>
+          ) : null}
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 10 }}>
