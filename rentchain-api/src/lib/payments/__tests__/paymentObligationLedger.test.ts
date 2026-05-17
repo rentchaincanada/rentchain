@@ -190,7 +190,57 @@ describe("paymentObligationLedger", () => {
     );
   });
 
-  it("keeps imported canonical payments outside the lease term in manual review", () => {
+  it("reconciles same-lease imported payments shortly before lease start as prepaid rent evidence", () => {
+    const rows = buildPaymentObligationLedgerRows({
+      leases: [
+        {
+          ...lease,
+          startDate: "2026-05-31",
+          endDate: "2027-05-29",
+          monthlyRent: 164000,
+          amountCents: 164000,
+        },
+      ],
+      canonicalPayments: [
+        {
+          id: "payment-import-prepaid-1",
+          leaseId: "lease-1",
+          amountCents: 164000,
+          status: "recorded",
+          effectiveDate: "2026-05-05",
+          source: "payment_csv_import",
+        },
+        {
+          id: "payment-import-prepaid-2",
+          leaseId: "lease-1",
+          amountCents: 164000,
+          status: "recorded",
+          effectiveDate: "2026-05-17",
+          source: "payment_csv_import",
+        },
+      ],
+    });
+
+    expect(rows[0]).toEqual(
+      expect.objectContaining({
+        expectedAmountCents: 164000,
+        paidAmountCents: 328000,
+        obligationStatus: "overpaid",
+        evidenceStatus: "reconciled",
+        source: "canonical_payment",
+        reasons: expect.arrayContaining(["paid_amount_above_expected", "canonical_payment_recorded"]),
+      })
+    );
+    expect(summarizePaymentObligationLedger(rows)).toEqual(
+      expect.objectContaining({
+        expectedAmountCents: 164000,
+        paidAmountCents: 328000,
+        outstandingAmountCents: 0,
+      })
+    );
+  });
+
+  it("keeps imported canonical payments outside the prepayment and lease term window in manual review", () => {
     const rows = buildPaymentObligationLedgerRows({
       leases: [lease],
       canonicalPayments: [
@@ -199,7 +249,7 @@ describe("paymentObligationLedger", () => {
           leaseId: "lease-1",
           amountCents: 180000,
           status: "recorded",
-          effectiveDate: "2026-03-31",
+          effectiveDate: "2026-02-01",
           source: "payment_csv_import",
         },
       ],

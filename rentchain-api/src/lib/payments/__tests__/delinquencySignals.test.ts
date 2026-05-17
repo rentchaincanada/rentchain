@@ -148,6 +148,28 @@ describe("delinquencySignals", () => {
     ]);
   });
 
+  it("does not derive missing payment when canonical payment evidence clears outstanding amount", () => {
+    const signals = deriveDelinquencySignals(
+      [
+        row({
+          rowId: "canonical-paid",
+          paymentIntentId: null,
+          rentPaymentId: null,
+          paymentDocumentId: "payment-1",
+          obligationStatus: "overpaid",
+          expectedAmountCents: 164000,
+          paidAmountCents: 492000,
+          evidenceStatus: "reconciled",
+          source: "canonical_payment",
+          dueDate: "2026-05-05",
+        }),
+      ],
+      "2026-05-17T00:00:00.000Z"
+    );
+
+    expect(signals).toEqual([]);
+  });
+
   it("derives manual_review_required for manual review and unknown obligation states", () => {
     const signals = deriveDelinquencySignals(
       [

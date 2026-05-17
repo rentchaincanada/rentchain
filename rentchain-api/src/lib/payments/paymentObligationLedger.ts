@@ -138,6 +138,7 @@ const PENDING_PAYMENT_INTENT_STATUSES = new Set<PaymentIntentStatus>([
   "pending_settlement",
 ]);
 const PAID_PAYMENT_INTENT_STATUSES = new Set<PaymentIntentStatus>(["confirmed", "reconciled"]);
+const PREPAID_RENT_WINDOW_DAYS = 31;
 
 function asString(value: unknown, max = 500): string | null {
   const next = String(value ?? "").trim().slice(0, max);
@@ -238,7 +239,7 @@ function paymentFallsWithinLeaseTerm(payment: PaymentObligationCanonicalPaymentI
   if (paymentDate === null) return true;
   const start = dateOnlyMillis(lease.startDate);
   const end = dateOnlyMillis(lease.endDate);
-  if (start !== null && paymentDate < start) return false;
+  if (start !== null && paymentDate < start - PREPAID_RENT_WINDOW_DAYS * 86_400_000) return false;
   if (end !== null && paymentDate > end) return false;
   return true;
 }

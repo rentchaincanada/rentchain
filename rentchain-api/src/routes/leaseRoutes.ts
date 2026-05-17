@@ -1389,6 +1389,45 @@ async function loadLeaseCanonicalPaymentsForObligationLedger(
     }));
 }
 
+function buildCanonicalPaymentEvidenceFromLedgerEntries(
+  entries: any[],
+  existingPayments: PaymentObligationCanonicalPaymentInput[]
+): PaymentObligationCanonicalPaymentInput[] {
+  const existingPaymentDocumentIds = new Set(
+    existingPayments.map((payment) => String(payment.paymentDocumentId || payment.id || "").trim()).filter(Boolean)
+  );
+  const existingLedgerEntryIds = new Set(
+    existingPayments.map((payment) => String(payment.ledgerEntryId || "").trim()).filter(Boolean)
+  );
+  return (entries || [])
+    .filter((entry: any) => String(entry?.entryType || entry?.type || "").trim().toLowerCase() === "payment")
+    .filter((entry: any) => {
+      const entryId = String(entry?.id || "").trim();
+      const paymentDocumentId = String(entry?.paymentDocumentId || "").trim();
+      if (entryId && existingLedgerEntryIds.has(entryId)) return false;
+      if (paymentDocumentId && existingPaymentDocumentIds.has(paymentDocumentId)) return false;
+      return true;
+    })
+    .map((entry: any) => ({
+      id: String(entry?.paymentDocumentId || entry?.id || "").trim(),
+      paymentDocumentId: String(entry?.paymentDocumentId || "").trim() || null,
+      leaseId: String(entry?.leaseId || "").trim(),
+      tenantId: String(entry?.tenantId || "").trim() || null,
+      landlordId: String(entry?.landlordId || "").trim() || null,
+      propertyId: String(entry?.propertyId || "").trim() || null,
+      unitId: String(entry?.unitId || "").trim() || null,
+      amountCents: Math.max(0, Math.round(Number(entry?.amountCents || 0))),
+      currency: "cad",
+      status: "recorded",
+      paidAt: String(entry?.paidAt || entry?.effectiveDate || "").trim() || null,
+      effectiveDate: String(entry?.effectiveDate || entry?.paidAt || "").trim() || null,
+      method: String(entry?.method || "").trim() || null,
+      reference: String(entry?.reference || "").trim() || null,
+      source: String(entry?.source || "ledger_entry_payment").trim() || "ledger_entry_payment",
+      ledgerEntryId: String(entry?.id || "").trim() || null,
+    }));
+}
+
 async function loadLeaseReconciliationRecordsForObligationLedger(params: {
   leaseId: string;
   paymentIntentIds: string[];
@@ -3173,6 +3212,7 @@ router.get("/:leaseId/ledger", async (req: any, res: Response) => {
     const obligationRentPayments = await loadLeaseRentPaymentsForObligationLedger(leaseId, landlordId);
     const obligationPaymentIntents = await loadLeasePaymentIntentsForObligationLedger(leaseId, landlordId);
     const obligationCanonicalPayments = await loadLeaseCanonicalPaymentsForObligationLedger(leaseId, landlordId);
+    const obligationLedgerPaymentEvidence = buildCanonicalPaymentEvidenceFromLedgerEntries(entries, obligationCanonicalPayments);
     const obligationReconciliationRecords = await loadLeaseReconciliationRecordsForObligationLedger({
       leaseId,
       paymentIntentIds: obligationPaymentIntents.map((record: any) => String(record?.paymentIntentId || "").trim()),
@@ -3189,7 +3229,7 @@ router.get("/:leaseId/ledger", async (req: any, res: Response) => {
       ],
       paymentIntents: obligationPaymentIntents as any,
       rentPayments: obligationRentPayments,
-      canonicalPayments: obligationCanonicalPayments,
+      canonicalPayments: [...obligationCanonicalPayments, ...obligationLedgerPaymentEvidence],
       reconciliationRecords: obligationReconciliationRecords,
     });
     const delinquencySignals = deriveDelinquencySignals(obligationRows);

@@ -192,7 +192,7 @@ function deriveSignalTypes(
     signals.push({ signalType: "overdue", reasons: [`obligation_${status}_after_due_date`] });
   }
 
-  if (!hasRentPayment && pastDue) {
+  if (!hasRentPayment && pastDue && outstandingAmountCents > 0) {
     signals.push({ signalType: "missing_payment", reasons: ["missing_rent_payment_after_due_date"] });
   }
 
