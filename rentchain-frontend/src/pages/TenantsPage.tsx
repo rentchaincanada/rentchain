@@ -168,6 +168,13 @@ function describeTenantLinkage(
   };
 }
 
+function getTenantCurrentLeaseId(
+  tenant?: TenantApiModel | null,
+  currentLease?: TenantLeaseSummary | null
+): string {
+  return String(currentLease?.id || tenant?.currentLeaseId || "").trim();
+}
+
 type TenantsErrorBoundaryState = {
   hasError: boolean;
   debugId: string;
@@ -457,8 +464,12 @@ const loadTenants = useCallback(async () => {
   const { bundle: selectedTenantDetailBundle } = useTenantDetail(tenantExists ? selectedTenantId : null);
   const selectedCurrentLease =
     selectedTenantDetailBundle?.currentLease || selectedTenantDetailBundle?.lease || null;
+  const selectedCurrentLeaseId = getTenantCurrentLeaseId(selectedTenant, selectedCurrentLease);
   const selectedTenantLinkage = selectedTenant
     ? describeTenantLinkage(selectedTenant, selectedCurrentLease)
+    : null;
+  const selectedLeaseLedgerPath = selectedCurrentLeaseId
+    ? `/leases/${encodeURIComponent(selectedCurrentLeaseId)}/ledger`
     : null;
 
   const filteredTenants = useMemo(() => {
@@ -958,6 +969,89 @@ const loadTenants = useCallback(async () => {
                     </div>
                     <div style={{ fontSize: 12, color: text.muted }}>{selectedTenantLinkage.linkageNote}</div>
                   </div>
+                </Section>
+              ) : null}
+              {selectedTenant && selectedTenantLinkage ? (
+                <Section>
+                  <Card>
+                    <div style={{ display: "grid", gap: 12 }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "flex-start",
+                          justifyContent: "space-between",
+                          gap: 12,
+                          flexWrap: "wrap",
+                        }}
+                      >
+                        <div style={{ display: "grid", gap: 4, minWidth: 220 }}>
+                          <div style={{ fontSize: 16, fontWeight: 700, color: text.primary }}>
+                            Lease ledger
+                          </div>
+                          <div style={{ fontSize: 13, color: text.muted, lineHeight: 1.45 }}>
+                            Current lease charges, payments, balances, and exports.
+                          </div>
+                        </div>
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                          {[
+                            "View ledger",
+                            "Record payment",
+                            "Export ledger",
+                          ].map((label) => (
+                            <button
+                              key={label}
+                              type="button"
+                              disabled={!selectedLeaseLedgerPath}
+                              onClick={() => {
+                                if (selectedLeaseLedgerPath) navigate(selectedLeaseLedgerPath);
+                              }}
+                              style={{
+                                padding: "8px 10px",
+                                borderRadius: radius.md,
+                                border: `1px solid ${colors.border}`,
+                                background: selectedLeaseLedgerPath ? colors.card : colors.panel,
+                                color: selectedLeaseLedgerPath ? text.primary : text.muted,
+                                cursor: selectedLeaseLedgerPath ? "pointer" : "not-allowed",
+                              }}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+                          gap: 10,
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: text.muted }}>Property</div>
+                          <div style={{ marginTop: 4, fontSize: 14, color: text.primary }}>
+                            {selectedTenantLinkage.propertyLabel}
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: text.muted }}>Unit</div>
+                          <div style={{ marginTop: 4, fontSize: 14, color: text.primary }}>
+                            {selectedTenantLinkage.unitLabel}
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: text.muted }}>Current lease</div>
+                          <div style={{ marginTop: 4, fontSize: 14, color: text.primary }}>
+                            {selectedTenantLinkage.leaseLabel}
+                          </div>
+                        </div>
+                      </div>
+                      {!selectedLeaseLedgerPath ? (
+                        <div style={{ fontSize: 12, color: text.muted }}>
+                          Link a current lease before using lease ledger actions.
+                        </div>
+                      ) : null}
+                    </div>
+                  </Card>
                 </Section>
               ) : null}
               <Section style={{ minHeight: 0 }}>
