@@ -37,6 +37,11 @@ export type PaymentImportPreviewResponse = {
   ok: true;
   importBatchId: string;
   filename: string;
+  notices?: {
+    ignoredColumns: boolean;
+    sensitiveColumnsOmitted: boolean;
+    messages: string[];
+  };
   summary: {
     totalRows: number;
     totalPaymentAmountCents: number;

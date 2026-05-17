@@ -136,6 +136,26 @@ export function PaymentCsvImportPreviewCard() {
 
       {preview ? (
         <div style={{ display: "grid", gap: 12 }}>
+          {preview.notices?.messages?.length ? (
+            <div style={{ display: "grid", gap: 6 }}>
+              {preview.notices.messages.map((message) => (
+                <div
+                  key={message}
+                  style={{
+                    border: "1px solid #fde68a",
+                    background: "#fffbeb",
+                    color: "#92400e",
+                    borderRadius: 10,
+                    padding: "8px 10px",
+                    fontSize: 13,
+                  }}
+                >
+                  {message}
+                </div>
+              ))}
+            </div>
+          ) : null}
+
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 8 }}>
             <SummaryTile label="Rows" value={String(preview.summary.totalRows)} />
             <SummaryTile label="Total amount" value={preview.summary.totalPaymentAmountDisplay} />

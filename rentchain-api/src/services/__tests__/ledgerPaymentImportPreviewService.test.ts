@@ -148,6 +148,56 @@ describe("ledgerPaymentImportPreviewService", () => {
     });
   });
 
+  it("ignores sensitive bank export columns without echoing their values", () => {
+    const result = preview(
+      [
+        "Date,First Name,Last Name,Rent Amount,Property,Unit,Reference,Bank Account Number,Transit Number,Institution Number,Running Balance,Memo",
+        "2026-05-15,Bailey,Blinkers,1640,Harbour View,1,receipt-safe,123456789,00123,004,99999.99,account 123456789 transfer",
+      ].join("\n")
+    );
+
+    expect(result.rows[0]).toMatchObject({
+      tenantName: "Bailey Blinkers",
+      reference: "receipt-safe",
+      amountCents: 164000,
+      paymentDate: "2026-05-15",
+      matchStatus: "matched",
+      confidence: "high",
+    });
+    expect(result.notices).toEqual({
+      ignoredColumns: true,
+      sensitiveColumnsOmitted: true,
+      messages: [
+        "Some columns were ignored because they are not needed for rent payment import.",
+        "Sensitive banking columns were detected and omitted from preview/import.",
+      ],
+    });
+
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain("123456789");
+    expect(serialized).not.toContain("00123");
+    expect(serialized).not.toContain("99999.99");
+    expect(serialized).not.toContain("account 123456789 transfer");
+    expect(serialized).not.toContain("Bank Account Number");
+    expect(serialized).not.toContain("Transit Number");
+  });
+
+  it("reports generic ignored columns without returning ignored values", () => {
+    const result = preview(
+      [
+        "tenantName,property,unit,amount,paymentDate,Unneeded Export Column",
+        "Bailey Blinkers,Harbour View,1,150,2026-05-15,internal-bank-note",
+      ].join("\n")
+    );
+
+    expect(result.notices.ignoredColumns).toBe(true);
+    expect(result.notices.sensitiveColumnsOmitted).toBe(false);
+    expect(result.notices.messages).toEqual([
+      "Some columns were ignored because they are not needed for rent payment import.",
+    ]);
+    expect(JSON.stringify(result)).not.toContain("internal-bank-note");
+  });
+
   it("marks tenant name and property matches without unit as medium confidence", () => {
     const result = preview("tenantName,property,amount,paymentDate\nBailey Blinkers,Harbour View,150,2026-05-15");
     expect(result.rows[0]).toMatchObject({

@@ -79,6 +79,11 @@ export type PaymentImportPreviewResult = {
   ok: true;
   importBatchId: string;
   filename: string;
+  notices: {
+    ignoredColumns: boolean;
+    sensitiveColumnsOmitted: boolean;
+    messages: string[];
+  };
   summary: {
     totalRows: number;
     totalPaymentAmountCents: number;
@@ -146,12 +151,59 @@ const HEADER_ALIASES: Record<string, string> = {
   note: "notes",
 };
 
+const SENSITIVE_HEADER_PATTERNS = [
+  /bank.*account/,
+  /account.*number/,
+  /^account$/,
+  /transit/,
+  /institution/,
+  /routing/,
+  /iban/,
+  /swift/,
+  /card.*number/,
+  /authorization/,
+  /^auth/,
+  /payer.*bank/,
+  /payor.*bank/,
+  /payee.*bank/,
+  /payer.*account/,
+  /payor.*account/,
+  /payee.*account/,
+  /available.*balance/,
+  /running.*balance/,
+  /^balance$/,
+  /transaction.*id/,
+  /bank.*transaction/,
+  /^memo$/,
+];
+
 function normalizeHeader(value: unknown): string {
   return String(value || "")
     .replace(/^\uFEFF/, "")
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "");
+}
+
+function analyzeHeaders(fields: string[] | undefined): {
+  ignoredColumns: boolean;
+  sensitiveColumnsOmitted: boolean;
+} {
+  let ignoredColumns = false;
+  let sensitiveColumnsOmitted = false;
+
+  for (const field of fields || []) {
+    const normalized = normalizeHeader(field);
+    if (!normalized) continue;
+    if (!HEADER_ALIASES[normalized]) {
+      ignoredColumns = true;
+      if (SENSITIVE_HEADER_PATTERNS.some((pattern) => pattern.test(normalized))) {
+        sensitiveColumnsOmitted = true;
+      }
+    }
+  }
+
+  return { ignoredColumns, sensitiveColumnsOmitted };
 }
 
 function normalizeMatch(value: unknown): string {
@@ -512,6 +564,7 @@ export function previewPaymentCsvImport(params: {
     header: true,
     skipEmptyLines: true,
   });
+  const headerAnalysis = analyzeHeaders(parsed.meta.fields);
 
   const candidates = buildCandidates(params);
   const rows: PaymentImportPreviewRow[] = [];
@@ -639,14 +692,24 @@ export function previewPaymentCsvImport(params: {
   });
 
   const totalPaymentAmountCents = rows.reduce((sum, row) => sum + (row.amountCents || 0), 0);
+  const noticeMessages = [
+    headerAnalysis.ignoredColumns ? "Some columns were ignored because they are not needed for rent payment import." : "",
+    headerAnalysis.sensitiveColumnsOmitted ? "Sensitive banking columns were detected and omitted from preview/import." : "",
+  ].filter(Boolean);
+
   return {
     ok: true,
     importBatchId: crypto
       .createHash("sha256")
-      .update(`${filename}\n${params.csvText || ""}`)
+      .update(`${filename}\n${rows.map((row) => row.rowFingerprint).join("\n")}`)
       .digest("hex")
       .slice(0, 24),
     filename,
+    notices: {
+      ignoredColumns: headerAnalysis.ignoredColumns,
+      sensitiveColumnsOmitted: headerAnalysis.sensitiveColumnsOmitted,
+      messages: noticeMessages,
+    },
     rows,
     summary: {
       totalRows: rows.length,

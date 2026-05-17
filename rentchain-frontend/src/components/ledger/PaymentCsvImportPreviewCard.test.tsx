@@ -24,6 +24,14 @@ describe("PaymentCsvImportPreviewCard", () => {
       ok: true,
       importBatchId: "batch-1",
       filename: "payments.csv",
+      notices: {
+        ignoredColumns: true,
+        sensitiveColumnsOmitted: true,
+        messages: [
+          "Some columns were ignored because they are not needed for rent payment import.",
+          "Sensitive banking columns were detected and omitted from preview/import.",
+        ],
+      },
       summary: {
         totalRows: 2,
         totalPaymentAmountCents: 35000,
@@ -116,6 +124,8 @@ describe("PaymentCsvImportPreviewCard", () => {
 
     await waitFor(() => expect(mocks.previewLedgerPaymentCsvImportMock).toHaveBeenCalledWith(file));
     expect(await screen.findByText("$350.00")).toBeInTheDocument();
+    expect(screen.getByText("Some columns were ignored because they are not needed for rent payment import.")).toBeInTheDocument();
+    expect(screen.getByText("Sensitive banking columns were detected and omitted from preview/import.")).toBeInTheDocument();
     expect(screen.getByText("1 rows matched tenant lease records. 1 rows are blocked until the row-level issue is fixed.")).toBeInTheDocument();
     expect(screen.getAllByText("Harbour View").length).toBeGreaterThan(0);
     expect(screen.getByText("Bailey Blinkers")).toBeInTheDocument();
