@@ -1,6 +1,7 @@
 import express from "express";
 import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { routeSource } from "../../middleware/routeSource";
 
 const { fakeDb, resetFakeDb, seedDoc, writeTracker } = vi.hoisted(() => {
   const store = new Map<string, Map<string, any>>();
@@ -73,7 +74,15 @@ vi.mock("../../services/capabilityGuard", () => ({
 
 function buildApp(router: any) {
   const app = express();
-  app.use("/api/ledger", router);
+  app.use("/api/ledger", routeSource("ledgerRoutes.ts"), router);
+  return app;
+}
+
+function buildAppWithBroadScreeningFallback(router: any) {
+  const app = buildApp(router);
+  const screeningFallback = express.Router();
+  screeningFallback.use((_req, res) => res.status(404).json({ ok: false, error: "Not Found" }));
+  app.use("/api", routeSource("screeningJobsAdminRoutes.ts"), screeningFallback);
   return app;
 }
 
@@ -133,6 +142,28 @@ describe("ledger payment CSV import routes", () => {
     expect(res.body.rows[0]).toMatchObject({
       matchedTenantId: "tenant-1",
       leaseId: "lease-1",
+      confidence: "high",
+    });
+    expect(writeTracker.writes).toBe(0);
+  });
+
+  it("keeps payment CSV preview route ahead of broad screening fallback routes", async () => {
+    const router = (await import("../ledgerRoutes")).default;
+    const app = buildAppWithBroadScreeningFallback(router);
+    const csv = "tenantName,property,unit,amount,paymentDate\nBailey Blinkers,Harbour View,1,150,2026-05-15";
+
+    const res = await request(app)
+      .post("/api/ledger/imports/payment-csv/preview")
+      .attach("file", Buffer.from(csv), {
+        filename: "payments.csv",
+        contentType: "text/csv",
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.headers["x-route-source"]).toBe("ledgerRoutes.ts");
+    expect(res.headers["x-route-source"]).not.toBe("screeningJobsAdminRoutes.ts");
+    expect(res.body.rows[0]).toMatchObject({
+      matchStatus: "matched",
       confidence: "high",
     });
     expect(writeTracker.writes).toBe(0);

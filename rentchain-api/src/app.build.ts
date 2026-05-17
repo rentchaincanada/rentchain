@@ -428,7 +428,7 @@ app.use("/api", tenantSignalsRoutes);
 app.use("/api/reporting", reportingRoutes);
 app.use("/api", compatRoutes);
 app.use("/api", routeSource("unitsRoutes.ts"), unitsRoutes);
-app.use("/api/ledger", ledgerRoutes);
+app.use("/api/ledger", routeSource("ledgerRoutes.ts"), ledgerRoutes);
 app.use("/api/dashboard", routeSource("dashboardRoutes.ts"), dashboardRoutes);
 app.use("/api/landlord", routeSource("landlordActivationRoutes.ts"), landlordActivationRoutes);
 app.use("/api/application-links", routeSource("landlordApplicationLinksRoutes.ts"), landlordApplicationLinksRoutes);
