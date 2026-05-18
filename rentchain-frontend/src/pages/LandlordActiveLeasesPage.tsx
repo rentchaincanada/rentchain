@@ -126,6 +126,29 @@ function formatCoherenceToken(value: string | null | undefined) {
   return normalized.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
+function occupancyDisplayLabel(lease: LandlordActiveLease) {
+  const coherence = lease.stateCoherence;
+  if (!coherence) return null;
+  if (coherence.flags?.requiresReview || coherence.occupancyState === "review_required" || coherence.occupancyState === "unknown") {
+    return "Review needed";
+  }
+  if (coherence.leaseOperationalState === "archived") return "Archived";
+  if (coherence.occupancyState === "upcoming") return "Upcoming";
+  if (coherence.occupancyState === "occupied" || coherence.occupancyState === "notice_period") return "Occupied";
+  if (coherence.occupancyState === "vacant") return "Vacant";
+  return "Review needed";
+}
+
+function renderOccupancyDisplay(lease: LandlordActiveLease) {
+  const label = occupancyDisplayLabel(lease);
+  if (!label) return null;
+  return (
+    <div style={{ color: label === "Review needed" ? "#92400e" : "#64748b", fontSize: 12, marginTop: 6 }}>
+      Occupancy: <strong>{label}</strong>
+    </div>
+  );
+}
+
 function renderStateCoherence(lease: LandlordActiveLease) {
   const coherence = lease.stateCoherence;
   if (!coherence) return null;
@@ -147,8 +170,7 @@ function renderStateCoherence(lease: LandlordActiveLease) {
     >
       {needsReview ? (
         <div style={{ fontWeight: 800 }}>
-          Needs review: {formatCoherenceToken(coherence.leaseOperationalState)} lease ·{" "}
-          {formatCoherenceToken(coherence.occupancyState)} occupancy
+          Needs review: {formatCoherenceToken(coherence.leaseOperationalState)} lease · Review needed occupancy
         </div>
       ) : null}
       {paymentActivityLabel ? <div>{paymentActivityLabel}</div> : null}
@@ -757,6 +779,7 @@ export default function LandlordActiveLeasesPage() {
                     </td>
                     <td style={{ padding: 12 }}>
                       <div>{statusBadge(lease.status)}</div>
+                      {renderOccupancyDisplay(lease)}
                       {lease.leaseExecution ? (
                         <div style={{ display: "grid", gap: 4, marginTop: 6 }}>
                           <div style={{ fontSize: 12, fontWeight: 700, color: "#0f172a" }}>
@@ -865,6 +888,7 @@ export default function LandlordActiveLeasesPage() {
                 <div>
                   <div style={{ color: "#64748b", fontSize: 12 }}>Status</div>
                   <div style={{ marginTop: 6 }}>{statusBadge(lease.status)}</div>
+                  {renderOccupancyDisplay(lease)}
                 </div>
                 <div>
                   <div style={{ color: "#64748b", fontSize: 12 }}>Rent</div>

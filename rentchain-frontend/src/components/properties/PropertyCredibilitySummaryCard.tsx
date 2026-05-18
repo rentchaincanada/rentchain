@@ -5,6 +5,7 @@ import { colors, radius, shadows, spacing, text } from "@/styles/tokens";
 
 interface PropertyCredibilitySummaryCardProps {
   summary?: PropertyCredibilitySummary | null;
+  leaseHref?: string;
 }
 
 function healthTone(status?: PropertyCredibilitySummary["healthStatus"] | null) {
@@ -48,7 +49,7 @@ const MetricTile: React.FC<{ label: string; value: React.ReactNode; caption?: Re
   </div>
 );
 
-export const PropertyCredibilitySummaryCard: React.FC<PropertyCredibilitySummaryCardProps> = ({ summary }) => {
+export const PropertyCredibilitySummaryCard: React.FC<PropertyCredibilitySummaryCardProps> = ({ summary, leaseHref = "/leases" }) => {
   if (!summary || summary.healthStatus === "unknown") {
     return (
       <section
@@ -67,6 +68,9 @@ export const PropertyCredibilitySummaryCard: React.FC<PropertyCredibilitySummary
           <div style={{ color: text.muted, fontSize: 13, lineHeight: 1.6 }}>
             This summary reflects current lease and tenant credibility signals for this property. Decision support only.
           </div>
+          <a href={leaseHref} style={{ color: "#2563eb", fontSize: 13, fontWeight: 700 }}>
+            View related leases
+          </a>
         </div>
         <div
           style={{
@@ -105,6 +109,9 @@ export const PropertyCredibilitySummaryCard: React.FC<PropertyCredibilitySummary
           <div style={{ color: text.muted, fontSize: 13, lineHeight: 1.6 }}>
             This summary reflects current lease and tenant credibility signals for this property. Decision support only.
           </div>
+          <a href={leaseHref} style={{ color: "#2563eb", fontSize: 13, fontWeight: 700 }}>
+            View related leases
+          </a>
         </div>
         <span
           style={{

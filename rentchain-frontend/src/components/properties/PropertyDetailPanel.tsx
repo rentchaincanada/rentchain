@@ -39,6 +39,7 @@ import { calculateConfiguredUnitRentTotal, resolveConfiguredUnitRent } from "@/l
 import { buildPropertySummaryMetrics } from "@/lib/propertySummaryMetrics";
 import {
   deriveUnitOccupancyFromLeases,
+  type UnitOccupancy,
   type UnitOccupancyStatus,
 } from "@/lib/leases/leaseLifecycle";
 import { getUnitsNeedingOccupancySetup } from "./occupancyPrompt";
@@ -71,10 +72,10 @@ function isRawUnitIdLabel(value: string, rawIds: string[]) {
   return RAW_ID_PATTERN.test(value) && /[A-Za-z]/.test(value) && /\d/.test(value);
 }
 
-function resolveLeaseRiskUnitLabel(lease: Lease, unitsForDisplay: any[]): string {
+function findLeaseRiskUnit(lease: Lease, unitsForDisplay: any[]): any | null {
   const rawIds = [cleanLabel(lease.unitId), cleanLabel((lease as any).id)].filter(Boolean);
   const unitReference = cleanLabel(lease.unitId || lease.unitNumber || lease.unitLabel);
-  const matchedUnit = unitsForDisplay.find((unit: any) => {
+  return unitsForDisplay.find((unit: any) => {
     const candidates = [
       unit?.id,
       unit?.unitId,
@@ -87,7 +88,12 @@ function resolveLeaseRiskUnitLabel(lease: Lease, unitsForDisplay: any[]): string
       .map(cleanLabel)
       .filter(Boolean);
     return candidates.some((candidate) => candidate.toLowerCase() === unitReference.toLowerCase());
-  });
+  }) || null;
+}
+
+function resolveLeaseRiskUnitLabel(lease: Lease, unitsForDisplay: any[]): string {
+  const rawIds = [cleanLabel(lease.unitId), cleanLabel((lease as any).id)].filter(Boolean);
+  const matchedUnit = findLeaseRiskUnit(lease, unitsForDisplay);
   const candidates = [
     matchedUnit?.unitNumber,
     matchedUnit?.label,
@@ -103,21 +109,79 @@ function resolveLeaseRiskUnitLabel(lease: Lease, unitsForDisplay: any[]): string
   return /^unit\b/i.test(label) ? label : `Unit ${label}`;
 }
 
+function resolveLeaseRiskRent(lease: Lease, unitsForDisplay: any[]): number {
+  const matchedUnit = findLeaseRiskUnit(lease, unitsForDisplay);
+  return resolveConfiguredUnitRent(matchedUnit || {}) ?? lease.monthlyRent ?? 0;
+}
+
+function formatDateInputValue(value: unknown): string {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})/.exec(raw);
+  if (dateOnly) return `${dateOnly[1]}-${dateOnly[2]}-${dateOnly[3]}`;
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return parsed.toISOString().slice(0, 10);
+}
+
+function resolveOccupancyTenantName(unit: any, occupancy: UnitOccupancy): string {
+  const lease = occupancy.lease as any;
+  return String(
+    lease?.tenantName ||
+      lease?.tenantDisplayName ||
+      lease?.primaryTenantName ||
+      lease?.occupantName ||
+      unit?.occupantName ||
+      unit?.tenantName ||
+      ""
+  ).trim();
+}
+
+function resolveOccupancyLeaseEndDate(unit: any, occupancy: UnitOccupancy): string {
+  const lease = occupancy.lease as any;
+  return String(lease?.endDate || lease?.leaseEndDate || unit?.leaseEndDate || unit?.leaseEnd || "").trim();
+}
+
+function buildUnitOccupancyView(unit: any, occupancy: UnitOccupancy) {
+  const tenantName = occupancy.status === "occupied" || occupancy.status === "upcoming"
+    ? resolveOccupancyTenantName(unit, occupancy)
+    : "";
+  const leaseEndDate = occupancy.status === "occupied" || occupancy.status === "upcoming"
+    ? resolveOccupancyLeaseEndDate(unit, occupancy)
+    : "";
+  const leaseId = String((occupancy.lease as any)?.id || (occupancy.lease as any)?.leaseId || "").trim();
+  return {
+    status: occupancy.status,
+    label: occupancy.label,
+    tenantName,
+    leaseEndDate,
+    leaseId,
+    reviewReason: occupancy.status === "review_required" ? occupancy.reason || "Occupancy data needs review." : "",
+    ledgerHref: leaseId ? `/leases/${encodeURIComponent(leaseId)}/ledger` : "",
+  };
+}
+
 function unitOccupancyTone(status: UnitOccupancyStatus) {
   if (status === "occupied") {
     return { background: "rgba(34,197,94,0.1)", color: "#166534", dot: "#22c55e" };
   }
-  if (status === "notice_period") {
+  if (status === "review_required") {
     return { background: "rgba(245,158,11,0.12)", color: "#92400e", dot: "#f59e0b" };
   }
   if (status === "upcoming") {
     return { background: "rgba(59,130,246,0.1)", color: "#1d4ed8", dot: "#3b82f6" };
   }
+  if (status === "archived") {
+    return { background: "rgba(100,116,139,0.1)", color: "#475569", dot: "#64748b" };
+  }
   return { background: "rgba(248,113,113,0.08)", color: "#b91c1c", dot: "#f87171" };
 }
 
 const formatDate = (iso: string): string => {
-  const d = new Date(iso);
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || "").trim());
+  const d = dateOnly
+    ? new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3]))
+    : new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleDateString(undefined, {
     month: "short",
@@ -653,6 +717,24 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
   const getUnitOccupancy = useCallback(
     (unit: any) => deriveUnitOccupancyFromLeases(unit, leases),
     [leases]
+  );
+  const getUnitOccupancyView = useCallback(
+    (unit: any) => buildUnitOccupancyView(unit, getUnitOccupancy(unit)),
+    [getUnitOccupancy]
+  );
+  const getUnitForEdit = useCallback(
+    (unit: any) => {
+      const view = getUnitOccupancyView(unit);
+      const hasLeaseDerivedOccupancy = Boolean(view.leaseId) && (view.status === "occupied" || view.status === "upcoming");
+      if (!hasLeaseDerivedOccupancy) return unit;
+      return {
+        ...unit,
+        status: "occupied",
+        occupantName: view.tenantName || unit?.occupantName || "",
+        leaseEndDate: formatDateInputValue(view.leaseEndDate) || unit?.leaseEndDate || "",
+      };
+    },
+    [getUnitOccupancyView]
   );
 
   const unitsNeedingOccupancySetup = useMemo(
@@ -1268,7 +1350,10 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
         </div>
       )}
 
-      <PropertyCredibilitySummaryCard summary={credibilitySummary} />
+      <PropertyCredibilitySummaryCard
+        summary={credibilitySummary}
+        leaseHref={property?.id ? `/leases?propertyId=${encodeURIComponent(String(property.id))}` : "/leases"}
+      />
       <PropertyRegistryStatusCard property={property} onOpenSubmissionAssistant={() => setSubmissionAssistantOpen(true)} />
 
       {activeLeases.length > 0 && (
@@ -1309,11 +1394,31 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                     {resolveLeaseRiskUnitLabel(lease, displayedUnits)}
                   </div>
                   <div style={{ color: "#475569", fontSize: 12 }}>
-                    {formatCurrency(lease.monthlyRent)} / month
+                    {formatCurrency(resolveLeaseRiskRent(lease, displayedUnits))} / month
                     {lease.riskConfidence != null ? " • " + Math.round(lease.riskConfidence * 100) + "% confidence" : ""}
                   </div>
                 </div>
-                <RiskScoreBadge grade={(lease.riskGrade as any) || lease.risk?.grade || null} score={lease.riskScore ?? lease.risk?.score ?? null} compact />
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <RiskScoreBadge grade={(lease.riskGrade as any) || lease.risk?.grade || null} score={lease.riskScore ?? lease.risk?.score ?? null} compact />
+                  {lease.id ? (
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/leases/${encodeURIComponent(String(lease.id))}/ledger`)}
+                      style={{
+                        padding: "6px 10px",
+                        borderRadius: 8,
+                        border: "1px solid #dbeafe",
+                        background: "#eff6ff",
+                        color: "#1d4ed8",
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        fontSize: "0.8rem",
+                      }}
+                    >
+                      Ledger
+                    </button>
+                  ) : null}
+                </div>
               </div>
             ))}
           </div>
@@ -1376,7 +1481,8 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                 <button
                   type="button"
                   onClick={() => {
-                    setEditingUnit(unitsNeedingOccupancySetup[0] || displayedUnits[0] || null);
+                    const targetUnit = unitsNeedingOccupancySetup[0] || displayedUnits[0] || null;
+                    setEditingUnit(targetUnit ? getUnitForEdit(targetUnit) : null);
                     dismissOccupancyPrompt();
                   }}
                   style={{
@@ -1499,21 +1605,10 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                   const rentVal = resolveConfiguredUnitRent(u);
                   const sqftVal = (u as any).sqft ?? null;
                   const occupancy = getUnitOccupancy(u);
+                  const occupancyView = buildUnitOccupancyView(u, occupancy);
                   const occupancyTone = unitOccupancyTone(occupancy.status);
-                  const isLeased = occupancy.status === "occupied" || occupancy.status === "notice_period";
-                  const occupantName =
-                    isLeased || occupancy.status === "upcoming"
-                      ? String((u as any).occupantName || (occupancy.lease as any)?.tenantName || "").trim()
-                      : "";
-                  const leaseEndDate =
-                    isLeased || occupancy.status === "upcoming"
-                      ? String(
-                          (occupancy.lease as any)?.endDate ||
-                            (occupancy.lease as any)?.leaseEndDate ||
-                            (u as any).leaseEndDate ||
-                            ""
-                        ).trim()
-                      : "";
+                  const occupantName = occupancyView.tenantName;
+                  const leaseEndDate = occupancyView.leaseEndDate;
                   const rentDisplay =
                     rentVal !== null && rentVal !== undefined
                       ? formatCurrency(Number(rentVal) || 0)
@@ -1595,6 +1690,17 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                             <div style={{ fontSize: "0.8rem", color: "#475569" }}>
                               {occupantName}
                               {leaseEndDate ? ` · Ends ${formatDate(leaseEndDate)}` : ""}
+                              {occupancyView.ledgerHref ? (
+                                <>
+                                  {" · "}
+                                  <a href={occupancyView.ledgerHref}>Ledger</a>
+                                </>
+                              ) : null}
+                            </div>
+                          ) : null}
+                          {occupancyView.reviewReason ? (
+                            <div style={{ fontSize: "0.78rem", color: "#92400e" }}>
+                              {occupancyView.reviewReason}
                             </div>
                           ) : null}
                           {(u as any).leaseDocument?.fileName ? (
@@ -1614,7 +1720,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                           <button
                             type="button"
-                            onClick={() => setEditingUnit(u)}
+                            onClick={() => setEditingUnit(getUnitForEdit(u))}
                             style={{
                               padding: "6px 10px",
                               borderRadius: 8,
@@ -1678,20 +1784,9 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
             const rentVal = resolveConfiguredUnitRent(u);
             const sqftVal = (u as any).sqft ?? null;
             const occupancy = getUnitOccupancy(u);
-            const isLeased = occupancy.status === "occupied" || occupancy.status === "notice_period";
-            const occupantName =
-              isLeased || occupancy.status === "upcoming"
-                ? String((u as any).occupantName || (occupancy.lease as any)?.tenantName || "").trim()
-                : "";
-            const leaseEndDate =
-              isLeased || occupancy.status === "upcoming"
-                ? String(
-                    (occupancy.lease as any)?.endDate ||
-                      (occupancy.lease as any)?.leaseEndDate ||
-                      (u as any).leaseEndDate ||
-                      ""
-                  ).trim()
-                : "";
+            const occupancyView = buildUnitOccupancyView(u, occupancy);
+            const occupantName = occupancyView.tenantName;
+            const leaseEndDate = occupancyView.leaseEndDate;
             const rentDisplay =
               rentVal !== null && rentVal !== undefined
                 ? formatCurrency(Number(rentVal) || 0)
@@ -1734,6 +1829,17 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                       <div style={{ fontSize: "0.8rem", color: "#475569", marginTop: 4 }}>
                         {occupantName}
                         {leaseEndDate ? ` · Ends ${formatDate(leaseEndDate)}` : ""}
+                        {occupancyView.ledgerHref ? (
+                          <>
+                            {" · "}
+                            <a href={occupancyView.ledgerHref}>Ledger</a>
+                          </>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    {occupancyView.reviewReason ? (
+                      <div style={{ fontSize: "0.78rem", color: "#92400e", marginTop: 4 }}>
+                        {occupancyView.reviewReason}
                       </div>
                     ) : null}
                     {(u as any).leaseDocument?.fileName ? (
@@ -1778,7 +1884,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                 <div className="rc-unit-actions">
                   <button
                     type="button"
-                    onClick={() => setEditingUnit(u)}
+                    onClick={() => setEditingUnit(getUnitForEdit(u))}
                     style={{
                       padding: "6px 10px",
                       borderRadius: 8,

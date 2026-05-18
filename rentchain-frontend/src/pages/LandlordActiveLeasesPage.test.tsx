@@ -380,7 +380,8 @@ describe("LandlordActiveLeasesPage", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText(/Needs review: Draft lease · Review Required occupancy/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Needs review: Draft lease · Review needed occupancy/i)).toBeInTheDocument();
+    expect(screen.getByText("Review needed")).toBeInTheDocument();
     expect(screen.getByText("Recorded ledger payment activity present")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Ledger" })).toHaveAttribute("href", "/leases/lease-review/ledger");
   });

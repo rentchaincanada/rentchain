@@ -70,7 +70,7 @@ describe("leaseLifecycle", () => {
         ],
         today
       )
-    ).toMatchObject({ status: "notice_period", label: "Notice period" });
+    ).toMatchObject({ status: "occupied", label: "Occupied" });
 
     expect(
       deriveUnitOccupancyFromLeases(
@@ -181,6 +181,63 @@ describe("leaseLifecycle", () => {
         ],
         today
       )
-    ).toMatchObject({ status: "review_required", label: "Review required" });
+    ).toMatchObject({ status: "review_required", label: "Review needed" });
+  });
+
+  it("keeps archived leases out of occupied display", () => {
+    expect(
+      deriveLeaseLifecycleStatus(
+        {
+          id: "lease-archived-derived",
+          unitId: "unit-archived",
+          status: "active",
+          startDate: "2026-01-01",
+          endDate: "2026-12-31",
+          derivedLifecycleState: "archived",
+        },
+        today
+      )
+    ).toBe("archived");
+
+    expect(
+      deriveUnitOccupancyFromLeases(
+        { id: "unit-archived", unitNumber: "106" },
+        [
+          {
+            id: "lease-archived",
+            unitId: "unit-archived",
+            status: "archived",
+            startDate: "2025-01-01",
+            endDate: "2026-12-31",
+          },
+        ],
+        today
+      )
+    ).toMatchObject({ status: "archived", label: "Archived" });
+  });
+
+  it("flags multiple current leases for one unit as review needed", () => {
+    expect(
+      deriveUnitOccupancyFromLeases(
+        { id: "unit-conflict", unitNumber: "107" },
+        [
+          {
+            id: "lease-active-1",
+            unitId: "unit-conflict",
+            status: "active",
+            startDate: "2026-01-01",
+            endDate: "2026-12-31",
+          },
+          {
+            id: "lease-active-2",
+            unitId: "unit-conflict",
+            status: "active",
+            startDate: "2026-02-01",
+            endDate: "2026-11-30",
+          },
+        ],
+        today
+      )
+    ).toMatchObject({ status: "review_required", label: "Review needed" });
   });
 });

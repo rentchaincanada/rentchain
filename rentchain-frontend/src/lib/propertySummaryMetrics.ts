@@ -29,7 +29,7 @@ export function buildPropertySummaryMetrics(
     occupancy: deriveUnitOccupancyFromLeases(unit, leases, today),
   }));
   const occupiedUnits = occupancyByUnit
-    .filter((item) => item.occupancy.status === "occupied" || item.occupancy.status === "notice_period")
+    .filter((item) => item.occupancy.status === "occupied")
     .map((item) => item.unit);
   const leasedUnits = occupiedUnits;
   const occupancyRate = unitCount > 0 ? (occupiedUnits.length / unitCount) * 100 : 0;
@@ -38,7 +38,7 @@ export function buildPropertySummaryMetrics(
     0
   );
   const currentOccupiedRentTotal = occupancyByUnit.reduce((sum, item) => {
-    if (item.occupancy.status !== "occupied" && item.occupancy.status !== "notice_period") return sum;
+    if (item.occupancy.status !== "occupied") return sum;
     const rentFromLease =
       typeof item.occupancy.lease?.monthlyRent === "number"
         ? item.occupancy.lease.monthlyRent
