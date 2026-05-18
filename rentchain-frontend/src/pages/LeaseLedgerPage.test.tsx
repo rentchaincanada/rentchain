@@ -468,6 +468,13 @@ describe("LeaseLedgerPage", () => {
 
     expect(await screen.findByText("Payment obligations")).toBeInTheDocument();
     expect(screen.getByText("Read-only view of expected rent, execution records, and reconciliation evidence.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Obligation status is financial truth from payments and reconciliation. Decision workflow actions do not change these values.")
+    ).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Financial status" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Financial signal" })).toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Status" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Delinquency" })).not.toBeInTheDocument();
     expect(screen.getAllByText("Expected").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Paid").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Outstanding").length).toBeGreaterThan(0);
@@ -503,7 +510,7 @@ describe("LeaseLedgerPage", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText("Delinquency overview")).toBeInTheDocument();
+    expect(await screen.findByText("Financial delinquency summary")).toBeInTheDocument();
     expect(screen.getByText("Read-only detection based on obligation ledger signals.")).toBeInTheDocument();
     expect(screen.getAllByText("Overdue").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Outstanding").length).toBeGreaterThan(0);
@@ -534,6 +541,14 @@ describe("LeaseLedgerPage", () => {
       screen.getByText("These actions manage operational review workflow only. They do not change lease balances, payment records, or ledger history.")
     ).toBeInTheDocument();
     expect(screen.getByText("Overdue Rent")).toBeInTheDocument();
+    expect(screen.getAllByText("Financial signal").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Workflow status").length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText("Workflow actions update review handling only. Financial status is derived from payments, obligations, and reconciliation evidence.").length
+    ).toBeGreaterThan(0);
+    expect(screen.getByText("Active critical decisions")).toBeInTheDocument();
+    expect(screen.getByText("Active warning decisions")).toBeInTheDocument();
+    expect(screen.getByText("Active decision count")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: /Mark reviewed: Marks this issue as reviewed by staff/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("button", { name: /Snooze: Temporarily hides this issue until later review/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("button", { name: /Assign: Assigns this review item to a team\/person/i }).length).toBeGreaterThan(0);
