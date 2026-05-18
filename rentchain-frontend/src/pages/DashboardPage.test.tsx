@@ -530,7 +530,7 @@ describe("DashboardPage", () => {
     expect(screen.getAllByText("Info")).toHaveLength(1);
     screen.getByRole("button", { name: "Info about Run your first screening" }).click();
     await waitFor(() => expect(screen.getByRole("dialog", { name: "Action information" })).toBeInTheDocument());
-    expect(screen.getByText(/Connect TransUnion access from Applications/i)).toBeInTheDocument();
+    expect(screen.getByText(/Open the screening workflow from Applications/i)).toBeInTheDocument();
     screen.getByRole("button", { name: "Open" }).click();
     expect(assignMock).toHaveBeenCalledWith("/applications?openTransUnionAccess=1");
   });
@@ -577,7 +577,7 @@ describe("DashboardPage", () => {
       </ToastProvider>
     );
 
-    expect(await screen.findByText("TransUnion Setup Funnel")).toBeInTheDocument();
+    expect(await screen.findByText("Provider setup funnel")).toBeInTheDocument();
     screen.getAllByRole("button", { name: "Open" })[0].click();
     expect(assignMock).toHaveBeenCalledWith("/applications?openTransUnionAccess=1");
     expect(screen.getByText("Started → Connected 50%")).toBeInTheDocument();
@@ -637,8 +637,8 @@ describe("DashboardPage", () => {
       </ToastProvider>
     );
 
-    expect(await screen.findAllByRole("button", { name: "Get TransUnion Access" })).not.toHaveLength(0);
-    screen.getAllByRole("button", { name: "Get TransUnion Access" })[0].click();
+    expect(await screen.findAllByRole("button", { name: "Set up screening workflow" })).not.toHaveLength(0);
+    screen.getAllByRole("button", { name: "Set up screening workflow" })[0].click();
     expect(mocks.navigateMock).toHaveBeenCalledWith("/applications?openTransUnionAccess=1");
 
     mocks.navigateMock.mockReset();

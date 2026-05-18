@@ -50,6 +50,7 @@ import "./ApplicationsPage.css";
 import { SendScreeningInviteModal } from "../components/screening/SendScreeningInviteModal";
 import { ScreeningStatusBadge } from "../components/screening/ScreeningStatusBadge";
 import { ScreeningStatusCard } from "@/components/screening/ScreeningStatusCard";
+import { ScreeningWorkflowPanel } from "@/components/screening/ScreeningWorkflowPanel";
 import {
   ScreeningReportView,
   type ScreeningReportAction,
@@ -199,6 +200,8 @@ function ScreeningProviderSetupCard({
   loading,
   readyToScreen,
   selectedApplicationLabel,
+  workflowStatus,
+  screeningEnabled = true,
   screeningsCompletedCount,
   lastScreeningDate,
   onGetAccess,
@@ -214,6 +217,8 @@ function ScreeningProviderSetupCard({
   loading: boolean;
   readyToScreen: boolean;
   selectedApplicationLabel?: string | null;
+  workflowStatus?: string | null;
+  screeningEnabled?: boolean;
   screeningsCompletedCount?: number | null;
   lastScreeningDate?: string | number | null;
   onGetAccess: () => void;
@@ -246,23 +251,23 @@ function ScreeningProviderSetupCard({
         ? "Screening Provider is connected and ready for the selected application."
         : "Screening Provider is connected. Choose an applicant to start the tenant screening workflow."
       : pending
-        ? "Tenant Screening Setup is in progress. Finish provider credentialing, then return to enter Provider credentials."
+        ? "Screening provider setup is in progress. Finish provider credentialing, then return to configure provider details."
         : error
-          ? "Screening provider not connected. Review Provider credentials and try again."
-          : "Screening provider not connected. Start setup or enter Provider credentials before requesting tenant screening.";
+          ? "Screening provider not connected. Review provider details and try again."
+          : "Screening provider not connected. Start setup or enter provider details before requesting tenant screening.";
   const nextStep = connected
     ? readyToScreen
       ? `Next step: start screening${safeSelectedApplicationLabel ? ` for ${safeSelectedApplicationLabel}` : ""}.`
       : "Next step: choose an applicant, then start screening from that application."
     : pending
-      ? "Next step: complete Tenant Screening Setup, then enter Provider credentials."
-      : "Next step: connect Provider credentials or start Tenant Screening Setup.";
+      ? "Next step: complete screening provider setup, then enter provider details."
+      : "Next step: connect provider details or start screening provider setup.";
 
   return (
     <Card elevated data-testid="screening-provider-setup-card" style={{ display: "grid", gap: spacing.md }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: spacing.md, flexWrap: "wrap" }}>
         <div style={{ display: "grid", gap: spacing.xs }}>
-          <div style={{ fontWeight: 700, fontSize: "1.05rem" }}>Tenant Screening Setup</div>
+          <div style={{ fontWeight: 700, fontSize: "1.05rem" }}>Screening provider setup</div>
           <div style={{ color: text.subtle, fontSize: "0.88rem", fontWeight: 700 }}>Screening Provider</div>
           <div style={{ color: text.muted, lineHeight: 1.6 }}>{body}</div>
         </div>
@@ -283,16 +288,28 @@ function ScreeningProviderSetupCard({
         >
           {connected ? (
             <>
-              <div>Provider credentials: Stored securely</div>
+              <div>Provider details: Stored securely</div>
               <div>Last updated date: {updatedAt ? new Date(updatedAt).toLocaleDateString() : "Not available"}</div>
               {completedCount != null ? <div>Screenings completed: {completedCount}</div> : null}
               {formattedLastScreeningDate ? <div>Last screening date: {formattedLastScreeningDate}</div> : null}
             </>
           ) : (
-            <div>Provider credentials are required before screening can begin.</div>
+            <div>Provider setup is required before live screening can begin.</div>
           )}
           <div>{nextStep}</div>
         </div>
+      ) : null}
+
+      {!loading ? (
+        <ScreeningWorkflowPanel
+          compact
+          screeningEnabled={screeningEnabled}
+          transUnionConnected={connected}
+          workflowStatus={workflowStatus}
+          onTransUnionSetup={connected ? undefined : onGetAccess}
+          onTransUnionStart={connected && readyToScreen && onStartScreening ? onStartScreening : undefined}
+          onManualReview={onChooseApplicant}
+        />
       ) : null}
 
       {!loading ? (
@@ -300,7 +317,7 @@ function ScreeningProviderSetupCard({
           {connected ? (
             <>
               <Button type="button" variant="secondary" onClick={onUpdateCredentials}>
-                Provider credentials
+                Manage screening providers
               </Button>
               <Button type="button" variant="ghost" onClick={onDisconnect}>
                 Disconnect
@@ -318,19 +335,19 @@ function ScreeningProviderSetupCard({
           ) : pending ? (
             <>
               <Button type="button" onClick={onEnterDetails}>
-                Provider credentials
+                Configure screening workflow
               </Button>
               <Button type="button" variant="secondary" onClick={onViewInstructions}>
-                Tenant Screening Setup
+                Screening provider setup
               </Button>
             </>
           ) : (
             <>
               <Button type="button" onClick={onGetAccess}>
-                Tenant Screening Setup
+                Screening provider setup
               </Button>
               <Button type="button" variant="secondary" onClick={onConnectExisting}>
-                Provider credentials
+                Manage screening providers
               </Button>
             </>
           )}
@@ -2285,6 +2302,8 @@ const ApplicationsPage: React.FC = () => {
         integration={transUnionIntegration}
         loading={transUnionLoading}
         readyToScreen={Boolean(detail)}
+        screeningEnabled={SCREENING_ENABLED}
+        workflowStatus={displayScreeningStatus || manualScreeningStatus?.status || null}
         selectedApplicationLabel={buildApplicantLabel(detail)}
         onChooseApplicant={guideToApplicationsForScreening}
         screeningsCompletedCount={

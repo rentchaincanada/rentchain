@@ -130,7 +130,7 @@ export function TransUnionConnectionCard({
       "Use the guided access path first if your business still needs TransUnion approval. If you already have credentials, connect them directly here.";
     nextStep = "Next step: get TransUnion access first, or connect your existing membership details.";
     actions = [
-      { label: "Get TransUnion Access", onClick: onGetAccess, variant: "primary" },
+      { label: "Start provider setup", onClick: onGetAccess, variant: "primary" },
       { label: "Connect Existing Membership", onClick: onConnectExisting },
     ];
   }

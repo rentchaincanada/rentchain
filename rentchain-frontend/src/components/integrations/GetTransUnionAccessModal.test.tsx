@@ -79,6 +79,28 @@ describe("GetTransUnionAccessModal", () => {
     expect(onPhoneClick).toHaveBeenCalledTimes(1);
   });
 
+  it("presents provider options before provider-specific contact details", () => {
+    render(
+      <GetTransUnionAccessModal
+        open
+        onClose={vi.fn()}
+        onMarkInProgress={vi.fn()}
+        onEnterCredentials={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText("Choose or manage a screening workflow provider before ordering reports. Provider availability can vary by setup status, consent requirements, and integration readiness.")).toBeInTheDocument();
+    expect(screen.getByText("Provider options")).toBeInTheDocument();
+    expect(screen.getByText("TransUnion")).toBeInTheDocument();
+    expect(screen.getByText("Live provider path")).toBeInTheDocument();
+    expect(screen.getByText("Manual/offline screening")).toBeInTheDocument();
+    expect(screen.getByText("Available fallback")).toBeInTheDocument();
+    expect(screen.getByText("Certn")).toBeInTheDocument();
+    expect(screen.getAllByText("Candidate provider")).toHaveLength(2);
+    expect(screen.getByText("Equifax")).toBeInTheDocument();
+    expect(screen.getByText("TransUnion provider contact details")).toBeInTheDocument();
+  });
+
   it("debounces rapid email clicks so tracking and opening happen once", () => {
     const onEmailClick = vi.fn();
 
@@ -164,10 +186,10 @@ describe("GetTransUnionAccessModal", () => {
       />
     );
 
-    const dialog = screen.getByRole("dialog", { name: "Get TransUnion Access" });
+    const dialog = screen.getByRole("dialog", { name: "Screening provider setup" });
     const card = dialog.firstElementChild as HTMLElement;
     expect(dialog).toHaveStyle({ overflowY: "auto" });
     expect(card).toHaveStyle({ maxHeight: "calc(100dvh - 24px)", overflowY: "auto" });
-    expect(screen.getByRole("button", { name: "Get TransUnion Access" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Start provider setup" })).toBeInTheDocument();
   });
 });

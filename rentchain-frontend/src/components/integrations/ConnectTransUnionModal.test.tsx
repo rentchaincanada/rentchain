@@ -13,21 +13,21 @@ describe("ConnectTransUnionModal", () => {
       />
     );
 
-    expect(screen.getByText("Connect Your TransUnion Account")).toBeInTheDocument();
+    expect(screen.getByText("Configure screening provider")).toBeInTheDocument();
     expect(
       screen.getByText(
-        "Connect your TransUnion membership by entering the member code and passcode issued to your business. Screening requests are initiated under your TransUnion credentials within RentChain."
+        "Configure the live provider path for tenant screening. TransUnion is the current live provider in RentChain, and screening requests use the member code and passcode issued to your business."
       )
     ).toBeInTheDocument();
     expect(
       screen.getByText(/If connection details are not available yet, use the access flow first/i)
     ).toBeInTheDocument();
-    expect(screen.getByText("Need TransUnion access?")).toBeInTheDocument();
+    expect(screen.getByText("Need provider access?")).toBeInTheDocument();
     expect(screen.getByText("Already credentialed?")).toBeInTheDocument();
     expect(screen.getByText("Choose path")).toBeInTheDocument();
-    expect(screen.getByText("Connect membership")).toBeInTheDocument();
+    expect(screen.getByText("Connect provider")).toBeInTheDocument();
     expect(screen.getByText("Ready to screen")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Get TransUnion Access" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Start provider setup" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "I Already Have Credentials" })).toBeInTheDocument();
     expect(screen.queryByText("Member code")).not.toBeInTheDocument();
   });
@@ -45,7 +45,7 @@ describe("ConnectTransUnionModal", () => {
     );
 
     const dialog = screen.getAllByRole("dialog").find((node) =>
-      node.getAttribute("aria-label") === "Connect Your TransUnion Account"
+      node.getAttribute("aria-label") === "Configure screening provider"
     ) as HTMLElement;
     const dialogQueries = within(dialog);
 
@@ -80,12 +80,12 @@ describe("ConnectTransUnionModal", () => {
     );
 
     const dialog = screen.getAllByRole("dialog").find((node) =>
-      node.getAttribute("aria-label") === "Connect Your TransUnion Account"
+      node.getAttribute("aria-label") === "Configure screening provider"
     ) as HTMLElement;
     const dialogQueries = within(dialog);
 
     await waitFor(() => {
-      expect(dialogQueries.getByText("Membership credentials")).toBeInTheDocument();
+      expect(dialogQueries.getByText("Live provider details")).toBeInTheDocument();
     });
     expect(dialogQueries.getByText("Business details required for setup")).toBeInTheDocument();
     expect(dialogQueries.queryByRole("button", { name: "I Already Have Credentials" })).not.toBeInTheDocument();
@@ -109,7 +109,7 @@ describe("ConnectTransUnionModal", () => {
     );
 
     const dialog = screen.getAllByRole("dialog").find((node) =>
-      node.getAttribute("aria-label") === "Connect Your TransUnion Account"
+      node.getAttribute("aria-label") === "Configure screening provider"
     ) as HTMLElement;
     const dialogQueries = within(dialog);
     const credentialButton = dialogQueries.queryByRole("button", {
@@ -142,9 +142,9 @@ describe("ConnectTransUnionModal", () => {
 
     fireEvent.click(dialogQueries.getAllByRole("button", { name: "Connect Account" })[0]);
 
-    expect(await screen.findByText("TransUnion Connected")).toBeInTheDocument();
+    expect(await screen.findByText("Screening provider connected")).toBeInTheDocument();
     const successDialog = screen.getAllByRole("dialog").find((node) =>
-      node.getAttribute("aria-label") === "TransUnion Connected"
+      node.getAttribute("aria-label") === "Screening provider connected"
     ) as HTMLElement;
     expect(within(successDialog).getByRole("button", { name: "Continue to Screening" })).toBeInTheDocument();
   });

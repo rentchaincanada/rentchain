@@ -31,7 +31,7 @@ export function ActionRequiredPanel({
     const href = String(item?.href || "").toLowerCase();
     const isScreening = title.includes("screening") || title.includes("transunion") || href.includes("opentransunionaccess");
     if (isScreening) {
-      return "Connect TransUnion access from Applications, then open an application review to run screening once the applicant has provided the required consent.";
+      return "Open the screening workflow from Applications, review provider availability, then run or record screening once the applicant has provided the required consent.";
     }
     return "Open this action to continue the related workflow. RentChain keeps these items here when there is a clear next step for the landlord.";
   }
