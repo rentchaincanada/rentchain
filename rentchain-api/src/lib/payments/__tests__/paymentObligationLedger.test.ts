@@ -121,6 +121,27 @@ describe("paymentObligationLedger", () => {
     );
   });
 
+  it("derives due date from period start when lease metadata is unavailable", () => {
+    const rows = buildPaymentObligationLedgerRows({
+      paymentIntents: [
+        intent({
+          leaseId: "lease-missing",
+          periodStart: "2026-06-01",
+          periodEnd: "2027-05-30",
+          dueDate: "2026-05-05",
+        }),
+      ],
+    });
+
+    expect(rows[0]).toEqual(
+      expect.objectContaining({
+        leaseId: "lease-missing",
+        periodStart: "2026-06-01T00:00:00.000Z",
+        dueDate: "2026-06-01",
+      })
+    );
+  });
+
   it("derives due date from nested rent schedule due day", () => {
     const rows = buildPaymentObligationLedgerRows({
       leases: [

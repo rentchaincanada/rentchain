@@ -304,10 +304,9 @@ function leaseEndDate(lease: PaymentObligationLeaseInput | null | undefined): st
 }
 
 function deriveLeaseTermDueDate(lease: PaymentObligationLeaseInput | null | undefined, periodStart?: unknown, fallbackDueDate?: unknown): string | null {
-  if (!lease) return normalizeDate(fallbackDueDate);
-  const anchor = dateOnlyParts(periodStart || leaseStartDate(lease) || fallbackDueDate || lease.dueDate);
-  if (!anchor) return normalizeDate(fallbackDueDate || lease.dueDate);
-  const configuredDueDay = leaseDueDay(lease);
+  const anchor = dateOnlyParts(periodStart || leaseStartDate(lease) || fallbackDueDate || lease?.dueDate);
+  if (!anchor) return null;
+  const configuredDueDay = lease ? leaseDueDay(lease) : 1;
   const dueMonth =
     anchor.day > configuredDueDay
       ? nextMonth(anchor.year, anchor.month)

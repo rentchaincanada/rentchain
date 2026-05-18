@@ -182,7 +182,7 @@ function decisionFromDelinquencySignal(
       expectedAmountCents: signal.expectedAmountCents,
       paidAmountCents: signal.paidAmountCents,
       outstandingAmountCents: signal.outstandingAmountCents,
-      dueDate: signal.dueDate || null,
+      dueDate: signal.dueDate || row?.dueDate || null,
       obligationRowId: row?.rowId || null,
       obligationStatus: row?.obligationStatus || null,
     },
