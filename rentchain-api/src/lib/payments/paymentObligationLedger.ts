@@ -256,6 +256,15 @@ function daysInUtcMonth(year: number, month: number): number {
   return new Date(Date.UTC(year, month, 0)).getUTCDate();
 }
 
+function formatDateOnly(year: number, month: number, day: number): string {
+  return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function nextMonth(year: number, month: number): { year: number; month: number } {
+  if (month < 12) return { year, month: month + 1 };
+  return { year: year + 1, month: 1 };
+}
+
 function normalizeDueDay(value: unknown): number | null {
   const day = Number(value);
   if (!Number.isInteger(day) || day < 1 || day > 31) return null;
@@ -276,8 +285,13 @@ function deriveLeaseTermDueDate(lease: PaymentObligationLeaseInput | null | unde
   if (!lease) return normalizeDate(fallbackDueDate);
   const anchor = dateOnlyParts(periodStart || lease.startDate || fallbackDueDate || lease.dueDate);
   if (!anchor) return normalizeDate(fallbackDueDate || lease.dueDate);
-  const dueDay = Math.min(leaseDueDay(lease), daysInUtcMonth(anchor.year, anchor.month));
-  return new Date(Date.UTC(anchor.year, anchor.month - 1, dueDay)).toISOString();
+  const configuredDueDay = leaseDueDay(lease);
+  const dueMonth =
+    anchor.day > configuredDueDay
+      ? nextMonth(anchor.year, anchor.month)
+      : { year: anchor.year, month: anchor.month };
+  const dueDay = Math.min(configuredDueDay, daysInUtcMonth(dueMonth.year, dueMonth.month));
+  return formatDateOnly(dueMonth.year, dueMonth.month, dueDay);
 }
 
 function paymentFallsWithinLeaseTerm(payment: PaymentObligationCanonicalPaymentInput, lease: PaymentObligationLeaseInput | null): boolean {

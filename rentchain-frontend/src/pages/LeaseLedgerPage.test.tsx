@@ -119,6 +119,7 @@ describe("LeaseLedgerPage", () => {
           leaseId: "lease-1",
           paymentIntentId: "pi-underpaid",
           propertyId: "prop-1",
+          dueDate: "2026-05-05T00:00:00.000Z",
           expectedAmountCents: 145000,
           paidAmountCents: 10000,
           currency: "cad",
@@ -490,6 +491,7 @@ describe("LeaseLedgerPage", () => {
     expect(screen.getAllByText("Unknown").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Reconciled").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Manual Review Required").length).toBeGreaterThan(0);
+    expect(screen.getByText(new Date(2026, 4, 5).toLocaleDateString())).toBeInTheDocument();
   });
 
   it("renders delinquency summary cards and row-level signal reasons", async () => {

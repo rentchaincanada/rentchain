@@ -96,7 +96,7 @@ describe("paymentObligationLedger", () => {
     expect(rows[0]).toEqual(
       expect.objectContaining({
         periodStart: "2026-05-31T00:00:00.000Z",
-        dueDate: "2026-05-01T00:00:00.000Z",
+        dueDate: "2026-06-01",
       })
     );
   });
@@ -108,19 +108,19 @@ describe("paymentObligationLedger", () => {
 
     expect(rows[0]).toEqual(
       expect.objectContaining({
-        dueDate: "2026-05-05T00:00:00.000Z",
+        dueDate: "2026-05-05",
       })
     );
   });
 
-  it("falls back to the first day of the obligation month when due day is missing", () => {
+  it("falls back to the next first day when due day is missing", () => {
     const rows = buildPaymentObligationLedgerRows({
       leases: [{ ...lease, startDate: "2026-06-15", dueDate: null }],
     });
 
     expect(rows[0]).toEqual(
       expect.objectContaining({
-        dueDate: "2026-06-01T00:00:00.000Z",
+        dueDate: "2026-07-01",
       })
     );
   });
@@ -179,7 +179,7 @@ describe("paymentObligationLedger", () => {
       expect.objectContaining({
         leaseId: "lease-1",
         paymentDocumentId: "payment-import-1",
-        dueDate: "2026-04-01T00:00:00.000Z",
+        dueDate: "2026-04-01",
         expectedAmountCents: 180000,
         paidAmountCents: 180000,
         obligationStatus: "paid",
@@ -215,7 +215,7 @@ describe("paymentObligationLedger", () => {
 
     expect(rows[0]).toEqual(
       expect.objectContaining({
-        dueDate: "2026-05-05T00:00:00.000Z",
+        dueDate: "2026-05-05",
         paidAmountCents: 180000,
         obligationStatus: "paid",
         evidenceStatus: "reconciled",
@@ -237,7 +237,7 @@ describe("paymentObligationLedger", () => {
 
     expect(rows[0]).toEqual(
       expect.objectContaining({
-        dueDate: "2026-05-05T00:00:00.000Z",
+        dueDate: "2026-05-05",
         paidAmountCents: 180000,
         obligationStatus: "paid",
       })
@@ -310,7 +310,7 @@ describe("paymentObligationLedger", () => {
     expect(rows[0]).toEqual(
       expect.objectContaining({
         expectedAmountCents: 164000,
-        dueDate: "2026-05-01T00:00:00.000Z",
+        dueDate: "2026-06-01",
         paidAmountCents: 328000,
         obligationStatus: "overpaid",
         evidenceStatus: "reconciled",
