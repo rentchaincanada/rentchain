@@ -68,6 +68,7 @@ import { computeNoResponseState } from "../services/leaseNoticeWorkflowService";
 import { deriveLeaseLifecycleSummary } from "../services/leaseLifecycle/deriveLeaseLifecycleSummary";
 import { deriveLeaseLifecycleState } from "../lib/leases/leaseLifecycle";
 import { deriveLeaseOccupancyCoherence } from "../lib/leases/deriveLeaseOccupancyCoherence";
+import { evaluateJurisdictionPolicy } from "../lib/jurisdiction/operationalPolicyEvaluator";
 import { formatInternalReference, slugifyOperationalReference } from "../lib/identityReferences";
 import { syncPropertyUnitOccupancyForTenantContext } from "../services/tenantPortal/tenantOccupancySyncService";
 
@@ -1019,10 +1020,22 @@ async function enrichLeaseRow(raw: any) {
     loadLeaseDocumentUrlForLease(raw),
   ]);
 
+  const propertyData = propertySnap?.exists ? propertySnap.data() : null;
   const propertyName =
-    propertySnap?.exists
-      ? String(propertySnap.data()?.name || propertySnap.data()?.addressLine1 || "Property").trim() || "Property"
+    propertyData
+      ? String(propertyData?.name || propertyData?.addressLine1 || "Property").trim() || "Property"
       : "Property";
+  const propertyProvince =
+    String(
+      raw?.jurisdictionProvince ||
+        raw?.province ||
+        raw?.provinceState ||
+        propertyData?.jurisdictionProvince ||
+        propertyData?.province ||
+        propertyData?.provinceState ||
+        propertyData?.state ||
+        ""
+    ).trim() || null;
   const tenantName =
     tenantSnap?.exists
       ? String(tenantSnap.data()?.fullName || tenantSnap.data()?.name || "").trim() || null
@@ -1076,6 +1089,7 @@ async function enrichLeaseRow(raw: any) {
   return {
     ...(await hydrateLeaseUnitDisplayFields(lease, landlordId)),
     propertyName,
+    jurisdictionProvince: propertyProvince,
     tenantName,
     tenantEmail,
     documentUrl,
@@ -1127,18 +1141,30 @@ async function listLandlordLeaseRows(landlordId: string, opts?: { archived?: boo
   return mergedLeases.map((lease: any) => {
     const rawLease = rawLeaseById.get(String(lease?.id || "").trim()) || null;
     const latestNotice = latestNoticeByLeaseId.get(String(lease?.id || "").trim()) || null;
+    const leaseLifecycleSummary = deriveLeaseLifecycleSummary({
+      lease: {
+        status: lease?.status,
+        leaseStartDate: lease?.startDate,
+        leaseEndDate: lease?.endDate,
+        nextNoticeDueAt: rawLease?.nextNoticeDueAt,
+      },
+      latestNotice,
+      noResponse: latestNotice ? computeNoResponseState(latestNotice) : false,
+    });
     return {
       ...lease,
-      leaseLifecycleSummary: deriveLeaseLifecycleSummary({
-        lease: {
-          status: lease?.status,
-          leaseStartDate: lease?.startDate,
-          leaseEndDate: lease?.endDate,
-          nextNoticeDueAt: rawLease?.nextNoticeDueAt,
-        },
-        latestNotice,
-        noResponse: latestNotice ? computeNoResponseState(latestNotice) : false,
-      }),
+      leaseLifecycleSummary,
+      jurisdictionPolicies: evaluateJurisdictionPolicy({
+        province: rawLease?.province || rawLease?.provinceState || null,
+        propertyProvince: lease?.jurisdictionProvince || null,
+        jurisdictionProvince: rawLease?.jurisdictionProvince || null,
+        leaseStatus: lease?.status,
+        leaseStartDate: lease?.startDate,
+        leaseEndDate: lease?.endDate,
+        leaseExecutionStatus: lease?.leaseExecution?.executionStatus,
+        leaseLifecycleStatus: leaseLifecycleSummary.lifecycleStatus,
+        stateCoherence: lease?.stateCoherence || null,
+      }).results,
     };
   });
 }

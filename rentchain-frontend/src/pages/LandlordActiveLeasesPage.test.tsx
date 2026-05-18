@@ -121,6 +121,22 @@ describe("LandlordActiveLeasesPage", () => {
             daysUntilExpiry: 30,
             history: [{ type: "lease_started", label: "Lease started", occurredAt: "2026-01-01T00:00:00.000Z" }],
           },
+          jurisdictionPolicies: [
+            {
+              jurisdiction: "NS",
+              policyKey: "lease_renewal_review",
+              status: "review",
+              severity: "info",
+              label: "Lease renewal review recommended",
+              reason: "The lease end date is within the configured review window.",
+              recommendation: "Review the lease and prepare next-step workflow guidance.",
+              sourceRuleKey: "NS.lease_renewal_review",
+              confidence: "medium",
+              legalAdvice: false,
+              disclaimer:
+                "RentChain provides operational workflow guidance only. It does not provide legal advice, create legal conclusions, or replace review of current provincial forms and rules.",
+            },
+          ],
         },
       ],
     });
@@ -178,6 +194,9 @@ describe("LandlordActiveLeasesPage", () => {
     expect(screen.getAllByText("Lease fully executed").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Expiring soon").length).toBeGreaterThan(0);
     expect(screen.getByText(/Prepare renewal notice/i)).toBeInTheDocument();
+    expect(screen.getByText("NS workflow guidance")).toBeInTheDocument();
+    expect(screen.getByText("Lease renewal review recommended")).toBeInTheDocument();
+    expect(screen.getByText("Workflow guidance only — verify local legal requirements.")).toBeInTheDocument();
     expect(screen.getAllByText(/Rent terms ready for future setup/i).length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: /Enable rent collection/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "View lease" })).toHaveAttribute("href", "https://example.com/lease.pdf");

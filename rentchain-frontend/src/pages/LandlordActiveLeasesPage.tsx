@@ -229,6 +229,44 @@ function renderLifecycleSummary(lease: LandlordActiveLease) {
   );
 }
 
+function renderJurisdictionPolicyGuidance(lease: LandlordActiveLease) {
+  const policies = Array.isArray(lease.jurisdictionPolicies) ? lease.jurisdictionPolicies : [];
+  if (policies.length === 0) return null;
+  const visiblePolicies = policies.slice(0, 3);
+  return (
+    <div
+      style={{
+        display: "grid",
+        gap: 6,
+        marginTop: 8,
+        padding: "8px 10px",
+        border: "1px solid #bfdbfe",
+        borderRadius: 10,
+        background: "#eff6ff",
+        color: "#1e3a8a",
+        fontSize: 12,
+      }}
+    >
+      <div style={{ fontWeight: 800 }}>
+        {policies[0]?.jurisdiction === "NS"
+          ? "NS workflow guidance"
+          : policies[0]?.jurisdiction === "ON"
+          ? "ON workflow guidance"
+          : "Jurisdiction workflow guidance"}
+      </div>
+      {visiblePolicies.map((policy) => (
+        <div key={`${policy.policyKey}:${policy.sourceRuleKey}`} style={{ display: "grid", gap: 2 }}>
+          <div style={{ fontWeight: policy.severity === "warning" || policy.severity === "critical" ? 800 : 700 }}>
+            {policy.label}
+          </div>
+          <div>{policy.recommendation}</div>
+        </div>
+      ))}
+      <div style={{ color: "#475569" }}>Workflow guidance only — verify local legal requirements.</div>
+    </div>
+  );
+}
+
 export default function LandlordActiveLeasesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const view = searchParams.get("view") === "archived" ? "archived" : "active";
@@ -731,6 +769,7 @@ export default function LandlordActiveLeasesPage() {
                       ) : null}
                       {renderLifecycleSummary(lease)}
                       {renderStateCoherence(lease)}
+                      {renderJurisdictionPolicyGuidance(lease)}
                       {lease.archivedAt ? (
                         <div style={{ color: "#64748b", fontSize: 12, marginTop: 4 }}>
                           Archived {formatDate(lease.archivedAt)}
@@ -859,6 +898,7 @@ export default function LandlordActiveLeasesPage() {
                 <div style={{ color: "#64748b", fontSize: 12 }}>{paymentReadinessChecklist(lease)}</div>
               ) : null}
               {renderStateCoherence(lease)}
+              {renderJurisdictionPolicyGuidance(lease)}
               {renderLeaseActions(lease)}
             </div>
           ))}
