@@ -223,12 +223,32 @@ function DecisionActionControls({
   pending: boolean;
   onAction: (decision: DecisionItem, actionType: DecisionActionType) => void;
 }) {
-  const actions: Array<{ actionType: DecisionActionType; label: string }> = [
-    { actionType: "reviewed", label: "Mark reviewed" },
-    { actionType: "snoozed", label: "Snooze" },
-    { actionType: "assigned", label: "Assign" },
-    { actionType: "dismissed", label: "Dismiss" },
-    { actionType: "resolved", label: "Resolve" },
+  const actions: Array<{ actionType: DecisionActionType; label: string; description: string }> = [
+    {
+      actionType: "reviewed",
+      label: "Mark reviewed",
+      description: "Marks this issue as reviewed by staff. Does not change balances or payment records.",
+    },
+    {
+      actionType: "snoozed",
+      label: "Snooze",
+      description: "Temporarily hides this issue until later review. Does not affect ledger or delinquency calculations.",
+    },
+    {
+      actionType: "assigned",
+      label: "Assign",
+      description: "Assigns this review item to a team/person. Does not change financial records.",
+    },
+    {
+      actionType: "dismissed",
+      label: "Dismiss",
+      description: "Dismisses this signal from active review. Does not delete ledger/payment history.",
+    },
+    {
+      actionType: "resolved",
+      label: "Resolve",
+      description: "Marks the operational review task as resolved. Does not automatically modify balances or obligations.",
+    },
   ];
   return (
     <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
@@ -237,6 +257,8 @@ function DecisionActionControls({
           key={action.actionType}
           type="button"
           disabled={pending}
+          title={action.description}
+          aria-label={`${action.label}: ${action.description}`}
           onClick={() => onAction(decision, action.actionType)}
           style={{ border: "1px solid #cbd5e1", background: "#fff", borderRadius: 8, padding: "6px 9px", fontWeight: 700 }}
         >
@@ -781,6 +803,9 @@ export default function LeaseLedgerPage() {
           <h2 style={{ margin: 0, fontSize: "1rem" }}>Decisions</h2>
           <div style={{ color: "#64748b", fontSize: 13, marginTop: 3 }}>
             Read-only decisions derived from detected lease and payment signals.
+          </div>
+          <div style={{ color: "#475569", fontSize: 13, marginTop: 4 }}>
+            These actions manage operational review workflow only. They do not change lease balances, payment records, or ledger history.
           </div>
         </div>
         {decisions.length === 0 ? (
