@@ -43,6 +43,11 @@ function actorEmailFromReq(req: any) {
   return asString(req.user?.email, 320) || null;
 }
 
+function isActiveDecisionStatus(status: unknown) {
+  const normalized = asString(status || "detected", 40);
+  return !["reviewed", "snoozed", "accepted", "dismissed", "resolved"].includes(normalized);
+}
+
 async function loadLeaseForDecisionAccess(req: any, leaseId: string) {
   const snap = await db.collection("leases").doc(leaseId).get();
   if (!snap.exists) return { ok: false as const, status: 404, error: "decision_lease_not_found" };
@@ -209,10 +214,12 @@ router.get("/", requireAuth, async (req: any, res: Response) => {
       decisions: model.decisions,
       actions: model.actions,
       summary: {
-        total: model.decisions.length,
-        critical: model.decisions.filter((decision) => decision.severity === "critical").length,
-        warning: model.decisions.filter((decision) => decision.severity === "warning").length,
-        info: model.decisions.filter((decision) => decision.severity === "info").length,
+        total: model.decisions.filter((decision) => isActiveDecisionStatus(decision.status)).length,
+        allTotal: model.decisions.length,
+        inactiveTotal: model.decisions.filter((decision) => !isActiveDecisionStatus(decision.status)).length,
+        critical: model.decisions.filter((decision) => isActiveDecisionStatus(decision.status) && decision.severity === "critical").length,
+        warning: model.decisions.filter((decision) => isActiveDecisionStatus(decision.status) && decision.severity === "warning").length,
+        info: model.decisions.filter((decision) => isActiveDecisionStatus(decision.status) && decision.severity === "info").length,
       },
     });
   } catch (err: any) {

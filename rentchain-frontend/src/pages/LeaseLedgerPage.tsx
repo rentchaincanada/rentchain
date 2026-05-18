@@ -478,9 +478,10 @@ export default function LeaseLedgerPage() {
     return Object.entries(monthlyTotals).sort((a, b) => (a[0] < b[0] ? 1 : -1));
   }, [monthlyTotals]);
 
-  const loadLedger = async () => {
+  const loadLedger = async (options: { showLoading?: boolean } = {}) => {
     if (!leaseId) return;
-    setLoading(true);
+    const showLoading = options.showLoading ?? true;
+    if (showLoading) setLoading(true);
     setError(null);
     try {
       const res = await fetchLeaseLedger(leaseId, from || undefined, to || undefined);
@@ -495,7 +496,7 @@ export default function LeaseLedgerPage() {
     } catch (err: unknown) {
       setError(errorMessage(err, "Failed to load lease ledger"));
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   };
 
@@ -513,6 +514,7 @@ export default function LeaseLedgerPage() {
       });
       const nextDecision = result?.decision || decisionWithStatus(decision, actionType);
       setDecisions((current) => current.map((item) => (item.decisionId === decision.decisionId ? nextDecision : item)));
+      await loadLedger({ showLoading: false });
     } catch (err: unknown) {
       setError(errorMessage(err, "Failed to update decision"));
     } finally {
@@ -797,7 +799,7 @@ export default function LeaseLedgerPage() {
                 <strong>{decisionSummary.warning}</strong>
               </div>
               <div style={{ border: "1px solid #e2e8f0", borderRadius: 10, padding: 10 }}>
-                <div style={{ fontSize: 12, color: "#64748b" }}>Total</div>
+                <div style={{ fontSize: 12, color: "#64748b" }}>Active</div>
                 <strong>{decisionSummary.total}</strong>
               </div>
             </div>

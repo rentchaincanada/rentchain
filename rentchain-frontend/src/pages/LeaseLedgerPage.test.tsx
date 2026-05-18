@@ -552,6 +552,30 @@ describe("LeaseLedgerPage", () => {
   });
 
   it("updates lease decision status from human actions", async () => {
+    const baseLedgerResponse = await mocks.fetchLeaseLedger("lease-1");
+    mocks.fetchLeaseLedger.mockClear();
+    mocks.fetchLeaseLedger
+      .mockResolvedValueOnce(baseLedgerResponse)
+      .mockResolvedValueOnce({
+        ...baseLedgerResponse,
+        decisions: baseLedgerResponse.decisions.map((decision: any) =>
+          decision.decisionId === "decision-overdue"
+            ? {
+                ...decision,
+                status: "reviewed",
+                latestAction: {
+                  actionId: "action-1",
+                  decisionId: "decision-overdue",
+                  actionType: "reviewed",
+                  previousStatus: "detected",
+                  nextStatus: "reviewed",
+                  createdAt: "2026-05-05T12:00:00.000Z",
+                },
+              }
+            : decision
+        ),
+      });
+
     render(
       <MemoryRouter initialEntries={["/leases/lease-1/ledger"]}>
         <Routes>
@@ -564,7 +588,10 @@ describe("LeaseLedgerPage", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "Mark reviewed" })[0]);
 
     await waitFor(() => expect(mocks.patchDecisionAction).toHaveBeenCalledWith("decision-overdue", expect.objectContaining({ actionType: "reviewed" })));
+    await waitFor(() => expect(mocks.fetchLeaseLedger).toHaveBeenCalledTimes(2));
     expect(screen.getAllByText("Reviewed").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Outstanding").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("$4,200.00").length).toBeGreaterThan(0);
   });
 
   it("renders an empty obligation state while preserving existing ledger entries", async () => {
