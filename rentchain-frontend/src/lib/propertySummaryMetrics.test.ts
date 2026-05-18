@@ -181,4 +181,53 @@ describe("buildPropertySummaryMetrics", () => {
     expect(metrics.occupancyRate).toBe(0);
     expect(metrics.currentOccupiedRentTotal).toBe(0);
   });
+
+  it("does not count review-needed occupancy conflicts as occupied", () => {
+    const metrics = buildPropertySummaryMetrics(
+      [
+        {
+          id: "unit-1",
+          unitNumber: "101",
+          status: "occupied",
+          occupantName: "Conflicted Tenant",
+          leaseEndDate: "2026-12-31",
+          rent: 1800,
+        },
+      ],
+      [
+        {
+          id: "lease-1",
+          tenantId: "tenant-1",
+          propertyId: "prop-1",
+          unitId: "unit-1",
+          unitNumber: "101",
+          monthlyRent: 1800,
+          startDate: "2026-01-01",
+          endDate: "2026-12-31",
+          status: "active",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+        {
+          id: "lease-2",
+          tenantId: "tenant-2",
+          propertyId: "prop-1",
+          unitId: "unit-1",
+          unitNumber: "101",
+          monthlyRent: 1800,
+          startDate: "2026-02-01",
+          endDate: "2026-11-30",
+          status: "active",
+          createdAt: "2026-02-01T00:00:00.000Z",
+          updatedAt: "2026-02-01T00:00:00.000Z",
+        },
+      ],
+      1,
+      "2026-05-04"
+    );
+
+    expect(metrics.leasedUnits).toHaveLength(0);
+    expect(metrics.occupancyRate).toBe(0);
+    expect(metrics.currentOccupiedRentTotal).toBe(0);
+  });
 });

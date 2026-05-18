@@ -154,4 +154,30 @@ describe("TenantLeasePanel", () => {
     expect(screen.queryByText(/Apr 30, 2026/)).not.toBeInTheDocument();
     expect(screen.queryByText(/May 31, 2026/)).not.toBeInTheDocument();
   });
+
+  it("surfaces a signed future lease as upcoming instead of showing no current lease", async () => {
+    mocks.getLeaseAutomationTasks.mockResolvedValue({ tasks: [] });
+    mocks.getLeasesForTenant.mockResolvedValue({
+      leases: [
+        {
+          id: "lease-future",
+          propertyId: "prop-1",
+          propertyName: "North Towers",
+          unitNumber: "103",
+          monthlyRent: 1640,
+          startDate: "2026-07-01",
+          endDate: "2027-06-30",
+          status: "active",
+          signatureStatus: "signed",
+          automationEnabled: true,
+        },
+      ],
+    });
+
+    render(<TenantLeasePanel tenantId="tenant-1" />);
+
+    expect(await screen.findByText("Upcoming Lease")).toBeInTheDocument();
+    expect(screen.getByText("Property: North Towers - Unit 103")).toBeInTheDocument();
+    expect(mocks.getLeaseAutomationTasks).not.toHaveBeenCalled();
+  });
 });

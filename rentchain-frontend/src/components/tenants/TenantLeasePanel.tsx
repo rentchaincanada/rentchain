@@ -12,6 +12,7 @@ import { useCapabilities } from "@/hooks/useCapabilities";
 import { useUpgrade } from "@/context/UpgradeContext";
 import { upgradeStarterButtonStyle } from "@/lib/upgradeButtonStyles";
 import { LeaseRiskCard } from "@/components/leases/LeaseRiskCard";
+import { deriveLeaseLifecycleStatus, isLeaseCurrentlyActive } from "@/lib/leases/leaseLifecycle";
 
 const DATE_ONLY_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
 const DATE_FORMAT_OPTIONS: Intl.DateTimeFormatOptions = {
@@ -167,12 +168,23 @@ export const TenantLeasePanel: React.FC<TenantLeasePanelProps> = ({ tenantId }) 
   }, [loadLeases, tenantId]);
 
   const activeLease = useMemo(
-    () => leases.find((l) => l.status === "active") ?? null,
+    () => leases.find((l) => isLeaseCurrentlyActive(l)) ?? null,
     [leases]
   );
 
+  const upcomingLease = useMemo(
+    () => leases.find((l) => deriveLeaseLifecycleStatus(l) === "signed_future") ?? null,
+    [leases]
+  );
+
+  const displayedLease = activeLease || upcomingLease;
+
   const endedLeases = useMemo(
-    () => leases.filter((l) => l.status === "ended"),
+    () =>
+      leases.filter((l) => {
+        const lifecycle = deriveLeaseLifecycleStatus(l);
+        return lifecycle === "expired" || lifecycle === "terminated" || lifecycle === "renewed" || l.status === "ended" || l.status === "archived";
+      }),
     [leases]
   );
 
@@ -354,7 +366,7 @@ export const TenantLeasePanel: React.FC<TenantLeasePanelProps> = ({ tenantId }) 
   } else {
     content = (
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        {activeLease && (
+        {displayedLease && (
           <div
             style={{
               ...panelSurface,
@@ -362,21 +374,22 @@ export const TenantLeasePanel: React.FC<TenantLeasePanelProps> = ({ tenantId }) 
             }}
           >
             <div style={{ color: "#64748b", fontSize: 12, marginBottom: 4, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.6 }}>
-              Current Lease
+              {activeLease ? "Current Lease" : "Upcoming Lease"}
             </div>
             <div style={{ color: "#0f172a", fontWeight: 700 }}>
-              Property: {formatLeaseLabel(activeLease)}
+              Property: {formatLeaseLabel(displayedLease)}
             </div>
             <div style={{ color: "#334155", fontSize: 13, marginTop: 4, fontWeight: 600 }}>
-              Rent: {formatCurrency(activeLease.monthlyRent)} / month
+              Rent: {formatCurrency(displayedLease.monthlyRent)} / month
             </div>
             <div style={{ color: "#64748b", fontSize: 12, marginTop: 4 }}>
-              {formatDate(activeLease.startDate)} →{" "}
-              {activeLease.endDate ? formatDate(activeLease.endDate) : "Ongoing"}
+              {formatDate(displayedLease.startDate)} →{" "}
+              {displayedLease.endDate ? formatDate(displayedLease.endDate) : "Ongoing"}
             </div>
             <div style={{ marginTop: 12 }}>
-              <LeaseRiskCard risk={activeLease.risk ?? null} compact />
+              <LeaseRiskCard risk={displayedLease.risk ?? null} compact />
             </div>
+            {activeLease ? (
             <div
               style={{
                 ...insetPanelSurface,
@@ -406,7 +419,9 @@ export const TenantLeasePanel: React.FC<TenantLeasePanelProps> = ({ tenantId }) 
                 {automationSaving ? "Saving..." : activeLease.automationEnabled !== false ? "On" : "Off"}
               </label>
             </div>
+            ) : null}
 
+            {activeLease ? (
             <div
               style={{
                 ...insetPanelSurface,
@@ -480,8 +495,9 @@ export const TenantLeasePanel: React.FC<TenantLeasePanelProps> = ({ tenantId }) 
                 </div>
               ) : null}
             </div>
+            ) : null}
             <div style={{ marginTop: 8, display: "grid", gap: 8 }}>
-              {confirmingLeaseId === activeLease.id ? (
+              {activeLease && confirmingLeaseId === activeLease.id ? (
                 <div
                   style={{
                     borderRadius: 12,
@@ -538,6 +554,7 @@ export const TenantLeasePanel: React.FC<TenantLeasePanelProps> = ({ tenantId }) 
                   </div>
                 </div>
               ) : null}
+              {activeLease ? (
               <div style={{ display: "flex", justifyContent: "flex-end" }}>
                 <button
                   type="button"
@@ -558,6 +575,7 @@ export const TenantLeasePanel: React.FC<TenantLeasePanelProps> = ({ tenantId }) 
                   End lease
                 </button>
               </div>
+              ) : null}
             </div>
           </div>
         )}

@@ -8,14 +8,16 @@ export type LeaseLifecycleStatus =
   | "renewed"
   | "terminated"
   | "cancelled"
+  | "archived"
   | "unknown";
 
-export type UnitOccupancyStatus = "vacant" | "occupied" | "notice_period" | "upcoming" | "review_required";
+export type UnitOccupancyStatus = "vacant" | "occupied" | "upcoming" | "archived" | "review_required";
 
 export type UnitOccupancy = {
   status: UnitOccupancyStatus;
-  label: "Vacant" | "Occupied" | "Notice period" | "Upcoming" | "Review required";
+  label: "Vacant" | "Occupied" | "Upcoming" | "Archived" | "Review needed";
   lease: LeaseLike | null;
+  reason?: string | null;
 };
 
 export type LeaseLike = {
@@ -90,6 +92,7 @@ const CANONICAL_LIFECYCLE_STATUSES = new Set<LeaseLifecycleStatus>([
   "renewed",
   "terminated",
   "cancelled",
+  "archived",
   "unknown",
 ]);
 
@@ -176,6 +179,7 @@ export function deriveLeaseLifecycleStatus(
   const endDay = leaseEndDay(lease);
 
   if (CANCELLED_STATUSES.has(status)) return "cancelled";
+  if (status === "archived" || lifecycleStatus === "archived") return "archived";
   if (TERMINATED_STATUSES.has(status) || (lease.terminationDate && (toDay(lease.terminationDate) ?? Infinity) <= currentDay)) {
     return "terminated";
   }
@@ -244,6 +248,15 @@ function hasManualCurrentOccupancy(unit: UnitLike, today: string | number | Date
   return status === "occupied" && hasManualOccupant(unit) && hasCurrentManualLeaseEnd(unit, today);
 }
 
+function hasUnitArchivedSignal(unit: UnitLike): boolean {
+  const status = normalize(unit.occupancyStatus || unit.status);
+  return status === "archived" || status === "deleted" || status === "inactive";
+}
+
+function hasLeaseArchivedSignal(lease: LeaseLike): boolean {
+  return deriveLeaseLifecycleStatus(lease) === "archived";
+}
+
 export function leasesForUnit(unit: UnitLike, leases: LeaseLike[]): LeaseLike[] {
   const ids = new Set(unitIdentifiers(unit));
   if (!ids.size) return [];
@@ -264,12 +277,28 @@ export function deriveUnitOccupancyFromLeases(
   }));
 
   const review = withLifecycle.find((item) => item.status === "unknown" || item.lease.derivedLifecycleRequiresReview === true);
-  if (review) return { status: "review_required", label: "Review required", lease: review.lease };
+  if (review) {
+    return {
+      status: "review_required",
+      label: "Review needed",
+      lease: review.lease,
+      reason: Array.isArray(review.lease.derivedLifecycleReasons) && review.lease.derivedLifecycleReasons.length
+        ? review.lease.derivedLifecycleReasons.join(", ")
+        : "Lifecycle data needs review.",
+    };
+  }
 
-  const notice = withLifecycle.find((item) => item.status === "notice_period");
-  if (notice) return { status: "notice_period", label: "Notice period", lease: notice.lease };
+  const currentLeases = withLifecycle.filter((item) => item.status === "active" || item.status === "notice_period");
+  if (currentLeases.length > 1) {
+    return {
+      status: "review_required",
+      label: "Review needed",
+      lease: currentLeases[0]?.lease ?? null,
+      reason: "Multiple current leases match this unit.",
+    };
+  }
 
-  const active = withLifecycle.find((item) => item.status === "active");
+  const active = currentLeases[0];
   if (active) return { status: "occupied", label: "Occupied", lease: active.lease };
 
   const upcoming = withLifecycle.find((item) => item.status === "signed_future");
@@ -277,6 +306,10 @@ export function deriveUnitOccupancyFromLeases(
 
   if (hasManualCurrentOccupancy(unit, today)) {
     return { status: "occupied", label: "Occupied", lease: null };
+  }
+
+  if (hasUnitArchivedSignal(unit) || matchedLeases.some(hasLeaseArchivedSignal)) {
+    return { status: "archived", label: "Archived", lease: matchedLeases[0] ?? null };
   }
 
   return { status: "vacant", label: "Vacant", lease: null };

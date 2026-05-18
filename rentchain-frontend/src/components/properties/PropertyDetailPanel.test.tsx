@@ -84,7 +84,13 @@ vi.mock("./UnitsCsvPreviewModal", () => ({
 }));
 
 vi.mock("./UnitEditModal", () => ({
-  UnitEditModal: () => null,
+  UnitEditModal: ({ open, unit }: any) =>
+    open ? (
+      <div data-testid="unit-edit-modal">
+        <div>modal tenant: {unit?.occupantName || ""}</div>
+        <div>modal lease end: {unit?.leaseEndDate || ""}</div>
+      </div>
+    ) : null,
 }));
 
 vi.mock("./SendApplicationModal", () => ({
@@ -96,7 +102,7 @@ vi.mock("@/components/leases/RiskScoreBadge", () => ({
 }));
 
 vi.mock("@/components/properties/PropertyCredibilitySummaryCard", () => ({
-  PropertyCredibilitySummaryCard: () => null,
+  PropertyCredibilitySummaryCard: ({ leaseHref }: any) => <a href={leaseHref}>View related leases</a>,
 }));
 
 describe("PropertyDetailPanel", () => {
@@ -434,9 +440,65 @@ describe("PropertyDetailPanel", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText("Lease risk overview")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getAllByText("Lease risk overview").length).toBeGreaterThan(0));
     expect(screen.getAllByText("Unit 101").length).toBeGreaterThan(0);
     expect(screen.queryByText("Unit wzECCdkACeLm2yWdV9b3")).not.toBeInTheDocument();
+  });
+
+  it("uses configured unit rent in lease risk overview when matched unit data is fresher than lease rent", async () => {
+    mocks.fetchUnitsForProperty.mockResolvedValue([
+      {
+        id: "unit-102",
+        unitNumber: "102",
+        status: "occupied",
+        rent: 1540,
+      },
+    ]);
+    mocks.getLeasesForProperty.mockResolvedValue({
+      leases: [
+        {
+          id: "lease-102",
+          tenantId: "tenant-1",
+          propertyId: "prop-1",
+          unitId: "unit-102",
+          unitNumber: "102",
+          monthlyRent: 1400,
+          startDate: "2026-01-01",
+          endDate: "2026-12-31",
+          status: "active",
+          riskScore: 72,
+          riskGrade: "B",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+      credibilitySummary: null,
+    });
+
+    render(
+      <MemoryRouter>
+        <PropertyDetailPanel
+          property={{
+            id: "prop-1",
+            name: "Harbour View",
+            addressLine1: "12 Wharf Street",
+            city: "Halifax",
+            province: "NS",
+            postalCode: "B3H 1A1",
+            country: "Canada",
+            totalUnits: 1,
+            amenities: [],
+            units: [],
+            createdAt: new Date().toISOString(),
+          }}
+          onRefresh={vi.fn()}
+        />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => expect(screen.getAllByText("Lease risk overview").length).toBeGreaterThan(0));
+    expect(screen.getAllByText("$1,540 / month").length).toBeGreaterThan(0);
+    expect(screen.queryByText("$1,400 / month")).not.toBeInTheDocument();
   });
 
   it("uses a conservative lease risk fallback when no unit label exists", async () => {
@@ -507,6 +569,7 @@ describe("PropertyDetailPanel", () => {
           unitId: "unit-future",
           unitNumber: "201",
           monthlyRent: 1800,
+          tenantName: "Future Tenant",
           startDate: "2026-06-01",
           endDate: "2027-05-31",
           status: "active",
@@ -521,6 +584,7 @@ describe("PropertyDetailPanel", () => {
           unitId: "unit-notice",
           unitNumber: "202",
           monthlyRent: 1900,
+          tenantName: "Current Tenant",
           startDate: "2026-01-01",
           endDate: "2026-12-31",
           status: "move_out_pending",
@@ -553,8 +617,70 @@ describe("PropertyDetailPanel", () => {
     );
 
     expect((await screen.findAllByText("Upcoming")).length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Notice period").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Occupied").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Future Tenant · Ends May 31, 2027/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Current Tenant · Ends Dec 31, 2026/).length).toBeGreaterThan(0);
     expect(screen.getByText("50%")).toBeInTheDocument();
+  });
+
+  it("hydrates the unit edit modal from lease-derived occupancy instead of stale unit fields", async () => {
+    mocks.fetchUnitsForProperty.mockResolvedValue([
+      {
+        id: "unit-occupied",
+        unitNumber: "101",
+        rent: 1800,
+        status: "occupied",
+        occupantName: "Stale Occupant",
+        leaseEndDate: "2026-08-30",
+      },
+    ]);
+    mocks.getLeasesForProperty.mockResolvedValue({
+      leases: [
+        {
+          id: "lease-occupied",
+          tenantId: "tenant-1",
+          propertyId: "prop-1",
+          unitId: "unit-occupied",
+          unitNumber: "101",
+          monthlyRent: 1800,
+          tenantName: "John Smith",
+          startDate: "2026-01-01",
+          endDate: "2027-05-29",
+          status: "active",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+      credibilitySummary: null,
+    });
+
+    render(
+      <MemoryRouter>
+        <PropertyDetailPanel
+          property={{
+            id: "prop-1",
+            name: "Harbour View",
+            addressLine1: "12 Wharf Street",
+            city: "Halifax",
+            province: "NS",
+            postalCode: "B3H 1A1",
+            country: "Canada",
+            totalUnits: 1,
+            amenities: [],
+            units: [],
+            createdAt: new Date().toISOString(),
+          }}
+          onRefresh={vi.fn()}
+        />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => expect(screen.getAllByText(/John Smith · Ends May 29, 2027/).length).toBeGreaterThan(0));
+    expect(screen.getAllByRole("link", { name: "View related leases" })[0]).toHaveAttribute("href", "/leases?propertyId=prop-1");
+    fireEvent.click(screen.getAllByRole("button", { name: "Edit" }).at(-1)!);
+
+    expect(screen.getByText("modal tenant: John Smith")).toBeInTheDocument();
+    expect(screen.getByText("modal lease end: 2027-05-29")).toBeInTheDocument();
   });
 
   it("uses the updated archive confirmation copy before archiving", async () => {
