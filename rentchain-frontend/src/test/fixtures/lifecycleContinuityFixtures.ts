@@ -1,0 +1,204 @@
+export type LifecycleContinuityUiRecord = Record<string, unknown>;
+
+export const lifecycleContinuityUiIds = {
+  landlordId: "lc_landlord_001",
+  propertyId: "lc_property_north_towers",
+  unit101Id: "lc_unit_101",
+  unit103Id: "lc_unit_103",
+  activeTenantId: "lc_tenant_active_001",
+  upcomingTenantId: "lc_tenant_upcoming_001",
+  activeLeaseId: "lc_lease_active_001",
+  upcomingLeaseId: "lc_lease_upcoming_001",
+  paymentId: "lc_payment_import_001",
+  ledgerEntryId: "lc_ledger_payment_001",
+  obligationId: "lc_obligation_2026_06",
+  decisionId: "lc_decision_manual_review_001",
+  signedDocumentId: "lc_doc_signed_lease_001",
+} as const;
+
+export const lifecycleContinuityUiDates = {
+  now: "2026-05-18T12:00:00.000Z",
+  activeLeaseStart: "2026-06-01",
+  activeLeaseEnd: "2027-05-31",
+  upcomingLeaseStart: "2026-07-01",
+  upcomingLeaseEnd: "2027-06-30",
+  paymentDate: "2026-06-01",
+  obligationDueDate: "2026-06-01T00:00:00.000Z",
+} as const;
+
+function cloneRecord<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function withOverrides<T extends LifecycleContinuityUiRecord>(
+  base: T,
+  overrides?: Partial<T>,
+): T {
+  return {
+    ...cloneRecord(base),
+    ...(overrides ?? {}),
+  };
+}
+
+export function buildLifecycleContinuityTenantRow(
+  overrides?: Partial<LifecycleContinuityUiRecord>,
+): LifecycleContinuityUiRecord {
+  return withOverrides(
+    {
+      id: lifecycleContinuityUiIds.activeTenantId,
+      displayName: "John Smith",
+      email: "john.smith@example.test",
+      lifecycleState: "active",
+      lifecycleLabel: "Active",
+      propertyLabel: "North Towers",
+      unitLabel: "Unit 101",
+      currentLease: {
+        leaseId: lifecycleContinuityUiIds.activeLeaseId,
+        label: "North Towers - Unit 101 Lease",
+        href: `/leases/${lifecycleContinuityUiIds.activeLeaseId}/summary`,
+      },
+    },
+    overrides,
+  );
+}
+
+export function buildLifecycleContinuityLeaseSummary(
+  overrides?: Partial<LifecycleContinuityUiRecord>,
+): LifecycleContinuityUiRecord {
+  return withOverrides(
+    {
+      leaseId: lifecycleContinuityUiIds.activeLeaseId,
+      label: "North Towers - Unit 101 Lease",
+      tenantName: "John Smith",
+      propertyLabel: "North Towers",
+      unitLabel: "Unit 101",
+      startDate: lifecycleContinuityUiDates.activeLeaseStart,
+      endDate: lifecycleContinuityUiDates.activeLeaseEnd,
+      status: "active",
+      signingStatus: "signed",
+      href: `/leases/${lifecycleContinuityUiIds.activeLeaseId}/summary`,
+      ledgerHref: `/leases/${lifecycleContinuityUiIds.activeLeaseId}/ledger`,
+    },
+    overrides,
+  );
+}
+
+export function buildLifecycleContinuityPropertyUnitRows(): LifecycleContinuityUiRecord[] {
+  return [
+    {
+      unitId: lifecycleContinuityUiIds.unit101Id,
+      unitLabel: "Unit 101",
+      propertyLabel: "North Towers",
+      configuredRent: "$1,640.00",
+      occupancyStatus: "Occupied",
+      occupancyDetail: "John Smith - Ends May 31, 2027",
+      leaseId: lifecycleContinuityUiIds.activeLeaseId,
+      leaseHref: `/leases/${lifecycleContinuityUiIds.activeLeaseId}/summary`,
+      ledgerHref: `/leases/${lifecycleContinuityUiIds.activeLeaseId}/ledger`,
+    },
+    {
+      unitId: lifecycleContinuityUiIds.unit103Id,
+      unitLabel: "Unit 103",
+      propertyLabel: "North Towers",
+      configuredRent: "$1,980.00",
+      occupancyStatus: "Upcoming",
+      occupancyDetail: "Bailey Blinkers - Ends Jun 30, 2027",
+      leaseId: lifecycleContinuityUiIds.upcomingLeaseId,
+      leaseHref: `/leases/${lifecycleContinuityUiIds.upcomingLeaseId}/summary`,
+      ledgerHref: `/leases/${lifecycleContinuityUiIds.upcomingLeaseId}/ledger`,
+    },
+  ];
+}
+
+export function buildLifecycleContinuityPaymentRow(
+  overrides?: Partial<LifecycleContinuityUiRecord>,
+): LifecycleContinuityUiRecord {
+  return withOverrides(
+    {
+      id: lifecycleContinuityUiIds.paymentId,
+      paymentDocumentId: lifecycleContinuityUiIds.paymentId,
+      tenantName: "John Smith",
+      propertyLabel: "North Towers",
+      unitLabel: "Unit 101",
+      amount: "$1,640.00",
+      amountCents: 164000,
+      paymentDate: lifecycleContinuityUiDates.paymentDate,
+      method: "etransfer",
+      reference: "LC-CSV-1001",
+      status: "recorded",
+      canEdit: true,
+      ledgerEntryId: lifecycleContinuityUiIds.ledgerEntryId,
+    },
+    overrides,
+  );
+}
+
+export function buildLifecycleContinuityLeaseLedgerResponse(): LifecycleContinuityUiRecord {
+  return {
+    lease: buildLifecycleContinuityLeaseSummary(),
+    ledgerEntries: [
+      {
+        id: lifecycleContinuityUiIds.ledgerEntryId,
+        type: "payment",
+        category: "payment",
+        amount: "-$1,640.00",
+        amountCents: 164000,
+        signedAmountCents: -164000,
+        effectiveDate: lifecycleContinuityUiDates.paymentDate,
+        paymentDocumentId: lifecycleContinuityUiIds.paymentId,
+      },
+    ],
+    obligations: [
+      {
+        id: lifecycleContinuityUiIds.obligationId,
+        financialStatus: "Current",
+        dueDate: lifecycleContinuityUiDates.obligationDueDate,
+        expectedAmount: "$1,640.00",
+        paidAmount: "$1,640.00",
+        outstandingAmount: "$0.00",
+        evidence: "Reconciled",
+      },
+    ],
+    decisions: [
+      {
+        id: lifecycleContinuityUiIds.decisionId,
+        financialSignal: "Manual review required",
+        workflowStatus: "Unreviewed",
+        obligationId: lifecycleContinuityUiIds.obligationId,
+      },
+    ],
+  };
+}
+
+export function buildLifecycleContinuityTenantWorkspaceDocumentContext(): LifecycleContinuityUiRecord {
+  return {
+    leaseId: lifecycleContinuityUiIds.activeLeaseId,
+    tenantId: lifecycleContinuityUiIds.activeTenantId,
+    propertyLabel: "North Towers",
+    unitLabel: "Unit 101",
+    leaseLabel: "North Towers - Unit 101 Lease",
+    documentStatus: "signed",
+    documentId: lifecycleContinuityUiIds.signedDocumentId,
+    documentUrl: "https://example.test/docs/lc_doc_signed_lease_001.pdf",
+    confidence: "high",
+    warnings: [],
+  };
+}
+
+export function buildLifecycleContinuityFrontendScenario(): {
+  tenantRow: LifecycleContinuityUiRecord;
+  leaseSummary: LifecycleContinuityUiRecord;
+  propertyUnitRows: LifecycleContinuityUiRecord[];
+  paymentRow: LifecycleContinuityUiRecord;
+  leaseLedger: LifecycleContinuityUiRecord;
+  tenantWorkspaceDocumentContext: LifecycleContinuityUiRecord;
+} {
+  return {
+    tenantRow: buildLifecycleContinuityTenantRow(),
+    leaseSummary: buildLifecycleContinuityLeaseSummary(),
+    propertyUnitRows: buildLifecycleContinuityPropertyUnitRows(),
+    paymentRow: buildLifecycleContinuityPaymentRow(),
+    leaseLedger: buildLifecycleContinuityLeaseLedgerResponse(),
+    tenantWorkspaceDocumentContext: buildLifecycleContinuityTenantWorkspaceDocumentContext(),
+  };
+}
