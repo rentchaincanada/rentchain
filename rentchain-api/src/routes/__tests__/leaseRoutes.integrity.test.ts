@@ -572,6 +572,81 @@ describe("leaseRoutes integrity repairs", () => {
     expect(res.body?.delinquencySignals).toEqual([]);
   });
 
+  it("derives lease ledger obligation due date from legacy lease term aliases before stale due date", async () => {
+    seedDoc("leases", "lease-1", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      tenantId: "tenant-1",
+      unitId: "unit-101",
+      unitNumber: "101",
+      monthlyRent: 1640,
+      leaseStartDate: "2026-05-31",
+      leaseEndDate: "2027-05-29",
+      dueDate: "2026-05-05",
+      status: "active",
+    });
+    seedDoc("ledgerEntries", "entry-prepaid-1", {
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      leaseId: "lease-1",
+      propertyId: "prop-1",
+      unitId: "unit-101",
+      entryType: "payment",
+      category: "payment",
+      amountCents: 164000,
+      effectiveDate: "2026-05-05",
+      method: "etransfer",
+      createdAt: 20,
+    });
+
+    const app = await makeApp();
+    const res = await request(app).get("/lease-1/ledger");
+
+    expect(res.status).toBe(200);
+    expect(res.body?.obligationRows).toEqual([
+      expect.objectContaining({
+        leaseId: "lease-1",
+        periodStart: "2026-05-31T00:00:00.000Z",
+        periodEnd: "2027-05-29T00:00:00.000Z",
+        dueDate: "2026-06-01",
+        paidAmountCents: 164000,
+        obligationStatus: "paid",
+        evidenceStatus: "reconciled",
+      }),
+    ]);
+  });
+
+  it("derives lease ledger obligation due date from lease start alias when due date is missing", async () => {
+    seedDoc("leases", "lease-103", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      tenantId: "tenant-3",
+      unitId: "unit-103",
+      unitNumber: "103",
+      monthlyRent: 1725,
+      leaseStartDate: "2026-07-01",
+      leaseEndDate: "2027-06-30",
+      status: "active",
+    });
+
+    const app = await makeApp();
+    const res = await request(app).get("/lease-103/ledger");
+
+    expect(res.status).toBe(200);
+    expect(res.body?.obligationRows).toEqual([
+      expect.objectContaining({
+        leaseId: "lease-103",
+        periodStart: "2026-07-01T00:00:00.000Z",
+        periodEnd: "2027-06-30T00:00:00.000Z",
+        dueDate: "2026-07-01",
+        expectedAmountCents: 172500,
+        paidAmountCents: 0,
+        obligationStatus: "missing",
+        evidenceStatus: "none",
+      }),
+    ]);
+  });
+
   it("exports lease ledger csv with property and unit labels instead of raw ids", async () => {
     seedDoc("properties", "prop-1", {
       landlordId: "landlord-1",

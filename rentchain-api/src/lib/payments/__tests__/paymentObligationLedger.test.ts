@@ -101,6 +101,45 @@ describe("paymentObligationLedger", () => {
     );
   });
 
+  it("derives due date from legacy lease start aliases before stale due date fallback", () => {
+    const rows = buildPaymentObligationLedgerRows({
+      leases: [
+        {
+          ...lease,
+          startDate: null,
+          leaseStartDate: "2026-05-31",
+          dueDate: "2026-05-05",
+        },
+      ],
+    });
+
+    expect(rows[0]).toEqual(
+      expect.objectContaining({
+        periodStart: "2026-05-31T00:00:00.000Z",
+        dueDate: "2026-06-01",
+      })
+    );
+  });
+
+  it("derives due date from nested rent schedule due day", () => {
+    const rows = buildPaymentObligationLedgerRows({
+      leases: [
+        {
+          ...lease,
+          startDate: "2026-07-01",
+          dueDay: null,
+          rentSchedule: { dueDay: 5 },
+        },
+      ],
+    });
+
+    expect(rows[0]).toEqual(
+      expect.objectContaining({
+        dueDate: "2026-07-05",
+      })
+    );
+  });
+
   it("derives monthly obligation due date from a custom lease due day", () => {
     const rows = buildPaymentObligationLedgerRows({
       leases: [{ ...lease, startDate: "2026-05-01", dueDay: 5, dueDate: "2026-05-01" }],
