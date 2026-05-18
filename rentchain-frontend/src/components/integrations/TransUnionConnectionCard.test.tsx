@@ -34,7 +34,7 @@ describe("TransUnionConnectionCard", () => {
     expect(screen.getAllByText("Not connected")).toHaveLength(2);
     expect(screen.getByText("Connect or get access")).toBeInTheDocument();
     expect(screen.getByText("Ready to screen")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Get TransUnion Access" }));
+    fireEvent.click(screen.getByRole("button", { name: "Start provider setup" }));
     expect(onGetAccess).toHaveBeenCalledTimes(1);
   });
 

@@ -96,7 +96,7 @@ export function ConnectTransUnionModal({
       <div
         role="dialog"
         aria-modal="true"
-        aria-label="TransUnion Connected"
+        aria-label="Screening provider connected"
         style={{
           position: "fixed",
           inset: 0,
@@ -120,10 +120,10 @@ export function ConnectTransUnionModal({
           }}
         >
           <div style={{ display: "grid", gap: spacing.sm }}>
-            <h2 style={{ margin: 0, fontSize: "1.2rem" }}>TransUnion Connected</h2>
+            <h2 style={{ margin: 0, fontSize: "1.2rem" }}>Screening provider connected</h2>
             <p style={{ margin: 0, color: text.muted, lineHeight: 1.6 }}>
-              Your TransUnion membership is now connected to RentChain. You can continue screening
-              applicants without leaving this workflow.
+              Your live screening provider membership is now connected to RentChain. TransUnion is
+              the active provider path for this connection.
             </p>
           </div>
           <div
@@ -163,7 +163,7 @@ export function ConnectTransUnionModal({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="Connect Your TransUnion Account"
+      aria-label="Configure screening provider"
       style={{
         position: "fixed",
         inset: 0,
@@ -191,11 +191,11 @@ export function ConnectTransUnionModal({
         }}
       >
         <div style={{ display: "grid", gap: spacing.xs }}>
-          <h2 style={{ margin: 0, fontSize: "1.2rem" }}>Connect Your TransUnion Account</h2>
+          <h2 style={{ margin: 0, fontSize: "1.2rem" }}>Configure screening provider</h2>
           <p style={{ margin: 0, color: text.muted }}>
-            Connect your TransUnion membership by entering the member code and passcode issued to
-            your business. Screening requests are initiated under your TransUnion credentials within
-            RentChain.
+            Configure the live provider path for tenant screening. TransUnion is the current live
+            provider in RentChain, and screening requests use the member code and passcode issued to
+            your business.
           </p>
           <p style={{ margin: 0, color: text.subtle, fontSize: "0.92rem" }}>
             If connection details are not available yet, use the access flow first. If the connection window does not open on mobile, try again or continue on desktop.
@@ -218,7 +218,7 @@ export function ConnectTransUnionModal({
               },
               {
                 key: "connect",
-                label: "Connect membership",
+                label: "Connect provider",
                 active: showCredentials,
                 complete: success,
               },
@@ -266,11 +266,11 @@ export function ConnectTransUnionModal({
                   gap: 10,
                 }}
               >
-                <div style={{ fontWeight: 700 }}>Need TransUnion access?</div>
+                <div style={{ fontWeight: 700 }}>Need provider access?</div>
                 <div style={{ color: text.muted, fontSize: "0.92rem", lineHeight: 1.5 }}>
-                  Don&apos;t have TransUnion yet? We&apos;ll guide you through the external onboarding
-                  path first. Once TransUnion issues your member code and passcode, come back here to
-                  finish setup in RentChain.
+                  Need live screening credentials? We&apos;ll guide you through the current provider
+                  onboarding path first. Once TransUnion issues your member code and passcode, come
+                  back here to finish setup in RentChain.
                 </div>
                 <div style={{ color: text.subtle, fontSize: "0.86rem" }}>
                   Outcome: your account moves into a credentialing-in-progress state until you receive
@@ -279,7 +279,7 @@ export function ConnectTransUnionModal({
                 {onGetAccess ? (
                   <div>
                     <Button type="button" variant="secondary" onClick={onGetAccess}>
-                      Get TransUnion Access
+                      Start provider setup
                     </Button>
                   </div>
                 ) : null}
@@ -330,7 +330,7 @@ export function ConnectTransUnionModal({
                   gap: 6,
                 }}
               >
-                <div style={{ fontWeight: 700 }}>Membership credentials</div>
+                <div style={{ fontWeight: 700 }}>Live provider details</div>
                 <div style={{ color: text.muted, fontSize: "0.92rem", lineHeight: 1.5 }}>
                   Enter the member code and passcode exactly as TransUnion provided them.
                 </div>

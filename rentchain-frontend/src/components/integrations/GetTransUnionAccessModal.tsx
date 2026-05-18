@@ -94,7 +94,7 @@ export function GetTransUnionAccessModal({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="Get TransUnion Access"
+      aria-label="Screening provider setup"
       style={{
         position: "fixed",
         inset: 0,
@@ -122,11 +122,11 @@ export function GetTransUnionAccessModal({
         }}
       >
         <div style={{ display: "grid", gap: spacing.sm }}>
-          <h2 style={{ margin: 0, fontSize: "1.2rem" }}>Get TransUnion Access</h2>
+          <h2 style={{ margin: 0, fontSize: "1.2rem" }}>Screening provider setup</h2>
           <p style={{ margin: 0, color: text.muted, lineHeight: 1.6 }}>
-            To use TransUnion screening through RentChain, your business must first be credentialed
-            by TransUnion. Once approved, you’ll receive a member code and passcode to enter in
-            RentChain.
+            Configure your screening workflow before ordering reports. TransUnion is the current
+            live provider path in RentChain, and your business must be credentialed by TransUnion
+            before live screening can begin.
           </p>
         </div>
         <div
@@ -138,7 +138,7 @@ export function GetTransUnionAccessModal({
         >
           {[
             { label: "Not connected", state: "complete" },
-            { label: "Get access", state: "current" },
+            { label: "Provider access", state: "current" },
             { label: "Return to connect", state: "upcoming" },
           ].map((step) => (
             <div
@@ -171,8 +171,8 @@ export function GetTransUnionAccessModal({
         >
           <div style={{ fontWeight: 700, color: text.primary, marginBottom: 8 }}>How credentialing works</div>
           <ol style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 6 }}>
-            <li>Contact TransUnion.</li>
-            <li>Get credentialed for your business.</li>
+            <li>Choose the live provider path for this workflow.</li>
+            <li>Get credentialed for your business with the provider.</li>
             <li>Receive your member code and passcode.</li>
             <li>Return to RentChain and connect your credentials.</li>
           </ol>
@@ -269,8 +269,8 @@ export function GetTransUnionAccessModal({
             lineHeight: 1.6,
           }}
         >
-          Expected outcome: your account will be marked as credentialing in progress so you always
-          know the next step is to return and connect the issued membership details.
+          Expected outcome: your screening workflow will be marked as credentialing in progress so
+          you always know the next step is to return and connect the issued membership details.
         </div>
         <div
           style={{
@@ -317,7 +317,7 @@ export function GetTransUnionAccessModal({
             Close
           </Button>
           <Button type="button" onClick={() => void onMarkInProgress()} disabled={submitting}>
-            {submitting ? "Saving..." : "Get TransUnion Access"}
+            {submitting ? "Saving..." : "Start provider setup"}
           </Button>
         </div>
       </Card>

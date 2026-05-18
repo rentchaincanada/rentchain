@@ -164,10 +164,10 @@ describe("GetTransUnionAccessModal", () => {
       />
     );
 
-    const dialog = screen.getByRole("dialog", { name: "Get TransUnion Access" });
+    const dialog = screen.getByRole("dialog", { name: "Screening provider setup" });
     const card = dialog.firstElementChild as HTMLElement;
     expect(dialog).toHaveStyle({ overflowY: "auto" });
     expect(card).toHaveStyle({ maxHeight: "calc(100dvh - 24px)", overflowY: "auto" });
-    expect(screen.getByRole("button", { name: "Get TransUnion Access" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Start provider setup" })).toBeInTheDocument();
   });
 });

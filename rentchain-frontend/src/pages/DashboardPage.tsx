@@ -30,7 +30,7 @@ import { listReferrals } from "../api/referralsApi";
 import { markDashboardVisit } from "@/features/upgradeNudges/nudgeStore";
 import { GettingStartedCard } from "../components/onboarding/GettingStartedCard";
 import { LandlordWelcomeModal } from "../components/onboarding/LandlordWelcomeModal";
-import { SCREENING_ENABLED, getUiLocale, screeningComingSoonLabel } from "../config/screening";
+import { SCREENING_ENABLED } from "../config/screening";
 import { openUpgradeFlow } from "@/billing/openUpgradeFlow";
 import { UpgradeNudgeInlineCard } from "@/features/upgradeNudges/UpgradeNudgeInlineCard";
 import { canUseTimeline, normalizeTimelinePlan } from "@/features/automation/timeline/timelineEntitlements";
@@ -258,8 +258,7 @@ const DashboardPage: React.FC = () => {
   const [showTimelineNudge, setShowTimelineNudge] = React.useState(false);
   const timelineNudgeViewedRef = React.useRef(false);
   const canManualScreen = isAdmin || features?.screening_pay_per_use !== false;
-  const uiLocale = getUiLocale();
-  const screeningLabel = screeningComingSoonLabel(uiLocale);
+  const screeningWorkflowLabel = "Screening workflow setup";
   const openActionsRef = React.useRef<HTMLDivElement | null>(null);
   const canUseReferrals = isLandlord || isAdmin;
   const [properties, setProperties] = React.useState<any[]>([]);
@@ -1004,8 +1003,8 @@ const DashboardPage: React.FC = () => {
                   Add Expense
                 </Button>
                 {!SCREENING_ENABLED ? (
-                  <Button variant="primary" disabled>
-                    {screeningLabel}
+                  <Button variant="primary" onClick={() => navigate("/applications")}>
+                    {screeningWorkflowLabel}
                   </Button>
                 ) : screeningSetupComplete ? (
                   <Button variant="primary" onClick={() => navigate("/applications")}>
@@ -1124,27 +1123,23 @@ const DashboardPage: React.FC = () => {
 
         {dataReady ? (
           <Card style={{ padding: spacing.md, border: `1px solid ${colors.border}` }}>
-            <div style={{ fontWeight: 700, marginBottom: 6 }}>Credit screening</div>
+            <div style={{ fontWeight: 700, marginBottom: 6 }}>Screening workflow</div>
             <div style={{ color: text.muted, marginBottom: 12 }}>
               {SCREENING_ENABLED
                 ? screeningSetupComplete
                   ? "Your configured screening provider is connected. Go to Applications to start screening."
                   : "Open the screening workflow to review provider setup, consent requirements, and manual/offline options."
-                : screeningLabel}
+                : "Open the screening workflow to review provider paths, consent requirements, and manual/offline options."}
             </div>
-            {SCREENING_ENABLED ? (
-              <Button onClick={() => navigate(screeningSetupComplete ? "/applications" : "/applications?openTransUnionAccess=1")}>
-                {screeningSetupComplete ? "Run screening" : "Set up screening workflow"}
-              </Button>
-            ) : (
-              <Button disabled>{screeningLabel}</Button>
-            )}
+            <Button onClick={() => navigate(screeningSetupComplete ? "/applications" : "/applications?openTransUnionAccess=1")}>
+              {screeningSetupComplete ? "Run screening" : "Set up screening workflow"}
+            </Button>
           </Card>
         ) : null}
 
         {dataReady && SCREENING_ENABLED ? (
           <Card style={{ padding: spacing.md, border: `1px solid ${colors.border}` }}>
-            <div style={{ fontWeight: 700, marginBottom: 6 }}>TransUnion Setup Funnel</div>
+            <div style={{ fontWeight: 700, marginBottom: 6 }}>Provider setup funnel</div>
             <div style={{ color: text.muted, marginBottom: 12 }}>
               {transUnionFunnelLoading
                 ? "Loading onboarding funnel..."

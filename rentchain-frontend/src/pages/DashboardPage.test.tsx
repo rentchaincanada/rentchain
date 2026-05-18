@@ -577,7 +577,7 @@ describe("DashboardPage", () => {
       </ToastProvider>
     );
 
-    expect(await screen.findByText("TransUnion Setup Funnel")).toBeInTheDocument();
+    expect(await screen.findByText("Provider setup funnel")).toBeInTheDocument();
     screen.getAllByRole("button", { name: "Open" })[0].click();
     expect(assignMock).toHaveBeenCalledWith("/applications?openTransUnionAccess=1");
     expect(screen.getByText("Started → Connected 50%")).toBeInTheDocument();
