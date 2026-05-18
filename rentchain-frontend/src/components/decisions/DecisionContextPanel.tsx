@@ -75,9 +75,10 @@ export function DecisionContextPanel({
       </div>
 
       <div style={{ display: "grid", gap: 4 }}>
-        <div style={{ color: "#334155", fontSize: 12, fontWeight: 800, textTransform: "uppercase" }}>Review trail</div>
+        <div style={{ color: "#334155", fontSize: 12, fontWeight: 800, textTransform: "uppercase" }}>Review workflow trail</div>
+        <div style={{ color: "#64748b", fontSize: 12 }}>Tracks operational review actions only.</div>
         <div style={{ color: "#475569", fontSize: 12 }}>
-          Current status: <strong>{decisionStatusCopy[decision.status || "detected"]}</strong>
+          Workflow status: <strong>{decisionStatusCopy[decision.status || "detected"]}</strong>
         </div>
         {latestAction ? (
           <div style={{ color: "#475569", fontSize: 12 }}>
@@ -93,4 +94,3 @@ export function DecisionContextPanel({
 }
 
 export default DecisionContextPanel;
-

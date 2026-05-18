@@ -530,7 +530,15 @@ describe("LeaseLedgerPage", () => {
 
     expect(await screen.findByText("Decisions")).toBeInTheDocument();
     expect(screen.getByText("Read-only decisions derived from detected lease and payment signals.")).toBeInTheDocument();
+    expect(
+      screen.getByText("These actions manage operational review workflow only. They do not change lease balances, payment records, or ledger history.")
+    ).toBeInTheDocument();
     expect(screen.getByText("Overdue Rent")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /Mark reviewed: Marks this issue as reviewed by staff/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: /Snooze: Temporarily hides this issue until later review/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: /Assign: Assigns this review item to a team\/person/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: /Dismiss: Dismisses this signal from active review/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: /Resolve: Marks the operational review task as resolved/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByText("Rent past due date").length).toBeGreaterThan(0);
     expect(screen.getAllByRole("link", { name: "Lease ledger" }).some((link) => link.getAttribute("href") === "/leases/lease-1/ledger")).toBe(true);
     expect(screen.getAllByRole("link", { name: "Harbour View · Unit 101" }).some((link) => link.getAttribute("href") === "/properties?propertyId=prop-1&unitId=unit-1")).toBe(true);
@@ -585,7 +593,7 @@ describe("LeaseLedgerPage", () => {
     );
 
     expect(await screen.findByText("Overdue Rent")).toBeInTheDocument();
-    fireEvent.click(screen.getAllByRole("button", { name: "Mark reviewed" })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: /Mark reviewed:/ })[0]);
 
     await waitFor(() => expect(mocks.patchDecisionAction).toHaveBeenCalledWith("decision-overdue", expect.objectContaining({ actionType: "reviewed" })));
     await waitFor(() => expect(mocks.fetchLeaseLedger).toHaveBeenCalledTimes(2));
