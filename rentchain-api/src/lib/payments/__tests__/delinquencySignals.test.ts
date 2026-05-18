@@ -196,6 +196,31 @@ describe("delinquencySignals", () => {
     expect(signals[1].reasons).toEqual(["obligation_status_unknown"]);
   });
 
+  it("carries normalized due date into manual review signals for canonical payment rows", () => {
+    const signals = deriveDelinquencySignals(
+      [
+        row({
+          rowId: "canonical-review",
+          paymentIntentId: null,
+          rentPaymentId: null,
+          paymentDocumentId: "payment-1",
+          obligationStatus: "manual_review_required",
+          evidenceStatus: "manual_review_required",
+          source: "canonical_payment",
+          dueDate: "2026-07-01",
+        }),
+      ],
+      "2026-07-15T00:00:00.000Z"
+    );
+
+    expect(signals[0]).toEqual(
+      expect.objectContaining({
+        signalType: "manual_review_required",
+        dueDate: "2026-07-01T00:00:00.000Z",
+      })
+    );
+  });
+
   it("summarizes signal counts and outstanding rent", () => {
     const signals = deriveDelinquencySignals(
       [

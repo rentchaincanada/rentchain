@@ -205,6 +205,42 @@ describe("decisionEngine", () => {
     );
   });
 
+  it("falls back to obligation row due date for manual review decision metadata", () => {
+    const decisions = deriveDecisions({
+      delinquencySignals: [
+        signal({
+          signalId: "delinquency:manual_review_required:canonical-review",
+          paymentIntentId: null,
+          rentPaymentId: null,
+          signalType: "manual_review_required",
+          severity: "warning",
+          dueDate: null,
+          reasons: ["obligation_requires_manual_review"],
+        }),
+      ],
+      obligationRows: [
+        row({
+          rowId: "canonical_payment:lease-103:payment-1",
+          paymentIntentId: null,
+          rentPaymentId: null,
+          paymentDocumentId: "payment-1",
+          obligationStatus: "manual_review_required",
+          evidenceStatus: "manual_review_required",
+          source: "canonical_payment",
+          dueDate: "2026-07-01",
+        }),
+      ],
+      today: "2026-07-15T00:00:00.000Z",
+    });
+
+    expect(decisions[0].metadata).toEqual(
+      expect.objectContaining({
+        obligationRowId: "canonical_payment:lease-103:payment-1",
+        dueDate: "2026-07-01",
+      })
+    );
+  });
+
   it("does not create decisions for informational rent_due signals", () => {
     const decisions = deriveDecisions({
       delinquencySignals: [

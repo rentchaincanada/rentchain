@@ -465,6 +465,7 @@ describe("leaseRoutes integrity repairs", () => {
       expect.objectContaining({
         leaseId: "lease-1",
         paymentDocumentId: "payment-import-1",
+        dueDate: "2026-05-01",
         expectedAmountCents: 198000,
         paidAmountCents: 198000,
         obligationStatus: "paid",
@@ -551,6 +552,7 @@ describe("leaseRoutes integrity repairs", () => {
     expect(res.body?.obligationRows).toEqual([
       expect.objectContaining({
         leaseId: "lease-1",
+        dueDate: "2026-06-01",
         expectedAmountCents: 164000,
         paidAmountCents: 492000,
         obligationStatus: "overpaid",
@@ -568,6 +570,138 @@ describe("leaseRoutes integrity repairs", () => {
       })
     );
     expect(res.body?.delinquencySignals).toEqual([]);
+  });
+
+  it("derives lease ledger obligation due date from legacy lease term aliases before stale due date", async () => {
+    seedDoc("leases", "lease-1", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      tenantId: "tenant-1",
+      unitId: "unit-101",
+      unitNumber: "101",
+      monthlyRent: 1640,
+      leaseStartDate: "2026-05-31",
+      leaseEndDate: "2027-05-29",
+      dueDate: "2026-05-05",
+      status: "active",
+    });
+    seedDoc("ledgerEntries", "entry-prepaid-1", {
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      leaseId: "lease-1",
+      propertyId: "prop-1",
+      unitId: "unit-101",
+      entryType: "payment",
+      category: "payment",
+      amountCents: 164000,
+      effectiveDate: "2026-05-05",
+      method: "etransfer",
+      createdAt: 20,
+    });
+
+    const app = await makeApp();
+    const res = await request(app).get("/lease-1/ledger");
+
+    expect(res.status).toBe(200);
+    expect(res.body?.obligationRows).toEqual([
+      expect.objectContaining({
+        leaseId: "lease-1",
+        periodStart: "2026-05-31T00:00:00.000Z",
+        periodEnd: "2027-05-29T00:00:00.000Z",
+        dueDate: "2026-06-01",
+        paidAmountCents: 164000,
+        obligationStatus: "paid",
+        evidenceStatus: "reconciled",
+      }),
+    ]);
+  });
+
+  it("derives lease ledger obligation due date from lease start alias when due date is missing", async () => {
+    seedDoc("leases", "lease-103", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      tenantId: "tenant-3",
+      unitId: "unit-103",
+      unitNumber: "103",
+      monthlyRent: 1725,
+      leaseStartDate: "2026-07-01",
+      leaseEndDate: "2027-06-30",
+      status: "active",
+    });
+
+    const app = await makeApp();
+    const res = await request(app).get("/lease-103/ledger");
+
+    expect(res.status).toBe(200);
+    expect(res.body?.obligationRows).toEqual([
+      expect.objectContaining({
+        leaseId: "lease-103",
+        periodStart: "2026-07-01T00:00:00.000Z",
+        periodEnd: "2027-06-30T00:00:00.000Z",
+        dueDate: "2026-07-01",
+        expectedAmountCents: 172500,
+        paidAmountCents: 0,
+        obligationStatus: "missing",
+        evidenceStatus: "none",
+      }),
+    ]);
+  });
+
+  it("keeps normalized due date on manual review payloads for canonical payment obligations", async () => {
+    seedDoc("leases", "lease-103", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      tenantId: "tenant-3",
+      unitId: "unit-103",
+      unitNumber: "103",
+      monthlyRent: 1725,
+      leaseStartDate: "2026-07-01",
+      leaseEndDate: "2027-06-30",
+      status: "active",
+    });
+    seedDoc("payments", "payment-outside-window", {
+      landlordId: "landlord-1",
+      tenantId: "tenant-3",
+      leaseId: "lease-103",
+      propertyId: "prop-1",
+      unitId: "unit-103",
+      amountCents: 172500,
+      status: "recorded",
+      paidAt: "2026-05-01",
+      effectiveDate: "2026-05-01",
+      source: "payment_csv_import",
+    });
+
+    const app = await makeApp();
+    const res = await request(app).get("/lease-103/ledger");
+
+    expect(res.status).toBe(200);
+    expect(res.body?.obligationRows).toEqual([
+      expect.objectContaining({
+        leaseId: "lease-103",
+        dueDate: "2026-07-01",
+        obligationStatus: "manual_review_required",
+        evidenceStatus: "manual_review_required",
+        source: "canonical_payment",
+      }),
+    ]);
+    expect(res.body?.delinquencySignals).toEqual([
+      expect.objectContaining({
+        leaseId: "lease-103",
+        dueDate: "2026-07-01T00:00:00.000Z",
+        signalType: "manual_review_required",
+      }),
+    ]);
+    expect(res.body?.decisions).toEqual([
+      expect.objectContaining({
+        leaseId: "lease-103",
+        decisionType: "review_manual_payment_issue",
+        metadata: expect.objectContaining({
+          dueDate: "2026-07-01T00:00:00.000Z",
+          obligationStatus: "manual_review_required",
+        }),
+      }),
+    ]);
   });
 
   it("exports lease ledger csv with property and unit labels instead of raw ids", async () => {

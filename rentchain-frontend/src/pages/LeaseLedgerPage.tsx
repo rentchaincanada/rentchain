@@ -68,6 +68,11 @@ function formatSignedCurrencyCents(cents: number, entryType: LeaseLedgerEntry["e
 
 function formatDate(value: string | null | undefined) {
   if (!value) return "—";
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+  if (dateOnly) {
+    const [, year, month, day] = dateOnly;
+    return new Date(Number(year), Number(month) - 1, Number(day)).toLocaleDateString();
+  }
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
   return parsed.toLocaleDateString();
