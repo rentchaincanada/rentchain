@@ -205,6 +205,51 @@ describe("deriveCommandCenterSignals", () => {
 
     expect(signals).toEqual([]);
   });
+
+  it("normalizes raw decision context labels with operational lease and property references", () => {
+    const signals = deriveCommandCenterSignals({
+      decisions: [
+        decision({
+          id: "decision-lease",
+          relatedEntity: { kind: "lease", id: "lease-1", label: "Lease jjua9wFKDV19d5y5sdV7" },
+          destination: "/leases/lease-1/ledger",
+        }),
+        decision({
+          id: "decision-property",
+          type: "property",
+          workflow: {
+            queue: "general_review",
+            workflowState: "new",
+            ownershipType: "operations",
+            reviewPriority: "medium",
+            escalationLevel: "attention",
+            manualOnly: true,
+          },
+          relatedEntity: { kind: "property", id: "property-1", label: "Property ZaeL9oqpJCSZPguWa6wR" },
+          destination: "/properties?propertyId=property-1",
+        }),
+      ],
+      leases: [lease()],
+      properties: [
+        {
+          id: "property-1",
+          name: "Center Suites",
+          addressLine1: "2 Main",
+          city: "Halifax",
+          totalUnits: 1,
+          units: [],
+          createdAt: "2026-01-01T00:00:00.000Z",
+        } as any,
+      ],
+    });
+
+    expect(signals.find((signal) => signal.id === "decision:decision-lease")?.contextLabel).toBe(
+      "North Towers · 101 · John Smith"
+    );
+    expect(signals.find((signal) => signal.id === "decision:decision-property")?.contextLabel).toBe("Center Suites");
+    expect(signals.map((signal) => signal.contextLabel).join(" ")).not.toContain("jjua9wFKDV19d5y5sdV7");
+    expect(signals.map((signal) => signal.contextLabel).join(" ")).not.toContain("ZaeL9oqpJCSZPguWa6wR");
+  });
 });
 
 describe("OperationalCommandCenterPage", () => {
@@ -268,6 +313,9 @@ describe("OperationalCommandCenterPage", () => {
     expect(screen.getAllByText("Lease lifecycle").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Documents / workspace").length).toBeGreaterThan(0);
     expect(screen.getByText("Review missing payment")).toBeInTheDocument();
+    expect(screen.getAllByText("Context: North Towers · 101 · John Smith").length).toBeGreaterThan(0);
+    expect(screen.queryByText(/Lease jjua9wFKDV19d5y5sdV7/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Property ZaeL9oqpJCSZPguWa6wR/i)).not.toBeInTheDocument();
     expect(screen.getAllByText("Open source workflow").length).toBeGreaterThan(0);
     expect(mocks.macShellProps).toHaveBeenCalledWith(expect.objectContaining({ title: "Operational command center" }));
   });

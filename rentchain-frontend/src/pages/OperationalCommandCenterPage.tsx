@@ -125,7 +125,90 @@ function decisionCategory(item: DecisionInboxItem): CommandCenterCategory {
 function leaseLabel(lease: LandlordActiveLease) {
   const property = lease.propertyName || lease.propertyLabel || "Property";
   const unit = lease.unitLabel || lease.unitNumber || "Unit";
-  return `${property} · ${unit}`;
+  const tenant = lease.tenantName ? ` · ${lease.tenantName}` : "";
+  return `${property} · ${unit}${tenant}`;
+}
+
+function propertyLabel(property: Property) {
+  return property.name || property.addressLine1 || "Property";
+}
+
+function looksLikeInternalId(value: unknown) {
+  const text = String(value || "").trim();
+  if (!text) return false;
+  if (/^[A-Za-z0-9_-]{16,}$/.test(text)) return true;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(text);
+}
+
+function hasRawReferenceLabel(value: unknown) {
+  const text = String(value || "").trim();
+  if (!text) return false;
+  return /^(Lease|Property|Tenant|Unit)\s+[A-Za-z0-9_-]{12,}$/i.test(text);
+}
+
+function leaseIdFromDestination(value: unknown) {
+  const text = String(value || "");
+  const match = text.match(/\/leases\/([^/?#]+)/);
+  if (!match?.[1]) return null;
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return match[1];
+  }
+}
+
+function buildLeaseLookup(leases: LandlordActiveLease[]) {
+  const lookup = new Map<string, LandlordActiveLease>();
+  for (const lease of leases) {
+    [lease.id, (lease as any).leaseId, lease.unitId, lease.tenantId, lease.propertyId]
+      .map((value) => String(value || "").trim())
+      .filter(Boolean)
+      .forEach((key) => lookup.set(key, lease));
+  }
+  return lookup;
+}
+
+function buildPropertyLookup(properties: Property[]) {
+  const lookup = new Map<string, Property>();
+  for (const property of properties) {
+    String(property.id || "").trim() && lookup.set(String(property.id), property);
+    for (const unit of property.units || []) {
+      const unitId = String((unit as any)?.id || "").trim();
+      if (unitId) lookup.set(unitId, property);
+    }
+  }
+  return lookup;
+}
+
+function resolveDecisionContextLabel(
+  item: DecisionInboxItem,
+  lookups: { leases: Map<string, LandlordActiveLease>; properties: Map<string, Property> }
+) {
+  const relatedId = String(item.relatedEntity?.id || "").trim();
+  const destinationLeaseId = leaseIdFromDestination(item.destination);
+  if (item.relatedEntity?.kind === "property") {
+    const property = relatedId ? lookups.properties.get(relatedId) : null;
+    if (property) return propertyLabel(property);
+  }
+  const lease = [relatedId, destinationLeaseId]
+    .filter(Boolean)
+    .map((id) => lookups.leases.get(String(id)))
+    .find(Boolean);
+  if (lease) return leaseLabel(lease);
+
+  const property = relatedId ? lookups.properties.get(relatedId) : null;
+  if (property) return propertyLabel(property);
+
+  const existingLabel = String(item.relatedEntity?.label || "").trim();
+  if (existingLabel && !looksLikeInternalId(existingLabel) && !hasRawReferenceLabel(existingLabel)) return existingLabel;
+
+  if (item.workflow?.queue === "delinquency_review") return "Lease ledger review";
+  if (item.workflow?.queue === "screening_review") return "Screening workflow review";
+  if (item.workflow?.queue === "lease_review") return "Lease workflow review";
+  if (item.relatedEntity?.kind === "property") return "Property review";
+  if (item.relatedEntity?.kind === "tenant") return "Tenant review";
+  if (item.relatedEntity?.kind === "lease") return "Lease review";
+  return "Operational review";
 }
 
 export function deriveCommandCenterSignals(input: {
@@ -136,6 +219,12 @@ export function deriveCommandCenterSignals(input: {
 }): CommandCenterSignal[] {
   const now = input.now || new Date();
   const signals: CommandCenterSignal[] = [];
+  const leases = input.leases || [];
+  const properties = input.properties || [];
+  const lookups = {
+    leases: buildLeaseLookup(leases),
+    properties: buildPropertyLookup(properties),
+  };
 
   for (const item of input.decisions || []) {
     if (INACTIVE_DECISION_STATUSES.has(String(item.status))) continue;
@@ -146,13 +235,13 @@ export function deriveCommandCenterSignals(input: {
       severity: severityFromDecision(item),
       title: item.title || "Operational review item",
       description: item.description || "Review the source workflow before taking any action.",
-      contextLabel: item.relatedEntity?.label || "Context unavailable",
+      contextLabel: resolveDecisionContextLabel(item, lookups),
       destination: item.destination || CATEGORY_CONFIG[category].destination,
       source: `Decision inbox · ${label(item.workflow?.queue || "general_review")}`,
     });
   }
 
-  for (const lease of input.leases || []) {
+  for (const lease of leases) {
     const baseLabel = leaseLabel(lease);
     const leaseDestination = `/leases/${encodeURIComponent(lease.id)}/ledger`;
     const endingIn = daysUntil(lease.endDate, now);
@@ -252,7 +341,7 @@ export function deriveCommandCenterSignals(input: {
     }
   }
 
-  for (const property of input.properties || []) {
+  for (const property of properties) {
     const units = Array.isArray(property.units) ? property.units : [];
     const vacantUnits = units.filter((unit: any) => String(unit?.status || "").toLowerCase() === "vacant").length;
     if (vacantUnits > 0) {
@@ -262,7 +351,7 @@ export function deriveCommandCenterSignals(input: {
         severity: "info",
         title: "Vacant units visible",
         description: `${vacantUnits} vacant unit${vacantUnits === 1 ? "" : "s"} may need listing, lease, or follow-up review.`,
-        contextLabel: property.name || property.addressLine1 || "Property",
+        contextLabel: propertyLabel(property),
         destination: "/properties",
         source: "Properties · occupancy display",
       });
