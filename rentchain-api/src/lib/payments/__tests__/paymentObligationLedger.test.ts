@@ -88,6 +88,43 @@ describe("paymentObligationLedger", () => {
     ]);
   });
 
+  it("derives monthly obligation due date from lease due day 1", () => {
+    const rows = buildPaymentObligationLedgerRows({
+      leases: [{ ...lease, startDate: "2026-05-31", dueDay: 1, dueDate: "2026-05-31" }],
+    });
+
+    expect(rows[0]).toEqual(
+      expect.objectContaining({
+        periodStart: "2026-05-31T00:00:00.000Z",
+        dueDate: "2026-05-01T00:00:00.000Z",
+      })
+    );
+  });
+
+  it("derives monthly obligation due date from a custom lease due day", () => {
+    const rows = buildPaymentObligationLedgerRows({
+      leases: [{ ...lease, startDate: "2026-05-01", dueDay: 5, dueDate: "2026-05-01" }],
+    });
+
+    expect(rows[0]).toEqual(
+      expect.objectContaining({
+        dueDate: "2026-05-05T00:00:00.000Z",
+      })
+    );
+  });
+
+  it("falls back to the first day of the obligation month when due day is missing", () => {
+    const rows = buildPaymentObligationLedgerRows({
+      leases: [{ ...lease, startDate: "2026-06-15", dueDate: null }],
+    });
+
+    expect(rows[0]).toEqual(
+      expect.objectContaining({
+        dueDate: "2026-06-01T00:00:00.000Z",
+      })
+    );
+  });
+
   it("derives paid when paid amount matches expected", () => {
     const rows = buildPaymentObligationLedgerRows({
       leases: [lease],
@@ -120,7 +157,7 @@ describe("paymentObligationLedger", () => {
 
   it("reconciles imported canonical payments against matching lease obligations", () => {
     const rows = buildPaymentObligationLedgerRows({
-      leases: [lease],
+      leases: [{ ...lease, dueDay: 1 }],
       canonicalPayments: [
         {
           id: "payment-import-1",
@@ -142,6 +179,7 @@ describe("paymentObligationLedger", () => {
       expect.objectContaining({
         leaseId: "lease-1",
         paymentDocumentId: "payment-import-1",
+        dueDate: "2026-04-01T00:00:00.000Z",
         expectedAmountCents: 180000,
         paidAmountCents: 180000,
         obligationStatus: "paid",
@@ -155,6 +193,53 @@ describe("paymentObligationLedger", () => {
         expectedAmountCents: 180000,
         paidAmountCents: 180000,
         outstandingAmountCents: 0,
+      })
+    );
+  });
+
+  it("keeps canonical payment evidence date separate from obligation due date", () => {
+    const rows = buildPaymentObligationLedgerRows({
+      leases: [{ ...lease, startDate: "2026-05-01", dueDay: 5 }],
+      canonicalPayments: [
+        {
+          id: "payment-import-late",
+          leaseId: "lease-1",
+          amountCents: 180000,
+          status: "recorded",
+          effectiveDate: "2026-05-17",
+          paidAt: "2026-05-17",
+          source: "payment_csv_import",
+        },
+      ],
+    });
+
+    expect(rows[0]).toEqual(
+      expect.objectContaining({
+        dueDate: "2026-05-05T00:00:00.000Z",
+        paidAmountCents: 180000,
+        obligationStatus: "paid",
+        evidenceStatus: "reconciled",
+      })
+    );
+  });
+
+  it("keeps manual rent payment evidence date separate from obligation due date", () => {
+    const rows = buildPaymentObligationLedgerRows({
+      leases: [{ ...lease, startDate: "2026-05-01", dueDay: 5 }],
+      rentPayments: [
+        rentPayment({
+          id: "rp-manual-1",
+          paymentIntentId: null,
+          paidAt: "2026-05-20T12:00:00.000Z",
+        }),
+      ],
+    });
+
+    expect(rows[0]).toEqual(
+      expect.objectContaining({
+        dueDate: "2026-05-05T00:00:00.000Z",
+        paidAmountCents: 180000,
+        obligationStatus: "paid",
       })
     );
   });
@@ -197,6 +282,7 @@ describe("paymentObligationLedger", () => {
           ...lease,
           startDate: "2026-05-31",
           endDate: "2027-05-29",
+          dueDay: 1,
           monthlyRent: 164000,
           amountCents: 164000,
         },
@@ -224,6 +310,7 @@ describe("paymentObligationLedger", () => {
     expect(rows[0]).toEqual(
       expect.objectContaining({
         expectedAmountCents: 164000,
+        dueDate: "2026-05-01T00:00:00.000Z",
         paidAmountCents: 328000,
         obligationStatus: "overpaid",
         evidenceStatus: "reconciled",

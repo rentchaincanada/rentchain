@@ -465,6 +465,7 @@ describe("leaseRoutes integrity repairs", () => {
       expect.objectContaining({
         leaseId: "lease-1",
         paymentDocumentId: "payment-import-1",
+        dueDate: "2026-05-01T00:00:00.000Z",
         expectedAmountCents: 198000,
         paidAmountCents: 198000,
         obligationStatus: "paid",
@@ -551,6 +552,7 @@ describe("leaseRoutes integrity repairs", () => {
     expect(res.body?.obligationRows).toEqual([
       expect.objectContaining({
         leaseId: "lease-1",
+        dueDate: "2026-05-01T00:00:00.000Z",
         expectedAmountCents: 164000,
         paidAmountCents: 492000,
         obligationStatus: "overpaid",

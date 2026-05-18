@@ -68,6 +68,11 @@ export type PaymentObligationLeaseInput = {
   startDate?: string | null;
   endDate?: string | null;
   dueDate?: string | null;
+  dueDay?: number | string | null;
+  rentDueDay?: number | string | null;
+  paymentDueDay?: number | string | null;
+  rentDueDayOfMonth?: number | string | null;
+  paymentFrequency?: string | null;
   derivedLifecycleState?: LeaseLifecycleState | null;
   derivedLifecycleRequiresReview?: boolean | null;
   status?: string | null;
@@ -233,6 +238,48 @@ function dateOnlyMillis(value: unknown): number | null {
   return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
 }
 
+function dateOnlyParts(value: unknown): { year: number; month: number; day: number } | null {
+  const raw = asString(value, 120);
+  if (!raw) return null;
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
+  if (dateOnly) {
+    const [, year, month, day] = dateOnly;
+    return { year: Number(year), month: Number(month), day: Number(day) };
+  }
+  const parsed = Date.parse(raw);
+  if (!Number.isFinite(parsed)) return null;
+  const date = new Date(parsed);
+  return { year: date.getUTCFullYear(), month: date.getUTCMonth() + 1, day: date.getUTCDate() };
+}
+
+function daysInUtcMonth(year: number, month: number): number {
+  return new Date(Date.UTC(year, month, 0)).getUTCDate();
+}
+
+function normalizeDueDay(value: unknown): number | null {
+  const day = Number(value);
+  if (!Number.isInteger(day) || day < 1 || day > 31) return null;
+  return day;
+}
+
+function leaseDueDay(lease: PaymentObligationLeaseInput | null | undefined): number {
+  return (
+    normalizeDueDay(lease?.dueDay) ??
+    normalizeDueDay(lease?.rentDueDay) ??
+    normalizeDueDay(lease?.paymentDueDay) ??
+    normalizeDueDay(lease?.rentDueDayOfMonth) ??
+    1
+  );
+}
+
+function deriveLeaseTermDueDate(lease: PaymentObligationLeaseInput | null | undefined, periodStart?: unknown, fallbackDueDate?: unknown): string | null {
+  if (!lease) return normalizeDate(fallbackDueDate);
+  const anchor = dateOnlyParts(periodStart || lease.startDate || fallbackDueDate || lease.dueDate);
+  if (!anchor) return normalizeDate(fallbackDueDate || lease.dueDate);
+  const dueDay = Math.min(leaseDueDay(lease), daysInUtcMonth(anchor.year, anchor.month));
+  return new Date(Date.UTC(anchor.year, anchor.month - 1, dueDay)).toISOString();
+}
+
 function paymentFallsWithinLeaseTerm(payment: PaymentObligationCanonicalPaymentInput, lease: PaymentObligationLeaseInput | null): boolean {
   if (!lease) return false;
   const paymentDate = dateOnlyMillis(payment.effectiveDate || payment.paidAt);
@@ -390,7 +437,7 @@ export function buildPaymentObligationLedgerRows(
       tenantId: intent.tenantId || lease?.tenantId || lease?.primaryTenantId || null,
       periodStart: normalizeDate(intent.periodStart || lease?.startDate),
       periodEnd: normalizeDate(intent.periodEnd || lease?.endDate),
-      dueDate: normalizeDate(intent.dueDate || lease?.dueDate),
+      dueDate: deriveLeaseTermDueDate(lease, intent.periodStart || lease?.startDate, intent.dueDate || lease?.dueDate),
       expectedAmountCents: normalizeAmountCents(intent.amountCents),
       paidAmountCents,
       currency: normalizeCurrency(intent.currency || lease?.currency),
@@ -431,7 +478,7 @@ export function buildPaymentObligationLedgerRows(
       tenantId: rentPayment.tenantId || lease?.tenantId || lease?.primaryTenantId || null,
       periodStart: normalizeDate(lease?.startDate),
       periodEnd: normalizeDate(lease?.endDate),
-      dueDate: normalizeDate(lease?.dueDate),
+      dueDate: deriveLeaseTermDueDate(lease, lease?.startDate, lease?.dueDate),
       expectedAmountCents: normalizeAmountCents(rentPayment.amountCents),
       paidAmountCents,
       currency: normalizeCurrency(rentPayment.currency || lease?.currency),
@@ -475,7 +522,7 @@ export function buildPaymentObligationLedgerRows(
       tenantId: inWindowPayments[0]?.tenantId || lease.tenantId || lease.primaryTenantId || null,
       periodStart: normalizeDate(lease.startDate),
       periodEnd: normalizeDate(lease.endDate),
-      dueDate: normalizeDate(inWindowPayments[0]?.effectiveDate || inWindowPayments[0]?.paidAt || lease.dueDate),
+      dueDate: deriveLeaseTermDueDate(lease, lease.startDate, lease.dueDate),
       expectedAmountCents,
       paidAmountCents,
       currency: normalizeCurrency(inWindowPayments[0]?.currency || lease.currency),
@@ -512,7 +559,7 @@ export function buildPaymentObligationLedgerRows(
       tenantId: lease.tenantId || lease.primaryTenantId || null,
       periodStart: normalizeDate(lease.startDate),
       periodEnd: normalizeDate(lease.endDate),
-      dueDate: normalizeDate(lease.dueDate),
+      dueDate: deriveLeaseTermDueDate(lease, lease.startDate, lease.dueDate),
       expectedAmountCents,
       paidAmountCents: 0,
       currency: normalizeCurrency(lease.currency),
