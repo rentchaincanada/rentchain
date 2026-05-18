@@ -81,7 +81,7 @@ describe("EvidencePackPage", () => {
       </MemoryRouter>
     );
 
-    fireEvent.change(screen.getByLabelText("Scope ID"), { target: { value: "lease-1" } });
+    fireEvent.change(screen.getByLabelText(/Internal scope reference/i), { target: { value: "lease-1" } });
     fireEvent.change(screen.getByLabelText("Scope"), { target: { value: "lease" } });
     fireEvent.click(screen.getByRole("button", { name: "Preview evidence" }));
 

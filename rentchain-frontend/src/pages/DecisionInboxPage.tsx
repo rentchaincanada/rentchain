@@ -146,6 +146,65 @@ function Badge({ children, tone }: { children: React.ReactNode; tone: { color: s
   );
 }
 
+function looksLikeInternalId(value: string) {
+  const raw = value.trim();
+  if (!raw) return false;
+  if (/^[a-z]+:[A-Za-z0-9:_-]{8,}$/i.test(raw)) return true;
+  if (/^[a-z]+_[a-z]+:[A-Za-z0-9:_-]{8,}$/i.test(raw)) return true;
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(raw)) return true;
+  if (/^[A-Za-z0-9_-]{18,}$/.test(raw) && /[A-Z]/.test(raw) && /[a-z]/.test(raw) && /\d/.test(raw)) return true;
+  return false;
+}
+
+function hasRawReferenceLabel(value: string) {
+  const raw = value.trim();
+  if (!raw) return false;
+  if (looksLikeInternalId(raw)) return true;
+  return /^(Lease|Property|Decision|Tenant|Unit)\s+[A-Za-z0-9:_-]+$/i.test(raw);
+}
+
+function workflowQueueLabel(queue: string) {
+  if (queue === "delinquency_review") return "delinquency review";
+  if (queue === "lease_review") return "lease readiness review";
+  if (queue === "screening_review") return "screening workflow review";
+  if (queue === "maintenance_review") return "maintenance review";
+  if (queue === "compliance_review") return "compliance review";
+  if (queue === "admin_review") return "admin review";
+  return label(queue).toLowerCase();
+}
+
+function operationalReviewLabel(input: { value: string; queue?: string }) {
+  const raw = input.value.toLowerCase();
+  if (raw.includes("review_missing_payment") || raw.includes("missing_payment")) return "Missing payment review";
+  if (raw.includes("reduce_vacancy_risk") || raw.includes("vacancy")) return "Vacancy pressure review";
+  if (raw.includes("revenue")) return "Revenue pressure review";
+  if (raw.includes("delinquency") || input.queue === "delinquency_review") return "Delinquency review";
+  if (raw.includes("screening") || input.queue === "screening_review") return "Screening workflow review";
+  if (raw.includes("lease") || input.queue === "lease_review") return "Lease readiness review";
+  return "Operational review";
+}
+
+function safeRelatedLabel(item: DecisionInboxItem) {
+  const raw = item.relatedEntity?.label || "";
+  if (raw && !hasRawReferenceLabel(raw)) return raw;
+  if (item.destination?.startsWith("/leases/")) return "Lease context review";
+  return operationalReviewLabel({ value: raw || item.id, queue: item.workflow.queue });
+}
+
+function safeAutomationReason(reason: string, item: DecisionInboxItem) {
+  const routedMatch = reason.match(/^Decision\s+(.+?)\s+is routed to\s+([a-z_]+)\.?$/i);
+  if (routedMatch) {
+    return `${operationalReviewLabel({ value: routedMatch[1], queue: item.workflow.queue })} is routed to ${workflowQueueLabel(
+      routedMatch[2]
+    )}.`;
+  }
+  return reason.replace(/\b(Lease|Property|Decision|Tenant|Unit)\s+[A-Za-z0-9:_-]{8,}\b/gi, (_, kind: string) => {
+    if (String(kind).toLowerCase() === "lease") return "Lease context review";
+    if (String(kind).toLowerCase() === "property") return "Property review";
+    return operationalReviewLabel({ value: item.id, queue: item.workflow.queue });
+  });
+}
+
 function DecisionInboxCard({ item }: { item: DecisionInboxItem }) {
   const delinquencyActions = item.delinquencyActions || [];
   const automatedWorkflow = item.automatedWorkflow;
@@ -185,7 +244,7 @@ function DecisionInboxCard({ item }: { item: DecisionInboxItem }) {
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
         <span style={{ color: "#64748b", fontSize: 13 }}>
-          Related: {item.relatedEntity?.label || "Context unavailable"}
+          Related: {safeRelatedLabel(item)}
         </span>
         {item.destination ? (
           <Link to={item.destination} style={{ color: "#2563eb", fontWeight: 800 }}>
@@ -300,7 +359,7 @@ function DecisionInboxCard({ item }: { item: DecisionInboxItem }) {
             <strong style={{ color: "#1e3a8a", fontSize: 13 }}>Review automation reasoning</strong>
             {automatedWorkflow.reasons.slice(0, 3).map((reason) => (
               <span key={reason} style={{ color: "#334155", fontSize: 13 }}>
-                {reason}
+                {safeAutomationReason(reason, item)}
               </span>
             ))}
             {automatedWorkflow.blockedReasons.map((reason) => (

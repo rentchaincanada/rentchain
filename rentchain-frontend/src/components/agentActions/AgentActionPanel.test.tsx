@@ -59,4 +59,27 @@ describe("AgentActionPanel", () => {
     expect(screen.getByText("Blocked")).toBeInTheDocument();
     expect(screen.getByText("Required workflow context is missing or incomplete.")).toBeInTheDocument();
   });
+
+  it("renders workflow explanation reasons without raw decision route identifiers", () => {
+    render(
+      <AgentActionPanel
+        actions={[
+          action({
+            explanation: {
+              summary: "Escalation review is recommended based on workflow severity.",
+              reasons: [
+                "Decision decision:review_overdue_rent:delinquency:overdue:lease_lifecycle:jjua9wfkdv19d5y5sdv7 is routed to delinquency_review.",
+              ],
+              blockedReasons: [],
+            },
+          }),
+        ]}
+      />
+    );
+
+    expect(screen.getByText("Overdue rent review is routed to delinquency review.")).toBeInTheDocument();
+    expect(screen.queryByText(/Decision decision:/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/lease_lifecycle:/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/delinquency_review/)).not.toBeInTheDocument();
+  });
 });

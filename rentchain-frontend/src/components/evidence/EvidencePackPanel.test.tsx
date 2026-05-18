@@ -76,6 +76,8 @@ describe("EvidencePackPanel", () => {
     expect(screen.getByText("Total items")).toBeInTheDocument();
     expect(screen.getByText("Decision lineage")).toBeInTheDocument();
     expect(screen.getByText("Review missing payment")).toBeInTheDocument();
+    expect(screen.getByText("Decision · Review missing payment")).toBeInTheDocument();
+    expect(screen.queryByText("Decision · decision-1")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "View context" })).toHaveAttribute("href", "/leases/lease-1/ledger");
     expect(screen.getByRole("link", { name: "View timeline" })).toHaveAttribute(
       "href",
@@ -84,5 +86,69 @@ describe("EvidencePackPanel", () => {
     expect(screen.getByText(/Missing evidence: No landlord-scoped canonical events/i)).toBeInTheDocument();
     expect(screen.getByText("Payment Account Details")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /submit|send|share externally|certify|file|upload|auto-report|legal approval/i })).not.toBeInTheDocument();
+  });
+
+  it("does not render raw decision or lease identifiers as primary evidence labels", () => {
+    render(
+      <MemoryRouter>
+        <EvidencePackPanel
+          evidencePack={evidencePack({
+            scope: "lease",
+            scopeId: "JK6S7JQ2HsMj8m8RFI76",
+            sections: [
+              {
+                sectionKey: "lease_context",
+                label: "Lease context",
+                status: "included",
+                itemsCount: 1,
+                items: [{
+                  evidenceItemId: "lease-item",
+                  itemType: "lease_summary",
+                  label: "Lease JK6S7JQ2HsMj8m8RFI76",
+                  description: "Lease context includes property and unit linkage.",
+                  status: "included",
+                  source: "lease_ledger",
+                  sourceId: "JK6S7JQ2HsMj8m8RFI76",
+                  destination: "/leases/JK6S7JQ2HsMj8m8RFI76/ledger",
+                  timestamp: null,
+                  redacted: false,
+                  redactionReason: null,
+                  blockedReason: null,
+                }],
+                missingEvidence: [],
+                blockedReasons: [],
+              },
+              {
+                sectionKey: "decision_lineage",
+                label: "Decision lineage",
+                status: "included",
+                itemsCount: 1,
+                items: [{
+                  evidenceItemId: "decision-item",
+                  itemType: "decision",
+                  label: "Decision decision:review_missing_payment:delinquency:missing_payment:lease_lifecycle:jjua9wfkdv19d5y5sdv7",
+                  description: "Expected rent payment is missing.",
+                  status: "included",
+                  source: "decision_inbox",
+                  sourceId: "decision:review_missing_payment:delinquency:missing_payment:lease_lifecycle:jjua9wfkdv19d5y5sdv7",
+                  destination: "/leases/jjua9wfkdv19d5y5sdv7/ledger",
+                  timestamp: null,
+                  redacted: false,
+                  redactionReason: null,
+                  blockedReason: null,
+                }],
+                missingEvidence: [],
+                blockedReasons: [],
+              },
+            ],
+          }) as any}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getAllByText("Lease context review").length).toBeGreaterThan(0);
+    expect(screen.getByText("Missing payment review")).toBeInTheDocument();
+    expect(screen.queryByText(/Lease JK6S7JQ2HsMj8m8RFI76/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Decision decision:/)).not.toBeInTheDocument();
   });
 });

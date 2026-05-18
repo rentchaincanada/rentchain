@@ -45,6 +45,51 @@ function generatedAt(value: unknown): string {
   return Number.isNaN(parsed.getTime()) ? new Date().toISOString() : parsed.toISOString();
 }
 
+function titleCase(value: string): string {
+  return value.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function workflowQueueLabel(queue: DecisionWorkflowQueue): string {
+  if (queue === "lease_review") return "Lease readiness review";
+  if (queue === "delinquency_review") return "Delinquency review";
+  if (queue === "screening_review") return "Screening workflow review";
+  if (queue === "maintenance_review") return "Maintenance review";
+  if (queue === "compliance_review") return "Compliance review";
+  if (queue === "admin_review") return "Admin review";
+  return "General review";
+}
+
+function looksLikeInternalId(value: unknown): boolean {
+  const raw = asString(value, 240);
+  if (!raw) return false;
+  if (/^[a-z]+:[A-Za-z0-9:_-]{8,}$/i.test(raw)) return true;
+  if (/^[a-z]+_[a-z]+:/i.test(raw)) return true;
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(raw)) return true;
+  if (/^[A-Za-z0-9_-]{18,}$/.test(raw) && /[A-Z]/.test(raw) && /[a-z]/.test(raw) && /\d/.test(raw)) return true;
+  return false;
+}
+
+function hasRawReferenceLabel(value: unknown): boolean {
+  const raw = asString(value, 240);
+  if (!raw) return false;
+  if (looksLikeInternalId(raw)) return true;
+  return /^(Lease|Property|Decision|Tenant|Unit)\s+[A-Za-z0-9:_-]+$/i.test(raw);
+}
+
+function operationalDecisionLabel(decision: DecisionInboxItem): string {
+  const title = asString(decision.title, 160);
+  if (title && !hasRawReferenceLabel(title)) return title;
+  const raw = asString(decision.id, 240).toLowerCase();
+  if (raw.includes("reduce_vacancy_risk") || raw.includes("vacancy")) return "Vacancy pressure review";
+  if (raw.includes("revenue")) return "Revenue pressure review";
+  if (raw.includes("missing_payment") || raw.includes("delinquency") || decision.workflow.queue === "delinquency_review") {
+    return "Delinquency review";
+  }
+  if (raw.includes("lease") || decision.workflow.queue === "lease_review") return "Lease readiness review";
+  if (raw.includes("screening") || decision.workflow.queue === "screening_review") return "Screening workflow review";
+  return "Operational review";
+}
+
 function workflowTypeForDecision(decision: DecisionInboxItem): AutomatedWorkflowType {
   if (decision.workflow.queue === "delinquency_review") return "delinquency";
   if (decision.workflow.queue === "maintenance_review") return "maintenance";
@@ -65,9 +110,9 @@ function transitionForState(state: DecisionWorkflowState): { toState: DecisionWo
 
 function reasonsForDecision(decision: DecisionInboxItem, toState: DecisionWorkflowState): string[] {
   const reasons = [
-    `Decision ${decision.id} is routed to ${decision.workflow.queue}.`,
-    `Current workflow state is ${decision.workflow.workflowState}.`,
-    `Derived internal review state is ${toState}.`,
+    `${operationalDecisionLabel(decision)} is routed to ${workflowQueueLabel(decision.workflow.queue)}.`,
+    `Current workflow state is ${titleCase(decision.workflow.workflowState)}.`,
+    `Derived internal review state is ${titleCase(toState)}.`,
     "Manual review remains required before any operational action.",
   ];
   if (decision.workflow.escalationLevel !== "none") {

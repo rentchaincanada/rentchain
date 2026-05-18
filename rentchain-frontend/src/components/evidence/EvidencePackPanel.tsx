@@ -8,6 +8,78 @@ function label(value: string) {
   return value.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
+function looksLikeInternalId(value: string) {
+  const raw = value.trim();
+  if (!raw) return false;
+  if (/^[a-z]+:[A-Za-z0-9:_-]{8,}$/i.test(raw)) return true;
+  if (/^[a-z]+_[a-z]+:[A-Za-z0-9:_-]{8,}$/i.test(raw)) return true;
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(raw)) return true;
+  if (/^[A-Za-z0-9_-]{18,}$/.test(raw) && /[A-Z]/.test(raw) && /[a-z]/.test(raw) && /\d/.test(raw)) return true;
+  return false;
+}
+
+function hasRawReferenceLabel(value: string) {
+  const raw = value.trim();
+  if (!raw) return false;
+  if (looksLikeInternalId(raw)) return true;
+  return /^(Lease|Property|Decision|Tenant|Unit)\s+[A-Za-z0-9:_-]+$/i.test(raw);
+}
+
+function workflowFallbackLabel(value: string) {
+  const raw = value.toLowerCase();
+  if (raw.includes("review_missing_payment") || raw.includes("missing_payment")) return "Missing payment review";
+  if (raw.includes("reduce_vacancy_risk") || raw.includes("vacancy")) return "Vacancy pressure review";
+  if (raw.includes("revenue")) return "Revenue pressure review";
+  if (raw.includes("delinquency")) return "Delinquency review";
+  if (raw.includes("screening")) return "Screening workflow review";
+  if (raw.includes("lease")) return "Lease context review";
+  return "Operational review";
+}
+
+function safeEvidenceLabel(input: {
+  label: string;
+  sectionKey?: string;
+  itemType?: string;
+  scope?: string;
+}) {
+  if (input.label && !hasRawReferenceLabel(input.label)) return input.label;
+  if (input.itemType === "lease_summary" || input.sectionKey === "lease_context") {
+    return "Lease context review";
+  }
+  if (input.itemType === "property_summary" || input.sectionKey === "property_context") {
+    return "Property review";
+  }
+  return workflowFallbackLabel(input.label);
+}
+
+function operationalScopeLabel(evidencePack: EvidencePack) {
+  const preferredSections = [
+    "lease_context",
+    "property_context",
+    "delinquency_context",
+    "decision_lineage",
+    "workflow_routing",
+    "maintenance_context",
+  ];
+  for (const sectionKey of preferredSections) {
+    const section = evidencePack.sections.find((item) => item.sectionKey === sectionKey);
+    const item = section?.items.find((entry) => entry.label?.trim());
+    if (item?.label) {
+      return safeEvidenceLabel({
+        label: item.label,
+        sectionKey: section?.sectionKey,
+        itemType: item.itemType,
+        scope: evidencePack.scope,
+      });
+    }
+  }
+  if (evidencePack.scope === "lease") return "Lease context review";
+  if (evidencePack.scope === "property") return "Property review";
+  if (evidencePack.scope === "delinquency") return "Delinquency review";
+  if (evidencePack.scope === "decision" || evidencePack.scope === "workflow") return "Operational review";
+  return `${label(evidencePack.scope)} review`;
+}
+
 function statusTone(status: string) {
   if (status === "blocked") return { color: "#991b1b", background: "#fee2e2", border: "#fecaca" };
   if (status === "incomplete" || status === "unavailable") return { color: "#92400e", background: "#fef3c7", border: "#fde68a" };
@@ -45,7 +117,7 @@ export function EvidencePackPanel({ evidencePack }: { evidencePack: EvidencePack
             <div>
               <h2 style={{ margin: 0, fontSize: "1.1rem" }}>Evidence details</h2>
               <div style={{ color: "#64748b", fontSize: 13 }}>
-                {label(evidencePack.scope)} · {evidencePack.scopeId}
+                {label(evidencePack.scope)} · {operationalScopeLabel(evidencePack)}
               </div>
             </div>
             <Badge status={evidencePack.status}>{label(evidencePack.status)}</Badge>
@@ -103,7 +175,14 @@ export function EvidencePackPanel({ evidencePack }: { evidencePack: EvidencePack
             {section.items.slice(0, 5).map((item) => (
               <div key={item.evidenceItemId} style={{ borderTop: "1px solid #e2e8f0", paddingTop: 8, display: "grid", gap: 4 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-                  <strong style={{ color: "#0f172a", fontSize: 13 }}>{item.label}</strong>
+                  <strong style={{ color: "#0f172a", fontSize: 13 }}>
+                    {safeEvidenceLabel({
+                      label: item.label,
+                      sectionKey: section.sectionKey,
+                      itemType: item.itemType,
+                      scope: evidencePack.scope,
+                    })}
+                  </strong>
                   <Badge status={item.status}>{label(item.status)}</Badge>
                 </div>
                 <div style={{ color: "#475569", fontSize: 13 }}>{item.description}</div>

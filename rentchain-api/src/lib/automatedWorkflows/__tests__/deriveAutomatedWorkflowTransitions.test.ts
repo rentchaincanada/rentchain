@@ -159,4 +159,26 @@ describe("deriveAutomatedWorkflowTransitions", () => {
 
     expect(source).toEqual(before);
   });
+
+  it("uses readable operational reasons instead of raw decision identifiers", () => {
+    const result = deriveAutomatedWorkflowTransitions({
+      decisions: [
+        decision({
+          id: "reduce_vacancy_risk:ZaeL9oqpJCSZPguWa6wR",
+          title: "Decision reduce_vacancy_risk:ZaeL9oqpJCSZPguWa6wR",
+          workflow: {
+            queue: "lease_review",
+            workflowState: "new",
+            ownershipType: "landlord",
+            reviewPriority: "medium",
+            escalationLevel: "none",
+            manualOnly: true,
+          },
+        }),
+      ],
+    });
+
+    expect(result.workflows[0].reasons[0]).toBe("Vacancy pressure review is routed to Lease readiness review.");
+    expect(result.workflows[0].reasons.join(" ")).not.toMatch(/ZaeL9oqpJCSZPguWa6wR|reduce_vacancy_risk:/);
+  });
 });

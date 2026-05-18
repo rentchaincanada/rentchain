@@ -131,4 +131,41 @@ describe("deriveEvidencePack", () => {
     expect(pack.status).toBe("unavailable");
     expect(pack.manualReviewRequired).toBe(true);
   });
+
+  it("uses operational evidence labels instead of raw lease and decision identifiers", () => {
+    const pack = deriveEvidencePack({
+      scope: "lease",
+      scopeId: "JK6S7JQ2HsMj8m8RFI76",
+      landlordId: "landlord-1",
+      decisions: [
+        {
+          ...decision,
+          id: "reduce_vacancy_risk:ZaeL9oqpJCSZPguWa6wR",
+          title: "Decision reduce_vacancy_risk:ZaeL9oqpJCSZPguWa6wR",
+          workflow: { ...decision.workflow, queue: "lease_review" },
+        },
+      ],
+      leases: [
+        {
+          id: "JK6S7JQ2HsMj8m8RFI76",
+          propertyName: "North Towers",
+          unitNumber: "103",
+          tenantName: "James Smith",
+        },
+      ],
+      properties: [{ id: "ZaeL9oqpJCSZPguWa6wR", name: "North Towers" }],
+    });
+
+    const leaseContext = pack.sections.find((section) => section.sectionKey === "lease_context");
+    const decisionLineage = pack.sections.find((section) => section.sectionKey === "decision_lineage");
+
+    expect(leaseContext?.items[0]?.label).toBe("North Towers · Unit 103 · James Smith");
+    expect(decisionLineage?.items[0]?.label).toBe("Vacancy pressure review");
+    expect(pack.sections.flatMap((section) => section.items.map((item) => item.label))).not.toContain(
+      "Lease JK6S7JQ2HsMj8m8RFI76"
+    );
+    expect(pack.sections.flatMap((section) => section.items.map((item) => item.label))).not.toContain(
+      "Decision reduce_vacancy_risk:ZaeL9oqpJCSZPguWa6wR"
+    );
+  });
 });

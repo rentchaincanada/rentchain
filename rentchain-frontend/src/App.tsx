@@ -126,6 +126,7 @@ const PortfolioScoreHistoryPage = lazy(() => import("./pages/admin/PortfolioScor
 const PortfolioHealthSummaryPage = lazy(() => import("./pages/landlord/PortfolioHealthSummaryPage"));
 const LandlordAnalyticsPage = lazy(() => import("./pages/landlord/LandlordAnalyticsPage"));
 const LandlordInboxPage = lazy(() => import("./pages/landlord/LandlordInboxPage"));
+const OperationalCommandCenterPage = lazy(() => import("./pages/OperationalCommandCenterPage"));
 const DecisionInboxPage = lazy(() => import("./pages/DecisionInboxPage"));
 const AgentSupervisionPage = lazy(() => import("./pages/AgentSupervisionPage"));
 const InstitutionExportsPage = lazy(() => import("./pages/InstitutionExportsPage"));
@@ -521,6 +522,18 @@ function App() {
               <LandlordNav>
                 <Suspense fallback={null}>
                   <LandlordAnalyticsPage />
+                </Suspense>
+              </LandlordNav>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/operations"
+          element={
+            <RequireAuth>
+              <LandlordNav>
+                <Suspense fallback={null}>
+                  <OperationalCommandCenterPage />
                 </Suspense>
               </LandlordNav>
             </RequireAuth>
