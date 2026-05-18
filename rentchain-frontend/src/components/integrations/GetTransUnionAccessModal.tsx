@@ -31,6 +31,28 @@ Subject: ${MAILTO_SUBJECT}
 
 ${MAILTO_BODY}`;
 const EMAIL_HANDOFF_COOLDOWN_MS = 1500;
+const PROVIDER_OPTIONS = [
+  {
+    label: "TransUnion",
+    status: "Live provider path",
+    detail: "Requires provider credentialing before live screening can begin.",
+  },
+  {
+    label: "Manual/offline screening",
+    status: "Available fallback",
+    detail: "Use manual review when live provider screening is unavailable or not appropriate.",
+  },
+  {
+    label: "Certn",
+    status: "Candidate provider",
+    detail: "Workflow-ready candidate. Integration is not active yet.",
+  },
+  {
+    label: "Equifax",
+    status: "Candidate provider",
+    detail: "Future provider path candidate. Integration is not active yet.",
+  },
+] as const;
 
 type Props = {
   open: boolean;
@@ -124,10 +146,37 @@ export function GetTransUnionAccessModal({
         <div style={{ display: "grid", gap: spacing.sm }}>
           <h2 style={{ margin: 0, fontSize: "1.2rem" }}>Screening provider setup</h2>
           <p style={{ margin: 0, color: text.muted, lineHeight: 1.6 }}>
-            Configure your screening workflow before ordering reports. TransUnion is the current
-            live provider path in RentChain, and your business must be credentialed by TransUnion
-            before live screening can begin.
+            Choose or manage a screening workflow provider before ordering reports. Provider
+            availability can vary by setup status, consent requirements, and integration readiness.
           </p>
+        </div>
+        <div style={{ display: "grid", gap: spacing.sm }}>
+          <div style={{ fontWeight: 700, color: text.primary }}>Provider options</div>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              gap: spacing.sm,
+            }}
+          >
+            {PROVIDER_OPTIONS.map((provider) => (
+              <div
+                key={provider.label}
+                style={{
+                  border: `1px solid ${provider.label === "TransUnion" ? colors.accent : colors.border}`,
+                  background: provider.label === "TransUnion" ? colors.accentSoft : "#fff",
+                  borderRadius: radius.md,
+                  padding: spacing.sm,
+                  display: "grid",
+                  gap: 6,
+                }}
+              >
+                <div style={{ fontWeight: 700 }}>{provider.label}</div>
+                <div style={{ color: text.primary, fontSize: "0.9rem", fontWeight: 700 }}>{provider.status}</div>
+                <div style={{ color: text.muted, fontSize: "0.9rem", lineHeight: 1.45 }}>{provider.detail}</div>
+              </div>
+            ))}
+          </div>
         </div>
         <div
           style={{
@@ -171,93 +220,101 @@ export function GetTransUnionAccessModal({
         >
           <div style={{ fontWeight: 700, color: text.primary, marginBottom: 8 }}>How credentialing works</div>
           <ol style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 6 }}>
-            <li>Choose the live provider path for this workflow.</li>
-            <li>Get credentialed for your business with the provider.</li>
-            <li>Receive your member code and passcode.</li>
+            <li>Choose the provider path or manual workflow that fits the applicant review.</li>
+            <li>For live provider screening, complete provider credentialing for your business.</li>
+            <li>Receive any provider-issued member code and passcode.</li>
             <li>Return to RentChain and connect your credentials.</li>
           </ol>
         </div>
-        <div
+        <details
           style={{
             border: `1px solid ${colors.border}`,
             borderRadius: radius.md,
             padding: spacing.sm,
             background: "#fff",
-            display: "grid",
-            gridTemplateColumns: "minmax(0, 1fr) minmax(220px, 0.75fr)",
-            gap: 8,
           }}
         >
-          <div style={{ display: "grid", gap: 8, minWidth: 0 }}>
-            <div style={{ fontWeight: 700, color: text.primary }}>TransUnion contact</div>
-            <div style={{ color: text.primary, lineHeight: 1.6, overflowWrap: "anywhere" }}>
-              <div>Chhavi Kumar</div>
-              <div>Account Executive, Inside Sales</div>
-              <div>{CHHAVI_EMAIL}</div>
-              <div>{CHHAVI_PHONE}</div>
-              <div>Customer Support: {CUSTOMER_SUPPORT_PHONE}</div>
-              <div>Tech Support: {TECH_SUPPORT_PHONE}</div>
-              <div>{TECH_SUPPORT_EMAIL}</div>
+          <summary style={{ cursor: "pointer", fontWeight: 700, color: text.primary }}>
+            TransUnion provider contact details
+          </summary>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "minmax(0, 1fr) minmax(220px, 0.75fr)",
+              gap: 8,
+              marginTop: spacing.sm,
+            }}
+          >
+            <div style={{ display: "grid", gap: 8, minWidth: 0 }}>
+              <div style={{ color: text.primary, lineHeight: 1.6, overflowWrap: "anywhere" }}>
+                <div>Chhavi Kumar</div>
+                <div>Account Executive, Inside Sales</div>
+                <div>{CHHAVI_EMAIL}</div>
+                <div>{CHHAVI_PHONE}</div>
+                <div>Customer Support: {CUSTOMER_SUPPORT_PHONE}</div>
+                <div>Tech Support: {TECH_SUPPORT_PHONE}</div>
+                <div>{TECH_SUPPORT_EMAIL}</div>
+              </div>
+            </div>
+            <div style={{ display: "grid", gap: spacing.sm, alignContent: "start", minWidth: 0 }}>
+              <a
+                href={CHHAVI_MAILTO}
+                onClick={handleEmailClick}
+                aria-disabled={emailOpening}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: "10px 14px",
+                  borderRadius: radius.pill,
+                  border: `1px solid ${colors.border}`,
+                  background: emailOpening ? colors.bg : colors.accentSoft,
+                  color: text.primary,
+                  textDecoration: "none",
+                  fontWeight: 600,
+                  fontSize: "0.95rem",
+                  pointerEvents: emailOpening ? "none" : "auto",
+                  opacity: emailOpening ? 0.7 : 1,
+                }}
+              >
+                Email Chhavi Kumar
+              </a>
+              <a
+                href={CHHAVI_TEL}
+                onClick={onPhoneClick}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: "10px 14px",
+                  borderRadius: radius.pill,
+                  border: `1px solid ${colors.border}`,
+                  background: "transparent",
+                  color: text.primary,
+                  textDecoration: "none",
+                  fontWeight: 600,
+                  fontSize: "0.95rem",
+                }}
+              >
+                Call Chhavi Kumar
+              </a>
+              <Button type="button" variant="secondary" onClick={() => void handleCopyTemplate()}>
+                Copy email template
+              </Button>
+            </div>
+            <div style={{ gridColumn: "1 / -1" }}>
+              {emailStatus ? (
+                <div
+                  role="status"
+                  aria-live="polite"
+                  style={{ color: text.muted, fontSize: "0.9rem", lineHeight: 1.5 }}
+                >
+                  {emailStatus}
+                </div>
+              ) : null}
             </div>
           </div>
-          <div style={{ display: "grid", gap: spacing.sm, alignContent: "start", minWidth: 0 }}>
-            <a
-              href={CHHAVI_MAILTO}
-              onClick={handleEmailClick}
-              aria-disabled={emailOpening}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                padding: "10px 14px",
-                borderRadius: radius.pill,
-                border: `1px solid ${colors.border}`,
-                background: emailOpening ? colors.bg : colors.accentSoft,
-                color: text.primary,
-                textDecoration: "none",
-                fontWeight: 600,
-                fontSize: "0.95rem",
-                pointerEvents: emailOpening ? "none" : "auto",
-                opacity: emailOpening ? 0.7 : 1,
-              }}
-            >
-              Email Chhavi Kumar
-            </a>
-            <a
-              href={CHHAVI_TEL}
-              onClick={onPhoneClick}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                padding: "10px 14px",
-                borderRadius: radius.pill,
-                border: `1px solid ${colors.border}`,
-                background: "transparent",
-                color: text.primary,
-                textDecoration: "none",
-                fontWeight: 600,
-                fontSize: "0.95rem",
-              }}
-            >
-              Call Chhavi Kumar
-            </a>
-            <Button type="button" variant="secondary" onClick={() => void handleCopyTemplate()}>
-              Copy email template
-            </Button>
-          </div>
-          <div style={{ gridColumn: "1 / -1" }}>
-            {emailStatus ? (
-              <div
-                role="status"
-                aria-live="polite"
-                style={{ color: text.muted, fontSize: "0.9rem", lineHeight: 1.5 }}
-              >
-                {emailStatus}
-              </div>
-            ) : null}
-          </div>
-        </div>
+        </details>
         <div
           style={{
             border: `1px solid ${colors.border}`,
