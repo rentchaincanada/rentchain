@@ -161,7 +161,7 @@ function DashboardDecisionSummaryPanel({
           Open decision inbox
         </Link>
       </div>
-      {summary.total === 0 ? (
+      {summary.allTotal === 0 ? (
         <div style={{ color: "#166534", background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 10, padding: 10 }}>
           No issues detected. Everything is up to date.
         </div>

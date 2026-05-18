@@ -135,6 +135,12 @@ describe("decisionRoutes", () => {
         }),
       ])
     );
+    expect(res.body.summary).toEqual(
+      expect.objectContaining({
+        allTotal: res.body.decisions.length,
+        inactiveTotal: 0,
+      })
+    );
   });
 
   it("persists decision action records without mutating lease documents", async () => {
@@ -166,6 +172,91 @@ describe("decisionRoutes", () => {
         status: "active",
       }),
     ]);
+  });
+
+  it("reports reviewed decisions as inactive in route summaries", async () => {
+    seedLease();
+    const app = await makeApp();
+
+    const listRes = await request(app).get("/api/decisions?leaseId=lease-1");
+    const decision = listRes.body.decisions.find((row: any) => row.decisionType === "review_missing_payment");
+    expect(decision).toBeTruthy();
+
+    await request(app)
+      .patch(`/api/decisions/${encodeURIComponent(decision.decisionId)}/action`)
+      .send({ leaseId: "lease-1", actionType: "reviewed", note: "Reviewed by operator" })
+      .expect(200);
+
+    const res = await request(app).get("/api/decisions?leaseId=lease-1");
+
+    expect(res.body.summary).toEqual(
+      expect.objectContaining({
+        allTotal: res.body.decisions.length,
+        inactiveTotal: 1,
+        total: res.body.decisions.length - 1,
+      })
+    );
+  });
+
+  it.each([
+    ["reviewed", { note: "Reviewed by operator" }, "reviewed"],
+    ["snoozed", { snoozedUntil: "2026-05-12T00:00:00.000Z" }, "snoozed"],
+    ["assigned", { assignedTo: "operations" }, "assigned"],
+    ["dismissed", { note: "Not actionable" }, "dismissed"],
+    ["resolved", { note: "Resolved from ledger review" }, "resolved"],
+  ])("persists deterministic %s action transitions", async (actionType, extraPayload, expectedStatus) => {
+    seedLease();
+    const app = await makeApp();
+
+    const listRes = await request(app).get("/api/decisions?leaseId=lease-1");
+    const decision = listRes.body.decisions.find((row: any) => row.decisionType === "review_missing_payment");
+    expect(decision).toBeTruthy();
+
+    const res = await request(app)
+      .patch(`/api/decisions/${encodeURIComponent(decision.decisionId)}/action`)
+      .send({ leaseId: "lease-1", actionType, ...extraPayload });
+
+    expect(res.status).toBe(200);
+    expect(res.body.decision).toEqual(
+      expect.objectContaining({
+        decisionId: decision.decisionId,
+        status: expectedStatus,
+        latestAction: expect.objectContaining({
+          actionType,
+          previousStatus: "detected",
+          nextStatus: expectedStatus,
+        }),
+      })
+    );
+    expect(listDocs("decisionActions")).toHaveLength(1);
+  });
+
+  it("records repeated decision actions with the current overlaid status as previousStatus", async () => {
+    seedLease();
+    const app = await makeApp();
+
+    const listRes = await request(app).get("/api/decisions?leaseId=lease-1");
+    const decision = listRes.body.decisions.find((row: any) => row.decisionType === "review_missing_payment");
+    expect(decision).toBeTruthy();
+
+    await request(app)
+      .patch(`/api/decisions/${encodeURIComponent(decision.decisionId)}/action`)
+      .send({ leaseId: "lease-1", actionType: "reviewed" })
+      .expect(200);
+
+    const res = await request(app)
+      .patch(`/api/decisions/${encodeURIComponent(decision.decisionId)}/action`)
+      .send({ leaseId: "lease-1", actionType: "resolved", note: "Resolved after review" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.action).toEqual(
+      expect.objectContaining({
+        actionType: "resolved",
+        previousStatus: "reviewed",
+        nextStatus: "resolved",
+      })
+    );
+    expect(listDocs("decisionActions")).toHaveLength(2);
   });
 
   it("blocks landlord access to leases outside their scope", async () => {

@@ -55,6 +55,8 @@ export type DecisionItem = {
 
 export type DecisionSummary = {
   total: number;
+  allTotal: number;
+  inactiveTotal: number;
   critical: number;
   warning: number;
   info: number;
@@ -92,6 +94,13 @@ export const decisionStatusCopy: Record<DecisionStatus, string> = {
   dismissed: "Dismissed",
   resolved: "Resolved",
 };
+
+const INACTIVE_DECISION_STATUSES = new Set<DecisionStatus>(["reviewed", "snoozed", "accepted", "dismissed", "resolved"]);
+
+export function isDecisionActive(decision: Pick<DecisionItem, "status">): boolean {
+  const status = decision.status || "detected";
+  return !INACTIVE_DECISION_STATUSES.has(status);
+}
 
 const delinquencyDecisionMap: Record<
   DelinquencySignalType,
@@ -230,9 +239,12 @@ export function decisionFromLifecycleReviewItem(item: {
 }
 
 export function summarizeDecisionItems(decisions: DecisionItem[] | null | undefined): DecisionSummary {
-  const rows = decisions || [];
+  const allRows = decisions || [];
+  const rows = allRows.filter(isDecisionActive);
   return {
     total: rows.length,
+    allTotal: allRows.length,
+    inactiveTotal: allRows.length - rows.length,
     critical: rows.filter((item) => item.severity === "critical").length,
     warning: rows.filter((item) => item.severity === "warning").length,
     info: rows.filter((item) => item.severity === "info").length,
