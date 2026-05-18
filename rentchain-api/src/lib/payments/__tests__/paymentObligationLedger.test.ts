@@ -118,6 +118,153 @@ describe("paymentObligationLedger", () => {
     );
   });
 
+  it("reconciles imported canonical payments against matching lease obligations", () => {
+    const rows = buildPaymentObligationLedgerRows({
+      leases: [lease],
+      canonicalPayments: [
+        {
+          id: "payment-import-1",
+          leaseId: "lease-1",
+          landlordId: "landlord-1",
+          tenantId: "tenant-1",
+          propertyId: "prop-1",
+          unitId: "unit-1",
+          amountCents: 180000,
+          status: "recorded",
+          effectiveDate: "2026-05-17",
+          source: "payment_csv_import",
+        },
+      ],
+    });
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toEqual(
+      expect.objectContaining({
+        leaseId: "lease-1",
+        paymentDocumentId: "payment-import-1",
+        expectedAmountCents: 180000,
+        paidAmountCents: 180000,
+        obligationStatus: "paid",
+        evidenceStatus: "reconciled",
+        source: "canonical_payment",
+        reasons: expect.arrayContaining(["paid_amount_matches_expected", "canonical_payment_recorded"]),
+      })
+    );
+    expect(summarizePaymentObligationLedger(rows)).toEqual(
+      expect.objectContaining({
+        expectedAmountCents: 180000,
+        paidAmountCents: 180000,
+        outstandingAmountCents: 0,
+      })
+    );
+  });
+
+  it("reconciles partial imported canonical payments without clearing the outstanding amount", () => {
+    const rows = buildPaymentObligationLedgerRows({
+      leases: [lease],
+      canonicalPayments: [
+        {
+          id: "payment-import-partial",
+          leaseId: "lease-1",
+          amountCents: 100000,
+          status: "recorded",
+          effectiveDate: "2026-05-17",
+          source: "payment_csv_import",
+        },
+      ],
+    });
+
+    expect(rows[0]).toEqual(
+      expect.objectContaining({
+        expectedAmountCents: 180000,
+        paidAmountCents: 100000,
+        obligationStatus: "underpaid",
+        source: "canonical_payment",
+      })
+    );
+    expect(summarizePaymentObligationLedger(rows)).toEqual(
+      expect.objectContaining({
+        paidAmountCents: 100000,
+        outstandingAmountCents: 80000,
+      })
+    );
+  });
+
+  it("reconciles same-lease imported payments shortly before lease start as prepaid rent evidence", () => {
+    const rows = buildPaymentObligationLedgerRows({
+      leases: [
+        {
+          ...lease,
+          startDate: "2026-05-31",
+          endDate: "2027-05-29",
+          monthlyRent: 164000,
+          amountCents: 164000,
+        },
+      ],
+      canonicalPayments: [
+        {
+          id: "payment-import-prepaid-1",
+          leaseId: "lease-1",
+          amountCents: 164000,
+          status: "recorded",
+          effectiveDate: "2026-05-05",
+          source: "payment_csv_import",
+        },
+        {
+          id: "payment-import-prepaid-2",
+          leaseId: "lease-1",
+          amountCents: 164000,
+          status: "recorded",
+          effectiveDate: "2026-05-17",
+          source: "payment_csv_import",
+        },
+      ],
+    });
+
+    expect(rows[0]).toEqual(
+      expect.objectContaining({
+        expectedAmountCents: 164000,
+        paidAmountCents: 328000,
+        obligationStatus: "overpaid",
+        evidenceStatus: "reconciled",
+        source: "canonical_payment",
+        reasons: expect.arrayContaining(["paid_amount_above_expected", "canonical_payment_recorded"]),
+      })
+    );
+    expect(summarizePaymentObligationLedger(rows)).toEqual(
+      expect.objectContaining({
+        expectedAmountCents: 164000,
+        paidAmountCents: 328000,
+        outstandingAmountCents: 0,
+      })
+    );
+  });
+
+  it("keeps imported canonical payments outside the prepayment and lease term window in manual review", () => {
+    const rows = buildPaymentObligationLedgerRows({
+      leases: [lease],
+      canonicalPayments: [
+        {
+          id: "payment-import-old",
+          leaseId: "lease-1",
+          amountCents: 180000,
+          status: "recorded",
+          effectiveDate: "2026-02-01",
+          source: "payment_csv_import",
+        },
+      ],
+    });
+
+    expect(rows[0]).toEqual(
+      expect.objectContaining({
+        paidAmountCents: 0,
+        obligationStatus: "manual_review_required",
+        evidenceStatus: "manual_review_required",
+        reasons: expect.arrayContaining(["reconciliation_requires_manual_review", "canonical_payment_outside_lease_term"]),
+      })
+    );
+  });
+
   it("derives underpaid and overpaid by comparing paid amount to expected amount", () => {
     expect(
       derivePaymentObligationStatus({

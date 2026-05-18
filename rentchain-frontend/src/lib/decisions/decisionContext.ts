@@ -1,5 +1,5 @@
 import type { LeaseDelinquencySignal, LeaseObligationLedgerRow } from "@/api/leaseLedgerApi";
-import { formatInternalReference } from "@/lib/identityReferences";
+import { formatInternalReference, shortenInternalId } from "@/lib/identityReferences";
 import type { DecisionItem } from "./decisionDisplay";
 
 export type DecisionContextLink = {
@@ -20,6 +20,13 @@ export type DecisionRelatedData = {
   includeAdminReviewLink?: boolean;
 };
 
+type DecisionReviewContext = {
+  propertyLabel?: string | null;
+  unitLabel?: string | null;
+  tenantName?: string | null;
+  leaseLabel?: string | null;
+};
+
 function cleanString(value: unknown): string | null {
   const next = String(value ?? "").trim();
   return next || null;
@@ -32,6 +39,12 @@ function metadataString(decision: DecisionItem, key: string): string | null {
 function metadataNumber(decision: DecisionItem, key: string): number | null {
   const value = Number(decision.metadata?.[key]);
   return Number.isFinite(value) ? value : null;
+}
+
+function metadataReviewContext(decision: DecisionItem): DecisionReviewContext {
+  const raw = decision.metadata?.reviewContext;
+  if (!raw || typeof raw !== "object") return {};
+  return raw as DecisionReviewContext;
 }
 
 function formatCurrencyCents(value: unknown): string {
@@ -105,6 +118,10 @@ export function buildDecisionContextLinks(
   options?: { includeAdminReviewLink?: boolean }
 ): DecisionContextLink[] {
   const links: DecisionContextLink[] = [];
+  const reviewContext = metadataReviewContext(decision);
+  const propertyLabel = cleanString(reviewContext.propertyLabel);
+  const unitLabel = cleanString(reviewContext.unitLabel);
+  const tenantName = cleanString(reviewContext.tenantName);
   if (decision.leaseId) {
     links.push({
       key: "lease",
@@ -124,7 +141,7 @@ export function buildDecisionContextLinks(
     if (decision.unitId) search.set("unitId", decision.unitId);
     links.push({
       key: "property",
-      label: decision.unitId ? "Property / unit" : "Property",
+      label: propertyLabel && unitLabel ? `${propertyLabel} · ${unitLabel}` : propertyLabel || unitLabel || (decision.unitId ? "Property / unit" : "Property"),
       href: `/properties?${search.toString()}`,
       helperText: decision.unitId ? "Open property and unit context" : "Open property context",
     });
@@ -132,7 +149,7 @@ export function buildDecisionContextLinks(
   if (decision.tenantId) {
     links.push({
       key: "tenant",
-      label: "Tenant",
+      label: tenantName || "Tenant",
       href: `/tenants?tenantId=${encodeURIComponent(decision.tenantId)}`,
       helperText: "Open tenant context",
     });
@@ -191,6 +208,18 @@ export function buildDecisionEvidenceItems(
   }
   if (decision.rentPaymentId) {
     items.push({ label: "Internal rent payment reference", value: formatInternalReference("payment", decision.rentPaymentId) });
+  }
+  if (decision.propertyId) {
+    items.push({ label: "Internal Property ID", value: shortenInternalId(decision.propertyId) });
+  }
+  if (decision.unitId) {
+    items.push({ label: "Internal Unit ID", value: shortenInternalId(decision.unitId) });
+  }
+  if (decision.tenantId) {
+    items.push({ label: "Internal Tenant ID", value: shortenInternalId(decision.tenantId) });
+  }
+  if (decision.leaseId) {
+    items.push({ label: "Internal Lease ID", value: shortenInternalId(decision.leaseId) });
   }
   if (decision.latestAction) {
     items.push({

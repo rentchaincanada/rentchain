@@ -1,7 +1,7 @@
 import React from "react";
 import { Card, Button } from "../ui/Ui";
 import { spacing, colors, text } from "../../styles/tokens";
-import { formatOperationalReference } from "@/lib/identityReferences";
+import { formatInternalReference, formatOperationalLabel } from "@/lib/identityReferences";
 
 type Props = {
   items: any[];
@@ -68,8 +68,16 @@ export function ActionRequiredPanel({
             const title = item?.title || item?.type || "Action";
             const severity = String(item?.severity || "info").toLowerCase();
             const subtitleParts = [];
-            if (item?.propertyId) subtitleParts.push(formatOperationalReference("property", item.propertyId));
-            if (item?.tenantId) subtitleParts.push(formatOperationalReference("tenant", item.tenantId));
+            if (item?.propertyName || item?.propertyLabel) {
+              subtitleParts.push(formatOperationalLabel({ kind: "property", label: item.propertyName || item.propertyLabel }));
+            } else if (item?.propertyId) {
+              subtitleParts.push(formatInternalReference("property", item.propertyId));
+            }
+            if (item?.tenantName || item?.tenantLabel) {
+              subtitleParts.push(formatOperationalLabel({ kind: "tenant", label: item.tenantName || item.tenantLabel }));
+            } else if (item?.tenantId) {
+              subtitleParts.push(formatInternalReference("tenant", item.tenantId));
+            }
             return (
               <div
                 key={item?.id || idx}

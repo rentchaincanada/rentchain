@@ -409,6 +409,167 @@ describe("leaseRoutes integrity repairs", () => {
     );
   });
 
+  it("includes canonical imported payments in read-only obligation reconciliation", async () => {
+    seedDoc("leases", "lease-1", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      tenantId: "tenant-1",
+      unitId: "unit-1",
+      unitNumber: "101",
+      monthlyRent: 1980,
+      startDate: "2026-05-01",
+      endDate: "2027-04-30",
+      dueDate: "2026-05-01",
+      status: "active",
+    });
+    seedDoc("payments", "payment-import-1", {
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      leaseId: "lease-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      amountCents: 198000,
+      status: "recorded",
+      paidAt: "2026-05-17",
+      effectiveDate: "2026-05-17",
+      source: "payment_csv_import",
+      ledgerEntryId: "entry-import-1",
+    });
+    seedDoc("ledgerEntries", "entry-import-1", {
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      leaseId: "lease-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      entryType: "payment",
+      category: "payment",
+      amountCents: 198000,
+      effectiveDate: "2026-05-17",
+      paymentDocumentId: "payment-import-1",
+      source: "payment_csv_import",
+      createdAt: 20,
+    });
+
+    const app = await makeApp();
+    const res = await request(app).get("/lease-1/ledger");
+
+    expect(res.status).toBe(200);
+    expect(res.body?.entries?.[0]).toEqual(
+      expect.objectContaining({
+        id: "entry-import-1",
+        entryType: "payment",
+        signedAmountCents: -198000,
+      })
+    );
+    expect(res.body?.obligationRows).toEqual([
+      expect.objectContaining({
+        leaseId: "lease-1",
+        paymentDocumentId: "payment-import-1",
+        expectedAmountCents: 198000,
+        paidAmountCents: 198000,
+        obligationStatus: "paid",
+        evidenceStatus: "reconciled",
+        source: "canonical_payment",
+      }),
+    ]);
+    expect(res.body?.obligationSummary).toEqual(
+      expect.objectContaining({
+        totalRows: 1,
+        expectedAmountCents: 198000,
+        paidAmountCents: 198000,
+        outstandingAmountCents: 0,
+      })
+    );
+    expect(res.body?.delinquencySignals).toEqual([]);
+  });
+
+  it("uses same-lease pre-start ledger payment entries as obligation prepayment evidence", async () => {
+    seedDoc("leases", "lease-1", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      tenantId: "tenant-1",
+      unitId: "unit-101",
+      unitNumber: "101",
+      monthlyRent: 1640,
+      startDate: "2026-05-31",
+      endDate: "2027-05-29",
+      dueDate: "2026-05-31",
+      status: "active",
+    });
+    seedDoc("ledgerEntries", "entry-prepaid-1", {
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      leaseId: "lease-1",
+      propertyId: "prop-1",
+      unitId: "unit-101",
+      entryType: "payment",
+      category: "payment",
+      amountCents: 164000,
+      effectiveDate: "2026-05-05",
+      method: "etransfer",
+      reference: "1001",
+      source: "payment_csv_import",
+      createdAt: 20,
+    });
+    seedDoc("ledgerEntries", "entry-prepaid-2", {
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      leaseId: "lease-1",
+      propertyId: "prop-1",
+      unitId: "unit-101",
+      entryType: "payment",
+      category: "payment",
+      amountCents: 164000,
+      effectiveDate: "2026-05-05",
+      method: "other",
+      createdAt: 21,
+    });
+    seedDoc("ledgerEntries", "entry-prepaid-3", {
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      leaseId: "lease-1",
+      propertyId: "prop-1",
+      unitId: "unit-101",
+      entryType: "payment",
+      category: "payment",
+      amountCents: 164000,
+      effectiveDate: "2026-05-17",
+      method: "etransfer",
+      createdAt: 22,
+    });
+
+    const app = await makeApp();
+    const res = await request(app).get("/lease-1/ledger");
+
+    expect(res.status).toBe(200);
+    expect(res.body?.totals).toEqual(
+      expect.objectContaining({
+        paymentsCents: 492000,
+        balanceCents: -492000,
+      })
+    );
+    expect(res.body?.obligationRows).toEqual([
+      expect.objectContaining({
+        leaseId: "lease-1",
+        expectedAmountCents: 164000,
+        paidAmountCents: 492000,
+        obligationStatus: "overpaid",
+        evidenceStatus: "reconciled",
+        source: "canonical_payment",
+        reasons: expect.arrayContaining(["canonical_payment_recorded"]),
+      }),
+    ]);
+    expect(res.body?.obligationSummary).toEqual(
+      expect.objectContaining({
+        totalRows: 1,
+        expectedAmountCents: 164000,
+        paidAmountCents: 492000,
+        outstandingAmountCents: 0,
+      })
+    );
+    expect(res.body?.delinquencySignals).toEqual([]);
+  });
+
   it("exports lease ledger csv with property and unit labels instead of raw ids", async () => {
     seedDoc("properties", "prop-1", {
       landlordId: "landlord-1",

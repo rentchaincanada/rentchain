@@ -432,7 +432,7 @@ describe("LeaseLedgerPage", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText("Harbour View · Unit 101")).toBeInTheDocument();
+    expect((await screen.findAllByText("Harbour View · Unit 101")).length).toBeGreaterThan(0);
     expect(screen.getByText(/Renewal pending/i)).toBeInTheDocument();
     expect(screen.getByText("Waiting for landlord signature")).toBeInTheDocument();
     expect(screen.getByText("Call tenant next week")).toBeInTheDocument();
@@ -447,7 +447,7 @@ describe("LeaseLedgerPage", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText("Harbour View · Unit 101")).toBeInTheDocument();
+    expect((await screen.findAllByText("Harbour View · Unit 101")).length).toBeGreaterThan(0);
     expect(screen.getAllByText("$1,450.00").length).toBeGreaterThan(0);
     expect(screen.getAllByText("$100.00").length).toBeGreaterThan(0);
     expect(screen.getByText("+$1,450.00")).toBeInTheDocument();
@@ -531,8 +531,12 @@ describe("LeaseLedgerPage", () => {
     expect(screen.getByText("Overdue Rent")).toBeInTheDocument();
     expect(screen.getAllByText("Rent past due date").length).toBeGreaterThan(0);
     expect(screen.getAllByRole("link", { name: "Lease ledger" }).some((link) => link.getAttribute("href") === "/leases/lease-1/ledger")).toBe(true);
-    expect(screen.getAllByRole("link", { name: "Property / unit" }).some((link) => link.getAttribute("href") === "/properties?propertyId=prop-1&unitId=unit-1")).toBe(true);
-    expect(screen.getByRole("link", { name: "Tenant" })).toHaveAttribute("href", "/tenants?tenantId=tenant-1");
+    expect(screen.getAllByRole("link", { name: "Harbour View · Unit 101" }).some((link) => link.getAttribute("href") === "/properties?propertyId=prop-1&unitId=unit-1")).toBe(true);
+    expect(screen.getByRole("link", { name: "Jane Tenant" })).toHaveAttribute("href", "/tenants?tenantId=tenant-1");
+    expect(screen.queryByText(/Unit ref/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Tenant ref/i)).not.toBeInTheDocument();
+    expect(screen.getAllByText("Internal Unit ID").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Internal Tenant ID").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Outstanding amount").length).toBeGreaterThan(0);
     expect(screen.getAllByText("$1,450.00").length).toBeGreaterThan(0);
     expect(screen.getByText("Underpaid Rent")).toBeInTheDocument();
@@ -643,7 +647,7 @@ describe("LeaseLedgerPage", () => {
       </MemoryRouter>
     );
 
-    await screen.findByText("Harbour View · Unit 101");
+    await screen.findAllByText("Harbour View · Unit 101");
     fireEvent.click(screen.getByRole("button", { name: "Export PDF" }));
 
     await waitFor(() => {
@@ -670,7 +674,7 @@ describe("LeaseLedgerPage", () => {
       </MemoryRouter>
     );
 
-    await screen.findByText("Harbour View · Unit 101");
+    await screen.findAllByText("Harbour View · Unit 101");
     fireEvent.click(screen.getAllByRole("button", { name: "Add lease note" })[0]);
     fireEvent.change(screen.getByLabelText("Note"), { target: { value: "Follow up on renewal" } });
     fireEvent.click(screen.getByRole("button", { name: "Save note" }));
