@@ -50,6 +50,7 @@ import "./ApplicationsPage.css";
 import { SendScreeningInviteModal } from "../components/screening/SendScreeningInviteModal";
 import { ScreeningStatusBadge } from "../components/screening/ScreeningStatusBadge";
 import { ScreeningStatusCard } from "@/components/screening/ScreeningStatusCard";
+import { ScreeningWorkflowPanel } from "@/components/screening/ScreeningWorkflowPanel";
 import {
   ScreeningReportView,
   type ScreeningReportAction,
@@ -199,6 +200,8 @@ function ScreeningProviderSetupCard({
   loading,
   readyToScreen,
   selectedApplicationLabel,
+  workflowStatus,
+  screeningEnabled = true,
   screeningsCompletedCount,
   lastScreeningDate,
   onGetAccess,
@@ -214,6 +217,8 @@ function ScreeningProviderSetupCard({
   loading: boolean;
   readyToScreen: boolean;
   selectedApplicationLabel?: string | null;
+  workflowStatus?: string | null;
+  screeningEnabled?: boolean;
   screeningsCompletedCount?: number | null;
   lastScreeningDate?: string | number | null;
   onGetAccess: () => void;
@@ -293,6 +298,18 @@ function ScreeningProviderSetupCard({
           )}
           <div>{nextStep}</div>
         </div>
+      ) : null}
+
+      {!loading ? (
+        <ScreeningWorkflowPanel
+          compact
+          screeningEnabled={screeningEnabled}
+          transUnionConnected={connected}
+          workflowStatus={workflowStatus}
+          onTransUnionSetup={connected ? undefined : onGetAccess}
+          onTransUnionStart={connected && readyToScreen && onStartScreening ? onStartScreening : undefined}
+          onManualReview={onChooseApplicant}
+        />
       ) : null}
 
       {!loading ? (
@@ -2285,6 +2302,8 @@ const ApplicationsPage: React.FC = () => {
         integration={transUnionIntegration}
         loading={transUnionLoading}
         readyToScreen={Boolean(detail)}
+        screeningEnabled={SCREENING_ENABLED}
+        workflowStatus={displayScreeningStatus || manualScreeningStatus?.status || null}
         selectedApplicationLabel={buildApplicantLabel(detail)}
         onChooseApplicant={guideToApplicationsForScreening}
         screeningsCompletedCount={

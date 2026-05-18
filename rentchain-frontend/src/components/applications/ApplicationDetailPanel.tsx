@@ -12,6 +12,7 @@ import { updateApplicationDetails, updateApplicationReferences } from "@/api/app
 import { useToast } from "../ui/ToastProvider";
 import { ConvertToTenantButton } from "./ConvertToTenantButton";
 import { getUiLocale, SCREENING_ENABLED, screeningComingSoonLabel, screeningComingSoonNotice } from "../../config/screening";
+import { ScreeningWorkflowPanel } from "@/components/screening/ScreeningWorkflowPanel";
 
 type ApplicationDetailPanelProps = {
   application: Application | null;
@@ -1176,6 +1177,12 @@ export const ApplicationDetailPanel: React.FC<ApplicationDetailPanelProps> = ({
       </div>
 
       {/* Screening */}
+      <ScreeningWorkflowPanel
+        compact
+        screeningEnabled={SCREENING_ENABLED}
+        workflowStatus={(application as any)?.screeningStatus || (application as any)?.screening?.status || null}
+      />
+
       {!SCREENING_ENABLED ? (
         <div
           style={{

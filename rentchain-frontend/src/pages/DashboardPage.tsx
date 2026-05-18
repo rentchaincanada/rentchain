@@ -594,7 +594,7 @@ const DashboardPage: React.FC = () => {
     if (SCREENING_ENABLED && canManualScreen && (kpis.screeningsCount ?? 0) === 0) {
       items.push({
         id: "run-first-screening",
-        title: "Get TransUnion access",
+        title: "Set up screening workflow",
         severity: "info",
         href: "/applications?openTransUnionAccess=1",
       });
@@ -1013,7 +1013,7 @@ const DashboardPage: React.FC = () => {
                   </Button>
                 ) : (
                   <Button variant="primary" onClick={() => navigate("/applications?openTransUnionAccess=1")}>
-                    Get TransUnion Access
+                    Set up screening workflow
                   </Button>
                 )}
               </div>
@@ -1128,13 +1128,13 @@ const DashboardPage: React.FC = () => {
             <div style={{ color: text.muted, marginBottom: 12 }}>
               {SCREENING_ENABLED
                 ? screeningSetupComplete
-                  ? "Your screening setup is connected. Go to Applications to start screening."
-                  : "Start the TransUnion onboarding path, then return to RentChain to connect your credentials and screen applicants."
+                  ? "Your configured screening provider is connected. Go to Applications to start screening."
+                  : "Open the screening workflow to review provider setup, consent requirements, and manual/offline options."
                 : screeningLabel}
             </div>
             {SCREENING_ENABLED ? (
               <Button onClick={() => navigate(screeningSetupComplete ? "/applications" : "/applications?openTransUnionAccess=1")}>
-                {screeningSetupComplete ? "Run screening" : "Get TransUnion Access"}
+                {screeningSetupComplete ? "Run screening" : "Set up screening workflow"}
               </Button>
             ) : (
               <Button disabled>{screeningLabel}</Button>

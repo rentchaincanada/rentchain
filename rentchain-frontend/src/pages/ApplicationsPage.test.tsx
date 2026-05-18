@@ -534,6 +534,12 @@ describe("ApplicationsPage", () => {
     expect(screen.getByRole("button", { name: "Send screening invite" })).toBeInTheDocument();
     expect(screen.getAllByText("Tenant Screening Setup").length).toBeGreaterThan(0);
     expect(screen.getByText("Screening Provider")).toBeInTheDocument();
+    expect(screen.getAllByText("Screening workflow").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("TransUnion").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Certn").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Equifax").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Manual/offline review").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Verify consent and provider requirements before ordering reports/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText("Screening provider not connected").length).toBeGreaterThan(0);
     expect(screen.getAllByRole("button", { name: "Provider credentials" }).length).toBeGreaterThan(0);
     expect(screen.queryByText("TransUnion Connection")).not.toBeInTheDocument();
