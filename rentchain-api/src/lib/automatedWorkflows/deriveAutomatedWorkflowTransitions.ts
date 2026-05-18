@@ -62,6 +62,7 @@ function workflowQueueLabel(queue: DecisionWorkflowQueue): string {
 function looksLikeInternalId(value: unknown): boolean {
   const raw = asString(value, 240);
   if (!raw) return false;
+  if (/^[a-z]+:[A-Za-z0-9:_-]{8,}$/i.test(raw)) return true;
   if (/^[a-z]+_[a-z]+:/i.test(raw)) return true;
   if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(raw)) return true;
   if (/^[A-Za-z0-9_-]{18,}$/.test(raw) && /[A-Z]/.test(raw) && /[a-z]/.test(raw) && /\d/.test(raw)) return true;
@@ -72,7 +73,7 @@ function hasRawReferenceLabel(value: unknown): boolean {
   const raw = asString(value, 240);
   if (!raw) return false;
   if (looksLikeInternalId(raw)) return true;
-  return /^(Lease|Property|Decision|Tenant|Unit)\s+[A-Za-z0-9:_-]{8,}$/i.test(raw);
+  return /^(Lease|Property|Decision|Tenant|Unit)\s+[A-Za-z0-9:_-]+$/i.test(raw);
 }
 
 function operationalDecisionLabel(decision: DecisionInboxItem): string {

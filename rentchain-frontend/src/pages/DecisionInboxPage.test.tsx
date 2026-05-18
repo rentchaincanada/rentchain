@@ -369,7 +369,9 @@ describe("DecisionInboxPage", () => {
     expect(screen.getByText("Draft only. Review local legal requirements before use.")).toBeInTheDocument();
     expect(screen.getByText(/no tenant communication will be sent/i)).toBeInTheDocument();
     expect(screen.getByText("Source: Lease Ledger")).toBeInTheDocument();
-    expect(screen.getByText("Related: Lease lease-1")).toBeInTheDocument();
+    expect(screen.getByText("Related: Lease context review")).toBeInTheDocument();
+    expect(screen.getByText("Missing payment review is routed to delinquency review.")).toBeInTheDocument();
+    expect(screen.queryByText(/Decision decision:review_missing_payment/)).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "View context" })).toHaveAttribute("href", "/leases/lease-1/ledger");
     expect(screen.getByText("Open cost approval")).toBeInTheDocument();
     expect(screen.getByText("No context link available")).toBeInTheDocument();
