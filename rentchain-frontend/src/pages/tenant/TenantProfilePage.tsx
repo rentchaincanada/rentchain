@@ -323,7 +323,9 @@ export default function TenantProfilePage() {
               { label: "Lease end", value: formatDate(data?.profile?.lease?.endDate) },
               {
                 label: "Lease document",
-                value: data?.profile?.lease?.documentUrl ? "Available" : "Not shared yet",
+                value:
+                  data?.profile?.lease?.leaseDocumentContext?.displayLabel ||
+                  (data?.profile?.lease?.documentUrl ? "Available" : "Not shared yet"),
               },
             ]}
           />

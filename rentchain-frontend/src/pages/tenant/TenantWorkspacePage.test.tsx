@@ -2165,6 +2165,21 @@ describe("tenant workspace frontend shell", () => {
       monthlyRent: 1800,
       status: "active",
       documentUrl: "https://example.com/lease.pdf",
+      leaseDocumentContext: {
+        leaseId: "lease-1",
+        tenantId: "tenant-1",
+        propertyId: "prop-1",
+        unitId: "unit-1",
+        leaseStatus: "active",
+        signingStatus: "signed",
+        documentStatus: "signed",
+        documentId: "snapshot-1",
+        documentUrl: "https://example.com/lease.pdf",
+        displayLabel: "Signed lease document",
+        source: "lease_signed_document",
+        confidence: "high",
+        warnings: [],
+      },
       signatureStatus: "signed",
       signatureReadinessLabel: "Lease signing complete",
       signatureReadinessDescription: "The visible lease record shows the current signing stage as complete.",
@@ -2225,7 +2240,8 @@ describe("tenant workspace frontend shell", () => {
     expect(await screen.findByText(/^Lease Summary$/i)).toBeInTheDocument();
     expect(screen.getByText(/\$1,800/i)).toBeInTheDocument();
     expect(screen.getByText(/^Lease signing complete$/i)).toBeInTheDocument();
-    expect(screen.getByText(/^Lease document available$/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Signed lease document$/i)).toBeInTheDocument();
+    expect(screen.getByText(/Document status: Signed/i)).toBeInTheDocument();
     expect(screen.getByText(/^Lease fully executed$/i)).toBeInTheDocument();
     expect(screen.getByText(/Rent terms ready for future setup/i)).toBeInTheDocument();
     expect(screen.getByText(/Payment processed by Stripe\. RentChain does not store card or bank payment details\./i)).toBeInTheDocument();

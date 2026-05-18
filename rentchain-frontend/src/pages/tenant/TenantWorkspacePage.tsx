@@ -1012,8 +1012,14 @@ export default function TenantWorkspacePage() {
           <TenantKeyValueGrid
             rows={[
               { label: "Status", value: activeTenancy.label },
-              { label: "Lease reference", value: data?.lease?.leaseId || "Not visible yet" },
+              { label: "Internal Lease ID", value: data?.lease?.leaseId || "Not visible yet" },
               { label: "Lease status", value: prettyStatus(data?.lease?.status) },
+              {
+                label: "Lease document",
+                value:
+                  data?.lease?.leaseDocumentContext?.displayLabel ||
+                  (data?.lease?.documentUrl ? "Lease document available" : "No lease document available yet"),
+              },
               { label: "Monthly rent", value: formatMoney(data?.lease?.monthlyRent) },
             ]}
           />
