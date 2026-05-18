@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useToast } from "../components/ui/ToastProvider";
 import { useAuth } from "../context/useAuth";
 import { TenantDetailPanel } from "../components/tenants/TenantDetailPanel";
@@ -152,12 +152,17 @@ function describeTenantLinkage(
   const primaryProperty = tenant.propertyName || tenant.propertyId || "No property linked";
   const primaryUnit = tenant.unit || tenant.unitLabel || tenant.unitId || "No unit linked";
   const currentLeaseId = String(currentLease?.id || tenant.currentLeaseId || "").trim();
-  const leaseState = currentLeaseId || "No current lease linked";
+  const leaseLabel = currentLeaseId
+    ? [primaryProperty !== "No property linked" ? primaryProperty : null, primaryUnit !== "No unit linked" ? primaryUnit : null, "Lease"]
+        .filter(Boolean)
+        .join(" · ")
+    : "No current lease linked";
 
   return {
     propertyLabel: primaryProperty,
     unitLabel: primaryUnit,
-    leaseLabel: leaseState,
+    leaseLabel,
+    leaseId: currentLeaseId || null,
     activeTenancyCount: activeTenancies.length,
     linkageNote:
       !tenant.propertyId && !tenant.unitId && !currentLeaseId
@@ -470,6 +475,9 @@ const loadTenants = useCallback(async () => {
     : null;
   const selectedLeaseLedgerPath = selectedCurrentLeaseId
     ? `/leases/${encodeURIComponent(selectedCurrentLeaseId)}/ledger`
+    : null;
+  const selectedLeaseSummaryPath = selectedCurrentLeaseId
+    ? `/leases/${encodeURIComponent(selectedCurrentLeaseId)}/summary`
     : null;
 
   const filteredTenants = useMemo(() => {
@@ -957,7 +965,13 @@ const loadTenants = useCallback(async () => {
                       <Card>
                         <div style={{ fontSize: 11, fontWeight: 700, color: text.muted }}>Current lease link</div>
                         <div style={{ marginTop: 4, fontSize: 14, color: text.primary }}>
-                          {selectedTenantLinkage.leaseLabel}
+                          {selectedLeaseSummaryPath ? (
+                            <Link to={selectedLeaseSummaryPath} style={{ fontWeight: 700, color: "#2563eb" }}>
+                              {selectedTenantLinkage.leaseLabel}
+                            </Link>
+                          ) : (
+                            selectedTenantLinkage.leaseLabel
+                          )}
                         </div>
                       </Card>
                       <Card>
@@ -1041,7 +1055,13 @@ const loadTenants = useCallback(async () => {
                         <div>
                           <div style={{ fontSize: 11, fontWeight: 700, color: text.muted }}>Current lease</div>
                           <div style={{ marginTop: 4, fontSize: 14, color: text.primary }}>
-                            {selectedTenantLinkage.leaseLabel}
+                            {selectedLeaseSummaryPath ? (
+                              <Link to={selectedLeaseSummaryPath} style={{ fontWeight: 700, color: "#2563eb" }}>
+                                {selectedTenantLinkage.leaseLabel}
+                              </Link>
+                            ) : (
+                              selectedTenantLinkage.leaseLabel
+                            )}
                           </div>
                         </div>
                       </div>

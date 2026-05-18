@@ -197,7 +197,10 @@ describe("TenantsPage", () => {
     expect(screen.getByRole("button", { name: "Add note" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Send tenant invite" })).toBeInTheDocument();
     expect(screen.getAllByText("Active").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("lease-1").length).toBeGreaterThan(0);
+    const leaseLinks = screen.getAllByRole("link", { name: "Main Street · Unit 4 · Lease" });
+    expect(leaseLinks.length).toBeGreaterThan(0);
+    expect(leaseLinks[0]).toHaveAttribute("href", "/leases/lease-1/summary");
+    expect(screen.queryByText("lease-1")).not.toBeInTheDocument();
     expect(screen.getByText("Lease ledger")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "View ledger" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Record payment" })).toBeEnabled();
@@ -250,7 +253,10 @@ describe("TenantsPage", () => {
     );
 
     expect(await screen.findByText("Tenant actions")).toBeInTheDocument();
-    expect(screen.getAllByText("lease-active-1").length).toBeGreaterThan(0);
+    const leaseLinks = screen.getAllByRole("link", { name: "Main Street · Unit 4 · Lease" });
+    expect(leaseLinks.length).toBeGreaterThan(0);
+    expect(leaseLinks[0]).toHaveAttribute("href", "/leases/lease-active-1/summary");
+    expect(screen.queryByText("lease-active-1")).not.toBeInTheDocument();
     expect(screen.queryByText("No current lease linked")).not.toBeInTheDocument();
   });
 

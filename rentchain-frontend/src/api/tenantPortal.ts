@@ -45,6 +45,7 @@ export type TenantWorkspaceLease = {
   dueDay?: number | null;
   status: string | null;
   documentUrl: string | null;
+  leaseDocumentContext?: TenantLeaseDocumentContext | null;
   signatureStatus?: "not_started" | "awaiting_tenant_signature" | "awaiting_landlord_signature" | "signed" | "unavailable";
   signatureReadinessLabel?: string | null;
   signatureReadinessDescription?: string | null;
@@ -105,6 +106,22 @@ export type TenantWorkspaceLease = {
     } | null;
     paymentExperience: PaymentExperience;
   } | null;
+};
+
+export type TenantLeaseDocumentContext = {
+  leaseId?: string | null;
+  tenantId?: string | null;
+  propertyId?: string | null;
+  unitId?: string | null;
+  leaseStatus?: string | null;
+  signingStatus?: string | null;
+  documentStatus: "signed" | "generated" | "pending" | "missing";
+  documentId?: string | null;
+  documentUrl?: string | null;
+  displayLabel: string;
+  source: string;
+  confidence: "high" | "medium" | "low";
+  warnings: string[];
 };
 
 export type RentPaymentHistoryItem = {

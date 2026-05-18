@@ -860,6 +860,153 @@ describe("tenantPortalRoutes foundation", () => {
     );
   });
 
+  it("links tenant lease workspace to generated unsigned lease package attachments", async () => {
+    ensureCollection("leases").set("lease-1", {
+      ...(ensureCollection("leases").get("lease-1") || {}),
+      status: "ready_for_signature",
+      documentUrl: null,
+      approvedDocumentUrl: null,
+      documentRef: null,
+      tenantSignature: null,
+      landlordSignature: null,
+    });
+    ensureCollection("ledgerAttachments").set("lease-generated-current", {
+      tenantId: "tenant-1",
+      landlordId: "landlord-1",
+      leaseId: "lease-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      ledgerItemId: "lease-1",
+      title: "Lease document",
+      fileName: "schedule-a-v1.pdf",
+      category: "Lease",
+      purpose: "LEASE",
+      purposeLabel: "Lease",
+      url: "https://example.com/generated-current.pdf",
+      createdAt: 900,
+      source: "lease_pdf_generation",
+    });
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/lease",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.data?.documentUrl).toBe("https://example.com/generated-current.pdf");
+    expect(res.body?.data?.leasePdfStatus).toBe("available");
+    expect(res.body?.data?.leaseDocumentContext).toEqual(
+      expect.objectContaining({
+        leaseId: "lease-1",
+        documentStatus: "generated",
+        documentUrl: "https://example.com/generated-current.pdf",
+        displayLabel: "Generated lease package",
+        source: "ledgerAttachments",
+        confidence: "high",
+      })
+    );
+  });
+
+  it("prefers the current active lease document over an archived tenant lease reference", async () => {
+    ensureCollection("tenants").set("tenant-1", {
+      ...(ensureCollection("tenants").get("tenant-1") || {}),
+      leaseId: "archived-lease",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+    });
+    ensureCollection("leases").set("archived-lease", {
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      status: "archived",
+      documentUrl: "https://example.com/archived.pdf",
+      updatedAt: 1000,
+    });
+    ensureCollection("leases").set("active-lease", {
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      status: "active",
+      startDate: "2026-06-01",
+      endDate: "2027-05-31",
+      monthlyRent: 1800,
+      documentUrl: "https://example.com/current.pdf",
+      updatedAt: 500,
+    });
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/lease",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.data?.leaseId).toBe("active-lease");
+    expect(res.body?.data?.documentUrl).toBe("https://example.com/current.pdf");
+    expect(res.body?.data?.leaseDocumentContext?.documentUrl).toBe("https://example.com/current.pdf");
+  });
+
+  it("does not expose another tenant's lease attachment as current lease document", async () => {
+    ensureCollection("leases").set("lease-1", {
+      ...(ensureCollection("leases").get("lease-1") || {}),
+      status: "ready_for_signature",
+      documentUrl: null,
+      approvedDocumentUrl: null,
+      documentRef: null,
+    });
+    ensureCollection("ledgerAttachments").set("lease-generated-other-tenant", {
+      tenantId: "tenant-2",
+      landlordId: "landlord-1",
+      leaseId: "lease-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      ledgerItemId: "lease-1",
+      title: "Lease document",
+      fileName: "schedule-a-v1.pdf",
+      category: "Lease",
+      purpose: "LEASE",
+      purposeLabel: "Lease",
+      url: "https://example.com/other-tenant.pdf",
+      createdAt: 900,
+      source: "lease_pdf_generation",
+    });
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/lease",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(JSON.stringify(res.body)).not.toContain("other-tenant.pdf");
+    expect(res.body?.data?.leaseDocumentContext?.documentStatus).toBe("pending");
+  });
+
   it("creates a tenant rent payment checkout only for an eligible enabled lease", async () => {
     ensureCollection("leases").set("lease-1", {
       ...(ensureCollection("leases").get("lease-1") || {}),
@@ -2971,8 +3118,8 @@ describe("tenantPortalRoutes foundation", () => {
         expect.objectContaining({
           label: "LEASE — Lease",
           category: "Lease",
-          fileName: "schedule-a-v1.pdf",
-          url: "https://example.com/generated-lease.pdf",
+          fileName: "signed-lease.pdf",
+          url: "https://example.com/lease.pdf",
         }),
       ])
     );
@@ -2993,6 +3140,20 @@ describe("tenantPortalRoutes foundation", () => {
   });
 
   it("dedupes duplicate visible Lease attachments in the tenant document vault", async () => {
+    ensureCollection("leases").set("lease-1", {
+      ...(ensureCollection("leases").get("lease-1") || {}),
+      status: "ready_for_signature",
+      documentUrl: null,
+      approvedDocumentUrl: null,
+      documentRef: null,
+      tenantSignature: null,
+      landlordSignature: null,
+      tenantSignedAt: null,
+      landlordSignedAt: null,
+      fullyExecutedAt: null,
+      fullySignedAt: null,
+      signatureCompletedAt: null,
+    });
     ensureCollection("ledgerAttachments").set("lease-generated-draft-only", {
       tenantId: "tenant-1",
       landlordId: "landlord-1",

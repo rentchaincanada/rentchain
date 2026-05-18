@@ -2308,6 +2308,51 @@ async function queryFirstApplicationDocument(field: string, value: string | null
   return null;
 }
 
+function leaseSelectionRank(record: { id: string; data: any }): number {
+  const status = String(record.data?.status || "").trim().toLowerCase();
+  const archived = Boolean(record.data?.archivedAt || record.data?.deletedAt) || ["archived", "past", "ended", "inactive", "void"].includes(status);
+  if (archived) return -100;
+  if (["active", "current", "signed", "fully_executed"].includes(status)) return 100;
+  if (["sent", "awaiting_tenant_signature", "pending_tenant_signature", "ready_for_signature", "lease_sent"].includes(status)) return 80;
+  if (["draft", "pending", "lease_pending"].includes(status)) return 50;
+  return 20;
+}
+
+async function findBestTenantLease(params: {
+  current: { id: string; data: any } | null;
+  tenantId: string | null;
+  propertyId: string | null;
+}) {
+  const tenantId = String(params.tenantId || "").trim();
+  const propertyId = String(params.propertyId || "").trim();
+  const candidates = new Map<string, { id: string; data: any }>();
+  if (params.current?.id) candidates.set(params.current.id, params.current);
+  if (tenantId) {
+    for (const query of [
+      () => db.collection("leases").where("tenantId", "==", tenantId).limit(20).get(),
+      () => db.collection("leases").where("tenantIds", "array-contains", tenantId).limit(20).get(),
+    ]) {
+      try {
+        const snap = await query();
+        snap.docs.forEach((doc) => candidates.set(doc.id, { id: doc.id, data: doc.data() as any }));
+      } catch {
+        // Keep the explicitly linked lease if one of the compatibility queries is unavailable.
+      }
+    }
+  }
+
+  const ranked = Array.from(candidates.values())
+    .filter((candidate) => !propertyId || String(candidate.data?.propertyId || "").trim() === propertyId)
+    .filter((candidate) => !tenantId || leaseHasTenant(candidate.data, tenantId))
+    .sort((left, right) => {
+      const rankDelta = leaseSelectionRank(right) - leaseSelectionRank(left);
+      if (rankDelta !== 0) return rankDelta;
+      return timestampToSort(right.data?.updatedAt || right.data?.createdAt) - timestampToSort(left.data?.updatedAt || left.data?.createdAt);
+    });
+
+  return ranked[0] || params.current;
+}
+
 async function loadTenantWorkspaceData(context: Awaited<ReturnType<typeof resolveTenancyContext>>) {
   const propertyDoc = await loadDocument("properties", context.propertyId);
 
@@ -2329,30 +2374,7 @@ async function loadTenantWorkspaceData(context: Awaited<ReturnType<typeof resolv
   }
 
   let leaseDoc = await loadDocument("leases", context.leaseId);
-  if (!leaseDoc && context.tenantId) {
-    try {
-      const directSnap = await db.collection("leases").where("tenantId", "==", context.tenantId).limit(5).get();
-      const directMatch = directSnap.docs.find((doc) => {
-        const data = doc.data() as any;
-        return String(data?.propertyId || "") === String(context.propertyId || "");
-      });
-      if (directMatch) leaseDoc = { id: directMatch.id, data: directMatch.data() as any };
-    } catch {
-      leaseDoc = null;
-    }
-  }
-  if (!leaseDoc && context.tenantId) {
-    try {
-      const snap = await db.collection("leases").where("tenantIds", "array-contains", context.tenantId).limit(5).get();
-      const match = snap.docs.find((doc) => {
-        const data = doc.data() as any;
-        return String(data?.propertyId || "") === String(context.propertyId || "");
-      });
-      if (match) leaseDoc = { id: match.id, data: match.data() as any };
-    } catch {
-      leaseDoc = null;
-    }
-  }
+  leaseDoc = await findBestTenantLease({ current: leaseDoc, tenantId: context.tenantId, propertyId: context.propertyId });
 
   const maintenanceItems: Array<{ id: string; data: any }> = [];
   if (context.tenantId) {
@@ -2368,7 +2390,24 @@ async function loadTenantWorkspaceData(context: Awaited<ReturnType<typeof resolv
     }
   }
 
-  const lease = leaseDoc ? projectTenantLease(leaseDoc.id, leaseDoc.data) : null;
+  const leaseDocumentContext = leaseDoc
+    ? await getTenantLeaseDocumentContext({
+        leaseId: leaseDoc.id,
+        tenantId: context.tenantId,
+        propertyId: String(leaseDoc.data?.propertyId || context.propertyId || "").trim() || null,
+        unitId: String(leaseDoc.data?.unitId || context.unitId || "").trim() || null,
+        leaseData: leaseDoc.data,
+      })
+    : null;
+  const leaseProjectionData =
+    leaseDoc && leaseDocumentContext?.documentUrl
+      ? {
+          ...leaseDoc.data,
+          documentUrl: leaseDocumentContext.documentUrl,
+          approvedDocumentUrl: leaseDocumentContext.documentUrl,
+        }
+      : leaseDoc?.data;
+  const lease = leaseDoc ? projectTenantLease(leaseDoc.id, leaseProjectionData) : null;
   const rentPaymentSummary = lease
     ? (
         await buildLeasePaymentProjection({
@@ -2396,7 +2435,7 @@ async function loadTenantWorkspaceData(context: Awaited<ReturnType<typeof resolv
   return {
     property: propertyDoc ? projectTenantProperty(propertyDoc.id, propertyDoc.data) : null,
     application: applicationDoc ? projectTenantApplication(applicationDoc.id, applicationDoc.data) : null,
-    lease: lease ? { ...lease, rentPaymentSummary } : null,
+    lease: lease ? { ...lease, leaseDocumentContext, rentPaymentSummary } : null,
     maintenance: maintenanceItems
       .map((item) => projectTenantMaintenance(item.id, item.data))
       .sort((left, right) => Number(right.updatedAt || 0) - Number(left.updatedAt || 0)),
@@ -2727,6 +2766,37 @@ function shapeTenantProfileResponse(profile: Awaited<ReturnType<typeof loadTenan
   };
 }
 
+async function withTenantLeaseDocumentContext(profile: Awaited<ReturnType<typeof loadTenantProfileProjection>>) {
+  const lease = profile?.profile?.lease;
+  const leaseId = String(lease?.leaseId || profile?.context?.leaseId || "").trim();
+  const tenantId = String(profile?.context?.tenantId || "").trim();
+  if (!leaseId || !tenantId) return profile;
+  const leaseSnap = await db.collection("leases").doc(leaseId).get();
+  if (!leaseSnap.exists) return profile;
+  const leaseData = leaseSnap.data() as any;
+  const leaseDocumentContext = await getTenantLeaseDocumentContext({
+    leaseId,
+    tenantId,
+    propertyId: String(profile?.context?.propertyId || leaseData?.propertyId || "").trim() || null,
+    unitId: String(profile?.context?.unitId || leaseData?.unitId || "").trim() || null,
+    leaseData,
+  });
+  const nextLease = leaseDocumentContext.documentUrl
+    ? projectTenantLease(leaseId, {
+        ...leaseData,
+        documentUrl: leaseDocumentContext.documentUrl,
+        approvedDocumentUrl: leaseDocumentContext.documentUrl,
+      })
+    : lease;
+  return {
+    ...profile,
+    profile: {
+      ...profile.profile,
+      lease: nextLease ? { ...nextLease, leaseDocumentContext } : lease,
+    },
+  };
+}
+
 function normalizeDocumentKey(value: unknown): string {
   return String(value || "")
     .trim()
@@ -2839,12 +2909,281 @@ function dedupeTenantVisibleLeaseAttachments(attachments: any[]): any[] {
   return output;
 }
 
+type TenantLeaseDocumentContext = {
+  leaseId?: string;
+  tenantId?: string;
+  propertyId?: string;
+  unitId?: string;
+  leaseStatus?: string;
+  signingStatus?: string;
+  documentStatus: "signed" | "generated" | "pending" | "missing";
+  documentId?: string;
+  documentUrl?: string;
+  displayLabel: string;
+  source: string;
+  confidence: "high" | "medium" | "low";
+  warnings: string[];
+};
+
+function firstLeaseDocumentUrl(raw: any, fields: string[]): string | null {
+  for (const field of fields) {
+    const value = String(raw?.[field] || "").trim();
+    if (value.startsWith("https://")) return value;
+  }
+  return null;
+}
+
+function leaseHasTenant(raw: any, tenantId: string): boolean {
+  const normalizedTenantId = String(tenantId || "").trim();
+  if (!normalizedTenantId) return false;
+  if (String(raw?.tenantId || "").trim() === normalizedTenantId) return true;
+  if (String(raw?.primaryTenantId || "").trim() === normalizedTenantId) return true;
+  return Array.isArray(raw?.tenantIds) && raw.tenantIds.map((value: any) => String(value || "").trim()).includes(normalizedTenantId);
+}
+
+function isLeaseSigned(raw: any): boolean {
+  const status = String(raw?.status || "").trim().toLowerCase();
+  return Boolean(
+    raw?.fullyExecutedAt ||
+      raw?.fullySignedAt ||
+      raw?.signatureCompletedAt ||
+      (raw?.tenantSignature?.signedAt && raw?.landlordSignature?.signedAt) ||
+      (raw?.tenantSignedAt && raw?.landlordSignedAt) ||
+      ["signed", "executed", "fully_executed"].includes(status)
+  );
+}
+
+function isLeaseDocumentWorkflowPending(raw: any): boolean {
+  const status = String(raw?.status || "").trim().toLowerCase();
+  const documentStatus = String(raw?.documentStatus || raw?.leaseDocumentStatus || raw?.pdfStatus || raw?.generationStatus || "")
+    .trim()
+    .toLowerCase();
+  return Boolean(
+    raw?.documentGeneratedAt ||
+      raw?.documentPreparedAt ||
+      raw?.leaseDocumentGeneratedAt ||
+      raw?.leaseDocumentPreparedAt ||
+      raw?.pdfGeneratedAt ||
+      raw?.scheduleAGeneratedAt ||
+      ["sent", "awaiting_tenant_signature", "pending_tenant_signature", "ready_for_signature", "signature_requested"].includes(status) ||
+      ["pending", "preparing", "generating", "generated", "ready_for_review", "review_pending"].includes(documentStatus)
+  );
+}
+
+function bestTenantLeaseAttachment(params: {
+  attachments: any[];
+  leaseId: string | null;
+  propertyId: string | null;
+  unitId: string | null;
+}) {
+  const leaseId = String(params.leaseId || "").trim();
+  const propertyId = String(params.propertyId || "").trim();
+  const unitId = String(params.unitId || "").trim();
+
+  const candidates = (Array.isArray(params.attachments) ? params.attachments : [])
+    .filter((item) => isVisibleLeaseDocumentAttachment(item) && String(item?.url || "").trim().startsWith("https://"))
+    .map((item) => {
+      const candidateLeaseId = String(item?.leaseId || "").trim();
+      const candidateLedgerItemId = String(item?.ledgerItemId || "").trim();
+      const candidatePropertyId = String(item?.propertyId || "").trim();
+      const candidateUnitId = String(item?.unitId || "").trim();
+      const exactLease = leaseId && (candidateLeaseId === leaseId || candidateLedgerItemId === leaseId) ? 4 : 0;
+      const propertyMatch = propertyId && candidatePropertyId === propertyId ? 2 : 0;
+      const unitMatch = unitId && candidateUnitId === unitId ? 1 : 0;
+      return {
+        item,
+        score: exactLease + propertyMatch + unitMatch,
+        createdAt: Number(item?.createdAt || 0) || 0,
+      };
+    })
+    .filter((entry) => entry.score > 0 || !leaseId);
+
+  candidates.sort((left, right) => right.score - left.score || right.createdAt - left.createdAt);
+  return candidates[0]?.item || null;
+}
+
+async function loadTenantLeaseAttachments(tenantId: string): Promise<any[]> {
+  const normalizedTenantId = String(tenantId || "").trim();
+  if (!normalizedTenantId) return [];
+  const snap = await db.collection("ledgerAttachments").where("tenantId", "==", normalizedTenantId).limit(50).get();
+  return snap.docs.map((doc) => ({ id: doc.id, ...(doc.data() as any) }));
+}
+
+async function getTenantLeaseDocumentContext(params: {
+  leaseId: string | null;
+  tenantId: string | null;
+  propertyId: string | null;
+  unitId: string | null;
+  leaseData: any;
+  attachments?: any[];
+}): Promise<TenantLeaseDocumentContext> {
+  const leaseId = String(params.leaseId || "").trim();
+  const tenantId = String(params.tenantId || "").trim();
+  const propertyId = String(params.propertyId || params.leaseData?.propertyId || "").trim();
+  const unitId = String(params.unitId || params.leaseData?.unitId || params.leaseData?.unit || "").trim();
+  const leaseStatus = String(params.leaseData?.status || "").trim() || undefined;
+  const warnings: string[] = [];
+
+  if (!leaseId || !params.leaseData) {
+    return {
+      tenantId: tenantId || undefined,
+      propertyId: propertyId || undefined,
+      unitId: unitId || undefined,
+      leaseStatus,
+      documentStatus: "missing",
+      displayLabel: "No lease document available yet",
+      source: "missing_lease",
+      confidence: "low",
+      warnings: ["No current lease record is available for this tenant workspace."],
+    };
+  }
+
+  if (tenantId && !leaseHasTenant(params.leaseData, tenantId)) {
+    return {
+      leaseId,
+      tenantId,
+      propertyId: propertyId || undefined,
+      unitId: unitId || undefined,
+      leaseStatus,
+      documentStatus: "missing",
+      displayLabel: "No lease document available yet",
+      source: "tenant_mismatch",
+      confidence: "low",
+      warnings: ["The visible lease record is not linked to this tenant workspace."],
+    };
+  }
+
+  const signed = isLeaseSigned(params.leaseData);
+  const signedUrl = firstLeaseDocumentUrl(params.leaseData, [
+    "signedDocumentUrl",
+    "signedLeaseDocumentUrl",
+    "executedDocumentUrl",
+    "finalDocumentUrl",
+    "fullyExecutedDocumentUrl",
+    "documentUrl",
+    "approvedDocumentUrl",
+    "documentRef",
+  ]);
+  if (signed && signedUrl) {
+    return {
+      leaseId,
+      tenantId: tenantId || undefined,
+      propertyId: propertyId || undefined,
+      unitId: unitId || undefined,
+      leaseStatus,
+      signingStatus: "signed",
+      documentStatus: "signed",
+      documentId: String(params.leaseData?.signedDocumentId || params.leaseData?.documentId || params.leaseData?.latestLeaseSnapshotId || "").trim() || undefined,
+      documentUrl: signedUrl,
+      displayLabel: "Signed lease document",
+      source: "lease_signed_document",
+      confidence: "high",
+      warnings,
+    };
+  }
+
+  const generatedUrl = firstLeaseDocumentUrl(params.leaseData, ["documentUrl", "approvedDocumentUrl", "documentRef"]);
+  if (generatedUrl) {
+    return {
+      leaseId,
+      tenantId: tenantId || undefined,
+      propertyId: propertyId || undefined,
+      unitId: unitId || undefined,
+      leaseStatus,
+      signingStatus: signed ? "signed" : "unsigned",
+      documentStatus: signed ? "signed" : "generated",
+      documentId: String(params.leaseData?.documentId || params.leaseData?.latestLeaseSnapshotId || "").trim() || undefined,
+      documentUrl: generatedUrl,
+      displayLabel: signed ? "Signed lease document" : "Generated lease package",
+      source: "lease_document_fields",
+      confidence: "high",
+      warnings,
+    };
+  }
+
+  const attachments = params.attachments || (tenantId ? await loadTenantLeaseAttachments(tenantId) : []);
+  const attachment = bestTenantLeaseAttachment({ attachments, leaseId, propertyId, unitId });
+  if (attachment) {
+    return {
+      leaseId,
+      tenantId: tenantId || undefined,
+      propertyId: propertyId || undefined,
+      unitId: unitId || undefined,
+      leaseStatus,
+      signingStatus: signed ? "signed" : "unsigned",
+      documentStatus: signed ? "signed" : "generated",
+      documentId: String(attachment?.id || "").trim() || undefined,
+      documentUrl: String(attachment.url || "").trim(),
+      displayLabel: signed ? "Signed lease document" : "Generated lease package",
+      source: "ledgerAttachments",
+      confidence: "high",
+      warnings,
+    };
+  }
+
+  if (isLeaseDocumentWorkflowPending(params.leaseData)) {
+    return {
+      leaseId,
+      tenantId: tenantId || undefined,
+      propertyId: propertyId || undefined,
+      unitId: unitId || undefined,
+      leaseStatus,
+      signingStatus: signed ? "signed" : "unsigned",
+      documentStatus: "pending",
+      displayLabel: "Lease document pending",
+      source: "lease_document_workflow",
+      confidence: "medium",
+      warnings: ["A lease workflow is visible, but no tenant-safe document link is available yet."],
+    };
+  }
+
+  return {
+    leaseId,
+    tenantId: tenantId || undefined,
+    propertyId: propertyId || undefined,
+    unitId: unitId || undefined,
+    leaseStatus,
+    signingStatus: signed ? "signed" : "unsigned",
+    documentStatus: "missing",
+    displayLabel: "No lease document available yet",
+    source: "missing_document",
+    confidence: "medium",
+    warnings: ["No tenant-safe lease document link is available yet."],
+  };
+}
+
 function buildTenantDocumentWorkspace(params: {
   attachments: Array<any>;
   profile: Awaited<ReturnType<typeof loadTenantProfileProjection>>;
+  leaseDocumentContext?: TenantLeaseDocumentContext | null;
 }) {
   const checklist = Array.isArray(params.profile?.identity?.documentChecklist) ? params.profile.identity.documentChecklist : [];
-  const attachments = dedupeTenantVisibleLeaseAttachments(Array.isArray(params.attachments) ? params.attachments : []);
+  const leaseDocumentContext = params.leaseDocumentContext || null;
+  const contextAttachment =
+    leaseDocumentContext?.documentUrl &&
+    leaseDocumentContext.documentStatus !== "missing" &&
+    leaseDocumentContext.source !== "ledgerAttachments"
+      ? {
+          id: leaseDocumentContext.documentId || `lease-document-context-${leaseDocumentContext.leaseId || "current"}`,
+          tenantId: leaseDocumentContext.tenantId || null,
+          leaseId: leaseDocumentContext.leaseId || null,
+          propertyId: leaseDocumentContext.propertyId || null,
+          unitId: leaseDocumentContext.unitId || null,
+          ledgerItemId: leaseDocumentContext.leaseId || null,
+          title: leaseDocumentContext.displayLabel,
+          fileName: leaseDocumentContext.documentStatus === "signed" ? "signed-lease.pdf" : "lease-package.pdf",
+          category: "Lease",
+          purpose: "LEASE",
+          purposeLabel: "Lease",
+          url: leaseDocumentContext.documentUrl,
+          createdAt: 0,
+          source: leaseDocumentContext.source,
+        }
+      : null;
+  const attachments = dedupeTenantVisibleLeaseAttachments([
+    ...(contextAttachment ? [contextAttachment] : []),
+    ...(Array.isArray(params.attachments) ? params.attachments : []),
+  ]);
 
   const normalizedAttachmentMap = new Map<string, any[]>();
   attachments.forEach((item) => {
@@ -4105,11 +4444,11 @@ router.get("/profile", requireTenantWorkspaceIdentity, async (req: any, res) => 
   if (!context) return;
 
   try {
-    const profile = await loadTenantProfileProjection({
+    const profile = await withTenantLeaseDocumentContext(await loadTenantProfileProjection({
       context,
       userId: String(req.user?.id || "").trim(),
       userEmail: String(req.user?.email || "").trim() || null,
-    });
+    }));
 
     await recordTenantEvent({
       eventType: "tenant_profile_viewed",
@@ -6349,29 +6688,32 @@ router.get("/attachments", requireTenantWorkspaceIdentity, async (req: any, res)
     const tenantId = String(context.tenantId || "").trim();
     if (!tenantId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
 
-    const [snap, profile] = await Promise.all([
+    const [snap, profile, workspaceData] = await Promise.all([
       db.collection("ledgerAttachments").where("tenantId", "==", tenantId).limit(50).get(),
       loadTenantProfileProjection({
         context,
         userId: String(req.user?.id || "").trim(),
         userEmail: String(req.user?.email || "").trim() || null,
-      }),
+      }).then((profile) => withTenantLeaseDocumentContext(profile)),
+      loadTenantWorkspaceData(context),
     ]);
 
     const rawAttachments = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
     rawAttachments.sort((a, b) => (Number(b.createdAt || 0) || 0) - (Number(a.createdAt || 0) || 0));
 
-    const workspace = buildTenantDocumentWorkspace({
+    const documentWorkspace = buildTenantDocumentWorkspace({
       attachments: rawAttachments,
       profile,
+      leaseDocumentContext: workspaceData.lease?.leaseDocumentContext || (profile.profile?.lease as any)?.leaseDocumentContext || null,
     });
 
     return res.json({
       ok: true,
-      data: workspace.items,
-      summary: workspace.summary,
-      guidance: workspace.guidance,
-      updatedAt: workspace.updatedAt,
+      data: documentWorkspace.items,
+      summary: documentWorkspace.summary,
+      guidance: documentWorkspace.guidance,
+      updatedAt: documentWorkspace.updatedAt,
+      leaseDocumentContext: workspaceData.lease?.leaseDocumentContext || (profile.profile?.lease as any)?.leaseDocumentContext || null,
     });
   } catch (err) {
     console.error("[tenant/attachments] failed", {
@@ -6430,20 +6772,14 @@ router.get("/lease", requireTenant, async (req: any, res) => {
         leaseRecord = leaseSnap.data() as any;
       }
     }
-    if (!leaseRecord) {
-      const leaseSnap = await db.collection("leases").where("tenantId", "==", tenantId).limit(20).get();
-      const ranked = leaseSnap.docs
-        .map((doc) => ({ id: doc.id, ...(doc.data() as any) }))
-        .sort((a, b) => {
-          const aActive = ["signed", "active", "current"].includes(String(a?.status || "").toLowerCase()) ? 1 : 0;
-          const bActive = ["signed", "active", "current"].includes(String(b?.status || "").toLowerCase()) ? 1 : 0;
-          if (aActive !== bActive) return bActive - aActive;
-          return Number(b?.updatedAt || b?.createdAt || 0) - Number(a?.updatedAt || a?.createdAt || 0);
-        });
-      if (ranked.length > 0) {
-        leaseRecord = ranked[0];
-        leaseId = leaseId || String(leaseRecord.id || "").trim() || null;
-      }
+    const bestLease = await findBestTenantLease({
+      current: leaseRecord && leaseId ? { id: leaseId, data: leaseRecord } : null,
+      tenantId,
+      propertyId,
+    });
+    if (bestLease) {
+      leaseRecord = bestLease.data;
+      leaseId = bestLease.id;
     }
 
     propertyId = propertyId || String(leaseRecord?.propertyId || "").trim() || null;
@@ -6473,9 +6809,25 @@ router.get("/lease", requireTenant, async (req: any, res) => {
       }
     }
 
+    const leaseDocumentContext =
+      leaseId && leaseRecord
+        ? await getTenantLeaseDocumentContext({
+            leaseId,
+            tenantId,
+            propertyId,
+            unitId,
+            leaseData: leaseRecord,
+          })
+        : null;
     const projectedLease = leaseId
       ? projectTenantLease(leaseId, {
           ...(leaseRecord || {}),
+          ...(leaseDocumentContext?.documentUrl
+            ? {
+                documentUrl: leaseDocumentContext.documentUrl,
+                approvedDocumentUrl: leaseDocumentContext.documentUrl,
+              }
+            : {}),
           startDate: leaseRecord?.startDate || leaseRecord?.leaseStart || tenantData?.leaseStart || tenantData?.leaseStartDate || null,
           endDate: leaseRecord?.endDate || tenantData?.leaseEnd || null,
           monthlyRent:
@@ -6534,6 +6886,7 @@ router.get("/lease", requireTenant, async (req: any, res) => {
       rentAmount: projectedLease?.monthlyRent ?? null,
       leaseStart: projectedLease?.startDate ?? null,
       leaseEnd: projectedLease?.endDate ?? null,
+      leaseDocumentContext,
     };
 
     return res.json({ ok: true, data: lease, lease, ...lease });

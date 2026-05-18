@@ -102,6 +102,10 @@ export default function TenantLeasePage() {
   }
 
   const execution = data?.leaseExecution || null;
+  const leaseDocumentContext = data?.leaseDocumentContext || null;
+  const leaseDocumentUrl = leaseDocumentContext?.documentUrl || data?.documentUrl || null;
+  const leaseDocumentLabel = leaseDocumentContext?.displayLabel || data?.leasePdfLabel || null;
+  const leaseDocumentWarnings = Array.isArray(leaseDocumentContext?.warnings) ? leaseDocumentContext.warnings : [];
   const paymentReadiness = data?.paymentReadiness || null;
   const paymentSummary = rentPaymentDetails || data?.rentPaymentSummary || null;
   const latestPaymentStatus =
@@ -310,16 +314,24 @@ export default function TenantLeasePage() {
           ) : null}
 
           <TenantInfoCard heading="Lease Document" accent="#0f766e">
-            {data.leasePdfLabel ? (
+            {leaseDocumentLabel ? (
               <div style={{ display: "grid", gap: 6 }}>
-                <div style={{ fontWeight: 800 }}>{data.leasePdfLabel}</div>
+                <div style={{ fontWeight: 800 }}>{leaseDocumentLabel}</div>
                 {data.leasePdfDescription ? (
                   <div style={{ color: "var(--text-muted, #64748b)" }}>{data.leasePdfDescription}</div>
                 ) : null}
+                {leaseDocumentContext?.documentStatus ? (
+                  <div style={{ color: "var(--text-muted, #64748b)" }}>
+                    Document status: {prettyStatus(leaseDocumentContext.documentStatus)}
+                  </div>
+                ) : null}
+                {leaseDocumentWarnings.length > 0 ? (
+                  <div style={{ color: "var(--text-muted, #64748b)" }}>{leaseDocumentWarnings[0]}</div>
+                ) : null}
               </div>
             ) : null}
-            {data.documentUrl ? (
-              <a href={data.documentUrl} target="_blank" rel="noreferrer">
+            {leaseDocumentUrl ? (
+              <a href={leaseDocumentUrl} target="_blank" rel="noreferrer">
                 Open lease document
               </a>
             ) : (
