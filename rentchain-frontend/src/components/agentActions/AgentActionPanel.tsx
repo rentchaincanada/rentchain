@@ -5,6 +5,40 @@ function label(value: string) {
   return value.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
+function workflowQueueLabel(queue: string) {
+  if (queue === "delinquency_review") return "delinquency review";
+  if (queue === "lease_review") return "lease readiness review";
+  if (queue === "screening_review") return "screening workflow review";
+  if (queue === "maintenance_review") return "maintenance review";
+  if (queue === "compliance_review") return "compliance review";
+  if (queue === "admin_review") return "admin review";
+  return label(queue).toLowerCase();
+}
+
+function operationalReviewLabel(value: string, queue?: string) {
+  const raw = value.toLowerCase();
+  if (raw.includes("review_overdue_rent") || raw.includes("overdue_rent") || raw.includes("overdue")) {
+    return "Overdue rent review";
+  }
+  if (raw.includes("review_missing_payment") || raw.includes("missing_payment")) return "Missing payment review";
+  if (raw.includes("reduce_vacancy_risk") || raw.includes("vacancy")) return "Vacancy pressure review";
+  if (raw.includes("revenue")) return "Revenue pressure review";
+  if (raw.includes("delinquency") || queue === "delinquency_review") return "Delinquency review";
+  if (raw.includes("screening") || queue === "screening_review") return "Screening workflow review";
+  if (raw.includes("lease") || queue === "lease_review") return "Lease readiness review";
+  return "Operational review";
+}
+
+function safeExplanationReason(reason: string, action: PolicyGatedAgentAction) {
+  const routedMatch = reason.match(/^Decision\s+(.+?)\s+is routed to\s+([a-z_]+)\.?$/i);
+  if (routedMatch) {
+    return `${operationalReviewLabel(routedMatch[1], action.queue)} is routed to ${workflowQueueLabel(routedMatch[2])}.`;
+  }
+  return reason.replace(/\b(lease_lifecycle|decision|property|lease):[A-Za-z0-9:_-]+\b/gi, (match) =>
+    operationalReviewLabel(match, action.queue)
+  );
+}
+
 function statusTone(status: AgentActionStatus) {
   if (status === "blocked") return { color: "#991b1b", background: "#fee2e2", border: "#fecaca" };
   if (status === "suggested") return { color: "#92400e", background: "#fef3c7", border: "#fde68a" };
@@ -74,7 +108,7 @@ export function AgentActionPanel({ actions }: { actions?: PolicyGatedAgentAction
             <strong style={{ color: "#312e81", fontSize: 13 }}>Review explanation</strong>
             {action.explanation.reasons.slice(0, 4).map((reason) => (
               <span key={reason} style={{ color: "#475569", fontSize: 13 }}>
-                {reason}
+                {safeExplanationReason(reason, action)}
               </span>
             ))}
             {action.explanation.blockedReasons.map((reason) => (
