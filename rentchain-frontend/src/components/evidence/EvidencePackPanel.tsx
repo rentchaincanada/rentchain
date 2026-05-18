@@ -8,6 +8,27 @@ function label(value: string) {
   return value.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
+function operationalScopeLabel(evidencePack: EvidencePack) {
+  const preferredSections = [
+    "lease_context",
+    "property_context",
+    "delinquency_context",
+    "decision_lineage",
+    "workflow_routing",
+    "maintenance_context",
+  ];
+  for (const sectionKey of preferredSections) {
+    const section = evidencePack.sections.find((item) => item.sectionKey === sectionKey);
+    const item = section?.items.find((entry) => entry.label?.trim());
+    if (item?.label) return item.label;
+  }
+  if (evidencePack.scope === "lease") return "Lease context review";
+  if (evidencePack.scope === "property") return "Property review";
+  if (evidencePack.scope === "delinquency") return "Delinquency review";
+  if (evidencePack.scope === "decision" || evidencePack.scope === "workflow") return "Operational review";
+  return `${label(evidencePack.scope)} review`;
+}
+
 function statusTone(status: string) {
   if (status === "blocked") return { color: "#991b1b", background: "#fee2e2", border: "#fecaca" };
   if (status === "incomplete" || status === "unavailable") return { color: "#92400e", background: "#fef3c7", border: "#fde68a" };
@@ -45,7 +66,7 @@ export function EvidencePackPanel({ evidencePack }: { evidencePack: EvidencePack
             <div>
               <h2 style={{ margin: 0, fontSize: "1.1rem" }}>Evidence details</h2>
               <div style={{ color: "#64748b", fontSize: 13 }}>
-                {label(evidencePack.scope)} · {evidencePack.scopeId}
+                {label(evidencePack.scope)} · {operationalScopeLabel(evidencePack)}
               </div>
             </div>
             <Badge status={evidencePack.status}>{label(evidencePack.status)}</Badge>

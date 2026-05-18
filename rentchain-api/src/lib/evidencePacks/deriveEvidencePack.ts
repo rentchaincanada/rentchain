@@ -48,6 +48,61 @@ function normalizeTimestamp(value: unknown): string | null {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
+function looksLikeInternalId(value: unknown): boolean {
+  const raw = asString(value, 240);
+  if (!raw) return false;
+  if (/^[a-z]+_[a-z]+:/i.test(raw)) return true;
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(raw)) return true;
+  if (/^[A-Za-z0-9_-]{18,}$/.test(raw) && /[A-Z]/.test(raw) && /[a-z]/.test(raw) && /\d/.test(raw)) return true;
+  return false;
+}
+
+function hasRawReferenceLabel(value: unknown): boolean {
+  const raw = asString(value, 240);
+  if (!raw) return false;
+  if (looksLikeInternalId(raw)) return true;
+  return /^(Lease|Property|Decision|Tenant|Unit)\s+[A-Za-z0-9:_-]{8,}$/i.test(raw);
+}
+
+function unitLabel(value: unknown): string {
+  const raw = asString(value, 80);
+  if (!raw || looksLikeInternalId(raw)) return "";
+  return /^unit\s+/i.test(raw) ? raw : `Unit ${raw}`;
+}
+
+function leaseContextLabel(lease: Record<string, any>): string {
+  const property = asString(
+    lease.propertyName || lease.propertyLabel || lease.property?.name || lease.propertyAddress || lease.address,
+    120
+  );
+  const unit = unitLabel(lease.unitLabel || lease.unitNumber || lease.unitName || lease.unit);
+  const tenant = asString(lease.tenantName || lease.primaryTenantName || lease.tenant?.name, 120);
+  const parts = [property, unit].filter(Boolean);
+  if (parts.length) return tenant ? `${parts.join(" · ")} · ${tenant}` : parts.join(" · ");
+  if (tenant) return `${tenant} lease`;
+  return "Lease context review";
+}
+
+function propertyContextLabel(property: Record<string, any>): string {
+  const name = asString(property.name || property.propertyName || property.address || property.addressLine1, 160);
+  return name && !hasRawReferenceLabel(name) ? name : "Property review";
+}
+
+function operationalDecisionLabel(decision: Record<string, any>): string {
+  const title = asString(decision.title, 160);
+  if (title && !hasRawReferenceLabel(title)) return title;
+  const raw = asString(decision.id || decision.decisionId || decision.decisionType || decision.type, 240).toLowerCase();
+  const queue = asString(decision.workflow?.queue, 120).toLowerCase();
+  if (raw.includes("reduce_vacancy_risk") || raw.includes("vacancy")) return "Vacancy pressure review";
+  if (raw.includes("revenue")) return "Revenue pressure review";
+  if (raw.includes("missing_payment") || raw.includes("delinquency") || queue === "delinquency_review") {
+    return "Delinquency review";
+  }
+  if (raw.includes("lease") || queue === "lease_review") return "Lease readiness review";
+  if (raw.includes("screening") || queue === "screening_review") return "Screening workflow review";
+  return "Operational review";
+}
+
 function evidenceItem(input: {
   itemType: EvidenceItemType;
   label: string;
@@ -149,7 +204,7 @@ function decisionSections(input: DeriveEvidencePackInput): EvidencePackSection[]
   const decisionItems = target.map((decision) =>
     evidenceItem({
       itemType: "decision",
-      label: decision.title,
+      label: operationalDecisionLabel(decision),
       description: decision.description,
       source: "decision_inbox",
       sourceId: decision.id,
@@ -285,7 +340,7 @@ function contextSections(input: DeriveEvidencePackInput): EvidencePackSection[] 
     .map((lease) =>
       evidenceItem({
         itemType: "lease_summary",
-        label: `Lease ${asString(lease.id || lease.leaseId, 120) || "summary"}`,
+        label: leaseContextLabel(lease),
         description: `Lease context includes property and unit linkage without private tenant documents.`,
         source: "lease_ledger",
         sourceId: asString(lease.id || lease.leaseId, 240) || null,
@@ -299,7 +354,7 @@ function contextSections(input: DeriveEvidencePackInput): EvidencePackSection[] 
     .map((property) =>
       evidenceItem({
         itemType: "property_summary",
-        label: asString(property.name || property.address || property.id || "Property summary", 160),
+        label: propertyContextLabel(property),
         description: "Landlord-scoped property context is available.",
         source: "registry",
         sourceId: asString(property.id || property.propertyId, 240) || null,
@@ -354,7 +409,7 @@ function delinquencySection(input: DeriveEvidencePackInput): EvidencePackSection
     items: delinquency.slice(0, 8).map((decision) =>
       evidenceItem({
         itemType: "ledger_summary",
-        label: decision.title,
+        label: operationalDecisionLabel(decision),
         description: decision.description,
         source: "lease_ledger",
         sourceId: decision.id,

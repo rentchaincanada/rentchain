@@ -76,6 +76,8 @@ describe("EvidencePackPanel", () => {
     expect(screen.getByText("Total items")).toBeInTheDocument();
     expect(screen.getByText("Decision lineage")).toBeInTheDocument();
     expect(screen.getByText("Review missing payment")).toBeInTheDocument();
+    expect(screen.getByText("Decision · Review missing payment")).toBeInTheDocument();
+    expect(screen.queryByText("Decision · decision-1")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "View context" })).toHaveAttribute("href", "/leases/lease-1/ledger");
     expect(screen.getByRole("link", { name: "View timeline" })).toHaveAttribute(
       "href",

@@ -48,7 +48,7 @@ export default function EvidencePackPage() {
 
   const loadPreview = React.useCallback(async () => {
     if (!scopeId.trim()) {
-      setError("Scope ID is required for evidence preview.");
+      setError("Internal scope reference is required for evidence preview.");
       setData(null);
       return;
     }
@@ -101,12 +101,15 @@ export default function EvidencePackPage() {
             </select>
           </label>
           <label style={{ display: "grid", gap: 5, color: "#334155", fontSize: 13, fontWeight: 800 }}>
-            Scope ID
+            Internal scope reference
             <input
               value={scopeId}
               onChange={(event) => setScopeId(event.target.value)}
               style={{ border: "1px solid #cbd5e1", borderRadius: 8, padding: "8px 10px", minWidth: 260 }}
             />
+            <span style={{ color: "#64748b", fontSize: 12, fontWeight: 600 }}>
+              Internal routing reference. Evidence labels below use operational context when available.
+            </span>
           </label>
           <button
             type="button"
