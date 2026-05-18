@@ -336,13 +336,20 @@ function DecisionRow({
   return (
     <div style={{ border: "1px solid #e2e8f0", borderRadius: 12, padding: 12, background: "#fff", display: "grid", gap: 6 }}>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        <strong>{copy.label}</strong>
+      </div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        <span style={{ color: "#64748b", fontSize: 12, fontWeight: 800 }}>Financial signal</span>
         <DecisionBadge severity={decision.severity} label={copy.badge} />
+        <span style={{ color: "#64748b", fontSize: 12, fontWeight: 800 }}>Workflow status</span>
         <span style={{ border: "1px solid #cbd5e1", borderRadius: 999, padding: "3px 8px", fontSize: 12, fontWeight: 800 }}>
           {decisionStatusCopy[decision.status || "detected"]}
         </span>
-        <strong>{copy.label}</strong>
       </div>
       <div style={{ color: "#475569" }}>{decision.reason}</div>
+      <div style={{ color: "#64748b", fontSize: 12 }}>
+        Workflow actions update review handling only. Financial status is derived from payments, obligations, and reconciliation evidence.
+      </div>
       {context.length ? <div style={{ color: "#64748b", fontSize: 12 }}>{context.join(" · ")}</div> : null}
       {decision.latestAction ? (
         <div style={{ color: "#64748b", fontSize: 12 }}>Last action: {decisionStatusCopy[decision.latestAction.nextStatus]}</div>
@@ -816,15 +823,15 @@ export default function LeaseLedgerPage() {
           <>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 8 }}>
               <div style={{ border: "1px solid #fecaca", borderRadius: 10, padding: 10, background: "#fef2f2" }}>
-                <div style={{ fontSize: 12, color: "#991b1b" }}>Critical</div>
+                <div style={{ fontSize: 12, color: "#991b1b" }}>Active critical decisions</div>
                 <strong>{decisionSummary.critical}</strong>
               </div>
               <div style={{ border: "1px solid #fed7aa", borderRadius: 10, padding: 10, background: "#fff7ed" }}>
-                <div style={{ fontSize: 12, color: "#9a3412" }}>Warning</div>
+                <div style={{ fontSize: 12, color: "#9a3412" }}>Active warning decisions</div>
                 <strong>{decisionSummary.warning}</strong>
               </div>
               <div style={{ border: "1px solid #e2e8f0", borderRadius: 10, padding: 10 }}>
-                <div style={{ fontSize: 12, color: "#64748b" }}>Active</div>
+                <div style={{ fontSize: 12, color: "#64748b" }}>Active decision count</div>
                 <strong>{decisionSummary.total}</strong>
               </div>
             </div>
@@ -847,7 +854,7 @@ export default function LeaseLedgerPage() {
 
       <section style={{ display: "grid", gap: 10 }}>
         <div>
-          <h2 style={{ margin: 0, fontSize: "1rem" }}>Delinquency overview</h2>
+          <h2 style={{ margin: 0, fontSize: "1rem" }}>Financial delinquency summary</h2>
           <div style={{ color: "#64748b", fontSize: 13, marginTop: 3 }}>
             Read-only detection based on obligation ledger signals.
           </div>
@@ -883,6 +890,9 @@ export default function LeaseLedgerPage() {
           <div style={{ color: "#64748b", fontSize: 13, marginTop: 3 }}>
             Read-only view of expected rent, execution records, and reconciliation evidence.
           </div>
+          <div style={{ color: "#475569", fontSize: 13, marginTop: 4 }}>
+            Obligation status is financial truth from payments and reconciliation. Decision workflow actions do not change these values.
+          </div>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 8 }}>
           <div style={{ border: "1px solid #e2e8f0", borderRadius: 10, padding: 10 }}>
@@ -911,7 +921,7 @@ export default function LeaseLedgerPage() {
             <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1080 }}>
               <thead>
                 <tr style={{ background: "#f8fafc" }}>
-                  {["Period", "Due date", "Expected", "Paid", "Outstanding", "Status", "Delinquency", "Evidence"].map((h) => (
+                  {["Period", "Due date", "Expected", "Paid", "Outstanding", "Financial status", "Financial signal", "Evidence"].map((h) => (
                     <th key={h} style={{ textAlign: "left", padding: 10, borderBottom: "1px solid #e2e8f0" }}>{h}</th>
                   ))}
                 </tr>
