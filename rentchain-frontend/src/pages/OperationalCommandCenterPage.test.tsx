@@ -378,6 +378,10 @@ describe("OperationalCommandCenterPage", () => {
     expect(screen.getAllByText("Payments / obligations").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Lease lifecycle").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Documents / workspace").length).toBeGreaterThan(0);
+    expect(screen.getByTestId("operations-coordination-lanes")).toHaveStyle({
+      display: "grid",
+      gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))",
+    });
     expect(screen.getByText("Priority routing queue")).toBeInTheDocument();
     expect(screen.getByText(/Highest priority first by urgency, severity, and source workflow/i)).toBeInTheDocument();
     expect(screen.getAllByText("Critical").length).toBeGreaterThan(0);

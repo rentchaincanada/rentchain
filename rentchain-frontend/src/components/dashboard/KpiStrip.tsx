@@ -42,7 +42,7 @@ export function KpiStrip({ kpis, loading, links }: Props) {
     <div
       style={{
         display: "grid",
-        gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(140px, 1fr))",
+        gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(min(100%, 160px), 1fr))",
         gap: isMobile ? 16 : spacing.sm,
         alignItems: "stretch",
         minWidth: 0,
