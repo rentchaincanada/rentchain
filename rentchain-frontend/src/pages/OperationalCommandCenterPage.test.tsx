@@ -394,7 +394,17 @@ describe("OperationalCommandCenterPage", () => {
     expect(screen.getByText("Workflow status: New")).toBeInTheDocument();
     expect(screen.getByText("Review status: Open")).toBeInTheDocument();
     expect(screen.getAllByText("Financial status: Review required").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Assignment: Operations owned").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Escalation: Critical").length).toBeGreaterThan(0);
     expect(screen.getByText("Next action: Review payment evidence")).toBeInTheDocument();
+    expect(screen.getByText("Saved operational views")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "All Operational" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "High Risk" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Workflow type")).toBeInTheDocument();
+    expect(screen.getByLabelText("Review status")).toBeInTheDocument();
+    expect(screen.getByLabelText("Assignment state")).toBeInTheDocument();
+    expect(screen.getByLabelText("Escalation state")).toBeInTheDocument();
+    expect(screen.getByLabelText("Timing / risk")).toBeInTheDocument();
     expect(screen.queryByText(/Lease jjua9wFKDV19d5y5sdV7/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Property ZaeL9oqpJCSZPguWa6wR/i)).not.toBeInTheDocument();
     expect(screen.getAllByText("Open source workflow").length).toBeGreaterThan(0);
@@ -415,13 +425,55 @@ describe("OperationalCommandCenterPage", () => {
     expect(screen.queryByText("Review missing payment")).not.toBeInTheDocument();
     expect(screen.getByText("Lease ending soon")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "All" }));
+    fireEvent.click(screen.getByRole("button", { name: "All operational" }));
     fireEvent.change(screen.getByLabelText("Search operational items"), { target: { value: "North Towers 101" } });
     expect(screen.getByText("Review missing payment")).toBeInTheDocument();
     expect(screen.queryByText("Vacant units visible")).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Search operational items"), { target: { value: "no matching workflow" } });
-    expect(screen.getByText("No operational items match the current search or filter.")).toBeInTheDocument();
+    expect(screen.getByText("No operational items match this triage view.")).toBeInTheDocument();
+    expect(screen.getByText(/Current filters:/)).toBeInTheDocument();
+  });
+
+  it("supports combined triage facets while preserving search and reset behavior", async () => {
+    render(
+      <MemoryRouter>
+        <OperationalCommandCenterPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Review missing payment")).toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Delinquent" })[1]);
+    expect(screen.getByText("Review missing payment")).toBeInTheDocument();
+    expect(screen.queryByText("Vacant units visible")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Review status"), { target: { value: "open" } });
+    fireEvent.change(screen.getByLabelText("Assignment state"), { target: { value: "unassigned" } });
+    expect(screen.queryByText("Review missing payment")).not.toBeInTheDocument();
+    expect(screen.getByText("No operational items match this triage view.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Reset filters" }));
+    expect(screen.getByText("Review missing payment")).toBeInTheDocument();
+    expect(screen.getByText("Vacant units visible")).toBeInTheDocument();
+  });
+
+  it("applies saved operational views without backend state changes", async () => {
+    render(
+      <MemoryRouter>
+        <OperationalCommandCenterPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Review missing payment")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "High Risk" }));
+    expect(screen.getByText("Review missing payment")).toBeInTheDocument();
+    expect(screen.queryByText("Vacant units visible")).not.toBeInTheDocument();
+    expect(screen.getByText(/Active view: Critical/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Upcoming Deadlines" }));
+    expect(screen.queryByText("Review missing payment")).not.toBeInTheDocument();
+    expect(screen.getByText("Lease ending soon")).toBeInTheDocument();
   });
 
   it("shows a safe empty state when no signals are visible", async () => {
