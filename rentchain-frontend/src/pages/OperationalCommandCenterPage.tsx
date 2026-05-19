@@ -705,7 +705,15 @@ export default function OperationalCommandCenterPage() {
           </div>
         </Section>
 
-        <Section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10, minWidth: 0 }}>
+        <Section
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 160px), 1fr))",
+            gap: 10,
+            minWidth: 0,
+            boxSizing: "border-box",
+          }}
+        >
           {[
             ["Signals", signals.length],
             ["Critical", criticalCount],
@@ -730,7 +738,18 @@ export default function OperationalCommandCenterPage() {
             </div>
             <div style={{ color: "#64748b", fontSize: 13 }}>Read-only coordination layer</div>
           </div>
-          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "stretch", gap: 12, minWidth: 0 }}>
+          <div
+            data-testid="operations-coordination-lanes"
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))",
+              alignItems: "stretch",
+              gap: 12,
+              minWidth: 0,
+              width: "100%",
+              boxSizing: "border-box",
+            }}
+          >
             {categorySummary.map(({ category, config, total, critical, warning, info }) => {
               const Icon = config.icon;
               return (
@@ -740,9 +759,8 @@ export default function OperationalCommandCenterPage() {
                   style={{
                     color: "inherit",
                     textDecoration: "none",
-                    minWidth: 260,
-                    flex: "1 1 280px",
                     display: "flex",
+                    minWidth: 0,
                     boxSizing: "border-box",
                   }}
                 >

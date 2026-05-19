@@ -178,11 +178,29 @@ function DashboardDecisionSummaryPanel({
         </div>
       ) : (
         <>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: spacing.sm }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 130px), 1fr))",
+              gap: spacing.sm,
+              minWidth: 0,
+              boxSizing: "border-box",
+            }}
+          >
             {cells.map((cell) => {
               const tone = decisionSeverityStyle[cell.severity];
               return (
-                <div key={cell.label} style={{ border: `1px solid ${tone.border}`, background: tone.bg, borderRadius: 10, padding: 10 }}>
+                <div
+                  key={cell.label}
+                  style={{
+                    border: `1px solid ${tone.border}`,
+                    background: tone.bg,
+                    borderRadius: 10,
+                    padding: 10,
+                    minWidth: 0,
+                    boxSizing: "border-box",
+                  }}
+                >
                   <div style={{ color: tone.color, fontSize: 12, fontWeight: 700 }}>{cell.label}</div>
                   <strong style={{ color: tone.color, fontSize: 20 }}>{cell.value}</strong>
                 </div>
@@ -814,7 +832,18 @@ const DashboardPage: React.FC = () => {
         ) : null}
 
         {dataReady ? (
-          <div style={{ display: "grid", gap: spacing.lg, minWidth: 0, width: "100%", boxSizing: "border-box", clear: "both" }}>
+          <div
+            data-testid="dashboard-kpi-decision-stack"
+            style={{
+              display: "grid",
+              gap: spacing.xl,
+              minWidth: 0,
+              width: "100%",
+              boxSizing: "border-box",
+              clear: "both",
+              alignItems: "start",
+            }}
+          >
             <KpiStrip
               kpis={kpis}
               loading={loading}

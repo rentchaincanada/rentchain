@@ -327,6 +327,12 @@ describe("DashboardPage", () => {
     expect(screen.getAllByText("Partial payment received").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Manual Review").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Payment mismatch detected").length).toBeGreaterThan(0);
+    expect(screen.getByTestId("dashboard-kpi-decision-stack")).toHaveStyle({
+      display: "grid",
+      gap: "2rem",
+      width: "100%",
+      boxSizing: "border-box",
+    });
   });
 
   it("updates dashboard decision status from human actions", async () => {

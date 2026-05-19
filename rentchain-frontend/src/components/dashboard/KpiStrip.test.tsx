@@ -40,4 +40,38 @@ describe("KpiStrip", () => {
     expect(screen.getByText("Properties")).toBeInTheDocument();
     expect(screen.getByText("Units")).toBeInTheDocument();
   });
+
+  it("uses safe desktop grid tracks that cannot overflow the container width", () => {
+    vi.mocked(window.matchMedia).mockImplementation((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+
+    const { container } = render(
+      <MemoryRouter>
+        <KpiStrip
+          kpis={{
+            propertiesCount: 2,
+            unitsCount: 4,
+            tenantsCount: 3,
+            openActionsCount: 1,
+            delinquentCount: 0,
+          }}
+        />
+      </MemoryRouter>
+    );
+
+    const grid = container.firstElementChild as HTMLElement;
+    expect(grid).toHaveStyle({
+      gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 160px), 1fr))",
+      width: "100%",
+      boxSizing: "border-box",
+    });
+  });
 });
