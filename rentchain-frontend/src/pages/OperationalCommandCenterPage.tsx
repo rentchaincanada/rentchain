@@ -21,16 +21,22 @@ type CommandCenterCategory =
   | "review_workflow";
 
 type CommandCenterSeverity = "critical" | "warning" | "info";
+type CommandCenterPriorityGroup = "critical" | "needs_review" | "upcoming" | "informational";
 
 export type CommandCenterSignal = {
   id: string;
   category: CommandCenterCategory;
   severity: CommandCenterSeverity;
+  priorityGroup: CommandCenterPriorityGroup;
   title: string;
   description: string;
   contextLabel: string;
   destination: string;
   source: string;
+  workflowStatus: string;
+  reviewStatus: string;
+  financialStatus?: string | null;
+  nextActionLabel: string;
 };
 
 type CategoryConfig = {
@@ -88,6 +94,38 @@ const CATEGORY_ORDER: CommandCenterCategory[] = [
   "review_workflow",
 ];
 
+const PRIORITY_GROUPS: Array<{
+  group: CommandCenterPriorityGroup;
+  label: string;
+  description: string;
+  tone: CommandCenterSeverity;
+}> = [
+  {
+    group: "critical",
+    label: "Critical",
+    description: "Highest-priority items that need prompt human review.",
+    tone: "critical",
+  },
+  {
+    group: "needs_review",
+    label: "Needs review",
+    description: "Operational issues that need staff review before the source workflow progresses.",
+    tone: "warning",
+  },
+  {
+    group: "upcoming",
+    label: "Upcoming",
+    description: "Forward-looking lease, occupancy, and workflow timing signals.",
+    tone: "info",
+  },
+  {
+    group: "informational",
+    label: "Informational",
+    description: "Lower-risk visibility signals and non-urgent operational context.",
+    tone: "info",
+  },
+];
+
 const INACTIVE_DECISION_STATUSES = new Set(["resolved", "dismissed"]);
 
 function label(value: string) {
@@ -112,6 +150,43 @@ function severityFromDecision(item: DecisionInboxItem): CommandCenterSeverity {
   if (item.severity === "critical" || item.severity === "high" || item.status === "blocked") return "critical";
   if (item.severity === "medium" || item.workflow?.escalationLevel === "attention") return "warning";
   return "info";
+}
+
+function priorityRank(group: CommandCenterPriorityGroup) {
+  return PRIORITY_GROUPS.findIndex((item) => item.group === group);
+}
+
+function severityRank(severity: CommandCenterSeverity) {
+  return { critical: 0, warning: 1, info: 2 }[severity];
+}
+
+function priorityFromDecision(item: DecisionInboxItem, category: CommandCenterCategory): CommandCenterPriorityGroup {
+  if (
+    item.status === "blocked" ||
+    item.workflow?.workflowState === "escalated" ||
+    item.workflow?.escalationLevel === "critical" ||
+    category === "payments"
+  ) {
+    return "critical";
+  }
+  if (
+    item.severity === "high" ||
+    item.severity === "medium" ||
+    item.workflow?.workflowState === "waiting_context" ||
+    item.workflow?.escalationLevel === "urgent" ||
+    item.workflow?.escalationLevel === "attention"
+  ) {
+    return "needs_review";
+  }
+  return "informational";
+}
+
+function nextActionForDecision(item: DecisionInboxItem, category: CommandCenterCategory) {
+  if (category === "payments") return "Review payment evidence";
+  if (category === "screening") return "Review screening workflow";
+  if (category === "lease_lifecycle") return "Review lease readiness";
+  if (category === "occupancy") return "Review occupancy context";
+  return "Review source workflow";
 }
 
 function decisionCategory(item: DecisionInboxItem): CommandCenterCategory {
@@ -211,6 +286,18 @@ function resolveDecisionContextLabel(
   return "Operational review";
 }
 
+export function prioritizeOperationalItems(signals: CommandCenterSignal[]): CommandCenterSignal[] {
+  return [...signals].sort((a, b) => {
+    return (
+      priorityRank(a.priorityGroup) - priorityRank(b.priorityGroup) ||
+      severityRank(a.severity) - severityRank(b.severity) ||
+      CATEGORY_ORDER.indexOf(a.category) - CATEGORY_ORDER.indexOf(b.category) ||
+      a.title.localeCompare(b.title) ||
+      a.id.localeCompare(b.id)
+    );
+  });
+}
+
 export function deriveCommandCenterSignals(input: {
   decisions?: DecisionInboxItem[];
   leases?: LandlordActiveLease[];
@@ -233,11 +320,16 @@ export function deriveCommandCenterSignals(input: {
       id: `decision:${item.id}`,
       category,
       severity: severityFromDecision(item),
+      priorityGroup: priorityFromDecision(item, category),
       title: item.title || "Operational review item",
       description: item.description || "Review the source workflow before taking any action.",
       contextLabel: resolveDecisionContextLabel(item, lookups),
       destination: item.destination || CATEGORY_CONFIG[category].destination,
       source: `Decision inbox · ${label(item.workflow?.queue || "general_review")}`,
+      workflowStatus: label(item.workflow?.workflowState || "new"),
+      reviewStatus: label(item.status || "open"),
+      financialStatus: category === "payments" ? "Review required" : null,
+      nextActionLabel: nextActionForDecision(item, category),
     });
   }
 
@@ -253,11 +345,16 @@ export function deriveCommandCenterSignals(input: {
         id: `lease-coherence:${lease.id}`,
         category: "occupancy",
         severity: "warning",
+        priorityGroup: lease.stateCoherence?.flags?.hasStateConflict ? "critical" : "needs_review",
         title: lease.stateCoherence.coherenceLabel || "Occupancy review needed",
         description: lease.stateCoherence.coherenceReason || "Lease and occupancy signals need human review.",
         contextLabel: baseLabel,
         destination: "/leases",
         source: "Lease operations · occupancy coherence",
+        workflowStatus: label(lease.stateCoherence.leaseOperationalState || "review_required"),
+        reviewStatus: "Review needed",
+        financialStatus: null,
+        nextActionLabel: "Review occupancy context",
       });
     }
 
@@ -266,11 +363,16 @@ export function deriveCommandCenterSignals(input: {
         id: `lease-execution:${lease.id}`,
         category: "lease_lifecycle",
         severity: executionStatus === "blocked" ? "critical" : "warning",
+        priorityGroup: executionStatus === "blocked" ? "critical" : "needs_review",
         title: lease.leaseExecution?.executionLabel || "Lease execution needs review",
         description: lease.leaseExecution?.executionDescription || "Lease execution is not complete.",
         contextLabel: baseLabel,
         destination: "/leases",
         source: "Lease operations · execution readiness",
+        workflowStatus: label(executionStatus),
+        reviewStatus: "Review needed",
+        financialStatus: null,
+        nextActionLabel: "Review lease execution",
       });
     }
 
@@ -279,11 +381,16 @@ export function deriveCommandCenterSignals(input: {
         id: `lease-signature:${lease.id}`,
         category: "documents",
         severity: "warning",
+        priorityGroup: "needs_review",
         title: lease.signatureReadinessLabel || "Lease signature pending",
         description: lease.signatureReadinessDescription || "Lease package has a pending signature step.",
         contextLabel: baseLabel,
         destination: leaseDestination,
         source: "Lease operations · document readiness",
+        workflowStatus: label(signatureStatus),
+        reviewStatus: "Review needed",
+        financialStatus: null,
+        nextActionLabel: "Review lease package",
       });
     }
 
@@ -292,11 +399,16 @@ export function deriveCommandCenterSignals(input: {
         id: `lease-document:${lease.id}`,
         category: "documents",
         severity: lease.leasePdfStatus === "not_available" ? "warning" : "info",
+        priorityGroup: lease.leasePdfStatus === "not_available" ? "needs_review" : "informational",
         title: lease.leasePdfLabel || "Lease document package not ready",
         description: lease.leasePdfDescription || "The tenant-facing lease package is not yet available.",
         contextLabel: baseLabel,
         destination: "/leases",
         source: "Lease operations · tenant workspace linkage",
+        workflowStatus: label(lease.leasePdfStatus),
+        reviewStatus: lease.leasePdfStatus === "not_available" ? "Review needed" : "Informational",
+        financialStatus: null,
+        nextActionLabel: "Review document context",
       });
     }
 
@@ -305,11 +417,16 @@ export function deriveCommandCenterSignals(input: {
         id: `payment-readiness:${lease.id}`,
         category: "payments",
         severity: lease.paymentReadiness.readinessStatus === "blocked" ? "critical" : "warning",
+        priorityGroup: lease.paymentReadiness.readinessStatus === "blocked" ? "critical" : "needs_review",
         title: lease.paymentReadiness.readinessLabel || "Payment readiness needs review",
         description: lease.paymentReadiness.readinessDescription || "Review lease payment setup before relying on collection workflow.",
         contextLabel: baseLabel,
         destination: leaseDestination,
         source: "Lease operations · payment readiness",
+        workflowStatus: label(lease.paymentReadiness.readinessStatus),
+        reviewStatus: "Review needed",
+        financialStatus: label(lease.paymentReadiness.readinessStatus),
+        nextActionLabel: "Review payment setup",
       });
     }
 
@@ -318,11 +435,16 @@ export function deriveCommandCenterSignals(input: {
         id: `lease-ending:${lease.id}`,
         category: "lease_lifecycle",
         severity: endingIn <= 30 ? "warning" : "info",
+        priorityGroup: "upcoming",
         title: "Lease ending soon",
         description: `Lease ends ${formatDate(lease.endDate)}. Review renewal, notice, or move-out workflow timing.`,
         contextLabel: baseLabel,
         destination: "/leases",
         source: "Lease operations · lifecycle timing",
+        workflowStatus: "Upcoming",
+        reviewStatus: endingIn <= 30 ? "Needs review" : "Upcoming",
+        financialStatus: null,
+        nextActionLabel: "Review renewal timing",
       });
     }
 
@@ -332,11 +454,17 @@ export function deriveCommandCenterSignals(input: {
         id: `policy:${lease.id}:${policy.policyKey}`,
         category: "lease_lifecycle",
         severity: policy.severity === "critical" ? "critical" : policy.severity === "warning" ? "warning" : "info",
+        priorityGroup:
+          policy.severity === "critical" ? "critical" : policy.policyKey.includes("renewal") ? "upcoming" : "needs_review",
         title: policy.label,
         description: `${policy.reason} ${policy.disclaimer}`,
         contextLabel: baseLabel,
         destination: "/leases",
         source: `Jurisdiction workflow · ${policy.jurisdiction}`,
+        workflowStatus: label(policy.status),
+        reviewStatus: "Review needed",
+        financialStatus: null,
+        nextActionLabel: "Review jurisdiction guidance",
       });
     }
   }
@@ -349,19 +477,21 @@ export function deriveCommandCenterSignals(input: {
         id: `property-vacancy:${property.id}`,
         category: "occupancy",
         severity: "info",
+        priorityGroup: "informational",
         title: "Vacant units visible",
         description: `${vacantUnits} vacant unit${vacantUnits === 1 ? "" : "s"} may need listing, lease, or follow-up review.`,
         contextLabel: propertyLabel(property),
         destination: "/properties",
         source: "Properties · occupancy display",
+        workflowStatus: "Informational",
+        reviewStatus: "Informational",
+        financialStatus: null,
+        nextActionLabel: "Review property occupancy",
       });
     }
   }
 
-  return signals.sort((a, b) => {
-    const severityRank = { critical: 0, warning: 1, info: 2 };
-    return severityRank[a.severity] - severityRank[b.severity] || CATEGORY_ORDER.indexOf(a.category) - CATEGORY_ORDER.indexOf(b.category);
-  });
+  return prioritizeOperationalItems(signals);
 }
 
 function summarizeByCategory(signals: CommandCenterSignal[]) {
@@ -372,6 +502,13 @@ function summarizeByCategory(signals: CommandCenterSignal[]) {
     critical: signals.filter((signal) => signal.category === category && signal.severity === "critical").length,
     warning: signals.filter((signal) => signal.category === category && signal.severity === "warning").length,
     info: signals.filter((signal) => signal.category === category && signal.severity === "info").length,
+  }));
+}
+
+function summarizeByPriority(signals: CommandCenterSignal[]) {
+  return PRIORITY_GROUPS.map((group) => ({
+    ...group,
+    signals: signals.filter((signal) => signal.priorityGroup === group.group),
   }));
 }
 
@@ -448,6 +585,7 @@ export default function OperationalCommandCenterPage() {
     [decisionData?.items, leases, properties]
   );
   const categorySummary = React.useMemo(() => summarizeByCategory(signals), [signals]);
+  const prioritySummary = React.useMemo(() => summarizeByPriority(signals), [signals]);
   const criticalCount = signals.filter((signal) => signal.severity === "critical").length;
   const warningCount = signals.filter((signal) => signal.severity === "warning").length;
 
@@ -474,9 +612,10 @@ export default function OperationalCommandCenterPage() {
             ["Signals", signals.length],
             ["Critical", criticalCount],
             ["Warnings", warningCount],
+            ["Needs review", signals.filter((signal) => signal.priorityGroup === "needs_review").length],
+            ["Upcoming", signals.filter((signal) => signal.priorityGroup === "upcoming").length],
             ["Open decisions", decisionData?.summary?.open ?? 0],
             ["Delinquent", dashboardData?.kpis?.delinquentCount ?? 0],
-            ["Open actions", dashboardData?.kpis?.openActionsCount ?? 0],
           ].map(([name, value]) => (
             <Card key={String(name)} style={{ borderRadius: 8, padding: 12 }}>
               <div style={{ color: "#64748b", fontSize: 12, fontWeight: 900 }}>{name}</div>
@@ -524,8 +663,8 @@ export default function OperationalCommandCenterPage() {
         <Section style={{ display: "grid", gap: 12 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             <Building2 size={18} />
-            <strong style={{ color: "#0f172a" }}>High-signal queue</strong>
-            <span style={{ color: "#64748b", fontSize: 13 }}>Prioritized by severity and source workflow.</span>
+            <strong style={{ color: "#0f172a" }}>Priority routing queue</strong>
+            <span style={{ color: "#64748b", fontSize: 13 }}>Highest priority first by urgency, severity, and source workflow.</span>
           </div>
           {loading ? <Card>Loading operational signals...</Card> : null}
           {!loading && error ? <Card style={{ color: "#b91c1c" }}>{error}</Card> : null}
@@ -533,27 +672,52 @@ export default function OperationalCommandCenterPage() {
             <Card style={{ color: "#64748b" }}>No high-signal operational issues are currently visible.</Card>
           ) : null}
           {!loading && !error && signals.length ? (
-            <div style={{ display: "grid", gap: 10 }}>
-              {signals.slice(0, 12).map((signal) => (
-                <Card key={signal.id} style={{ borderRadius: 8, padding: 14, display: "grid", gap: 8 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-                    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                      <Badge severity={signal.severity}>{signal.severity}</Badge>
-                      <span style={{ color: "#64748b", fontSize: 13, fontWeight: 800 }}>
-                        {CATEGORY_CONFIG[signal.category].label}
-                      </span>
-                      <span style={{ color: "#64748b", fontSize: 13 }}>{signal.source}</span>
+            <div style={{ display: "grid", gap: 14 }}>
+              {prioritySummary.map((group) => (
+                <div key={group.group} style={{ display: "grid", gap: 8 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "end" }}>
+                    <div style={{ display: "grid", gap: 3 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                        <Badge severity={group.tone}>{group.label}</Badge>
+                        <strong style={{ color: "#0f172a" }}>{group.signals.length} item{group.signals.length === 1 ? "" : "s"}</strong>
+                      </div>
+                      <span style={{ color: "#64748b", fontSize: 13 }}>{group.description}</span>
                     </div>
-                    <Link to={signal.destination} style={{ color: "#2563eb", fontWeight: 900 }}>
-                      Open source workflow
-                    </Link>
                   </div>
-                  <div style={{ display: "grid", gap: 4 }}>
-                    <strong style={{ color: "#0f172a", fontSize: 16 }}>{signal.title}</strong>
-                    <span style={{ color: "#475569", lineHeight: 1.5 }}>{signal.description}</span>
-                    <span style={{ color: "#64748b", fontSize: 13 }}>Context: {signal.contextLabel}</span>
-                  </div>
-                </Card>
+                  {group.signals.length ? (
+                    <div style={{ display: "grid", gap: 10 }}>
+                      {group.signals.map((signal) => (
+                        <Card key={signal.id} style={{ borderRadius: 8, padding: 14, display: "grid", gap: 8 }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                              <Badge severity={signal.severity}>{signal.severity}</Badge>
+                              <span style={{ color: "#64748b", fontSize: 13, fontWeight: 800 }}>
+                                {CATEGORY_CONFIG[signal.category].label}
+                              </span>
+                              <span style={{ color: "#64748b", fontSize: 13 }}>{signal.source}</span>
+                            </div>
+                            <Link to={signal.destination} style={{ color: "#2563eb", fontWeight: 900 }}>
+                              Open source workflow
+                            </Link>
+                          </div>
+                          <div style={{ display: "grid", gap: 4 }}>
+                            <strong style={{ color: "#0f172a", fontSize: 16 }}>{signal.title}</strong>
+                            <span style={{ color: "#475569", lineHeight: 1.5 }}>{signal.description}</span>
+                            <span style={{ color: "#64748b", fontSize: 13 }}>Context: {signal.contextLabel}</span>
+                          </div>
+                          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", color: "#475569", fontSize: 12, fontWeight: 800 }}>
+                            <span>Workflow status: {signal.workflowStatus}</span>
+                            <span>Review status: {signal.reviewStatus}</span>
+                            {signal.financialStatus ? <span>Financial status: {signal.financialStatus}</span> : null}
+                            <span>Next action: {signal.nextActionLabel}</span>
+                          </div>
+                        </Card>
+                      ))}
+                    </div>
+                  ) : (
+                    <Card style={{ color: "#64748b", borderRadius: 8 }}>No {group.label.toLowerCase()} items currently visible.</Card>
+                  )}
+                </div>
               ))}
             </div>
           ) : null}
