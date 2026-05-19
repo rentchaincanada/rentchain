@@ -240,6 +240,28 @@ describe("deriveCommandCenterSignals", () => {
     expect(prioritizeOperationalItems([...signals].reverse()).map((signal) => signal.id)).toEqual(signals.map((signal) => signal.id));
   });
 
+  it("normalizes machine reason labels into operator-readable copy", () => {
+    const signals = deriveCommandCenterSignals({
+      leases: [
+        lease({
+          stateCoherence: {
+            ...lease().stateCoherence,
+            coherenceLabel: "Needs review",
+            coherenceReason: "lease_status_active_but_execution_incomplete",
+          },
+        }),
+      ],
+      properties: [],
+    });
+
+    const coherenceSignal = signals.find((signal) => signal.id === "lease-coherence:lease-1");
+    expect(coherenceSignal).toMatchObject({
+      title: "Active lease needs execution review",
+      description: "Lease is marked active, but signing or execution is incomplete.",
+    });
+    expect(JSON.stringify(signals)).not.toContain("lease_status_active_but_execution_incomplete");
+  });
+
   it("keeps resolved and dismissed decisions out of the active command center queue", () => {
     const signals = deriveCommandCenterSignals({
       decisions: [decision({ id: "resolved-1", status: "resolved" }), decision({ id: "dismissed-1", status: "dismissed" })],
@@ -364,6 +386,7 @@ describe("OperationalCommandCenterPage", () => {
     expect(screen.getAllByText("Informational").length).toBeGreaterThan(0);
     expect(screen.getByText("Review missing payment")).toBeInTheDocument();
     expect(screen.getAllByText("Context: North Towers · 101 · John Smith").length).toBeGreaterThan(0);
+    expect(screen.getByText("Why: Lease is active but occupancy state conflicts.")).toBeInTheDocument();
     expect(screen.getByText("Workflow status: New")).toBeInTheDocument();
     expect(screen.getByText("Review status: Open")).toBeInTheDocument();
     expect(screen.getAllByText("Financial status: Review required").length).toBeGreaterThan(0);

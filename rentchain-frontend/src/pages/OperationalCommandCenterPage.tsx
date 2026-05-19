@@ -132,6 +132,32 @@ function label(value: string) {
   return value.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
+function operationalCopy(value: string | null | undefined, fallback: string) {
+  const raw = String(value || "").trim();
+  if (!raw) return fallback;
+  const normalized = raw.toLowerCase();
+  const known: Record<string, string> = {
+    lease_status_active_but_execution_incomplete: "Lease is marked active, but signing or execution is incomplete.",
+    ledger_payment_activity_without_provider_payment_setup:
+      "Payment activity exists, but payment setup still needs operational review.",
+    active_lease_on_vacant_unit: "Lease and unit occupancy signals conflict and need review.",
+    occupied_unit_without_active_executed_lease: "Unit appears occupied without a fully executed active lease.",
+    tenant_active_without_executed_occupancy: "Tenant and lease occupancy signals need review.",
+  };
+  if (known[normalized]) return known[normalized];
+  if (/^[a-z0-9]+(?:_[a-z0-9]+){2,}$/.test(normalized)) return label(normalized);
+  return raw;
+}
+
+function operationalTitle(value: string | null | undefined, fallback: string) {
+  const raw = String(value || "").trim();
+  const normalized = raw.toLowerCase();
+  if (!raw || normalized === "needs review") return fallback;
+  if (normalized === "lease_status_active_but_execution_incomplete") return "Active lease needs execution review";
+  if (normalized === "ledger_payment_activity_without_provider_payment_setup") return "Payment setup needs review";
+  return operationalCopy(raw, fallback);
+}
+
 function formatDate(value?: string | null) {
   if (!value) return "date unavailable";
   const date = new Date(value);
@@ -346,8 +372,8 @@ export function deriveCommandCenterSignals(input: {
         category: "occupancy",
         severity: "warning",
         priorityGroup: lease.stateCoherence?.flags?.hasStateConflict ? "critical" : "needs_review",
-        title: lease.stateCoherence.coherenceLabel || "Occupancy review needed",
-        description: lease.stateCoherence.coherenceReason || "Lease and occupancy signals need human review.",
+        title: operationalTitle(lease.stateCoherence.coherenceReason || lease.stateCoherence.coherenceLabel, "Occupancy review needed"),
+        description: operationalCopy(lease.stateCoherence.coherenceReason, "Lease and occupancy signals need human review."),
         contextLabel: baseLabel,
         destination: "/leases",
         source: "Lease operations · occupancy coherence",
@@ -702,14 +728,16 @@ export default function OperationalCommandCenterPage() {
                           </div>
                           <div style={{ display: "grid", gap: 4 }}>
                             <strong style={{ color: "#0f172a", fontSize: 16 }}>{signal.title}</strong>
-                            <span style={{ color: "#475569", lineHeight: 1.5 }}>{signal.description}</span>
                             <span style={{ color: "#64748b", fontSize: 13 }}>Context: {signal.contextLabel}</span>
+                            <span style={{ color: "#475569", lineHeight: 1.5 }}>Why: {signal.description}</span>
+                            <span style={{ color: "#0f172a", fontSize: 13, fontWeight: 900 }}>
+                              Next action: {signal.nextActionLabel}
+                            </span>
                           </div>
                           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", color: "#475569", fontSize: 12, fontWeight: 800 }}>
                             <span>Workflow status: {signal.workflowStatus}</span>
                             <span>Review status: {signal.reviewStatus}</span>
                             {signal.financialStatus ? <span>Financial status: {signal.financialStatus}</span> : null}
-                            <span>Next action: {signal.nextActionLabel}</span>
                           </div>
                         </Card>
                       ))}
