@@ -36,7 +36,7 @@ describe("KpiStrip", () => {
     );
 
     const grid = container.firstElementChild as HTMLElement;
-    expect(grid).toHaveStyle({ gridTemplateColumns: "1fr", gap: "16px", minWidth: "0" });
+    expect(grid).toHaveStyle({ gridTemplateColumns: "1fr", gap: "16px", minWidth: "0", width: "100%", boxSizing: "border-box" });
     expect(screen.getByText("Properties")).toBeInTheDocument();
     expect(screen.getByText("Units")).toBeInTheDocument();
   });

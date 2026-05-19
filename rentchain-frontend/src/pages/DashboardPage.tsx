@@ -151,7 +151,18 @@ function DashboardDecisionSummaryPanel({
     { label: "Manual Review", value: summary.manualReview, severity: "warning" as const },
   ];
   return (
-    <Card style={{ padding: spacing.md, border: `1px solid ${colors.border}`, display: "grid", gap: spacing.sm, minWidth: 0, overflow: "hidden" }}>
+    <Card
+      style={{
+        padding: spacing.md,
+        border: `1px solid ${colors.border}`,
+        display: "grid",
+        gap: spacing.sm,
+        minWidth: 0,
+        width: "100%",
+        boxSizing: "border-box",
+        overflow: "hidden",
+      }}
+    >
       <div>
         <div style={{ fontWeight: 800 }}>Decision summary</div>
         <div style={{ color: text.muted, fontSize: 13, marginTop: 3 }}>
@@ -183,7 +194,18 @@ function DashboardDecisionSummaryPanel({
               const copy = decisionDisplayCopy[decision.decisionType];
               const tone = decisionSeverityStyle[decision.severity];
               return (
-                <div key={decision.decisionId} style={{ display: "grid", gap: 6, color: text.primary, borderTop: `1px solid ${colors.border}`, paddingTop: 8, minWidth: 0 }}>
+                <div
+                  key={decision.decisionId}
+                  style={{
+                    display: "grid",
+                    gap: 6,
+                    color: text.primary,
+                    borderTop: `1px solid ${colors.border}`,
+                    paddingTop: 8,
+                    minWidth: 0,
+                    boxSizing: "border-box",
+                  }}
+                >
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                   <span style={{ border: `1px solid ${tone.border}`, background: tone.bg, color: tone.color, borderRadius: 999, padding: "2px 8px", fontSize: 12, fontWeight: 800 }}>
                     {copy.badge}
@@ -792,7 +814,7 @@ const DashboardPage: React.FC = () => {
         ) : null}
 
         {dataReady ? (
-          <div style={{ display: "grid", gap: spacing.lg, minWidth: 0 }}>
+          <div style={{ display: "grid", gap: spacing.lg, minWidth: 0, width: "100%", boxSizing: "border-box", clear: "both" }}>
             <KpiStrip
               kpis={kpis}
               loading={loading}

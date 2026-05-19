@@ -705,7 +705,7 @@ export default function OperationalCommandCenterPage() {
           </div>
         </Section>
 
-        <Section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10 }}>
+        <Section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 10, minWidth: 0 }}>
           {[
             ["Signals", signals.length],
             ["Critical", criticalCount],
@@ -715,7 +715,7 @@ export default function OperationalCommandCenterPage() {
             ["Open decisions", decisionData?.summary?.open ?? 0],
             ["Delinquent", dashboardData?.kpis?.delinquentCount ?? 0],
           ].map(([name, value]) => (
-            <Card key={String(name)} style={{ borderRadius: 8, padding: 12 }}>
+            <Card key={String(name)} style={{ borderRadius: 8, padding: 12, boxSizing: "border-box", minWidth: 0 }}>
               <div style={{ color: "#64748b", fontSize: 12, fontWeight: 900 }}>{name}</div>
               <strong style={{ color: "#0f172a", fontSize: 24 }}>{value}</strong>
             </Card>
@@ -730,16 +730,36 @@ export default function OperationalCommandCenterPage() {
             </div>
             <div style={{ color: "#64748b", fontSize: 13 }}>Read-only coordination layer</div>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 10, minWidth: 0 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "stretch", gap: 12, minWidth: 0 }}>
             {categorySummary.map(({ category, config, total, critical, warning, info }) => {
               const Icon = config.icon;
               return (
                 <Link
                   key={category}
                   to={config.destination}
-                  style={{ color: "inherit", textDecoration: "none", minWidth: 0 }}
+                  style={{
+                    color: "inherit",
+                    textDecoration: "none",
+                    minWidth: 260,
+                    flex: "1 1 280px",
+                    display: "flex",
+                    boxSizing: "border-box",
+                  }}
                 >
-                  <Card style={{ borderRadius: 8, padding: 14, display: "grid", gap: 8, height: "100%", minWidth: 0, overflowWrap: "anywhere" }}>
+                  <Card
+                    style={{
+                      borderRadius: 8,
+                      padding: 14,
+                      display: "grid",
+                      alignContent: "start",
+                      gap: 8,
+                      width: "100%",
+                      minHeight: 150,
+                      minWidth: 0,
+                      boxSizing: "border-box",
+                      overflowWrap: "anywhere",
+                    }}
+                  >
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <Icon size={18} />
                       <strong style={{ color: "#0f172a" }}>{config.label}</strong>
@@ -815,7 +835,7 @@ export default function OperationalCommandCenterPage() {
             <Card style={{ color: "#64748b" }}>No high-signal operational issues are currently visible.</Card>
           ) : null}
           {!loading && !error && signals.length > 0 && visibleSignals.length === 0 ? (
-            <Card style={{ color: "#64748b" }}>No operational items match the current search or filter.</Card>
+            <Card style={{ color: "#64748b", boxSizing: "border-box" }}>No operational items match the current search or filter.</Card>
           ) : null}
           {!loading && !error && visibleSignals.length ? (
             <div style={{ display: "grid", gap: 14 }}>
@@ -833,7 +853,18 @@ export default function OperationalCommandCenterPage() {
                   {group.signals.length ? (
                     <div style={{ display: "grid", gap: 10 }}>
                       {group.signals.map((signal) => (
-                        <Card key={signal.id} style={{ borderRadius: 8, padding: 14, display: "grid", gap: 8, minWidth: 0, overflowWrap: "anywhere" }}>
+                        <Card
+                          key={signal.id}
+                          style={{
+                            borderRadius: 8,
+                            padding: 14,
+                            display: "grid",
+                            gap: 8,
+                            minWidth: 0,
+                            boxSizing: "border-box",
+                            overflowWrap: "anywhere",
+                          }}
+                        >
                           <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
                             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                               <Badge severity={signal.severity}>{signal.severity}</Badge>
@@ -863,7 +894,9 @@ export default function OperationalCommandCenterPage() {
                       ))}
                     </div>
                   ) : (
-                    <Card style={{ color: "#64748b", borderRadius: 8 }}>No {group.label.toLowerCase()} items currently visible.</Card>
+                    <Card style={{ color: "#64748b", borderRadius: 8, boxSizing: "border-box" }}>
+                      No {group.label.toLowerCase()} items currently visible.
+                    </Card>
                   )}
                 </div>
               ))}

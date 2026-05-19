@@ -46,6 +46,8 @@ export function KpiStrip({ kpis, loading, links }: Props) {
         gap: isMobile ? 16 : spacing.sm,
         alignItems: "stretch",
         minWidth: 0,
+        width: "100%",
+        boxSizing: "border-box",
       }}
     >
       {itemsOrder.map((item) => {
@@ -59,6 +61,7 @@ export function KpiStrip({ kpis, loading, links }: Props) {
               minHeight: isMobile ? 0 : 80,
               height: "100%",
               minWidth: 0,
+              boxSizing: "border-box",
               overflowWrap: "anywhere",
             }}
           >
