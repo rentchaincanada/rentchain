@@ -1,6 +1,6 @@
 import React from "react";
 import { MemoryRouter } from "react-router-dom";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import OperationalCommandCenterPage, { deriveCommandCenterSignals, prioritizeOperationalItems } from "./OperationalCommandCenterPage";
 
@@ -395,6 +395,29 @@ describe("OperationalCommandCenterPage", () => {
     expect(screen.queryByText(/Property ZaeL9oqpJCSZPguWa6wR/i)).not.toBeInTheDocument();
     expect(screen.getAllByText("Open source workflow").length).toBeGreaterThan(0);
     expect(mocks.macShellProps).toHaveBeenCalledWith(expect.objectContaining({ title: "Operational command center" }));
+  });
+
+  it("filters and searches visible operational items without changing priority sorting", async () => {
+    render(
+      <MemoryRouter>
+        <OperationalCommandCenterPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Review missing payment")).toBeInTheDocument();
+    expect(screen.getByText("Lease ending soon")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Upcoming" }));
+    expect(screen.queryByText("Review missing payment")).not.toBeInTheDocument();
+    expect(screen.getByText("Lease ending soon")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "All" }));
+    fireEvent.change(screen.getByLabelText("Search operational items"), { target: { value: "North Towers 101" } });
+    expect(screen.getByText("Review missing payment")).toBeInTheDocument();
+    expect(screen.queryByText("Vacant units visible")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Search operational items"), { target: { value: "no matching workflow" } });
+    expect(screen.getByText("No operational items match the current search or filter.")).toBeInTheDocument();
   });
 
   it("shows a safe empty state when no signals are visible", async () => {

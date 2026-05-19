@@ -151,7 +151,7 @@ function DashboardDecisionSummaryPanel({
     { label: "Manual Review", value: summary.manualReview, severity: "warning" as const },
   ];
   return (
-    <Card style={{ padding: spacing.md, border: `1px solid ${colors.border}`, display: "grid", gap: spacing.sm }}>
+    <Card style={{ padding: spacing.md, border: `1px solid ${colors.border}`, display: "grid", gap: spacing.sm, minWidth: 0, overflow: "hidden" }}>
       <div>
         <div style={{ fontWeight: 800 }}>Decision summary</div>
         <div style={{ color: text.muted, fontSize: 13, marginTop: 3 }}>
@@ -183,7 +183,7 @@ function DashboardDecisionSummaryPanel({
               const copy = decisionDisplayCopy[decision.decisionType];
               const tone = decisionSeverityStyle[decision.severity];
               return (
-                <div key={decision.decisionId} style={{ display: "grid", gap: 6, color: text.primary, borderTop: `1px solid ${colors.border}`, paddingTop: 8 }}>
+                <div key={decision.decisionId} style={{ display: "grid", gap: 6, color: text.primary, borderTop: `1px solid ${colors.border}`, paddingTop: 8, minWidth: 0 }}>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                   <span style={{ border: `1px solid ${tone.border}`, background: tone.bg, color: tone.color, borderRadius: 999, padding: "2px 8px", fontSize: 12, fontWeight: 800 }}>
                     {copy.badge}
@@ -192,7 +192,7 @@ function DashboardDecisionSummaryPanel({
                       {decisionStatusCopy[decision.status || "detected"]}
                     </span>
                   <span>{copy.label}</span>
-                  <span style={{ color: text.muted }}>{decision.reason}</span>
+                  <span style={{ color: text.muted, overflowWrap: "anywhere" }}>{decision.reason}</span>
                   </div>
                   <DecisionContextPanel decision={decision} compact />
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -792,24 +792,24 @@ const DashboardPage: React.FC = () => {
         ) : null}
 
         {dataReady ? (
-          <KpiStrip
-            kpis={kpis}
-            loading={loading}
-            links={{
-              propertiesCount: "/properties",
-              unitsCount: "/properties",
-              tenantsCount: "/tenants",
-              openActionsCount: "/dashboard#open-actions",
-              delinquentCount: "/payments?filter=delinquent",
-            }}
-          />
-        ) : null}
-        {dataReady ? (
-          <DashboardDecisionSummaryPanel
-            decisions={dashboardDecisions}
-            pendingId={decisionActionPendingId}
-            onAction={handleDashboardDecisionAction}
-          />
+          <div style={{ display: "grid", gap: spacing.lg, minWidth: 0 }}>
+            <KpiStrip
+              kpis={kpis}
+              loading={loading}
+              links={{
+                propertiesCount: "/properties",
+                unitsCount: "/properties",
+                tenantsCount: "/tenants",
+                openActionsCount: "/dashboard#open-actions",
+                delinquentCount: "/payments?filter=delinquent",
+              }}
+            />
+            <DashboardDecisionSummaryPanel
+              decisions={dashboardDecisions}
+              pendingId={decisionActionPendingId}
+              onAction={handleDashboardDecisionAction}
+            />
+          </div>
         ) : null}
         {dataReady ? (
           <div style={{ marginTop: spacing.md }}>

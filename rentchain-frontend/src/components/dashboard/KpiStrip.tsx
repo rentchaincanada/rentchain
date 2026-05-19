@@ -45,6 +45,7 @@ export function KpiStrip({ kpis, loading, links }: Props) {
         gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(140px, 1fr))",
         gap: isMobile ? 16 : spacing.sm,
         alignItems: "stretch",
+        minWidth: 0,
       }}
     >
       {itemsOrder.map((item) => {
@@ -57,6 +58,8 @@ export function KpiStrip({ kpis, loading, links }: Props) {
               border: `1px solid ${colors.border}`,
               minHeight: isMobile ? 0 : 80,
               height: "100%",
+              minWidth: 0,
+              overflowWrap: "anywhere",
             }}
           >
             {loading ? (

@@ -22,6 +22,15 @@ type CommandCenterCategory =
 
 type CommandCenterSeverity = "critical" | "warning" | "info";
 type CommandCenterPriorityGroup = "critical" | "needs_review" | "upcoming" | "informational";
+type CommandCenterFilter =
+  | "all"
+  | "critical"
+  | "warnings"
+  | "needs_review"
+  | "upcoming"
+  | "open_decisions"
+  | "delinquent"
+  | "informational";
 
 export type CommandCenterSignal = {
   id: string;
@@ -127,6 +136,16 @@ const PRIORITY_GROUPS: Array<{
 ];
 
 const INACTIVE_DECISION_STATUSES = new Set(["resolved", "dismissed"]);
+const COMMAND_CENTER_FILTERS: Array<{ value: CommandCenterFilter; label: string }> = [
+  { value: "all", label: "All" },
+  { value: "critical", label: "Critical" },
+  { value: "warnings", label: "Warnings" },
+  { value: "needs_review", label: "Needs review" },
+  { value: "upcoming", label: "Upcoming" },
+  { value: "open_decisions", label: "Open decisions" },
+  { value: "delinquent", label: "Delinquent" },
+  { value: "informational", label: "Informational" },
+];
 
 function label(value: string) {
   return value.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
@@ -538,6 +557,53 @@ function summarizeByPriority(signals: CommandCenterSignal[]) {
   }));
 }
 
+function normalizeSearchText(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function signalSearchText(signal: CommandCenterSignal) {
+  return [
+    signal.title,
+    signal.description,
+    signal.contextLabel,
+    CATEGORY_CONFIG[signal.category].label,
+    signal.category,
+    signal.source,
+    signal.workflowStatus,
+    signal.reviewStatus,
+    signal.financialStatus,
+    signal.nextActionLabel,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
+function matchesCommandCenterFilter(signal: CommandCenterSignal, filter: CommandCenterFilter) {
+  if (filter === "all") return true;
+  if (filter === "critical") return signal.priorityGroup === "critical" || signal.severity === "critical";
+  if (filter === "warnings") return signal.severity === "warning";
+  if (filter === "needs_review") return signal.priorityGroup === "needs_review";
+  if (filter === "upcoming") return signal.priorityGroup === "upcoming";
+  if (filter === "open_decisions") return signal.id.startsWith("decision:");
+  if (filter === "delinquent") return signal.category === "payments" || /delinqu|payment evidence/i.test(signal.source);
+  if (filter === "informational") return signal.priorityGroup === "informational";
+  return true;
+}
+
+export function filterOperationalItems(
+  signals: CommandCenterSignal[],
+  options: { search?: string; filter?: CommandCenterFilter }
+) {
+  const query = normalizeSearchText(String(options.search || ""));
+  const filter = options.filter || "all";
+  return signals.filter((signal) => {
+    if (!matchesCommandCenterFilter(signal, filter)) return false;
+    if (!query) return true;
+    return normalizeSearchText(signalSearchText(signal)).includes(query);
+  });
+}
+
 function severityTone(severity: CommandCenterSeverity) {
   if (severity === "critical") return { color: "#991b1b", background: "#fee2e2", border: "#fecaca" };
   if (severity === "warning") return { color: "#92400e", background: "#fef3c7", border: "#fde68a" };
@@ -574,6 +640,8 @@ export default function OperationalCommandCenterPage() {
   const [dashboardData, setDashboardData] = React.useState<DashboardSummaryData | null>(null);
   const [leases, setLeases] = React.useState<LandlordActiveLease[]>([]);
   const [properties, setProperties] = React.useState<Property[]>([]);
+  const [search, setSearch] = React.useState("");
+  const [activeFilter, setActiveFilter] = React.useState<CommandCenterFilter>("all");
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -610,8 +678,12 @@ export default function OperationalCommandCenterPage() {
     () => deriveCommandCenterSignals({ decisions: decisionData?.items || [], leases, properties }),
     [decisionData?.items, leases, properties]
   );
-  const categorySummary = React.useMemo(() => summarizeByCategory(signals), [signals]);
-  const prioritySummary = React.useMemo(() => summarizeByPriority(signals), [signals]);
+  const visibleSignals = React.useMemo(
+    () => filterOperationalItems(signals, { search, filter: activeFilter }),
+    [activeFilter, search, signals]
+  );
+  const categorySummary = React.useMemo(() => summarizeByCategory(visibleSignals), [visibleSignals]);
+  const prioritySummary = React.useMemo(() => summarizeByPriority(visibleSignals), [visibleSignals]);
   const criticalCount = signals.filter((signal) => signal.severity === "critical").length;
   const warningCount = signals.filter((signal) => signal.severity === "warning").length;
 
@@ -650,7 +722,7 @@ export default function OperationalCommandCenterPage() {
           ))}
         </Section>
 
-        <Section style={{ display: "grid", gap: 12 }}>
+        <Section style={{ display: "grid", gap: 12, minWidth: 0 }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
             <div>
               <div style={{ fontWeight: 900, color: "#0f172a" }}>Coordination lanes</div>
@@ -658,16 +730,16 @@ export default function OperationalCommandCenterPage() {
             </div>
             <div style={{ color: "#64748b", fontSize: 13 }}>Read-only coordination layer</div>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 10, minWidth: 0 }}>
             {categorySummary.map(({ category, config, total, critical, warning, info }) => {
               const Icon = config.icon;
               return (
                 <Link
                   key={category}
                   to={config.destination}
-                  style={{ color: "inherit", textDecoration: "none" }}
+                  style={{ color: "inherit", textDecoration: "none", minWidth: 0 }}
                 >
-                  <Card style={{ borderRadius: 8, padding: 14, display: "grid", gap: 8, height: "100%" }}>
+                  <Card style={{ borderRadius: 8, padding: 14, display: "grid", gap: 8, height: "100%", minWidth: 0, overflowWrap: "anywhere" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <Icon size={18} />
                       <strong style={{ color: "#0f172a" }}>{config.label}</strong>
@@ -686,18 +758,66 @@ export default function OperationalCommandCenterPage() {
           </div>
         </Section>
 
-        <Section style={{ display: "grid", gap: 12 }}>
+        <Section style={{ display: "grid", gap: 12, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             <Building2 size={18} />
             <strong style={{ color: "#0f172a" }}>Priority routing queue</strong>
             <span style={{ color: "#64748b", fontSize: 13 }}>Highest priority first by urgency, severity, and source workflow.</span>
+          </div>
+          <div style={{ display: "grid", gap: 10 }}>
+            <label style={{ display: "grid", gap: 5, color: "#334155", fontSize: 13, fontWeight: 800 }}>
+              Search operational items
+              <input
+                aria-label="Search operational items"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search by tenant, property, unit, workflow, category, or status"
+                style={{
+                  width: "100%",
+                  minWidth: 0,
+                  border: "1px solid #cbd5e1",
+                  borderRadius: 8,
+                  padding: "10px 12px",
+                  fontSize: 14,
+                  color: "#0f172a",
+                  boxSizing: "border-box",
+                }}
+              />
+            </label>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }} aria-label="Operational item filters">
+              {COMMAND_CENTER_FILTERS.map((filter) => {
+                const selected = activeFilter === filter.value;
+                return (
+                  <button
+                    key={filter.value}
+                    type="button"
+                    onClick={() => setActiveFilter(filter.value)}
+                    style={{
+                      border: selected ? "1px solid #1d4ed8" : "1px solid #cbd5e1",
+                      background: selected ? "#dbeafe" : "#fff",
+                      color: selected ? "#1d4ed8" : "#334155",
+                      borderRadius: 999,
+                      padding: "7px 11px",
+                      fontSize: 13,
+                      fontWeight: 900,
+                      cursor: "pointer",
+                    }}
+                  >
+                    {filter.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
           {loading ? <Card>Loading operational signals...</Card> : null}
           {!loading && error ? <Card style={{ color: "#b91c1c" }}>{error}</Card> : null}
           {!loading && !error && signals.length === 0 ? (
             <Card style={{ color: "#64748b" }}>No high-signal operational issues are currently visible.</Card>
           ) : null}
-          {!loading && !error && signals.length ? (
+          {!loading && !error && signals.length > 0 && visibleSignals.length === 0 ? (
+            <Card style={{ color: "#64748b" }}>No operational items match the current search or filter.</Card>
+          ) : null}
+          {!loading && !error && visibleSignals.length ? (
             <div style={{ display: "grid", gap: 14 }}>
               {prioritySummary.map((group) => (
                 <div key={group.group} style={{ display: "grid", gap: 8 }}>
@@ -713,7 +833,7 @@ export default function OperationalCommandCenterPage() {
                   {group.signals.length ? (
                     <div style={{ display: "grid", gap: 10 }}>
                       {group.signals.map((signal) => (
-                        <Card key={signal.id} style={{ borderRadius: 8, padding: 14, display: "grid", gap: 8 }}>
+                        <Card key={signal.id} style={{ borderRadius: 8, padding: 14, display: "grid", gap: 8, minWidth: 0, overflowWrap: "anywhere" }}>
                           <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
                             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                               <Badge severity={signal.severity}>{signal.severity}</Badge>
