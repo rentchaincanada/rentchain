@@ -378,6 +378,9 @@ describe("OperationalCommandCenterPage", () => {
     expect(screen.getAllByText("Payments / obligations").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Lease lifecycle").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Documents / workspace").length).toBeGreaterThan(0);
+    expect(screen.getByTestId("operations-summary-strip")).toHaveStyle({
+      gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 136px), 1fr))",
+    });
     expect(screen.getByTestId("operations-coordination-lanes")).toHaveStyle({
       display: "grid",
       gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))",

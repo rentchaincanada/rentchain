@@ -934,10 +934,11 @@ export default function OperationalCommandCenterPage() {
         </Section>
 
         <Section
+          data-testid="operations-summary-strip"
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 160px), 1fr))",
-            gap: 10,
+            gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 136px), 1fr))",
+            gap: 8,
             minWidth: 0,
             boxSizing: "border-box",
           }}
