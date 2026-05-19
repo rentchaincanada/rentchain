@@ -31,6 +31,22 @@ type CommandCenterFilter =
   | "open_decisions"
   | "delinquent"
   | "informational";
+type SavedOperationalView = "all_operational" | "needs_review" | "high_risk" | "upcoming_deadlines" | "unassigned" | "delinquent";
+type WorkflowTypeFilter = "all" | CommandCenterCategory;
+type ReviewStatusFilter = "all" | "open" | "review_needed" | "informational";
+type AssignmentFilter = "all" | "assigned" | "unassigned";
+type EscalationFilter = "all" | "escalated" | "not_escalated";
+type TimingRiskFilter = "all" | "delinquent" | "upcoming" | "high_risk";
+
+type CommandCenterFilterOptions = {
+  search?: string;
+  filter?: CommandCenterFilter;
+  workflowType?: WorkflowTypeFilter;
+  reviewStatus?: ReviewStatusFilter;
+  assignment?: AssignmentFilter;
+  escalation?: EscalationFilter;
+  timingRisk?: TimingRiskFilter;
+};
 
 export type CommandCenterSignal = {
   id: string;
@@ -46,6 +62,12 @@ export type CommandCenterSignal = {
   reviewStatus: string;
   financialStatus?: string | null;
   nextActionLabel: string;
+  assignmentState?: "assigned" | "unassigned";
+  assignmentLabel?: string;
+  escalationState?: "escalated" | "not_escalated";
+  escalationLabel?: string;
+  timingState?: "upcoming" | "current";
+  riskState?: "delinquent" | "high_risk" | "review" | "informational";
 };
 
 type CategoryConfig = {
@@ -137,7 +159,7 @@ const PRIORITY_GROUPS: Array<{
 
 const INACTIVE_DECISION_STATUSES = new Set(["resolved", "dismissed"]);
 const COMMAND_CENTER_FILTERS: Array<{ value: CommandCenterFilter; label: string }> = [
-  { value: "all", label: "All" },
+  { value: "all", label: "All operational" },
   { value: "critical", label: "Critical" },
   { value: "warnings", label: "Warnings" },
   { value: "needs_review", label: "Needs review" },
@@ -145,6 +167,46 @@ const COMMAND_CENTER_FILTERS: Array<{ value: CommandCenterFilter; label: string 
   { value: "open_decisions", label: "Open decisions" },
   { value: "delinquent", label: "Delinquent" },
   { value: "informational", label: "Informational" },
+];
+
+const SAVED_OPERATIONAL_VIEWS: Array<{ value: SavedOperationalView; label: string; description: string }> = [
+  { value: "all_operational", label: "All Operational", description: "Every visible source workflow signal." },
+  { value: "needs_review", label: "Needs Review", description: "Items waiting for staff review or decision handling." },
+  { value: "high_risk", label: "High Risk", description: "Critical or escalated items that should surface first." },
+  { value: "upcoming_deadlines", label: "Upcoming Deadlines", description: "Forward-looking lease, occupancy, and workflow timing." },
+  { value: "unassigned", label: "Unassigned", description: "Items without a clear workflow owner." },
+  { value: "delinquent", label: "Delinquent", description: "Payment, obligation, and delinquency review work." },
+];
+
+const WORKFLOW_TYPE_OPTIONS: Array<{ value: WorkflowTypeFilter; label: string }> = [
+  { value: "all", label: "All workflow types" },
+  ...CATEGORY_ORDER.map((category) => ({ value: category, label: CATEGORY_CONFIG[category].label })),
+];
+
+const REVIEW_STATUS_OPTIONS: Array<{ value: ReviewStatusFilter; label: string }> = [
+  { value: "all", label: "All review states" },
+  { value: "open", label: "Open decisions" },
+  { value: "review_needed", label: "Needs review" },
+  { value: "informational", label: "Informational only" },
+];
+
+const ASSIGNMENT_OPTIONS: Array<{ value: AssignmentFilter; label: string }> = [
+  { value: "all", label: "All assignment states" },
+  { value: "assigned", label: "Assigned / owned" },
+  { value: "unassigned", label: "Unassigned" },
+];
+
+const ESCALATION_OPTIONS: Array<{ value: EscalationFilter; label: string }> = [
+  { value: "all", label: "All escalation states" },
+  { value: "escalated", label: "Escalated" },
+  { value: "not_escalated", label: "Not escalated" },
+];
+
+const TIMING_RISK_OPTIONS: Array<{ value: TimingRiskFilter; label: string }> = [
+  { value: "all", label: "All timing / risk" },
+  { value: "delinquent", label: "Delinquent" },
+  { value: "upcoming", label: "Upcoming / deadline" },
+  { value: "high_risk", label: "High risk" },
 ];
 
 function label(value: string) {
@@ -232,6 +294,55 @@ function nextActionForDecision(item: DecisionInboxItem, category: CommandCenterC
   if (category === "lease_lifecycle") return "Review lease readiness";
   if (category === "occupancy") return "Review occupancy context";
   return "Review source workflow";
+}
+
+function assignmentForDecision(item: DecisionInboxItem): Pick<CommandCenterSignal, "assignmentState" | "assignmentLabel"> {
+  const owner = String(item.workflow?.ownershipType || "").trim();
+  if (!owner || owner === "system") return { assignmentState: "unassigned", assignmentLabel: "Unassigned" };
+  return { assignmentState: "assigned", assignmentLabel: `${label(owner)} owned` };
+}
+
+function escalationForDecision(item: DecisionInboxItem): Pick<CommandCenterSignal, "escalationState" | "escalationLabel"> {
+  const escalationLevel = String(item.workflow?.escalationLevel || "none").trim();
+  if (["critical", "urgent", "attention"].includes(escalationLevel)) {
+    return { escalationState: "escalated", escalationLabel: label(escalationLevel) };
+  }
+  return { escalationState: "not_escalated", escalationLabel: "Not escalated" };
+}
+
+function riskStateForSignal(params: {
+  category: CommandCenterCategory;
+  severity: CommandCenterSeverity;
+  priorityGroup: CommandCenterPriorityGroup;
+  source?: string | null;
+}): CommandCenterSignal["riskState"] {
+  if (params.category === "payments" || /delinqu/i.test(String(params.source || ""))) return "delinquent";
+  if (params.severity === "critical" || params.priorityGroup === "critical") return "high_risk";
+  if (params.priorityGroup === "needs_review" || params.severity === "warning") return "review";
+  return "informational";
+}
+
+function signalTriageDefaults(params: {
+  category: CommandCenterCategory;
+  severity: CommandCenterSeverity;
+  priorityGroup: CommandCenterPriorityGroup;
+  source?: string | null;
+  assignmentState?: CommandCenterSignal["assignmentState"];
+  assignmentLabel?: string;
+  escalationState?: CommandCenterSignal["escalationState"];
+  escalationLabel?: string;
+}): Pick<
+  CommandCenterSignal,
+  "assignmentState" | "assignmentLabel" | "escalationState" | "escalationLabel" | "timingState" | "riskState"
+> {
+  return {
+    assignmentState: params.assignmentState || "unassigned",
+    assignmentLabel: params.assignmentLabel || "Unassigned",
+    escalationState: params.escalationState || (params.severity === "critical" ? "escalated" : "not_escalated"),
+    escalationLabel: params.escalationLabel || (params.severity === "critical" ? "Critical review" : "Not escalated"),
+    timingState: params.priorityGroup === "upcoming" ? "upcoming" : "current",
+    riskState: riskStateForSignal(params),
+  };
 }
 
 function decisionCategory(item: DecisionInboxItem): CommandCenterCategory {
@@ -343,6 +454,22 @@ export function prioritizeOperationalItems(signals: CommandCenterSignal[]): Comm
   });
 }
 
+function withTriageMetadata(signal: CommandCenterSignal): CommandCenterSignal {
+  return {
+    ...signal,
+    ...signalTriageDefaults({
+      category: signal.category,
+      severity: signal.severity,
+      priorityGroup: signal.priorityGroup,
+      source: signal.source,
+      assignmentState: signal.assignmentState,
+      assignmentLabel: signal.assignmentLabel,
+      escalationState: signal.escalationState,
+      escalationLabel: signal.escalationLabel,
+    }),
+  };
+}
+
 export function deriveCommandCenterSignals(input: {
   decisions?: DecisionInboxItem[];
   leases?: LandlordActiveLease[];
@@ -361,11 +488,13 @@ export function deriveCommandCenterSignals(input: {
   for (const item of input.decisions || []) {
     if (INACTIVE_DECISION_STATUSES.has(String(item.status))) continue;
     const category = decisionCategory(item);
+    const priorityGroup = priorityFromDecision(item, category);
+    const severity = severityFromDecision(item);
     signals.push({
       id: `decision:${item.id}`,
       category,
-      severity: severityFromDecision(item),
-      priorityGroup: priorityFromDecision(item, category),
+      severity,
+      priorityGroup,
       title: item.title || "Operational review item",
       description: item.description || "Review the source workflow before taking any action.",
       contextLabel: resolveDecisionContextLabel(item, lookups),
@@ -375,6 +504,8 @@ export function deriveCommandCenterSignals(input: {
       reviewStatus: label(item.status || "open"),
       financialStatus: category === "payments" ? "Review required" : null,
       nextActionLabel: nextActionForDecision(item, category),
+      ...assignmentForDecision(item),
+      ...escalationForDecision(item),
     });
   }
 
@@ -536,7 +667,7 @@ export function deriveCommandCenterSignals(input: {
     }
   }
 
-  return prioritizeOperationalItems(signals);
+  return prioritizeOperationalItems(signals.map(withTriageMetadata));
 }
 
 function summarizeByCategory(signals: CommandCenterSignal[]) {
@@ -593,15 +724,51 @@ function matchesCommandCenterFilter(signal: CommandCenterSignal, filter: Command
 
 export function filterOperationalItems(
   signals: CommandCenterSignal[],
-  options: { search?: string; filter?: CommandCenterFilter }
+  options: CommandCenterFilterOptions
 ) {
   const query = normalizeSearchText(String(options.search || ""));
   const filter = options.filter || "all";
   return signals.filter((signal) => {
     if (!matchesCommandCenterFilter(signal, filter)) return false;
+    if (options.workflowType && options.workflowType !== "all" && signal.category !== options.workflowType) return false;
+    if (options.reviewStatus && options.reviewStatus !== "all") {
+      const normalizedReview = normalizeSearchText(signal.reviewStatus);
+      if (options.reviewStatus === "open" && !signal.id.startsWith("decision:")) return false;
+      if (options.reviewStatus === "review_needed" && !/review|need|blocked|open/.test(normalizedReview)) return false;
+      if (options.reviewStatus === "informational" && !/informational|upcoming/.test(normalizedReview)) return false;
+    }
+    if (options.assignment && options.assignment !== "all" && signal.assignmentState !== options.assignment) return false;
+    if (options.escalation && options.escalation !== "all" && signal.escalationState !== options.escalation) return false;
+    if (options.timingRisk && options.timingRisk !== "all") {
+      if (options.timingRisk === "upcoming" && signal.timingState !== "upcoming") return false;
+      if (options.timingRisk === "delinquent" && signal.riskState !== "delinquent") return false;
+      if (options.timingRisk === "high_risk" && signal.riskState !== "high_risk") return false;
+    }
     if (!query) return true;
     return normalizeSearchText(signalSearchText(signal)).includes(query);
   });
+}
+
+function filterCopy(options: CommandCenterFilterOptions) {
+  const pieces = [
+    COMMAND_CENTER_FILTERS.find((item) => item.value === (options.filter || "all"))?.label,
+    WORKFLOW_TYPE_OPTIONS.find((item) => item.value === (options.workflowType || "all"))?.label,
+    REVIEW_STATUS_OPTIONS.find((item) => item.value === (options.reviewStatus || "all"))?.label,
+    ASSIGNMENT_OPTIONS.find((item) => item.value === (options.assignment || "all"))?.label,
+    ESCALATION_OPTIONS.find((item) => item.value === (options.escalation || "all"))?.label,
+    TIMING_RISK_OPTIONS.find((item) => item.value === (options.timingRisk || "all"))?.label,
+    options.search ? `Search: "${options.search}"` : null,
+  ].filter(Boolean);
+  return pieces.join(" · ");
+}
+
+function savedViewFilters(view: SavedOperationalView): Partial<CommandCenterFilterOptions> {
+  if (view === "needs_review") return { filter: "needs_review", reviewStatus: "review_needed" };
+  if (view === "high_risk") return { filter: "critical", escalation: "escalated" };
+  if (view === "upcoming_deadlines") return { filter: "upcoming", timingRisk: "upcoming" };
+  if (view === "unassigned") return { filter: "all", assignment: "unassigned" };
+  if (view === "delinquent") return { filter: "delinquent", workflowType: "payments", timingRisk: "delinquent" };
+  return { filter: "all", workflowType: "all", reviewStatus: "all", assignment: "all", escalation: "all", timingRisk: "all" };
 }
 
 function severityTone(severity: CommandCenterSeverity) {
@@ -642,6 +809,12 @@ export default function OperationalCommandCenterPage() {
   const [properties, setProperties] = React.useState<Property[]>([]);
   const [search, setSearch] = React.useState("");
   const [activeFilter, setActiveFilter] = React.useState<CommandCenterFilter>("all");
+  const [activeSavedView, setActiveSavedView] = React.useState<SavedOperationalView>("all_operational");
+  const [workflowType, setWorkflowType] = React.useState<WorkflowTypeFilter>("all");
+  const [reviewStatus, setReviewStatus] = React.useState<ReviewStatusFilter>("all");
+  const [assignment, setAssignment] = React.useState<AssignmentFilter>("all");
+  const [escalation, setEscalation] = React.useState<EscalationFilter>("all");
+  const [timingRisk, setTimingRisk] = React.useState<TimingRiskFilter>("all");
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -679,13 +852,30 @@ export default function OperationalCommandCenterPage() {
     [decisionData?.items, leases, properties]
   );
   const visibleSignals = React.useMemo(
-    () => filterOperationalItems(signals, { search, filter: activeFilter }),
-    [activeFilter, search, signals]
+    () => filterOperationalItems(signals, { search, filter: activeFilter, workflowType, reviewStatus, assignment, escalation, timingRisk }),
+    [activeFilter, assignment, escalation, reviewStatus, search, signals, timingRisk, workflowType]
   );
   const categorySummary = React.useMemo(() => summarizeByCategory(visibleSignals), [visibleSignals]);
   const prioritySummary = React.useMemo(() => summarizeByPriority(visibleSignals), [visibleSignals]);
   const criticalCount = signals.filter((signal) => signal.severity === "critical").length;
   const warningCount = signals.filter((signal) => signal.severity === "warning").length;
+  const activeFilterCopy = filterCopy({ search, filter: activeFilter, workflowType, reviewStatus, assignment, escalation, timingRisk });
+
+  function applySavedView(view: SavedOperationalView) {
+    const next = savedViewFilters(view);
+    setActiveSavedView(view);
+    setActiveFilter(next.filter || "all");
+    setWorkflowType(next.workflowType || "all");
+    setReviewStatus(next.reviewStatus || "all");
+    setAssignment(next.assignment || "all");
+    setEscalation(next.escalation || "all");
+    setTimingRisk(next.timingRisk || "all");
+  }
+
+  function clearFilters() {
+    setSearch("");
+    applySavedView("all_operational");
+  }
 
   return (
     <MacShell title="Operational command center" showTopNav={false}>
@@ -822,14 +1012,47 @@ export default function OperationalCommandCenterPage() {
                 }}
               />
             </label>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }} aria-label="Operational item filters">
+            <div style={{ display: "grid", gap: 8 }}>
+              <div style={{ color: "#334155", fontSize: 13, fontWeight: 900 }}>Saved operational views</div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }} aria-label="Saved operational views">
+                {SAVED_OPERATIONAL_VIEWS.map((view) => {
+                  const selected = activeSavedView === view.value;
+                  return (
+                    <button
+                      key={view.value}
+                      type="button"
+                      onClick={() => applySavedView(view.value)}
+                      title={view.description}
+                      style={{
+                        border: selected ? "1px solid #0f172a" : "1px solid #cbd5e1",
+                        background: selected ? "#0f172a" : "#fff",
+                        color: selected ? "#fff" : "#334155",
+                        borderRadius: 999,
+                        padding: "7px 11px",
+                        fontSize: 13,
+                        fontWeight: 900,
+                        cursor: "pointer",
+                      }}
+                    >
+                      {view.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div style={{ display: "grid", gap: 8 }}>
+              <div style={{ color: "#334155", fontSize: 13, fontWeight: 900 }}>Priority filters</div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }} aria-label="Operational item filters">
               {COMMAND_CENTER_FILTERS.map((filter) => {
                 const selected = activeFilter === filter.value;
                 return (
                   <button
                     key={filter.value}
                     type="button"
-                    onClick={() => setActiveFilter(filter.value)}
+                    onClick={() => {
+                      setActiveSavedView("all_operational");
+                      setActiveFilter(filter.value);
+                    }}
                     style={{
                       border: selected ? "1px solid #1d4ed8" : "1px solid #cbd5e1",
                       background: selected ? "#dbeafe" : "#fff",
@@ -845,6 +1068,96 @@ export default function OperationalCommandCenterPage() {
                   </button>
                 );
               })}
+              </div>
+            </div>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 190px), 1fr))",
+                gap: 10,
+                minWidth: 0,
+              }}
+            >
+              {[
+                {
+                  label: "Workflow type",
+                  value: workflowType,
+                  options: WORKFLOW_TYPE_OPTIONS,
+                  onChange: (value: string) => setWorkflowType(value as WorkflowTypeFilter),
+                },
+                {
+                  label: "Review status",
+                  value: reviewStatus,
+                  options: REVIEW_STATUS_OPTIONS,
+                  onChange: (value: string) => setReviewStatus(value as ReviewStatusFilter),
+                },
+                {
+                  label: "Assignment state",
+                  value: assignment,
+                  options: ASSIGNMENT_OPTIONS,
+                  onChange: (value: string) => setAssignment(value as AssignmentFilter),
+                },
+                {
+                  label: "Escalation state",
+                  value: escalation,
+                  options: ESCALATION_OPTIONS,
+                  onChange: (value: string) => setEscalation(value as EscalationFilter),
+                },
+                {
+                  label: "Timing / risk",
+                  value: timingRisk,
+                  options: TIMING_RISK_OPTIONS,
+                  onChange: (value: string) => setTimingRisk(value as TimingRiskFilter),
+                },
+              ].map((control) => (
+                <label key={control.label} style={{ display: "grid", gap: 5, color: "#334155", fontSize: 13, fontWeight: 800 }}>
+                  {control.label}
+                  <select
+                    aria-label={control.label}
+                    value={control.value}
+                    onChange={(event) => {
+                      setActiveSavedView("all_operational");
+                      control.onChange(event.target.value);
+                    }}
+                    style={{
+                      width: "100%",
+                      minWidth: 0,
+                      border: "1px solid #cbd5e1",
+                      borderRadius: 8,
+                      padding: "9px 10px",
+                      fontSize: 14,
+                      color: "#0f172a",
+                      background: "#fff",
+                      boxSizing: "border-box",
+                    }}
+                  >
+                    {control.options.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ))}
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+              <span style={{ color: "#64748b", fontSize: 13 }}>Active view: {activeFilterCopy}</span>
+              <button
+                type="button"
+                onClick={clearFilters}
+                style={{
+                  border: "1px solid #cbd5e1",
+                  background: "#fff",
+                  color: "#334155",
+                  borderRadius: 8,
+                  padding: "7px 10px",
+                  fontSize: 13,
+                  fontWeight: 900,
+                  cursor: "pointer",
+                }}
+              >
+                Reset filters
+              </button>
             </div>
           </div>
           {loading ? <Card>Loading operational signals...</Card> : null}
@@ -853,7 +1166,11 @@ export default function OperationalCommandCenterPage() {
             <Card style={{ color: "#64748b" }}>No high-signal operational issues are currently visible.</Card>
           ) : null}
           {!loading && !error && signals.length > 0 && visibleSignals.length === 0 ? (
-            <Card style={{ color: "#64748b", boxSizing: "border-box" }}>No operational items match the current search or filter.</Card>
+            <Card style={{ color: "#64748b", boxSizing: "border-box", display: "grid", gap: 6 }}>
+              <strong style={{ color: "#0f172a" }}>No operational items match this triage view.</strong>
+              <span>Current filters: {activeFilterCopy}.</span>
+              <span>Adjust the view or reset filters to return to the full operational queue.</span>
+            </Card>
           ) : null}
           {!loading && !error && visibleSignals.length ? (
             <div style={{ display: "grid", gap: 14 }}>
@@ -907,6 +1224,8 @@ export default function OperationalCommandCenterPage() {
                             <span>Workflow status: {signal.workflowStatus}</span>
                             <span>Review status: {signal.reviewStatus}</span>
                             {signal.financialStatus ? <span>Financial status: {signal.financialStatus}</span> : null}
+                            <span>Assignment: {signal.assignmentLabel || "Unassigned"}</span>
+                            <span>Escalation: {signal.escalationLabel || "Not escalated"}</span>
                           </div>
                         </Card>
                       ))}
