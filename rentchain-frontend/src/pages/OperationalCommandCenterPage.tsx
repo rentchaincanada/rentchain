@@ -777,6 +777,36 @@ function severityTone(severity: CommandCenterSeverity) {
   return { color: "#075985", background: "#e0f2fe", border: "#bae6fd" };
 }
 
+function chipStyle(selected: boolean, tone: "dark" | "blue" = "blue"): React.CSSProperties {
+  const activeDark = tone === "dark";
+  return {
+    border: selected ? `1px solid ${activeDark ? "#0f172a" : "#1d4ed8"}` : "1px solid #cbd5e1",
+    background: selected ? (activeDark ? "#0f172a" : "#dbeafe") : "#fff",
+    color: selected ? (activeDark ? "#fff" : "#1d4ed8") : "#334155",
+    borderRadius: 999,
+    padding: "8px 12px",
+    fontSize: 13,
+    fontWeight: 900,
+    cursor: "pointer",
+    maxWidth: "100%",
+    minHeight: 36,
+    overflowWrap: "anywhere",
+    textAlign: "center",
+  };
+}
+
+const sectionTitleStyle: React.CSSProperties = {
+  color: "#0f172a",
+  fontSize: 15,
+  fontWeight: 900,
+};
+
+const helperTextStyle: React.CSSProperties = {
+  color: "#64748b",
+  fontSize: 13,
+  lineHeight: 1.45,
+};
+
 function Badge({ children, severity }: { children: React.ReactNode; severity: CommandCenterSeverity }) {
   const tone = severityTone(severity);
   return (
@@ -879,9 +909,17 @@ export default function OperationalCommandCenterPage() {
 
   return (
     <MacShell title="Operational command center" showTopNav={false}>
-      <div style={{ display: "grid", gap: 16 }}>
+      <div style={{ display: "grid", gap: 18, width: "100%", maxWidth: 1280, margin: "0 auto", minWidth: 0 }}>
         <Section>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap", alignItems: "start" }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))",
+              gap: 16,
+              alignItems: "start",
+              minWidth: 0,
+            }}
+          >
             <div style={{ display: "grid", gap: 6, maxWidth: 920 }}>
               <h1 style={{ margin: 0, fontSize: "1.55rem", color: "#0f172a" }}>Operational command center</h1>
               <div style={{ color: "#475569", lineHeight: 1.55 }}>
@@ -913,7 +951,7 @@ export default function OperationalCommandCenterPage() {
             ["Open decisions", decisionData?.summary?.open ?? 0],
             ["Delinquent", dashboardData?.kpis?.delinquentCount ?? 0],
           ].map(([name, value]) => (
-            <Card key={String(name)} style={{ borderRadius: 8, padding: 12, boxSizing: "border-box", minWidth: 0 }}>
+            <Card key={String(name)} style={{ borderRadius: 8, padding: 12, boxSizing: "border-box", minWidth: 0, minHeight: 86 }}>
               <div style={{ color: "#64748b", fontSize: 12, fontWeight: 900 }}>{name}</div>
               <strong style={{ color: "#0f172a", fontSize: 24 }}>{value}</strong>
             </Card>
@@ -923,10 +961,10 @@ export default function OperationalCommandCenterPage() {
         <Section style={{ display: "grid", gap: 12, minWidth: 0 }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
             <div>
-              <div style={{ fontWeight: 900, color: "#0f172a" }}>Coordination lanes</div>
-              <div style={{ color: "#64748b", fontSize: 13 }}>Each lane links back to the source workflow for manual review.</div>
+              <div style={sectionTitleStyle}>Coordination lanes</div>
+              <div style={helperTextStyle}>Each lane links back to the source workflow for manual review.</div>
             </div>
-            <div style={{ color: "#64748b", fontSize: 13 }}>Read-only coordination layer</div>
+            <div style={{ ...helperTextStyle, fontWeight: 800 }}>Read-only coordination layer</div>
           </div>
           <div
             data-testid="operations-coordination-lanes"
@@ -986,13 +1024,25 @@ export default function OperationalCommandCenterPage() {
           </div>
         </Section>
 
-        <Section style={{ display: "grid", gap: 12, minWidth: 0 }}>
+        <Section style={{ display: "grid", gap: 14, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             <Building2 size={18} />
-            <strong style={{ color: "#0f172a" }}>Priority routing queue</strong>
-            <span style={{ color: "#64748b", fontSize: 13 }}>Highest priority first by urgency, severity, and source workflow.</span>
+            <strong style={sectionTitleStyle}>Priority routing queue</strong>
+            <span style={helperTextStyle}>Highest priority first by urgency, severity, and source workflow.</span>
           </div>
-          <div style={{ display: "grid", gap: 10 }}>
+          <Card
+            data-testid="operations-filter-panel"
+            style={{
+              display: "grid",
+              gap: 14,
+              padding: 14,
+              borderRadius: 10,
+              border: "1px solid #dbe3ef",
+              background: "#f8fafc",
+              minWidth: 0,
+              boxSizing: "border-box",
+            }}
+          >
             <label style={{ display: "grid", gap: 5, color: "#334155", fontSize: 13, fontWeight: 800 }}>
               Search operational items
               <input
@@ -1008,13 +1058,23 @@ export default function OperationalCommandCenterPage() {
                   padding: "10px 12px",
                   fontSize: 14,
                   color: "#0f172a",
+                  background: "#fff",
                   boxSizing: "border-box",
                 }}
               />
             </label>
             <div style={{ display: "grid", gap: 8 }}>
               <div style={{ color: "#334155", fontSize: 13, fontWeight: 900 }}>Saved operational views</div>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }} aria-label="Saved operational views">
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 140px), 1fr))",
+                  gap: 8,
+                  alignItems: "start",
+                  minWidth: 0,
+                }}
+                aria-label="Saved operational views"
+              >
                 {SAVED_OPERATIONAL_VIEWS.map((view) => {
                   const selected = activeSavedView === view.value;
                   return (
@@ -1023,16 +1083,8 @@ export default function OperationalCommandCenterPage() {
                       type="button"
                       onClick={() => applySavedView(view.value)}
                       title={view.description}
-                      style={{
-                        border: selected ? "1px solid #0f172a" : "1px solid #cbd5e1",
-                        background: selected ? "#0f172a" : "#fff",
-                        color: selected ? "#fff" : "#334155",
-                        borderRadius: 999,
-                        padding: "7px 11px",
-                        fontSize: 13,
-                        fontWeight: 900,
-                        cursor: "pointer",
-                      }}
+                      aria-pressed={selected}
+                      style={chipStyle(selected, "dark")}
                     >
                       {view.label}
                     </button>
@@ -1042,38 +1094,39 @@ export default function OperationalCommandCenterPage() {
             </div>
             <div style={{ display: "grid", gap: 8 }}>
               <div style={{ color: "#334155", fontSize: 13, fontWeight: 900 }}>Priority filters</div>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }} aria-label="Operational item filters">
-              {COMMAND_CENTER_FILTERS.map((filter) => {
-                const selected = activeFilter === filter.value;
-                return (
-                  <button
-                    key={filter.value}
-                    type="button"
-                    onClick={() => {
-                      setActiveSavedView("all_operational");
-                      setActiveFilter(filter.value);
-                    }}
-                    style={{
-                      border: selected ? "1px solid #1d4ed8" : "1px solid #cbd5e1",
-                      background: selected ? "#dbeafe" : "#fff",
-                      color: selected ? "#1d4ed8" : "#334155",
-                      borderRadius: 999,
-                      padding: "7px 11px",
-                      fontSize: 13,
-                      fontWeight: 900,
-                      cursor: "pointer",
-                    }}
-                  >
-                    {filter.label}
-                  </button>
-                );
-              })}
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 130px), 1fr))",
+                  gap: 8,
+                  alignItems: "start",
+                  minWidth: 0,
+                }}
+                aria-label="Operational item filters"
+              >
+                {COMMAND_CENTER_FILTERS.map((filter) => {
+                  const selected = activeFilter === filter.value;
+                  return (
+                    <button
+                      key={filter.value}
+                      type="button"
+                      onClick={() => {
+                        setActiveSavedView("all_operational");
+                        setActiveFilter(filter.value);
+                      }}
+                      aria-pressed={selected}
+                      style={chipStyle(selected)}
+                    >
+                      {filter.label}
+                    </button>
+                  );
+                })}
               </div>
             </div>
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 190px), 1fr))",
+                gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 210px), 1fr))",
                 gap: 10,
                 minWidth: 0,
               }}
@@ -1141,7 +1194,7 @@ export default function OperationalCommandCenterPage() {
               ))}
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-              <span style={{ color: "#64748b", fontSize: 13 }}>Active view: {activeFilterCopy}</span>
+              <span style={{ ...helperTextStyle, overflowWrap: "anywhere" }}>Active view: {activeFilterCopy}</span>
               <button
                 type="button"
                 onClick={clearFilters}
@@ -1154,16 +1207,25 @@ export default function OperationalCommandCenterPage() {
                   fontSize: 13,
                   fontWeight: 900,
                   cursor: "pointer",
+                  minHeight: 34,
                 }}
               >
                 Reset filters
               </button>
             </div>
-          </div>
-          {loading ? <Card>Loading operational signals...</Card> : null}
-          {!loading && error ? <Card style={{ color: "#b91c1c" }}>{error}</Card> : null}
+          </Card>
+          {loading ? <Card style={{ color: "#64748b", display: "grid", gap: 6 }}>Loading operational signals...</Card> : null}
+          {!loading && error ? (
+            <Card style={{ color: "#b91c1c", display: "grid", gap: 6 }}>
+              <strong>Operational command center could not load.</strong>
+              <span>{error}</span>
+            </Card>
+          ) : null}
           {!loading && !error && signals.length === 0 ? (
-            <Card style={{ color: "#64748b" }}>No high-signal operational issues are currently visible.</Card>
+            <Card style={{ color: "#64748b", display: "grid", gap: 6 }}>
+              <strong style={{ color: "#0f172a" }}>No high-signal operational issues are currently visible.</strong>
+              <span>When a source workflow needs review, it will appear here with its source route and next action.</span>
+            </Card>
           ) : null}
           {!loading && !error && signals.length > 0 && visibleSignals.length === 0 ? (
             <Card style={{ color: "#64748b", boxSizing: "border-box", display: "grid", gap: 6 }}>
@@ -1173,9 +1235,9 @@ export default function OperationalCommandCenterPage() {
             </Card>
           ) : null}
           {!loading && !error && visibleSignals.length ? (
-            <div style={{ display: "grid", gap: 14 }}>
+            <div style={{ display: "grid", gap: 16 }}>
               {prioritySummary.map((group) => (
-                <div key={group.group} style={{ display: "grid", gap: 8 }}>
+                <div key={group.group} style={{ display: "grid", gap: 10, minWidth: 0 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "end" }}>
                     <div style={{ display: "grid", gap: 3 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
@@ -1194,13 +1256,22 @@ export default function OperationalCommandCenterPage() {
                             borderRadius: 8,
                             padding: 14,
                             display: "grid",
-                            gap: 8,
+                            gap: 10,
                             minWidth: 0,
                             boxSizing: "border-box",
                             overflowWrap: "anywhere",
+                            border: signal.severity === "critical" ? "1px solid #fecaca" : "1px solid rgba(15, 23, 42, 0.08)",
                           }}
                         >
-                          <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                          <div
+                            style={{
+                              display: "grid",
+                              gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 260px), 1fr))",
+                              gap: 10,
+                              alignItems: "start",
+                              minWidth: 0,
+                            }}
+                          >
                             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                               <Badge severity={signal.severity}>{signal.severity}</Badge>
                               <span style={{ color: "#64748b", fontSize: 13, fontWeight: 800 }}>
@@ -1208,11 +1279,19 @@ export default function OperationalCommandCenterPage() {
                               </span>
                               <span style={{ color: "#64748b", fontSize: 13 }}>{signal.source}</span>
                             </div>
-                            <Link to={signal.destination} style={{ color: "#2563eb", fontWeight: 900 }}>
+                            <Link
+                              to={signal.destination}
+                              style={{
+                                color: "#2563eb",
+                                fontWeight: 900,
+                                whiteSpace: "nowrap",
+                                alignSelf: "start",
+                              }}
+                            >
                               Open source workflow
                             </Link>
                           </div>
-                          <div style={{ display: "grid", gap: 4 }}>
+                          <div style={{ display: "grid", gap: 5, minWidth: 0 }}>
                             <strong style={{ color: "#0f172a", fontSize: 16 }}>{signal.title}</strong>
                             <span style={{ color: "#64748b", fontSize: 13 }}>Context: {signal.contextLabel}</span>
                             <span style={{ color: "#475569", lineHeight: 1.5 }}>Why: {signal.description}</span>
@@ -1220,7 +1299,17 @@ export default function OperationalCommandCenterPage() {
                               Next action: {signal.nextActionLabel}
                             </span>
                           </div>
-                          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", color: "#475569", fontSize: 12, fontWeight: 800 }}>
+                          <div
+                            style={{
+                              display: "grid",
+                              gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 180px), 1fr))",
+                              gap: 8,
+                              color: "#475569",
+                              fontSize: 12,
+                              fontWeight: 800,
+                              minWidth: 0,
+                            }}
+                          >
                             <span>Workflow status: {signal.workflowStatus}</span>
                             <span>Review status: {signal.reviewStatus}</span>
                             {signal.financialStatus ? <span>Financial status: {signal.financialStatus}</span> : null}

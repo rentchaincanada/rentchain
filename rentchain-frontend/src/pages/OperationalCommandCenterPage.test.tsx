@@ -398,6 +398,10 @@ describe("OperationalCommandCenterPage", () => {
     expect(screen.getAllByText("Escalation: Critical").length).toBeGreaterThan(0);
     expect(screen.getByText("Next action: Review payment evidence")).toBeInTheDocument();
     expect(screen.getByText("Saved operational views")).toBeInTheDocument();
+    expect(screen.getByTestId("operations-filter-panel")).toHaveStyle({
+      display: "grid",
+      minWidth: "0",
+    });
     expect(screen.getByRole("button", { name: "All Operational" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "High Risk" })).toBeInTheDocument();
     expect(screen.getByLabelText("Workflow type")).toBeInTheDocument();
@@ -467,6 +471,7 @@ describe("OperationalCommandCenterPage", () => {
 
     expect(await screen.findByText("Review missing payment")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "High Risk" }));
+    expect(screen.getByRole("button", { name: "High Risk" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByText("Review missing payment")).toBeInTheDocument();
     expect(screen.queryByText("Vacant units visible")).not.toBeInTheDocument();
     expect(screen.getByText(/Active view: Critical/)).toBeInTheDocument();
