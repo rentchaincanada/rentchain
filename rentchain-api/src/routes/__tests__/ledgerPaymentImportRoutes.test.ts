@@ -196,6 +196,29 @@ describe("ledger payment CSV import routes", () => {
     expect(writeTracker.ledgerEntryWrites).toBe(0);
   });
 
+  it("keeps payment CSV confirm route ahead of broad screening fallback routes", async () => {
+    const router = (await import("../ledgerRoutes")).default;
+    const app = buildAppWithBroadScreeningFallback(router);
+    const csv = "tenantName,property,unit,amount,paymentDate\nBailey Blinkers,Harbour View,1,150,2026-05-15";
+
+    const preview = await request(app)
+      .post("/api/ledger/imports/payment-csv/preview")
+      .attach("file", Buffer.from(csv), {
+        filename: "payments.csv",
+        contentType: "text/csv",
+      });
+
+    const res = await request(app).post("/api/ledger/imports/payment-csv/confirm").send({
+      importBatchId: preview.body.importBatchId,
+      selectedRowIds: [preview.body.rows[0].rowId],
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.headers["x-route-source"]).toBe("ledgerRoutes.ts");
+    expect(res.headers["x-route-source"]).not.toBe("screeningJobsAdminRoutes.ts");
+    expect(res.body).toMatchObject({ ok: true, importedCount: 1 });
+  });
+
   it("does not match tenants outside the authenticated landlord scope", async () => {
     const router = (await import("../ledgerRoutes")).default;
     const app = buildApp(router);
