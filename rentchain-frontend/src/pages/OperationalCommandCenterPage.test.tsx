@@ -7,6 +7,7 @@ import OperationalCommandCenterPage, {
   deriveOperationalReviewQueueItems,
   prioritizeOperationalItems,
   reviewWorkspacePreviewForSignal,
+  scopedSourceDestinationForSignal,
 } from "./OperationalCommandCenterPage";
 
 const mocks = vi.hoisted(() => ({
@@ -344,6 +345,65 @@ describe("deriveCommandCenterSignals", () => {
     expect(JSON.stringify(queueItems)).not.toContain("providerPayload");
     expect(JSON.stringify(queueItems)).not.toContain("financialMutation");
     expect(JSON.stringify(queueItems)).not.toContain("institutionalSharing");
+  });
+
+  it("uses scoped lease summary links for lease review queue items when a landlord-scoped lease id is available", () => {
+    const signals = deriveCommandCenterSignals({
+      decisions: [],
+      leases: [lease()],
+      properties: [],
+    });
+
+    const executionSignal = signals.find((signal) => signal.id === "lease-execution:lease-1");
+    expect(executionSignal).toEqual(
+      expect.objectContaining({
+        destination: "/leases",
+        scopedLeaseId: "lease-1",
+      })
+    );
+    expect(scopedSourceDestinationForSignal(executionSignal!)).toBe("/leases/lease-1/summary");
+
+    const queueItems = deriveOperationalReviewQueueItems(signals);
+    const executionQueueItem = queueItems.find((item) => item.queueItemId === "manual-review-queue:lease-execution:lease-1");
+    expect(executionQueueItem).toEqual(
+      expect.objectContaining({
+        title: "Lease execution blocked",
+        destination: "/leases/lease-1/summary",
+        contextLabel: "North Towers · 101 · John Smith",
+      })
+    );
+  });
+
+  it("keeps the generic lease fallback when no scoped lease id is available", () => {
+    const fallbackSignal = {
+      id: "lease-review:unscoped",
+      category: "lease_lifecycle",
+      severity: "warning",
+      priorityGroup: "needs_review",
+      title: "Lease review needed",
+      description: "Review the lease workflow.",
+      contextLabel: "Lease context review",
+      destination: "/leases",
+      source: "Lease operations",
+      workflowStatus: "Review needed",
+      reviewStatus: "Review needed",
+      financialStatus: null,
+      nextActionLabel: "Review lease execution",
+      assignmentState: "unassigned",
+      assignmentLabel: "Unassigned",
+      escalationState: "not_escalated",
+      escalationLabel: "Not escalated",
+      timingState: "current",
+      riskState: "review",
+    } as const;
+
+    expect(scopedSourceDestinationForSignal(fallbackSignal)).toBe("/leases");
+    expect(deriveOperationalReviewQueueItems([fallbackSignal])[0]).toEqual(
+      expect.objectContaining({
+        destination: "/leases",
+        contextLabel: "Lease context review",
+      })
+    );
   });
 
   it("normalizes raw decision context labels with operational lease and property references", () => {

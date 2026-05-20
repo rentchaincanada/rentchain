@@ -73,6 +73,7 @@ export type CommandCenterSignal = {
   escalationLabel?: string;
   timingState?: "upcoming" | "current";
   riskState?: "delinquent" | "high_risk" | "review" | "informational";
+  scopedLeaseId?: string | null;
 };
 
 type CategoryConfig = {
@@ -289,6 +290,16 @@ function routingReasonForSignal(signal: CommandCenterSignal) {
   return "Operational review";
 }
 
+function leaseSummaryDestination(leaseId: string) {
+  return `/leases/${encodeURIComponent(leaseId)}/summary`;
+}
+
+export function scopedSourceDestinationForSignal(signal: CommandCenterSignal) {
+  const scopedLeaseId = String(signal.scopedLeaseId || "").trim();
+  if (scopedLeaseId && signal.destination === "/leases") return leaseSummaryDestination(scopedLeaseId);
+  return signal.destination;
+}
+
 export function reviewWorkspacePreviewForSignal(signal: CommandCenterSignal): ReviewWorkspaceUiModel {
   return {
     workspaceReference: `manual-review-preview:${signal.category}:${signal.priorityGroup}`,
@@ -304,7 +315,7 @@ export function reviewWorkspacePreviewForSignal(signal: CommandCenterSignal): Re
     evidenceLinks: [
       {
         label: `${CATEGORY_CONFIG[signal.category].label} source workflow`,
-        destination: signal.destination,
+        destination: scopedSourceDestinationForSignal(signal),
         sensitivityClass: signal.category === "screening" || signal.category === "documents" ? "restricted" : "sensitive",
       },
     ],
@@ -327,7 +338,7 @@ export function deriveOperationalReviewQueueItems(signals: CommandCenterSignal[]
       title: signal.title,
       contextLabel: signal.contextLabel,
       sourceLabel: signal.source,
-      destination: signal.destination,
+      destination: evidenceLink?.destination || scopedSourceDestinationForSignal(signal),
       workspaceType: preview.workspaceType,
       reviewStatus: preview.reviewStatus,
       reviewPriority: preview.reviewPriority,
@@ -520,6 +531,18 @@ function resolveDecisionContextLabel(
   return "Operational review";
 }
 
+function resolveDecisionLease(
+  item: DecisionInboxItem,
+  lookups: { leases: Map<string, LandlordActiveLease> }
+) {
+  const relatedId = String(item.relatedEntity?.id || "").trim();
+  const destinationLeaseId = leaseIdFromDestination(item.destination);
+  return [relatedId, destinationLeaseId]
+    .filter(Boolean)
+    .map((id) => lookups.leases.get(String(id)))
+    .find(Boolean);
+}
+
 export function prioritizeOperationalItems(signals: CommandCenterSignal[]): CommandCenterSignal[] {
   return [...signals].sort((a, b) => {
     return (
@@ -568,6 +591,7 @@ export function deriveCommandCenterSignals(input: {
     const category = decisionCategory(item);
     const priorityGroup = priorityFromDecision(item, category);
     const severity = severityFromDecision(item);
+    const scopedLease = resolveDecisionLease(item, lookups);
     signals.push({
       id: `decision:${item.id}`,
       category,
@@ -582,6 +606,7 @@ export function deriveCommandCenterSignals(input: {
       reviewStatus: label(item.status || "open"),
       financialStatus: category === "payments" ? "Review required" : null,
       nextActionLabel: nextActionForDecision(item, category),
+      scopedLeaseId: scopedLease?.id || null,
       ...assignmentForDecision(item),
       ...escalationForDecision(item),
     });
@@ -609,6 +634,7 @@ export function deriveCommandCenterSignals(input: {
         reviewStatus: "Review needed",
         financialStatus: null,
         nextActionLabel: "Review occupancy context",
+        scopedLeaseId: lease.id,
       });
     }
 
@@ -627,6 +653,7 @@ export function deriveCommandCenterSignals(input: {
         reviewStatus: "Review needed",
         financialStatus: null,
         nextActionLabel: "Review lease execution",
+        scopedLeaseId: lease.id,
       });
     }
 
@@ -645,6 +672,7 @@ export function deriveCommandCenterSignals(input: {
         reviewStatus: "Review needed",
         financialStatus: null,
         nextActionLabel: "Review lease package",
+        scopedLeaseId: lease.id,
       });
     }
 
@@ -663,6 +691,7 @@ export function deriveCommandCenterSignals(input: {
         reviewStatus: lease.leasePdfStatus === "not_available" ? "Review needed" : "Informational",
         financialStatus: null,
         nextActionLabel: "Review document context",
+        scopedLeaseId: lease.id,
       });
     }
 
@@ -681,6 +710,7 @@ export function deriveCommandCenterSignals(input: {
         reviewStatus: "Review needed",
         financialStatus: label(lease.paymentReadiness.readinessStatus),
         nextActionLabel: "Review payment setup",
+        scopedLeaseId: lease.id,
       });
     }
 
@@ -699,6 +729,7 @@ export function deriveCommandCenterSignals(input: {
         reviewStatus: endingIn <= 30 ? "Needs review" : "Upcoming",
         financialStatus: null,
         nextActionLabel: "Review renewal timing",
+        scopedLeaseId: lease.id,
       });
     }
 
@@ -719,6 +750,7 @@ export function deriveCommandCenterSignals(input: {
         reviewStatus: "Review needed",
         financialStatus: null,
         nextActionLabel: "Review jurisdiction guidance",
+        scopedLeaseId: lease.id,
       });
     }
   }
