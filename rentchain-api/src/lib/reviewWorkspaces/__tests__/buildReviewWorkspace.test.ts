@@ -89,14 +89,17 @@ describe("buildReviewWorkspace", () => {
       })
     );
     expect(workspace.evidenceRefs).toEqual([
-      {
+      expect.objectContaining({
+        evidenceRefId: "review_evidence_ref:evidence-1:item-1:ledgerentries:ledger-1",
         evidencePackId: "evidence-1",
         evidenceItemId: "item-1",
+        evidenceType: "evidence_pack",
         label: "Missing payment evidence",
         sourceCollection: "ledgerEntries",
         sourceId: "ledger-1",
+        sourceRef: { sourceCollection: "ledgerEntries", sourceId: "ledger-1" },
         sensitivityClass: "sensitive",
-      },
+      }),
     ]);
     expect(workspace.relatedResourceRefs).toEqual([
       expect.objectContaining({

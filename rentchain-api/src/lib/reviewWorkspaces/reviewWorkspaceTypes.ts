@@ -23,12 +23,26 @@ export type ReviewWorkspaceReviewer = {
 };
 
 export type ReviewWorkspaceEvidenceRef = {
+  evidenceRefId: string;
   evidencePackId: string;
   evidenceItemId: string | null;
+  evidenceType: "evidence_pack" | "evidence_item" | "source_reference";
   label: string;
   sourceCollection: string | null;
   sourceId: string | null;
+  sourceRef: {
+    sourceCollection: string;
+    sourceId: string;
+  } | null;
+  scopeType: string | null;
+  scopeId: string | null;
+  landlordId: string | null;
+  tenantId: string | null;
   sensitivityClass: ReviewWorkspaceSensitivityClass;
+  projectionProfile: string | null;
+  projectionVersion: string | null;
+  redactionSummary: string | null;
+  lineageSummary: string | null;
 };
 
 export type ReviewWorkspaceResourceType =
