@@ -8,7 +8,7 @@ The baseline is designed to improve protection against script injection, clickja
 
 ## Headers Added
 
-The following headers are applied to static assets and non-asset SPA routes in `rentchain-frontend/vercel.json`:
+The following headers are applied through one broad frontend route rule in `rentchain-frontend/vercel.json` so static assets and SPA routes share the same browser-security baseline:
 
 - `Content-Security-Policy`
 - `X-Frame-Options: DENY`
@@ -62,7 +62,7 @@ The CSP allows the following external source families where currently needed or 
 - `frame-src` remains broad enough to avoid breaking document/PDF/provider preview behavior. Future tightening should be based on deployed CSP violation data and a full iframe/embed inventory.
 - `script-src` includes `https://vercel.live` so Vercel preview feedback can load without console-blocking errors during preview QA.
 - `connect-src` includes `https://*.a.run.app` because Cloud Run preview and alternate service URLs can differ from the explicit production Cloud Run host.
-- `Permissions-Policy` intentionally avoids unsupported experimental feature tokens such as `browsing-topics` to prevent browser console noise on preview and production deployments.
+- `Permissions-Policy` intentionally avoids unsupported experimental feature tokens such as `browsing-topics` to prevent browser console noise on preview and production deployments. The security headers are centralized in one broad Vercel rule to avoid route-specific duplicate policy blocks.
 - CSP reporting is not enabled because there is no governed CSP report ingestion endpoint yet.
 - This mission does not introduce runtime header middleware. Vercel remains the frontend header authority.
 - This mission does not harden backend Cloud Run responses.
@@ -71,7 +71,7 @@ The CSP allows the following external source families where currently needed or 
 
 Config regression tests assert:
 
-- security headers are present on both asset and SPA route header rules
+- security headers are present on the broad frontend route rule that covers asset and SPA responses
 - header names do not conflict within each route rule
 - cache policies remain unchanged
 - CSP includes required RentChain, Firebase/Google, Stripe, Cloud Run, worker, and frame directives

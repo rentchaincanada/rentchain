@@ -48,24 +48,22 @@ const getHeaderMap = (rule: VercelHeaderRule) =>
   new Map(rule.headers.map((header) => [header.key, header.value]));
 
 describe("frontend Vercel security headers", () => {
-  it("applies the security baseline to static assets and SPA routes", () => {
-    for (const source of ["/assets/(.*)", "/((?!assets/).*)"]) {
-      const headerMap = getHeaderMap(getHeaderRule(source));
+  it("applies one broad security baseline to all frontend routes", () => {
+    const headerMap = getHeaderMap(getHeaderRule("/(.*)"));
 
-      for (const headerName of requiredSecurityHeaders) {
-        expect(headerMap.get(headerName), `${source} missing ${headerName}`).toBeTruthy();
-      }
+    for (const headerName of requiredSecurityHeaders) {
+      expect(headerMap.get(headerName), `Missing ${headerName}`).toBeTruthy();
     }
   });
 
-  it("keeps cache policy and security headers non-conflicting per route", () => {
-    for (const source of ["/assets/(.*)", "/((?!assets/).*)"]) {
+  it("keeps cache policy and security headers non-conflicting per rule", () => {
+    for (const source of ["/assets/(.*)", "/((?!assets/).*)", "/(.*)"]) {
       const rule = getHeaderRule(source);
       const normalizedHeaderNames = rule.headers.map((header) => header.key.toLowerCase());
       const permissionsPolicy = getHeaderMap(rule).get("Permissions-Policy");
 
       expect(new Set(normalizedHeaderNames).size).toBe(normalizedHeaderNames.length);
-      expect(permissionsPolicy).not.toContain("browsing-topics");
+      expect(permissionsPolicy ?? "").not.toContain("browsing-topics");
     }
 
     expect(getHeaderMap(getHeaderRule("/assets/(.*)")).get("Cache-Control")).toBe(
@@ -77,7 +75,7 @@ describe("frontend Vercel security headers", () => {
   });
 
   it("uses a conservative CSP that preserves required app integrations", () => {
-    const csp = getHeaderMap(getHeaderRule("/((?!assets/).*)")).get(
+    const csp = getHeaderMap(getHeaderRule("/(.*)")).get(
       "Content-Security-Policy",
     );
 
