@@ -11,6 +11,10 @@ import type {
   EvidencePackSectionKey,
   EvidenceSectionStatus,
 } from "./evidencePackTypes";
+import {
+  deriveEvidenceProjectionProfile,
+  deriveEvidenceSourceReferences,
+} from "./evidenceProjectionProfile";
 
 const DEFAULT_DISCLAIMERS = [
   "Preview only. Evidence is not shared externally.",
@@ -466,6 +470,14 @@ function derivePackStatus(sections: EvidencePackSection[], hasScope: boolean): E
   return "ready_for_review";
 }
 
+function hasRestrictedRedactions(redactions: EvidencePackRedaction[]): boolean {
+  return redactions.some((redaction) =>
+    /account|bank|card|credential|identity|message|payload|provider|raw|screening|token/i.test(
+      `${redaction.fieldCategory} ${redaction.reason}`,
+    ),
+  );
+}
+
 export function deriveEvidencePack(input: DeriveEvidencePackInput): EvidencePack {
   const scope = input.scope;
   const scopeId = asString(input.scopeId, 500);
@@ -483,6 +495,16 @@ export function deriveEvidencePack(input: DeriveEvidencePackInput): EvidencePack
     redactions.section,
   ];
   const allItems = sections.flatMap((item) => item.items);
+  const sourceRefs = deriveEvidenceSourceReferences(allItems);
+  const sourceCollections = Array.from(new Set(sourceRefs.map((item) => item.sourceCollection))).sort((a, b) =>
+    a.localeCompare(b),
+  );
+  const restricted = hasRestrictedRedactions(redactions.redactions);
+  const projectionProfile = deriveEvidenceProjectionProfile({
+    scope,
+    sourceCollections,
+    hasRestrictedRedactions: restricted,
+  });
   const blockedReasons = sections.flatMap((item) => item.blockedReasons);
   const missingItems = sections.reduce((sum, item) => sum + item.missingEvidence.length, 0);
   const hasScope = Boolean(scope && scopeId && input.landlordId);
@@ -494,6 +516,16 @@ export function deriveEvidencePack(input: DeriveEvidencePackInput): EvidencePack
     scope,
     scopeId,
     status: derivePackStatus(sections, hasScope),
+    projectionProfile,
+    projectionVersion: projectionProfile.profileVersion,
+    sensitivityClass: projectionProfile.sensitivityClass,
+    sourceCollections,
+    sourceRefs,
+    redactionSummary: {
+      redactionPolicy: projectionProfile.redactionPolicy,
+      redactedFieldGroups: redactions.redactions.map((item) => item.fieldCategory).sort((a, b) => a.localeCompare(b)),
+      redactionCount: redactions.redactions.length,
+    },
     manualReviewRequired: true,
     externalSharingEnabled: false,
     certificationIssued: false,
