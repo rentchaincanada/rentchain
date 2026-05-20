@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import OperationalCommandCenterPage, {
   deriveCommandCenterSignals,
+  deriveOperationalReviewQueueItems,
   prioritizeOperationalItems,
   reviewWorkspacePreviewForSignal,
 } from "./OperationalCommandCenterPage";
@@ -309,6 +310,42 @@ describe("deriveCommandCenterSignals", () => {
     expect(JSON.stringify(preview)).not.toContain("rawPayload");
   });
 
+  it("derives deterministic manual-only operational review queue items", () => {
+    const signals = deriveCommandCenterSignals({
+      decisions: [decision()],
+      leases: [lease()],
+      properties: [],
+    });
+
+    const queueItems = deriveOperationalReviewQueueItems(signals);
+    const paymentItem = queueItems.find((item) => item.queueItemId === "manual-review-queue:decision:decision-1");
+
+    expect(paymentItem).toEqual(
+      expect.objectContaining({
+        title: "Review missing payment",
+        contextLabel: "North Towers · 101 · John Smith",
+        workspaceType: "payment_ledger_review",
+        reviewStatus: "Open",
+        reviewPriority: "Critical",
+        routingReason: "Delinquency or payment evidence review",
+        assignmentLabel: "Operations owned",
+        financialStatus: "Review required",
+        sensitivityClass: "sensitive",
+        visibilityClass: "landlord_operational",
+        manualOnly: true,
+        autonomousActionsEnabled: false,
+      })
+    );
+    expect(queueItems.map((item) => item.queueItemId)).toEqual(
+      prioritizeOperationalItems(signals).map((signal) => `manual-review-queue:${signal.id}`)
+    );
+    expect(JSON.stringify(queueItems)).not.toContain("tenantVisible");
+    expect(JSON.stringify(queueItems)).not.toContain("rawPayload");
+    expect(JSON.stringify(queueItems)).not.toContain("providerPayload");
+    expect(JSON.stringify(queueItems)).not.toContain("financialMutation");
+    expect(JSON.stringify(queueItems)).not.toContain("institutionalSharing");
+  });
+
   it("normalizes raw decision context labels with operational lease and property references", () => {
     const signals = deriveCommandCenterSignals({
       decisions: [
@@ -428,7 +465,7 @@ describe("OperationalCommandCenterPage", () => {
     expect(screen.getAllByText("Needs review").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Upcoming").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Informational").length).toBeGreaterThan(0);
-    expect(screen.getByText("Review missing payment")).toBeInTheDocument();
+    expect(screen.getAllByText("Review missing payment").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Context: North Towers · 101 · John Smith").length).toBeGreaterThan(0);
     expect(screen.getByText("Why: Lease is active but occupancy state conflicts.")).toBeInTheDocument();
     expect(screen.getByText("Workflow status: New")).toBeInTheDocument();
@@ -438,6 +475,11 @@ describe("OperationalCommandCenterPage", () => {
     expect(screen.getAllByText("Escalation: Critical").length).toBeGreaterThan(0);
     expect(screen.getByText("Next action: Review payment evidence")).toBeInTheDocument();
     expect(screen.getAllByText("Review workspace readiness").length).toBeGreaterThan(0);
+    expect(screen.getByTestId("operational-review-queue")).toBeInTheDocument();
+    expect(screen.getByText("Operational review queue")).toBeInTheDocument();
+    expect(screen.getByText(/does not create workspaces, route work automatically, or change source records/i)).toBeInTheDocument();
+    expect(screen.getAllByText("Scoped evidence/resource links").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Review missing payment").length).toBeGreaterThan(1);
     expect(screen.getAllByText(/does not create a workspace, route work automatically, or change source records/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText("Payment Ledger Review").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Delinquency or payment evidence review").length).toBeGreaterThan(0);
@@ -471,16 +513,17 @@ describe("OperationalCommandCenterPage", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText("Review missing payment")).toBeInTheDocument();
-    expect(screen.getByText("Lease ending soon")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getAllByText("Review missing payment").length).toBeGreaterThan(0));
+    expect(screen.getAllByText("Lease ending soon").length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole("button", { name: "Upcoming" }));
     expect(screen.queryByText("Review missing payment")).not.toBeInTheDocument();
-    expect(screen.getByText("Lease ending soon")).toBeInTheDocument();
+    expect(screen.getAllByText("Lease ending soon").length).toBeGreaterThan(0);
+    expect(screen.getByTestId("operational-review-queue")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "All operational" }));
     fireEvent.change(screen.getByLabelText("Search operational items"), { target: { value: "North Towers 101" } });
-    expect(screen.getByText("Review missing payment")).toBeInTheDocument();
+    expect(screen.getAllByText("Review missing payment").length).toBeGreaterThan(0);
     expect(screen.queryByText("Vacant units visible")).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Search operational items"), { target: { value: "no matching workflow" } });
@@ -495,10 +538,10 @@ describe("OperationalCommandCenterPage", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText("Review missing payment")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getAllByText("Review missing payment").length).toBeGreaterThan(0));
 
     fireEvent.click(screen.getAllByRole("button", { name: "Delinquent" })[1]);
-    expect(screen.getByText("Review missing payment")).toBeInTheDocument();
+    expect(screen.getAllByText("Review missing payment").length).toBeGreaterThan(0);
     expect(screen.queryByText("Vacant units visible")).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Review status"), { target: { value: "open" } });
@@ -507,8 +550,8 @@ describe("OperationalCommandCenterPage", () => {
     expect(screen.getByText("No operational items match this triage view.")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Reset filters" }));
-    expect(screen.getByText("Review missing payment")).toBeInTheDocument();
-    expect(screen.getByText("Vacant units visible")).toBeInTheDocument();
+    expect(screen.getAllByText("Review missing payment").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Vacant units visible").length).toBeGreaterThan(0);
   });
 
   it("applies saved operational views without backend state changes", async () => {
@@ -518,16 +561,16 @@ describe("OperationalCommandCenterPage", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText("Review missing payment")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getAllByText("Review missing payment").length).toBeGreaterThan(0));
     fireEvent.click(screen.getByRole("button", { name: "High Risk" }));
     expect(screen.getByRole("button", { name: "High Risk" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByText("Review missing payment")).toBeInTheDocument();
+    expect(screen.getAllByText("Review missing payment").length).toBeGreaterThan(0);
     expect(screen.queryByText("Vacant units visible")).not.toBeInTheDocument();
     expect(screen.getByText(/Active view: Critical/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Upcoming Deadlines" }));
     expect(screen.queryByText("Review missing payment")).not.toBeInTheDocument();
-    expect(screen.getByText("Lease ending soon")).toBeInTheDocument();
+    expect(screen.getAllByText("Lease ending soon").length).toBeGreaterThan(0);
   });
 
   it("shows a safe empty state when no signals are visible", async () => {
