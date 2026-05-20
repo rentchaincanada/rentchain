@@ -1,5 +1,11 @@
 import { deriveLeaseExecution, type LeaseExecution } from "../leaseExecution/deriveLeaseExecution";
 import { derivePaymentReadiness, type PaymentReadiness } from "../paymentReadiness/derivePaymentReadiness";
+import {
+  deriveTenantSafeProjectionProfile,
+  deriveTenantSafeSourceRefs,
+  type TenantSafeProjectionProfile,
+  type TenantSafeProjectionSourceReference,
+} from "./tenantSafeProjectionContract";
 
 type TenantPropertyProjection = {
   propertyId: string;
@@ -14,6 +20,16 @@ type TenantPropertyProjection = {
 
 type TenantLeaseProjection = {
   leaseId: string;
+  projectionProfile: TenantSafeProjectionProfile;
+  projectionVersion: string;
+  sensitivityClass: TenantSafeProjectionProfile["sensitivityClass"];
+  sourceCollections: string[];
+  sourceRefs: TenantSafeProjectionSourceReference[];
+  redactionSummary: {
+    redactionPolicy: string;
+    redactedFieldGroups: string[];
+    redactionCount: number;
+  };
   startDate: string | null;
   endDate: string | null;
   monthlyRent: number | null;
@@ -398,9 +414,35 @@ export function projectTenantLease(recordId: string, data: any): TenantLeaseProj
   const dueDay = asNumber(data?.dueDay);
   const leaseReadiness = deriveTenantSafeLeaseReadinessMetadata(data, { documentUrl, leaseId: recordId });
   const leaseExecution = leaseReadiness.leaseExecution;
+  const tenantId = asString(data?.primaryTenantId) || asString(data?.tenantId) || asString(data?.tenantIds?.[0]);
+  const propertyId = asString(data?.propertyId);
+  const unitId = asString(data?.unitId) || asString(data?.unitNumber) || asString(data?.unit);
+  const sourceRefs = deriveTenantSafeSourceRefs({
+    leaseId: recordId,
+    propertyId,
+    unitId,
+    tenantId,
+  });
+  const sourceCollections = Array.from(new Set(sourceRefs.map((item) => item.sourceCollection))).sort((a, b) =>
+    a.localeCompare(b),
+  );
+  const projectionProfile = deriveTenantSafeProjectionProfile({
+    scopeType: "tenant_current_lease",
+    sourceCollections,
+  });
 
   return {
     leaseId: recordId,
+    projectionProfile,
+    projectionVersion: projectionProfile.projectionVersion,
+    sensitivityClass: projectionProfile.sensitivityClass,
+    sourceCollections,
+    sourceRefs,
+    redactionSummary: {
+      redactionPolicy: projectionProfile.redactionPolicy,
+      redactedFieldGroups: projectionProfile.excludedFieldGroups,
+      redactionCount: projectionProfile.excludedFieldGroups.length,
+    },
     startDate,
     endDate,
     monthlyRent,
@@ -414,9 +456,9 @@ export function projectTenantLease(recordId: string, data: any): TenantLeaseProj
       startDate,
       endDate,
       dueDay,
-      tenantId: asString(data?.primaryTenantId) || asString(data?.tenantId) || asString(data?.tenantIds?.[0]),
-      propertyId: asString(data?.propertyId),
-      unitId: asString(data?.unitId) || asString(data?.unitNumber) || asString(data?.unit),
+      tenantId,
+      propertyId,
+      unitId,
       leaseExecution,
     }),
   };
