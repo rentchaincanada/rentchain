@@ -62,8 +62,10 @@ describe("frontend Vercel security headers", () => {
     for (const source of ["/assets/(.*)", "/((?!assets/).*)"]) {
       const rule = getHeaderRule(source);
       const normalizedHeaderNames = rule.headers.map((header) => header.key.toLowerCase());
+      const permissionsPolicy = getHeaderMap(rule).get("Permissions-Policy");
 
       expect(new Set(normalizedHeaderNames).size).toBe(normalizedHeaderNames.length);
+      expect(permissionsPolicy).not.toContain("browsing-topics");
     }
 
     expect(getHeaderMap(getHeaderRule("/assets/(.*)")).get("Cache-Control")).toBe(
