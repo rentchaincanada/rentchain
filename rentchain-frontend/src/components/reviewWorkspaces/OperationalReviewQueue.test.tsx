@@ -1,6 +1,6 @@
 import React from "react";
 import { MemoryRouter } from "react-router-dom";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { OperationalReviewQueue, type OperationalReviewQueueItem } from "./OperationalReviewQueue";
 
@@ -46,8 +46,13 @@ describe("OperationalReviewQueue", () => {
     expect(screen.getAllByText("North Towers · Unit 104 · James Smith").length).toBeGreaterThan(0);
     expect(screen.getByText("Payment Ledger Review")).toBeInTheDocument();
     expect(screen.getByText("Delinquency or payment evidence review")).toBeInTheDocument();
-    expect(screen.getByText("Operations owned")).toBeInTheDocument();
+    expect(screen.getAllByText("Operations owned").length).toBeGreaterThan(0);
     expect(screen.getByText("Review required")).toBeInTheDocument();
+    expect(screen.getByLabelText("Review status for Review missing payment")).toHaveValue("open");
+    expect(screen.getByLabelText("Assigned reviewer for Review missing payment")).toHaveValue("operations");
+    expect(screen.getByText("Manual status: Open")).toBeInTheDocument();
+    expect(screen.getByText("Manual assignment: Operations owned")).toBeInTheDocument();
+    expect(screen.getByText(/They do not route work automatically, change source records, or alter financial status/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Payments / obligations source workflow" })).toHaveAttribute(
       "href",
       "/leases/lease-1/ledger"
@@ -58,6 +63,30 @@ describe("OperationalReviewQueue", () => {
     expect(screen.queryByText(/mutate ledger/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/institutional sharing/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/tenant-visible review/i)).not.toBeInTheDocument();
+  });
+
+  it("updates manual assignment and status metadata without adding mutation actions", () => {
+    render(
+      <MemoryRouter>
+        <OperationalReviewQueue items={[queueItem()]} />
+      </MemoryRouter>
+    );
+
+    fireEvent.change(screen.getByLabelText("Review status for Review missing payment"), {
+      target: { value: "in_review" },
+    });
+    fireEvent.change(screen.getByLabelText("Assigned reviewer for Review missing payment"), {
+      target: { value: "finance_reviewer" },
+    });
+
+    expect(screen.getByText("Manual status: In review")).toBeInTheDocument();
+    expect(screen.getByText("Manual assignment: Finance reviewer")).toBeInTheDocument();
+    expect(screen.getByText("Assignment reason: Finance reviewer owns the next manual review step.")).toBeInTheDocument();
+    expect(screen.getByText("Review status note: Operator review is actively underway.")).toBeInTheDocument();
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    expect(screen.queryByText(/auto.?assign/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/auto.?resolution/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/mutate ledger/i)).not.toBeInTheDocument();
   });
 
   it("uses safe fallback labels for raw internal identifiers", () => {

@@ -1,6 +1,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { Card } from "@/components/ui/Ui";
+import { ReviewAssignmentStatusControls } from "./ReviewAssignmentStatusControls";
 
 export type ReviewWorkspaceUiLink = {
   label: string;
@@ -100,6 +101,13 @@ export function ReviewWorkspacePanel({ workspace }: { workspace: ReviewWorkspace
         {metadataCell("Sensitivity", label(workspace.sensitivityClass))}
         {metadataCell("Visibility", label(workspace.visibilityClass))}
       </div>
+
+      <ReviewAssignmentStatusControls
+        itemId={workspace.workspaceReference}
+        title={label(workspace.workspaceType)}
+        initialStatus={workspace.reviewStatus}
+        initialAssignment={workspace.assignmentLabel}
+      />
 
       <div style={{ display: "grid", gap: 5, minWidth: 0 }}>
         <span style={{ color: "#334155", fontSize: 12, fontWeight: 900 }}>Scoped evidence linkage</span>
