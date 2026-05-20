@@ -4,6 +4,13 @@ import cookieParser from "cookie-parser";
 import { authenticateJwt } from "./middleware/authMiddleware";
 import { routeSource } from "./middleware/routeSource";
 import { notFoundHandler, errorHandler } from "./middleware/errorHandler";
+import {
+  rateLimitDiagnostics,
+  rateLimitEvidenceExportReview,
+  rateLimitInternalJob,
+  rateLimitPublicToken,
+  rateLimitTenantWorkspaceEntry,
+} from "./middleware/rateLimit";
 import { corsOptions } from "./lib/cors";
 import { getPricingHealth } from "./config/planMatrix";
 import { resolveCanonicalPlan } from "./services/entitlements/planCapabilities";
@@ -236,7 +243,7 @@ app.use("/api/api", (req, res) => {
 
 // Health
 app.use("/health", healthRoutes);
-app.get("/api/__routes", (_req, res) => {
+app.get("/api/__routes", rateLimitDiagnostics, (_req, res) => {
   res.setHeader("x-route-source", "app.build.ts:/api/__routes");
   return res.json({
     ok: true,
@@ -261,18 +268,24 @@ app.use("/api", routeSource("publicRoutes.ts"), publicRoutes);
 app.use("/api/public", routeSource("publicRoutes.ts"), publicRoutes);
 app.use("/api", routeSource("publicPortfolioScoreRoutes.ts"), publicPortfolioScoreRoutes);
 app.use("/api/public", routeSource("publicTenantShareRoutes.ts"), publicTenantShareRoutes);
+app.use("/api/public/landlord-invites", rateLimitPublicToken);
 app.use("/api/public", routeSource("landlordInvitesPublicRoutes.ts"), landlordInvitesPublicRoutes);
 app.use("/api/public", routeSource("landlordInquiryRoutes.ts"), landlordInquiryPublicRoutes);
 app.use("/api/public", tenantHistorySharePublicRouter);
+app.use("/api/public/application-links", rateLimitPublicToken);
 app.use("/api/public", routeSource("publicApplicationLinksRoutes.ts"), publicApplicationLinksRoutes);
 app.use("/api", routeSource("viewingRoutes.ts"), viewingRoutes);
 app.use("/api/auth", routeSource("authRoutes.ts"), authRoutes);
+app.use("/api/invites", rateLimitPublicToken);
 app.use("/api/invites", routeSource("invitesRoutes.ts"), invitesRoutes);
+app.use("/api/access", rateLimitPublicToken);
 app.use("/api/access", routeSource("accessRoutes.ts"), accessRoutes);
 app.use("/api/capabilities", routeSource("capabilitiesRoutes.ts"), capabilitiesRoutes);
+app.use("/api/internal", rateLimitInternalJob);
 app.use("/api/internal", routeSource("internalReportsRoutes.ts"), internalReportsRoutes);
 app.use("/api/internal", routeSource("identityOracleInternalRoutes.ts"), identityOracleInternalRoutes);
 app.use("/api/internal", routeSource("applicationReminderInternalRoutes.ts"), applicationReminderInternalRoutes);
+app.use("/api/status", rateLimitDiagnostics);
 app.use("/api/status", routeSource("statusRoutes.ts"), statusRoutes);
 
 // Auth decode (non-blocking if header missing)
@@ -348,14 +361,18 @@ app.use("/api", routeSource("landlordPortfolioScoreSharingRoutes.ts"), landlordP
 console.log("[route-mount] landlordPortfolioScoreSharingRoutes mounted at /api");
 app.use("/api/landlord", routeSource("landlordDecisionInboxRoutes.ts"), landlordDecisionInboxRoutes);
 console.log("[route-mount] landlordDecisionInboxRoutes mounted at /api/landlord");
+app.use("/api/landlord/institution-exports", rateLimitEvidenceExportReview);
 app.use("/api/landlord", routeSource("landlordInstitutionExportsRoutes.ts"), landlordInstitutionExportsRoutes);
 console.log("[route-mount] landlordInstitutionExportsRoutes mounted at /api/landlord");
 app.use("/api/landlord", routeSource("landlordAuditComplianceRoutes.ts"), landlordAuditComplianceRoutes);
 console.log("[route-mount] landlordAuditComplianceRoutes mounted at /api/landlord");
+app.use("/api/landlord/operator-reviews", rateLimitEvidenceExportReview);
 app.use("/api/landlord", routeSource("landlordOperatorReviewRoutes.ts"), landlordOperatorReviewRoutes);
 console.log("[route-mount] landlordOperatorReviewRoutes mounted at /api/landlord");
+app.use("/api/landlord/evidence-packs", rateLimitEvidenceExportReview);
 app.use("/api/landlord", routeSource("landlordEvidencePackRoutes.ts"), landlordEvidencePackRoutes);
 console.log("[route-mount] landlordEvidencePackRoutes mounted at /api/landlord");
+app.use("/api/landlord/review-timeline", rateLimitEvidenceExportReview);
 app.use("/api/landlord", routeSource("landlordReviewTimelineRoutes.ts"), landlordReviewTimelineRoutes);
 console.log("[route-mount] landlordReviewTimelineRoutes mounted at /api/landlord");
 app.use("/api/landlord", routeSource("landlordIdentityLayerRoutes.ts"), landlordIdentityLayerRoutes);
@@ -438,7 +455,9 @@ app.use(
   routeSource("landlordApplicationLinksRoutes.ts"),
   landlordApplicationLinksRoutes
 );
+app.use("/api/tenant-invites", rateLimitTenantWorkspaceEntry);
 app.use("/api/tenant-invites", tenantInvitesRoutes);
+app.use("/api/tenant/invite", rateLimitTenantWorkspaceEntry);
 app.use("/api/tenant", tenantPortalRoutes);
 app.use("/api/recipient", routeSource("recipientTrustReviewRoutes.ts"), recipientTrustReviewRoutes);
 app.use("/api/tenant", tenantParticipationRoutes);
@@ -495,13 +514,13 @@ app.use("/api", routeSource("screeningReportRoutes.ts"), screeningReportRoutes);
 app.use("/api", tenantOnboardRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/landlord", landlordMicroLiveRoutes);
-app.get("/api/__probe/tenants-mount", (_req, res) =>
+app.get("/api/__probe/tenants-mount", rateLimitDiagnostics, (_req, res) =>
   res.json({ ok: true, probe: "tenants-mount", ts: Date.now() })
 );
-app.get("/api/__probe/version", (_req, res) =>
+app.get("/api/__probe/version", rateLimitDiagnostics, (_req, res) =>
   res.json({ ok: true, ts: Date.now(), marker: "probe-v1" })
 );
-app.get("/api/__probe/revision", (_req, res) => {
+app.get("/api/__probe/revision", rateLimitDiagnostics, (_req, res) => {
   res.setHeader("x-route-source", "app.build.ts:/api/__probe/revision");
   return res.json({
     ok: true,
@@ -519,12 +538,12 @@ app.use("/api", routeSource("telemetryRoutes.ts"), telemetryRoutes);
 console.log(
   "[routes] /api/properties, /api/properties/:propertyId/units, /api/action-requests, /api/applications"
 );
-app.post("/api/_echo", (req, res) => {
+app.post("/api/_echo", rateLimitDiagnostics, (req, res) => {
   res.setHeader("x-route-source", "app.build.ts:/api/_echo");
   return res.json({ ok: true, method: "POST", body: req.body ?? null });
 });
 
-app.get("/api/__probe/routes", (_req, res) => {
+app.get("/api/__probe/routes", rateLimitDiagnostics, (_req, res) => {
   const appAny: any = app;
   const stack = appAny?._router?.stack || [];
   const mounts = stack
@@ -548,7 +567,7 @@ app.get("/api/__probe/routes", (_req, res) => {
 });
 
 // Build stamp
-app.get("/api/_build", (_req, res) => {
+app.get("/api/_build", rateLimitDiagnostics, (_req, res) => {
   res.setHeader("x-route-source", "app.build.ts:/api/_build");
   return res.json({
     ok: true,
@@ -559,7 +578,7 @@ app.get("/api/_build", (_req, res) => {
 });
 
 // Echo for POST reachability
-app.post("/api/_echo", (req, res) => {
+app.post("/api/_echo", rateLimitDiagnostics, (req, res) => {
   res.setHeader("x-route-source", "app.build.ts:/api/_echo");
   return res.json({
     ok: true,
@@ -569,7 +588,7 @@ app.post("/api/_echo", (req, res) => {
   });
 });
 
-app.get("/api/__debug/build", (_req, res) => {
+app.get("/api/__debug/build", rateLimitDiagnostics, (_req, res) => {
   res.setHeader("x-route-source", "app.build.ts:/api/__debug/build");
   return res.json({
     ok: true,
@@ -585,7 +604,7 @@ app.get("/api/__debug/build", (_req, res) => {
   });
 });
 
-app.get("/api/__debug/ping-application-links", (_req, res) => {
+app.get("/api/__debug/ping-application-links", rateLimitDiagnostics, (_req, res) => {
   res.setHeader("x-route-source", "debugPingApplicationLinks");
   return res.json({ ok: true });
 });
