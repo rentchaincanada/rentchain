@@ -89,10 +89,76 @@ describe("deriveEvidencePack", () => {
 
     expect(pack).toEqual(expect.objectContaining({
       evidencePackId: "evidence_pack:decision:landlord-1:decision-1",
+      projectionVersion: "evidence_projection_profile_v1",
+      sensitivityClass: "restricted",
       manualReviewRequired: true,
       externalSharingEnabled: false,
       certificationIssued: false,
     }));
+    expect(pack.projectionProfile).toEqual(
+      expect.objectContaining({
+        profileName: "landlord_evidence_review",
+        profileVersion: "evidence_projection_profile_v1",
+        audience: "landlord_operational_review",
+        scopeType: "decision",
+        sensitivityClass: "restricted",
+        internalReferencePolicy:
+          "Internal IDs may appear only as scoped source references, never as primary display labels.",
+        sourceLineagePolicy:
+          "Each included evidence item declares a source collection and source ID when available.",
+      }),
+    );
+    expect(pack.projectionProfile.allowedFieldGroups).toEqual(
+      expect.arrayContaining([
+        "operational_labels",
+        "status_summaries",
+        "scoped_source_references",
+        "redaction_categories",
+      ]),
+    );
+    expect(pack.projectionProfile.excludedFieldGroups).toEqual(
+      expect.arrayContaining([
+        "raw_provider_payloads",
+        "raw_csv_values",
+        "payment_account_details",
+        "private_message_bodies",
+        "debug_payloads",
+      ]),
+    );
+    expect(pack.sourceCollections).toEqual(
+      expect.arrayContaining([
+        "auditComplianceReadiness",
+        "canonicalEvents",
+        "decisionItems",
+        "institutionExportPackages",
+        "leases",
+        "operatorReviewSessions",
+        "properties",
+      ]),
+    );
+    expect(pack.sourceRefs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sourceCollection: "decisionItems",
+          sourceId: "decision-1",
+          itemType: "decision",
+          itemLabel: "Review missing payment",
+        }),
+        expect.objectContaining({
+          sourceCollection: "canonicalEvents",
+          sourceId: "event-1",
+          itemType: "canonical_event",
+        }),
+      ]),
+    );
+    expect(pack.redactionSummary).toEqual(
+      expect.objectContaining({
+        redactionPolicy:
+          "Exclude raw/provider/payment credential/debug/private-message fields; include redaction categories only.",
+        redactionCount: 2,
+        redactedFieldGroups: ["payment_account_details", "screening_payloads"],
+      }),
+    );
     expect(pack.sections.map((section) => section.sectionKey)).toEqual(expect.arrayContaining([
       "decision_lineage",
       "workflow_routing",
@@ -106,6 +172,63 @@ describe("deriveEvidencePack", () => {
     ]));
     expect(pack.summary.redactedItems).toBeGreaterThan(0);
     expect(JSON.stringify(pack)).not.toMatch(/accountNumber|creditReport|bureauPayload|privateDocument/i);
+  });
+
+  it("derives deterministic source lineage without using internal IDs as primary labels", () => {
+    const first = deriveEvidencePack({
+      scope: "lease",
+      scopeId: "lease-1",
+      landlordId: "landlord-1",
+      generatedAt: "2026-05-05T12:00:00.000Z",
+      decisions: [decision],
+      canonicalEvents: [
+        {
+          id: "event-lease-1",
+          type: "lease_context_reviewed",
+          summary: "Lease context reviewed.",
+          leaseId: "lease-1",
+          resource: { id: "lease-1" },
+          occurredAt: "2026-05-05T12:03:00.000Z",
+        },
+      ],
+      leases: [{ id: "lease-1", propertyName: "North Towers", unitNumber: "101", tenantName: "John Smith" }],
+      properties: [{ id: "prop-1", name: "North Towers" }],
+      institutionExportPackage: exportPackage,
+      auditComplianceReadiness: readiness,
+    });
+    const second = deriveEvidencePack({
+      scope: "lease",
+      scopeId: "lease-1",
+      landlordId: "landlord-1",
+      generatedAt: "2026-05-05T12:00:00.000Z",
+      decisions: [decision],
+      canonicalEvents: [
+        {
+          id: "event-lease-1",
+          type: "lease_context_reviewed",
+          summary: "Lease context reviewed.",
+          leaseId: "lease-1",
+          resource: { id: "lease-1" },
+          occurredAt: "2026-05-05T12:03:00.000Z",
+        },
+      ],
+      leases: [{ id: "lease-1", propertyName: "North Towers", unitNumber: "101", tenantName: "John Smith" }],
+      properties: [{ id: "prop-1", name: "North Towers" }],
+      institutionExportPackage: exportPackage,
+      auditComplianceReadiness: readiness,
+    });
+
+    expect(first.sourceRefs).toEqual(second.sourceRefs);
+    expect(first.sourceRefs.map((ref) => `${ref.sourceCollection}:${ref.sourceId}:${ref.itemType}`)).toEqual(
+      [...first.sourceRefs.map((ref) => `${ref.sourceCollection}:${ref.sourceId}:${ref.itemType}`)].sort(),
+    );
+    expect(first.sections.find((section) => section.sectionKey === "lease_context")?.items[0]?.label).toBe(
+      "North Towers · Unit 101 · John Smith",
+    );
+    expect(first.sections.flatMap((section) => section.items.map((item) => item.label))).not.toContain(
+      "Lease lease-1",
+    );
+    expect(first.projectionProfile.allowedSourceCollections).toEqual(first.sourceCollections);
   });
 
   it("blocks readiness when redaction metadata is missing", () => {

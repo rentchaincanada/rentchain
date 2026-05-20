@@ -89,11 +89,48 @@ export type EvidencePackRedaction = {
   reason: string;
 };
 
+export type EvidencePackSensitivityClass = "sensitive" | "restricted";
+
+export type EvidenceProjectionAudience = "landlord_operational_review";
+
+export type EvidenceProjectionProfile = {
+  profileName: "landlord_evidence_review";
+  profileVersion: string;
+  audience: EvidenceProjectionAudience;
+  scopeType: EvidencePackScope;
+  allowedSourceCollections: string[];
+  sensitivityClass: EvidencePackSensitivityClass;
+  allowedFieldGroups: string[];
+  excludedFieldGroups: string[];
+  redactionPolicy: string;
+  internalReferencePolicy: string;
+  sourceLineagePolicy: string;
+};
+
+export type EvidenceSourceReference = {
+  sourceCollection: string;
+  sourceId: string;
+  itemType: EvidenceItem["itemType"];
+  itemLabel: string;
+};
+
+export type EvidencePackRedactionSummary = {
+  redactionPolicy: string;
+  redactedFieldGroups: string[];
+  redactionCount: number;
+};
+
 export type EvidencePack = {
   evidencePackId: string;
   scope: EvidencePackScope;
   scopeId: string;
   status: EvidencePackStatus;
+  projectionProfile: EvidenceProjectionProfile;
+  projectionVersion: string;
+  sensitivityClass: EvidencePackSensitivityClass;
+  sourceCollections: string[];
+  sourceRefs: EvidenceSourceReference[];
+  redactionSummary: EvidencePackRedactionSummary;
   manualReviewRequired: true;
   externalSharingEnabled: false;
   certificationIssued: false;
