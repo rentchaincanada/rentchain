@@ -89,9 +89,7 @@ function tokenPreview(token: string | null | undefined) {
   const t = String(token);
   if (!t) return { has: false, len: 0, preview: "" };
   const len = t.length;
-  const first = t.slice(0, 10);
-  const last = t.slice(-10);
-  return { has: true, len, preview: `${first}...${last}` };
+  return { has: true, len, preview: "[redacted]" };
 }
 
 interface AuthProviderProps {
