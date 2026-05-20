@@ -347,6 +347,79 @@ describe("deriveCommandCenterSignals", () => {
     expect(JSON.stringify(queueItems)).not.toContain("institutionalSharing");
   });
 
+  it("preserves review audit continuity from source signal into workspace preview and queue item metadata", () => {
+    const signals = deriveCommandCenterSignals({
+      decisions: [decision()],
+      leases: [lease()],
+      properties: [],
+    });
+    const sourceSignal = signals.find((signal) => signal.id === "decision:decision-1");
+
+    expect(sourceSignal).toEqual(
+      expect.objectContaining({
+        id: "decision:decision-1",
+        source: "Decision inbox · Delinquency Review",
+        destination: "/leases/lease-1/ledger",
+        contextLabel: "North Towers · 101 · John Smith",
+        reviewStatus: "Open",
+        assignmentLabel: "Operations owned",
+        financialStatus: "Review required",
+      })
+    );
+
+    const preview = reviewWorkspacePreviewForSignal(sourceSignal!);
+    expect(preview).toEqual(
+      expect.objectContaining({
+        workspaceReference: "manual-review-preview:payments:critical",
+        workspaceType: "payment_ledger_review",
+        reviewStatus: "Open",
+        reviewPriority: "Critical",
+        routingReason: "Delinquency or payment evidence review",
+        assignmentLabel: "Operations owned",
+        manualOnly: true,
+        autonomousActionsEnabled: false,
+      })
+    );
+    expect(preview.evidenceLinks).toEqual([
+      expect.objectContaining({
+        label: "Payments / obligations source workflow",
+        destination: "/leases/lease-1/ledger",
+        sensitivityClass: "sensitive",
+      }),
+    ]);
+    expect(preview.relatedResources).toEqual([
+      expect.objectContaining({
+        label: "North Towers · 101 · John Smith",
+        resourceType: "lease",
+      }),
+    ]);
+
+    const queueItem = deriveOperationalReviewQueueItems(signals).find(
+      (item) => item.queueItemId === "manual-review-queue:decision:decision-1"
+    );
+    expect(queueItem).toEqual(
+      expect.objectContaining({
+        title: "Review missing payment",
+        sourceLabel: "Decision inbox · Delinquency Review",
+        destination: "/leases/lease-1/ledger",
+        routingReason: "Delinquency or payment evidence review",
+        evidenceLabel: "Payments / obligations source workflow",
+        relatedResourceLabel: "North Towers · 101 · John Smith",
+        reviewStatus: "Open",
+        assignmentLabel: "Operations owned",
+        manualOnly: true,
+        autonomousActionsEnabled: false,
+      })
+    );
+    expect(JSON.stringify({ preview, queueItem })).not.toContain("autoCreate");
+    expect(JSON.stringify({ preview, queueItem })).not.toContain("autoAssign");
+    expect(JSON.stringify({ preview, queueItem })).not.toContain("autoResolve");
+    expect(JSON.stringify({ preview, queueItem })).not.toContain("tenantVisible");
+    expect(JSON.stringify({ preview, queueItem })).not.toContain("financialMutation");
+    expect(JSON.stringify({ preview, queueItem })).not.toContain("institutionalSharing");
+    expect(JSON.stringify({ preview, queueItem })).not.toContain("rawPayload");
+  });
+
   it("uses scoped lease summary links for lease review queue items when a landlord-scoped lease id is available", () => {
     const signals = deriveCommandCenterSignals({
       decisions: [],
