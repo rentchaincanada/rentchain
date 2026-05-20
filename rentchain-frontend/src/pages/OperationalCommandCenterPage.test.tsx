@@ -2,7 +2,11 @@ import React from "react";
 import { MemoryRouter } from "react-router-dom";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import OperationalCommandCenterPage, { deriveCommandCenterSignals, prioritizeOperationalItems } from "./OperationalCommandCenterPage";
+import OperationalCommandCenterPage, {
+  deriveCommandCenterSignals,
+  prioritizeOperationalItems,
+  reviewWorkspacePreviewForSignal,
+} from "./OperationalCommandCenterPage";
 
 const mocks = vi.hoisted(() => ({
   fetchDecisionInbox: vi.fn(),
@@ -272,6 +276,35 @@ describe("deriveCommandCenterSignals", () => {
     expect(signals).toEqual([]);
   });
 
+  it("derives manual-only review workspace preview metadata from operational signals", () => {
+    const signal = deriveCommandCenterSignals({
+      decisions: [decision()],
+      leases: [lease()],
+      properties: [],
+    }).find((item) => item.id === "decision:decision-1");
+
+    expect(signal).toBeTruthy();
+    const preview = reviewWorkspacePreviewForSignal(signal!);
+    expect(preview).toEqual(
+      expect.objectContaining({
+        workspaceType: "payment_ledger_review",
+        reviewStatus: "Open",
+        reviewPriority: "Critical",
+        routingReason: "Delinquency or payment evidence review",
+        visibilityClass: "landlord_operational",
+        manualOnly: true,
+        autonomousActionsEnabled: false,
+      })
+    );
+    expect(preview.evidenceLinks).toEqual([
+      expect.objectContaining({
+        label: "Payments / obligations source workflow",
+        destination: "/leases/lease-1/ledger",
+      }),
+    ]);
+    expect(preview.relatedResources).toEqual([expect.objectContaining({ label: "North Towers · 101 · John Smith" })]);
+  });
+
   it("normalizes raw decision context labels with operational lease and property references", () => {
     const signals = deriveCommandCenterSignals({
       decisions: [
@@ -400,6 +433,11 @@ describe("OperationalCommandCenterPage", () => {
     expect(screen.getAllByText("Assignment: Operations owned").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Escalation: Critical").length).toBeGreaterThan(0);
     expect(screen.getByText("Next action: Review payment evidence")).toBeInTheDocument();
+    expect(screen.getAllByText("Review workspace readiness").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/does not create a workspace, route work automatically, or change source records/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Payment Ledger Review").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Delinquency or payment evidence review").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: /create review workspace/i })).not.toBeInTheDocument();
     expect(screen.getByText("Saved operational views")).toBeInTheDocument();
     expect(screen.getByTestId("operations-filter-panel")).toHaveStyle({
       display: "grid",

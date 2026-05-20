@@ -10,6 +10,7 @@ import {
 import { getActiveLeasesForLandlord, type LandlordActiveLease } from "@/api/leasesApi";
 import { fetchProperties, type Property } from "@/api/propertiesApi";
 import { MacShell } from "@/components/layout/MacShell";
+import { ReviewWorkspacePanel, type ReviewWorkspaceUiModel } from "@/components/reviewWorkspaces/ReviewWorkspacePanel";
 import { Card, Section } from "@/components/ui/Ui";
 
 type CommandCenterCategory =
@@ -265,6 +266,51 @@ function priorityRank(group: CommandCenterPriorityGroup) {
 
 function severityRank(severity: CommandCenterSeverity) {
   return { critical: 0, warning: 1, info: 2 }[severity];
+}
+
+function workspaceTypeForSignal(signal: CommandCenterSignal) {
+  if (signal.category === "payments") return "payment_ledger_review";
+  if (signal.category === "screening") return "screening_review";
+  if (signal.category === "documents" || signal.category === "lease_lifecycle") return "document_review";
+  if (signal.category === "occupancy") return "operational_anomaly_review";
+  return "evidence_review";
+}
+
+function routingReasonForSignal(signal: CommandCenterSignal) {
+  if (signal.category === "payments" || signal.riskState === "delinquent") return "Delinquency or payment evidence review";
+  if (signal.category === "screening") return "Screening workflow review";
+  if (signal.category === "documents") return "Document review";
+  if (signal.category === "lease_lifecycle") return "Lease execution review";
+  if (signal.category === "occupancy") return "Occupancy review";
+  return "Operational review";
+}
+
+export function reviewWorkspacePreviewForSignal(signal: CommandCenterSignal): ReviewWorkspaceUiModel {
+  return {
+    workspaceReference: `manual-review-preview:${signal.category}:${signal.priorityGroup}`,
+    workspaceType: workspaceTypeForSignal(signal),
+    reviewStatus: signal.reviewStatus,
+    reviewPriority: label(signal.priorityGroup),
+    routingReason: routingReasonForSignal(signal),
+    assignmentLabel: signal.assignmentLabel || "Unassigned",
+    sensitivityClass: signal.category === "screening" || signal.category === "documents" ? "restricted" : "sensitive",
+    visibilityClass: "landlord_operational",
+    manualOnly: true,
+    autonomousActionsEnabled: false,
+    evidenceLinks: [
+      {
+        label: `${CATEGORY_CONFIG[signal.category].label} source workflow`,
+        destination: signal.destination,
+        sensitivityClass: signal.category === "screening" || signal.category === "documents" ? "restricted" : "sensitive",
+      },
+    ],
+    relatedResources: [
+      {
+        label: signal.contextLabel,
+        resourceType: signal.category === "occupancy" ? "property" : signal.category === "payments" ? "lease" : "workflow",
+      },
+    ],
+  };
 }
 
 function priorityFromDecision(item: DecisionInboxItem, category: CommandCenterCategory): CommandCenterPriorityGroup {
@@ -1317,6 +1363,7 @@ export default function OperationalCommandCenterPage() {
                             <span>Assignment: {signal.assignmentLabel || "Unassigned"}</span>
                             <span>Escalation: {signal.escalationLabel || "Not escalated"}</span>
                           </div>
+                          <ReviewWorkspacePanel workspace={reviewWorkspacePreviewForSignal(signal)} />
                         </Card>
                       ))}
                     </div>
