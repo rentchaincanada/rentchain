@@ -12,6 +12,10 @@ import {
   deriveInstitutionalTrustExportPackage,
   institutionalTrustExportMappingForPackageType,
 } from "../institutionTrustExports/deriveInstitutionalTrustExportPackage";
+import {
+  deriveInstitutionExportProfile,
+  deriveInstitutionExportSourceRefs,
+} from "./institutionExportProfile";
 
 const PACKAGE_AUDIENCE: Record<InstitutionExportPackageType, InstitutionExportAudience> = {
   lender_due_diligence: "lender",
@@ -171,6 +175,14 @@ function summarizeMaintenance(records: Array<Record<string, unknown>>) {
   };
 }
 
+function hasRestrictedRedactions(redactions: InstitutionExportRedaction[]): boolean {
+  return redactions.some((redaction) =>
+    /account|bank|card|credential|identity|message|payload|provider|raw|screening|token/i.test(
+      `${redaction.fieldCategory} ${redaction.reason}`,
+    ),
+  );
+}
+
 export function deriveInstitutionExportPackage(input: DeriveInstitutionExportPackageInput): InstitutionExportPackage {
   const packageType = input.packageType;
   const audience = PACKAGE_AUDIENCE[packageType];
@@ -269,12 +281,52 @@ export function deriveInstitutionExportPackage(input: DeriveInstitutionExportPac
     );
   }
 
+  const sourceRefs = deriveInstitutionExportSourceRefs({
+    properties,
+    leases,
+    units,
+    maintenanceRequests,
+    decisionItems,
+    auditEvents,
+    portableAttestations: portableAttestations as Array<Record<string, unknown>> | null,
+  });
+  const sourceCollections = Array.from(new Set(sourceRefs.map((item) => item.sourceCollection))).sort((a, b) =>
+    a.localeCompare(b),
+  );
+  const exportScope = "landlord_portfolio_preview";
+  const exportProfile = deriveInstitutionExportProfile({
+    packageType,
+    audience,
+    exportScope,
+    sourceCollections,
+    hasRestrictedRedactions: hasRestrictedRedactions(DEFAULT_REDACTIONS),
+  });
+
   return {
     packageId: cleanId(`institution_export:${packageType}:${landlordId || "missing_landlord"}`),
     packageType,
     audience,
     status: blockedReasons.length ? "blocked" : "preview_ready",
     generatedAt,
+    exportGeneratedAt: generatedAt,
+    exportProfile,
+    exportVersion: exportProfile.exportVersion,
+    exportScope,
+    sensitivityClass: exportProfile.sensitivityClass,
+    authorityBasis: exportProfile.authorityBasis,
+    sourceCollections,
+    sourceRefs,
+    projectionPolicy: exportProfile.projectionPolicy,
+    redactionSummary: {
+      redactionPolicy: exportProfile.redactionPolicy,
+      redactedFieldGroups: DEFAULT_REDACTIONS.map((item) => item.fieldCategory).sort((a, b) => a.localeCompare(b)),
+      redactionCount: DEFAULT_REDACTIONS.length,
+    },
+    lineageSummary: {
+      sourceReferenceCount: sourceRefs.length,
+      sourceCollections,
+      lineagePolicy: exportProfile.lineagePolicy,
+    },
     manualOnly: true,
     externalSubmissionEnabled: false,
     sections,

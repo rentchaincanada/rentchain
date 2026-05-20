@@ -91,8 +91,84 @@ describe("deriveInstitutionExportPackage", () => {
     expect(pkg.packageId).toBe("institution_export:lender_due_diligence:landlord-1");
     expect(pkg.audience).toBe("lender");
     expect(pkg.status).toBe("preview_ready");
+    expect(pkg.exportGeneratedAt).toBe("2026-05-05T12:00:00.000Z");
+    expect(pkg.exportVersion).toBe("institution_export_allowlist_v1");
+    expect(pkg.exportScope).toBe("landlord_portfolio_preview");
+    expect(pkg.sensitivityClass).toBe("restricted");
+    expect(pkg.authorityBasis).toBe("landlord_scoped_preview");
     expect(pkg.manualOnly).toBe(true);
     expect(pkg.externalSubmissionEnabled).toBe(false);
+    expect(pkg.exportProfile).toEqual(
+      expect.objectContaining({
+        exportProfile: "institutional_export_preview",
+        exportVersion: "institution_export_allowlist_v1",
+        audienceCategory: "lender",
+        exportScope: "landlord_portfolio_preview",
+        sensitivityClass: "restricted",
+        authorityBasis: "landlord_scoped_preview",
+        projectionPolicy: "Allowlisted aggregate preview only; do not include raw source records.",
+        retentionPolicy: "Preview metadata only; retention policy must be approved before external sharing.",
+        auditExpectation: "Manual review and audit event linkage required before institutional export release.",
+      }),
+    );
+    expect(pkg.exportProfile.allowedFieldGroups).toEqual(
+      expect.arrayContaining([
+        "aggregate_counts",
+        "status_summaries",
+        "occupancy_summaries",
+        "delinquency_summaries",
+        "redaction_categories",
+      ]),
+    );
+    expect(pkg.exportProfile.excludedFieldGroups).toEqual(
+      expect.arrayContaining([
+        "raw_provider_payloads",
+        "raw_screening_reports",
+        "raw_csv_values",
+        "payment_account_details",
+        "private_message_contents",
+        "debug_payloads",
+      ]),
+    );
+    expect(pkg.sourceCollections).toEqual(
+      expect.arrayContaining(["auditEvents", "decisionItems", "leases", "maintenanceRequests", "properties"]),
+    );
+    expect(pkg.sourceRefs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ sourceCollection: "properties", sourceId: "prop-1" }),
+        expect.objectContaining({ sourceCollection: "leases", sourceId: "lease-1" }),
+        expect.objectContaining({ sourceCollection: "maintenanceRequests", sourceId: "maint-1" }),
+        expect.objectContaining({ sourceCollection: "decisionItems", sourceId: "decision-1" }),
+        expect.objectContaining({ sourceCollection: "auditEvents", sourceId: "event-1" }),
+      ]),
+    );
+    expect(pkg.redactionSummary).toEqual(
+      expect.objectContaining({
+        redactionPolicy:
+          "Exclude raw/provider/payment credential/debug/private-message fields; include redaction categories only.",
+        redactionCount: 5,
+        redactedFieldGroups: [
+          "identity_documents",
+          "payment_account_details",
+          "private_message_contents",
+          "screening_payloads",
+          "tenant_contact_details",
+        ],
+      }),
+    );
+    expect(pkg.lineageSummary).toEqual(
+      expect.objectContaining({
+        sourceReferenceCount: 5,
+        sourceCollections: expect.arrayContaining([
+          "auditEvents",
+          "decisionItems",
+          "leases",
+          "maintenanceRequests",
+          "properties",
+        ]),
+        lineagePolicy: "Each represented source collection declares deterministic source IDs or count-only lineage.",
+      }),
+    );
     expect(pkg.sections).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ sectionKey: "property_summary", status: "included", recordsCount: 1 }),
@@ -106,6 +182,29 @@ describe("deriveInstitutionExportPackage", () => {
         delinquencySummary: expect.objectContaining({ decisionsCount: 1, criticalCount: 1 }),
       })
     );
+  });
+
+  it("derives deterministic allowlist metadata and lineage ordering", () => {
+    const input = {
+      packageType: "auditor_review" as const,
+      landlordId: "landlord-1",
+      generatedAt: "2026-05-05T12:00:00.000Z",
+      properties: [{ id: "prop-1", status: "active", unitsCount: 1 }],
+      leases: [{ id: "lease-1", status: "active", unitId: "unit-1" }],
+      units: [{ id: "unit-1", status: "occupied", leaseId: "lease-1" }],
+      decisionItems: [{ id: "decision-1", severity: "warning", workflow: { queue: "review" } }],
+      auditEvents: [{ id: "event-1" }],
+    };
+    const first = deriveInstitutionExportPackage(input);
+    const second = deriveInstitutionExportPackage(input);
+
+    expect(first.sourceRefs).toEqual(second.sourceRefs);
+    expect(first.sourceRefs.map((ref) => `${ref.sourceCollection}:${ref.sourceId}`)).toEqual(
+      [...first.sourceRefs.map((ref) => `${ref.sourceCollection}:${ref.sourceId}`)].sort(),
+    );
+    expect(first.exportProfile.allowedCollections).toEqual(first.sourceCollections);
+    expect(first.projectionPolicy).toBe("Allowlisted aggregate preview only; do not include raw source records.");
+    expect(first.payloadPreview).toEqual(second.payloadPreview);
   });
 
   it("blocks previews when landlord or property context is missing", () => {
@@ -180,6 +279,9 @@ describe("deriveInstitutionExportPackage", () => {
       ])
     );
     expectNoRestrictedProjectionFields(pkg.payloadPreview);
+    expectNoRestrictedProjectionFields(pkg.exportProfile);
+    expectNoRestrictedProjectionFields(pkg.redactionSummary);
+    expectNoRestrictedProjectionFields(pkg.lineageSummary);
     expectPayloadDoesNotContainValues(pkg.payloadPreview, [
       "123-45-6789",
       "creditReport",
@@ -192,6 +294,26 @@ describe("deriveInstitutionExportPackage", () => {
       "whsec_secret",
       "internal-router",
     ]);
+    expectPayloadDoesNotContainValues(
+      {
+        exportProfile: pkg.exportProfile,
+        sourceRefs: pkg.sourceRefs,
+        redactionSummary: pkg.redactionSummary,
+        lineageSummary: pkg.lineageSummary,
+      },
+      [
+        "123-45-6789",
+        "creditReport",
+        "000123",
+        "tenant-1",
+        "raw tenant export csv",
+        "raw provider payload",
+        "debug payload",
+        "private stack trace",
+        "whsec_secret",
+        "internal-router",
+      ],
+    );
   });
 
   it("optionally attaches policy-gated portable trust exports without changing route adoption", () => {
@@ -227,5 +349,14 @@ describe("deriveInstitutionExportPackage", () => {
     );
     expect(JSON.stringify(pkg.trustExport)).not.toContain("provider-reference");
     expect(JSON.stringify(pkg.trustExport)).not.toContain("internal-reference");
+    expect(pkg.sourceCollections).toEqual(expect.arrayContaining(["portableAttestations", "properties"]));
+    expect(pkg.sourceRefs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sourceCollection: "portableAttestations",
+          sourceId: "institution-package-attestation-1",
+        }),
+      ]),
+    );
   });
 });
