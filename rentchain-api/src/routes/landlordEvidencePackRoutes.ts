@@ -10,6 +10,7 @@ import { deriveInstitutionExportPackage } from "../lib/institutionExports/derive
 import type { InstitutionExportPackageType } from "../lib/institutionExports/institutionExportTypes";
 import { normalizeOperatorReviewSession } from "../lib/operatorReviews/buildOperatorReviewSession";
 import { OPERATOR_REVIEW_SESSIONS_COLLECTION } from "../lib/operatorReviews/operatorReviewTypes";
+import { getEffectiveLandlordId } from "../auth/requestAuthority";
 
 const router = Router();
 
@@ -90,7 +91,7 @@ async function loadOperatorReviewSessions(landlordId: string) {
 
 router.get("/evidence-packs/preview", requireAuth, requireLandlord, async (req: any, res) => {
   try {
-    const landlordId = asString(req.user?.landlordId || req.user?.id, 240);
+    const landlordId = asString(getEffectiveLandlordId(req), 240);
     const scope = requestedScope(req.query?.scope);
     const scopeId = asString(req.query?.scopeId, 500);
     if (!landlordId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });

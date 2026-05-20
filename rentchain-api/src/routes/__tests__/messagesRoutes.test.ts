@@ -298,6 +298,25 @@ describe("messagesRoutes notifications", () => {
     );
   });
 
+  it("preserves landlord message scope fallback from user id when landlordId is absent", async () => {
+    const router = await createRouter();
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/landlord/messages/conversations",
+      headers: { "x-test-user": JSON.stringify({ id: "landlord-1", role: "landlord" }) },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.conversations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "conv-1",
+          tenantDisplayName: "Taylor Tenant",
+        }),
+      ])
+    );
+  });
+
   it("enriches older conversations from tenant-linked property and unit context when available", async () => {
     ensureCollection("conversations").set("conv-2", {
       landlordId: "landlord-1",
