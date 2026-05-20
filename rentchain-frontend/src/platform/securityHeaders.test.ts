@@ -83,10 +83,11 @@ describe("frontend Vercel security headers", () => {
     expect(csp).toContain("base-uri 'self'");
     expect(csp).toContain("object-src 'none'");
     expect(csp).toContain("frame-ancestors 'none'");
-    expect(csp).toContain("script-src 'self'");
+    expect(csp).toContain("script-src 'self' https://vercel.live");
     expect(csp).toContain("style-src 'self' 'unsafe-inline'");
     expect(csp).toContain("connect-src 'self'");
     expect(csp).toContain("https://rentchain-landlord-api-915921057662.us-central1.run.app");
+    expect(csp).toContain("https://*.a.run.app");
     expect(csp).toContain("https://*.rentchain.ai");
     expect(csp).toContain("https://*.googleapis.com");
     expect(csp).toContain("https://*.firebaseio.com");

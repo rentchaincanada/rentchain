@@ -36,7 +36,7 @@ Key directives:
 - `base-uri 'self'`
 - `object-src 'none'`
 - `frame-ancestors 'none'`
-- `script-src 'self'`
+- `script-src 'self' https://vercel.live`
 - `style-src 'self' 'unsafe-inline'`
 - `connect-src 'self' ...`
 - `frame-src 'self' blob: data: https:`
@@ -50,6 +50,8 @@ The CSP allows the following external source families where currently needed or 
 
 - RentChain domains: `https://*.rentchain.ai`
 - Cloud Run API: `https://rentchain-landlord-api-915921057662.us-central1.run.app`
+- Cloud Run preview/alternate services: `https://*.a.run.app`
+- Vercel preview feedback: `https://vercel.live`
 - Firebase and Google APIs: `https://*.googleapis.com`, `https://*.firebaseio.com`, `https://*.firebaseapp.com`, `https://*.gstatic.com`, `wss://*.firebaseio.com`
 - Stripe: `https://*.stripe.com`
 - Images and frames: `https:` in addition to `self`, `blob:`, and `data:` for compatibility with existing document/PDF/provider preview behavior
@@ -58,6 +60,8 @@ The CSP allows the following external source families where currently needed or 
 
 - `style-src` includes `'unsafe-inline'` because the frontend uses React inline styles and component-level dynamic styling. Removing it should be a later staged mission after style usage is inventoried.
 - `frame-src` remains broad enough to avoid breaking document/PDF/provider preview behavior. Future tightening should be based on deployed CSP violation data and a full iframe/embed inventory.
+- `script-src` includes `https://vercel.live` so Vercel preview feedback can load without console-blocking errors during preview QA.
+- `connect-src` includes `https://*.a.run.app` because Cloud Run preview and alternate service URLs can differ from the explicit production Cloud Run host.
 - CSP reporting is not enabled because there is no governed CSP report ingestion endpoint yet.
 - This mission does not introduce runtime header middleware. Vercel remains the frontend header authority.
 - This mission does not harden backend Cloud Run responses.
@@ -81,8 +85,8 @@ After Vercel preview deployment:
 3. Load `/dashboard`
 4. Load `/operations`
 5. Verify normal `/api` calls still work through the preview
-6. Verify login/auth screens load
-7. Verify there are no CSP console errors blocking required app resources
+6. Verify login/auth screens load and login requests are not blocked by CSP
+7. Verify there are no CSP console errors blocking required app or Vercel preview feedback resources
 8. Verify Stripe/provider redirect entry points still render
 9. Verify document/PDF preview surfaces still render where available
 
