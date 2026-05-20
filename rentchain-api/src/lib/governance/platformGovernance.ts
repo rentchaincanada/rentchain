@@ -1,3 +1,5 @@
+import { isRestrictedLogKey } from "../logging/safeLogger";
+
 export type GovernanceSensitivity = "public" | "internal" | "confidential" | "restricted";
 export type GovernanceRetentionCategory =
   | "operational_short"
@@ -70,7 +72,7 @@ function normalizedKey(value: string): string {
 
 function isSensitiveKey(key: string): boolean {
   const normalized = normalizedKey(key);
-  return SENSITIVE_KEY_FRAGMENTS.some((fragment) => normalized.includes(normalizedKey(fragment)));
+  return isRestrictedLogKey(key) || SENSITIVE_KEY_FRAGMENTS.some((fragment) => normalized.includes(normalizedKey(fragment)));
 }
 
 export function actorFromRequest(req: any): GovernanceActor {

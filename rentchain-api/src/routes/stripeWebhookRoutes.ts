@@ -23,6 +23,7 @@ import { setLastProviderError } from "../services/screeningRequestService";
 import { addRecord } from "../services/billingService";
 import { BillingRecord } from "../types/billing";
 import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
+import { safeErrorLog, safeOperationalLog } from "../lib/logging/safeLogger";
 
 interface StripeWebhookRequest extends Request {
   rawBody?: Buffer;
@@ -89,7 +90,7 @@ router.post(
         STRIPE_WEBHOOK_SECRET
       );
     } catch (err: any) {
-      console.error("[stripe-webhook] Signature verification failed", {
+      safeOperationalLog("error", "[stripe-webhook] Signature verification failed", {
         message: err && (err as any).message ? (err as any).message : String(err),
       });
       res.status(400).send("Signature verification failed");
@@ -119,7 +120,7 @@ router.post(
             (value) => typeof value === "string"
           ) &&
           metaKeys.every((key) => key.toLowerCase().includes("id"));
-        console.log("[webhook] checkout.session.completed", {
+        safeOperationalLog("info", "[webhook] checkout.session.completed", {
           eventType: event.type,
           sessionId: session.id,
           paymentStatus: session.payment_status,
@@ -129,9 +130,7 @@ router.post(
 
       if (!screeningRequestId) {
         if (isDev) {
-          console.warn(
-            "[webhook] checkout.session.completed missing screeningRequestId metadata"
-          );
+          safeOperationalLog("warn", "[webhook] checkout.session.completed missing screeningRequestId metadata");
         }
         res.sendStatus(200);
         return;
@@ -140,10 +139,9 @@ router.post(
       const screeningRequest = getScreeningRequestById(screeningRequestId);
       if (!screeningRequest) {
         if (isDev) {
-          console.warn(
-            "[webhook] checkout.session.completed could not find screeningRequest",
-            { screeningRequestId }
-          );
+          safeOperationalLog("warn", "[webhook] checkout.session.completed could not find screeningRequest", {
+            screeningRequestId,
+          });
         }
         res.sendStatus(200);
         return;
@@ -202,7 +200,7 @@ router.post(
             }
           } catch (err) {
             if (isDev) {
-              console.warn("[stripe-webhook] Unable to fetch receipt", {
+              safeOperationalLog("warn", "[stripe-webhook] Unable to fetch receipt", {
                 message:
                   err && (err as any).message ? (err as any).message : String(err),
               });
@@ -276,7 +274,7 @@ router.post(
             }),
           }).catch((err) => {
             if (isDev) {
-              console.warn("[stripe-webhook] Failed to send email", {
+              safeOperationalLog("warn", "[stripe-webhook] Failed to send email", {
                 message:
                   err && (err as any).message ? (err as any).message : String(err),
               });
@@ -324,16 +322,13 @@ router.post(
         );
         setLastProviderError(new Date().toISOString());
         if (isDev) {
-          console.error("[stripe-webhook] provider error", {
-            message:
-              err && (err as any).message ? (err as any).message : String(err),
-          });
+          safeErrorLog("[stripe-webhook] provider error", err, { screeningRequestId, applicationId });
         }
         return res.sendStatus(200);
       }
 
       if (isDev) {
-        console.log("[stripe] screening completed", {
+        safeOperationalLog("info", "[stripe] screening completed", {
           screeningRequestId,
           applicationId,
           paymentStatus: session.payment_status,

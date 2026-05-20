@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { db } from "../config/firebase";
 import { actorFromRequest, governanceMetadata, sanitizeTelemetryProps } from "../lib/governance/platformGovernance";
+import { safeErrorLog } from "../lib/logging/safeLogger";
 import { requireAuth } from "../middleware/requireAuth";
 
 const router = Router();
@@ -37,7 +38,7 @@ router.post("/telemetry", requireAuth, async (req: any, res) => {
     });
     return res.status(200).json({ ok: true });
   } catch (err: any) {
-    console.error("[telemetryRoutes] write failed", err?.message || err);
+    safeErrorLog("[telemetryRoutes] write failed", err, { eventName, userId, landlordId, role });
     return res.status(500).json({ ok: false, error: "telemetry_write_failed" });
   }
 });

@@ -8,6 +8,7 @@ import { getStripeClient, isStripeConfigured } from "../services/stripeService";
 import { resolveFrontendBase } from "../services/screening/inviteTokens";
 import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
 import { sendEmail } from "../services/emailService";
+import { safeErrorLog } from "../lib/logging/safeLogger";
 
 interface WebhookRequest extends Request {
   rawBody?: Buffer;
@@ -159,7 +160,11 @@ export const transunionWebhookHandler = async (req: WebhookRequest, res: Respons
           }
         }
       } catch (err: any) {
-        console.error("[transunion-webhook] identity fallback failed", err?.message || err);
+        safeErrorLog("[transunion-webhook] identity fallback failed", err, {
+          orderId: orderDoc.id,
+          requestId,
+          eventType,
+        });
       }
     }
 

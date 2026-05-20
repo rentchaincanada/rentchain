@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { db } from "../../config/firebase";
+import { safeOperationalLog } from "../../lib/logging/safeLogger";
 import {
   SYSTEM_OBSERVABILITY_EVENTS_COLLECTION,
   type SystemObservabilityEventInput,
@@ -128,7 +129,7 @@ export async function recordSystemObservabilityEvent(
     return { ok: true, duplicate: Boolean(existing), record };
   } catch (err) {
     if (!failSoft) throw err;
-    console.warn("[systemObservability] record failed softly", {
+    safeOperationalLog("warn", "[systemObservability] record failed softly", {
       eventType: input?.eventType || null,
       workflow: input?.workflow || null,
       message: (err as any)?.message || err,
