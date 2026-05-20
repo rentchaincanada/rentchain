@@ -40,6 +40,18 @@ describe("safeLogger", () => {
       stack: "private stack trace",
       routeSource: "debug router",
       debugPayload: { internalDebug: "debug details" },
+      authorization: "Bearer eyJauthorization.jwt",
+      Authorization: "Bearer eyJuppercase.jwt",
+      bearer: "eyJbearer.jwt",
+      idToken: "id-token-secret",
+      refreshToken: "refresh-token-secret",
+      accessToken: "access-token-secret",
+      firebaseToken: "firebase-token-secret",
+      sessionToken: "session-token-secret",
+      customToken: "custom-token-secret",
+      internalJobToken: "internal-job-token-secret",
+      cookie: "session=secret",
+      "set-cookie": "session=secret; HttpOnly",
     });
 
     expect(sanitized).toEqual({
@@ -66,6 +78,17 @@ describe("safeLogger", () => {
       "private stack trace",
       "debug router",
       "debug details",
+      "eyJauthorization.jwt",
+      "eyJuppercase.jwt",
+      "eyJbearer.jwt",
+      "id-token-secret",
+      "refresh-token-secret",
+      "access-token-secret",
+      "firebase-token-secret",
+      "session-token-secret",
+      "custom-token-secret",
+      "internal-job-token-secret",
+      "session=secret",
     ]);
   });
 
@@ -120,6 +143,11 @@ describe("safeLogger", () => {
     expect(isRestrictedLogKey("providerPayload")).toBe(true);
     expect(isRestrictedLogKey("rawCsv")).toBe(true);
     expect(isRestrictedLogKey("routeSource")).toBe(true);
+    expect(isRestrictedLogKey("Authorization")).toBe(true);
+    expect(isRestrictedLogKey("idToken")).toBe(true);
+    expect(isRestrictedLogKey("refreshToken")).toBe(true);
+    expect(isRestrictedLogKey("sessionToken")).toBe(true);
+    expect(isRestrictedLogKey("set-cookie")).toBe(true);
     expect(isRestrictedLogKey("requestId")).toBe(false);
   });
 

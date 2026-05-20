@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 const jwtMocks = vi.hoisted(() => ({
   verify: vi.fn(),
@@ -31,6 +31,10 @@ function createRes() {
 }
 
 describe("authenticateJwt optional auth for events track", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("allows /api/events/track through without auth", async () => {
     const { authenticateJwt } = await import("../authMiddleware");
     const req: any = {
@@ -71,8 +75,9 @@ describe("authenticateJwt optional auth for events track", () => {
   });
 
   it("still rejects invalid bearer auth on unrelated routes", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
     jwtMocks.verify.mockImplementationOnce(() => {
-      throw new Error("bad token");
+      throw new Error("bad token Authorization: Bearer leaked.jwt.value");
     });
     const { authenticateJwt } = await import("../authMiddleware");
     const req: any = {
@@ -97,5 +102,14 @@ describe("authenticateJwt optional auth for events track", () => {
         code: "UNAUTHORIZED",
       })
     );
+    expect(errorSpy).toHaveBeenCalledWith("[authenticateJwt] verification failed", {
+      route: "/api/account/limits",
+      method: "GET",
+      authHeaderPresent: true,
+      error: {
+        name: "Error",
+        message: "bad token Authorization: [REDACTED]",
+      },
+    });
   });
 });

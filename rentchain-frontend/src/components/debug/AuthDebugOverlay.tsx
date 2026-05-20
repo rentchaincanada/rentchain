@@ -20,8 +20,7 @@ function previewToken(tok: string | null) {
   const t = String(tok);
   const len = t.length;
   const whitespace = /\s/.test(t);
-  const preview =
-    len >= 25 ? `${t.slice(0, 10)}…${t.slice(-10)}` : `${t.slice(0, 10)}…`;
+  const preview = "[redacted]";
   return { present: true, len, preview, whitespace };
 }
 

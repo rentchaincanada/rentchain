@@ -35,6 +35,17 @@ const RESTRICTED_KEY_PATTERNS = [
   /^stack$/i,
   /route.*source/i,
   /debug.*payload/i,
+  /^authorization$/i,
+  /^bearer$/i,
+  /id.*token/i,
+  /refresh.*token/i,
+  /access.*token/i,
+  /firebase.*token/i,
+  /session.*token/i,
+  /custom.*token/i,
+  /internal.*job.*token/i,
+  /^cookie$/i,
+  /set.*cookie/i,
 ];
 
 const INLINE_SECRET_PATTERNS = [

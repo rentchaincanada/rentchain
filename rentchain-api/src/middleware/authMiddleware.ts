@@ -3,6 +3,7 @@ import type { RequestHandler } from "express";
 import jwt from "jsonwebtoken";
 import { JWT_SECRET } from "../config/authConfig";
 import { jsonError } from "../lib/httpResponse";
+import { safeErrorLog } from "../lib/logging/safeLogger";
 
 export interface AuthenticatedUser {
   id: string;
@@ -114,7 +115,11 @@ export const authenticateJwt: RequestHandler = (req, res, next): void => {
     if (isOptionalAuthPath(req)) {
       return next();
     }
-    console.error("[authenticateJwt] verification failed", err);
+    safeErrorLog("[authenticateJwt] verification failed", err, {
+      route: req.originalUrl || req.path,
+      method: req.method,
+      authHeaderPresent: true,
+    });
     jsonError(res, 401, "UNAUTHORIZED", "UNAUTHORIZED", undefined, (req as any).requestId);
   }
 };
