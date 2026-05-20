@@ -117,14 +117,17 @@ describe("review workspace scope and permission regression", () => {
     });
 
     expect(workspace.evidenceRefs).toEqual([
-      {
+      expect.objectContaining({
+        evidenceRefId: "review_evidence_ref:evidence-pack-1:item-1:ledgerentries:ledger-entry-1",
         evidencePackId: "evidence-pack-1",
         evidenceItemId: "item-1",
+        evidenceType: "evidence_pack",
         label: "Scoped evidence pack",
         sourceCollection: "ledgerEntries",
         sourceId: "ledger-entry-1",
+        sourceRef: { sourceCollection: "ledgerEntries", sourceId: "ledger-entry-1" },
         sensitivityClass: "restricted",
-      },
+      }),
     ]);
     expectNoRestrictedProjectionFields(workspace);
     expectPayloadDoesNotContainValues(workspace, [
@@ -137,6 +140,87 @@ describe("review workspace scope and permission regression", () => {
       "private message body",
     ]);
     expectManualOnlyReviewMetadata(workspace);
+  });
+
+  it("normalizes deterministic evidence-link governance metadata and excludes unrelated evidence refs", () => {
+    const workspace = buildReviewWorkspace({
+      workspaceType: "evidence_review",
+      workspaceScopeId: "evidence-pack-1",
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      createdBy,
+      evidenceRefs: [
+        {
+          evidencePackId: "evidence-pack-1",
+          evidenceItemId: "decision-1",
+          evidenceType: "evidence_item",
+          label: "Missing payment review evidence",
+          sourceCollection: "decisionItems",
+          sourceId: "decision-1",
+          scopeType: "decision",
+          scopeId: "decision-1",
+          landlordId: "landlord-1",
+          tenantId: "tenant-1",
+          sensitivityClass: "restricted",
+          projectionProfile: "landlord_evidence_review",
+          projectionVersion: "evidence_projection_profile_v1",
+          redactionSummary: "Restricted fields excluded; redaction categories retained.",
+          lineageSummary: "Derived from decisionItems:decision-1.",
+        },
+        {
+          evidencePackId: "evidence-pack-2",
+          evidenceItemId: "decision-2",
+          evidenceType: "evidence_item",
+          label: "Wrong landlord evidence",
+          sourceCollection: "decisionItems",
+          sourceId: "decision-2",
+          scopeType: "decision",
+          scopeId: "decision-2",
+          landlordId: "landlord-2",
+          tenantId: "tenant-1",
+          sensitivityClass: "restricted",
+        },
+        {
+          evidencePackId: "evidence-pack-3",
+          evidenceItemId: "decision-3",
+          evidenceType: "evidence_item",
+          label: "Wrong tenant evidence",
+          sourceCollection: "decisionItems",
+          sourceId: "decision-3",
+          scopeType: "decision",
+          scopeId: "decision-3",
+          landlordId: "landlord-1",
+          tenantId: "tenant-3",
+          sensitivityClass: "restricted",
+        },
+      ],
+    });
+
+    expect(workspace.evidenceRefs).toEqual([
+      {
+        evidenceRefId: "review_evidence_ref:evidence-pack-1:decision-1:decisionitems:decision-1",
+        evidencePackId: "evidence-pack-1",
+        evidenceItemId: "decision-1",
+        evidenceType: "evidence_item",
+        label: "Missing payment review evidence",
+        sourceCollection: "decisionItems",
+        sourceId: "decision-1",
+        sourceRef: { sourceCollection: "decisionItems", sourceId: "decision-1" },
+        scopeType: "decision",
+        scopeId: "decision-1",
+        landlordId: "landlord-1",
+        tenantId: "tenant-1",
+        sensitivityClass: "restricted",
+        projectionProfile: "landlord_evidence_review",
+        projectionVersion: "evidence_projection_profile_v1",
+        redactionSummary: "Restricted fields excluded; redaction categories retained.",
+        lineageSummary: "Derived from decisionItems:decision-1.",
+      },
+    ]);
+    expect(JSON.stringify(workspace)).not.toContain("evidence-pack-2");
+    expect(JSON.stringify(workspace)).not.toContain("evidence-pack-3");
+    expect(JSON.stringify(workspace)).not.toContain("landlord-2");
+    expect(JSON.stringify(workspace)).not.toContain("tenant-3");
   });
 
   it("keeps operational routing handoff manual-only and filters unrelated resources before workspace input", () => {

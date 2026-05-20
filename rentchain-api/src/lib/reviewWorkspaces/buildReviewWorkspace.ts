@@ -30,6 +30,7 @@ const VALID_STATUSES = new Set<ReviewWorkspaceStatus>(["open", "under_review", "
 const VALID_PRIORITIES = new Set<ReviewWorkspacePriority>(["critical", "warning", "needs_review", "upcoming", "info"]);
 const VALID_SENSITIVITY = new Set<ReviewWorkspaceSensitivityClass>(["sensitive", "restricted"]);
 const VALID_VISIBILITY = new Set<ReviewWorkspaceVisibilityClass>(["landlord_operational", "admin_support"]);
+const VALID_EVIDENCE_TYPES = new Set(["evidence_pack", "evidence_item", "source_reference"]);
 const VALID_RESOURCE_TYPES = new Set<ReviewWorkspaceResourceType>([
   "lease",
   "tenant",
@@ -70,6 +71,24 @@ function safeText(value: unknown, max = 1000): string {
   return asString(value, max).replace(/[<>]/g, "").replace(/\s+/g, " ").trim();
 }
 
+function evidenceRefId(input: {
+  evidencePackId: string;
+  evidenceItemId?: string | null;
+  sourceCollection?: string | null;
+  sourceId?: string | null;
+}): string {
+  const clean = cleanIdPart(
+    [
+      "review_evidence_ref",
+      input.evidencePackId,
+      input.evidenceItemId || "pack",
+      input.sourceCollection || "source",
+      input.sourceId || "unknown",
+    ].join(":")
+  );
+  return clean || `review_evidence_ref:${crypto.createHash("sha256").update(JSON.stringify(input)).digest("hex")}`;
+}
+
 function uniqueSorted(values: string[]): string[] {
   return Array.from(new Set(values.filter(Boolean))).sort((a, b) => a.localeCompare(b));
 }
@@ -102,7 +121,10 @@ export function normalizeReviewWorkspaceReviewer(raw: unknown): ReviewWorkspaceR
   };
 }
 
-export function normalizeReviewWorkspaceEvidenceRefs(raw: unknown): ReviewWorkspaceEvidenceRef[] {
+export function normalizeReviewWorkspaceEvidenceRefs(
+  raw: unknown,
+  scope: { landlordId: string; tenantId?: string | null }
+): ReviewWorkspaceEvidenceRef[] {
   if (!Array.isArray(raw)) return [];
   const refs = raw
     .map((item) => {
@@ -110,14 +132,39 @@ export function normalizeReviewWorkspaceEvidenceRefs(raw: unknown): ReviewWorksp
       const evidencePackId = asString(data.evidencePackId || data.evidenceId || data.id, 240);
       const label = safeText(data.label, 160);
       const sensitivityClass = asString(data.sensitivityClass, 40) as ReviewWorkspaceSensitivityClass;
+      const evidenceType = asString(data.evidenceType || data.type, 80);
+      const sourceCollection = asString(data.sourceCollection, 120) || null;
+      const sourceId = asString(data.sourceId, 240) || null;
+      const landlordId = asString(data.landlordId, 240) || null;
+      const tenantId = asString(data.tenantId, 240) || null;
       if (!evidencePackId || !label) return null;
+      if (landlordId && landlordId !== scope.landlordId) return null;
+      if (scope.tenantId && tenantId && tenantId !== scope.tenantId) return null;
       return {
+        evidenceRefId:
+          asString(data.evidenceRefId, 240) ||
+          evidenceRefId({
+            evidencePackId,
+            evidenceItemId: asString(data.evidenceItemId, 240) || null,
+            sourceCollection,
+            sourceId,
+          }),
         evidencePackId,
         evidenceItemId: asString(data.evidenceItemId, 240) || null,
+        evidenceType: VALID_EVIDENCE_TYPES.has(evidenceType) ? (evidenceType as ReviewWorkspaceEvidenceRef["evidenceType"]) : "evidence_pack",
         label,
-        sourceCollection: asString(data.sourceCollection, 120) || null,
-        sourceId: asString(data.sourceId, 240) || null,
+        sourceCollection,
+        sourceId,
+        sourceRef: sourceCollection && sourceId ? { sourceCollection, sourceId } : null,
+        scopeType: asString(data.scopeType || data.scope, 120) || null,
+        scopeId: asString(data.scopeId, 240) || null,
+        landlordId,
+        tenantId,
         sensitivityClass: VALID_SENSITIVITY.has(sensitivityClass) ? sensitivityClass : "sensitive",
+        projectionProfile: asString(data.projectionProfile || data.profileName, 120) || null,
+        projectionVersion: asString(data.projectionVersion || data.profileVersion, 120) || null,
+        redactionSummary: safeText(data.redactionSummary, 500) || null,
+        lineageSummary: safeText(data.lineageSummary, 500) || null,
       };
     })
     .filter(Boolean) as ReviewWorkspaceEvidenceRef[];
@@ -212,7 +259,10 @@ export function buildReviewWorkspace(input: BuildReviewWorkspaceInput): ReviewWo
   const reviewPriority = asString(input.reviewPriority, 40) as ReviewWorkspacePriority;
   const sensitivityClass = asString(input.sensitivityClass, 40) as ReviewWorkspaceSensitivityClass;
   const visibilityClass = asString(input.visibilityClass, 40) as ReviewWorkspaceVisibilityClass;
-  const evidenceRefs = normalizeReviewWorkspaceEvidenceRefs(input.evidenceRefs);
+  const evidenceRefs = normalizeReviewWorkspaceEvidenceRefs(input.evidenceRefs, {
+    landlordId,
+    tenantId: input.tenantId,
+  });
   const relatedResourceRefs = normalizeReviewWorkspaceResourceRefs(input.relatedResourceRefs, {
     landlordId,
     tenantId: input.tenantId,
