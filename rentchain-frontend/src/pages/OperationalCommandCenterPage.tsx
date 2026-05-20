@@ -10,6 +10,10 @@ import {
 import { getActiveLeasesForLandlord, type LandlordActiveLease } from "@/api/leasesApi";
 import { fetchProperties, type Property } from "@/api/propertiesApi";
 import { MacShell } from "@/components/layout/MacShell";
+import {
+  OperationalReviewQueue,
+  type OperationalReviewQueueItem,
+} from "@/components/reviewWorkspaces/OperationalReviewQueue";
 import { ReviewWorkspacePanel, type ReviewWorkspaceUiModel } from "@/components/reviewWorkspaces/ReviewWorkspacePanel";
 import { Card, Section } from "@/components/ui/Ui";
 
@@ -311,6 +315,34 @@ export function reviewWorkspacePreviewForSignal(signal: CommandCenterSignal): Re
       },
     ],
   };
+}
+
+export function deriveOperationalReviewQueueItems(signals: CommandCenterSignal[]): OperationalReviewQueueItem[] {
+  return prioritizeOperationalItems(signals).map((signal) => {
+    const preview = reviewWorkspacePreviewForSignal(signal);
+    const evidenceLink = preview.evidenceLinks[0];
+    const relatedResource = preview.relatedResources[0];
+    return {
+      queueItemId: `manual-review-queue:${signal.id}`,
+      title: signal.title,
+      contextLabel: signal.contextLabel,
+      sourceLabel: signal.source,
+      destination: signal.destination,
+      workspaceType: preview.workspaceType,
+      reviewStatus: preview.reviewStatus,
+      reviewPriority: preview.reviewPriority,
+      routingReason: preview.routingReason,
+      assignmentLabel: preview.assignmentLabel,
+      workflowStatus: signal.workflowStatus,
+      financialStatus: signal.financialStatus || null,
+      sensitivityClass: preview.sensitivityClass,
+      visibilityClass: preview.visibilityClass,
+      evidenceLabel: evidenceLink?.label || "Source workflow evidence",
+      relatedResourceLabel: relatedResource?.label || "Scoped operational context",
+      manualOnly: true,
+      autonomousActionsEnabled: false,
+    };
+  });
 }
 
 function priorityFromDecision(item: DecisionInboxItem, category: CommandCenterCategory): CommandCenterPriorityGroup {
@@ -931,6 +963,7 @@ export default function OperationalCommandCenterPage() {
     () => filterOperationalItems(signals, { search, filter: activeFilter, workflowType, reviewStatus, assignment, escalation, timingRisk }),
     [activeFilter, assignment, escalation, reviewStatus, search, signals, timingRisk, workflowType]
   );
+  const reviewQueueItems = React.useMemo(() => deriveOperationalReviewQueueItems(visibleSignals), [visibleSignals]);
   const categorySummary = React.useMemo(() => summarizeByCategory(visibleSignals), [visibleSignals]);
   const prioritySummary = React.useMemo(() => summarizeByPriority(visibleSignals), [visibleSignals]);
   const criticalCount = signals.filter((signal) => signal.severity === "critical").length;
@@ -1281,6 +1314,7 @@ export default function OperationalCommandCenterPage() {
               <span>Adjust the view or reset filters to return to the full operational queue.</span>
             </Card>
           ) : null}
+          {!loading && !error && visibleSignals.length ? <OperationalReviewQueue items={reviewQueueItems} /> : null}
           {!loading && !error && visibleSignals.length ? (
             <div style={{ display: "grid", gap: 16 }}>
               {prioritySummary.map((group) => (
