@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { deriveEvidencePack } from "../deriveEvidencePack";
+import {
+  expectNoRestrictedProjectionFields,
+  expectPayloadDoesNotContainValues,
+} from "../../../__tests__/helpers/projectionSafetyAssertions";
 
 const decision: any = {
   id: "decision-1",
@@ -167,5 +171,76 @@ describe("deriveEvidencePack", () => {
     expect(pack.sections.flatMap((section) => section.items.map((item) => item.label))).not.toContain(
       "Decision reduce_vacancy_risk:ZaeL9oqpJCSZPguWa6wR"
     );
+  });
+
+  it("keeps raw provider, banking, debug, and private document fields out of evidence projections", () => {
+    const pack = deriveEvidencePack({
+      scope: "decision",
+      scopeId: "decision-sensitive",
+      landlordId: "landlord-1",
+      decisions: [
+        {
+          ...decision,
+          id: "decision-sensitive",
+          title: "Missing payment review",
+          description: "Payment evidence needs operational review.",
+          rawPayload: { accountNumber: "111122223333" },
+          providerPayload: { rawReport: "raw bureau report" },
+          internalDebug: "routeSource=debug-router",
+        },
+      ],
+      institutionExportPackage: exportPackage,
+      auditComplianceReadiness: readiness,
+      canonicalEvents: [
+        {
+          id: "event-sensitive",
+          type: "payment_review_created",
+          summary: "Payment review was created.",
+          resource: { id: "decision-sensitive" },
+          occurredAt: "2026-05-05T12:03:00.000Z",
+          rawCsv: "account 111122223333",
+          stack: "private stack trace",
+        },
+      ],
+      leases: [
+        {
+          id: "lease-sensitive",
+          leaseId: "lease-sensitive",
+          propertyName: "North Towers",
+          unitNumber: "104",
+          tenantName: "Taylor Tenant",
+          sin: "999-888-777",
+          bankAccountNumber: "111122223333",
+          privateDocument: "raw signed lease body",
+        },
+      ],
+      properties: [
+        {
+          id: "prop-sensitive",
+          name: "North Towers",
+          routeSource: "internal-router",
+        },
+      ],
+      maintenanceRequests: [
+        {
+          id: "maintenance-sensitive",
+          title: "Maintenance review",
+          rawReport: "private maintenance report",
+        },
+      ],
+    });
+
+    expectNoRestrictedProjectionFields(pack);
+    expectPayloadDoesNotContainValues(pack, [
+      "111122223333",
+      "raw bureau report",
+      "routeSource=debug-router",
+      "account 111122223333",
+      "private stack trace",
+      "999-888-777",
+      "raw signed lease body",
+      "internal-router",
+      "private maintenance report",
+    ]);
   });
 });

@@ -1,4 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  expectNoRestrictedProjectionFields,
+  expectPayloadDoesNotContainValues,
+} from "../../__tests__/helpers/projectionSafetyAssertions";
 
 const { sendEmailMock } = vi.hoisted(() => ({
   sendEmailMock: vi.fn(),
@@ -152,6 +156,15 @@ describe("messagesRoutes notifications", () => {
       landlordId: "landlord-1",
       tenantId: "tenant-1",
       unitId: "unit-1",
+      rawPayload: { providerPayload: "raw conversation payload" },
+      internalDebug: "debug conversation route",
+      routeSource: "messagesRoutes.ts",
+    });
+    ensureCollection("messages").set("message-1", {
+      conversationId: "conv-1",
+      senderRole: "tenant",
+      body: "private tenant message body",
+      rawReport: "raw message report",
     });
     ensureCollection("tenants").set("tenant-1", {
       email: "tenant@example.com",
@@ -296,6 +309,14 @@ describe("messagesRoutes notifications", () => {
         unitDisplayLabel: "Unit 2A",
       })
     );
+    expectNoRestrictedProjectionFields(res.body);
+    expectPayloadDoesNotContainValues(res.body, [
+      "private tenant message body",
+      "raw message report",
+      "raw conversation payload",
+      "debug conversation route",
+      "messagesRoutes.ts",
+    ]);
   });
 
   it("preserves landlord message scope fallback from user id when landlordId is absent", async () => {

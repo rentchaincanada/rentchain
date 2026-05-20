@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { previewPaymentCsvImport } from "../ledgerPaymentImportPreviewService";
+import {
+  expectNoRestrictedProjectionFields,
+  expectPayloadDoesNotContainValues,
+} from "../../__tests__/helpers/projectionSafetyAssertions";
 
 const tenants = [
   { id: "tenant-1", fullName: "Bailey Blinkers", email: "bailey@example.com", landlordId: "landlord-1" },
@@ -178,13 +182,18 @@ describe("ledgerPaymentImportPreviewService", () => {
       ],
     });
 
-    const serialized = JSON.stringify(result);
-    expect(serialized).not.toContain("123456789");
-    expect(serialized).not.toContain("00123");
-    expect(serialized).not.toContain("99999.99");
-    expect(serialized).not.toContain("account 123456789 transfer");
-    expect(serialized).not.toContain("Bank Account Number");
-    expect(serialized).not.toContain("Transit Number");
+    expectNoRestrictedProjectionFields(result);
+    expectPayloadDoesNotContainValues(result, [
+      "123456789",
+      "00123",
+      "99999.99",
+      "account 123456789 transfer",
+      "Bank Account Number",
+      "Transit Number",
+      "Institution Number",
+      "Running Balance",
+      "Memo",
+    ]);
   });
 
   it("reports generic ignored columns without returning ignored values", () => {

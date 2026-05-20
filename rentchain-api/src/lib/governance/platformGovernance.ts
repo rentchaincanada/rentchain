@@ -38,9 +38,11 @@ const SENSITIVE_KEY_FRAGMENTS = [
   "provider",
   "reporttext",
   "routing",
+  "routesource",
   "screeningpayload",
   "secret",
   "sin",
+  "stack",
   "ssn",
   "token",
 ];

@@ -1,4 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  expectNoRestrictedProjectionFields,
+  expectPayloadDoesNotContainValues,
+} from "../../../__tests__/helpers/projectionSafetyAssertions";
 
 const collections = new Map<string, Map<string, any>>();
 let generatedId = 0;
@@ -85,10 +89,19 @@ describe("tenantTrustExportService", () => {
     });
     loadTenantIdentityRecord.mockResolvedValue({
       identityStatus: "verified",
-      profile: { completionStatus: "complete" },
+      profile: {
+        completionStatus: "complete",
+        sin: "999-888-777",
+        bankAccountNumber: "111122223333",
+        rawPayload: "raw identity payload",
+      },
       application: { reusable: true, lastSubmittedAt: "2026-04-20T00:00:00.000Z" },
       documents: { completionStatus: "complete", missingCategories: [] },
-      screening: { status: "completed", lastCompletedAt: "2026-04-21T00:00:00.000Z" },
+      screening: {
+        status: "completed",
+        lastCompletedAt: "2026-04-21T00:00:00.000Z",
+        providerPayload: { rawReport: "raw screening report" },
+      },
       leases: { activeCount: 1, historicalCount: 1, lastSignedAt: "2026-04-22T00:00:00.000Z" },
       verification: { level: "strong" },
       readinessLabel: "Well established",
@@ -111,6 +124,14 @@ describe("tenantTrustExportService", () => {
     expect(preview?.excludedClaims.length).toBeGreaterThan(0);
     expect(JSON.stringify(preview)).not.toContain("documentUrl");
     expect(JSON.stringify(preview)).not.toContain("paymentMethod");
+    expectNoRestrictedProjectionFields(preview);
+    expectPayloadDoesNotContainValues(preview, [
+      "tenant@example.com",
+      "999-888-777",
+      "111122223333",
+      "raw identity payload",
+      "raw screening report",
+    ]);
     expect(preview?.publicAccessEnabled).toBe(false);
     expect(preview?.externalSubmissionEnabled).toBe(false);
   });
@@ -165,6 +186,14 @@ describe("tenantTrustExportService", () => {
     expect(payload).not.toContain("publicAccessEnabled\":true");
     expect(payload).not.toContain("externalSubmissionEnabled\":true");
     expect(payload).not.toContain("tenant-1");
+    expectNoRestrictedProjectionFields(prepared);
+    expectPayloadDoesNotContainValues(prepared, [
+      "tenant@example.com",
+      "999-888-777",
+      "111122223333",
+      "raw identity payload",
+      "raw screening report",
+    ]);
     expect(ensureCollection("tenantTrustExports").size).toBe(1);
     expect(Array.from(ensureCollection("tenantTrustExports").values())[0]?.tenantId).toBe("tenant-1");
   });
