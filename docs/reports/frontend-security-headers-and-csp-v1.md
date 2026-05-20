@@ -63,6 +63,7 @@ The CSP allows the following external source families where currently needed or 
 - `script-src` includes `https://vercel.live` so Vercel preview feedback can load without console-blocking errors during preview QA.
 - `connect-src` includes `https://*.a.run.app` because Cloud Run preview and alternate service URLs can differ from the explicit production Cloud Run host.
 - `Permissions-Policy` intentionally avoids unsupported experimental feature tokens such as `browsing-topics` to prevent browser console noise on preview and production deployments. The security headers are centralized in one broad Vercel rule to avoid route-specific duplicate policy blocks.
+- Vercel deployment protection can return a `401` shell for `/manifest.webmanifest` and static assets before repo-defined route/header behavior is applied. The manifest is present in `public/manifest.webmanifest` and generated into `dist/manifest.webmanifest`; a preview-only `401` from the protected deployment shell is not a missing manifest artifact.
 - CSP reporting is not enabled because there is no governed CSP report ingestion endpoint yet.
 - This mission does not introduce runtime header middleware. Vercel remains the frontend header authority.
 - This mission does not harden backend Cloud Run responses.
@@ -76,6 +77,7 @@ Config regression tests assert:
 - cache policies remain unchanged
 - CSP includes required RentChain, Firebase/Google, Stripe, Cloud Run, worker, and frame directives
 - `/api/:path*` continues to rewrite to the Cloud Run API before the SPA fallback
+- `/manifest.webmanifest` remains referenced by `index.html` and backed by a public manifest file
 
 ## Post-Deploy QA
 

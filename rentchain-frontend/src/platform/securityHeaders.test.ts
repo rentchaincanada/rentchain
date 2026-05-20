@@ -26,6 +26,7 @@ type VercelConfig = {
 const vercelConfig = JSON.parse(
   readFileSync(join(process.cwd(), "vercel.json"), "utf8"),
 ) as VercelConfig;
+const indexHtml = readFileSync(join(process.cwd(), "index.html"), "utf8");
 
 const requiredSecurityHeaders = [
   "Content-Security-Policy",
@@ -109,5 +110,12 @@ describe("frontend Vercel security headers", () => {
     });
     expect(rewriteSources.indexOf("/api/:path*")).toBeGreaterThan(-1);
     expect(rewriteSources.indexOf("/:path*")).toBeGreaterThan(rewriteSources.indexOf("/api/:path*"));
+  });
+
+  it("keeps the PWA manifest reference backed by a public manifest file", () => {
+    expect(indexHtml).toContain('<link rel="manifest" href="/manifest.webmanifest" />');
+    expect(() =>
+      readFileSync(join(process.cwd(), "public", "manifest.webmanifest"), "utf8"),
+    ).not.toThrow();
   });
 });
