@@ -5,6 +5,10 @@ import {
   redactIdentifierMap,
   sanitizeTelemetryProps,
 } from "../platformGovernance";
+import {
+  expectNoRestrictedProjectionFields,
+  expectPayloadDoesNotContainValues,
+} from "../../../__tests__/helpers/projectionSafetyAssertions";
 
 describe("platformGovernance", () => {
   it("normalizes attributable actor context from requests", () => {
@@ -30,9 +34,15 @@ describe("platformGovernance", () => {
       nested: {
         documentText: "raw document body",
         accountNumber: "123456",
+        rawPayload: { providerPayload: "raw provider dump" },
+        routingNumber: "000111222",
+        webhookSecret: "whsec_secret",
         safeStatus: "completed",
       },
       tenantEmail: "tenant@example.com",
+      routeSource: "internal-debug-router",
+      stack: "private stack trace",
+      token: "secret-token",
     });
 
     expect(projected).toEqual({
@@ -42,8 +52,18 @@ describe("platformGovernance", () => {
         safeStatus: "completed",
       },
     });
-    expect(JSON.stringify(projected)).not.toContain("tenant@example.com");
-    expect(JSON.stringify(projected)).not.toContain("raw document body");
+    expectNoRestrictedProjectionFields(projected);
+    expectPayloadDoesNotContainValues(projected, [
+      "tenant@example.com",
+      "raw document body",
+      "123456",
+      "raw provider dump",
+      "000111222",
+      "whsec_secret",
+      "internal-debug-router",
+      "private stack trace",
+      "secret-token",
+    ]);
   });
 
   it("classifies high-risk document exports as restricted", () => {

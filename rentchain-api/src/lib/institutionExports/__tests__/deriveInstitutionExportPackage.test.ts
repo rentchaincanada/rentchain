@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { deriveInstitutionExportPackage } from "../deriveInstitutionExportPackage";
 import type { PortableAttestation } from "../../portableAttestations/portableAttestationTypes";
+import {
+  expectNoRestrictedProjectionFields,
+  expectPayloadDoesNotContainValues,
+} from "../../../__tests__/helpers/projectionSafetyAssertions";
 
 function attestation(): PortableAttestation {
   return {
@@ -133,7 +137,7 @@ describe("deriveInstitutionExportPackage", () => {
       packageType: "government_program_review",
       landlordId: "landlord-1",
       generatedAt: "2026-05-05T12:00:00.000Z",
-      properties: [{ id: "prop-1" }],
+      properties: [{ id: "prop-1", rawPayload: { routeSource: "internal-router" } } as any],
       leases: [
         {
           id: "lease-1",
@@ -141,6 +145,29 @@ describe("deriveInstitutionExportPackage", () => {
           ssn: "123-45-6789",
           creditReport: { score: 700 },
           bankAccountNumber: "000123",
+          rawCsv: "raw tenant export csv",
+        } as any,
+      ],
+      maintenanceRequests: [
+        {
+          id: "maint-1",
+          providerPayload: { rawReport: "raw provider payload" },
+        } as any,
+      ],
+      decisionItems: [
+        {
+          id: "decision-1",
+          severity: "critical",
+          type: "billing",
+          workflow: { queue: "delinquency_review" },
+          internalDebug: "debug payload",
+        } as any,
+      ],
+      auditEvents: [
+        {
+          id: "event-1",
+          stack: "private stack trace",
+          webhookSecret: "whsec_secret",
         } as any,
       ],
     });
@@ -152,7 +179,19 @@ describe("deriveInstitutionExportPackage", () => {
         expect.objectContaining({ fieldCategory: "payment_account_details" }),
       ])
     );
-    expect(JSON.stringify(pkg.payloadPreview)).not.toMatch(/123-45-6789|creditReport|000123|tenant-1/);
+    expectNoRestrictedProjectionFields(pkg.payloadPreview);
+    expectPayloadDoesNotContainValues(pkg.payloadPreview, [
+      "123-45-6789",
+      "creditReport",
+      "000123",
+      "tenant-1",
+      "raw tenant export csv",
+      "raw provider payload",
+      "debug payload",
+      "private stack trace",
+      "whsec_secret",
+      "internal-router",
+    ]);
   });
 
   it("optionally attaches policy-gated portable trust exports without changing route adoption", () => {
