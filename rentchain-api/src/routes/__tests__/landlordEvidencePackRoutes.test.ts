@@ -202,6 +202,18 @@ describe("landlordEvidencePackRoutes", () => {
     expect(forbidden.status).toBe(403);
   });
 
+  it("preserves landlord authority fallback from user id when landlordId is absent", async () => {
+    seedLandlordData();
+    mockUser = { id: "landlord-1", role: "landlord", email: "landlord@example.com" };
+    const router = (await import("../landlordEvidencePackRoutes")).default;
+
+    const res = await invokeRouter(router, { method: "GET", url: "/evidence-packs/preview?scope=decision&scopeId=decision-1" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(res.body.evidencePack.scopeId).toBe("decision-1");
+  });
+
   it("does not expose another landlord's source context", async () => {
     seedLandlordData();
     seedDoc("properties", "prop-2", { landlordId: "landlord-2", name: "Other property" });

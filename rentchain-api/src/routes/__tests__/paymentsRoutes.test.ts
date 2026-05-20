@@ -244,6 +244,21 @@ describe("paymentsRoutes exports", () => {
     ]);
   });
 
+  it("preserves landlord payment scope fallback from user id when landlordId is absent", async () => {
+    authState.user = { id: "landlord-1", role: "landlord" };
+    const router = (await import("../paymentsRoutes")).default;
+    const res = await invokeRouter(router, { method: "GET", url: "/payments?tenantId=tenant-1" });
+
+    expect(res.status).toBe(200);
+    expect(res.headers["x-payments-auth-scope"]).toBe("landlord-resolved");
+    expect(res.body).toEqual([
+      expect.objectContaining({
+        id: "payment-1",
+        tenantId: "tenant-1",
+      }),
+    ]);
+  });
+
   it("returns unauthorized instead of global payments when auth is missing", async () => {
     authState.user = null;
     ensureCollection("payments").set("global-seed-t1", {

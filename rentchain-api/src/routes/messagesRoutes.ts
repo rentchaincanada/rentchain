@@ -6,6 +6,7 @@ import { db, FieldValue } from "../config/firebase";
 import { requireCapability } from "../services/capabilityGuard";
 import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
 import { sendEmail } from "../services/emailService";
+import { getEffectiveLandlordId, getEffectiveTenantId, resolveRequestAuthority } from "../auth/requestAuthority";
 
 const router = Router();
 router.use(authenticateJwt);
@@ -615,7 +616,7 @@ async function addMessage(params: {
 }
 
 async function enforceMessagingCapability(req: any, landlordId: string, res: any): Promise<boolean> {
-  if (String(req.user?.role || "").toLowerCase() === "admin") {
+  if (resolveRequestAuthority(req).isAdmin) {
     return true;
   }
   const cap = await requireCapability(landlordId, "messaging", req.user);
@@ -630,7 +631,7 @@ async function enforceMessagingCapability(req: any, landlordId: string, res: any
  * Landlord endpoints
  */
 router.get("/landlord/messages/conversations", requireLandlord, async (req: any, res) => {
-  const landlordId = req.user?.landlordId || req.user?.id;
+  const landlordId = getEffectiveLandlordId(req);
   if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
   if (!(await enforceMessagingCapability(req, landlordId, res))) return;
   try {
@@ -657,7 +658,7 @@ router.get("/landlord/messages/conversations", requireLandlord, async (req: any,
 });
 
 router.get("/landlord/messages/conversations/:id", requireLandlord, async (req: any, res) => {
-  const landlordId = req.user?.landlordId || req.user?.id;
+  const landlordId = getEffectiveLandlordId(req);
   if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
   if (!(await enforceMessagingCapability(req, landlordId, res))) return;
   const id = String(req.params?.id || "").trim();
@@ -686,7 +687,7 @@ router.get("/landlord/messages/conversations/:id", requireLandlord, async (req: 
 });
 
 router.post("/landlord/messages/conversations/:id", requireLandlord, async (req: any, res) => {
-  const landlordId = req.user?.landlordId || req.user?.id;
+  const landlordId = getEffectiveLandlordId(req);
   if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
   if (!(await enforceMessagingCapability(req, landlordId, res))) return;
   const id = String(req.params?.id || "").trim();
@@ -718,7 +719,7 @@ router.post("/landlord/messages/conversations/:id", requireLandlord, async (req:
 });
 
 router.post("/landlord/messages/conversations/:id/read", requireLandlord, async (req: any, res) => {
-  const landlordId = req.user?.landlordId || req.user?.id;
+  const landlordId = getEffectiveLandlordId(req);
   if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
   if (!(await enforceMessagingCapability(req, landlordId, res))) return;
   const id = String(req.params?.id || "").trim();
@@ -754,8 +755,8 @@ function requireTenant(req: any, res: any, next: any) {
 
 function getTenantContext(req: any) {
   return {
-    tenantId: req.user?.tenantId || req.user?.id || null,
-    landlordId: req.user?.landlordId || null,
+    tenantId: getEffectiveTenantId(req),
+    landlordId: resolveRequestAuthority(req).landlordId,
     unitId: req.user?.unitId || null,
   };
 }

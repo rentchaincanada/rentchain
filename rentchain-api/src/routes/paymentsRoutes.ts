@@ -12,6 +12,7 @@ import { requireAuth } from "../middleware/requireAuth";
 import { requirePermission } from "../middleware/requireAuthz";
 import { buildDatedExportFilename, setAttachmentExportHeaders } from "../lib/exports/exportResponse";
 import { db } from "../config/firebase";
+import { getEffectiveLandlordId, resolveRequestAuthority } from "../auth/requestAuthority";
 
 const router = Router();
 const paymentsEditRouter = Router();
@@ -24,10 +25,10 @@ const csvEscape = (value: unknown) => {
   return text;
 };
 
-const roleForReq = (req: any) => String(req.user?.actorRole || req.user?.role || "").trim().toLowerCase();
+const roleForReq = (req: any) => resolveRequestAuthority(req).actorRole;
 
 function landlordIdForReq(req: any): string {
-  return String(req.user?.landlordId || req.user?.id || "").trim();
+  return String(getEffectiveLandlordId(req) || "").trim();
 }
 
 const PAYMENT_OWNER_FIELDS = ["landlordId", "ownerId", "userId", "createdByLandlordId"] as const;
@@ -837,7 +838,7 @@ router.get("/payments/tenant/:tenantId/monthly", async (req: Request, res: Respo
 // GET /api/payments/property/:propertyId/monthly (stubbed to avoid 404/400)
 router.get("/payments/property/:propertyId/monthly", requireAuth, (req: any, res: Response) => {
   res.setHeader("x-route-source", "paymentsRoutes.ts");
-  const landlordId = req.user?.landlordId || req.user?.id;
+  const landlordId = getEffectiveLandlordId(req);
   const propertyId = String(req.params.propertyId || "");
   const year = Number(req.query?.year);
   const month = Number(req.query?.month);
