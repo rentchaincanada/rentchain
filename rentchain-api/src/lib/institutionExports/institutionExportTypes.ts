@@ -37,12 +37,61 @@ export type InstitutionExportRedaction = {
   reason: string;
 };
 
+export type InstitutionExportSensitivityClass = "sensitive" | "restricted";
+
+export type InstitutionExportScope = "landlord_portfolio_preview";
+
+export type InstitutionExportProfile = {
+  exportProfile: "institutional_export_preview";
+  exportVersion: string;
+  audienceCategory: InstitutionExportAudience;
+  exportScope: InstitutionExportScope;
+  allowedCollections: string[];
+  allowedFieldGroups: string[];
+  excludedFieldGroups: string[];
+  sensitivityClass: InstitutionExportSensitivityClass;
+  authorityBasis: string;
+  projectionPolicy: string;
+  retentionPolicy: string;
+  redactionPolicy: string;
+  lineagePolicy: string;
+  auditExpectation: string;
+};
+
+export type InstitutionExportSourceReference = {
+  sourceCollection: string;
+  sourceId: string;
+};
+
+export type InstitutionExportRedactionSummary = {
+  redactionPolicy: string;
+  redactedFieldGroups: string[];
+  redactionCount: number;
+};
+
+export type InstitutionExportLineageSummary = {
+  sourceReferenceCount: number;
+  sourceCollections: string[];
+  lineagePolicy: string;
+};
+
 export type InstitutionExportPackage = {
   packageId: string;
   packageType: InstitutionExportPackageType;
   audience: InstitutionExportAudience;
   status: InstitutionExportStatus;
   generatedAt: string;
+  exportGeneratedAt: string;
+  exportProfile: InstitutionExportProfile;
+  exportVersion: string;
+  exportScope: InstitutionExportScope;
+  sensitivityClass: InstitutionExportSensitivityClass;
+  authorityBasis: string;
+  sourceCollections: string[];
+  sourceRefs: InstitutionExportSourceReference[];
+  projectionPolicy: string;
+  redactionSummary: InstitutionExportRedactionSummary;
+  lineageSummary: InstitutionExportLineageSummary;
   manualOnly: true;
   externalSubmissionEnabled: false;
   sections: InstitutionExportSection[];
