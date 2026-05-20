@@ -1,6 +1,6 @@
 import React from "react";
 import { MemoryRouter } from "react-router-dom";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { ReviewWorkspacePanel, type ReviewWorkspaceUiModel } from "./ReviewWorkspacePanel";
 
@@ -39,10 +39,37 @@ describe("ReviewWorkspacePanel", () => {
     expect(screen.getByText("Payment Ledger Review")).toBeInTheDocument();
     expect(screen.getByText("Delinquency or payment evidence review")).toBeInTheDocument();
     expect(screen.getByText("Landlord Operational")).toBeInTheDocument();
+    expect(screen.getByLabelText("Review status for Payment Ledger Review")).toHaveValue("open");
+    expect(screen.getByLabelText("Assigned reviewer for Payment Ledger Review")).toHaveValue("operations");
+    expect(screen.getByText(/They do not route work automatically, change source records, or alter financial status/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Payments / obligations source workflow" })).toHaveAttribute("href", "/leases/lease-1/ledger");
     expect(screen.getByText("North Towers · Unit 104 · James Smith")).toBeInTheDocument();
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
     expect(screen.queryByText(/auto-create/i)).not.toBeInTheDocument();
+  });
+
+  it("allows local manual assignment and status selections without persistence or autonomous controls", () => {
+    render(
+      <MemoryRouter>
+        <ReviewWorkspacePanel workspace={workspace()} />
+      </MemoryRouter>
+    );
+
+    fireEvent.change(screen.getByLabelText("Review status for Payment Ledger Review"), {
+      target: { value: "blocked" },
+    });
+    fireEvent.change(screen.getByLabelText("Assigned reviewer for Payment Ledger Review"), {
+      target: { value: "property_manager" },
+    });
+
+    expect(screen.getByText("Manual status: Blocked")).toBeInTheDocument();
+    expect(screen.getByText("Manual assignment: Property manager")).toBeInTheDocument();
+    expect(screen.getByText("Assignment reason: Property manager owns the next manual review step.")).toBeInTheDocument();
+    expect(screen.getByText("Review status note: Cannot progress until a manual blocker is cleared.")).toBeInTheDocument();
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    expect(screen.queryByText(/auto.?assign/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/auto.?route/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/financial mutation/i)).not.toBeInTheDocument();
   });
 
   it("does not render raw resource identifiers as primary labels", () => {

@@ -1,6 +1,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { Card } from "@/components/ui/Ui";
+import { ReviewAssignmentStatusControls } from "./ReviewAssignmentStatusControls";
 
 export type OperationalReviewQueueItem = {
   queueItemId: string;
@@ -127,6 +128,13 @@ export function OperationalReviewQueue({ items }: { items: OperationalReviewQueu
                 {metadata("Sensitivity", label(item.sensitivityClass))}
                 {metadata("Visibility", label(item.visibilityClass))}
               </div>
+
+              <ReviewAssignmentStatusControls
+                itemId={item.queueItemId}
+                title={safeDisplayLabel(item.title, "Operational review item")}
+                initialStatus={item.reviewStatus}
+                initialAssignment={item.assignmentLabel}
+              />
 
               <div style={{ display: "grid", gap: 5 }}>
                 <span style={{ color: "#334155", fontSize: 12, fontWeight: 900 }}>Scoped evidence/resource links</span>
