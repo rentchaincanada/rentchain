@@ -1,8 +1,12 @@
 import React from "react";
 import { MemoryRouter } from "react-router-dom";
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
 import { ReviewWorkspacePanel, type ReviewWorkspaceUiModel } from "./ReviewWorkspacePanel";
+
+afterEach(() => {
+  cleanup();
+});
 
 function workspace(overrides: Partial<ReviewWorkspaceUiModel> = {}): ReviewWorkspaceUiModel {
   return {
@@ -57,5 +61,39 @@ describe("ReviewWorkspacePanel", () => {
     expect(screen.getByText("Lease context")).toBeInTheDocument();
     expect(screen.queryByText(/Decision decision:/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Lease JK6S7JQ2HsMj8m8RFI76/i)).not.toBeInTheDocument();
+  });
+
+  it("does not render autonomous, mutation, sharing, tenant-internal, or raw payload controls", () => {
+    render(
+      <MemoryRouter>
+        <ReviewWorkspacePanel
+          workspace={workspace({
+            workspaceReference: "internal-scope-reference:workspace-1",
+            evidenceLinks: [
+              {
+                label: "Screening source workflow",
+                destination: "/applications/app-1",
+                sensitivityClass: "restricted",
+              },
+            ],
+            relatedResources: [{ label: "Screening workflow review", resourceType: "screening_order" }],
+          })}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText(/Internal workspace reference:/)).toBeInTheDocument();
+    expect(screen.getByText("Screening source workflow")).toBeInTheDocument();
+    expect(screen.getByText("Screening workflow review")).toBeInTheDocument();
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    expect(screen.queryByText(/create review workspace/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/auto.?route/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/resolve review/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/mutate ledger/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/institutional sharing/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/tenant-visible review/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/raw provider/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/raw csv/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/secret-token/i)).not.toBeInTheDocument();
   });
 });

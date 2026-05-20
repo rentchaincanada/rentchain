@@ -303,6 +303,10 @@ describe("deriveCommandCenterSignals", () => {
       }),
     ]);
     expect(preview.relatedResources).toEqual([expect.objectContaining({ label: "North Towers · 101 · John Smith" })]);
+    expect(JSON.stringify(preview)).not.toContain("tenantVisible");
+    expect(JSON.stringify(preview)).not.toContain("financialMutation");
+    expect(JSON.stringify(preview)).not.toContain("institutionalSharing");
+    expect(JSON.stringify(preview)).not.toContain("rawPayload");
   });
 
   it("normalizes raw decision context labels with operational lease and property references", () => {
@@ -438,6 +442,10 @@ describe("OperationalCommandCenterPage", () => {
     expect(screen.getAllByText("Payment Ledger Review").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Delinquency or payment evidence review").length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: /create review workspace/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/tenant-visible review/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/institutional sharing/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/financial mutation/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/raw provider/i)).not.toBeInTheDocument();
     expect(screen.getByText("Saved operational views")).toBeInTheDocument();
     expect(screen.getByTestId("operations-filter-panel")).toHaveStyle({
       display: "grid",
