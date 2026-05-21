@@ -377,6 +377,7 @@ describe("leaseRoutes GET /active", () => {
     const listRes = await invokeRouter(router, { method: "GET", url: "/active" });
     expect(listRes.status).toBe(200);
     expect(listRes.body?.leases?.[0]?.documentUrl).toBe("https://signed.example.com/fresh-list.pdf");
+    expect(JSON.stringify(listRes.body)).not.toContain("signed-expired.pdf");
 
     const refreshRes = await invokeRouter(router, { method: "GET", url: "/lease-1/document-url" });
     expect(refreshRes.status).toBe(200);
@@ -401,6 +402,55 @@ describe("leaseRoutes GET /active", () => {
       path: "leases/landlord-1/lease-1/schedule-a-v1.pdf",
       expiresMinutes: 30,
     });
+    expect(JSON.stringify(refreshRes.body)).not.toContain("signed-expired.pdf");
+  });
+
+  it("refreshes legacy persisted GCS signed URLs instead of returning stale URLs", async () => {
+    getSignedDownloadUrlMock.mockResolvedValueOnce("https://signed.example.com/fresh-legacy-list.pdf");
+    getSignedDownloadUrlMock.mockResolvedValueOnce("https://signed.example.com/fresh-legacy-click.pdf");
+    const staleUrl =
+      "https://storage.googleapis.com/lease-documents/leases/landlord-1/lease-legacy/schedule-a-v1.pdf?X-Goog-Expires=1&X-Goog-Signature=expired";
+    seedDoc("properties", "prop-1", { landlordId: "landlord-1", name: "Centre Suites" });
+    seedDoc("tenants", "tenant-1", { landlordId: "landlord-1", fullName: "Bailey Blinkers", email: "hello+central1@rentchain.ai" });
+    seedDoc("leases", "lease-legacy", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      tenantId: "tenant-1",
+      primaryTenantId: "tenant-1",
+      tenantIds: ["tenant-1"],
+      unitId: "unit-1",
+      unitNumber: "101",
+      monthlyRent: 1850,
+      startDate: "2026-01-01",
+      endDate: "2099-12-31",
+      status: "active",
+      documentUrl: staleUrl,
+    });
+
+    const router = (await import("../leaseRoutes")).default;
+    const listRes = await invokeRouter(router, { method: "GET", url: "/active" });
+    expect(listRes.status).toBe(200);
+    expect(listRes.body?.leases?.[0]?.documentUrl).toBe("https://signed.example.com/fresh-legacy-list.pdf");
+    expect(JSON.stringify(listRes.body)).not.toContain(staleUrl);
+
+    const refreshRes = await invokeRouter(router, { method: "GET", url: "/lease-legacy/document-url" });
+    expect(refreshRes.status).toBe(200);
+    expect(refreshRes.body).toEqual(
+      expect.objectContaining({
+        ok: true,
+        documentUrl: "https://signed.example.com/fresh-legacy-click.pdf",
+        refreshMode: "signed_url",
+      })
+    );
+    expect(refreshRes.body?.documentRef).toEqual(
+      expect.objectContaining({
+        source: "lease.documentUrl",
+        bucket: "lease-documents",
+        path: "leases/landlord-1/lease-legacy/schedule-a-v1.pdf",
+        internalReferenceOnly: true,
+      })
+    );
+    expect(JSON.stringify(refreshRes.body)).not.toContain(staleUrl);
   });
 
   it("surfaces ledger payment activity separately from provider payment setup", async () => {

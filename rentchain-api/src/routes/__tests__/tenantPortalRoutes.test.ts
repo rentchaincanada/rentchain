@@ -961,6 +961,52 @@ describe("tenantPortalRoutes foundation", () => {
     });
   });
 
+  it("refreshes tenant-scoped legacy GCS signed lease URLs instead of returning stale persisted URLs", async () => {
+    const staleUrl =
+      "https://storage.googleapis.com/lease-documents/leases/landlord-1/lease-1/schedule-a-v1.pdf?X-Goog-Expires=1&X-Goog-Signature=expired";
+    ensureCollection("leases").set("lease-1", {
+      ...(ensureCollection("leases").get("lease-1") || {}),
+      status: "active",
+      leaseDocument: undefined,
+      referenceDocument: undefined,
+      documentStorage: undefined,
+      signedDocument: undefined,
+      documentUrl: staleUrl,
+    });
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/lease/document-url",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+          leaseId: "lease-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.data).toEqual(
+      expect.objectContaining({
+        documentUrl: "https://signed.example/leases/landlord-1/lease-1/schedule-a-v1.pdf",
+        displayLabel: "Signed lease document",
+        documentStatus: "signed",
+        source: "lease.documentUrl",
+        expiresInSeconds: 1800,
+      })
+    );
+    expect(JSON.stringify(res.body)).not.toContain(staleUrl);
+    expect(getSignedDownloadUrlMock).toHaveBeenCalledWith({
+      bucket: "lease-documents",
+      path: "leases/landlord-1/lease-1/schedule-a-v1.pdf",
+      expiresMinutes: 30,
+    });
+  });
+
   it("prefers the current active lease document over an archived tenant lease reference", async () => {
     ensureCollection("tenants").set("tenant-1", {
       ...(ensureCollection("tenants").get("tenant-1") || {}),

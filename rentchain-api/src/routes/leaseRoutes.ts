@@ -619,8 +619,7 @@ async function loadLeaseDocumentUrlForLease(raw: any): Promise<string | null> {
     try {
       return await getSignedDownloadUrl({ bucket: storageRef.bucket, path: storageRef.path, expiresMinutes: 30 });
     } catch {
-      // Fall back to the legacy persisted URL below; callers still get continuity
-      // for older records while storage-backed records refresh on each load.
+      return null;
     }
   }
 
@@ -676,12 +675,54 @@ function storageRefFromDocumentRecord(record: any, source: string): LeaseDocumen
   return { bucket, path, source };
 }
 
+function parseGcsSignedUrlStorageRef(value: unknown, source: string): LeaseDocumentStorageRef | null {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== "https:") return null;
+    if (url.hostname === "storage.googleapis.com" || url.hostname === "storage.cloud.google.com") {
+      const segments = url.pathname.split("/").filter(Boolean);
+      const bucket = segments.shift() || "";
+      const path = normalizeStoragePath(segments.join("/"));
+      return bucket && path ? { bucket, path, source } : null;
+    }
+    if (url.hostname.endsWith(".storage.googleapis.com")) {
+      const bucket = url.hostname.slice(0, -".storage.googleapis.com".length);
+      const path = normalizeStoragePath(decodeURIComponent(url.pathname).replace(/^\/+/, ""));
+      return bucket && path ? { bucket, path, source } : null;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function storageRefFromSignedUrlFields(record: any, source: string): LeaseDocumentStorageRef | null {
+  const fields = [
+    "signedDocumentUrl",
+    "signedLeaseDocumentUrl",
+    "executedDocumentUrl",
+    "finalDocumentUrl",
+    "fullyExecutedDocumentUrl",
+    "documentUrl",
+    "approvedDocumentUrl",
+    "documentRef",
+    "url",
+  ];
+  for (const field of fields) {
+    const ref = parseGcsSignedUrlStorageRef(record?.[field], `${source}.${field}`);
+    if (ref) return ref;
+  }
+  return null;
+}
+
 function storageRefFromGeneratedFile(file: any, source: string): LeaseDocumentStorageRef | null {
   const kind = String(file?.kind || "").trim().toLowerCase();
   const url = String(file?.url || "").trim();
   const looksLikeLeasePdf = !kind || kind.includes("pdf") || kind.includes("schedule");
   if (!looksLikeLeasePdf && !url) return null;
-  return storageRefFromDocumentRecord(file, source);
+  return storageRefFromDocumentRecord(file, source) || storageRefFromSignedUrlFields(file, source);
 }
 
 function directLeaseDocumentStorageRef(raw: any): LeaseDocumentStorageRef | null {
@@ -690,6 +731,7 @@ function directLeaseDocumentStorageRef(raw: any): LeaseDocumentStorageRef | null
     storageRefFromDocumentRecord(raw?.referenceDocument, "referenceDocument") ||
     storageRefFromDocumentRecord(raw?.documentStorage, "documentStorage") ||
     storageRefFromDocumentRecord(raw?.signedDocument, "signedDocument") ||
+    storageRefFromSignedUrlFields(raw, "lease") ||
     null
   );
 }

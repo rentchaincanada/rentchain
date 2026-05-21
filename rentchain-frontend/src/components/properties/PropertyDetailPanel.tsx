@@ -149,13 +149,26 @@ function buildUnitOccupancyView(unit: any, occupancy: UnitOccupancy) {
   const leaseEndDate = occupancy.status === "occupied" || occupancy.status === "upcoming"
     ? resolveOccupancyLeaseEndDate(unit, occupancy)
     : "";
+  const lease = occupancy.lease as any;
   const leaseId = String((occupancy.lease as any)?.id || (occupancy.lease as any)?.leaseId || "").trim();
+  const tenantId = String(
+    lease?.tenantId ||
+      lease?.primaryTenantId ||
+      (Array.isArray(lease?.tenantIds) ? lease.tenantIds[0] : "") ||
+      unit?.tenantId ||
+      unit?.currentTenantId ||
+      unit?.occupantTenantId ||
+      ""
+  ).trim();
   return {
     status: occupancy.status,
     label: occupancy.label,
     tenantName,
+    tenantId,
+    tenantHref: tenantName && tenantId ? `/tenants?tenantId=${encodeURIComponent(tenantId)}` : "",
     leaseEndDate,
     leaseId,
+    leaseHref: leaseId ? `/leases/${encodeURIComponent(leaseId)}/summary` : "",
     reviewReason: occupancy.status === "review_required" ? occupancy.reason || "Occupancy data needs review." : "",
     ledgerHref: leaseId ? `/leases/${encodeURIComponent(leaseId)}/ledger` : "",
   };
@@ -1688,8 +1701,18 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                           </span>
                           {occupantName ? (
                             <div style={{ fontSize: "0.8rem", color: "#475569" }}>
-                              {occupantName}
+                              {occupancyView.tenantHref ? (
+                                <a href={occupancyView.tenantHref}>{occupantName}</a>
+                              ) : (
+                                occupantName
+                              )}
                               {leaseEndDate ? ` · Ends ${formatDate(leaseEndDate)}` : ""}
+                              {occupancyView.leaseHref ? (
+                                <>
+                                  {" · "}
+                                  <a href={occupancyView.leaseHref}>View lease</a>
+                                </>
+                              ) : null}
                               {occupancyView.ledgerHref ? (
                                 <>
                                   {" · "}
@@ -1827,8 +1850,18 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                     <div className="rc-unit-value">{occupancy.label}</div>
                     {occupantName ? (
                       <div style={{ fontSize: "0.8rem", color: "#475569", marginTop: 4 }}>
-                        {occupantName}
+                        {occupancyView.tenantHref ? (
+                          <a href={occupancyView.tenantHref}>{occupantName}</a>
+                        ) : (
+                          occupantName
+                        )}
                         {leaseEndDate ? ` · Ends ${formatDate(leaseEndDate)}` : ""}
+                        {occupancyView.leaseHref ? (
+                          <>
+                            {" · "}
+                            <a href={occupancyView.leaseHref}>View lease</a>
+                          </>
+                        ) : null}
                         {occupancyView.ledgerHref ? (
                           <>
                             {" · "}

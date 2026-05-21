@@ -3021,6 +3021,48 @@ function tenantLeaseStorageRefFromRecord(record: any, source: string): TenantLea
   return { bucket, path, source };
 }
 
+function parseTenantLeaseGcsSignedUrlStorageRef(value: unknown, source: string): TenantLeaseDocumentStorageRef | null {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== "https:") return null;
+    if (url.hostname === "storage.googleapis.com" || url.hostname === "storage.cloud.google.com") {
+      const segments = url.pathname.split("/").filter(Boolean);
+      const bucket = segments.shift() || "";
+      const path = normalizeLeaseDocumentStoragePath(segments.join("/"));
+      return bucket && path ? { bucket, path, source } : null;
+    }
+    if (url.hostname.endsWith(".storage.googleapis.com")) {
+      const bucket = url.hostname.slice(0, -".storage.googleapis.com".length);
+      const path = normalizeLeaseDocumentStoragePath(decodeURIComponent(url.pathname).replace(/^\/+/, ""));
+      return bucket && path ? { bucket, path, source } : null;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function tenantLeaseStorageRefFromSignedUrlFields(record: any, source: string): TenantLeaseDocumentStorageRef | null {
+  const fields = [
+    "signedDocumentUrl",
+    "signedLeaseDocumentUrl",
+    "executedDocumentUrl",
+    "finalDocumentUrl",
+    "fullyExecutedDocumentUrl",
+    "documentUrl",
+    "approvedDocumentUrl",
+    "documentRef",
+    "url",
+  ];
+  for (const field of fields) {
+    const ref = parseTenantLeaseGcsSignedUrlStorageRef(record?.[field], `${source}.${field}`);
+    if (ref) return ref;
+  }
+  return null;
+}
+
 function tenantLeaseDocumentStorageRef(params: {
   leaseData?: any;
   attachment?: any;
@@ -3031,6 +3073,8 @@ function tenantLeaseDocumentStorageRef(params: {
     tenantLeaseStorageRefFromRecord(params.leaseData?.documentStorage, "documentStorage") ||
     tenantLeaseStorageRefFromRecord(params.leaseData?.signedDocument, "signedDocument") ||
     tenantLeaseStorageRefFromRecord(params.attachment, "ledgerAttachments") ||
+    tenantLeaseStorageRefFromSignedUrlFields(params.leaseData, "lease") ||
+    tenantLeaseStorageRefFromSignedUrlFields(params.attachment, "ledgerAttachments") ||
     null
   );
 }
@@ -3108,7 +3152,7 @@ async function getTenantLeaseDocumentContext(params: {
     "approvedDocumentUrl",
     "documentRef",
   ]);
-  if (signed && (refreshedDirectUrl || signedUrl)) {
+  if (signed && (refreshedDirectUrl || (!directStorageRef && signedUrl))) {
     return {
       leaseId,
       tenantId: tenantId || undefined,
@@ -3127,7 +3171,7 @@ async function getTenantLeaseDocumentContext(params: {
   }
 
   const generatedUrl = firstLeaseDocumentUrl(params.leaseData, ["documentUrl", "approvedDocumentUrl", "documentRef"]);
-  if (refreshedDirectUrl || generatedUrl) {
+  if (refreshedDirectUrl || (!directStorageRef && generatedUrl)) {
     return {
       leaseId,
       tenantId: tenantId || undefined,
@@ -3148,24 +3192,26 @@ async function getTenantLeaseDocumentContext(params: {
   const attachments = params.attachments || (tenantId ? await loadTenantLeaseAttachments(tenantId) : []);
   const attachment = bestTenantLeaseAttachment({ attachments, leaseId, propertyId, unitId });
   if (attachment) {
-    const refreshedAttachmentUrl = await refreshTenantLeaseSignedUrl(
-      tenantLeaseDocumentStorageRef({ attachment })
-    );
-    return {
-      leaseId,
-      tenantId: tenantId || undefined,
-      propertyId: propertyId || undefined,
-      unitId: unitId || undefined,
-      leaseStatus,
-      signingStatus: signed ? "signed" : "unsigned",
-      documentStatus: signed ? "signed" : "generated",
-      documentId: String(attachment?.id || "").trim() || undefined,
-      documentUrl: refreshedAttachmentUrl || String(attachment.url || "").trim(),
-      displayLabel: signed ? "Signed lease document" : "Generated lease package",
-      source: "ledgerAttachments",
-      confidence: "high",
-      warnings,
-    };
+    const attachmentStorageRef = tenantLeaseDocumentStorageRef({ attachment });
+    const refreshedAttachmentUrl = await refreshTenantLeaseSignedUrl(attachmentStorageRef);
+    const attachmentUrl = refreshedAttachmentUrl || (!attachmentStorageRef ? String(attachment.url || "").trim() : "");
+    if (attachmentUrl) {
+      return {
+        leaseId,
+        tenantId: tenantId || undefined,
+        propertyId: propertyId || undefined,
+        unitId: unitId || undefined,
+        leaseStatus,
+        signingStatus: signed ? "signed" : "unsigned",
+        documentStatus: signed ? "signed" : "generated",
+        documentId: String(attachment?.id || "").trim() || undefined,
+        documentUrl: attachmentUrl,
+        displayLabel: signed ? "Signed lease document" : "Generated lease package",
+        source: refreshedAttachmentUrl ? attachmentStorageRef?.source || "ledgerAttachments" : "ledgerAttachments",
+        confidence: "high",
+        warnings,
+      };
+    }
   }
 
   if (isLeaseDocumentWorkflowPending(params.leaseData)) {

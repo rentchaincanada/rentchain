@@ -92,6 +92,7 @@ describe("LandlordLeaseSummaryPage", () => {
     expect(screen.getByText("Tony Wenpeng")).toBeInTheDocument();
     expect(screen.queryByText(/gs:\/\//i)).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open ledger" })).toHaveAttribute("href", "/leases/lease-1/ledger");
+    expect(screen.getByRole("button", { name: "Print / Save PDF" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Back to leases" })).toHaveAttribute("href", "/leases");
   });
 
@@ -172,7 +173,7 @@ describe("LandlordLeaseSummaryPage", () => {
       </MemoryRouter>
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: "Save lease summary" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Print / Save PDF" }));
 
     await waitFor(() => {
       expect(global.URL.createObjectURL).toHaveBeenCalledTimes(1);

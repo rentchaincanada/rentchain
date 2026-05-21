@@ -87,7 +87,7 @@ export default function LandlordLeaseSummaryPage() {
           disabled={!lease}
           style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a" }}
         >
-          Save lease summary
+          Print / Save PDF
         </button>
         <Link
           to="/leases"
