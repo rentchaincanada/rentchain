@@ -16,8 +16,12 @@ import {
   TenantInfoCard,
   TenantLoadingState,
   TenantSurfaceShell,
-  prettyStatus,
 } from "./TenantWorkspaceShared";
+import {
+  workOrderCategoryLabel,
+  workOrderPriorityLabel,
+  workOrderStatusLabel,
+} from "../../lib/workOrderOperationalLabels";
 
 function fmtDate(ts?: number | null) {
   if (!ts) return "—";
@@ -164,8 +168,8 @@ export default function TenantMaintenanceRequestsPage() {
                   accent={requestView?.needsAttention ? "#dc2626" : "#b45309"}
                 >
                                    <div style={{ color: textTokens.muted, fontSize: "0.92rem" }}>
-                    {requestView?.lifecycleLabel || prettyStatus(item.status)} • {prettyStatus(item.priority)} •{" "}
-                    {prettyStatus(item.category)}
+                    {requestView?.lifecycleLabel || workOrderStatusLabel(item.status, "tenant")} •{" "}
+                    {workOrderPriorityLabel(item.priority)} • {workOrderCategoryLabel(item.category)}
                   </div>
                   <div style={{ color: textTokens.secondary, lineHeight: 1.5 }}>
                     {requestView?.summary || "This request is visible in your tenant maintenance workspace."}

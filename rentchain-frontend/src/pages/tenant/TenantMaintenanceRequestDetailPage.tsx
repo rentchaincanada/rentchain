@@ -12,7 +12,12 @@ import {
 import { Button, Card, Section } from "../../components/ui/Ui";
 import { clearTenantToken, getTenantToken } from "../../lib/tenantAuth";
 import { colors, radius, spacing, text as textTokens } from "../../styles/tokens";
-import { TenantSurfaceShell, prettyStatus } from "./TenantWorkspaceShared";
+import { TenantSurfaceShell } from "./TenantWorkspaceShared";
+import {
+  workOrderCategoryLabel,
+  workOrderPriorityLabel,
+  workOrderStatusLabel,
+} from "../../lib/workOrderOperationalLabels";
 import { buildMaintenanceLifecycleView } from "../maintenanceWorkspaceState";
 import { buildMaintenanceAssignmentRoutingView } from "../maintenanceAssignmentRoutingState";
 import { buildMaintenanceConfirmationAccessView } from "../maintenanceConfirmationAccessState";
@@ -347,9 +352,9 @@ export default function TenantMaintenanceRequestDetailPage() {
             <div style={{ display: "grid", gap: spacing.sm }}>
               <div style={{ fontSize: "1.2rem", fontWeight: 800, color: textTokens.primary }}>{data.title}</div>
               <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap", color: textTokens.muted, fontSize: "0.95rem" }}>
-                <span>Status: {prettyStatus(data.status)}</span>
-                <span>Priority: {prettyStatus(data.priority)}</span>
-                <span>Category: {prettyStatus(data.category)}</span>
+                <span>Status: {workOrderStatusLabel(data.status, "tenant")}</span>
+                <span>Priority: {workOrderPriorityLabel(data.priority)}</span>
+                <span>Category: {workOrderCategoryLabel(data.category)}</span>
                 {assignmentView ? <span>Handling: {assignmentView.tenantVisibleLabel}</span> : null}
               </div>
               <div style={{ color: textTokens.muted, fontSize: "0.95rem" }}>
@@ -581,7 +586,7 @@ export default function TenantMaintenanceRequestDetailPage() {
                   <div style={{ fontWeight: 800, color: textTokens.primary }}>Follow-up / rework</div>
                   <div style={{ color: textTokens.secondary }}>
                     {data.reworkCycle
-                      ? `Rework #${data.reworkCycle.cycleNumber} is ${data.reworkCycle.status.replaceAll("_", " ")}.`
+                      ? `Rework #${data.reworkCycle.cycleNumber} is ${workOrderStatusLabel(data.reworkCycle.status, "tenant").toLowerCase()}.`
                       : "A follow-up cycle has been recorded for this request."}
                   </div>
                   {data.reworkCycle?.completionSummary ? (
@@ -627,7 +632,7 @@ export default function TenantMaintenanceRequestDetailPage() {
                     <>
                       <div style={{ color: textTokens.primary, fontWeight: 700 }}>Return visit coordination</div>
                       <div style={{ color: textTokens.secondary }}>
-                        Status: {String(data.reworkCycle.schedule.status || "not_scheduled").replaceAll("_", " ")}
+                        Status: {workOrderStatusLabel(data.reworkCycle.schedule.status || "not_scheduled", "tenant")}
                       </div>
                       <div style={{ color: textTokens.secondary }}>
                         Visit time: {fmtDate(data.reworkCycle.schedule.scheduledFor || data.reworkCycle.schedule.timeWindowStart)}
@@ -637,7 +642,7 @@ export default function TenantMaintenanceRequestDetailPage() {
                       </div>
                       <div style={{ color: textTokens.secondary }}>
                         Access: {data.reworkCycle.schedule.requiresTenantAccess ? "required" : "not required"} • Your status:{" "}
-                        {String(data.reworkCycle.schedule.tenantAccessStatus || "pending").replaceAll("_", " ")}
+                        {workOrderStatusLabel(data.reworkCycle.schedule.tenantAccessStatus || "pending", "tenant")}
                       </div>
                       {data.reworkCycle.schedule.tenantAccessNote ? (
                         <div style={{ color: textTokens.secondary }}>{data.reworkCycle.schedule.tenantAccessNote}</div>

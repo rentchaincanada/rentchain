@@ -10,6 +10,7 @@ export type OperationalReviewReasonKey =
   | "document_review"
   | "occupancy_review"
   | "evidence_review"
+  | "operational_work_order_review"
   | "operational_anomaly_review"
   | "informational_not_reviewable";
 

@@ -44,6 +44,7 @@ function reviewReasonLabel(reason: OperationalReviewReasonKey): string {
   if (reason === "document_review") return "Document review";
   if (reason === "occupancy_review") return "Occupancy review";
   if (reason === "evidence_review") return "Evidence review";
+  if (reason === "operational_work_order_review") return "Operational work order review";
   if (reason === "informational_not_reviewable") return "Informational only";
   return "Operational anomaly review";
 }
@@ -97,6 +98,12 @@ function reasonFromInput(input: OperationalReviewRoutingInput): OperationalRevie
     return "payment_evidence_review";
   }
   if (input.category === "lease_lifecycle" || haystack.includes("lease")) return "lease_execution_review";
+  if (
+    input.category === "operations" &&
+    (haystack.includes("maintenance") || haystack.includes("work_order") || haystack.includes("work order"))
+  ) {
+    return "operational_work_order_review";
+  }
   return "operational_anomaly_review";
 }
 
@@ -140,6 +147,23 @@ function normalizeRelatedResourceRefs(input: OperationalReviewRoutingInput): Ope
   );
 }
 
+function normalizeDecisionRelatedResource(decision: DecisionInboxItem): {
+  resourceType: string;
+  label: string;
+} | null {
+  if (!decision.relatedEntity) return null;
+  if (decision.relatedEntity.kind === "maintenance_request") {
+    return {
+      resourceType: "work_order",
+      label: safeLabel(decision.relatedEntity.label, "Operational work order"),
+    };
+  }
+  return {
+    resourceType: decision.relatedEntity.kind,
+    label: safeLabel(decision.relatedEntity.label, "Operational resource"),
+  };
+}
+
 export function deriveOperationalReviewRouting(input: OperationalReviewRoutingInput): OperationalReviewRoutingDecision {
   const itemId = asString(input.itemId, 500);
   const landlordId = asString(input.landlordId, 240);
@@ -173,12 +197,13 @@ export function deriveOperationalReviewRoutingFromDecision(
   decision: DecisionInboxItem,
   scope: { landlordId: string; tenantId?: string | null }
 ): OperationalReviewRoutingDecision {
-  const relatedResourceRefs: OperationalReviewResourceRefInput[] = decision.relatedEntity
+  const normalizedRelatedResource = normalizeDecisionRelatedResource(decision);
+  const relatedResourceRefs: OperationalReviewResourceRefInput[] = decision.relatedEntity && normalizedRelatedResource
     ? [
         {
-          resourceType: decision.relatedEntity.kind === "maintenance_request" ? "document" : decision.relatedEntity.kind,
+          resourceType: normalizedRelatedResource.resourceType,
           resourceId: decision.relatedEntity.id,
-          label: decision.relatedEntity.label,
+          label: normalizedRelatedResource.label,
           landlordId: scope.landlordId,
           tenantId: scope.tenantId || null,
         },
