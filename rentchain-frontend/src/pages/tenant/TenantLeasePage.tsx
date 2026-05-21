@@ -24,6 +24,30 @@ import {
   prettyRentPaymentStatus,
 } from "../../lib/payments/paymentStatusGuidance";
 
+function isGoogleStorageSignedUrl(value: string) {
+  try {
+    const url = new URL(value);
+    return url.hostname === "storage.googleapis.com" || url.hostname === "storage.cloud.google.com" || url.hostname.endsWith(".storage.googleapis.com");
+  } catch {
+    return false;
+  }
+}
+
+function isAppDomainLeasePdfFallback(value: string) {
+  if (!value) return false;
+  try {
+    const url = new URL(value, window.location.origin);
+    return url.origin === window.location.origin && /^\/leases\/.+\.pdf$/i.test(url.pathname);
+  } catch {
+    return /^\/leases\/.+\.pdf(?:$|\?)/i.test(value);
+  }
+}
+
+function canUseLegacyDocumentFallback(value: string) {
+  const next = String(value || "").trim();
+  return Boolean(next) && !isGoogleStorageSignedUrl(next) && !isAppDomainLeasePdfFallback(next);
+}
+
 export default function TenantLeasePage() {
   const [data, setData] = React.useState<Awaited<ReturnType<typeof getTenantLeaseWorkspace>>>(null);
   const [rentPaymentDetails, setRentPaymentDetails] = React.useState<Awaited<
@@ -95,11 +119,11 @@ export default function TenantLeasePage() {
       if (!nextUrl) throw new Error("Lease document is not available.");
       window.open(nextUrl, "_blank", "noreferrer");
     } catch (err: any) {
-      if (fallbackUrl) {
+      if (canUseLegacyDocumentFallback(fallbackUrl)) {
         window.open(fallbackUrl, "_blank", "noreferrer");
         return;
       }
-      setError(err?.payload?.error || err?.message || "Lease document is not available.");
+      setError(err?.payload?.error || err?.message || "Lease document link expired and needs regeneration.");
     } finally {
       setOpeningDocument(false);
     }

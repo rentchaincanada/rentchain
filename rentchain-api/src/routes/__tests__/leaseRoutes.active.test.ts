@@ -453,6 +453,34 @@ describe("leaseRoutes GET /active", () => {
     expect(JSON.stringify(refreshRes.body)).not.toContain(staleUrl);
   });
 
+  it("does not use app-domain lease PDF paths as document URL fallback", async () => {
+    seedDoc("properties", "prop-1", { landlordId: "landlord-1", name: "Coburg Rd" });
+    seedDoc("tenants", "tenant-1", { landlordId: "landlord-1", fullName: "Chip Milo", email: "hello+cob6tenant@rentchain.ai" });
+    seedDoc("leases", "lease-app-domain", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      tenantId: "tenant-1",
+      primaryTenantId: "tenant-1",
+      tenantIds: ["tenant-1"],
+      unitId: "unit-6",
+      unitNumber: "6",
+      monthlyRent: 1800,
+      startDate: "2026-01-01",
+      endDate: "2099-12-31",
+      status: "active",
+      documentUrl: "https://preview.rentchain.ai/leases/PXbRIbJdZpV2eBjzNmLaISgDa852/nkzRYxdZ49p0IGdXD3mS/schedule-a-v1.pdf",
+    });
+
+    const router = (await import("../leaseRoutes")).default;
+    const listRes = await invokeRouter(router, { method: "GET", url: "/active" });
+    expect(listRes.status).toBe(200);
+    expect(listRes.body?.leases?.[0]?.documentUrl).toBeNull();
+
+    const refreshRes = await invokeRouter(router, { method: "GET", url: "/lease-app-domain/document-url" });
+    expect(refreshRes.status).toBe(404);
+    expect(JSON.stringify(refreshRes.body)).not.toContain("/leases/PXbRIbJdZpV2eBjzNmLaISgDa852");
+  });
+
   it("surfaces ledger payment activity separately from provider payment setup", async () => {
     seedDoc("properties", "prop-1", { landlordId: "landlord-1", name: "Harbour View" });
     seedDoc("tenants", "tenant-1", { landlordId: "landlord-1", fullName: "Jane Tenant", status: "active" });

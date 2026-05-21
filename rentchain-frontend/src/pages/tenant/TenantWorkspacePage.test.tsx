@@ -2264,6 +2264,62 @@ describe("tenant workspace frontend shell", () => {
     expect(window.open).toHaveBeenCalledWith("https://example.com/refreshed-lease.pdf", "_blank", "noreferrer");
   });
 
+  it("does not open stale tenant GCS lease URLs when refresh fails", async () => {
+    tenantPortalApi.refreshTenantLeaseDocumentUrl.mockRejectedValueOnce(new Error("refresh failed"));
+    tenantPortalApi.getTenantLeaseWorkspace.mockResolvedValue({
+      leaseId: "lease-stale",
+      startDate: "2026-03-01",
+      endDate: "2027-02-28",
+      monthlyRent: 1800,
+      status: "active",
+      documentUrl:
+        "https://storage.googleapis.com/lease-documents/leases/PXbRIbJdZpV2eBjzNmLaISgDa852/nkzRYxdZ49p0IGdXD3mS/schedule-a-v1.pdf?X-Goog-Expires=1",
+      leaseDocumentContext: {
+        leaseId: "lease-stale",
+        documentUrl:
+          "https://storage.googleapis.com/lease-documents/leases/PXbRIbJdZpV2eBjzNmLaISgDa852/nkzRYxdZ49p0IGdXD3mS/schedule-a-v1.pdf?X-Goog-Expires=1",
+        displayLabel: "Signed lease document",
+        documentStatus: "signed",
+        source: "lease.documentUrl",
+        confidence: "high",
+        warnings: [],
+      },
+      signatureStatus: "signed",
+      signatureReadinessLabel: "Lease signing complete",
+      signatureReadinessDescription: "The visible lease record shows the current signing stage as complete.",
+      tenantSignature: {
+        signedAt: "2026-03-02T12:00:00.000Z",
+        signatureMethod: "typed",
+        signatureDisplayName: "Taylor Tenant",
+      },
+      leasePdfStatus: "available",
+      leasePdfLabel: "Lease document available",
+      leasePdfDescription: "A tenant-safe lease document is available in this workspace.",
+      leaseExecution: {
+        executionStatus: "fully_executed",
+        executionLabel: "Lease fully executed",
+        executionDescription: "The lease is fully executed.",
+        requiredNextAction: "none",
+        tenantSignatureStatus: "completed",
+        landlordSignatureStatus: "completed",
+        pdfStatus: "generated",
+        completedAt: "2026-03-02T12:00:00.000Z",
+      },
+    } as any);
+
+    render(
+      <MemoryRouter>
+        <TenantLeasePage />
+      </MemoryRouter>
+    );
+
+    vi.mocked(window.open).mockClear();
+    fireEvent.click(await screen.findByRole("button", { name: /Open lease document/i }));
+    await waitFor(() => expect(tenantPortalApi.refreshTenantLeaseDocumentUrl).toHaveBeenCalled());
+    expect(window.open).not.toHaveBeenCalled();
+    expect(await screen.findByText("refresh failed")).toBeInTheDocument();
+  });
+
   it("shows the tenant lease sign action only when backend execution metadata requires it", async () => {
     tenantPortalApi.getTenantLeaseWorkspace.mockResolvedValue({
       leaseId: "lease-2",

@@ -2323,9 +2323,11 @@ async function findBestTenantLease(params: {
   current: { id: string; data: any } | null;
   tenantId: string | null;
   propertyId: string | null;
+  tenantEmail?: string | null;
 }) {
   const tenantId = String(params.tenantId || "").trim();
   const propertyId = String(params.propertyId || "").trim();
+  const tenantEmail = String(params.tenantEmail || "").trim().toLowerCase();
   const candidates = new Map<string, { id: string; data: any }>();
   if (params.current?.id) candidates.set(params.current.id, params.current);
   if (tenantId) {
@@ -2341,10 +2343,23 @@ async function findBestTenantLease(params: {
       }
     }
   }
+  if (tenantEmail) {
+    for (const query of [
+      () => db.collection("leases").where("tenantEmail", "==", tenantEmail).limit(20).get(),
+      () => db.collection("leases").where("email", "==", tenantEmail).limit(20).get(),
+    ]) {
+      try {
+        const snap = await query();
+        snap.docs.forEach((doc) => candidates.set(doc.id, { id: doc.id, data: doc.data() as any }));
+      } catch {
+        // Email-linked leases are a compatibility path only.
+      }
+    }
+  }
 
   const ranked = Array.from(candidates.values())
     .filter((candidate) => !propertyId || String(candidate.data?.propertyId || "").trim() === propertyId)
-    .filter((candidate) => !tenantId || leaseHasTenant(candidate.data, tenantId))
+    .filter((candidate) => leaseMatchesTenantIdentity(candidate.data, tenantId, tenantEmail))
     .sort((left, right) => {
       const rankDelta = leaseSelectionRank(right) - leaseSelectionRank(left);
       if (rankDelta !== 0) return rankDelta;
@@ -2375,7 +2390,12 @@ async function loadTenantWorkspaceData(context: Awaited<ReturnType<typeof resolv
   }
 
   let leaseDoc = await loadDocument("leases", context.leaseId);
-  leaseDoc = await findBestTenantLease({ current: leaseDoc, tenantId: context.tenantId, propertyId: context.propertyId });
+  leaseDoc = await findBestTenantLease({
+    current: leaseDoc,
+    tenantId: context.tenantId,
+    tenantEmail: context.invitedEmail,
+    propertyId: context.propertyId,
+  });
 
   const maintenanceItems: Array<{ id: string; data: any }> = [];
   if (context.tenantId) {
@@ -2395,6 +2415,7 @@ async function loadTenantWorkspaceData(context: Awaited<ReturnType<typeof resolv
     ? await getTenantLeaseDocumentContext({
         leaseId: leaseDoc.id,
         tenantId: context.tenantId,
+        tenantEmail: context.invitedEmail,
         propertyId: String(leaseDoc.data?.propertyId || context.propertyId || "").trim() || null,
         unitId: String(leaseDoc.data?.unitId || context.unitId || "").trim() || null,
         leaseData: leaseDoc.data,
@@ -2778,6 +2799,7 @@ async function withTenantLeaseDocumentContext(profile: Awaited<ReturnType<typeof
   const leaseDocumentContext = await getTenantLeaseDocumentContext({
     leaseId,
     tenantId,
+    tenantEmail: String(profile?.context?.invitedEmail || "").trim() || null,
     propertyId: String(profile?.context?.propertyId || leaseData?.propertyId || "").trim() || null,
     unitId: String(profile?.context?.unitId || leaseData?.unitId || "").trim() || null,
     leaseData,
@@ -2929,9 +2951,20 @@ type TenantLeaseDocumentContext = {
 function firstLeaseDocumentUrl(raw: any, fields: string[]): string | null {
   for (const field of fields) {
     const value = String(raw?.[field] || "").trim();
-    if (value.startsWith("https://")) return value;
+    if (value.startsWith("https://") && !isAppDomainLeasePdfUrl(value)) return value;
   }
   return null;
+}
+
+function isAppDomainLeasePdfUrl(value: unknown): boolean {
+  const raw = String(value || "").trim();
+  if (!raw) return false;
+  try {
+    const url = new URL(raw, "https://app.rentchain.invalid");
+    return /^\/leases\/.+\.pdf$/i.test(url.pathname);
+  } catch {
+    return /^\/leases\/.+\.pdf(?:$|\?)/i.test(raw);
+  }
 }
 
 function leaseHasTenant(raw: any, tenantId: string): boolean {
@@ -2940,6 +2973,23 @@ function leaseHasTenant(raw: any, tenantId: string): boolean {
   if (String(raw?.tenantId || "").trim() === normalizedTenantId) return true;
   if (String(raw?.primaryTenantId || "").trim() === normalizedTenantId) return true;
   return Array.isArray(raw?.tenantIds) && raw.tenantIds.map((value: any) => String(value || "").trim()).includes(normalizedTenantId);
+}
+
+function leaseMatchesTenantIdentity(raw: any, tenantId?: string | null, tenantEmail?: string | null): boolean {
+  const normalizedTenantId = String(tenantId || "").trim();
+  if (normalizedTenantId && leaseHasTenant(raw, normalizedTenantId)) return true;
+  const normalizedEmail = String(tenantEmail || "").trim().toLowerCase();
+  if (!normalizedEmail) return false;
+  const emails = [
+    raw?.tenantEmail,
+    raw?.email,
+    raw?.primaryTenantEmail,
+    raw?.tenant?.email,
+    raw?.applicantEmail,
+  ]
+    .map((value) => String(value || "").trim().toLowerCase())
+    .filter(Boolean);
+  return emails.includes(normalizedEmail);
 }
 
 function isLeaseSigned(raw: any): boolean {
@@ -3098,6 +3148,7 @@ async function loadTenantLeaseAttachments(tenantId: string): Promise<any[]> {
 async function getTenantLeaseDocumentContext(params: {
   leaseId: string | null;
   tenantId: string | null;
+  tenantEmail?: string | null;
   propertyId: string | null;
   unitId: string | null;
   leaseData: any;
@@ -3105,6 +3156,7 @@ async function getTenantLeaseDocumentContext(params: {
 }): Promise<TenantLeaseDocumentContext> {
   const leaseId = String(params.leaseId || "").trim();
   const tenantId = String(params.tenantId || "").trim();
+  const tenantEmail = String(params.tenantEmail || "").trim().toLowerCase();
   const propertyId = String(params.propertyId || params.leaseData?.propertyId || "").trim();
   const unitId = String(params.unitId || params.leaseData?.unitId || params.leaseData?.unit || "").trim();
   const leaseStatus = String(params.leaseData?.status || "").trim() || undefined;
@@ -3124,10 +3176,10 @@ async function getTenantLeaseDocumentContext(params: {
     };
   }
 
-  if (tenantId && !leaseHasTenant(params.leaseData, tenantId)) {
+  if ((tenantId || tenantEmail) && !leaseMatchesTenantIdentity(params.leaseData, tenantId, tenantEmail)) {
     return {
       leaseId,
-      tenantId,
+      tenantId: tenantId || undefined,
       propertyId: propertyId || undefined,
       unitId: unitId || undefined,
       leaseStatus,
@@ -4962,12 +5014,13 @@ router.get("/lease/document-url", requireTenantWorkspaceIdentity, async (req: an
     const leaseSnap = await db.collection("leases").doc(context.leaseId).get();
     if (!leaseSnap.exists) return res.status(404).json({ ok: false, error: "lease_document_not_found" });
     const leaseData = leaseSnap.data() as any;
-    if (!leaseHasTenant(leaseData, context.tenantId)) {
+    if (!leaseMatchesTenantIdentity(leaseData, context.tenantId, context.invitedEmail || req.user?.email)) {
       return res.status(403).json({ ok: false, error: "lease_not_owned_by_tenant" });
     }
     const documentContext = await getTenantLeaseDocumentContext({
       leaseId: context.leaseId,
       tenantId: context.tenantId,
+      tenantEmail: String(context.invitedEmail || req.user?.email || "").trim() || null,
       propertyId: context.propertyId,
       unitId: context.unitId,
       leaseData,
@@ -6911,6 +6964,7 @@ router.get("/lease", requireTenant, async (req: any, res) => {
     const bestLease = await findBestTenantLease({
       current: leaseRecord && leaseId ? { id: leaseId, data: leaseRecord } : null,
       tenantId,
+      tenantEmail: String(tenantData?.email || req.user?.email || "").trim() || null,
       propertyId,
     });
     if (bestLease) {
@@ -6950,6 +7004,7 @@ router.get("/lease", requireTenant, async (req: any, res) => {
         ? await getTenantLeaseDocumentContext({
             leaseId,
             tenantId,
+            tenantEmail: String(tenantData?.email || req.user?.email || "").trim() || null,
             propertyId,
             unitId,
             leaseData: leaseRecord,

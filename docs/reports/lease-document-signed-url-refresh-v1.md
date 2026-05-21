@@ -14,6 +14,7 @@ No storage migration, Firestore rule change, public bucket access, auth rewrite,
 | Landlord active lease list | Shows `documentUrl` directly when available. | Storage-backed responses refresh the URL on load; the UI also calls a scoped refresh endpoint before opening a document. |
 | Tenant lease workspace | Shows tenant-safe `leaseDocumentContext.documentUrl`. | Storage-backed lease/attachment context refreshes the URL server-side; tenant UI calls a scoped refresh endpoint before opening. |
 | Legacy URL-only records | May only have an already-signed URL and no explicit storage reference. | Legacy GCS signed URLs are parsed into internal bucket/path refs and refreshed; non-GCS legacy URLs remain a compatibility fallback when no storage metadata can be derived. |
+| Email-linked tenant lease records | Some legacy leases can be linked by tenant email before canonical tenant ID fields are complete. | Tenant workspace resolution can derive a tenant-safe lease document context from an exact authenticated tenant email match without broadening access. |
 | Unit reconciliation documents | Existing unit `leaseDocument` signed URL hydration remains unchanged. | Future follow-up can apply the same explicit click-refresh pattern if needed. |
 
 ## Signed URL Governance
@@ -22,6 +23,7 @@ No storage migration, Firestore rule change, public bucket access, auth rewrite,
 - Permanent public URLs are not introduced.
 - Raw storage paths are internal metadata only, not primary UI labels.
 - Stale persisted signed URLs are not reused when explicit storage metadata or a parseable GCS signed URL is available.
+- App-domain `/leases/...pdf` paths are not used as document fallbacks.
 - Authorized viewers refresh through backend mediation:
   - landlord: `GET /api/leases/:leaseId/document-url`
   - tenant workspace: `GET /api/tenant/lease/document-url`
@@ -51,8 +53,10 @@ These fields are governance references for refresh and lineage. They are not dis
 - Landlord explicit document refresh endpoint returns a fresh signed URL and marks storage refs as internal references.
 - Tenant lease document refresh endpoint returns a tenant-scoped refreshed URL and does not leak the stale persisted URL.
 - Legacy persisted GCS signed URLs refresh through parsed internal storage refs instead of reopening expired URLs.
+- Email-linked active tenant leases can produce tenant-safe document context when the authenticated tenant email exactly matches the lease email.
 - Frontend landlord lease document action calls the refresh endpoint before opening.
 - Frontend tenant lease document action calls the refresh endpoint before opening.
+- Frontend document actions do not open stale GCS or app-domain PDF fallbacks when refresh fails; they surface a regeneration-needed message instead.
 - Lease summary export action is labelled `Print / Save PDF`.
 - Property unit occupancy links tenant names to tenant profiles while keeping lease links as explicit `View lease` actions.
 

@@ -225,6 +225,41 @@ describe("LandlordActiveLeasesPage", () => {
     expect(mocks.printSummaryDocument).toHaveBeenCalledWith("summary");
   });
 
+  it("does not open stale GCS or app-domain lease document fallbacks when refresh fails", async () => {
+    mocks.refreshLeaseDocumentUrl.mockReset();
+    mocks.refreshLeaseDocumentUrl.mockRejectedValueOnce(new Error("refresh failed"));
+    mocks.getActiveLeasesForLandlord.mockResolvedValue({
+      leases: [
+        {
+          id: "lease-stale",
+          propertyId: "prop-1",
+          propertyName: "Coburg Rd",
+          unitNumber: "6",
+          monthlyRent: 1800,
+          startDate: "2026-01-01",
+          endDate: "2026-12-31",
+          status: "active",
+          tenantName: "Chip Milo",
+          tenantEmail: "hello+cob6tenant@rentchain.ai",
+          documentUrl:
+            "https://storage.googleapis.com/lease-documents/leases/PXbRIbJdZpV2eBjzNmLaISgDa852/nkzRYxdZ49p0IGdXD3mS/schedule-a-v1.pdf?X-Goog-Expires=1",
+        },
+      ],
+    });
+
+    render(
+      <MemoryRouter>
+        <LandlordActiveLeasesPage />
+      </MemoryRouter>
+    );
+
+    vi.mocked(window.open).mockClear();
+    fireEvent.click(await screen.findByRole("button", { name: "View lease" }));
+    await waitFor(() => expect(mocks.refreshLeaseDocumentUrl).toHaveBeenCalledWith("lease-stale"));
+    expect(window.open).not.toHaveBeenCalled();
+    expect(await screen.findByText("refresh failed")).toBeInTheDocument();
+  });
+
   it("renders date-only lease dates without shifting them backward across timezones", async () => {
     mocks.getActiveLeasesForLandlord.mockResolvedValue({
       leases: [
@@ -488,6 +523,8 @@ describe("LandlordActiveLeasesPage", () => {
     );
 
     expect(await screen.findByText(/Occupied units missing lease records/i)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "View reference" })).not.toBeInTheDocument();
+    expect(screen.getByText("Lease document link expired and needs regeneration.")).toBeInTheDocument();
     fireEvent.click(screen.getAllByRole("button", { name: "Convert unit 9 to lease" })[0]);
     fireEvent.change(screen.getByLabelText("Tenant phone (optional)"), { target: { value: "(902) 555-1111 ext 9" } });
     fireEvent.change(screen.getByLabelText("Co-applicant email (optional)"), { target: { value: "coapplicant@example.com" } });

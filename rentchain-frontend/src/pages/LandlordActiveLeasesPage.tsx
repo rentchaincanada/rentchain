@@ -66,6 +66,30 @@ function errorMessage(error: unknown, fallback: string) {
   return fallback;
 }
 
+function isGoogleStorageSignedUrl(value: string) {
+  try {
+    const url = new URL(value);
+    return url.hostname === "storage.googleapis.com" || url.hostname === "storage.cloud.google.com" || url.hostname.endsWith(".storage.googleapis.com");
+  } catch {
+    return false;
+  }
+}
+
+function isAppDomainLeasePdfFallback(value: string) {
+  if (!value) return false;
+  try {
+    const url = new URL(value, window.location.origin);
+    return url.origin === window.location.origin && /^\/leases\/.+\.pdf$/i.test(url.pathname);
+  } catch {
+    return /^\/leases\/.+\.pdf(?:$|\?)/i.test(value);
+  }
+}
+
+function canUseLegacyDocumentFallback(value: string) {
+  const next = String(value || "").trim();
+  return Boolean(next) && !isGoogleStorageSignedUrl(next) && !isAppDomainLeasePdfFallback(next);
+}
+
 function normalizePhoneInput(value: string) {
   return String(value || "").replace(/\D/g, "").slice(0, 15);
 }
@@ -404,11 +428,11 @@ export default function LandlordActiveLeasesPage() {
       if (!nextUrl) throw new Error("Lease document is not available.");
       window.open(nextUrl, "_blank", "noreferrer");
     } catch (err: unknown) {
-      if (fallbackUrl) {
+      if (canUseLegacyDocumentFallback(fallbackUrl)) {
         window.open(fallbackUrl, "_blank", "noreferrer");
         return;
       }
-      setError(errorMessage(err, "Lease document is not available."));
+      setError(errorMessage(err, "Lease document link expired and needs regeneration."));
     } finally {
       setDocumentBusyLeaseId(null);
     }
@@ -460,7 +484,7 @@ export default function LandlordActiveLeasesPage() {
         `Status: ${prettyLeaseStatus(lease.status)}`,
         `Term: ${formatDate(lease.startDate)} to ${formatDate(lease.endDate)}`,
         `View ledger: ${ledgerUrl}`,
-        lease.documentUrl ? `Lease document: ${lease.documentUrl}` : "",
+        `Lease summary: ${typeof window !== "undefined" ? `${window.location.origin}${summaryPath}` : summaryPath}`,
       ]
         .filter(Boolean)
         .join("\n")
@@ -693,9 +717,9 @@ export default function LandlordActiveLeasesPage() {
                 </div>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   {candidate.leaseDocument?.url ? (
-                    <a href={candidate.leaseDocument.url} target="_blank" rel="noreferrer" style={{ color: "#2563eb" }}>
-                      View reference
-                    </a>
+                    <span style={{ color: "#64748b", fontSize: 13 }}>
+                      Lease document link expired and needs regeneration.
+                    </span>
                   ) : null}
                   {candidate.canConvert ? (
                     <button

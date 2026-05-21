@@ -625,7 +625,7 @@ async function loadLeaseDocumentUrlForLease(raw: any): Promise<string | null> {
 
   const directUrl =
     String(raw?.documentUrl || raw?.approvedDocumentUrl || raw?.documentRef || "").trim() || null;
-  if (directUrl) return directUrl;
+  if (directUrl && !isAppDomainLeasePdfUrl(directUrl)) return directUrl;
 
   const referenceBucket = String(raw?.referenceDocument?.bucket || raw?.leaseDocument?.bucket || "").trim();
   const referencePath = String(raw?.referenceDocument?.path || raw?.leaseDocument?.path || "").trim();
@@ -665,6 +665,17 @@ type LeaseDocumentStorageRef = {
 
 function normalizeStoragePath(value: unknown): string {
   return String(value || "").trim().replace(/^\/+/, "");
+}
+
+function isAppDomainLeasePdfUrl(value: unknown): boolean {
+  const raw = String(value || "").trim();
+  if (!raw) return false;
+  try {
+    const url = new URL(raw, "https://app.rentchain.invalid");
+    return /^\/leases\/.+\.pdf$/i.test(url.pathname);
+  } catch {
+    return /^\/leases\/.+\.pdf(?:$|\?)/i.test(raw);
+  }
 }
 
 function storageRefFromDocumentRecord(record: any, source: string): LeaseDocumentStorageRef | null {

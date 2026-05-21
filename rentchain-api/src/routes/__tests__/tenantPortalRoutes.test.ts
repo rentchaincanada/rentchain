@@ -1007,6 +1007,60 @@ describe("tenantPortalRoutes foundation", () => {
     });
   });
 
+  it("derives tenant-safe lease document context from an email-linked active lease with a refreshable legacy URL", async () => {
+    const staleUrl =
+      "https://storage.googleapis.com/lease-documents/leases/PXbRIbJdZpV2eBjzNmLaISgDa852/nkzRYxdZ49p0IGdXD3mS/schedule-a-v1.pdf?X-Goog-Expires=1&X-Goog-Signature=expired";
+    ensureCollection("leases").set("lease-1", {
+      ...(ensureCollection("leases").get("lease-1") || {}),
+      status: "archived",
+    });
+    ensureCollection("leases").set("lease-email-linked", {
+      propertyId: "prop-1",
+      unitId: "unit-6",
+      unitNumber: "6",
+      status: "active",
+      tenantEmail: "tenant@example.com",
+      tenantName: "Chip Milo",
+      startDate: "2026-02-01",
+      endDate: "2027-01-31",
+      monthlyRent: 1800,
+      documentUrl: staleUrl,
+      tenantSignature: {
+        signedAt: "2026-02-01T10:00:00.000Z",
+      },
+      landlordSignature: {
+        signedAt: "2026-02-01T11:00:00.000Z",
+      },
+    });
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/lease",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.data?.leaseId).toBe("lease-email-linked");
+    expect(res.body?.data?.documentUrl).toBe(
+      "https://signed.example/leases/PXbRIbJdZpV2eBjzNmLaISgDa852/nkzRYxdZ49p0IGdXD3mS/schedule-a-v1.pdf"
+    );
+    expect(res.body?.data?.leaseDocumentContext).toEqual(
+      expect.objectContaining({
+        documentStatus: "signed",
+        source: "lease.documentUrl",
+      })
+    );
+    expect(JSON.stringify(res.body)).not.toContain(staleUrl);
+  });
+
   it("prefers the current active lease document over an archived tenant lease reference", async () => {
     ensureCollection("tenants").set("tenant-1", {
       ...(ensureCollection("tenants").get("tenant-1") || {}),
