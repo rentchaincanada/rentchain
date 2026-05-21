@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import { authenticateJwt } from "./middleware/authMiddleware";
+import { requireLandlord } from "./middleware/requireLandlord";
 import { routeSource } from "./middleware/routeSource";
 import {
   requireDiagnosticAccess,
@@ -25,7 +26,7 @@ import authRoutes from "./routes/authRoutes";
 import paymentsRoutes, { handlePaymentEdit, paymentsEditRouter } from "./routes/paymentsRoutes";
 import applicationsRoutes from "./routes/applicationsRoutes";
 import applicationsConversionRoutes from "./routes/applicationsConversionRoutes";
-import leaseRoutes from "./routes/leaseRoutes";
+import leaseRoutes, { handleLeaseDocumentUrl } from "./routes/leaseRoutes";
 import tenantOnboardRoutes from "./routes/tenantOnboardRoutes";
 import eventsRoutes from "./routes/eventsRoutes";
 import dashboardRoutes from "./routes/dashboardRoutes";
@@ -442,6 +443,7 @@ app.get("/api/me", async (req: any, res: any, next: any) => {
 // Core prefixed APIs must mount before broad /api routers.
 app.use("/api/compliance", routeSource("complianceRoutes.ts"), complianceRoutes);
 app.use("/api/decisions", routeSource("decisionRoutes.ts"), decisionRoutes);
+app.get("/api/leases/:leaseId/document-url", routeSource("leaseRoutes.ts"), requireLandlord, handleLeaseDocumentUrl);
 app.use("/api/leases", routeSource("leaseRoutes.ts"), leaseRoutes);
 app.use("/api/tenants", routeSource("tenantsRoutes.ts"), tenantsRoutes);
 app.use("/api", routeSource("tenanciesRoutes.ts"), tenanciesRoutes);

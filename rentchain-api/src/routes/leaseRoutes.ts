@@ -2841,7 +2841,7 @@ router.get("/:leaseId/payments", requireLandlord, async (req: any, res: Response
   }
 });
 
-router.get("/:leaseId/document-url", requireLandlord, async (req: any, res: Response) => {
+export async function handleLeaseDocumentUrl(req: any, res: Response) {
   try {
     if (!(await enforceLeaseCapability(req, res))) return;
     const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
@@ -2886,7 +2886,9 @@ router.get("/:leaseId/document-url", requireLandlord, async (req: any, res: Resp
     console.error("[GET /api/leases/:leaseId/document-url] error", err);
     return res.status(500).json({ ok: false, error: "Failed to refresh lease document URL" });
   }
-});
+}
+
+router.get("/:leaseId/document-url", requireLandlord, handleLeaseDocumentUrl);
 
 router.post("/:leaseId/restore", requireLandlord, async (req: any, res: Response) => {
   try {
