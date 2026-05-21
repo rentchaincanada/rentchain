@@ -6,15 +6,22 @@ import { buildLeaseSummaryPdfSource } from "@/utils/leaseSummaryPdf";
 
 const mocks = vi.hoisted(() => ({
   getLeaseById: vi.fn(),
+  printSummaryDocument: vi.fn(),
 }));
 
 vi.mock("@/api/leasesApi", () => ({
   getLeaseById: mocks.getLeaseById,
 }));
 
+vi.mock("@/utils/printSummary", () => ({
+  printSummaryDocument: (...args: unknown[]) => mocks.printSummaryDocument(...args),
+}));
+
 describe("LandlordLeaseSummaryPage", () => {
   beforeEach(() => {
     mocks.getLeaseById.mockReset();
+    mocks.printSummaryDocument.mockReset();
+    mocks.printSummaryDocument.mockResolvedValue(undefined);
     mocks.getLeaseById.mockResolvedValue({
       lease: {
         id: "lease-1",
@@ -156,13 +163,36 @@ describe("LandlordLeaseSummaryPage", () => {
     expect(screen.getByText("June 1, 2026")).toBeInTheDocument();
   });
 
-  it("saves missing-document lease summaries as PDFs instead of raw text", async () => {
+  it("opens the browser print flow before falling back to direct PDF download", async () => {
+    render(
+      <MemoryRouter initialEntries={["/leases/lease-1/summary"]}>
+        <Routes>
+          <Route path="/leases/:leaseId/summary" element={<LandlordLeaseSummaryPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Print / Save PDF" }));
+
+    await waitFor(() => {
+      expect(mocks.printSummaryDocument).toHaveBeenCalledWith("summary");
+    });
+    expect(global.URL.createObjectURL).not.toHaveBeenCalled();
+    expect(HTMLAnchorElement.prototype.click).not.toHaveBeenCalled();
+  });
+
+  it("falls back to direct PDF download only when browser printing is unavailable", async () => {
     const realCreateElement = document.createElement.bind(document);
     const createdAnchors: HTMLAnchorElement[] = [];
     vi.spyOn(document, "createElement").mockImplementation((tagName: string, options?: ElementCreationOptions) => {
       const element = realCreateElement(tagName, options);
       if (tagName.toLowerCase() === "a") createdAnchors.push(element as HTMLAnchorElement);
       return element;
+    });
+    const originalPrint = window.print;
+    Object.defineProperty(window, "print", {
+      configurable: true,
+      value: undefined,
     });
 
     render(
@@ -180,6 +210,7 @@ describe("LandlordLeaseSummaryPage", () => {
       expect(HTMLAnchorElement.prototype.click).toHaveBeenCalledTimes(1);
       expect(global.URL.revokeObjectURL).toHaveBeenCalledTimes(1);
     });
+    expect(mocks.printSummaryDocument).not.toHaveBeenCalled();
     const blob = vi.mocked(global.URL.createObjectURL).mock.calls[0][0] as Blob;
     expect(blob.type).toBe("application/pdf");
     const pdfText = buildLeaseSummaryPdfSource(mocks.getLeaseById.mock.calls.length ? (await mocks.getLeaseById.mock.results[0].value).lease : {});
@@ -193,6 +224,10 @@ describe("LandlordLeaseSummaryPage", () => {
     const downloadAnchor = createdAnchors[createdAnchors.length - 1];
     expect(downloadAnchor?.download).toBe("lease-3.pdf");
     expect(downloadAnchor?.download).not.toMatch(/\.txt$/);
+    Object.defineProperty(window, "print", {
+      configurable: true,
+      value: originalPrint,
+    });
   });
 
   it("paginates long lease summary content without adding empty trailing pages", () => {

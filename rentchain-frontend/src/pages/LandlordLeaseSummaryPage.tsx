@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { getLeaseById, type LandlordActiveLease } from "@/api/leasesApi";
 import { LeaseDocumentView } from "@/components/leases/LeaseDocumentView";
 import { downloadLeaseSummaryPdf } from "@/utils/leaseSummaryPdf";
+import { printSummaryDocument } from "@/utils/printSummary";
 
 function errorMessage(error: unknown, fallback: string) {
   if (error instanceof Error && error.message) return error.message;
@@ -62,6 +63,14 @@ export default function LandlordLeaseSummaryPage() {
   }, [leaseId]);
 
   const ledgerPath = lease ? `/leases/${encodeURIComponent(lease.id)}/ledger` : `/leases/${encodeURIComponent(leaseId)}/ledger`;
+  async function handlePrintOrSavePdf() {
+    if (!lease) return;
+    if (typeof window !== "undefined" && typeof window.print === "function") {
+      await printSummaryDocument("summary");
+      return;
+    }
+    downloadLeaseSummaryPdf(lease);
+  }
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
@@ -81,9 +90,7 @@ export default function LandlordLeaseSummaryPage() {
         </Link>
           <button
             type="button"
-            onClick={() => {
-              if (lease) downloadLeaseSummaryPdf(lease);
-            }}
+            onClick={() => void handlePrintOrSavePdf()}
           disabled={!lease}
           style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a" }}
         >
