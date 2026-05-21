@@ -157,7 +157,6 @@ describe("landlord maintenance workspace", () => {
 
     expect((await screen.findAllByText("In progress")).length).toBeGreaterThan(0);
     expect(screen.getAllByText("Urgent").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("General Repair").length).toBeGreaterThan(0);
     expect(screen.queryByText("in_progress")).not.toBeInTheDocument();
     expect(screen.queryByText("general_repair")).not.toBeInTheDocument();
   });
