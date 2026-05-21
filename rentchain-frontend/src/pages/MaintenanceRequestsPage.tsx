@@ -32,6 +32,11 @@ import {
   buildMaintenanceSchedulingAccessView,
   buildMaintenanceSchedulingCalendarEvents,
 } from "./maintenanceSchedulingAccessState";
+import {
+  workOrderCategoryLabel,
+  workOrderPriorityLabel,
+  workOrderStatusLabel,
+} from "../lib/workOrderOperationalLabels";
 
 const FILTERS: Array<{ value: "all" | MaintenanceWorkflowStatus; label: string }> = [
   { value: "all", label: "All requests" },
@@ -681,8 +686,8 @@ export default function MaintenanceRequestsPage() {
                 <td>{item.tenantName || "Tenant"}</td>
                 <td>{displayPropertyLabel(item)}</td>
                 <td>{displayUnitLabel(item)}</td>
-                <td>{item.priority || "-"}</td>
-                <td>{item.status || "-"}</td>
+                <td>{workOrderPriorityLabel(item.priority)}</td>
+                <td>{workOrderStatusLabel(item.status, "operator")}</td>
                 <td>{item.assignedContractorName || "-"}</td>
                 <td>{fmtDate(item.createdAt)}</td>
                 <td>{fmtDate(item.updatedAt)}</td>
@@ -696,12 +701,12 @@ export default function MaintenanceRequestsPage() {
             <table className="printTable">
               <tbody>
                 <tr><th>Title</th><td>{selected.title}</td></tr>
-                <tr><th>Category</th><td>{selected.category || "-"}</td></tr>
+                <tr><th>Category</th><td>{workOrderCategoryLabel(selected.category)}</td></tr>
                 <tr><th>Tenant</th><td>{selected.tenantName || "Tenant"}</td></tr>
                 <tr><th>Property</th><td>{displayPropertyLabel(selected)}</td></tr>
                 <tr><th>Unit</th><td>{displayUnitLabel(selected)}</td></tr>
-                <tr><th>Priority</th><td>{selected.priority || "-"}</td></tr>
-                <tr><th>Status</th><td>{selected.status || "-"}</td></tr>
+                <tr><th>Priority</th><td>{workOrderPriorityLabel(selected.priority)}</td></tr>
+                <tr><th>Status</th><td>{workOrderStatusLabel(selected.status, "operator")}</td></tr>
                 <tr><th>Assigned contractor</th><td>{selected.assignedContractorName || "-"}</td></tr>
                 <tr><th>Service window start</th><td>{fmtDate(selected.serviceWindowStartAt)}</td></tr>
                 <tr><th>Service window end</th><td>{fmtDate(selected.serviceWindowEndAt)}</td></tr>
@@ -1182,7 +1187,7 @@ export default function MaintenanceRequestsPage() {
                               fontWeight: 700,
                             }}
                           >
-                            {item.status}
+                            {workOrderStatusLabel(item.status, "operator")}
                           </span>
                           <span
                             style={{
@@ -1193,7 +1198,7 @@ export default function MaintenanceRequestsPage() {
                           >
                             {assignment.assignmentLabel}
                           </span>
-                          <span style={{ color: text.muted, fontSize: 12 }}>{item.priority}</span>
+                          <span style={{ color: text.muted, fontSize: 12 }}>{workOrderPriorityLabel(item.priority)}</span>
                           <span style={{ color: text.muted, fontSize: 12 }}>{fmtDate(item.createdAt)}</span>
                         </div>
                         <div style={{ color: text.secondary, fontSize: 12 }}>{assignment.ownerSummary}</div>
@@ -1258,7 +1263,7 @@ export default function MaintenanceRequestsPage() {
                         fontWeight: 700,
                       }}
                     >
-                      {selected.status}
+                      {workOrderStatusLabel(selected.status, "operator")}
                     </div>
                   </div>
 

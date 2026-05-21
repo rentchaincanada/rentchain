@@ -155,4 +155,46 @@ describe("deriveOperationalReviewRouting", () => {
       expect.objectContaining({ reviewReasonKey: "evidence_review", workspaceType: "evidence_review" })
     );
   });
+
+  it("normalizes maintenance decisions as operational work order review metadata", () => {
+    const routing = deriveOperationalReviewRoutingFromDecision(
+      decision({
+        id: "decision:maintenance_review:maint-1",
+        title: "Work order needs review",
+        description: "Maintenance request requires operational follow-up.",
+        type: "maintenance",
+        relatedEntity: { kind: "maintenance_request", id: "maint-1", label: "" },
+        workflow: {
+          queue: "maintenance_review",
+          workflowState: "open",
+          ownershipType: "landlord",
+          reviewPriority: "needs_review",
+          escalationLevel: "attention",
+          manualOnly: true,
+        },
+      }),
+      { landlordId: "landlord-1", tenantId: "tenant-1" }
+    );
+
+    expect(routing).toEqual(
+      expect.objectContaining({
+        reviewReasonKey: "operational_work_order_review",
+        reviewReasonLabel: "Operational work order review",
+        workspaceType: "operational_anomaly_review",
+        manualOnly: true,
+        autoCreateWorkspace: false,
+        autonomousActionsEnabled: false,
+      })
+    );
+    expect(routing.relatedResourceRefs).toEqual([
+      expect.objectContaining({
+        resourceType: "work_order",
+        resourceId: "maint-1",
+        label: "Operational work order",
+        landlordId: "landlord-1",
+        tenantId: "tenant-1",
+      }),
+    ]);
+    expect(JSON.stringify(routing)).not.toContain("maintenance_request");
+  });
 });

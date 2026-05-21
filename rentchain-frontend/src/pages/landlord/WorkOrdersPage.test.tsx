@@ -230,6 +230,29 @@ describe("WorkOrdersPage", () => {
     expect(mocks.listWorkOrders).toHaveBeenCalledWith();
   });
 
+  it("renders operator-facing work order labels without machine-style statuses", async () => {
+    mocks.canUseWorkOrders = true;
+    mocks.listWorkOrders.mockResolvedValue([
+      makeWorkOrder({
+        status: "in_progress",
+        priority: "urgent",
+        category: "general_repair",
+      }),
+    ]);
+
+    render(
+      <MemoryRouter>
+        <WorkOrdersPage />
+      </MemoryRouter>
+    );
+
+    expect((await screen.findAllByText("In progress")).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Urgent").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("General Repair").length).toBeGreaterThan(0);
+    expect(screen.queryByText("in_progress")).not.toBeInTheDocument();
+    expect(screen.queryByText("general_repair")).not.toBeInTheDocument();
+  });
+
   it("hydrates maintenance-backlog query params into a property-scoped visible list", async () => {
     mocks.canUseWorkOrders = true;
     mocks.fetchProperties.mockResolvedValue({
@@ -614,7 +637,7 @@ describe("WorkOrdersPage", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByRole("button", { name: "Create Work Order" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Create work order" })).toBeInTheDocument();
     fireEvent.click(await screen.findByRole("button", { name: /timeline/i }));
     expect(await screen.findByText(/Unlock the contractor directory on Pro/i)).toBeInTheDocument();
     expect(mocks.fetchContractors).not.toHaveBeenCalled();

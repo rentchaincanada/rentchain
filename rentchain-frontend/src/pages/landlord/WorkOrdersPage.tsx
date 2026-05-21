@@ -42,6 +42,12 @@ import {
 import { type ExpenseCategory } from "../../api/expensesApi";
 import { printSummaryDocument } from "../../utils/printSummary";
 import { triggerBlobDownload } from "../../utils/downloadBlob";
+import {
+  workOrderCategoryLabel,
+  workOrderCollectionLabel,
+  workOrderPriorityLabel,
+  workOrderStatusLabel,
+} from "../../lib/workOrderOperationalLabels";
 
 function formatDate(ms?: number | null) {
   if (!ms) return "-";
@@ -962,8 +968,8 @@ export default function WorkOrdersPage() {
     <div style={{ display: "grid", gap: 14 }}>
       <Card style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
         <div>
-          <div style={{ fontWeight: 700, fontSize: "1.06rem" }}>Work Orders</div>
-          <div style={{ color: "#64748b", marginTop: 4 }}>Create, assign, and track landlord maintenance jobs.</div>
+          <div style={{ fontWeight: 700, fontSize: "1.06rem" }}>{workOrderCollectionLabel("operator")}</div>
+          <div style={{ color: "#64748b", marginTop: 4 }}>Create, assign, and track landlord work orders.</div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <Button variant="secondary" onClick={() => void triggerExport("csv")} disabled={exporting !== null}>
@@ -979,7 +985,7 @@ export default function WorkOrdersPage() {
             Refresh
           </Button>
           <Link to="/work-orders/new">
-            <Button>Create Work Order</Button>
+            <Button>Create work order</Button>
           </Link>
         </div>
       </Card>
@@ -1036,9 +1042,9 @@ export default function WorkOrdersPage() {
               <tr key={item.id}>
                 <td>{item.title}</td>
                 <td>{getPropertyLabel(item)}</td>
-                <td>{item.category || "-"}</td>
-                <td>{item.priority || "-"}</td>
-                <td>{item.status || "-"}</td>
+                <td>{workOrderCategoryLabel(item.category)}</td>
+                <td>{workOrderPriorityLabel(item.priority)}</td>
+                <td>{workOrderStatusLabel(item.status, "operator")}</td>
                 <td>{getAssignedContractorLabel(item)}</td>
                 <td>{formatDate(item.scheduledFor)}</td>
                 <td>{formatDate(item.serviceStartedAt)}</td>
@@ -1055,9 +1061,9 @@ export default function WorkOrdersPage() {
               <tbody>
                 <tr><th>Title</th><td>{selected.title}</td></tr>
                 <tr><th>Property</th><td>{getPropertyLabel(selected)}</td></tr>
-                <tr><th>Category</th><td>{selected.category || "-"}</td></tr>
-                <tr><th>Priority</th><td>{selected.priority || "-"}</td></tr>
-                <tr><th>Status</th><td>{selected.status || "-"}</td></tr>
+                <tr><th>Category</th><td>{workOrderCategoryLabel(selected.category)}</td></tr>
+                <tr><th>Priority</th><td>{workOrderPriorityLabel(selected.priority)}</td></tr>
+                <tr><th>Status</th><td>{workOrderStatusLabel(selected.status, "operator")}</td></tr>
                 <tr><th>Assigned contractor</th><td>{getAssignedContractorLabel(selected)}</td></tr>
                 <tr><th>Scheduled for</th><td>{formatDate(selected.scheduledFor)}</td></tr>
                 <tr><th>Service started</th><td>{formatDate(selected.serviceStartedAt)}</td></tr>
@@ -1083,7 +1089,7 @@ export default function WorkOrdersPage() {
                     {updates.map((update) => (
                       <tr key={update.id}>
                         <td>{formatDate(update.createdAtMs)}</td>
-                        <td>{update.updateType}</td>
+                        <td>{workOrderStatusLabel(update.updateType, "operator")}</td>
                         <td>{String(update.message || "").trim() || "-"}</td>
                       </tr>
                     ))}
@@ -1098,9 +1104,9 @@ export default function WorkOrdersPage() {
       <div style={{ display: "grid", gap: 12, gridTemplateColumns: "minmax(0,1fr)", alignItems: "start" }}>
         <Card>
           {loading ? (
-            <div>Loading work orders...</div>
+            <div>Loading {workOrderCollectionLabel("operator").toLowerCase()}...</div>
           ) : visibleWorkOrders.length === 0 ? (
-            <div style={{ color: "#64748b" }}>No work orders yet.</div>
+            <div style={{ color: "#64748b" }}>No {workOrderCollectionLabel("operator").toLowerCase()} yet.</div>
           ) : isMobile ? (
             <div style={{ display: "grid", gap: 12 }}>
               {visibleWorkOrders.map((item) => (
@@ -1117,12 +1123,12 @@ export default function WorkOrdersPage() {
                   <div style={{ display: "grid", gap: 4 }}>
                     <div style={{ fontWeight: 700 }}>{item.title}</div>
                     <div style={{ color: "#64748b", fontSize: 13 }}>
-                      {item.category || "Uncategorized"} · {item.priority} priority
+                      {workOrderCategoryLabel(item.category)} · {workOrderPriorityLabel(item.priority)} priority
                     </div>
                   </div>
                   <div style={{ display: "grid", gap: 6, fontSize: 13 }}>
                     <div>
-                      <strong>Status:</strong> {item.status}
+                      <strong>Status:</strong> {workOrderStatusLabel(item.status, "operator")}
                     </div>
                     <div>
                       <strong>Assigned:</strong> {item.contractorAssignment?.displayName || item.assignedContractorId || "-"}
@@ -1199,9 +1205,9 @@ export default function WorkOrdersPage() {
                 {visibleWorkOrders.map((item) => (
                   <tr key={item.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
                     <td style={{ padding: 8, fontWeight: 600 }}>{item.title}</td>
-                    <td style={{ padding: 8 }}>{item.category || "-"}</td>
-                    <td style={{ padding: 8 }}>{item.priority}</td>
-                    <td style={{ padding: 8 }}>{item.status}</td>
+                    <td style={{ padding: 8 }}>{workOrderCategoryLabel(item.category)}</td>
+                    <td style={{ padding: 8 }}>{workOrderPriorityLabel(item.priority)}</td>
+                    <td style={{ padding: 8 }}>{workOrderStatusLabel(item.status, "operator")}</td>
                     <td style={{ padding: 8 }}>{item.contractorAssignment?.displayName || item.assignedContractorId || "-"}</td>
                     <td style={{ padding: 8 }}>{formatDate(item.updatedAtMs)}</td>
                     <td style={{ padding: 8 }}>
@@ -1361,7 +1367,7 @@ export default function WorkOrdersPage() {
                 <div>
                   <div style={{ fontSize: 12, color: "#64748b" }}>Active rework cycle</div>
                   <div style={{ marginTop: 4 }}>
-                    Rework #{selected.reworkCycle.cycleNumber} • {selected.reworkCycle.status.replaceAll("_", " ")}
+                    Rework #{selected.reworkCycle.cycleNumber} • {workOrderStatusLabel(selected.reworkCycle.status, "operator")}
                   </div>
                   {selected.reworkCycle.completionSummary ? (
                     <div style={{ marginTop: 4, whiteSpace: "pre-wrap" }}>{selected.reworkCycle.completionSummary}</div>
@@ -1620,7 +1626,7 @@ export default function WorkOrdersPage() {
               <div style={{ fontWeight: 700 }}>Rework cycle</div>
               <div style={{ color: "#64748b" }}>
                 {selected.reworkCycle
-                  ? `Rework #${selected.reworkCycle.cycleNumber} is ${selected.reworkCycle.status.replaceAll("_", " ")}.`
+                  ? `Rework #${selected.reworkCycle.cycleNumber} is ${workOrderStatusLabel(selected.reworkCycle.status, "operator").toLowerCase()}.`
                   : selected.resolutionStatus === "follow_up_required"
                   ? "This work order is ready to move into a structured rework cycle."
                   : "No active rework cycle."}
@@ -1739,7 +1745,7 @@ export default function WorkOrdersPage() {
                       </div>
                       {selected.reworkReview.closureOutcome ? (
                         <div style={{ color: "#64748b", fontSize: 13 }}>
-                          Closure outcome: {selected.reworkReview.closureOutcome.replaceAll("_", " ")}
+                          Closure outcome: {workOrderStatusLabel(selected.reworkReview.closureOutcome, "operator")}
                         </div>
                       ) : null}
                       {selected.reworkReview.tenantDeclineReason ? (

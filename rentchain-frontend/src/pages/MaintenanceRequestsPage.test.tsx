@@ -122,6 +122,46 @@ describe("landlord maintenance workspace", () => {
     expect(screen.getByText(/Mark reviewed/i)).toBeInTheDocument();
   });
 
+  it("normalizes landlord-facing maintenance request statuses without raw workflow keys", async () => {
+    maintenanceWorkflowApi.listLandlordMaintenance.mockResolvedValue({
+      items: [
+        {
+          id: "maint-1",
+          tenantId: "tenant-1",
+          landlordId: "landlord-1",
+          propertyId: "prop-1",
+          unitId: "unit-2",
+          tenantName: "Taylor Tenant",
+          propertyLabel: "123 Main St",
+          unitLabel: "Unit 4",
+          title: "Broken heater",
+          description: "Heat is not turning on.",
+          category: "general_repair",
+          priority: "urgent",
+          status: "in_progress",
+          assignedContractorName: "North Shore HVAC",
+          createdAt: 100,
+          updatedAt: 200,
+          statusHistory: [],
+        },
+      ],
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/maintenance/maint-1"]}>
+        <Routes>
+          <Route path="/maintenance/:id" element={<MaintenanceRequestsPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect((await screen.findAllByText("In progress")).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Urgent").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("General Repair").length).toBeGreaterThan(0);
+    expect(screen.queryByText("in_progress")).not.toBeInTheDocument();
+    expect(screen.queryByText("general_repair")).not.toBeInTheDocument();
+  });
+
   it("renders the PDF summary action and routes it through the shared print helper", async () => {
     render(
       <MemoryRouter initialEntries={["/maintenance/maint-1"]}>
