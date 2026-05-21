@@ -116,9 +116,6 @@ export async function signInWithPassword(
     throw err;
   }
 
-  // Helpful: confirm we're using some key without exposing full value
-  console.log("[auth] FIREBASE_API_KEY prefix", FIREBASE_API_KEY.slice(0, 8));
-
   const url = `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`;
   const res = await fetch(url, {
     method: "POST",

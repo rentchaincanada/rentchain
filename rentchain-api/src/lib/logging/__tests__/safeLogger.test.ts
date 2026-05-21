@@ -36,6 +36,9 @@ describe("safeLogger", () => {
       routingNumber: "000111222",
       token: "secret-token",
       apiKey: "sk_live_sensitive",
+      firebaseApiKey: "firebase-api-key-sensitive",
+      privateKey: "private-key-sensitive",
+      serviceAccountJson: "service-account-sensitive",
       webhookSecret: "whsec_sensitive",
       stack: "private stack trace",
       routeSource: "debug router",
@@ -74,6 +77,9 @@ describe("safeLogger", () => {
       "000111222",
       "secret-token",
       "sk_live_sensitive",
+      "firebase-api-key-sensitive",
+      "private-key-sensitive",
+      "service-account-sensitive",
       "whsec_sensitive",
       "private stack trace",
       "debug router",
@@ -144,6 +150,9 @@ describe("safeLogger", () => {
     expect(isRestrictedLogKey("rawCsv")).toBe(true);
     expect(isRestrictedLogKey("routeSource")).toBe(true);
     expect(isRestrictedLogKey("Authorization")).toBe(true);
+    expect(isRestrictedLogKey("firebaseApiKey")).toBe(true);
+    expect(isRestrictedLogKey("privateKey")).toBe(true);
+    expect(isRestrictedLogKey("serviceAccountJson")).toBe(true);
     expect(isRestrictedLogKey("idToken")).toBe(true);
     expect(isRestrictedLogKey("refreshToken")).toBe(true);
     expect(isRestrictedLogKey("sessionToken")).toBe(true);
