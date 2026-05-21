@@ -3,6 +3,10 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 import { authenticateJwt } from "./middleware/authMiddleware";
 import { routeSource } from "./middleware/routeSource";
+import {
+  requireDiagnosticAccess,
+  safeDiagnosticBuildMetadata,
+} from "./middleware/diagnosticSurfaceGuard";
 import { notFoundHandler, errorHandler } from "./middleware/errorHandler";
 import {
   rateLimitDiagnostics,
@@ -243,14 +247,18 @@ app.use("/api/api", (req, res) => {
 
 // Health
 app.use("/health", healthRoutes);
-app.get("/api/__routes", rateLimitDiagnostics, (_req, res) => {
-  res.setHeader("x-route-source", "app.build.ts:/api/__routes");
-  return res.json({
-    ok: true,
-    runtime: "app.build.ts",
-    mounted: ["/api/auth", "/api/access", "/api/invites"],
-  });
-});
+app.get(
+  "/api/__routes",
+  rateLimitDiagnostics,
+  requireDiagnosticAccess("app.build.ts:/api/__routes"),
+  (_req, res) => {
+    return res.json({
+      ok: true,
+      runtime: "app.build.ts",
+      mounted: ["/api/auth", "/api/access", "/api/invites"],
+    });
+  }
+);
 
 // Billing routes
 app.use("/api/billing", routeSource("billingRoutes.ts"), billingRoutes);
@@ -514,20 +522,21 @@ app.use("/api", routeSource("screeningReportRoutes.ts"), screeningReportRoutes);
 app.use("/api", tenantOnboardRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/landlord", landlordMicroLiveRoutes);
-app.get("/api/__probe/tenants-mount", rateLimitDiagnostics, (_req, res) =>
-  res.json({ ok: true, probe: "tenants-mount", ts: Date.now() })
+app.get(
+  "/api/__probe/tenants-mount",
+  rateLimitDiagnostics,
+  requireDiagnosticAccess("app.build.ts:/api/__probe/tenants-mount"),
+  (_req, res) => res.json({ ok: true, probe: "tenants-mount" })
 );
-app.get("/api/__probe/version", rateLimitDiagnostics, (_req, res) =>
-  res.json({ ok: true, ts: Date.now(), marker: "probe-v1" })
-);
+app.get("/api/__probe/version", rateLimitDiagnostics, (_req, res) => {
+  res.setHeader("x-route-source", "app.build.ts:/api/__probe/version");
+  return res.json({ ok: true, marker: "probe-v1", ...safeDiagnosticBuildMetadata() });
+});
 app.get("/api/__probe/revision", rateLimitDiagnostics, (_req, res) => {
   res.setHeader("x-route-source", "app.build.ts:/api/__probe/revision");
   return res.json({
     ok: true,
-    service: "rentchain-landlord-api",
-    revision: process.env.K_REVISION || null,
-    commit: process.env.GIT_SHA || process.env.COMMIT_SHA || null,
-    ts: Date.now(),
+    ...safeDiagnosticBuildMetadata(),
   });
 });
 app.use("/api/account", accountRoutes);
@@ -538,76 +547,83 @@ app.use("/api", routeSource("telemetryRoutes.ts"), telemetryRoutes);
 console.log(
   "[routes] /api/properties, /api/properties/:propertyId/units, /api/action-requests, /api/applications"
 );
-app.post("/api/_echo", rateLimitDiagnostics, (req, res) => {
-  res.setHeader("x-route-source", "app.build.ts:/api/_echo");
-  return res.json({ ok: true, method: "POST", body: req.body ?? null });
-});
+app.get(
+  "/api/__probe/routes",
+  rateLimitDiagnostics,
+  requireDiagnosticAccess("app.build.ts:/api/__probe/routes"),
+  (_req, res) => {
+    const appAny: any = app;
+    const stack = appAny?._router?.stack || [];
+    const mounts = stack
+      .filter((l: any) => l && l.name === "router" && l.regexp)
+      .map((l: any) => String(l.regexp));
+    const routes = stack
+      .filter((l: any) => l && l.route && l.route.path)
+      .map((l: any) => ({
+        path: l.route.path,
+        methods: l.route.methods,
+      }));
 
-app.get("/api/__probe/routes", rateLimitDiagnostics, (_req, res) => {
-  const appAny: any = app;
-  const stack = appAny?._router?.stack || [];
-  const mounts = stack
-    .filter((l: any) => l && l.name === "router" && l.regexp)
-    .map((l: any) => String(l.regexp));
-  const routes = stack
-    .filter((l: any) => l && l.route && l.route.path)
-    .map((l: any) => ({
-      path: l.route.path,
-      methods: l.route.methods,
-    }));
-
-  res.json({
-    ok: true,
-    mountsCount: mounts.length,
-    mounts,
-    routesCount: routes.length,
-    routes,
-    hasTenantsMount: mounts.some((s: string) => s.includes("tenants")),
-  });
-});
+    res.json({
+      ok: true,
+      mountsCount: mounts.length,
+      mounts,
+      routesCount: routes.length,
+      routes,
+      hasTenantsMount: mounts.some((s: string) => s.includes("tenants")),
+    });
+  }
+);
 
 // Build stamp
 app.get("/api/_build", rateLimitDiagnostics, (_req, res) => {
   res.setHeader("x-route-source", "app.build.ts:/api/_build");
   return res.json({
     ok: true,
-    service: process.env.K_SERVICE || null,
-    revision: process.env.K_REVISION || null,
-    time: new Date().toISOString(),
+    ...safeDiagnosticBuildMetadata(),
   });
 });
 
 // Echo for POST reachability
-app.post("/api/_echo", rateLimitDiagnostics, (req, res) => {
-  res.setHeader("x-route-source", "app.build.ts:/api/_echo");
-  return res.json({
-    ok: true,
-    method: req.method,
-    path: req.path,
-    body: req.body ?? null,
-  });
-});
+app.post(
+  "/api/_echo",
+  rateLimitDiagnostics,
+  requireDiagnosticAccess("app.build.ts:/api/_echo"),
+  (req, res) => {
+    return res.json({
+      ok: true,
+      method: req.method,
+      path: req.path,
+      body: req.body ?? null,
+    });
+  }
+);
 
-app.get("/api/__debug/build", rateLimitDiagnostics, (_req, res) => {
-  res.setHeader("x-route-source", "app.build.ts:/api/__debug/build");
-  return res.json({
-    ok: true,
-    vercel: {
-      gitCommitSha: process.env.VERCEL_GIT_COMMIT_SHA || null,
-      deploymentId: process.env.VERCEL_DEPLOYMENT_ID || null,
-      env: process.env.VERCEL_ENV || null,
-    },
-    routeCheck: {
-      landlordApplicationLinksMounted: true,
-      mountPath: "/api/landlord/application-links",
-    },
-  });
-});
+app.get(
+  "/api/__debug/build",
+  rateLimitDiagnostics,
+  requireDiagnosticAccess("app.build.ts:/api/__debug/build"),
+  (_req, res) => {
+    return res.json({
+      ok: true,
+      build: safeDiagnosticBuildMetadata(),
+      vercel: { env: process.env.VERCEL_ENV || null },
+      routeCheck: {
+        landlordApplicationLinksMounted: true,
+        mountPath: "/api/landlord/application-links",
+      },
+    });
+  }
+);
 
-app.get("/api/__debug/ping-application-links", rateLimitDiagnostics, (_req, res) => {
-  res.setHeader("x-route-source", "debugPingApplicationLinks");
-  return res.json({ ok: true });
-});
+app.get(
+  "/api/__debug/ping-application-links",
+  rateLimitDiagnostics,
+  requireDiagnosticAccess("debugPingApplicationLinks"),
+  (_req, res) => {
+    return res.json({ ok: true });
+  }
+);
 
 // API 404 handler
 app.use("/api", (_req, res) => {

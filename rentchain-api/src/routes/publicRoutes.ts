@@ -17,6 +17,10 @@ import { getBureauProvider } from "../services/screening/providers/bureauProvide
 import { getPricingHealth } from "../config/planMatrix";
 import { getEnvFlags } from "../config/requiredEnv";
 import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
+import {
+  requireDiagnosticAccess,
+  safeDiagnosticBuildMetadata,
+} from "../middleware/diagnosticSurfaceGuard";
 
 const router = Router();
 
@@ -320,8 +324,7 @@ router.get("/__probe/version", (_req, res) => {
   res.json({
     ok: true,
     marker: "probe-v1",
-    commit: process.env.COMMIT_SHA || null,
-    ts: Date.now(),
+    ...safeDiagnosticBuildMetadata(),
   });
 });
 
@@ -329,17 +332,17 @@ router.get("/__probe/revision", (_req, res) => {
   res.setHeader("x-route-source", "publicRoutes.ts");
   res.json({
     ok: true,
-    service: "rentchain-landlord-api",
-    revision: process.env.K_REVISION || null,
-    commit: process.env.COMMIT_SHA || null,
-    ts: Date.now(),
+    ...safeDiagnosticBuildMetadata(),
   });
 });
 
-router.get("/__probe/onboarding-route", (_req, res) => {
-  res.setHeader("x-route-source", "publicRoutes.ts");
-  res.json({ ok: true, mounted: true });
-});
+router.get(
+  "/__probe/onboarding-route",
+  requireDiagnosticAccess("publicRoutes.ts:/__probe/onboarding-route"),
+  (_req, res) => {
+    res.json({ ok: true, mounted: true });
+  }
+);
 
 router.use("/onboarding", onboardingRoutes);
 
@@ -415,13 +418,16 @@ router.post("/notify-plan-interest", async (req: any, res) => {
   }
 });
 
-router.get("/__probe/routes-lite", (_req, res) => {
-  res.setHeader("x-route-source", "publicRoutes.ts");
-  return res.json({
-    ok: true,
-    routes: ["/__probe/version", "/tenants", "/tenants/:tenantId"],
-  });
-});
+router.get(
+  "/__probe/routes-lite",
+  requireDiagnosticAccess("publicRoutes.ts:/__probe/routes-lite"),
+  (_req, res) => {
+    return res.json({
+      ok: true,
+      routes: ["/__probe/version", "/tenants", "/tenants/:tenantId"],
+    });
+  }
+);
 
 router.get("/ready", (_req, res) => {
   res.setHeader("x-route-source", "publicRoutes.ts");
