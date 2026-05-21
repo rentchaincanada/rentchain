@@ -3,6 +3,10 @@ import path from "path";
 import express from "express";
 import { describe, expect, it, vi } from "vitest";
 import { routeSource } from "../../middleware/routeSource";
+import {
+  requireDiagnosticAccess,
+  safeDiagnosticBuildMetadata,
+} from "../../middleware/diagnosticSurfaceGuard";
 
 const authState = vi.hoisted(() => ({
   user: null as any,
@@ -130,6 +134,10 @@ function appBuildSource() {
   return fs.readFileSync(path.resolve(__dirname, "../../app.build.ts"), "utf8");
 }
 
+function publicRoutesSource() {
+  return fs.readFileSync(path.resolve(__dirname, "../publicRoutes.ts"), "utf8");
+}
+
 async function invokeApp(
   app: any,
   options: {
@@ -216,12 +224,19 @@ async function buildRuntimeOwnershipApp() {
   app.use("/api/landlord", routeSource("landlordEvidencePackRoutes.ts"), landlordEvidencePackRoutes);
   app.use("/api/internal", routeSource("internalReportsRoutes.ts"), internalReportsRoutes);
   app.get("/api/__probe/revision", routeSource("app.build.ts:/api/__probe/revision"), (_req, res) =>
-    res.json({ ok: true, revision: "test" })
+    res.json({
+      ok: true,
+      ...safeDiagnosticBuildMetadata({
+        K_SERVICE: "rentchain-api",
+        K_REVISION: "rev-1",
+        GIT_SHA: "sha-1",
+      } as NodeJS.ProcessEnv),
+    })
   );
-  app.get("/api/__debug/build", routeSource("app.build.ts:/api/__debug/build"), (_req, res) =>
+  app.get("/api/__debug/build", requireDiagnosticAccess("app.build.ts:/api/__debug/build"), (_req, res) =>
     res.json({ ok: true, routeCheck: { landlordApplicationLinksMounted: true } })
   );
-  app.post("/api/_echo", routeSource("app.build.ts:/api/_echo"), (req, res) =>
+  app.post("/api/_echo", requireDiagnosticAccess("app.build.ts:/api/_echo"), (req, res) =>
     res.json({ ok: true, method: "POST", body: req.body ?? null })
   );
   app.use("/api", (_req, res) => {
@@ -266,15 +281,25 @@ describe("API route ownership regression", () => {
     expect(screeningJobsMount).toBeLessThan(apiCatchall);
   });
 
-  it("documents intentionally reachable probe, debug, echo, and catchall route sources", () => {
+  it("documents public-safe probes, gated diagnostics, and catchall route sources", () => {
     const source = appBuildSource();
-    const echoRoutes = source.match(/app\.post\("\/api\/_echo"/g) || [];
+    const publicSource = publicRoutesSource();
+    const echoRoutes = source.match(/app\.post\(\s*"\/api\/_echo"/g) || [];
 
-    expect(source).toContain('app.get("/api/__probe/revision"');
-    expect(source).toContain('app.get("/api/__probe/routes"');
-    expect(source).toContain('app.get("/api/__debug/build"');
-    expect(source).toContain('app.get("/api/__debug/ping-application-links"');
-    expect(echoRoutes).toHaveLength(2);
+    expect(source).toMatch(/app\.get\(\s*"\/api\/__probe\/revision"/);
+    expect(source).toMatch(/app\.get\(\s*"\/api\/__probe\/routes"/);
+    expect(source).toMatch(/app\.get\(\s*"\/api\/__debug\/build"/);
+    expect(source).toMatch(/app\.get\(\s*"\/api\/__debug\/ping-application-links"/);
+    expect(source).toContain('safeDiagnosticBuildMetadata()');
+    expect(source).toContain('requireDiagnosticAccess("app.build.ts:/api/__routes")');
+    expect(source).toContain('requireDiagnosticAccess("app.build.ts:/api/__probe/routes")');
+    expect(source).toContain('requireDiagnosticAccess("app.build.ts:/api/_echo")');
+    expect(source).toContain('requireDiagnosticAccess("app.build.ts:/api/__debug/build")');
+    expect(source).toContain('requireDiagnosticAccess("debugPingApplicationLinks")');
+    expect(publicSource).toContain('requireDiagnosticAccess("publicRoutes.ts:/__probe/onboarding-route")');
+    expect(publicSource).toContain('requireDiagnosticAccess("publicRoutes.ts:/__probe/routes-lite")');
+    expect(publicSource).toContain("safeDiagnosticBuildMetadata()");
+    expect(echoRoutes).toHaveLength(1);
     expect(source).toContain('res.setHeader("x-route-source", "not-found")');
   });
 
@@ -340,25 +365,62 @@ describe("API route ownership regression", () => {
     expect(transunionRes.headers["x-route-source"]).toBe("transunionWebhookRoutes.ts");
   });
 
-  it("keeps probe/debug/echo exposure and API catchall deterministic", async () => {
-    const app = await buildRuntimeOwnershipApp();
+  it("keeps public-safe probes, gated diagnostics, and API catchall deterministic", async () => {
+    const originalNodeEnv = process.env.NODE_ENV;
+    const originalInternalToken = process.env.INTERNAL_JOB_TOKEN;
+    process.env.NODE_ENV = "production";
+    process.env.INTERNAL_JOB_TOKEN = "secret-token";
 
-    const revision = await invokeApp(app, { method: "GET", url: "/api/__probe/revision" });
-    expect(revision.status).toBe(200);
-    expect(revision.headers["x-route-source"]).toBe("app.build.ts:/api/__probe/revision");
+    try {
+      const app = await buildRuntimeOwnershipApp();
 
-    const debug = await invokeApp(app, { method: "GET", url: "/api/__debug/build" });
-    expect(debug.status).toBe(200);
-    expect(debug.headers["x-route-source"]).toBe("app.build.ts:/api/__debug/build");
+      const revision = await invokeApp(app, { method: "GET", url: "/api/__probe/revision" });
+      expect(revision.status).toBe(200);
+      expect(revision.headers["x-route-source"]).toBe("app.build.ts:/api/__probe/revision");
+      expect(revision.body).toMatchObject({
+        ok: true,
+        service: "rentchain-api",
+        revisionPresent: true,
+        commitPresent: true,
+      });
+      expect(JSON.stringify(revision.body)).not.toContain("rev-1");
+      expect(JSON.stringify(revision.body)).not.toContain("sha-1");
 
-    const echo = await invokeApp(app, { method: "POST", url: "/api/_echo", body: { ok: true } });
-    expect(echo.status).toBe(200);
-    expect(echo.headers["x-route-source"]).toBe("app.build.ts:/api/_echo");
-    expect(echo.body).toMatchObject({ ok: true, method: "POST", body: { ok: true } });
+      const debugDenied = await invokeApp(app, { method: "GET", url: "/api/__debug/build" });
+      expect(debugDenied.status).toBe(404);
+      expect(debugDenied.headers["x-route-source"]).toBe("app.build.ts:/api/__debug/build");
+      expect(debugDenied.body).toEqual({ ok: false, code: "NOT_FOUND", error: "Not Found" });
 
-    const missing = await invokeApp(app, { method: "GET", url: "/api/unknown-route" });
-    expect(missing.status).toBe(404);
-    expect(missing.headers["x-route-source"]).toBe("not-found");
-    expect(missing.body).toEqual({ ok: false, code: "NOT_FOUND", error: "Not Found" });
+      const echoDenied = await invokeApp(app, { method: "POST", url: "/api/_echo", body: { token: "secret" } });
+      expect(echoDenied.status).toBe(404);
+      expect(echoDenied.headers["x-route-source"]).toBe("app.build.ts:/api/_echo");
+      expect(JSON.stringify(echoDenied.body)).not.toContain("secret");
+
+      const debugAllowed = await invokeApp(app, {
+        method: "GET",
+        url: "/api/__debug/build",
+        headers: { "x-internal-job-token": "secret-token" },
+      });
+      expect(debugAllowed.status).toBe(200);
+      expect(debugAllowed.body).toMatchObject({ ok: true, routeCheck: { landlordApplicationLinksMounted: true } });
+
+      const echoAllowed = await invokeApp(app, {
+        method: "POST",
+        url: "/api/_echo",
+        body: { ok: true },
+        headers: { "x-internal-job-token": "secret-token" },
+      });
+      expect(echoAllowed.status).toBe(200);
+      expect(echoAllowed.body).toMatchObject({ ok: true, method: "POST", body: { ok: true } });
+
+      const missing = await invokeApp(app, { method: "GET", url: "/api/unknown-route" });
+      expect(missing.status).toBe(404);
+      expect(missing.headers["x-route-source"]).toBe("not-found");
+      expect(missing.body).toEqual({ ok: false, code: "NOT_FOUND", error: "Not Found" });
+    } finally {
+      process.env.NODE_ENV = originalNodeEnv;
+      if (originalInternalToken == null) delete process.env.INTERNAL_JOB_TOKEN;
+      else process.env.INTERNAL_JOB_TOKEN = originalInternalToken;
+    }
   });
 });
