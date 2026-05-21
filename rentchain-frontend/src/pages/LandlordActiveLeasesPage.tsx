@@ -7,6 +7,7 @@ import {
   getActiveLeasesForLandlord,
   getArchivedLeasesForLandlord,
   getLeaseReconciliationCandidates,
+  refreshLeaseDocumentUrl,
   restoreLeaseRecord,
   type LandlordActiveLease,
   type LeaseReconciliationCandidate,
@@ -300,6 +301,7 @@ export default function LandlordActiveLeasesPage() {
   const [selectedCandidate, setSelectedCandidate] = React.useState<LeaseReconciliationCandidate | null>(null);
   const [convertSaving, setConvertSaving] = React.useState(false);
   const [paymentRailBusyLeaseId, setPaymentRailBusyLeaseId] = React.useState<string | null>(null);
+  const [documentBusyLeaseId, setDocumentBusyLeaseId] = React.useState<string | null>(null);
   const [occupantName, setOccupantName] = React.useState("");
   const [tenantEmail, setTenantEmail] = React.useState("");
   const [tenantPhone, setTenantPhone] = React.useState("");
@@ -393,6 +395,25 @@ export default function LandlordActiveLeasesPage() {
     }
   }
 
+  async function openLeaseDocument(lease: LandlordActiveLease) {
+    const fallbackUrl = String(lease.documentUrl || "").trim();
+    setDocumentBusyLeaseId(lease.id);
+    try {
+      const refreshed = await refreshLeaseDocumentUrl(lease.id);
+      const nextUrl = String(refreshed?.documentUrl || "").trim() || fallbackUrl;
+      if (!nextUrl) throw new Error("Lease document is not available.");
+      window.open(nextUrl, "_blank", "noreferrer");
+    } catch (err: unknown) {
+      if (fallbackUrl) {
+        window.open(fallbackUrl, "_blank", "noreferrer");
+        return;
+      }
+      setError(errorMessage(err, "Lease document is not available."));
+    } finally {
+      setDocumentBusyLeaseId(null);
+    }
+  }
+
   async function handleConvert() {
     if (!selectedCandidate) return;
     setConvertSaving(true);
@@ -458,14 +479,14 @@ export default function LandlordActiveLeasesPage() {
     return (
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         {lease.documentUrl ? (
-          <a
-            href={lease.documentUrl}
-            target="_blank"
-            rel="noreferrer"
+          <button
+            type="button"
+            onClick={() => void openLeaseDocument(lease)}
+            disabled={documentBusyLeaseId === lease.id}
             style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", textDecoration: "none", color: "#0f172a" }}
           >
-            View lease
-          </a>
+            {documentBusyLeaseId === lease.id ? "Opening..." : "View lease"}
+          </button>
         ) : (
           <Link
             to={summaryPath}
@@ -497,18 +518,12 @@ export default function LandlordActiveLeasesPage() {
           type="button"
           onClick={() => {
             if (lease.documentUrl) {
-              const a = document.createElement("a");
-              a.href = lease.documentUrl;
-              a.target = "_blank";
-              a.rel = "noreferrer";
-              a.download = "";
-              document.body.appendChild(a);
-              a.click();
-              a.remove();
+              void openLeaseDocument(lease);
               return;
             }
             downloadLeaseSummaryPdf(lease);
           }}
+          disabled={documentBusyLeaseId === lease.id}
           style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a" }}
         >
           Save

@@ -614,6 +614,16 @@ async function resolveRestoreUnitTargetsForLease(lease: any, errorPrefix: string
 }
 
 async function loadLeaseDocumentUrlForLease(raw: any): Promise<string | null> {
+  const storageRef = await loadLeaseDocumentStorageRefForLease(raw);
+  if (storageRef) {
+    try {
+      return await getSignedDownloadUrl({ bucket: storageRef.bucket, path: storageRef.path, expiresMinutes: 30 });
+    } catch {
+      // Fall back to the legacy persisted URL below; callers still get continuity
+      // for older records while storage-backed records refresh on each load.
+    }
+  }
+
   const directUrl =
     String(raw?.documentUrl || raw?.approvedDocumentUrl || raw?.documentRef || "").trim() || null;
   if (directUrl) return directUrl;
@@ -646,6 +656,88 @@ async function loadLeaseDocumentUrlForLease(raw: any): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+type LeaseDocumentStorageRef = {
+  bucket: string;
+  path: string;
+  source: string;
+};
+
+function normalizeStoragePath(value: unknown): string {
+  return String(value || "").trim().replace(/^\/+/, "");
+}
+
+function storageRefFromDocumentRecord(record: any, source: string): LeaseDocumentStorageRef | null {
+  if (!record || typeof record !== "object") return null;
+  const bucket = String(record?.bucket || record?.storageBucket || "").trim();
+  const path = normalizeStoragePath(record?.path || record?.objectKey || record?.storagePath);
+  if (!bucket || !path) return null;
+  return { bucket, path, source };
+}
+
+function storageRefFromGeneratedFile(file: any, source: string): LeaseDocumentStorageRef | null {
+  const kind = String(file?.kind || "").trim().toLowerCase();
+  const url = String(file?.url || "").trim();
+  const looksLikeLeasePdf = !kind || kind.includes("pdf") || kind.includes("schedule");
+  if (!looksLikeLeasePdf && !url) return null;
+  return storageRefFromDocumentRecord(file, source);
+}
+
+function directLeaseDocumentStorageRef(raw: any): LeaseDocumentStorageRef | null {
+  return (
+    storageRefFromDocumentRecord(raw?.leaseDocument, "leaseDocument") ||
+    storageRefFromDocumentRecord(raw?.referenceDocument, "referenceDocument") ||
+    storageRefFromDocumentRecord(raw?.documentStorage, "documentStorage") ||
+    storageRefFromDocumentRecord(raw?.signedDocument, "signedDocument") ||
+    null
+  );
+}
+
+async function loadLeaseDocumentStorageRefForLease(raw: any): Promise<LeaseDocumentStorageRef | null> {
+  const directRef = directLeaseDocumentStorageRef(raw);
+  if (directRef) return directRef;
+
+  const snapshotIds = [
+    raw?.latestLeaseSnapshotId,
+    raw?.lastGeneratedSnapshotId,
+    raw?.leaseSnapshotId,
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
+
+  const draftId = String(raw?.sourceDraftId || raw?.draftId || "").trim();
+  if (draftId) {
+    try {
+      const draftSnap = await db.collection("leaseDrafts").doc(draftId).get();
+      if (draftSnap.exists) {
+        const draft = draftSnap.data() as any;
+        [draft?.lastGeneratedSnapshotId, draft?.latestLeaseSnapshotId]
+          .map((value) => String(value || "").trim())
+          .filter(Boolean)
+          .forEach((snapshotId) => snapshotIds.push(snapshotId));
+      }
+    } catch {
+      // Missing draft metadata should not make an otherwise valid lease fail.
+    }
+  }
+
+  for (const snapshotId of Array.from(new Set(snapshotIds))) {
+    try {
+      const snapshotSnap = await db.collection("leaseSnapshots").doc(snapshotId).get();
+      if (!snapshotSnap.exists) continue;
+      const snapshot = snapshotSnap.data() as any;
+      const generatedFiles = Array.isArray(snapshot?.generatedFiles) ? snapshot.generatedFiles : [];
+      for (const file of generatedFiles) {
+        const ref = storageRefFromGeneratedFile(file, `leaseSnapshots/${snapshotId}`);
+        if (ref) return ref;
+      }
+    } catch {
+      // Continue through remaining metadata sources.
+    }
+  }
+
+  return null;
 }
 
 function firstGeneratedLeasePdfFile(generatedFiles: any[]): any | null {
@@ -823,6 +915,19 @@ async function linkGeneratedLeasePdfToTenantWorkspace(params: {
     : [];
   const now = Date.now();
   const fileName = "schedule-a-v1.pdf";
+  const storageBucket = String(params.file?.bucket || params.file?.storageBucket || "").trim() || null;
+  const storagePath = normalizeStoragePath(params.file?.path || params.file?.objectKey || params.file?.storagePath) || null;
+  const leaseDocument =
+    storageBucket && storagePath
+      ? {
+          bucket: storageBucket,
+          path: storagePath,
+          fileName,
+          contentType: "application/pdf",
+          source: "lease_pdf_generation",
+          signedUrlExpiresAt: now + 30 * 60 * 1000,
+        }
+      : null;
 
   if (leaseId) {
     await db
@@ -833,6 +938,7 @@ async function linkGeneratedLeasePdfToTenantWorkspace(params: {
           documentUrl: url,
           approvedDocumentUrl: url,
           documentRef: url,
+          ...(leaseDocument ? { leaseDocument, referenceDocument: leaseDocument } : {}),
           documentGeneratedAt: now,
           leaseDocumentGeneratedAt: now,
           latestLeaseSnapshotId: params.snapshotId,
@@ -861,6 +967,9 @@ async function linkGeneratedLeasePdfToTenantWorkspace(params: {
           unitId,
           ledgerItemId: leaseId || `leaseDraft:${params.draftId}`,
           url,
+          ...(storageBucket ? { storageBucket } : {}),
+          ...(storagePath ? { storagePath } : {}),
+          signedUrlExpiresAt: now + 30 * 60 * 1000,
           title: "Lease document",
           fileName,
           category: "Lease",
@@ -2676,6 +2785,53 @@ router.get("/:leaseId/payments", requireLandlord, async (req: any, res: Response
   } catch (err) {
     console.error("[GET /api/leases/:leaseId/payments] error", err);
     return res.status(500).json({ ok: false, error: "LEASE_PAYMENT_STATUS_FAILED" });
+  }
+});
+
+router.get("/:leaseId/document-url", requireLandlord, async (req: any, res: Response) => {
+  try {
+    if (!(await enforceLeaseCapability(req, res))) return;
+    const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
+    const leaseId = String(req.params?.leaseId || "").trim();
+    if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+    if (!leaseId) return res.status(400).json({ ok: false, error: "leaseId is required" });
+
+    const leaseCheck = await getLeaseEntityForLandlord(leaseId, landlordId);
+    if (!leaseCheck.ok) return res.status(leaseCheck.status).json({ ok: false, error: leaseCheck.error });
+
+    const storageRef = await loadLeaseDocumentStorageRefForLease(leaseCheck.lease as any);
+    if (!storageRef) {
+      const fallbackUrl = await loadLeaseDocumentUrlForLease(leaseCheck.lease as any);
+      if (!fallbackUrl) return res.status(404).json({ ok: false, error: "lease_document_not_found" });
+      return res.status(200).json({
+        ok: true,
+        documentUrl: fallbackUrl,
+        refreshMode: "legacy_url",
+        expiresInSeconds: null,
+      });
+    }
+
+    const expiresMinutes = 30;
+    const documentUrl = await getSignedDownloadUrl({
+      bucket: storageRef.bucket,
+      path: storageRef.path,
+      expiresMinutes,
+    });
+    return res.status(200).json({
+      ok: true,
+      documentUrl,
+      refreshMode: "signed_url",
+      expiresInSeconds: expiresMinutes * 60,
+      documentRef: {
+        source: storageRef.source,
+        bucket: storageRef.bucket,
+        path: storageRef.path,
+        internalReferenceOnly: true,
+      },
+    });
+  } catch (err) {
+    console.error("[GET /api/leases/:leaseId/document-url] error", err);
+    return res.status(500).json({ ok: false, error: "Failed to refresh lease document URL" });
   }
 });
 

@@ -3,6 +3,7 @@ import {
   createTenantLeasePaymentCheckout,
   getTenantLeasePaymentStatus,
   getTenantLeaseWorkspace,
+  refreshTenantLeaseDocumentUrl,
   signTenantLease,
 } from "../../api/tenantPortal";
 import {
@@ -31,6 +32,7 @@ export default function TenantLeasePage() {
   const [loading, setLoading] = React.useState(true);
   const [signing, setSigning] = React.useState(false);
   const [paying, setPaying] = React.useState(false);
+  const [openingDocument, setOpeningDocument] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
   const load = React.useCallback(async () => {
@@ -80,6 +82,26 @@ export default function TenantLeasePage() {
       setError(err?.payload?.error || err?.message || "Unable to record your lease signature.");
     } finally {
       setSigning(false);
+    }
+  }
+
+  async function handleOpenLeaseDocument() {
+    const fallbackUrl = String(data?.leaseDocumentContext?.documentUrl || data?.documentUrl || "").trim();
+    setOpeningDocument(true);
+    setError(null);
+    try {
+      const refreshed = await refreshTenantLeaseDocumentUrl();
+      const nextUrl = String(refreshed?.documentUrl || "").trim() || fallbackUrl;
+      if (!nextUrl) throw new Error("Lease document is not available.");
+      window.open(nextUrl, "_blank", "noreferrer");
+    } catch (err: any) {
+      if (fallbackUrl) {
+        window.open(fallbackUrl, "_blank", "noreferrer");
+        return;
+      }
+      setError(err?.payload?.error || err?.message || "Lease document is not available.");
+    } finally {
+      setOpeningDocument(false);
     }
   }
 
@@ -331,9 +353,9 @@ export default function TenantLeasePage() {
               </div>
             ) : null}
             {leaseDocumentUrl ? (
-              <a href={leaseDocumentUrl} target="_blank" rel="noreferrer">
-                Open lease document
-              </a>
+              <button type="button" onClick={() => void handleOpenLeaseDocument()} disabled={openingDocument}>
+                {openingDocument ? "Opening..." : "Open lease document"}
+              </button>
             ) : (
               <div style={{ color: "var(--text-muted, #64748b)" }}>
                 No approved lease document link is available in this workspace yet.

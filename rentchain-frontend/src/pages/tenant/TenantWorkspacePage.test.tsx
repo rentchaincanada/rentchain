@@ -12,6 +12,7 @@ import { TenantNav } from "../../components/layout/TenantNav";
 const tenantPortalApi = vi.hoisted(() => ({
   getTenantWorkspace: vi.fn(),
   getTenantLeaseWorkspace: vi.fn(),
+  refreshTenantLeaseDocumentUrl: vi.fn(),
   getTenantLeasePaymentStatus: vi.fn(),
   exportTenantIdentityPackage: vi.fn(),
   createInstitutionalHandoffDraft: vi.fn(),
@@ -458,6 +459,14 @@ describe("tenant workspace frontend shell", () => {
         },
       },
     });
+    tenantPortalApi.refreshTenantLeaseDocumentUrl.mockResolvedValue({
+      documentUrl: "https://example.com/refreshed-lease.pdf",
+      displayLabel: "Signed lease document",
+      documentStatus: "signed",
+      source: "leaseDocument",
+      expiresInSeconds: 1800,
+    });
+    vi.spyOn(window, "open").mockReturnValue(null);
     tenantAttachmentsApi.getTenantAttachments.mockResolvedValue({
       ok: true,
       data: [
@@ -2248,7 +2257,11 @@ describe("tenant workspace frontend shell", () => {
     expect(screen.getByRole("button", { name: /Pay rent/i })).toBeInTheDocument();
     expect(screen.getByText(/^Drawn signature$/i)).toBeInTheDocument();
     expect(screen.getByText(/^Taylor Tenant$/i)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Open lease document/i })).toBeInTheDocument();
+    const openLeaseButton = screen.getByRole("button", { name: /Open lease document/i });
+    expect(openLeaseButton).toBeInTheDocument();
+    fireEvent.click(openLeaseButton);
+    await waitFor(() => expect(tenantPortalApi.refreshTenantLeaseDocumentUrl).toHaveBeenCalled());
+    expect(window.open).toHaveBeenCalledWith("https://example.com/refreshed-lease.pdf", "_blank", "noreferrer");
   });
 
   it("shows the tenant lease sign action only when backend execution metadata requires it", async () => {

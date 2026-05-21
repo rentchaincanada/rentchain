@@ -348,6 +348,61 @@ describe("leaseRoutes GET /active", () => {
     );
   });
 
+  it("refreshes storage-backed lease document URLs for landlord lease responses and explicit refresh requests", async () => {
+    getSignedDownloadUrlMock.mockResolvedValueOnce("https://signed.example.com/fresh-list.pdf");
+    getSignedDownloadUrlMock.mockResolvedValueOnce("https://signed.example.com/fresh-click.pdf");
+    seedDoc("properties", "prop-1", { landlordId: "landlord-1", name: "Harbour View" });
+    seedDoc("tenants", "tenant-1", { landlordId: "landlord-1", fullName: "Jane Tenant", email: "jane@example.com" });
+    seedDoc("leases", "lease-1", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      tenantId: "tenant-1",
+      primaryTenantId: "tenant-1",
+      tenantIds: ["tenant-1"],
+      unitId: "unit-1",
+      unitNumber: "101",
+      monthlyRent: 1850,
+      startDate: "2026-01-01",
+      endDate: "2099-12-31",
+      status: "active",
+      documentUrl: "https://storage.googleapis.com/signed-expired.pdf",
+      leaseDocument: {
+        bucket: "lease-documents",
+        path: "leases/landlord-1/lease-1/schedule-a-v1.pdf",
+        fileName: "schedule-a-v1.pdf",
+      },
+    });
+
+    const router = (await import("../leaseRoutes")).default;
+    const listRes = await invokeRouter(router, { method: "GET", url: "/active" });
+    expect(listRes.status).toBe(200);
+    expect(listRes.body?.leases?.[0]?.documentUrl).toBe("https://signed.example.com/fresh-list.pdf");
+
+    const refreshRes = await invokeRouter(router, { method: "GET", url: "/lease-1/document-url" });
+    expect(refreshRes.status).toBe(200);
+    expect(refreshRes.body).toEqual(
+      expect.objectContaining({
+        ok: true,
+        documentUrl: "https://signed.example.com/fresh-click.pdf",
+        refreshMode: "signed_url",
+        expiresInSeconds: 1800,
+      })
+    );
+    expect(refreshRes.body?.documentRef).toEqual(
+      expect.objectContaining({
+        source: "leaseDocument",
+        bucket: "lease-documents",
+        path: "leases/landlord-1/lease-1/schedule-a-v1.pdf",
+        internalReferenceOnly: true,
+      })
+    );
+    expect(getSignedDownloadUrlMock).toHaveBeenCalledWith({
+      bucket: "lease-documents",
+      path: "leases/landlord-1/lease-1/schedule-a-v1.pdf",
+      expiresMinutes: 30,
+    });
+  });
+
   it("surfaces ledger payment activity separately from provider payment setup", async () => {
     seedDoc("properties", "prop-1", { landlordId: "landlord-1", name: "Harbour View" });
     seedDoc("tenants", "tenant-1", { landlordId: "landlord-1", fullName: "Jane Tenant", status: "active" });

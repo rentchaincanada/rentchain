@@ -596,6 +596,26 @@ export async function getTenantLeaseWorkspace(): Promise<TenantWorkspaceLease | 
   return res?.data ?? null;
 }
 
+export async function refreshTenantLeaseDocumentUrl(): Promise<{
+  documentUrl: string;
+  displayLabel: string;
+  documentStatus: string;
+  source: string;
+  expiresInSeconds: number;
+}> {
+  const res = await tenantApiFetch<{
+    ok: boolean;
+    data: {
+      documentUrl: string;
+      displayLabel: string;
+      documentStatus: string;
+      source: string;
+      expiresInSeconds: number;
+    };
+  }>("/tenant/lease/document-url");
+  return res.data;
+}
+
 export async function createTenantLeasePaymentCheckout(
   leaseId: string
 ): Promise<{ rentPaymentId: string; status: "checkout_created"; redirectUrl: string }> {

@@ -374,6 +374,19 @@ export async function getLeaseById(id: string): Promise<{ lease: LandlordActiveL
   return apiJson<{ lease: LandlordActiveLease }>(`/leases/${encodeURIComponent(id)}`);
 }
 
+export async function refreshLeaseDocumentUrl(id: string): Promise<{
+  documentUrl: string;
+  refreshMode: "signed_url" | "legacy_url";
+  expiresInSeconds: number | null;
+}> {
+  return apiJson<{
+    ok: true;
+    documentUrl: string;
+    refreshMode: "signed_url" | "legacy_url";
+    expiresInSeconds: number | null;
+  }>(`/leases/${encodeURIComponent(id)}/document-url`);
+}
+
 export async function getLeaseNotes(id: string): Promise<{ ok: true; notes: LeaseNote[] }> {
   return apiJson<{ ok: true; notes: LeaseNote[] }>(`/leases/${encodeURIComponent(id)}/notes`);
 }
