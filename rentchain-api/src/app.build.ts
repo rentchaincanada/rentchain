@@ -559,7 +559,7 @@ app.use(
 app.use("/api/tenant-invites", rateLimitTenantWorkspaceEntry);
 app.use("/api/tenant-invites", tenantInvitesRoutes);
 app.use("/api/tenant/invite", rateLimitTenantWorkspaceEntry);
-app.use("/api/tenant", tenantPortalRoutes);
+app.use("/api/tenant", routeSource("tenantPortalRoutes.ts"), tenantPortalRoutes);
 app.use("/api/recipient", routeSource("recipientTrustReviewRoutes.ts"), recipientTrustReviewRoutes);
 app.use("/api/tenant", tenantParticipationRoutes);
 app.use("/api/tenant", tenantOnboardingHardeningRoutes);

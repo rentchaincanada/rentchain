@@ -404,19 +404,33 @@ export default function TenantLeasePage() {
             ) : null}
             {leaseDocumentUrl ? (
               <button type="button" onClick={() => void handleOpenLeaseDocument()} disabled={openingDocument}>
-                {openingDocument ? "Opening..." : "Open lease document"}
+                {openingDocument ? "Opening..." : "View lease"}
               </button>
             ) : (
               <div style={{ color: "var(--text-muted, #64748b)" }}>
                 No approved lease document link is available in this workspace yet.
               </div>
             )}
-            {scheduleAUrl ? (
+          </TenantInfoCard>
+
+          {scheduleAUrl ? (
+            <TenantInfoCard heading="Schedule A / attachment" accent="#0891b2">
+              <div style={{ display: "grid", gap: 6 }}>
+                <div style={{ fontWeight: 800 }}>Schedule A</div>
+                <div style={{ color: "var(--text-muted, #64748b)" }}>
+                  This supplemental form is separate from the primary lease document.
+                </div>
+                {scheduleADocumentContext?.documentStatus ? (
+                  <div style={{ color: "var(--text-muted, #64748b)" }}>
+                    Document status: {prettyStatus(scheduleADocumentContext.documentStatus)}
+                  </div>
+                ) : null}
+              </div>
               <button type="button" onClick={() => void handleOpenLeaseDocument("schedule-a")} disabled={openingDocument}>
                 {openingDocument ? "Opening..." : "Open Schedule A"}
               </button>
-            ) : null}
-          </TenantInfoCard>
+            </TenantInfoCard>
+          ) : null}
 
           <TenantInfoCard heading="Lease Signing" accent="#7c3aed">
             <div style={{ display: "grid", gap: 12 }}>

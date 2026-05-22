@@ -148,6 +148,59 @@ describe("tenant attachments page", () => {
     expect(screen.getByText(/Direct upload is not available from this page yet/i)).toBeInTheDocument();
   });
 
+  it("does not render a zero-document vault when tenant-safe lease attachments are available", async () => {
+    tenantAttachmentsApi.getTenantAttachments.mockResolvedValue({
+      ok: true,
+      data: [
+        {
+          id: "schedule-a-context-lease-1",
+          label: "SCHEDULE_A — Schedule A",
+          category: "Attachments",
+          status: "uploaded",
+          title: "Schedule A",
+          fileName: "schedule-a.pdf",
+          url: "https://signed.example/schedule-a.pdf",
+          uploadedAt: 1710002000000,
+          nextAction: "This file has been added to your record.",
+          purpose: "SCHEDULE_A",
+          purposeLabel: "Schedule A",
+        },
+      ],
+      summary: {
+        total: 1,
+        missing: 0,
+        uploaded: 1,
+        pendingReview: 0,
+        verified: 0,
+        needsAttention: 0,
+      },
+      guidance: {
+        headline: "Your current tenant-safe document record is up to date.",
+        nextSteps: [],
+        uploadEntryAvailable: false,
+        uploadEntryLabel: null,
+        uploadEntryPath: null,
+        supportPath: "/tenant/messages",
+        supportLabel: "Message your landlord",
+      },
+      updatedAt: 1710002000000,
+    });
+
+    render(
+      <MemoryRouter>
+        <TenantAttachmentsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Document Vault Summary/i)).toBeInTheDocument();
+    expect(screen.queryByText(/No documents in your vault yet/i)).not.toBeInTheDocument();
+    expect(screen.getAllByText(/Schedule A/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/schedule-a\.pdf/i).length).toBeGreaterThan(0);
+    expect(screen.getByRole("link", { name: /Open file/i })).toHaveAttribute("href", "https://signed.example/schedule-a.pdf");
+    expect(screen.queryByText(/support-operator/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/realActorId/i)).not.toBeInTheDocument();
+  });
+
   it("renders unauthorized state safely", async () => {
     tenantAttachmentsApi.getTenantAttachments.mockRejectedValue({ message: "FORBIDDEN" });
 

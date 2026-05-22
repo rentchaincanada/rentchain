@@ -168,7 +168,7 @@ export async function previewTenantTrustExport(
 ): Promise<TenantTrustExportPreview> {
   const res = await tenantApiFetch<{ ok: boolean; data: TenantTrustExportPreview }>("/tenant/trust-exports/preview", {
     method: "POST",
-    body: JSON.stringify(request),
+    body: request,
   });
   return res.data;
 }
@@ -178,7 +178,7 @@ export async function prepareTenantTrustExport(
 ): Promise<TenantTrustExportRecord> {
   const res = await tenantApiFetch<{ ok: boolean; data: TenantTrustExportRecord }>("/tenant/trust-exports", {
     method: "POST",
-    body: JSON.stringify(request),
+    body: request,
   });
   return res.data;
 }

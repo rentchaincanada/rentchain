@@ -2272,7 +2272,7 @@ describe("tenant workspace frontend shell", () => {
     expect(screen.getByRole("button", { name: /Pay rent/i })).toBeInTheDocument();
     expect(screen.getByText(/^Drawn signature$/i)).toBeInTheDocument();
     expect(screen.getByText(/^Taylor Tenant$/i)).toBeInTheDocument();
-    const openLeaseButton = screen.getByRole("button", { name: /Open lease document/i });
+    const openLeaseButton = screen.getByRole("button", { name: /View lease/i });
     expect(openLeaseButton).toBeInTheDocument();
     fireEvent.click(openLeaseButton);
     await waitFor(() => expect(tenantPortalApi.refreshTenantLeaseDocumentUrl).toHaveBeenCalled());
@@ -2342,6 +2342,7 @@ describe("tenant workspace frontend shell", () => {
 
     vi.mocked(window.open).mockClear();
     expect(screen.queryByRole("button", { name: /Open lease document/i })).not.toBeInTheDocument();
+    expect(await screen.findByText(/Schedule A \/ attachment/i)).toBeInTheDocument();
     fireEvent.click(await screen.findByRole("button", { name: /Open Schedule A/i }));
     await waitFor(() =>
       expect(tenantPortalApi.refreshTenantLeaseDocumentUrl).toHaveBeenCalledWith({ document: "schedule-a" })
@@ -2404,7 +2405,7 @@ describe("tenant workspace frontend shell", () => {
     );
 
     vi.mocked(window.open).mockClear();
-    fireEvent.click(await screen.findByRole("button", { name: /Open lease document/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /View lease/i }));
     await waitFor(() => expect(tenantPortalApi.refreshTenantLeaseDocumentUrl).toHaveBeenCalledWith());
     expect(window.open).not.toHaveBeenCalled();
   });

@@ -3368,6 +3368,59 @@ describe("tenantPortalRoutes foundation", () => {
     ).toBe(true);
   });
 
+  it("includes tenant-safe Schedule A attachments in the document vault without making them primary lease documents", async () => {
+    ensureCollection("leases").set("lease-1", {
+      ...(ensureCollection("leases").get("lease-1") || {}),
+      status: "active",
+      documentUrl: null,
+      approvedDocumentUrl: null,
+      documentRef: null,
+      leaseDocument: null,
+      scheduleADocument: {
+        bucket: "test-bucket",
+        path: "leases/landlord-1/draft-1/schedule-a-v1.pdf",
+      },
+      internalOnly: "support-only",
+      realActorId: "support-operator",
+    });
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/attachments",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.summary?.total).toBeGreaterThan(0);
+    expect(res.body?.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          label: "SCHEDULE_A — Schedule A",
+          category: "Attachments",
+          purpose: "SCHEDULE_A",
+          purposeLabel: "Schedule A",
+          fileName: "schedule-a.pdf",
+          url: "https://signed.example/leases/landlord-1/draft-1/schedule-a-v1.pdf",
+        }),
+      ])
+    );
+    const primaryLeaseItems = res.body?.data?.filter((item: any) => item.category === "Lease" && item.purpose === "LEASE");
+    expect(primaryLeaseItems).toEqual([]);
+    const payload = JSON.stringify(res.body);
+    expect(payload).not.toContain("support-operator");
+    expect(payload).not.toContain("internalOnly");
+    expect(payload).not.toContain("storagePath");
+    expect(payload).not.toContain("test-bucket");
+  });
+
   it("dedupes duplicate visible Lease attachments in the tenant document vault", async () => {
     ensureCollection("leases").set("lease-1", {
       ...(ensureCollection("leases").get("lease-1") || {}),
