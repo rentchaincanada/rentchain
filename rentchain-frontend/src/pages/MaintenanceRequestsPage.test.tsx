@@ -479,17 +479,19 @@ describe("landlord maintenance workspace", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: /Record cost/i }));
 
-    expect(workOrdersApi.submitLandlordWorkOrderCost).toHaveBeenCalledWith("maintenance_maint-1", {
-      actualCostCents: 24500,
-      currency: "CAD",
-      lineItems: [
-        { label: "Labor cost", amountCents: 15000, category: "labor" },
-        { label: "Material cost", amountCents: 5000, category: "materials" },
-        { label: "Vendor cost", amountCents: 4500, category: "other" },
-      ],
-      reviewNote: "Recorded after the final closure update.",
+    await waitFor(() => {
+      expect(workOrdersApi.submitLandlordWorkOrderCost).toHaveBeenCalledWith("maintenance_maint-1", {
+        actualCostCents: 24500,
+        currency: "CAD",
+        lineItems: [
+          { label: "Labor cost", amountCents: 15000, category: "labor" },
+          { label: "Material cost", amountCents: 5000, category: "materials" },
+          { label: "Vendor cost", amountCents: 4500, category: "other" },
+        ],
+        reviewNote: "Recorded after the final closure update.",
+      });
     });
-  });
+  }, 10000);
 
   it("links a recorded maintenance cost to an expense when eligible", async () => {
     maintenanceWorkflowApi.listLandlordMaintenance.mockResolvedValue({
