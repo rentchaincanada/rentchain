@@ -239,6 +239,16 @@ async function buildRuntimeOwnershipApp() {
       } as NodeJS.ProcessEnv),
     })
   );
+  app.get("/api/_build", routeSource("app.build.ts:/api/_build"), (_req, res) =>
+    res.json({
+      ok: true,
+      ...safeDiagnosticBuildMetadata({
+        K_SERVICE: "rentchain-api",
+        K_REVISION: "rev-1",
+        GIT_SHA: "sha-1",
+      } as NodeJS.ProcessEnv),
+    })
+  );
   app.get("/api/__debug/build", requireDiagnosticAccess("app.build.ts:/api/__debug/build"), (_req, res) =>
     res.json({ ok: true, routeCheck: { landlordApplicationLinksMounted: true } })
   );
@@ -279,9 +289,14 @@ describe("API route ownership regression", () => {
     const tenantsMount = source.indexOf('app.use("/api/tenants", routeSource("tenantsRoutes.ts"), tenantsRoutes)');
     const telemetryMount = source.indexOf('app.use("/api", routeSource("telemetryRoutes.ts"), telemetryRoutes)');
     const screeningRoutesMount = source.indexOf('app.use("/api", routeSource("screeningRoutes.ts"), screeningRoutes)');
+    const statusMount = source.indexOf('app.use("/api/status", statusRoutes)');
+    const paymentsBroadMount = source.indexOf('app.use("/api", routeSource("paymentsRoutes.ts"), paymentsRoutes)');
+    const publicPortfolioMount = source.indexOf('app.use("/api", routeSource("publicPortfolioScoreRoutes.ts"), publicPortfolioScoreRoutes)');
+    const viewingMount = source.indexOf('app.use("/api", routeSource("viewingRoutes.ts"), viewingRoutes)');
     const expensesMount = source.indexOf('app.use("/api", routeSource("expensesRoutes.ts"), expensesRoutes)');
     const riskAgentMount = source.indexOf('app.use("/api", routeSource("riskAgentRoutes.ts"), riskAgentRoutes)');
     const screeningJobsMount = source.indexOf('app.use("/api", routeSource("screeningJobsAdminRoutes.ts"), screeningJobsAdminRoutes)');
+    const buildProbeRoute = source.indexOf('app.get("/api/_build", rateLimitDiagnostics');
     const apiCatchall = source.indexOf('app.use("/api", (_req, res) => {');
 
     expect(ledgerMount).toBeGreaterThan(-1);
@@ -291,19 +306,28 @@ describe("API route ownership regression", () => {
     expect(tenantsMount).toBeGreaterThan(-1);
     expect(telemetryMount).toBeGreaterThan(-1);
     expect(screeningRoutesMount).toBeGreaterThan(-1);
+    expect(statusMount).toBeGreaterThan(-1);
+    expect(paymentsBroadMount).toBeGreaterThan(-1);
+    expect(publicPortfolioMount).toBeGreaterThan(-1);
+    expect(viewingMount).toBeGreaterThan(-1);
     expect(expensesMount).toBeGreaterThan(-1);
     expect(riskAgentMount).toBeGreaterThan(-1);
     expect(screeningJobsMount).toBeGreaterThan(-1);
+    expect(buildProbeRoute).toBeGreaterThan(-1);
     expect(apiCatchall).toBeGreaterThan(-1);
     expect(ledgerMount).toBeLessThan(screeningJobsMount);
     expect(decisionsMount).toBeLessThan(screeningJobsMount);
     expect(leaseDocumentUrlRoute).toBeLessThan(screeningJobsMount);
     expect(leasesMount).toBeLessThan(screeningJobsMount);
     expect(tenantsMount).toBeLessThan(screeningJobsMount);
+    expect(statusMount).toBeLessThan(paymentsBroadMount);
+    expect(statusMount).toBeLessThan(publicPortfolioMount);
+    expect(statusMount).toBeLessThan(viewingMount);
     expect(telemetryMount).toBeLessThan(expensesMount);
     expect(screeningRoutesMount).toBeLessThan(expensesMount);
     expect(telemetryMount).toBeLessThan(riskAgentMount);
     expect(screeningRoutesMount).toBeLessThan(riskAgentMount);
+    expect(buildProbeRoute).toBeLessThan(riskAgentMount);
     expect(telemetryMount).toBeLessThan(screeningJobsMount);
     expect(screeningRoutesMount).toBeLessThan(screeningJobsMount);
     expect(screeningJobsMount).toBeLessThan(apiCatchall);
@@ -313,6 +337,7 @@ describe("API route ownership regression", () => {
     const source = appBuildSource();
     const publicSource = publicRoutesSource();
     const echoRoutes = source.match(/app\.post\(\s*"\/api\/_echo"/g) || [];
+    const buildRoutes = source.match(/app\.get\(\s*"\/api\/_build"/g) || [];
 
     expect(source).toMatch(/app\.get\(\s*"\/api\/__probe\/revision"/);
     expect(source).toMatch(/app\.get\(\s*"\/api\/__probe\/routes"/);
@@ -326,8 +351,13 @@ describe("API route ownership regression", () => {
     expect(source).toContain('requireDiagnosticAccess("debugPingApplicationLinks")');
     expect(publicSource).toContain('requireDiagnosticAccess("publicRoutes.ts:/__probe/onboarding-route")');
     expect(publicSource).toContain('requireDiagnosticAccess("publicRoutes.ts:/__probe/routes-lite")');
+    expect(publicSource).toContain('requireDiagnosticAccess("publicRoutes.ts:/_probe/billing")');
     expect(publicSource).toContain("safeDiagnosticBuildMetadata()");
+    expect(publicSource).not.toContain("apiRevision");
     expect(echoRoutes).toHaveLength(1);
+    expect(buildRoutes).toHaveLength(1);
+    expect(source).toContain('app.use("/api/status", statusRoutes)');
+    expect(source).not.toContain('routeSource("statusRoutes.ts"), statusRoutes');
     expect(source).toContain('res.setHeader("x-route-source", "not-found")');
   });
 
@@ -452,6 +482,18 @@ describe("API route ownership regression", () => {
       });
       expect(JSON.stringify(revision.body)).not.toContain("rev-1");
       expect(JSON.stringify(revision.body)).not.toContain("sha-1");
+
+      const build = await invokeApp(app, { method: "GET", url: "/api/_build" });
+      expect(build.status).toBe(200);
+      expect(build.headers["x-route-source"]).toBe("app.build.ts:/api/_build");
+      expect(build.body).toMatchObject({
+        ok: true,
+        service: "rentchain-api",
+        revisionPresent: true,
+        commitPresent: true,
+      });
+      expect(JSON.stringify(build.body)).not.toContain("rev-1");
+      expect(JSON.stringify(build.body)).not.toContain("sha-1");
 
       const debugDenied = await invokeApp(app, { method: "GET", url: "/api/__debug/build" });
       expect(debugDenied.status).toBe(404);

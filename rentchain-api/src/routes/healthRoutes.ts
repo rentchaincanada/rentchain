@@ -1,14 +1,15 @@
 import express from "express";
 import { getVersion } from "../version";
 import { db } from "../config/firebase";
+import { safeDiagnosticBuildMetadata } from "../middleware/diagnosticSurfaceGuard";
 
 const router = express.Router();
 
 router.get("/", (_req, res) => {
   res.json({
     ok: true,
-    service: "rentchain-api",
-    releaseSha: process.env.RELEASE_SHA || "unknown",
+    ...safeDiagnosticBuildMetadata(),
+    releaseShaPresent: Boolean(String(process.env.RELEASE_SHA || "").trim()),
     reportingEnabled: process.env.REPORTING_ENABLED === "true",
     reportingDryRun: process.env.REPORTING_DRY_RUN === "true",
   });
@@ -19,7 +20,6 @@ router.get("/version", (_req, res) => {
     status: "ok",
     service: "rentchain-api",
     version: getVersion(),
-    env: process.env.NODE_ENV || "development",
   });
 });
 

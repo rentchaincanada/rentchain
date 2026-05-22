@@ -262,6 +262,17 @@ app.get(
   }
 );
 
+// Build stamp: mounted before broad /api routers so deployment probes do not fall through.
+app.get("/api/_build", rateLimitDiagnostics, (_req, res) => {
+  res.setHeader("x-route-source", "app.build.ts:/api/_build");
+  return res.json({
+    ok: true,
+    ...safeDiagnosticBuildMetadata(),
+  });
+});
+app.use("/api/status", rateLimitDiagnostics);
+app.use("/api/status", statusRoutes);
+
 // Billing routes
 app.use("/api/billing", routeSource("billingRoutes.ts"), billingRoutes);
 console.log("[boot] mounted billingRoutes at /api/billing");
@@ -295,8 +306,6 @@ app.use("/api/internal", rateLimitInternalJob);
 app.use("/api/internal", routeSource("internalReportsRoutes.ts"), internalReportsRoutes);
 app.use("/api/internal", routeSource("identityOracleInternalRoutes.ts"), identityOracleInternalRoutes);
 app.use("/api/internal", routeSource("applicationReminderInternalRoutes.ts"), applicationReminderInternalRoutes);
-app.use("/api/status", rateLimitDiagnostics);
-app.use("/api/status", routeSource("statusRoutes.ts"), statusRoutes);
 
 // Auth decode (non-blocking if header missing)
 app.use(authenticateJwt);
@@ -578,15 +587,6 @@ app.get(
     });
   }
 );
-
-// Build stamp
-app.get("/api/_build", rateLimitDiagnostics, (_req, res) => {
-  res.setHeader("x-route-source", "app.build.ts:/api/_build");
-  return res.json({
-    ok: true,
-    ...safeDiagnosticBuildMetadata(),
-  });
-});
 
 // Echo for POST reachability
 app.post(
