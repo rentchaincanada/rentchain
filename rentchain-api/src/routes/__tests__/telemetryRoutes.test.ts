@@ -101,6 +101,46 @@ describe("telemetryRoutes", () => {
     });
   });
 
+  it("accepts PDF print preview telemetry and keeps it sanitized", async () => {
+    const router = (await import("../telemetryRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/telemetry",
+      user: { id: "user-1", role: "landlord", landlordId: "landlord-1" },
+      body: {
+        eventName: "pdf_print_opened",
+        eventProps: {
+          exportType: "print_summary",
+          renderingPath: "window_print",
+          status: "print_opened",
+          token: "secret-token",
+          rawPayload: { html: "<private-document>" },
+          tenantName: "Private Tenant",
+        },
+      },
+    });
+
+    expect(res.status).toBe(200);
+    const stored = Array.from(collections.get("telemetry_events")?.values() || []);
+    expect(stored).toHaveLength(1);
+    expect(stored[0]).toMatchObject({
+      eventName: "pdf_print_opened",
+      eventProps: expect.objectContaining({
+        exportType: "print_summary",
+        renderingPath: "window_print",
+        status: "print_opened",
+      }),
+      governance: expect.objectContaining({
+        sensitivity: "confidential",
+        retentionCategory: "export_metadata",
+        metadataOnly: true,
+      }),
+    });
+    expect(stored[0].eventProps.token).toBeUndefined();
+    expect(stored[0].eventProps.rawPayload).toBeUndefined();
+    expect(stored[0].eventProps.tenantName).toBeUndefined();
+  });
+
   it("continues rejecting unrelated telemetry event families", async () => {
     const router = (await import("../telemetryRoutes")).default;
     const res = await invokeRouter(router, {

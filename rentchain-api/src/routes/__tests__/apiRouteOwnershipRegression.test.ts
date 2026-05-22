@@ -216,6 +216,8 @@ async function buildRuntimeOwnershipApp() {
   const messagesRoutes = (await import("../messagesRoutes")).default;
   const landlordEvidencePackRoutes = (await import("../landlordEvidencePackRoutes")).default;
   const internalReportsRoutes = (await import("../internalReportsRoutes")).default;
+  const telemetryRoutes = (await import("../telemetryRoutes")).default;
+  const screeningRoutes = (await import("../screeningRoutes")).default;
   const screeningJobsAdminRoutes = (await import("../screeningJobsAdminRoutes")).default;
   const { stripeWebhookHandler } = await import("../stripeScreeningOrdersWebhookRoutes");
   const { transunionWebhookHandler } = await import("../transunionWebhookRoutes");
@@ -243,6 +245,8 @@ async function buildRuntimeOwnershipApp() {
   app.post("/api/_echo", requireDiagnosticAccess("app.build.ts:/api/_echo"), (req, res) =>
     res.json({ ok: true, method: "POST", body: req.body ?? null })
   );
+  app.use("/api", routeSource("telemetryRoutes.ts"), telemetryRoutes);
+  app.use("/api", routeSource("screeningRoutes.ts"), screeningRoutes);
   app.use("/api", routeSource("screeningJobsAdminRoutes.ts"), screeningJobsAdminRoutes);
   app.use("/api", (_req, res) => {
     res.setHeader("x-route-source", "not-found");
@@ -273,6 +277,10 @@ describe("API route ownership regression", () => {
     );
     const leasesMount = source.indexOf('app.use("/api/leases", routeSource("leaseRoutes.ts"), leaseRoutes)');
     const tenantsMount = source.indexOf('app.use("/api/tenants", routeSource("tenantsRoutes.ts"), tenantsRoutes)');
+    const telemetryMount = source.indexOf('app.use("/api", routeSource("telemetryRoutes.ts"), telemetryRoutes)');
+    const screeningRoutesMount = source.indexOf('app.use("/api", routeSource("screeningRoutes.ts"), screeningRoutes)');
+    const expensesMount = source.indexOf('app.use("/api", routeSource("expensesRoutes.ts"), expensesRoutes)');
+    const riskAgentMount = source.indexOf('app.use("/api", routeSource("riskAgentRoutes.ts"), riskAgentRoutes)');
     const screeningJobsMount = source.indexOf('app.use("/api", routeSource("screeningJobsAdminRoutes.ts"), screeningJobsAdminRoutes)');
     const apiCatchall = source.indexOf('app.use("/api", (_req, res) => {');
 
@@ -281,6 +289,10 @@ describe("API route ownership regression", () => {
     expect(leaseDocumentUrlRoute).toBeGreaterThan(-1);
     expect(leasesMount).toBeGreaterThan(-1);
     expect(tenantsMount).toBeGreaterThan(-1);
+    expect(telemetryMount).toBeGreaterThan(-1);
+    expect(screeningRoutesMount).toBeGreaterThan(-1);
+    expect(expensesMount).toBeGreaterThan(-1);
+    expect(riskAgentMount).toBeGreaterThan(-1);
     expect(screeningJobsMount).toBeGreaterThan(-1);
     expect(apiCatchall).toBeGreaterThan(-1);
     expect(ledgerMount).toBeLessThan(screeningJobsMount);
@@ -288,6 +300,12 @@ describe("API route ownership regression", () => {
     expect(leaseDocumentUrlRoute).toBeLessThan(screeningJobsMount);
     expect(leasesMount).toBeLessThan(screeningJobsMount);
     expect(tenantsMount).toBeLessThan(screeningJobsMount);
+    expect(telemetryMount).toBeLessThan(expensesMount);
+    expect(screeningRoutesMount).toBeLessThan(expensesMount);
+    expect(telemetryMount).toBeLessThan(riskAgentMount);
+    expect(screeningRoutesMount).toBeLessThan(riskAgentMount);
+    expect(telemetryMount).toBeLessThan(screeningJobsMount);
+    expect(screeningRoutesMount).toBeLessThan(screeningJobsMount);
     expect(screeningJobsMount).toBeLessThan(apiCatchall);
   });
 
@@ -351,6 +369,29 @@ describe("API route ownership regression", () => {
     expect(res.headers["x-route-source"]).toBe("leaseRoutes.ts");
     expect(res.headers["x-route-source"]).not.toBe("screeningJobsAdminRoutes.ts");
     expect(res.body?.error).not.toBe("Not Found");
+  });
+
+  it("keeps telemetry and screening history owned by explicit routers before screening job fallback", async () => {
+    authState.user = null;
+    const app = await buildRuntimeOwnershipApp();
+
+    const telemetryRes = await invokeApp(app, {
+      method: "POST",
+      url: "/api/telemetry",
+      body: { eventName: "nudge_impression", eventProps: { token: "secret" } },
+    });
+    expect(telemetryRes.status).toBe(401);
+    expect(telemetryRes.headers["x-route-source"]).toBe("telemetryRoutes.ts");
+    expect(telemetryRes.headers["x-route-source"]).not.toBe("screeningJobsAdminRoutes.ts");
+
+    const screeningHistoryRes = await invokeApp(app, {
+      method: "GET",
+      url: "/api/screenings/history?applicationId=application-1",
+    });
+    expect(screeningHistoryRes.status).toBe(401);
+    expect(screeningHistoryRes.headers["x-route-source"]).toBe("screeningRoutes.ts");
+    expect(screeningHistoryRes.headers["x-route-source"]).not.toBe("screeningJobsAdminRoutes.ts");
+    expect(JSON.stringify(screeningHistoryRes.body)).not.toContain("secret");
   });
 
   it("keeps webhook requests public and owned by webhook routers", async () => {
