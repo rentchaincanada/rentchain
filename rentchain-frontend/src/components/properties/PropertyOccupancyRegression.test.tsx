@@ -223,8 +223,10 @@ describe("PropertyDetailPanel occupancy regression coverage", () => {
     expect((await screen.findAllByText("Occupied")).length).toBeGreaterThan(0);
     expect(screen.getAllByText("Upcoming").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Vacant").length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/John Smith · Ends May 31, 2099/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Bailey Blinkers · Ends Jun 30, 2100/).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("link", { name: "John Smith" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Ends May 31, 2099/).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("link", { name: "Bailey Blinkers" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Ends Jun 30, 2100/).length).toBeGreaterThan(0);
     expect(screen.queryByText(/Casey Past · Ends May 31, 2026/)).not.toBeInTheDocument();
     expect(screen.queryByText(lifecycleContinuityIds.activeLeaseId)).not.toBeInTheDocument();
     expect(screen.queryByText(lifecycleContinuityIds.unit101Id)).not.toBeInTheDocument();
@@ -293,7 +295,8 @@ describe("PropertyDetailPanel occupancy regression coverage", () => {
 
     renderPropertyDetail();
 
-    await waitFor(() => expect(screen.getAllByText(/John Smith · Ends May 31, 2099/).length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getAllByRole("link", { name: "John Smith" }).length).toBeGreaterThan(0));
+    expect(screen.getAllByText(/Ends May 31, 2099/).length).toBeGreaterThan(0);
     fireEvent.click(screen.getAllByRole("button", { name: "Edit" }).at(-1)!);
 
     expect(screen.getByTestId("unit-edit-modal")).toBeInTheDocument();
@@ -344,7 +347,7 @@ describe("PropertyDetailPanel occupancy regression coverage", () => {
     expect(ledgerLinks.some((link) => link.getAttribute("href") === `/leases/${lifecycleContinuityIds.activeLeaseId}/ledger`)).toBe(true);
     expect(ledgerLinks.some((link) => link.getAttribute("href") === `/leases/${lifecycleContinuityIds.upcomingLeaseId}/ledger`)).toBe(true);
 
-    const activeRow = screen.getAllByText(/John Smith · Ends May 31, 2099/)[0].closest("td");
+    const activeRow = screen.getAllByRole("link", { name: "John Smith" })[0].closest("td");
     expect(activeRow).toBeTruthy();
     expect(within(activeRow as HTMLElement).getByRole("link", { name: "Ledger" })).toHaveAttribute(
       "href",

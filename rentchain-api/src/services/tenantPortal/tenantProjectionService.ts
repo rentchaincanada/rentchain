@@ -173,6 +173,11 @@ function asString(value: unknown): string | null {
   return next || null;
 }
 
+function isScheduleADocumentUrl(value: unknown): boolean {
+  const normalized = String(value || "").trim().toLowerCase();
+  return Boolean(normalized) && (normalized.includes("schedule-a") || normalized.includes("schedule_a"));
+}
+
 function asNumber(value: unknown): number | null {
   const next = Number(value);
   return Number.isFinite(next) ? next : null;
@@ -403,8 +408,9 @@ export function projectTenantProperty(recordId: string, data: any): TenantProper
 }
 
 export function projectTenantLease(recordId: string, data: any): TenantLeaseProjection {
-  const documentUrl =
+  const rawDocumentUrl =
     asString(data?.documentUrl) || asString(data?.approvedDocumentUrl) || asString(data?.documentRef);
+  const documentUrl = isScheduleADocumentUrl(rawDocumentUrl) ? null : rawDocumentUrl;
   const startDate = asString(data?.startDate) || asString(data?.leaseStart);
   const endDate = asString(data?.endDate) || asString(data?.leaseEnd);
   const monthlyRent =

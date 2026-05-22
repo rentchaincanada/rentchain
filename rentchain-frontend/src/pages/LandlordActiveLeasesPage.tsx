@@ -7,6 +7,7 @@ import {
   getActiveLeasesForLandlord,
   getArchivedLeasesForLandlord,
   getLeaseReconciliationCandidates,
+  refreshLeaseDocumentUrl,
   restoreLeaseRecord,
   type LandlordActiveLease,
   type LeaseReconciliationCandidate,
@@ -63,6 +64,47 @@ function todayIso() {
 function errorMessage(error: unknown, fallback: string) {
   if (error instanceof Error && error.message) return error.message;
   return fallback;
+}
+
+function isGoogleStorageSignedUrl(value: string) {
+  try {
+    const url = new URL(value);
+    return url.hostname === "storage.googleapis.com" || url.hostname === "storage.cloud.google.com" || url.hostname.endsWith(".storage.googleapis.com");
+  } catch {
+    return false;
+  }
+}
+
+function isAppDomainLeasePdfFallback(value: string) {
+  if (!value) return false;
+  try {
+    const url = new URL(value, window.location.origin);
+    return url.origin === window.location.origin && /^\/leases\/.+\.pdf$/i.test(url.pathname);
+  } catch {
+    return /^\/leases\/.+\.pdf(?:$|\?)/i.test(value);
+  }
+}
+
+function canUseLegacyDocumentFallback(value: string) {
+  const next = String(value || "").trim();
+  return Boolean(next) && !isGoogleStorageSignedUrl(next) && !isAppDomainLeasePdfFallback(next);
+}
+
+function isScheduleADocumentUrl(value: unknown) {
+  const normalized = String(value || "").trim().toLowerCase();
+  return Boolean(normalized) && (normalized.includes("schedule-a") || normalized.includes("schedule_a"));
+}
+
+function primaryLeaseDocumentUrl(lease: LandlordActiveLease) {
+  const value = String(lease.documentUrl || "").trim();
+  return value && !isScheduleADocumentUrl(value) ? value : "";
+}
+
+function scheduleADocumentUrl(lease: LandlordActiveLease) {
+  const explicit = String(lease.scheduleAUrl || "").trim();
+  if (explicit) return explicit;
+  const legacy = String(lease.documentUrl || "").trim();
+  return isScheduleADocumentUrl(legacy) ? legacy : "";
 }
 
 function normalizePhoneInput(value: string) {
@@ -300,6 +342,7 @@ export default function LandlordActiveLeasesPage() {
   const [selectedCandidate, setSelectedCandidate] = React.useState<LeaseReconciliationCandidate | null>(null);
   const [convertSaving, setConvertSaving] = React.useState(false);
   const [paymentRailBusyLeaseId, setPaymentRailBusyLeaseId] = React.useState<string | null>(null);
+  const [documentBusyLeaseId, setDocumentBusyLeaseId] = React.useState<string | null>(null);
   const [occupantName, setOccupantName] = React.useState("");
   const [tenantEmail, setTenantEmail] = React.useState("");
   const [tenantPhone, setTenantPhone] = React.useState("");
@@ -393,6 +436,33 @@ export default function LandlordActiveLeasesPage() {
     }
   }
 
+  async function openLeaseDocument(lease: LandlordActiveLease, documentKind: "lease" | "schedule-a" = "lease") {
+    const fallbackUrl = documentKind === "schedule-a" ? scheduleADocumentUrl(lease) : primaryLeaseDocumentUrl(lease);
+    let primaryRefreshReturnedScheduleA = false;
+    setDocumentBusyLeaseId(lease.id);
+    try {
+      const refreshed =
+        documentKind === "schedule-a"
+          ? await refreshLeaseDocumentUrl(lease.id, { document: "schedule-a" })
+          : await refreshLeaseDocumentUrl(lease.id);
+      const nextUrl = String(refreshed?.documentUrl || "").trim() || fallbackUrl;
+      if (documentKind === "lease" && isScheduleADocumentUrl(nextUrl)) {
+        primaryRefreshReturnedScheduleA = true;
+        throw new Error("Primary lease document unavailable. Use View Schedule A for the supplemental form.");
+      }
+      if (!nextUrl) throw new Error("Lease document is not available.");
+      window.open(nextUrl, "_blank", "noreferrer");
+    } catch (err: unknown) {
+      if (!primaryRefreshReturnedScheduleA && canUseLegacyDocumentFallback(fallbackUrl)) {
+        window.open(fallbackUrl, "_blank", "noreferrer");
+        return;
+      }
+      setError(errorMessage(err, documentKind === "schedule-a" ? "Schedule A link expired and needs regeneration." : "Lease document link expired and needs regeneration."));
+    } finally {
+      setDocumentBusyLeaseId(null);
+    }
+  }
+
   async function handleConvert() {
     if (!selectedCandidate) return;
     setConvertSaving(true);
@@ -439,7 +509,7 @@ export default function LandlordActiveLeasesPage() {
         `Status: ${prettyLeaseStatus(lease.status)}`,
         `Term: ${formatDate(lease.startDate)} to ${formatDate(lease.endDate)}`,
         `View ledger: ${ledgerUrl}`,
-        lease.documentUrl ? `Lease document: ${lease.documentUrl}` : "",
+        `Lease summary: ${typeof window !== "undefined" ? `${window.location.origin}${summaryPath}` : summaryPath}`,
       ]
         .filter(Boolean)
         .join("\n")
@@ -455,25 +525,45 @@ export default function LandlordActiveLeasesPage() {
 
   function renderLeaseActions(lease: LandlordActiveLease) {
     const { ledgerPath, summaryPath, emailHref } = buildLeaseActionMeta(lease);
+    const primaryDocumentUrl = primaryLeaseDocumentUrl(lease);
+    const scheduleAUrl = scheduleADocumentUrl(lease);
     return (
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        {lease.documentUrl ? (
-          <a
-            href={lease.documentUrl}
-            target="_blank"
-            rel="noreferrer"
+        {primaryDocumentUrl ? (
+          <button
+            type="button"
+            onClick={() => void openLeaseDocument(lease)}
+            disabled={documentBusyLeaseId === lease.id}
             style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", textDecoration: "none", color: "#0f172a" }}
           >
-            View lease
-          </a>
+            {documentBusyLeaseId === lease.id ? "Opening..." : "View lease"}
+          </button>
         ) : (
-          <Link
-            to={summaryPath}
-            style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a", textDecoration: "none" }}
+          <button
+            type="button"
+            disabled
+            title={scheduleAUrl ? "Only Schedule A is available for this record." : "No primary lease PDF is attached to this record."}
+            style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #e2e8f0", background: "#f8fafc", color: "#64748b" }}
           >
-            View lease
-          </Link>
+            Primary lease document unavailable
+          </button>
         )}
+        <Link
+          to={summaryPath}
+          style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a", textDecoration: "none" }}
+        >
+          Lease summary
+        </Link>
+        {scheduleAUrl ? (
+          <button
+            type="button"
+            onClick={() => void openLeaseDocument(lease, "schedule-a")}
+            disabled={documentBusyLeaseId === lease.id}
+            style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", textDecoration: "none", color: "#0f172a" }}
+          >
+            {documentBusyLeaseId === lease.id ? "Opening..." : "View Schedule A"}
+          </button>
+        ) : null}
         <Link to={ledgerPath} style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", textDecoration: "none", color: "#0f172a" }}>
           Ledger
         </Link>
@@ -496,19 +586,13 @@ export default function LandlordActiveLeasesPage() {
         <button
           type="button"
           onClick={() => {
-            if (lease.documentUrl) {
-              const a = document.createElement("a");
-              a.href = lease.documentUrl;
-              a.target = "_blank";
-              a.rel = "noreferrer";
-              a.download = "";
-              document.body.appendChild(a);
-              a.click();
-              a.remove();
+            if (primaryLeaseDocumentUrl(lease)) {
+              void openLeaseDocument(lease);
               return;
             }
             downloadLeaseSummaryPdf(lease);
           }}
+          disabled={documentBusyLeaseId === lease.id}
           style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a" }}
         >
           Save
@@ -678,9 +762,9 @@ export default function LandlordActiveLeasesPage() {
                 </div>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   {candidate.leaseDocument?.url ? (
-                    <a href={candidate.leaseDocument.url} target="_blank" rel="noreferrer" style={{ color: "#2563eb" }}>
-                      View reference
-                    </a>
+                    <span style={{ color: "#64748b", fontSize: 13 }}>
+                      Lease document link expired and needs regeneration.
+                    </span>
                   ) : null}
                   {candidate.canConvert ? (
                     <button

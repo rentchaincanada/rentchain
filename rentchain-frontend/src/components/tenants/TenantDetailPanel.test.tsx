@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TenantDetailPanel } from "./TenantDetailPanel";
@@ -8,7 +8,9 @@ const mocks = vi.hoisted(() => ({
   fetchLedger: vi.fn(),
   fetchLeaseLedger: vi.fn(),
   fetchTenantFinancialActivity: vi.fn(),
+  downloadTenantReport: vi.fn(),
   getTenantSignals: vi.fn(),
+  printSummaryDocument: vi.fn(),
   showToast: vi.fn(),
 }));
 
@@ -29,8 +31,16 @@ vi.mock("@/api/tenantDetail", () => ({
   updateTenantMoveInReadiness: vi.fn(),
 }));
 
+vi.mock("@/api/tenantsApi", () => ({
+  downloadTenantReport: (...args: unknown[]) => mocks.downloadTenantReport(...args),
+}));
+
 vi.mock("@/api/tenantSignals", () => ({
   getTenantSignals: mocks.getTenantSignals,
+}));
+
+vi.mock("@/utils/printSummary", () => ({
+  printSummaryDocument: (...args: unknown[]) => mocks.printSummaryDocument(...args),
 }));
 
 vi.mock("../ui/ToastProvider", () => ({
@@ -96,6 +106,11 @@ describe("TenantDetailPanel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getTenantSignals.mockResolvedValue({ signals: null });
+    mocks.printSummaryDocument.mockResolvedValue(undefined);
+    mocks.downloadTenantReport.mockResolvedValue({
+      blob: new Blob(["tenant"], { type: "application/pdf" }),
+      filename: "tenant-summary.pdf",
+    });
     mocks.fetchTenantFinancialActivity.mockResolvedValue([
       {
         id: "row-1",
@@ -225,11 +240,17 @@ describe("TenantDetailPanel", () => {
     expect(screen.getByText(/Balance .*1,850\.00/i)).toBeInTheDocument();
     expect(await screen.findByText("Financial activity")).toBeInTheDocument();
     expect(screen.getByText("Recorded Payments")).toBeInTheDocument();
-    expect(screen.getByText("Recorded payment (e-transfer)")).toBeInTheDocument();
+    expect(screen.getAllByText("Recorded payment (e-transfer)").length).toBeGreaterThan(0);
     expect(screen.getByText("Tenant activity panel")).toBeInTheDocument();
     await waitFor(() => expect(mocks.fetchLeaseLedger).toHaveBeenCalledWith("lease-1"));
     await waitFor(() => expect(mocks.fetchTenantFinancialActivity).toHaveBeenCalledWith("tenant-1"));
     expect(mocks.fetchLedger).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Print / Save PDF" }));
+    await waitFor(() => expect(mocks.printSummaryDocument).toHaveBeenCalledWith("summary"));
+    expect(mocks.downloadTenantReport).not.toHaveBeenCalled();
+    expect(document.querySelector(".print-only-summary")?.textContent).toContain("Tenant summary");
+    expect(document.querySelector(".print-only-summary")?.textContent).toContain("Taylor Tenant");
   });
 
   it("falls back to the existing tenant-level ledger source when no current lease is linked", async () => {
@@ -310,8 +331,8 @@ describe("TenantDetailPanel", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText("May 1, 2026")).toBeInTheDocument();
-    expect(screen.getByText("Apr 30, 2027")).toBeInTheDocument();
+    expect((await screen.findAllByText("May 1, 2026")).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Apr 30, 2027").length).toBeGreaterThan(0);
     expect(screen.queryByText("Apr 30, 2026")).not.toBeInTheDocument();
     expect(screen.queryByText("Apr 29, 2027")).not.toBeInTheDocument();
     await waitFor(() => expect(mocks.fetchLeaseLedger).toHaveBeenCalledWith("lease-1"));

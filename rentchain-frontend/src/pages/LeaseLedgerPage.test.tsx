@@ -682,14 +682,8 @@ describe("LeaseLedgerPage", () => {
     expect(screen.getAllByText("$1,450.00").length).toBeGreaterThan(0);
   });
 
-  it("exports the lease ledger as a PDF download", async () => {
-    const realCreateElement = document.createElement.bind(document);
-    const createdAnchors: HTMLAnchorElement[] = [];
-    vi.spyOn(document, "createElement").mockImplementation((tagName: string, options?: ElementCreationOptions) => {
-      const element = realCreateElement(tagName, options);
-      if (tagName.toLowerCase() === "a") createdAnchors.push(element as HTMLAnchorElement);
-      return element;
-    });
+  it("opens browser print preview for lease ledger PDF output", async () => {
+    const printSpy = vi.spyOn(window, "print").mockImplementation(() => {});
 
     render(
       <MemoryRouter initialEntries={["/leases/lease-1/ledger"]}>
@@ -700,21 +694,14 @@ describe("LeaseLedgerPage", () => {
     );
 
     await screen.findAllByText("Harbour View · Unit 101");
-    fireEvent.click(screen.getByRole("button", { name: "Export PDF" }));
+    fireEvent.click(screen.getByRole("button", { name: "Print / Save PDF" }));
 
-    await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalledWith(
-        expect.stringContaining("/api/leases/lease-1/ledger/export.pdf"),
-        expect.objectContaining({
-          method: "GET",
-          credentials: "include",
-        })
-      );
-      expect(HTMLAnchorElement.prototype.click).toHaveBeenCalledTimes(1);
-    });
-    expect(createdAnchors[createdAnchors.length - 1]?.download).toBe("lease-ledger-harbour-view-unit-101.pdf");
-    expect(global.URL.createObjectURL).toHaveBeenCalled();
-    expect(global.URL.revokeObjectURL).toHaveBeenCalled();
+    expect(printSpy).toHaveBeenCalled();
+    expect(global.fetch).not.toHaveBeenCalledWith(
+      expect.stringContaining("/api/leases/lease-1/ledger/export.pdf"),
+      expect.anything()
+    );
+    printSpy.mockRestore();
   });
 
   it("adds a lease note from the ledger detail surface", async () => {

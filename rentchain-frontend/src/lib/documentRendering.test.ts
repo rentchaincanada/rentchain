@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   createPrintRoot,
+  PRINT_SAFE_CLASS,
   PRINT_ROOT_ATTRIBUTE,
   shouldStartNewPage,
   triggerDocumentDownload,
@@ -12,6 +13,7 @@ describe("documentRendering foundation", () => {
     const root = createPrintRoot(document);
 
     expect(root.getAttribute(PRINT_ROOT_ATTRIBUTE)).toBe("true");
+    expect(root.classList.contains(PRINT_SAFE_CLASS)).toBe(true);
   });
 
   it("keeps pagination decisions deterministic at the bottom guard", () => {

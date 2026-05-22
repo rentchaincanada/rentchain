@@ -605,7 +605,7 @@ export default function MaintenanceRequestsPage() {
           </div>
           <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
             <Button variant="secondary" onClick={() => void printSummaryDocument("summary")}>
-              Export PDF Summary
+              Print / Save PDF
             </Button>
             <Button variant="secondary" onClick={() => void load()} disabled={loading || saving}>
               Refresh

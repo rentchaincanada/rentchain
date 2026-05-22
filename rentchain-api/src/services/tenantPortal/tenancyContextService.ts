@@ -61,6 +61,27 @@ function isActiveLeaseStatus(status: unknown): boolean {
   return ACTIVE_LEASE_STATUSES.has(next);
 }
 
+function leaseMatchesTenantIdentity(data: any, tenantId: string | null, email: string | null): boolean {
+  const normalizedTenantId = asString(tenantId);
+  if (normalizedTenantId) {
+    if (asString(data?.tenantId) === normalizedTenantId) return true;
+    if (asString(data?.primaryTenantId) === normalizedTenantId) return true;
+    if (Array.isArray(data?.tenantIds) && data.tenantIds.map((value: any) => asString(value)).includes(normalizedTenantId)) return true;
+  }
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) return false;
+  return [
+    data?.tenantEmail,
+    data?.email,
+    data?.primaryTenantEmail,
+    data?.tenant?.email,
+    data?.applicantEmail,
+  ]
+    .map((value) => normalizeEmail(value))
+    .filter(Boolean)
+    .includes(normalizedEmail);
+}
+
 async function safeGetDocs(collectionName: string, field: string, value: string, operator: "==" | "array-contains" = "==") {
   if (!value) return [];
   try {
@@ -231,6 +252,8 @@ export async function resolveTenancyContext(identity: TenantWorkspaceIdentity): 
   const leaseDocs = [
     ...(tenantRecordId ? await safeGetDocs("leases", "tenantId", tenantRecordId) : []),
     ...(tenantRecordId ? await safeGetDocs("leases", "tenantIds", tenantRecordId, "array-contains") : []),
+    ...(email ? await safeGetDocs("leases", "tenantEmail", email) : []),
+    ...(email ? await safeGetDocs("leases", "email", email) : []),
     ...(tenantRecordLeaseId ? [await db.collection("leases").doc(String(tenantRecordLeaseId)).get().catch(() => null as any)] : []),
   ].filter(Boolean);
 
@@ -238,6 +261,7 @@ export async function resolveTenancyContext(identity: TenantWorkspaceIdentity): 
     if (!doc?.exists) continue;
     const data = (doc.data() || {}) as any;
     if (!isActiveLeaseStatus(data?.status)) continue;
+    if (!leaseMatchesTenantIdentity(data, tenantRecordId, email)) continue;
     const propertyId = asString(data?.propertyId);
     if (!propertyId) continue;
     pushCandidate({

@@ -180,6 +180,33 @@ describe("resolveTenancyContext", () => {
     expect(result.leaseId).toBe("lease-email");
   });
 
+  it("resolves active tenant authority from an email-linked active lease when tenant id linkage is missing", async () => {
+    ensureCollection("tenants").set("tenant-by-email", {
+      tenantId: "tenant-by-email",
+      email: "tenant@example.com",
+    });
+    ensureCollection("leases").set("lease-email-only", {
+      tenantEmail: "tenant@example.com",
+      propertyId: "prop-email",
+      unitId: "unit-6",
+      status: "active",
+    });
+
+    const { resolveTenancyContext } = await import("../tenantPortal/tenancyContextService");
+    const result = await resolveTenancyContext({
+      uid: "auth-user-1",
+      email: "tenant@example.com",
+      tenantId: null,
+      leaseId: null,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.authority).toBe("active_tenant");
+    expect(result.tenantId).toBe("tenant-by-email");
+    expect(result.leaseId).toBe("lease-email-only");
+    expect(result.unitId).toBe("unit-6");
+  });
+
   it("does not grant tenant authority from an arbitrary mismatched email", async () => {
     ensureCollection("tenants").set("tenant-by-email", {
       tenantId: "tenant-by-email",

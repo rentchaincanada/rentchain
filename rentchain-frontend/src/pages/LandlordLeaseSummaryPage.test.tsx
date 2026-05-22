@@ -6,15 +6,22 @@ import { buildLeaseSummaryPdfSource } from "@/utils/leaseSummaryPdf";
 
 const mocks = vi.hoisted(() => ({
   getLeaseById: vi.fn(),
+  printSummaryDocument: vi.fn(),
 }));
 
 vi.mock("@/api/leasesApi", () => ({
   getLeaseById: mocks.getLeaseById,
 }));
 
+vi.mock("@/utils/printSummary", () => ({
+  printSummaryDocument: (...args: unknown[]) => mocks.printSummaryDocument(...args),
+}));
+
 describe("LandlordLeaseSummaryPage", () => {
   beforeEach(() => {
     mocks.getLeaseById.mockReset();
+    mocks.printSummaryDocument.mockReset();
+    mocks.printSummaryDocument.mockResolvedValue(undefined);
     mocks.getLeaseById.mockResolvedValue({
       lease: {
         id: "lease-1",
@@ -77,22 +84,41 @@ describe("LandlordLeaseSummaryPage", () => {
     );
 
     expect(await screen.findByText("Lease summary")).toBeInTheDocument();
-    expect(screen.getByTestId("lease-document-view")).toBeInTheDocument();
-    expect(screen.getByRole("article", { name: "Residential Lease Pack" })).toBeInTheDocument();
-    expect(screen.getByRole("term", { name: "Property" })).toBeInTheDocument();
-    expect(screen.getByText("Residential Lease Pack")).toBeInTheDocument();
-    expect(screen.getByText("Property and Unit")).toBeInTheDocument();
-    expect(screen.getByText("Landlord and Tenant")).toBeInTheDocument();
-    expect(screen.getByText("Lease Term")).toBeInTheDocument();
-    expect(screen.getByText("Rent and Payment Terms")).toBeInTheDocument();
-    expect(screen.getByText("Clauses and Additional Terms")).toBeInTheDocument();
-    expect(screen.getByText("Audit and Events")).toBeInTheDocument();
+    expect(screen.getAllByTestId("lease-document-view").length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("article", { name: "Residential Lease Pack" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("term", { name: "Property" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Residential Lease Pack").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Property and Unit").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Landlord and Tenant").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Lease Term").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Rent and Payment Terms").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Clauses and Additional Terms").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Audit and Events").length).toBeGreaterThan(0);
     expect(mocks.getLeaseById).toHaveBeenCalledWith("lease-1");
-    expect(screen.getByText("Coburg Rd")).toBeInTheDocument();
-    expect(screen.getByText("Tony Wenpeng")).toBeInTheDocument();
+    expect(screen.getAllByText("Coburg Rd").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Tony Wenpeng").length).toBeGreaterThan(0);
     expect(screen.queryByText(/gs:\/\//i)).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open ledger" })).toHaveAttribute("href", "/leases/lease-1/ledger");
+    expect(screen.getByRole("button", { name: "Print / Save PDF" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Back to leases" })).toHaveAttribute("href", "/leases");
+  });
+
+  it("renders a non-empty printable lease summary source for browser print preview", async () => {
+    const { container } = render(
+      <MemoryRouter initialEntries={["/leases/lease-1/summary"]}>
+        <Routes>
+          <Route path="/leases/:leaseId/summary" element={<LandlordLeaseSummaryPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByText("Lease summary");
+    const printSource = container.querySelector(".print-only-summary");
+
+    expect(printSource).toBeTruthy();
+    expect(printSource?.textContent).toContain("Residential Lease Pack");
+    expect(printSource?.textContent).toContain("Coburg Rd");
+    expect(printSource?.textContent).toContain("Tony Wenpeng");
   });
 
   it("renders date-only lease summary dates without UTC timezone rollback", async () => {
@@ -120,8 +146,8 @@ describe("LandlordLeaseSummaryPage", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText("May 1, 2026")).toBeInTheDocument();
-    expect(screen.getByText("June 1, 2026")).toBeInTheDocument();
+    expect((await screen.findAllByText("May 1, 2026")).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("June 1, 2026").length).toBeGreaterThan(0);
     expect(screen.queryByText("April 30, 2026")).not.toBeInTheDocument();
     expect(screen.queryByText("May 31, 2026")).not.toBeInTheDocument();
   });
@@ -151,17 +177,40 @@ describe("LandlordLeaseSummaryPage", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText("May 1, 2026")).toBeInTheDocument();
-    expect(screen.getByText("June 1, 2026")).toBeInTheDocument();
+    expect((await screen.findAllByText("May 1, 2026")).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("June 1, 2026").length).toBeGreaterThan(0);
   });
 
-  it("saves missing-document lease summaries as PDFs instead of raw text", async () => {
+  it("opens the browser print flow before falling back to direct PDF download", async () => {
+    render(
+      <MemoryRouter initialEntries={["/leases/lease-1/summary"]}>
+        <Routes>
+          <Route path="/leases/:leaseId/summary" element={<LandlordLeaseSummaryPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Print / Save PDF" }));
+
+    await waitFor(() => {
+      expect(mocks.printSummaryDocument).toHaveBeenCalledWith("summary");
+    });
+    expect(global.URL.createObjectURL).not.toHaveBeenCalled();
+    expect(HTMLAnchorElement.prototype.click).not.toHaveBeenCalled();
+  });
+
+  it("falls back to direct PDF download only when browser printing is unavailable", async () => {
     const realCreateElement = document.createElement.bind(document);
     const createdAnchors: HTMLAnchorElement[] = [];
     vi.spyOn(document, "createElement").mockImplementation((tagName: string, options?: ElementCreationOptions) => {
       const element = realCreateElement(tagName, options);
       if (tagName.toLowerCase() === "a") createdAnchors.push(element as HTMLAnchorElement);
       return element;
+    });
+    const originalPrint = window.print;
+    Object.defineProperty(window, "print", {
+      configurable: true,
+      value: undefined,
     });
 
     render(
@@ -172,13 +221,14 @@ describe("LandlordLeaseSummaryPage", () => {
       </MemoryRouter>
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: "Save lease summary" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Print / Save PDF" }));
 
     await waitFor(() => {
       expect(global.URL.createObjectURL).toHaveBeenCalledTimes(1);
       expect(HTMLAnchorElement.prototype.click).toHaveBeenCalledTimes(1);
       expect(global.URL.revokeObjectURL).toHaveBeenCalledTimes(1);
     });
+    expect(mocks.printSummaryDocument).not.toHaveBeenCalled();
     const blob = vi.mocked(global.URL.createObjectURL).mock.calls[0][0] as Blob;
     expect(blob.type).toBe("application/pdf");
     const pdfText = buildLeaseSummaryPdfSource(mocks.getLeaseById.mock.calls.length ? (await mocks.getLeaseById.mock.results[0].value).lease : {});
@@ -192,6 +242,10 @@ describe("LandlordLeaseSummaryPage", () => {
     const downloadAnchor = createdAnchors[createdAnchors.length - 1];
     expect(downloadAnchor?.download).toBe("lease-3.pdf");
     expect(downloadAnchor?.download).not.toMatch(/\.txt$/);
+    Object.defineProperty(window, "print", {
+      configurable: true,
+      value: originalPrint,
+    });
   });
 
   it("paginates long lease summary content without adding empty trailing pages", () => {

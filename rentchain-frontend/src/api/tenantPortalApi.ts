@@ -23,6 +23,7 @@ export interface TenantLease {
   status: string | null;
   documentUrl?: string | null;
   leaseDocumentContext?: TenantLeaseDocumentContext | null;
+  scheduleADocumentContext?: TenantLeaseDocumentContext | null;
   signatureStatus?: "not_started" | "awaiting_tenant_signature" | "awaiting_landlord_signature" | "signed" | "unavailable";
   signatureReadinessLabel?: string | null;
   signatureReadinessDescription?: string | null;

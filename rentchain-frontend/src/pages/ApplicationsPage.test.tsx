@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   fetchLandlordApplicationFunnel: vi.fn(),
   getTransUnionIntegration: vi.fn(),
   trackTransUnionUsageEvent: vi.fn(),
+  printSummaryDocument: vi.fn(),
   showToast: vi.fn(),
   openUpgrade: vi.fn(),
   entitlementsMock: vi.fn(),
@@ -96,6 +97,10 @@ vi.mock("@/api/integrationsApi", () => ({
   requestTransUnionOnboarding: vi.fn(),
   trackTransUnionUsageEvent: mocks.trackTransUnionUsageEvent,
   updateTransUnionCredentials: vi.fn(),
+}));
+
+vi.mock("@/utils/printSummary", () => ({
+  printSummaryDocument: (...args: unknown[]) => mocks.printSummaryDocument(...args),
 }));
 
 vi.mock("@/api/viewingsApi", () => ({
@@ -355,6 +360,8 @@ describe("ApplicationsPage", () => {
       version: 1,
     });
     mocks.trackTransUnionUsageEvent.mockResolvedValue({ ok: true });
+    mocks.printSummaryDocument.mockReset();
+    mocks.printSummaryDocument.mockResolvedValue(undefined);
     mocks.showToast.mockReset();
     mocks.openUpgrade.mockReset();
   });
@@ -372,6 +379,26 @@ describe("ApplicationsPage", () => {
     expect(container.querySelector(".rc-viewing-requests-detail-pane")).toBeTruthy();
     expect(container.querySelector(".rc-applications-list-scroll")).toBeTruthy();
     expect(container.querySelector(".rc-applications-detail")).toBeTruthy();
+  });
+
+  it("provides a printable application summary action for the selected application", async () => {
+    const { container } = render(
+      <MemoryRouter>
+        <ApplicationsPage />
+      </MemoryRouter>
+    );
+
+    const applicantName = await screen.findByText("Jamie Stone");
+    const applicantRow = applicantName.closest('[role="button"]');
+    expect(applicantRow).toBeTruthy();
+    fireEvent.click(applicantRow as HTMLElement);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Print / Save PDF" }));
+
+    expect(mocks.printSummaryDocument).toHaveBeenCalledWith("application");
+    const printSource = container.querySelector(".print-only-application");
+    expect(printSource?.textContent).toContain("Application summary");
+    expect(printSource?.textContent).toContain("Jamie Stone");
   });
 
   it("hides cancelled viewing requests by default and preserves active ordering", async () => {

@@ -223,7 +223,7 @@ const PaymentsPage: React.FC = () => {
             <Button variant="secondary" onClick={() => void triggerExport("xls")} disabled={exporting !== null}>
               {exporting === "xls" ? "Exporting..." : "Export Spreadsheet (.xls)"}
             </Button>
-            <Button variant="secondary" onClick={() => void printSummaryDocument("summary")}>Export PDF</Button>
+            <Button variant="secondary" onClick={() => void printSummaryDocument("summary")}>Print / Save PDF</Button>
           </div>
         </div>
       </Card>

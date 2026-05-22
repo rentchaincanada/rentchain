@@ -41,7 +41,7 @@ export function BoardSnapshotDrawer({
       >
         Monthly Operations Snapshot
         <div style={{ display: "flex", gap: 8 }}>
-          <Button onClick={() => window.print()}>Export PDF</Button>
+          <Button onClick={() => window.print()}>Print / Save PDF</Button>
           <Button
             style={{ border: "1px solid #e5e7eb", background: "#fff", color: "#111827" }}
             onClick={onClose}

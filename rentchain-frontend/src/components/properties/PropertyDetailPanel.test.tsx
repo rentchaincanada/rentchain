@@ -351,6 +351,7 @@ describe("PropertyDetailPanel", () => {
         {
           id: "lease-1",
           tenantId: "tenant-1",
+          tenantName: "Jane Tenant",
           propertyId: "prop-1",
           unitId: "unit-1",
           unitNumber: "101",
@@ -387,6 +388,13 @@ describe("PropertyDetailPanel", () => {
     );
 
     expect((await screen.findAllByText("Occupied")).length).toBeGreaterThan(0);
+    const tenantLinks = screen.getAllByRole("link", { name: "Jane Tenant" });
+    expect(tenantLinks.length).toBeGreaterThan(0);
+    expect(tenantLinks[0]).toHaveAttribute("href", "/tenants?tenantId=tenant-1");
+    const leaseLinks = screen.getAllByRole("link", { name: "View lease" });
+    expect(leaseLinks.length).toBeGreaterThan(0);
+    expect(leaseLinks[0]).toHaveAttribute("href", "/leases/lease-1/summary");
+    expect(screen.queryByText("tenant-1")).not.toBeInTheDocument();
   });
 
   it("hydrates lease risk unit labels from property units instead of showing raw unit ids", async () => {
@@ -618,8 +626,10 @@ describe("PropertyDetailPanel", () => {
 
     expect((await screen.findAllByText("Upcoming")).length).toBeGreaterThan(0);
     expect(screen.getAllByText("Occupied").length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Future Tenant · Ends May 31, 2027/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Current Tenant · Ends Dec 31, 2026/).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("link", { name: "Future Tenant" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Ends May 31, 2027/).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("link", { name: "Current Tenant" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Ends Dec 31, 2026/).length).toBeGreaterThan(0);
     expect(screen.getByText("50%")).toBeInTheDocument();
   });
 
@@ -675,7 +685,8 @@ describe("PropertyDetailPanel", () => {
       </MemoryRouter>
     );
 
-    await waitFor(() => expect(screen.getAllByText(/John Smith · Ends May 29, 2027/).length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getAllByRole("link", { name: "John Smith" }).length).toBeGreaterThan(0));
+    expect(screen.getAllByText(/Ends May 29, 2027/).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("link", { name: "View related leases" })[0]).toHaveAttribute("href", "/leases?propertyId=prop-1");
     fireEvent.click(screen.getAllByRole("button", { name: "Edit" }).at(-1)!);
 

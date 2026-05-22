@@ -46,6 +46,7 @@ export type TenantWorkspaceLease = {
   status: string | null;
   documentUrl: string | null;
   leaseDocumentContext?: TenantLeaseDocumentContext | null;
+  scheduleADocumentContext?: TenantLeaseDocumentContext | null;
   signatureStatus?: "not_started" | "awaiting_tenant_signature" | "awaiting_landlord_signature" | "signed" | "unavailable";
   signatureReadinessLabel?: string | null;
   signatureReadinessDescription?: string | null;
@@ -594,6 +595,27 @@ export async function getTenantApplicationStatus(): Promise<TenantWorkspaceAppli
 export async function getTenantLeaseWorkspace(): Promise<TenantWorkspaceLease | null> {
   const res = await tenantApiFetch<{ ok: boolean; data: TenantWorkspaceLease | null }>("/tenant/lease");
   return res?.data ?? null;
+}
+
+export async function refreshTenantLeaseDocumentUrl(options?: { document?: "lease" | "schedule-a" }): Promise<{
+  documentUrl: string;
+  displayLabel: string;
+  documentStatus: string;
+  source: string;
+  expiresInSeconds: number;
+}> {
+  const query = options?.document ? `?document=${encodeURIComponent(options.document)}` : "";
+  const res = await tenantApiFetch<{
+    ok: boolean;
+    data: {
+      documentUrl: string;
+      displayLabel: string;
+      documentStatus: string;
+      source: string;
+      expiresInSeconds: number;
+    };
+  }>(`/tenant/lease/document-url${query}`);
+  return res.data;
 }
 
 export async function createTenantLeasePaymentCheckout(

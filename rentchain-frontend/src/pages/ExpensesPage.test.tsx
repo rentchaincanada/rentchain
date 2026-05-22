@@ -80,7 +80,7 @@ describe("ExpensesPage", () => {
     expect(await screen.findByText("Upgrade to Pro to import receipts, PDFs, CSVs, and spreadsheets with AI-assisted review.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Export CSV" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Export Spreadsheet (.xls)" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Export PDF" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Print / Save PDF" })).not.toBeInTheDocument();
     expect(screen.getAllByText("Alpha Property").length).toBeGreaterThan(0);
   });
 
@@ -97,7 +97,7 @@ describe("ExpensesPage", () => {
       expect(screen.getByRole("button", { name: "Export CSV" })).toBeInTheDocument();
     });
     expect(screen.getByRole("button", { name: "Export Spreadsheet (.xls)" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Export PDF" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Print / Save PDF" })).toBeInTheDocument();
   });
 
   it("generates client-side CSV for CSV and spreadsheet downloads without HTML", async () => {
@@ -135,9 +135,12 @@ describe("ExpensesPage", () => {
     expect(spreadsheetText).not.toContain("unit-firestore-1");
     expect(mocks.exportExpensesMock).not.toHaveBeenCalledWith("xls", expect.any(Object));
 
-    fireEvent.click(screen.getAllByRole("button", { name: "Export PDF" })[0]);
-    await waitFor(() => expect(mocks.exportExpensesMock).toHaveBeenCalledWith("pdf", expect.any(Object)));
+    const printSpy = vi.spyOn(window, "print").mockImplementation(() => {});
+    fireEvent.click(screen.getAllByRole("button", { name: "Print / Save PDF" })[0]);
+    expect(printSpy).toHaveBeenCalled();
+    expect(mocks.exportExpensesMock).not.toHaveBeenCalledWith("pdf", expect.any(Object));
 
+    printSpy.mockRestore();
     click.mockRestore();
   });
 

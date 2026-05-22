@@ -721,6 +721,14 @@ export default function LeaseLedgerPage() {
     }
   }
 
+  async function printOrExportLedgerPdf() {
+    if (typeof window !== "undefined" && typeof window.print === "function") {
+      window.print();
+      return;
+    }
+    await exportLedger("pdf");
+  }
+
   return (
     <div style={{ padding: 16, display: "grid", gap: 14 }}>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", justifyContent: "space-between" }}>
@@ -747,7 +755,7 @@ export default function LeaseLedgerPage() {
           <button onClick={() => setShowChargeModal(true)}>Add charge</button>
           <button onClick={() => setShowPaymentModal(true)}>Record payment</button>
           <button onClick={() => void exportLedger("csv")}>Export CSV</button>
-          <button onClick={() => void exportLedger("pdf")}>Export PDF</button>
+          <button onClick={() => void printOrExportLedgerPdf()}>Print / Save PDF</button>
           <button onClick={() => void toggleArchive()} disabled={saving || !lease}>
             {lease?.archivedAt ? "Restore lease" : "Archive lease"}
           </button>

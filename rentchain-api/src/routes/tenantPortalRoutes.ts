@@ -78,6 +78,7 @@ import {
 } from "../services/tenantPortal/tenantInstitutionAccessService";
 import { recordSystemObservabilityEvent } from "../services/observability/recordSystemObservabilityEvent";
 import { buildLeasePaymentProjection } from "../services/projections/buildLeasePaymentProjection";
+import { getSignedDownloadUrl } from "../lib/gcsSignedUrl";
 
 const router = Router();
 router.use(authenticateJwt);
@@ -2322,9 +2323,11 @@ async function findBestTenantLease(params: {
   current: { id: string; data: any } | null;
   tenantId: string | null;
   propertyId: string | null;
+  tenantEmail?: string | null;
 }) {
   const tenantId = String(params.tenantId || "").trim();
   const propertyId = String(params.propertyId || "").trim();
+  const tenantEmail = String(params.tenantEmail || "").trim().toLowerCase();
   const candidates = new Map<string, { id: string; data: any }>();
   if (params.current?.id) candidates.set(params.current.id, params.current);
   if (tenantId) {
@@ -2340,10 +2343,23 @@ async function findBestTenantLease(params: {
       }
     }
   }
+  if (tenantEmail) {
+    for (const query of [
+      () => db.collection("leases").where("tenantEmail", "==", tenantEmail).limit(20).get(),
+      () => db.collection("leases").where("email", "==", tenantEmail).limit(20).get(),
+    ]) {
+      try {
+        const snap = await query();
+        snap.docs.forEach((doc) => candidates.set(doc.id, { id: doc.id, data: doc.data() as any }));
+      } catch {
+        // Email-linked leases are a compatibility path only.
+      }
+    }
+  }
 
   const ranked = Array.from(candidates.values())
     .filter((candidate) => !propertyId || String(candidate.data?.propertyId || "").trim() === propertyId)
-    .filter((candidate) => !tenantId || leaseHasTenant(candidate.data, tenantId))
+    .filter((candidate) => leaseMatchesTenantIdentity(candidate.data, tenantId, tenantEmail))
     .sort((left, right) => {
       const rankDelta = leaseSelectionRank(right) - leaseSelectionRank(left);
       if (rankDelta !== 0) return rankDelta;
@@ -2374,7 +2390,12 @@ async function loadTenantWorkspaceData(context: Awaited<ReturnType<typeof resolv
   }
 
   let leaseDoc = await loadDocument("leases", context.leaseId);
-  leaseDoc = await findBestTenantLease({ current: leaseDoc, tenantId: context.tenantId, propertyId: context.propertyId });
+  leaseDoc = await findBestTenantLease({
+    current: leaseDoc,
+    tenantId: context.tenantId,
+    tenantEmail: context.invitedEmail,
+    propertyId: context.propertyId,
+  });
 
   const maintenanceItems: Array<{ id: string; data: any }> = [];
   if (context.tenantId) {
@@ -2394,9 +2415,21 @@ async function loadTenantWorkspaceData(context: Awaited<ReturnType<typeof resolv
     ? await getTenantLeaseDocumentContext({
         leaseId: leaseDoc.id,
         tenantId: context.tenantId,
+        tenantEmail: context.invitedEmail,
         propertyId: String(leaseDoc.data?.propertyId || context.propertyId || "").trim() || null,
         unitId: String(leaseDoc.data?.unitId || context.unitId || "").trim() || null,
         leaseData: leaseDoc.data,
+      })
+    : null;
+  const scheduleADocumentContext = leaseDoc
+    ? await getTenantLeaseDocumentContext({
+        leaseId: leaseDoc.id,
+        tenantId: context.tenantId,
+        tenantEmail: context.invitedEmail,
+        propertyId: String(leaseDoc.data?.propertyId || context.propertyId || "").trim() || null,
+        unitId: String(leaseDoc.data?.unitId || context.unitId || "").trim() || null,
+        leaseData: leaseDoc.data,
+        documentKind: "schedule-a",
       })
     : null;
   const leaseProjectionData =
@@ -2435,7 +2468,7 @@ async function loadTenantWorkspaceData(context: Awaited<ReturnType<typeof resolv
   return {
     property: propertyDoc ? projectTenantProperty(propertyDoc.id, propertyDoc.data) : null,
     application: applicationDoc ? projectTenantApplication(applicationDoc.id, applicationDoc.data) : null,
-    lease: lease ? { ...lease, leaseDocumentContext, rentPaymentSummary } : null,
+    lease: lease ? { ...lease, leaseDocumentContext, scheduleADocumentContext, rentPaymentSummary } : null,
     maintenance: maintenanceItems
       .map((item) => projectTenantMaintenance(item.id, item.data))
       .sort((left, right) => Number(right.updatedAt || 0) - Number(left.updatedAt || 0)),
@@ -2777,9 +2810,19 @@ async function withTenantLeaseDocumentContext(profile: Awaited<ReturnType<typeof
   const leaseDocumentContext = await getTenantLeaseDocumentContext({
     leaseId,
     tenantId,
+    tenantEmail: String(profile?.context?.invitedEmail || "").trim() || null,
     propertyId: String(profile?.context?.propertyId || leaseData?.propertyId || "").trim() || null,
     unitId: String(profile?.context?.unitId || leaseData?.unitId || "").trim() || null,
     leaseData,
+  });
+  const scheduleADocumentContext = await getTenantLeaseDocumentContext({
+    leaseId,
+    tenantId,
+    tenantEmail: String(profile?.context?.invitedEmail || "").trim() || null,
+    propertyId: String(profile?.context?.propertyId || leaseData?.propertyId || "").trim() || null,
+    unitId: String(profile?.context?.unitId || leaseData?.unitId || "").trim() || null,
+    leaseData,
+    documentKind: "schedule-a",
   });
   const nextLease = leaseDocumentContext.documentUrl
     ? projectTenantLease(leaseId, {
@@ -2792,7 +2835,7 @@ async function withTenantLeaseDocumentContext(profile: Awaited<ReturnType<typeof
     ...profile,
     profile: {
       ...profile.profile,
-      lease: nextLease ? { ...nextLease, leaseDocumentContext } : lease,
+      lease: nextLease ? { ...nextLease, leaseDocumentContext, scheduleADocumentContext } : lease,
     },
   };
 }
@@ -2925,12 +2968,46 @@ type TenantLeaseDocumentContext = {
   warnings: string[];
 };
 
-function firstLeaseDocumentUrl(raw: any, fields: string[]): string | null {
+function isScheduleADocumentValue(value: unknown): boolean {
+  const normalized = String(value || "").trim().toLowerCase();
+  return Boolean(normalized) && (normalized.includes("schedule-a") || normalized.includes("schedule_a"));
+}
+
+function isScheduleADocumentRecord(record: any): boolean {
+  if (!record || typeof record !== "object") return false;
+  return [
+    record.kind,
+    record.fileName,
+    record.name,
+    record.title,
+    record.path,
+    record.objectKey,
+    record.storagePath,
+    record.url,
+  ].some(isScheduleADocumentValue);
+}
+
+function firstLeaseDocumentUrl(raw: any, fields: string[], options?: { scheduleAOnly?: boolean; includeScheduleA?: boolean }): string | null {
   for (const field of fields) {
     const value = String(raw?.[field] || "").trim();
-    if (value.startsWith("https://")) return value;
+    if (!value.startsWith("https://") || isAppDomainLeasePdfUrl(value)) continue;
+    const isScheduleA = isScheduleADocumentValue(value);
+    if (options?.scheduleAOnly && !isScheduleA) continue;
+    if (!options?.includeScheduleA && !options?.scheduleAOnly && isScheduleA) continue;
+    return value;
   }
   return null;
+}
+
+function isAppDomainLeasePdfUrl(value: unknown): boolean {
+  const raw = String(value || "").trim();
+  if (!raw) return false;
+  try {
+    const url = new URL(raw, "https://app.rentchain.invalid");
+    return /^\/leases\/.+\.pdf$/i.test(url.pathname);
+  } catch {
+    return /^\/leases\/.+\.pdf(?:$|\?)/i.test(raw);
+  }
 }
 
 function leaseHasTenant(raw: any, tenantId: string): boolean {
@@ -2939,6 +3016,23 @@ function leaseHasTenant(raw: any, tenantId: string): boolean {
   if (String(raw?.tenantId || "").trim() === normalizedTenantId) return true;
   if (String(raw?.primaryTenantId || "").trim() === normalizedTenantId) return true;
   return Array.isArray(raw?.tenantIds) && raw.tenantIds.map((value: any) => String(value || "").trim()).includes(normalizedTenantId);
+}
+
+function leaseMatchesTenantIdentity(raw: any, tenantId?: string | null, tenantEmail?: string | null): boolean {
+  const normalizedTenantId = String(tenantId || "").trim();
+  if (normalizedTenantId && leaseHasTenant(raw, normalizedTenantId)) return true;
+  const normalizedEmail = String(tenantEmail || "").trim().toLowerCase();
+  if (!normalizedEmail) return false;
+  const emails = [
+    raw?.tenantEmail,
+    raw?.email,
+    raw?.primaryTenantEmail,
+    raw?.tenant?.email,
+    raw?.applicantEmail,
+  ]
+    .map((value) => String(value || "").trim().toLowerCase())
+    .filter(Boolean);
+  return emails.includes(normalizedEmail);
 }
 
 function isLeaseSigned(raw: any): boolean {
@@ -3002,6 +3096,174 @@ function bestTenantLeaseAttachment(params: {
   return candidates[0]?.item || null;
 }
 
+type TenantLeaseDocumentStorageRef = {
+  bucket: string;
+  path: string;
+  source: string;
+};
+
+function isTenantScheduleAStorageRef(ref: TenantLeaseDocumentStorageRef | null): boolean {
+  return Boolean(ref && (isScheduleADocumentValue(ref.path) || isScheduleADocumentValue(ref.source)));
+}
+
+function normalizeLeaseDocumentStoragePath(value: unknown): string {
+  return String(value || "").trim().replace(/^\/+/, "");
+}
+
+function tenantLeaseStorageRefFromRecord(record: any, source: string): TenantLeaseDocumentStorageRef | null {
+  if (!record || typeof record !== "object") return null;
+  const bucket = String(record?.bucket || record?.storageBucket || "").trim();
+  const path = normalizeLeaseDocumentStoragePath(record?.path || record?.objectKey || record?.storagePath);
+  if (!bucket || !path) return null;
+  return { bucket, path, source };
+}
+
+function parseTenantLeaseGcsSignedUrlStorageRef(value: unknown, source: string): TenantLeaseDocumentStorageRef | null {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== "https:") return null;
+    if (url.hostname === "storage.googleapis.com" || url.hostname === "storage.cloud.google.com") {
+      const segments = url.pathname.split("/").filter(Boolean);
+      const bucket = segments.shift() || "";
+      const path = normalizeLeaseDocumentStoragePath(segments.join("/"));
+      return bucket && path ? { bucket, path, source } : null;
+    }
+    if (url.hostname.endsWith(".storage.googleapis.com")) {
+      const bucket = url.hostname.slice(0, -".storage.googleapis.com".length);
+      const path = normalizeLeaseDocumentStoragePath(decodeURIComponent(url.pathname).replace(/^\/+/, ""));
+      return bucket && path ? { bucket, path, source } : null;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function tenantLeaseStorageRefFromSignedUrlFields(record: any, source: string): TenantLeaseDocumentStorageRef | null {
+  const fields = [
+    "signedDocumentUrl",
+    "signedLeaseDocumentUrl",
+    "executedDocumentUrl",
+    "finalDocumentUrl",
+    "fullyExecutedDocumentUrl",
+    "documentUrl",
+    "approvedDocumentUrl",
+    "documentRef",
+    "url",
+  ];
+  for (const field of fields) {
+    const ref = parseTenantLeaseGcsSignedUrlStorageRef(record?.[field], `${source}.${field}`);
+    if (ref) return ref;
+  }
+  return null;
+}
+
+function tenantLeaseDocumentStorageRef(params: {
+  leaseData?: any;
+  attachment?: any;
+}): TenantLeaseDocumentStorageRef | null {
+  const refs = [
+    tenantLeaseStorageRefFromRecord(params.leaseData?.leaseDocument, "leaseDocument"),
+    tenantLeaseStorageRefFromRecord(params.leaseData?.referenceDocument, "referenceDocument"),
+    tenantLeaseStorageRefFromRecord(params.leaseData?.documentStorage, "documentStorage"),
+    tenantLeaseStorageRefFromRecord(params.leaseData?.signedDocument, "signedDocument"),
+    tenantLeaseStorageRefFromRecord(params.attachment, "ledgerAttachments"),
+    tenantLeaseStorageRefFromSignedUrlFields(params.leaseData, "lease"),
+    tenantLeaseStorageRefFromSignedUrlFields(params.attachment, "ledgerAttachments"),
+  ];
+  return refs.find((ref) => ref && !isTenantScheduleAStorageRef(ref)) || null;
+}
+
+function tenantScheduleAStorageRef(params: {
+  leaseData?: any;
+  attachment?: any;
+}): TenantLeaseDocumentStorageRef | null {
+  const refs = [
+    tenantLeaseStorageRefFromRecord(params.leaseData?.scheduleADocument, "scheduleADocument"),
+    tenantLeaseStorageRefFromRecord(params.leaseData?.scheduleA, "scheduleA"),
+    tenantLeaseStorageRefFromRecord(params.leaseData?.leaseDocument, "leaseDocument"),
+    tenantLeaseStorageRefFromRecord(params.leaseData?.referenceDocument, "referenceDocument"),
+    tenantLeaseStorageRefFromRecord(params.leaseData?.documentStorage, "documentStorage"),
+    tenantLeaseStorageRefFromRecord(params.leaseData?.signedDocument, "signedDocument"),
+    tenantLeaseStorageRefFromRecord(params.attachment, "ledgerAttachments"),
+    tenantLeaseStorageRefFromSignedUrlFields(params.leaseData, "lease"),
+    tenantLeaseStorageRefFromSignedUrlFields(params.attachment, "ledgerAttachments"),
+  ];
+  return refs.find((ref) => ref && isTenantScheduleAStorageRef(ref)) || null;
+}
+
+function tenantStorageRefFromGeneratedFile(
+  file: any,
+  source: string,
+  options?: { scheduleAOnly?: boolean; includeScheduleA?: boolean }
+): TenantLeaseDocumentStorageRef | null {
+  const kind = String(file?.kind || "").trim().toLowerCase();
+  const url = String(file?.url || "").trim();
+  const isScheduleA = isScheduleADocumentRecord(file);
+  if (options?.scheduleAOnly && !isScheduleA) return null;
+  if (!options?.includeScheduleA && !options?.scheduleAOnly && isScheduleA) return null;
+  const looksLikePdf = !kind || kind.includes("pdf") || kind.includes("lease") || kind.includes("document") || kind.includes("schedule");
+  if (!looksLikePdf && !url) return null;
+  return tenantLeaseStorageRefFromRecord(file, source) || tenantLeaseStorageRefFromSignedUrlFields(file, source);
+}
+
+async function loadTenantGeneratedDocumentStorageRef(
+  leaseData: any,
+  options?: { scheduleAOnly?: boolean; includeScheduleA?: boolean }
+): Promise<TenantLeaseDocumentStorageRef | null> {
+  const snapshotIds = [
+    leaseData?.latestLeaseSnapshotId,
+    leaseData?.lastGeneratedSnapshotId,
+    leaseData?.leaseSnapshotId,
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
+
+  const draftId = String(leaseData?.sourceDraftId || leaseData?.draftId || "").trim();
+  if (draftId) {
+    try {
+      const draftSnap = await db.collection("leaseDrafts").doc(draftId).get();
+      if (draftSnap.exists) {
+        const draft = draftSnap.data() as any;
+        [draft?.lastGeneratedSnapshotId, draft?.latestLeaseSnapshotId]
+          .map((value) => String(value || "").trim())
+          .filter(Boolean)
+          .forEach((snapshotId) => snapshotIds.push(snapshotId));
+      }
+    } catch {
+      // Missing draft metadata should not expose or hide unrelated tenant documents.
+    }
+  }
+
+  for (const snapshotId of Array.from(new Set(snapshotIds))) {
+    try {
+      const snapshotSnap = await db.collection("leaseSnapshots").doc(snapshotId).get();
+      if (!snapshotSnap.exists) continue;
+      const snapshot = snapshotSnap.data() as any;
+      const generatedFiles = Array.isArray(snapshot?.generatedFiles) ? snapshot.generatedFiles : [];
+      for (const file of generatedFiles) {
+        const ref = tenantStorageRefFromGeneratedFile(file, `leaseSnapshots/${snapshotId}`, options);
+        if (ref) return ref;
+      }
+    } catch {
+      // Continue through remaining snapshot candidates.
+    }
+  }
+
+  return null;
+}
+
+async function refreshTenantLeaseSignedUrl(storageRef: TenantLeaseDocumentStorageRef | null): Promise<string | null> {
+  if (!storageRef) return null;
+  try {
+    return await getSignedDownloadUrl({ bucket: storageRef.bucket, path: storageRef.path, expiresMinutes: 30 });
+  } catch {
+    return null;
+  }
+}
+
 async function loadTenantLeaseAttachments(tenantId: string): Promise<any[]> {
   const normalizedTenantId = String(tenantId || "").trim();
   if (!normalizedTenantId) return [];
@@ -3012,13 +3274,16 @@ async function loadTenantLeaseAttachments(tenantId: string): Promise<any[]> {
 async function getTenantLeaseDocumentContext(params: {
   leaseId: string | null;
   tenantId: string | null;
+  tenantEmail?: string | null;
   propertyId: string | null;
   unitId: string | null;
   leaseData: any;
   attachments?: any[];
+  documentKind?: "lease" | "schedule-a";
 }): Promise<TenantLeaseDocumentContext> {
   const leaseId = String(params.leaseId || "").trim();
   const tenantId = String(params.tenantId || "").trim();
+  const tenantEmail = String(params.tenantEmail || "").trim().toLowerCase();
   const propertyId = String(params.propertyId || params.leaseData?.propertyId || "").trim();
   const unitId = String(params.unitId || params.leaseData?.unitId || params.leaseData?.unit || "").trim();
   const leaseStatus = String(params.leaseData?.status || "").trim() || undefined;
@@ -3038,10 +3303,10 @@ async function getTenantLeaseDocumentContext(params: {
     };
   }
 
-  if (tenantId && !leaseHasTenant(params.leaseData, tenantId)) {
+  if ((tenantId || tenantEmail) && !leaseMatchesTenantIdentity(params.leaseData, tenantId, tenantEmail)) {
     return {
       leaseId,
-      tenantId,
+      tenantId: tenantId || undefined,
       propertyId: propertyId || undefined,
       unitId: unitId || undefined,
       leaseStatus,
@@ -3054,6 +3319,54 @@ async function getTenantLeaseDocumentContext(params: {
   }
 
   const signed = isLeaseSigned(params.leaseData);
+
+  if (params.documentKind === "schedule-a") {
+    const directScheduleRef = tenantScheduleAStorageRef({ leaseData: params.leaseData });
+    const generatedScheduleRef = directScheduleRef
+      ? null
+      : await loadTenantGeneratedDocumentStorageRef(params.leaseData, { scheduleAOnly: true });
+    const storageRef = directScheduleRef || generatedScheduleRef;
+    const refreshedUrl = await refreshTenantLeaseSignedUrl(storageRef);
+    const scheduleUrl =
+      firstLeaseDocumentUrl(params.leaseData, ["scheduleAUrl", "scheduleADocumentUrl"], { includeScheduleA: true }) ||
+      firstLeaseDocumentUrl(params.leaseData?.scheduleADocument, ["url"], { includeScheduleA: true }) ||
+      firstLeaseDocumentUrl(params.leaseData?.scheduleA, ["url"], { includeScheduleA: true }) ||
+      firstLeaseDocumentUrl(params.leaseData, ["documentUrl", "approvedDocumentUrl", "documentRef"], { scheduleAOnly: true });
+    if (refreshedUrl || (!storageRef && scheduleUrl)) {
+      return {
+        leaseId,
+        tenantId: tenantId || undefined,
+        propertyId: propertyId || undefined,
+        unitId: unitId || undefined,
+        leaseStatus,
+        signingStatus: signed ? "signed" : "unsigned",
+        documentStatus: "generated",
+        documentId: String(params.leaseData?.scheduleADocumentId || params.leaseData?.latestLeaseSnapshotId || "").trim() || undefined,
+        documentUrl: refreshedUrl || scheduleUrl || undefined,
+        displayLabel: "Schedule A",
+        source: refreshedUrl ? storageRef?.source || "schedule_a_document" : "schedule_a_document",
+        confidence: "medium",
+        warnings,
+      };
+    }
+    return {
+      leaseId,
+      tenantId: tenantId || undefined,
+      propertyId: propertyId || undefined,
+      unitId: unitId || undefined,
+      leaseStatus,
+      documentStatus: "missing",
+      displayLabel: "No Schedule A available yet",
+      source: "schedule_a_missing",
+      confidence: "low",
+      warnings: ["No tenant-safe Schedule A link is available yet."],
+    };
+  }
+
+  const directStorageRef =
+    tenantLeaseDocumentStorageRef({ leaseData: params.leaseData }) ||
+    (await loadTenantGeneratedDocumentStorageRef(params.leaseData));
+  const refreshedDirectUrl = await refreshTenantLeaseSignedUrl(directStorageRef);
   const signedUrl = firstLeaseDocumentUrl(params.leaseData, [
     "signedDocumentUrl",
     "signedLeaseDocumentUrl",
@@ -3064,7 +3377,7 @@ async function getTenantLeaseDocumentContext(params: {
     "approvedDocumentUrl",
     "documentRef",
   ]);
-  if (signed && signedUrl) {
+  if (signed && (refreshedDirectUrl || (!directStorageRef && signedUrl))) {
     return {
       leaseId,
       tenantId: tenantId || undefined,
@@ -3074,16 +3387,16 @@ async function getTenantLeaseDocumentContext(params: {
       signingStatus: "signed",
       documentStatus: "signed",
       documentId: String(params.leaseData?.signedDocumentId || params.leaseData?.documentId || params.leaseData?.latestLeaseSnapshotId || "").trim() || undefined,
-      documentUrl: signedUrl,
+      documentUrl: refreshedDirectUrl || signedUrl || undefined,
       displayLabel: "Signed lease document",
-      source: "lease_signed_document",
+      source: refreshedDirectUrl ? directStorageRef?.source || "lease_signed_document" : "lease_signed_document",
       confidence: "high",
       warnings,
     };
   }
 
   const generatedUrl = firstLeaseDocumentUrl(params.leaseData, ["documentUrl", "approvedDocumentUrl", "documentRef"]);
-  if (generatedUrl) {
+  if (refreshedDirectUrl || (!directStorageRef && generatedUrl)) {
     return {
       leaseId,
       tenantId: tenantId || undefined,
@@ -3093,9 +3406,9 @@ async function getTenantLeaseDocumentContext(params: {
       signingStatus: signed ? "signed" : "unsigned",
       documentStatus: signed ? "signed" : "generated",
       documentId: String(params.leaseData?.documentId || params.leaseData?.latestLeaseSnapshotId || "").trim() || undefined,
-      documentUrl: generatedUrl,
+      documentUrl: refreshedDirectUrl || generatedUrl || undefined,
       displayLabel: signed ? "Signed lease document" : "Generated lease package",
-      source: "lease_document_fields",
+      source: refreshedDirectUrl ? directStorageRef?.source || "lease_document_fields" : "lease_document_fields",
       confidence: "high",
       warnings,
     };
@@ -3104,21 +3417,26 @@ async function getTenantLeaseDocumentContext(params: {
   const attachments = params.attachments || (tenantId ? await loadTenantLeaseAttachments(tenantId) : []);
   const attachment = bestTenantLeaseAttachment({ attachments, leaseId, propertyId, unitId });
   if (attachment) {
-    return {
-      leaseId,
-      tenantId: tenantId || undefined,
-      propertyId: propertyId || undefined,
-      unitId: unitId || undefined,
-      leaseStatus,
-      signingStatus: signed ? "signed" : "unsigned",
-      documentStatus: signed ? "signed" : "generated",
-      documentId: String(attachment?.id || "").trim() || undefined,
-      documentUrl: String(attachment.url || "").trim(),
-      displayLabel: signed ? "Signed lease document" : "Generated lease package",
-      source: "ledgerAttachments",
-      confidence: "high",
-      warnings,
-    };
+    const attachmentStorageRef = tenantLeaseDocumentStorageRef({ attachment });
+    const refreshedAttachmentUrl = await refreshTenantLeaseSignedUrl(attachmentStorageRef);
+    const attachmentUrl = refreshedAttachmentUrl || (!attachmentStorageRef ? String(attachment.url || "").trim() : "");
+    if (attachmentUrl) {
+      return {
+        leaseId,
+        tenantId: tenantId || undefined,
+        propertyId: propertyId || undefined,
+        unitId: unitId || undefined,
+        leaseStatus,
+        signingStatus: signed ? "signed" : "unsigned",
+        documentStatus: signed ? "signed" : "generated",
+        documentId: String(attachment?.id || "").trim() || undefined,
+        documentUrl: attachmentUrl,
+        displayLabel: signed ? "Signed lease document" : "Generated lease package",
+        source: refreshedAttachmentUrl ? attachmentStorageRef?.source || "ledgerAttachments" : "ledgerAttachments",
+        confidence: "high",
+        warnings,
+      };
+    }
   }
 
   if (isLeaseDocumentWorkflowPending(params.leaseData)) {
@@ -4856,6 +5174,60 @@ router.get("/lease", requireTenantWorkspaceIdentity, async (req: any, res) => {
   if (!context) return;
   const workspace = await loadTenantWorkspaceData(context);
   return res.json({ ok: true, data: workspace.lease });
+});
+
+router.get("/lease/document-url", requireTenantWorkspaceIdentity, async (req: any, res) => {
+  const context = await resolveWorkspaceContextOrRespond(req, res);
+  if (!context) return;
+  if (context.authority !== "active_tenant" || !context.tenantId || !context.leaseId) {
+    return res.status(403).json({ ok: false, error: "TENANT_CONTEXT_REQUIRED" });
+  }
+
+  try {
+    const leaseSnap = await db.collection("leases").doc(context.leaseId).get();
+    if (!leaseSnap.exists) return res.status(404).json({ ok: false, error: "lease_document_not_found" });
+    const leaseData = leaseSnap.data() as any;
+    if (!leaseMatchesTenantIdentity(leaseData, context.tenantId, context.invitedEmail || req.user?.email)) {
+      return res.status(403).json({ ok: false, error: "lease_not_owned_by_tenant" });
+    }
+    const requestQuery = new URLSearchParams(String(req.originalUrl || req.url || "").split("?")[1] || "");
+    const requestedDocument = String(
+      req.query?.document || req.query?.kind || requestQuery.get("document") || requestQuery.get("kind") || "lease"
+    )
+      .trim()
+      .toLowerCase();
+    const documentContext = await getTenantLeaseDocumentContext({
+      leaseId: context.leaseId,
+      tenantId: context.tenantId,
+      tenantEmail: String(context.invitedEmail || req.user?.email || "").trim() || null,
+      propertyId: context.propertyId,
+      unitId: context.unitId,
+      leaseData,
+      documentKind:
+        requestedDocument === "schedule-a" || requestedDocument === "schedule_a" || requestedDocument === "schedule"
+          ? "schedule-a"
+          : "lease",
+    });
+    if (!documentContext.documentUrl || documentContext.documentStatus === "missing") {
+      return res.status(404).json({ ok: false, error: "lease_document_not_found" });
+    }
+    return res.json({
+      ok: true,
+      data: {
+        documentUrl: documentContext.documentUrl,
+        displayLabel: documentContext.displayLabel,
+        documentStatus: documentContext.documentStatus,
+        source: documentContext.source,
+        expiresInSeconds: 30 * 60,
+      },
+    });
+  } catch (err: any) {
+    console.error("[tenant/lease/document-url] failed", {
+      userId: req.user?.id,
+      message: err?.message || "failed",
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_LEASE_DOCUMENT_URL_FAILED" });
+  }
 });
 
 router.post("/leases/:leaseId/payments/checkout", requireTenantWorkspaceIdentity, async (req: any, res: any) => {
@@ -6775,6 +7147,7 @@ router.get("/lease", requireTenant, async (req: any, res) => {
     const bestLease = await findBestTenantLease({
       current: leaseRecord && leaseId ? { id: leaseId, data: leaseRecord } : null,
       tenantId,
+      tenantEmail: String(tenantData?.email || req.user?.email || "").trim() || null,
       propertyId,
     });
     if (bestLease) {
@@ -6814,9 +7187,22 @@ router.get("/lease", requireTenant, async (req: any, res) => {
         ? await getTenantLeaseDocumentContext({
             leaseId,
             tenantId,
+            tenantEmail: String(tenantData?.email || req.user?.email || "").trim() || null,
             propertyId,
             unitId,
             leaseData: leaseRecord,
+          })
+        : null;
+    const scheduleADocumentContext =
+      leaseId && leaseRecord
+        ? await getTenantLeaseDocumentContext({
+            leaseId,
+            tenantId,
+            tenantEmail: String(tenantData?.email || req.user?.email || "").trim() || null,
+            propertyId,
+            unitId,
+            leaseData: leaseRecord,
+            documentKind: "schedule-a",
           })
         : null;
     const projectedLease = leaseId
@@ -6887,6 +7273,7 @@ router.get("/lease", requireTenant, async (req: any, res) => {
       leaseStart: projectedLease?.startDate ?? null,
       leaseEnd: projectedLease?.endDate ?? null,
       leaseDocumentContext,
+      scheduleADocumentContext,
     };
 
     return res.json({ ok: true, data: lease, lease, ...lease });

@@ -916,6 +916,235 @@ describe("tenantPortalRoutes foundation", () => {
     );
   });
 
+  it("refreshes tenant-scoped storage-backed lease document URLs without exposing other tenant documents", async () => {
+    ensureCollection("leases").set("lease-1", {
+      ...(ensureCollection("leases").get("lease-1") || {}),
+      status: "active",
+      documentUrl: "https://storage.googleapis.com/expired-tenant-lease.pdf",
+      leaseDocument: {
+        bucket: "lease-documents",
+        path: "leases/landlord-1/lease-1/lease-v1.pdf",
+        fileName: "lease-v1.pdf",
+      },
+    });
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/lease/document-url",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+          leaseId: "lease-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.data).toEqual(
+      expect.objectContaining({
+        documentUrl: "https://signed.example/leases/landlord-1/lease-1/lease-v1.pdf",
+        displayLabel: "Signed lease document",
+        documentStatus: "signed",
+        source: "leaseDocument",
+        expiresInSeconds: 1800,
+      })
+    );
+    expect(JSON.stringify(res.body)).not.toContain("expired-tenant-lease.pdf");
+    expect(getSignedDownloadUrlMock).toHaveBeenCalledWith({
+      bucket: "lease-documents",
+      path: "leases/landlord-1/lease-1/lease-v1.pdf",
+      expiresMinutes: 30,
+    });
+  });
+
+  it("refreshes tenant-scoped legacy GCS signed lease URLs instead of returning stale persisted URLs", async () => {
+    const staleUrl =
+      "https://storage.googleapis.com/lease-documents/leases/landlord-1/lease-1/lease-v1.pdf?X-Goog-Expires=1&X-Goog-Signature=expired";
+    ensureCollection("leases").set("lease-1", {
+      ...(ensureCollection("leases").get("lease-1") || {}),
+      status: "active",
+      leaseDocument: undefined,
+      referenceDocument: undefined,
+      documentStorage: undefined,
+      signedDocument: undefined,
+      documentUrl: staleUrl,
+    });
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/lease/document-url",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+          leaseId: "lease-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.data).toEqual(
+      expect.objectContaining({
+        documentUrl: "https://signed.example/leases/landlord-1/lease-1/lease-v1.pdf",
+        displayLabel: "Signed lease document",
+        documentStatus: "signed",
+        source: "lease.documentUrl",
+        expiresInSeconds: 1800,
+      })
+    );
+    expect(JSON.stringify(res.body)).not.toContain(staleUrl);
+    expect(getSignedDownloadUrlMock).toHaveBeenCalledWith({
+      bucket: "lease-documents",
+      path: "leases/landlord-1/lease-1/lease-v1.pdf",
+      expiresMinutes: 30,
+    });
+  });
+
+  it("does not treat Schedule A as the tenant primary lease document", async () => {
+    ensureCollection("leases").set("lease-1", {
+      ...(ensureCollection("leases").get("lease-1") || {}),
+      status: "active",
+      documentUrl: undefined,
+      approvedDocumentUrl: undefined,
+      sourceDraftId: "draft-1",
+    });
+    ensureCollection("leaseDrafts").set("draft-1", {
+      lastGeneratedSnapshotId: "snapshot-1",
+    });
+    ensureCollection("leaseSnapshots").set("snapshot-1", {
+      generatedFiles: [
+        {
+          kind: "schedule-a-pdf",
+          bucket: "lease-documents",
+          path: "leases/landlord-1/draft-1/schedule-a-v1.pdf",
+          url: "https://storage.googleapis.com/lease-documents/leases/landlord-1/draft-1/schedule-a-v1.pdf?X-Goog-Expires=1",
+        },
+      ],
+    });
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const primaryRes = await invokeRouter(router, {
+      method: "GET",
+      url: "/lease/document-url",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+          leaseId: "lease-1",
+        }),
+      },
+    });
+    expect(primaryRes.status).toBe(404);
+    expect(primaryRes.body?.error).toBe("lease_document_not_found");
+
+    const scheduleRes = await invokeRouter(router, {
+      method: "GET",
+      url: "/lease/document-url?document=schedule-a",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+          leaseId: "lease-1",
+        }),
+      },
+    });
+    expect(scheduleRes.status).toBe(200);
+    expect(scheduleRes.body?.data).toEqual(
+      expect.objectContaining({
+        documentUrl: "https://signed.example/leases/landlord-1/draft-1/schedule-a-v1.pdf",
+        displayLabel: "Schedule A",
+        documentStatus: "generated",
+        source: "leaseSnapshots/snapshot-1",
+      })
+    );
+
+    const leaseRes = await invokeRouter(router, {
+      method: "GET",
+      url: "/lease",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+    expect(leaseRes.status).toBe(200);
+    expect(leaseRes.body?.data?.leaseDocumentContext?.documentStatus).toBe("missing");
+    expect(leaseRes.body?.data?.scheduleADocumentContext).toEqual(
+      expect.objectContaining({
+        displayLabel: "Schedule A",
+        documentUrl: "https://signed.example/leases/landlord-1/draft-1/schedule-a-v1.pdf",
+      })
+    );
+  });
+
+  it("derives tenant-safe lease document context from an email-linked active lease with a refreshable legacy URL", async () => {
+    const staleUrl =
+      "https://storage.googleapis.com/lease-documents/leases/PXbRIbJdZpV2eBjzNmLaISgDa852/nkzRYxdZ49p0IGdXD3mS/lease-v1.pdf?X-Goog-Expires=1&X-Goog-Signature=expired";
+    ensureCollection("leases").set("lease-1", {
+      ...(ensureCollection("leases").get("lease-1") || {}),
+      status: "archived",
+    });
+    ensureCollection("leases").set("lease-email-linked", {
+      propertyId: "prop-1",
+      unitId: "unit-6",
+      unitNumber: "6",
+      status: "active",
+      tenantEmail: "tenant@example.com",
+      tenantName: "Chip Milo",
+      startDate: "2026-02-01",
+      endDate: "2027-01-31",
+      monthlyRent: 1800,
+      documentUrl: staleUrl,
+      tenantSignature: {
+        signedAt: "2026-02-01T10:00:00.000Z",
+      },
+      landlordSignature: {
+        signedAt: "2026-02-01T11:00:00.000Z",
+      },
+    });
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/lease",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.data?.leaseId).toBe("lease-email-linked");
+    expect(res.body?.data?.documentUrl).toBe(
+      "https://signed.example/leases/PXbRIbJdZpV2eBjzNmLaISgDa852/nkzRYxdZ49p0IGdXD3mS/lease-v1.pdf"
+    );
+    expect(res.body?.data?.leaseDocumentContext).toEqual(
+      expect.objectContaining({
+        documentStatus: "signed",
+        source: "lease.documentUrl",
+      })
+    );
+    expect(JSON.stringify(res.body)).not.toContain(staleUrl);
+  });
+
   it("prefers the current active lease document over an archived tenant lease reference", async () => {
     ensureCollection("tenants").set("tenant-1", {
       ...(ensureCollection("tenants").get("tenant-1") || {}),

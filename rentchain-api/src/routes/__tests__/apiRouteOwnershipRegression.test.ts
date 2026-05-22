@@ -211,15 +211,19 @@ async function invokeApp(
 }
 
 async function buildRuntimeOwnershipApp() {
+  const { requireLandlord } = await import("../../middleware/requireLandlord");
+  const { handleLeaseDocumentUrl } = await import("../leaseRoutes");
   const messagesRoutes = (await import("../messagesRoutes")).default;
   const landlordEvidencePackRoutes = (await import("../landlordEvidencePackRoutes")).default;
   const internalReportsRoutes = (await import("../internalReportsRoutes")).default;
+  const screeningJobsAdminRoutes = (await import("../screeningJobsAdminRoutes")).default;
   const { stripeWebhookHandler } = await import("../stripeScreeningOrdersWebhookRoutes");
   const { transunionWebhookHandler } = await import("../transunionWebhookRoutes");
 
   const app = express();
   app.post("/api/webhooks/stripe", routeSource("stripeScreeningOrdersWebhookRoutes.ts"), stripeWebhookHandler);
   app.post("/api/webhooks/transunion", routeSource("transunionWebhookRoutes.ts"), transunionWebhookHandler);
+  app.get("/api/leases/:leaseId/document-url", routeSource("leaseRoutes.ts"), requireLandlord, handleLeaseDocumentUrl);
   app.use("/api", routeSource("messagesRoutes.ts"), messagesRoutes);
   app.use("/api/landlord", routeSource("landlordEvidencePackRoutes.ts"), landlordEvidencePackRoutes);
   app.use("/api/internal", routeSource("internalReportsRoutes.ts"), internalReportsRoutes);
@@ -239,6 +243,7 @@ async function buildRuntimeOwnershipApp() {
   app.post("/api/_echo", requireDiagnosticAccess("app.build.ts:/api/_echo"), (req, res) =>
     res.json({ ok: true, method: "POST", body: req.body ?? null })
   );
+  app.use("/api", routeSource("screeningJobsAdminRoutes.ts"), screeningJobsAdminRoutes);
   app.use("/api", (_req, res) => {
     res.setHeader("x-route-source", "not-found");
     return res.status(404).json({ ok: false, code: "NOT_FOUND", error: "Not Found" });
@@ -263,6 +268,9 @@ describe("API route ownership regression", () => {
     const source = appBuildSource();
     const ledgerMount = source.indexOf('app.use("/api/ledger", routeSource("ledgerRoutes.ts"), ledgerRoutes)');
     const decisionsMount = source.indexOf('app.use("/api/decisions", routeSource("decisionRoutes.ts"), decisionRoutes)');
+    const leaseDocumentUrlRoute = source.indexOf(
+      'app.get("/api/leases/:leaseId/document-url", routeSource("leaseRoutes.ts"), requireLandlord, handleLeaseDocumentUrl)'
+    );
     const leasesMount = source.indexOf('app.use("/api/leases", routeSource("leaseRoutes.ts"), leaseRoutes)');
     const tenantsMount = source.indexOf('app.use("/api/tenants", routeSource("tenantsRoutes.ts"), tenantsRoutes)');
     const screeningJobsMount = source.indexOf('app.use("/api", routeSource("screeningJobsAdminRoutes.ts"), screeningJobsAdminRoutes)');
@@ -270,12 +278,14 @@ describe("API route ownership regression", () => {
 
     expect(ledgerMount).toBeGreaterThan(-1);
     expect(decisionsMount).toBeGreaterThan(-1);
+    expect(leaseDocumentUrlRoute).toBeGreaterThan(-1);
     expect(leasesMount).toBeGreaterThan(-1);
     expect(tenantsMount).toBeGreaterThan(-1);
     expect(screeningJobsMount).toBeGreaterThan(-1);
     expect(apiCatchall).toBeGreaterThan(-1);
     expect(ledgerMount).toBeLessThan(screeningJobsMount);
     expect(decisionsMount).toBeLessThan(screeningJobsMount);
+    expect(leaseDocumentUrlRoute).toBeLessThan(screeningJobsMount);
     expect(leasesMount).toBeLessThan(screeningJobsMount);
     expect(tenantsMount).toBeLessThan(screeningJobsMount);
     expect(screeningJobsMount).toBeLessThan(apiCatchall);
@@ -325,6 +335,22 @@ describe("API route ownership regression", () => {
     });
     expect(internalRes.status).toBe(401);
     expect(internalRes.headers["x-route-source"]).toBe("internalReportsRoutes.ts");
+  });
+
+  it("keeps lease document URL refresh owned by lease routes before screening job fallback", async () => {
+    authState.user = { id: "landlord-1", landlordId: "landlord-1", role: "landlord" };
+    const app = await buildRuntimeOwnershipApp();
+
+    const res = await invokeApp(app, {
+      method: "GET",
+      url: "/api/leases/lease-missing/document-url",
+      headers: { authorization: "Bearer landlord-token" },
+    });
+
+    expect(res.status).toBe(404);
+    expect(res.headers["x-route-source"]).toBe("leaseRoutes.ts");
+    expect(res.headers["x-route-source"]).not.toBe("screeningJobsAdminRoutes.ts");
+    expect(res.body?.error).not.toBe("Not Found");
   });
 
   it("keeps webhook requests public and owned by webhook routers", async () => {

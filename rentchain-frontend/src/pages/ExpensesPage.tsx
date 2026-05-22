@@ -214,6 +214,10 @@ const ExpensesPage: React.FC = () => {
   const triggerDownload = async (format: "csv" | "xls" | "pdf") => {
     try {
       setExporting(format);
+      if (format === "pdf" && typeof window !== "undefined" && typeof window.print === "function") {
+        window.print();
+        return;
+      }
       if (format === "csv" || format === "xls") {
         const blob = buildCsvBlob(
           ["date", "property", "unit", "category", "vendor", "description", "amount", "status", "source"],
@@ -345,7 +349,7 @@ const ExpensesPage: React.FC = () => {
                 {exporting === "xls" ? "Exporting..." : "Export Spreadsheet (.xls)"}
               </Button>
               <Button variant="secondary" onClick={() => void triggerDownload("pdf")} disabled={exporting !== null}>
-                {exporting === "pdf" ? "Exporting..." : "Export PDF"}
+                {exporting === "pdf" ? "Opening..." : "Print / Save PDF"}
               </Button>
             </>
           ) : null}
