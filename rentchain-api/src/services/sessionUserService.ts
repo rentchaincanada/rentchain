@@ -15,6 +15,14 @@ export type HydratedSessionUser = {
   permissions?: Permission[];
   revokedPermissions?: Permission[];
   entitlements: UserEntitlements;
+  realActorId?: string;
+  realActorRole?: string;
+  effectiveActorId?: string;
+  effectiveActorRole?: string;
+  impersonationSessionId?: string;
+  impersonationReason?: string;
+  impersonationStartedAt?: string;
+  impersonationActive?: boolean;
 };
 
 type BuildSessionUserOptions = {
@@ -30,6 +38,14 @@ type BaseUser = {
   tenantId?: string;
   permissions?: Permission[];
   revokedPermissions?: Permission[];
+  realActorId?: string;
+  realActorRole?: string;
+  effectiveActorId?: string;
+  effectiveActorRole?: string;
+  impersonationSessionId?: string;
+  impersonationReason?: string;
+  impersonationStartedAt?: string;
+  impersonationActive?: boolean;
 };
 
 async function applyEntitlements(
@@ -92,6 +108,14 @@ export async function buildCanonicalSessionUserFromClaims(
     tenantId: claims.tenantId,
     permissions: claims.permissions ?? [],
     revokedPermissions: claims.revokedPermissions ?? [],
+    realActorId: claims.realActorId,
+    realActorRole: claims.realActorRole,
+    effectiveActorId: claims.effectiveActorId,
+    effectiveActorRole: claims.effectiveActorRole,
+    impersonationSessionId: claims.impersonationSessionId,
+    impersonationReason: claims.impersonationReason,
+    impersonationStartedAt: claims.impersonationStartedAt,
+    impersonationActive: Boolean(claims.impersonationSessionId),
   };
   const claimsPlan = (claims as any)?.plan ?? null;
   const requestCache = options.requestCache;
@@ -231,6 +255,14 @@ export async function buildCanonicalSessionUserFromClaims(
       revokedPermissions: Array.isArray(mergedDoc.revokedPermissions)
         ? mergedDoc.revokedPermissions
         : baseUser.revokedPermissions,
+      realActorId: baseUser.realActorId,
+      realActorRole: baseUser.realActorRole,
+      effectiveActorId: baseUser.effectiveActorId,
+      effectiveActorRole: baseUser.effectiveActorRole,
+      impersonationSessionId: baseUser.impersonationSessionId,
+      impersonationReason: baseUser.impersonationReason,
+      impersonationStartedAt: baseUser.impersonationStartedAt,
+      impersonationActive: baseUser.impersonationActive,
     },
     approved,
     claimsPlan,

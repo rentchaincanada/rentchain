@@ -9,6 +9,13 @@ export type JwtClaimsV1 = {
   tenantId?: string;
   permissions?: Permission[];
   revokedPermissions?: Permission[];
+  realActorId?: string;
+  realActorRole?: string;
+  effectiveActorId?: string;
+  effectiveActorRole?: string;
+  impersonationSessionId?: string;
+  impersonationReason?: string;
+  impersonationStartedAt?: string;
   ver: 1;
 };
 

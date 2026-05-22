@@ -1,5 +1,8 @@
 export function blockImpersonationWrites(req: any, res: any, next: any) {
-  const isImpersonation = req.user?.role === "tenant" && req.user?.actorRole === "landlord";
+  const isImpersonation =
+    req.user?.impersonationActive === true ||
+    Boolean(req.user?.impersonationSessionId) ||
+    (req.user?.role === "tenant" && (req.user?.actorRole === "landlord" || req.user?.actorRole === "admin"));
   if (isImpersonation) {
     res.setHeader("x-impersonation", "true");
     const method = String(req.method || "").toUpperCase();
