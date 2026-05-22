@@ -105,6 +105,7 @@ import adminRegistryRoutes from "./routes/adminRegistryRoutes";
 import adminScreeningResultsRoutes from "./routes/adminScreeningResultsRoutes";
 import adminScreeningUsageRoutes from "./routes/adminScreeningUsageRoutes";
 import screeningReportRoutes from "./routes/screeningReportRoutes";
+import screeningRoutes from "./routes/screeningRoutes";
 import telemetryRoutes from "./routes/telemetryRoutes";
 import invitesRoutes from "./routes/invitesRoutes";
 import accessRoutes from "./routes/accessRoutes";
@@ -299,6 +300,8 @@ app.use("/api/status", routeSource("statusRoutes.ts"), statusRoutes);
 
 // Auth decode (non-blocking if header missing)
 app.use(authenticateJwt);
+app.use("/api", routeSource("telemetryRoutes.ts"), telemetryRoutes);
+app.use("/api", routeSource("screeningRoutes.ts"), screeningRoutes);
 app.use("/api/events", routeSource("eventsRoutes.ts"), eventsRoutes);
 app.use("/api", routeSource("expensesRoutes.ts"), expensesRoutes);
 console.log("[route-mount] expensesRoutes mounted at /api");
@@ -545,7 +548,6 @@ app.use("/api/account", accountRoutes);
 app.use("/api/onboarding", routeSource("onboardingRoutes.ts"), onboardingRoutes);
 app.use("/api", routeSource("onboardingRoutes.ts"), onboardingRoutes);
 app.use("/api", routeSource("messagesRoutes.ts"), messagesRoutes);
-app.use("/api", routeSource("telemetryRoutes.ts"), telemetryRoutes);
 console.log(
   "[routes] /api/properties, /api/properties/:propertyId/units, /api/action-requests, /api/applications"
 );

@@ -11,10 +11,10 @@ export async function logTelemetryEvent(
   try {
     await apiFetch("/telemetry", {
       method: "POST",
-      body: JSON.stringify({
+      body: {
         eventName: normalized,
         eventProps: eventProps || {},
-      }),
+      },
     });
   } catch {
     // non-blocking

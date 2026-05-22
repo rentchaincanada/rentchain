@@ -68,7 +68,7 @@ function logMockProviderCheckout(seedKey: string) {
   });
 }
 
-router.use(authenticateJwt, attachAccount);
+router.use(["/screenings", "/screening/report"], authenticateJwt, attachAccount);
 
 router.get("/screenings/config", (_req, res: Response) => {
   res.status(200).json({
