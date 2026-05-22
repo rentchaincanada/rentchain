@@ -107,7 +107,14 @@ export default function LandlordLeaseSummaryPage() {
       {loading ? <div>Loading lease summary…</div> : null}
       {error ? <div style={{ color: "#b91c1c" }}>{error}</div> : null}
 
-      {lease ? <LeaseDocumentView lease={lease} /> : null}
+      {lease ? (
+        <>
+          <LeaseDocumentView lease={lease} />
+          <div className="print-only print-only-summary" aria-hidden="true">
+            <LeaseDocumentView lease={lease} />
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }

@@ -498,7 +498,7 @@ describe("WorkOrdersPage", () => {
 
     expect(await screen.findByRole("button", { name: "Export CSV" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Export Spreadsheet (.xls)" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Export PDF" }));
+    fireEvent.click(screen.getByRole("button", { name: "Print / Save PDF" }));
     expect(mocks.printSummaryDocument).toHaveBeenCalledWith("summary");
   });
 

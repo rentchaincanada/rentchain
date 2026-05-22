@@ -979,7 +979,7 @@ export default function WorkOrdersPage() {
             {exporting === "xls" ? "Exporting..." : "Export Spreadsheet (.xls)"}
           </Button>
           <Button variant="secondary" onClick={() => void printSummaryDocument("summary")}>
-            Export PDF
+            Print / Save PDF
           </Button>
           <Button variant="secondary" onClick={() => void load()}>
             Refresh

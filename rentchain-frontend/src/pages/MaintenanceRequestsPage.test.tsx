@@ -170,7 +170,7 @@ describe("landlord maintenance workspace", () => {
       </MemoryRouter>
     );
 
-    fireEvent.click((await screen.findAllByRole("button", { name: "Export PDF Summary" }))[0]);
+    fireEvent.click((await screen.findAllByRole("button", { name: "Print / Save PDF" }))[0]);
     expect(printSummaryDocumentMock).toHaveBeenCalledWith("summary");
   });
 

@@ -29,6 +29,7 @@ import { TenantActivityPanel } from "./TenantActivityPanel";
 import { FinancialActivityPanel } from "./FinancialActivityPanel";
 import { FeatureGate } from "@/components/billing/FeatureGate";
 import { LockedFeature } from "@/components/billing/LockedFeature";
+import { printSummaryDocument } from "@/utils/printSummary";
 
 interface TenantDetailPanelProps {
   tenantId: string | null;
@@ -303,7 +304,19 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityR
     };
   }, [tenantId]);
 
-  const handleDownloadReport = async () => {
+  const downloadTenantReportFallback = async () => {
+    const report = await downloadTenantReport(tenantId);
+    const url = URL.createObjectURL(report.blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = report.filename || "tenant-summary.pdf";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const handlePrintOrSaveReport = async () => {
     if (!canExportPdf) {
       openUpgrade({
         reason: "exports",
@@ -317,18 +330,14 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityR
       return;
     }
     try {
-      const report = await downloadTenantReport(tenantId);
-      const url = URL.createObjectURL(report.blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = report.filename || "tenant-summary.pdf";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
+      if (typeof window !== "undefined" && typeof window.print === "function") {
+        await printSummaryDocument("summary");
+        return;
+      }
+      await downloadTenantReportFallback();
       showToast({
         message: "Tenant summary downloaded",
-        description: "The PDF summary has been saved.",
+        description: "Browser print was unavailable, so the PDF summary has been saved.",
         variant: "success",
       });
     } catch (err: any) {
@@ -459,7 +468,7 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityR
           <div style={{ display: "flex", gap: spacing.xs, flexWrap: "wrap", justifyContent: "flex-end" }}>
             <button
               type="button"
-              onClick={handleDownloadReport}
+              onClick={handlePrintOrSaveReport}
               style={{
                 borderRadius: radius.pill,
                 border: `1px solid ${colors.border}`,
@@ -474,10 +483,10 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityR
                 boxShadow: shadows.sm,
               }}
             >
-              <span role="img" aria-label="file">
+              <span aria-hidden="true">
                 📄
               </span>
-              <span>{canExportPdf ? "Download Tenant Summary (PDF)" : "Upgrade for Tenant PDF"}</span>
+              <span>{canExportPdf ? "Print / Save PDF" : "Upgrade for Tenant PDF"}</span>
             </button>
             {isLandlord ? (
               <>
@@ -593,6 +602,64 @@ const TenantDetailLayout: React.FC<LayoutProps> = ({ bundle, tenantId, activityR
         {lifecycle?.flags?.hasStateConflict ? (
           <DetailField label="Lifecycle Review" value="Source status conflict detected" />
         ) : null}
+      </div>
+
+      <div className="print-only print-only-summary" aria-hidden="true">
+        <section
+          style={{
+            display: "grid",
+            gap: 12,
+            color: "#0f172a",
+            background: "#fff",
+            fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+          }}
+        >
+          <header style={{ display: "grid", gap: 4 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", color: "#475569" }}>
+              Tenant summary
+            </div>
+            <h1 style={{ margin: 0, fontSize: 24 }}>{tenant.fullName || tenant.name || "Unnamed Tenant"}</h1>
+            <div style={{ color: "#475569", fontSize: 14 }}>
+              {propertyLabel} · Unit {unitLabel}
+            </div>
+            {propertyAddress ? <div style={{ color: "#475569", fontSize: 13 }}>{propertyAddress}</div> : null}
+          </header>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10 }}>
+            <DetailField label="Email" value={tenant.email ?? "--"} />
+            <DetailField label="Phone" value={tenant.phone ?? "--"} />
+            <DetailField label="Current lease status" value={formatLeaseStatus(lease?.status)} />
+            <DetailField
+              label="Monthly rent"
+              value={
+                monthlyRent || monthlyRent === 0
+                  ? `$${Number(monthlyRent).toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+                  : "--"
+              }
+            />
+            <DetailField label="Lease start" value={formatDateLabel(tenant.leaseStart ?? lease?.leaseStart)} />
+            <DetailField label="Lease end" value={formatDateLabel(tenant.leaseEnd ?? lease?.leaseEnd)} />
+            <DetailField label="Lifecycle" value={lifecycle?.lifecycleLabel ?? "--"} />
+            <DetailField label="Risk level" value={riskLevel} />
+          </div>
+          <section style={{ display: "grid", gap: 6 }}>
+            <h2 style={{ margin: 0, fontSize: 16 }}>Financial activity summary</h2>
+            {financialActivityRows.length ? (
+              financialActivityRows.slice(0, 6).map((row) => (
+                <div key={row.id} style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 13 }}>
+                  <span>{row.displayLabel || row.sourceBadge || "Financial activity"}</span>
+                  <span>
+                    {Number(row.amount || 0).toLocaleString(undefined, {
+                      style: "currency",
+                      currency: "CAD",
+                    })}
+                  </span>
+                </div>
+              ))
+            ) : (
+              <div style={{ color: "#475569", fontSize: 13 }}>No financial activity rows loaded.</div>
+            )}
+          </section>
+        </section>
       </div>
 
       <CredibilityInsightsCard insights={credibilityInsights} />

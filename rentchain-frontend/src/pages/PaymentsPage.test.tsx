@@ -96,7 +96,7 @@ describe("PaymentsPage", () => {
     ).toBeInTheDocument();
     expect(await screen.findByRole("button", { name: "Export CSV" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Export Spreadsheet (.xls)" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Export PDF" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Print / Save PDF" })).toBeInTheDocument();
     expect(screen.getByText("AI-assisted payment CSV import")).toBeInTheDocument();
     expect((await screen.findAllByText("Taylor Tenant")).length).toBeGreaterThan(0);
     expect(screen.getAllByText("123 Main St / Unit 3A").length).toBeGreaterThan(0);
@@ -106,7 +106,7 @@ describe("PaymentsPage", () => {
   it("routes PDF export through the shared print helper", async () => {
     render(<PaymentsPage />);
 
-    fireEvent.click((await screen.findAllByRole("button", { name: "Export PDF" }))[0]);
+    fireEvent.click((await screen.findAllByRole("button", { name: "Print / Save PDF" }))[0]);
     expect(mocks.printSummaryDocument).toHaveBeenCalledWith("summary");
   });
 

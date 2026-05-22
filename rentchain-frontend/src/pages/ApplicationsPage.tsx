@@ -66,6 +66,7 @@ import {
   screeningUnavailableMessage,
 } from "../config/screening";
 import { ApplicationDecisionSummaryCard } from "@/components/applications/ApplicationDecisionSummaryCard";
+import { PrintApplicationView } from "@/components/applications/PrintApplicationView";
 import {
   connectTransUnion,
   disconnectTransUnion,
@@ -77,6 +78,7 @@ import {
   type TransUnionIntegration,
 } from "@/api/integrationsApi";
 import { fetchLandlordApplicationFunnel, type LandlordApplicationFunnelAnalytics } from "@/api/landlordAnalyticsApi";
+import { printSummaryDocument } from "@/utils/printSummary";
 import { GetTransUnionAccessModal } from "@/components/integrations/GetTransUnionAccessModal";
 import { ConnectTransUnionModal } from "@/components/integrations/ConnectTransUnionModal";
 import { UpdateTransUnionCredentialsModal } from "@/components/integrations/UpdateTransUnionCredentialsModal";
@@ -694,6 +696,31 @@ const ApplicationsPage: React.FC = () => {
   const selectedLabel = detail
     ? `${detail.applicant.firstName} ${detail.applicant.lastName}`.trim()
     : "Application";
+  const printableApplication = useMemo(() => {
+    if (!detail) return null;
+    const applicantName = `${detail.applicant.firstName} ${detail.applicant.lastName}`.trim() || "Applicant";
+    const propertyName = properties.find((property) => property.id === detail.propertyId)?.name || "Property";
+    return {
+      ...detail,
+      fullName: applicantName,
+      applicantName,
+      email: detail.applicant.email,
+      phone: detail.applicant.phoneHome || detail.applicant.phoneWork || null,
+      applicantPhone: detail.applicant.phoneHome || detail.applicant.phoneWork || null,
+      dateOfBirth: detail.applicant.dob || null,
+      propertyName,
+      unitApplied: null,
+      monthlyIncome:
+        typeof detail.employment?.applicant?.monthlyIncomeCents === "number"
+          ? detail.employment.applicant.monthlyIncomeCents / 100
+          : null,
+      recentAddress: detail.residentialHistory?.[0]
+        ? {
+            streetName: detail.residentialHistory[0].address,
+          }
+        : null,
+    };
+  }, [detail, properties]);
   const screeningOrderId = detail?.screening?.orderId || null;
   const isTransUnionConnected = transUnionIntegration.status === "connected";
   const visibleViewingRequests = useMemo(
@@ -2816,20 +2843,30 @@ const ApplicationsPage: React.FC = () => {
               ) : !detail ? (
                 <div style={{ color: text.muted }}>Select an application to view details.</div>
               ) : (
-                <div style={{ display: "grid", gap: spacing.md }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ display: "grid", gap: spacing.md }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: spacing.sm, flexWrap: "wrap" }}>
                 <div>
                   <div style={{ fontSize: "1.35rem", fontWeight: 700 }}>{detail.applicant.firstName} {detail.applicant.lastName}</div>
                   <div style={{ color: text.muted, fontSize: 13 }}>{detail.applicant.email}</div>
                 </div>
-                <div className="rc-applications-status-row">
-                  {statusOptions.map((s) => (
-                    <Button key={s} variant={detail.status === s ? "primary" : "secondary"} onClick={() => void setStatus(s)}>
-                      {s.replace("_", " ")}
-                    </Button>
-                  ))}
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                  <Button variant="secondary" onClick={() => void printSummaryDocument("application")}>
+                    Print / Save PDF
+                  </Button>
+                  <div className="rc-applications-status-row">
+                    {statusOptions.map((s) => (
+                      <Button key={s} variant={detail.status === s ? "primary" : "secondary"} onClick={() => void setStatus(s)}>
+                        {s.replace("_", " ")}
+                      </Button>
+                    ))}
+                  </div>
                 </div>
               </div>
+              {printableApplication ? (
+                <div className="print-only print-only-application" aria-hidden="true">
+                  <PrintApplicationView application={printableApplication as any} />
+                </div>
+              ) : null}
 
               <ApplicationDecisionSummaryCard
                 summary={decisionSummary}

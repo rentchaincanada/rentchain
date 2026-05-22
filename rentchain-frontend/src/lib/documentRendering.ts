@@ -32,6 +32,7 @@ export type PdfPreviewFallbackMetadata = {
 export function createPrintRoot(documentRef: Document = document): HTMLDivElement {
   const printableRoot = documentRef.createElement("div");
   printableRoot.setAttribute(PRINT_ROOT_ATTRIBUTE, "true");
+  printableRoot.classList.add(PRINT_SAFE_CLASS);
   return printableRoot;
 }
 
