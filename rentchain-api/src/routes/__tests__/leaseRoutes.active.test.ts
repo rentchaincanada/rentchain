@@ -514,6 +514,103 @@ describe("leaseRoutes GET /active", () => {
     );
   });
 
+  it("prefers primary lease PDFs when both lease PDF and Schedule A are present", async () => {
+    getSignedDownloadUrlMock.mockResolvedValueOnce("https://signed.example.com/lease-list.pdf");
+    getSignedDownloadUrlMock.mockResolvedValueOnce("https://signed.example.com/schedule-a-list.pdf");
+    getSignedDownloadUrlMock.mockResolvedValueOnce("https://signed.example.com/lease-click.pdf");
+    getSignedDownloadUrlMock.mockResolvedValueOnce("https://signed.example.com/schedule-a-click.pdf");
+    seedDoc("properties", "prop-1", { landlordId: "landlord-1", name: "Coburg Rd" });
+    seedDoc("tenants", "tenant-1", { landlordId: "landlord-1", fullName: "Chip Milo", email: "hello+cob6tenant@rentchain.ai" });
+    seedDoc("leases", "lease-both", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      tenantId: "tenant-1",
+      primaryTenantId: "tenant-1",
+      tenantIds: ["tenant-1"],
+      unitId: "unit-6",
+      unitNumber: "6",
+      monthlyRent: 1800,
+      startDate: "2026-01-01",
+      endDate: "2099-12-31",
+      status: "active",
+      sourceDraftId: "draft-both",
+    });
+    seedDoc("leaseDrafts", "draft-both", { landlordId: "landlord-1", lastGeneratedSnapshotId: "snapshot-both" });
+    seedDoc("leaseSnapshots", "snapshot-both", {
+      landlordId: "landlord-1",
+      generatedFiles: [
+        {
+          kind: "lease-pdf",
+          bucket: "lease-documents",
+          path: "leases/landlord-1/draft-both/lease-v1.pdf",
+          url: "https://storage.googleapis.com/lease-documents/leases/landlord-1/draft-both/lease-v1.pdf?X-Goog-Expires=1",
+        },
+        {
+          kind: "schedule-a-pdf",
+          bucket: "lease-documents",
+          path: "leases/landlord-1/draft-both/schedule-a-v1.pdf",
+          url: "https://storage.googleapis.com/lease-documents/leases/landlord-1/draft-both/schedule-a-v1.pdf?X-Goog-Expires=1",
+        },
+      ],
+    });
+
+    const router = (await import("../leaseRoutes")).default;
+    const listRes = await invokeRouter(router, { method: "GET", url: "/active" });
+    expect(listRes.status).toBe(200);
+    expect(listRes.body?.leases?.[0]?.documentUrl).toBe("https://signed.example.com/lease-list.pdf");
+    expect(listRes.body?.leases?.[0]?.scheduleAUrl).toBe("https://signed.example.com/schedule-a-list.pdf");
+
+    const primaryRes = await invokeRouter(router, { method: "GET", url: "/lease-both/document-url" });
+    expect(primaryRes.status).toBe(200);
+    expect(primaryRes.body).toEqual(
+      expect.objectContaining({
+        documentUrl: "https://signed.example.com/lease-click.pdf",
+        documentKind: "lease",
+      })
+    );
+
+    const scheduleRes = await invokeRouter(router, { method: "GET", url: "/lease-both/document-url?document=schedule-a" });
+    expect(scheduleRes.status).toBe(200);
+    expect(scheduleRes.body).toEqual(
+      expect.objectContaining({
+        documentUrl: "https://signed.example.com/schedule-a-click.pdf",
+        documentKind: "schedule-a",
+      })
+    );
+  });
+
+  it("keeps primary and Schedule A unavailable when no document metadata exists", async () => {
+    seedDoc("properties", "prop-1", { landlordId: "landlord-1", name: "Coburg Rd" });
+    seedDoc("tenants", "tenant-1", { landlordId: "landlord-1", fullName: "Chip Milo", email: "hello+cob6tenant@rentchain.ai" });
+    seedDoc("leases", "lease-no-doc", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      tenantId: "tenant-1",
+      primaryTenantId: "tenant-1",
+      tenantIds: ["tenant-1"],
+      unitId: "unit-6",
+      unitNumber: "6",
+      monthlyRent: 1800,
+      startDate: "2026-01-01",
+      endDate: "2099-12-31",
+      status: "active",
+    });
+
+    const router = (await import("../leaseRoutes")).default;
+    const listRes = await invokeRouter(router, { method: "GET", url: "/active" });
+    expect(listRes.status).toBe(200);
+    expect(listRes.body?.leases?.[0]?.documentUrl).toBeNull();
+    expect(listRes.body?.leases?.[0]?.scheduleAUrl).toBeNull();
+
+    const primaryRes = await invokeRouter(router, { method: "GET", url: "/lease-no-doc/document-url" });
+    expect(primaryRes.status).toBe(404);
+    expect(primaryRes.body?.error).toBe("lease_document_not_found");
+
+    const scheduleRes = await invokeRouter(router, { method: "GET", url: "/lease-no-doc/document-url?document=schedule-a" });
+    expect(scheduleRes.status).toBe(404);
+    expect(scheduleRes.body?.error).toBe("schedule_a_document_not_found");
+  });
+
   it("does not use app-domain lease PDF paths as document URL fallback", async () => {
     seedDoc("properties", "prop-1", { landlordId: "landlord-1", name: "Coburg Rd" });
     seedDoc("tenants", "tenant-1", { landlordId: "landlord-1", fullName: "Chip Milo", email: "hello+cob6tenant@rentchain.ai" });

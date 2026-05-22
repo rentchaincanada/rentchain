@@ -72,6 +72,11 @@ function isRawUnitIdLabel(value: string, rawIds: string[]) {
   return RAW_ID_PATTERN.test(value) && /[A-Za-z]/.test(value) && /\d/.test(value);
 }
 
+function isScheduleADocumentUrl(value: unknown) {
+  const normalized = String(value || "").trim().toLowerCase();
+  return Boolean(normalized) && (normalized.includes("schedule-a") || normalized.includes("schedule_a"));
+}
+
 function findLeaseRiskUnit(lease: Lease, unitsForDisplay: any[]): any | null {
   const rawIds = [cleanLabel(lease.unitId), cleanLabel((lease as any).id)].filter(Boolean);
   const unitReference = cleanLabel(lease.unitId || lease.unitNumber || lease.unitLabel);
@@ -1730,7 +1735,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                             <div style={{ fontSize: "0.78rem", color: "#2563eb" }}>
                               {(u as any).leaseDocument?.url ? (
                                 <a href={(u as any).leaseDocument.url} target="_blank" rel="noreferrer">
-                                  View lease document
+                                  {isScheduleADocumentUrl((u as any).leaseDocument.url) ? "View Schedule A" : "View lease document"}
                                 </a>
                               ) : (
                                 `Lease document: ${String((u as any).leaseDocument.fileName)}`
@@ -1879,7 +1884,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                       <div style={{ fontSize: "0.78rem", color: "#2563eb", marginTop: 4 }}>
                         {(u as any).leaseDocument?.url ? (
                           <a href={(u as any).leaseDocument.url} target="_blank" rel="noreferrer">
-                            View lease document
+                            {isScheduleADocumentUrl((u as any).leaseDocument.url) ? "View Schedule A" : "View lease document"}
                           </a>
                         ) : (
                           `Lease document: ${String((u as any).leaseDocument.fileName)}`

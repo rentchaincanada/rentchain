@@ -254,8 +254,10 @@ describe("LandlordActiveLeasesPage", () => {
     );
 
     vi.mocked(window.open).mockClear();
-    fireEvent.click(await screen.findByRole("button", { name: "View lease" }));
-    await waitFor(() => expect(mocks.refreshLeaseDocumentUrl).toHaveBeenCalledWith("lease-stale"));
+    expect(await screen.findByRole("button", { name: "Primary lease document unavailable" })).toBeDisabled();
+    expect(screen.getByRole("link", { name: "Lease summary" })).toHaveAttribute("href", "/leases/lease-stale/summary");
+    fireEvent.click(screen.getByRole("button", { name: "View Schedule A" }));
+    await waitFor(() => expect(mocks.refreshLeaseDocumentUrl).toHaveBeenCalledWith("lease-stale", { document: "schedule-a" }));
     expect(window.open).not.toHaveBeenCalled();
     expect(await screen.findByText("refresh failed")).toBeInTheDocument();
   });
@@ -292,7 +294,8 @@ describe("LandlordActiveLeasesPage", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByRole("link", { name: "View lease" })).toHaveAttribute(
+    expect(await screen.findByRole("button", { name: "Primary lease document unavailable" })).toBeDisabled();
+    expect(screen.getByRole("link", { name: "Lease summary" })).toHaveAttribute(
       "href",
       "/leases/lease-schedule/summary"
     );
@@ -301,6 +304,27 @@ describe("LandlordActiveLeasesPage", () => {
       expect(mocks.refreshLeaseDocumentUrl).toHaveBeenCalledWith("lease-schedule", { document: "schedule-a" })
     );
     expect(window.open).toHaveBeenCalledWith("https://example.com/schedule-a-refreshed.pdf", "_blank", "noreferrer");
+  });
+
+  it("does not open a Schedule A URL returned by the primary lease refresh path", async () => {
+    mocks.refreshLeaseDocumentUrl.mockReset();
+    mocks.refreshLeaseDocumentUrl.mockResolvedValueOnce({
+      documentUrl: "https://storage.googleapis.com/lease-documents/leases/landlord/draft/schedule-a-v1.pdf",
+      refreshMode: "signed_url",
+      expiresInSeconds: 1800,
+      documentKind: "lease",
+    });
+
+    render(
+      <MemoryRouter>
+        <LandlordActiveLeasesPage />
+      </MemoryRouter>
+    );
+
+    vi.mocked(window.open).mockClear();
+    fireEvent.click(await screen.findByRole("button", { name: "View lease" }));
+    await waitFor(() => expect(mocks.refreshLeaseDocumentUrl).toHaveBeenCalledWith("lease-1"));
+    expect(window.open).not.toHaveBeenCalled();
   });
 
   it("renders date-only lease dates without shifting them backward across timezones", async () => {
@@ -553,7 +577,8 @@ describe("LandlordActiveLeasesPage", () => {
     );
 
     expect((await screen.findAllByText("Harbour View")).length).toBeGreaterThan(0);
-    expect(screen.getByRole("link", { name: "View lease" })).toHaveAttribute("href", "/leases/lease-1/summary");
+    expect(screen.getByRole("button", { name: "Primary lease document unavailable" })).toBeDisabled();
+    expect(screen.getByRole("link", { name: "Lease summary" })).toHaveAttribute("href", "/leases/lease-1/summary");
     expect(screen.getByRole("link", { name: "Ledger" })).toHaveAttribute("href", "/leases/lease-1/ledger");
     expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
   });

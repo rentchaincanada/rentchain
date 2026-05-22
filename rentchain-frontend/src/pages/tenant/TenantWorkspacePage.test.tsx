@@ -2341,10 +2341,72 @@ describe("tenant workspace frontend shell", () => {
     );
 
     vi.mocked(window.open).mockClear();
-    fireEvent.click(await screen.findByRole("button", { name: /Open lease document/i }));
-    await waitFor(() => expect(tenantPortalApi.refreshTenantLeaseDocumentUrl).toHaveBeenCalled());
+    expect(screen.queryByRole("button", { name: /Open lease document/i })).not.toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: /Open Schedule A/i }));
+    await waitFor(() =>
+      expect(tenantPortalApi.refreshTenantLeaseDocumentUrl).toHaveBeenCalledWith({ document: "schedule-a" })
+    );
     expect(window.open).not.toHaveBeenCalled();
     expect(await screen.findByText("refresh failed")).toBeInTheDocument();
+  });
+
+  it("does not open Schedule A when the tenant primary lease refresh path returns it", async () => {
+    tenantPortalApi.refreshTenantLeaseDocumentUrl.mockResolvedValueOnce({
+      documentUrl: "https://storage.googleapis.com/lease-documents/leases/landlord/draft/schedule-a-v1.pdf",
+      displayLabel: "Signed lease document",
+      documentStatus: "signed",
+      source: "leaseDocument",
+      expiresInSeconds: 1800,
+    });
+    tenantPortalApi.getTenantLeaseWorkspace.mockResolvedValue({
+      leaseId: "lease-tenant-primary",
+      startDate: "2026-03-01",
+      endDate: "2027-02-28",
+      monthlyRent: 1800,
+      status: "active",
+      documentUrl: "https://example.com/lease.pdf",
+      leaseDocumentContext: {
+        leaseId: "lease-tenant-primary",
+        documentUrl: "https://example.com/lease.pdf",
+        displayLabel: "Signed lease document",
+        documentStatus: "signed",
+        source: "lease.documentUrl",
+        confidence: "high",
+        warnings: [],
+      },
+      scheduleADocumentContext: {
+        leaseId: "lease-tenant-primary",
+        documentUrl: "https://example.com/schedule-a.pdf",
+        displayLabel: "Schedule A",
+        documentStatus: "generated",
+        source: "leaseSnapshots/snapshot-schedule-a",
+        confidence: "high",
+        warnings: [],
+      },
+      signatureStatus: "signed",
+      signatureReadinessLabel: "Lease signing complete",
+      leaseExecution: {
+        executionStatus: "fully_executed",
+        executionLabel: "Lease fully executed",
+        executionDescription: "The lease is fully executed.",
+        requiredNextAction: "none",
+        tenantSignatureStatus: "completed",
+        landlordSignatureStatus: "completed",
+        pdfStatus: "generated",
+        completedAt: "2026-03-02T12:00:00.000Z",
+      },
+    } as any);
+
+    render(
+      <MemoryRouter>
+        <TenantLeasePage />
+      </MemoryRouter>
+    );
+
+    vi.mocked(window.open).mockClear();
+    fireEvent.click(await screen.findByRole("button", { name: /Open lease document/i }));
+    await waitFor(() => expect(tenantPortalApi.refreshTenantLeaseDocumentUrl).toHaveBeenCalledWith());
+    expect(window.open).not.toHaveBeenCalled();
   });
 
   it("shows the tenant lease sign action only when backend execution metadata requires it", async () => {

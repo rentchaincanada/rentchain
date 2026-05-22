@@ -48,6 +48,11 @@ function canUseLegacyDocumentFallback(value: string) {
   return Boolean(next) && !isGoogleStorageSignedUrl(next) && !isAppDomainLeasePdfFallback(next);
 }
 
+function isScheduleADocumentUrl(value: unknown) {
+  const normalized = String(value || "").trim().toLowerCase();
+  return Boolean(normalized) && (normalized.includes("schedule-a") || normalized.includes("schedule_a"));
+}
+
 export default function TenantLeasePage() {
   const [data, setData] = React.useState<Awaited<ReturnType<typeof getTenantLeaseWorkspace>>>(null);
   const [rentPaymentDetails, setRentPaymentDetails] = React.useState<Awaited<
@@ -112,6 +117,7 @@ export default function TenantLeasePage() {
   async function handleOpenLeaseDocument(documentKind: "lease" | "schedule-a" = "lease") {
     const context = documentKind === "schedule-a" ? data?.scheduleADocumentContext : data?.leaseDocumentContext;
     const fallbackUrl = String(context?.documentUrl || (documentKind === "lease" ? data?.documentUrl : "") || "").trim();
+    let primaryRefreshReturnedScheduleA = false;
     setOpeningDocument(true);
     setError(null);
     try {
@@ -120,10 +126,18 @@ export default function TenantLeasePage() {
           ? await refreshTenantLeaseDocumentUrl({ document: "schedule-a" })
           : await refreshTenantLeaseDocumentUrl();
       const nextUrl = String(refreshed?.documentUrl || "").trim() || fallbackUrl;
+      if (documentKind === "lease" && isScheduleADocumentUrl(nextUrl)) {
+        primaryRefreshReturnedScheduleA = true;
+        throw new Error("Primary lease document unavailable. Use Open Schedule A for the supplemental form.");
+      }
       if (!nextUrl) throw new Error("Lease document is not available.");
       window.open(nextUrl, "_blank", "noreferrer");
     } catch (err: any) {
-      if (canUseLegacyDocumentFallback(fallbackUrl)) {
+      if (
+        !primaryRefreshReturnedScheduleA &&
+        canUseLegacyDocumentFallback(fallbackUrl) &&
+        (documentKind === "schedule-a" || !isScheduleADocumentUrl(fallbackUrl))
+      ) {
         window.open(fallbackUrl, "_blank", "noreferrer");
         return;
       }
@@ -154,9 +168,15 @@ export default function TenantLeasePage() {
   const execution = data?.leaseExecution || null;
   const leaseDocumentContext = data?.leaseDocumentContext || null;
   const scheduleADocumentContext = data?.scheduleADocumentContext || null;
-  const leaseDocumentUrl = leaseDocumentContext?.documentUrl || data?.documentUrl || null;
-  const scheduleAUrl = scheduleADocumentContext?.documentUrl || null;
-  const leaseDocumentLabel = leaseDocumentContext?.displayLabel || data?.leasePdfLabel || null;
+  const rawLeaseDocumentUrl = String(leaseDocumentContext?.documentUrl || data?.documentUrl || "").trim();
+  const rawScheduleAUrl = String(scheduleADocumentContext?.documentUrl || "").trim();
+  const leaseDocumentUrl = rawLeaseDocumentUrl && !isScheduleADocumentUrl(rawLeaseDocumentUrl) ? rawLeaseDocumentUrl : null;
+  const scheduleAUrl = rawScheduleAUrl || (isScheduleADocumentUrl(rawLeaseDocumentUrl) ? rawLeaseDocumentUrl : null);
+  const leaseDocumentLabel = leaseDocumentUrl
+    ? leaseDocumentContext?.displayLabel || data?.leasePdfLabel || null
+    : scheduleAUrl
+    ? "Primary lease document unavailable"
+    : leaseDocumentContext?.displayLabel || data?.leasePdfLabel || null;
   const leaseDocumentWarnings = Array.isArray(leaseDocumentContext?.warnings) ? leaseDocumentContext.warnings : [];
   const paymentReadiness = data?.paymentReadiness || null;
   const paymentSummary = rentPaymentDetails || data?.rentPaymentSummary || null;
