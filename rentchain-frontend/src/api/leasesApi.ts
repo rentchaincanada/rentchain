@@ -124,6 +124,7 @@ export interface LandlordActiveLease extends Lease {
   tenantName?: string | null;
   tenantEmail?: string | null;
   documentUrl?: string | null;
+  scheduleAUrl?: string | null;
   signatureStatus?: "not_started" | "awaiting_tenant_signature" | "awaiting_landlord_signature" | "signed" | "unavailable";
   signatureReadinessLabel?: string | null;
   signatureReadinessDescription?: string | null;
@@ -374,17 +375,20 @@ export async function getLeaseById(id: string): Promise<{ lease: LandlordActiveL
   return apiJson<{ lease: LandlordActiveLease }>(`/leases/${encodeURIComponent(id)}`);
 }
 
-export async function refreshLeaseDocumentUrl(id: string): Promise<{
+export async function refreshLeaseDocumentUrl(id: string, options?: { document?: "lease" | "schedule-a" }): Promise<{
   documentUrl: string;
   refreshMode: "signed_url" | "legacy_url";
   expiresInSeconds: number | null;
+  documentKind?: "lease" | "schedule-a";
 }> {
+  const documentKind = options?.document ? `?document=${encodeURIComponent(options.document)}` : "";
   return apiJson<{
     ok: true;
     documentUrl: string;
     refreshMode: "signed_url" | "legacy_url";
     expiresInSeconds: number | null;
-  }>(`/leases/${encodeURIComponent(id)}/document-url`);
+    documentKind?: "lease" | "schedule-a";
+  }>(`/leases/${encodeURIComponent(id)}/document-url${documentKind}`);
 }
 
 export async function getLeaseNotes(id: string): Promise<{ ok: true; notes: LeaseNote[] }> {

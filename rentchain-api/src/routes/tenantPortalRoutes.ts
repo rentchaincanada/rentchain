@@ -2421,6 +2421,17 @@ async function loadTenantWorkspaceData(context: Awaited<ReturnType<typeof resolv
         leaseData: leaseDoc.data,
       })
     : null;
+  const scheduleADocumentContext = leaseDoc
+    ? await getTenantLeaseDocumentContext({
+        leaseId: leaseDoc.id,
+        tenantId: context.tenantId,
+        tenantEmail: context.invitedEmail,
+        propertyId: String(leaseDoc.data?.propertyId || context.propertyId || "").trim() || null,
+        unitId: String(leaseDoc.data?.unitId || context.unitId || "").trim() || null,
+        leaseData: leaseDoc.data,
+        documentKind: "schedule-a",
+      })
+    : null;
   const leaseProjectionData =
     leaseDoc && leaseDocumentContext?.documentUrl
       ? {
@@ -2457,7 +2468,7 @@ async function loadTenantWorkspaceData(context: Awaited<ReturnType<typeof resolv
   return {
     property: propertyDoc ? projectTenantProperty(propertyDoc.id, propertyDoc.data) : null,
     application: applicationDoc ? projectTenantApplication(applicationDoc.id, applicationDoc.data) : null,
-    lease: lease ? { ...lease, leaseDocumentContext, rentPaymentSummary } : null,
+    lease: lease ? { ...lease, leaseDocumentContext, scheduleADocumentContext, rentPaymentSummary } : null,
     maintenance: maintenanceItems
       .map((item) => projectTenantMaintenance(item.id, item.data))
       .sort((left, right) => Number(right.updatedAt || 0) - Number(left.updatedAt || 0)),
@@ -2804,6 +2815,15 @@ async function withTenantLeaseDocumentContext(profile: Awaited<ReturnType<typeof
     unitId: String(profile?.context?.unitId || leaseData?.unitId || "").trim() || null,
     leaseData,
   });
+  const scheduleADocumentContext = await getTenantLeaseDocumentContext({
+    leaseId,
+    tenantId,
+    tenantEmail: String(profile?.context?.invitedEmail || "").trim() || null,
+    propertyId: String(profile?.context?.propertyId || leaseData?.propertyId || "").trim() || null,
+    unitId: String(profile?.context?.unitId || leaseData?.unitId || "").trim() || null,
+    leaseData,
+    documentKind: "schedule-a",
+  });
   const nextLease = leaseDocumentContext.documentUrl
     ? projectTenantLease(leaseId, {
         ...leaseData,
@@ -2815,7 +2835,7 @@ async function withTenantLeaseDocumentContext(profile: Awaited<ReturnType<typeof
     ...profile,
     profile: {
       ...profile.profile,
-      lease: nextLease ? { ...nextLease, leaseDocumentContext } : lease,
+      lease: nextLease ? { ...nextLease, leaseDocumentContext, scheduleADocumentContext } : lease,
     },
   };
 }
@@ -2948,10 +2968,33 @@ type TenantLeaseDocumentContext = {
   warnings: string[];
 };
 
-function firstLeaseDocumentUrl(raw: any, fields: string[]): string | null {
+function isScheduleADocumentValue(value: unknown): boolean {
+  const normalized = String(value || "").trim().toLowerCase();
+  return Boolean(normalized) && (normalized.includes("schedule-a") || normalized.includes("schedule_a"));
+}
+
+function isScheduleADocumentRecord(record: any): boolean {
+  if (!record || typeof record !== "object") return false;
+  return [
+    record.kind,
+    record.fileName,
+    record.name,
+    record.title,
+    record.path,
+    record.objectKey,
+    record.storagePath,
+    record.url,
+  ].some(isScheduleADocumentValue);
+}
+
+function firstLeaseDocumentUrl(raw: any, fields: string[], options?: { scheduleAOnly?: boolean; includeScheduleA?: boolean }): string | null {
   for (const field of fields) {
     const value = String(raw?.[field] || "").trim();
-    if (value.startsWith("https://") && !isAppDomainLeasePdfUrl(value)) return value;
+    if (!value.startsWith("https://") || isAppDomainLeasePdfUrl(value)) continue;
+    const isScheduleA = isScheduleADocumentValue(value);
+    if (options?.scheduleAOnly && !isScheduleA) continue;
+    if (!options?.includeScheduleA && !options?.scheduleAOnly && isScheduleA) continue;
+    return value;
   }
   return null;
 }
@@ -3059,6 +3102,10 @@ type TenantLeaseDocumentStorageRef = {
   source: string;
 };
 
+function isTenantScheduleAStorageRef(ref: TenantLeaseDocumentStorageRef | null): boolean {
+  return Boolean(ref && (isScheduleADocumentValue(ref.path) || isScheduleADocumentValue(ref.source)));
+}
+
 function normalizeLeaseDocumentStoragePath(value: unknown): string {
   return String(value || "").trim().replace(/^\/+/, "");
 }
@@ -3117,16 +3164,95 @@ function tenantLeaseDocumentStorageRef(params: {
   leaseData?: any;
   attachment?: any;
 }): TenantLeaseDocumentStorageRef | null {
-  return (
-    tenantLeaseStorageRefFromRecord(params.leaseData?.leaseDocument, "leaseDocument") ||
-    tenantLeaseStorageRefFromRecord(params.leaseData?.referenceDocument, "referenceDocument") ||
-    tenantLeaseStorageRefFromRecord(params.leaseData?.documentStorage, "documentStorage") ||
-    tenantLeaseStorageRefFromRecord(params.leaseData?.signedDocument, "signedDocument") ||
-    tenantLeaseStorageRefFromRecord(params.attachment, "ledgerAttachments") ||
-    tenantLeaseStorageRefFromSignedUrlFields(params.leaseData, "lease") ||
-    tenantLeaseStorageRefFromSignedUrlFields(params.attachment, "ledgerAttachments") ||
-    null
-  );
+  const refs = [
+    tenantLeaseStorageRefFromRecord(params.leaseData?.leaseDocument, "leaseDocument"),
+    tenantLeaseStorageRefFromRecord(params.leaseData?.referenceDocument, "referenceDocument"),
+    tenantLeaseStorageRefFromRecord(params.leaseData?.documentStorage, "documentStorage"),
+    tenantLeaseStorageRefFromRecord(params.leaseData?.signedDocument, "signedDocument"),
+    tenantLeaseStorageRefFromRecord(params.attachment, "ledgerAttachments"),
+    tenantLeaseStorageRefFromSignedUrlFields(params.leaseData, "lease"),
+    tenantLeaseStorageRefFromSignedUrlFields(params.attachment, "ledgerAttachments"),
+  ];
+  return refs.find((ref) => ref && !isTenantScheduleAStorageRef(ref)) || null;
+}
+
+function tenantScheduleAStorageRef(params: {
+  leaseData?: any;
+  attachment?: any;
+}): TenantLeaseDocumentStorageRef | null {
+  const refs = [
+    tenantLeaseStorageRefFromRecord(params.leaseData?.scheduleADocument, "scheduleADocument"),
+    tenantLeaseStorageRefFromRecord(params.leaseData?.scheduleA, "scheduleA"),
+    tenantLeaseStorageRefFromRecord(params.leaseData?.leaseDocument, "leaseDocument"),
+    tenantLeaseStorageRefFromRecord(params.leaseData?.referenceDocument, "referenceDocument"),
+    tenantLeaseStorageRefFromRecord(params.leaseData?.documentStorage, "documentStorage"),
+    tenantLeaseStorageRefFromRecord(params.leaseData?.signedDocument, "signedDocument"),
+    tenantLeaseStorageRefFromRecord(params.attachment, "ledgerAttachments"),
+    tenantLeaseStorageRefFromSignedUrlFields(params.leaseData, "lease"),
+    tenantLeaseStorageRefFromSignedUrlFields(params.attachment, "ledgerAttachments"),
+  ];
+  return refs.find((ref) => ref && isTenantScheduleAStorageRef(ref)) || null;
+}
+
+function tenantStorageRefFromGeneratedFile(
+  file: any,
+  source: string,
+  options?: { scheduleAOnly?: boolean; includeScheduleA?: boolean }
+): TenantLeaseDocumentStorageRef | null {
+  const kind = String(file?.kind || "").trim().toLowerCase();
+  const url = String(file?.url || "").trim();
+  const isScheduleA = isScheduleADocumentRecord(file);
+  if (options?.scheduleAOnly && !isScheduleA) return null;
+  if (!options?.includeScheduleA && !options?.scheduleAOnly && isScheduleA) return null;
+  const looksLikePdf = !kind || kind.includes("pdf") || kind.includes("lease") || kind.includes("document") || kind.includes("schedule");
+  if (!looksLikePdf && !url) return null;
+  return tenantLeaseStorageRefFromRecord(file, source) || tenantLeaseStorageRefFromSignedUrlFields(file, source);
+}
+
+async function loadTenantGeneratedDocumentStorageRef(
+  leaseData: any,
+  options?: { scheduleAOnly?: boolean; includeScheduleA?: boolean }
+): Promise<TenantLeaseDocumentStorageRef | null> {
+  const snapshotIds = [
+    leaseData?.latestLeaseSnapshotId,
+    leaseData?.lastGeneratedSnapshotId,
+    leaseData?.leaseSnapshotId,
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
+
+  const draftId = String(leaseData?.sourceDraftId || leaseData?.draftId || "").trim();
+  if (draftId) {
+    try {
+      const draftSnap = await db.collection("leaseDrafts").doc(draftId).get();
+      if (draftSnap.exists) {
+        const draft = draftSnap.data() as any;
+        [draft?.lastGeneratedSnapshotId, draft?.latestLeaseSnapshotId]
+          .map((value) => String(value || "").trim())
+          .filter(Boolean)
+          .forEach((snapshotId) => snapshotIds.push(snapshotId));
+      }
+    } catch {
+      // Missing draft metadata should not expose or hide unrelated tenant documents.
+    }
+  }
+
+  for (const snapshotId of Array.from(new Set(snapshotIds))) {
+    try {
+      const snapshotSnap = await db.collection("leaseSnapshots").doc(snapshotId).get();
+      if (!snapshotSnap.exists) continue;
+      const snapshot = snapshotSnap.data() as any;
+      const generatedFiles = Array.isArray(snapshot?.generatedFiles) ? snapshot.generatedFiles : [];
+      for (const file of generatedFiles) {
+        const ref = tenantStorageRefFromGeneratedFile(file, `leaseSnapshots/${snapshotId}`, options);
+        if (ref) return ref;
+      }
+    } catch {
+      // Continue through remaining snapshot candidates.
+    }
+  }
+
+  return null;
 }
 
 async function refreshTenantLeaseSignedUrl(storageRef: TenantLeaseDocumentStorageRef | null): Promise<string | null> {
@@ -3153,6 +3279,7 @@ async function getTenantLeaseDocumentContext(params: {
   unitId: string | null;
   leaseData: any;
   attachments?: any[];
+  documentKind?: "lease" | "schedule-a";
 }): Promise<TenantLeaseDocumentContext> {
   const leaseId = String(params.leaseId || "").trim();
   const tenantId = String(params.tenantId || "").trim();
@@ -3192,7 +3319,53 @@ async function getTenantLeaseDocumentContext(params: {
   }
 
   const signed = isLeaseSigned(params.leaseData);
-  const directStorageRef = tenantLeaseDocumentStorageRef({ leaseData: params.leaseData });
+
+  if (params.documentKind === "schedule-a") {
+    const directScheduleRef = tenantScheduleAStorageRef({ leaseData: params.leaseData });
+    const generatedScheduleRef = directScheduleRef
+      ? null
+      : await loadTenantGeneratedDocumentStorageRef(params.leaseData, { scheduleAOnly: true });
+    const storageRef = directScheduleRef || generatedScheduleRef;
+    const refreshedUrl = await refreshTenantLeaseSignedUrl(storageRef);
+    const scheduleUrl =
+      firstLeaseDocumentUrl(params.leaseData, ["scheduleAUrl", "scheduleADocumentUrl"], { includeScheduleA: true }) ||
+      firstLeaseDocumentUrl(params.leaseData?.scheduleADocument, ["url"], { includeScheduleA: true }) ||
+      firstLeaseDocumentUrl(params.leaseData?.scheduleA, ["url"], { includeScheduleA: true }) ||
+      firstLeaseDocumentUrl(params.leaseData, ["documentUrl", "approvedDocumentUrl", "documentRef"], { scheduleAOnly: true });
+    if (refreshedUrl || (!storageRef && scheduleUrl)) {
+      return {
+        leaseId,
+        tenantId: tenantId || undefined,
+        propertyId: propertyId || undefined,
+        unitId: unitId || undefined,
+        leaseStatus,
+        signingStatus: signed ? "signed" : "unsigned",
+        documentStatus: "generated",
+        documentId: String(params.leaseData?.scheduleADocumentId || params.leaseData?.latestLeaseSnapshotId || "").trim() || undefined,
+        documentUrl: refreshedUrl || scheduleUrl || undefined,
+        displayLabel: "Schedule A",
+        source: refreshedUrl ? storageRef?.source || "schedule_a_document" : "schedule_a_document",
+        confidence: "medium",
+        warnings,
+      };
+    }
+    return {
+      leaseId,
+      tenantId: tenantId || undefined,
+      propertyId: propertyId || undefined,
+      unitId: unitId || undefined,
+      leaseStatus,
+      documentStatus: "missing",
+      displayLabel: "No Schedule A available yet",
+      source: "schedule_a_missing",
+      confidence: "low",
+      warnings: ["No tenant-safe Schedule A link is available yet."],
+    };
+  }
+
+  const directStorageRef =
+    tenantLeaseDocumentStorageRef({ leaseData: params.leaseData }) ||
+    (await loadTenantGeneratedDocumentStorageRef(params.leaseData));
   const refreshedDirectUrl = await refreshTenantLeaseSignedUrl(directStorageRef);
   const signedUrl = firstLeaseDocumentUrl(params.leaseData, [
     "signedDocumentUrl",
@@ -5017,6 +5190,12 @@ router.get("/lease/document-url", requireTenantWorkspaceIdentity, async (req: an
     if (!leaseMatchesTenantIdentity(leaseData, context.tenantId, context.invitedEmail || req.user?.email)) {
       return res.status(403).json({ ok: false, error: "lease_not_owned_by_tenant" });
     }
+    const requestQuery = new URLSearchParams(String(req.originalUrl || req.url || "").split("?")[1] || "");
+    const requestedDocument = String(
+      req.query?.document || req.query?.kind || requestQuery.get("document") || requestQuery.get("kind") || "lease"
+    )
+      .trim()
+      .toLowerCase();
     const documentContext = await getTenantLeaseDocumentContext({
       leaseId: context.leaseId,
       tenantId: context.tenantId,
@@ -5024,6 +5203,10 @@ router.get("/lease/document-url", requireTenantWorkspaceIdentity, async (req: an
       propertyId: context.propertyId,
       unitId: context.unitId,
       leaseData,
+      documentKind:
+        requestedDocument === "schedule-a" || requestedDocument === "schedule_a" || requestedDocument === "schedule"
+          ? "schedule-a"
+          : "lease",
     });
     if (!documentContext.documentUrl || documentContext.documentStatus === "missing") {
       return res.status(404).json({ ok: false, error: "lease_document_not_found" });
@@ -7010,6 +7193,18 @@ router.get("/lease", requireTenant, async (req: any, res) => {
             leaseData: leaseRecord,
           })
         : null;
+    const scheduleADocumentContext =
+      leaseId && leaseRecord
+        ? await getTenantLeaseDocumentContext({
+            leaseId,
+            tenantId,
+            tenantEmail: String(tenantData?.email || req.user?.email || "").trim() || null,
+            propertyId,
+            unitId,
+            leaseData: leaseRecord,
+            documentKind: "schedule-a",
+          })
+        : null;
     const projectedLease = leaseId
       ? projectTenantLease(leaseId, {
           ...(leaseRecord || {}),
@@ -7078,6 +7273,7 @@ router.get("/lease", requireTenant, async (req: any, res) => {
       leaseStart: projectedLease?.startDate ?? null,
       leaseEnd: projectedLease?.endDate ?? null,
       leaseDocumentContext,
+      scheduleADocumentContext,
     };
 
     return res.json({ ok: true, data: lease, lease, ...lease });

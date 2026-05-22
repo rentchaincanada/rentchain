@@ -109,12 +109,16 @@ export default function TenantLeasePage() {
     }
   }
 
-  async function handleOpenLeaseDocument() {
-    const fallbackUrl = String(data?.leaseDocumentContext?.documentUrl || data?.documentUrl || "").trim();
+  async function handleOpenLeaseDocument(documentKind: "lease" | "schedule-a" = "lease") {
+    const context = documentKind === "schedule-a" ? data?.scheduleADocumentContext : data?.leaseDocumentContext;
+    const fallbackUrl = String(context?.documentUrl || (documentKind === "lease" ? data?.documentUrl : "") || "").trim();
     setOpeningDocument(true);
     setError(null);
     try {
-      const refreshed = await refreshTenantLeaseDocumentUrl();
+      const refreshed =
+        documentKind === "schedule-a"
+          ? await refreshTenantLeaseDocumentUrl({ document: "schedule-a" })
+          : await refreshTenantLeaseDocumentUrl();
       const nextUrl = String(refreshed?.documentUrl || "").trim() || fallbackUrl;
       if (!nextUrl) throw new Error("Lease document is not available.");
       window.open(nextUrl, "_blank", "noreferrer");
@@ -123,7 +127,7 @@ export default function TenantLeasePage() {
         window.open(fallbackUrl, "_blank", "noreferrer");
         return;
       }
-      setError(err?.payload?.error || err?.message || "Lease document link expired and needs regeneration.");
+      setError(err?.payload?.error || err?.message || (documentKind === "schedule-a" ? "Schedule A link expired and needs regeneration." : "Lease document link expired and needs regeneration."));
     } finally {
       setOpeningDocument(false);
     }
@@ -149,7 +153,9 @@ export default function TenantLeasePage() {
 
   const execution = data?.leaseExecution || null;
   const leaseDocumentContext = data?.leaseDocumentContext || null;
+  const scheduleADocumentContext = data?.scheduleADocumentContext || null;
   const leaseDocumentUrl = leaseDocumentContext?.documentUrl || data?.documentUrl || null;
+  const scheduleAUrl = scheduleADocumentContext?.documentUrl || null;
   const leaseDocumentLabel = leaseDocumentContext?.displayLabel || data?.leasePdfLabel || null;
   const leaseDocumentWarnings = Array.isArray(leaseDocumentContext?.warnings) ? leaseDocumentContext.warnings : [];
   const paymentReadiness = data?.paymentReadiness || null;
@@ -385,6 +391,11 @@ export default function TenantLeasePage() {
                 No approved lease document link is available in this workspace yet.
               </div>
             )}
+            {scheduleAUrl ? (
+              <button type="button" onClick={() => void handleOpenLeaseDocument("schedule-a")} disabled={openingDocument}>
+                {openingDocument ? "Opening..." : "Open Schedule A"}
+              </button>
+            ) : null}
           </TenantInfoCard>
 
           <TenantInfoCard heading="Lease Signing" accent="#7c3aed">

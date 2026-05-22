@@ -419,11 +419,14 @@ export default function LandlordActiveLeasesPage() {
     }
   }
 
-  async function openLeaseDocument(lease: LandlordActiveLease) {
-    const fallbackUrl = String(lease.documentUrl || "").trim();
+  async function openLeaseDocument(lease: LandlordActiveLease, documentKind: "lease" | "schedule-a" = "lease") {
+    const fallbackUrl = String(documentKind === "schedule-a" ? lease.scheduleAUrl : lease.documentUrl || "").trim();
     setDocumentBusyLeaseId(lease.id);
     try {
-      const refreshed = await refreshLeaseDocumentUrl(lease.id);
+      const refreshed =
+        documentKind === "schedule-a"
+          ? await refreshLeaseDocumentUrl(lease.id, { document: "schedule-a" })
+          : await refreshLeaseDocumentUrl(lease.id);
       const nextUrl = String(refreshed?.documentUrl || "").trim() || fallbackUrl;
       if (!nextUrl) throw new Error("Lease document is not available.");
       window.open(nextUrl, "_blank", "noreferrer");
@@ -432,7 +435,7 @@ export default function LandlordActiveLeasesPage() {
         window.open(fallbackUrl, "_blank", "noreferrer");
         return;
       }
-      setError(errorMessage(err, "Lease document link expired and needs regeneration."));
+      setError(errorMessage(err, documentKind === "schedule-a" ? "Schedule A link expired and needs regeneration." : "Lease document link expired and needs regeneration."));
     } finally {
       setDocumentBusyLeaseId(null);
     }
@@ -519,6 +522,16 @@ export default function LandlordActiveLeasesPage() {
             View lease
           </Link>
         )}
+        {lease.scheduleAUrl ? (
+          <button
+            type="button"
+            onClick={() => void openLeaseDocument(lease, "schedule-a")}
+            disabled={documentBusyLeaseId === lease.id}
+            style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", textDecoration: "none", color: "#0f172a" }}
+          >
+            {documentBusyLeaseId === lease.id ? "Opening..." : "View Schedule A"}
+          </button>
+        ) : null}
         <Link to={ledgerPath} style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", textDecoration: "none", color: "#0f172a" }}>
           Ledger
         </Link>

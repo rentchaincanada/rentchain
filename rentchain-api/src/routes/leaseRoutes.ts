@@ -625,11 +625,11 @@ async function loadLeaseDocumentUrlForLease(raw: any): Promise<string | null> {
 
   const directUrl =
     String(raw?.documentUrl || raw?.approvedDocumentUrl || raw?.documentRef || "").trim() || null;
-  if (directUrl && !isAppDomainLeasePdfUrl(directUrl)) return directUrl;
+  if (directUrl && !isAppDomainLeasePdfUrl(directUrl) && !isScheduleADocumentValue(directUrl)) return directUrl;
 
   const referenceBucket = String(raw?.referenceDocument?.bucket || raw?.leaseDocument?.bucket || "").trim();
   const referencePath = String(raw?.referenceDocument?.path || raw?.leaseDocument?.path || "").trim();
-  if (referenceBucket && referencePath) {
+  if (referenceBucket && referencePath && !isScheduleADocumentValue(referencePath)) {
     try {
       return await getSignedDownloadUrl({ bucket: referenceBucket, path: referencePath, expiresMinutes: 30 });
     } catch {
@@ -650,7 +650,45 @@ async function loadLeaseDocumentUrlForLease(raw: any): Promise<string | null> {
     if (!snapshotSnap.exists) return null;
     const snapshot = snapshotSnap.data() as any;
     const generatedFiles = Array.isArray(snapshot?.generatedFiles) ? snapshot.generatedFiles : [];
-    const firstFile = generatedFiles.find((item: any) => String(item?.url || "").trim());
+    const firstFile = firstGeneratedLeasePdfFile(generatedFiles);
+    return String(firstFile?.url || "").trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+async function loadScheduleAUrlForLease(raw: any): Promise<string | null> {
+  const storageRef = await loadScheduleAStorageRefForLease(raw);
+  if (storageRef) {
+    try {
+      return await getSignedDownloadUrl({ bucket: storageRef.bucket, path: storageRef.path, expiresMinutes: 30 });
+    } catch {
+      return null;
+    }
+  }
+
+  const directUrl =
+    String(raw?.scheduleAUrl || raw?.scheduleADocumentUrl || raw?.scheduleADocument?.url || raw?.scheduleA?.url || "").trim() || null;
+  if (directUrl && !isAppDomainLeasePdfUrl(directUrl)) return directUrl;
+
+  const legacyUrl =
+    String(raw?.documentUrl || raw?.approvedDocumentUrl || raw?.documentRef || "").trim() || null;
+  if (legacyUrl && !isAppDomainLeasePdfUrl(legacyUrl) && isScheduleADocumentValue(legacyUrl)) return legacyUrl;
+
+  const draftId = String(raw?.sourceDraftId || "").trim();
+  if (!draftId) return null;
+
+  try {
+    const draftSnap = await db.collection("leaseDrafts").doc(draftId).get();
+    if (!draftSnap.exists) return null;
+    const draft = draftSnap.data() as any;
+    const snapshotId = String(draft?.lastGeneratedSnapshotId || "").trim();
+    if (!snapshotId) return null;
+    const snapshotSnap = await db.collection("leaseSnapshots").doc(snapshotId).get();
+    if (!snapshotSnap.exists) return null;
+    const snapshot = snapshotSnap.data() as any;
+    const generatedFiles = Array.isArray(snapshot?.generatedFiles) ? snapshot.generatedFiles : [];
+    const firstFile = firstGeneratedScheduleAFile(generatedFiles);
     return String(firstFile?.url || "").trim() || null;
   } catch {
     return null;
@@ -662,6 +700,29 @@ type LeaseDocumentStorageRef = {
   path: string;
   source: string;
 };
+
+function isScheduleADocumentValue(value: unknown): boolean {
+  const normalized = String(value || "").trim().toLowerCase();
+  return Boolean(normalized) && (normalized.includes("schedule-a") || normalized.includes("schedule_a"));
+}
+
+function isScheduleADocumentRecord(record: any): boolean {
+  if (!record || typeof record !== "object") return false;
+  return [
+    record.kind,
+    record.fileName,
+    record.name,
+    record.title,
+    record.path,
+    record.objectKey,
+    record.storagePath,
+    record.url,
+  ].some(isScheduleADocumentValue);
+}
+
+function isScheduleAStorageRef(ref: LeaseDocumentStorageRef | null): boolean {
+  return Boolean(ref && (isScheduleADocumentValue(ref.path) || isScheduleADocumentValue(ref.source)));
+}
 
 function normalizeStoragePath(value: unknown): string {
   return String(value || "").trim().replace(/^\/+/, "");
@@ -728,23 +789,43 @@ function storageRefFromSignedUrlFields(record: any, source: string): LeaseDocume
   return null;
 }
 
-function storageRefFromGeneratedFile(file: any, source: string): LeaseDocumentStorageRef | null {
+function storageRefFromGeneratedFile(
+  file: any,
+  source: string,
+  options?: { scheduleAOnly?: boolean; includeScheduleA?: boolean }
+): LeaseDocumentStorageRef | null {
   const kind = String(file?.kind || "").trim().toLowerCase();
   const url = String(file?.url || "").trim();
-  const looksLikeLeasePdf = !kind || kind.includes("pdf") || kind.includes("schedule");
+  const isScheduleA = isScheduleADocumentRecord(file);
+  if (options?.scheduleAOnly && !isScheduleA) return null;
+  if (!options?.includeScheduleA && !options?.scheduleAOnly && isScheduleA) return null;
+  const looksLikeLeasePdf = !kind || kind.includes("pdf") || kind.includes("lease") || kind.includes("document") || kind.includes("schedule");
   if (!looksLikeLeasePdf && !url) return null;
   return storageRefFromDocumentRecord(file, source) || storageRefFromSignedUrlFields(file, source);
 }
 
 function directLeaseDocumentStorageRef(raw: any): LeaseDocumentStorageRef | null {
-  return (
-    storageRefFromDocumentRecord(raw?.leaseDocument, "leaseDocument") ||
-    storageRefFromDocumentRecord(raw?.referenceDocument, "referenceDocument") ||
-    storageRefFromDocumentRecord(raw?.documentStorage, "documentStorage") ||
-    storageRefFromDocumentRecord(raw?.signedDocument, "signedDocument") ||
-    storageRefFromSignedUrlFields(raw, "lease") ||
-    null
-  );
+  const refs = [
+    storageRefFromDocumentRecord(raw?.leaseDocument, "leaseDocument"),
+    storageRefFromDocumentRecord(raw?.referenceDocument, "referenceDocument"),
+    storageRefFromDocumentRecord(raw?.documentStorage, "documentStorage"),
+    storageRefFromDocumentRecord(raw?.signedDocument, "signedDocument"),
+    storageRefFromSignedUrlFields(raw, "lease"),
+  ];
+  return refs.find((ref) => ref && !isScheduleAStorageRef(ref)) || null;
+}
+
+function directScheduleAStorageRef(raw: any): LeaseDocumentStorageRef | null {
+  const refs = [
+    storageRefFromDocumentRecord(raw?.scheduleADocument, "scheduleADocument"),
+    storageRefFromDocumentRecord(raw?.scheduleA, "scheduleA"),
+    storageRefFromDocumentRecord(raw?.leaseDocument, "leaseDocument"),
+    storageRefFromDocumentRecord(raw?.referenceDocument, "referenceDocument"),
+    storageRefFromDocumentRecord(raw?.documentStorage, "documentStorage"),
+    storageRefFromDocumentRecord(raw?.signedDocument, "signedDocument"),
+    storageRefFromSignedUrlFields(raw, "lease"),
+  ];
+  return refs.find((ref) => ref && isScheduleAStorageRef(ref)) || null;
 }
 
 async function loadLeaseDocumentStorageRefForLease(raw: any): Promise<LeaseDocumentStorageRef | null> {
@@ -793,12 +874,67 @@ async function loadLeaseDocumentStorageRefForLease(raw: any): Promise<LeaseDocum
   return null;
 }
 
+async function loadScheduleAStorageRefForLease(raw: any): Promise<LeaseDocumentStorageRef | null> {
+  const directRef = directScheduleAStorageRef(raw);
+  if (directRef) return directRef;
+
+  const snapshotIds = [
+    raw?.latestLeaseSnapshotId,
+    raw?.lastGeneratedSnapshotId,
+    raw?.leaseSnapshotId,
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
+
+  const draftId = String(raw?.sourceDraftId || raw?.draftId || "").trim();
+  if (draftId) {
+    try {
+      const draftSnap = await db.collection("leaseDrafts").doc(draftId).get();
+      if (draftSnap.exists) {
+        const draft = draftSnap.data() as any;
+        [draft?.lastGeneratedSnapshotId, draft?.latestLeaseSnapshotId]
+          .map((value) => String(value || "").trim())
+          .filter(Boolean)
+          .forEach((snapshotId) => snapshotIds.push(snapshotId));
+      }
+    } catch {
+      // Missing draft metadata should not make an otherwise valid lease fail.
+    }
+  }
+
+  for (const snapshotId of Array.from(new Set(snapshotIds))) {
+    try {
+      const snapshotSnap = await db.collection("leaseSnapshots").doc(snapshotId).get();
+      if (!snapshotSnap.exists) continue;
+      const snapshot = snapshotSnap.data() as any;
+      const generatedFiles = Array.isArray(snapshot?.generatedFiles) ? snapshot.generatedFiles : [];
+      for (const file of generatedFiles) {
+        const ref = storageRefFromGeneratedFile(file, `leaseSnapshots/${snapshotId}`, { scheduleAOnly: true });
+        if (ref) return ref;
+      }
+    } catch {
+      // Continue through remaining metadata sources.
+    }
+  }
+
+  return null;
+}
+
 function firstGeneratedLeasePdfFile(generatedFiles: any[]): any | null {
   return (
     (Array.isArray(generatedFiles) ? generatedFiles : []).find((item: any) => {
       const url = String(item?.url || "").trim();
       const kind = String(item?.kind || "").trim().toLowerCase();
-      return url.startsWith("https://") && (!kind || kind.includes("pdf") || kind.includes("schedule"));
+      return url.startsWith("https://") && !isScheduleADocumentRecord(item) && (!kind || kind.includes("pdf") || kind.includes("lease") || kind.includes("document"));
+    }) || null
+  );
+}
+
+function firstGeneratedScheduleAFile(generatedFiles: any[]): any | null {
+  return (
+    (Array.isArray(generatedFiles) ? generatedFiles : []).find((item: any) => {
+      const url = String(item?.url || "").trim();
+      return url.startsWith("https://") && isScheduleADocumentRecord(item);
     }) || null
   );
 }
@@ -1176,10 +1312,11 @@ async function enrichLeaseRow(raw: any) {
   const tenantId =
     String(lease.primaryTenantId || lease.tenantId || lease.tenantIds?.[0] || "").trim() || null;
 
-  const [propertySnap, tenantSnap, documentUrl] = await Promise.all([
+  const [propertySnap, tenantSnap, documentUrl, scheduleAUrl] = await Promise.all([
     propertyId ? db.collection("properties").doc(propertyId).get().catch(() => null) : Promise.resolve(null),
     tenantId ? db.collection("tenants").doc(tenantId).get().catch(() => null) : Promise.resolve(null),
     loadLeaseDocumentUrlForLease(raw),
+    loadScheduleAUrlForLease(raw),
   ]);
 
   const propertyData = propertySnap?.exists ? propertySnap.data() : null;
@@ -1255,6 +1392,7 @@ async function enrichLeaseRow(raw: any) {
     tenantName,
     tenantEmail,
     documentUrl,
+    scheduleAUrl,
     ...leaseReadiness,
     paymentReadiness,
     rentPaymentSummary,
@@ -2846,21 +2984,33 @@ export async function handleLeaseDocumentUrl(req: any, res: Response) {
     if (!(await enforceLeaseCapability(req, res))) return;
     const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
     const leaseId = String(req.params?.leaseId || "").trim();
+    const requestQuery = new URLSearchParams(String(req.originalUrl || req.url || "").split("?")[1] || "");
+    const requestedDocument = String(
+      req.query?.document || req.query?.kind || requestQuery.get("document") || requestQuery.get("kind") || "lease"
+    )
+      .trim()
+      .toLowerCase();
+    const wantsScheduleA = requestedDocument === "schedule-a" || requestedDocument === "schedule_a" || requestedDocument === "schedule";
     if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
     if (!leaseId) return res.status(400).json({ ok: false, error: "leaseId is required" });
 
     const leaseCheck = await getLeaseEntityForLandlord(leaseId, landlordId);
     if (!leaseCheck.ok) return res.status(leaseCheck.status).json({ ok: false, error: leaseCheck.error });
 
-    const storageRef = await loadLeaseDocumentStorageRefForLease(leaseCheck.lease as any);
+    const storageRef = wantsScheduleA
+      ? await loadScheduleAStorageRefForLease(leaseCheck.lease as any)
+      : await loadLeaseDocumentStorageRefForLease(leaseCheck.lease as any);
     if (!storageRef) {
-      const fallbackUrl = await loadLeaseDocumentUrlForLease(leaseCheck.lease as any);
-      if (!fallbackUrl) return res.status(404).json({ ok: false, error: "lease_document_not_found" });
+      const fallbackUrl = wantsScheduleA
+        ? await loadScheduleAUrlForLease(leaseCheck.lease as any)
+        : await loadLeaseDocumentUrlForLease(leaseCheck.lease as any);
+      if (!fallbackUrl) return res.status(404).json({ ok: false, error: wantsScheduleA ? "schedule_a_document_not_found" : "lease_document_not_found" });
       return res.status(200).json({
         ok: true,
         documentUrl: fallbackUrl,
         refreshMode: "legacy_url",
         expiresInSeconds: null,
+        documentKind: wantsScheduleA ? "schedule-a" : "lease",
       });
     }
 
@@ -2875,6 +3025,7 @@ export async function handleLeaseDocumentUrl(req: any, res: Response) {
       documentUrl,
       refreshMode: "signed_url",
       expiresInSeconds: expiresMinutes * 60,
+      documentKind: wantsScheduleA ? "schedule-a" : "lease",
       documentRef: {
         source: storageRef.source,
         bucket: storageRef.bucket,

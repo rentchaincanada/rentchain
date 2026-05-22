@@ -260,6 +260,49 @@ describe("LandlordActiveLeasesPage", () => {
     expect(await screen.findByText("refresh failed")).toBeInTheDocument();
   });
 
+  it("shows Schedule A as a separate action without replacing the lease summary action", async () => {
+    mocks.getActiveLeasesForLandlord.mockResolvedValue({
+      leases: [
+        {
+          id: "lease-schedule",
+          propertyId: "prop-1",
+          propertyName: "Coburg Rd",
+          unitNumber: "6",
+          monthlyRent: 1800,
+          startDate: "2026-01-01",
+          endDate: "2026-12-31",
+          status: "active",
+          tenantName: "Chip Milo",
+          tenantEmail: "hello+cob6tenant@rentchain.ai",
+          documentUrl: null,
+          scheduleAUrl: "https://example.com/schedule-a.pdf",
+        },
+      ],
+    });
+    mocks.refreshLeaseDocumentUrl.mockResolvedValueOnce({
+      documentUrl: "https://example.com/schedule-a-refreshed.pdf",
+      refreshMode: "signed_url",
+      expiresInSeconds: 1800,
+      documentKind: "schedule-a",
+    });
+
+    render(
+      <MemoryRouter>
+        <LandlordActiveLeasesPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole("link", { name: "View lease" })).toHaveAttribute(
+      "href",
+      "/leases/lease-schedule/summary"
+    );
+    fireEvent.click(screen.getByRole("button", { name: "View Schedule A" }));
+    await waitFor(() =>
+      expect(mocks.refreshLeaseDocumentUrl).toHaveBeenCalledWith("lease-schedule", { document: "schedule-a" })
+    );
+    expect(window.open).toHaveBeenCalledWith("https://example.com/schedule-a-refreshed.pdf", "_blank", "noreferrer");
+  });
+
   it("renders date-only lease dates without shifting them backward across timezones", async () => {
     mocks.getActiveLeasesForLandlord.mockResolvedValue({
       leases: [

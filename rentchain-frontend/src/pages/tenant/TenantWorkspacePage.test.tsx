@@ -2189,6 +2189,21 @@ describe("tenant workspace frontend shell", () => {
         confidence: "high",
         warnings: [],
       },
+      scheduleADocumentContext: {
+        leaseId: "lease-1",
+        tenantId: "tenant-1",
+        propertyId: "prop-1",
+        unitId: "unit-1",
+        leaseStatus: "active",
+        signingStatus: "signed",
+        documentStatus: "generated",
+        documentId: "snapshot-schedule-a",
+        documentUrl: "https://example.com/schedule-a.pdf",
+        displayLabel: "Schedule A",
+        source: "leaseSnapshots/snapshot-schedule-a",
+        confidence: "medium",
+        warnings: [],
+      },
       signatureStatus: "signed",
       signatureReadinessLabel: "Lease signing complete",
       signatureReadinessDescription: "The visible lease record shows the current signing stage as complete.",
@@ -2262,6 +2277,18 @@ describe("tenant workspace frontend shell", () => {
     fireEvent.click(openLeaseButton);
     await waitFor(() => expect(tenantPortalApi.refreshTenantLeaseDocumentUrl).toHaveBeenCalled());
     expect(window.open).toHaveBeenCalledWith("https://example.com/refreshed-lease.pdf", "_blank", "noreferrer");
+    tenantPortalApi.refreshTenantLeaseDocumentUrl.mockResolvedValueOnce({
+      documentUrl: "https://example.com/refreshed-schedule-a.pdf",
+      displayLabel: "Schedule A",
+      documentStatus: "generated",
+      source: "leaseSnapshots/snapshot-schedule-a",
+      expiresInSeconds: 1800,
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Open Schedule A/i }));
+    await waitFor(() =>
+      expect(tenantPortalApi.refreshTenantLeaseDocumentUrl).toHaveBeenCalledWith({ document: "schedule-a" })
+    );
+    expect(window.open).toHaveBeenCalledWith("https://example.com/refreshed-schedule-a.pdf", "_blank", "noreferrer");
   });
 
   it("does not open stale tenant GCS lease URLs when refresh fails", async () => {
