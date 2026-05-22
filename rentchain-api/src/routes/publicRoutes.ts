@@ -53,13 +53,21 @@ function resolveEmailFromAddress(): string {
   ).trim();
 }
 
+function publicCapabilitySummary() {
+  const flags = getEnvFlags();
+  return {
+    emailConfigured: Boolean(flags.emailConfigured),
+    stripeConfigured: Boolean(flags.stripeConfigured),
+    pricingConfigured: Boolean(flags.pricingConfigured),
+  };
+}
+
 router.get("/health", (_req, res) => {
   res.setHeader("x-route-source", "publicRoutes.ts");
   res.json({
     ok: true,
     service: "rentchain-api",
-    ts: Date.now(),
-    config: getEnvFlags(),
+    capabilities: publicCapabilitySummary(),
   });
 });
 
@@ -80,10 +88,6 @@ router.get("/health/stripe", async (_req, res) => {
   const has = (key: string) => {
     const raw = process.env[key];
     return Boolean(raw && String(raw).trim());
-  };
-  const getTrimmed = (key: string) => {
-    const raw = process.env[key];
-    return raw ? String(raw).trim() : "";
   };
   const priceKeys = [
     "STRIPE_PRICE_STARTER_MONTHLY",
@@ -106,37 +110,28 @@ router.get("/health/stripe", async (_req, res) => {
       const stripe = getStripeClient();
       for (const key of priceKeys) {
         if (!has(key)) continue;
-        const priceId = getTrimmed(key);
+        const priceId = String(process.env[key] || "").trim();
         if (!priceId.startsWith("price_")) {
-          return res.json({ ok: false, error: "price_invalid", key });
+          return res.json({ ok: false, error: "price_invalid" });
         }
         try {
           await stripe.prices.retrieve(priceId);
         } catch (err) {
-          return res.json({ ok: false, error: "price_invalid", key });
+          return res.json({ ok: false, error: "price_invalid" });
         }
       }
     } catch (err) {
       return res.json({ ok: false, error: "stripe_not_configured" });
     }
   }
+  const configuredPriceCount = priceKeys.filter((key) => has(key)).length;
   res.json({
     ok: true,
     stripeConfigured: isStripeConfigured(),
-    webhookSecretConfigured: Boolean(process.env.STRIPE_WEBHOOK_SECRET),
-    priceEnv: {
-      STRIPE_PRICE_STARTER_MONTHLY: has("STRIPE_PRICE_STARTER_MONTHLY"),
-      STRIPE_PRICE_STARTER_YEARLY: has("STRIPE_PRICE_STARTER_YEARLY"),
-      STRIPE_PRICE_PRO_MONTHLY: has("STRIPE_PRICE_PRO_MONTHLY"),
-      STRIPE_PRICE_PRO_YEARLY: has("STRIPE_PRICE_PRO_YEARLY"),
-      STRIPE_PRICE_ELITE_MONTHLY: has("STRIPE_PRICE_ELITE_MONTHLY"),
-      STRIPE_PRICE_ELITE_YEARLY: has("STRIPE_PRICE_ELITE_YEARLY"),
-      STRIPE_PRICE_BUSINESS_MONTHLY: has("STRIPE_PRICE_BUSINESS_MONTHLY"),
-      STRIPE_PRICE_BUSINESS_YEARLY: has("STRIPE_PRICE_BUSINESS_YEARLY"),
-      STRIPE_PRICE_STARTER: has("STRIPE_PRICE_STARTER"),
-      STRIPE_PRICE_PRO: has("STRIPE_PRICE_PRO"),
-      STRIPE_PRICE_ELITE: has("STRIPE_PRICE_ELITE"),
-      STRIPE_PRICE_BUSINESS: has("STRIPE_PRICE_BUSINESS"),
+    priceConfiguration: {
+      configured: configuredPriceCount > 0,
+      configuredCount: configuredPriceCount,
+      expectedCount: priceKeys.length,
     },
     deepChecked: deepCheckEnabled,
     build: safeDiagnosticBuildMetadata(),
@@ -151,13 +146,10 @@ router.get("/health/pricing", (_req, res) => {
     ok: health.ok,
     stripeConfigured: isStripeConfigured(),
     planPricesConfigured: health.ok,
-    missing: health.missing,
-    invalid: health.invalid,
-    amountInvalid: health.amountInvalid,
-    used: health.used,
+    missingCount: health.missing.length,
+    invalidCount: health.invalid.length,
+    amountInvalidCount: health.amountInvalid.length,
     fallbackUsed,
-    env: health.env,
-    ts: Date.now(),
   });
 });
 
