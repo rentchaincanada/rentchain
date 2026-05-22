@@ -361,6 +361,46 @@ describe("API route ownership regression", () => {
     expect(source).toContain('res.setHeader("x-route-source", "not-found")');
   });
 
+  it("pins privileged admin/support route families before broad fallbacks", () => {
+    const source = appBuildSource();
+    const supportConsoleMount = source.indexOf('app.use("/api/admin", routeSource("supportConsoleRoutes.ts"), supportConsoleRoutes)');
+    const supportOperationsMount = source.indexOf(
+      'app.use("/api/admin", routeSource("adminSupportOperationsRoutes.ts"), adminSupportOperationsRoutes)'
+    );
+    const incidentReadinessMount = source.indexOf(
+      'app.use("/api/admin", routeSource("adminObservabilityIncidentReadinessRoutes.ts"), adminObservabilityIncidentReadinessRoutes)'
+    );
+    const publicExposureMount = source.indexOf(
+      'app.use("/api/admin", routeSource("adminPublicExposureHardeningRoutes.ts"), adminPublicExposureHardeningRoutes)'
+    );
+    const pdfObservabilityMount = source.indexOf(
+      'app.use("/api/admin", routeSource("adminPdfExportObservabilityRoutes.ts"), adminPdfExportObservabilityRoutes)'
+    );
+    const impersonationMount = source.indexOf('app.use("/api/impersonation", routeSource("impersonationRoutes.ts"), impersonationRoutes)');
+    const adminRoutesMount = source.indexOf('app.use("/api/admin", routeSource("adminRoutes.ts"), adminRoutes)');
+    const screeningJobsMount = source.indexOf('app.use("/api", routeSource("screeningJobsAdminRoutes.ts"), screeningJobsAdminRoutes)');
+    const apiCatchall = source.indexOf('app.use("/api", (_req, res) => {');
+
+    expect(supportConsoleMount).toBeGreaterThan(-1);
+    expect(supportOperationsMount).toBeGreaterThan(-1);
+    expect(incidentReadinessMount).toBeGreaterThan(-1);
+    expect(publicExposureMount).toBeGreaterThan(-1);
+    expect(pdfObservabilityMount).toBeGreaterThan(-1);
+    expect(impersonationMount).toBeGreaterThan(-1);
+    expect(adminRoutesMount).toBeGreaterThan(-1);
+    expect(screeningJobsMount).toBeGreaterThan(-1);
+    expect(apiCatchall).toBeGreaterThan(-1);
+
+    expect(supportConsoleMount).toBeLessThan(adminRoutesMount);
+    expect(supportOperationsMount).toBeLessThan(adminRoutesMount);
+    expect(incidentReadinessMount).toBeLessThan(adminRoutesMount);
+    expect(publicExposureMount).toBeLessThan(adminRoutesMount);
+    expect(pdfObservabilityMount).toBeLessThan(adminRoutesMount);
+    expect(impersonationMount).toBeLessThan(screeningJobsMount);
+    expect(adminRoutesMount).toBeLessThan(apiCatchall);
+    expect(screeningJobsMount).toBeLessThan(apiCatchall);
+  });
+
   it("routes protected tenant, evidence, and internal endpoints to their owners before rejecting missing credentials", async () => {
     authState.user = null;
     const app = await buildRuntimeOwnershipApp();
