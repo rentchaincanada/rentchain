@@ -10,6 +10,8 @@ The implementation remains conservative:
 - unsafe debug/probe/echo/routes surfaces remain gated by the existing internal diagnostic token pattern;
 - the leftover billing probe is now production-gated;
 - public health-adjacent responses no longer expose exact revision or commit identifiers;
+- public health-adjacent responses avoid server-only env names and exact environment hints;
+- internal echo diagnostics no longer return raw request bodies;
 - no auth behavior, Firestore rules, schemas, route visibility, product workflows, or permissions were changed.
 
 ## Diagnostic surface inventory
@@ -21,9 +23,9 @@ The implementation remains conservative:
 | `/health/db` | public-safe db health | Public, minimal ok/skipped/fail result preserved for deployment verification. |
 | `/health/version` | production-safe health diagnostic | Public; environment hint removed. |
 | `/api/status/public` | production-safe status | Public status-app integration preserved without route-source/debug headers. |
-| `/api/health` | production-safe app health | Public capability booleans only. |
-| `/api/health/stripe` | production-safe app health | Public Stripe/pricing readiness retained; exact Cloud Run revision redacted to safe build presence metadata. |
-| `/api/health/pricing` | production-safe app health | Public pricing configuration health retained. |
+| `/api/health` | production-safe app health | Public capability booleans only; server-only env/provider details are not returned. |
+| `/api/health/stripe` | production-safe app health | Public Stripe/pricing readiness retained; exact Cloud Run revision and server-only Stripe env names are redacted. |
+| `/api/health/pricing` | production-safe app health | Public pricing configuration health retained as counts/booleans rather than specific env names. |
 | `/api/health/screening-provider` | production-safe provider readiness | Public provider readiness retained; exact commit/revision redacted to safe build presence metadata. |
 | `/api/__probe/version` | production-safe deployment probe | Public, redacted build presence metadata. |
 | `/api/__probe/revision` | production-safe deployment probe | Public, redacted revision/commit presence metadata. |
@@ -34,8 +36,8 @@ The implementation remains conservative:
 | `/api/__probe/routes-lite` | internal diagnostic | Production-gated by `INTERNAL_JOB_TOKEN`. |
 | `/api/__probe/tenants-mount` | internal diagnostic | Production-gated by `INTERNAL_JOB_TOKEN`. |
 | `/api/__probe/onboarding-route` | internal diagnostic | Production-gated by `INTERNAL_JOB_TOKEN`. |
-| `/api/_echo` | internal diagnostic | Production-gated by `INTERNAL_JOB_TOKEN`; denied responses do not echo request payloads. |
-| `/api/__debug/build` | internal diagnostic | Production-gated by `INTERNAL_JOB_TOKEN`; allowed response uses redacted build metadata. |
+| `/api/_echo` | internal diagnostic | Production-gated by `INTERNAL_JOB_TOKEN`; allowed and denied responses do not echo request payloads. |
+| `/api/__debug/build` | internal diagnostic | Production-gated by `INTERNAL_JOB_TOKEN`; allowed response uses redacted build metadata and does not return Vercel env values. |
 | `/api/__debug/ping-application-links` | internal diagnostic | Production-gated by `INTERNAL_JOB_TOKEN`. |
 
 ## Production gating rules
@@ -51,6 +53,7 @@ Allowed diagnostic responses must not include:
 - raw route tables or route internals;
 - exact Cloud Run revision IDs;
 - exact commit SHAs.
+- exact deployment environment labels from platform env vars.
 
 ## Health and status rationale
 
@@ -65,7 +68,7 @@ Non-production environments keep diagnostic access usable for deployment trouble
 ## Tests added or updated
 
 - `healthRoutes.test.ts` verifies `/health`, `/health/version`, `/health/ready`, and `/health/db` remain reachable and do not expose exact release, revision, commit, or environment values.
-- `apiRouteOwnershipRegression.test.ts` verifies the billing probe is gated, public route probes use redacted build metadata, exact `apiRevision` fields are not reintroduced in `publicRoutes.ts`, and existing debug/echo route ownership remains deterministic.
+- `apiRouteOwnershipRegression.test.ts` verifies the billing probe is gated, public route probes use redacted build metadata, exact `apiRevision` fields are not reintroduced in `publicRoutes.ts`, public health-adjacent responses avoid raw env/config fields, `_echo` does not return raw request bodies, and existing debug/echo route ownership remains deterministic.
 
 ## Known limitations
 

@@ -253,7 +253,7 @@ async function buildRuntimeOwnershipApp() {
     res.json({ ok: true, routeCheck: { landlordApplicationLinksMounted: true } })
   );
   app.post("/api/_echo", requireDiagnosticAccess("app.build.ts:/api/_echo"), (req, res) =>
-    res.json({ ok: true, method: "POST", body: req.body ?? null })
+    res.json({ ok: true, method: "POST", bodyPresent: req.body != null })
   );
   app.use("/api", routeSource("telemetryRoutes.ts"), telemetryRoutes);
   app.use("/api", routeSource("screeningRoutes.ts"), screeningRoutes);
@@ -338,6 +338,10 @@ describe("API route ownership regression", () => {
     const publicSource = publicRoutesSource();
     const echoRoutes = source.match(/app\.post\(\s*"\/api\/_echo"/g) || [];
     const buildRoutes = source.match(/app\.get\(\s*"\/api\/_build"/g) || [];
+    const routesProbeRoute = source.indexOf('app.get(\n  "/api/__probe/routes"');
+    const echoRoute = source.indexOf('app.post(\n  "/api/_echo"');
+    const debugBuildRoute = source.indexOf('app.get(\n  "/api/__debug/build"');
+    const riskAgentMount = source.indexOf('app.use("/api", routeSource("riskAgentRoutes.ts"), riskAgentRoutes)');
 
     expect(source).toMatch(/app\.get\(\s*"\/api\/__probe\/revision"/);
     expect(source).toMatch(/app\.get\(\s*"\/api\/__probe\/routes"/);
@@ -353,9 +357,21 @@ describe("API route ownership regression", () => {
     expect(publicSource).toContain('requireDiagnosticAccess("publicRoutes.ts:/__probe/routes-lite")');
     expect(publicSource).toContain('requireDiagnosticAccess("publicRoutes.ts:/_probe/billing")');
     expect(publicSource).toContain("safeDiagnosticBuildMetadata()");
+    expect(publicSource).toContain("publicCapabilitySummary()");
+    expect(publicSource).not.toContain("config: getEnvFlags()");
+    expect(publicSource).not.toContain("webhookSecretConfigured");
+    expect(publicSource).not.toContain("priceEnv");
+    expect(publicSource).not.toContain("env: health.env");
     expect(publicSource).not.toContain("apiRevision");
     expect(echoRoutes).toHaveLength(1);
     expect(buildRoutes).toHaveLength(1);
+    expect(routesProbeRoute).toBeGreaterThan(-1);
+    expect(echoRoute).toBeGreaterThan(-1);
+    expect(debugBuildRoute).toBeGreaterThan(-1);
+    expect(riskAgentMount).toBeGreaterThan(-1);
+    expect(routesProbeRoute).toBeLessThan(riskAgentMount);
+    expect(echoRoute).toBeLessThan(riskAgentMount);
+    expect(debugBuildRoute).toBeLessThan(riskAgentMount);
     expect(source).toContain('app.use("/api/status", statusRoutes)');
     expect(source).not.toContain('routeSource("statusRoutes.ts"), statusRoutes');
     expect(source).toContain('res.setHeader("x-route-source", "not-found")');
@@ -552,6 +568,8 @@ describe("API route ownership regression", () => {
       });
       expect(debugAllowed.status).toBe(200);
       expect(debugAllowed.body).toMatchObject({ ok: true, routeCheck: { landlordApplicationLinksMounted: true } });
+      expect(JSON.stringify(debugAllowed.body)).not.toContain("preview");
+      expect(JSON.stringify(debugAllowed.body)).not.toContain("VERCEL_ENV");
 
       const echoAllowed = await invokeApp(app, {
         method: "POST",
@@ -560,7 +578,9 @@ describe("API route ownership regression", () => {
         headers: { "x-internal-job-token": "secret-token" },
       });
       expect(echoAllowed.status).toBe(200);
-      expect(echoAllowed.body).toMatchObject({ ok: true, method: "POST", body: { ok: true } });
+      expect(echoAllowed.body).toMatchObject({ ok: true, method: "POST", bodyPresent: true });
+      expect(JSON.stringify(echoAllowed.body)).not.toContain("secret");
+      expect(JSON.stringify(echoAllowed.body)).not.toContain('"body"');
 
       const missing = await invokeApp(app, { method: "GET", url: "/api/unknown-route" });
       expect(missing.status).toBe(404);

@@ -270,6 +270,85 @@ app.get("/api/_build", rateLimitDiagnostics, (_req, res) => {
     ...safeDiagnosticBuildMetadata(),
   });
 });
+app.get(
+  "/api/__probe/tenants-mount",
+  rateLimitDiagnostics,
+  requireDiagnosticAccess("app.build.ts:/api/__probe/tenants-mount"),
+  (_req, res) => res.json({ ok: true, probe: "tenants-mount" })
+);
+app.get("/api/__probe/version", rateLimitDiagnostics, (_req, res) => {
+  res.setHeader("x-route-source", "app.build.ts:/api/__probe/version");
+  return res.json({ ok: true, marker: "probe-v1", ...safeDiagnosticBuildMetadata() });
+});
+app.get("/api/__probe/revision", rateLimitDiagnostics, (_req, res) => {
+  res.setHeader("x-route-source", "app.build.ts:/api/__probe/revision");
+  return res.json({
+    ok: true,
+    ...safeDiagnosticBuildMetadata(),
+  });
+});
+app.get(
+  "/api/__probe/routes",
+  rateLimitDiagnostics,
+  requireDiagnosticAccess("app.build.ts:/api/__probe/routes"),
+  (_req, res) => {
+    const appAny: any = app;
+    const stack = appAny?._router?.stack || [];
+    const mounts = stack
+      .filter((l: any) => l && l.name === "router" && l.regexp)
+      .map((l: any) => String(l.regexp));
+    const routes = stack
+      .filter((l: any) => l && l.route && l.route.path)
+      .map((l: any) => ({
+        path: l.route.path,
+        methods: l.route.methods,
+      }));
+
+    res.json({
+      ok: true,
+      mountsCount: mounts.length,
+      mounts,
+      routesCount: routes.length,
+      routes,
+      hasTenantsMount: mounts.some((s: string) => s.includes("tenants")),
+    });
+  }
+);
+app.post(
+  "/api/_echo",
+  rateLimitDiagnostics,
+  requireDiagnosticAccess("app.build.ts:/api/_echo"),
+  (req, res) => {
+    return res.json({
+      ok: true,
+      method: req.method,
+      path: req.path,
+      bodyPresent: req.body != null,
+    });
+  }
+);
+app.get(
+  "/api/__debug/build",
+  rateLimitDiagnostics,
+  requireDiagnosticAccess("app.build.ts:/api/__debug/build"),
+  (_req, res) => {
+    return res.json({
+      ok: true,
+      build: safeDiagnosticBuildMetadata(),
+      routeCheck: {
+        landlordApplicationLinksMounted: true,
+      },
+    });
+  }
+);
+app.get(
+  "/api/__debug/ping-application-links",
+  rateLimitDiagnostics,
+  requireDiagnosticAccess("debugPingApplicationLinks"),
+  (_req, res) => {
+    return res.json({ ok: true });
+  }
+);
 app.use("/api/status", rateLimitDiagnostics);
 app.use("/api/status", statusRoutes);
 
@@ -536,97 +615,12 @@ app.use("/api", routeSource("screeningReportRoutes.ts"), screeningReportRoutes);
 app.use("/api", tenantOnboardRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/landlord", landlordMicroLiveRoutes);
-app.get(
-  "/api/__probe/tenants-mount",
-  rateLimitDiagnostics,
-  requireDiagnosticAccess("app.build.ts:/api/__probe/tenants-mount"),
-  (_req, res) => res.json({ ok: true, probe: "tenants-mount" })
-);
-app.get("/api/__probe/version", rateLimitDiagnostics, (_req, res) => {
-  res.setHeader("x-route-source", "app.build.ts:/api/__probe/version");
-  return res.json({ ok: true, marker: "probe-v1", ...safeDiagnosticBuildMetadata() });
-});
-app.get("/api/__probe/revision", rateLimitDiagnostics, (_req, res) => {
-  res.setHeader("x-route-source", "app.build.ts:/api/__probe/revision");
-  return res.json({
-    ok: true,
-    ...safeDiagnosticBuildMetadata(),
-  });
-});
 app.use("/api/account", accountRoutes);
 app.use("/api/onboarding", routeSource("onboardingRoutes.ts"), onboardingRoutes);
 app.use("/api", routeSource("onboardingRoutes.ts"), onboardingRoutes);
 app.use("/api", routeSource("messagesRoutes.ts"), messagesRoutes);
 console.log(
   "[routes] /api/properties, /api/properties/:propertyId/units, /api/action-requests, /api/applications"
-);
-app.get(
-  "/api/__probe/routes",
-  rateLimitDiagnostics,
-  requireDiagnosticAccess("app.build.ts:/api/__probe/routes"),
-  (_req, res) => {
-    const appAny: any = app;
-    const stack = appAny?._router?.stack || [];
-    const mounts = stack
-      .filter((l: any) => l && l.name === "router" && l.regexp)
-      .map((l: any) => String(l.regexp));
-    const routes = stack
-      .filter((l: any) => l && l.route && l.route.path)
-      .map((l: any) => ({
-        path: l.route.path,
-        methods: l.route.methods,
-      }));
-
-    res.json({
-      ok: true,
-      mountsCount: mounts.length,
-      mounts,
-      routesCount: routes.length,
-      routes,
-      hasTenantsMount: mounts.some((s: string) => s.includes("tenants")),
-    });
-  }
-);
-
-// Echo for POST reachability
-app.post(
-  "/api/_echo",
-  rateLimitDiagnostics,
-  requireDiagnosticAccess("app.build.ts:/api/_echo"),
-  (req, res) => {
-    return res.json({
-      ok: true,
-      method: req.method,
-      path: req.path,
-      body: req.body ?? null,
-    });
-  }
-);
-
-app.get(
-  "/api/__debug/build",
-  rateLimitDiagnostics,
-  requireDiagnosticAccess("app.build.ts:/api/__debug/build"),
-  (_req, res) => {
-    return res.json({
-      ok: true,
-      build: safeDiagnosticBuildMetadata(),
-      vercel: { env: process.env.VERCEL_ENV || null },
-      routeCheck: {
-        landlordApplicationLinksMounted: true,
-        mountPath: "/api/landlord/application-links",
-      },
-    });
-  }
-);
-
-app.get(
-  "/api/__debug/ping-application-links",
-  rateLimitDiagnostics,
-  requireDiagnosticAccess("debugPingApplicationLinks"),
-  (_req, res) => {
-    return res.json({ ok: true });
-  }
 );
 
 // API 404 handler
