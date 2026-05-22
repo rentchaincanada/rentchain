@@ -63,14 +63,17 @@ router.get("/health", (_req, res) => {
   });
 });
 
-router.get("/_probe/billing", (_req, res) => {
-  res.setHeader("x-route-source", "publicRoutes.ts");
-  res.json({
-    ok: true,
-    billingExpectedPath: "/api/billing/checkout",
-    hint: "If POST /api/billing/checkout is 404, billingRoutes is not mounted in this build.",
-  });
-});
+router.get(
+  "/_probe/billing",
+  requireDiagnosticAccess("publicRoutes.ts:/_probe/billing"),
+  (_req, res) => {
+    res.json({
+      ok: true,
+      billingExpectedPath: "/api/billing/checkout",
+      hint: "If POST /api/billing/checkout is 404, billingRoutes is not mounted in this build.",
+    });
+  }
+);
 
 router.get("/health/stripe", async (_req, res) => {
   res.setHeader("x-route-source", "publicRoutes.ts");
@@ -136,7 +139,7 @@ router.get("/health/stripe", async (_req, res) => {
       STRIPE_PRICE_BUSINESS: has("STRIPE_PRICE_BUSINESS"),
     },
     deepChecked: deepCheckEnabled,
-    apiRevision: process.env.K_REVISION || null,
+    build: safeDiagnosticBuildMetadata(),
   });
 });
 
@@ -167,7 +170,7 @@ router.get("/health/screening-provider", async (_req, res) => {
     configured: health.configured,
     preflightOk: health.preflightOk,
     preflightDetail: health.preflightDetail || null,
-    apiRevision: process.env.COMMIT_SHA || process.env.GIT_SHA || null,
+    build: safeDiagnosticBuildMetadata(),
     ts: Date.now(),
   });
 });
