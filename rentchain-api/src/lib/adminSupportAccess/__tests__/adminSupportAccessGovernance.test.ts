@@ -191,6 +191,139 @@ describe("adminSupportAccessGovernance", () => {
     expectPayloadDoesNotContainValues(refs, ["raw provider dump", "secret-token", "evidence-2", "evidence-3"]);
   });
 
+  it("keeps privileged route scope refs metadata-only and excludes unrelated evidence/export/review refs", () => {
+    const context = classifyAdminSupportScope({
+      authority: {
+        actorId: "support-1",
+        actorRole: "support",
+        effectiveLandlordId: "support-1",
+        effectiveTenantId: null,
+        isAdmin: false,
+        isSupport: true,
+        isLandlord: false,
+        isTenant: false,
+        warnings: [],
+        errors: [],
+      },
+      requestedLandlordId: "landlord-1",
+      requestedTenantId: "tenant-1",
+    });
+
+    const auditRef = buildPrivilegedAccessAuditRef({
+      context,
+      action: "Support Route Scope Review",
+      occurredAt: "2026-05-22T10:00:00.000Z",
+      resourceRefs: [
+        {
+          resourceType: "admin_route",
+          resourceId: "/api/admin/support-operations",
+          label: "Support operations route",
+          landlordId: "landlord-1",
+          tenantId: "tenant-1",
+          routeSource: "adminSupportOperationsRoutes.ts",
+          debugPayload: { token: "secret-token" },
+        },
+        {
+          resourceType: "review_workspace",
+          resourceId: "wrong-landlord-review",
+          label: "Wrong landlord review",
+          landlordId: "landlord-2",
+          tenantId: "tenant-1",
+        },
+      ],
+      evidenceRefs: [
+        {
+          resourceType: "evidence_pack",
+          resourceId: "evidence-1",
+          label: "Scoped evidence pack",
+          landlordId: "landlord-1",
+          tenantId: "tenant-1",
+          rawProviderPayload: "provider-data",
+        },
+        {
+          resourceType: "export_package",
+          resourceId: "wrong-tenant-export",
+          label: "Wrong tenant export",
+          landlordId: "landlord-1",
+          tenantId: "tenant-2",
+        },
+      ],
+    });
+
+    expect(auditRef).toEqual(
+      expect.objectContaining({
+        accessMode: "support_scoped_diagnostic",
+        visibilityClass: "admin_support_internal",
+        tenantVisible: false,
+        metadataOnly: true,
+        supportSafe: true,
+        sensitivePayloadIncluded: false,
+        restrictedPayloadIncluded: false,
+        autonomousEscalationEnabled: false,
+      })
+    );
+    expect(auditRef.resourceRefs).toEqual([
+      expect.objectContaining({
+        resourceType: "admin_route",
+        resourceId: "/api/admin/support-operations",
+        label: "Support operations route",
+        landlordId: "landlord-1",
+        tenantId: "tenant-1",
+        internalReference: true,
+      }),
+    ]);
+    expect(auditRef.evidenceRefs).toEqual([
+      expect.objectContaining({
+        resourceType: "evidence_pack",
+        resourceId: "evidence-1",
+        label: "Scoped evidence pack",
+        landlordId: "landlord-1",
+        tenantId: "tenant-1",
+        internalReference: true,
+      }),
+    ]);
+    expectNoRestrictedProjectionFields(auditRef);
+    expectPayloadDoesNotContainValues(auditRef, [
+      "secret-token",
+      "provider-data",
+      "wrong-landlord-review",
+      "wrong-tenant-export",
+      "routeSource",
+      "debugPayload",
+    ]);
+  });
+
+  it("does not imply impersonation, tenant-visible internals, or autonomous escalation for admin/support contexts", () => {
+    const adminContext = classifyAdminSupportScope({
+      authority: {
+        actorId: "admin-1",
+        actorRole: "admin",
+        effectiveLandlordId: "admin-1",
+        effectiveTenantId: null,
+        isAdmin: true,
+        isSupport: false,
+        isLandlord: false,
+        isTenant: false,
+        warnings: [],
+        errors: [],
+      },
+      requestedLandlordId: "landlord-1",
+      requestedTenantId: "tenant-1",
+    });
+
+    expect(adminContext).toEqual(
+      expect.objectContaining({
+        accessMode: "admin_scoped_review",
+        tenantVisible: false,
+        crossLandlordVisibilityEnabled: false,
+        impersonationEnabled: false,
+        autonomousEscalationEnabled: false,
+        financialMutationEnabled: false,
+        requiresAuditEvent: true,
+      })
+    );
+  });
+
   it("builds metadata-only audit refs without autonomous escalation or tenant-visible internals", () => {
     const context = classifyAdminSupportScope({
       authority: {
