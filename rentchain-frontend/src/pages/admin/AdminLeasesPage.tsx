@@ -34,6 +34,14 @@ function IntegrityPill({ lease }: { lease: AdminLeaseView }) {
   return <Pill tone="default">Healthy</Pill>;
 }
 
+function leaseLabel(lease: AdminLeaseView) {
+  return lease.leaseDisplayLabel || `${lease.propertyName || "Property not linked"} · ${lease.unitNumber ? `Unit ${lease.unitNumber}` : "Unit not assigned"}`;
+}
+
+function landlordLabel(lease: AdminLeaseView) {
+  return lease.landlordDisplayName || "Landlord account";
+}
+
 export const AdminLeasesPage: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -303,14 +311,15 @@ export const AdminLeasesPage: React.FC = () => {
                         style={{ cursor: "pointer", borderBottom: "1px solid rgba(15, 23, 42, 0.06)" }}
                       >
                         <td style={{ padding: "12px" }}>
-                          <div style={{ fontWeight: 600 }}>{item.id}</div>
+                          <div style={{ fontWeight: 600 }}>{leaseLabel(item)}</div>
+                          <div style={{ color: "#64748b", fontSize: 13 }}>Admin lease record</div>
                         </td>
                         <td style={{ padding: "12px" }}>
-                          <div>{item.propertyName || "Unknown property"}</div>
-                          <div style={{ color: "#64748b", fontSize: 13 }}>{item.unitNumber ? `Unit ${item.unitNumber}` : "No unit"}</div>
+                          <div>{item.propertyName || "Property not linked"}</div>
+                          <div style={{ color: "#64748b", fontSize: 13 }}>{item.unitNumber ? `Unit ${item.unitNumber}` : "Unit not assigned"}</div>
                         </td>
                         <td style={{ padding: "12px" }}>{item.tenantNames.length ? item.tenantNames.join(", ") : "—"}</td>
-                        <td style={{ padding: "12px" }}>{item.landlordId || "—"}</td>
+                        <td style={{ padding: "12px" }}>{landlordLabel(item)}</td>
                         <td style={{ padding: "12px" }}>
                           <Pill tone="default">{formatValue(item.status)}</Pill>
                         </td>
@@ -377,8 +386,8 @@ export const AdminLeasesPage: React.FC = () => {
         >
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
             <div>
-              <div style={{ fontWeight: 700, fontSize: 18 }}>{selectedLease.id}</div>
-              <div style={{ color: "#64748b", fontSize: 14 }}>{selectedLease.propertyName || "Unknown property"}</div>
+              <div style={{ fontWeight: 700, fontSize: 18 }}>{leaseLabel(selectedLease)}</div>
+              <div style={{ color: "#64748b", fontSize: 14 }}>{landlordLabel(selectedLease)}</div>
             </div>
             <Button variant="secondary" onClick={() => setSelectedLease(null)}>
               Close
@@ -394,17 +403,14 @@ export const AdminLeasesPage: React.FC = () => {
 
           <Card style={{ display: "grid", gap: 8 }}>
             <div style={{ fontWeight: 600 }}>Property / Unit</div>
-            <div>{selectedLease.propertyName || "Unknown property"}</div>
-            <div>{selectedLease.propertyId || "No property id"}</div>
-            <div>{selectedLease.unitNumber ? `Unit ${selectedLease.unitNumber}` : "No unit number"}</div>
-            <div>{selectedLease.unitId || "No unit id"}</div>
-            <div>{selectedLease.landlordId || "No landlord id"}</div>
+            <div>{selectedLease.propertyName || "Property not linked"}</div>
+            <div>{selectedLease.unitNumber ? `Unit ${selectedLease.unitNumber}` : "Unit not assigned"}</div>
+            <div>{landlordLabel(selectedLease)}</div>
           </Card>
 
           <Card style={{ display: "grid", gap: 8 }}>
             <div style={{ fontWeight: 600 }}>Tenant(s)</div>
             <div>{selectedLease.tenantNames.length ? selectedLease.tenantNames.join(", ") : "No linked tenants"}</div>
-            <div>{selectedLease.tenantIds.length ? selectedLease.tenantIds.join(", ") : "No tenant ids"}</div>
           </Card>
 
           <Card style={{ display: "grid", gap: 8 }}>

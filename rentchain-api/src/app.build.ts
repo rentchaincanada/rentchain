@@ -550,16 +550,16 @@ app.use("/api/ledger", routeSource("ledgerRoutes.ts"), ledgerRoutes);
 app.use("/api/dashboard", routeSource("dashboardRoutes.ts"), dashboardRoutes);
 app.use("/api/landlord", routeSource("landlordActivationRoutes.ts"), landlordActivationRoutes);
 app.use("/api/application-links", routeSource("landlordApplicationLinksRoutes.ts"), landlordApplicationLinksRoutes);
+app.use("/api/tenant-invites", rateLimitTenantWorkspaceEntry);
+app.use("/api/tenant-invites", tenantInvitesRoutes);
+app.use("/api/tenant/invite", rateLimitTenantWorkspaceEntry);
+app.use("/api/tenant", routeSource("tenantPortalRoutes.ts"), tenantPortalRoutes);
 app.use("/api", routeSource("referralsRoutes.ts"), referralsRoutes);
 app.use(
   "/api/landlord/application-links",
   routeSource("landlordApplicationLinksRoutes.ts"),
   landlordApplicationLinksRoutes
 );
-app.use("/api/tenant-invites", rateLimitTenantWorkspaceEntry);
-app.use("/api/tenant-invites", tenantInvitesRoutes);
-app.use("/api/tenant/invite", rateLimitTenantWorkspaceEntry);
-app.use("/api/tenant", routeSource("tenantPortalRoutes.ts"), tenantPortalRoutes);
 app.use("/api/recipient", routeSource("recipientTrustReviewRoutes.ts"), recipientTrustReviewRoutes);
 app.use("/api/tenant", tenantParticipationRoutes);
 app.use("/api/tenant", tenantOnboardingHardeningRoutes);

@@ -131,6 +131,7 @@ Dashboard and operations surfaces continue consuming their existing safe summari
 - Support console routes remain admin-gated and can show dedicated safe diagnostic resources; future support surfaces should use this helper or an equivalent audience-aware projection contract.
 - Future persisted impersonation sessions should use the same audience categories before any landlord, tenant, export, or timeline projection.
 - Server-side revocation/session persistence remains outside this mission.
+- Tenant trust exports remain JSON-first as the canonical audit package in this phase. A future mission should add a tenant-friendly PDF trust export summary while preserving JSON as the canonical, projection-safe audit package.
 
 ## Guardrail Confirmation
 

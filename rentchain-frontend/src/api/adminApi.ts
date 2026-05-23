@@ -82,11 +82,13 @@ export type FetchAdminTenantsParams = {
 
 export type AdminLeaseView = {
   id: string;
+  leaseDisplayLabel: string;
   propertyId: string | null;
   propertyName: string | null;
   unitId: string | null;
   unitNumber: string | null;
   landlordId: string | null;
+  landlordDisplayName: string | null;
   tenantIds: string[];
   tenantNames: string[];
   status: string | null;

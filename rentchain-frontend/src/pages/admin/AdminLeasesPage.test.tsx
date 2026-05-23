@@ -37,11 +37,13 @@ describe("AdminLeasesPage", () => {
       items: [
         {
           id: "lease-1",
+          leaseDisplayLabel: "Coburg Rd · Unit 101 · Jane Tenant",
           propertyId: "prop-1",
           propertyName: "Coburg Rd",
           unitId: "unit-1",
           unitNumber: "101",
           landlordId: "landlord-1",
+          landlordDisplayName: "Harbour Homes",
           tenantIds: ["tenant-1"],
           tenantNames: ["Jane Tenant"],
           status: "active",
@@ -87,7 +89,9 @@ describe("AdminLeasesPage", () => {
       });
     });
 
-    expect(screen.getByText("lease-1")).toBeInTheDocument();
+    expect(screen.getByText("Coburg Rd · Unit 101 · Jane Tenant")).toBeInTheDocument();
+    expect(screen.queryByText("lease-1")).not.toBeInTheDocument();
+    expect(screen.queryByText("landlord-1")).not.toBeInTheDocument();
   });
 
   it("opens the lease detail drawer when a row is selected", async () => {
@@ -99,14 +103,19 @@ describe("AdminLeasesPage", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText("lease-1")).toBeInTheDocument();
-    fireEvent.click(screen.getAllByText("lease-1")[0]);
+    expect(await screen.findByText("Coburg Rd · Unit 101 · Jane Tenant")).toBeInTheDocument();
+    fireEvent.click(screen.getAllByText("Coburg Rd · Unit 101 · Jane Tenant")[0]);
 
     const drawer = screen.getByRole("dialog", { name: "Lease detail drawer" });
     expect(drawer).toBeInTheDocument();
-    expect(within(drawer).getByText("prop-1")).toBeInTheDocument();
+    expect(within(drawer).getByText("Coburg Rd · Unit 101 · Jane Tenant")).toBeInTheDocument();
+    expect(within(drawer).queryByText("prop-1")).not.toBeInTheDocument();
+    expect(within(drawer).queryByText("unit-1")).not.toBeInTheDocument();
+    expect(within(drawer).queryByText("tenant-1")).not.toBeInTheDocument();
+    expect(within(drawer).queryByText("lease-1")).not.toBeInTheDocument();
+    expect(within(drawer).queryByText("landlord-1")).not.toBeInTheDocument();
     expect(within(drawer).getByText("Unit 101")).toBeInTheDocument();
     expect(within(drawer).getByText("Jane Tenant")).toBeInTheDocument();
-    expect(within(drawer).getByText("landlord-1")).toBeInTheDocument();
+    expect(within(drawer).getAllByText("Harbour Homes").length).toBeGreaterThan(0);
   });
 });
