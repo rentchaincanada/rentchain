@@ -5,7 +5,17 @@ import { Button, Card, Pill, Section } from "../../components/ui/Ui";
 import { useToast } from "../../components/ui/ToastProvider";
 import { fetchAdminOverview, type AdminOverview } from "../../api/adminApi";
 
-const QUICK_LINKS = [
+type AdminQuickLinkCountKey = keyof Pick<
+  AdminOverview["summary"],
+  "totalProperties" | "totalTenants" | "totalLeases" | "integrityWarnings"
+>;
+
+const QUICK_LINKS: Array<{
+  title: string;
+  to: string;
+  description: string;
+  countKey: AdminQuickLinkCountKey | null;
+}> = [
   {
     title: "Properties",
     to: "/admin/properties",
@@ -29,6 +39,12 @@ const QUICK_LINKS = [
     to: "/admin/integrity",
     description: "Integrity dashboard is the next phase for deeper issue review.",
     countKey: "integrityWarnings" as const,
+  },
+  {
+    title: "Security incidents",
+    to: "/admin/security/incidents",
+    description: "Review metadata-only security, impersonation, policy, and projection signals.",
+    countKey: null,
   },
 ];
 
@@ -133,7 +149,7 @@ export const AdminDashboardPage: React.FC = () => {
                 <Card key={link.to} style={{ display: "grid", gap: 10 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
                     <div style={{ fontWeight: 700 }}>{link.title}</div>
-                    <Pill tone="accent">{overview.summary[link.countKey]}</Pill>
+                    {link.countKey ? <Pill tone="accent">{overview.summary[link.countKey]}</Pill> : <Pill tone="muted">Review</Pill>}
                   </div>
                   <div style={{ color: "#475569", minHeight: 40 }}>{link.description}</div>
                   <Link to={link.to} style={{ color: "#2563eb", fontWeight: 600, textDecoration: "none" }}>

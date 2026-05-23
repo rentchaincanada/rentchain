@@ -130,6 +130,7 @@ import adminNotificationRoutes from "./routes/adminNotificationRoutes";
 import adminSupportOperationsRoutes from "./routes/adminSupportOperationsRoutes";
 import adminObservabilityRoutes from "./routes/adminObservabilityRoutes";
 import adminObservabilityIncidentReadinessRoutes from "./routes/adminObservabilityIncidentReadinessRoutes";
+import adminSecurityIncidentRoutes from "./routes/adminSecurityIncidentRoutes";
 import adminReleaseGovernanceRoutes from "./routes/adminReleaseGovernanceRoutes";
 import adminPublicExposureHardeningRoutes from "./routes/adminPublicExposureHardeningRoutes";
 import adminCommercialReadinessRoutes from "./routes/adminCommercialReadinessRoutes";
@@ -423,6 +424,8 @@ app.use("/api/admin", routeSource("adminObservabilityRoutes.ts"), adminObservabi
 console.log("[route-mount] adminObservabilityRoutes mounted at /api/admin");
 app.use("/api/admin", routeSource("adminObservabilityIncidentReadinessRoutes.ts"), adminObservabilityIncidentReadinessRoutes);
 console.log("[route-mount] adminObservabilityIncidentReadinessRoutes mounted at /api/admin");
+app.use("/api/admin", routeSource("adminSecurityIncidentRoutes.ts"), adminSecurityIncidentRoutes);
+console.log("[route-mount] adminSecurityIncidentRoutes mounted at /api/admin");
 app.use("/api/admin", routeSource("adminReleaseGovernanceRoutes.ts"), adminReleaseGovernanceRoutes);
 console.log("[route-mount] adminReleaseGovernanceRoutes mounted at /api/admin");
 app.use("/api/admin", routeSource("adminPublicExposureHardeningRoutes.ts"), adminPublicExposureHardeningRoutes);

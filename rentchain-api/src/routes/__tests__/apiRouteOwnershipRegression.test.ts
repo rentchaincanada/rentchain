@@ -218,6 +218,7 @@ async function buildRuntimeOwnershipApp() {
   const internalReportsRoutes = (await import("../internalReportsRoutes")).default;
   const telemetryRoutes = (await import("../telemetryRoutes")).default;
   const screeningRoutes = (await import("../screeningRoutes")).default;
+  const adminSecurityIncidentRoutes = (await import("../adminSecurityIncidentRoutes")).default;
   const screeningJobsAdminRoutes = (await import("../screeningJobsAdminRoutes")).default;
   const { stripeWebhookHandler } = await import("../stripeScreeningOrdersWebhookRoutes");
   const { transunionWebhookHandler } = await import("../transunionWebhookRoutes");
@@ -257,6 +258,7 @@ async function buildRuntimeOwnershipApp() {
   );
   app.use("/api", routeSource("telemetryRoutes.ts"), telemetryRoutes);
   app.use("/api", routeSource("screeningRoutes.ts"), screeningRoutes);
+  app.use("/api/admin", routeSource("adminSecurityIncidentRoutes.ts"), adminSecurityIncidentRoutes);
   app.use("/api", routeSource("screeningJobsAdminRoutes.ts"), screeningJobsAdminRoutes);
   app.use("/api", (_req, res) => {
     res.setHeader("x-route-source", "not-found");
@@ -393,6 +395,9 @@ describe("API route ownership regression", () => {
     const incidentReadinessMount = source.indexOf(
       'app.use("/api/admin", routeSource("adminObservabilityIncidentReadinessRoutes.ts"), adminObservabilityIncidentReadinessRoutes)'
     );
+    const securityIncidentMount = source.indexOf(
+      'app.use("/api/admin", routeSource("adminSecurityIncidentRoutes.ts"), adminSecurityIncidentRoutes)'
+    );
     const publicExposureMount = source.indexOf(
       'app.use("/api/admin", routeSource("adminPublicExposureHardeningRoutes.ts"), adminPublicExposureHardeningRoutes)'
     );
@@ -401,22 +406,29 @@ describe("API route ownership regression", () => {
     );
     const impersonationMount = source.indexOf('app.use("/api/impersonation", routeSource("impersonationRoutes.ts"), impersonationRoutes)');
     const adminRoutesMount = source.indexOf('app.use("/api/admin", routeSource("adminRoutes.ts"), adminRoutes)');
+    const adminScreeningUsageMount = source.indexOf(
+      'app.use("/api/admin", routeSource("adminScreeningUsageRoutes.ts"), adminScreeningUsageRoutes)'
+    );
     const screeningJobsMount = source.indexOf('app.use("/api", routeSource("screeningJobsAdminRoutes.ts"), screeningJobsAdminRoutes)');
     const apiCatchall = source.indexOf('app.use("/api", (_req, res) => {');
 
     expect(supportConsoleMount).toBeGreaterThan(-1);
     expect(supportOperationsMount).toBeGreaterThan(-1);
     expect(incidentReadinessMount).toBeGreaterThan(-1);
+    expect(securityIncidentMount).toBeGreaterThan(-1);
     expect(publicExposureMount).toBeGreaterThan(-1);
     expect(pdfObservabilityMount).toBeGreaterThan(-1);
     expect(impersonationMount).toBeGreaterThan(-1);
     expect(adminRoutesMount).toBeGreaterThan(-1);
+    expect(adminScreeningUsageMount).toBeGreaterThan(-1);
     expect(screeningJobsMount).toBeGreaterThan(-1);
     expect(apiCatchall).toBeGreaterThan(-1);
 
     expect(supportConsoleMount).toBeLessThan(adminRoutesMount);
     expect(supportOperationsMount).toBeLessThan(adminRoutesMount);
     expect(incidentReadinessMount).toBeLessThan(adminRoutesMount);
+    expect(securityIncidentMount).toBeLessThan(adminRoutesMount);
+    expect(securityIncidentMount).toBeLessThan(adminScreeningUsageMount);
     expect(publicExposureMount).toBeLessThan(adminRoutesMount);
     expect(pdfObservabilityMount).toBeLessThan(adminRoutesMount);
     expect(impersonationMount).toBeLessThan(screeningJobsMount);
@@ -485,6 +497,38 @@ describe("API route ownership regression", () => {
     expect(screeningHistoryRes.headers["x-route-source"]).toBe("screeningRoutes.ts");
     expect(screeningHistoryRes.headers["x-route-source"]).not.toBe("screeningJobsAdminRoutes.ts");
     expect(JSON.stringify(screeningHistoryRes.body)).not.toContain("secret");
+  });
+
+  it("keeps admin security incidents owned by security incident routes before screening usage fallback", async () => {
+    authState.user = { id: "admin-1", role: "admin", permissions: ["system.admin"] };
+    const app = await buildRuntimeOwnershipApp();
+
+    const res = await invokeApp(app, {
+      method: "GET",
+      url: "/api/admin/security/incidents?limit=50",
+      headers: { authorization: "Bearer admin-token" },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.headers["x-route-source"]).toBe("adminSecurityIncidentRoutes.ts");
+    expect(res.body).toEqual(
+      expect.objectContaining({
+        ok: true,
+        incidents: [],
+        summary: expect.objectContaining({ metadataOnly: true }),
+      })
+    );
+
+    authState.user = { id: "landlord-1", role: "landlord", permissions: [] };
+    const denied = await invokeApp(app, {
+      method: "GET",
+      url: "/api/admin/security/incidents?limit=50",
+      headers: { authorization: "Bearer landlord-token" },
+    });
+
+    expect(denied.status).toBe(403);
+    expect(denied.headers["x-route-source"]).toBe("adminSecurityIncidentRoutes.ts");
+    expect(denied.body?.error).not.toBe("Not Found");
   });
 
   it("keeps webhook requests public and owned by webhook routers", async () => {
