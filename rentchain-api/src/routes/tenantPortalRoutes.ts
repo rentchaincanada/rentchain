@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "crypto";
 import { Router } from "express";
 import { authenticateJwt } from "../middleware/authMiddleware";
+import { routeSource } from "../middleware/routeSource";
 import { db, FieldValue } from "../config/firebase";
 import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
 import { sendEmail } from "../services/emailService";
@@ -82,6 +83,7 @@ import { getSignedDownloadUrl } from "../lib/gcsSignedUrl";
 
 const router = Router();
 router.use(authenticateJwt);
+const tenantPortalRouteSource = routeSource("tenantPortalRoutes.ts");
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -2855,6 +2857,7 @@ function documentCategoryForLabel(value: string): string {
   if (normalized.includes("identity") || normalized.includes("id") || normalized.includes("passport") || normalized.includes("license")) {
     return "Identity";
   }
+  if (normalized.includes("schedule a") || normalized.includes("schedulea")) return "Attachments";
   if (normalized.includes("lease")) return "Lease";
   if (normalized.includes("invite")) return "Invite";
   return "Documents";
@@ -3474,9 +3477,11 @@ function buildTenantDocumentWorkspace(params: {
   attachments: Array<any>;
   profile: Awaited<ReturnType<typeof loadTenantProfileProjection>>;
   leaseDocumentContext?: TenantLeaseDocumentContext | null;
+  scheduleADocumentContext?: TenantLeaseDocumentContext | null;
 }) {
   const checklist = Array.isArray(params.profile?.identity?.documentChecklist) ? params.profile.identity.documentChecklist : [];
   const leaseDocumentContext = params.leaseDocumentContext || null;
+  const scheduleADocumentContext = params.scheduleADocumentContext || null;
   const contextAttachment =
     leaseDocumentContext?.documentUrl &&
     leaseDocumentContext.documentStatus !== "missing" &&
@@ -3498,8 +3503,29 @@ function buildTenantDocumentWorkspace(params: {
           source: leaseDocumentContext.source,
         }
       : null;
+  const scheduleAContextAttachment =
+    scheduleADocumentContext?.documentUrl &&
+    scheduleADocumentContext.documentStatus !== "missing"
+      ? {
+          id: scheduleADocumentContext.documentId || `schedule-a-context-${scheduleADocumentContext.leaseId || "current"}`,
+          tenantId: scheduleADocumentContext.tenantId || null,
+          leaseId: scheduleADocumentContext.leaseId || null,
+          propertyId: scheduleADocumentContext.propertyId || null,
+          unitId: scheduleADocumentContext.unitId || null,
+          ledgerItemId: scheduleADocumentContext.leaseId || null,
+          title: "Schedule A",
+          fileName: "schedule-a.pdf",
+          category: "Attachments",
+          purpose: "SCHEDULE_A",
+          purposeLabel: "Schedule A",
+          url: scheduleADocumentContext.documentUrl,
+          createdAt: 0,
+          source: scheduleADocumentContext.source,
+        }
+      : null;
   const attachments = dedupeTenantVisibleLeaseAttachments([
     ...(contextAttachment ? [contextAttachment] : []),
+    ...(scheduleAContextAttachment ? [scheduleAContextAttachment] : []),
     ...(Array.isArray(params.attachments) ? params.attachments : []),
   ]);
 
@@ -4096,7 +4122,7 @@ router.post("/identity/export", requireTenantWorkspaceIdentity, async (req: any,
   });
 });
 
-router.get("/trust-exports", requireTenantWorkspaceIdentity, async (req: any, res) => {
+router.get("/trust-exports", tenantPortalRouteSource, requireTenantWorkspaceIdentity, async (req: any, res) => {
   const context = await resolveWorkspaceContextOrRespond(req, res);
   if (!context) return;
 
@@ -4117,7 +4143,7 @@ router.get("/trust-exports", requireTenantWorkspaceIdentity, async (req: any, re
   }
 });
 
-router.post("/trust-exports/preview", requireTenantWorkspaceIdentity, async (req: any, res) => {
+router.post("/trust-exports/preview", tenantPortalRouteSource, requireTenantWorkspaceIdentity, async (req: any, res) => {
   const context = await resolveWorkspaceContextOrRespond(req, res);
   if (!context) return;
 
@@ -4147,7 +4173,7 @@ router.post("/trust-exports/preview", requireTenantWorkspaceIdentity, async (req
   }
 });
 
-router.post("/trust-exports", requireTenantWorkspaceIdentity, async (req: any, res) => {
+router.post("/trust-exports", tenantPortalRouteSource, requireTenantWorkspaceIdentity, async (req: any, res) => {
   const context = await resolveWorkspaceContextOrRespond(req, res);
   if (!context) return;
 
@@ -4180,7 +4206,7 @@ router.post("/trust-exports", requireTenantWorkspaceIdentity, async (req: any, r
   }
 });
 
-router.post("/trust-exports/:id/revoke", requireTenantWorkspaceIdentity, async (req: any, res) => {
+router.post("/trust-exports/:id/revoke", tenantPortalRouteSource, requireTenantWorkspaceIdentity, async (req: any, res) => {
   const context = await resolveWorkspaceContextOrRespond(req, res);
   if (!context) return;
 
@@ -7077,6 +7103,7 @@ router.get("/attachments", requireTenantWorkspaceIdentity, async (req: any, res)
       attachments: rawAttachments,
       profile,
       leaseDocumentContext: workspaceData.lease?.leaseDocumentContext || (profile.profile?.lease as any)?.leaseDocumentContext || null,
+      scheduleADocumentContext: workspaceData.lease?.scheduleADocumentContext || (profile.profile?.lease as any)?.scheduleADocumentContext || null,
     });
 
     return res.json({
@@ -7086,6 +7113,7 @@ router.get("/attachments", requireTenantWorkspaceIdentity, async (req: any, res)
       guidance: documentWorkspace.guidance,
       updatedAt: documentWorkspace.updatedAt,
       leaseDocumentContext: workspaceData.lease?.leaseDocumentContext || (profile.profile?.lease as any)?.leaseDocumentContext || null,
+      scheduleADocumentContext: workspaceData.lease?.scheduleADocumentContext || (profile.profile?.lease as any)?.scheduleADocumentContext || null,
     });
   } catch (err) {
     console.error("[tenant/attachments] failed", {

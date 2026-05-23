@@ -8,6 +8,14 @@ function formatDate(value: string | number | null) {
   return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleDateString();
 }
 
+function propertyDisplayName(item: AdminPropertyView) {
+  return item.displayLabel || item.name || "Property not labelled";
+}
+
+function ownerDisplayName(item: AdminPropertyView) {
+  return item.ownerDisplayName || item.ownerStatusLabel || "Owner profile unavailable";
+}
+
 type Props = {
   items: AdminPropertyView[];
   sortBy: "createdAt" | "updatedAt" | "name";
@@ -52,14 +60,14 @@ export const AdminDataTable: React.FC<Props> = ({ items, sortBy, sortDir, onSort
               style={{ borderBottom: "1px solid rgba(148,163,184,0.14)", cursor: "pointer" }}
             >
               <td style={{ padding: "12px" }}>
-                <div style={{ fontWeight: 700 }}>{item.name || item.id}</div>
-                <div style={{ fontSize: 12, color: "#64748b" }}>{item.id}</div>
+                <div style={{ fontWeight: 700 }}>{propertyDisplayName(item)}</div>
+                <div style={{ fontSize: 12, color: "#64748b" }}>Admin property record</div>
               </td>
               <td style={{ padding: "12px" }}>{[item.address1, item.city].filter(Boolean).join(", ") || "--"}</td>
               <td style={{ padding: "12px" }}>{item.province || "--"}</td>
               <td style={{ padding: "12px" }}>
-                <div>{item.ownerUserId || "--"}</div>
-                <div style={{ fontSize: 12, color: "#64748b" }}>{item.landlordId || "--"}</div>
+                <div>{ownerDisplayName(item)}</div>
+                <div style={{ fontSize: 12, color: "#64748b" }}>{item.ownerStatusLabel || "Ownership status unavailable"}</div>
               </td>
               <td style={{ padding: "12px" }}>{item.unitCount}</td>
               <td style={{ padding: "12px" }}>{item.occupiedUnitCount}</td>

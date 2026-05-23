@@ -1828,6 +1828,7 @@ describe("tenantPortalRoutes foundation", () => {
     });
 
     expect(missingConsent.status).toBe(400);
+    expect(missingConsent.headers["x-route-source"]).toBe("tenantPortalRoutes.ts");
     expect(missingConsent.body?.error).toBe("TENANT_TRUST_EXPORT_CONSENT_REQUIRED");
 
     const preview = await invokeRouter(router, {
@@ -1871,6 +1872,7 @@ describe("tenantPortalRoutes foundation", () => {
     });
 
     expect(prepared.status).toBe(200);
+    expect(prepared.headers["x-route-source"]).toBe("tenantPortalRoutes.ts");
     expect(prepared.body?.data?.lifecycle).toBe("prepared");
     expect(prepared.body?.data?.consent?.granted).toBe(true);
     expect(prepared.body?.data?.package?.status).toBe("export_ready");
@@ -1926,6 +1928,7 @@ describe("tenantPortalRoutes foundation", () => {
       },
     });
     expect(listed.status).toBe(200);
+    expect(listed.headers["x-route-source"]).toBe("tenantPortalRoutes.ts");
     expect(listed.body?.data?.items?.[0]?.exportId).toBe(exportId);
 
     const revoked = await invokeRouter(router, {
@@ -3366,6 +3369,59 @@ describe("tenantPortalRoutes foundation", () => {
         ["uploaded", "missing", "pending_review", "verified", "needs_attention", "reupload_requested"].includes(item.status)
       )
     ).toBe(true);
+  });
+
+  it("includes tenant-safe Schedule A attachments in the document vault without making them primary lease documents", async () => {
+    ensureCollection("leases").set("lease-1", {
+      ...(ensureCollection("leases").get("lease-1") || {}),
+      status: "active",
+      documentUrl: null,
+      approvedDocumentUrl: null,
+      documentRef: null,
+      leaseDocument: null,
+      scheduleADocument: {
+        bucket: "test-bucket",
+        path: "leases/landlord-1/draft-1/schedule-a-v1.pdf",
+      },
+      internalOnly: "support-only",
+      realActorId: "support-operator",
+    });
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/attachments",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.summary?.total).toBeGreaterThan(0);
+    expect(res.body?.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          label: "SCHEDULE_A — Schedule A",
+          category: "Attachments",
+          purpose: "SCHEDULE_A",
+          purposeLabel: "Schedule A",
+          fileName: "schedule-a.pdf",
+          url: "https://signed.example/leases/landlord-1/draft-1/schedule-a-v1.pdf",
+        }),
+      ])
+    );
+    const primaryLeaseItems = res.body?.data?.filter((item: any) => item.category === "Lease" && item.purpose === "LEASE");
+    expect(primaryLeaseItems).toEqual([]);
+    const payload = JSON.stringify(res.body);
+    expect(payload).not.toContain("support-operator");
+    expect(payload).not.toContain("internalOnly");
+    expect(payload).not.toContain("storagePath");
+    expect(payload).not.toContain("test-bucket");
   });
 
   it("dedupes duplicate visible Lease attachments in the tenant document vault", async () => {

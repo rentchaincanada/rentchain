@@ -19,6 +19,12 @@ const { fakeDb, resetFakeDb, seedDoc } = (() => {
   function makeQuery(name: string, filters: Array<{ field: string; op: string; value: any }> = []) {
     return {
       where: (field: string, op: string, value: any) => makeQuery(name, [...filters, { field, op, value }]),
+      doc: (id: string) => ({
+        get: async () => {
+          const doc = ensureCollection(name).get(id);
+          return { id, exists: !!doc, data: () => doc?.data };
+        },
+      }),
       get: async () => {
         const docs = Array.from(ensureCollection(name).values())
           .filter((doc) => matches(doc, filters))
@@ -34,6 +40,7 @@ const { fakeDb, resetFakeDb, seedDoc } = (() => {
     fakeDb: {
       collection: (name: string) => ({
         where: (field: string, op: string, value: any) => makeQuery(name, [{ field, op, value }]),
+        doc: (id: string) => makeQuery(name).doc(id),
         get: async () => makeQuery(name).get(),
       }),
     },
@@ -82,6 +89,9 @@ describe("adminPropertyView", () => {
     seedDoc("units", "unit-1", { propertyId: "prop-1", occupancyStatus: "occupied" });
     seedDoc("units", "unit-2", { propertyId: "prop-1", occupancyStatus: "vacant" });
     seedDoc("units", "unit-3", { propertyId: "prop-2", occupancyStatus: "occupied" });
+    seedDoc("landlords", "landlord-1", { businessName: "Harbour Homes" });
+    seedDoc("landlords", "landlord-2", { displayName: "Summit Rentals" });
+    seedDoc("users", "owner-1", { displayName: "Owner One" });
   });
 
   it("returns only safe admin property view fields with counts", async () => {
@@ -91,9 +101,12 @@ describe("adminPropertyView", () => {
     expect(result.items[0]).toEqual(
       expect.objectContaining({
         id: expect.any(String),
+        displayLabel: expect.any(String),
         name: expect.anything(),
         ownerUserId: expect.anything(),
         landlordId: expect.anything(),
+        ownerDisplayName: expect.anything(),
+        ownerStatusLabel: expect.any(String),
         managerUserIds: expect.any(Array),
         unitCount: expect.any(Number),
         occupiedUnitCount: expect.any(Number),
@@ -102,6 +115,9 @@ describe("adminPropertyView", () => {
       })
     );
     expect(result.items[0]).not.toHaveProperty("internalNotes");
+    expect(result.items.find((item) => item.id === "prop-1")?.ownerDisplayName).toBe("Owner One");
+    expect(result.items.find((item) => item.id === "prop-2")?.ownerDisplayName).toBe("Summit Rentals");
+    expect(result.items.find((item) => item.id === "prop-2")?.ownerStatusLabel).toBe("Landlord linked / owner profile missing");
   });
 
   it("filters by search and province", async () => {

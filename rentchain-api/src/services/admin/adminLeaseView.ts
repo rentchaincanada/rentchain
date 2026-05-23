@@ -4,11 +4,13 @@ type FirestoreLike = Pick<FirebaseFirestore.Firestore, "collection">;
 
 export type AdminLeaseView = {
   id: string;
+  leaseDisplayLabel: string;
   propertyId: string | null;
   propertyName: string | null;
   unitId: string | null;
   unitNumber: string | null;
   landlordId: string | null;
+  landlordDisplayName: string | null;
   tenantIds: string[];
   tenantNames: string[];
   status: string | null;
@@ -149,6 +151,45 @@ function computeIntegrity(raw: Record<string, unknown>) {
   };
 }
 
+function safeLandlordDisplayName(record: Record<string, unknown> | null | undefined): string | null {
+  return (
+    asTrimmedString(record?.businessName) ||
+    asTrimmedString(record?.companyName) ||
+    asTrimmedString(record?.displayName) ||
+    asTrimmedString(record?.name) ||
+    null
+  );
+}
+
+function buildLeaseDisplayLabel(input: {
+  propertyName: string | null;
+  unitNumber: string | null;
+  tenantNames: string[];
+}): string {
+  const property = input.propertyName || "Property not linked";
+  const unit = input.unitNumber ? `Unit ${input.unitNumber}` : "Unit not assigned";
+  const tenant = input.tenantNames[0] || "Tenant not linked";
+  return `${property} · ${unit} · ${tenant}`;
+}
+
+function isLikelyRawInternalId(value: string | null, knownId?: string | null): boolean {
+  const normalized = asTrimmedString(value);
+  if (!normalized) return false;
+  if (knownId && normalized === asTrimmedString(knownId)) return true;
+  return /^[A-Za-z0-9_-]{16,}$/.test(normalized) && !/\s/.test(normalized);
+}
+
+function safeUnitDisplayLabel(raw: Record<string, unknown>): string | null {
+  const unitId = asTrimmedString(raw.unitId) || null;
+  const candidates = [raw.unitNumber, raw.unitLabel, raw.unit]
+    .map((value) => asTrimmedString(value))
+    .filter(Boolean);
+  for (const candidate of candidates) {
+    if (!isLikelyRawInternalId(candidate, unitId)) return candidate;
+  }
+  return null;
+}
+
 async function loadLinkedDocs(
   firestore: FirestoreLike,
   collectionName: string,
@@ -169,11 +210,14 @@ async function loadLinkedDocs(
 function buildView(
   lease: LeaseDocRow,
   propertiesById: Map<string, Record<string, unknown>>,
-  tenantsById: Map<string, Record<string, unknown>>
+  tenantsById: Map<string, Record<string, unknown>>,
+  landlordsById: Map<string, Record<string, unknown>>
 ): AdminLeaseView {
   const raw = lease.raw;
   const propertyId = asTrimmedString(raw.propertyId) || null;
   const property = propertyId ? propertiesById.get(propertyId) : null;
+  const landlordId = asTrimmedString(raw.landlordId) || null;
+  const landlord = landlordId ? landlordsById.get(landlordId) : null;
   const tenantIds = tenantIdsFromLease(raw);
   const tenantNames = tenantIds
     .map((tenantId) => {
@@ -182,17 +226,22 @@ function buildView(
     })
     .filter(Boolean);
   const integrity = computeIntegrity(raw);
+  const propertyName =
+    asTrimmedString(property?.name) ||
+    asTrimmedString(raw.propertyName || raw.propertyLabel) ||
+    null;
+  const unitNumber = safeUnitDisplayLabel(raw);
+  const landlordDisplayName = safeLandlordDisplayName(landlord) || "Landlord account";
 
   return {
     id: lease.id,
+    leaseDisplayLabel: buildLeaseDisplayLabel({ propertyName, unitNumber, tenantNames }),
     propertyId,
-    propertyName:
-      asTrimmedString(property?.name) ||
-      asTrimmedString(raw.propertyName || raw.propertyLabel) ||
-      null,
+    propertyName,
     unitId: asTrimmedString(raw.unitId) || null,
-    unitNumber: asTrimmedString(raw.unitNumber || raw.unitLabel || raw.unit) || null,
-    landlordId: asTrimmedString(raw.landlordId) || null,
+    unitNumber,
+    landlordId,
+    landlordDisplayName,
     tenantIds,
     tenantNames,
     status: asTrimmedString(raw.status) || null,
@@ -217,9 +266,10 @@ function matchesSearch(view: AdminLeaseView, q: string | null) {
   if (!q) return true;
   const haystack = [
     view.id,
+    view.leaseDisplayLabel,
     view.propertyName,
     view.unitNumber,
-    view.landlordId,
+    view.landlordDisplayName,
     ...view.tenantNames,
   ]
     .map((value) => asLower(value))
@@ -250,12 +300,14 @@ export async function listAdminLeases(
 
   const propertyIds = Array.from(new Set(leaseDocs.map((lease) => asTrimmedString(lease.raw.propertyId)).filter(Boolean)));
   const tenantIds = Array.from(new Set(leaseDocs.flatMap((lease) => tenantIdsFromLease(lease.raw))));
-  const [propertiesById, tenantsById] = await Promise.all([
+  const landlordIds = Array.from(new Set(leaseDocs.map((lease) => asTrimmedString(lease.raw.landlordId)).filter(Boolean)));
+  const [propertiesById, tenantsById, landlordsById] = await Promise.all([
     loadLinkedDocs(firestore, "properties", propertyIds),
     loadLinkedDocs(firestore, "tenants", tenantIds),
+    loadLinkedDocs(firestore, "landlords", landlordIds),
   ]);
 
-  const allViews = leaseDocs.map((lease) => buildView(lease, propertiesById, tenantsById));
+  const allViews = leaseDocs.map((lease) => buildView(lease, propertiesById, tenantsById, landlordsById));
 
   const filtered = allViews.filter((view) => {
     if (!matchesSearch(view, query.q)) return false;

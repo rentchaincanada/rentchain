@@ -4,6 +4,7 @@ type FirestoreLike = Pick<FirebaseFirestore.Firestore, "collection">;
 
 export type AdminPropertyView = {
   id: string;
+  displayLabel: string;
   name: string | null;
   address1: string | null;
   city: string | null;
@@ -12,6 +13,8 @@ export type AdminPropertyView = {
   pid: string | null;
   ownerUserId: string | null;
   landlordId: string | null;
+  ownerDisplayName: string | null;
+  ownerStatusLabel: string;
   managerUserIds: string[];
   unitCount: number;
   occupiedUnitCount: number;
@@ -86,7 +89,41 @@ function computeIntegrity(raw: Record<string, unknown>) {
   };
 }
 
-function matchesSearch(raw: Record<string, unknown>, propertyId: string, q: string | null) {
+function safeAccountDisplayName(record: Record<string, unknown> | null | undefined): string | null {
+  return (
+    asTrimmedString(record?.businessName) ||
+    asTrimmedString(record?.companyName) ||
+    asTrimmedString(record?.displayName) ||
+    asTrimmedString(record?.name) ||
+    null
+  );
+}
+
+function ownerStatusLabel(input: { ownerUserId: string | null; landlordId: string | null; managerUserIds: string[] }) {
+  if (input.ownerUserId) return "Owner profile linked";
+  if (input.landlordId) return "Landlord linked / owner profile missing";
+  if (input.managerUserIds.length) return "Manager linked / owner profile missing";
+  return "No owner or landlord link";
+}
+
+async function loadLinkedDocs(
+  firestore: FirestoreLike,
+  collectionName: string,
+  ids: string[]
+): Promise<Map<string, Record<string, unknown>>> {
+  const out = new Map<string, Record<string, unknown>>();
+  await Promise.all(
+    ids.map(async (id) => {
+      const trimmed = asTrimmedString(id);
+      if (!trimmed) return;
+      const snap = await (firestore.collection(collectionName) as any).doc(trimmed).get().catch(() => null);
+      if (snap?.exists) out.set(trimmed, (snap.data() || {}) as Record<string, unknown>);
+    })
+  );
+  return out;
+}
+
+function matchesSearch(raw: Record<string, unknown>, propertyId: string, q: string | null, ownerDisplayName?: string | null) {
   if (!q) return true;
   const haystack = [
     propertyId,
@@ -94,7 +131,7 @@ function matchesSearch(raw: Record<string, unknown>, propertyId: string, q: stri
     raw.addressLine1,
     raw.address1,
     raw.city,
-    raw.landlordId,
+    ownerDisplayName,
     raw.pid,
     raw.propertyPid,
     raw.parcelId,
@@ -159,6 +196,12 @@ export async function listAdminProperties(
 
   const snap = await collectionQuery.get();
   const allDocs = (snap.docs || []).map((doc: any) => ({ id: doc.id, raw: (doc.data() || {}) as Record<string, unknown> }));
+  const landlordIds = Array.from(new Set(allDocs.map(({ raw }) => asTrimmedString(raw.landlordId)).filter(Boolean)));
+  const ownerUserIds = Array.from(new Set(allDocs.map(({ raw }) => asTrimmedString(raw.ownerUserId)).filter(Boolean)));
+  const [landlordsById, usersById] = await Promise.all([
+    loadLinkedDocs(firestore, "landlords", landlordIds),
+    loadLinkedDocs(firestore, "users", ownerUserIds),
+  ]);
 
   const filtered = allDocs.filter(({ id, raw }) => {
     if (query.province && asTrimmedString(raw.province).toUpperCase() !== query.province) return false;
@@ -166,7 +209,12 @@ export async function listAdminProperties(
     if (query.integrity === "issues" && !integrity.hasIssues) return false;
     if (query.integrity === "orphaned" && !integrity.orphaned) return false;
     if (query.integrity === "missingOwner" && !integrity.missingOwner) return false;
-    return matchesSearch(raw, id, query.q);
+    const landlordId = asTrimmedString(raw.landlordId) || null;
+    const ownerUserId = asTrimmedString(raw.ownerUserId) || null;
+    const ownerDisplayName =
+      safeAccountDisplayName(ownerUserId ? usersById.get(ownerUserId) : null) ||
+      safeAccountDisplayName(landlordId ? landlordsById.get(landlordId) : null);
+    return matchesSearch(raw, id, query.q, ownerDisplayName);
   });
 
   filtered.sort((a, b) => {
@@ -193,9 +241,18 @@ export async function listAdminProperties(
     const counts = countsByProperty.get(id);
     const integrity = computeIntegrity(raw);
     const fallbackUnitCount = Number(raw.unitCount || raw.totalUnits || 0) || 0;
+    const ownerUserId = asTrimmedString(raw.ownerUserId) || null;
+    const landlordId = asTrimmedString(raw.landlordId) || null;
+    const managerUserIds = safeArray(raw.managerUserIds);
+    const ownerDisplayName =
+      safeAccountDisplayName(ownerUserId ? usersById.get(ownerUserId) : null) ||
+      safeAccountDisplayName(landlordId ? landlordsById.get(landlordId) : null) ||
+      null;
+    const name = asTrimmedString(raw.name) || null;
     return {
       id,
-      name: asTrimmedString(raw.name) || null,
+      displayLabel: name || "Property not labelled",
+      name,
       address1: asTrimmedString(raw.addressLine1 || raw.address1) || null,
       city: asTrimmedString(raw.city) || null,
       province: asTrimmedString(raw.province) || null,
@@ -210,9 +267,11 @@ export async function listAdminProperties(
         asTrimmedString((raw.metadata as any)?.propertyPid) ||
         asTrimmedString((raw.metadata as any)?.parcelId) ||
         null,
-      ownerUserId: asTrimmedString(raw.ownerUserId) || null,
-      landlordId: asTrimmedString(raw.landlordId) || null,
-      managerUserIds: safeArray(raw.managerUserIds),
+      ownerUserId,
+      landlordId,
+      ownerDisplayName,
+      ownerStatusLabel: ownerStatusLabel({ ownerUserId, landlordId, managerUserIds }),
+      managerUserIds,
       unitCount: counts?.unitCount ?? fallbackUnitCount,
       occupiedUnitCount: counts?.occupiedUnitCount ?? 0,
       vacantUnitCount: counts?.vacantUnitCount ?? 0,

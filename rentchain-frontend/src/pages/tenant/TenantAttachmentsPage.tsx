@@ -5,6 +5,7 @@ import {
   type TenantAttachment,
 } from "../../api/tenantAttachmentsApi";
 import { getTenantAccess, type TenantAccessWorkspace } from "../../api/tenantAccess";
+import { getTenantLeaseWorkspace } from "../../api/tenantPortal";
 import {
   TenantEmptyState,
   TenantErrorState,
@@ -16,6 +17,7 @@ import {
 } from "./TenantWorkspaceShared";
 import { spacing, text as textTokens } from "../../styles/tokens";
 import { buildTenantDocumentVaultView } from "./tenantDocumentVault";
+import { mergeTenantAttachments, tenantLeaseWorkspaceAttachments } from "./tenantLeaseDocumentAttachments";
 
 function statusTone(status?: TenantAttachment["status"]) {
   switch (status) {
@@ -66,16 +68,19 @@ export default function TenantAttachmentsPage() {
       setLoading(true);
       setError(null);
       try {
-        const [attachmentsResult, accessResult] = await Promise.allSettled([
+        const [attachmentsResult, accessResult, leaseWorkspaceResult] = await Promise.allSettled([
           getTenantAttachments(),
           getTenantAccess(),
+          getTenantLeaseWorkspace(),
         ]);
         if (attachmentsResult.status !== "fulfilled") {
           throw attachmentsResult.reason;
         }
         const res = attachmentsResult.value;
         if (!cancelled) {
-          setItems(Array.isArray(res?.data) ? sortUrgent(res.data) : []);
+          const leaseWorkspaceItems =
+            leaseWorkspaceResult.status === "fulfilled" ? tenantLeaseWorkspaceAttachments(leaseWorkspaceResult.value) : [];
+          setItems(sortUrgent(mergeTenantAttachments(Array.isArray(res?.data) ? res.data : [], leaseWorkspaceItems)));
           setSummary(res?.summary);
           setGuidance(res?.guidance);
           setUpdatedAt(typeof res?.updatedAt === "number" ? res.updatedAt : null);

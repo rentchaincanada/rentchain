@@ -77,7 +77,8 @@ describe("adminLeaseView", () => {
     seedDoc("leases", "lease-3", {
       landlordId: "landlord-1",
       propertyId: "prop-1",
-      unitNumber: "102",
+      unitId: "a1O2tQcdEZ7t6y3GHT5G",
+      unitNumber: "a1O2tQcdEZ7t6y3GHT5G",
       tenantId: "tenant-4",
       status: "inactive",
       monthlyRent: 1200,
@@ -96,6 +97,9 @@ describe("adminLeaseView", () => {
     seedDoc("tenants", "tenant-2", { firstName: "Co", lastName: "Tenant" });
     seedDoc("tenants", "tenant-3", { fullName: "Alex Summit" });
     seedDoc("tenants", "tenant-4", { fullName: "Old Lease" });
+
+    seedDoc("landlords", "landlord-1", { businessName: "Harbour Homes" });
+    seedDoc("landlords", "landlord-2", { displayName: "Summit Rentals" });
   });
 
   it("returns safe shaped lease rows with tenant names", async () => {
@@ -105,8 +109,14 @@ describe("adminLeaseView", () => {
     expect(result.items[0]).toHaveProperty("id");
     expect(result.items[0]).toHaveProperty("propertyName");
     expect(result.items[0]).toHaveProperty("tenantNames");
+    expect(result.items[0]).toHaveProperty("leaseDisplayLabel");
+    expect(result.items[0]).toHaveProperty("landlordDisplayName");
     expect(result.items[0]).toHaveProperty("integrity");
     expect(result.items[0]).not.toHaveProperty("auditBlob");
+    expect(result.items.find((item) => item.id === "lease-1")?.leaseDisplayLabel).toBe("Coburg Rd · Unit 101 · Jane Tenant");
+    expect(result.items.find((item) => item.id === "lease-1")?.landlordDisplayName).toBe("Harbour Homes");
+    expect(result.items.find((item) => item.id === "lease-3")?.unitNumber).toBeNull();
+    expect(result.items.find((item) => item.id === "lease-3")?.leaseDisplayLabel).toBe("Coburg Rd · Unit not assigned · Old Lease");
   });
 
   it("supports search across property, unit, tenant, and lease id", async () => {

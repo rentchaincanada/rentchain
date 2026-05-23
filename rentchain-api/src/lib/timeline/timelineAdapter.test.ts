@@ -72,4 +72,40 @@ describe("timelineAdapter", () => {
 
     expect(result.details).toBeUndefined();
   });
+
+  it("does not project impersonation actor-chain metadata into timeline items", () => {
+    const result = canonicalEventToTimelineItem(
+      buildEvent({
+        id: "impersonation-event-1",
+        type: "impersonation.started",
+        domain: "system",
+        action: "impersonation_started",
+        visibility: "internal",
+        summary: "Support impersonation started.",
+        metadata: {
+          realActorId: "admin-1",
+          realActorRole: "admin",
+          effectiveActorId: "tenant-1",
+          effectiveActorRole: "tenant",
+          impersonationSessionId: "session-1",
+          impersonationReason: "incident_review",
+          supportProjectionSafe: true,
+          visibilityClass: "admin_support_internal",
+          actorChain: {
+            realActorId: "admin-1",
+            effectiveActorId: "tenant-1",
+          },
+        },
+      })
+    );
+
+    expect(result.title).toBe("System Impersonation Started");
+    const payload = JSON.stringify(result);
+    expect(payload).not.toContain("realActorId");
+    expect(payload).not.toContain("effectiveActorId");
+    expect(payload).not.toContain("impersonationSessionId");
+    expect(payload).not.toContain("supportProjectionSafe");
+    expect(payload).not.toContain("admin-1");
+    expect(payload).not.toContain("tenant-1");
+  });
 });

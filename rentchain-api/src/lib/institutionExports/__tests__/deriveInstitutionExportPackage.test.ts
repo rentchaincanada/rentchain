@@ -316,6 +316,73 @@ describe("deriveInstitutionExportPackage", () => {
     );
   });
 
+  it("keeps impersonation/support metadata out of user-safe institution export previews", () => {
+    const pkg = deriveInstitutionExportPackage({
+      packageType: "lender_due_diligence",
+      landlordId: "landlord-1",
+      generatedAt: "2026-05-05T12:00:00.000Z",
+      properties: [{ id: "prop-1", status: "active", unitsCount: 4 }],
+      auditEvents: [
+        {
+          id: "impersonation-event-1",
+          type: "impersonation.started",
+          realActorId: "admin-1",
+          realActorRole: "admin",
+          effectiveActorId: "tenant-1",
+          effectiveActorRole: "tenant",
+          impersonationSessionId: "session-1",
+          impersonationReason: "incident_review",
+          impersonationStartedAt: "2026-05-22T20:00:00.000Z",
+          supportProjectionSafe: true,
+          tenantVisible: false,
+          visibilityClass: "admin_support_internal",
+          policyDecision: "allowed",
+          sourceActionFamily: "admin_support_impersonation",
+          actorChain: {
+            realActorId: "admin-1",
+            effectiveActorId: "tenant-1",
+          },
+          debugPayload: { stack: "private stack trace" },
+          rawProviderPayload: { token: "secret-token" },
+        } as any,
+      ],
+    });
+
+    expect(pkg.sourceRefs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ sourceCollection: "auditEvents", sourceId: "impersonation-event-1" }),
+      ]),
+    );
+    expect(pkg.payloadPreview).toEqual(
+      expect.objectContaining({
+        auditEventSummary: { total: 1 },
+      }),
+    );
+    expectPayloadDoesNotContainValues(pkg, [
+      "realActorId",
+      "realActorRole",
+      "effectiveActorId",
+      "effectiveActorRole",
+      "impersonationSessionId",
+      "impersonationReason",
+      "impersonationStartedAt",
+      "impersonationActive",
+      "supportProjectionSafe",
+      "tenantVisible",
+      "visibilityClass",
+      "policyDecision",
+      "sourceActionFamily",
+      "actorChain",
+      "admin-1",
+      "tenant-1",
+      "session-1",
+      "incident_review",
+      "private stack trace",
+      "secret-token",
+    ]);
+    expectNoRestrictedProjectionFields(pkg.payloadPreview);
+  });
+
   it("optionally attaches policy-gated portable trust exports without changing route adoption", () => {
     const pkg = deriveInstitutionExportPackage({
       packageType: "lender_due_diligence",

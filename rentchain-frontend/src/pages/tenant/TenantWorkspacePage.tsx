@@ -68,6 +68,7 @@ import {
 import TenantProfileCompletionCard from "./TenantProfileCompletionCard";
 import { buildTenantProfileCompletion } from "./tenantProfileCompletion";
 import { buildTenantDocumentVaultView } from "./tenantDocumentVault";
+import { mergeTenantAttachments, tenantLeaseWorkspaceAttachments } from "./tenantLeaseDocumentAttachments";
 import { buildTenantApplicationReuseView } from "./tenantApplicationReuse";
 import { buildTenantWorkspaceModeView } from "./tenantWorkspaceMode";
 import { buildActiveTenancyWorkspaceState } from "./activeTenancyWorkspaceState";
@@ -925,7 +926,7 @@ export default function TenantWorkspacePage() {
   const nextActions = data?.application?.nextActions || [];
   const profileCompletion = profileData ? buildTenantProfileCompletion(profileData) : null;
   const documentVault = buildTenantDocumentVaultView({
-    items: attachments?.data || [],
+    items: mergeTenantAttachments(attachments?.data || [], tenantLeaseWorkspaceAttachments(data?.lease || null)),
     summary: attachments?.summary,
     guidance: attachments?.guidance,
     updatedAt: attachments?.updatedAt,
@@ -2436,7 +2437,9 @@ export default function TenantWorkspacePage() {
                 : "Open your document vault to review readiness and sharing visibility."}
             </div>
             <div style={{ color: textTokens.muted }}>
-              {attachments?.guidance?.headline || "Keep your profile organized by keeping documents ready in one place."}
+              {(documentVault.metrics[0]?.value || 0) > 0
+                ? "Your tenant-visible documents are available in the document vault."
+                : attachments?.guidance?.headline || "Keep your profile organized by keeping documents ready in one place."}
             </div>
             <Link to="/tenant/attachments">Open document vault</Link>
           </div>
