@@ -1828,6 +1828,7 @@ describe("tenantPortalRoutes foundation", () => {
     });
 
     expect(missingConsent.status).toBe(400);
+    expect(missingConsent.headers["x-route-source"]).toBe("tenantPortalRoutes.ts");
     expect(missingConsent.body?.error).toBe("TENANT_TRUST_EXPORT_CONSENT_REQUIRED");
 
     const preview = await invokeRouter(router, {
@@ -1871,6 +1872,7 @@ describe("tenantPortalRoutes foundation", () => {
     });
 
     expect(prepared.status).toBe(200);
+    expect(prepared.headers["x-route-source"]).toBe("tenantPortalRoutes.ts");
     expect(prepared.body?.data?.lifecycle).toBe("prepared");
     expect(prepared.body?.data?.consent?.granted).toBe(true);
     expect(prepared.body?.data?.package?.status).toBe("export_ready");
@@ -1926,6 +1928,7 @@ describe("tenantPortalRoutes foundation", () => {
       },
     });
     expect(listed.status).toBe(200);
+    expect(listed.headers["x-route-source"]).toBe("tenantPortalRoutes.ts");
     expect(listed.body?.data?.items?.[0]?.exportId).toBe(exportId);
 
     const revoked = await invokeRouter(router, {

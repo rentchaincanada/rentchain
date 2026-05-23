@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "crypto";
 import { Router } from "express";
 import { authenticateJwt } from "../middleware/authMiddleware";
+import { routeSource } from "../middleware/routeSource";
 import { db, FieldValue } from "../config/firebase";
 import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
 import { sendEmail } from "../services/emailService";
@@ -82,6 +83,7 @@ import { getSignedDownloadUrl } from "../lib/gcsSignedUrl";
 
 const router = Router();
 router.use(authenticateJwt);
+const tenantPortalRouteSource = routeSource("tenantPortalRoutes.ts");
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -4120,7 +4122,7 @@ router.post("/identity/export", requireTenantWorkspaceIdentity, async (req: any,
   });
 });
 
-router.get("/trust-exports", requireTenantWorkspaceIdentity, async (req: any, res) => {
+router.get("/trust-exports", tenantPortalRouteSource, requireTenantWorkspaceIdentity, async (req: any, res) => {
   const context = await resolveWorkspaceContextOrRespond(req, res);
   if (!context) return;
 
@@ -4141,7 +4143,7 @@ router.get("/trust-exports", requireTenantWorkspaceIdentity, async (req: any, re
   }
 });
 
-router.post("/trust-exports/preview", requireTenantWorkspaceIdentity, async (req: any, res) => {
+router.post("/trust-exports/preview", tenantPortalRouteSource, requireTenantWorkspaceIdentity, async (req: any, res) => {
   const context = await resolveWorkspaceContextOrRespond(req, res);
   if (!context) return;
 
@@ -4171,7 +4173,7 @@ router.post("/trust-exports/preview", requireTenantWorkspaceIdentity, async (req
   }
 });
 
-router.post("/trust-exports", requireTenantWorkspaceIdentity, async (req: any, res) => {
+router.post("/trust-exports", tenantPortalRouteSource, requireTenantWorkspaceIdentity, async (req: any, res) => {
   const context = await resolveWorkspaceContextOrRespond(req, res);
   if (!context) return;
 
@@ -4204,7 +4206,7 @@ router.post("/trust-exports", requireTenantWorkspaceIdentity, async (req: any, r
   }
 });
 
-router.post("/trust-exports/:id/revoke", requireTenantWorkspaceIdentity, async (req: any, res) => {
+router.post("/trust-exports/:id/revoke", tenantPortalRouteSource, requireTenantWorkspaceIdentity, async (req: any, res) => {
   const context = await resolveWorkspaceContextOrRespond(req, res);
   if (!context) return;
 

@@ -1305,6 +1305,70 @@ describe("tenant workspace frontend shell", () => {
     expect(screen.getByRole("link", { name: /Open access/i })).toBeInTheDocument();
   });
 
+  it("includes tenant-safe lease attachment context in dashboard document summary", async () => {
+    const workspace = await tenantPortalApi.getTenantWorkspace();
+    tenantPortalApi.getTenantWorkspace.mockResolvedValue({
+      ...workspace,
+      lease: {
+        leaseId: "lease-1",
+        startDate: null,
+        endDate: null,
+        monthlyRent: null,
+        status: "active",
+        documentUrl: null,
+        leaseDocumentContext: null,
+        scheduleADocumentContext: {
+          leaseId: "lease-1",
+          tenantId: "tenant-1",
+          propertyId: "prop-1",
+          unitId: "unit-1",
+          leaseStatus: "active",
+          signingStatus: null,
+          documentStatus: "generated",
+          documentId: "schedule-a-doc",
+          documentUrl: "https://signed.example/schedule-a.pdf",
+          displayLabel: "Schedule A",
+          source: "tenant-safe-lease-workspace",
+          confidence: "high",
+          warnings: [],
+        },
+      },
+    });
+    tenantAttachmentsApi.getTenantAttachments.mockResolvedValue({
+      ok: true,
+      data: [],
+      summary: {
+        total: 0,
+        missing: 0,
+        uploaded: 0,
+        pendingReview: 0,
+        verified: 0,
+        needsAttention: 0,
+      },
+      guidance: {
+        headline: "You have not added any tenant-visible documents yet.",
+        nextSteps: [],
+        uploadEntryAvailable: false,
+        uploadEntryLabel: null,
+        uploadEntryPath: null,
+        supportPath: "/tenant/messages",
+        supportLabel: "Message your landlord",
+      },
+      updatedAt: null,
+    });
+
+    render(
+      <MemoryRouter>
+        <TenantWorkspacePage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/^Tenant Dashboard$/i)).toBeInTheDocument();
+    expect(screen.getByText(/1 document in your vault, 1 ready to share, and 0 still needing attention/i)).toBeInTheDocument();
+    expect(screen.queryByText(/schedule-a-doc/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/tenant-1/i)).not.toBeInTheDocument();
+  });
+
   it("starts tenant checkout from the workspace when rent collection is enabled", async () => {
     tenantPortalApi.getTenantWorkspace.mockResolvedValue({
       context: {

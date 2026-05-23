@@ -5,11 +5,7 @@ import {
   type TenantAttachment,
 } from "../../api/tenantAttachmentsApi";
 import { getTenantAccess, type TenantAccessWorkspace } from "../../api/tenantAccess";
-import {
-  getTenantLeaseWorkspace,
-  type TenantLeaseDocumentContext,
-  type TenantWorkspaceLease,
-} from "../../api/tenantPortal";
+import { getTenantLeaseWorkspace } from "../../api/tenantPortal";
 import {
   TenantEmptyState,
   TenantErrorState,
@@ -21,6 +17,7 @@ import {
 } from "./TenantWorkspaceShared";
 import { spacing, text as textTokens } from "../../styles/tokens";
 import { buildTenantDocumentVaultView } from "./tenantDocumentVault";
+import { mergeTenantAttachments, tenantLeaseWorkspaceAttachments } from "./tenantLeaseDocumentAttachments";
 
 function statusTone(status?: TenantAttachment["status"]) {
   switch (status) {
@@ -54,75 +51,6 @@ function sortUrgent(items: TenantAttachment[]) {
     if (left !== right) return left - right;
     return Number(b.uploadedAt || b.createdAt || 0) - Number(a.uploadedAt || a.createdAt || 0);
   });
-}
-
-function documentContextToAttachment(
-  context: TenantLeaseDocumentContext | null | undefined,
-  kind: "lease" | "schedule-a"
-): TenantAttachment | null {
-  if (!context || !context.documentUrl || context.documentStatus === "missing") return null;
-  const leaseId = String(context.leaseId || "current").trim() || "current";
-  if (kind === "lease") {
-    return {
-      id: `lease-document-context-${leaseId}`,
-      tenantId: context.tenantId || null,
-      leaseId: context.leaseId || null,
-      title: "Lease document",
-      label: "Lease document",
-      category: "Lease documents",
-      status: context.documentStatus === "pending" ? "pending_review" : "uploaded",
-      purpose: "LEASE",
-      purposeLabel: "Lease",
-      fileName: "lease-document.pdf",
-      url: context.documentUrl,
-      uploadedAt: null,
-      createdAt: null,
-      nextAction: "This tenant-safe lease document is linked to your lease workspace.",
-    };
-  }
-  return {
-    id: `schedule-a-context-${leaseId}`,
-    tenantId: context.tenantId || null,
-    leaseId: context.leaseId || null,
-    title: "Schedule A",
-    label: "Schedule A",
-    category: "Lease documents / attachments",
-    status: context.documentStatus === "pending" ? "pending_review" : "uploaded",
-    purpose: "SCHEDULE_A",
-    purposeLabel: "Schedule A",
-    fileName: "schedule-a.pdf",
-    url: context.documentUrl,
-    uploadedAt: null,
-    createdAt: null,
-    nextAction: "This tenant-safe lease attachment is linked to your lease workspace.",
-  };
-}
-
-function tenantLeaseWorkspaceAttachments(lease: TenantWorkspaceLease | null | undefined): TenantAttachment[] {
-  if (!lease) return [];
-  return [
-    documentContextToAttachment(lease.leaseDocumentContext, "lease"),
-    documentContextToAttachment(lease.scheduleADocumentContext, "schedule-a"),
-  ].filter(Boolean) as TenantAttachment[];
-}
-
-function mergeTenantAttachments(items: TenantAttachment[], leaseWorkspaceItems: TenantAttachment[]): TenantAttachment[] {
-  const merged: TenantAttachment[] = [];
-  const seen = new Set<string>();
-  for (const item of [...leaseWorkspaceItems, ...items]) {
-    const key = [
-      String(item.purpose || "").trim().toUpperCase(),
-      String(item.leaseId || "").trim(),
-      String(item.fileName || item.title || item.label || "").trim().toLowerCase(),
-      String(item.url || "").trim(),
-    ].join("|");
-    const fallbackKey = String(item.id || key).trim();
-    const finalKey = key.replace(/\|/g, "") ? key : fallbackKey;
-    if (seen.has(finalKey)) continue;
-    seen.add(finalKey);
-    merged.push(item);
-  }
-  return merged;
 }
 
 export default function TenantAttachmentsPage() {
