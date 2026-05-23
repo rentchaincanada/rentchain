@@ -130,6 +130,7 @@ import adminNotificationRoutes from "./routes/adminNotificationRoutes";
 import adminSupportOperationsRoutes from "./routes/adminSupportOperationsRoutes";
 import adminObservabilityRoutes from "./routes/adminObservabilityRoutes";
 import adminObservabilityIncidentReadinessRoutes from "./routes/adminObservabilityIncidentReadinessRoutes";
+import adminSecurityIncidentRoutes from "./routes/adminSecurityIncidentRoutes";
 import adminReleaseGovernanceRoutes from "./routes/adminReleaseGovernanceRoutes";
 import adminPublicExposureHardeningRoutes from "./routes/adminPublicExposureHardeningRoutes";
 import adminCommercialReadinessRoutes from "./routes/adminCommercialReadinessRoutes";
@@ -605,6 +606,7 @@ app.use("/api/admin", routeSource("adminOverviewRoutes.ts"), adminOverviewRoutes
 app.use("/api/admin", routeSource("adminIntegrityRoutes.ts"), adminIntegrityRoutes);
 app.use("/api/admin", routeSource("adminSavedFiltersRoutes.ts"), adminSavedFiltersRoutes);
 app.use("/api/admin", routeSource("adminAuditRoutes.ts"), adminAuditRoutes);
+app.use("/api/admin", routeSource("adminSecurityIncidentRoutes.ts"), adminSecurityIncidentRoutes);
 app.use("/api/admin", routeSource("adminScreeningResultsRoutes.ts"), adminScreeningResultsRoutes);
 app.use("/api/admin", routeSource("adminScreeningUsageRoutes.ts"), adminScreeningUsageRoutes);
 app.use("/api/admin/demo", routeSource("adminDemoRoutes.ts"), adminDemoRoutes);
