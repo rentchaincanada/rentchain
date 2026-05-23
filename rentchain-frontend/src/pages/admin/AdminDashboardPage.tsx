@@ -46,6 +46,12 @@ const QUICK_LINKS: Array<{
     description: "Review metadata-only security, impersonation, policy, and projection signals.",
     countKey: null,
   },
+  {
+    title: "Support escalations",
+    to: "/admin/support/escalations",
+    description: "Review metadata-only support escalation history and manual notes.",
+    countKey: null,
+  },
 ];
 
 const EMPTY_OVERVIEW: AdminOverview = {

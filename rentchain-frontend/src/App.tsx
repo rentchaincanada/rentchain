@@ -112,6 +112,7 @@ const AdminAlertingPage = lazy(() => import("./pages/admin/AdminAlertingPage"));
 const AdminObservabilityPage = lazy(() => import("./pages/admin/AdminObservabilityPage"));
 const AdminNotificationsPage = lazy(() => import("./pages/admin/AdminNotificationsPage"));
 const AdminSecurityIncidentsPage = lazy(() => import("./pages/admin/AdminSecurityIncidentsPage"));
+const AdminSupportEscalationsPage = lazy(() => import("./pages/admin/AdminSupportEscalationsPage"));
 const ObservabilityIncidentReadinessPage = lazy(() => import("./pages/ObservabilityIncidentReadinessPage"));
 const ReleaseGovernancePage = lazy(() => import("./pages/ReleaseGovernancePage"));
 const PublicExposureHardeningPage = lazy(() => import("./pages/PublicExposureHardeningPage"));
@@ -1057,6 +1058,18 @@ function App() {
               <RequireAdmin>
                 <Suspense fallback={null}>
                   <AdminSecurityIncidentsPage />
+                </Suspense>
+              </RequireAdmin>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/admin/support/escalations"
+          element={
+            <RequireAuth>
+              <RequireAdmin>
+                <Suspense fallback={null}>
+                  <AdminSupportEscalationsPage />
                 </Suspense>
               </RequireAdmin>
             </RequireAuth>
