@@ -424,6 +424,8 @@ app.use("/api/admin", routeSource("adminObservabilityRoutes.ts"), adminObservabi
 console.log("[route-mount] adminObservabilityRoutes mounted at /api/admin");
 app.use("/api/admin", routeSource("adminObservabilityIncidentReadinessRoutes.ts"), adminObservabilityIncidentReadinessRoutes);
 console.log("[route-mount] adminObservabilityIncidentReadinessRoutes mounted at /api/admin");
+app.use("/api/admin", routeSource("adminSecurityIncidentRoutes.ts"), adminSecurityIncidentRoutes);
+console.log("[route-mount] adminSecurityIncidentRoutes mounted at /api/admin");
 app.use("/api/admin", routeSource("adminReleaseGovernanceRoutes.ts"), adminReleaseGovernanceRoutes);
 console.log("[route-mount] adminReleaseGovernanceRoutes mounted at /api/admin");
 app.use("/api/admin", routeSource("adminPublicExposureHardeningRoutes.ts"), adminPublicExposureHardeningRoutes);
@@ -606,7 +608,6 @@ app.use("/api/admin", routeSource("adminOverviewRoutes.ts"), adminOverviewRoutes
 app.use("/api/admin", routeSource("adminIntegrityRoutes.ts"), adminIntegrityRoutes);
 app.use("/api/admin", routeSource("adminSavedFiltersRoutes.ts"), adminSavedFiltersRoutes);
 app.use("/api/admin", routeSource("adminAuditRoutes.ts"), adminAuditRoutes);
-app.use("/api/admin", routeSource("adminSecurityIncidentRoutes.ts"), adminSecurityIncidentRoutes);
 app.use("/api/admin", routeSource("adminScreeningResultsRoutes.ts"), adminScreeningResultsRoutes);
 app.use("/api/admin", routeSource("adminScreeningUsageRoutes.ts"), adminScreeningUsageRoutes);
 app.use("/api/admin/demo", routeSource("adminDemoRoutes.ts"), adminDemoRoutes);
