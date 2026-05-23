@@ -172,6 +172,24 @@ function buildLeaseDisplayLabel(input: {
   return `${property} · ${unit} · ${tenant}`;
 }
 
+function isLikelyRawInternalId(value: string | null, knownId?: string | null): boolean {
+  const normalized = asTrimmedString(value);
+  if (!normalized) return false;
+  if (knownId && normalized === asTrimmedString(knownId)) return true;
+  return /^[A-Za-z0-9_-]{16,}$/.test(normalized) && !/\s/.test(normalized);
+}
+
+function safeUnitDisplayLabel(raw: Record<string, unknown>): string | null {
+  const unitId = asTrimmedString(raw.unitId) || null;
+  const candidates = [raw.unitNumber, raw.unitLabel, raw.unit]
+    .map((value) => asTrimmedString(value))
+    .filter(Boolean);
+  for (const candidate of candidates) {
+    if (!isLikelyRawInternalId(candidate, unitId)) return candidate;
+  }
+  return null;
+}
+
 async function loadLinkedDocs(
   firestore: FirestoreLike,
   collectionName: string,
@@ -212,7 +230,7 @@ function buildView(
     asTrimmedString(property?.name) ||
     asTrimmedString(raw.propertyName || raw.propertyLabel) ||
     null;
-  const unitNumber = asTrimmedString(raw.unitNumber || raw.unitLabel || raw.unit) || null;
+  const unitNumber = safeUnitDisplayLabel(raw);
   const landlordDisplayName = safeLandlordDisplayName(landlord) || "Landlord account";
 
   return {

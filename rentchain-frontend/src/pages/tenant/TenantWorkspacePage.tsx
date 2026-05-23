@@ -2437,7 +2437,9 @@ export default function TenantWorkspacePage() {
                 : "Open your document vault to review readiness and sharing visibility."}
             </div>
             <div style={{ color: textTokens.muted }}>
-              {attachments?.guidance?.headline || "Keep your profile organized by keeping documents ready in one place."}
+              {(documentVault.metrics[0]?.value || 0) > 0
+                ? "Your tenant-visible documents are available in the document vault."
+                : attachments?.guidance?.headline || "Keep your profile organized by keeping documents ready in one place."}
             </div>
             <Link to="/tenant/attachments">Open document vault</Link>
           </div>

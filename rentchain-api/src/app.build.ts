@@ -554,7 +554,7 @@ app.use("/api/tenant-invites", rateLimitTenantWorkspaceEntry);
 app.use("/api/tenant-invites", tenantInvitesRoutes);
 app.use("/api/tenant/invite", rateLimitTenantWorkspaceEntry);
 app.use("/api/tenant", routeSource("tenantPortalRoutes.ts"), tenantPortalRoutes);
-app.use("/api", routeSource("referralsRoutes.ts"), referralsRoutes);
+app.use("/api", referralsRoutes);
 app.use(
   "/api/landlord/application-links",
   routeSource("landlordApplicationLinksRoutes.ts"),

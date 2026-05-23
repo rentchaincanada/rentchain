@@ -7,6 +7,7 @@ import type { TenantLifecycle } from "./tenantsApi";
 
 export type AdminPropertyView = {
   id: string;
+  displayLabel: string;
   name: string | null;
   address1: string | null;
   city: string | null;
@@ -14,6 +15,8 @@ export type AdminPropertyView = {
   postalCode: string | null;
   ownerUserId: string | null;
   landlordId: string | null;
+  ownerDisplayName: string | null;
+  ownerStatusLabel: string;
   managerUserIds: string[];
   unitCount: number;
   occupiedUnitCount: number;

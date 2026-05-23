@@ -12,6 +12,14 @@ function metadataRow(label: string, value: React.ReactNode) {
   );
 }
 
+function propertyDisplayName(property: AdminPropertyView) {
+  return property.displayLabel || property.name || "Property not labelled";
+}
+
+function ownerDisplayName(property: AdminPropertyView) {
+  return property.ownerDisplayName || property.ownerStatusLabel || "Owner profile unavailable";
+}
+
 export const AdminDetailDrawer: React.FC<{
   property: AdminPropertyView | null;
   onClose: () => void;
@@ -47,8 +55,8 @@ export const AdminDetailDrawer: React.FC<{
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
           <div style={{ display: "grid", gap: 6 }}>
-            <div style={{ fontSize: "1.2rem", fontWeight: 800 }}>{property.name || property.id}</div>
-            <div style={{ color: "#475569" }}>{[property.address1, property.city, property.province].filter(Boolean).join(", ") || property.id}</div>
+            <div style={{ fontSize: "1.2rem", fontWeight: 800 }}>{propertyDisplayName(property)}</div>
+            <div style={{ color: "#475569" }}>{[property.address1, property.city, property.province].filter(Boolean).join(", ") || "Address not available"}</div>
           </div>
           <Button variant="ghost" onClick={onClose}>Close</Button>
         </div>
@@ -58,9 +66,9 @@ export const AdminDetailDrawer: React.FC<{
             <IntegrityBadge integrity={property.integrity} />
             {property.managerUserIds.length ? <Pill>{property.managerUserIds.length} managers</Pill> : null}
           </div>
-          {metadataRow("Owner user", property.ownerUserId || "--")}
-          {metadataRow("Landlord id", property.landlordId || "--")}
-          {metadataRow("Managers", property.managerUserIds.length ? property.managerUserIds.join(", ") : "--")}
+          {metadataRow("Owner / landlord", ownerDisplayName(property))}
+          {metadataRow("Ownership status", property.ownerStatusLabel || "Ownership status unavailable")}
+          {metadataRow("Managers", property.managerUserIds.length ? `${property.managerUserIds.length} linked manager${property.managerUserIds.length === 1 ? "" : "s"}` : "--")}
         </Card>
 
         <Card style={{ display: "grid", gap: 12 }}>

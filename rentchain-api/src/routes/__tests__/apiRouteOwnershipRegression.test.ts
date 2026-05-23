@@ -296,7 +296,7 @@ describe("API route ownership regression", () => {
     const expensesMount = source.indexOf('app.use("/api", routeSource("expensesRoutes.ts"), expensesRoutes)');
     const riskAgentMount = source.indexOf('app.use("/api", routeSource("riskAgentRoutes.ts"), riskAgentRoutes)');
     const tenantPortalMount = source.indexOf('app.use("/api/tenant", routeSource("tenantPortalRoutes.ts"), tenantPortalRoutes)');
-    const referralsMount = source.indexOf('app.use("/api", routeSource("referralsRoutes.ts"), referralsRoutes)');
+    const referralsMount = source.indexOf('app.use("/api", referralsRoutes)');
     const screeningJobsMount = source.indexOf('app.use("/api", routeSource("screeningJobsAdminRoutes.ts"), screeningJobsAdminRoutes)');
     const buildProbeRoute = source.indexOf('app.get("/api/_build", rateLimitDiagnostics');
     const apiCatchall = source.indexOf('app.use("/api", (_req, res) => {');
@@ -337,6 +337,7 @@ describe("API route ownership regression", () => {
     expect(telemetryMount).toBeLessThan(screeningJobsMount);
     expect(screeningRoutesMount).toBeLessThan(screeningJobsMount);
     expect(screeningJobsMount).toBeLessThan(apiCatchall);
+    expect(source).not.toContain('app.use("/api", routeSource("referralsRoutes.ts"), referralsRoutes)');
   });
 
   it("documents public-safe probes, gated diagnostics, and catchall route sources", () => {

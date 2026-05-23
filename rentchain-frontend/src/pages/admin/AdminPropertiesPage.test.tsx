@@ -37,6 +37,7 @@ describe("AdminPropertiesPage", () => {
       items: [
         {
           id: "prop-1",
+          displayLabel: "Coburg Rd",
           name: "Coburg Rd",
           address1: "123 Coburg Rd",
           city: "Halifax",
@@ -44,6 +45,8 @@ describe("AdminPropertiesPage", () => {
           postalCode: "B3H 1Y5",
           ownerUserId: "owner-1",
           landlordId: "landlord-1",
+          ownerDisplayName: "Harbour Homes",
+          ownerStatusLabel: "Owner profile linked",
           managerUserIds: ["manager-1"],
           unitCount: 2,
           occupiedUnitCount: 1,
@@ -82,6 +85,8 @@ describe("AdminPropertiesPage", () => {
     });
 
     expect(screen.getByText("Coburg Rd")).toBeInTheDocument();
+    expect(screen.queryByText("prop-1")).not.toBeInTheDocument();
+    expect(screen.queryByText("landlord-1")).not.toBeInTheDocument();
   });
 
   it("opens the property detail drawer when a row is selected", async () => {
@@ -99,7 +104,10 @@ describe("AdminPropertiesPage", () => {
 
     const drawer = screen.getByRole("dialog", { name: "Property detail drawer" });
     expect(drawer).toBeInTheDocument();
-    expect(within(drawer).getByText("owner-1")).toBeInTheDocument();
-    expect(within(drawer).getByText("landlord-1")).toBeInTheDocument();
+    expect(within(drawer).getByText("Harbour Homes")).toBeInTheDocument();
+    expect(within(drawer).getByText("Owner profile linked")).toBeInTheDocument();
+    expect(within(drawer).queryByText("owner-1")).not.toBeInTheDocument();
+    expect(within(drawer).queryByText("landlord-1")).not.toBeInTheDocument();
+    expect(within(drawer).queryByText("prop-1")).not.toBeInTheDocument();
   });
 });
