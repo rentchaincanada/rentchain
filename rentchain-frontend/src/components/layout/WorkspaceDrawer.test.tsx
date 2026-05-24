@@ -60,6 +60,24 @@ describe("WorkspaceDrawer", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it("shows governed review workspace navigation only for admins", () => {
+    const { rerender } = render(
+      <MemoryRouter initialEntries={["/dashboard"]}>
+        <WorkspaceDrawer open onClose={vi.fn()} userRole="landlord" userEmail="owner@example.com" />
+      </MemoryRouter>
+    );
+
+    expect(screen.queryByRole("button", { name: "Governed review workspaces" })).not.toBeInTheDocument();
+
+    rerender(
+      <MemoryRouter initialEntries={["/dashboard"]}>
+        <WorkspaceDrawer open onClose={vi.fn()} userRole="admin" userEmail="admin@example.com" />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole("button", { name: "Governed review workspaces" })).toBeInTheDocument();
+  });
+
   it("positions the mobile sheet above the bottom navigation", () => {
     render(
       <MemoryRouter initialEntries={["/dashboard"]}>
