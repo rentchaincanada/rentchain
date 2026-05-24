@@ -189,6 +189,13 @@ export const NAV_ITEMS: NavItem[] = [
     showInDrawer: true,
   },
   {
+    id: "governed-review-workspaces",
+    label: "Governed review workspaces",
+    to: "/admin/review-workspaces",
+    requiresAdmin: true,
+    showInDrawer: true,
+  },
+  {
     id: "pdf-export-observability",
     label: "PDF Observability",
     to: "/admin/pdf-export-observability",

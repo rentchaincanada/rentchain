@@ -159,6 +159,8 @@ describe("AdminReviewWorkspacesPage", () => {
     expect(screen.queryByRole("button", { name: /resolve/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /dismiss/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /delete/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /create/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /remediate/i })).not.toBeInTheDocument();
     expect(JSON.stringify(document.body.textContent)).not.toContain("tenant-raw-id");
     expect(JSON.stringify(document.body.textContent)).not.toContain("gs://");
     expect(JSON.stringify(document.body.textContent)).not.toContain("secret-token");
@@ -206,6 +208,14 @@ describe("AdminReviewWorkspacesPage", () => {
     render(<AdminReviewWorkspacesPage />);
 
     expect(await screen.findByText(/No governed review workspace records are available yet/)).toBeInTheDocument();
+    expect(screen.getByText(/metadata-only surface is ready/)).toBeInTheDocument();
+    expect(screen.getByText(/append-only persistence and write governance are enabled/)).toBeInTheDocument();
+    expect(screen.getByText(/Unsupported or raw-only records are excluded by default/)).toBeInTheDocument();
     expect(screen.getByText(/No governed review workspace append records/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /create/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /approve/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /resolve/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /dismiss/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /remediate/i })).not.toBeInTheDocument();
   });
 });

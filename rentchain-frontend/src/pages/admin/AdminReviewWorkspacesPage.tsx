@@ -286,8 +286,11 @@ export default function AdminReviewWorkspacesPage() {
             {!loading && workspaces.length === 0 ? (
               <Card>
                 <div style={{ fontWeight: 700 }}>No governed review workspace records are available yet.</div>
-                <div style={{ color: "#64748b", marginTop: 6 }}>
-                  {summary.emptyState || "Append-only workspace records will appear here after an approved append store is populated."}
+                <div style={{ color: "#64748b", marginTop: 6, display: "grid", gap: 6 }}>
+                  <div>This metadata-only surface is ready, but no persisted governed review workspace records exist yet.</div>
+                  <div>Workspace records will appear after append-only persistence and write governance are enabled.</div>
+                  <div>Unsupported or raw-only records are excluded by default.</div>
+                  {summary.emptyState ? <div>{summary.emptyState}</div> : null}
                 </div>
               </Card>
             ) : null}
