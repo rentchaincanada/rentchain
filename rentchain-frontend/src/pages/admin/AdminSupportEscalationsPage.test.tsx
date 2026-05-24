@@ -103,6 +103,27 @@ beforeEach(() => {
           mutationControlsEnabled: false,
         },
       ],
+      governedReviewWorkspace: {
+        workspaceId: "governed_workspace:safe",
+        workspaceType: "support_escalation_review",
+        title: "Credential Secret escalation workspace",
+        summary: "Metadata-only support escalation workspace summary.",
+        workflowFamily: "admin_support_escalation_review",
+        severitySummary: "critical",
+        reviewStateSummary: "awaiting_approval",
+        relatedIncidentCount: 0,
+        relatedEscalationCount: 1,
+        relatedEvidenceCount: 1,
+        relatedNoteCount: 1,
+        approvalExpectationSummary: "security_review",
+        metadataOnly: true,
+        visibilityClass: "admin_support_internal",
+        tenantVisible: false,
+        landlordVisible: false,
+        appendCompatible: true,
+        mutationControlsEnabled: false,
+        rawPayloadAccessEnabled: false,
+      },
       emptyState: false,
     },
   });
@@ -120,6 +141,8 @@ describe("AdminSupportEscalationsPage", () => {
     expect(await screen.findByRole("heading", { name: "Support escalations" })).toBeInTheDocument();
     expect((await screen.findAllByText("Credential Secret escalation")).length).toBeGreaterThan(0);
     expect(await screen.findByText("Security operator")).toBeInTheDocument();
+    expect(await screen.findByText("Metadata-only support escalation workspace summary.")).toBeInTheDocument();
+    expect(await screen.findByText("1 evidence refs")).toBeInTheDocument();
     expect(await screen.findByText(/Escalation To Runbook/)).toBeInTheDocument();
     expect(await screen.findByText(/Credential or Secret Exposure Runbook/)).toBeInTheDocument();
     expect(screen.getAllByText("Metadata only").length).toBeGreaterThan(0);

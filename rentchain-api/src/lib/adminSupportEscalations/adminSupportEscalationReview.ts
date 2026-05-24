@@ -16,6 +16,10 @@ import {
   buildEscalationWorkspaceLinks,
   type EscalationReviewWorkspaceLink,
 } from "../escalationReviewWorkspaceLinks/escalationReviewWorkspaceLinks";
+import {
+  buildEscalationGovernedReviewWorkspaceSummary,
+  type GovernedReviewWorkspaceSummary,
+} from "../governedReviewWorkspaces/governedReviewWorkspaces";
 
 export const ADMIN_SUPPORT_ESCALATION_REVIEW_VERSION = "admin_support_escalation_review_v1";
 
@@ -46,6 +50,7 @@ export type AdminSupportEscalationReviewDetail = AdminSupportEscalationReviewRec
   redactionSummary: string;
   prohibitedActions: string[];
   relatedWorkspaceLinks: EscalationReviewWorkspaceLink[];
+  governedReviewWorkspace: GovernedReviewWorkspaceSummary;
   emptyState: boolean;
 };
 
@@ -177,25 +182,27 @@ export function buildAdminSupportEscalationReviewDetail(
   const record = buildGroupRecord(safeEscalationId, historyEntries, reviewNotes);
   if (!record) return null;
   const template = buildSupportEscalationRunbookTemplate({ category: record.category, severity: record.severity });
-  return {
+  const sortedHistory = historyEntries.sort((a, b) => a.occurredAt.localeCompare(b.occurredAt));
+  const sortedNotes = reviewNotes.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  const detailWithoutWorkspace = {
     ...record,
-    historyEntries: historyEntries.sort((a, b) => a.occurredAt.localeCompare(b.occurredAt)),
-    reviewNotes: reviewNotes.sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
+    historyEntries: sortedHistory,
+    reviewNotes: sortedNotes,
     redactionSummary:
       "Escalation details are metadata-only; raw notes, payloads, provider data, documents, storage paths, credentials, debug data, request/response bodies, and policy internals are excluded.",
     prohibitedActions: template.prohibitedActions,
     relatedWorkspaceLinks: buildEscalationWorkspaceLinks({
       escalation: {
         ...record,
-        historyEntries,
-        reviewNotes,
-        redactionSummary: "",
-        prohibitedActions: template.prohibitedActions,
-        relatedWorkspaceLinks: [],
-        emptyState: false,
+        historyEntries: sortedHistory,
+        reviewNotes: sortedNotes,
       },
     }),
     emptyState: false,
+  };
+  return {
+    ...detailWithoutWorkspace,
+    governedReviewWorkspace: buildEscalationGovernedReviewWorkspaceSummary(detailWithoutWorkspace),
   };
 }
 

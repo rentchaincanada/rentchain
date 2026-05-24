@@ -1,16 +1,18 @@
 import crypto from "crypto";
 import type {
-  AdminSecurityIncidentReviewDetail,
   AdminSecurityIncidentReviewRecord,
 } from "../adminSecurityIncidents/adminSecurityIncidentReview";
 import type {
-  AdminSupportEscalationReviewDetail,
   AdminSupportEscalationReviewRecord,
 } from "../adminSupportEscalations/adminSupportEscalationReview";
 import {
   buildSupportEscalationRunbookTemplate,
   type SupportEscalationApprovalRequirement,
 } from "../supportEscalationRunbooks/supportEscalationRunbooks";
+import type {
+  SupportEscalationHistoryEntry,
+  SupportEscalationReviewNote,
+} from "../supportEscalationHistory/supportEscalationHistory";
 
 export const ESCALATION_REVIEW_WORKSPACE_LINK_VERSION = "escalation_review_workspace_linking_v1";
 
@@ -208,7 +210,7 @@ function refMatchesIncident(ref: { referenceId?: string; referenceType?: string 
 }
 
 export function buildIncidentWorkspaceLinks(input: {
-  incident: AdminSecurityIncidentReviewDetail | AdminSecurityIncidentReviewRecord;
+  incident: AdminSecurityIncidentReviewRecord;
   escalations?: AdminSupportEscalationReviewRecord[];
   derivedAt?: unknown;
 }): EscalationReviewWorkspaceLink[] {
@@ -240,7 +242,10 @@ export function buildIncidentWorkspaceLinks(input: {
 }
 
 export function buildEscalationWorkspaceLinks(input: {
-  escalation: AdminSupportEscalationReviewDetail | AdminSupportEscalationReviewRecord;
+  escalation: AdminSupportEscalationReviewRecord & {
+    historyEntries?: SupportEscalationHistoryEntry[];
+    reviewNotes?: SupportEscalationReviewNote[];
+  };
   incidents?: AdminSecurityIncidentReviewRecord[];
   derivedAt?: unknown;
 }): EscalationReviewWorkspaceLink[] {
@@ -279,7 +284,7 @@ export function buildEscalationWorkspaceLinks(input: {
     ),
   ];
 
-  if ("historyEntries" in escalation) {
+  if (escalation.historyEntries && escalation.reviewNotes) {
     links.push(
       ...escalation.historyEntries.map((entry) =>
         buildEscalationReviewWorkspaceLink({
