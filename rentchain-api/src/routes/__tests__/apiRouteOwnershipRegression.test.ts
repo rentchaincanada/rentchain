@@ -219,6 +219,7 @@ async function buildRuntimeOwnershipApp() {
   const telemetryRoutes = (await import("../telemetryRoutes")).default;
   const screeningRoutes = (await import("../screeningRoutes")).default;
   const adminSecurityIncidentRoutes = (await import("../adminSecurityIncidentRoutes")).default;
+  const adminSupportEscalationRoutes = (await import("../adminSupportEscalationRoutes")).default;
   const screeningJobsAdminRoutes = (await import("../screeningJobsAdminRoutes")).default;
   const { stripeWebhookHandler } = await import("../stripeScreeningOrdersWebhookRoutes");
   const { transunionWebhookHandler } = await import("../transunionWebhookRoutes");
@@ -259,6 +260,7 @@ async function buildRuntimeOwnershipApp() {
   app.use("/api", routeSource("telemetryRoutes.ts"), telemetryRoutes);
   app.use("/api", routeSource("screeningRoutes.ts"), screeningRoutes);
   app.use("/api/admin", routeSource("adminSecurityIncidentRoutes.ts"), adminSecurityIncidentRoutes);
+  app.use("/api/admin", routeSource("adminSupportEscalationRoutes.ts"), adminSupportEscalationRoutes);
   app.use("/api", routeSource("screeningJobsAdminRoutes.ts"), screeningJobsAdminRoutes);
   app.use("/api", (_req, res) => {
     res.setHeader("x-route-source", "not-found");
@@ -398,6 +400,9 @@ describe("API route ownership regression", () => {
     const securityIncidentMount = source.indexOf(
       'app.use("/api/admin", routeSource("adminSecurityIncidentRoutes.ts"), adminSecurityIncidentRoutes)'
     );
+    const supportEscalationMount = source.indexOf(
+      'app.use("/api/admin", routeSource("adminSupportEscalationRoutes.ts"), adminSupportEscalationRoutes)'
+    );
     const publicExposureMount = source.indexOf(
       'app.use("/api/admin", routeSource("adminPublicExposureHardeningRoutes.ts"), adminPublicExposureHardeningRoutes)'
     );
@@ -416,6 +421,7 @@ describe("API route ownership regression", () => {
     expect(supportOperationsMount).toBeGreaterThan(-1);
     expect(incidentReadinessMount).toBeGreaterThan(-1);
     expect(securityIncidentMount).toBeGreaterThan(-1);
+    expect(supportEscalationMount).toBeGreaterThan(-1);
     expect(publicExposureMount).toBeGreaterThan(-1);
     expect(pdfObservabilityMount).toBeGreaterThan(-1);
     expect(impersonationMount).toBeGreaterThan(-1);
@@ -429,6 +435,8 @@ describe("API route ownership regression", () => {
     expect(incidentReadinessMount).toBeLessThan(adminRoutesMount);
     expect(securityIncidentMount).toBeLessThan(adminRoutesMount);
     expect(securityIncidentMount).toBeLessThan(adminScreeningUsageMount);
+    expect(supportEscalationMount).toBeLessThan(adminRoutesMount);
+    expect(supportEscalationMount).toBeLessThan(adminScreeningUsageMount);
     expect(publicExposureMount).toBeLessThan(adminRoutesMount);
     expect(pdfObservabilityMount).toBeLessThan(adminRoutesMount);
     expect(impersonationMount).toBeLessThan(screeningJobsMount);
@@ -528,6 +536,38 @@ describe("API route ownership regression", () => {
 
     expect(denied.status).toBe(403);
     expect(denied.headers["x-route-source"]).toBe("adminSecurityIncidentRoutes.ts");
+    expect(denied.body?.error).not.toBe("Not Found");
+  });
+
+  it("keeps admin support escalations owned by support escalation routes before screening usage fallback", async () => {
+    authState.user = { id: "admin-1", role: "admin", permissions: ["system.admin"] };
+    const app = await buildRuntimeOwnershipApp();
+
+    const res = await invokeApp(app, {
+      method: "GET",
+      url: "/api/admin/support/escalations?limit=50",
+      headers: { authorization: "Bearer admin-token" },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.headers["x-route-source"]).toBe("adminSupportEscalationRoutes.ts");
+    expect(res.body).toEqual(
+      expect.objectContaining({
+        ok: true,
+        escalations: [],
+        summary: expect.objectContaining({ metadataOnly: true }),
+      })
+    );
+
+    authState.user = { id: "landlord-1", role: "landlord", permissions: [] };
+    const denied = await invokeApp(app, {
+      method: "GET",
+      url: "/api/admin/support/escalations?limit=50",
+      headers: { authorization: "Bearer landlord-token" },
+    });
+
+    expect(denied.status).toBe(403);
+    expect(denied.headers["x-route-source"]).toBe("adminSupportEscalationRoutes.ts");
     expect(denied.body?.error).not.toBe("Not Found");
   });
 
