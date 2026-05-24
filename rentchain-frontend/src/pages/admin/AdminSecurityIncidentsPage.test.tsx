@@ -72,6 +72,37 @@ beforeEach(() => {
       relatedEventSummaries: [],
       redactionNotes: ["Raw actor ids, target ids, tokens, provider payloads, documents, storage paths, stack traces, and policy internals are not included."],
       suggestedNextReviewStep: "Review support attribution.",
+      relatedWorkspaceLinks: [
+        {
+          linkId: "workspace_link:safe",
+          linkType: "incident_to_evidence",
+          sourceSummary: {
+            kind: "security_incident",
+            label: "Impersonation Started",
+            category: "impersonation_started",
+            severity: "medium",
+            state: "open",
+            metadataOnly: true,
+            rawIdsIncluded: false,
+          },
+          targetSummary: {
+            kind: "evidence_reference",
+            label: "Telemetry metadata reference",
+            category: "telemetry",
+            severity: null,
+            state: null,
+            metadataOnly: true,
+            rawIdsIncluded: false,
+          },
+          workflowFamily: "admin_security_incident_review",
+          metadataOnly: true,
+          visibilityClass: "admin_support_internal",
+          tenantVisible: false,
+          landlordVisible: false,
+          appendCompatible: true,
+          mutationControlsEnabled: false,
+        },
+      ],
     },
   });
 });
@@ -88,6 +119,8 @@ describe("AdminSecurityIncidentsPage", () => {
     expect(await screen.findByRole("heading", { name: "Security incidents" })).toBeInTheDocument();
     expect((await screen.findAllByText("Impersonation Started")).length).toBeGreaterThan(0);
     expect(await screen.findByText("impersonationRoutes.ts")).toBeInTheDocument();
+    expect(await screen.findByText(/Incident To Evidence/)).toBeInTheDocument();
+    expect(await screen.findByText(/Telemetry metadata reference/)).toBeInTheDocument();
     expect(screen.getAllByText("Metadata only").length).toBeGreaterThan(0);
     expect(JSON.stringify(document.body.textContent)).not.toContain("realActorId");
     expect(JSON.stringify(document.body.textContent)).not.toContain("effectiveActorId");

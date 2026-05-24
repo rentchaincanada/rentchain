@@ -12,6 +12,10 @@ import {
   type SupportEscalationHistoryEntry,
   type SupportEscalationReviewNote,
 } from "../supportEscalationHistory/supportEscalationHistory";
+import {
+  buildEscalationWorkspaceLinks,
+  type EscalationReviewWorkspaceLink,
+} from "../escalationReviewWorkspaceLinks/escalationReviewWorkspaceLinks";
 
 export const ADMIN_SUPPORT_ESCALATION_REVIEW_VERSION = "admin_support_escalation_review_v1";
 
@@ -41,6 +45,7 @@ export type AdminSupportEscalationReviewDetail = AdminSupportEscalationReviewRec
   reviewNotes: SupportEscalationReviewNote[];
   redactionSummary: string;
   prohibitedActions: string[];
+  relatedWorkspaceLinks: EscalationReviewWorkspaceLink[];
   emptyState: boolean;
 };
 
@@ -179,6 +184,17 @@ export function buildAdminSupportEscalationReviewDetail(
     redactionSummary:
       "Escalation details are metadata-only; raw notes, payloads, provider data, documents, storage paths, credentials, debug data, request/response bodies, and policy internals are excluded.",
     prohibitedActions: template.prohibitedActions,
+    relatedWorkspaceLinks: buildEscalationWorkspaceLinks({
+      escalation: {
+        ...record,
+        historyEntries,
+        reviewNotes,
+        redactionSummary: "",
+        prohibitedActions: template.prohibitedActions,
+        relatedWorkspaceLinks: [],
+        emptyState: false,
+      },
+    }),
     emptyState: false,
   };
 }
