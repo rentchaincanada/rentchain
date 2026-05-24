@@ -128,6 +128,17 @@ function DetailPanel({ escalation }: { escalation: AdminSupportEscalationDetail 
           <div style={{ fontWeight: 700 }}>Redaction summary</div>
           <div style={{ color: "#475569" }}>{escalation.redactionSummary}</div>
         </div>
+        {escalation.governedReviewWorkspace ? (
+          <div>
+            <div style={{ fontWeight: 700 }}>Governed review workspace</div>
+            <div style={{ color: "#475569", marginTop: 6 }}>{escalation.governedReviewWorkspace.summary}</div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+              <Pill tone="muted">{label(escalation.governedReviewWorkspace.workspaceType)}</Pill>
+              <Pill tone="muted">{escalation.governedReviewWorkspace.relatedEvidenceCount} evidence refs</Pill>
+              <Pill tone="muted">{escalation.governedReviewWorkspace.relatedNoteCount} notes</Pill>
+            </div>
+          </div>
+        ) : null}
         <div>
           <div style={{ fontWeight: 700 }}>Prohibited actions</div>
           <ul style={{ margin: "8px 0 0", paddingLeft: 18, color: "#475569" }}>

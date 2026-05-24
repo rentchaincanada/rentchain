@@ -123,6 +123,17 @@ function DetailPanel({ incident }: { incident: AdminSecurityIncidentDetail | nul
           <div style={{ fontWeight: 700 }}>Review action</div>
           <div style={{ color: "#475569" }}>{incident.suggestedNextReviewStep}</div>
         </div>
+        {incident.governedReviewWorkspace ? (
+          <div>
+            <div style={{ fontWeight: 700 }}>Governed review workspace</div>
+            <div style={{ color: "#475569", marginTop: 6 }}>{incident.governedReviewWorkspace.summary}</div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+              <Pill tone="muted">{label(incident.governedReviewWorkspace.workspaceType)}</Pill>
+              <Pill tone="muted">{incident.governedReviewWorkspace.relatedEvidenceCount} evidence refs</Pill>
+              <Pill tone="muted">{incident.governedReviewWorkspace.relatedEscalationCount} escalation links</Pill>
+            </div>
+          </div>
+        ) : null}
         <div>
           <div style={{ fontWeight: 700 }}>Redaction notes</div>
           <ul style={{ margin: "8px 0 0", paddingLeft: 18, color: "#475569" }}>

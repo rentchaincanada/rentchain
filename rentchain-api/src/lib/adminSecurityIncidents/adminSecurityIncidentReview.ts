@@ -4,6 +4,10 @@ import {
   buildIncidentWorkspaceLinks,
   type EscalationReviewWorkspaceLink,
 } from "../escalationReviewWorkspaceLinks/escalationReviewWorkspaceLinks";
+import {
+  buildIncidentGovernedReviewWorkspaceSummary,
+  type GovernedReviewWorkspaceSummary,
+} from "../governedReviewWorkspaces/governedReviewWorkspaces";
 
 export const ADMIN_SECURITY_INCIDENT_REVIEW_VERSION = "admin_security_incident_review_v1";
 
@@ -80,6 +84,7 @@ export type AdminSecurityIncidentReviewDetail = AdminSecurityIncidentReviewRecor
   redactionNotes: string[];
   suggestedNextReviewStep: string;
   relatedWorkspaceLinks: EscalationReviewWorkspaceLink[];
+  governedReviewWorkspace: GovernedReviewWorkspaceSummary;
 };
 
 const SUPPORTED_CATEGORIES = new Set<AdminSecurityIncidentCategory>([
@@ -320,14 +325,15 @@ export function buildAdminSecurityIncidentReviewRecord(input: {
 export function buildAdminSecurityIncidentReviewDetail(
   record: AdminSecurityIncidentReviewRecord
 ): AdminSecurityIncidentReviewDetail {
-  return {
+  const relatedWorkspaceLinks = buildIncidentWorkspaceLinks({ incident: record });
+  const detailWithoutWorkspace = {
     ...record,
     timeline: [
       {
         occurredAt: record.occurredAt,
         label: record.title,
         category: record.category,
-        metadataOnly: true,
+        metadataOnly: true as const,
       },
     ],
     relatedEventSummaries: [
@@ -336,7 +342,7 @@ export function buildAdminSecurityIncidentReviewDetail(
         sourceCollection: record.safeEvidenceReferences[0]?.referenceType || "event",
         occurredAt: record.occurredAt,
         summary: record.summary,
-        metadataOnly: true,
+        metadataOnly: true as const,
       },
     ],
     redactionNotes: [
@@ -344,7 +350,11 @@ export function buildAdminSecurityIncidentReviewDetail(
       "Raw actor ids, target ids, tokens, provider payloads, documents, storage paths, stack traces, and policy internals are not included.",
     ],
     suggestedNextReviewStep: record.recommendedReviewAction,
-    relatedWorkspaceLinks: buildIncidentWorkspaceLinks({ incident: record }),
+    relatedWorkspaceLinks,
+  };
+  return {
+    ...detailWithoutWorkspace,
+    governedReviewWorkspace: buildIncidentGovernedReviewWorkspaceSummary(detailWithoutWorkspace),
   };
 }
 

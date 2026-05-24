@@ -103,6 +103,27 @@ beforeEach(() => {
           mutationControlsEnabled: false,
         },
       ],
+      governedReviewWorkspace: {
+        workspaceId: "governed_workspace:safe",
+        workspaceType: "security_review",
+        title: "Impersonation Started workspace",
+        summary: "Metadata-only review workspace summary.",
+        workflowFamily: "admin_security_incident_review",
+        severitySummary: "medium",
+        reviewStateSummary: "open",
+        relatedIncidentCount: 1,
+        relatedEscalationCount: 0,
+        relatedEvidenceCount: 1,
+        relatedNoteCount: 0,
+        approvalExpectationSummary: "Review support attribution.",
+        metadataOnly: true,
+        visibilityClass: "admin_support_internal",
+        tenantVisible: false,
+        landlordVisible: false,
+        appendCompatible: true,
+        mutationControlsEnabled: false,
+        rawPayloadAccessEnabled: false,
+      },
     },
   });
 });
@@ -119,6 +140,8 @@ describe("AdminSecurityIncidentsPage", () => {
     expect(await screen.findByRole("heading", { name: "Security incidents" })).toBeInTheDocument();
     expect((await screen.findAllByText("Impersonation Started")).length).toBeGreaterThan(0);
     expect(await screen.findByText("impersonationRoutes.ts")).toBeInTheDocument();
+    expect(await screen.findByText("Metadata-only review workspace summary.")).toBeInTheDocument();
+    expect(await screen.findByText("1 evidence refs")).toBeInTheDocument();
     expect(await screen.findByText(/Incident To Evidence/)).toBeInTheDocument();
     expect(await screen.findByText(/Telemetry metadata reference/)).toBeInTheDocument();
     expect(screen.getAllByText("Metadata only").length).toBeGreaterThan(0);
