@@ -1,5 +1,9 @@
 import crypto from "crypto";
 import { projectAdminSupportMetadataForAudience } from "../adminSupportProjectionSafety/adminSupportProjectionSafety";
+import {
+  buildIncidentWorkspaceLinks,
+  type EscalationReviewWorkspaceLink,
+} from "../escalationReviewWorkspaceLinks/escalationReviewWorkspaceLinks";
 
 export const ADMIN_SECURITY_INCIDENT_REVIEW_VERSION = "admin_security_incident_review_v1";
 
@@ -75,6 +79,7 @@ export type AdminSecurityIncidentReviewDetail = AdminSecurityIncidentReviewRecor
   }>;
   redactionNotes: string[];
   suggestedNextReviewStep: string;
+  relatedWorkspaceLinks: EscalationReviewWorkspaceLink[];
 };
 
 const SUPPORTED_CATEGORIES = new Set<AdminSecurityIncidentCategory>([
@@ -339,6 +344,7 @@ export function buildAdminSecurityIncidentReviewDetail(
       "Raw actor ids, target ids, tokens, provider payloads, documents, storage paths, stack traces, and policy internals are not included.",
     ],
     suggestedNextReviewStep: record.recommendedReviewAction,
+    relatedWorkspaceLinks: buildIncidentWorkspaceLinks({ incident: record }),
   };
 }
 
@@ -369,4 +375,3 @@ export function filterAdminSecurityIncidentRecords(
     return true;
   });
 }
-

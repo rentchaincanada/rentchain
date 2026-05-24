@@ -56,6 +56,37 @@ export type AdminSecurityIncidentDetail = AdminSecurityIncidentRecord & {
   }>;
   redactionNotes: string[];
   suggestedNextReviewStep: string;
+  relatedWorkspaceLinks: AdminReviewWorkspaceLink[];
+};
+
+export type AdminReviewWorkspaceLink = {
+  linkId: string;
+  linkType: string;
+  sourceSummary: {
+    kind: string;
+    label: string;
+    category: string | null;
+    severity: string | null;
+    state: string | null;
+    metadataOnly: true;
+    rawIdsIncluded: false;
+  };
+  targetSummary: {
+    kind: string;
+    label: string;
+    category: string | null;
+    severity: string | null;
+    state: string | null;
+    metadataOnly: true;
+    rawIdsIncluded: false;
+  };
+  workflowFamily: string | null;
+  metadataOnly: true;
+  visibilityClass: "admin_support_internal";
+  tenantVisible: false;
+  landlordVisible: false;
+  appendCompatible: true;
+  mutationControlsEnabled: false;
 };
 
 export async function fetchAdminSecurityIncidents(params?: {
@@ -91,4 +122,3 @@ export async function fetchAdminSecurityIncidentDetail(incidentId: string) {
     incident: AdminSecurityIncidentDetail;
   }>(`/admin/security/incidents/${encodeURIComponent(incidentId)}`);
 }
-

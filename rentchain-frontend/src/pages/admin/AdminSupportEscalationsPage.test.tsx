@@ -72,6 +72,37 @@ beforeEach(() => {
       reviewNotes: [],
       redactionSummary: "Escalation details are metadata-only.",
       prohibitedActions: ["Do not perform autonomous remediation."],
+      relatedWorkspaceLinks: [
+        {
+          linkId: "workspace_link:safe",
+          linkType: "escalation_to_runbook",
+          sourceSummary: {
+            kind: "support_escalation",
+            label: "Credential Secret escalation",
+            category: "credential_secret",
+            severity: "critical",
+            state: "awaiting_approval",
+            metadataOnly: true,
+            rawIdsIncluded: false,
+          },
+          targetSummary: {
+            kind: "runbook",
+            label: "Credential or Secret Exposure Runbook",
+            category: "credential_secret",
+            severity: "critical",
+            state: "security_review",
+            metadataOnly: true,
+            rawIdsIncluded: false,
+          },
+          workflowFamily: "admin_support_escalation_review",
+          metadataOnly: true,
+          visibilityClass: "admin_support_internal",
+          tenantVisible: false,
+          landlordVisible: false,
+          appendCompatible: true,
+          mutationControlsEnabled: false,
+        },
+      ],
       emptyState: false,
     },
   });
@@ -89,6 +120,8 @@ describe("AdminSupportEscalationsPage", () => {
     expect(await screen.findByRole("heading", { name: "Support escalations" })).toBeInTheDocument();
     expect((await screen.findAllByText("Credential Secret escalation")).length).toBeGreaterThan(0);
     expect(await screen.findByText("Security operator")).toBeInTheDocument();
+    expect(await screen.findByText(/Escalation To Runbook/)).toBeInTheDocument();
+    expect(await screen.findByText(/Credential or Secret Exposure Runbook/)).toBeInTheDocument();
     expect(screen.getAllByText("Metadata only").length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: /approve/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /resolve/i })).not.toBeInTheDocument();

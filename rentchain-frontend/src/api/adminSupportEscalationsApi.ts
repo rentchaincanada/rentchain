@@ -37,7 +37,38 @@ export type AdminSupportEscalationDetail = AdminSupportEscalationRecord & {
   reviewNotes: Array<Record<string, unknown>>;
   redactionSummary: string;
   prohibitedActions: string[];
+  relatedWorkspaceLinks: AdminReviewWorkspaceLink[];
   emptyState: boolean;
+};
+
+export type AdminReviewWorkspaceLink = {
+  linkId: string;
+  linkType: string;
+  sourceSummary: {
+    kind: string;
+    label: string;
+    category: string | null;
+    severity: string | null;
+    state: string | null;
+    metadataOnly: true;
+    rawIdsIncluded: false;
+  };
+  targetSummary: {
+    kind: string;
+    label: string;
+    category: string | null;
+    severity: string | null;
+    state: string | null;
+    metadataOnly: true;
+    rawIdsIncluded: false;
+  };
+  workflowFamily: string | null;
+  metadataOnly: true;
+  visibilityClass: "admin_support_internal";
+  tenantVisible: false;
+  landlordVisible: false;
+  appendCompatible: true;
+  mutationControlsEnabled: false;
 };
 
 export type AdminSupportEscalationSummary = {

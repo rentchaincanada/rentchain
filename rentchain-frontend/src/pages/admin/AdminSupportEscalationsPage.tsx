@@ -136,6 +136,20 @@ function DetailPanel({ escalation }: { escalation: AdminSupportEscalationDetail 
             ))}
           </ul>
         </div>
+        <div>
+          <div style={{ fontWeight: 700 }}>Related review workspace links</div>
+          {escalation.relatedWorkspaceLinks?.length ? (
+            <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
+              {escalation.relatedWorkspaceLinks.map((link) => (
+                <div key={link.linkId} style={{ color: "#475569" }}>
+                  {label(link.linkType)} · {link.sourceSummary.label} → {link.targetSummary.label}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ color: "#64748b", marginTop: 8 }}>No metadata-only workspace links are available yet.</div>
+          )}
+        </div>
       </div>
     </Card>
   );
