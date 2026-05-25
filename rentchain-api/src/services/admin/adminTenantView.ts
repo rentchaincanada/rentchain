@@ -81,6 +81,16 @@ function unitScopeKey(propertyId: string | null | undefined, landlordId: string 
   return `${asTrimmedString(propertyId)}::${asTrimmedString(landlordId)}`;
 }
 
+function mergeUnits(...groups: CanonicalUnitRecord[][]): CanonicalUnitRecord[] {
+  const out = new Map<string, CanonicalUnitRecord>();
+  for (const group of groups) {
+    for (const unit of group) {
+      if (!out.has(unit.id)) out.set(unit.id, unit);
+    }
+  }
+  return Array.from(out.values());
+}
+
 function asTrimmedString(value: unknown): string {
   return String(value || "").trim();
 }
@@ -211,6 +221,11 @@ function safeUnitLabel(raw: Record<string, unknown>, propertyUnits: CanonicalUni
   return resolveUnitDisplayFromPropertyUnits(raw, propertyUnits);
 }
 
+function sanitizeUnitNumber(value: string | null, unitId: string | null): string | null {
+  const normalized = normalizeUnitDisplayValue(value);
+  return normalized && !isLikelyRawInternalId(normalized, unitId) ? normalized : null;
+}
+
 function screeningStatus(raw: Record<string, unknown>) {
   return (
     asTrimmedString(raw.screeningStatus) ||
@@ -294,12 +309,39 @@ async function loadUnitsByReferences(
   return out;
 }
 
+function tenantRelationshipKeys(tenant: TenantDocRow): string[] {
+  return Array.from(
+    new Set(
+      [
+        tenant.id,
+        tenant.raw.id,
+        tenant.raw.tenantId,
+        tenant.raw.userId,
+        tenant.raw.uid,
+        tenant.raw.accountId,
+        tenant.raw.profileId,
+        tenant.raw.authUid,
+      ]
+        .map((value) => asTrimmedString(value))
+        .filter(Boolean)
+    )
+  );
+}
+
 async function loadReverseLeaseLinks(
   firestore: FirestoreLike,
-  tenantIds: string[]
+  tenants: TenantDocRow[]
 ): Promise<Map<string, LeaseDocRow[]>> {
   const out = new Map<string, LeaseDocRow[]>();
-  const uniqueTenantIds = Array.from(new Set(tenantIds.map((value) => asTrimmedString(value)).filter(Boolean)));
+  const keyToTenantIds = new Map<string, string[]>();
+  for (const tenant of tenants) {
+    for (const key of tenantRelationshipKeys(tenant)) {
+      const existing = keyToTenantIds.get(key) || [];
+      existing.push(tenant.id);
+      keyToTenantIds.set(key, existing);
+    }
+  }
+  const uniqueTenantIds = Array.from(keyToTenantIds.keys());
   await Promise.all(
     uniqueTenantIds.map(async (tenantId) => {
       const rows = new Map<string, LeaseDocRow>();
@@ -314,7 +356,13 @@ async function loadReverseLeaseLinks(
       for (const doc of arraySnap?.docs || []) {
         rows.set(doc.id, { id: doc.id, raw: (doc.data() || {}) as Record<string, unknown> });
       }
-      if (rows.size) out.set(tenantId, Array.from(rows.values()));
+      if (rows.size) {
+        for (const ownerTenantId of keyToTenantIds.get(tenantId) || []) {
+          const existing = new Map((out.get(ownerTenantId) || []).map((row) => [row.id, row]));
+          for (const row of rows.values()) existing.set(row.id, row);
+          out.set(ownerTenantId, Array.from(existing.values()));
+        }
+      }
     })
   );
   return out;
@@ -383,7 +431,12 @@ function buildView(
     asTrimmedString(tenant.raw.unitNumber) ||
     asTrimmedString(linkedLease?.raw.unitNumber) ||
     null;
-  const propertyUnits = propertyId ? unitsByPropertyScope.get(unitScopeKey(propertyId, landlordId)) || [] : [];
+  const propertyUnits = propertyId
+    ? mergeUnits(
+        unitsByPropertyScope.get(unitScopeKey(propertyId, landlordId)) || [],
+        unitsByPropertyScope.get(unitScopeKey(propertyId, null)) || []
+      )
+    : [];
   const directUnitRaw = unitId ? unitsById.get(unitId) : null;
   const unitCandidates = [...propertyUnits];
   const unitReferences = [
@@ -459,12 +512,14 @@ function buildView(
     propertyId,
     propertyName,
     unitId,
-    unitNumber:
+    unitNumber: sanitizeUnitNumber(
       canonicalUnitLabel(directUnitRaw ? toCanonicalUnitRecord(unitId!, directUnitRaw) : null) ||
-      safeUnitLabel(tenant.raw, unitCandidates) ||
-      resolvedLeaseUnit ||
-      safeUnitLabel((linkedLease?.raw || {}) as Record<string, unknown>, unitCandidates) ||
-      null,
+        safeUnitLabel(tenant.raw, unitCandidates) ||
+        resolvedLeaseUnit ||
+        safeUnitLabel((linkedLease?.raw || {}) as Record<string, unknown>, unitCandidates) ||
+        null,
+      unitId
+    ),
     leaseId,
     leaseStatus: currentLeaseStatus,
     screeningStatus: currentScreeningStatus,
@@ -528,10 +583,9 @@ export async function listAdminTenants(
         .filter(Boolean)
     )
   );
-  const tenantIds = tenantDocs.map((tenant) => tenant.id);
   const [leasesById, reverseLeasesByTenantId] = await Promise.all([
     loadLinkedDocs(firestore, "leases", leaseIds),
-    loadReverseLeaseLinks(firestore, tenantIds),
+    loadReverseLeaseLinks(firestore, tenantDocs),
   ]);
 
   const propertyIds = Array.from(
@@ -569,17 +623,19 @@ export async function listAdminTenants(
   );
   const unitsById = await loadLinkedDocs(firestore, "units", unitIds);
   const unitsByReference = await loadUnitsByReferences(firestore, unitIds);
+  const scopedUnitEntries = tenantDocs
+    .map((tenant) => {
+      const linkedLease = resolveLeaseLink(tenant, leasesById, reverseLeasesByTenantId);
+      const propertyId = asTrimmedString(tenant.raw.propertyId || linkedLease?.raw.propertyId);
+      if (!propertyId) return null;
+      const landlordId = asTrimmedString(tenant.raw.landlordId || linkedLease?.raw.landlordId);
+      return [unitScopeKey(propertyId, landlordId), { propertyId, landlordId }] as const;
+    })
+    .filter((value): value is readonly [string, { propertyId: string; landlordId: string }] => Boolean(value));
+  const unscopedUnitEntries = propertyIds.map((propertyId) => [unitScopeKey(propertyId, null), { propertyId, landlordId: "" }] as const);
   const unitScopes = Array.from(
     new Map(
-      tenantDocs
-        .map((tenant) => {
-          const linkedLease = resolveLeaseLink(tenant, leasesById, reverseLeasesByTenantId);
-          const propertyId = asTrimmedString(tenant.raw.propertyId || linkedLease?.raw.propertyId);
-          if (!propertyId) return null;
-          const landlordId = asTrimmedString(tenant.raw.landlordId || linkedLease?.raw.landlordId);
-          return [unitScopeKey(propertyId, landlordId), { propertyId, landlordId }] as const;
-        })
-        .filter((value): value is readonly [string, { propertyId: string; landlordId: string }] => Boolean(value))
+      [...scopedUnitEntries, ...unscopedUnitEntries]
     ).values()
   );
   const unitsByPropertyScope = new Map<string, CanonicalUnitRecord[]>();

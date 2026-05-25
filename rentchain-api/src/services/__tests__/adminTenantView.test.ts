@@ -128,6 +128,7 @@ describe("adminTenantView", () => {
     seedDoc("tenants", "tenant-live-chip", {
       fullName: "Chip Milo",
       email: "chip.live@example.com",
+      tenantId: "chip-user-1",
       landlordId: "landlord-1",
       propertyId: "prop-1",
       unitId: "a1O2tQcdEZ7t6y3GHT5G",
@@ -184,7 +185,7 @@ describe("adminTenantView", () => {
       propertyId: "prop-1",
       unitId: "a1O2tQcdEZ7t6y3GHT5G",
       unitNumber: "a1O2tQcdEZ7t6y3GHT5G",
-      tenantIds: ["tenant-live-chip"],
+      tenantIds: ["chip-user-1"],
       status: "active",
       startDate: "2026-05-01",
       endDate: "2027-04-30",
@@ -326,6 +327,34 @@ describe("adminTenantView", () => {
       leaseStatus: "active",
       currentLeaseStartDate: "2026-05-01",
       currentLeaseEndDate: "2027-04-30",
+    });
+  });
+
+  it("does not expose raw unit ids when converted tenant unit references cannot be resolved", async () => {
+    seedDoc("tenants", "tenant-alice", {
+      fullName: "Alice Wonderland",
+      email: "alice@example.com",
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitId: "LP1buUj0kSH6A668slqP",
+      unitNumber: "LP1buUj0kSH6A668slqP",
+      leaseStatus: "active",
+      status: "active",
+      createdAt: "2026-03-11T00:00:00.000Z",
+      updatedAt: "2026-03-11T00:00:00.000Z",
+    });
+
+    const { listAdminTenants } = await import("../admin/adminTenantView");
+    const result = await listAdminTenants({ firestore: fakeDb as any, q: "alice", page: 1, pageSize: 25 });
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toMatchObject({
+      fullName: "Alice Wonderland",
+      unitId: "LP1buUj0kSH6A668slqP",
+      unitNumber: null,
+      leaseStatus: "active",
+      currentLeaseStartDate: null,
+      currentLeaseEndDate: null,
     });
   });
 

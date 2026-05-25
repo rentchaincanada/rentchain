@@ -204,6 +204,36 @@ describe("adminLeaseView", () => {
     expect(byLeaseId.items.map((item) => item.id)).toEqual(["lease-3"]);
   });
 
+  it("resolves lease unit document ids when lease unitNumber is missing", async () => {
+    seedDoc("leases", "lease-null-unit", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitId: "unit-null-6",
+      tenantId: "tenant-null",
+      status: "active",
+      monthlyRent: 2000,
+      startDate: "2026-05-01",
+      endDate: "2027-04-30",
+      updatedAt: "2026-03-11T00:00:00.000Z",
+      createdAt: "2026-03-11T00:00:00.000Z",
+    });
+    seedDoc("tenants", "tenant-null", { fullName: "Null Unit" });
+    seedDoc("units", "unit-null-6", { propertyId: "prop-1", unitNumber: "6" });
+
+    const { listAdminLeases } = await import("../admin/adminLeaseView");
+    const result = await listAdminLeases({ firestore: fakeDb as any, q: "null unit", page: 1, pageSize: 25 });
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toMatchObject({
+      id: "lease-null-unit",
+      unitId: "unit-null-6",
+      unitNumber: "6",
+      leaseDisplayLabel: "Coburg Rd · Unit 6 · Null Unit",
+      startDate: "2026-05-01",
+      endDate: "2027-04-30",
+    });
+  });
+
   it("filters by status, risk grade, integrity, and date range", async () => {
     const { listAdminLeases } = await import("../admin/adminLeaseView");
     const statusFiltered = await listAdminLeases({ firestore: fakeDb as any, status: "active", page: 1, pageSize: 25 });

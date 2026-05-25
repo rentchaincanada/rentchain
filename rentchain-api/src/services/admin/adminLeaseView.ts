@@ -68,6 +68,16 @@ function unitScopeKey(propertyId: string | null | undefined, landlordId: string 
   return `${asTrimmedString(propertyId)}::${asTrimmedString(landlordId)}`;
 }
 
+function mergeUnits(...groups: CanonicalUnitRecord[][]): CanonicalUnitRecord[] {
+  const out = new Map<string, CanonicalUnitRecord>();
+  for (const group of groups) {
+    for (const unit of group) {
+      if (!out.has(unit.id)) out.set(unit.id, unit);
+    }
+  }
+  return Array.from(out.values());
+}
+
 function asTrimmedString(value: unknown): string {
   return String(value || "").trim();
 }
@@ -251,6 +261,11 @@ function safeUnitDisplayLabel(raw: Record<string, unknown>, propertyUnits: Canon
   return resolveUnitDisplayFromPropertyUnits(raw, propertyUnits);
 }
 
+function sanitizeUnitNumber(value: string | null, unitId: string | null): string | null {
+  const normalized = normalizeUnitDisplayValue(value);
+  return normalized && !isLikelyRawInternalId(normalized, unitId) ? normalized : null;
+}
+
 async function loadLinkedDocs(
   firestore: FirestoreLike,
   collectionName: string,
@@ -322,7 +337,12 @@ function buildView(
     asTrimmedString(raw.resolvedUnitId) ||
     asTrimmedString(raw.unitNumber) ||
     null;
-  const propertyUnits = propertyId ? [...(unitsByPropertyScope.get(unitScopeKey(propertyId, landlordId)) || [])] : [];
+  const propertyUnits = propertyId
+    ? mergeUnits(
+        unitsByPropertyScope.get(unitScopeKey(propertyId, landlordId)) || [],
+        unitsByPropertyScope.get(unitScopeKey(propertyId, null)) || []
+      )
+    : [];
   const unitReferences = [raw.unitId, raw.resolvedUnitId, raw.unitNumber, raw.unitLabel, raw.unit]
     .map((value) => asTrimmedString(value))
     .filter(Boolean);
@@ -346,12 +366,13 @@ function buildView(
     });
   }
   const canonicalLease = toCanonicalLeaseRecord(lease.id, raw, propertyUnits);
-  const unitNumber =
+  const resolvedUnitNumber =
     canonicalUnitLabel(directUnitRaw ? toCanonicalUnitRecord(unitId!, directUnitRaw) : null) ||
     canonicalUnitLabel(propertyUnits.find((unit) => unit.id === canonicalLease.resolvedUnitId)) ||
     normalizeUnitDisplayValue(canonicalLease.resolvedUnitLabel) ||
     normalizeUnitDisplayValue(canonicalLease.resolvedUnitNumber) ||
     safeUnitDisplayLabel(raw, propertyUnits);
+  const unitNumber = sanitizeUnitNumber(resolvedUnitNumber, unitId);
   const landlordDisplayName =
     safeLandlordDisplayName(landlord) ||
     (landlordId ? "Landlord linked / profile missing" : "Landlord profile unavailable");
@@ -439,16 +460,18 @@ export async function listAdminLeases(
     loadLinkedDocs(firestore, "units", unitIds),
     loadUnitsByReferences(firestore, unitIds),
   ]);
+  const scopedUnitEntries = leaseDocs
+    .map((lease) => {
+      const propertyId = asTrimmedString(lease.raw.propertyId);
+      if (!propertyId) return null;
+      const landlordId = asTrimmedString(lease.raw.landlordId);
+      return [unitScopeKey(propertyId, landlordId), { propertyId, landlordId }] as const;
+    })
+    .filter((value): value is readonly [string, { propertyId: string; landlordId: string }] => Boolean(value));
+  const unscopedUnitEntries = propertyIds.map((propertyId) => [unitScopeKey(propertyId, null), { propertyId, landlordId: "" }] as const);
   const unitScopes = Array.from(
     new Map(
-      leaseDocs
-        .map((lease) => {
-          const propertyId = asTrimmedString(lease.raw.propertyId);
-          if (!propertyId) return null;
-          const landlordId = asTrimmedString(lease.raw.landlordId);
-          return [unitScopeKey(propertyId, landlordId), { propertyId, landlordId }] as const;
-        })
-        .filter((value): value is readonly [string, { propertyId: string; landlordId: string }] => Boolean(value))
+      [...scopedUnitEntries, ...unscopedUnitEntries]
     ).values()
   );
   const unitsByPropertyScope = new Map<string, CanonicalUnitRecord[]>();
