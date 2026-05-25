@@ -11,6 +11,7 @@ const { fakeDb, resetFakeDb, seedDoc } = (() => {
   function matches(doc: any, filters: Array<{ field: string; op: string; value: any }>) {
     return filters.every(({ field, op, value }) => {
       const actual = doc?.data?.[field];
+      if (op === "array-contains") return Array.isArray(actual) && actual.includes(value);
       if (op === "==") return actual === value;
       return false;
     });
@@ -124,6 +125,18 @@ describe("adminTenantView", () => {
       createdAt: "2026-03-04T00:00:00.000Z",
       updatedAt: "2026-03-08T00:00:00.000Z",
     });
+    seedDoc("tenants", "tenant-live-chip", {
+      fullName: "Chip Milo",
+      email: "chip.live@example.com",
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitId: "a1O2tQcdEZ7t6y3GHT5G",
+      unitNumber: "a1O2tQcdEZ7t6y3GHT5G",
+      leaseStatus: "active",
+      status: "active",
+      createdAt: "2026-03-10T00:00:00.000Z",
+      updatedAt: "2026-03-10T00:00:00.000Z",
+    });
 
     seedDoc("leases", "lease-1", {
       landlordId: "landlord-1",
@@ -166,11 +179,22 @@ describe("adminTenantView", () => {
       leaseStartDate: "2026-05-01",
       leaseEndDate: "2027-04-30",
     });
+    seedDoc("leases", "ZD2VvH7cCZ7Q8YfVGR55", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitId: "a1O2tQcdEZ7t6y3GHT5G",
+      unitNumber: "a1O2tQcdEZ7t6y3GHT5G",
+      tenantIds: ["tenant-live-chip"],
+      status: "active",
+      startDate: "2026-05-01",
+      endDate: "2027-04-30",
+    });
 
     seedDoc("properties", "prop-1", { name: "Coburg Rd" });
     seedDoc("properties", "prop-2", { name: "Summit" });
     seedDoc("units", "unit-doc-coburg-6", { propertyId: "prop-1", unitId: "unit-coburg-6", unitNumber: "6" });
     seedDoc("units", "unit-field-doc-6", { unitId: "unit-field-6", unitNumber: "6" });
+    seedDoc("units", "a1O2tQcdEZ7t6y3GHT5G", { propertyId: "prop-1", unitNumber: "6" });
   });
 
   it("returns only safe admin tenant view fields", async () => {
@@ -244,7 +268,7 @@ describe("adminTenantView", () => {
       pageSize: 25,
     });
 
-    expect(leaseFiltered.items.map((item) => item.id)).toEqual(["tenant-6", "tenant-4", "tenant-1"]);
+    expect(leaseFiltered.items.map((item) => item.id)).toEqual(["tenant-live-chip", "tenant-6", "tenant-4", "tenant-1"]);
     expect(screeningFiltered.items.map((item) => item.id)).toEqual(["tenant-4", "tenant-1"]);
     expect(moveInFiltered.items.map((item) => item.id)).toEqual(["tenant-2"]);
   });
@@ -288,14 +312,32 @@ describe("adminTenantView", () => {
     });
   });
 
+  it("reverse-links active leases and resolves raw unit ids when tenant lease pointers are missing", async () => {
+    const { listAdminTenants } = await import("../admin/adminTenantView");
+    const result = await listAdminTenants({ firestore: fakeDb as any, q: "chip.live@example.com", page: 1, pageSize: 25 });
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toMatchObject({
+      fullName: "Chip Milo",
+      propertyName: "Coburg Rd",
+      unitId: "a1O2tQcdEZ7t6y3GHT5G",
+      unitNumber: "6",
+      leaseId: "ZD2VvH7cCZ7Q8YfVGR55",
+      leaseStatus: "active",
+      currentLeaseStartDate: "2026-05-01",
+      currentLeaseEndDate: "2027-04-30",
+    });
+  });
+
   it("keeps legitimate applicant and active tenant workspaces distinct for the same person", async () => {
     const { listAdminTenants } = await import("../admin/adminTenantView");
     const result = await listAdminTenants({ firestore: fakeDb as any, q: "chip milo", sortBy: "createdAt", sortDir: "asc", page: 1, pageSize: 25 });
 
-    expect(result.items).toHaveLength(2);
-    expect(result.items.map((item) => item.id).sort()).toEqual(["tenant-4", "tenant-5"]);
+    expect(result.items).toHaveLength(3);
+    expect(result.items.map((item) => item.id).sort()).toEqual(["tenant-4", "tenant-5", "tenant-live-chip"]);
     expect(result.items.find((item) => item.id === "tenant-4")?.lifecycle.lifecycleState).toBe("active");
     expect(result.items.find((item) => item.id === "tenant-5")?.lifecycle.lifecycleState).toBe("applicant");
+    expect(result.items.find((item) => item.id === "tenant-live-chip")?.lifecycle.lifecycleState).toBe("active");
   });
 
   it("supports sort and pagination", async () => {
@@ -308,7 +350,7 @@ describe("adminTenantView", () => {
       pageSize: 1,
     });
 
-    expect(result.total).toBe(6);
+    expect(result.total).toBe(7);
     expect(result.page).toBe(2);
     expect(result.pageSize).toBe(1);
     expect(result.hasMore).toBe(true);

@@ -131,6 +131,20 @@ describe("adminLeaseView", () => {
       updatedAt: "2026-03-09T00:00:00.000Z",
       createdAt: "2026-03-06T00:00:00.000Z",
     });
+    seedDoc("leases", "ZD2VvH7cCZ7Q8YfVGR55", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitId: "a1O2tQcdEZ7t6y3GHT5G",
+      unitNumber: "a1O2tQcdEZ7t6y3GHT5G",
+      tenantIds: ["tenant-5"],
+      status: "active",
+      monthlyRent: 2000,
+      startDate: "2026-05-01",
+      endDate: "2027-04-30",
+      riskGrade: "A",
+      updatedAt: "2026-03-10T00:00:00.000Z",
+      createdAt: "2026-03-10T00:00:00.000Z",
+    });
 
     seedDoc("properties", "prop-1", { name: "Coburg Rd" });
     seedDoc("properties", "prop-2", { name: "Summit" });
@@ -146,6 +160,7 @@ describe("adminLeaseView", () => {
     seedDoc("units", "unit-doc-coburg-6", { propertyId: "prop-1", unitId: "unit-coburg-6", unitNumber: "6" });
     seedDoc("units", "unit-direct-6", { unitNumber: "6" });
     seedDoc("units", "unit-field-doc-6", { unitId: "unit-field-6", unitNumber: "6" });
+    seedDoc("units", "a1O2tQcdEZ7t6y3GHT5G", { propertyId: "prop-1", unitNumber: "6" });
   });
 
   it("returns safe shaped lease rows with tenant names", async () => {
@@ -161,14 +176,21 @@ describe("adminLeaseView", () => {
     expect(result.items[0]).not.toHaveProperty("auditBlob");
     expect(result.items.find((item) => item.id === "lease-1")?.leaseDisplayLabel).toBe("Coburg Rd · Unit 101 · Jane Tenant");
     expect(result.items.find((item) => item.id === "lease-1")?.landlordDisplayName).toBe("Harbour Homes");
-    expect(result.items.find((item) => item.id === "lease-3")?.unitNumber).toBeNull();
-    expect(result.items.find((item) => item.id === "lease-3")?.leaseDisplayLabel).toBe("Coburg Rd · Unit not assigned · Old Lease");
+    expect(result.items.find((item) => item.id === "lease-3")?.unitNumber).toBe("6");
+    expect(result.items.find((item) => item.id === "lease-3")?.leaseDisplayLabel).toBe("Coburg Rd · Unit 6 · Old Lease");
     expect(result.items.find((item) => item.id === "lease-4")?.unitNumber).toBe("6");
     expect(result.items.find((item) => item.id === "lease-4")?.leaseDisplayLabel).toBe("Coburg Rd · Unit 6 · Chip Milo");
     expect(result.items.find((item) => item.id === "lease-5")?.unitNumber).toBe("6");
     expect(result.items.find((item) => item.id === "lease-5")?.leaseDisplayLabel).toBe("Coburg Rd · Unit 6 · Chip Milo");
     expect(result.items.find((item) => item.id === "lease-6")?.unitNumber).toBe("6");
     expect(result.items.find((item) => item.id === "lease-6")?.leaseDisplayLabel).toBe("Coburg Rd · Unit 6 · Chip Milo");
+    expect(result.items.find((item) => item.id === "ZD2VvH7cCZ7Q8YfVGR55")).toMatchObject({
+      unitId: "a1O2tQcdEZ7t6y3GHT5G",
+      unitNumber: "6",
+      leaseDisplayLabel: "Coburg Rd · Unit 6 · Chip Milo",
+      startDate: "2026-05-01",
+      endDate: "2027-04-30",
+    });
   });
 
   it("supports search across property, unit, tenant, and lease id", async () => {
@@ -200,8 +222,8 @@ describe("adminLeaseView", () => {
       pageSize: 25,
     });
 
-    expect(statusFiltered.items.map((item) => item.id)).toEqual(["lease-6", "lease-5", "lease-4", "lease-1"]);
-    expect(riskFiltered.items.map((item) => item.id)).toEqual(["lease-6", "lease-5", "lease-4", "lease-2"]);
+    expect(statusFiltered.items.map((item) => item.id)).toEqual(["ZD2VvH7cCZ7Q8YfVGR55", "lease-6", "lease-5", "lease-4", "lease-1"]);
+    expect(riskFiltered.items.map((item) => item.id)).toEqual(["ZD2VvH7cCZ7Q8YfVGR55", "lease-6", "lease-5", "lease-4", "lease-2"]);
     expect(integrityFiltered.items.map((item) => item.id)).toEqual(["lease-2"]);
     expect(dateFiltered.items.map((item) => item.id)).toEqual(["lease-2"]);
   });
@@ -218,10 +240,10 @@ describe("adminLeaseView", () => {
       pageSize: 1,
     });
 
-    expect(scoped.total).toBe(5);
+    expect(scoped.total).toBe(6);
     expect(scoped.page).toBe(3);
     expect(scoped.pageSize).toBe(1);
     expect(scoped.hasMore).toBe(true);
-    expect(scoped.items[0]?.id).toBe("lease-6");
+    expect(scoped.items[0]?.id).toBe("ZD2VvH7cCZ7Q8YfVGR55");
   });
 });

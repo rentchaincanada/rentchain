@@ -343,6 +343,7 @@ function buildView(
   }
   const canonicalLease = toCanonicalLeaseRecord(lease.id, raw, propertyUnits);
   const unitNumber =
+    canonicalUnitLabel(directUnitRaw ? toCanonicalUnitRecord(unitId!, directUnitRaw) : null) ||
     canonicalUnitLabel(propertyUnits.find((unit) => unit.id === canonicalLease.resolvedUnitId)) ||
     normalizeUnitDisplayValue(canonicalLease.resolvedUnitLabel) ||
     normalizeUnitDisplayValue(canonicalLease.resolvedUnitNumber) ||

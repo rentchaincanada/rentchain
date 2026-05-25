@@ -72,6 +72,11 @@ type LeaseLink = {
   raw: Record<string, unknown>;
 } | null;
 
+type LeaseDocRow = {
+  id: string;
+  raw: Record<string, unknown>;
+};
+
 function asTrimmedString(value: unknown): string {
   return String(value || "").trim();
 }
@@ -222,6 +227,19 @@ function leaseStatus(raw: Record<string, unknown>) {
   return asTrimmedString(raw.leaseStatus || raw.status) || null;
 }
 
+function isCurrentLeaseStatus(value: unknown) {
+  const normalized = asLower(value);
+  return ["active", "current", "notice_pending", "renewal_pending", "renewal_accepted", "move_out_pending"].includes(normalized);
+}
+
+function leaseStart(raw: Record<string, unknown>) {
+  return normalizeDate(raw.leaseStartDate) || normalizeDate(raw.startDate) || normalizeDate(raw.leaseStart);
+}
+
+function leaseEnd(raw: Record<string, unknown>) {
+  return normalizeDate(raw.leaseEndDate) || normalizeDate(raw.endDate) || normalizeDate(raw.leaseEnd);
+}
+
 function compareValues(a: string | number | null, b: string | number | null, dir: "asc" | "desc") {
   const aValue = a ?? "";
   const bValue = b ?? "";
@@ -272,40 +290,75 @@ async function loadUnitsByReferences(
   return out;
 }
 
+async function loadReverseLeaseLinks(
+  firestore: FirestoreLike,
+  tenantIds: string[]
+): Promise<Map<string, LeaseDocRow[]>> {
+  const out = new Map<string, LeaseDocRow[]>();
+  const uniqueTenantIds = Array.from(new Set(tenantIds.map((value) => asTrimmedString(value)).filter(Boolean)));
+  await Promise.all(
+    uniqueTenantIds.map(async (tenantId) => {
+      const rows = new Map<string, LeaseDocRow>();
+      const directSnap = await (firestore.collection("leases") as any).where("tenantId", "==", tenantId).get().catch(() => null);
+      for (const doc of directSnap?.docs || []) {
+        rows.set(doc.id, { id: doc.id, raw: (doc.data() || {}) as Record<string, unknown> });
+      }
+      const arraySnap = await (firestore.collection("leases") as any)
+        .where("tenantIds", "array-contains", tenantId)
+        .get()
+        .catch(() => null);
+      for (const doc of arraySnap?.docs || []) {
+        rows.set(doc.id, { id: doc.id, raw: (doc.data() || {}) as Record<string, unknown> });
+      }
+      if (rows.size) out.set(tenantId, Array.from(rows.values()));
+    })
+  );
+  return out;
+}
+
 function resolveLeaseLink(
   tenant: TenantDocRow,
-  leasesById: Map<string, Record<string, unknown>>
+  leasesById: Map<string, Record<string, unknown>>,
+  reverseLeasesByTenantId: Map<string, LeaseDocRow[]> = new Map()
 ): LeaseLink {
   const leaseId = asTrimmedString(tenant.raw.currentLeaseId || tenant.raw.leaseId);
-  if (!leaseId) return null;
-  const raw = leasesById.get(leaseId);
-  if (!raw) return null;
+  const explicitRaw = leaseId ? leasesById.get(leaseId) : null;
+  const candidates: LeaseDocRow[] = explicitRaw
+    ? [{ id: leaseId, raw: explicitRaw }]
+    : reverseLeasesByTenantId.get(tenant.id) || [];
+  const compatible = candidates.filter(({ raw }) => {
+    if (!explicitRaw && !isCurrentLeaseStatus(leaseStatus(raw))) return false;
 
-  const tenantLandlordId = asTrimmedString(tenant.raw.landlordId);
-  const leaseLandlordId = asTrimmedString(raw.landlordId);
-  if (tenantLandlordId && leaseLandlordId && tenantLandlordId !== leaseLandlordId) return null;
+    const tenantLandlordId = asTrimmedString(tenant.raw.landlordId);
+    const leaseLandlordId = asTrimmedString(raw.landlordId);
+    if (tenantLandlordId && leaseLandlordId && tenantLandlordId !== leaseLandlordId) return false;
 
-  const tenantPropertyId = asTrimmedString(tenant.raw.propertyId);
-  const leasePropertyId = asTrimmedString(raw.propertyId);
-  if (tenantPropertyId && leasePropertyId && tenantPropertyId !== leasePropertyId) return null;
+    const tenantPropertyId = asTrimmedString(tenant.raw.propertyId);
+    const leasePropertyId = asTrimmedString(raw.propertyId);
+    if (tenantPropertyId && leasePropertyId && tenantPropertyId !== leasePropertyId) return false;
 
-  const tenantUnitId = asTrimmedString(tenant.raw.unitId);
-  const leaseUnitId = asTrimmedString(raw.unitId);
-  if (tenantUnitId && leaseUnitId && tenantUnitId !== leaseUnitId) return null;
+    const tenantUnitId = asTrimmedString(tenant.raw.unitId);
+    const leaseUnitId = asTrimmedString(raw.unitId);
+    if (tenantUnitId && leaseUnitId && tenantUnitId !== leaseUnitId) return false;
 
-  return { id: leaseId, raw };
+    return true;
+  });
+  compatible.sort((a, b) => (leaseStart(b.raw) || "").localeCompare(leaseStart(a.raw) || ""));
+  const winner = compatible[0];
+  return winner ? { id: winner.id, raw: winner.raw } : null;
 }
 
 function buildView(
   tenant: TenantDocRow,
   leasesById: Map<string, Record<string, unknown>>,
+  reverseLeasesByTenantId: Map<string, LeaseDocRow[]>,
   propertiesById: Map<string, Record<string, unknown>>,
   unitsByPropertyId: Map<string, CanonicalUnitRecord[]>,
   unitsById: Map<string, Record<string, unknown>>,
   unitsByReference: Map<string, CanonicalUnitRecord[]>
 ): AdminTenantView {
   const names = nameParts(tenant.raw);
-  const linkedLease = resolveLeaseLink(tenant, leasesById);
+  const linkedLease = resolveLeaseLink(tenant, leasesById, reverseLeasesByTenantId);
 
   const propertyId =
     asTrimmedString(tenant.raw.propertyId) ||
@@ -402,6 +455,7 @@ function buildView(
     propertyName,
     unitId,
     unitNumber:
+      canonicalUnitLabel(directUnitRaw ? toCanonicalUnitRecord(unitId!, directUnitRaw) : null) ||
       safeUnitLabel(tenant.raw, unitCandidates) ||
       resolvedLeaseUnit ||
       safeUnitLabel((linkedLease?.raw || {}) as Record<string, unknown>, unitCandidates) ||
@@ -411,12 +465,10 @@ function buildView(
     screeningStatus: currentScreeningStatus,
     moveInStatus: currentMoveInStatus,
     currentLeaseStartDate:
-      normalizeDate(linkedLease?.raw.leaseStartDate) ||
-      normalizeDate(linkedLease?.raw.leaseStart) ||
+      leaseStart((linkedLease?.raw || {}) as Record<string, unknown>) ||
       normalizeDate(tenant.raw.leaseStart),
     currentLeaseEndDate:
-      normalizeDate(linkedLease?.raw.leaseEndDate) ||
-      normalizeDate(linkedLease?.raw.leaseEnd) ||
+      leaseEnd((linkedLease?.raw || {}) as Record<string, unknown>) ||
       normalizeDate(tenant.raw.leaseEnd),
     createdAt: safeValue(tenant.raw.createdAt ?? tenant.raw.created_at),
     updatedAt: safeValue(tenant.raw.updatedAt ?? tenant.raw.updated_at),
@@ -471,13 +523,17 @@ export async function listAdminTenants(
         .filter(Boolean)
     )
   );
-  const leasesById = await loadLinkedDocs(firestore, "leases", leaseIds);
+  const tenantIds = tenantDocs.map((tenant) => tenant.id);
+  const [leasesById, reverseLeasesByTenantId] = await Promise.all([
+    loadLinkedDocs(firestore, "leases", leaseIds),
+    loadReverseLeaseLinks(firestore, tenantIds),
+  ]);
 
   const propertyIds = Array.from(
     new Set(
       tenantDocs
         .map((tenant) => {
-          const linkedLease = resolveLeaseLink(tenant, leasesById);
+          const linkedLease = resolveLeaseLink(tenant, leasesById, reverseLeasesByTenantId);
           return asTrimmedString(tenant.raw.propertyId || linkedLease?.raw.propertyId);
         })
         .filter(Boolean)
@@ -488,7 +544,7 @@ export async function listAdminTenants(
     new Set(
       tenantDocs
         .flatMap((tenant) => {
-          const linkedLease = resolveLeaseLink(tenant, leasesById);
+          const linkedLease = resolveLeaseLink(tenant, leasesById, reverseLeasesByTenantId);
           return [
             tenant.raw.unitId,
             tenant.raw.resolvedUnitId,
@@ -515,7 +571,9 @@ export async function listAdminTenants(
     })
   );
 
-  const allViews = tenantDocs.map((tenant) => buildView(tenant, leasesById, propertiesById, unitsByPropertyId, unitsById, unitsByReference));
+  const allViews = tenantDocs.map((tenant) =>
+    buildView(tenant, leasesById, reverseLeasesByTenantId, propertiesById, unitsByPropertyId, unitsById, unitsByReference)
+  );
 
   const filtered = allViews.filter((view) => {
     if (!matchesSearch(view, query.q)) return false;
