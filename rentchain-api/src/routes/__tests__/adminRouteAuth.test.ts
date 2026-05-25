@@ -1,4 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import express from "express";
+import request from "supertest";
+import { routeSource } from "../../middleware/routeSource";
 
 const mocks = vi.hoisted(() => ({
   verifyAuthTokenMock: vi.fn(),
@@ -258,5 +261,88 @@ describe("admin route auth", () => {
       )).statusCode
     ).toBe(200);
     expect((await runRoute(adminPropertiesRoutes.default, "get", "/properties/export.csv", authReq)).statusCode).toBe(200);
+  });
+
+  it("returns normalized admin lease and tenant projection fields through the mounted API routes", async () => {
+    mocks.verifyAuthTokenMock.mockReturnValue({ sub: "admin-1" });
+    mocks.buildCanonicalSessionUserFromClaimsMock.mockResolvedValue({
+      id: "admin-1",
+      role: "admin",
+      permissions: ["system.admin"],
+      revokedPermissions: [],
+    });
+    mocks.listAdminLeasesMock.mockResolvedValueOnce({
+      items: [
+        {
+          id: "ZD2VvH7cCZ7Q8YfVGR55",
+          propertyName: "Coburg Rd",
+          unitId: "a1O2tQcdEZ7t6y3GHT5G",
+          unitNumber: "6",
+          tenantName: "Chip Milo",
+          leaseDisplayLabel: "Coburg Rd · Unit 6 · Chip Milo",
+          startDate: "2026-05-01",
+          endDate: "2027-04-30",
+        },
+      ],
+      page: 1,
+      pageSize: 25,
+      total: 1,
+      hasMore: false,
+    });
+    mocks.listAdminTenantsMock.mockResolvedValueOnce({
+      items: [
+        {
+          id: "tenant-chip-milo",
+          name: "Chip Milo",
+          propertyName: "Coburg Rd",
+          unitId: "a1O2tQcdEZ7t6y3GHT5G",
+          unitNumber: "6",
+          leaseStatus: "active",
+          currentLeaseStartDate: "2026-05-01",
+          currentLeaseEndDate: "2027-04-30",
+        },
+      ],
+      page: 1,
+      pageSize: 25,
+      total: 1,
+      hasMore: false,
+    });
+
+    const [adminTenantsRoutes, adminLeasesRoutes] = await Promise.all([
+      import("../adminTenantsRoutes"),
+      import("../adminLeasesRoutes"),
+    ]);
+
+    const app = express();
+    app.use("/api/admin", routeSource("adminTenantsRoutes.ts"), adminTenantsRoutes.default);
+    app.use("/api/admin", routeSource("adminLeasesRoutes.ts"), adminLeasesRoutes.default);
+
+    const leasesRes = await request(app)
+      .get("/api/admin/leases?q=milo&page=1&pageSize=25")
+      .set("Authorization", "Bearer admin-token");
+    expect(leasesRes.status).toBe(200);
+    expect(leasesRes.headers["x-route-source"]).toBe("adminLeasesRoutes.ts");
+    expect(leasesRes.body.items[0]).toMatchObject({
+      unitNumber: "6",
+      leaseDisplayLabel: "Coburg Rd · Unit 6 · Chip Milo",
+    });
+
+    const tenantsRes = await request(app)
+      .get("/api/admin/tenants?q=milo&page=1&pageSize=25")
+      .set("Authorization", "Bearer admin-token");
+    expect(tenantsRes.status).toBe(200);
+    expect(tenantsRes.headers["x-route-source"]).toBe("adminTenantsRoutes.ts");
+    expect(tenantsRes.body.items[0]).toMatchObject({
+      unitNumber: "6",
+      currentLeaseStartDate: "2026-05-01",
+      currentLeaseEndDate: "2027-04-30",
+    });
+
+    expect(mocks.listAdminLeasesMock).toHaveBeenCalledWith(
+      expect.objectContaining({ q: "milo", page: 1, pageSize: 25 })
+    );
+    expect(mocks.listAdminTenantsMock).toHaveBeenCalledWith(
+      expect.objectContaining({ q: "milo", page: 1, pageSize: 25 })
+    );
   });
 });

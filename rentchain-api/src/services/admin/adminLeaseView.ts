@@ -64,6 +64,10 @@ type LeaseDocRow = {
   raw: Record<string, unknown>;
 };
 
+function unitScopeKey(propertyId: string | null | undefined, landlordId: string | null | undefined): string {
+  return `${asTrimmedString(propertyId)}::${asTrimmedString(landlordId)}`;
+}
+
 function asTrimmedString(value: unknown): string {
   return String(value || "").trim();
 }
@@ -290,7 +294,7 @@ async function loadUnitsByReferences(
 function buildView(
   lease: LeaseDocRow,
   propertiesById: Map<string, Record<string, unknown>>,
-  unitsByPropertyId: Map<string, CanonicalUnitRecord[]>,
+  unitsByPropertyScope: Map<string, CanonicalUnitRecord[]>,
   unitsById: Map<string, Record<string, unknown>>,
   unitsByReference: Map<string, CanonicalUnitRecord[]>,
   tenantsById: Map<string, Record<string, unknown>>,
@@ -318,7 +322,7 @@ function buildView(
     asTrimmedString(raw.resolvedUnitId) ||
     asTrimmedString(raw.unitNumber) ||
     null;
-  const propertyUnits = propertyId ? [...(unitsByPropertyId.get(propertyId) || [])] : [];
+  const propertyUnits = propertyId ? [...(unitsByPropertyScope.get(unitScopeKey(propertyId, landlordId)) || [])] : [];
   const unitReferences = [raw.unitId, raw.resolvedUnitId, raw.unitNumber, raw.unitLabel, raw.unit]
     .map((value) => asTrimmedString(value))
     .filter(Boolean);
@@ -435,15 +439,30 @@ export async function listAdminLeases(
     loadLinkedDocs(firestore, "units", unitIds),
     loadUnitsByReferences(firestore, unitIds),
   ]);
-  const unitsByPropertyId = new Map<string, CanonicalUnitRecord[]>();
+  const unitScopes = Array.from(
+    new Map(
+      leaseDocs
+        .map((lease) => {
+          const propertyId = asTrimmedString(lease.raw.propertyId);
+          if (!propertyId) return null;
+          const landlordId = asTrimmedString(lease.raw.landlordId);
+          return [unitScopeKey(propertyId, landlordId), { propertyId, landlordId }] as const;
+        })
+        .filter((value): value is readonly [string, { propertyId: string; landlordId: string }] => Boolean(value))
+    ).values()
+  );
+  const unitsByPropertyScope = new Map<string, CanonicalUnitRecord[]>();
   await Promise.all(
-    propertyIds.map(async (propertyId) => {
-      unitsByPropertyId.set(propertyId, await loadUnitsForProperty(firestore as any, propertyId).catch(() => []));
+    unitScopes.map(async ({ propertyId, landlordId }) => {
+      unitsByPropertyScope.set(
+        unitScopeKey(propertyId, landlordId),
+        await loadUnitsForProperty(firestore as any, propertyId, landlordId).catch(() => [])
+      );
     })
   );
 
   const allViews = leaseDocs.map((lease) =>
-    buildView(lease, propertiesById, unitsByPropertyId, unitsById, unitsByReference, tenantsById, landlordsById)
+    buildView(lease, propertiesById, unitsByPropertyScope, unitsById, unitsByReference, tenantsById, landlordsById)
   );
 
   const filtered = allViews.filter((view) => {

@@ -77,6 +77,10 @@ type LeaseDocRow = {
   raw: Record<string, unknown>;
 };
 
+function unitScopeKey(propertyId: string | null | undefined, landlordId: string | null | undefined): string {
+  return `${asTrimmedString(propertyId)}::${asTrimmedString(landlordId)}`;
+}
+
 function asTrimmedString(value: unknown): string {
   return String(value || "").trim();
 }
@@ -353,7 +357,7 @@ function buildView(
   leasesById: Map<string, Record<string, unknown>>,
   reverseLeasesByTenantId: Map<string, LeaseDocRow[]>,
   propertiesById: Map<string, Record<string, unknown>>,
-  unitsByPropertyId: Map<string, CanonicalUnitRecord[]>,
+  unitsByPropertyScope: Map<string, CanonicalUnitRecord[]>,
   unitsById: Map<string, Record<string, unknown>>,
   unitsByReference: Map<string, CanonicalUnitRecord[]>
 ): AdminTenantView {
@@ -365,6 +369,7 @@ function buildView(
     asTrimmedString(linkedLease?.raw.propertyId) ||
     null;
   const property = propertyId ? propertiesById.get(propertyId) : null;
+  const landlordId = asTrimmedString(tenant.raw.landlordId) || asTrimmedString(linkedLease?.raw.landlordId) || null;
   const propertyName =
     asTrimmedString(property?.name) ||
     asTrimmedString(tenant.raw.propertyName || tenant.raw.property) ||
@@ -378,7 +383,7 @@ function buildView(
     asTrimmedString(tenant.raw.unitNumber) ||
     asTrimmedString(linkedLease?.raw.unitNumber) ||
     null;
-  const propertyUnits = propertyId ? unitsByPropertyId.get(propertyId) || [] : [];
+  const propertyUnits = propertyId ? unitsByPropertyScope.get(unitScopeKey(propertyId, landlordId)) || [] : [];
   const directUnitRaw = unitId ? unitsById.get(unitId) : null;
   const unitCandidates = [...propertyUnits];
   const unitReferences = [
@@ -450,7 +455,7 @@ function buildView(
     lastName: names.lastName,
     email: asTrimmedString(tenant.raw.email) || null,
     phone: asTrimmedString(tenant.raw.phone) || null,
-    landlordId: asTrimmedString(tenant.raw.landlordId) || asTrimmedString(linkedLease?.raw.landlordId) || null,
+    landlordId,
     propertyId,
     propertyName,
     unitId,
@@ -564,15 +569,31 @@ export async function listAdminTenants(
   );
   const unitsById = await loadLinkedDocs(firestore, "units", unitIds);
   const unitsByReference = await loadUnitsByReferences(firestore, unitIds);
-  const unitsByPropertyId = new Map<string, CanonicalUnitRecord[]>();
+  const unitScopes = Array.from(
+    new Map(
+      tenantDocs
+        .map((tenant) => {
+          const linkedLease = resolveLeaseLink(tenant, leasesById, reverseLeasesByTenantId);
+          const propertyId = asTrimmedString(tenant.raw.propertyId || linkedLease?.raw.propertyId);
+          if (!propertyId) return null;
+          const landlordId = asTrimmedString(tenant.raw.landlordId || linkedLease?.raw.landlordId);
+          return [unitScopeKey(propertyId, landlordId), { propertyId, landlordId }] as const;
+        })
+        .filter((value): value is readonly [string, { propertyId: string; landlordId: string }] => Boolean(value))
+    ).values()
+  );
+  const unitsByPropertyScope = new Map<string, CanonicalUnitRecord[]>();
   await Promise.all(
-    propertyIds.map(async (propertyId) => {
-      unitsByPropertyId.set(propertyId, await loadUnitsForProperty(firestore as any, propertyId).catch(() => []));
+    unitScopes.map(async ({ propertyId, landlordId }) => {
+      unitsByPropertyScope.set(
+        unitScopeKey(propertyId, landlordId),
+        await loadUnitsForProperty(firestore as any, propertyId, landlordId).catch(() => [])
+      );
     })
   );
 
   const allViews = tenantDocs.map((tenant) =>
-    buildView(tenant, leasesById, reverseLeasesByTenantId, propertiesById, unitsByPropertyId, unitsById, unitsByReference)
+    buildView(tenant, leasesById, reverseLeasesByTenantId, propertiesById, unitsByPropertyScope, unitsById, unitsByReference)
   );
 
   const filtered = allViews.filter((view) => {
