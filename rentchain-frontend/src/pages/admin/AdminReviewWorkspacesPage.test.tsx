@@ -2,6 +2,10 @@ import React from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import AdminReviewWorkspacesPage from "./AdminReviewWorkspacesPage";
+import {
+  getGovernedReviewWorkspaceFixtureDetail,
+  getGovernedReviewWorkspaceFixtureResponse,
+} from "../../test/fixtures/governedReviewWorkspaceFixtures";
 
 const showToast = vi.fn();
 const fetchAdminReviewWorkspaces = vi.fn();
@@ -27,116 +31,14 @@ vi.mock("../../components/ui/Ui", () => ({
   Section: ({ children }: any) => <section>{children}</section>,
 }));
 
-const WORKSPACE = {
-  workspaceId: "governed_workspace:safe",
-  workspaceType: "security_review",
-  title: "Security review workspace",
-  summary: "Metadata-only workspace summary.",
-  workflowFamily: "admin_security_incident_review",
-  severitySummary: "medium",
-  reviewStateSummary: "metadata_review_ready",
-  approvalExpectationSummary: "admin_review",
-  relatedIncidentCount: 1,
-  relatedEscalationCount: 0,
-  relatedEvidenceCount: 1,
-  relatedNoteCount: 1,
-  appendEventCount: 1,
-  retentionClass: "security_review",
-  retentionReviewAt: "2026-06-01T00:00:00.000Z",
-  lastAppendedAt: "2026-05-24T01:00:00.000Z",
-  metadataOnly: true,
-  visibilityClass: "admin_support_internal",
-  tenantVisible: false,
-  landlordVisible: false,
-  appendOnly: true,
-  mutationControlsEnabled: false,
-  rawPayloadAccessEnabled: false,
-};
-
 beforeEach(() => {
   showToast.mockReset();
   fetchAdminReviewWorkspaces.mockReset();
   fetchAdminReviewWorkspaceDetail.mockReset();
-  fetchAdminReviewWorkspaces.mockResolvedValue({
-    ok: true,
-    workspaces: [WORKSPACE],
-    summary: { total: 1, metadataOnly: true, emptyState: null },
-    schema: {
-      metadataOnly: true,
-      visibilityClass: "admin_support_internal",
-      tenantVisible: false,
-      landlordVisible: false,
-      appendOnly: true,
-      persistence: "read_only_if_present",
-      mutationControlsEnabled: false,
-      rawPayloadAccessEnabled: false,
-      createRouteEnabled: false,
-      updateRouteEnabled: false,
-      deleteRouteEnabled: false,
-    },
-  });
-  fetchAdminReviewWorkspaceDetail.mockResolvedValue({
-    ok: true,
-    workspace: {
-      ...WORKSPACE,
-      safeEvidenceRefs: [
-        {
-          referenceType: "evidence_pack",
-          referenceId: "evidence-safe",
-          label: "Evidence metadata reference",
-          internalReference: true,
-          metadataOnly: true,
-        },
-      ],
-      relatedWorkspaceLinks: [
-        {
-          linkId: "workspace_link:safe",
-          linkType: "incident_to_review_workspace",
-          sourceSummary: {
-            kind: "security_incident",
-            label: "Security incident",
-            category: "policy_denied",
-            severity: "medium",
-            state: "open",
-            metadataOnly: true,
-            rawIdsIncluded: false,
-          },
-          targetSummary: {
-            kind: "review_workspace",
-            label: "Governed workspace",
-            category: "security_review",
-            severity: "medium",
-            state: "metadata_review_ready",
-            metadataOnly: true,
-            rawIdsIncluded: false,
-          },
-          workflowFamily: "admin_security_incident_review",
-          metadataOnly: true,
-          visibilityClass: "admin_support_internal",
-          tenantVisible: false,
-          landlordVisible: false,
-          appendCompatible: true,
-          mutationControlsEnabled: false,
-        },
-      ],
-      appendEventSummaries: [
-        {
-          eventRefId: "event-safe",
-          eventType: "workspace_candidate_created",
-          eventSummary: "Workspace candidate created.",
-          occurredAt: "2026-05-24T01:00:00.000Z",
-          metadataOnly: true,
-          visibilityClass: "admin_support_internal",
-          tenantVisible: false,
-          landlordVisible: false,
-          appendOnly: true,
-        },
-      ],
-      redactionSummary: "Raw notes, documents, storage paths, tokens, secrets, and debug payloads are excluded.",
-      payloadSafety: { rawPayloads: "excluded" },
-      persistenceDecision: "contract_only_firestore_deferred",
-    },
-  });
+  fetchAdminReviewWorkspaces.mockResolvedValue(getGovernedReviewWorkspaceFixtureResponse());
+  fetchAdminReviewWorkspaceDetail.mockImplementation((workspaceId: string) =>
+    Promise.resolve(getGovernedReviewWorkspaceFixtureDetail(workspaceId))
+  );
 });
 
 afterEach(() => {
@@ -150,8 +52,11 @@ describe("AdminReviewWorkspacesPage", () => {
 
     expect(await screen.findByRole("heading", { name: "Governed review workspaces" })).toBeInTheDocument();
     expect((await screen.findAllByText("Security review workspace")).length).toBeGreaterThan(0);
+    expect(screen.getByText("Support escalation review workspace")).toBeInTheDocument();
+    expect(screen.getByText("Export governance review workspace")).toBeInTheDocument();
+    expect(screen.getByText("Evidence review workspace")).toBeInTheDocument();
     expect(await screen.findByText(/Workspace Candidate Created/)).toBeInTheDocument();
-    expect(await screen.findByText(/Evidence metadata reference/)).toBeInTheDocument();
+    expect(await screen.findByText(/Security review workspace evidence metadata/)).toBeInTheDocument();
     expect(await screen.findByText(/Incident To Review Workspace/)).toBeInTheDocument();
     expect(screen.getAllByText("Metadata only").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Read only").length).toBeGreaterThan(0);
