@@ -3,6 +3,13 @@ import {
   deriveTenantLifecycle,
   type TenantLifecycleResult,
 } from "../../lib/tenants/deriveTenantLifecycle";
+import {
+  loadUnitsForProperty,
+  resolveUnitReference,
+  toCanonicalLeaseRecord,
+  toCanonicalUnitRecord,
+  type CanonicalUnitRecord,
+} from "../leaseCanonicalizationService";
 
 type FirestoreLike = Pick<FirebaseFirestore.Firestore, "collection">;
 
@@ -124,11 +131,75 @@ function nameParts(raw: Record<string, unknown>) {
 
 function unitLabel(raw: Record<string, unknown>) {
   return (
-    asTrimmedString(raw.unitNumber) ||
-    asTrimmedString(raw.unitLabel) ||
-    asTrimmedString(raw.unit) ||
+    normalizeUnitDisplayValue(raw.unitNumber) ||
+    normalizeUnitDisplayValue(raw.unitLabel) ||
+    normalizeUnitDisplayValue(raw.unit) ||
     null
   );
+}
+
+function normalizeUnitDisplayValue(value: unknown): string | null {
+  const next = asTrimmedString(value);
+  if (!next) return null;
+  return next.replace(/^unit\s+/i, "").trim() || null;
+}
+
+function isLikelyRawInternalId(value: string | null, knownId?: string | null): boolean {
+  const normalized = asTrimmedString(value);
+  if (!normalized) return false;
+  if (knownId && normalized === asTrimmedString(knownId)) return true;
+  return /^[A-Za-z0-9_-]{16,}$/.test(normalized) && !/\s/.test(normalized);
+}
+
+function canonicalUnitLabel(unit?: CanonicalUnitRecord | null): string | null {
+  if (!unit) return null;
+  const candidates = [
+    unit.unitNumber,
+    unit.label,
+    unit.raw?.unitNumber,
+    unit.raw?.unitLabel,
+    unit.raw?.label,
+    unit.raw?.name,
+    unit.raw?.unit,
+  ]
+    .map((value) => normalizeUnitDisplayValue(value))
+    .filter(Boolean);
+  for (const candidate of candidates) {
+    if (!isLikelyRawInternalId(candidate, unit.id)) return candidate;
+  }
+  return null;
+}
+
+function resolveUnitDisplayFromPropertyUnits(
+  raw: Record<string, unknown>,
+  propertyUnits: CanonicalUnitRecord[]
+): string | null {
+  const references = [raw.unitId, raw.resolvedUnitId, raw.unitNumber, raw.unitLabel, raw.unit]
+    .map((value) => asTrimmedString(value))
+    .filter(Boolean);
+  for (const reference of references) {
+    const resolution = resolveUnitReference(propertyUnits, reference);
+    if (!resolution.ambiguous && resolution.unit) {
+      const label = canonicalUnitLabel(resolution.unit);
+      if (label) return label;
+    }
+    const exactUnit = propertyUnits.find((unit) =>
+      [unit.id, unit.raw?.unitId, unit.raw?.uid, unit.raw?.id]
+        .map((value) => asTrimmedString(value))
+        .filter(Boolean)
+        .includes(reference)
+    );
+    const exactLabel = canonicalUnitLabel(exactUnit);
+    if (exactLabel) return exactLabel;
+  }
+  return null;
+}
+
+function safeUnitLabel(raw: Record<string, unknown>, propertyUnits: CanonicalUnitRecord[]) {
+  const unitId = asTrimmedString(raw.unitId) || asTrimmedString(raw.resolvedUnitId) || null;
+  const rawLabel = unitLabel(raw);
+  if (rawLabel && !isLikelyRawInternalId(rawLabel, unitId)) return rawLabel;
+  return resolveUnitDisplayFromPropertyUnits(raw, propertyUnits);
 }
 
 function screeningStatus(raw: Record<string, unknown>) {
@@ -178,6 +249,29 @@ async function loadLinkedDocs(
   return out;
 }
 
+async function loadUnitsByReferences(
+  firestore: FirestoreLike,
+  references: string[]
+): Promise<Map<string, CanonicalUnitRecord[]>> {
+  const out = new Map<string, CanonicalUnitRecord[]>();
+  const uniqueReferences = Array.from(new Set(references.map((value) => asTrimmedString(value)).filter(Boolean)));
+  await Promise.all(
+    uniqueReferences.map(async (reference) => {
+      const rows: CanonicalUnitRecord[] = [];
+      const docSnap = await (firestore.collection("units") as any).doc(reference).get().catch(() => null);
+      if (docSnap?.exists) {
+        rows.push(toCanonicalUnitRecord(docSnap.id || reference, (docSnap.data() || {}) as Record<string, unknown>));
+      }
+      const fieldSnap = await (firestore.collection("units") as any).where("unitId", "==", reference).get().catch(() => null);
+      for (const doc of fieldSnap?.docs || []) {
+        rows.push(toCanonicalUnitRecord(doc.id, (doc.data() || {}) as Record<string, unknown>));
+      }
+      if (rows.length) out.set(reference, rows);
+    })
+  );
+  return out;
+}
+
 function resolveLeaseLink(
   tenant: TenantDocRow,
   leasesById: Map<string, Record<string, unknown>>
@@ -205,7 +299,10 @@ function resolveLeaseLink(
 function buildView(
   tenant: TenantDocRow,
   leasesById: Map<string, Record<string, unknown>>,
-  propertiesById: Map<string, Record<string, unknown>>
+  propertiesById: Map<string, Record<string, unknown>>,
+  unitsByPropertyId: Map<string, CanonicalUnitRecord[]>,
+  unitsById: Map<string, Record<string, unknown>>,
+  unitsByReference: Map<string, CanonicalUnitRecord[]>
 ): AdminTenantView {
   const names = nameParts(tenant.raw);
   const linkedLease = resolveLeaseLink(tenant, leasesById);
@@ -218,7 +315,56 @@ function buildView(
   const propertyName =
     asTrimmedString(property?.name) ||
     asTrimmedString(tenant.raw.propertyName || tenant.raw.property) ||
+    asTrimmedString(linkedLease?.raw.propertyName) ||
     asTrimmedString(linkedLease?.raw.propertyLabel) ||
+    null;
+  const unitId =
+    asTrimmedString(tenant.raw.unitId) ||
+    asTrimmedString(linkedLease?.raw.unitId) ||
+    asTrimmedString(linkedLease?.raw.resolvedUnitId) ||
+    asTrimmedString(tenant.raw.unitNumber) ||
+    asTrimmedString(linkedLease?.raw.unitNumber) ||
+    null;
+  const propertyUnits = propertyId ? unitsByPropertyId.get(propertyId) || [] : [];
+  const directUnitRaw = unitId ? unitsById.get(unitId) : null;
+  const unitCandidates = [...propertyUnits];
+  const unitReferences = [
+    tenant.raw.unitId,
+    tenant.raw.resolvedUnitId,
+    tenant.raw.unitNumber,
+    tenant.raw.unitLabel,
+    tenant.raw.unit,
+    linkedLease?.raw.unitId,
+    linkedLease?.raw.resolvedUnitId,
+    linkedLease?.raw.unitNumber,
+    linkedLease?.raw.unitLabel,
+    linkedLease?.raw.unit,
+  ]
+    .map((value) => asTrimmedString(value))
+    .filter(Boolean);
+  for (const reference of unitReferences) {
+    for (const unit of unitsByReference.get(reference) || []) {
+      if (!unitCandidates.some((existing) => existing.id === unit.id)) unitCandidates.push(unit);
+    }
+  }
+  if (directUnitRaw && !unitCandidates.some((unit) => unit.id === unitId)) {
+    unitCandidates.push({
+      id: unitId!,
+      landlordId: asTrimmedString(directUnitRaw.landlordId) || null,
+      propertyId: asTrimmedString(directUnitRaw.propertyId) || propertyId,
+      unitNumber: asTrimmedString(directUnitRaw.unitNumber ?? directUnitRaw.unit ?? directUnitRaw.name) || null,
+      label: asTrimmedString(directUnitRaw.label ?? directUnitRaw.displayLabel ?? directUnitRaw.unitLabel ?? directUnitRaw.unitNumber) || null,
+      rent: Number.isFinite(Number(directUnitRaw.rent ?? directUnitRaw.marketRent ?? directUnitRaw.monthlyRent))
+        ? Number(directUnitRaw.rent ?? directUnitRaw.marketRent ?? directUnitRaw.monthlyRent)
+        : null,
+      raw: directUnitRaw,
+    });
+  }
+  const canonicalLease = linkedLease ? toCanonicalLeaseRecord(linkedLease.id, linkedLease.raw, unitCandidates) : null;
+  const resolvedLeaseUnit =
+    canonicalUnitLabel(unitCandidates.find((unit) => unit.id === canonicalLease?.resolvedUnitId)) ||
+    normalizeUnitDisplayValue(canonicalLease?.resolvedUnitLabel) ||
+    normalizeUnitDisplayValue(canonicalLease?.resolvedUnitNumber) ||
     null;
 
   const leaseId = linkedLease?.id || null;
@@ -254,10 +400,11 @@ function buildView(
     landlordId: asTrimmedString(tenant.raw.landlordId) || asTrimmedString(linkedLease?.raw.landlordId) || null,
     propertyId,
     propertyName,
-    unitId: asTrimmedString(tenant.raw.unitId) || asTrimmedString(linkedLease?.raw.unitId) || null,
+    unitId,
     unitNumber:
-      unitLabel(tenant.raw) ||
-      unitLabel((linkedLease?.raw || {}) as Record<string, unknown>) ||
+      safeUnitLabel(tenant.raw, unitCandidates) ||
+      resolvedLeaseUnit ||
+      safeUnitLabel((linkedLease?.raw || {}) as Record<string, unknown>, unitCandidates) ||
       null,
     leaseId,
     leaseStatus: currentLeaseStatus,
@@ -337,8 +484,38 @@ export async function listAdminTenants(
     )
   );
   const propertiesById = await loadLinkedDocs(firestore, "properties", propertyIds);
+  const unitIds = Array.from(
+    new Set(
+      tenantDocs
+        .flatMap((tenant) => {
+          const linkedLease = resolveLeaseLink(tenant, leasesById);
+          return [
+            tenant.raw.unitId,
+            tenant.raw.resolvedUnitId,
+            tenant.raw.unitNumber,
+            tenant.raw.unitLabel,
+            tenant.raw.unit,
+            linkedLease?.raw.unitId,
+            linkedLease?.raw.resolvedUnitId,
+            linkedLease?.raw.unitNumber,
+            linkedLease?.raw.unitLabel,
+            linkedLease?.raw.unit,
+          ];
+        })
+        .map((value) => asTrimmedString(value))
+        .filter(Boolean)
+    )
+  );
+  const unitsById = await loadLinkedDocs(firestore, "units", unitIds);
+  const unitsByReference = await loadUnitsByReferences(firestore, unitIds);
+  const unitsByPropertyId = new Map<string, CanonicalUnitRecord[]>();
+  await Promise.all(
+    propertyIds.map(async (propertyId) => {
+      unitsByPropertyId.set(propertyId, await loadUnitsForProperty(firestore as any, propertyId).catch(() => []));
+    })
+  );
 
-  const allViews = tenantDocs.map((tenant) => buildView(tenant, leasesById, propertiesById));
+  const allViews = tenantDocs.map((tenant) => buildView(tenant, leasesById, propertiesById, unitsByPropertyId, unitsById, unitsByReference));
 
   const filtered = allViews.filter((view) => {
     if (!matchesSearch(view, query.q)) return false;

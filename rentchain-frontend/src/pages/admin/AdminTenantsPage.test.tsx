@@ -76,6 +76,47 @@ describe("AdminTenantsPage", () => {
             hasScreening: true,
           },
         },
+        {
+          id: "tenant-applicant-1",
+          fullName: "Jane Tenant",
+          firstName: "Jane",
+          lastName: "Tenant",
+          email: "jane.applicant@example.com",
+          phone: null,
+          landlordId: "landlord-1",
+          propertyId: "prop-1",
+          propertyName: "Coburg Rd",
+          unitId: null,
+          unitNumber: null,
+          leaseId: null,
+          leaseStatus: null,
+          screeningStatus: null,
+          moveInStatus: null,
+          currentLeaseStartDate: null,
+          currentLeaseEndDate: null,
+          createdAt: "2026-03-02T00:00:00.000Z",
+          updatedAt: "2026-03-04T00:00:00.000Z",
+          lifecycle: {
+            lifecycleState: "applicant",
+            lifecycleLabel: "Applicant",
+            lifecycleReason: "application_signal",
+            confidence: "medium",
+            sourceFields: {},
+            flags: {
+              hasActiveLease: false,
+              hasPendingLease: false,
+              hasCompletedScreening: false,
+              isArchived: false,
+              isPastTenant: false,
+              hasStateConflict: false,
+            },
+          },
+          flags: {
+            missingLeaseLink: false,
+            missingPropertyLink: false,
+            hasScreening: false,
+          },
+        },
       ],
       page: 1,
       pageSize: 25,
@@ -110,6 +151,9 @@ describe("AdminTenantsPage", () => {
     expect(screen.getByLabelText("Admin tenants mobile list")).toBeInTheDocument();
     expect(screen.getAllByText("Landlord linked").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Active tenant workspace").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Lease-linked tenant record").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Applicant workspace").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Application-only record").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Lifecycle: Active").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Lease: Active").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Screening: Complete").length).toBeGreaterThan(0);
@@ -144,5 +188,6 @@ describe("AdminTenantsPage", () => {
     expect(within(drawer).queryByText("landlord-1")).not.toBeInTheDocument();
     expect(within(drawer).queryByText("lease-1")).not.toBeInTheDocument();
     expect(within(drawer).queryByText("tenant-1")).not.toBeInTheDocument();
+    expect(within(drawer).queryByRole("link", { name: /lease/i })).not.toBeInTheDocument();
   });
 });

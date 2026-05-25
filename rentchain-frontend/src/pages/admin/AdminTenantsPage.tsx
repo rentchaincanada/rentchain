@@ -73,6 +73,24 @@ function tenantWorkspaceContext(item: AdminTenantView) {
   return `${lifecycleLabel(item)} workspace`;
 }
 
+function tenantWorkspaceExplanation(item: AdminTenantView) {
+  const lifecycle = String(item.lifecycle?.lifecycleState || "").toLowerCase();
+  const leaseStatus = String(item.leaseStatus || "").toLowerCase();
+  if (item.leaseId || item.lifecycle?.flags?.hasActiveLease || leaseStatus === "active" || leaseStatus === "current") {
+    return "Lease-linked tenant record";
+  }
+  if (item.lifecycle?.flags?.hasPendingLease || lifecycle.includes("lease")) {
+    return "Lease workflow record";
+  }
+  if (lifecycle.includes("screening")) {
+    return "Screening workflow record";
+  }
+  if (lifecycle === "applicant" || (!item.unitNumber && !item.leaseStatus)) {
+    return "Application-only record";
+  }
+  return "Tenant workspace record";
+}
+
 export const AdminTenantsPage: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -329,6 +347,7 @@ export const AdminTenantsPage: React.FC = () => {
                   >
                     <span className="rc-admin-tenant-card__title">{item.fullName || "Unnamed tenant"}</span>
                     <span className="rc-admin-tenant-card__context">{tenantWorkspaceContext(item)}</span>
+                    <span className="rc-admin-tenant-card__explanation">{tenantWorkspaceExplanation(item)}</span>
                     <span className="rc-admin-tenant-card__contact">{item.email || item.phone || "Contact unavailable"}</span>
                     <span className="rc-admin-tenant-card__placement">
                       {item.propertyName || "Unknown property"} · {item.unitNumber ? `Unit ${item.unitNumber}` : "No unit"}
@@ -422,26 +441,13 @@ export const AdminTenantsPage: React.FC = () => {
         <div
           role="dialog"
           aria-label="Tenant detail drawer"
-          style={{
-            position: "fixed",
-            top: 0,
-            right: 0,
-            width: "min(420px, 100vw)",
-            height: "100vh",
-            background: "#fff",
-            borderLeft: "1px solid rgba(15, 23, 42, 0.08)",
-            boxShadow: "-8px 0 24px rgba(15, 23, 42, 0.12)",
-            padding: 20,
-            overflowY: "auto",
-            zIndex: 60,
-            display: "grid",
-            gap: 16,
-          }}
+          className="rc-admin-tenant-drawer"
         >
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
             <div>
               <div style={{ fontWeight: 700, fontSize: 18 }}>{selectedTenant.fullName || "Unnamed tenant"}</div>
               <div style={{ color: "#64748b", fontSize: 14 }}>{tenantWorkspaceContext(selectedTenant)}</div>
+              <div style={{ color: "#64748b", fontSize: 13 }}>{tenantWorkspaceExplanation(selectedTenant)}</div>
             </div>
             <Button variant="secondary" onClick={() => setSelectedTenant(null)}>
               Close

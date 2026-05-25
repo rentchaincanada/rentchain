@@ -90,6 +90,40 @@ describe("adminTenantView", () => {
       createdAt: "2026-03-03T00:00:00.000Z",
       updatedAt: "2026-03-04T00:00:00.000Z",
     });
+    seedDoc("tenants", "tenant-4", {
+      fullName: "Chip Milo",
+      email: "chip@example.com",
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitId: "unit-coburg-6",
+      unitNumber: "unit-coburg-6",
+      currentLeaseId: "lease-4",
+      screeningStatus: "complete",
+      moveInStatus: "ready",
+      createdAt: "2026-03-04T00:00:00.000Z",
+      updatedAt: "2026-03-07T00:00:00.000Z",
+    });
+    seedDoc("tenants", "tenant-6", {
+      fullName: "Field Unit Tenant",
+      email: "field@example.com",
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitId: "unit-field-6",
+      unitNumber: "unit-field-6",
+      currentLeaseId: "lease-6",
+      createdAt: "2026-03-04T00:00:00.000Z",
+      updatedAt: "2026-03-09T00:00:00.000Z",
+    });
+    seedDoc("tenants", "tenant-5", {
+      fullName: "Chip Milo",
+      email: "chip.applicant@example.com",
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      applicantStatus: "submitted",
+      applicationId: "application-chip",
+      createdAt: "2026-03-04T00:00:00.000Z",
+      updatedAt: "2026-03-08T00:00:00.000Z",
+    });
 
     seedDoc("leases", "lease-1", {
       landlordId: "landlord-1",
@@ -114,9 +148,29 @@ describe("adminTenantView", () => {
       unitId: "unit-9",
       status: "active",
     });
+    seedDoc("leases", "lease-4", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitId: "unit-coburg-6",
+      unitNumber: "unit-coburg-6",
+      status: "active",
+      leaseStartDate: "2026-04-01",
+      leaseEndDate: "2027-03-31",
+    });
+    seedDoc("leases", "lease-6", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitId: "unit-field-6",
+      unitNumber: "unit-field-6",
+      status: "active",
+      leaseStartDate: "2026-05-01",
+      leaseEndDate: "2027-04-30",
+    });
 
     seedDoc("properties", "prop-1", { name: "Coburg Rd" });
     seedDoc("properties", "prop-2", { name: "Summit" });
+    seedDoc("units", "unit-doc-coburg-6", { propertyId: "prop-1", unitId: "unit-coburg-6", unitNumber: "6" });
+    seedDoc("units", "unit-field-doc-6", { unitId: "unit-field-6", unitNumber: "6" });
   });
 
   it("returns only safe admin tenant view fields", async () => {
@@ -190,8 +244,8 @@ describe("adminTenantView", () => {
       pageSize: 25,
     });
 
-    expect(leaseFiltered.items.map((item) => item.id)).toEqual(["tenant-1"]);
-    expect(screeningFiltered.items.map((item) => item.id)).toEqual(["tenant-1"]);
+    expect(leaseFiltered.items.map((item) => item.id)).toEqual(["tenant-6", "tenant-4", "tenant-1"]);
+    expect(screeningFiltered.items.map((item) => item.id)).toEqual(["tenant-4", "tenant-1"]);
     expect(moveInFiltered.items.map((item) => item.id)).toEqual(["tenant-2"]);
   });
 
@@ -204,6 +258,46 @@ describe("adminTenantView", () => {
     expect(result.items[0]?.flags.missingLeaseLink).toBe(true);
   });
 
+  it("uses linked unit documents when lease and tenant unit fields contain raw unit ids", async () => {
+    const { listAdminTenants } = await import("../admin/adminTenantView");
+    const result = await listAdminTenants({ firestore: fakeDb as any, q: "chip@example.com", page: 1, pageSize: 25 });
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toMatchObject({
+      fullName: "Chip Milo",
+      propertyName: "Coburg Rd",
+      unitNumber: "6",
+      leaseId: "lease-4",
+      leaseStatus: "active",
+      currentLeaseStartDate: "2026-04-01",
+      currentLeaseEndDate: "2027-03-31",
+    });
+  });
+
+  it("uses unitId field lookup when raw unit id does not match the unit document id", async () => {
+    const { listAdminTenants } = await import("../admin/adminTenantView");
+    const result = await listAdminTenants({ firestore: fakeDb as any, q: "field@example.com", page: 1, pageSize: 25 });
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toMatchObject({
+      fullName: "Field Unit Tenant",
+      propertyName: "Coburg Rd",
+      unitNumber: "6",
+      leaseId: "lease-6",
+      leaseStatus: "active",
+    });
+  });
+
+  it("keeps legitimate applicant and active tenant workspaces distinct for the same person", async () => {
+    const { listAdminTenants } = await import("../admin/adminTenantView");
+    const result = await listAdminTenants({ firestore: fakeDb as any, q: "chip milo", sortBy: "createdAt", sortDir: "asc", page: 1, pageSize: 25 });
+
+    expect(result.items).toHaveLength(2);
+    expect(result.items.map((item) => item.id).sort()).toEqual(["tenant-4", "tenant-5"]);
+    expect(result.items.find((item) => item.id === "tenant-4")?.lifecycle.lifecycleState).toBe("active");
+    expect(result.items.find((item) => item.id === "tenant-5")?.lifecycle.lifecycleState).toBe("applicant");
+  });
+
   it("supports sort and pagination", async () => {
     const { listAdminTenants } = await import("../admin/adminTenantView");
     const result = await listAdminTenants({
@@ -214,7 +308,7 @@ describe("adminTenantView", () => {
       pageSize: 1,
     });
 
-    expect(result.total).toBe(3);
+    expect(result.total).toBe(6);
     expect(result.page).toBe(2);
     expect(result.pageSize).toBe(1);
     expect(result.hasMore).toBe(true);

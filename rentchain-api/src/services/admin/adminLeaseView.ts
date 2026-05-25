@@ -1,4 +1,11 @@
 import { db } from "../../config/firebase";
+import {
+  loadUnitsForProperty,
+  resolveUnitReference,
+  toCanonicalLeaseRecord,
+  toCanonicalUnitRecord,
+  type CanonicalUnitRecord,
+} from "../leaseCanonicalizationService";
 
 type FirestoreLike = Pick<FirebaseFirestore.Firestore, "collection">;
 
@@ -172,6 +179,12 @@ function buildLeaseDisplayLabel(input: {
   return `${property} · ${unit} · ${tenant}`;
 }
 
+function normalizeUnitDisplayValue(value: unknown): string | null {
+  const next = asTrimmedString(value);
+  if (!next) return null;
+  return next.replace(/^unit\s+/i, "").trim() || null;
+}
+
 function isLikelyRawInternalId(value: string | null, knownId?: string | null): boolean {
   const normalized = asTrimmedString(value);
   if (!normalized) return false;
@@ -179,15 +192,59 @@ function isLikelyRawInternalId(value: string | null, knownId?: string | null): b
   return /^[A-Za-z0-9_-]{16,}$/.test(normalized) && !/\s/.test(normalized);
 }
 
-function safeUnitDisplayLabel(raw: Record<string, unknown>): string | null {
+function canonicalUnitLabel(unit?: CanonicalUnitRecord | null): string | null {
+  if (!unit) return null;
+  const candidates = [
+    unit.unitNumber,
+    unit.label,
+    unit.raw?.unitNumber,
+    unit.raw?.unitLabel,
+    unit.raw?.label,
+    unit.raw?.name,
+    unit.raw?.unit,
+  ]
+    .map((value) => normalizeUnitDisplayValue(value))
+    .filter(Boolean);
+  for (const candidate of candidates) {
+    if (!isLikelyRawInternalId(candidate, unit.id)) return candidate;
+  }
+  return null;
+}
+
+function resolveUnitDisplayFromPropertyUnits(
+  raw: Record<string, unknown>,
+  propertyUnits: CanonicalUnitRecord[]
+): string | null {
+  const references = [raw.unitId, raw.resolvedUnitId, raw.unitNumber, raw.unitLabel, raw.unit]
+    .map((value) => asTrimmedString(value))
+    .filter(Boolean);
+  for (const reference of references) {
+    const resolution = resolveUnitReference(propertyUnits, reference);
+    if (!resolution.ambiguous && resolution.unit) {
+      const label = canonicalUnitLabel(resolution.unit);
+      if (label) return label;
+    }
+    const exactUnit = propertyUnits.find((unit) =>
+      [unit.id, unit.raw?.unitId, unit.raw?.uid, unit.raw?.id]
+        .map((value) => asTrimmedString(value))
+        .filter(Boolean)
+        .includes(reference)
+    );
+    const exactLabel = canonicalUnitLabel(exactUnit);
+    if (exactLabel) return exactLabel;
+  }
+  return null;
+}
+
+function safeUnitDisplayLabel(raw: Record<string, unknown>, propertyUnits: CanonicalUnitRecord[]): string | null {
   const unitId = asTrimmedString(raw.unitId) || null;
   const candidates = [raw.unitNumber, raw.unitLabel, raw.unit]
-    .map((value) => asTrimmedString(value))
+    .map((value) => normalizeUnitDisplayValue(value))
     .filter(Boolean);
   for (const candidate of candidates) {
     if (!isLikelyRawInternalId(candidate, unitId)) return candidate;
   }
-  return null;
+  return resolveUnitDisplayFromPropertyUnits(raw, propertyUnits);
 }
 
 async function loadLinkedDocs(
@@ -207,9 +264,35 @@ async function loadLinkedDocs(
   return out;
 }
 
+async function loadUnitsByReferences(
+  firestore: FirestoreLike,
+  references: string[]
+): Promise<Map<string, CanonicalUnitRecord[]>> {
+  const out = new Map<string, CanonicalUnitRecord[]>();
+  const uniqueReferences = Array.from(new Set(references.map((value) => asTrimmedString(value)).filter(Boolean)));
+  await Promise.all(
+    uniqueReferences.map(async (reference) => {
+      const rows: CanonicalUnitRecord[] = [];
+      const docSnap = await (firestore.collection("units") as any).doc(reference).get().catch(() => null);
+      if (docSnap?.exists) {
+        rows.push(toCanonicalUnitRecord(docSnap.id || reference, (docSnap.data() || {}) as Record<string, unknown>));
+      }
+      const fieldSnap = await (firestore.collection("units") as any).where("unitId", "==", reference).get().catch(() => null);
+      for (const doc of fieldSnap?.docs || []) {
+        rows.push(toCanonicalUnitRecord(doc.id, (doc.data() || {}) as Record<string, unknown>));
+      }
+      if (rows.length) out.set(reference, rows);
+    })
+  );
+  return out;
+}
+
 function buildView(
   lease: LeaseDocRow,
   propertiesById: Map<string, Record<string, unknown>>,
+  unitsByPropertyId: Map<string, CanonicalUnitRecord[]>,
+  unitsById: Map<string, Record<string, unknown>>,
+  unitsByReference: Map<string, CanonicalUnitRecord[]>,
   tenantsById: Map<string, Record<string, unknown>>,
   landlordsById: Map<string, Record<string, unknown>>
 ): AdminLeaseView {
@@ -230,15 +313,50 @@ function buildView(
     asTrimmedString(property?.name) ||
     asTrimmedString(raw.propertyName || raw.propertyLabel) ||
     null;
-  const unitNumber = safeUnitDisplayLabel(raw);
-  const landlordDisplayName = safeLandlordDisplayName(landlord) || "Landlord account";
+  const unitId =
+    asTrimmedString(raw.unitId) ||
+    asTrimmedString(raw.resolvedUnitId) ||
+    asTrimmedString(raw.unitNumber) ||
+    null;
+  const propertyUnits = propertyId ? [...(unitsByPropertyId.get(propertyId) || [])] : [];
+  const unitReferences = [raw.unitId, raw.resolvedUnitId, raw.unitNumber, raw.unitLabel, raw.unit]
+    .map((value) => asTrimmedString(value))
+    .filter(Boolean);
+  for (const reference of unitReferences) {
+    for (const unit of unitsByReference.get(reference) || []) {
+      if (!propertyUnits.some((existing) => existing.id === unit.id)) propertyUnits.push(unit);
+    }
+  }
+  const directUnitRaw = unitId ? unitsById.get(unitId) : null;
+  if (directUnitRaw && !propertyUnits.some((unit) => unit.id === unitId)) {
+    propertyUnits.push({
+      id: unitId!,
+      landlordId: asTrimmedString(directUnitRaw.landlordId) || null,
+      propertyId: asTrimmedString(directUnitRaw.propertyId) || propertyId,
+      unitNumber: asTrimmedString(directUnitRaw.unitNumber ?? directUnitRaw.unit ?? directUnitRaw.name) || null,
+      label: asTrimmedString(directUnitRaw.label ?? directUnitRaw.displayLabel ?? directUnitRaw.unitLabel ?? directUnitRaw.unitNumber) || null,
+      rent: Number.isFinite(Number(directUnitRaw.rent ?? directUnitRaw.marketRent ?? directUnitRaw.monthlyRent))
+        ? Number(directUnitRaw.rent ?? directUnitRaw.marketRent ?? directUnitRaw.monthlyRent)
+        : null,
+      raw: directUnitRaw,
+    });
+  }
+  const canonicalLease = toCanonicalLeaseRecord(lease.id, raw, propertyUnits);
+  const unitNumber =
+    canonicalUnitLabel(propertyUnits.find((unit) => unit.id === canonicalLease.resolvedUnitId)) ||
+    normalizeUnitDisplayValue(canonicalLease.resolvedUnitLabel) ||
+    normalizeUnitDisplayValue(canonicalLease.resolvedUnitNumber) ||
+    safeUnitDisplayLabel(raw, propertyUnits);
+  const landlordDisplayName =
+    safeLandlordDisplayName(landlord) ||
+    (landlordId ? "Landlord linked / profile missing" : "Landlord profile unavailable");
 
   return {
     id: lease.id,
     leaseDisplayLabel: buildLeaseDisplayLabel({ propertyName, unitNumber, tenantNames }),
     propertyId,
     propertyName,
-    unitId: asTrimmedString(raw.unitId) || null,
+    unitId,
     unitNumber,
     landlordId,
     landlordDisplayName,
@@ -301,13 +419,31 @@ export async function listAdminLeases(
   const propertyIds = Array.from(new Set(leaseDocs.map((lease) => asTrimmedString(lease.raw.propertyId)).filter(Boolean)));
   const tenantIds = Array.from(new Set(leaseDocs.flatMap((lease) => tenantIdsFromLease(lease.raw))));
   const landlordIds = Array.from(new Set(leaseDocs.map((lease) => asTrimmedString(lease.raw.landlordId)).filter(Boolean)));
-  const [propertiesById, tenantsById, landlordsById] = await Promise.all([
+  const unitIds = Array.from(
+    new Set(
+      leaseDocs
+        .flatMap((lease) => [lease.raw.unitId, lease.raw.resolvedUnitId, lease.raw.unitNumber, lease.raw.unitLabel, lease.raw.unit])
+        .map((value) => asTrimmedString(value))
+        .filter(Boolean)
+    )
+  );
+  const [propertiesById, tenantsById, landlordsById, unitsById, unitsByReference] = await Promise.all([
     loadLinkedDocs(firestore, "properties", propertyIds),
     loadLinkedDocs(firestore, "tenants", tenantIds),
     loadLinkedDocs(firestore, "landlords", landlordIds),
+    loadLinkedDocs(firestore, "units", unitIds),
+    loadUnitsByReferences(firestore, unitIds),
   ]);
+  const unitsByPropertyId = new Map<string, CanonicalUnitRecord[]>();
+  await Promise.all(
+    propertyIds.map(async (propertyId) => {
+      unitsByPropertyId.set(propertyId, await loadUnitsForProperty(firestore as any, propertyId).catch(() => []));
+    })
+  );
 
-  const allViews = leaseDocs.map((lease) => buildView(lease, propertiesById, tenantsById, landlordsById));
+  const allViews = leaseDocs.map((lease) =>
+    buildView(lease, propertiesById, unitsByPropertyId, unitsById, unitsByReference, tenantsById, landlordsById)
+  );
 
   const filtered = allViews.filter((view) => {
     if (!matchesSearch(view, query.q)) return false;
