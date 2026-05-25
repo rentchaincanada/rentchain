@@ -8,6 +8,7 @@ import { colors, radius, shadows, spacing, text, layout, blur } from "../../styl
 import { RentChainLogo } from "../brand/RentChainLogo";
 import { fetchLandlordConversations } from "../../api/messagesApi";
 import { useCapabilities } from "@/hooks/useCapabilities";
+import "./TopNav.css";
 
 function roleLabel(raw: string): string {
   const normalized = String(raw || "").trim().toLowerCase();
@@ -65,6 +66,7 @@ const TopNav: React.FC = () => {
   return (
     <>
       <header
+        className="rc-top-nav"
         style={{
           position: "sticky",
           top: 0,
@@ -77,6 +79,7 @@ const TopNav: React.FC = () => {
         }}
       >
         <div
+          className="rc-top-nav-inner"
           style={{
             display: "flex",
             alignItems: "center",
@@ -87,8 +90,9 @@ const TopNav: React.FC = () => {
         >
           <RentChainLogo href="/dashboard" size="sm" />
 
-          <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: spacing.sm }}>
+          <div className="rc-top-nav-actions" style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: spacing.sm }}>
             <span
+              className="rc-top-nav-role"
               style={{
                 borderRadius: radius.pill,
                 border: `1px solid ${colors.border}`,
@@ -105,6 +109,7 @@ const TopNav: React.FC = () => {
             </span>
             {canShowMessagesShortcut ? (
               <Button
+                className="rc-top-nav-optional-action"
                 variant="secondary"
                 onClick={() => navigate("/messages")}
                 aria-label={hasUnreadMessages ? "Messages (unread)" : "Messages"}
@@ -137,6 +142,7 @@ const TopNav: React.FC = () => {
               </Button>
             ) : null}
             <Button
+              className="rc-top-nav-optional-action"
               variant="secondary"
               onClick={() => navigate(accountPath)}
               style={{
@@ -151,6 +157,7 @@ const TopNav: React.FC = () => {
               My Account
             </Button>
             <Button
+              className="rc-top-nav-workspace-button"
               variant="secondary"
               onClick={() => setDrawerOpen(true)}
               style={{

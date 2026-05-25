@@ -106,8 +106,14 @@ describe("AdminTenantsPage", () => {
       });
     });
 
-    expect(screen.getByText("Jane Tenant")).toBeInTheDocument();
-    expect(screen.getAllByText("Active").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Jane Tenant").length).toBeGreaterThan(0);
+    expect(screen.getByLabelText("Admin tenants mobile list")).toBeInTheDocument();
+    expect(screen.getAllByText("Landlord linked").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Active tenant workspace").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Lifecycle: Active").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Lease: Active").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Screening: Complete").length).toBeGreaterThan(0);
+    expect(screen.queryByText("tenant-1")).not.toBeInTheDocument();
   });
 
   it("opens the tenant detail drawer when a row is selected", async () => {
@@ -119,13 +125,24 @@ describe("AdminTenantsPage", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText("Jane Tenant")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getAllByText("Jane Tenant").length).toBeGreaterThan(0);
+    });
     fireEvent.click(screen.getAllByText("Jane Tenant")[0]);
 
     const drawer = screen.getByRole("dialog", { name: "Tenant detail drawer" });
     expect(drawer).toBeInTheDocument();
     expect(within(drawer).getByText("jane@example.com")).toBeInTheDocument();
-    expect(within(drawer).getByText("landlord-1")).toBeInTheDocument();
-    expect(within(drawer).getByText("lease-1")).toBeInTheDocument();
+    expect(within(drawer).getByText("Active tenant workspace")).toBeInTheDocument();
+    expect(within(drawer).getAllByText("Landlord linked").length).toBeGreaterThan(0);
+    expect(within(drawer).getByText("Active lease")).toBeInTheDocument();
+    expect(within(drawer).getByText("Lease status: Active")).toBeInTheDocument();
+    expect(within(drawer).getByText("Screening status: Complete")).toBeInTheDocument();
+    expect(within(drawer).getByText("Move-in status: Ready")).toBeInTheDocument();
+    expect(within(drawer).queryByText("prop-1")).not.toBeInTheDocument();
+    expect(within(drawer).queryByText("unit-1")).not.toBeInTheDocument();
+    expect(within(drawer).queryByText("landlord-1")).not.toBeInTheDocument();
+    expect(within(drawer).queryByText("lease-1")).not.toBeInTheDocument();
+    expect(within(drawer).queryByText("tenant-1")).not.toBeInTheDocument();
   });
 });

@@ -35,7 +35,7 @@ export default function PdfExportObservabilityPage() {
   }, [showToast]);
 
   return (
-    <MacShell title="PDF export observability" showTopNav={false}>
+    <MacShell title="PDF export observability">
       <div style={{ display: "grid", gap: 16 }}>
         <Section>
           <div style={{ display: "grid", gap: 6 }}>

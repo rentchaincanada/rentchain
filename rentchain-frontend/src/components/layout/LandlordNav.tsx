@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Menu, X } from "lucide-react";
+import { FileText, LayoutDashboard, Menu, MessagesSquare, ScrollText, X } from "lucide-react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import TopNav from "./TopNav";
 import { useAuth } from "../../context/useAuth";
@@ -8,12 +8,43 @@ import { getVisibleNavItems } from "./navConfig";
 import { useCapabilities } from "@/hooks/useCapabilities";
 import { UpgradeNudgeHost } from "@/features/upgradeNudges/UpgradeNudgeHost";
 import { getRoleDefaultDestination } from "@/lib/authDestination";
+import { RentChainLogo } from "../brand/RentChainLogo";
 import "./LandlordNav.css";
 
 type Props = {
   children: React.ReactNode;
   unreadMessages?: boolean;
 };
+
+const landlordMobileTabs = [
+  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/applications", label: "Documents", icon: FileText },
+  { to: "/leases", label: "Leases", icon: ScrollText },
+  { to: "/messages", label: "Messages", icon: MessagesSquare, requiresMessaging: true },
+];
+
+function includesAdminAuthority(value: unknown): boolean {
+  if (Array.isArray(value)) {
+    return value.some((entry) => includesAdminAuthority(entry));
+  }
+  const normalized = String(value || "").trim().toLowerCase();
+  return normalized === "admin" || normalized === "system.admin";
+}
+
+function isAdminContext(user: unknown): boolean {
+  const candidate = user as Record<string, any> | null | undefined;
+  if (!candidate) return false;
+  return (
+    includesAdminAuthority(candidate.role) ||
+    includesAdminAuthority(candidate.actorRole) ||
+    includesAdminAuthority(candidate.permissions) ||
+    includesAdminAuthority(candidate.claims?.permissions) ||
+    includesAdminAuthority(candidate.claims?.role) ||
+    includesAdminAuthority(candidate.claims?.actorRole) ||
+    candidate.isAdmin === true ||
+    candidate.admin === true
+  );
+}
 
 export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
   const nav = useNavigate();
@@ -25,13 +56,14 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const lastFocusedRef = useRef<HTMLElement | null>(null);
   const navLoading = !ready || isLoading || authStatus === "restoring" || !user || capsLoading;
+  const isAdminLikeContext = React.useMemo(() => isAdminContext(user), [user]);
   const effectiveRole = React.useMemo(() => {
     if (navLoading) return "";
+    if (isAdminLikeContext) return "admin";
     const actorRole = String(user?.actorRole || "").trim().toLowerCase();
     const role = String(user?.role || "").trim().toLowerCase();
-    if (actorRole === "admin" || role === "admin") return "admin";
     return actorRole || role || "landlord";
-  }, [navLoading, user?.actorRole, user?.role]);
+  }, [isAdminLikeContext, navLoading, user?.actorRole, user?.role]);
   const isLandlordWorkspace = effectiveRole === "landlord" || effectiveRole === "admin";
   if (import.meta.env.DEV) {
     console.debug("[nav] role resolved", {
@@ -53,7 +85,15 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
       }),
     [primaryDrawerItems]
   );
-  const tabItems = visibleItems.filter((item) => item.showInTabs);
+  const tabItems =
+    effectiveRole === "landlord" && !isAdminLikeContext
+      ? landlordMobileTabs.filter((item) => !item.requiresMessaging || features?.messaging !== false)
+      : [];
+  const showMobileBottomNav = effectiveRole === "landlord" && !isAdminLikeContext;
+  const shellClassName = [
+    "rc-landlord-shell",
+    showMobileBottomNav ? "rc-landlord-shell--mobile-tabs" : "",
+  ].filter(Boolean).join(" ");
   const contentClassName = [
     "rc-landlord-content",
     loc.pathname.startsWith("/messages") ? "rc-landlord-content--mobile-flush" : "",
@@ -65,12 +105,6 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
   };
   const closeDrawer = () => {
     setDrawerOpen(false);
-  };
-
-  const mobileTabLabel = (label: string) => {
-    if (label === "Applications") return "Apps";
-    if (label === "Messages") return "Msgs";
-    return label;
   };
 
   useEffect(() => {
@@ -169,36 +203,46 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
   }
 
   return (
-    <div className="rc-landlord-shell">
+    <div className={shellClassName}>
       <div className="rc-landlord-topnav">
         <TopNav />
       </div>
 
-      <button
-        type="button"
-        className="rc-landlord-hamburger"
-        aria-label="Open menu"
-        aria-expanded={drawerOpen}
-        aria-controls="rc-landlord-drawer"
-        onClick={(event) => {
-          lastFocusedRef.current = event.currentTarget;
-          setDrawerOpen(true);
-        }}
-      >
-        <span />
-        <span />
-        <span />
-      </button>
+      <div className="rc-landlord-mobile-topbar">
+        <RentChainLogo href="/dashboard" size="sm" />
+        <span className="rc-landlord-mobile-role">{effectiveRole === "admin" ? "Admin" : "Landlord"}</span>
+        <button
+          type="button"
+          className="rc-landlord-mobile-menu"
+          aria-label="Open menu"
+          aria-expanded={drawerOpen}
+          aria-controls="rc-landlord-drawer"
+          onClick={(event) => {
+            lastFocusedRef.current = event.currentTarget;
+            setDrawerOpen(true);
+          }}
+        >
+          <Menu size={20} strokeWidth={2.2} />
+        </button>
+      </div>
 
       <div
-        className={`rc-landlord-backdrop rc-landlord-backdrop--nav-safe ${drawerOpen ? "is-open" : ""}`}
+        className={[
+          "rc-landlord-backdrop",
+          showMobileBottomNav ? "rc-landlord-backdrop--nav-safe" : "",
+          drawerOpen ? "is-open" : "",
+        ].filter(Boolean).join(" ")}
         onClick={closeDrawer}
         aria-hidden={!drawerOpen}
       />
 
       <aside
         id="rc-landlord-drawer"
-        className={`rc-landlord-drawer rc-landlord-drawer--nav-safe ${drawerOpen ? "is-open" : ""}`}
+        className={[
+          "rc-landlord-drawer",
+          showMobileBottomNav ? "rc-landlord-drawer--nav-safe" : "",
+          drawerOpen ? "is-open" : "",
+        ].filter(Boolean).join(" ")}
         role="dialog"
         aria-modal={drawerOpen ? "true" : undefined}
         aria-label="Navigation menu"
@@ -226,9 +270,9 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
             </div>
           ) : (
             <div className="rc-landlord-drawer-links">
-              {orderedPrimaryDrawerItems.map(({ to, label }) => (
+              {orderedPrimaryDrawerItems.map(({ id, to, label }) => (
                 <button
-                  key={to}
+                  key={id}
                   type="button"
                   onClick={() => handleDrawerNavigation(to)}
                   className={loc.pathname.startsWith(to) ? "active" : ""}
@@ -247,9 +291,9 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
           ) : null}
           {adminDrawerItems.length ? (
             <div className="rc-landlord-drawer-links">
-              {adminDrawerItems.map(({ to, label }) => (
+              {adminDrawerItems.map(({ id, to, label }) => (
                 <button
-                  key={to}
+                  key={id}
                   type="button"
                   onClick={() => handleDrawerNavigation(to)}
                   className={loc.pathname.startsWith(to) ? "active" : ""}
@@ -265,42 +309,44 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
       <UpgradeNudgeHost />
       <div className={contentClassName}>{children}</div>
 
-      <nav className="rc-mobile-tabbar" aria-label="Bottom navigation">
-        {(navLoading ? [] : tabItems).map(({ to, label, icon: Icon }) => {
-          if (!Icon) return null;
-          const active = loc.pathname.startsWith(to);
-          return (
-            <button
-              key={to}
-              type="button"
-              onClick={() => nav(to)}
-              className={active ? "active" : ""}
-            >
-              <Icon size={20} strokeWidth={2.2} />
-              <span className="rc-mobile-tabbar-label">
-                {mobileTabLabel(label)}
-                {label === "Messages" && unreadFlag ? (
-                  <span className="rc-mobile-tabbar-dot" />
-                ) : null}
-              </span>
-            </button>
-          );
-        })}
-        <button
-          type="button"
-          onClick={(event) => {
-            lastFocusedRef.current = event.currentTarget;
-            setDrawerOpen((open) => !open);
-          }}
-          className={drawerOpen ? "active" : ""}
-          aria-label="Open workspace pages"
-          aria-expanded={drawerOpen}
-          aria-controls="rc-landlord-drawer"
-        >
-          {drawerOpen ? <X size={20} strokeWidth={2.2} /> : <Menu size={20} strokeWidth={2.2} />}
-          <span className="rc-mobile-tabbar-label">More</span>
-        </button>
-      </nav>
+      {showMobileBottomNav ? (
+        <nav className="rc-landlord-mobile-tabbar" aria-label="Bottom navigation">
+          {(navLoading ? [] : tabItems).map(({ to, label, icon: Icon }) => {
+            if (!Icon) return null;
+            const active = loc.pathname.startsWith(to);
+            return (
+              <button
+                key={to}
+                type="button"
+                onClick={() => nav(to)}
+                className={active ? "active" : ""}
+              >
+                <Icon size={20} strokeWidth={2.2} />
+                <span className="rc-landlord-mobile-tabbar-label">
+                  {label}
+                  {label === "Messages" && unreadFlag ? (
+                    <span className="rc-landlord-mobile-tabbar-dot" />
+                  ) : null}
+                </span>
+              </button>
+            );
+          })}
+          <button
+            type="button"
+            onClick={(event) => {
+              lastFocusedRef.current = event.currentTarget;
+              setDrawerOpen((open) => !open);
+            }}
+            className={drawerOpen ? "active" : ""}
+            aria-label="Open workspace pages"
+            aria-expanded={drawerOpen}
+            aria-controls="rc-landlord-drawer"
+          >
+            {drawerOpen ? <X size={20} strokeWidth={2.2} /> : <Menu size={20} strokeWidth={2.2} />}
+            <span className="rc-landlord-mobile-tabbar-label">More</span>
+          </button>
+        </nav>
+      ) : null}
     </div>
   );
 };

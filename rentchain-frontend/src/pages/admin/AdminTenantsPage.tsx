@@ -5,6 +5,7 @@ import { Button, Card, Pill, Section } from "../../components/ui/Ui";
 import { useToast } from "../../components/ui/ToastProvider";
 import { exportAdminTenantsCsv, fetchAdminTenants, type AdminTenantView } from "../../api/adminApi";
 import { AdminSavedFilters } from "../../components/admin/AdminSavedFilters";
+import "./AdminTenantsPage.css";
 
 function readFilters(search: string) {
   const params = new URLSearchParams(search);
@@ -21,15 +22,55 @@ function readFilters(search: string) {
 }
 
 function formatStatus(value: string | null) {
-  return value ? value.replace(/_/g, " ") : "None";
+  const normalized = value ? value.replace(/_/g, " ") : "Not available";
+  return normalized.replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
-function StatusPill({ value, tone = "default" }: { value: string | null; tone?: "default" | "accent" | "danger" }) {
-  return <Pill tone={tone}>{formatStatus(value)}</Pill>;
+function StatusPill({
+  label,
+  value,
+  tone = "default",
+}: {
+  label?: string;
+  value: string | null;
+  tone?: "default" | "accent" | "danger";
+}) {
+  const text = formatStatus(value);
+  return <Pill tone={tone}>{label ? `${label}: ${text}` : text}</Pill>;
 }
 
 function lifecycleLabel(item: AdminTenantView | null) {
   return item?.lifecycle?.lifecycleLabel || "Unknown";
+}
+
+function landlordSummary(item: AdminTenantView) {
+  return item.landlordId ? "Landlord linked" : "No landlord link";
+}
+
+function leaseSummary(item: AdminTenantView) {
+  return item.leaseStatus ? `${formatStatus(item.leaseStatus)} lease` : "Lease not linked";
+}
+
+function unavailableStatus(value: string | null) {
+  return value ? formatStatus(value) : "Not available";
+}
+
+function tenantWorkspaceContext(item: AdminTenantView) {
+  const lifecycle = String(item.lifecycle?.lifecycleState || "").toLowerCase();
+  const leaseStatus = String(item.leaseStatus || "").toLowerCase();
+  if (item.lifecycle?.flags?.hasActiveLease || leaseStatus === "active" || leaseStatus === "current") {
+    return "Active tenant workspace";
+  }
+  if (item.lifecycle?.flags?.hasPendingLease || lifecycle.includes("lease")) {
+    return "Lease pending workspace";
+  }
+  if (lifecycle.includes("screening")) {
+    return "Screening workspace";
+  }
+  if (lifecycle === "applicant" || (!item.unitNumber && !item.leaseStatus)) {
+    return "Applicant workspace";
+  }
+  return `${lifecycleLabel(item)} workspace`;
 }
 
 export const AdminTenantsPage: React.FC = () => {
@@ -278,8 +319,34 @@ export const AdminTenantsPage: React.FC = () => {
           ) : null}
           {!loading && data?.items?.length ? (
             <>
-              <div style={{ overflowX: "auto" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <div className="rc-admin-tenants-mobile-list" aria-label="Admin tenants mobile list">
+                {data.items.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className="rc-admin-tenant-card"
+                    onClick={() => setSelectedTenant(item)}
+                  >
+                    <span className="rc-admin-tenant-card__title">{item.fullName || "Unnamed tenant"}</span>
+                    <span className="rc-admin-tenant-card__context">{tenantWorkspaceContext(item)}</span>
+                    <span className="rc-admin-tenant-card__contact">{item.email || item.phone || "Contact unavailable"}</span>
+                    <span className="rc-admin-tenant-card__placement">
+                      {item.propertyName || "Unknown property"} · {item.unitNumber ? `Unit ${item.unitNumber}` : "No unit"}
+                    </span>
+                    <span className="rc-admin-tenant-card__meta">
+                      <span>{landlordSummary(item)}</span>
+                      <span>{item.phone || "No phone"}</span>
+                    </span>
+                    <span className="rc-admin-tenant-card__pills">
+                      <StatusPill label="Lifecycle" value={lifecycleLabel(item)} tone={item.lifecycle?.flags?.hasStateConflict ? "danger" : "accent"} />
+                      <StatusPill label="Lease" value={item.leaseStatus} />
+                      <StatusPill label="Screening" value={item.screeningStatus} tone={item.flags.hasScreening ? "accent" : "default"} />
+                    </span>
+                  </button>
+                ))}
+              </div>
+              <div className="rc-admin-tenants-table-wrap">
+                <table className="rc-admin-tenants-table">
                   <thead>
                     <tr style={{ textAlign: "left", borderBottom: "1px solid rgba(15, 23, 42, 0.08)" }}>
                       {["Tenant", "Email", "Phone", "Property / Unit", "Landlord", "Lifecycle", "Lease Status", "Screening", "Move-In", "Updated"].map((label) => (
@@ -298,7 +365,7 @@ export const AdminTenantsPage: React.FC = () => {
                       >
                         <td style={{ padding: "12px" }}>
                           <div style={{ fontWeight: 600 }}>{item.fullName || "Unnamed tenant"}</div>
-                          <div style={{ color: "#64748b", fontSize: 13 }}>{item.id}</div>
+                          <div style={{ color: "#64748b", fontSize: 13 }}>{tenantWorkspaceContext(item)}</div>
                         </td>
                         <td style={{ padding: "12px" }}>{item.email || "—"}</td>
                         <td style={{ padding: "12px" }}>{item.phone || "—"}</td>
@@ -306,18 +373,18 @@ export const AdminTenantsPage: React.FC = () => {
                           <div>{item.propertyName || "Unknown property"}</div>
                           <div style={{ color: "#64748b", fontSize: 13 }}>{item.unitNumber ? `Unit ${item.unitNumber}` : "No unit"}</div>
                         </td>
-                        <td style={{ padding: "12px" }}>{item.landlordId || "—"}</td>
+                        <td style={{ padding: "12px" }}>{landlordSummary(item)}</td>
                         <td style={{ padding: "12px" }}>
-                          <StatusPill value={lifecycleLabel(item)} tone={item.lifecycle?.flags?.hasStateConflict ? "danger" : "accent"} />
+                          <StatusPill label="Lifecycle" value={lifecycleLabel(item)} tone={item.lifecycle?.flags?.hasStateConflict ? "danger" : "accent"} />
                         </td>
                         <td style={{ padding: "12px" }}>
-                          <StatusPill value={item.leaseStatus} />
+                          <StatusPill label="Lease" value={item.leaseStatus} />
                         </td>
                         <td style={{ padding: "12px" }}>
-                          <StatusPill value={item.screeningStatus} tone={item.flags.hasScreening ? "accent" : "default"} />
+                          <StatusPill label="Screening" value={item.screeningStatus} tone={item.flags.hasScreening ? "accent" : "default"} />
                         </td>
                         <td style={{ padding: "12px" }}>
-                          <StatusPill value={item.moveInStatus} />
+                          <StatusPill label="Move-in" value={item.moveInStatus} />
                         </td>
                         <td style={{ padding: "12px" }}>{String(item.updatedAt || "—")}</td>
                       </tr>
@@ -374,7 +441,7 @@ export const AdminTenantsPage: React.FC = () => {
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
             <div>
               <div style={{ fontWeight: 700, fontSize: 18 }}>{selectedTenant.fullName || "Unnamed tenant"}</div>
-              <div style={{ color: "#64748b", fontSize: 14 }}>{selectedTenant.id}</div>
+              <div style={{ color: "#64748b", fontSize: 14 }}>{tenantWorkspaceContext(selectedTenant)}</div>
             </div>
             <Button variant="secondary" onClick={() => setSelectedTenant(null)}>
               Close
@@ -390,34 +457,23 @@ export const AdminTenantsPage: React.FC = () => {
           <Card style={{ display: "grid", gap: 8 }}>
             <div style={{ fontWeight: 600 }}>Current Placement</div>
             <div>{selectedTenant.propertyName || "Unknown property"}</div>
-            <div>{selectedTenant.propertyId || "No property id"}</div>
             <div>{selectedTenant.unitNumber ? `Unit ${selectedTenant.unitNumber}` : "No unit number"}</div>
-            <div>{selectedTenant.unitId || "No unit id"}</div>
-            <div>{selectedTenant.landlordId || "No landlord id"}</div>
+            <div>{landlordSummary(selectedTenant)}</div>
           </Card>
 
           <Card style={{ display: "grid", gap: 8 }}>
             <div style={{ fontWeight: 600 }}>Lease Summary</div>
-            <div>{selectedTenant.leaseId || "No lease id"}</div>
-            <div>{formatStatus(selectedTenant.leaseStatus)}</div>
-            <div>{selectedTenant.currentLeaseStartDate || "No start date"}</div>
-            <div>{selectedTenant.currentLeaseEndDate || "No end date"}</div>
+            <div>{leaseSummary(selectedTenant)}</div>
+            <div>Start date: {selectedTenant.currentLeaseStartDate || "Unavailable"}</div>
+            <div>End date: {selectedTenant.currentLeaseEndDate || "Unavailable"}</div>
           </Card>
 
           <Card style={{ display: "grid", gap: 8 }}>
             <div style={{ fontWeight: 600 }}>Status</div>
-            <div>
-              <StatusPill
-                value={lifecycleLabel(selectedTenant)}
-                tone={selectedTenant.lifecycle?.flags?.hasStateConflict ? "danger" : "accent"}
-              />
-            </div>
-            <div>
-              <StatusPill value={selectedTenant.screeningStatus} tone={selectedTenant.flags.hasScreening ? "accent" : "default"} />
-            </div>
-            <div>
-              <StatusPill value={selectedTenant.moveInStatus} />
-            </div>
+            <div>Lifecycle status: {lifecycleLabel(selectedTenant)}</div>
+            <div>Lease status: {unavailableStatus(selectedTenant.leaseStatus)}</div>
+            <div>Screening status: {unavailableStatus(selectedTenant.screeningStatus)}</div>
+            <div>Move-in status: {unavailableStatus(selectedTenant.moveInStatus)}</div>
             <div style={{ display: "grid", gap: 6, color: "#475569" }}>
               <div>Missing lease link: {selectedTenant.flags.missingLeaseLink ? "Yes" : "No"}</div>
               <div>Missing property link: {selectedTenant.flags.missingPropertyLink ? "Yes" : "No"}</div>

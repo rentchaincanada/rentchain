@@ -84,7 +84,9 @@ describe("AdminPropertiesPage", () => {
       });
     });
 
-    expect(screen.getByText("Coburg Rd")).toBeInTheDocument();
+    expect(screen.getAllByText("Coburg Rd").length).toBeGreaterThan(0);
+    expect(screen.getByLabelText("Admin properties mobile list")).toBeInTheDocument();
+    expect(screen.getAllByText("Harbour Homes").length).toBeGreaterThan(0);
     expect(screen.queryByText("prop-1")).not.toBeInTheDocument();
     expect(screen.queryByText("landlord-1")).not.toBeInTheDocument();
   });
@@ -98,7 +100,9 @@ describe("AdminPropertiesPage", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText("Coburg Rd")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getAllByText("Coburg Rd").length).toBeGreaterThan(0);
+    });
 
     fireEvent.click(screen.getAllByText("Coburg Rd")[0]);
 

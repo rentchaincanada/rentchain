@@ -1,0 +1,76 @@
+.rc-admin-tenants-mobile-list {
+  display: none;
+}
+
+.rc-admin-tenants-table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.rc-admin-tenants-table {
+  width: 100%;
+  min-width: 980px;
+  border-collapse: collapse;
+}
+
+@media (max-width: 820px) {
+  .rc-admin-tenants-mobile-list {
+    display: grid;
+    gap: 10px;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .rc-admin-tenants-table-wrap {
+    display: none;
+  }
+
+  .rc-admin-tenant-card {
+    appearance: none;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    display: grid;
+    gap: 8px;
+    text-align: left;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    border-radius: 12px;
+    background: #fff;
+    color: #0f172a;
+    padding: 12px;
+    box-sizing: border-box;
+    cursor: pointer;
+    overflow: hidden;
+  }
+
+  .rc-admin-tenant-card__title {
+    font-weight: 800;
+    overflow-wrap: anywhere;
+  }
+
+  .rc-admin-tenant-card__context {
+    color: #1d4ed8;
+    font-size: 12px;
+    font-weight: 800;
+    overflow-wrap: anywhere;
+  }
+
+  .rc-admin-tenant-card__contact,
+  .rc-admin-tenant-card__placement,
+  .rc-admin-tenant-card__meta {
+    min-width: 0;
+    color: #475569;
+    font-size: 13px;
+    overflow-wrap: anywhere;
+  }
+
+  .rc-admin-tenant-card__meta,
+  .rc-admin-tenant-card__pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 10px;
+    align-items: center;
+  }
+}

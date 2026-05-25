@@ -7,11 +7,18 @@ const mocks = vi.hoisted(() => ({
   logout: vi.fn(),
   fetchLandlordConversations: vi.fn(),
   useCapabilities: vi.fn(),
+  user: { id: "landlord-1", role: "landlord", actorRole: "landlord", email: "owner@example.com" } as {
+    id: string;
+    role: string;
+    actorRole: string;
+    email: string;
+    permissions?: string[];
+  },
 }));
 
 vi.mock("../../context/useAuth", () => ({
   useAuth: () => ({
-    user: { id: "landlord-1", role: "landlord", actorRole: "landlord", email: "owner@example.com" },
+    user: mocks.user,
     logout: mocks.logout,
     ready: true,
     isLoading: false,
@@ -65,6 +72,7 @@ describe("LandlordNav mobile drawer", () => {
   });
 
   beforeEach(() => {
+    mocks.user = { id: "landlord-1", role: "landlord", actorRole: "landlord", email: "owner@example.com" };
     mocks.logout.mockReset();
     mocks.fetchLandlordConversations.mockResolvedValue([]);
     mocks.useCapabilities.mockReturnValue({
@@ -140,14 +148,62 @@ describe("LandlordNav mobile drawer", () => {
     expect(screen.getByTestId("current-path")).toHaveTextContent("/payments");
   });
 
-  it("uses compact labels for long mobile tabs", () => {
+  it("uses the requested landlord mobile app tabs", () => {
     renderLandlordNav();
 
     const tabbar = screen.getByRole("navigation", { name: "Bottom navigation" });
-    expect(within(tabbar).getByText("Apps")).toBeInTheDocument();
-    expect(within(tabbar).getByText("Msgs")).toBeInTheDocument();
+    expect(within(tabbar).getByText("Dashboard")).toBeInTheDocument();
+    expect(within(tabbar).getByText("Documents")).toBeInTheDocument();
+    expect(within(tabbar).getByText("Leases")).toBeInTheDocument();
+    expect(within(tabbar).getByText("Messages")).toBeInTheDocument();
+    expect(within(tabbar).getByText("More")).toBeInTheDocument();
     expect(within(tabbar).queryByText("Applications")).not.toBeInTheDocument();
-    expect(within(tabbar).queryByText("Messages")).not.toBeInTheDocument();
+    expect(within(tabbar).queryByText("Tenants")).not.toBeInTheDocument();
+    expect(within(tabbar).queryByText("Properties")).not.toBeInTheDocument();
+  });
+
+  it("keeps the shared nav tab configuration aligned with the landlord mobile app tabs", async () => {
+    const { NAV_ITEMS } = await import("./navConfig");
+
+    expect(NAV_ITEMS.filter((item) => item.showInTabs).map((item) => item.label)).toEqual([
+      "Dashboard",
+      "Documents",
+      "Leases",
+      "Messages",
+    ]);
+  });
+
+  it("navigates landlord mobile tabs to canonical routes", () => {
+    renderLandlordNav();
+
+    const tabbar = screen.getByRole("navigation", { name: "Bottom navigation" });
+    fireEvent.click(within(tabbar).getByRole("button", { name: "Documents" }));
+    expect(screen.getByTestId("current-path")).toHaveTextContent("/applications");
+
+    fireEvent.click(within(tabbar).getByRole("button", { name: "Leases" }));
+    expect(screen.getByTestId("current-path")).toHaveTextContent("/leases");
+  });
+
+  it("does not render the landlord bottom nav for admin role contexts", () => {
+    mocks.user = { id: "admin-1", role: "admin", actorRole: "admin", email: "admin@example.com" };
+
+    renderLandlordNav();
+
+    expect(screen.queryByRole("navigation", { name: "Bottom navigation" })).not.toBeInTheDocument();
+  });
+
+  it("does not render the landlord bottom nav for admin permission contexts", () => {
+    mocks.user = {
+      id: "admin-2",
+      role: "landlord",
+      actorRole: "landlord",
+      email: "admin@example.com",
+      permissions: ["system.admin"],
+    };
+
+    renderLandlordNav();
+
+    expect(screen.queryByRole("navigation", { name: "Bottom navigation" })).not.toBeInTheDocument();
   });
 
   it("closes the drawer on Escape", async () => {

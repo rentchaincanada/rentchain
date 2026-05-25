@@ -11,9 +11,17 @@ type WorkspaceDrawerProps = {
   userEmail?: string | null;
   userRole?: string | null;
   onSignOut?: () => void;
+  reserveBottomNavSpace?: boolean;
 };
 
-export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose, userEmail, userRole, onSignOut }) => {
+export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({
+  open,
+  onClose,
+  userEmail,
+  userRole,
+  onSignOut,
+  reserveBottomNavSpace = false,
+}) => {
   const navigate = useNavigate();
   const location = useLocation();
   const { features, loading: capsLoading } = useCapabilities();
@@ -74,7 +82,9 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
     onClose();
   };
   const mobileBottomNavOffset =
-    "var(--rc-mobile-drawer-bottom-offset, calc(104px + env(safe-area-inset-bottom, 0px)))";
+    reserveBottomNavSpace
+      ? "var(--rc-mobile-drawer-bottom-offset, calc(104px + env(safe-area-inset-bottom, 0px)))"
+      : "calc(12px + env(safe-area-inset-bottom, 0px))";
 
   const footerContent = (
     <>
@@ -107,10 +117,12 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
         left: 0,
         right: 0,
         bottom: isMobile ? mobileBottomNavOffset : 0,
-        zIndex: isMobile ? 60 : 3000,
+        zIndex: isMobile ? 3000 : 3000,
         display: "flex",
-        justifyContent: "flex-end",
+        justifyContent: isMobile ? "center" : "flex-end",
         alignItems: isMobile ? "flex-end" : "flex-start",
+        maxWidth: "100%",
+        overflow: "hidden",
         overscrollBehavior: "none",
         touchAction: isMobile ? "auto" : "none",
         pointerEvents: "auto",
@@ -133,12 +145,13 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
         aria-label="Workspace navigation"
         style={{
           position: "relative",
-          width: isMobile ? "auto" : 320,
-          maxWidth: isMobile ? "none" : "90vw",
+          width: isMobile ? "min(420px, calc(100% - 24px))" : 320,
+          maxWidth: isMobile ? "min(560px, calc(100% - 24px))" : "90vw",
           height: isMobile ? "auto" : "100dvh",
-          maxHeight: isMobile ? `min(calc(100dvh - ${mobileBottomNavOffset} - 16px), 560px)` : "100dvh",
-          margin: isMobile ? "0 max(12px, env(safe-area-inset-right, 0px)) 8px max(12px, env(safe-area-inset-left, 0px))" : 0,
+          maxHeight: isMobile ? `min(calc(100dvh - ${mobileBottomNavOffset} - 16px), 620px)` : "100dvh",
+          margin: isMobile ? "0 auto 8px" : 0,
           minHeight: 0,
+          minWidth: 0,
           background: colors.card,
           border: isMobile ? `1px solid ${colors.border}` : undefined,
           borderLeft: isMobile ? undefined : `1px solid ${colors.border}`,
@@ -146,10 +159,10 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
           boxShadow: shadows.lg,
           display: "flex",
           flexDirection: "column",
-          zIndex: isMobile ? 61 : 3001,
+          zIndex: isMobile ? 3001 : 3001,
           overflow: "hidden",
           overscrollBehaviorY: "contain",
-          contain: "layout paint size",
+          contain: "layout paint",
           isolation: "isolate",
           WebkitOverflowScrolling: "touch",
           paddingTop: isMobile ? 0 : "env(safe-area-inset-top)",
@@ -195,13 +208,19 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
             WebkitOverflowScrolling: "touch",
             overscrollBehaviorY: "contain",
             touchAction: "pan-y",
-            padding: `0 ${spacing.lg}`,
+          padding: `0 ${isMobile ? spacing.md : spacing.lg}`,
             minHeight: 0,
             maxHeight: "100%",
           }}
         >
           <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.02em", color: text.muted, marginBottom: spacing.sm }}>Pages</div>
-          <div style={{ display: "grid", gap: 8 }}>
+          <div
+            style={{
+              display: "grid",
+              gap: isMobile ? 10 : 8,
+              gridTemplateColumns: isMobile ? "repeat(2, minmax(0, 1fr))" : "1fr",
+            }}
+          >
             {navLoading ? (
               <div
                 style={{
@@ -225,8 +244,9 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
                   type="button"
                   onClick={() => handleNav(link.to)}
                   style={{
-                    textAlign: "left",
-                    padding: "10px 12px",
+                    textAlign: isMobile ? "center" : "left",
+                    padding: isMobile ? "10px 8px" : "10px 12px",
+                    minHeight: isMobile ? 48 : undefined,
                     borderRadius: radius.md,
                     border: `1px solid ${active ? colors.accent : colors.border}`,
                     background: active ? "rgba(37,99,235,0.08)" : colors.card,
@@ -240,7 +260,14 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
               );
             })}
             {adminDrawerItems.length ? (
-              <div style={{ height: 1, background: colors.border, margin: `${spacing.xs} 0` }} />
+              <div
+                style={{
+                  height: 1,
+                  background: colors.border,
+                  margin: `${spacing.xs} 0`,
+                  gridColumn: isMobile ? "1 / -1" : undefined,
+                }}
+              />
             ) : null}
             {adminDrawerItems.map((link) => {
               const active = location.pathname.startsWith(link.to);
@@ -250,8 +277,9 @@ export const WorkspaceDrawer: React.FC<WorkspaceDrawerProps> = ({ open, onClose,
                   type="button"
                   onClick={() => handleNav(link.to)}
                   style={{
-                    textAlign: "left",
-                    padding: "10px 12px",
+                    textAlign: isMobile ? "center" : "left",
+                    padding: isMobile ? "10px 8px" : "10px 12px",
+                    minHeight: isMobile ? 48 : undefined,
                     borderRadius: radius.md,
                     border: `1px solid ${active ? colors.accent : colors.border}`,
                     background: active ? "rgba(37,99,235,0.08)" : colors.card,

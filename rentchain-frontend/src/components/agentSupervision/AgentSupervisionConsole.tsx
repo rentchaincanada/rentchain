@@ -38,7 +38,8 @@ function Badge({ children, tone }: { children: React.ReactNode; tone: { color: s
         padding: "3px 9px",
         fontSize: 12,
         fontWeight: 800,
-        whiteSpace: "nowrap",
+        maxWidth: "100%",
+        overflowWrap: "anywhere",
       }}
     >
       {children}
@@ -48,12 +49,12 @@ function Badge({ children, tone }: { children: React.ReactNode; tone: { color: s
 
 function SupervisionItemCard({ item }: { item: AgentSupervisionItem }) {
   return (
-    <Card style={{ borderRadius: 8, padding: 12, display: "grid", gap: 8 }}>
-      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+    <Card style={{ borderRadius: 8, padding: 12, display: "grid", gap: 8, minWidth: 0, maxWidth: "100%" }}>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", minWidth: 0, maxWidth: "100%" }}>
         <Badge tone={severityTone(item.severity)}>{label(item.severity)}</Badge>
         <Badge tone={statusTone(item.status)}>{label(item.status)}</Badge>
-        <span style={{ color: "#475569", fontSize: 13, fontWeight: 800 }}>{label(item.itemType)}</span>
-        <span style={{ color: "#64748b", fontSize: 13 }}>
+        <span style={{ color: "#475569", fontSize: 13, fontWeight: 800, minWidth: 0, overflowWrap: "anywhere" }}>{label(item.itemType)}</span>
+        <span style={{ color: "#64748b", fontSize: 13, minWidth: 0, maxWidth: "100%", overflowWrap: "anywhere" }}>
           Scope: {label(item.relatedScope.scope)} {item.relatedScope.scopeId}
         </span>
       </div>
@@ -71,7 +72,7 @@ function SupervisionItemCard({ item }: { item: AgentSupervisionItem }) {
           ))}
         </div>
       ) : null}
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", color: "#475569", fontSize: 12, fontWeight: 800 }}>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", color: "#475569", fontSize: 12, fontWeight: 800, minWidth: 0 }}>
         <span>Manual review required</span>
         <span>Policy guarded</span>
         <span>Human approval required</span>
@@ -88,9 +89,9 @@ function SupervisionItemCard({ item }: { item: AgentSupervisionItem }) {
 function ItemSection({ title, items }: { title: string; items: AgentSupervisionItem[] }) {
   if (!items.length) return null;
   return (
-    <Section style={{ display: "grid", gap: 10 }}>
+    <Section style={{ display: "grid", gap: 10, minWidth: 0, maxWidth: "100%", overflowX: "hidden" }}>
       <div style={{ fontWeight: 900, color: "#0f172a" }}>{title}</div>
-      <div style={{ display: "grid", gap: 10 }}>
+      <div style={{ display: "grid", gap: 10, minWidth: 0, maxWidth: "100%" }}>
         {items.map((item) => (
           <SupervisionItemCard key={item.supervisionItemId} item={item} />
         ))}
@@ -101,8 +102,8 @@ function ItemSection({ title, items }: { title: string; items: AgentSupervisionI
 
 export function AgentSupervisionConsole({ snapshot }: { snapshot: AgentSupervisionSnapshot }) {
   return (
-    <div style={{ display: "grid", gap: 16 }}>
-      <Section style={{ display: "grid", gap: 8 }}>
+    <div style={{ display: "grid", gap: 16, minWidth: 0, maxWidth: "100%", overflowX: "hidden" }}>
+      <Section style={{ display: "grid", gap: 8, minWidth: 0, maxWidth: "100%" }}>
         <div style={{ display: "grid", gap: 4 }}>
           <strong style={{ color: "#0f172a" }}>Supervised operational intelligence only.</strong>
           <span style={{ color: "#475569" }}>
@@ -110,16 +111,16 @@ export function AgentSupervisionConsole({ snapshot }: { snapshot: AgentSupervisi
             external submission is automated.
           </span>
         </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", color: "#475569", fontSize: 12, fontWeight: 900 }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", color: "#475569", fontSize: 12, fontWeight: 900, minWidth: 0 }}>
           <span>External execution disabled</span>
           <span>Autonomous execution disabled</span>
           <span>Manual review required</span>
         </div>
       </Section>
 
-      <Section style={{ display: "grid", gap: 10 }}>
+      <Section style={{ display: "grid", gap: 10, minWidth: 0, maxWidth: "100%" }}>
         <div style={{ fontWeight: 900 }}>Supervision summary</div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(145px, 1fr))", gap: 10 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(145px, 100%), 1fr))", gap: 10, minWidth: 0 }}>
           {[
             ["Suggested actions", snapshot.summary.suggestedActions],
             ["Blocked actions", snapshot.summary.blockedActions],
@@ -127,8 +128,8 @@ export function AgentSupervisionConsole({ snapshot }: { snapshot: AgentSupervisi
             ["Escalations", snapshot.summary.escalations],
             ["Workflow sync issues", snapshot.summary.workflowSyncIssues],
           ].map(([name, value]) => (
-            <Card key={String(name)} style={{ borderRadius: 8, padding: 12 }}>
-              <div style={{ color: "#64748b", fontSize: 12, fontWeight: 800 }}>{name}</div>
+            <Card key={String(name)} style={{ borderRadius: 8, padding: 12, minWidth: 0 }}>
+              <div style={{ color: "#64748b", fontSize: 12, fontWeight: 800, overflowWrap: "anywhere" }}>{name}</div>
               <strong style={{ color: "#0f172a", fontSize: 22 }}>{value}</strong>
             </Card>
           ))}
