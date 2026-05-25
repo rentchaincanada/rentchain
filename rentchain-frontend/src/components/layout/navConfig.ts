@@ -1,5 +1,5 @@
 import type { ComponentType } from "react";
-import { LayoutDashboard, Building2, Users, ScrollText, MessagesSquare, User, ReceiptText, BarChart3, Inbox, ClipboardList } from "lucide-react";
+import { LayoutDashboard, Building2, Users, ScrollText, MessagesSquare, User, ReceiptText, BarChart3, Inbox, ClipboardList, FileText } from "lucide-react";
 import { SCREENING_ENABLED } from "../../config/screening";
 
 export type NavItem = {
@@ -52,7 +52,6 @@ export const NAV_ITEMS: NavItem[] = [
     to: "/properties",
     icon: Building2,
     showInDrawer: true,
-    showInTabs: true,
   },
   {
     id: "tenants",
@@ -60,7 +59,6 @@ export const NAV_ITEMS: NavItem[] = [
     to: "/tenants",
     icon: Users,
     showInDrawer: true,
-    showInTabs: true,
   },
   {
     id: "applications",
@@ -68,7 +66,24 @@ export const NAV_ITEMS: NavItem[] = [
     to: "/applications",
     icon: ScrollText,
     showInDrawer: true,
+  },
+  {
+    id: "documents",
+    label: "Documents",
+    to: "/applications",
+    icon: FileText,
+    showInDrawer: false,
     showInTabs: true,
+    requiresLandlordOrAdmin: true,
+  },
+  {
+    id: "leases",
+    label: "Leases",
+    to: "/leases",
+    icon: ScrollText,
+    showInDrawer: true,
+    showInTabs: true,
+    requiresLandlordOrAdmin: true,
   },
   {
     id: "landlord-inbox",

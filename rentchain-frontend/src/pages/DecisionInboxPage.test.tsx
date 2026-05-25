@@ -396,6 +396,21 @@ describe("DecisionInboxPage", () => {
     expect(apiMocks.macShellProps).toHaveBeenCalledWith(expect.objectContaining({ showTopNav: false }));
   });
 
+  it("marks the decision inbox with mobile-safe responsive layout classes", async () => {
+    render(
+      <MemoryRouter>
+        <DecisionInboxPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole("heading", { name: "Decision inbox" })).toBeInTheDocument();
+    expect(document.querySelector(".rc-decision-inbox-page")).toBeInTheDocument();
+    expect(document.querySelector(".rc-decision-inbox-header")).toBeInTheDocument();
+    expect(document.querySelector(".rc-decision-inbox-context-links")).toBeInTheDocument();
+    expect(document.querySelector(".rc-decision-inbox-filters")).toBeInTheDocument();
+    expect(document.querySelector(".rc-decision-inbox-list")).toBeInTheDocument();
+  });
+
   it("updates visible decisions through deterministic filters", async () => {
     apiMocks.fetchDecisionInbox
       .mockResolvedValueOnce(inboxResponse())

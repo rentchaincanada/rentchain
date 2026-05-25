@@ -89,7 +89,9 @@ describe("AdminLeasesPage", () => {
       });
     });
 
-    expect(screen.getByText("Coburg Rd · Unit 101 · Jane Tenant")).toBeInTheDocument();
+    expect(screen.getAllByText("Coburg Rd · Unit 101 · Jane Tenant").length).toBeGreaterThan(0);
+    expect(screen.getByLabelText("Admin leases mobile list")).toBeInTheDocument();
+    expect(screen.getAllByText("Harbour Homes").length).toBeGreaterThan(0);
     expect(screen.queryByText("lease-1")).not.toBeInTheDocument();
     expect(screen.queryByText("landlord-1")).not.toBeInTheDocument();
   });
@@ -103,7 +105,9 @@ describe("AdminLeasesPage", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText("Coburg Rd · Unit 101 · Jane Tenant")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getAllByText("Coburg Rd · Unit 101 · Jane Tenant").length).toBeGreaterThan(0);
+    });
     fireEvent.click(screen.getAllByText("Coburg Rd · Unit 101 · Jane Tenant")[0]);
 
     const drawer = screen.getByRole("dialog", { name: "Lease detail drawer" });

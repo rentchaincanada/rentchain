@@ -263,24 +263,35 @@ export default function AdminReviewWorkspacesPage() {
         </div>
 
         <Card>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
-            <label>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(240px, 100%), 1fr))", gap: 12, minWidth: 0 }}>
+            <label style={{ display: "grid", gap: 4, minWidth: 0 }}>
               <div style={{ fontSize: 12, color: "#64748b" }}>Workspace type</div>
-              <select aria-label="Workspace type" value={workspaceType} onChange={(event) => setWorkspaceType(event.target.value)}>
+              <select
+                aria-label="Workspace type"
+                value={workspaceType}
+                onChange={(event) => setWorkspaceType(event.target.value)}
+                style={{ width: "100%", minWidth: 0, boxSizing: "border-box" }}
+              >
                 <option value="">All workspace types</option>
                 {WORKSPACE_TYPES.map((item) => <option key={item} value={item}>{label(item)}</option>)}
               </select>
             </label>
-            <label>
+            <label style={{ display: "grid", gap: 4, minWidth: 0 }}>
               <div style={{ fontSize: 12, color: "#64748b" }}>Search</div>
-              <input aria-label="Search" value={q} onChange={(event) => setQ(event.target.value)} placeholder="Search metadata" />
+              <input
+                aria-label="Search"
+                value={q}
+                onChange={(event) => setQ(event.target.value)}
+                placeholder="Search metadata"
+                style={{ width: "100%", minWidth: 0, boxSizing: "border-box" }}
+              />
             </label>
           </div>
         </Card>
 
         {error ? <Card><div style={{ color: "#b91c1c" }}>{error}</div></Card> : null}
 
-        <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(300px, 440px)", gap: 16 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(300px, 100%), 1fr))", gap: 16 }}>
           <div style={{ display: "grid", gap: 10 }}>
             {loading ? <Card><div>Loading governed review workspace metadata...</div></Card> : null}
             {!loading && workspaces.length === 0 ? (

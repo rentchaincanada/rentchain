@@ -5,6 +5,7 @@ import { Button, Card, Pill, Section } from "../../components/ui/Ui";
 import { useToast } from "../../components/ui/ToastProvider";
 import { exportAdminLeasesCsv, fetchAdminLeases, type AdminLeaseView } from "../../api/adminApi";
 import { AdminSavedFilters } from "../../components/admin/AdminSavedFilters";
+import "./AdminLeasesPage.css";
 
 function readFilters(search: string) {
   const params = new URLSearchParams(search);
@@ -40,6 +41,10 @@ function leaseLabel(lease: AdminLeaseView) {
 
 function landlordLabel(lease: AdminLeaseView) {
   return lease.landlordDisplayName || "Landlord account";
+}
+
+function tenantLabel(lease: AdminLeaseView) {
+  return lease.tenantNames.length ? lease.tenantNames.join(", ") : "No linked tenants";
 }
 
 export const AdminLeasesPage: React.FC = () => {
@@ -292,8 +297,39 @@ export const AdminLeasesPage: React.FC = () => {
           ) : null}
           {!loading && data?.items?.length ? (
             <>
-              <div style={{ overflowX: "auto" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <div className="rc-admin-leases-mobile-list" aria-label="Admin leases mobile list">
+                {data.items.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className="rc-admin-lease-card"
+                    onClick={() => setSelectedLease(item)}
+                  >
+                    <span className="rc-admin-lease-card__title">{leaseLabel(item)}</span>
+                    <span className="rc-admin-lease-card__placement">
+                      {item.propertyName || "Property not linked"} · {item.unitNumber ? `Unit ${item.unitNumber}` : "Unit not assigned"}
+                    </span>
+                    <span className="rc-admin-lease-card__meta">
+                      <span>{tenantLabel(item)}</span>
+                      <span>{landlordLabel(item)}</span>
+                    </span>
+                    <span className="rc-admin-lease-card__meta">
+                      <span>Status: {formatValue(item.status)}</span>
+                      <span>Rent: {formatMoney(item.monthlyRent)}</span>
+                    </span>
+                    <span className="rc-admin-lease-card__meta">
+                      <span>Start: {item.startDate || "Unavailable"}</span>
+                      <span>End: {item.endDate || "Unavailable"}</span>
+                    </span>
+                    <span className="rc-admin-lease-card__footer">
+                      <Pill tone="accent">Risk {item.riskGrade || "unavailable"}</Pill>
+                      <IntegrityPill lease={item} />
+                    </span>
+                  </button>
+                ))}
+              </div>
+              <div className="rc-admin-leases-table-wrap">
+                <table className="rc-admin-leases-table">
                   <thead>
                     <tr style={{ textAlign: "left", borderBottom: "1px solid rgba(15, 23, 42, 0.08)" }}>
                       {["Lease", "Property / Unit", "Tenant(s)", "Landlord", "Status", "Rent", "Start", "End", "Risk", "Integrity", "Updated"].map((label) => (
@@ -318,7 +354,7 @@ export const AdminLeasesPage: React.FC = () => {
                           <div>{item.propertyName || "Property not linked"}</div>
                           <div style={{ color: "#64748b", fontSize: 13 }}>{item.unitNumber ? `Unit ${item.unitNumber}` : "Unit not assigned"}</div>
                         </td>
-                        <td style={{ padding: "12px" }}>{item.tenantNames.length ? item.tenantNames.join(", ") : "—"}</td>
+                        <td style={{ padding: "12px" }}>{tenantLabel(item)}</td>
                         <td style={{ padding: "12px" }}>{landlordLabel(item)}</td>
                         <td style={{ padding: "12px" }}>
                           <Pill tone="default">{formatValue(item.status)}</Pill>

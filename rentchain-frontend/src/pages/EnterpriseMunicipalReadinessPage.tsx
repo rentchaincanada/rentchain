@@ -58,7 +58,7 @@ export default function EnterpriseMunicipalReadinessPage() {
   }
 
   return (
-    <MacShell title="Enterprise and municipal readiness" showTopNav={false}>
+    <MacShell title="Enterprise and municipal readiness">
       <div style={{ display: "grid", gap: 16 }}>
         <Section>
           <div style={{ display: "grid", gap: 6 }}>

@@ -20,6 +20,7 @@ import { AgentActionPanel } from "@/components/agentActions/AgentActionPanel";
 import { OperatorReviewSessionPanel } from "@/components/operatorReviews/OperatorReviewSessionPanel";
 import { Card, Section } from "@/components/ui/Ui";
 import { useToast } from "@/components/ui/ToastProvider";
+import "./DecisionInboxPage.css";
 
 type FilterValue<T extends string> = T | "all";
 
@@ -226,7 +227,7 @@ function DecisionInboxCard({ item }: { item: DecisionInboxItem }) {
     });
   }
   return (
-    <Card style={{ display: "grid", gap: 12, borderRadius: 8 }}>
+    <Card className="rc-decision-inbox-card" style={{ display: "grid", gap: 12, borderRadius: 8 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
         <Badge tone={severityTone(item.severity)}>{label(item.severity)}</Badge>
         <Badge tone={statusTone(item.status)}>{label(item.status)}</Badge>
@@ -458,32 +459,40 @@ export default function DecisionInboxPage() {
 
   return (
     <MacShell title="Decision inbox" showTopNav={false}>
-      <div style={{ display: "grid", gap: 16 }}>
+      <div className="rc-decision-inbox-page" style={{ display: "grid", gap: 16 }}>
         <Section>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "start" }}>
-            <div style={{ display: "grid", gap: 6 }}>
+          <div
+            className="rc-decision-inbox-header"
+            style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "start" }}
+          >
+            <div className="rc-decision-inbox-heading" style={{ display: "grid", gap: 6 }}>
               <h1 style={{ margin: 0, fontSize: "1.5rem" }}>Decision inbox</h1>
               <div style={{ color: "#475569", maxWidth: 900 }}>
                 A read-only view of detected decisions across analytics and lease ledger surfaces. Review context here without
                 triggering workflow actions.
               </div>
             </div>
-            <Link to="/institution-exports" style={{ color: "#2563eb", fontWeight: 800 }}>
-              Institution export preview
-            </Link>
-            <Link to="/agent-supervision" style={{ color: "#2563eb", fontWeight: 800 }}>
-              Agent supervision
-            </Link>
-            <Link to="/identity-layer" style={{ color: "#2563eb", fontWeight: 800 }}>
-              Identity layer
-            </Link>
+            <div className="rc-decision-inbox-context-links">
+              <Link to="/institution-exports" style={{ color: "#2563eb", fontWeight: 800 }}>
+                Institution export preview
+              </Link>
+              <Link to="/agent-supervision" style={{ color: "#2563eb", fontWeight: 800 }}>
+                Agent supervision
+              </Link>
+              <Link to="/identity-layer" style={{ color: "#2563eb", fontWeight: 800 }}>
+                Identity layer
+              </Link>
+            </div>
           </div>
         </Section>
 
         {data ? (
           <Section style={{ display: "grid", gap: 10 }}>
             <div style={{ fontWeight: 800 }}>Summary</div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10 }}>
+            <div
+              className="rc-decision-inbox-summary-grid"
+              style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 10 }}
+            >
               {[
                 ["Total", data.summary.total],
                 ["Critical", data.summary.critical],
@@ -512,7 +521,7 @@ export default function DecisionInboxPage() {
           </Section>
         ) : null}
 
-        <Section style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "end" }}>
+        <Section className="rc-decision-inbox-filters" style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "end" }}>
           <FilterSelect labelText="Severity" value={severity} options={severityOptions} onChange={setSeverity} />
           <FilterSelect labelText="Status" value={status} options={statusOptions} onChange={setStatus} />
           <FilterSelect labelText="Type" value={type} options={typeOptions} onChange={setType} />
@@ -537,7 +546,7 @@ export default function DecisionInboxPage() {
           <Card style={{ color: "#64748b" }}>No decisions match the current filters.</Card>
         ) : null}
         {!loading && !error && data?.items.length ? (
-          <div style={{ display: "grid", gap: 12 }}>
+          <div className="rc-decision-inbox-list" style={{ display: "grid", gap: 12 }}>
             {data.items.map((item) => (
               <DecisionInboxCard key={item.id} item={item} />
             ))}

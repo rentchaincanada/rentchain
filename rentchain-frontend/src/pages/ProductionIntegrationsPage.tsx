@@ -58,7 +58,7 @@ export default function ProductionIntegrationsPage() {
   }
 
   return (
-    <MacShell title="Production integrations" showTopNav={false}>
+    <MacShell title="Production integrations">
       <div style={{ display: "grid", gap: 16 }}>
         <Section>
           <div style={{ display: "grid", gap: 6 }}>

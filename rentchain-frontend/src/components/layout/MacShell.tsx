@@ -2,6 +2,7 @@
 import React from "react";
 import TopNav from "./TopNav";
 import { layout, spacing, colors, text } from "../../styles/tokens";
+import "./MacShell.css";
 
 interface MacShellProps {
   title?: string;

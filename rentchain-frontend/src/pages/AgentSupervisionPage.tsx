@@ -41,12 +41,12 @@ export default function AgentSupervisionPage() {
 
   return (
     <MacShell title="Agent supervision" showTopNav={false}>
-      <div style={{ display: "grid", gap: 16 }}>
+      <div style={{ display: "grid", gap: 16, minWidth: 0, maxWidth: "100%", overflowX: "hidden" }}>
         <Section>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "start" }}>
-            <div style={{ display: "grid", gap: 6 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "start", minWidth: 0 }}>
+            <div style={{ display: "grid", gap: 6, minWidth: 0, maxWidth: "100%" }}>
               <h1 style={{ margin: 0, fontSize: "1.5rem" }}>Agent supervision</h1>
-              <div style={{ color: "#475569", maxWidth: 900 }}>
+              <div style={{ color: "#475569", maxWidth: 900, overflowWrap: "anywhere" }}>
                 A read-only control tower for workflow previews, policy-gated suggestions, blocked states, escalation
                 visibility, and review lineage.
               </div>

@@ -78,7 +78,7 @@ describe("WorkspaceDrawer", () => {
     expect(screen.getByRole("button", { name: "Governed review workspaces" })).toBeInTheDocument();
   });
 
-  it("positions the mobile sheet above the bottom navigation", () => {
+  it("does not reserve bottom navigation space by default", () => {
     render(
       <MemoryRouter initialEntries={["/dashboard"]}>
         <WorkspaceDrawer open onClose={vi.fn()} userRole="landlord" userEmail="owner@example.com" />
@@ -87,15 +87,44 @@ describe("WorkspaceDrawer", () => {
 
     const dialog = screen.getByRole("dialog", { name: "Workspace navigation" });
     expect(dialog.parentElement).toHaveStyle({
-      bottom: "var(--rc-mobile-drawer-bottom-offset, calc(104px + env(safe-area-inset-bottom, 0px)))",
+      bottom: "calc(12px + env(safe-area-inset-bottom, 0px))",
       alignItems: "flex-end",
-      zIndex: "60",
+      justifyContent: "center",
+      zIndex: "3000",
     });
     expect(dialog).toHaveStyle({
+      width: "min(420px, calc(100% - 24px))",
+      maxWidth: "min(560px, calc(100% - 24px))",
       height: "auto",
       maxHeight:
-        "min(calc(100dvh - var(--rc-mobile-drawer-bottom-offset, calc(104px + env(safe-area-inset-bottom, 0px))) - 16px), 560px)",
-      zIndex: "61",
+        "min(calc(100dvh - calc(12px + env(safe-area-inset-bottom, 0px)) - 16px), 620px)",
+      zIndex: "3001",
+    });
+    expect(within(dialog).getByRole("button", { name: "Dashboard" }).parentElement).toHaveStyle({
+      gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    });
+  });
+
+  it("can reserve bottom navigation space when explicitly requested", () => {
+    render(
+      <MemoryRouter initialEntries={["/dashboard"]}>
+        <WorkspaceDrawer
+          open
+          onClose={vi.fn()}
+          userRole="landlord"
+          userEmail="owner@example.com"
+          reserveBottomNavSpace
+        />
+      </MemoryRouter>
+    );
+
+    const dialog = screen.getByRole("dialog", { name: "Workspace navigation" });
+    expect(dialog.parentElement).toHaveStyle({
+      bottom: "var(--rc-mobile-drawer-bottom-offset, calc(104px + env(safe-area-inset-bottom, 0px)))",
+    });
+    expect(dialog).toHaveStyle({
+      maxHeight:
+        "min(calc(100dvh - var(--rc-mobile-drawer-bottom-offset, calc(104px + env(safe-area-inset-bottom, 0px))) - 16px), 620px)",
     });
   });
 
