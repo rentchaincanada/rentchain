@@ -125,7 +125,8 @@ describe("tenant profile and communications pages", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText((content) => content.includes("tenant@example.com") && content.includes("Unit 1"))).toBeInTheDocument();
+    expect(await screen.findByText("tenant@example.com")).toBeInTheDocument();
+    expect(screen.getByText("Unit 1")).toBeInTheDocument();
     expect(screen.queryByText(/iXHTFgm8ay3iuUptfI4I/)).not.toBeInTheDocument();
   });
 
@@ -155,6 +156,81 @@ describe("tenant profile and communications pages", () => {
     expect(await screen.findByText("tenant@example.com")).toBeInTheDocument();
     expect(screen.queryByText(/raw-internal-unit-id/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Unit raw-internal-unit-id/)).not.toBeInTheDocument();
+  });
+
+  it("tenant profile property display uses the workspace unit fallback when profile unit is missing", async () => {
+    tenantPortalApi.getTenantWorkspace.mockResolvedValueOnce({
+      context: {
+        authority: "active_tenant",
+        propertyId: "prop-1",
+        rc_prop_id: "rc-prop-1",
+        applicationId: "app-1",
+        leaseId: "lease-1",
+        tenantId: "tenant-1",
+        unitId: "raw-unit-id-123456789",
+        invitedEmail: "tenant@example.com",
+      },
+      property: {
+        propertyId: "prop-1",
+        rc_prop_id: "rc-prop-1",
+        street1: "6227 Coburg Road",
+        street2: null,
+        city: "Halifax",
+        province: "NS",
+        postalCode: "B3H 1Z8",
+        features: [],
+      },
+      unit: {
+        unitId: "raw-unit-id-123456789",
+        label: "6",
+      },
+    });
+    tenantProfileApi.getTenantProfile.mockResolvedValue({
+      context: { authority: "active_tenant" },
+      profile: {
+        displayName: "Taylor Tenant",
+        email: "tenant@example.com",
+        phone: "902-555-0100",
+        authorityLabel: "Active tenant",
+        property: {
+          propertyId: "prop-1",
+          rc_prop_id: "rc-prop-1",
+          street1: "6227 Coburg Road",
+          street2: null,
+          city: "Halifax",
+          province: "NS",
+          postalCode: "B3H 1Z8",
+          features: [],
+        },
+        unit: null,
+        application: { status: "submitted" },
+        lease: { status: "active", monthlyRent: 1800, startDate: "2026-02-01", endDate: "2027-01-31", documentUrl: null },
+      },
+      identity: {
+        overallStatus: "verified",
+        identityVerification: {
+          status: "verified",
+          label: "Verified",
+          note: "Verified.",
+          updatedAt: "2026-01-05T00:00:00.000Z",
+        },
+        documentChecklist: [],
+        nextSteps: [],
+      },
+      actions: {
+        editableFields: ["displayName", "phone"],
+        documentEntry: { available: true, path: "/tenant/attachments", label: "Open documents", note: null },
+      },
+    });
+
+    render(
+      <MemoryRouter>
+        <TenantProfilePage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/6227 Coburg Road · Unit 6 · Halifax, NS B3H 1Z8/i)).toBeInTheDocument();
+    expect(screen.queryByText(/raw-unit-id-123456789/i)).not.toBeInTheDocument();
   });
 
   it("tenant profile page renders safe projected profile data and identity states", async () => {

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { getTenantProfile, updateTenantProfile, type TenantProfileStatus } from "../../api/tenantProfile";
 import { getTenantAttachments } from "../../api/tenantAttachmentsApi";
+import { getTenantWorkspace } from "../../api/tenantPortal";
 import {
   TenantEmptyState,
   TenantErrorState,
@@ -64,6 +65,7 @@ export default function TenantProfilePage() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<Awaited<ReturnType<typeof getTenantAttachments>> | null>(null);
+  const [workspace, setWorkspace] = useState<Awaited<ReturnType<typeof getTenantWorkspace>> | null>(null);
   const displayNameRef = React.useRef<HTMLInputElement | null>(null);
   const phoneRef = React.useRef<HTMLInputElement | null>(null);
   const rentalRecordRef = React.useRef<HTMLDivElement | null>(null);
@@ -107,6 +109,22 @@ export default function TenantProfilePage() {
       }
     };
     void loadAttachments();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadWorkspace = async () => {
+      try {
+        const next = await getTenantWorkspace();
+        if (!cancelled) setWorkspace(next);
+      } catch {
+        if (!cancelled) setWorkspace(null);
+      }
+    };
+    void loadWorkspace();
     return () => {
       cancelled = true;
     };
@@ -205,7 +223,10 @@ export default function TenantProfilePage() {
   const identityTone = statusTone(data?.identity?.overallStatus || "missing");
   const verificationTone = statusTone(data?.identity?.identityVerification?.status || "missing");
   const documentEntry = data?.actions?.documentEntry;
-  const propertyDisplay = buildProfilePropertyDisplay(data?.profile?.property || null, data?.profile?.unit?.label);
+  const propertyDisplay = buildProfilePropertyDisplay(
+    data?.profile?.property || workspace?.property || null,
+    data?.profile?.unit?.label || workspace?.unit?.label
+  );
   const applicationSignals = [
     ...(data?.profile?.application?.missingSteps || []),
     ...(data?.profile?.application?.nextActions || []),
