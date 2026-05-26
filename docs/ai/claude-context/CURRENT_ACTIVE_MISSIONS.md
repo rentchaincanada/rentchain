@@ -1,48 +1,179 @@
 # Current Active Missions
 
-## Source Audit
+This file replaces stale `CURRENT_MISSION.md` context for Claude.ai sharing. It is strategic, chronological, and phase-oriented. It is not an implementation branch plan by itself; each item still requires an explicit operator mission before Codex or Claude acts on it.
 
-`docs/execution/CURRENT_MISSION.md` currently appears to be a placeholder template. It should not be blindly copied into Claude.ai as the live mission.
+## Current Platform Phase
 
-The current mission for this snapshot is operator-provided:
+RentChain has completed the first governed operational infrastructure layer around:
 
-- branch: `docs/ai-claude-context-snapshot-v1`
-- objective: create Claude.ai context snapshot files under `docs/ai/claude-context/`
-- scope: documentation only
+- impersonation governance and actor-chain attribution
+- admin/support projection safety
+- security incident review
+- support escalation runbooks
+- escalation history and manual review note contracts
+- admin support escalation review
+- cross-workflow escalation/workspace links
+- governed review workspace summaries, persistence-readiness contracts, append adapter, read routes, admin page, navigation, and test-only fixtures
+- AI cowork protocol, Dev Container foundation, Playwright QA readiness, and Cloud Run deployment verification checklists
 
-## Recently Completed Direction
+These are governance and review foundations. They should not be treated as autonomous remediation, workflow execution, or external institutional integration.
 
-Recent merged work, based on current docs and branch history, has focused on:
+## Current Strategic Direction
 
-- AI cowork protocol and Dev Container/Playwright/Cloud Run QA foundations
-- tenant message read-state and refresh synchronization
-- tenant profile/document readiness consistency
-- tenant mobile bottom navigation
-- admin tenant/lease projection consistency
-- landlord/admin mobile layout and navigation polish
-- governed review workspace foundations, read routes, admin page, navigation, and fixtures
-- support escalation runbooks, history, review notes, and admin review surface
-- admin security incident review surface
-- impersonation governance and support/admin projection safety
+RentChain is moving toward governed operational housing infrastructure:
 
-## Next Recommended Themes
+- operational system of record for rental workflows
+- human-accountable review and escalation surfaces
+- evidence and export readiness
+- support/security governance
+- tenant-safe trust and controlled sharing
+- mobile operational access
+- supervised AI collaboration and QA
+- institutional coordination readiness after governance layers mature
 
-Potential next mission themes, subject to operator activation:
+The next missions should continue hardening review, QA, projection safety, tenant continuity, and institutional evidence readiness before adding broad automation or external integrations.
 
-- role-specific Playwright smoke specs using `PREVIEW_URL`
-- tenant profile card typography/responsive polish
-- tenant message realtime QA hardening if further preview issues appear
-- governed review workspace write governance only after append-only controls are explicitly approved
-- Cloud Run deployment verification automation that remains non-mutating by default
-- Claude context maintenance process to keep upload snapshots current
+## Active Next Sequence
 
-## Known Follow-Up Areas
+### Phase 1 — AI Collaboration & QA Infrastructure
 
-- Avoid stale backend deployment drift by verifying Cloud Run revision/image/traffic for backend missions.
-- Keep tenant, landlord, and admin mobile navigation separate.
-- Keep institutional export/trust work consent-scoped and manual-review-first.
-- Preserve projection safety when connecting admin/support review surfaces.
+Purpose: make Codex, Claude, Playwright, GitHub, Vercel, and Cloud Run collaboration safer and more repeatable.
 
-## Uncertainty Note
+- `docs/ai-cowork-vscode-sandbox-protocol-v1` — completed protocol for AI cowork authority, QA, and deployment boundaries.
+- `chore/devcontainer-codex-claude-playwright-foundation-v1` — completed Dev Container and safe QA script foundation.
+- `feat/playwright-mobile-preview-qa-harness-v1` — add deterministic mobile preview QA harness using `PREVIEW_URL`.
+- `feat/playwright-admin-tenant-landlord-smoke-suite-v1` — add small role-aware smoke coverage for admin, tenant, and landlord surfaces.
+- `fix/cloud-run-preview-revision-verification-script-v1` — add safe helper script for Cloud Run revision/image/traffic verification.
+- `feat/qa-report-artifact-generation-v1` — generate safe QA summaries without committing secrets, screenshots with sensitive data, or raw payloads.
 
-This file summarizes current direction from available docs and recent branch context. If a new operator prompt or active PR contradicts this snapshot, that newer prompt/PR is the mission source of truth.
+### Phase 2 — Tenant & Operational Continuity Foundations
+
+Purpose: strengthen tenant continuity and operational readiness without leaking private data or creating hidden scoring.
+
+- `fix/tenant-profile-email-card-responsive-polish-v1` — polish profile typography and card overflow.
+- `feat/tenant-identity-readiness-foundation-v1` — clarify identity readiness metadata without biometrics or provider claims.
+- `feat/tenant-multi-lease-readiness-v1` — represent multi-lease or historical lease readiness safely.
+- `feat/tenant-operational-engagement-signals-v1` — define metadata-only engagement/readiness signals without surveillance scoring.
+- `feat/governed-access-continuity-v1` — preserve tenant-safe access state across profile, documents, lease, and messages.
+- `feat/operational-telemetry-readiness-v1` — define safe telemetry summaries for operational QA and support.
+- `feat/smart-property-governance-foundation-v1` — prepare property governance labels and readiness states without ownership overclaims.
+- `feat/tenancy-continuity-foundation-v1` — connect tenant, lease, unit, document, and message continuity through safe summaries.
+- `feat/occupancy-continuity-readiness-v1` — prepare occupancy continuity read models and evidence summaries.
+
+### Phase 3 — Governed Review Workspace Hardening
+
+Purpose: harden governed review workspaces before adding any mutation controls or workflow execution.
+
+- `feat/governed-review-workspace-dev-fixture-toggle-v1` — add safe local/test fixture visibility controls.
+- `fix/governed-review-workspace-empty-states-v1` — improve empty states and no-data explanations.
+- `feat/governed-review-workspace-ui-contracts-v1` — document UI/read model contracts for review surfaces.
+- `test/governed-review-workspace-route-access-regression-v1` — protect admin-only read routes and route-source attribution.
+- `test/governed-review-workspace-metadata-response-safety-v1` — assert metadata-only responses and raw payload exclusion.
+- `feat/incident-escalation-review-integration-v1` — connect incident and escalation summaries without mutation controls.
+- `feat/review-workspace-append-event-audit-trail-v1` — expose append-event audit lineage safely.
+- `feat/review-workspace-audit-export-readiness-v1` — prepare admin-only, metadata-safe export readiness.
+- `feat/review-workspace-cross-surface-readiness-summaries-v1` — summarize security, escalation, evidence, and export readiness across surfaces.
+
+### Phase 4 — Security & Operational Hardening
+
+Purpose: strengthen operational security posture, support boundaries, and route/projection safety.
+
+- session and token governance hardening
+- frontend security headers and CSP review
+- dependency and supply-chain governance
+- document upload and malware-governance readiness
+- secret rotation and environment governance
+- security audit and incident response foundations
+- support/admin route-scope regression protection
+- telemetry and screening route governance
+- admin/support access governance
+
+### Phase 5 — Evidence, Export & Institutional Trust
+
+Purpose: expand evidence and export readiness while preserving consent, redaction, and projection safety.
+
+- export integrity and signature foundations
+- institutional export allowlist governance
+- consent governance timeline
+- institutional trust export framework hardening
+- recipient-authenticated access readiness
+- trust export adoption readiness
+- portable attestation readiness
+- institution interoperability readiness
+- institution legal and compliance readiness
+- external legal review preparation
+
+### Phase 6 — Institutional Coordination Readiness
+
+Purpose: prepare controlled institutional workflows after governance, evidence, and consent layers are stable.
+
+- pilot institution operations runbooks
+- institution partner readiness
+- institution access operational QA
+- institution access support/admin readiness
+- institution review invite operational QA
+- institutional identity readiness
+- institutional identity assurance framework
+- institutional sharing room readiness
+- subsidy/program coordination readiness
+- lifecycle continuity for institution-facing workflows
+
+### Phase 7 — Long-Term Interoperability & Integrity Readiness
+
+Purpose: plan interoperability and integrity layers without bypassing governance foundations.
+
+- provincial adapter standard readiness
+- external adapter compatibility
+- selective integrity verification
+- portable evidence package compatibility
+- future RWA execution readiness audit
+- settlement rail readiness
+- asset tokenization readiness infrastructure
+- cross-organization trust layer
+- release governance and public exposure hardening
+
+## Strategic Principles
+
+- Governance-first evolution.
+- Operational infrastructure before interoperability.
+- Supervised operational AI, not autonomous enforcement.
+- Projection safety for every audience.
+- Audit continuity and append-safe history.
+- Institutional-safe exports with consent, redaction, and provenance.
+- Gradual institutional coordination layering.
+- Cloud Run backend freshness must be verified separately from Vercel frontend freshness.
+- Future strategy must not be described as implemented production behavior.
+
+## Recommended Next Documentation Missions
+
+1. `docs/readme-modernization-v1` — completed by this modernization work; keep README aligned with governance-first platform framing.
+2. `docs/architecture-modernization-v1` — completed by this modernization work; keep architecture layers current as review/export/institutional foundations evolve.
+3. `docs/governance-reference-consolidation-v1` — recommended next docs mission to consolidate scattered governance reports into a stable Claude/operator reference index.
+
+## Best Immediate Claude Cleanup
+
+Remove from Claude.ai project context:
+
+- `CURRENT_MISSION.md`
+
+Add to Claude.ai project context:
+
+- `CURRENT_ACTIVE_MISSIONS.md`
+
+Preferred Claude upload order:
+
+1. `PROJECT_OVERVIEW.md`
+2. `PLATFORM_GUARDRAILS.md`
+3. `CURRENT_PLATFORM_STATE.md`
+4. `CURRENT_STRATEGIC_DIRECTION.md`
+5. `CURRENT_ARCHITECTURE.md`
+6. `CURRENT_GOVERNANCE_MODEL.md`
+7. `CURRENT_ACTIVE_MISSIONS.md`
+8. `CURRENT_PRICING_AND_CAPABILITIES.md`
+9. `CLAUDE_ROLE.md`
+10. `AI_COWORK_PROTOCOL.md`
+11. `CURRENT_MOBILE_DIRECTION.md`
+
+## Staleness Rule
+
+If an operator prompt, active PR, or current source code contradicts this file, the newer prompt/PR/code path wins. Claude should recommend an audit before turning this strategic sequence into implementation work.
