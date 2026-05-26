@@ -258,6 +258,33 @@ function prettyAccessAuditReason(value: string | null | undefined) {
   return prettyPolicyReason(value);
 }
 
+function isLikelyRawTenantReference(value: string | null | undefined): boolean {
+  return Boolean(String(value || "").trim().match(/^[A-Za-z0-9_-]{12,}$/));
+}
+
+function safeTenantContextValue(value: string | null | undefined): string | null {
+  const next = String(value || "").trim();
+  if (!next || isLikelyRawTenantReference(next)) return null;
+  return next;
+}
+
+function buildTenantDashboardPropertyDisplay(
+  property: Awaited<ReturnType<typeof getTenantWorkspace>>["property"] | null | undefined,
+  unit: Awaited<ReturnType<typeof getTenantWorkspace>>["unit"] | null | undefined
+) {
+  const propertyLabel =
+    safeTenantContextValue((property as any)?.name) ||
+    safeTenantContextValue(property?.street1) ||
+    safeTenantContextValue(property?.street2);
+  const unitLabel = safeTenantContextValue(unit?.label);
+  const city = safeTenantContextValue(property?.city);
+  const province = safeTenantContextValue(property?.province);
+  const locality = [city, province].filter(Boolean).join(", ");
+  return [propertyLabel, unitLabel ? `Unit ${unitLabel}` : safeTenantContextValue(property?.street2), locality]
+    .filter(Boolean)
+    .join(" · ");
+}
+
 function prettyInstitutionType(
   value: "bank" | "lender" | "insurer" | "regulator" | "internal_review" | null | undefined
 ) {
@@ -919,9 +946,7 @@ export default function TenantWorkspacePage() {
     );
   }
 
-  const propertyAddress = [data?.property?.street1, data?.property?.street2, data?.property?.city, data?.property?.province]
-    .filter(Boolean)
-    .join(", ");
+  const propertyAddress = buildTenantDashboardPropertyDisplay(data?.property || null, data?.unit || null);
   const maintenanceCount = Array.isArray(data?.maintenance) ? data.maintenance.length : 0;
   const nextActions = data?.application?.nextActions || [];
   const profileCompletion = profileData ? buildTenantProfileCompletion(profileData) : null;
@@ -1013,7 +1038,6 @@ export default function TenantWorkspacePage() {
           <TenantKeyValueGrid
             rows={[
               { label: "Status", value: activeTenancy.label },
-              { label: "Internal Lease ID", value: data?.lease?.leaseId || "Not visible yet" },
               { label: "Lease status", value: prettyStatus(data?.lease?.status) },
               {
                 label: "Lease document",

@@ -1146,6 +1146,10 @@ describe("tenant workspace frontend shell", () => {
         postalCode: "B3H1A1",
         features: ["laundry"],
       },
+      unit: {
+        unitId: "unit-1",
+        label: "4",
+      },
       application: {
         applicationId: "app-1",
         status: "submitted",
@@ -1277,12 +1281,14 @@ describe("tenant workspace frontend shell", () => {
     expect(screen.getByText(/Ready to apply/i)).toBeInTheDocument();
     expect(screen.getByText(/Rent terms ready for future setup/i)).toBeInTheDocument();
     expect(screen.getByText(/Confirm payment setup later/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Internal Lease ID/i)).not.toBeInTheDocument();
+    expect(screen.queryByText("lease-1")).not.toBeInTheDocument();
     expect(screen.getByText(/^Application created$/i)).toBeInTheDocument();
     expect(screen.getByText(/A rental application record was started\./i)).toBeInTheDocument();
     expect(screen.getByText(/Missing pieces/i)).toBeInTheDocument();
     expect(screen.getByText(/Income documents/i)).toBeInTheDocument();
     expect(screen.getByText(/Manage Shared Access/i)).toBeInTheDocument();
-    expect(screen.getByText(/Add missing details to keep your rental profile organized/i)).toBeInTheDocument();
+    expect(screen.getByText(/Review the remaining profile area to keep your rental profile organized/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /View your profile/i })).toBeInTheDocument();
     expect(screen.queryByText(/^Applicant$/i)).not.toBeInTheDocument();
     expect(screen.getAllByText(/Active tenancy/i).length).toBeGreaterThan(0);
@@ -1295,7 +1301,7 @@ describe("tenant workspace frontend shell", () => {
     expect(screen.getByRole("link", { name: /Open communications inbox/i })).toBeInTheDocument();
     expect(screen.getByText(/Screening consent requested for 1 application/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Review request/i })).toBeInTheDocument();
-    expect(screen.getByText(/123 Main St, Unit 4, Halifax, NS/i)).toBeInTheDocument();
+    expect(screen.getByText(/123 Main St · Unit 4 · Halifax, NS/i)).toBeInTheDocument();
     expect(screen.getByText(/finish_profile/i)).toBeInTheDocument();
     expect(screen.getAllByText(/1 active access grant/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/1 document in your vault, 1 ready to share, and 0 still needing attention/i)).toBeInTheDocument();

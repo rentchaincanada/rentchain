@@ -18,7 +18,14 @@ export type TenantProfileProjection = {
     email: string | null;
     phone: string | null;
     authorityLabel: string;
-    property: ReturnType<typeof projectTenantProperty> | null;
+    property: (ReturnType<typeof projectTenantProperty> & {
+      unitNumber?: string | null;
+      unitDisplayLabel?: string | null;
+    }) | null;
+    unit: {
+      unitId: string | null;
+      label: string | null;
+    } | null;
     application: ReturnType<typeof projectTenantApplication> | null;
     lease: ReturnType<typeof projectTenantLease> | null;
   };
@@ -283,6 +290,92 @@ async function loadWorkspaceDocuments(context: TenancyContext) {
   }
 
   return { property, application, lease, tenant };
+}
+
+function isLikelyRawId(value: string | null): boolean {
+  if (!value) return false;
+  return /^[A-Za-z0-9_-]{12,}$/.test(value);
+}
+
+function firstSafeDisplayString(values: unknown[], rawIds: unknown[]): string | null {
+  const blocked = new Set(
+    rawIds
+      .map((value) => asString(value))
+      .filter(isLikelyRawId)
+      .filter((value): value is string => Boolean(value))
+  );
+  for (const value of values) {
+    const candidate = asString(value);
+    if (!candidate || blocked.has(candidate)) continue;
+    return candidate;
+  }
+  return null;
+}
+
+async function loadTenantProfileUnitProjection(params: {
+  context: TenancyContext;
+  propertyData?: any;
+  tenantData?: any;
+  leaseData?: any;
+}): Promise<TenantProfileProjection["profile"]["unit"]> {
+  const unitIdCandidates = Array.from(
+    new Set(
+      [
+        params.context.unitId,
+        params.tenantData?.unitId,
+        params.leaseData?.unitId,
+        params.tenantData?.unit,
+        params.leaseData?.unit,
+      ]
+        .map((value) => asString(value))
+        .filter((value): value is string => Boolean(value))
+    )
+  );
+  const unitDocs = (await Promise.all(unitIdCandidates.map((candidate) => loadDocument("units", candidate)))).filter(
+    (doc): doc is { id: string; data: any } => Boolean(doc?.data)
+  );
+  const propertyUnitDocs = params.context.propertyId
+    ? await queryMany("units", "propertyId", params.context.propertyId, "==", 250)
+    : [];
+  const propertyEmbeddedUnits = Array.isArray(params.propertyData?.units)
+    ? params.propertyData.units.map((unit: any, index: number) => ({ id: asString(unit?.id) || `property-unit-${index}`, data: unit }))
+    : [];
+  const scopedUnitDocs = [...unitDocs, ...propertyUnitDocs, ...propertyEmbeddedUnits];
+  const matchedUnitDocs = scopedUnitDocs.filter((doc) => {
+    const identifiers = [
+      doc.id,
+      doc.data?.id,
+      doc.data?.unitId,
+      doc.data?.unit_id,
+      doc.data?.unitNumber,
+      doc.data?.unitLabel,
+      doc.data?.label,
+      doc.data?.name,
+    ]
+      .map((value) => asString(value))
+      .filter(Boolean);
+    return identifiers.some((identifier) => unitIdCandidates.includes(identifier!));
+  });
+  const resolvedUnitDocs = matchedUnitDocs.length ? matchedUnitDocs : unitDocs;
+  const unitId = resolvedUnitDocs.find((doc) => isLikelyRawId(doc.id))?.id || unitIdCandidates.find(isLikelyRawId) || null;
+  const rawIds = [unitId, params.context.unitId, params.tenantData?.unitId, params.leaseData?.unitId];
+  const label = firstSafeDisplayString(
+    [
+      params.tenantData?.unitLabel,
+      params.tenantData?.unitNumber,
+      params.tenantData?.unit,
+      params.leaseData?.unitLabel,
+      params.leaseData?.unitNumber,
+      params.leaseData?.unit,
+      ...resolvedUnitDocs.flatMap((doc) => [doc.data?.unitNumber, doc.data?.unitLabel, doc.data?.label, doc.data?.name]),
+    ],
+    rawIds
+  );
+  if (!unitId && !label) return null;
+  return {
+    unitId,
+    label,
+  };
 }
 
 async function loadApplicationReuseSource(params: { context: TenancyContext; userEmail?: string | null }) {
@@ -813,6 +906,12 @@ export async function loadTenantProfileProjection(params: {
     screeningRequest: screeningRequest?.data || {},
     screeningResult: screeningResult?.data || {},
   });
+  const unit = await loadTenantProfileUnitProjection({
+    context,
+    propertyData: property?.data,
+    tenantData: tenant?.data,
+    leaseData: lease?.data,
+  });
 
   return {
     context: {
@@ -838,7 +937,14 @@ export async function loadTenantProfileProjection(params: {
         context.invitedEmail,
       phone: asString(tenant?.data?.phone) || asString(application?.data?.phone),
       authorityLabel: normalizeAuthorityLabel(context.authority),
-      property: property ? projectTenantProperty(property.id, property.data) : null,
+      property: property
+        ? {
+            ...projectTenantProperty(property.id, property.data),
+            unitNumber: unit?.label || null,
+            unitDisplayLabel: unit?.label ? `Unit ${unit.label}` : null,
+          }
+        : null,
+      unit,
       application: application ? projectTenantApplication(application.id, application.data) : null,
       lease: lease ? projectTenantLease(lease.id, lease.data) : null,
     },

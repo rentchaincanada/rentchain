@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { getTenantProfile, updateTenantProfile, type TenantProfileStatus } from "../../api/tenantProfile";
 import { getTenantAttachments } from "../../api/tenantAttachmentsApi";
+import { getTenantWorkspace } from "../../api/tenantPortal";
 import {
   TenantEmptyState,
   TenantErrorState,
@@ -32,6 +33,32 @@ function statusTone(status: TenantProfileStatus): { label: string; color: string
   }
 }
 
+function isLikelyRawId(value: string | null): boolean {
+  return Boolean(value && /^[A-Za-z0-9_-]{12,}$/.test(value));
+}
+
+function cleanProfileDisplayValue(value: string | null | undefined): string | null {
+  const next = String(value || "").trim();
+  if (!next || isLikelyRawId(next)) return null;
+  return next;
+}
+
+function buildProfilePropertyDisplay(property: Awaited<ReturnType<typeof getTenantProfile>>["profile"]["property"], unitLabel?: string | null) {
+  if (!property) return "";
+  const street = cleanProfileDisplayValue(property.street1);
+  const unit =
+    cleanProfileDisplayValue(unitLabel) ||
+    cleanProfileDisplayValue(property.unitNumber) ||
+    cleanProfileDisplayValue(String(property.unitDisplayLabel || "").replace(/^unit\s+/i, ""));
+  const city = cleanProfileDisplayValue(property.city);
+  const province = cleanProfileDisplayValue(property.province);
+  const postalCode = cleanProfileDisplayValue(property.postalCode);
+  const locality = [city, [province, postalCode].filter(Boolean).join(" ")].filter(Boolean).join(", ");
+  return [street, unit ? `Unit ${unit}` : cleanProfileDisplayValue(property.street2), locality]
+    .filter(Boolean)
+    .join(" · ");
+}
+
 export default function TenantProfilePage() {
   const [data, setData] = useState<Awaited<ReturnType<typeof getTenantProfile>> | null>(null);
   const [loading, setLoading] = useState(true);
@@ -41,8 +68,12 @@ export default function TenantProfilePage() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<Awaited<ReturnType<typeof getTenantAttachments>> | null>(null);
+  const [workspace, setWorkspace] = useState<Awaited<ReturnType<typeof getTenantWorkspace>> | null>(null);
   const displayNameRef = React.useRef<HTMLInputElement | null>(null);
   const phoneRef = React.useRef<HTMLInputElement | null>(null);
+  const rentalRecordRef = React.useRef<HTMLDivElement | null>(null);
+  const identityStatusRef = React.useRef<HTMLDivElement | null>(null);
+  const documentChecklistRef = React.useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -86,6 +117,22 @@ export default function TenantProfilePage() {
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    const loadWorkspace = async () => {
+      try {
+        const next = await getTenantWorkspace();
+        if (!cancelled) setWorkspace(next);
+      } catch {
+        if (!cancelled) setWorkspace(null);
+      }
+    };
+    void loadWorkspace();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const handleChange =
     (field: "displayName" | "phone") => (event: React.ChangeEvent<HTMLInputElement>) => {
       setSaveError(null);
@@ -121,16 +168,37 @@ export default function TenantProfilePage() {
     }
   };
 
+  const completion = data ? buildTenantProfileCompletion(data) : null;
+  const firstIncompleteCompletionKey =
+    completion?.sections.flatMap((section) => section.items).find((item) => item.status !== "complete")?.key || null;
   const focusMissingEditableField = React.useCallback(() => {
-    const firstMissingEditableField = !data?.profile?.phone
-      ? phoneRef.current
-      : !data?.profile?.displayName
-      ? displayNameRef.current
-      : displayNameRef.current;
-    if (!firstMissingEditableField) return;
-    firstMissingEditableField.scrollIntoView({ behavior: "smooth", block: "center" });
-    firstMissingEditableField.focus();
-  }, [data?.profile?.displayName, data?.profile?.phone]);
+    const focusTarget = (target: HTMLElement | null) => {
+      if (!target) return;
+      target.scrollIntoView({ behavior: "smooth", block: "center" });
+      target.focus();
+    };
+
+    switch (firstIncompleteCompletionKey) {
+      case "phone":
+        focusTarget(phoneRef.current);
+        return;
+      case "display_name":
+        focusTarget(displayNameRef.current);
+        return;
+      case "property_summary":
+      case "application_or_lease":
+        focusTarget(rentalRecordRef.current);
+        return;
+      case "identity_verification":
+        focusTarget(identityStatusRef.current);
+        return;
+      case "document_checklist":
+        focusTarget(documentChecklistRef.current);
+        return;
+      default:
+        focusTarget(phoneRef.current || displayNameRef.current);
+    }
+  }, [firstIncompleteCompletionKey]);
 
   if (loading) {
     return (
@@ -158,15 +226,10 @@ export default function TenantProfilePage() {
   const identityTone = statusTone(data?.identity?.overallStatus || "missing");
   const verificationTone = statusTone(data?.identity?.identityVerification?.status || "missing");
   const documentEntry = data?.actions?.documentEntry;
-  const completion = data ? buildTenantProfileCompletion(data) : null;
-  const propertyAddress = [
-    data?.profile?.property?.street1,
-    data?.profile?.property?.street2,
-    data?.profile?.property?.city,
-    data?.profile?.property?.province,
-  ]
-    .filter(Boolean)
-    .join(", ");
+  const propertyDisplay = buildProfilePropertyDisplay(
+    data?.profile?.property || workspace?.property || null,
+    data?.profile?.unit?.label || workspace?.unit?.label
+  );
   const applicationSignals = [
     ...(data?.profile?.application?.missingSteps || []),
     ...(data?.profile?.application?.nextActions || []),
@@ -202,7 +265,7 @@ export default function TenantProfilePage() {
               { label: "Email", value: data?.profile?.email || "—" },
               { label: "Phone", value: data?.profile?.phone || "—" },
               { label: "Access", value: data?.profile?.authorityLabel || "Tenant" },
-              { label: "Property", value: propertyAddress || "No property linked yet" },
+              { label: "Property", value: propertyDisplay || "No property linked yet" },
               { label: "Lease status", value: prettyStatus(data?.profile?.lease?.status) },
             ]}
           />
@@ -313,6 +376,7 @@ export default function TenantProfilePage() {
           gap: spacing.md,
         }}
       >
+        <div ref={rentalRecordRef} tabIndex={-1} style={{ outline: "none" }}>
         <TenantInfoCard heading="Rental record" accent="#7c3aed">
           <TenantKeyValueGrid
             rows={[
@@ -333,7 +397,9 @@ export default function TenantProfilePage() {
             This section keeps your current rental record visible in one place. Longer history can be added over time as more tenant-safe records are linked.
           </div>
         </TenantInfoCard>
+        </div>
 
+        <div ref={identityStatusRef} tabIndex={-1} style={{ outline: "none" }}>
         <TenantInfoCard heading="Identity status" accent="#1d4ed8">
           <div style={{ display: "grid", gap: spacing.sm }}>
             <div
@@ -362,6 +428,7 @@ export default function TenantProfilePage() {
             </div>
           </div>
         </TenantInfoCard>
+        </div>
 
         <TenantInfoCard heading="Employment and income" accent="#0891b2">
           <div style={{ display: "grid", gap: spacing.sm }}>
@@ -421,6 +488,7 @@ export default function TenantProfilePage() {
         </div>
       </TenantInfoCard>
 
+      <div ref={documentChecklistRef} tabIndex={-1} style={{ outline: "none" }}>
       <TenantInfoCard heading="Document checklist" accent="#b45309">
         {documentEntry?.note ? <div style={{ color: textTokens.secondary }}>{documentEntry.note}</div> : null}
         {data?.identity?.documentChecklist?.length ? (
@@ -472,6 +540,7 @@ export default function TenantProfilePage() {
           />
         )}
       </TenantInfoCard>
+      </div>
 
       <TenantInfoCard heading="Next steps" accent="#0891b2">
         {data?.identity?.nextSteps?.length ? (

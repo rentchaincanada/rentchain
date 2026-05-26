@@ -57,8 +57,8 @@ describe("buildTenantProfileCompletion", () => {
     expect(summary.totalCount).toBe(7);
     expect(summary.progressPercent).toBeGreaterThan(0);
     expect(summary.overallStatus).toBe("missing");
-    expect(summary.missingItems.some((item) => /name/i.test(item))).toBe(true);
-    expect(summary.missingItems.some((item) => /phone/i.test(item))).toBe(true);
+    expect(summary.missingItems.some((item) => /Display name:.*name/i.test(item))).toBe(true);
+    expect(summary.missingItems.some((item) => /Phone number:.*phone/i.test(item))).toBe(true);
   });
 
   it("marks a complete tenant-safe profile as fully organized", () => {

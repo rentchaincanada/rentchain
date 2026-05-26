@@ -46,6 +46,8 @@ describe("TenantNav mobile bottom navigation", () => {
   beforeEach(() => {
     cleanup();
     vi.clearAllMocks();
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 390 });
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: 844 });
     tenantPortalApi.getTenantWorkspace.mockResolvedValue({
       context: {
         invitedEmail: "tenant@example.com",
@@ -110,6 +112,28 @@ describe("TenantNav mobile bottom navigation", () => {
     expect(within(menu).getByRole("button", { name: "Maintenance" })).toBeInTheDocument();
     expect(within(menu).queryByRole("button", { name: "Properties" })).not.toBeInTheDocument();
     expect(within(menu).queryByRole("button", { name: "Admin" })).not.toBeInTheDocument();
+  });
+
+  it("does not render the mobile bottom nav or menu sheet on desktop", () => {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 1120 });
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: 800 });
+
+    renderTenantNav();
+
+    expect(screen.queryByRole("navigation", { name: "Tenant bottom navigation" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Tenant menu" })).not.toBeInTheDocument();
+  });
+
+  it("suppresses the More sheet in compact landscape mobile view", () => {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 820 });
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: 390 });
+
+    renderTenantNav();
+
+    fireEvent.click(screen.getByRole("button", { name: "More" }));
+
+    expect(screen.queryByRole("dialog", { name: "Tenant menu" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "More" })).toHaveAttribute("aria-disabled", "true");
   });
 
   it("adds mobile bottom spacing to tenant content", () => {

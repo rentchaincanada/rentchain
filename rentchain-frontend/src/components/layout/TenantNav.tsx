@@ -51,6 +51,12 @@ const mobileTabs = [
   },
 ];
 
+function buildTenantContextLabel(property?: { name?: string | null; street1?: string | null } | null, unit?: { label?: string | null } | null) {
+  const propertyLabel = String(property?.name || property?.street1 || "").trim();
+  const unitLabel = String(unit?.label || "").trim();
+  return [propertyLabel, unitLabel ? `Unit ${unitLabel}` : null].filter(Boolean).join(" · ");
+}
+
 export const TenantNav: React.FC<Props> = ({ children }) => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -60,6 +66,9 @@ export const TenantNav: React.FC<Props> = ({ children }) => {
   const [identityLoading, setIdentityLoading] = useState(true);
   const [isMobile, setIsMobile] = useState<boolean>(() =>
     typeof window === "undefined" ? false : window.innerWidth < 900
+  );
+  const [isCompactLandscape, setIsCompactLandscape] = useState<boolean>(() =>
+    typeof window === "undefined" ? false : window.innerWidth < 900 && window.innerWidth > window.innerHeight && window.innerHeight < 520
   );
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [unreadNotices, setUnreadNotices] = useState(0);
@@ -71,13 +80,14 @@ export const TenantNav: React.FC<Props> = ({ children }) => {
     const loadIdentity = async () => {
       try {
         const workspace = await getTenantWorkspace();
-        const name = String(workspace?.context?.invitedEmail || "").trim();
-        const email = String(workspace?.context?.invitedEmail || "").trim();
+        const tenantName = String(workspace?.tenant?.name || "").trim();
+        const email = String(workspace?.tenant?.email || workspace?.context?.invitedEmail || "").trim();
         const unit = String(workspace?.unit?.label || "").trim();
+        const contextLabel = buildTenantContextLabel(workspace?.property, workspace?.unit);
         if (!cancelled) {
-          setTenantName(name ? name.split("@")[0] : "Tenant workspace");
+          setTenantName(tenantName || email || "Tenant workspace");
           setTenantEmail(email || null);
-          setTenantUnit(unit || null);
+          setTenantUnit(contextLabel || (unit ? `Unit ${unit}` : null));
         }
       } catch {
         if (!cancelled) {
@@ -100,10 +110,17 @@ export const TenantNav: React.FC<Props> = ({ children }) => {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const onResize = () => setIsMobile(window.innerWidth < 900);
+    const onResize = () => {
+      setIsMobile(window.innerWidth < 900);
+      setIsCompactLandscape(window.innerWidth < 900 && window.innerWidth > window.innerHeight && window.innerHeight < 520);
+    };
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
+
+  useEffect(() => {
+    if (isCompactLandscape) setMoreOpen(false);
+  }, [isCompactLandscape]);
 
   useEffect(() => {
     setMoreOpen(false);
@@ -160,9 +177,10 @@ export const TenantNav: React.FC<Props> = ({ children }) => {
     navigate(path);
     setMoreOpen(false);
   };
+  const headerDetailItems = [tenantName && tenantEmail === tenantName ? null : tenantEmail, tenantUnit].filter(Boolean);
 
   return (
-    <div className="rc-tenant-shell">
+    <div className={`rc-tenant-shell${isCompactLandscape ? " rc-tenant-shell--compact-landscape" : ""}`}>
       <header
         className="rc-tenant-header"
         style={{
@@ -192,9 +210,7 @@ export const TenantNav: React.FC<Props> = ({ children }) => {
               {identityLoading ? "Loading your space..." : tenantName || "Your tenant space"}
             </div>
             <div style={{ fontSize: 12, color: "#94a3b8", minHeight: 16 }}>
-              {identityLoading
-                ? ""
-                : [tenantEmail, tenantUnit ? `Unit ${tenantUnit}` : null].filter(Boolean).join(" • ")}
+              {identityLoading ? "" : headerDetailItems.join(" • ")}
             </div>
           </div>
           <nav
@@ -298,46 +314,51 @@ export const TenantNav: React.FC<Props> = ({ children }) => {
       <main className="rc-tenant-main" style={{ maxWidth: 1120, margin: "0 auto", padding: isMobile ? 12 : 16 }}>
         {children}
       </main>
-      <div
-        className={`rc-tenant-mobile-backdrop${moreOpen ? " is-open" : ""}`}
-        aria-hidden="true"
-        onClick={() => setMoreOpen(false)}
-      />
-      <aside
-        id="rc-tenant-mobile-menu"
-        className={`rc-tenant-mobile-menu${moreOpen ? " is-open" : ""}`}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Tenant menu"
-      >
-        <div className="rc-tenant-mobile-menu-header">
-          <span>Tenant menu</span>
-          <button type="button" onClick={() => setMoreOpen(false)} aria-label="Close tenant menu">
-            <X size={18} />
-          </button>
-        </div>
-        <div className="rc-tenant-mobile-menu-links">
-          {navItems.map((item) => {
-            const active =
-              location.pathname === item.to ||
-              (item.to === "/tenant/documents" && location.pathname.startsWith("/tenant/attachments")) ||
-              (item.to !== "/tenant/dashboard" && location.pathname.startsWith(`${item.to}/`));
-            return (
-              <button
-                key={item.to}
-                type="button"
-                className={active ? "active" : undefined}
-                onClick={() => goTo(item.to)}
-              >
-                {item.label}
+      {isMobile && !isCompactLandscape ? (
+        <>
+          <div
+            className={`rc-tenant-mobile-backdrop${moreOpen ? " is-open" : ""}`}
+            aria-hidden="true"
+            onClick={() => setMoreOpen(false)}
+          />
+          <aside
+            id="rc-tenant-mobile-menu"
+            className={`rc-tenant-mobile-menu${moreOpen ? " is-open" : ""}`}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Tenant menu"
+          >
+            <div className="rc-tenant-mobile-menu-header">
+              <span>Tenant menu</span>
+              <button type="button" onClick={() => setMoreOpen(false)} aria-label="Close tenant menu">
+                <X size={18} />
               </button>
-            );
-          })}
-        </div>
-        <button type="button" className="rc-tenant-mobile-menu-signout" onClick={() => logoutTenant("/tenant/login")}>
-          Logout
-        </button>
-      </aside>
+            </div>
+            <div className="rc-tenant-mobile-menu-links">
+              {navItems.map((item) => {
+                const active =
+                  location.pathname === item.to ||
+                  (item.to === "/tenant/documents" && location.pathname.startsWith("/tenant/attachments")) ||
+                  (item.to !== "/tenant/dashboard" && location.pathname.startsWith(`${item.to}/`));
+                return (
+                  <button
+                    key={item.to}
+                    type="button"
+                    className={active ? "active" : undefined}
+                    onClick={() => goTo(item.to)}
+                  >
+                    {item.label}
+                  </button>
+                );
+              })}
+            </div>
+            <button type="button" className="rc-tenant-mobile-menu-signout" onClick={() => logoutTenant("/tenant/login")}>
+              Logout
+            </button>
+          </aside>
+        </>
+      ) : null}
+      {isMobile ? (
       <nav className="rc-tenant-mobile-tabbar" aria-label="Tenant bottom navigation">
         {mobileTabs.map((item) => {
           const Icon = item.icon;
@@ -362,16 +383,21 @@ export const TenantNav: React.FC<Props> = ({ children }) => {
         })}
         <button
           type="button"
-          className={moreOpen ? "active" : undefined}
-          onClick={() => setMoreOpen((open) => !open)}
-          aria-expanded={moreOpen}
+          className={moreOpen && !isCompactLandscape ? "active" : undefined}
+          onClick={() => {
+            if (isCompactLandscape) return;
+            setMoreOpen((open) => !open);
+          }}
+          aria-expanded={moreOpen && !isCompactLandscape}
           aria-controls="rc-tenant-mobile-menu"
           aria-label="More"
+          aria-disabled={isCompactLandscape ? "true" : undefined}
         >
           <Menu size={20} strokeWidth={2.2} />
           <span className="rc-tenant-mobile-tabbar-label">More</span>
         </button>
       </nav>
+      ) : null}
     </div>
   );
 };

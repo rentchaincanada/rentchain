@@ -525,6 +525,17 @@ export type InstitutionalHandoffSummary = {
 
 export type TenantWorkspaceSummary = {
   context: TenantWorkspaceContext;
+  tenant?: {
+    id?: string | null;
+    shortId?: string | null;
+    name?: string | null;
+    email?: string | null;
+    joinedAt?: number | null;
+    status?: string | null;
+  } | null;
+  landlord?: {
+    name?: string | null;
+  } | null;
   property: TenantWorkspaceProperty | null;
   unit: TenantWorkspaceUnit | null;
   application: TenantWorkspaceApplication | null;

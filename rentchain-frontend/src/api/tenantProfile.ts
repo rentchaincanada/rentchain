@@ -26,7 +26,13 @@ export type TenantProfileData = {
       city: string | null;
       province: string | null;
       postalCode: string | null;
+      unitNumber?: string | null;
+      unitDisplayLabel?: string | null;
       features: string[];
+    } | null;
+    unit: {
+      unitId: string | null;
+      label: string | null;
     } | null;
     application: {
       applicationId: string;
