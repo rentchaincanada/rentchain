@@ -1,0 +1,50 @@
+{
+  "name": "RentChain AI Cowork",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  "workspaceFolder": "/workspace/rentchain",
+  "remoteUser": "node",
+  "containerEnv": {
+    "SHELL": "/bin/bash"
+  },
+  "postCreateCommand": "bash -lc 'node --version && npm --version && gh --version || true && gcloud --version || true'",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "bradlc.vscode-tailwindcss",
+        "github.vscode-pull-request-github",
+        "ms-azuretools.vscode-docker",
+        "ms-playwright.playwright",
+        "googlecloudtools.cloudcode"
+      ],
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash",
+        "editor.formatOnSave": false,
+        "eslint.workingDirectories": [
+          "rentchain-frontend",
+          "rentchain-api"
+        ]
+      }
+    }
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    "ghcr.io/devcontainers/features/google-cloud-cli:1": {}
+  },
+  "forwardPorts": [
+    5173,
+    8080
+  ],
+  "portsAttributes": {
+    "5173": {
+      "label": "Vite frontend"
+    },
+    "8080": {
+      "label": "API"
+    }
+  }
+}
