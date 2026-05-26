@@ -346,6 +346,50 @@ describe("tenant communications routes", () => {
     expect(loadRes.body?.data?.thread?.unreadCount).toBe(2);
   });
 
+  it("marks communications thread messages read for tenant notification summary sync", async () => {
+    const router = (await import("../tenantPortalRoutes")).default;
+    const headers = {
+      "x-test-user": JSON.stringify({
+        id: "user-1",
+        email: "tenant@example.com",
+        role: "tenant",
+        tenantId: "tenant-1",
+        leaseId: "lease-1",
+      }),
+    };
+
+    const summaryBefore = await invokeRouter(router, {
+      method: "GET",
+      url: "/communication/summary",
+      headers,
+    });
+    expect(summaryBefore.status).toBe(200);
+    expect(summaryBefore.body?.unreadMessages).toBe(2);
+
+    const readRes = await invokeRouter(router, {
+      method: "POST",
+      url: "/communications/read",
+      headers,
+    });
+    expect(readRes.status).toBe(200);
+    expect(ensureCollection("tenantMessageReads").get("tenant-1_msg-1")).toMatchObject({
+      tenantId: "tenant-1",
+      messageId: "msg-1",
+    });
+    expect(ensureCollection("tenantMessageReads").get("tenant-1_msg-2")).toMatchObject({
+      tenantId: "tenant-1",
+      messageId: "msg-2",
+    });
+
+    const summaryAfter = await invokeRouter(router, {
+      method: "GET",
+      url: "/communication/summary",
+      headers,
+    });
+    expect(summaryAfter.status).toBe(200);
+    expect(summaryAfter.body?.unreadMessages).toBe(0);
+  });
+
   it("send path respects authority context and records a scoped message", async () => {
     const router = (await import("../tenantPortalRoutes")).default;
     const res = await invokeRouter(router, {

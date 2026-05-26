@@ -14,6 +14,27 @@ import {
 } from "./TenantWorkspaceShared";
 import { spacing, text as textTokens } from "../../styles/tokens";
 import { buildTenantCommunicationsWorkspaceState } from "./tenantCommunicationsWorkspaceState";
+import { TENANT_COMMUNICATIONS_UPDATED_EVENT } from "../../components/layout/TenantNav";
+
+const POLL_COMMUNICATIONS_MS = 12000;
+
+function dispatchTenantCommunicationsUpdated() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(TENANT_COMMUNICATIONS_UPDATED_EVENT));
+}
+
+function markWorkspaceReadLocally(
+  workspace: Awaited<ReturnType<typeof getTenantCommunicationsWorkspace>>
+): Awaited<ReturnType<typeof getTenantCommunicationsWorkspace>> {
+  if (!workspace.thread) return workspace;
+  return {
+    ...workspace,
+    thread: {
+      ...workspace.thread,
+      unreadCount: 0,
+    },
+  };
+}
 
 export default function TenantMessagesCenterPage() {
   const [workspace, setWorkspace] = useState<Awaited<ReturnType<typeof getTenantCommunicationsWorkspace>> | null>(null);
@@ -22,23 +43,37 @@ export default function TenantMessagesCenterPage() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const load = React.useCallback(async () => {
-    setLoading(true);
+  const load = React.useCallback(async (options?: { background?: boolean }) => {
+    const background = options?.background === true;
+    if (!background) setLoading(true);
     setError(null);
     try {
       const res = await getTenantCommunicationsWorkspace();
-      setWorkspace(res);
       await markTenantCommunicationsRead().catch(() => undefined);
+      setWorkspace(markWorkspaceReadLocally(res));
+      dispatchTenantCommunicationsUpdated();
     } catch (err: any) {
       setError(err?.message || "Unable to load messages.");
-      setWorkspace(null);
+      if (!background) setWorkspace(null);
     } finally {
-      setLoading(false);
+      if (!background) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
     void load();
+  }, [load]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      void load({ background: true });
+    }, POLL_COMMUNICATIONS_MS);
+    const onFocus = () => void load({ background: true });
+    window.addEventListener("focus", onFocus);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+    };
   }, [load]);
 
   const thread = workspace?.thread;
@@ -57,6 +92,7 @@ export default function TenantMessagesCenterPage() {
       await sendTenantCommunicationMessage(body);
       setComposer("");
       await load();
+      dispatchTenantCommunicationsUpdated();
     } catch (err: any) {
       setError(err?.message || "Unable to send your message.");
     } finally {

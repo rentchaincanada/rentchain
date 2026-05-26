@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
-import { TenantNav } from "./TenantNav";
+import { TENANT_COMMUNICATIONS_UPDATED_EVENT, TenantNav } from "./TenantNav";
 
 const tenantPortalApi = vi.hoisted(() => ({
   getTenantWorkspace: vi.fn(),
@@ -44,6 +44,7 @@ function renderTenantNav(initialPath = "/tenant/dashboard") {
 
 describe("TenantNav mobile bottom navigation", () => {
   beforeEach(() => {
+    vi.useRealTimers();
     cleanup();
     vi.clearAllMocks();
     Object.defineProperty(window, "innerWidth", { configurable: true, value: 390 });
@@ -112,6 +113,30 @@ describe("TenantNav mobile bottom navigation", () => {
     expect(within(menu).getByRole("button", { name: "Maintenance" })).toBeInTheDocument();
     expect(within(menu).queryByRole("button", { name: "Properties" })).not.toBeInTheDocument();
     expect(within(menu).queryByRole("button", { name: "Admin" })).not.toBeInTheDocument();
+  });
+
+  it("refreshes unread message badges when tenant communications update", async () => {
+    tenantCommunicationsApi.getTenantCommunicationSummary
+      .mockResolvedValueOnce({
+        unreadMessages: 1,
+        unreadNotices: 0,
+        unreadScreeningUpdates: 0,
+      })
+      .mockResolvedValue({
+        unreadMessages: 0,
+        unreadNotices: 0,
+        unreadScreeningUpdates: 0,
+      });
+
+    renderTenantNav();
+
+    const tabbar = screen.getByRole("navigation", { name: "Tenant bottom navigation" });
+    expect(await within(tabbar).findByText("Messages")).toBeInTheDocument();
+    await waitFor(() => expect(document.querySelector(".rc-tenant-mobile-tabbar-dot")).toBeInTheDocument());
+
+    window.dispatchEvent(new CustomEvent(TENANT_COMMUNICATIONS_UPDATED_EVENT));
+
+    await waitFor(() => expect(document.querySelector(".rc-tenant-mobile-tabbar-dot")).not.toBeInTheDocument());
   });
 
   it("does not render the mobile bottom nav or menu sheet on desktop", () => {

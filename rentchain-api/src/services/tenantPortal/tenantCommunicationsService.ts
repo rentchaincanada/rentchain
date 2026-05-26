@@ -454,5 +454,31 @@ export async function markTenantCommunicationsRead(params: {
     },
     { merge: true }
   );
+  const tenantReadId = asString(params.context.tenantId) || asString(params.userId);
+  const resolvedConversationId = existingConversation.id || conversationId;
+  if (tenantReadId && resolvedConversationId) {
+    const snap = await db
+      .collection("messages")
+      .where("conversationId", "==", resolvedConversationId)
+      .limit(200)
+      .get();
+    const now = Date.now();
+    await Promise.all(
+      snap.docs.map((doc) =>
+        db
+          .collection("tenantMessageReads")
+          .doc(`${tenantReadId}_${doc.id}`)
+          .set(
+            {
+              tenantId: tenantReadId,
+              messageId: doc.id,
+              readAtMs: now,
+              createdAt: FieldValue.serverTimestamp(),
+            },
+            { merge: true }
+          )
+      )
+    );
+  }
   return { ok: true as const };
 }
