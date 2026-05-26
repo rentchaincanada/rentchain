@@ -314,7 +314,7 @@ export const TenantNav: React.FC<Props> = ({ children }) => {
       <main className="rc-tenant-main" style={{ maxWidth: 1120, margin: "0 auto", padding: isMobile ? 12 : 16 }}>
         {children}
       </main>
-      {!isCompactLandscape ? (
+      {isMobile && !isCompactLandscape ? (
         <>
           <div
             className={`rc-tenant-mobile-backdrop${moreOpen ? " is-open" : ""}`}
@@ -358,6 +358,7 @@ export const TenantNav: React.FC<Props> = ({ children }) => {
           </aside>
         </>
       ) : null}
+      {isMobile ? (
       <nav className="rc-tenant-mobile-tabbar" aria-label="Tenant bottom navigation">
         {mobileTabs.map((item) => {
           const Icon = item.icon;
@@ -396,6 +397,7 @@ export const TenantNav: React.FC<Props> = ({ children }) => {
           <span className="rc-tenant-mobile-tabbar-label">More</span>
         </button>
       </nav>
+      ) : null}
     </div>
   );
 };

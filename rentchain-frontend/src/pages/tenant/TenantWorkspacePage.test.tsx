@@ -1146,6 +1146,10 @@ describe("tenant workspace frontend shell", () => {
         postalCode: "B3H1A1",
         features: ["laundry"],
       },
+      unit: {
+        unitId: "unit-1",
+        label: "4",
+      },
       application: {
         applicationId: "app-1",
         status: "submitted",
@@ -1297,7 +1301,7 @@ describe("tenant workspace frontend shell", () => {
     expect(screen.getByRole("link", { name: /Open communications inbox/i })).toBeInTheDocument();
     expect(screen.getByText(/Screening consent requested for 1 application/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Review request/i })).toBeInTheDocument();
-    expect(screen.getByText(/123 Main St, Unit 4, Halifax, NS/i)).toBeInTheDocument();
+    expect(screen.getByText(/123 Main St · Unit 4 · Halifax, NS/i)).toBeInTheDocument();
     expect(screen.getByText(/finish_profile/i)).toBeInTheDocument();
     expect(screen.getAllByText(/1 active access grant/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/1 document in your vault, 1 ready to share, and 0 still needing attention/i)).toBeInTheDocument();
