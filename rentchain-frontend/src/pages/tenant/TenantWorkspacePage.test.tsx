@@ -1277,6 +1277,8 @@ describe("tenant workspace frontend shell", () => {
     expect(screen.getByText(/Ready to apply/i)).toBeInTheDocument();
     expect(screen.getByText(/Rent terms ready for future setup/i)).toBeInTheDocument();
     expect(screen.getByText(/Confirm payment setup later/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Internal Lease ID/i)).not.toBeInTheDocument();
+    expect(screen.queryByText("lease-1")).not.toBeInTheDocument();
     expect(screen.getByText(/^Application created$/i)).toBeInTheDocument();
     expect(screen.getByText(/A rental application record was started\./i)).toBeInTheDocument();
     expect(screen.getByText(/Missing pieces/i)).toBeInTheDocument();

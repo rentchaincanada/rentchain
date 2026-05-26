@@ -311,6 +311,7 @@ function firstSafeDisplayString(values: unknown[], rawIds: unknown[]): string | 
 
 async function loadTenantProfileUnitProjection(params: {
   context: TenancyContext;
+  propertyData?: any;
   tenantData?: any;
   leaseData?: any;
 }): Promise<TenantProfileProjection["profile"]["unit"]> {
@@ -330,7 +331,30 @@ async function loadTenantProfileUnitProjection(params: {
   const unitDocs = (await Promise.all(unitIdCandidates.map((candidate) => loadDocument("units", candidate)))).filter(
     (doc): doc is { id: string; data: any } => Boolean(doc?.data)
   );
-  const unitId = unitDocs[0]?.id || unitIdCandidates.find(isLikelyRawId) || null;
+  const propertyUnitDocs = params.context.propertyId
+    ? await queryMany("units", "propertyId", params.context.propertyId, "==", 250)
+    : [];
+  const propertyEmbeddedUnits = Array.isArray(params.propertyData?.units)
+    ? params.propertyData.units.map((unit: any, index: number) => ({ id: asString(unit?.id) || `property-unit-${index}`, data: unit }))
+    : [];
+  const scopedUnitDocs = [...unitDocs, ...propertyUnitDocs, ...propertyEmbeddedUnits];
+  const matchedUnitDocs = scopedUnitDocs.filter((doc) => {
+    const identifiers = [
+      doc.id,
+      doc.data?.id,
+      doc.data?.unitId,
+      doc.data?.unit_id,
+      doc.data?.unitNumber,
+      doc.data?.unitLabel,
+      doc.data?.label,
+      doc.data?.name,
+    ]
+      .map((value) => asString(value))
+      .filter(Boolean);
+    return identifiers.some((identifier) => unitIdCandidates.includes(identifier!));
+  });
+  const resolvedUnitDocs = matchedUnitDocs.length ? matchedUnitDocs : unitDocs;
+  const unitId = resolvedUnitDocs.find((doc) => isLikelyRawId(doc.id))?.id || unitIdCandidates.find(isLikelyRawId) || null;
   const rawIds = [unitId, params.context.unitId, params.tenantData?.unitId, params.leaseData?.unitId];
   const label = firstSafeDisplayString(
     [
@@ -340,7 +364,7 @@ async function loadTenantProfileUnitProjection(params: {
       params.leaseData?.unitLabel,
       params.leaseData?.unitNumber,
       params.leaseData?.unit,
-      ...unitDocs.flatMap((doc) => [doc.data?.unitNumber, doc.data?.label, doc.data?.name]),
+      ...resolvedUnitDocs.flatMap((doc) => [doc.data?.unitNumber, doc.data?.unitLabel, doc.data?.label, doc.data?.name]),
     ],
     rawIds
   );
@@ -881,6 +905,7 @@ export async function loadTenantProfileProjection(params: {
   });
   const unit = await loadTenantProfileUnitProjection({
     context,
+    propertyData: property?.data,
     tenantData: tenant?.data,
     leaseData: lease?.data,
   });

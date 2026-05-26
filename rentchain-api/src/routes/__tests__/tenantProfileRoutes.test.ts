@@ -274,7 +274,7 @@ describe("tenant profile route", () => {
     expect(res.body?.data?.profile?.phone).toBe("902-555-0100");
     expect(res.body?.data?.profile?.property?.street1).toBe("123 Main St");
     expect(res.body?.data?.profile?.property?.postalCode).toBe("B3H1A1");
-    expect(res.body?.data?.profile?.unit).toEqual({ unitId: "unit-1", label: "6" });
+    expect(res.body?.data?.profile?.unit).toEqual({ unitId: null, label: "6" });
     expect(res.body?.data?.profile?.property?.internalSecret).toBeUndefined();
     expect(res.body?.data?.profile?.unit?.internalUnitNotes).toBeUndefined();
     expect(res.body?.data?.profile?.application?.sin).toBeUndefined();
@@ -423,6 +423,51 @@ describe("tenant profile route", () => {
     expect(res.status).toBe(200);
     expect(res.body?.data?.profile?.unit?.label).toBe("6");
     expect(res.body?.data?.profile?.unit?.unitId).toBeNull();
+    expect(JSON.stringify(res.body)).not.toContain("internalUnitNotes");
+  });
+
+  it("resolves tenant profile unit labels from property-scoped unit records without exposing raw unit ids", async () => {
+    ensureCollection("leases").set("lease-property-scoped-unit", {
+      tenantId: "tenant-property-scoped-unit",
+      propertyId: "prop-1",
+      unitId: "raw-unit-doc-id-123456",
+      status: "active",
+      startDate: "2026-02-01",
+      endDate: "2027-01-31",
+      monthlyRent: 1800,
+    });
+    ensureCollection("tenants").set("tenant-property-scoped-unit", {
+      fullName: "Property Scoped Unit Tenant",
+      email: "property-scoped-unit@example.com",
+      phone: "902-555-0102",
+      propertyId: "prop-1",
+      leaseId: "lease-property-scoped-unit",
+      unitId: "raw-unit-doc-id-123456",
+    });
+    ensureCollection("units").set("different-unit-doc-id", {
+      propertyId: "prop-1",
+      unitId: "raw-unit-doc-id-123456",
+      unitNumber: "6",
+      internalUnitNotes: "private",
+    });
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/profile",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-property-scoped-unit",
+          email: "property-scoped-unit@example.com",
+          role: "tenant",
+          tenantId: "tenant-property-scoped-unit",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.data?.profile?.unit?.label).toBe("6");
+    expect(res.body?.data?.profile?.unit?.label).not.toBe("raw-unit-doc-id-123456");
     expect(JSON.stringify(res.body)).not.toContain("internalUnitNotes");
   });
 });

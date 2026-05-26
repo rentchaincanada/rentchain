@@ -61,6 +61,9 @@ export const TenantNav: React.FC<Props> = ({ children }) => {
   const [isMobile, setIsMobile] = useState<boolean>(() =>
     typeof window === "undefined" ? false : window.innerWidth < 900
   );
+  const [isCompactLandscape, setIsCompactLandscape] = useState<boolean>(() =>
+    typeof window === "undefined" ? false : window.innerWidth < 900 && window.innerWidth > window.innerHeight && window.innerHeight < 520
+  );
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [unreadNotices, setUnreadNotices] = useState(0);
   const [unreadScreening, setUnreadScreening] = useState(0);
@@ -100,10 +103,17 @@ export const TenantNav: React.FC<Props> = ({ children }) => {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const onResize = () => setIsMobile(window.innerWidth < 900);
+    const onResize = () => {
+      setIsMobile(window.innerWidth < 900);
+      setIsCompactLandscape(window.innerWidth < 900 && window.innerWidth > window.innerHeight && window.innerHeight < 520);
+    };
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
+
+  useEffect(() => {
+    if (isCompactLandscape) setMoreOpen(false);
+  }, [isCompactLandscape]);
 
   useEffect(() => {
     setMoreOpen(false);
@@ -299,16 +309,17 @@ export const TenantNav: React.FC<Props> = ({ children }) => {
         {children}
       </main>
       <div
-        className={`rc-tenant-mobile-backdrop${moreOpen ? " is-open" : ""}`}
+        className={`rc-tenant-mobile-backdrop${moreOpen && !isCompactLandscape ? " is-open" : ""}`}
         aria-hidden="true"
         onClick={() => setMoreOpen(false)}
       />
       <aside
         id="rc-tenant-mobile-menu"
-        className={`rc-tenant-mobile-menu${moreOpen ? " is-open" : ""}`}
+        className={`rc-tenant-mobile-menu${moreOpen && !isCompactLandscape ? " is-open" : ""}`}
         role="dialog"
         aria-modal="true"
         aria-label="Tenant menu"
+        aria-hidden={isCompactLandscape ? "true" : undefined}
       >
         <div className="rc-tenant-mobile-menu-header">
           <span>Tenant menu</span>
@@ -362,11 +373,15 @@ export const TenantNav: React.FC<Props> = ({ children }) => {
         })}
         <button
           type="button"
-          className={moreOpen ? "active" : undefined}
-          onClick={() => setMoreOpen((open) => !open)}
-          aria-expanded={moreOpen}
+          className={moreOpen && !isCompactLandscape ? "active" : undefined}
+          onClick={() => {
+            if (isCompactLandscape) return;
+            setMoreOpen((open) => !open);
+          }}
+          aria-expanded={moreOpen && !isCompactLandscape}
           aria-controls="rc-tenant-mobile-menu"
           aria-label="More"
+          aria-disabled={isCompactLandscape ? "true" : undefined}
         >
           <Menu size={20} strokeWidth={2.2} />
           <span className="rc-tenant-mobile-tabbar-label">More</span>

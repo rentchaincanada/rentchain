@@ -1013,7 +1013,6 @@ export default function TenantWorkspacePage() {
           <TenantKeyValueGrid
             rows={[
               { label: "Status", value: activeTenancy.label },
-              { label: "Internal Lease ID", value: data?.lease?.leaseId || "Not visible yet" },
               { label: "Lease status", value: prettyStatus(data?.lease?.status) },
               {
                 label: "Lease document",
