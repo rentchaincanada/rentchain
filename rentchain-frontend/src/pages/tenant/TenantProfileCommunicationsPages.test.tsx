@@ -1,6 +1,6 @@
 import React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import TenantProfilePage from "./TenantProfilePage";
 import TenantMessagesCenterPage from "./TenantMessagesCenterPage";
@@ -40,6 +40,7 @@ vi.mock("../../api/tenantPortal", () => tenantPortalApi);
 
 describe("tenant profile and communications pages", () => {
   beforeEach(() => {
+    vi.useRealTimers();
     cleanup();
     vi.clearAllMocks();
     Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
@@ -863,14 +864,81 @@ describe("tenant profile and communications pages", () => {
       </MemoryRouter>
     );
 
-    expect(await screen.findByText(/A tenancy message is waiting for your reply/i)).toBeInTheDocument();
-    expect(screen.getByText(/Reply needed/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Your tenancy inbox is active/i)).toBeInTheDocument();
+    expect(screen.getByText(/Up to date/i)).toBeInTheDocument();
+    expect(screen.getByText(/Unread messages:/i).parentElement).toHaveTextContent("0");
     expect(screen.getAllByText(/Can you confirm the move-in time\?/i).length).toBeGreaterThan(0);
     fireEvent.change(screen.getByRole("textbox", { name: /Compose message/i }), {
       target: { value: "Hello there" },
     });
     fireEvent.click(screen.getByRole("button", { name: /Send message/i }));
     expect(await screen.findByText(/Send failed/i)).toBeInTheDocument();
+  });
+
+  it("communications page refreshes thread data while open", async () => {
+    tenantCommunicationsApi.getTenantCommunicationsWorkspace
+      .mockResolvedValueOnce({
+        canSend: true,
+        canSendReason: null,
+        thread: {
+          id: "thread-1",
+          landlordLabel: "Landlord",
+          unreadCount: 0,
+          lastMessageAt: "2026-01-06T00:00:00.000Z",
+          propertyId: "prop-1",
+          unitId: "unit-2",
+          messages: [
+            {
+              id: "msg-1",
+              senderRole: "tenant",
+              body: "Initial message",
+              createdAt: "2026-01-06T00:00:00.000Z",
+              createdAtMs: 1234,
+            },
+          ],
+        },
+      })
+      .mockResolvedValue({
+        canSend: true,
+        canSendReason: null,
+        thread: {
+          id: "thread-1",
+          landlordLabel: "Landlord",
+          unreadCount: 1,
+          lastMessageAt: "2026-01-06T00:01:00.000Z",
+          propertyId: "prop-1",
+          unitId: "unit-2",
+          messages: [
+            {
+              id: "msg-1",
+              senderRole: "tenant",
+              body: "Initial message",
+              createdAt: "2026-01-06T00:00:00.000Z",
+              createdAtMs: 1234,
+            },
+            {
+              id: "msg-2",
+              senderRole: "landlord",
+              body: "New landlord reply",
+              createdAt: "2026-01-06T00:01:00.000Z",
+              createdAtMs: 5678,
+            },
+          ],
+        },
+      });
+    tenantCommunicationsApi.markTenantCommunicationsRead.mockResolvedValue(undefined);
+
+    render(
+      <MemoryRouter>
+        <TenantMessagesCenterPage />
+      </MemoryRouter>
+    );
+
+    expect((await screen.findAllByText(/Initial message/i)).length).toBeGreaterThan(0);
+    window.dispatchEvent(new Event("focus"));
+    expect((await screen.findAllByText(/New landlord reply/i)).length).toBeGreaterThan(0);
+    await waitFor(() => expect(tenantCommunicationsApi.markTenantCommunicationsRead).toHaveBeenCalledTimes(2));
+    expect(screen.getByText(/Unread messages:/i).parentElement).toHaveTextContent("0");
   });
 
   it("notifications page renders safe feed items", async () => {

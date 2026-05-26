@@ -51,6 +51,8 @@ const mobileTabs = [
   },
 ];
 
+export const TENANT_COMMUNICATIONS_UPDATED_EVENT = "rentchain:tenant-communications-updated";
+
 function buildTenantContextLabel(property?: { name?: string | null; street1?: string | null } | null, unit?: { label?: string | null } | null) {
   const propertyLabel = String(property?.name || property?.street1 || "").trim();
   const unitLabel = String(unit?.label || "").trim();
@@ -135,29 +137,39 @@ export const TenantNav: React.FC<Props> = ({ children }) => {
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [moreOpen]);
 
+  const loadCommunicationSummary = React.useCallback(async () => {
+    try {
+      const summary = await getTenantCommunicationSummary();
+      setUnreadMessages(Number(summary?.unreadMessages || 0));
+      setUnreadNotices(Number(summary?.unreadNotices || 0));
+      setUnreadScreening(Number(summary?.unreadScreeningUpdates || 0));
+    } catch {
+      setUnreadMessages(0);
+      setUnreadNotices(0);
+      setUnreadScreening(0);
+    }
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
-    const loadSummary = async () => {
-      try {
-        const summary = await getTenantCommunicationSummary();
-        if (!cancelled) {
-          setUnreadMessages(Number(summary?.unreadMessages || 0));
-          setUnreadNotices(Number(summary?.unreadNotices || 0));
-          setUnreadScreening(Number(summary?.unreadScreeningUpdates || 0));
-        }
-      } catch {
-        if (!cancelled) {
-          setUnreadMessages(0);
-          setUnreadNotices(0);
-          setUnreadScreening(0);
-        }
-      }
+    const loadIfMounted = async () => {
+      if (cancelled) return;
+      await loadCommunicationSummary();
     };
-    void loadSummary();
+    const onCommunicationsUpdated = () => {
+      void loadIfMounted();
+    };
+    void loadIfMounted();
+    const interval = window.setInterval(() => void loadIfMounted(), 30000);
+    window.addEventListener(TENANT_COMMUNICATIONS_UPDATED_EVENT, onCommunicationsUpdated);
+    window.addEventListener("focus", onCommunicationsUpdated);
     return () => {
       cancelled = true;
+      window.clearInterval(interval);
+      window.removeEventListener(TENANT_COMMUNICATIONS_UPDATED_EVENT, onCommunicationsUpdated);
+      window.removeEventListener("focus", onCommunicationsUpdated);
     };
-  }, []);
+  }, [loadCommunicationSummary]);
 
   const linkStyle = useMemo(
     () =>
