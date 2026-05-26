@@ -1,27 +1,157 @@
-# RentChain Architecture & Deployment Quick Guide
+# RentChain Architecture
 
-For implementation workflow, mission execution, and repository discovery rules, follow `codex.md` and `PROCESS.md` when present.
+RentChain is governed rental operations and property intelligence infrastructure. Its architecture combines product workflows, audit continuity, projection-safe read models, metadata-first evidence, and supervised operational review.
 
-## 1) What runs where
-- **Vercel**: `rentchain-frontend` only (static build + client-side app + serverless functions under `rentchain-frontend/api/*` for lightweight proxies/waitlist).
-- **Cloud Run**: `rentchain-api` (Express app). All core API routes live here.
+For implementation workflow, repository discovery, and mission execution rules, follow `AGENTS.md`, `PROCESS.md`, `codex.md`, and `docs/execution/AI_COWORK_PROTOCOL.md`.
 
-## 2) Canonical API base
-- Frontend must call Cloud Run via `VITE_API_BASE_URL` (absolute, no trailing slash), e.g. `https://rentchain-landlord-api-915921057662.us-central1.run.app`.
-- Frontend requests should resolve to `${VITE_API_BASE_URL}/api/...`.
-- Never rely on `https://www.rentchain.ai/api/*` — that hits Vercel and many endpoints 404.
+## Runtime Deployment Model
 
-## 3) Verification commands
-- Cloud Run health:  
-  `curl https://rentchain-landlord-api-915921057662.us-central1.run.app/health`
-- Cloud Run application links (requires valid landlord JWT):  
-  `curl -X POST https://rentchain-landlord-api-915921057662.us-central1.run.app/api/landlord/application-links -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"propertyId":"PROP_ID","unitId":"UNIT_ID"}'`
-- Browser check: open app and confirm Network requests point to the Cloud Run host, not `www.rentchain.ai/api`.
+- Vercel deploys `rentchain-frontend` as the client application and lightweight serverless functions under `rentchain-frontend/api/*`.
+- Cloud Run serves `rentchain-api`, the Express API containing core product routes.
+- Firestore is the primary database.
+- Firebase Auth provides identity; server-side middleware enforces authorization.
+- Google Cloud Storage is used where storage is required.
+- Terraform, GitHub Actions, Vercel, and Google Cloud deployment checks form the delivery surface.
 
-## 4) Common pitfalls
-- Relative `/api/...` calls will hit Vercel and 404. Always use the API fetch helpers that prepend `VITE_API_BASE_URL`.
-- Changing `app.build.ts` only affects the Cloud Run API. Vercel serverless functions live under `rentchain-frontend/api/*` and are deployed separately.
+Frontend API calls must use the configured Cloud Run base URL through existing API helpers. A Vercel preview proves frontend freshness only; backend QA requires Cloud Run revision/image/traffic verification.
 
-## 5) Env vars (frontend)
-- `VITE_API_BASE_URL` (required; absolute Cloud Run base, no trailing slash).
-- Other public vars as needed by the app (e.g., feature flags), but `VITE_API_BASE_URL` is critical for all API calls.
+## Layer 1 — Operational System of Record
+
+This layer contains the operational rental workflows:
+
+- properties, units, tenants, applications, leases, messages, documents, maintenance, and work orders
+- portfolio and landlord operational views
+- tenant portal profile, lease, document, message, and trust/export-facing views
+- canonical events, decision summaries, review timelines, and workflow history where implemented
+
+Principle: product objects and events are the operational truth. Do not replace them with duplicate state systems or unsupported inferred workflows.
+
+## Layer 2 — Human Accountability Layer
+
+This layer provides manual review and audit continuity:
+
+- admin security incident review
+- support escalation runbooks
+- support escalation history and review note contracts
+- admin support escalation review surface
+- governed review workspace summaries and read routes
+- impersonation actor-chain attribution and support/admin audit metadata
+
+Principle: review surfaces should be metadata-only, manual-review-first, and explicit about what they do not execute. No hidden approve, resolve, dismiss, remediate, impersonate, or enforcement behavior should be inferred.
+
+## Layer 3 — Evidence & Institutional Trust Infrastructure
+
+This layer prepares evidence and export readiness:
+
+- projection-safe evidence references
+- institution export previews
+- institutional trust export frameworks
+- consent-scoped tenant trust/export concepts
+- identity, property, and account trust readiness models
+- redaction summaries and provenance metadata
+
+Principle: institutional trust is metadata-first and policy-gated. Raw provider payloads, documents, screening reports, private message bodies, storage paths, credentials, tokens, and unrestricted policy internals must not leak into user-safe or external-facing payloads.
+
+## Layer 4 — Controlled Operational Routing
+
+This layer coordinates manual review and supervised escalation:
+
+- security and support review routing
+- escalation categories, severity, manual states, approval expectations, and safe refs
+- route-source attribution for governance debugging
+- operator review concepts
+- future supervised operational routing
+
+Principle: routing is not automation. Escalation and review recommendations should not mutate records or trigger external effects unless a future mission explicitly adds safe, auditable controls.
+
+## Layer 5 — Operational Governance & Scaling Foundations
+
+This layer keeps the platform scalable and safe:
+
+- projection safety helpers
+- read models and sanitized summaries
+- consent continuity
+- workflow normalization
+- mobile operational access
+- deployment verification discipline
+- AI cowork process governance
+
+Principle: read models must remain audience-aware. Tenant, landlord, admin/support, export, dashboard, timeline, and debug contexts are separate surfaces with different visibility rules.
+
+## Layer 6 — Institutional Coordination Infrastructure
+
+This layer is future-oriented and should be treated carefully:
+
+- subsidy and program coordination readiness
+- lender, insurer, auditor, and government review workflows
+- lifecycle continuity across leases, tenants, documents, and evidence
+- institutional review rooms and invite flows
+- legal/compliance readiness workflows
+
+Principle: institutional coordination requires consent, retention, authorization, redaction, and manual review. Do not claim live external integrations unless implementation and deployment prove them.
+
+## Layer 7 — Long-Term Interoperability & Integrity Readiness
+
+This layer is strategic and later-stage:
+
+- selective integrity verification
+- interoperability compatibility
+- portable attestations
+- external adapter standards
+- evidence package signing or verification concepts
+- future institutional handoff formats
+
+Principle: governance before interoperability. Integrity and interoperability layers should build on stable consent, projection, evidence, and review foundations.
+
+## Strategic Architecture Principles
+
+- Governance before interoperability.
+- Supervised AI workflows, not autonomous enforcement.
+- Append-safe operational continuity.
+- Metadata-first institutional trust.
+- Projection-safe reads for every audience.
+- Controlled escalation routing.
+- Institutional export safety and consent-aware evidence lineage.
+- Firestore remains the primary database; do not introduce SQL or parallel persistence without a mission.
+- Auth and authority-sensitive access resolve server-side, never from client assumptions.
+
+## Canonical API Base
+
+The frontend must call Cloud Run through `VITE_API_BASE_URL`, with requests resolving to:
+
+```text
+${VITE_API_BASE_URL}/api/...
+```
+
+Do not rely on `https://www.rentchain.ai/api/*` for core API calls; that host points to Vercel and can return 404 for Cloud Run routes.
+
+## Deployment Verification
+
+For frontend changes:
+
+- Vercel preview should reflect the PR branch.
+- Browser/network checks should confirm the frontend points at the intended API base.
+
+For backend changes:
+
+- confirm Cloud Run active revision
+- confirm image tag or digest
+- confirm revision timestamp
+- confirm traffic is 100 percent to the expected revision
+- verify the authenticated API payload or route-source header after deployment
+
+If preview behavior disagrees with local tests, inspect deployment alignment before adding more code.
+
+## Non-Goals
+
+This architecture does not currently claim:
+
+- autonomous AI remediation
+- live lender/insurer/government integrations
+- external institutional submission
+- public trust profiles
+- legal certification
+- tokenization execution
+- production-ready native app-store distribution
+
+Those directions require future scoped missions, implementation evidence, and explicit operator approval.
