@@ -385,4 +385,43 @@ describe("tenant profile route", () => {
       nextOfKin: null,
     });
   });
+
+  it("keeps safe unit display labels when the context unit value is already a unit number", async () => {
+    ensureCollection("leases").set("lease-display-unit", {
+      tenantId: "tenant-display-unit",
+      propertyId: "prop-1",
+      unitNumber: "6",
+      status: "active",
+      startDate: "2026-02-01",
+      endDate: "2027-01-31",
+      monthlyRent: 1800,
+    });
+    ensureCollection("tenants").set("tenant-display-unit", {
+      fullName: "Unit Number Tenant",
+      email: "display-unit@example.com",
+      phone: "902-555-0101",
+      propertyId: "prop-1",
+      leaseId: "lease-display-unit",
+      unit: "6",
+    });
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/profile",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-display-unit",
+          email: "display-unit@example.com",
+          role: "tenant",
+          tenantId: "tenant-display-unit",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.data?.profile?.unit?.label).toBe("6");
+    expect(res.body?.data?.profile?.unit?.unitId).toBeNull();
+    expect(JSON.stringify(res.body)).not.toContain("internalUnitNotes");
+  });
 });

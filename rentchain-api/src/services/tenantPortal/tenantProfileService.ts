@@ -289,10 +289,16 @@ async function loadWorkspaceDocuments(context: TenancyContext) {
   return { property, application, lease, tenant };
 }
 
+function isLikelyRawId(value: string | null): boolean {
+  if (!value) return false;
+  return /^[A-Za-z0-9_-]{12,}$/.test(value);
+}
+
 function firstSafeDisplayString(values: unknown[], rawIds: unknown[]): string | null {
   const blocked = new Set(
     rawIds
       .map((value) => asString(value))
+      .filter(isLikelyRawId)
       .filter((value): value is string => Boolean(value))
   );
   for (const value of values) {
@@ -308,12 +314,23 @@ async function loadTenantProfileUnitProjection(params: {
   tenantData?: any;
   leaseData?: any;
 }): Promise<TenantProfileProjection["profile"]["unit"]> {
-  const unitId =
-    asString(params.context.unitId) ||
-    asString(params.tenantData?.unitId) ||
-    asString(params.leaseData?.unitId) ||
-    null;
-  const unitDoc = await loadDocument("units", unitId);
+  const unitIdCandidates = Array.from(
+    new Set(
+      [
+        params.context.unitId,
+        params.tenantData?.unitId,
+        params.leaseData?.unitId,
+        params.tenantData?.unit,
+        params.leaseData?.unit,
+      ]
+        .map((value) => asString(value))
+        .filter((value): value is string => Boolean(value))
+    )
+  );
+  const unitDocs = (await Promise.all(unitIdCandidates.map((candidate) => loadDocument("units", candidate)))).filter(
+    (doc): doc is { id: string; data: any } => Boolean(doc?.data)
+  );
+  const unitId = unitDocs[0]?.id || unitIdCandidates.find(isLikelyRawId) || null;
   const rawIds = [unitId, params.context.unitId, params.tenantData?.unitId, params.leaseData?.unitId];
   const label = firstSafeDisplayString(
     [
@@ -323,9 +340,7 @@ async function loadTenantProfileUnitProjection(params: {
       params.leaseData?.unitLabel,
       params.leaseData?.unitNumber,
       params.leaseData?.unit,
-      unitDoc?.data?.unitNumber,
-      unitDoc?.data?.label,
-      unitDoc?.data?.name,
+      ...unitDocs.flatMap((doc) => [doc.data?.unitNumber, doc.data?.label, doc.data?.name]),
     ],
     rawIds
   );
