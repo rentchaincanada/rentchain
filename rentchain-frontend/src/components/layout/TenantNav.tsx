@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { NavLink } from "react-router-dom";
+import { FileText, Home, Menu, MessageSquare, ScrollText, X } from "lucide-react";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { getTenantWorkspace } from "../../api/tenantPortal";
 import { getTenantCommunicationSummary } from "../../api/tenantCommunicationsApi";
 import { logoutTenant } from "../../lib/logoutTenant";
+import "./TenantNav.css";
 
 type Props = {
   children: React.ReactNode;
@@ -15,14 +17,43 @@ const navItems = [
   { label: "Onboarding", to: "/tenant/onboarding-hardening" },
   { label: "Access", to: "/tenant/access" },
   { label: "Application", to: "/tenant/application" },
-  { label: "Documents", to: "/tenant/attachments" },
+  { label: "Documents", to: "/tenant/documents" },
   { label: "History", to: "/tenant/activity" },
   { label: "Lease", to: "/tenant/lease" },
   { label: "Maintenance", to: "/tenant/maintenance" },
   { label: "Messages", to: "/tenant/messages" },
 ];
 
+const mobileTabs = [
+  {
+    label: "Dashboard",
+    to: "/tenant",
+    icon: Home,
+    isActive: (pathname: string) => pathname === "/tenant" || pathname.startsWith("/tenant/dashboard"),
+  },
+  {
+    label: "Lease",
+    to: "/tenant/lease",
+    icon: ScrollText,
+    isActive: (pathname: string) => pathname.startsWith("/tenant/lease"),
+  },
+  {
+    label: "Documents",
+    to: "/tenant/documents",
+    icon: FileText,
+    isActive: (pathname: string) => pathname.startsWith("/tenant/documents") || pathname.startsWith("/tenant/attachments"),
+  },
+  {
+    label: "Messages",
+    to: "/tenant/messages",
+    icon: MessageSquare,
+    isActive: (pathname: string) => pathname.startsWith("/tenant/messages"),
+  },
+];
+
 export const TenantNav: React.FC<Props> = ({ children }) => {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [tenantName, setTenantName] = useState<string | null>(null);
   const [tenantEmail, setTenantEmail] = useState<string | null>(null);
   const [tenantUnit, setTenantUnit] = useState<string | null>(null);
@@ -33,6 +64,8 @@ export const TenantNav: React.FC<Props> = ({ children }) => {
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [unreadNotices, setUnreadNotices] = useState(0);
   const [unreadScreening, setUnreadScreening] = useState(0);
+  const [moreOpen, setMoreOpen] = useState(false);
+
   useEffect(() => {
     let cancelled = false;
     const loadIdentity = async () => {
@@ -73,6 +106,19 @@ export const TenantNav: React.FC<Props> = ({ children }) => {
   }, []);
 
   useEffect(() => {
+    setMoreOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (!moreOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMoreOpen(false);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [moreOpen]);
+
+  useEffect(() => {
     let cancelled = false;
     const loadSummary = async () => {
       try {
@@ -110,9 +156,15 @@ export const TenantNav: React.FC<Props> = ({ children }) => {
     []
   );
 
+  const goTo = (path: string) => {
+    navigate(path);
+    setMoreOpen(false);
+  };
+
   return (
-    <div style={{ minHeight: "100vh", background: "#f8fafc" }}>
+    <div className="rc-tenant-shell">
       <header
+        className="rc-tenant-header"
         style={{
           position: "sticky",
           top: 0,
@@ -243,9 +295,83 @@ export const TenantNav: React.FC<Props> = ({ children }) => {
           </nav>
         </div>
       </header>
-      <main style={{ maxWidth: 1120, margin: "0 auto", padding: isMobile ? 12 : 16 }}>
+      <main className="rc-tenant-main" style={{ maxWidth: 1120, margin: "0 auto", padding: isMobile ? 12 : 16 }}>
         {children}
       </main>
+      <div
+        className={`rc-tenant-mobile-backdrop${moreOpen ? " is-open" : ""}`}
+        aria-hidden="true"
+        onClick={() => setMoreOpen(false)}
+      />
+      <aside
+        id="rc-tenant-mobile-menu"
+        className={`rc-tenant-mobile-menu${moreOpen ? " is-open" : ""}`}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Tenant menu"
+      >
+        <div className="rc-tenant-mobile-menu-header">
+          <span>Tenant menu</span>
+          <button type="button" onClick={() => setMoreOpen(false)} aria-label="Close tenant menu">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="rc-tenant-mobile-menu-links">
+          {navItems.map((item) => {
+            const active =
+              location.pathname === item.to ||
+              (item.to === "/tenant/documents" && location.pathname.startsWith("/tenant/attachments")) ||
+              (item.to !== "/tenant/dashboard" && location.pathname.startsWith(`${item.to}/`));
+            return (
+              <button
+                key={item.to}
+                type="button"
+                className={active ? "active" : undefined}
+                onClick={() => goTo(item.to)}
+              >
+                {item.label}
+              </button>
+            );
+          })}
+        </div>
+        <button type="button" className="rc-tenant-mobile-menu-signout" onClick={() => logoutTenant("/tenant/login")}>
+          Logout
+        </button>
+      </aside>
+      <nav className="rc-tenant-mobile-tabbar" aria-label="Tenant bottom navigation">
+        {mobileTabs.map((item) => {
+          const Icon = item.icon;
+          const active = item.isActive(location.pathname);
+          const hasUnread = item.to === "/tenant/messages" && unreadMessages > 0;
+          return (
+            <button
+              key={item.label}
+              type="button"
+              className={active ? "active" : undefined}
+              onClick={() => goTo(item.to)}
+              aria-current={active ? "page" : undefined}
+              aria-label={item.label}
+            >
+              <Icon size={20} strokeWidth={2.2} />
+              <span className="rc-tenant-mobile-tabbar-label">
+                {item.label}
+                {hasUnread ? <span className="rc-tenant-mobile-tabbar-dot" aria-hidden="true" /> : null}
+              </span>
+            </button>
+          );
+        })}
+        <button
+          type="button"
+          className={moreOpen ? "active" : undefined}
+          onClick={() => setMoreOpen((open) => !open)}
+          aria-expanded={moreOpen}
+          aria-controls="rc-tenant-mobile-menu"
+          aria-label="More"
+        >
+          <Menu size={20} strokeWidth={2.2} />
+          <span className="rc-tenant-mobile-tabbar-label">More</span>
+        </button>
+      </nav>
     </div>
   );
 };
