@@ -46,7 +46,10 @@ function cleanProfileDisplayValue(value: string | null | undefined): string | nu
 function buildProfilePropertyDisplay(property: Awaited<ReturnType<typeof getTenantProfile>>["profile"]["property"], unitLabel?: string | null) {
   if (!property) return "";
   const street = cleanProfileDisplayValue(property.street1);
-  const unit = cleanProfileDisplayValue(unitLabel);
+  const unit =
+    cleanProfileDisplayValue(unitLabel) ||
+    cleanProfileDisplayValue(property.unitNumber) ||
+    cleanProfileDisplayValue(String(property.unitDisplayLabel || "").replace(/^unit\s+/i, ""));
   const city = cleanProfileDisplayValue(property.city);
   const province = cleanProfileDisplayValue(property.province);
   const postalCode = cleanProfileDisplayValue(property.postalCode);

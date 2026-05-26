@@ -18,7 +18,10 @@ export type TenantProfileProjection = {
     email: string | null;
     phone: string | null;
     authorityLabel: string;
-    property: ReturnType<typeof projectTenantProperty> | null;
+    property: (ReturnType<typeof projectTenantProperty> & {
+      unitNumber?: string | null;
+      unitDisplayLabel?: string | null;
+    }) | null;
     unit: {
       unitId: string | null;
       label: string | null;
@@ -934,7 +937,13 @@ export async function loadTenantProfileProjection(params: {
         context.invitedEmail,
       phone: asString(tenant?.data?.phone) || asString(application?.data?.phone),
       authorityLabel: normalizeAuthorityLabel(context.authority),
-      property: property ? projectTenantProperty(property.id, property.data) : null,
+      property: property
+        ? {
+            ...projectTenantProperty(property.id, property.data),
+            unitNumber: unit?.label || null,
+            unitDisplayLabel: unit?.label ? `Unit ${unit.label}` : null,
+          }
+        : null,
       unit,
       application: application ? projectTenantApplication(application.id, application.data) : null,
       lease: lease ? projectTenantLease(lease.id, lease.data) : null,

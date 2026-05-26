@@ -275,6 +275,8 @@ describe("tenant profile route", () => {
     expect(res.body?.data?.profile?.property?.street1).toBe("123 Main St");
     expect(res.body?.data?.profile?.property?.postalCode).toBe("B3H1A1");
     expect(res.body?.data?.profile?.unit).toEqual({ unitId: null, label: "6" });
+    expect(res.body?.data?.profile?.property?.unitNumber).toBe("6");
+    expect(res.body?.data?.profile?.property?.unitDisplayLabel).toBe("Unit 6");
     expect(res.body?.data?.profile?.property?.internalSecret).toBeUndefined();
     expect(res.body?.data?.profile?.unit?.internalUnitNotes).toBeUndefined();
     expect(res.body?.data?.profile?.application?.sin).toBeUndefined();
