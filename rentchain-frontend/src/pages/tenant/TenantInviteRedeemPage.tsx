@@ -97,12 +97,12 @@ export default function TenantInviteRedeemPage() {
     }
     void workspaceRequest
       .then((next) => {
-        if (!cancelled) {
+        if (!cancelled && canLoadWorkspaceModeContext()) {
           setWorkspace(next);
         }
       })
       .catch(() => {
-        if (!cancelled) {
+        if (!cancelled && canLoadWorkspaceModeContext()) {
           setWorkspace(null);
         }
       });
