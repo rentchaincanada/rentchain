@@ -170,6 +170,7 @@ describe("tenant profile and communications pages", () => {
           street2: null,
           city: "Halifax",
           province: "NS",
+          postalCode: "B3H 1Z8",
         },
         unit: { unitId: "unit-4", label: "4" },
         application: { status: "submitted" },
@@ -210,7 +211,7 @@ describe("tenant profile and communications pages", () => {
     expect((await screen.findAllByText(/Verification is still in progress/i)).length).toBeGreaterThan(0);
     expect(screen.getByRole("textbox", { name: /Display name/i })).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: /Phone/i })).toBeInTheDocument();
-    expect(screen.getByText(/123 Main St · Unit 4/i)).toBeInTheDocument();
+    expect(screen.getByText(/123 Main St · Unit 4 · Halifax, NS B3H 1Z8/i)).toBeInTheDocument();
     expect(screen.queryByText(/unit-4/i)).not.toBeInTheDocument();
     expect(screen.getAllByText(/Rental record/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Employment and income/i).length).toBeGreaterThan(0);
@@ -220,6 +221,57 @@ describe("tenant profile and communications pages", () => {
     expect(screen.getByRole("link", { name: /Open document vault/i })).toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: /Review requested documents/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("link", { name: /Open documents|Review documents/i }).length).toBeGreaterThan(0);
+  });
+
+  it("tenant profile property display falls back safely when unit or postal code is missing", async () => {
+    tenantProfileApi.getTenantProfile.mockResolvedValue({
+      context: { authority: "active_tenant" },
+      profile: {
+        displayName: "Taylor Tenant",
+        email: "tenant@example.com",
+        phone: "902-555-0100",
+        authorityLabel: "Active tenant",
+        property: {
+          street1: "123 Main St",
+          street2: "Apartment 4",
+          city: "Halifax",
+          province: "NS",
+          postalCode: null,
+        },
+        unit: { unitId: "raw-unit-id-123456789", label: "raw-unit-id-123456789" },
+        application: { status: "submitted" },
+        lease: { status: "active", monthlyRent: 1800, startDate: "2026-02-01", endDate: "2027-01-31", documentUrl: null },
+      },
+      identity: {
+        overallStatus: "verified",
+        identityVerification: {
+          status: "verified",
+          label: "Verified",
+          note: "Verified.",
+          updatedAt: "2026-01-05T00:00:00.000Z",
+        },
+        documentChecklist: [],
+        nextSteps: [],
+      },
+      actions: {
+        editableFields: ["displayName", "phone"],
+        documentEntry: {
+          available: true,
+          path: "/tenant/attachments",
+          label: "Open documents",
+          note: null,
+        },
+      },
+    });
+
+    render(
+      <MemoryRouter>
+        <TenantProfilePage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/123 Main St · Apartment 4 · Halifax, NS/i)).toBeInTheDocument();
+    expect(screen.queryByText(/raw-unit-id-123456789/i)).not.toBeInTheDocument();
   });
 
   it("formats tenant rental record date-only lease dates without shifting backward", () => {

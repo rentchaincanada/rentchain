@@ -32,6 +32,29 @@ function statusTone(status: TenantProfileStatus): { label: string; color: string
   }
 }
 
+function isLikelyRawId(value: string | null): boolean {
+  return Boolean(value && /^[A-Za-z0-9_-]{12,}$/.test(value));
+}
+
+function cleanProfileDisplayValue(value: string | null | undefined): string | null {
+  const next = String(value || "").trim();
+  if (!next || isLikelyRawId(next)) return null;
+  return next;
+}
+
+function buildProfilePropertyDisplay(property: Awaited<ReturnType<typeof getTenantProfile>>["profile"]["property"], unitLabel?: string | null) {
+  if (!property) return "";
+  const street = cleanProfileDisplayValue(property.street1);
+  const unit = cleanProfileDisplayValue(unitLabel);
+  const city = cleanProfileDisplayValue(property.city);
+  const province = cleanProfileDisplayValue(property.province);
+  const postalCode = cleanProfileDisplayValue(property.postalCode);
+  const locality = [city, [province, postalCode].filter(Boolean).join(" ")].filter(Boolean).join(", ");
+  return [street, unit ? `Unit ${unit}` : cleanProfileDisplayValue(property.street2), locality]
+    .filter(Boolean)
+    .join(" · ");
+}
+
 export default function TenantProfilePage() {
   const [data, setData] = useState<Awaited<ReturnType<typeof getTenantProfile>> | null>(null);
   const [loading, setLoading] = useState(true);
@@ -182,21 +205,7 @@ export default function TenantProfilePage() {
   const identityTone = statusTone(data?.identity?.overallStatus || "missing");
   const verificationTone = statusTone(data?.identity?.identityVerification?.status || "missing");
   const documentEntry = data?.actions?.documentEntry;
-  const propertyAddress = [
-    data?.profile?.property?.street1,
-    data?.profile?.property?.street2,
-    data?.profile?.property?.city,
-    data?.profile?.property?.province,
-  ]
-    .filter(Boolean)
-    .join(", ");
-  const propertyLabel = data?.profile?.property?.street1 || propertyAddress;
-  const propertyDisplay = [
-    propertyLabel,
-    data?.profile?.unit?.label ? `Unit ${data.profile.unit.label}` : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  const propertyDisplay = buildProfilePropertyDisplay(data?.profile?.property || null, data?.profile?.unit?.label);
   const applicationSignals = [
     ...(data?.profile?.application?.missingSteps || []),
     ...(data?.profile?.application?.nextActions || []),

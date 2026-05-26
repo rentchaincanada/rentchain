@@ -273,6 +273,7 @@ describe("tenant profile route", () => {
     expect(res.body?.data?.profile?.email).toBe("tenant@example.com");
     expect(res.body?.data?.profile?.phone).toBe("902-555-0100");
     expect(res.body?.data?.profile?.property?.street1).toBe("123 Main St");
+    expect(res.body?.data?.profile?.property?.postalCode).toBe("B3H1A1");
     expect(res.body?.data?.profile?.unit).toEqual({ unitId: "unit-1", label: "6" });
     expect(res.body?.data?.profile?.property?.internalSecret).toBeUndefined();
     expect(res.body?.data?.profile?.unit?.internalUnitNotes).toBeUndefined();
