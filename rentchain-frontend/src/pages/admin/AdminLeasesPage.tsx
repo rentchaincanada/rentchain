@@ -40,7 +40,7 @@ function leaseLabel(lease: AdminLeaseView) {
 }
 
 function landlordLabel(lease: AdminLeaseView) {
-  return lease.landlordDisplayName || "Landlord account";
+  return lease.landlordDisplayName || (lease.landlordId ? "Landlord linked / profile missing" : "Landlord profile unavailable");
 }
 
 function tenantLabel(lease: AdminLeaseView) {
@@ -332,7 +332,7 @@ export const AdminLeasesPage: React.FC = () => {
                 <table className="rc-admin-leases-table">
                   <thead>
                     <tr style={{ textAlign: "left", borderBottom: "1px solid rgba(15, 23, 42, 0.08)" }}>
-                      {["Lease", "Property / Unit", "Tenant(s)", "Landlord", "Status", "Rent", "Start", "End", "Risk", "Integrity", "Updated"].map((label) => (
+                      {["Lease", "Tenant(s)", "Landlord", "Status / Rent", "Dates", "Risk / Integrity", "Updated"].map((label) => (
                         <th key={label} style={{ padding: "10px 12px", fontSize: 13, color: "#475569" }}>
                           {label}
                         </th>
@@ -346,27 +346,29 @@ export const AdminLeasesPage: React.FC = () => {
                         onClick={() => setSelectedLease(item)}
                         style={{ cursor: "pointer", borderBottom: "1px solid rgba(15, 23, 42, 0.06)" }}
                       >
-                        <td style={{ padding: "12px" }}>
+                        <td className="rc-admin-leases-table__primary" style={{ padding: "12px" }}>
                           <div style={{ fontWeight: 600 }}>{leaseLabel(item)}</div>
                           <div style={{ color: "#64748b", fontSize: 13 }}>Admin lease record</div>
                         </td>
+                        <td className="rc-admin-leases-table__name" style={{ padding: "12px" }}>{tenantLabel(item)}</td>
+                        <td className="rc-admin-leases-table__name" style={{ padding: "12px" }}>{landlordLabel(item)}</td>
                         <td style={{ padding: "12px" }}>
-                          <div>{item.propertyName || "Property not linked"}</div>
-                          <div style={{ color: "#64748b", fontSize: 13 }}>{item.unitNumber ? `Unit ${item.unitNumber}` : "Unit not assigned"}</div>
-                        </td>
-                        <td style={{ padding: "12px" }}>{tenantLabel(item)}</td>
-                        <td style={{ padding: "12px" }}>{landlordLabel(item)}</td>
-                        <td style={{ padding: "12px" }}>
-                          <Pill tone="default">{formatValue(item.status)}</Pill>
-                        </td>
-                        <td style={{ padding: "12px" }}>{formatMoney(item.monthlyRent)}</td>
-                        <td style={{ padding: "12px" }}>{item.startDate || "—"}</td>
-                        <td style={{ padding: "12px" }}>{item.endDate || "—"}</td>
-                        <td style={{ padding: "12px" }}>
-                          <Pill tone="accent">{item.riskGrade || "—"}</Pill>
+                          <div style={{ display: "grid", gap: 6 }}>
+                            <Pill tone="default">{formatValue(item.status)}</Pill>
+                            <span>{formatMoney(item.monthlyRent)}</span>
+                          </div>
                         </td>
                         <td style={{ padding: "12px" }}>
-                          <IntegrityPill lease={item} />
+                          <div style={{ display: "grid", gap: 4 }}>
+                            <span>Start: {item.startDate || "—"}</span>
+                            <span>End: {item.endDate || "—"}</span>
+                          </div>
+                        </td>
+                        <td style={{ padding: "12px" }}>
+                          <div style={{ display: "grid", gap: 6 }}>
+                            <Pill tone="accent">{item.riskGrade || "—"}</Pill>
+                            <IntegrityPill lease={item} />
+                          </div>
                         </td>
                         <td style={{ padding: "12px" }}>{String(item.updatedAt || "—")}</td>
                       </tr>
@@ -404,28 +406,14 @@ export const AdminLeasesPage: React.FC = () => {
         <div
           role="dialog"
           aria-label="Lease detail drawer"
-          style={{
-            position: "fixed",
-            top: 0,
-            right: 0,
-            width: "min(420px, 100vw)",
-            height: "100vh",
-            background: "#fff",
-            borderLeft: "1px solid rgba(15, 23, 42, 0.08)",
-            boxShadow: "-8px 0 24px rgba(15, 23, 42, 0.12)",
-            padding: 20,
-            overflowY: "auto",
-            zIndex: 60,
-            display: "grid",
-            gap: 16,
-          }}
+          className="rc-admin-lease-drawer"
         >
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
             <div>
               <div style={{ fontWeight: 700, fontSize: 18 }}>{leaseLabel(selectedLease)}</div>
               <div style={{ color: "#64748b", fontSize: 14 }}>{landlordLabel(selectedLease)}</div>
             </div>
-            <Button variant="secondary" onClick={() => setSelectedLease(null)}>
+            <Button variant="secondary" onClick={() => setSelectedLease(null)} style={{ minWidth: 76, whiteSpace: "nowrap" }}>
               Close
             </Button>
           </div>
