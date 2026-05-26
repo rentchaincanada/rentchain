@@ -207,16 +207,23 @@ describe("tenant profile route", () => {
     ensureCollection("leases").set("lease-1", {
       tenantId: "tenant-1",
       propertyId: "prop-1",
+      unitId: "unit-1",
       status: "active",
       startDate: "2026-02-01",
       endDate: "2027-01-31",
       monthlyRent: 1800,
       confidentialNotes: "private",
     });
+    ensureCollection("units").set("unit-1", {
+      propertyId: "prop-1",
+      unitNumber: "6",
+      internalUnitNotes: "private",
+    });
     ensureCollection("tenants").set("tenant-1", {
       fullName: "Taylor Tenant",
       email: "tenant@example.com",
       phone: "902-555-0100",
+      unitId: "unit-1",
       internalRiskScore: 900,
     });
     ensureCollection("screening_requests").set("screen-1", {
@@ -266,7 +273,9 @@ describe("tenant profile route", () => {
     expect(res.body?.data?.profile?.email).toBe("tenant@example.com");
     expect(res.body?.data?.profile?.phone).toBe("902-555-0100");
     expect(res.body?.data?.profile?.property?.street1).toBe("123 Main St");
+    expect(res.body?.data?.profile?.unit).toEqual({ unitId: "unit-1", label: "6" });
     expect(res.body?.data?.profile?.property?.internalSecret).toBeUndefined();
+    expect(res.body?.data?.profile?.unit?.internalUnitNotes).toBeUndefined();
     expect(res.body?.data?.profile?.application?.sin).toBeUndefined();
     expect(res.body?.data?.profile?.lease?.confidentialNotes).toBeUndefined();
     expect(res.body?.data?.identity?.identityVerification?.status).toBe("verified");

@@ -43,6 +43,9 @@ export default function TenantProfilePage() {
   const [attachments, setAttachments] = useState<Awaited<ReturnType<typeof getTenantAttachments>> | null>(null);
   const displayNameRef = React.useRef<HTMLInputElement | null>(null);
   const phoneRef = React.useRef<HTMLInputElement | null>(null);
+  const rentalRecordRef = React.useRef<HTMLDivElement | null>(null);
+  const identityStatusRef = React.useRef<HTMLDivElement | null>(null);
+  const documentChecklistRef = React.useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -121,16 +124,37 @@ export default function TenantProfilePage() {
     }
   };
 
+  const completion = data ? buildTenantProfileCompletion(data) : null;
+  const firstIncompleteCompletionKey =
+    completion?.sections.flatMap((section) => section.items).find((item) => item.status !== "complete")?.key || null;
   const focusMissingEditableField = React.useCallback(() => {
-    const firstMissingEditableField = !data?.profile?.phone
-      ? phoneRef.current
-      : !data?.profile?.displayName
-      ? displayNameRef.current
-      : displayNameRef.current;
-    if (!firstMissingEditableField) return;
-    firstMissingEditableField.scrollIntoView({ behavior: "smooth", block: "center" });
-    firstMissingEditableField.focus();
-  }, [data?.profile?.displayName, data?.profile?.phone]);
+    const focusTarget = (target: HTMLElement | null) => {
+      if (!target) return;
+      target.scrollIntoView({ behavior: "smooth", block: "center" });
+      target.focus();
+    };
+
+    switch (firstIncompleteCompletionKey) {
+      case "phone":
+        focusTarget(phoneRef.current);
+        return;
+      case "display_name":
+        focusTarget(displayNameRef.current);
+        return;
+      case "property_summary":
+      case "application_or_lease":
+        focusTarget(rentalRecordRef.current);
+        return;
+      case "identity_verification":
+        focusTarget(identityStatusRef.current);
+        return;
+      case "document_checklist":
+        focusTarget(documentChecklistRef.current);
+        return;
+      default:
+        focusTarget(phoneRef.current || displayNameRef.current);
+    }
+  }, [firstIncompleteCompletionKey]);
 
   if (loading) {
     return (
@@ -158,7 +182,6 @@ export default function TenantProfilePage() {
   const identityTone = statusTone(data?.identity?.overallStatus || "missing");
   const verificationTone = statusTone(data?.identity?.identityVerification?.status || "missing");
   const documentEntry = data?.actions?.documentEntry;
-  const completion = data ? buildTenantProfileCompletion(data) : null;
   const propertyAddress = [
     data?.profile?.property?.street1,
     data?.profile?.property?.street2,
@@ -167,6 +190,13 @@ export default function TenantProfilePage() {
   ]
     .filter(Boolean)
     .join(", ");
+  const propertyLabel = data?.profile?.property?.street1 || propertyAddress;
+  const propertyDisplay = [
+    propertyLabel,
+    data?.profile?.unit?.label ? `Unit ${data.profile.unit.label}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
   const applicationSignals = [
     ...(data?.profile?.application?.missingSteps || []),
     ...(data?.profile?.application?.nextActions || []),
@@ -202,7 +232,7 @@ export default function TenantProfilePage() {
               { label: "Email", value: data?.profile?.email || "—" },
               { label: "Phone", value: data?.profile?.phone || "—" },
               { label: "Access", value: data?.profile?.authorityLabel || "Tenant" },
-              { label: "Property", value: propertyAddress || "No property linked yet" },
+              { label: "Property", value: propertyDisplay || "No property linked yet" },
               { label: "Lease status", value: prettyStatus(data?.profile?.lease?.status) },
             ]}
           />
@@ -313,6 +343,7 @@ export default function TenantProfilePage() {
           gap: spacing.md,
         }}
       >
+        <div ref={rentalRecordRef} tabIndex={-1} style={{ outline: "none" }}>
         <TenantInfoCard heading="Rental record" accent="#7c3aed">
           <TenantKeyValueGrid
             rows={[
@@ -333,7 +364,9 @@ export default function TenantProfilePage() {
             This section keeps your current rental record visible in one place. Longer history can be added over time as more tenant-safe records are linked.
           </div>
         </TenantInfoCard>
+        </div>
 
+        <div ref={identityStatusRef} tabIndex={-1} style={{ outline: "none" }}>
         <TenantInfoCard heading="Identity status" accent="#1d4ed8">
           <div style={{ display: "grid", gap: spacing.sm }}>
             <div
@@ -362,6 +395,7 @@ export default function TenantProfilePage() {
             </div>
           </div>
         </TenantInfoCard>
+        </div>
 
         <TenantInfoCard heading="Employment and income" accent="#0891b2">
           <div style={{ display: "grid", gap: spacing.sm }}>
@@ -421,6 +455,7 @@ export default function TenantProfilePage() {
         </div>
       </TenantInfoCard>
 
+      <div ref={documentChecklistRef} tabIndex={-1} style={{ outline: "none" }}>
       <TenantInfoCard heading="Document checklist" accent="#b45309">
         {documentEntry?.note ? <div style={{ color: textTokens.secondary }}>{documentEntry.note}</div> : null}
         {data?.identity?.documentChecklist?.length ? (
@@ -472,6 +507,7 @@ export default function TenantProfilePage() {
           />
         )}
       </TenantInfoCard>
+      </div>
 
       <TenantInfoCard heading="Next steps" accent="#0891b2">
         {data?.identity?.nextSteps?.length ? (

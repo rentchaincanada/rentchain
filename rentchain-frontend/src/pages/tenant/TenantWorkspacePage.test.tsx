@@ -1282,7 +1282,7 @@ describe("tenant workspace frontend shell", () => {
     expect(screen.getByText(/Missing pieces/i)).toBeInTheDocument();
     expect(screen.getByText(/Income documents/i)).toBeInTheDocument();
     expect(screen.getByText(/Manage Shared Access/i)).toBeInTheDocument();
-    expect(screen.getByText(/Add missing details to keep your rental profile organized/i)).toBeInTheDocument();
+    expect(screen.getByText(/Review the remaining profile area to keep your rental profile organized/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /View your profile/i })).toBeInTheDocument();
     expect(screen.queryByText(/^Applicant$/i)).not.toBeInTheDocument();
     expect(screen.getAllByText(/Active tenancy/i).length).toBeGreaterThan(0);

@@ -167,10 +167,11 @@ describe("tenant profile and communications pages", () => {
         authorityLabel: "Active tenant",
         property: {
           street1: "123 Main St",
-          street2: "Unit 4",
+          street2: null,
           city: "Halifax",
           province: "NS",
         },
+        unit: { unitId: "unit-4", label: "4" },
         application: { status: "submitted" },
         lease: { status: "active", monthlyRent: 1800, startDate: "2026-02-01", endDate: "2027-01-31", documentUrl: null },
       },
@@ -209,6 +210,8 @@ describe("tenant profile and communications pages", () => {
     expect((await screen.findAllByText(/Verification is still in progress/i)).length).toBeGreaterThan(0);
     expect(screen.getByRole("textbox", { name: /Display name/i })).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: /Phone/i })).toBeInTheDocument();
+    expect(screen.getByText(/123 Main St · Unit 4/i)).toBeInTheDocument();
+    expect(screen.queryByText(/unit-4/i)).not.toBeInTheDocument();
     expect(screen.getAllByText(/Rental record/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Employment and income/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Upload government id/i).length).toBeGreaterThan(0);
@@ -542,6 +545,60 @@ describe("tenant profile and communications pages", () => {
     fireEvent.click(screen.getByRole("button", { name: /Update missing details/i }));
 
     expect(document.activeElement).toBe(phoneInput);
+  });
+
+  it("tenant profile completion CTA targets the actual incomplete identity area", async () => {
+    tenantProfileApi.getTenantProfile.mockResolvedValue({
+      context: { authority: "active_tenant" },
+      profile: {
+        displayName: "Taylor Tenant",
+        email: "tenant@example.com",
+        phone: "902-555-0100",
+        authorityLabel: "Active tenant",
+        property: {
+          street1: "Coburg Rd",
+          street2: null,
+          city: "Halifax",
+          province: "NS",
+        },
+        unit: { unitId: "unit-safe", label: "6" },
+        application: { status: "converted" },
+        lease: { status: "active", monthlyRent: 1800, startDate: "2026-05-01", endDate: "2027-04-30", documentUrl: null },
+      },
+      identity: {
+        overallStatus: "pending",
+        identityVerification: {
+          status: "pending",
+          label: "Pending",
+          note: "Verification is still in progress.",
+          updatedAt: "2026-01-05T00:00:00.000Z",
+        },
+        documentChecklist: [],
+        nextSteps: [],
+      },
+      actions: {
+        editableFields: ["displayName", "phone"],
+        documentEntry: {
+          available: false,
+          path: null,
+          label: "Open documents",
+          note: null,
+        },
+      },
+    });
+
+    render(
+      <MemoryRouter>
+        <TenantProfilePage />
+      </MemoryRouter>
+    );
+
+    await screen.findByDisplayValue("Taylor Tenant");
+    expect(screen.getByText(/Identity verification: Verification is still in progress/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Update missing details/i }));
+
+    expect(document.activeElement).toHaveTextContent(/Identity status/i);
+    expect(document.activeElement).not.toBe(screen.getByRole("textbox", { name: /Phone/i }));
   });
 
   it("communications page handles empty state and compose/send success", async () => {

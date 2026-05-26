@@ -28,6 +28,10 @@ export type TenantProfileData = {
       postalCode: string | null;
       features: string[];
     } | null;
+    unit: {
+      unitId: string | null;
+      label: string | null;
+    } | null;
     application: {
       applicationId: string;
       status: string | null;

@@ -100,7 +100,7 @@ export default function TenantProfileCompletionCard({
         {missingPreview.length ? (
           <div style={{ display: "grid", gap: 8 }}>
             <div style={{ color: textTokens.primary, fontWeight: 700 }}>
-              Add missing details to keep your rental profile organized.
+              Review the remaining profile area to keep your rental profile organized.
             </div>
             {missingPreview.map((item) => (
               <div key={item} style={{ color: textTokens.secondary }}>

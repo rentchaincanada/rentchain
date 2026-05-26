@@ -209,7 +209,7 @@ export function buildTenantProfileCompletion(
   );
   const missingItems = allItems
     .filter((item) => item.status !== "complete")
-    .map((item) => item.detail);
+    .map((item) => `${item.label}: ${item.detail}`);
 
   return {
     progressPercent,
