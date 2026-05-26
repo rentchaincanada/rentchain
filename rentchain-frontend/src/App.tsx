@@ -1681,6 +1681,10 @@ function App() {
           element={renderTenantShell(suspensePage(<TenantAttachmentsPage />))}
         />
         <Route
+          path="/tenant/documents"
+          element={renderTenantShell(suspensePage(<TenantAttachmentsPage />))}
+        />
+        <Route
           path="/tenant/notices"
           element={renderTenantShell(suspensePage(<TenantNoticesCenterPage />))}
         />
