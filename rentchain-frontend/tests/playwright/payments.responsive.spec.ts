@@ -8,13 +8,13 @@ test.describe("Payments page responsive", () => {
   ];
 
   for (const { name, size } of viewports) {
-    test(`renders payments on ${name}`, async ({ page }) => {
+    test(`renders payments on ${name}`, async ({ page }, testInfo) => {
       await page.setViewportSize(size);
-      await page.goto("http://localhost:5173/payments");
+      await page.goto("/payments");
       await expect(page.getByRole("heading", { name: /payments/i })).toBeVisible();
       await expect(page.getByRole("table")).toBeVisible();
       await page.screenshot({
-        path: `screenshots/payments-${name}.png`,
+        path: testInfo.outputPath(`payments-${name}.png`),
         fullPage: true,
       });
     });
