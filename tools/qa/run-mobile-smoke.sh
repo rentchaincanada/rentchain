@@ -45,8 +45,12 @@ if [ -n "${QA_GREP:-}" ]; then
   playwright_args+=(--grep="$QA_GREP")
 fi
 
-BASE_URL="$PREVIEW_URL" \
-QA_ROLE="$QA_ROLE" \
-QA_ARTIFACT_DIR="$QA_ARTIFACT_DIR" \
-QA_HTML_REPORT_DIR="$QA_HTML_REPORT_DIR" \
-npm run test:e2e -- "$QA_SPEC" "${playwright_args[@]}"
+export BASE_URL="$PREVIEW_URL"
+export QA_ROLE
+export QA_ARTIFACT_DIR
+export QA_HTML_REPORT_DIR
+if [ "${#playwright_args[@]}" -gt 0 ]; then
+  npm run test:e2e -- "$QA_SPEC" "${playwright_args[@]}"
+else
+  npm run test:e2e -- "$QA_SPEC"
+fi
