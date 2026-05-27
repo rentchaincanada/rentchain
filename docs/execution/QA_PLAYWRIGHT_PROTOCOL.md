@@ -43,6 +43,7 @@ The smoke scripts:
 - verify `rentchain-frontend` exists
 - verify Playwright is available through the existing frontend install
 - print the target URL and role
+- print whether the run is authenticated through local storage state or unauthenticated
 - run the mobile preview smoke harness by default
 - pass `PREVIEW_URL` through Playwright `baseURL`
 - create role-labeled Playwright artifact and HTML report folders
@@ -157,14 +158,44 @@ If none of the safe endpoint responses contain an expected commit, revision, or 
 
 ## Authenticated Role State
 
-Role smoke tests may use Playwright storage-state files when an operator provides them through environment variables:
+Role smoke tests may use Playwright storage-state files when an operator provides them through environment variables. Authenticated state is optional; if no storage-state path is provided, smoke tests keep running as unauthenticated reachability checks.
+
+Supported variables:
 
 - `QA_ADMIN_STORAGE_STATE`
 - `QA_TENANT_STORAGE_STATE`
 - `QA_LANDLORD_STORAGE_STATE`
 - `QA_STORAGE_STATE` as a generic fallback
 
-Storage-state files must be generated outside the repository or kept in ignored local artifact locations. Do not commit session cookies, bearer tokens, credentials, or storage-state JSON. If no storage state is provided, the role smoke tests run as unauthenticated reachability checks and annotate role-shell expectations as gated when protected pages redirect or block access.
+Precedence:
+
+1. role-specific storage state, such as `QA_TENANT_STORAGE_STATE`
+2. generic `QA_STORAGE_STATE`
+3. unauthenticated smoke mode
+
+The wrapper scripts print the active auth mode. When a storage-state variable is set, the referenced file must exist before Playwright starts; missing files fail fast with a clear message.
+
+Safe local locations:
+
+- outside the repository, such as `/tmp/rentchain-playwright/tenant.json`
+- ignored artifact paths, such as `rentchain-frontend/test-results/storage-state/tenant.json`
+
+Storage-state files can contain cookies, local storage, Firebase session material, and other secrets. Do not commit them, paste them into PRs, attach them to public issues, or include them in Claude uploads. `test-results/` and `playwright-report/` are ignored local artifact paths.
+
+Manual operator workflow:
+
+1. Open the target preview manually and sign in as the intended role.
+2. Use local Playwright tooling to save storage state to an ignored path.
+3. Export only the local path, not credentials:
+
+```bash
+export QA_TENANT_STORAGE_STATE=rentchain-frontend/test-results/storage-state/tenant.json
+PREVIEW_URL=https://example-preview.vercel.app tools/qa/run-tenant-smoke.sh
+```
+
+4. Delete or rotate storage-state files after QA if the session should not persist.
+
+Codex should not request, generate, store, or commit credentials. If authenticated state is unavailable, run unauthenticated smoke and report auth-gated findings honestly.
 
 ## Evidence Handling
 
