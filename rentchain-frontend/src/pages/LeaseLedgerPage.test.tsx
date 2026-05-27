@@ -516,7 +516,7 @@ describe("LeaseLedgerPage", () => {
     expect(screen.getAllByText("Outstanding").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Underpaid").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Manual Review").length).toBeGreaterThan(0);
-    expect(screen.getByText("$4,250.00")).toBeInTheDocument();
+    expect(await screen.findByText("$4,250.00")).toBeInTheDocument();
     expect(screen.queryByText("425000")).not.toBeInTheDocument();
 
     expect(screen.getByText("Overdue — Rent past due date (obligation missing after due date)")).toBeInTheDocument();
