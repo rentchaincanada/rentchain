@@ -14,6 +14,22 @@ Use these labels:
 
 Planned government, subsidy, welfare support, payment/disbursement, identity/KYC, settlement, inter-agency, and interoperability nodes must not be described as live integrations.
 
+## Architecture-to-Mission Phase Mapping
+
+Use this table to connect architecture layers to `CURRENT_ACTIVE_MISSIONS.md` without turning roadmap work into implemented claims.
+
+| Architecture layer | Mission phase | Maturity | Governance risk | Claude interpretation |
+| --- | --- | --- | --- | --- |
+| Layer 1 — Operational System of Record | Phase 2 — Tenant & Operational Continuity Foundations | Implemented foundations / in development | Medium | Core operational surfaces exist; workflow depth still needs scoped verification per surface. |
+| Layer 2 — Human Accountability Layer | Phase 3 — Governed Review Workspace Hardening | Implemented and in development | High | Review workspaces, incidents, and support escalations are human-review foundations, not autonomous execution. |
+| Layer 3 — Evidence & Institutional Trust Infrastructure | Phase 5 — Evidence, Export & Institutional Trust | In development | High | Evidence/export surfaces are metadata-first readiness layers unless deployed payloads prove a narrower implemented export. |
+| Layer 4 — Controlled Operational Routing | Phase 3 and Phase 4 — Review plus Security/Operational Hardening | In development | High | Routing is supervised triage and continuity, not enforcement, remediation, or uncontrolled escalation. |
+| Layer 5 — Operational Governance & Scaling Foundations | Phase 1, Phase 3, and Phase 4 — QA, Review, and Security Hardening | In development | Medium / High | QA, projection safety, deployment verification, route/access regression, mobile access, and AI cowork process reduce operational risk. |
+| Layer 6 — Institutional Coordination Infrastructure | Phase 6 — Institutional Coordination Readiness | Planned / Roadmap | Very High | Government, subsidy/program, lender, insurer, auditor, and institutional identity/sharing coordination remain roadmap/readiness work. |
+| Layer 7 — Long-Term Interoperability & Integrity Readiness | Phase 7 — Long-Term Interoperability & Integrity Readiness | Planned / Roadmap | Very High | Interoperability, settlement rail readiness, selective verification, tokenization readiness, and portable evidence compatibility remain later-stage roadmap work. |
+
+If a claim depends on environment flags, representative payloads, Cloud Run deployment freshness, external integration behavior, or end-to-end QA, label it **Needs Verification**.
+
 ## Backend Stack
 
 - Node.js and Express.

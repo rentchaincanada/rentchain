@@ -41,6 +41,20 @@ Architecture diagrams should be interpreted as evolution maps with maturity labe
 
 Before a future mission upgrades any roadmap item to implemented status, require source-code audit, route/payload verification, test evidence, and Cloud Run/Vercel deployment alignment where applicable.
 
+## Architecture Layer Mapping
+
+This mission sequence maps to the architecture layers in `ARCHITECTURE.md` and `CURRENT_ARCHITECTURE.md`:
+
+- **Phase 1 — AI Collaboration & QA Infrastructure** supports Layer 5 by improving deployment verification, Playwright readiness, QA artifacts, and supervised AI cowork process.
+- **Phase 2 — Tenant & Operational Continuity Foundations** supports Layer 1 by hardening tenant, landlord, lease, document, occupancy, engagement, and property continuity surfaces.
+- **Phase 3 — Governed Review Workspace Hardening** supports Layers 2 and 4 by strengthening security incident, support escalation, review workspace, append-event, and metadata-only routing foundations.
+- **Phase 4 — Security & Operational Hardening** supports Layers 4 and 5 by protecting route scope, projection safety, sessions, telemetry, dependencies, and support/admin access.
+- **Phase 5 — Evidence, Export & Institutional Trust** supports Layer 3 by expanding consent-aware evidence, export, trust, allowlist, and attestation readiness.
+- **Phase 6 — Institutional Coordination Readiness** supports Layer 6 and remains planned/readiness-oriented until scoped missions verify specific institutional workflows.
+- **Phase 7 — Long-Term Interoperability & Integrity Readiness** supports Layer 7 and remains roadmap-oriented until governance, consent, projection, evidence, and review layers mature.
+
+This mapping is an operational evolution map. It does not imply live government, subsidy, payment/disbursement, KYC, settlement, inter-agency, tokenization, or external institutional integrations.
+
 ## Active Next Sequence
 
 ### Phase 1 — AI Collaboration & QA Infrastructure
