@@ -2,6 +2,8 @@
 
 This file replaces stale `CURRENT_MISSION.md` context for Claude.ai sharing. It is strategic, chronological, and phase-oriented. It is not an implementation branch plan by itself; each item still requires an explicit operator mission before Codex or Claude acts on it.
 
+Use `GOVERNANCE_REFERENCE.md` for shared governance definitions and status labels before converting any mission theme into implementation scope.
+
 ## Current Platform Phase
 
 RentChain has completed the first governed operational infrastructure layer around:
@@ -152,9 +154,11 @@ Purpose: plan interoperability and integrity layers without bypassing governance
 
 ## Recommended Next Documentation Missions
 
-1. `docs/readme-modernization-v1` — completed by this modernization work; keep README aligned with governance-first platform framing.
-2. `docs/architecture-modernization-v1` — completed by this modernization work; keep architecture layers current as review/export/institutional foundations evolve.
-3. `docs/governance-reference-consolidation-v1` — recommended next docs mission to consolidate scattered governance reports into a stable Claude/operator reference index.
+1. `docs/readme-modernization-v1` — completed; keep README aligned with governance-first platform framing.
+2. `docs/architecture-modernization-v1` — completed; keep architecture layers current as review/export/institutional foundations evolve.
+3. `docs/platform-state-runtime-alignment-audit-v1` — completed; keep runtime surface claims separated from complete workflow and live integration claims.
+4. `docs/governance-reference-consolidation-v1` — current consolidation mission; use `GOVERNANCE_REFERENCE.md` as the canonical vocabulary layer.
+5. `docs/diagram-to-mission-phase-mapping-v1` — recommended next mission to map architecture diagram layers to mission phases without turning roadmap concepts into implemented claims.
 
 ## Best Immediate Claude Cleanup
 

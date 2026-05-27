@@ -4,6 +4,8 @@ RentChain is governed rental operations and property intelligence infrastructure
 
 For implementation workflow, repository discovery, and mission execution rules, follow `AGENTS.md`, `PROCESS.md`, `codex.md`, and `docs/execution/AI_COWORK_PROTOCOL.md`.
 
+For shared governance terminology, use `docs/ai/claude-context/GOVERNANCE_REFERENCE.md`.
+
 ## Architecture Diagram Maturity Legend
 
 The architecture map is an operational evolution map, not a guaranteed live production state map. It intentionally shows implemented foundations, in-development hardening, and planned roadmap layers together so engineering, QA, Claude, and strategic reviewers can reason about sequence.

@@ -2,6 +2,8 @@
 
 Claude must not violate these rules when advising on RentChain.
 
+Use `GOVERNANCE_REFERENCE.md` for canonical definitions of projection-safe, append-safe, metadata-first, supervised AI, controlled operational routing, institutional readiness, evidence/export governance, and implementation status labels.
+
 - Never widen tenant visibility into landlord/admin/support data.
 - Never expose raw Firestore IDs, unit IDs, lease IDs, landlord IDs, tenant IDs, storage paths, or internal references as user-facing labels.
 - Never bypass governance layers, route authorization, entitlement gates, or projection helpers.

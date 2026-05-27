@@ -4,6 +4,8 @@
 
 Architecture diagrams and maps should be read as operational evolution maps, not guaranteed live production state maps.
 
+Use `GOVERNANCE_REFERENCE.md` for shared definitions of implementation status, projection safety, append safety, metadata-first evidence/export posture, supervised AI, and controlled operational routing.
+
 Use these labels:
 
 - Implemented: materially present in current code, routes, docs, tests, or UI surfaces.

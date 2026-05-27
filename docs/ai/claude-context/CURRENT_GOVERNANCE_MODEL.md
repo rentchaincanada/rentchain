@@ -1,5 +1,7 @@
 # Current Governance Model
 
+Use `GOVERNANCE_REFERENCE.md` as the canonical vocabulary layer for projection-safe, append-safe, metadata-first, supervised AI, controlled operational routing, institutional readiness, evidence/export governance, and implementation status labels.
+
 ## Audit-Safe Operational History
 
 RentChain emphasizes audit-safe operational history through canonical events, metadata-only review records, route-source attribution, and append-compatible references.
