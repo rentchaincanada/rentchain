@@ -43,7 +43,10 @@ The smoke scripts:
 - verify `rentchain-frontend` exists
 - verify Playwright is available through the existing frontend install
 - print the target URL and role
-- run the existing Playwright test command when available
+- run the mobile preview smoke harness by default
+- pass `PREVIEW_URL` through Playwright `baseURL`
+- create role-labeled Playwright artifact and HTML report folders
+- refuse production URLs unless `ALLOW_PRODUCTION_QA=true` is explicitly set
 - fail clearly if dependencies are missing
 
 They do not:
@@ -60,7 +63,25 @@ They do not:
 - `tools/qa/run-admin-smoke.sh`: admin/governance smoke entrypoint
 - `tools/qa/run-tenant-smoke.sh`: tenant portal smoke entrypoint
 
-These scripts are intentionally thin wrappers around the existing frontend Playwright setup. Dedicated role-specific specs can be added in future missions.
+These scripts run `mobile-preview-smoke` unless `QA_SPEC` is overridden. The current harness is unauthenticated and non-mutating: protected routes may render login/access-denied states, but the run still verifies preview reachability, mobile viewport containment, console/page-error behavior, and artifact capture.
+
+Examples:
+
+```bash
+PREVIEW_URL=https://example-preview.vercel.app tools/qa/run-mobile-smoke.sh
+PREVIEW_URL=https://example-preview.vercel.app tools/qa/run-tenant-smoke.sh
+PREVIEW_URL=https://example-preview.vercel.app tools/qa/run-admin-smoke.sh
+```
+
+Optional inputs:
+
+- `QA_SPEC`: Playwright spec filter, default `mobile-preview-smoke`
+- `QA_GREP`: Playwright grep filter
+- `QA_BROWSER`: Playwright project name when projects are added
+- `QA_ARTIFACT_DIR`: output directory under `rentchain-frontend`, default `test-results/<role>-mobile-smoke`
+- `QA_HTML_REPORT_DIR`: HTML report directory under `rentchain-frontend`, default `playwright-report/<role>-mobile-smoke`
+- `QA_TRACE=on`: collect traces for all tests instead of failures only
+- `QA_VIDEO=on`: collect videos for all tests instead of failures only
 
 ## Evidence Handling
 
@@ -69,6 +90,7 @@ When Playwright produces artifacts:
 - keep `playwright-report/` and `test-results/` uncommitted
 - summarize key failures in the PR or QA report
 - include screenshots only when they do not expose secrets, raw IDs, private documents, tokens, or sensitive user data
+- failures should include the route/page label, viewport, target URL, and artifact/report path from the smoke script output
 
 ## Pass / Fail Interpretation
 
@@ -87,7 +109,7 @@ If Playwright disagrees with local tests, treat it as a QA finding and inspect t
 
 Future missions may add:
 
-- role-specific Playwright specs that use `PREVIEW_URL`
+- authenticated role-specific Playwright specs that use `PREVIEW_URL`
 - authenticated storage-state fixtures stored outside the repo
 - deterministic screenshot comparison for mobile layouts
 - route-source header checks for backend preview routes
