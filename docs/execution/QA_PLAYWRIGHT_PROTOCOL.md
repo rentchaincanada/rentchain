@@ -77,6 +77,8 @@ The role-specific scripts default to their matching Playwright spec:
 
 `run-mobile-smoke.sh` still defaults to `mobile-preview-smoke` unless `QA_SPEC` is overridden. The harness is non-mutating: protected routes may render login/access-denied states when authenticated storage state is not supplied, but the run still verifies preview reachability, desktop/mobile viewport containment, console/page-error behavior, and artifact capture.
 
+Use `QA_SPEC=mobile-layout-matrix` when the goal is responsive layout regression coverage across the tenant, landlord, and admin route matrix. The matrix runs iPhone, Android, and narrow mobile viewports and checks horizontal overflow, oversized panels/cards, fixed navigation overflow, clipped interactive controls, and role shell visibility. It remains non-mutating and uses the same artifact, finding classification, storage-state, QA summary, and Claude review-pack outputs as the other smoke suites.
+
 Role-specific wrapper scripts write to role-scoped artifact folders by default, such as `test-results/admin-smoke`, `test-results/tenant-smoke`, and `test-results/landlord-smoke`.
 
 Examples:
@@ -86,6 +88,7 @@ PREVIEW_URL=https://example-preview.vercel.app tools/qa/run-mobile-smoke.sh
 PREVIEW_URL=https://example-preview.vercel.app tools/qa/run-tenant-smoke.sh
 PREVIEW_URL=https://example-preview.vercel.app tools/qa/run-admin-smoke.sh
 PREVIEW_URL=https://example-preview.vercel.app tools/qa/run-landlord-smoke.sh
+PREVIEW_URL=https://example-preview.vercel.app QA_SPEC=mobile-layout-matrix tools/qa/run-mobile-smoke.sh
 ```
 
 Optional inputs:
