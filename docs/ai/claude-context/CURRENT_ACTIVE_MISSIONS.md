@@ -67,6 +67,12 @@ Purpose: make Codex, Claude, Playwright, GitHub, Vercel, and Cloud Run collabora
 - `feat/playwright-admin-tenant-landlord-smoke-suite-v1` — add small role-aware smoke coverage for admin, tenant, and landlord surfaces.
 - `fix/cloud-run-preview-revision-verification-script-v1` — add safe helper script for Cloud Run revision/image/traffic verification.
 - `feat/qa-report-artifact-generation-v1` — generate safe QA summaries without committing secrets, screenshots with sensitive data, or raw payloads.
+- `feat/playwright-authenticated-storage-state-foundations-v1` — completed optional local storage-state support without committing cookies, tokens, or credentials.
+- `feat/qa-report-artifact-claude-review-pack-v1` — completed Claude-ready QA review pack generation.
+- `feat/playwright-authenticated-admin-smoke-v1` — completed authenticated admin smoke coverage with read-only operational checks.
+- `feat/playwright-authenticated-landlord-smoke-v1` — completed authenticated landlord smoke coverage with read-only operational checks.
+- `feat/playwright-authenticated-tenant-smoke-v1` — current authenticated tenant smoke coverage with read-only tenant portal checks.
+- `feat/playwright-storage-state-capture-workflow-v1` — future operator-supervised storage-state capture workflow. Expected commands: `npm run qa:capture-tenant-state`, `npm run qa:capture-landlord-state`, and `npm run qa:capture-admin-state`. The operator signs in manually, Playwright saves local state under `~/rentchain-auth/`, and no credentials or auth JSON are committed or uploaded.
 
 ### Phase 2 — Tenant & Operational Continuity Foundations
 

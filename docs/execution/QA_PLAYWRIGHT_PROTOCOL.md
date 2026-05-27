@@ -224,9 +224,22 @@ The authenticated tenant suite remains read-only. It checks tenant workspace, le
 Safe local locations:
 
 - outside the repository, such as `/tmp/rentchain-playwright/tenant.json`
+- recommended local auth-state folder: `~/rentchain-auth`
 - ignored artifact paths, such as `rentchain-frontend/test-results/storage-state/tenant.json`
 
-Storage-state files can contain cookies, local storage, Firebase session material, and other secrets. Do not commit them, paste them into PRs, attach them to public issues, or include them in Claude uploads. `test-results/` and `playwright-report/` are ignored local artifact paths.
+Create the recommended local folder before using storage-state paths:
+
+```bash
+mkdir -p ~/rentchain-auth
+```
+
+Expected local filenames:
+
+- `~/rentchain-auth/tenant-storage-state.json`
+- `~/rentchain-auth/landlord-storage-state.json`
+- `~/rentchain-auth/admin-storage-state.json`
+
+Storage-state files can contain cookies, local storage, Firebase session material, and other secrets. They must remain local only. Do not commit them, paste them into PRs, attach them to public issues, include them in Claude/ChatGPT/Codex uploads, or upload them as QA artifacts. `test-results/` and `playwright-report/` are ignored local artifact paths.
 
 Manual operator workflow:
 
@@ -235,7 +248,7 @@ Manual operator workflow:
 3. Export only the local path, not credentials:
 
 ```bash
-export QA_TENANT_STORAGE_STATE=rentchain-frontend/test-results/storage-state/tenant.json
+export QA_TENANT_STORAGE_STATE=~/rentchain-auth/tenant-storage-state.json
 PREVIEW_URL=https://example-preview.vercel.app tools/qa/run-tenant-smoke.sh
 ```
 
@@ -246,23 +259,35 @@ Codex should not request, generate, store, or commit credentials. If authenticat
 Admin example:
 
 ```bash
-export QA_ADMIN_STORAGE_STATE=rentchain-frontend/test-results/storage-state/admin.json
+export QA_ADMIN_STORAGE_STATE=~/rentchain-auth/admin-storage-state.json
 PREVIEW_URL=https://example-preview.vercel.app tools/qa/run-admin-smoke.sh
 ```
 
 Landlord example:
 
 ```bash
-export QA_LANDLORD_STORAGE_STATE=rentchain-frontend/test-results/storage-state/landlord.json
+export QA_LANDLORD_STORAGE_STATE=~/rentchain-auth/landlord-storage-state.json
 PREVIEW_URL=https://example-preview.vercel.app tools/qa/run-landlord-smoke.sh
 ```
 
 Tenant example:
 
 ```bash
-export QA_TENANT_STORAGE_STATE=rentchain-frontend/test-results/storage-state/tenant.json
+export QA_TENANT_STORAGE_STATE=~/rentchain-auth/tenant-storage-state.json
 PREVIEW_URL=https://example-preview.vercel.app tools/qa/run-tenant-smoke.sh
 ```
+
+Planned capture workflow:
+
+- Future mission: `feat/playwright-storage-state-capture-workflow-v1`
+- Purpose: safely support operator-supervised storage-state capture commands:
+  - `npm run qa:capture-tenant-state`
+  - `npm run qa:capture-landlord-state`
+  - `npm run qa:capture-admin-state`
+- Expected flow: the operator runs a capture command, Playwright opens the preview login, the operator signs in manually, Playwright saves storage state under `~/rentchain-auth/`, and future authenticated smoke reuses the local file.
+- Guardrail: no credentials, cookies, tokens, or storage-state JSON are committed, pasted into AI tools, or uploaded as artifacts.
+
+Until that capture workflow exists, preserve current fail-closed behavior: when a `QA_*_STORAGE_STATE` path is provided but the file does not exist, smoke must fail clearly before Playwright starts.
 
 ## Evidence Handling
 
