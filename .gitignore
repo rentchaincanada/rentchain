@@ -87,3 +87,6 @@ __pycache__/
 docs/reports/transunion-usage-summary-v1.md
 docs/reports/
 docs/reports/
+
+# AI handoff working files - never commit
+.handoff/
