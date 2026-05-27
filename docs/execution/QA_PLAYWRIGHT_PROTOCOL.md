@@ -62,8 +62,17 @@ They do not:
 - `tools/qa/run-mobile-smoke.sh`: general mobile-oriented smoke entrypoint
 - `tools/qa/run-admin-smoke.sh`: admin/governance smoke entrypoint
 - `tools/qa/run-tenant-smoke.sh`: tenant portal smoke entrypoint
+- `tools/qa/run-landlord-smoke.sh`: landlord operations smoke entrypoint
 
-These scripts run `mobile-preview-smoke` unless `QA_SPEC` is overridden. The current harness is unauthenticated and non-mutating: protected routes may render login/access-denied states, but the run still verifies preview reachability, mobile viewport containment, console/page-error behavior, and artifact capture.
+The role-specific scripts default to their matching Playwright spec:
+
+- `admin-smoke`
+- `tenant-smoke`
+- `landlord-smoke`
+
+`run-mobile-smoke.sh` still defaults to `mobile-preview-smoke` unless `QA_SPEC` is overridden. The harness is non-mutating: protected routes may render login/access-denied states when authenticated storage state is not supplied, but the run still verifies preview reachability, desktop/mobile viewport containment, console/page-error behavior, and artifact capture.
+
+Role-specific wrapper scripts write to role-scoped artifact folders by default, such as `test-results/admin-smoke`, `test-results/tenant-smoke`, and `test-results/landlord-smoke`.
 
 Examples:
 
@@ -71,6 +80,7 @@ Examples:
 PREVIEW_URL=https://example-preview.vercel.app tools/qa/run-mobile-smoke.sh
 PREVIEW_URL=https://example-preview.vercel.app tools/qa/run-tenant-smoke.sh
 PREVIEW_URL=https://example-preview.vercel.app tools/qa/run-admin-smoke.sh
+PREVIEW_URL=https://example-preview.vercel.app tools/qa/run-landlord-smoke.sh
 ```
 
 Optional inputs:
@@ -82,6 +92,17 @@ Optional inputs:
 - `QA_HTML_REPORT_DIR`: HTML report directory under `rentchain-frontend`, default `playwright-report/<role>-mobile-smoke`
 - `QA_TRACE=on`: collect traces for all tests instead of failures only
 - `QA_VIDEO=on`: collect videos for all tests instead of failures only
+
+## Authenticated Role State
+
+Role smoke tests may use Playwright storage-state files when an operator provides them through environment variables:
+
+- `QA_ADMIN_STORAGE_STATE`
+- `QA_TENANT_STORAGE_STATE`
+- `QA_LANDLORD_STORAGE_STATE`
+- `QA_STORAGE_STATE` as a generic fallback
+
+Storage-state files must be generated outside the repository or kept in ignored local artifact locations. Do not commit session cookies, bearer tokens, credentials, or storage-state JSON. If no storage state is provided, the role smoke tests run as unauthenticated reachability checks and annotate role-shell expectations as gated when protected pages redirect or block access.
 
 ## Evidence Handling
 
