@@ -213,6 +213,10 @@ Authenticated admin smoke is stricter than unauthenticated reachability smoke. W
 
 The authenticated admin suite remains read-only. It checks admin dashboard, properties, tenants, leases, governed review workspaces, support escalations, security incidents, and support-operations continuity without approving, resolving, deleting, dismissing, or mutating records.
 
+Authenticated landlord smoke follows the same storage-state safety model. When `QA_LANDLORD_STORAGE_STATE` or `QA_STORAGE_STATE` is provided to `tools/qa/run-landlord-smoke.sh`, the landlord suite applies the storage state and requires role-appropriate landlord shell text on each checked route. If that shell text is missing, treat the result as an expired or wrong-role storage-state candidate unless screenshots/traces show a real landlord route regression.
+
+The authenticated landlord suite remains read-only. It checks dashboard, properties, applications, decision inbox, operations, leases, payments, work orders, and messages continuity without approving applications, sending notices, recording payments, assigning work orders, or mutating records.
+
 Safe local locations:
 
 - outside the repository, such as `/tmp/rentchain-playwright/tenant.json`
@@ -240,6 +244,13 @@ Admin example:
 ```bash
 export QA_ADMIN_STORAGE_STATE=rentchain-frontend/test-results/storage-state/admin.json
 PREVIEW_URL=https://example-preview.vercel.app tools/qa/run-admin-smoke.sh
+```
+
+Landlord example:
+
+```bash
+export QA_LANDLORD_STORAGE_STATE=rentchain-frontend/test-results/storage-state/landlord.json
+PREVIEW_URL=https://example-preview.vercel.app tools/qa/run-landlord-smoke.sh
 ```
 
 ## Evidence Handling
