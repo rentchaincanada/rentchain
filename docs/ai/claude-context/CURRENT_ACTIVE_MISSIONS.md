@@ -33,6 +33,8 @@ RentChain is moving toward governed operational housing infrastructure:
 
 The next missions should continue hardening review, QA, projection safety, tenant continuity, and institutional evidence readiness before adding broad automation or external integrations.
 
+Architecture diagrams should be interpreted as evolution maps with maturity labels: implemented, in development, and planned / roadmap. Planned institutional, government, payment, identity, settlement, and interoperability layers must not be described as live production systems.
+
 ## Active Next Sequence
 
 ### Phase 1 — AI Collaboration & QA Infrastructure
@@ -51,7 +53,7 @@ Purpose: make Codex, Claude, Playwright, GitHub, Vercel, and Cloud Run collabora
 Purpose: strengthen tenant continuity and operational readiness without leaking private data or creating hidden scoring.
 
 - `fix/tenant-profile-email-card-responsive-polish-v1` — polish profile typography and card overflow.
-- `feat/tenant-identity-readiness-foundation-v1` — clarify identity readiness metadata without biometrics or provider claims.
+- `feat/tenant-identity-readiness-foundation-v1` — clarify identity readiness metadata without biometrics, KYC claims, or active provider-integration claims.
 - `feat/tenant-multi-lease-readiness-v1` — represent multi-lease or historical lease readiness safely.
 - `feat/tenant-operational-engagement-signals-v1` — define metadata-only engagement/readiness signals without surveillance scoring.
 - `feat/governed-access-continuity-v1` — preserve tenant-safe access state across profile, documents, lease, and messages.
@@ -115,7 +117,7 @@ Purpose: prepare controlled institutional workflows after governance, evidence, 
 - institutional identity readiness
 - institutional identity assurance framework
 - institutional sharing room readiness
-- subsidy/program coordination readiness
+- subsidy/program coordination readiness as planned governance infrastructure, not live welfare support or government eligibility operation
 - lifecycle continuity for institution-facing workflows
 
 ### Phase 7 — Long-Term Interoperability & Integrity Readiness
@@ -127,7 +129,7 @@ Purpose: plan interoperability and integrity layers without bypassing governance
 - selective integrity verification
 - portable evidence package compatibility
 - future RWA execution readiness audit
-- settlement rail readiness
+- settlement rail readiness as a future coordination concept, not live regulated financial rail operation
 - asset tokenization readiness infrastructure
 - cross-organization trust layer
 - release governance and public exposure hardening

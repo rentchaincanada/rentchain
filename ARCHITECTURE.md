@@ -4,6 +4,44 @@ RentChain is governed rental operations and property intelligence infrastructure
 
 For implementation workflow, repository discovery, and mission execution rules, follow `AGENTS.md`, `PROCESS.md`, `codex.md`, and `docs/execution/AI_COWORK_PROTOCOL.md`.
 
+## Architecture Diagram Maturity Legend
+
+The architecture map is an operational evolution map, not a guaranteed live production state map. It intentionally shows implemented foundations, in-development hardening, and planned roadmap layers together so engineering, QA, Claude, and strategic reviewers can reason about sequence.
+
+Use this maturity legend whenever architecture diagrams or maps are shared:
+
+- **Implemented**: materially present in current code, routes, docs, tests, or shipped UI surfaces. Implementation depth may still vary by feature.
+- **In Development**: active foundation or hardening area with partial helpers, read models, tests, docs, or preview surfaces, but not complete workflow execution.
+- **Planned / Roadmap**: strategic direction only. Requires future scoped missions, governance review, tests, QA, and deployment verification before it can be described as live.
+
+```mermaid
+flowchart TD
+  L1["Layer 1: Operational System of Record<br/>Implemented foundations"]
+  L2["Layer 2: Human Accountability Layer<br/>Implemented and in development"]
+  L3["Layer 3: Evidence & Institutional Trust Infrastructure<br/>In development"]
+  L4["Layer 4: Controlled Operational Routing<br/>In development"]
+  L5["Layer 5: Operational Governance & Scaling Foundations<br/>In development"]
+  L6["Layer 6: Institutional Coordination Infrastructure<br/>Planned / roadmap"]
+  L7["Layer 7: Long-Term Interoperability & Integrity Readiness<br/>Planned / roadmap"]
+
+  L1 --> L2 --> L3 --> L4 --> L5 --> L6 --> L7
+
+  classDef implemented fill:#e8f5e9,stroke:#2e7d32,color:#123524;
+  classDef inDevelopment fill:#fff8e1,stroke:#f59e0b,color:#3f2f04;
+  classDef planned fill:#eef2ff,stroke:#6366f1,color:#1f2937,stroke-dasharray:5 5;
+
+  class L1 implemented;
+  class L2,L3,L4,L5 inDevelopment;
+  class L6,L7 planned;
+```
+
+Projection-safety notation for this map:
+
+- tenant, landlord, admin/support, export, dashboard, timeline, and debug surfaces are separate visibility contexts
+- user-facing reads must be projection-safe and audience-scoped
+- consent-governed sharing is required before external or institution-facing use
+- roadmap layers must not imply raw payload access, live government/payment rails, or autonomous escalation
+
 ## Runtime Deployment Model
 
 - Vercel deploys `rentchain-frontend` as the client application and lightweight serverless functions under `rentchain-frontend/api/*`.
@@ -37,6 +75,8 @@ This layer provides manual review and audit continuity:
 - governed review workspace summaries and read routes
 - impersonation actor-chain attribution and support/admin audit metadata
 
+Maturity: implemented and in development. Current surfaces are review and read-model foundations, not full workflow execution engines.
+
 Principle: review surfaces should be metadata-only, manual-review-first, and explicit about what they do not execute. No hidden approve, resolve, dismiss, remediate, impersonate, or enforcement behavior should be inferred.
 
 ## Layer 3 — Evidence & Institutional Trust Infrastructure
@@ -50,6 +90,8 @@ This layer prepares evidence and export readiness:
 - identity, property, and account trust readiness models
 - redaction summaries and provenance metadata
 
+Maturity: in development. These foundations support controlled review and readiness, not live institutional submissions or certification.
+
 Principle: institutional trust is metadata-first and policy-gated. Raw provider payloads, documents, screening reports, private message bodies, storage paths, credentials, tokens, and unrestricted policy internals must not leak into user-safe or external-facing payloads.
 
 ## Layer 4 — Controlled Operational Routing
@@ -60,7 +102,10 @@ This layer coordinates manual review and supervised escalation:
 - escalation categories, severity, manual states, approval expectations, and safe refs
 - route-source attribution for governance debugging
 - operator review concepts
-- future supervised operational routing
+- human-reviewed, AI-assisted triage concepts
+- controlled operational routing with supervised assistance
+
+Maturity: in development. Routing concepts remain supervised and review-first.
 
 Principle: routing is not automation. Escalation and review recommendations should not mutate records or trigger external effects unless a future mission explicitly adds safe, auditable controls.
 
@@ -80,13 +125,17 @@ Principle: read models must remain audience-aware. Tenant, landlord, admin/suppo
 
 ## Layer 6 — Institutional Coordination Infrastructure
 
-This layer is future-oriented and should be treated carefully:
+This layer is planned / roadmap and should be treated carefully:
 
-- subsidy and program coordination readiness
+- rental subsidy and housing program coordination readiness
 - lender, insurer, auditor, and government review workflows
 - lifecycle continuity across leases, tenants, documents, and evidence
 - institutional review rooms and invite flows
 - legal/compliance readiness workflows
+- future payments, settlement coordination, and disbursement readiness concepts
+- inter-agency data-sharing readiness concepts
+
+Maturity: planned / roadmap, generally Phase 6+ or later. It does not imply live welfare support, housing program, government, payment, disbursement, or inter-agency integrations.
 
 Principle: institutional coordination requires consent, retention, authorization, redaction, and manual review. Do not claim live external integrations unless implementation and deployment prove them.
 
@@ -100,8 +149,29 @@ This layer is strategic and later-stage:
 - external adapter standards
 - evidence package signing or verification concepts
 - future institutional handoff formats
+- continuity portability and archival/export package concepts
+
+Maturity: planned / roadmap, generally Phase 7+. It does not imply live regulated financial rails, compliance certification, identity provider integrations, or public interoperability commitments.
 
 Principle: governance before interoperability. Integrity and interoperability layers should build on stable consent, projection, evidence, and review foundations.
+
+## Identity, Compliance, and Payment Boundaries
+
+Use careful terminology for identity, compliance, and payment-related architecture:
+
+- Prefer **Tenant Identity Readiness** or **Identity Readiness Foundations** over compliance-grade KYC claims unless a future mission adds and verifies provider-backed identity verification.
+- Prefer **Security & Audit Foundations** or **future compliance readiness** over SOC2 readiness unless formal compliance work is explicitly scoped and supported.
+- Treat payments, disbursements, subsidy disbursement, and settlement coordination as future readiness concepts unless current code and deployment prove live regulated financial rail operation.
+- Treat archival/export packages, portable tenant history, and continuity portability as evidence/export roadmap layers unless a specific implemented export surface supports them.
+
+Government and support-related roadmap labels should remain explicitly planned:
+
+- **Rental Subsidies**: planned / roadmap, Phase 6+ coordination readiness only.
+- **Welfare Support**: planned / roadmap, Phase 6+ support coordination readiness only.
+- **Housing Programs**: planned / roadmap, Phase 6+ program coordination readiness only.
+- **Payments & Disbursements**: planned / roadmap, Phase 6+/7+ settlement coordination readiness only.
+- **Inter-Agency Data Sharing**: planned / roadmap, Phase 7+ interoperability readiness only.
+- **Archival/export packages and portable tenant history**: Phase 5+ evidence/export readiness unless an implemented tenant-safe export surface explicitly supports a narrower current capability.
 
 ## Strategic Architecture Principles
 

@@ -9,6 +9,8 @@ const mocks = vi.hoisted(() => ({
   printSummaryDocument: vi.fn(),
 }));
 
+const originalWindowPrintDescriptor = Object.getOwnPropertyDescriptor(window, "print");
+
 vi.mock("@/api/leasesApi", () => ({
   getLeaseById: mocks.getLeaseById,
 }));
@@ -66,11 +68,20 @@ describe("LandlordLeaseSummaryPage", () => {
 
     global.URL.createObjectURL = vi.fn(() => "blob:lease-summary");
     global.URL.revokeObjectURL = vi.fn();
+    Object.defineProperty(window, "print", {
+      configurable: true,
+      value: vi.fn(),
+    });
     HTMLAnchorElement.prototype.click = vi.fn();
   });
 
   afterEach(() => {
     cleanup();
+    if (originalWindowPrintDescriptor) {
+      Object.defineProperty(window, "print", originalWindowPrintDescriptor);
+    } else {
+      delete (window as Partial<Window>).print;
+    }
     vi.restoreAllMocks();
   });
 

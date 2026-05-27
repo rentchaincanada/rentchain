@@ -1,5 +1,17 @@
 # Current Architecture
 
+## Architecture Map Maturity
+
+Architecture diagrams and maps should be read as operational evolution maps, not guaranteed live production state maps.
+
+Use these labels:
+
+- Implemented: materially present in current code, routes, docs, tests, or UI surfaces.
+- In Development: partial foundations, helpers, read models, tests, docs, or preview surfaces.
+- Planned / Roadmap: future strategic direction requiring scoped implementation, governance review, QA, and deployment verification.
+
+Planned government, subsidy, welfare support, payment/disbursement, identity/KYC, settlement, inter-agency, and interoperability nodes must not be described as live integrations.
+
 ## Backend Stack
 
 - Node.js and Express.
@@ -50,6 +62,8 @@ Raw Firestore IDs should not be user-facing labels.
 ## AI-Assisted Workflow Posture
 
 AI can assist review, drafting, analysis, and triage, but workflows remain supervised. Current governance docs repeatedly prohibit autonomous remediation, hidden enforcement, and unsupervised status mutation unless an explicit mission defines safe controls.
+
+Use terms like "human-reviewed, AI-assisted triage" and "controlled operational routing with supervised assistance." Avoid wording that implies autonomous escalation or agent-driven operational execution.
 
 ## CI/CD Notes
 
