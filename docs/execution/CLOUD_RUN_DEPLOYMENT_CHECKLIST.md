@@ -28,6 +28,25 @@ export CLOUD_RUN_REGION=<region>
 export EXPECTED_COMMIT=<commit-sha>
 ```
 
+Before or after the `gcloud` checks, run the read-only preview verifier when a safe public probe is available:
+
+```bash
+PREVIEW_URL=https://example-preview.vercel.app \
+EXPECTED_COMMIT="$EXPECTED_COMMIT" \
+tools/qa/verify-cloud-run-preview-revision.sh
+```
+
+If the frontend preview and backend probe origin are different, set `BACKEND_BASE_URL` explicitly:
+
+```bash
+PREVIEW_URL=https://example-preview.vercel.app \
+BACKEND_BASE_URL=https://backend-preview.example.run.app \
+EXPECTED_COMMIT="$EXPECTED_COMMIT" \
+tools/qa/verify-cloud-run-preview-revision.sh
+```
+
+The verifier checks safe endpoints such as `/health`, `/health/ready`, `/health/db`, `/api/_build`, `/api/__probe/version`, and `/api/__probe/revision`. It fails when the expected commit, revision, or image token cannot be confirmed from endpoint output. Current public probes may expose only presence flags for build metadata; a verifier failure does not mutate Cloud Run and means manual revision/image/traffic confirmation is still required.
+
 Inspect the service:
 
 ```bash

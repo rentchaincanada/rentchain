@@ -63,6 +63,7 @@ They do not:
 - `tools/qa/run-admin-smoke.sh`: admin/governance smoke entrypoint
 - `tools/qa/run-tenant-smoke.sh`: tenant portal smoke entrypoint
 - `tools/qa/run-landlord-smoke.sh`: landlord operations smoke entrypoint
+- `tools/qa/verify-cloud-run-preview-revision.sh`: read-only backend revision verifier for preview QA
 
 The role-specific scripts default to their matching Playwright spec:
 
@@ -92,6 +93,39 @@ Optional inputs:
 - `QA_HTML_REPORT_DIR`: HTML report directory under `rentchain-frontend`, default `playwright-report/<role>-mobile-smoke`
 - `QA_TRACE=on`: collect traces for all tests instead of failures only
 - `QA_VIDEO=on`: collect videos for all tests instead of failures only
+
+## Cloud Run Preview Revision Verification
+
+Vercel preview freshness does not prove that Cloud Run is serving the expected backend commit. For missions that touch `rentchain-api`, run the revision verifier before treating preview API payloads as current.
+
+The verifier is read-only and calls only safe public or diagnostic endpoints. It refuses production targets unless `ALLOW_PRODUCTION_QA=true` is explicitly set.
+
+Required:
+
+- `PREVIEW_URL`: frontend preview URL or backend preview origin
+- one of `EXPECTED_COMMIT`, `EXPECTED_BACKEND_COMMIT`, `EXPECTED_REVISION`, or `EXPECTED_IMAGE_TAG`
+
+Optional:
+
+- `BACKEND_BASE_URL`: backend origin when the frontend preview and backend probe origin differ
+- `VERIFY_TIMEOUT_SECONDS`: per-endpoint curl timeout, default `10`
+
+Examples:
+
+```bash
+PREVIEW_URL=https://example-preview.vercel.app \
+EXPECTED_COMMIT=<pr-head-sha> \
+tools/qa/verify-cloud-run-preview-revision.sh
+
+PREVIEW_URL=https://example-preview.vercel.app \
+BACKEND_BASE_URL=https://backend-preview.example.run.app \
+EXPECTED_IMAGE_TAG=<image-tag-or-short-sha> \
+tools/qa/verify-cloud-run-preview-revision.sh
+```
+
+The verifier checks known safe probes, including `/health`, `/health/db`, `/health/ready`, `/api/_build`, `/api/__probe/version`, and `/api/__probe/revision`. It also reports gated diagnostics such as `/api/__debug/build` and `/api/_echo` when present, but gated `404` responses are not treated as proof of backend freshness.
+
+If none of the safe endpoint responses contain an expected commit, revision, or image token, the script fails clearly. Current public probes may expose only route/build presence flags rather than the raw commit or revision value; in that case, use `docs/execution/CLOUD_RUN_DEPLOYMENT_CHECKLIST.md` to confirm the active Cloud Run revision, image tag/digest, and 100 percent traffic allocation before continuing preview QA.
 
 ## Authenticated Role State
 
