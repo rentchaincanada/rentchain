@@ -217,6 +217,10 @@ Authenticated landlord smoke follows the same storage-state safety model. When `
 
 The authenticated landlord suite remains read-only. It checks dashboard, properties, applications, decision inbox, operations, leases, payments, work orders, and messages continuity without approving applications, sending notices, recording payments, assigning work orders, or mutating records.
 
+Authenticated tenant smoke follows the same storage-state safety model. When `QA_TENANT_STORAGE_STATE` or `QA_STORAGE_STATE` is provided to `tools/qa/run-tenant-smoke.sh`, the tenant suite applies the storage state and requires role-appropriate tenant shell text on each checked route. If that shell text is missing, treat the result as an expired or wrong-role storage-state candidate unless screenshots/traces show a real tenant portal regression.
+
+The authenticated tenant suite remains read-only. It checks tenant workspace, lease, ledger, documents, messages, profile, and maintenance continuity without sending messages, signing documents, initiating payments, editing profile data, submitting applications, or creating maintenance requests.
+
 Safe local locations:
 
 - outside the repository, such as `/tmp/rentchain-playwright/tenant.json`
@@ -251,6 +255,13 @@ Landlord example:
 ```bash
 export QA_LANDLORD_STORAGE_STATE=rentchain-frontend/test-results/storage-state/landlord.json
 PREVIEW_URL=https://example-preview.vercel.app tools/qa/run-landlord-smoke.sh
+```
+
+Tenant example:
+
+```bash
+export QA_TENANT_STORAGE_STATE=rentchain-frontend/test-results/storage-state/tenant.json
+PREVIEW_URL=https://example-preview.vercel.app tools/qa/run-tenant-smoke.sh
 ```
 
 ## Evidence Handling
