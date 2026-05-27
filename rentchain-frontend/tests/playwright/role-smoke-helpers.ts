@@ -9,14 +9,46 @@ export type RoleSmokeRoute = {
   shellText?: RegExp[];
 };
 
+export type RoleSmokeAuthDetails = {
+  mode: "authenticated" | "unauthenticated";
+  source?: string;
+  storageState?: string;
+};
+
+export type RoleRouteSmokeOptions = {
+  authDetails?: RoleSmokeAuthDetails;
+  requireShellText?: boolean;
+};
+
 export const roleSmokeViewports = [
   { name: "desktop", size: { width: 1280, height: 800 } },
   { name: "mobile", size: { width: 390, height: 844 } },
 ];
 
-export function storageStateForRole(role: RoleSmokeRole) {
+export function storageStateDetailsForRole(role: RoleSmokeRole): RoleSmokeAuthDetails {
   const roleKey = `QA_${role.toUpperCase()}_STORAGE_STATE`;
-  return process.env[roleKey] || process.env.QA_STORAGE_STATE || undefined;
+  const roleStorageState = process.env[roleKey];
+  if (roleStorageState) {
+    return {
+      mode: "authenticated",
+      source: roleKey,
+      storageState: roleStorageState,
+    };
+  }
+
+  if (process.env.QA_STORAGE_STATE) {
+    return {
+      mode: "authenticated",
+      source: "QA_STORAGE_STATE",
+      storageState: process.env.QA_STORAGE_STATE,
+    };
+  }
+
+  return { mode: "unauthenticated" };
+}
+
+export function storageStateForRole(role: RoleSmokeRole) {
+  return storageStateDetailsForRole(role).storageState;
 }
 
 export async function runRoleRouteSmoke(
@@ -24,9 +56,19 @@ export async function runRoleRouteSmoke(
   testInfo: TestInfo,
   route: RoleSmokeRoute,
   viewportName: string,
+  options: RoleRouteSmokeOptions = {},
 ) {
   const consoleErrors: string[] = [];
   const pageErrors: string[] = [];
+  const authMode = options.authDetails?.mode || "unauthenticated";
+
+  testInfo.annotations.push({
+    type: "auth-mode",
+    description:
+      authMode === "authenticated"
+        ? `authenticated via ${options.authDetails?.source || "storage state"}`
+        : "unauthenticated smoke",
+  });
 
   page.on("console", (message) => {
     if (message.type() === "error") {
@@ -68,6 +110,13 @@ export async function runRoleRouteSmoke(
         ? "matched role-appropriate shell text"
         : "role shell text not visible; route may be unauthenticated or access-gated",
     });
+
+    if (options.requireShellText) {
+      expect(
+        foundShellText.some(Boolean),
+        `${route.label} authenticated shell text; storage state may be expired, wrong role, or route regressed`,
+      ).toBe(true);
+    }
   }
 
   await page.screenshot({
