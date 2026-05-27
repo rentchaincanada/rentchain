@@ -13,6 +13,7 @@ export default defineConfig({
   },
   reporter: [
     ["list"],
+    ["json", { outputFile: process.env.QA_JSON_REPORT_FILE || "test-results/qa-results.json" }],
     ["html", { outputFolder: process.env.QA_HTML_REPORT_DIR || "playwright-report" }],
   ],
 });
