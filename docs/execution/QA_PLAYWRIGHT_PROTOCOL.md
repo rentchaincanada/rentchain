@@ -117,6 +117,16 @@ When Playwright produces artifacts:
 
 Passing Playwright smoke is not merge approval by itself.
 
+Smoke findings are classified so preview QA can separate expected protected-route noise from real failures:
+
+- `expected-auth-gated-response`: expected `401` or `403` resource responses when a protected route is checked without authenticated storage state.
+- `expected-third-party-browser-noise`: known browser/provider noise, including CSP-blocked preview fonts, Google provider account-list messages, and FedCM token retrieval noise.
+- `environment-browser-permission-issue`: browser-launch or local environment restrictions, such as macOS Chromium Mach port permission failures in a sandbox.
+- `possible-app-regression`: unexpected console errors or throttling-like `429` responses that need operator review. Unknown console errors fail the smoke run; known `429` noise is reported as a warning.
+- `hard-failure`: fatal page errors, app crashes, and route-level failures such as unexpected `5xx` responses.
+
+Each smoke test attaches `classified-smoke-findings` JSON to its Playwright result. Claude/Codex review should cite the category and route before treating a finding as a product blocker.
+
 Merge readiness still requires:
 
 - relevant local validation

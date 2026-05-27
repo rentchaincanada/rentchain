@@ -1,4 +1,5 @@
 import { expect, type Page, type TestInfo } from "@playwright/test";
+import { reportSmokeFindings } from "./smoke-findings";
 
 export type RoleSmokeRole = "admin" | "tenant" | "landlord";
 
@@ -74,6 +75,5 @@ export async function runRoleRouteSmoke(
     fullPage: true,
   });
 
-  expect(pageErrors, `${route.label} page errors`).toEqual([]);
-  expect(consoleErrors, `${route.label} console errors`).toEqual([]);
+  await reportSmokeFindings(testInfo, route.label, consoleErrors, pageErrors);
 }

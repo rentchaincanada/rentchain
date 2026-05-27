@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { reportSmokeFindings } from "./smoke-findings";
 
 type SmokeRoute = {
   label: string;
@@ -64,8 +65,7 @@ for (const viewport of viewports) {
           fullPage: true,
         });
 
-        expect(pageErrors, `${route.label} page errors`).toEqual([]);
-        expect(consoleErrors, `${route.label} console errors`).toEqual([]);
+        await reportSmokeFindings(testInfo, route.label, consoleErrors, pageErrors);
       });
     }
   });
