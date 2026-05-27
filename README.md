@@ -71,6 +71,8 @@ RentChain engineering follows these rules:
 - exports are metadata-first, consent-aware, and redaction-aware
 - workflow mutation requires explicit mission scope and review
 
+For Claude/Codex terminology, `docs/ai/claude-context/GOVERNANCE_REFERENCE.md` defines the canonical meanings of projection-safe, append-safe, metadata-first, supervised AI, controlled operational routing, institutional readiness, evidence/export governance, and implementation status labels.
+
 ## Operational Architecture Direction
 
 The architecture is organized around layered operational infrastructure:

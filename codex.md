@@ -24,6 +24,7 @@ Do not describe or implement RentChain as generic landlord SaaS. Do not infer au
 - `rentchain-api/` = backend API.
 - `docs/` = product, architecture, governance, strategy, execution, and Claude context docs.
 - `docs/ai/claude-context/` = Claude.ai upload/reference snapshots, not runtime source of truth.
+- `docs/ai/claude-context/GOVERNANCE_REFERENCE.md` = canonical governance vocabulary for Claude/Codex discussion.
 - `.codex/docs/` = technical deep-dives.
 - `.github/` = GitHub Actions and PR automation.
 - `.devcontainer/` = local cowork/sandbox foundation.

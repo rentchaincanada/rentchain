@@ -48,6 +48,7 @@ Defines strict guardrails Codex must never violate.
 
 ## Projection and Privacy Safety
 
+- Use `docs/ai/claude-context/GOVERNANCE_REFERENCE.md` for canonical definitions of projection-safe, append-safe, metadata-first, supervised AI, controlled operational routing, institutional readiness, and evidence/export governance.
 - Never widen tenant visibility into landlord, admin, support, or internal metadata.
 - Never expose raw Firestore IDs, unit IDs, lease IDs, landlord IDs, tenant IDs, storage paths, tokens, secrets, credentials, provider payloads, or raw documents as user-facing labels.
 - Preserve tenant-safe whitelist projections.
