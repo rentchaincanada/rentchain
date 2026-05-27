@@ -40,6 +40,19 @@ Core API routes live in `rentchain-api`. Route ownership and route-source header
 
 Vercel preview freshness does not prove Cloud Run backend freshness. Backend changes require Cloud Run revision/image/traffic verification.
 
+## Runtime Alignment Boundary
+
+The current application includes mounted frontend pages and backend route families across public, landlord, tenant, admin, support, review workspace, export/readiness, screening, billing/payment, maintenance, message, registry, audit, and observability surfaces.
+
+For Claude review, distinguish these states:
+
+- a route/page exists: implemented surface, but not proof of full workflow depth
+- a helper/read model exists: implemented foundation, but not proof of live persistence or mutation controls
+- a readiness/export page exists: implemented review/readiness surface, but not proof of external submission, legal certification, or institution integration
+- a route is mounted: implemented API surface, but deployed behavior still requires Cloud Run revision and payload verification
+
+Do not convert route inventory into production capability claims without checking current code path, tests, authorization, deployment revision, and representative payloads.
+
 ## Event, Ledger, and Review Principles
 
 RentChain architecture favors:

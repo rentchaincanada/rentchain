@@ -53,6 +53,19 @@ Projection-safety notation for this map:
 
 Frontend API calls must use the configured Cloud Run base URL through existing API helpers. A Vercel preview proves frontend freshness only; backend QA requires Cloud Run revision/image/traffic verification.
 
+## Runtime Alignment Boundary
+
+Current route inventory shows implemented surface area across public, landlord, tenant, contractor, admin, support, review-workspace, export/readiness, screening, billing/payment, maintenance, message, registry, audit, and observability workflows.
+
+Use this distinction when reading architecture docs:
+
+- **Mounted page or route**: the runtime surface exists.
+- **Helper or read model**: an implementation foundation exists, but may still be metadata-only, read-only, test-only, or persistence-readiness only.
+- **Readiness or observability page**: a governed review/readiness surface exists; it is not proof of live external integration.
+- **Preview behavior**: requires Vercel and Cloud Run alignment checks before being treated as current deployed truth.
+
+Do not upgrade a roadmap or readiness surface to a live production claim without checking source code, tests, authorization, representative payloads, and deployment revision.
+
 ## Layer 1 — Operational System of Record
 
 This layer contains the operational rental workflows:
@@ -75,7 +88,7 @@ This layer provides manual review and audit continuity:
 - governed review workspace summaries and read routes
 - impersonation actor-chain attribution and support/admin audit metadata
 
-Maturity: implemented and in development. Current surfaces are review and read-model foundations, not full workflow execution engines.
+Maturity: implemented and in development. Current surfaces are review and read-model foundations, not full workflow execution engines. Review workspace write/persistence behavior beyond helper/adapter foundations needs separate mission evidence before it is described as production workflow execution.
 
 Principle: review surfaces should be metadata-only, manual-review-first, and explicit about what they do not execute. No hidden approve, resolve, dismiss, remediate, impersonate, or enforcement behavior should be inferred.
 
@@ -90,7 +103,7 @@ This layer prepares evidence and export readiness:
 - identity, property, and account trust readiness models
 - redaction summaries and provenance metadata
 
-Maturity: in development. These foundations support controlled review and readiness, not live institutional submissions or certification.
+Maturity: in development. These foundations include implemented pages, routes, helpers, reports, and tests at varying depths. They support controlled review and readiness, not live institutional submissions or certification unless verified by a specific deployed route and payload.
 
 Principle: institutional trust is metadata-first and policy-gated. Raw provider payloads, documents, screening reports, private message bodies, storage paths, credentials, tokens, and unrestricted policy internals must not leak into user-safe or external-facing payloads.
 
@@ -135,7 +148,7 @@ This layer is planned / roadmap and should be treated carefully:
 - future payments, settlement coordination, and disbursement readiness concepts
 - inter-agency data-sharing readiness concepts
 
-Maturity: planned / roadmap, generally Phase 6+ or later. It does not imply live welfare support, housing program, government, payment, disbursement, or inter-agency integrations.
+Maturity: planned / roadmap, generally Phase 6+ or later. Some readiness pages may exist, but they do not imply live welfare support, housing program, government, payment, disbursement, or inter-agency integrations.
 
 Principle: institutional coordination requires consent, retention, authorization, redaction, and manual review. Do not claim live external integrations unless implementation and deployment prove them.
 

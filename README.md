@@ -32,6 +32,8 @@ Current material foundations include:
 
 These foundations are implemented at different maturity levels. Do not infer full workflow execution, external institutional integrations, or autonomous remediation unless current code and mission scope explicitly confirm it.
 
+Runtime alignment note: RentChain contains many mounted pages, route families, helpers, and tests across landlord, tenant, admin, support, export/readiness, and review workspace areas. A page or route being present means the surface exists; it does not automatically prove complete workflow depth, live production data, external submission, compliance certification, or deployed-backend freshness.
+
 ## In-Progress Operational Systems
 
 Current operational direction includes:
@@ -108,6 +110,8 @@ Institutional readiness is a trajectory, not a blanket production claim. Current
 - metadata-first redaction and provenance
 
 Live institutional integrations, legal certification, external submissions, custody, settlement rails, and public trust profiles require future scoped missions.
+
+Readiness pages for production integrations, enterprise/municipal coordination, platform credentialing, controlled integrations, settlement, tokenization, and interoperability should be treated as review/readiness surfaces unless runtime payloads and deployed route behavior prove a specific implemented capability.
 
 ## Halifax Registry and Compliance Direction
 
