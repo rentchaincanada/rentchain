@@ -44,6 +44,27 @@ Projection-safety notation for this map:
 - consent-governed sharing is required before external or institution-facing use
 - roadmap layers must not imply raw payload access, live government/payment rails, or autonomous escalation
 
+## Architecture-to-Mission Phase Mapping
+
+The architecture layers map to the mission phases in `docs/ai/claude-context/CURRENT_ACTIVE_MISSIONS.md`. This mapping is a planning and review aid, not a guarantee that every layer is fully implemented.
+
+| Architecture layer | Closest mission phase | Current maturity | Governance risk level | Interpretation |
+| --- | --- | --- | --- | --- |
+| Layer 1 — Operational System of Record | Phase 2 — Tenant & Operational Continuity Foundations | Implemented foundations / in development | Medium | Core landlord, tenant, lease, message, document, maintenance, application, and portfolio surfaces exist, but each workflow still needs scoped QA before stronger production claims. |
+| Layer 2 — Human Accountability Layer | Phase 3 — Governed Review Workspace Hardening | Implemented and in development | High | Security incident, support escalation, and review workspace surfaces are review-first foundations. They must not be described as autonomous workflow execution. |
+| Layer 3 — Evidence & Institutional Trust Infrastructure | Phase 5 — Evidence, Export & Institutional Trust | In development | High | Evidence, trust, and export readiness surfaces exist at varying depth. They remain metadata-first and consent-aware, not live external submissions or legal artifacts by default. |
+| Layer 4 — Controlled Operational Routing | Phase 3 and Phase 4 — Review Workspace Hardening plus Security & Operational Hardening | In development | High | Routing means supervised triage and review continuity. It does not imply mutation, enforcement, remediation, or uncontrolled escalation. |
+| Layer 5 — Operational Governance & Scaling Foundations | Phase 1, Phase 3, and Phase 4 — QA Infrastructure, Review Hardening, and Security Hardening | In development | Medium / High | Projection safety, read models, deployment verification, AI cowork process, mobile access, and route/access regression protection harden the platform before broader coordination. |
+| Layer 6 — Institutional Coordination Infrastructure | Phase 6 — Institutional Coordination Readiness | Planned / roadmap | Very High | Subsidy/program, government, insurer, lender, auditor, institutional identity, and sharing-room coordination remain readiness concepts unless future missions verify specific implemented slices. |
+| Layer 7 — Long-Term Interoperability & Integrity Readiness | Phase 7 — Long-Term Interoperability & Integrity Readiness | Planned / roadmap | Very High | Interoperability, selective integrity verification, settlement rail readiness, tokenization readiness, and portable evidence compatibility remain later-stage roadmap work. |
+
+Use `docs/ai/claude-context/GOVERNANCE_REFERENCE.md` status labels when discussing this table:
+
+- **Implemented** means the surface or foundation is materially present, not necessarily complete end-to-end workflow execution.
+- **In Development** means the architecture area has partial helpers, read models, routes, docs, tests, or preview surfaces.
+- **Planned / Roadmap** means a future scoped mission is required before describing it as live behavior.
+- **Needs Verification** applies whenever a claim depends on deployed payloads, Cloud Run revision freshness, environment flags, external integration behavior, or representative QA.
+
 ## Runtime Deployment Model
 
 - Vercel deploys `rentchain-frontend` as the client application and lightweight serverless functions under `rentchain-frontend/api/*`.
