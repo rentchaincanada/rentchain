@@ -81,6 +81,8 @@ The architecture is organized around layered operational infrastructure:
 6. Institutional coordination infrastructure: future subsidy, compliance, lender, insurer, and institutional workflows.
 7. Interoperability and integrity readiness: future selective verification and compatibility layers after governance is stable.
 
+Architecture diagrams and maps should use the maturity legend in `ARCHITECTURE.md`. They are operational evolution maps, not guaranteed live production state maps. Planned institutional, government, payment, identity, compliance, settlement, and interoperability layers require future scoped missions before they can be represented as live capabilities.
+
 ## AI Collaboration Workflow
 
 RentChain uses an AI cowork model:

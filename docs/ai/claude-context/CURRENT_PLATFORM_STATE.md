@@ -20,6 +20,8 @@ RentChain currently has material foundations for:
 
 Current admin/support governance surfaces are intentionally metadata-only, manual-review-oriented, and projection-safe.
 
+Architecture diagrams and maps should be read as operational evolution maps. They combine current foundations, in-development hardening, and future roadmap layers. Do not treat every diagram node as live production behavior.
+
 ## In Progress
 
 Active direction includes:
@@ -37,11 +39,13 @@ Active direction includes:
 Future-facing areas in docs include:
 
 - institution export and institutional trust export expansion
-- identity assurance and property/operator authority readiness
+- tenant identity readiness foundations and property/operator authority readiness
 - support escalation workflow execution after append-only governance is approved
 - governed review workspace persistence and supervised coordination
 - tenant trust portability and controlled sharing
 - institutional partner and legal/compliance readiness
 - physical mobile/PDF QA confidence improvements
+- rental subsidy, housing program, government, welfare support, payment/disbursement, settlement coordination, and inter-agency workflows only after scoped governance and implementation missions
+- long-term interoperability and selective integrity verification after consent, projection, evidence, and review layers mature
 
 Do not represent future-facing strategy as implemented production capability unless source code, routes, tests, and current PR context confirm it.
