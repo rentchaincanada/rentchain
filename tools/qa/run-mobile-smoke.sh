@@ -19,6 +19,29 @@ QA_JSON_REPORT_FILE="${QA_JSON_REPORT_FILE:-${QA_ARTIFACT_DIR}/qa-results.json}"
 QA_MARKDOWN_REPORT_FILE="${QA_MARKDOWN_REPORT_FILE:-${QA_ARTIFACT_DIR}/qa-summary.md}"
 ALLOW_PRODUCTION_QA="${ALLOW_PRODUCTION_QA:-false}"
 
+role_storage_key=""
+role_storage_state=""
+case "$QA_ROLE" in
+  admin|landlord|tenant)
+    role_storage_key="QA_$(printf "%s" "$QA_ROLE" | tr '[:lower:]' '[:upper:]')_STORAGE_STATE"
+    role_storage_state="${!role_storage_key:-}"
+    ;;
+esac
+fallback_storage_state="${QA_STORAGE_STATE:-}"
+
+auth_mode="unauthenticated"
+auth_source=""
+auth_storage_state=""
+if [ -n "$role_storage_state" ]; then
+  auth_mode="authenticated"
+  auth_source="$role_storage_key"
+  auth_storage_state="$role_storage_state"
+elif [ -n "$fallback_storage_state" ]; then
+  auth_mode="authenticated"
+  auth_source="QA_STORAGE_STATE"
+  auth_storage_state="$fallback_storage_state"
+fi
+
 if [ ! -d "$FRONTEND_DIR" ]; then
   echo "Missing rentchain-frontend directory." >&2
   exit 1
@@ -26,6 +49,12 @@ fi
 
 if [ ! -x "$FRONTEND_DIR/node_modules/.bin/playwright" ]; then
   echo "Playwright is unavailable. Run npm ci in rentchain-frontend first." >&2
+  exit 1
+fi
+
+if [ -n "$auth_storage_state" ] && [ ! -f "$auth_storage_state" ]; then
+  echo "Storage-state file from $auth_source was not found." >&2
+  echo "Keep storage-state JSON outside the repo or under ignored test-results paths." >&2
   exit 1
 fi
 
@@ -42,6 +71,11 @@ echo "Running RentChain Playwright smoke."
 echo "Role: $QA_ROLE"
 echo "Target: $PREVIEW_URL"
 echo "Spec filter: $QA_SPEC"
+if [ "$auth_mode" = "authenticated" ]; then
+  echo "Auth mode: authenticated storage state provided via $auth_source"
+else
+  echo "Auth mode: unauthenticated smoke; protected routes may be auth-gated"
+fi
 echo "Artifacts: $FRONTEND_DIR/$QA_ARTIFACT_DIR"
 echo "HTML report: $FRONTEND_DIR/$QA_HTML_REPORT_DIR"
 echo "JSON report: $FRONTEND_DIR/$QA_JSON_REPORT_FILE"
