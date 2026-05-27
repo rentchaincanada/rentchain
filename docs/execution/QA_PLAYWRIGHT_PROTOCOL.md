@@ -209,6 +209,10 @@ Precedence:
 
 The wrapper scripts print the active auth mode. When a storage-state variable is set, the referenced file must exist before Playwright starts; missing files fail fast with a clear message.
 
+Authenticated admin smoke is stricter than unauthenticated reachability smoke. When `QA_ADMIN_STORAGE_STATE` or `QA_STORAGE_STATE` is provided to `tools/qa/run-admin-smoke.sh`, the admin smoke suite applies the storage state and requires role-appropriate admin shell text on each checked route. If that shell text is missing, treat the result as an expired or wrong-role storage-state candidate unless screenshots/traces show a real admin route regression.
+
+The authenticated admin suite remains read-only. It checks admin dashboard, properties, tenants, leases, governed review workspaces, support escalations, security incidents, and support-operations continuity without approving, resolving, deleting, dismissing, or mutating records.
+
 Safe local locations:
 
 - outside the repository, such as `/tmp/rentchain-playwright/tenant.json`
@@ -230,6 +234,13 @@ PREVIEW_URL=https://example-preview.vercel.app tools/qa/run-tenant-smoke.sh
 4. Delete or rotate storage-state files after QA if the session should not persist.
 
 Codex should not request, generate, store, or commit credentials. If authenticated state is unavailable, run unauthenticated smoke and report auth-gated findings honestly.
+
+Admin example:
+
+```bash
+export QA_ADMIN_STORAGE_STATE=rentchain-frontend/test-results/storage-state/admin.json
+PREVIEW_URL=https://example-preview.vercel.app tools/qa/run-admin-smoke.sh
+```
 
 ## Evidence Handling
 
