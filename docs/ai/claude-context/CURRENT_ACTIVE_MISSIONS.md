@@ -18,6 +18,8 @@ RentChain has completed the first governed operational infrastructure layer arou
 
 These are governance and review foundations. They should not be treated as autonomous remediation, workflow execution, or external institutional integration.
 
+Runtime alignment note: route/page/API inventory shows many implemented surfaces across landlord, tenant, admin, support, export/readiness, and review-workspace areas. A mounted route or visible page should be treated as implemented surface area, not automatically as complete production workflow, live integration, or deployed-current behavior.
+
 ## Current Strategic Direction
 
 RentChain is moving toward governed operational housing infrastructure:
@@ -34,6 +36,8 @@ RentChain is moving toward governed operational housing infrastructure:
 The next missions should continue hardening review, QA, projection safety, tenant continuity, and institutional evidence readiness before adding broad automation or external integrations.
 
 Architecture diagrams should be interpreted as evolution maps with maturity labels: implemented, in development, and planned / roadmap. Planned institutional, government, payment, identity, settlement, and interoperability layers must not be described as live production systems.
+
+Before a future mission upgrades any roadmap item to implemented status, require source-code audit, route/payload verification, test evidence, and Cloud Run/Vercel deployment alignment where applicable.
 
 ## Active Next Sequence
 
