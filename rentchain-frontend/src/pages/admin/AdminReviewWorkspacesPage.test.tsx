@@ -69,6 +69,10 @@ describe("AdminReviewWorkspacesPage", () => {
     expect(JSON.stringify(document.body.textContent)).not.toContain("tenant-raw-id");
     expect(JSON.stringify(document.body.textContent)).not.toContain("gs://");
     expect(JSON.stringify(document.body.textContent)).not.toContain("secret-token");
+    expect(document.body.textContent).not.toContain("fixture_workspace_");
+    expect(document.body.textContent).not.toContain("_fixture_ref");
+    expect(document.body.textContent).not.toContain("_fixture_link");
+    expect(document.body.textContent).not.toContain("_fixture_append_event");
   });
 
   it("sends filters to the workspace API", async () => {

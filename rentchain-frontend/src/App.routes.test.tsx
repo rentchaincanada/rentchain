@@ -78,6 +78,18 @@ vi.mock("./pages/admin/AdminNotificationsPage", () => ({
   default: () => <h1>Admin Notifications</h1>,
 }));
 
+vi.mock("./pages/admin/AdminSecurityIncidentsPage", () => ({
+  default: () => <h1>Security incidents</h1>,
+}));
+
+vi.mock("./pages/admin/AdminSupportEscalationsPage", () => ({
+  default: () => <h1>Support escalations</h1>,
+}));
+
+vi.mock("./pages/admin/AdminReviewWorkspacesPage", () => ({
+  default: () => <h1>Governed review workspaces</h1>,
+}));
+
 vi.mock("./pages/ReleaseGovernancePage", () => ({
   default: () => <h1>Release Governance Page</h1>,
 }));
@@ -609,6 +621,44 @@ describe("Routes: /admin/lease-lifecycle-review", () => {
     );
 
     expect(await screen.findByText(/Lease Lifecycle Review/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("Routes: governed review workspace surfaces", () => {
+  it("keeps the security incident review surface available behind the admin shell", async () => {
+    const { default: App } = await import("./App");
+    render(
+      <MemoryRouter initialEntries={["/admin/security/incidents"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Security incidents/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
+  });
+
+  it("keeps the support escalation review surface available behind the admin shell", async () => {
+    const { default: App } = await import("./App");
+    render(
+      <MemoryRouter initialEntries={["/admin/support/escalations"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Support escalations/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
+  });
+
+  it("keeps the governed review workspace surface available behind the admin shell", async () => {
+    const { default: App } = await import("./App");
+    render(
+      <MemoryRouter initialEntries={["/admin/review-workspaces"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Governed review workspaces/i)).toBeInTheDocument();
     expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
   });
 });
