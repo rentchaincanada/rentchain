@@ -90,3 +90,6 @@ docs/reports/
 
 # AI handoff working files - never commit
 .handoff/
+
+# Mission documentation — local only
+docs/missions/

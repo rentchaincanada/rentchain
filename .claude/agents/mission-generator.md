@@ -88,6 +88,9 @@ BEFORE ANY COMMIT:
 - Strip all Co-Authored-By trailers
 - Confirm zero AI tool references in commit message, PR title, and PR description
 
+# Post-Implementation Requirement
+After completing all implementation tasks, Codex must write the full summary to .handoff/impl-summary.md before reporting completion.
+
 # Commit
 COMMIT: # Commit Hygiene
 BEFORE ANY COMMIT:
