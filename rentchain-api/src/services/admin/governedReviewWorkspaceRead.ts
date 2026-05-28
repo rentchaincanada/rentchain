@@ -1,9 +1,9 @@
 import { db } from "../../config/firebase";
 import {
   validateGovernedReviewWorkspacePersistenceCandidate,
-  type GovernedReviewWorkspaceAppendEventRef,
   type GovernedReviewWorkspacePersistenceRecord,
 } from "../../lib/governedReviewWorkspacePersistence/governedReviewWorkspacePersistence";
+import type { EscalationReviewWorkspaceLink } from "../../lib/escalationReviewWorkspaceLinks/escalationReviewWorkspaceLinks";
 
 const COLLECTION = "governedReviewWorkspaceAppendLog";
 
@@ -40,8 +40,8 @@ export type GovernedReviewWorkspaceReadSummary = {
 };
 
 export type GovernedReviewWorkspaceReadDetail = GovernedReviewWorkspaceReadSummary & {
-  safeEvidenceRefs: GovernedReviewWorkspacePersistenceRecord["safeEvidenceRefs"];
-  relatedWorkspaceLinks: GovernedReviewWorkspacePersistenceRecord["relatedWorkspaceLinks"];
+  safeEvidenceRefs: GovernedReviewWorkspaceSafeEvidenceRef[];
+  relatedWorkspaceLinks: GovernedReviewWorkspaceSafeLink[];
   appendEventSummaries: Array<{
     eventRefId: string;
     eventType: string;
@@ -58,8 +58,132 @@ export type GovernedReviewWorkspaceReadDetail = GovernedReviewWorkspaceReadSumma
   persistenceDecision: GovernedReviewWorkspacePersistenceRecord["persistenceDecision"];
 };
 
+type GovernedReviewWorkspaceSafeEvidenceRef = {
+  referenceType: string;
+  referenceId: string;
+  label: string;
+};
+
+type GovernedReviewWorkspaceSafeLinkSummary = {
+  kind: string;
+  label: string;
+  category: string | null;
+  severity: string | null;
+  state: string | null;
+  metadataOnly: true;
+  rawIdsIncluded: false;
+};
+
+type GovernedReviewWorkspaceSafeLink = {
+  linkId: string;
+  linkType: EscalationReviewWorkspaceLink["linkType"];
+  sourceSummary: GovernedReviewWorkspaceSafeLinkSummary;
+  targetSummary: GovernedReviewWorkspaceSafeLinkSummary;
+  workflowFamily: string | null;
+  metadataOnly: true;
+  visibilityClass: "admin_support_internal";
+  tenantVisible: false;
+  landlordVisible: false;
+  appendCompatible: true;
+  mutationControlsEnabled: false;
+};
+
+const SENSITIVE_TEXT_PATTERN =
+  /(?:gs:\/\/|storage\.googleapis\.com|https?:\/\/|bucket|token|secret|credential|authorization|cookie|password|bearer|request\s*body|response\s*body|requestbody|responsebody|stacktrace|debugpayload|rawproviderpayload|rawscreeningreport|tenant[-_\s]?(?:id|raw)|landlord[-_\s]?(?:id|raw)|lease[-_\s]?id|unit[-_\s]?id)/i;
+
+const RAW_IDENTIFIER_PATTERN = /^[a-zA-Z0-9_-]{16,}$/;
+const SAFE_LINK_TYPES = new Set<EscalationReviewWorkspaceLink["linkType"]>([
+  "incident_to_escalation",
+  "escalation_to_runbook",
+  "escalation_to_history",
+  "escalation_to_note",
+  "escalation_to_evidence",
+  "incident_to_evidence",
+  "incident_to_review_workspace",
+]);
+
 function asString(value: unknown, max = 500): string {
   return String(value ?? "").trim().slice(0, max);
+}
+
+function safeText(value: unknown, fallback: string, max = 160): string {
+  const label = asString(value, max).replace(/[<>]/g, "").replace(/\s+/g, " ").trim();
+  if (!label) return fallback;
+  if (SENSITIVE_TEXT_PATTERN.test(label)) return fallback;
+  if (RAW_IDENTIFIER_PATTERN.test(label)) return fallback;
+  return label;
+}
+
+function safeNullableText(value: unknown, max = 120): string | null {
+  const label = safeText(value, "", max);
+  return label || null;
+}
+
+function safeKey(value: unknown, fallback: string, max = 120): string {
+  const key = asString(value, max).toLowerCase().replace(/[^a-z0-9_.:-]+/g, "_");
+  if (!key || SENSITIVE_TEXT_PATTERN.test(String(value ?? ""))) return fallback;
+  return key;
+}
+
+function safeReferenceId(value: unknown, fallback: string, max = 180): string {
+  const key = safeKey(value, fallback, max);
+  if (RAW_IDENTIFIER_PATTERN.test(key)) return fallback;
+  return key;
+}
+
+function safeLinkType(value: unknown): EscalationReviewWorkspaceLink["linkType"] {
+  const key = safeKey(value, "incident_to_evidence", 80) as EscalationReviewWorkspaceLink["linkType"];
+  return SAFE_LINK_TYPES.has(key) ? key : "incident_to_evidence";
+}
+
+function safeEvidenceRefs(
+  refs: GovernedReviewWorkspacePersistenceRecord["safeEvidenceRefs"]
+): GovernedReviewWorkspaceSafeEvidenceRef[] {
+  return refs.slice(0, 20).map((ref, index) => {
+    const referenceType = safeKey(ref.referenceType, "support_diagnostic", 80);
+    return {
+      referenceType,
+      referenceId: safeReferenceId(ref.referenceId, `redacted_reference_${index + 1}`, 180),
+      label: safeText(ref.label, `${referenceType.split("_").join(" ")} reference`, 160),
+    };
+  });
+}
+
+function safeLinkSummary(
+  summary: EscalationReviewWorkspaceLink["sourceSummary"] | EscalationReviewWorkspaceLink["targetSummary"] | undefined,
+  fallbackKind: string
+): GovernedReviewWorkspaceSafeLinkSummary {
+  const kind = safeKey(summary?.kind, fallbackKind, 80);
+  return {
+    kind,
+    label: safeText(summary?.label, `${kind.split("_").join(" ")} reference`, 160),
+    category: safeNullableText(summary?.category, 120),
+    severity: safeNullableText(summary?.severity, 80),
+    state: safeNullableText(summary?.state, 80),
+    metadataOnly: true,
+    rawIdsIncluded: false,
+  };
+}
+
+function safeWorkspaceLinks(
+  links: GovernedReviewWorkspacePersistenceRecord["relatedWorkspaceLinks"]
+): GovernedReviewWorkspaceSafeLink[] {
+  return links
+    .filter((link) => link?.metadataOnly === true)
+    .slice(0, 30)
+    .map((link, index) => ({
+      linkId: `metadata_link_${index + 1}`,
+      linkType: safeLinkType(link.linkType),
+      sourceSummary: safeLinkSummary(link.sourceSummary, "governed_review_source"),
+      targetSummary: safeLinkSummary(link.targetSummary, "governed_review_workspace"),
+      workflowFamily: safeNullableText(link.workflowFamily, 120),
+      metadataOnly: true,
+      visibilityClass: "admin_support_internal",
+      tenantVisible: false,
+      landlordVisible: false,
+      appendCompatible: true,
+      mutationControlsEnabled: false,
+    }));
 }
 
 function sourceRecord(raw: Record<string, unknown>): GovernedReviewWorkspacePersistenceRecord {
@@ -78,12 +202,14 @@ function sourceRecord(raw: Record<string, unknown>): GovernedReviewWorkspacePers
     safeEvidenceRefs: (record.safeEvidenceRefs as any) || [],
     relatedWorkspaceLinks: (record.relatedWorkspaceLinks as any) || [],
     appendEvents: Array.isArray(record.appendEventRefs)
-      ? (record.appendEventRefs as GovernedReviewWorkspaceAppendEventRef[]).map((event) => ({
+      ? (record.appendEventRefs as Array<Record<string, unknown>>).map((event) => ({
           eventType: event.eventType,
           eventSummary: event.eventSummary,
           occurredAt: event.occurredAt,
-          relatedEvidenceRefs: event.relatedEvidenceRefs,
-          relatedWorkspaceLinks: event.relatedWorkspaceLinks,
+          relatedEvidenceRefs: Array.isArray(event.relatedEvidenceRefs) ? event.relatedEvidenceRefs : [],
+          relatedWorkspaceLinks: Array.isArray(event.relatedWorkspaceLinks)
+            ? (event.relatedWorkspaceLinks as EscalationReviewWorkspaceLink[])
+            : [],
         }))
       : [],
   });
@@ -121,8 +247,8 @@ function toSummary(record: GovernedReviewWorkspacePersistenceRecord): GovernedRe
 function toDetail(record: GovernedReviewWorkspacePersistenceRecord): GovernedReviewWorkspaceReadDetail {
   return {
     ...toSummary(record),
-    safeEvidenceRefs: record.safeEvidenceRefs,
-    relatedWorkspaceLinks: record.relatedWorkspaceLinks,
+    safeEvidenceRefs: safeEvidenceRefs(record.safeEvidenceRefs),
+    relatedWorkspaceLinks: safeWorkspaceLinks(record.relatedWorkspaceLinks),
     appendEventSummaries: record.appendEventRefs.map((event) => ({
       eventRefId: event.eventRefId,
       eventType: event.eventType,
