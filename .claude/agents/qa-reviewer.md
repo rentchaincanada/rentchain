@@ -25,13 +25,16 @@ APPEND SAFETY: [PASS or FAIL]
 VALIDATION: [PASS or FAIL]
 BRANCH HYGIENE: [PASS or FAIL]
 DIFF SCOPE: [PASS or FAIL]
+COMMIT HYGIENE: [PASS or FAIL]
 
 VERDICT: [SAFE TO MERGE or NEEDS FIXES or ESCALATE TO HUMAN]
 
 To determine each value:
 - Read .handoff/impl-summary.md
 - Read AGENTS.md
+- Read .handoff/RULES.md
 - Check each category against governance rules
+- COMMIT HYGIENE fails if any AI tool names appear in commits, PR title, or description
 - Write this report to .handoff/qa-review.md
 
 DO NOT write anything outside this format.
