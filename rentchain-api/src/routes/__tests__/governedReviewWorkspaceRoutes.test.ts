@@ -48,7 +48,7 @@ async function invokeRouter(router: any, options: { method: string; url: string;
   return await new Promise<{ status: number; body: any; headers: Record<string, string> }>((resolve, reject) => {
     const [path, queryString] = options.url.split("?");
     const detailMatch = path.match(/^\/review-workspaces\/(.+)$/);
-    mockUser = options.user ?? mockUser;
+    mockUser = Object.prototype.hasOwnProperty.call(options, "user") ? options.user : mockUser;
     const req: any = {
       method: options.method,
       url: options.url,
@@ -116,13 +116,52 @@ describe("governedReviewWorkspaceRoutes", () => {
             occurredAt: "2026-05-24T01:05:00.000Z",
           },
         ],
+        relatedWorkspaceLinks: [
+          {
+            linkId: "raw-link-id-1234567890",
+            linkType: "incident_to_review_workspace",
+            sourceSummary: {
+              kind: "security_incident",
+              label: "token secret source",
+              category: "tenant-id tenant-raw-id",
+              severity: "https://storage.googleapis.com/bucket/raw.pdf",
+              state: "metadata_review_ready",
+              metadataOnly: true,
+              rawIdsIncluded: true,
+            },
+            targetSummary: {
+              kind: "review_workspace",
+              label: "Governed workspace",
+              category: "security_review",
+              severity: "medium",
+              state: "landlord-id landlord-raw-id",
+              metadataOnly: true,
+              rawIdsIncluded: true,
+            },
+            workflowFamily: "authorization bearer workflow",
+            metadataOnly: true,
+            visibilityClass: "admin_support_internal",
+            tenantVisible: true,
+            landlordVisible: true,
+            appendCompatible: true,
+            mutationControlsEnabled: true,
+          },
+        ],
       },
     });
   }
 
-  it("denies non-admin access and returns route-owned metadata-only workspace summaries", async () => {
+  it("denies unauthenticated and non-admin access with route source headers", async () => {
     seedWorkspace();
     const router = (await import("../governedReviewWorkspaceRoutes")).default;
+
+    const unauthorized = await invokeRouter(router, {
+      method: "GET",
+      url: "/review-workspaces",
+      user: null,
+    });
+    expect(unauthorized.status).toBe(401);
+    expect(unauthorized.headers["x-route-source"]).toBe("governedReviewWorkspaceRoutes.ts");
 
     const forbidden = await invokeRouter(router, {
       method: "GET",
@@ -130,6 +169,12 @@ describe("governedReviewWorkspaceRoutes", () => {
       user: { id: "landlord-1", role: "landlord", permissions: [] },
     });
     expect(forbidden.status).toBe(403);
+    expect(forbidden.headers["x-route-source"]).toBe("governedReviewWorkspaceRoutes.ts");
+  });
+
+  it("returns route-owned metadata-only workspace summaries", async () => {
+    seedWorkspace();
+    const router = (await import("../governedReviewWorkspaceRoutes")).default;
 
     const res = await invokeRouter(router, {
       method: "GET",
@@ -183,9 +228,39 @@ describe("governedReviewWorkspaceRoutes", () => {
     );
     expect(JSON.stringify(detail.body)).not.toContain("Bearer-secret");
     expect(JSON.stringify(detail.body)).not.toContain("responseBody");
+    expect(JSON.stringify(detail.body)).not.toContain("tenant-raw-id");
+    expect(JSON.stringify(detail.body)).not.toContain("landlord-raw-id");
+    expect(JSON.stringify(detail.body)).not.toContain("raw-link-id");
+    expect(JSON.stringify(detail.body)).not.toContain("storage.googleapis.com");
+    expect(JSON.stringify(detail.body)).not.toContain("authorization bearer");
+    expect(detail.body.workspace.safeEvidenceRefs[0]).toEqual({
+      referenceType: "document",
+      referenceId: "doc-safe",
+      label: "document reference",
+    });
+    expect(detail.body.workspace.relatedWorkspaceLinks[0]).toEqual(
+      expect.objectContaining({
+        linkId: "metadata_link_1",
+        metadataOnly: true,
+        visibilityClass: "admin_support_internal",
+        tenantVisible: false,
+        landlordVisible: false,
+        appendCompatible: true,
+        mutationControlsEnabled: false,
+        sourceSummary: expect.objectContaining({
+          label: "security incident reference",
+          rawIdsIncluded: false,
+        }),
+        targetSummary: expect.objectContaining({
+          state: null,
+          rawIdsIncluded: false,
+        }),
+      })
+    );
 
     const post = await invokeRouter(router, { method: "POST", url: "/review-workspaces" });
     expect(post.status).toBe(404);
+    expect(post.headers["x-route-source"]).toBe("governedReviewWorkspaceRoutes.ts");
   });
 
   it("returns a safe empty state when no append records exist", async () => {

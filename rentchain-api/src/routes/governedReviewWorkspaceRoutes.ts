@@ -1,12 +1,15 @@
 import { Router } from "express";
 import { requireAuth } from "../middleware/requireAuth";
 import { requirePermission } from "../middleware/requireAuthz";
+import { routeSource } from "../middleware/routeSource";
 import {
   loadGovernedReviewWorkspaceDetail,
   loadGovernedReviewWorkspaces,
 } from "../services/admin/governedReviewWorkspaceRead";
 
 const router = Router();
+
+router.use(routeSource("governedReviewWorkspaceRoutes.ts"));
 
 router.get("/review-workspaces", requireAuth, requirePermission("system.admin"), async (req: any, res) => {
   res.setHeader("x-route-source", "governedReviewWorkspaceRoutes.ts");
