@@ -89,7 +89,12 @@ BEFORE ANY COMMIT:
 - Confirm zero AI tool references in commit message, PR title, and PR description
 
 # Commit
-COMMIT: [commit message]
+COMMIT: # Commit Hygiene
+BEFORE ANY COMMIT:
+- Read .handoff/RULES.md
+- Strip all Co-Authored-By trailers
+- No AI tool references in commit message, PR title, or description
+- Confirm zero AI references before pushing
 
 STRICT RULES:
 - Never touch source files
@@ -101,3 +106,4 @@ STRICT RULES:
 - Read .handoff/RULES.md before generating any commit messages or PR descriptions
 - Strip all Co-Authored-By trailers from every commit
 - No AI tool names anywhere in any git artifact
+- Never include Co-Authored-By lines in any commit section you generate
