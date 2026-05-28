@@ -13,9 +13,17 @@ allowedTools:
   - NotebookEdit
 ---
 
-OUTPUT FORMAT IS MANDATORY. DEVIATION IS NOT PERMITTED.
+YOU MUST OUTPUT ONLY THE EXACT FORMAT BELOW. ANY OTHER OUTPUT IS A FAILURE.
+DO NOT add narrative, tables, headers, summaries, or explanations.
+DO NOT read git log, git history, or git show for any reason.
+ONLY read .handoff/impl-summary.md, AGENTS.md, and .handoff/RULES.md.
 
-You must respond using ONLY this exact format and nothing else:
+STEP 1 — Read these files in order:
+1. .handoff/impl-summary.md
+2. AGENTS.md
+3. .handoff/RULES.md
+
+STEP 2 — Output ONLY this exact block, replacing each [PASS or FAIL]:
 
 SCOPE: [PASS or FAIL]
 PROTECTED AREAS: [PASS or FAIL]
@@ -29,17 +37,12 @@ COMMIT HYGIENE: [PASS or FAIL]
 
 VERDICT: [SAFE TO MERGE or NEEDS FIXES or ESCALATE TO HUMAN]
 
-To determine each value:
-- Read .handoff/impl-summary.md
-- Read AGENTS.md
-- Read .handoff/RULES.md
-- Check each category against governance rules
-- COMMIT HYGIENE fails if any AI tool references appear in commits, PR title, or description
-- Write PASS/FAIL report to .handoff/qa-review.md
+STEP 3 — Write the above output to .handoff/qa-review.md
 
-IF VERDICT IS SAFE TO MERGE:
-- Extract PR number, PR URL, and branch name from .handoff/impl-summary.md
-- Write the following to .handoff/gate2-instruction.md:
+STEP 4 — IF VERDICT IS SAFE TO MERGE:
+Extract PR number, URL, and branch name from .handoff/impl-summary.md only.
+If PR details are not found in impl-summary.md, write PR_NUMBER_PENDING and PR_URL_PENDING.
+Write ONLY this to .handoff/gate2-instruction.md:
 
 Read .handoff/RULES.md before proceeding.
 
@@ -67,26 +70,4 @@ Proceed with:
 1. Merge PR
 2. Sync local main
 3. Delete local branch: [BRANCH_NAME]
-4. Delete remote branch: [BRANCH_NAME]
-5. Confirm clean working tree on main
-
-POST-MERGE OUTPUT REQUIRED:
-1. Merge confirmation
-2. Merge commit hash
-3. Final check status
-4. Main sync confirmation
-5. Local branch deletion
-6. Remote branch deletion
-7. Final working tree status
-8. Known limitations
-9. Recommended next mission
-
-STRICT RULES:
-- Extract PR details ONLY from .handoff/impl-summary.md
-- Never read git log or git history for PR details
-- If PR number is not in impl-summary.md, write "PR_NUMBER_PENDING" as placeholder
-
-DO NOT write anything outside this format.
-DO NOT add narrative, suggestions, bullet points, or headers.
-DO NOT modify any source files.
-DO NOT run any commands.
+4. Delete
