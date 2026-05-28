@@ -7,6 +7,11 @@ export type RoleSmokeRoute = {
   label: string;
   path: string;
   shellText?: RegExp[];
+  expectedApiResponse?: {
+    urlPattern: RegExp;
+    header: string;
+    value: string;
+  };
 };
 
 export type RoleSmokeAuthDetails = {
@@ -79,6 +84,15 @@ export async function runRoleRouteSmoke(
     pageErrors.push(error.message);
   });
 
+  const expectedApiResponse =
+    route.expectedApiResponse && authMode === "authenticated"
+      ? page
+          .waitForResponse((response) => route.expectedApiResponse!.urlPattern.test(response.url()), {
+            timeout: 10_000,
+          })
+          .catch(() => null)
+      : null;
+
   const response = await page.goto(route.path, { waitUntil: "domcontentloaded" });
   if (response) {
     expect(response.status(), `${route.label} response status`).toBeLessThan(500);
@@ -92,6 +106,22 @@ export async function runRoleRouteSmoke(
     return Math.max(0, doc.scrollWidth - doc.clientWidth);
   });
   expect(overflow, `${route.label} horizontal overflow`).toBeLessThanOrEqual(2);
+
+  if (route.expectedApiResponse) {
+    if (authMode === "authenticated") {
+      const apiResponse = await expectedApiResponse;
+      expect(apiResponse, `${route.label} expected API response`).not.toBeNull();
+      expect(apiResponse!.status(), `${route.label} API response status`).toBeLessThan(500);
+      expect(apiResponse!.headers()[route.expectedApiResponse.header.toLowerCase()]).toBe(
+        route.expectedApiResponse.value,
+      );
+    } else {
+      testInfo.annotations.push({
+        type: "role-api-header",
+        description: "skipped API header assertion because smoke is unauthenticated",
+      });
+    }
+  }
 
   if (route.shellText?.length) {
     const foundShellText = await Promise.all(

@@ -11,7 +11,16 @@ const adminRoutes: RoleSmokeRoute[] = [
   { label: "admin properties", path: "/admin/properties", shellText: [/properties/i, /workspace/i] },
   { label: "admin tenants", path: "/admin/tenants", shellText: [/tenants/i, /workspace/i] },
   { label: "admin leases", path: "/admin/leases", shellText: [/leases/i, /workspace/i] },
-  { label: "admin review workspaces", path: "/admin/review-workspaces", shellText: [/review workspaces/i, /workspace/i] },
+  {
+    label: "admin review workspaces",
+    path: "/admin/review-workspaces",
+    shellText: [/review workspaces/i, /workspace/i],
+    expectedApiResponse: {
+      urlPattern: /\/api\/admin\/review-workspaces(?:\?|$)/,
+      header: "x-route-source",
+      value: "governedReviewWorkspaceRoutes.ts",
+    },
+  },
   { label: "admin support escalations", path: "/admin/support/escalations", shellText: [/support/i, /escalation/i] },
   { label: "admin security incidents", path: "/admin/security/incidents", shellText: [/security/i, /incident/i] },
   { label: "support operations", path: "/support-operations", shellText: [/support/i, /operations/i] },
