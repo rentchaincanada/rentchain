@@ -71,3 +71,5 @@ Proceed with:
 2. Sync local main
 3. Delete local branch: [BRANCH_NAME]
 4. Delete
+
+After completing all merge steps, write the full merge summary to .handoff/merge-log.md
