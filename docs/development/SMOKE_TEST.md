@@ -222,6 +222,135 @@ Each Playwright test attaches a `classified-smoke-findings` JSON payload with:
 
 The finding payload classifies expected 401/403 responses separately from hard failures and avoids storing raw credentials or provider payloads.
 
+## Legacy Frontend Smoke Setup
+
+For tests that need to bypass the dev preview gate but don't require full role-based authentication, use the **legacy smoke setup** pattern.
+
+### When to Use Legacy Smoke Setup
+
+Use `installLegacySmokeHarness()` for tests that:
+
+- Test frontend-only features without role context
+- Need to bypass DevAuthGate in development mode
+- Don't require authenticated API mocking or storage state
+- Focus on UI rendering, responsive design, or client-side functionality
+
+Examples: `ai-drawer.spec.ts`, `payments.responsive.spec.ts`
+
+### Legacy Setup API
+
+```typescript
+import { installLegacySmokeHarness } from "./legacy-smoke-setup";
+
+test("AI drawer loads", async ({ page }, testInfo) => {
+  // Unlock dev preview gate for this test
+  await installLegacySmokeHarness(page, { devPreviewUnlock: true });
+
+  testInfo.annotations.push({
+    type: "smoke-mode",
+    description: "legacy smoke test with dev preview unlock",
+  });
+
+  await page.goto("/dashboard");
+  // Test assertions...
+});
+```
+
+### Legacy vs Authenticated Smoke
+
+| Feature | Legacy Smoke | Authenticated Smoke |
+|---------|-------------|-------------------|
+| **Setup** | `installLegacySmokeHarness()` | `installRoleSmokeHarness()` |
+| **Auth Mode** | Dev preview unlock only | Full role-based auth context |
+| **Storage State** | Not required | Requires `QA_*_STORAGE_STATE` |
+| **API Mocking** | No mocking | Full mocked API responses |
+| **Use Cases** | UI tests, responsive tests | Role workflow validation |
+
+### Running Legacy Smoke Tests
+
+Legacy smoke tests don't require storage state environment variables:
+
+```bash
+cd rentchain-frontend
+
+# Run specific legacy tests
+npm run test:e2e -- ai-drawer.spec.ts
+npm run test:e2e -- payments.responsive.spec.ts
+
+# Run with debug mode
+npm run test:e2e -- --debug ai-drawer.spec.ts
+```
+
+### Dev Preview Gate Details
+
+The legacy setup unlocks the dev preview gate by setting:
+
+```javascript
+localStorage.setItem("dev_auth_unlocked", "1");
+```
+
+This bypasses the `DevAuthGate` component that wraps the entire App in development mode.
+
+**Important**: Dev preview unlock is:
+- Idempotent (safe to call multiple times)
+- Scoped to the test page context only
+- Automatically cleared between test runs
+- Only active in development mode (`import.meta.env.DEV`)
+
+### Legacy Smoke Test Structure
+
+```typescript
+import { test, expect } from "@playwright/test";
+import { installLegacySmokeHarness } from "./legacy-smoke-setup";
+
+test.describe("My Legacy Feature", () => {
+  test("feature works correctly", async ({ page }, testInfo) => {
+    // 1. Set up dev preview unlock
+    await installLegacySmokeHarness(page, { devPreviewUnlock: true });
+
+    // 2. Add test annotation
+    testInfo.annotations.push({
+      type: "smoke-mode",
+      description: "legacy smoke test with dev preview unlock"
+    });
+
+    // 3. Navigate and test as normal
+    await page.goto("/your-route");
+    await expect(page.getByText("Your Content")).toBeVisible();
+  });
+});
+```
+
+### Troubleshooting Legacy Smoke Tests
+
+#### Test still fails with dev preview gate
+
+**Symptom**: Test shows dev password screen even with `devPreviewUnlock: true`
+
+**Solutions**:
+1. Verify `installLegacySmokeHarness()` is called before `page.goto()`
+2. Check that `devPreviewUnlock: true` is passed in options
+3. Ensure you're running in dev mode (not production build)
+
+#### TypeError on import
+
+**Error**: `Cannot resolve module './legacy-smoke-setup'`
+
+**Solution**: Verify the import path is correct relative to your test file:
+```typescript
+import { installLegacySmokeHarness } from "./legacy-smoke-setup";
+```
+
+#### Legacy test passes but authenticated tests fail
+
+**Cause**: Environment variable conflict or missing storage state.
+
+**Solution**: Legacy and authenticated tests are independent. Set up storage state for authenticated tests separately:
+```bash
+cd rentchain-api && npm run storage-state:export
+export QA_ADMIN_STORAGE_STATE="../rentchain-api/.smoke-storage-state/admin-storage-state.json"
+```
+
 ## Troubleshooting
 
 ### Storage state file not found
