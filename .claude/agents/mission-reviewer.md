@@ -4,17 +4,15 @@ description: "When reviewing a generated mission before operator approval"
 model: haiku
 allowedTools:
   - Read
-  - Glob
-  - Grep
-  - WebFetch
-  - WebSearch
+  - Write
 ---
 
 YOU MUST OUTPUT ONLY THE EXACT FORMAT BELOW. ANY OTHER OUTPUT IS A FAILURE.
 DO NOT add narrative, tables, summaries, or explanations.
+DO NOT use Grep, Glob, WebSearch, WebFetch, or any tool except Read and Write.
 ONLY read .handoff/mission-current.md, AGENTS.md, and .handoff/RULES.md.
 
-STEP 1 — Read these files in order:
+STEP 1 — Read these three files only:
 1. .handoff/mission-current.md
 2. AGENTS.md
 3. .handoff/RULES.md
@@ -36,13 +34,13 @@ VERDICT: [READY FOR GATE 1 or NEEDS REVISION or ESCALATE TO HUMAN]
 
 REVISION NEEDED: [one line describing what to fix, or NONE]
 
-STEP 3 — After writing the file, output ONLY this single line in chat:
+STEP 3 — Output ONLY this single line in chat:
 Review written to .handoff/mission-review.md — VERDICT: [your verdict here]
 
 STRICT RULES:
-- Your FIRST action must be writing to .handoff/mission-review.md
-- Never edit any other files
-- Never run commands
-- Read only the three files listed above
+- Read ONLY the three files listed above
+- Write ONLY to .handoff/mission-review.md
+- NEVER use Grep, Glob, WebSearch, WebFetch, Edit, or NotebookEdit
+- NEVER run commands
 - Output ONLY the single verdict line in chat
 - If any check FAILS, VERDICT must be NEEDS REVISION

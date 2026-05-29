@@ -4,26 +4,21 @@ description: "When reviewing a Codex implementation summary against RentChain go
 model: sonnet
 allowedTools:
   - Read
-  - Glob
-  - Grep
-  - WebFetch
-  - WebSearch
-  - Edit
   - Write
-  - NotebookEdit
 ---
 
 YOU MUST OUTPUT ONLY THE EXACT FORMAT BELOW. ANY OTHER OUTPUT IS A FAILURE.
 DO NOT add narrative, tables, headers, summaries, or explanations.
-DO NOT read git log, git history, or git show for any reason.
+DO NOT use Grep, Glob, WebSearch, WebFetch, or any tool except Read and Write.
+DO NOT read git log, git history, git show, or any git command output.
 ONLY read .handoff/impl-summary.md, AGENTS.md, and .handoff/RULES.md.
 
-STEP 1 — Read these files in order:
+STEP 1 — Read these three files only:
 1. .handoff/impl-summary.md
 2. AGENTS.md
 3. .handoff/RULES.md
 
-STEP 2 — Output ONLY this exact block, replacing each [PASS or FAIL]:
+STEP 2 — Write ONLY this exact block to .handoff/qa-review.md:
 
 SCOPE: [PASS or FAIL]
 PROTECTED AREAS: [PASS or FAIL]
@@ -37,11 +32,9 @@ COMMIT HYGIENE: [PASS or FAIL]
 
 VERDICT: [SAFE TO MERGE or NEEDS FIXES or ESCALATE TO HUMAN]
 
-STEP 3 — Write the above output to .handoff/qa-review.md
-
-STEP 4 — IF VERDICT IS SAFE TO MERGE:
-Extract PR number, URL, and branch name from .handoff/impl-summary.md only.
-If PR details are not found in impl-summary.md, write PR_NUMBER_PENDING and PR_URL_PENDING.
+STEP 3 — IF VERDICT IS SAFE TO MERGE:
+Extract PR number, URL, and branch from .handoff/impl-summary.md ONLY.
+If not explicitly stated in impl-summary.md, use PR_NUMBER_PENDING and PR_URL_PENDING.
 Write ONLY this to .handoff/gate2-instruction.md:
 
 Read .handoff/RULES.md before proceeding.
@@ -70,6 +63,28 @@ Proceed with:
 1. Merge PR
 2. Sync local main
 3. Delete local branch: [BRANCH_NAME]
-4. Delete
+4. Delete remote branch: [BRANCH_NAME]
+5. Confirm clean working tree on main
+6. Write full merge summary to .handoff/merge-log.md
 
-After completing all merge steps, write the full merge summary to .handoff/merge-log.md
+POST-MERGE OUTPUT REQUIRED:
+1. Merge confirmation
+2. Merge commit hash
+3. Final check status
+4. Main sync confirmation
+5. Local branch deletion
+6. Remote branch deletion
+7. Final working tree status
+8. Known limitations
+9. Recommended next mission
+
+STEP 4 — Output ONLY this single line in chat:
+Review complete — VERDICT: [SAFE TO MERGE or NEEDS FIXES or ESCALATE TO HUMAN]
+
+STRICT RULES:
+- Read ONLY the three files listed above
+- Write ONLY to .handoff/qa-review.md and .handoff/gate2-instruction.md
+- NEVER use Grep, Glob, WebSearch, WebFetch, Edit, or NotebookEdit
+- NEVER read git objects, git log, git history, or git show
+- NEVER guess PR numbers — write PR_NUMBER_PENDING if not in impl-summary.md
+- Output ONLY the single verdict line in chat
