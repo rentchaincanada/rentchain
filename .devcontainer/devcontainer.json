@@ -1,15 +1,22 @@
 {
-  "name": "RentChain AI Cowork",
+  "name": "RentChain QA Dev",
   "build": {
-    "dockerfile": "Dockerfile",
+    "dockerfile": "../docker/Dockerfile.dev",
     "context": ".."
   },
   "workspaceFolder": "/workspace/rentchain",
   "remoteUser": "node",
   "containerEnv": {
-    "SHELL": "/bin/bash"
+    "SHELL": "/bin/bash",
+    "PLAYWRIGHT_BROWSERS_PATH": "/ms-playwright",
+    "VITE_API_BASE_URL": "http://localhost:5001"
   },
-  "postCreateCommand": "bash -lc 'node --version && npm --version && gh --version || true && gcloud --version || true'",
+  "postCreateCommand": "bash -lc 'node --version && npm --version && npx playwright --version && cd rentchain-api && npm ci && cd ../rentchain-frontend && npm ci && (gh --version || true) && (gcloud --version || true)'",
+  "mounts": [
+    "source=rentchain-api-node-modules,target=/workspace/rentchain/rentchain-api/node_modules,type=volume",
+    "source=rentchain-frontend-node-modules,target=/workspace/rentchain/rentchain-frontend/node_modules,type=volume",
+    "source=rentchain-shell-history,target=/commandhistory,type=volume"
+  ],
   "customizations": {
     "vscode": {
       "extensions": [
@@ -36,10 +43,18 @@
     "ghcr.io/devcontainers/features/google-cloud-cli:1": {}
   },
   "forwardPorts": [
+    3000,
+    5001,
     5173,
     8080
   ],
   "portsAttributes": {
+    "3000": {
+      "label": "Frontend alternate"
+    },
+    "5001": {
+      "label": "API alternate"
+    },
     "5173": {
       "label": "Vite frontend"
     },

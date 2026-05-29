@@ -68,6 +68,7 @@ override.tf.json
 # Local test artifacts
 playwright-report/
 test-results/
+.playwright/
 
 # Local conversation engine artifacts
 .conversation_engine/

@@ -1,0 +1,39 @@
+FROM node:20.11.1-bookworm
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+
+USER root
+
+# Install the command-line tools used by local development and QA workflows.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends \
+    bash \
+    ca-certificates \
+    curl \
+    git \
+    jq \
+    openssh-client \
+  && rm -rf /var/lib/apt/lists/*
+
+# Pin the browser automation runtime and install browser binaries in the image.
+RUN npm install -g @playwright/test@1.58.2 \
+  && npx playwright install --with-deps chromium firefox webkit \
+  && npm cache clean --force \
+  && chown -R node:node /ms-playwright
+
+WORKDIR /workspace/rentchain
+
+COPY rentchain-api/package*.json ./rentchain-api/
+COPY rentchain-frontend/package*.json ./rentchain-frontend/
+
+# Warm dependency caches during image build. Dev container volumes keep local
+# node_modules writable after the workspace is mounted.
+RUN cd rentchain-api \
+  && npm ci --ignore-scripts \
+  && cd ../rentchain-frontend \
+  && npm ci --ignore-scripts
+
+USER node
+
+SHELL ["/bin/bash", "-lc"]

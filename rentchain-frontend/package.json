@@ -21,7 +21,10 @@
     "test:light": "vitest run --maxWorkers=2",
     "test:single": "vitest run --maxWorkers=1",
     "test:smoke": "vitest run tests/smoke",
-    "test:e2e": "npm run preflight && playwright test",
+    "test:e2e": "npm run preflight && playwright test --config=../playwright.config.ts --project=frontend-chromium",
+    "test:e2e:ui": "npm run preflight && playwright test --config=../playwright.config.ts --project=frontend-chromium --ui",
+    "test:e2e:debug": "npm run preflight && playwright test --config=../playwright.config.ts --project=frontend-chromium --headed --debug",
+    "test:docker": "docker run --rm -v \"$PWD/..:/workspace/rentchain\" -w /workspace/rentchain/rentchain-frontend rentchain-dev npm run test:e2e",
     "check:merge-markers": "bash -lc 'if grep -R \"<<<<<<<\\|=======\\|>>>>>>>\" src; then echo \"Merge markers found\"; exit 1; else echo \"No merge markers found.\"; fi'"
   },
   "dependencies": {
@@ -39,7 +42,7 @@
     "@eslint/js": "^9.39.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.0",
-    "@playwright/test": "^1.50.1",
+    "@playwright/test": "1.58.2",
     "@types/node": "^24.10.1",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
