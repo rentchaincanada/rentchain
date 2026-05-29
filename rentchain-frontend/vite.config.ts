@@ -112,8 +112,8 @@ export default defineConfig(({ mode }) => {
     test: {
       environment: "jsdom",
       setupFiles: "./src/test/setup.ts",
-      include: ["src/**/*.{test,spec}.{ts,tsx}"],
-      exclude: ["tests/**", "node_modules/**", "dist/**"],
+      include: ["src/**/*.{test,spec}.{ts,tsx}", "tests/smoke/**/*.{test,spec}.{ts,tsx}"],
+      exclude: ["tests/playwright/**", "node_modules/**", "dist/**"],
 
       // ✅ stable + memory controlled
       pool: "forks",
