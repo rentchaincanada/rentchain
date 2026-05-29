@@ -37,6 +37,7 @@ export function generateStorageState(options: StorageStateGeneratorOptions): Pla
         value: authToken,
         domain: originUrl.hostname,
         path: "/",
+        expires: 4102444800,
         httpOnly: true,
         secure: originUrl.protocol === "https:",
         sameSite: "Lax" as const,
