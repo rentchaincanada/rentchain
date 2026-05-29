@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { installLegacySmokeHarness } from "./legacy-smoke-setup";
 
 test.describe("Payments page responsive", () => {
   const viewports = [
@@ -9,6 +10,14 @@ test.describe("Payments page responsive", () => {
 
   for (const { name, size } of viewports) {
     test(`renders payments on ${name}`, async ({ page }, testInfo) => {
+      // Use legacy smoke setup to unlock dev preview gate for this test
+      await installLegacySmokeHarness(page, { devPreviewUnlock: true });
+
+      testInfo.annotations.push({
+        type: "smoke-mode",
+        description: "legacy responsive smoke test with dev preview unlock",
+      });
+
       await page.setViewportSize(size);
       await page.goto("/payments");
       await expect(page.getByRole("heading", { name: /payments/i })).toBeVisible();
