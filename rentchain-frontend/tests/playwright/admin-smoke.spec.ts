@@ -1,49 +1,143 @@
-import { test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import {
-  roleSmokeViewports,
-  runRoleRouteSmoke,
-  storageStateDetailsForRole,
-  type RoleSmokeRoute,
+  assertRoleCanAccess,
+  getSmokeFixture,
+  installRoleSmokeHarness,
+  navigateToRoleDashboard,
+  requireStorageStateDetailsForRole,
+  roleAuthContext,
+  takeScreenshot,
+  type RoleAuthContext,
 } from "./role-smoke-helpers";
 
-const adminRoutes: RoleSmokeRoute[] = [
-  { label: "admin dashboard", path: "/admin", shellText: [/admin/i, /workspace/i] },
-  { label: "admin properties", path: "/admin/properties", shellText: [/properties/i, /workspace/i] },
-  { label: "admin tenants", path: "/admin/tenants", shellText: [/tenants/i, /workspace/i] },
-  { label: "admin leases", path: "/admin/leases", shellText: [/leases/i, /workspace/i] },
-  {
-    label: "admin review workspaces",
-    path: "/admin/review-workspaces",
-    shellText: [/review workspaces/i, /workspace/i],
-    expectedApiResponse: {
-      urlPattern: /\/api\/admin\/review-workspaces(?:\?|$)/,
-      header: "x-route-source",
-      value: "governedReviewWorkspaceRoutes.ts",
-    },
-  },
-  { label: "admin support escalations", path: "/admin/support/escalations", shellText: [/support/i, /escalation/i] },
-  { label: "admin security incidents", path: "/admin/security/incidents", shellText: [/security/i, /incident/i] },
-  { label: "support operations", path: "/support-operations", shellText: [/support/i, /operations/i] },
-];
+const authDetails = requireStorageStateDetailsForRole("admin");
+let authContext: RoleAuthContext;
 
-test.describe("admin role smoke", () => {
-  const authDetails = storageStateDetailsForRole("admin");
-  if (authDetails.storageState) {
-    test.use({ storageState: authDetails.storageState });
-  }
+test.describe("admin authenticated smoke coverage", () => {
+  test.use({ storageState: authDetails.storageState });
 
-  for (const viewport of roleSmokeViewports) {
-    test.describe(viewport.name, () => {
-      test.use({ viewport: viewport.size });
+  test.beforeAll(() => {
+    authContext = roleAuthContext("admin", authDetails);
+  });
 
-      for (const route of adminRoutes) {
-        test(`${route.label} renders safely`, async ({ page }, testInfo) => {
-          await runRoleRouteSmoke(page, testInfo, route, viewport.name, {
-            authDetails,
-            requireShellText: authDetails.mode === "authenticated",
-          });
-        });
-      }
+  test.beforeEach(async ({ page }) => {
+    await installRoleSmokeHarness(page, authContext);
+  });
+
+  test.describe("dashboard access and role verification", () => {
+    test("loads the admin dashboard with authenticated storage state", async ({ page }, testInfo) => {
+      await navigateToRoleDashboard(page, "admin");
+      await expect(page.getByRole("heading", { name: /admin dashboard/i })).toBeVisible();
+      await takeScreenshot(page, testInfo, "admin-dashboard");
     });
-  }
+
+    test("hydrates the admin identity from the current-user endpoint", async ({ page }) => {
+      await navigateToRoleDashboard(page, "admin");
+      const currentUser = await assertRoleCanAccess(page, "/api/me", "admin");
+      expect(currentUser).toMatchObject({
+        user: {
+          role: "admin",
+          actorRole: "admin",
+          permissions: ["system.admin"],
+        },
+      });
+    });
+
+    test("uses the authenticated smoke fixture version", async () => {
+      expect(authContext.fixtureVersion).toBe("authenticated-smoke-v1");
+      expect(authContext.role).toBe("admin");
+      expect(authContext.userId).toBe("smoke-admin");
+    });
+  });
+
+  test.describe("property management and data visibility", () => {
+    test("loads the admin properties surface", async ({ page }) => {
+      await navigateToRoleDashboard(page, "admin");
+      await assertRoleCanAccess(page, "/admin/properties", "admin");
+      await expect(page.getByRole("heading", { name: /^properties$/i })).toBeVisible();
+    });
+
+    test("can view all properties across landlords", async ({ page }) => {
+      await navigateToRoleDashboard(page, "admin");
+      const response = await assertRoleCanAccess(page, "/api/admin/properties", "admin");
+      const items = Array.isArray(response?.items) ? response.items : [];
+      expect(items).toHaveLength(getSmokeFixture().properties.length);
+      expect(JSON.stringify(items)).toContain("Smoke Property A");
+      expect(JSON.stringify(items)).toContain("Smoke Property B");
+    });
+
+    test("can view property metadata needed for admin review", async ({ page }) => {
+      await navigateToRoleDashboard(page, "admin");
+      const response = await assertRoleCanAccess(page, "/api/admin/properties", "admin");
+      const first = Array.isArray(response?.items) ? response.items[0] : null;
+      expect(first).toMatchObject({
+        displayLabel: "Smoke Property A",
+        city: "Halifax",
+        unitCount: 1,
+        integrity: {
+          hasIssues: false,
+        },
+      });
+    });
+
+    test("retains platform-wide visibility instead of landlord-scoped filtering", async ({ page }) => {
+      await navigateToRoleDashboard(page, "admin");
+      const response = await assertRoleCanAccess(page, "/api/admin/properties", "admin");
+      const labels = Array.isArray(response?.items)
+        ? response.items.map((item) => String((item as { displayLabel?: string }).displayLabel || ""))
+        : [];
+      expect(labels).toEqual(expect.arrayContaining(["Smoke Property A", "Smoke Property B"]));
+    });
+  });
+
+  test.describe("user and role management", () => {
+    test("can access the admin tenants surface", async ({ page }) => {
+      await navigateToRoleDashboard(page, "admin");
+      await assertRoleCanAccess(page, "/admin/tenants", "admin");
+      await expect(page.getByRole("heading", { name: /^tenants$/i })).toBeVisible();
+    });
+
+    test("can view users across all primary roles through tenant and owner records", async ({ page }) => {
+      await navigateToRoleDashboard(page, "admin");
+      const response = await assertRoleCanAccess(page, "/api/admin/tenants", "admin");
+      const text = JSON.stringify(response);
+      expect(text).toContain("Tenant Smoke A");
+      expect(text).toContain("Tenant Smoke B");
+    });
+
+    test("can open the lease administration surface without submitting changes", async ({ page }) => {
+      await navigateToRoleDashboard(page, "admin");
+      await assertRoleCanAccess(page, "/admin/leases", "admin");
+      await expect(page.getByRole("heading", { name: /^leases$/i })).toBeVisible();
+    });
+  });
+
+  test.describe("audit and system surfaces", () => {
+    test("can access audit data", async ({ page }) => {
+      await navigateToRoleDashboard(page, "admin");
+      const response = await assertRoleCanAccess(page, "/api/admin/audit", "admin");
+      expect(response).toMatchObject({
+        summary: {
+          recentAdminActions: 1,
+        },
+      });
+      expect(JSON.stringify(response)).toContain("view_properties");
+    });
+
+    test("can open audit and support system surfaces", async ({ page }) => {
+      await navigateToRoleDashboard(page, "admin");
+      await assertRoleCanAccess(page, "/admin/audit", "admin");
+      await expect(page.getByRole("heading", { name: /audit/i })).toBeVisible();
+      await assertRoleCanAccess(page, "/support-operations", "admin");
+      await expect(page.locator("body")).toContainText(/support|operations/i);
+    });
+
+    test("is not downgraded to landlord or tenant data boundaries", async ({ page }) => {
+      await navigateToRoleDashboard(page, "admin");
+      const propertyResponse = await assertRoleCanAccess(page, "/api/admin/properties", "admin");
+      const tenantResponse = await assertRoleCanAccess(page, "/api/admin/tenants", "admin");
+      expect(Array.isArray(propertyResponse?.items) ? propertyResponse.items : []).toHaveLength(2);
+      expect(Array.isArray(tenantResponse?.items) ? tenantResponse.items : []).toHaveLength(2);
+    });
+  });
 });

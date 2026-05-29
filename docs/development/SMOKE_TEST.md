@@ -39,13 +39,13 @@ This command:
 Source the exported environment variables:
 
 ```bash
-# Option 1: Source the exports (one-time per shell)
-export QA_ADMIN_STORAGE_STATE="./.smoke-storage-state/admin-storage-state.json"
-export QA_LANDLORD_STORAGE_STATE="./.smoke-storage-state/landlord-storage-state.json"
-export QA_TENANT_STORAGE_STATE="./.smoke-storage-state/tenant-storage-state.json"
+# From rentchain-frontend, point to the files generated in rentchain-api
+export QA_ADMIN_STORAGE_STATE="../rentchain-api/.smoke-storage-state/admin-storage-state.json"
+export QA_LANDLORD_STORAGE_STATE="../rentchain-api/.smoke-storage-state/landlord-storage-state.json"
+export QA_TENANT_STORAGE_STATE="../rentchain-api/.smoke-storage-state/tenant-storage-state.json"
 
 # Option 2: Or set via command line
-QA_ADMIN_STORAGE_STATE="./.smoke-storage-state/admin-storage-state.json" npm run test:smoke
+QA_ADMIN_STORAGE_STATE="../rentchain-api/.smoke-storage-state/admin-storage-state.json" npm run test:e2e -- admin-smoke.spec.ts
 ```
 
 ## Running Smoke Tests
@@ -64,8 +64,26 @@ npm run test:smoke -- --reporter=verbose
 cd rentchain-frontend
 npm run test:e2e          # Run all Playwright tests
 npm run test:e2e -- admin-smoke.spec.ts  # Run specific role tests
-npm run test:e2e -- --project=chromium   # Run specific browser
+npm run test:e2e -- --project=frontend-chromium   # Run specific browser
 ```
+
+### Run Role Suites In Isolation
+
+```bash
+cd rentchain-api
+npm run storage-state:export
+
+cd ../rentchain-frontend
+export QA_ADMIN_STORAGE_STATE="../rentchain-api/.smoke-storage-state/admin-storage-state.json"
+export QA_LANDLORD_STORAGE_STATE="../rentchain-api/.smoke-storage-state/landlord-storage-state.json"
+export QA_TENANT_STORAGE_STATE="../rentchain-api/.smoke-storage-state/tenant-storage-state.json"
+
+npm run test:e2e -- admin-smoke.spec.ts
+npm run test:e2e -- landlord-smoke.spec.ts
+npm run test:e2e -- tenant-smoke.spec.ts
+```
+
+Each role suite loads the exported storage state, derives the role context, installs deterministic smoke API responses, and verifies both allowed workflows and forbidden role boundaries.
 
 #### With UI Mode
 
@@ -137,6 +155,37 @@ The base fixture (`admin-storage-state.ts`) contains:
 - **landlord-smoke.spec.ts**: Landlord role workflow tests
 - **tenant-smoke.spec.ts**: Tenant role workflow tests
 
+## Role Coverage
+
+### Admin
+
+`admin-smoke.spec.ts` validates:
+
+- Admin dashboard hydration through `/api/me`
+- Admin properties, tenants, leases, audit, and support surfaces
+- Platform-wide visibility across all landlords, properties, tenants, leases, and maintenance records
+- Admin-only data access without landlord or tenant scoping
+
+### Landlord
+
+`landlord-smoke.spec.ts` validates:
+
+- Landlord dashboard hydration through `/api/me`
+- Owned property and unit visibility
+- Tenant visibility limited to units owned by the landlord
+- Maintenance visibility limited to owned units
+- Blocking from admin APIs, admin routes, and tenant-only data
+
+### Tenant
+
+`tenant-smoke.spec.ts` validates:
+
+- Tenant dashboard hydration through `/api/me`
+- Lease visibility limited to the authenticated tenant
+- Tenant maintenance list and creation path without submitting data
+- Tenant communications surface
+- Blocking from landlord APIs, property management APIs, and admin surfaces
+
 ## Key Points
 
 ### Storage State is Deterministic
@@ -149,7 +198,7 @@ Auth tokens in smoke tests are deterministic mocks (e.g., `smoke-admin-smoke-adm
 
 ### No Production Secrets
 
-Storage state files contain no real secrets, credentials, or API keys. They are safe to commit to version control (stored in `.smoke-storage-state/` which is gitignored by default).
+Storage state files contain no real secrets, credentials, or API keys. They are generated into `.smoke-storage-state/`, which is gitignored and must not be committed.
 
 ### Role Isolation
 
@@ -160,6 +209,19 @@ Each role has isolated data access:
 
 This is enforced both in fixtures and in test assertions.
 
+### Findings Structure
+
+Each Playwright test attaches a `classified-smoke-findings` JSON payload with:
+
+- `testName`
+- `role`
+- `routeOrFeature`
+- `result`
+- `summary`
+- `findings`
+
+The finding payload classifies expected 401/403 responses separately from hard failures and avoids storing raw credentials or provider payloads.
+
 ## Troubleshooting
 
 ### Storage state file not found
@@ -167,6 +229,16 @@ This is enforced both in fixtures and in test assertions.
 **Error**: `Error: ENOENT: no such file or directory`
 
 **Solution**: Run `npm run storage-state:export` first to generate the JSON files.
+
+### Missing role environment variable
+
+**Error**: `Missing storage state for admin`
+
+**Solution**: Export the role-specific variable from the `rentchain-frontend` shell:
+
+```bash
+export QA_ADMIN_STORAGE_STATE="../rentchain-api/.smoke-storage-state/admin-storage-state.json"
+```
 
 ### Tests pass locally but fail in CI
 
@@ -189,9 +261,21 @@ echo $QA_ADMIN_STORAGE_STATE
 # Should print the file path
 ```
 
+### Wrong route boundary result
+
+**Symptom**: A landlord or tenant can reach an admin API, or a tenant can reach landlord APIs.
+
+**Solution**: Treat this as a role-boundary regression. The role suites assert `403 Forbidden` for unauthorized API paths and route blocking for admin-only UI paths.
+
+### Tenant dashboard stays on login or recovery screen
+
+**Cause**: `QA_TENANT_STORAGE_STATE` is missing or points to the wrong file.
+
+**Solution**: Regenerate storage state, set `QA_TENANT_STORAGE_STATE`, and rerun `npm run test:e2e -- tenant-smoke.spec.ts`.
+
 ## Next Steps
 
 - Run `npm run storage-state:export` to generate storage state files
 - Run backend smoke tests: `npm run test:smoke`
 - Run frontend Playwright tests: `npm run test:e2e`
-- Commit `.smoke-storage-state/` to version control (it's gitignored)
+- Keep `.smoke-storage-state/` out of version control

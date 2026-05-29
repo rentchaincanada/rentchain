@@ -15,6 +15,12 @@ export type ClassifiedSmokeFinding = {
   message: string;
 };
 
+export type SmokeFindingReportContext = {
+  role?: "admin" | "landlord" | "tenant";
+  routeOrFeature?: string;
+  result?: "pass" | "fail" | "blocked";
+};
+
 const resourceStatusPattern = /Failed to load resource: the server responded with a status of (\d+)/i;
 
 export function classifyConsoleFinding(message: string): ClassifiedSmokeFinding {
@@ -90,6 +96,7 @@ export async function reportSmokeFindings(
   label: string,
   consoleErrors: string[],
   pageErrors: string[],
+  context: SmokeFindingReportContext = {},
 ) {
   const findings: ClassifiedSmokeFinding[] = [
     ...consoleErrors.map(classifyConsoleFinding),
@@ -103,7 +110,21 @@ export async function reportSmokeFindings(
   const summary = summarizeSmokeFindings(findings);
   await testInfo.attach("classified-smoke-findings", {
     contentType: "application/json",
-    body: Buffer.from(JSON.stringify({ label, summary, findings }, null, 2)),
+    body: Buffer.from(
+      JSON.stringify(
+        {
+          testName: testInfo.title,
+          role: context.role ?? null,
+          routeOrFeature: context.routeOrFeature ?? label,
+          result: context.result ?? (findings.some((finding) => finding.severity === "failure") ? "fail" : "pass"),
+          label,
+          summary,
+          findings,
+        },
+        null,
+        2,
+      ),
+    ),
   });
 
   for (const [category, count] of Object.entries(summary)) {
