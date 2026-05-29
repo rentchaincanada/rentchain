@@ -16,6 +16,10 @@
     "test:light": "npm run preflight && vitest run --pool=forks --minWorkers=1 --maxWorkers=2",
     "test:single": "npm run preflight && vitest run --pool=forks --minWorkers=1 --maxWorkers=1",
     "test:smoke": "npm run preflight && vitest run tests/smoke --pool=forks --minWorkers=1 --maxWorkers=1",
+    "test:e2e": "npm run preflight && playwright test --config=../playwright.config.ts --project=api-chromium",
+    "test:e2e:ui": "npm run preflight && playwright test --config=../playwright.config.ts --project=api-chromium --ui",
+    "test:e2e:debug": "npm run preflight && playwright test --config=../playwright.config.ts --project=api-chromium --headed --debug",
+    "test:docker": "docker run --rm -v \"$PWD/..:/workspace/rentchain\" -w /workspace/rentchain/rentchain-api rentchain-dev npm run test:e2e",
     "smoke": "node scripts/smoke-safe-build.js",
     "clean:win": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"Get-Process node -ErrorAction SilentlyContinue | Stop-Process -Force; Start-Sleep -Seconds 1; if (Test-Path node_modules) { Remove-Item -Recurse -Force node_modules }; if (Test-Path package-lock.json) { Write-Host 'keeping lockfile' }; npm cache verify\"",
     "reinstall:win": "npm run clean:win && npm ci"
@@ -49,6 +53,7 @@
     "zod": "^4.1.13"
   },
   "devDependencies": {
+    "@playwright/test": "1.58.2",
     "@types/bcryptjs": "^2.4.2",
     "@types/cookie-parser": "^1.4.7",
     "@types/cors": "^2.8.19",
