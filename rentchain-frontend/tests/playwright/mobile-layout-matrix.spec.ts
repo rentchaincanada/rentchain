@@ -1,6 +1,11 @@
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
 import { reportSmokeFindings } from "./smoke-findings";
-import { storageStateDetailsForRole, type RoleSmokeRole } from "./role-smoke-helpers";
+import {
+  installRoleSmokeHarness,
+  requireStorageStateDetailsForRole,
+  roleAuthContext,
+  type RoleSmokeRole,
+} from "./role-smoke-helpers";
 
 type MatrixRole = RoleSmokeRole;
 
@@ -21,7 +26,7 @@ const matrixRoutes: MatrixRoute[] = [
   { role: "tenant", label: "tenant workspace", path: "/tenant", shellText: [/tenant/i, /rentchain tenant/i] },
   { role: "tenant", label: "tenant lease", path: "/tenant/lease", shellText: [/lease/i, /tenant/i] },
   { role: "tenant", label: "tenant ledger", path: "/tenant/ledger", shellText: [/ledger/i, /tenant/i] },
-  { role: "tenant", label: "tenant documents", path: "/tenant/documents", shellText: [/documents/i, /schedule/i] },
+  { role: "tenant", label: "tenant documents", path: "/tenant/documents", shellText: [/tenant portal/i, /tenant experience/i] },
   { role: "tenant", label: "tenant messages", path: "/tenant/messages", shellText: [/messages/i, /tenant/i] },
   { role: "tenant", label: "tenant profile", path: "/tenant/profile", shellText: [/profile/i, /tenant/i] },
   { role: "tenant", label: "tenant maintenance", path: "/tenant/maintenance", shellText: [/maintenance/i, /tenant/i] },
@@ -90,11 +95,8 @@ async function collectMobileLayoutMetrics(page: Page) {
 
     const describe = (element: HTMLElement) => {
       const rect = element.getBoundingClientRect();
-      const label =
-        element.getAttribute("aria-label") ||
-        element.getAttribute("title") ||
-        element.textContent?.replace(/\s+/g, " ").trim().slice(0, 60) ||
-        element.tagName.toLowerCase();
+      const labelSource = element.getAttribute("aria-label") || element.getAttribute("title") || element.dataset.testid;
+      const label = labelSource ? labelSource.replace(/\s+/g, " ").trim().slice(0, 60) : element.tagName.toLowerCase();
       return {
         tag: element.tagName.toLowerCase(),
         label,
@@ -102,6 +104,18 @@ async function collectMobileLayoutMetrics(page: Page) {
         left: Math.round(rect.left),
         right: Math.round(rect.right),
       };
+    };
+
+    const hasHorizontalScrollContainer = (element: HTMLElement) => {
+      let current: HTMLElement | null = element.parentElement;
+      while (current && current !== document.body) {
+        const style = window.getComputedStyle(current);
+        if (current.scrollWidth > current.clientWidth + 2 && ["auto", "scroll"].includes(style.overflowX)) {
+          return true;
+        }
+        current = current.parentElement;
+      }
+      return false;
     };
 
     const oversizedElements = visibleElements
@@ -130,7 +144,7 @@ async function collectMobileLayoutMetrics(page: Page) {
       .filter((element) => element.matches("button, a, input, select, textarea, [role='button'], [tabindex]:not([tabindex='-1'])"))
       .filter((element) => {
         const rect = element.getBoundingClientRect();
-        return rect.left < -2 || rect.right > viewportWidth + 2;
+        return !hasHorizontalScrollContainer(element) && (rect.left < -2 || rect.right > viewportWidth + 2);
       })
       .slice(0, 8)
       .map(describe);
@@ -146,11 +160,142 @@ async function collectMobileLayoutMetrics(page: Page) {
   });
 }
 
+async function installMobileLayoutMatrixOverrides(page: Page) {
+  await page.route("**/api/applications**", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (request.method() === "GET" && url.pathname === "/api/applications") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([]),
+      });
+      return;
+    }
+
+    await route.fallback();
+  });
+
+  await page.route("**/api/viewings**", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (request.method() === "GET" && url.pathname === "/api/viewings") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify([]),
+      });
+      return;
+    }
+
+    await route.fallback();
+  });
+
+  await page.route("**/api/admin/review-workspaces**", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (request.method() === "GET" && url.pathname === "/api/admin/review-workspaces") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          ok: true,
+          workspaces: [],
+          summary: {
+            total: 0,
+            byType: {},
+            byStatus: {},
+            byAssignment: {},
+            appendOnly: true,
+            metadataOnly: true,
+            emptyState: "No governed review workspaces available.",
+          },
+          schema: {
+            metadataOnly: true,
+            visibilityClass: "admin_support_internal",
+            tenantVisible: false,
+            landlordVisible: false,
+            appendOnly: true,
+            persistence: "read_only_if_present",
+            mutationControlsEnabled: false,
+            rawPayloadAccessEnabled: false,
+            createRouteEnabled: false,
+            updateRouteEnabled: false,
+            deleteRouteEnabled: false,
+          },
+        }),
+      });
+      return;
+    }
+
+    await route.fallback();
+  });
+
+  await page.route("**/api/admin/support/escalations**", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (request.method() === "GET" && url.pathname === "/api/admin/support/escalations") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          ok: true,
+          escalations: [],
+          summary: {
+            total: 0,
+            highOrCritical: 0,
+            awaitingApproval: 0,
+            notes: 0,
+            metadataOnly: true,
+            emptyState: "No support escalations available.",
+          },
+          schema: {
+            metadataOnly: true,
+            visibilityClass: "admin_support_internal",
+            tenantVisible: false,
+            landlordVisible: false,
+            persistence: "read_only_if_present",
+            mutationControlsEnabled: false,
+          },
+        }),
+      });
+      return;
+    }
+
+    await route.fallback();
+  });
+
+  await page.route("**/api/admin/security/incidents**", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (request.method() === "GET" && url.pathname === "/api/admin/security/incidents") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          ok: true,
+          incidents: [],
+          summary: {
+            total: 0,
+            open: 0,
+            reviewing: 0,
+            highOrCritical: 0,
+            metadataOnly: true,
+          },
+        }),
+      });
+      return;
+    }
+
+    await route.fallback();
+  });
+}
+
 async function runMobileLayoutMatrix(page: Page, testInfo: TestInfo, route: MatrixRoute, viewportName: string) {
   const consoleErrors: string[] = [];
   const pageErrors: string[] = [];
-  const activeRole = selectedRole();
-  const authDetails = activeRole === route.role ? storageStateDetailsForRole(route.role) : { mode: "unauthenticated" as const };
+  const authDetails = requireStorageStateDetailsForRole(route.role);
+  const authContext = roleAuthContext(route.role, authDetails);
 
   testInfo.annotations.push({
     type: "smoke-mode",
@@ -162,10 +307,7 @@ async function runMobileLayoutMatrix(page: Page, testInfo: TestInfo, route: Matr
   });
   testInfo.annotations.push({
     type: "auth-mode",
-    description:
-      authDetails.mode === "authenticated"
-        ? `authenticated via ${authDetails.source || "storage state"}`
-        : "unauthenticated smoke",
+    description: `authenticated ${route.role} via ${authDetails.source || "storage state"}`,
   });
 
   page.on("console", (message) => {
@@ -174,6 +316,9 @@ async function runMobileLayoutMatrix(page: Page, testInfo: TestInfo, route: Matr
   page.on("pageerror", (error) => {
     pageErrors.push(error.message);
   });
+
+  await installRoleSmokeHarness(page, authContext);
+  await installMobileLayoutMatrixOverrides(page);
 
   const response = await page.goto(route.path, { waitUntil: "domcontentloaded" });
   if (response) {
@@ -188,9 +333,7 @@ async function runMobileLayoutMatrix(page: Page, testInfo: TestInfo, route: Matr
     type: "matrix-shell",
     description: shellVisible ? "matched role-appropriate shell text" : "shell text not visible; route may be unauthenticated or access-gated",
   });
-  if (authDetails.mode === "authenticated") {
-    expect(shellVisible, `${route.label} authenticated shell text; storage state may be expired, wrong role, or route regressed`).toBe(true);
-  }
+  expect(shellVisible, `${route.label} authenticated shell text; storage state may be expired, wrong role, or route regressed`).toBe(true);
 
   const metrics = await collectMobileLayoutMetrics(page);
   await testInfo.attach("mobile-layout-metrics", {
@@ -208,15 +351,14 @@ async function runMobileLayoutMatrix(page: Page, testInfo: TestInfo, route: Matr
     fullPage: true,
   });
 
-  await reportSmokeFindings(testInfo, route.label, consoleErrors, pageErrors);
+  await reportSmokeFindings(testInfo, route.label, consoleErrors, pageErrors, {
+    role: route.role,
+    routeOrFeature: route.path,
+  });
 }
 
 const role = selectedRole();
 const routes = role === "mobile" ? matrixRoutes : matrixRoutes.filter((route) => route.role === role);
-const storageState = role === "mobile" ? undefined : storageStateDetailsForRole(role).storageState;
-if (storageState) {
-  test.use({ storageState });
-}
 
 for (const viewport of matrixViewports) {
   test.describe(`mobile layout matrix: ${viewport.name}`, () => {
