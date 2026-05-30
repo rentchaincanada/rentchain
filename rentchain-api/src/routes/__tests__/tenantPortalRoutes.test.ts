@@ -290,6 +290,8 @@ describe("tenantPortalRoutes foundation", () => {
       tenantConfirmationStatus: null,
       tenantConfirmationUpdatedAt: null,
       accessAcknowledgedAt: null,
+      reopenedByActorId: "raw-landlord-user-id",
+      reopenedByActorRole: "landlord",
       statusHistory: [
         {
           status: "submitted",
@@ -527,9 +529,21 @@ describe("tenantPortalRoutes foundation", () => {
     });
 
     expect(res.status).toBe(200);
+    expect(res.body?.data?.projectionProfile).toEqual(
+      expect.objectContaining({
+        projectionName: "tenant_safe_workspace_context_projection",
+        audience: "tenant_workspace",
+        authorityBasis: "authenticated_tenant_scope",
+      })
+    );
+    expect(res.body?.data?.projectionVersion).toBe("tenant_safe_projection_v1");
+    expect(res.body?.data?.sensitivityClass).toBe("sensitive");
+    expect(res.body?.data?.redactionSummary?.redactedFieldGroups).toContain("landlord_only_notes");
     expect(res.body?.data?.property?.street1).toBe("123 Main St");
+    expect(res.body?.data?.property?.projectionProfile?.projectionName).toBe("tenant_safe_property_projection");
     expect(res.body?.data?.property?.internalSecret).toBeUndefined();
     expect(res.body?.data?.application?.status).toBe("submitted");
+    expect(res.body?.data?.application?.projectionProfile?.projectionName).toBe("tenant_safe_application_projection");
     expect(res.body?.data?.application?.sin).toBeUndefined();
     expect(res.body?.data?.lease?.monthlyRent).toBe(1800);
     expect(res.body?.data?.lease?.confidentialNotes).toBeUndefined();
@@ -566,6 +580,9 @@ describe("tenantPortalRoutes foundation", () => {
     );
     expect(Array.isArray(res.body?.data?.tenantIdentityRecord?.documents?.missingCategories)).toBe(true);
     expect(res.body?.data?.maintenance?.[0]?.title).toBe("Leaky tap");
+    expect(res.body?.data?.maintenance?.[0]?.projectionProfile?.projectionName).toBe("tenant_safe_maintenance_projection");
+    expect(res.body?.data?.maintenance?.[0]?.reopenedByActorRole).toBe("landlord");
+    expect(res.body?.data?.maintenance?.[0]?.reopenedByActorId).toBeUndefined();
     expect(res.body?.data?.maintenance?.[0]?.assignedContractorName).toBe("North Shore Plumbing");
     expect(res.body?.data?.maintenance?.[0]?.contractorStatus).toBe("assigned");
     expect(res.body?.data?.maintenance?.[0]?.serviceWindowStartAt).toBe(300);
@@ -624,6 +641,7 @@ describe("tenantPortalRoutes foundation", () => {
     expect(res.body?.data?.identityTimeline?.events?.[0]?.metadata).toBeUndefined();
     expect(JSON.stringify(res.body?.data?.portableIdentity || {})).not.toContain("token");
     expect(JSON.stringify(res.body?.data?.portableIdentity || {})).not.toContain("drawnDataUrl");
+    expect(JSON.stringify(res.body)).not.toContain("raw-landlord-user-id");
 
     const eventDocs = Array.from(ensureCollection("event_log").values());
     expect(eventDocs.some((event) => event.event_type === "tenant_workspace_viewed")).toBe(true);
@@ -2852,6 +2870,8 @@ describe("tenantPortalRoutes foundation", () => {
     expect(res.body?.data?.resolutionStatus).toBe("follow_up_required");
     expect(res.body?.data?.reopenReason).toBe("The latch failed again after closure.");
     expect(typeof res.body?.data?.reopenedAt).toBe("number");
+    expect(res.body?.data?.reopenedByActorRole).toBe("tenant");
+    expect(res.body?.data?.reopenedByActorId).toBeUndefined();
 
     const savedWorkOrder = ensureCollection("workOrders").get("maintenance_maint-2b");
     expect(savedWorkOrder?.followUpRequired).toBe(true);

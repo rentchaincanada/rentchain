@@ -2,7 +2,25 @@ export const TENANT_SAFE_PROJECTION_VERSION = "tenant_safe_projection_v1";
 
 export type TenantSafeProjectionAudience = "tenant_workspace";
 
-export type TenantSafeProjectionScopeType = "tenant_current_lease";
+export type TenantSafeProjectionName =
+  | "tenant_safe_workspace_projection"
+  | "tenant_safe_workspace_context_projection"
+  | "tenant_safe_profile_projection"
+  | "tenant_safe_application_projection"
+  | "tenant_safe_application_reuse_projection"
+  | "tenant_safe_communications_projection"
+  | "tenant_safe_maintenance_projection"
+  | "tenant_safe_property_projection";
+
+export type TenantSafeProjectionScopeType =
+  | "tenant_current_lease"
+  | "tenant_workspace_context"
+  | "tenant_profile"
+  | "tenant_application"
+  | "tenant_application_reuse"
+  | "tenant_communications"
+  | "tenant_maintenance"
+  | "tenant_property";
 
 export type TenantSafeProjectionSensitivityClass = "sensitive";
 
@@ -12,7 +30,7 @@ export type TenantSafeProjectionSourceReference = {
 };
 
 export type TenantSafeProjectionProfile = {
-  projectionName: "tenant_safe_workspace_projection";
+  projectionName: TenantSafeProjectionName;
   projectionVersion: typeof TENANT_SAFE_PROJECTION_VERSION;
   audience: TenantSafeProjectionAudience;
   scopeType: TenantSafeProjectionScopeType;
@@ -26,6 +44,20 @@ export type TenantSafeProjectionProfile = {
   redactionPolicy: string;
 };
 
+export type TenantSafeRedactionSummary = {
+  redactionPolicy: string;
+  redactedFieldGroups: string[];
+  redactionCount: number;
+};
+
+export type TenantSafeProjectionMetadata = {
+  projectionProfile: TenantSafeProjectionProfile;
+  projectionVersion: typeof TENANT_SAFE_PROJECTION_VERSION;
+  sensitivityClass: TenantSafeProjectionProfile["sensitivityClass"];
+  authorityBasis: TenantSafeProjectionProfile["authorityBasis"];
+  redactionSummary: TenantSafeRedactionSummary;
+};
+
 const ALLOWED_FIELD_GROUPS = [
   "tenant_visible_lease_summary",
   "tenant_visible_document_status",
@@ -34,6 +66,61 @@ const ALLOWED_FIELD_GROUPS = [
   "scoped_source_references",
   "operational_labels",
 ];
+
+const SURFACE_ALLOWED_FIELD_GROUPS: Record<TenantSafeProjectionScopeType, string[]> = {
+  tenant_current_lease: ALLOWED_FIELD_GROUPS,
+  tenant_workspace_context: [
+    "tenant_workspace_context",
+    "tenant_visible_profile_summary",
+    "tenant_visible_application_summary",
+    "tenant_visible_lease_summary",
+    "tenant_visible_maintenance_summary",
+    "derived_identity_signals",
+    "scoped_source_references",
+    "operational_labels",
+  ],
+  tenant_profile: [
+    "tenant_visible_profile_summary",
+    "tenant_visible_identity_status",
+    "tenant_visible_document_status",
+    "tenant_visible_application_summary",
+    "tenant_visible_lease_summary",
+    "scoped_source_references",
+    "operational_labels",
+  ],
+  tenant_application: [
+    "tenant_visible_application_summary",
+    "tenant_visible_document_status",
+    "scoped_source_references",
+    "operational_labels",
+  ],
+  tenant_application_reuse: [
+    "tenant_owned_reuse_profile",
+    "tenant_visible_application_reuse_fields",
+    "scoped_source_references",
+    "operational_labels",
+  ],
+  tenant_communications: [
+    "tenant_visible_communications_thread",
+    "tenant_visible_message_bodies",
+    "tenant_read_state_summary",
+    "scoped_source_references",
+    "operational_labels",
+  ],
+  tenant_maintenance: [
+    "tenant_visible_maintenance_summary",
+    "tenant_visible_maintenance_lifecycle",
+    "tenant_safe_evidence",
+    "scoped_source_references",
+    "operational_labels",
+  ],
+  tenant_property: [
+    "tenant_visible_property_summary",
+    "tenant_visible_unit_summary",
+    "scoped_source_references",
+    "operational_labels",
+  ],
+};
 
 const EXCLUDED_FIELD_GROUPS = [
   "landlord_only_notes",
@@ -48,27 +135,79 @@ const EXCLUDED_FIELD_GROUPS = [
   "private_message_bodies",
 ];
 
+const SURFACE_REDACTION_POLICIES: Record<TenantSafeProjectionScopeType, string> = {
+  tenant_current_lease: "Exclude landlord-only notes, raw/provider/payment/debug/private-message fields, and unrelated tenant data.",
+  tenant_workspace_context:
+    "Exclude landlord-only notes, raw/provider/payment/debug/private-message fields, unrelated tenant data, and raw internal actor references.",
+  tenant_profile:
+    "Exclude landlord-only notes, raw/provider/debug fields, unrelated tenant data, and raw screening payload references.",
+  tenant_application:
+    "Exclude raw application payloads, screening payloads, landlord-only notes, unrelated tenant data, and debug fields.",
+  tenant_application_reuse:
+    "Expose only tenant-owned reusable application fields; exclude screening payloads, consents, documents, notes, and unrelated tenant data.",
+  tenant_communications:
+    "Expose only tenant-visible conversation state and tenant-visible message bodies; exclude private/internal message bodies and debug fields.",
+  tenant_maintenance:
+    "Expose only tenant-visible maintenance lifecycle fields and tenant-safe evidence; exclude raw actor identifiers, internal costs, landlord-only notes, and storage paths.",
+  tenant_property:
+    "Expose only tenant-visible property and unit labels; exclude owner internals, management notes, and debug fields.",
+};
+
 function uniqueSorted(values: string[]): string[] {
   return Array.from(new Set(values.filter(Boolean))).sort((a, b) => a.localeCompare(b));
 }
 
 export function deriveTenantSafeProjectionProfile(input: {
+  projectionName?: TenantSafeProjectionName;
   scopeType: TenantSafeProjectionScopeType;
   sourceCollections: string[];
+  allowedFieldGroups?: string[];
+  excludedFieldGroups?: string[];
+  relationshipBasis?: string;
+  internalReferencePolicy?: string;
+  redactionPolicy?: string;
 }): TenantSafeProjectionProfile {
   return {
-    projectionName: "tenant_safe_workspace_projection",
+    projectionName: input.projectionName || "tenant_safe_workspace_projection",
     projectionVersion: TENANT_SAFE_PROJECTION_VERSION,
     audience: "tenant_workspace",
     scopeType: input.scopeType,
     allowedSourceCollections: uniqueSorted(input.sourceCollections),
-    allowedFieldGroups: ALLOWED_FIELD_GROUPS,
-    excludedFieldGroups: EXCLUDED_FIELD_GROUPS,
+    allowedFieldGroups: input.allowedFieldGroups || SURFACE_ALLOWED_FIELD_GROUPS[input.scopeType],
+    excludedFieldGroups: input.excludedFieldGroups || EXCLUDED_FIELD_GROUPS,
     sensitivityClass: "sensitive",
     authorityBasis: "authenticated_tenant_scope",
-    relationshipBasis: "Projection must be derived from the authenticated tenant's current lease relationship.",
-    internalReferencePolicy: "Internal IDs are scoped references for navigation/traceability, not primary display labels.",
-    redactionPolicy: "Exclude landlord-only notes, raw/provider/payment/debug/private-message fields, and unrelated tenant data.",
+    relationshipBasis:
+      input.relationshipBasis ||
+      "Projection must be derived from the authenticated tenant's current lease relationship.",
+    internalReferencePolicy:
+      input.internalReferencePolicy ||
+      "Internal IDs are scoped references for navigation/traceability, not primary display labels.",
+    redactionPolicy: input.redactionPolicy || SURFACE_REDACTION_POLICIES[input.scopeType],
+  };
+}
+
+export function deriveTenantSafeProjectionMetadata(input: {
+  projectionName?: TenantSafeProjectionName;
+  scopeType: TenantSafeProjectionScopeType;
+  sourceCollections: string[];
+  allowedFieldGroups?: string[];
+  excludedFieldGroups?: string[];
+  relationshipBasis?: string;
+  internalReferencePolicy?: string;
+  redactionPolicy?: string;
+}): TenantSafeProjectionMetadata {
+  const projectionProfile = deriveTenantSafeProjectionProfile(input);
+  return {
+    projectionProfile,
+    projectionVersion: projectionProfile.projectionVersion,
+    sensitivityClass: projectionProfile.sensitivityClass,
+    authorityBasis: projectionProfile.authorityBasis,
+    redactionSummary: {
+      redactionPolicy: projectionProfile.redactionPolicy,
+      redactedFieldGroups: projectionProfile.excludedFieldGroups,
+      redactionCount: projectionProfile.excludedFieldGroups.length,
+    },
   };
 }
 

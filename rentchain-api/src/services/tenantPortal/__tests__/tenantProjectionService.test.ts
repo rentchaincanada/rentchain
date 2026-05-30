@@ -4,7 +4,12 @@ import {
   expectNoRestrictedProjectionFields,
   expectPayloadDoesNotContainValues,
 } from "../../../__tests__/helpers/projectionSafetyAssertions";
-import { projectTenantLease } from "../tenantProjectionService";
+import {
+  projectTenantApplication,
+  projectTenantLease,
+  projectTenantMaintenance,
+  projectTenantProperty,
+} from "../tenantProjectionService";
 
 describe("tenantProjectionService", () => {
   it("adds deterministic tenant-safe projection contract metadata to current lease projections", () => {
@@ -124,5 +129,47 @@ describe("tenantProjectionService", () => {
       "other@example.test",
       "raw screening report",
     ]);
+  });
+
+  it("adds tenant-safe metadata to property, application, and maintenance projections", () => {
+    const property = projectTenantProperty("prop-1", {
+      rc_prop_id: "rc-prop-1",
+      street1: "123 Main St",
+      tenantId: "tenant-1",
+      unitId: "unit-1",
+      internalNotes: "private",
+    });
+    const application = projectTenantApplication("app-1", {
+      propertyId: "prop-1",
+      tenantId: "tenant-1",
+      unitId: "unit-1",
+      status: "submitted",
+      missingSteps: ["upload_id"],
+      rawProviderPayload: "private",
+    });
+    const maintenance = projectTenantMaintenance("maint-1", {
+      propertyId: "prop-1",
+      tenantId: "tenant-1",
+      unitId: "unit-1",
+      status: "reopened",
+      reopenedByActorId: "raw-user-id",
+      reopenedByActorRole: "landlord",
+      evidence: [
+        { id: "tenant-safe", visibility: "tenant_safe", url: "https://example.test/photo.jpg" },
+        { id: "internal", visibility: "internal", url: "https://example.test/internal.jpg" },
+      ],
+    });
+
+    expect(property.projectionProfile.projectionName).toBe("tenant_safe_property_projection");
+    expect(property.authorityBasis).toBe("authenticated_tenant_scope");
+    expect(application.projectionProfile.projectionName).toBe("tenant_safe_application_projection");
+    expect(application.redactionSummary.redactedFieldGroups).toContain("raw_provider_payloads");
+    expect(maintenance.projectionProfile.projectionName).toBe("tenant_safe_maintenance_projection");
+    expect(maintenance.reopenedByActorRole).toBe("landlord");
+    expect((maintenance as any).reopenedByActorId).toBeUndefined();
+    expect(maintenance.evidence).toEqual([
+      expect.objectContaining({ id: "tenant-safe", visibility: "tenant_safe" }),
+    ]);
+    expectPayloadDoesNotContainValues(maintenance, ["raw-user-id", "https://example.test/internal.jpg"]);
   });
 });

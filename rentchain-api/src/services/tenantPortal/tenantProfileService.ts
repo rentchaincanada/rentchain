@@ -1,14 +1,25 @@
 import { db } from "../../config/firebase";
 import type { TenancyContext } from "./tenancyContextService";
 import {
+  deriveTenantSafeProjectionMetadata,
+  deriveTenantSafeSourceRefs,
+  type TenantSafeProjectionMetadata,
+  type TenantSafeProjectionSourceReference,
+} from "./tenantSafeProjectionContract";
+import {
   projectTenantApplication,
   projectTenantLease,
   projectTenantProperty,
 } from "./tenantProjectionService";
 
+type TenantProjectionMetadataFields = TenantSafeProjectionMetadata & {
+  sourceCollections: string[];
+  sourceRefs: TenantSafeProjectionSourceReference[];
+};
+
 export type TenantVisibleStatus = "verified" | "pending" | "missing" | "needs_review";
 
-export type TenantProfileProjection = {
+export type TenantProfileProjection = TenantProjectionMetadataFields & {
   context: Pick<
     TenancyContext,
     "authority" | "propertyId" | "rc_prop_id" | "applicationId" | "leaseId" | "tenantId" | "unitId" | "invitedEmail"
@@ -47,7 +58,7 @@ export type TenantProfileProjection = {
   };
 };
 
-export type TenantApplicationReuseProjection = {
+export type TenantApplicationReuseProjection = TenantProjectionMetadataFields & {
   applicant: {
     firstName: string | null;
     lastName: string | null;
@@ -178,6 +189,19 @@ function splitNameParts(value: string | null) {
     firstName: parts[0] || null,
     lastName: parts.slice(1).join(" ") || null,
   };
+}
+
+function contextSourceRefs(context: TenancyContext): TenantSafeProjectionSourceReference[] {
+  return deriveTenantSafeSourceRefs({
+    leaseId: context.leaseId,
+    propertyId: context.propertyId,
+    unitId: context.unitId,
+    tenantId: context.tenantId,
+  });
+}
+
+function sourceCollectionsFromRefs(sourceRefs: TenantSafeProjectionSourceReference[]): string[] {
+  return Array.from(new Set(sourceRefs.map((item) => item.sourceCollection))).sort((a, b) => a.localeCompare(b));
 }
 
 async function loadDocument(collectionName: string, docId: string | null) {
@@ -912,8 +936,22 @@ export async function loadTenantProfileProjection(params: {
     tenantData: tenant?.data,
     leaseData: lease?.data,
   });
+  const sourceRefs = contextSourceRefs(context);
+  if (context.applicationId) {
+    sourceRefs.push({ sourceCollection: "applications", sourceId: context.applicationId });
+  }
+  const sourceCollections = sourceCollectionsFromRefs(sourceRefs);
+  const metadata = deriveTenantSafeProjectionMetadata({
+    projectionName: "tenant_safe_profile_projection",
+    scopeType: "tenant_profile",
+    sourceCollections,
+    relationshipBasis: "Profile projection must be derived from the authenticated tenant workspace context.",
+  });
 
   return {
+    ...metadata,
+    sourceCollections,
+    sourceRefs,
     context: {
       authority: context.authority,
       propertyId: context.propertyId,
@@ -980,8 +1018,22 @@ export async function loadTenantApplicationReuseProjection(params: {
     asString(application?.data?.applicantName) ||
     asString(application?.data?.fullName);
   const name = splitNameParts(candidateName);
+  const sourceRefs = contextSourceRefs(params.context);
+  if (params.context.applicationId) {
+    sourceRefs.push({ sourceCollection: "applications", sourceId: params.context.applicationId });
+  }
+  const sourceCollections = sourceCollectionsFromRefs(sourceRefs);
+  const metadata = deriveTenantSafeProjectionMetadata({
+    projectionName: "tenant_safe_application_reuse_projection",
+    scopeType: "tenant_application_reuse",
+    sourceCollections,
+    relationshipBasis: "Application reuse projection must be derived from tenant-owned application context.",
+  });
 
   return {
+    ...metadata,
+    sourceCollections,
+    sourceRefs,
     applicant: {
       firstName: asString(application?.data?.firstName) || name.firstName,
       lastName: asString(application?.data?.lastName) || name.lastName,

@@ -261,6 +261,15 @@ describe("tenant communications routes", () => {
     });
 
     expect(res.status).toBe(200);
+    expect(res.body?.data?.projectionProfile).toEqual(
+      expect.objectContaining({
+        projectionName: "tenant_safe_communications_projection",
+        audience: "tenant_workspace",
+        authorityBasis: "authenticated_tenant_scope",
+      })
+    );
+    expect(res.body?.data?.projectionVersion).toBe("tenant_safe_projection_v1");
+    expect(res.body?.data?.redactionSummary?.redactedFieldGroups).toContain("private_message_bodies");
     expect(res.body?.data?.thread?.id).toBe("conv-linked-unit");
     expect(res.body?.data?.thread?.messages).toEqual(
       expect.arrayContaining([

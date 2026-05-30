@@ -1,6 +1,7 @@
 import { tenantApiFetch } from "./tenantApiFetch";
+import type { TenantSafeProjectionMetadata } from "./tenantPortal";
 
-export type TenantApplicationReuseData = {
+export type TenantApplicationReuseData = TenantSafeProjectionMetadata & {
   applicant: {
     firstName: string | null;
     lastName: string | null;

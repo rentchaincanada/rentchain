@@ -269,6 +269,15 @@ describe("tenant profile route", () => {
     });
 
     expect(res.status).toBe(200);
+    expect(res.body?.data?.projectionProfile).toEqual(
+      expect.objectContaining({
+        projectionName: "tenant_safe_profile_projection",
+        audience: "tenant_workspace",
+        authorityBasis: "authenticated_tenant_scope",
+      })
+    );
+    expect(res.body?.data?.projectionVersion).toBe("tenant_safe_projection_v1");
+    expect(res.body?.data?.redactionSummary?.redactedFieldGroups).toContain("raw_screening_reports");
     expect(res.body?.data?.profile?.displayName).toBe("Taylor Tenant");
     expect(res.body?.data?.profile?.email).toBe("tenant@example.com");
     expect(res.body?.data?.profile?.phone).toBe("902-555-0100");
@@ -304,7 +313,14 @@ describe("tenant profile route", () => {
     });
 
     expect(res.status).toBe(200);
-    expect(res.body?.data).toEqual({
+    expect(res.body?.data).toEqual(expect.objectContaining({
+      projectionProfile: expect.objectContaining({
+        projectionName: "tenant_safe_application_reuse_projection",
+        audience: "tenant_workspace",
+        authorityBasis: "authenticated_tenant_scope",
+      }),
+      projectionVersion: "tenant_safe_projection_v1",
+      sensitivityClass: "sensitive",
       applicant: {
         firstName: "Taylor",
         lastName: "Tenant",
@@ -338,10 +354,10 @@ describe("tenant profile route", () => {
         phone: "9025550175",
         address: "99 Willow St",
       },
-    });
+    }));
     expect(JSON.stringify(res.body)).not.toContain("applicantNotes");
     expect(JSON.stringify(res.body)).not.toContain("signature");
-    expect(JSON.stringify(res.body)).not.toContain("consent");
+    expect(JSON.stringify(res.body)).not.toContain("creditConsent");
     expect(JSON.stringify(res.body)).not.toContain("screeningSummary");
     expect(JSON.stringify(res.body)).not.toContain("coApplicant");
     expect(JSON.stringify(res.body)).not.toContain("reasonForMoving");
@@ -373,7 +389,13 @@ describe("tenant profile route", () => {
     });
 
     expect(res.status).toBe(200);
-    expect(res.body?.data).toEqual({
+    expect(res.body?.data).toEqual(expect.objectContaining({
+      projectionProfile: expect.objectContaining({
+        projectionName: "tenant_safe_application_reuse_projection",
+        audience: "tenant_workspace",
+        authorityBasis: "authenticated_tenant_scope",
+      }),
+      projectionVersion: "tenant_safe_projection_v1",
       applicant: {
         firstName: "Taylor",
         lastName: "Tenant",
@@ -386,7 +408,7 @@ describe("tenant profile route", () => {
       employment: null,
       workReference: null,
       nextOfKin: null,
-    });
+    }));
   });
 
   it("keeps safe unit display labels when the context unit value is already a unit number", async () => {

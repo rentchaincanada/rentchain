@@ -1,5 +1,35 @@
 import { tenantApiFetch } from "./tenantApiFetch";
 
+export type TenantSafeProjectionMetadata = {
+  projectionProfile?: {
+    projectionName: string;
+    projectionVersion: string;
+    audience: "tenant_workspace";
+    scopeType: string;
+    allowedSourceCollections: string[];
+    allowedFieldGroups: string[];
+    excludedFieldGroups: string[];
+    sensitivityClass: "sensitive";
+    authorityBasis: "authenticated_tenant_scope";
+    relationshipBasis: string;
+    internalReferencePolicy: string;
+    redactionPolicy: string;
+  };
+  projectionVersion?: string;
+  sensitivityClass?: "sensitive";
+  authorityBasis?: "authenticated_tenant_scope";
+  sourceCollections?: string[];
+  sourceRefs?: Array<{
+    sourceCollection: string;
+    sourceId: string;
+  }>;
+  redactionSummary?: {
+    redactionPolicy: string;
+    redactedFieldGroups: string[];
+    redactionCount: number;
+  };
+};
+
 export type TenantWorkspaceContext = {
   ok?: boolean;
   authority: "applicant" | "active_tenant" | "invite" | null;
@@ -12,7 +42,7 @@ export type TenantWorkspaceContext = {
   invitedEmail: string | null;
 };
 
-export type TenantWorkspaceProperty = {
+export type TenantWorkspaceProperty = TenantSafeProjectionMetadata & {
   propertyId: string;
   rc_prop_id: string | null;
   street1: string | null;
@@ -28,7 +58,7 @@ export type TenantWorkspaceUnit = {
   label: string | null;
 };
 
-export type TenantWorkspaceApplication = {
+export type TenantWorkspaceApplication = TenantSafeProjectionMetadata & {
   applicationId: string;
   status: string | null;
   missingSteps: string[];
@@ -37,7 +67,7 @@ export type TenantWorkspaceApplication = {
   updatedAt: string | null;
 };
 
-export type TenantWorkspaceLease = {
+export type TenantWorkspaceLease = TenantSafeProjectionMetadata & {
   leaseId: string;
   startDate: string | null;
   endDate: string | null;
@@ -167,7 +197,7 @@ export type PaymentReadiness = {
   };
 };
 
-export type TenantWorkspaceMaintenance = {
+export type TenantWorkspaceMaintenance = TenantSafeProjectionMetadata & {
   requestId: string;
   id?: string;
   status: string | null;
@@ -184,7 +214,6 @@ export type TenantWorkspaceMaintenance = {
   completionOutcome?: "completed" | "partially_completed" | "follow_up_required" | null;
   completionConfirmedByLandlordAt?: number | null;
   reopenedAt?: number | null;
-  reopenedByActorId?: string | null;
   reopenedByActorRole?: "tenant" | "landlord" | "admin" | null;
   reopenReason?: string | null;
   serviceWindowStartAt?: number | null;
@@ -523,7 +552,7 @@ export type InstitutionalHandoffSummary = {
   updatedAt: string;
 };
 
-export type TenantWorkspaceSummary = {
+export type TenantWorkspaceSummary = TenantSafeProjectionMetadata & {
   context: TenantWorkspaceContext;
   tenant?: {
     id?: string | null;
