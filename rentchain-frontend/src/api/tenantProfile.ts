@@ -1,8 +1,9 @@
 import { tenantApiFetch } from "./tenantApiFetch";
+import type { TenantSafeProjectionMetadata } from "./tenantPortal";
 
 export type TenantProfileStatus = "verified" | "pending" | "missing" | "needs_review";
 
-export type TenantProfileData = {
+export type TenantProfileData = TenantSafeProjectionMetadata & {
   context: {
     authority: "applicant" | "active_tenant" | "invite" | null;
     propertyId: string | null;
@@ -18,7 +19,7 @@ export type TenantProfileData = {
     email: string | null;
     phone: string | null;
     authorityLabel: string;
-    property: {
+    property: (TenantSafeProjectionMetadata & {
       propertyId: string;
       rc_prop_id: string | null;
       street1: string | null;
@@ -29,27 +30,27 @@ export type TenantProfileData = {
       unitNumber?: string | null;
       unitDisplayLabel?: string | null;
       features: string[];
-    } | null;
+    }) | null;
     unit: {
       unitId: string | null;
       label: string | null;
     } | null;
-    application: {
+    application: (TenantSafeProjectionMetadata & {
       applicationId: string;
       status: string | null;
       missingSteps: string[];
       nextActions: string[];
       createdAt: string | null;
       updatedAt: string | null;
-    } | null;
-    lease: {
+    }) | null;
+    lease: (TenantSafeProjectionMetadata & {
       leaseId: string;
       startDate: string | null;
       endDate: string | null;
       monthlyRent: number | null;
       status: string | null;
       documentUrl: string | null;
-    } | null;
+    }) | null;
   };
   identity: {
     overallStatus: TenantProfileStatus;

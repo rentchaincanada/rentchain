@@ -3,8 +3,19 @@ import { buildEmailHtml, buildEmailText } from "../../email/templates/baseEmailT
 import { sendEmail } from "../emailService";
 import type { TenancyContext } from "./tenancyContextService";
 import { recordTenantEvent } from "./tenantEventLogService";
+import {
+  deriveTenantSafeProjectionMetadata,
+  deriveTenantSafeSourceRefs,
+  type TenantSafeProjectionMetadata,
+  type TenantSafeProjectionSourceReference,
+} from "./tenantSafeProjectionContract";
 
-export type TenantCommunicationsWorkspace = {
+type TenantProjectionMetadataFields = TenantSafeProjectionMetadata & {
+  sourceCollections: string[];
+  sourceRefs: TenantSafeProjectionSourceReference[];
+};
+
+export type TenantCommunicationsWorkspace = TenantProjectionMetadataFields & {
   canSend: boolean;
   canSendReason: string | null;
   thread: {
@@ -97,6 +108,25 @@ function buildConversationId(params: {
 }) {
   const scopeId = asString(params.context.tenantId) || asString(params.context.applicationId) || params.userId;
   return `${params.landlordId}__${scopeId}__${asString(params.context.unitId) || "na"}`;
+}
+
+function buildCommunicationsMetadata(context: TenancyContext) {
+  const sourceRefs = deriveTenantSafeSourceRefs({
+    leaseId: context.leaseId,
+    propertyId: context.propertyId,
+    unitId: context.unitId,
+    tenantId: context.tenantId,
+  });
+  const sourceCollections = Array.from(new Set(sourceRefs.map((item) => item.sourceCollection))).sort((a, b) =>
+    a.localeCompare(b)
+  );
+  const metadata = deriveTenantSafeProjectionMetadata({
+    projectionName: "tenant_safe_communications_projection",
+    scopeType: "tenant_communications",
+    sourceCollections,
+    relationshipBasis: "Communications projection must be derived from the authenticated tenant workspace context.",
+  });
+  return { ...metadata, sourceCollections, sourceRefs };
 }
 
 function conversationMatchesContext(conversation: any, context: TenancyContext, landlordId: string) {
@@ -242,6 +272,7 @@ export async function loadTenantCommunicationsWorkspace(params: {
   context: TenancyContext;
   userId: string;
 }) : Promise<TenantCommunicationsWorkspace> {
+  const projectionMetadata = buildCommunicationsMetadata(params.context);
   const propertyLandlord = await loadPropertyLandlord(params.context.propertyId);
   const landlordId = propertyLandlord?.landlordId;
   const canSend =
@@ -250,6 +281,7 @@ export async function loadTenantCommunicationsWorkspace(params: {
 
   if (!landlordId) {
     return {
+      ...projectionMetadata,
       canSend: false,
       canSendReason: "No landlord communication context is linked to this workspace yet.",
       thread: null,
@@ -296,6 +328,7 @@ export async function loadTenantCommunicationsWorkspace(params: {
   }).length;
 
   return {
+    ...projectionMetadata,
     canSend,
     canSendReason: canSend ? null : "Messaging becomes available once your tenancy or application context is fully linked.",
     thread: {

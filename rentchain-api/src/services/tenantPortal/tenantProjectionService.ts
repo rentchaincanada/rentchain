@@ -1,13 +1,20 @@
 import { deriveLeaseExecution, type LeaseExecution } from "../leaseExecution/deriveLeaseExecution";
 import { derivePaymentReadiness, type PaymentReadiness } from "../paymentReadiness/derivePaymentReadiness";
 import {
+  deriveTenantSafeProjectionMetadata,
   deriveTenantSafeProjectionProfile,
   deriveTenantSafeSourceRefs,
+  type TenantSafeProjectionMetadata,
   type TenantSafeProjectionProfile,
   type TenantSafeProjectionSourceReference,
 } from "./tenantSafeProjectionContract";
 
-type TenantPropertyProjection = {
+type TenantProjectionMetadataFields = TenantSafeProjectionMetadata & {
+  sourceCollections: string[];
+  sourceRefs: TenantSafeProjectionSourceReference[];
+};
+
+type TenantPropertyProjection = TenantProjectionMetadataFields & {
   propertyId: string;
   rc_prop_id: string | null;
   street1: string | null;
@@ -18,18 +25,8 @@ type TenantPropertyProjection = {
   features: string[];
 };
 
-type TenantLeaseProjection = {
+type TenantLeaseProjection = TenantProjectionMetadataFields & {
   leaseId: string;
-  projectionProfile: TenantSafeProjectionProfile;
-  projectionVersion: string;
-  sensitivityClass: TenantSafeProjectionProfile["sensitivityClass"];
-  sourceCollections: string[];
-  sourceRefs: TenantSafeProjectionSourceReference[];
-  redactionSummary: {
-    redactionPolicy: string;
-    redactedFieldGroups: string[];
-    redactionCount: number;
-  };
   startDate: string | null;
   endDate: string | null;
   monthlyRent: number | null;
@@ -56,7 +53,7 @@ type TenantLeaseProjection = {
   paymentReadiness: PaymentReadiness;
 };
 
-type TenantApplicationProjection = {
+type TenantApplicationProjection = TenantProjectionMetadataFields & {
   applicationId: string;
   status: string | null;
   missingSteps: string[];
@@ -65,7 +62,7 @@ type TenantApplicationProjection = {
   updatedAt: string | null;
 };
 
-type TenantMaintenanceProjection = {
+type TenantMaintenanceProjection = TenantProjectionMetadataFields & {
   requestId: string;
   status: string | null;
   category: string | null;
@@ -81,7 +78,6 @@ type TenantMaintenanceProjection = {
   completionOutcome: "completed" | "partially_completed" | "follow_up_required" | null;
   completionConfirmedByLandlordAt: number | null;
   reopenedAt: number | null;
-  reopenedByActorId: string | null;
   reopenedByActorRole: "tenant" | "landlord" | "admin" | null;
   reopenReason: string | null;
   serviceWindowStartAt: number | null;
@@ -394,8 +390,30 @@ function projectFeatureList(input: any): string[] {
     .slice(0, 8);
 }
 
+function uniqueSourceCollections(sourceRefs: TenantSafeProjectionSourceReference[]): string[] {
+  return Array.from(new Set(sourceRefs.map((item) => item.sourceCollection))).sort((a, b) => a.localeCompare(b));
+}
+
 export function projectTenantProperty(recordId: string, data: any): TenantPropertyProjection {
+  const tenantId = asString(data?.tenantId) || asString(data?.primaryTenantId);
+  const unitId = asString(data?.unitId) || asString(data?.unitNumber) || asString(data?.unit);
+  const sourceRefs = deriveTenantSafeSourceRefs({
+    propertyId: recordId,
+    unitId,
+    tenantId,
+  });
+  const sourceCollections = uniqueSourceCollections(sourceRefs);
+  const metadata = deriveTenantSafeProjectionMetadata({
+    projectionName: "tenant_safe_property_projection",
+    scopeType: "tenant_property",
+    sourceCollections,
+    relationshipBasis: "Property projection must be derived from the authenticated tenant workspace context.",
+  });
+
   return {
+    ...metadata,
+    sourceCollections,
+    sourceRefs,
     propertyId: recordId,
     rc_prop_id: asString(data?.rc_prop_id) || asString(data?.propertyId) || recordId,
     street1: asString(data?.street1) || asString(data?.addressLine1) || asString(data?.address),
@@ -429,26 +447,27 @@ export function projectTenantLease(recordId: string, data: any): TenantLeaseProj
     unitId,
     tenantId,
   });
-  const sourceCollections = Array.from(new Set(sourceRefs.map((item) => item.sourceCollection))).sort((a, b) =>
-    a.localeCompare(b),
-  );
+  const sourceCollections = uniqueSourceCollections(sourceRefs);
   const projectionProfile = deriveTenantSafeProjectionProfile({
     scopeType: "tenant_current_lease",
     sourceCollections,
   });
+  const metadata = deriveTenantSafeProjectionMetadata({
+    projectionName: projectionProfile.projectionName,
+    scopeType: projectionProfile.scopeType,
+    sourceCollections,
+    allowedFieldGroups: projectionProfile.allowedFieldGroups,
+    excludedFieldGroups: projectionProfile.excludedFieldGroups,
+    relationshipBasis: projectionProfile.relationshipBasis,
+    internalReferencePolicy: projectionProfile.internalReferencePolicy,
+    redactionPolicy: projectionProfile.redactionPolicy,
+  });
 
   return {
+    ...metadata,
     leaseId: recordId,
-    projectionProfile,
-    projectionVersion: projectionProfile.projectionVersion,
-    sensitivityClass: projectionProfile.sensitivityClass,
     sourceCollections,
     sourceRefs,
-    redactionSummary: {
-      redactionPolicy: projectionProfile.redactionPolicy,
-      redactedFieldGroups: projectionProfile.excludedFieldGroups,
-      redactionCount: projectionProfile.excludedFieldGroups.length,
-    },
     startDate,
     endDate,
     monthlyRent,
@@ -477,8 +496,25 @@ export function projectTenantApplication(recordId: string, data: any): TenantApp
   const nextActions = Array.isArray(data?.nextActions)
     ? data.nextActions.map((value: unknown) => asString(value)).filter((value: string | null): value is string => Boolean(value))
     : [];
+  const tenantId = asString(data?.tenantId) || asString(data?.applicantTenantId) || asString(data?.convertedTenantId);
+  const sourceRefs = deriveTenantSafeSourceRefs({
+    leaseId: asString(data?.leaseId),
+    propertyId: asString(data?.propertyId),
+    unitId: asString(data?.unitId) || asString(data?.unitApplied) || asString(data?.unit),
+    tenantId,
+  });
+  const sourceCollections = uniqueSourceCollections(sourceRefs);
+  const metadata = deriveTenantSafeProjectionMetadata({
+    projectionName: "tenant_safe_application_projection",
+    scopeType: "tenant_application",
+    sourceCollections,
+    relationshipBasis: "Application projection must be derived from the authenticated tenant workspace context.",
+  });
 
   return {
+    ...metadata,
+    sourceCollections,
+    sourceRefs,
     applicationId: recordId,
     status: asString(data?.status),
     missingSteps,
@@ -502,8 +538,25 @@ export function projectTenantMaintenance(recordId: string, data: any): TenantMai
             Boolean(entry.status || entry.actorRole || entry.message || entry.createdAt)
         )
     : [];
+  const sourceRefs = deriveTenantSafeSourceRefs({
+    leaseId: asString(data?.leaseId),
+    propertyId: asString(data?.propertyId),
+    unitId: asString(data?.unitId) || asString(data?.unitNumber) || asString(data?.unit),
+    tenantId: asString(data?.tenantId),
+  });
+  sourceRefs.push({ sourceCollection: "maintenanceRequests", sourceId: recordId });
+  const sourceCollections = uniqueSourceCollections(sourceRefs);
+  const metadata = deriveTenantSafeProjectionMetadata({
+    projectionName: "tenant_safe_maintenance_projection",
+    scopeType: "tenant_maintenance",
+    sourceCollections,
+    relationshipBasis: "Maintenance projection must be derived from the authenticated tenant workspace context.",
+  });
 
   return {
+    ...metadata,
+    sourceCollections,
+    sourceRefs,
     requestId: recordId,
     status: asString(data?.status),
     category: asString(data?.category),
@@ -524,7 +577,6 @@ export function projectTenantMaintenance(recordId: string, data: any): TenantMai
         : null,
     completionConfirmedByLandlordAt: toMillis(data?.completionConfirmedByLandlordAt),
     reopenedAt: toMillis(data?.reopenedAt),
-    reopenedByActorId: asString(data?.reopenedByActorId),
     reopenedByActorRole:
       data?.reopenedByActorRole === "tenant" ||
       data?.reopenedByActorRole === "landlord" ||

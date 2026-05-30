@@ -14,6 +14,11 @@ import {
   projectTenantMaintenance,
   projectTenantProperty,
 } from "../services/tenantPortal/tenantProjectionService";
+import {
+  deriveTenantSafeProjectionMetadata,
+  deriveTenantSafeSourceRefs,
+  type TenantSafeProjectionSourceReference,
+} from "../services/tenantPortal/tenantSafeProjectionContract";
 import { deriveLeaseExecution } from "../services/leaseExecution/deriveLeaseExecution";
 import { recordTenantEvent } from "../services/tenantPortal/tenantEventLogService";
 import { redeemTenancyInvite } from "../services/tenantPortal/tenantInviteService";
@@ -2477,6 +2482,41 @@ async function loadTenantWorkspaceData(context: Awaited<ReturnType<typeof resolv
   };
 }
 
+function buildTenantWorkspaceContextMetadata(
+  context: Awaited<ReturnType<typeof resolveTenancyContext>>,
+  workspace: Awaited<ReturnType<typeof loadTenantWorkspaceData>>
+) {
+  const sourceRefs: TenantSafeProjectionSourceReference[] = deriveTenantSafeSourceRefs({
+    leaseId: context.leaseId,
+    propertyId: context.propertyId,
+    unitId: context.unitId,
+    tenantId: context.tenantId,
+  });
+  if (context.applicationId) {
+    sourceRefs.push({ sourceCollection: "applications", sourceId: context.applicationId });
+  }
+  for (const item of workspace.maintenance || []) {
+    if (item?.requestId) {
+      sourceRefs.push({ sourceCollection: "maintenanceRequests", sourceId: item.requestId });
+    }
+  }
+  const byKey = new Map<string, TenantSafeProjectionSourceReference>();
+  for (const ref of sourceRefs) byKey.set(`${ref.sourceCollection}:${ref.sourceId}`, ref);
+  const normalizedRefs = Array.from(byKey.values()).sort((a, b) =>
+    `${a.sourceCollection}:${a.sourceId}`.localeCompare(`${b.sourceCollection}:${b.sourceId}`)
+  );
+  const sourceCollections = Array.from(new Set(normalizedRefs.map((item) => item.sourceCollection))).sort((a, b) =>
+    a.localeCompare(b)
+  );
+  const metadata = deriveTenantSafeProjectionMetadata({
+    projectionName: "tenant_safe_workspace_context_projection",
+    scopeType: "tenant_workspace_context",
+    sourceCollections,
+    relationshipBasis: "Workspace context projection must be derived from authenticated tenant authority resolution.",
+  });
+  return { ...metadata, sourceCollections, sourceRefs: normalizedRefs };
+}
+
 async function buildTenantWorkspaceDisplayProjection(
   context: Awaited<ReturnType<typeof resolveTenancyContext>>,
   workspace: Awaited<ReturnType<typeof loadTenantWorkspaceData>>,
@@ -4024,6 +4064,7 @@ async function handleTenantWorkspaceSummary(req: any, res: any) {
     },
   });
   const displayProjection = await buildTenantWorkspaceDisplayProjection(context, workspace, req);
+  const workspaceProjectionMetadata = buildTenantWorkspaceContextMetadata(context, workspace);
   await recordTenantEvent({
     eventType: "tenant_workspace_viewed",
     entityType: "tenant_workspace",
@@ -4044,6 +4085,7 @@ async function handleTenantWorkspaceSummary(req: any, res: any) {
   return res.json({
     ok: true,
     data: {
+      ...workspaceProjectionMetadata,
       context,
       tenant: displayProjection.tenant,
       landlord: displayProjection.landlord,
@@ -7776,7 +7818,6 @@ async function buildTenantMaintenanceDetailResponse(docId: string, maintenanceDa
     ...projectTenantMaintenance(docId, maintenanceData || {}),
     evidence: workOrderExists ? await serializeEvidenceForAudience(workOrderData?.evidence, "tenant") : [],
     reopenedAt: toMillis(workOrderData?.reopenedAt),
-    reopenedByActorId: String(workOrderData?.reopenedByActorId || "").trim() || null,
     reopenedByActorRole:
       workOrderData?.reopenedByActorRole === "tenant" ||
       workOrderData?.reopenedByActorRole === "landlord" ||

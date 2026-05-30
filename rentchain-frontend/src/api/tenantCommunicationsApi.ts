@@ -1,4 +1,5 @@
 import { tenantApiFetch } from "./tenantApiFetch";
+import type { TenantSafeProjectionMetadata } from "./tenantPortal";
 
 export type TenantCommunicationType = "notice" | "message" | "maintenance_update" | "screening_update" | "system";
 export type TenantCommunicationPriority = "low" | "normal" | "high";
@@ -35,7 +36,7 @@ export type TenantThreadMessage = {
   createdAtMs: number | null;
 };
 
-export type TenantCommunicationsWorkspace = {
+export type TenantCommunicationsWorkspace = TenantSafeProjectionMetadata & {
   canSend: boolean;
   canSendReason: string | null;
   thread: {
