@@ -1,7 +1,9 @@
+import { defineConfig } from "@playwright/test";
+
 const outputDir = process.env.QA_ARTIFACT_DIR || "test-results/playwright";
 const baseURL = process.env.BASE_URL || process.env.VITE_API_BASE_URL || "http://localhost:5173";
 
-export default {
+export default defineConfig({
   timeout: 60_000,
   outputDir,
   fullyParallel: false,
@@ -10,6 +12,7 @@ export default {
     ["list"],
     ["json", { outputFile: process.env.QA_JSON_REPORT_FILE || "test-results/playwright/results.json" }],
     ["html", { outputFolder: process.env.QA_HTML_REPORT_DIR || "playwright-report", open: "never" }],
+    ["./rentchain-frontend/tests/playwright/qa-artifact-reporter.ts"],
   ],
   use: {
     baseURL,
@@ -50,4 +53,4 @@ export default {
       use: { browserName: "webkit" },
     },
   ],
-};
+});

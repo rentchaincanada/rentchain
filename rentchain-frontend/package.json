@@ -22,8 +22,10 @@
     "test:single": "vitest run --maxWorkers=1",
     "test:smoke": "vitest run tests/smoke",
     "test:e2e": "npm run preflight && playwright test --config=../playwright.config.ts --project=frontend-chromium",
+    "test:e2e:with-artifacts": "npm run preflight && playwright test --config=playwright.config.ts; npx tsx scripts/generate-qa-review-pack.ts",
     "test:e2e:ui": "npm run preflight && playwright test --config=../playwright.config.ts --project=frontend-chromium --ui",
     "test:e2e:debug": "npm run preflight && playwright test --config=../playwright.config.ts --project=frontend-chromium --headed --debug",
+    "generate-qa-review-pack": "npx tsx scripts/generate-qa-review-pack.ts",
     "test:docker": "docker run --rm -v \"$PWD/..:/workspace/rentchain\" -w /workspace/rentchain/rentchain-frontend rentchain-dev npm run test:e2e",
     "check:merge-markers": "bash -lc 'if grep -R \"<<<<<<<\\|=======\\|>>>>>>>\" src; then echo \"Merge markers found\"; exit 1; else echo \"No merge markers found.\"; fi'"
   },

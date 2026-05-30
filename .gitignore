@@ -69,6 +69,7 @@ override.tf.json
 # Local test artifacts
 playwright-report/
 test-results/
+!test-results/qa-artifacts/
 .playwright/
 
 # Local conversation engine artifacts
@@ -92,6 +93,7 @@ docs/reports/
 
 # AI handoff working files - never commit
 .handoff/
+!.handoff/qa-review-pack.md
 
 # Mission documentation — local only
 docs/missions/
