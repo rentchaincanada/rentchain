@@ -1,6 +1,36 @@
 import { apiFetch } from "./http";
 import { DEBUG_AUTH_KEY } from "../lib/authKeys";
 
+export type TenantSafeProjectionMetadata = {
+  projectionProfile?: {
+    projectionName: string;
+    projectionVersion: string;
+    audience: "tenant_workspace";
+    scopeType: string;
+    allowedSourceCollections: string[];
+    allowedFieldGroups: string[];
+    excludedFieldGroups: string[];
+    sensitivityClass: "sensitive";
+    authorityBasis: "authenticated_tenant_scope";
+    relationshipBasis: string;
+    internalReferencePolicy: string;
+    redactionPolicy: string;
+  };
+  projectionVersion?: string;
+  sensitivityClass?: "sensitive";
+  authorityBasis?: "authenticated_tenant_scope";
+  sourceCollections?: string[];
+  sourceRefs?: Array<{
+    sourceCollection: string;
+    sourceId: string;
+  }>;
+  redactionSummary?: {
+    redactionPolicy: string;
+    redactedFieldGroups: string[];
+    redactionCount: number;
+  };
+};
+
 export interface TenantProfile {
   id: string;
   fullName: string;
@@ -11,7 +41,7 @@ export interface TenantProfile {
   createdAt?: string | null;
 }
 
-export interface TenantLease {
+export interface TenantLease extends TenantSafeProjectionMetadata {
   leaseId: string | null;
   propertyId: string | null;
   propertyName: string | null;

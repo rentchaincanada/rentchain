@@ -643,7 +643,7 @@ export async function refreshTenantLeaseDocumentUrl(options?: { document?: "leas
   documentStatus: string;
   source: string;
   expiresInSeconds: number;
-}> {
+} & TenantSafeProjectionMetadata> {
   const query = options?.document ? `?document=${encodeURIComponent(options.document)}` : "";
   const res = await tenantApiFetch<{
     ok: boolean;
@@ -653,7 +653,7 @@ export async function refreshTenantLeaseDocumentUrl(options?: { document?: "leas
       documentStatus: string;
       source: string;
       expiresInSeconds: number;
-    };
+    } & TenantSafeProjectionMetadata;
   }>(`/tenant/lease/document-url${query}`);
   return res.data;
 }

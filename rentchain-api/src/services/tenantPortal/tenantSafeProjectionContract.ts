@@ -10,7 +10,10 @@ export type TenantSafeProjectionName =
   | "tenant_safe_application_reuse_projection"
   | "tenant_safe_communications_projection"
   | "tenant_safe_maintenance_projection"
-  | "tenant_safe_property_projection";
+  | "tenant_safe_property_projection"
+  | "tenant_safe_lease_notice_projection"
+  | "tenant_safe_document_access_projection"
+  | "tenant_safe_attachment_projection";
 
 export type TenantSafeProjectionScopeType =
   | "tenant_current_lease"
@@ -20,7 +23,10 @@ export type TenantSafeProjectionScopeType =
   | "tenant_application_reuse"
   | "tenant_communications"
   | "tenant_maintenance"
-  | "tenant_property";
+  | "tenant_property"
+  | "tenant_lease_notice"
+  | "tenant_document_access"
+  | "tenant_attachment";
 
 export type TenantSafeProjectionSensitivityClass = "sensitive";
 
@@ -120,6 +126,28 @@ const SURFACE_ALLOWED_FIELD_GROUPS: Record<TenantSafeProjectionScopeType, string
     "scoped_source_references",
     "operational_labels",
   ],
+  tenant_lease_notice: [
+    "tenant_visible_lease_notice_summary",
+    "tenant_visible_notice_text",
+    "tenant_visible_response_options",
+    "tenant_response_state",
+    "scoped_source_references",
+    "operational_labels",
+  ],
+  tenant_document_access: [
+    "tenant_visible_document_status",
+    "tenant_scoped_signed_url",
+    "tenant_visible_document_labels",
+    "scoped_source_references",
+    "operational_labels",
+  ],
+  tenant_attachment: [
+    "tenant_visible_attachment_summary",
+    "tenant_visible_document_status",
+    "tenant_safe_evidence",
+    "scoped_source_references",
+    "operational_labels",
+  ],
 };
 
 const EXCLUDED_FIELD_GROUPS = [
@@ -133,6 +161,9 @@ const EXCLUDED_FIELD_GROUPS = [
   "route_source_metadata",
   "stack_traces",
   "private_message_bodies",
+  "storage_paths",
+  "provider_delivery_payloads",
+  "landlord_internal_workflow_state",
 ];
 
 const SURFACE_REDACTION_POLICIES: Record<TenantSafeProjectionScopeType, string> = {
@@ -151,6 +182,12 @@ const SURFACE_REDACTION_POLICIES: Record<TenantSafeProjectionScopeType, string> 
     "Expose only tenant-visible maintenance lifecycle fields and tenant-safe evidence; exclude raw actor identifiers, internal costs, landlord-only notes, and storage paths.",
   tenant_property:
     "Expose only tenant-visible property and unit labels; exclude owner internals, management notes, and debug fields.",
+  tenant_lease_notice:
+    "Expose notice text, deadlines, tenant response options, and tenant-owned response state; exclude landlord internal notes, processing state, provider delivery payloads, and unrelated notices.",
+  tenant_document_access:
+    "Expose only tenant-scoped document URL, status, label, and expiry; exclude storage paths, bucket names, provider payloads, raw document metadata, and unrelated documents.",
+  tenant_attachment:
+    "Expose only tenant-safe attachment labels, status, dates, and tenant-visible document links; exclude storage paths, bucket names, provider payloads, raw metadata, and unrelated evidence.",
 };
 
 function uniqueSorted(values: string[]): string[] {

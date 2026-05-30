@@ -1,6 +1,7 @@
 import { tenantApiFetch } from "./tenantApiFetch";
+import type { TenantSafeProjectionMetadata } from "./tenantPortal";
 
-export type TenantLeaseNoticeSummary = {
+export type TenantLeaseNoticeSummary = TenantSafeProjectionMetadata & {
   id: string;
   leaseId: string;
   landlordId: string | null;
@@ -38,14 +39,14 @@ export type TenantLeaseNoticeSummary = {
   } | null;
 };
 
-export type TenantLeaseNoticeDetailResponse = {
+export type TenantLeaseNoticeDetailResponse = TenantSafeProjectionMetadata & {
   ok: boolean;
   item: TenantLeaseNoticeSummary;
   data: TenantLeaseNoticeSummary;
   noResponse: boolean;
 };
 
-export type TenantLeaseNoticeRespondResponse = {
+export type TenantLeaseNoticeRespondResponse = TenantSafeProjectionMetadata & {
   ok: boolean;
   decision: "renew" | "quit";
   noticeId: string;
@@ -60,7 +61,7 @@ export type TenantLeaseNoticeRespondResponse = {
 };
 
 export function getTenantLeaseNotices() {
-  return tenantApiFetch<{ ok: boolean; items: TenantLeaseNoticeSummary[]; data: TenantLeaseNoticeSummary[] }>(
+  return tenantApiFetch<TenantSafeProjectionMetadata & { ok: boolean; items: TenantLeaseNoticeSummary[]; data: TenantLeaseNoticeSummary[] }>(
     "/tenant/lease-notices"
   );
 }
