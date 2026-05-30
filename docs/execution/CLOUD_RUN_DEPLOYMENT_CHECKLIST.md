@@ -45,6 +45,17 @@ EXPECTED_COMMIT="$EXPECTED_COMMIT" \
 tools/qa/verify-cloud-run-preview-revision.sh
 ```
 
+When only the public Cloud Run signal is needed, and exact build identifiers are intentionally redacted from public responses, use public signal mode:
+
+```bash
+PREVIEW_URL=https://example-preview.vercel.app \
+BACKEND_BASE_URL=https://backend-preview.example.run.app \
+VERIFY_PUBLIC_SIGNAL_ONLY=true \
+tools/qa/verify-cloud-run-preview-revision.sh
+```
+
+This confirms that `/health` is reachable and reports revision metadata presence. It does not replace read-only Cloud Run metadata checks for exact revision name, image tag/digest, expected commit, or 100 percent traffic allocation.
+
 The verifier checks safe endpoints such as `/health`, `/health/ready`, `/health/db`, `/api/_build`, `/api/__probe/version`, and `/api/__probe/revision`. It fails when the expected commit, revision, or image token cannot be confirmed from endpoint output. Current public probes may expose only presence flags for build metadata; a verifier failure does not mutate Cloud Run and means manual revision/image/traffic confirmation is still required.
 
 Inspect the service:
