@@ -153,6 +153,10 @@ async function runMobileLayoutMatrix(page: Page, testInfo: TestInfo, route: Matr
   const authDetails = activeRole === route.role ? storageStateDetailsForRole(route.role) : { mode: "unauthenticated" as const };
 
   testInfo.annotations.push({
+    type: "smoke-mode",
+    description: "mobile layout matrix smoke",
+  });
+  testInfo.annotations.push({
     type: "matrix-role",
     description: route.role,
   });
