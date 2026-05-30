@@ -175,6 +175,7 @@ Optional:
 
 - `BACKEND_BASE_URL`: backend origin when the frontend preview and backend probe origin differ
 - `VERIFY_TIMEOUT_SECONDS`: per-endpoint curl timeout, default `10`
+- `VERIFY_PUBLIC_SIGNAL_ONLY=true`: confirm only that the public health signal is reachable and reports revision metadata presence
 
 Examples:
 
@@ -187,9 +188,16 @@ PREVIEW_URL=https://example-preview.vercel.app \
 BACKEND_BASE_URL=https://backend-preview.example.run.app \
 EXPECTED_IMAGE_TAG=<image-tag-or-short-sha> \
 tools/qa/verify-cloud-run-preview-revision.sh
+
+PREVIEW_URL=https://example-preview.vercel.app \
+BACKEND_BASE_URL=https://backend-preview.example.run.app \
+VERIFY_PUBLIC_SIGNAL_ONLY=true \
+tools/qa/verify-cloud-run-preview-revision.sh
 ```
 
 The verifier checks known safe probes, including `/health`, `/health/db`, `/health/ready`, `/api/_build`, `/api/__probe/version`, and `/api/__probe/revision`. It also reports gated diagnostics such as `/api/__debug/build` and `/api/_echo` when present, but gated `404` responses are not treated as proof of backend freshness.
+
+Public signal mode confirms only that `/health` is reachable and reports `revisionPresent: true`. It does not prove the exact commit, revision name, image tag, or traffic allocation. Use it when public endpoints intentionally redact exact build identifiers and Cloud Run metadata access is unavailable.
 
 If none of the safe endpoint responses contain an expected commit, revision, or image token, the script fails clearly. Current public probes may expose only route/build presence flags rather than the raw commit or revision value; in that case, use `docs/execution/CLOUD_RUN_DEPLOYMENT_CHECKLIST.md` to confirm the active Cloud Run revision, image tag/digest, and 100 percent traffic allocation before continuing preview QA.
 

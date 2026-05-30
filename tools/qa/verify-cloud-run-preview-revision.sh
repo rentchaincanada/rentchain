@@ -8,6 +8,7 @@ EXPECTED_REVISION="${EXPECTED_REVISION:-}"
 EXPECTED_IMAGE_TAG="${EXPECTED_IMAGE_TAG:-}"
 ALLOW_PRODUCTION_QA="${ALLOW_PRODUCTION_QA:-false}"
 VERIFY_TIMEOUT_SECONDS="${VERIFY_TIMEOUT_SECONDS:-10}"
+VERIFY_PUBLIC_SIGNAL_ONLY="${VERIFY_PUBLIC_SIGNAL_ONLY:-false}"
 
 if [ -z "$PREVIEW_URL" ]; then
   echo "PREVIEW_URL is required." >&2
@@ -15,8 +16,9 @@ if [ -z "$PREVIEW_URL" ]; then
   exit 2
 fi
 
-if [ -z "$EXPECTED_COMMIT" ] && [ -z "$EXPECTED_REVISION" ] && [ -z "$EXPECTED_IMAGE_TAG" ]; then
+if [ "$VERIFY_PUBLIC_SIGNAL_ONLY" != "true" ] && [ -z "$EXPECTED_COMMIT" ] && [ -z "$EXPECTED_REVISION" ] && [ -z "$EXPECTED_IMAGE_TAG" ]; then
   echo "Set at least one expected backend identifier: EXPECTED_COMMIT, EXPECTED_REVISION, or EXPECTED_IMAGE_TAG." >&2
+  echo "For public reachability only, set VERIFY_PUBLIC_SIGNAL_ONLY=true." >&2
   exit 2
 fi
 
@@ -112,16 +114,21 @@ tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT
 
 confirmed="false"
+public_signal_confirmed="false"
 reachable="false"
 server_error="false"
 
 echo "RentChain Cloud Run preview revision verification"
 echo "Frontend preview: $frontend_origin"
 echo "Backend probe origin: $backend_origin"
-echo "Expected tokens:"
-for token in "${expected_tokens[@]}"; do
-  echo "  - $token"
-done
+if [ "$VERIFY_PUBLIC_SIGNAL_ONLY" = "true" ]; then
+  echo "Mode: public signal only"
+else
+  echo "Expected tokens:"
+  for token in "${expected_tokens[@]}"; do
+    echo "  - $token"
+  done
+fi
 echo
 
 for endpoint in "${endpoints[@]}"; do
@@ -176,19 +183,46 @@ for endpoint in "${endpoints[@]}"; do
   fi
 
   cat "$headers_file" "$body_file" > "$combined_file" 2>/dev/null || true
-  for token in "${expected_tokens[@]}"; do
-    if grep -Fq "$token" "$combined_file"; then
-      echo "  matched expected token: $token"
-      confirmed="true"
-    fi
-  done
+  if [ "$VERIFY_PUBLIC_SIGNAL_ONLY" != "true" ]; then
+    for token in "${expected_tokens[@]}"; do
+      if grep -Fq "$token" "$combined_file"; then
+        echo "  matched expected token: $token"
+        confirmed="true"
+      fi
+    done
+  fi
 
   if [ -s "$body_file" ]; then
     body_preview="$(head -c 600 "$body_file" | tr '\n' ' ' | sed 's/[[:space:]][[:space:]]*/ /g')"
     echo "  body preview: $body_preview"
   fi
+
+  if [ "$VERIFY_PUBLIC_SIGNAL_ONLY" = "true" ] && [ "$endpoint" = "/health" ]; then
+    if grep -Eq '"ok"[[:space:]]*:[[:space:]]*true' "$body_file" \
+      && grep -Eq '"revisionPresent"[[:space:]]*:[[:space:]]*true' "$body_file"; then
+      echo "  public signal: ok with revision metadata present"
+      public_signal_confirmed="true"
+    fi
+  fi
   echo
 done
+
+if [ "$VERIFY_PUBLIC_SIGNAL_ONLY" = "true" ]; then
+  if [ "$public_signal_confirmed" = "true" ]; then
+    echo "Verified: public health signal is reachable and reports revision metadata presence."
+    echo "Exact commit/revision/image identity was not verified in public signal mode."
+    exit 0
+  fi
+
+  echo "Could not confirm the public Cloud Run revision signal from /health." >&2
+  if [ "$reachable" != "true" ]; then
+    echo "No safe endpoint returned a reachable non-5xx response." >&2
+  fi
+  if [ "$server_error" = "true" ]; then
+    echo "One or more endpoints returned 5xx and should be reviewed separately." >&2
+  fi
+  exit 1
+fi
 
 if [ "$confirmed" = "true" ]; then
   echo "Verified: backend response data contains at least one expected revision/commit/image token."
