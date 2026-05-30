@@ -2517,6 +2517,76 @@ function buildTenantWorkspaceContextMetadata(
   return { ...metadata, sourceCollections, sourceRefs: normalizedRefs };
 }
 
+function normalizeTenantSourceRefs(sourceRefs: TenantSafeProjectionSourceReference[]) {
+  const byKey = new Map<string, TenantSafeProjectionSourceReference>();
+  for (const ref of sourceRefs) {
+    if (ref.sourceCollection && ref.sourceId) byKey.set(`${ref.sourceCollection}:${ref.sourceId}`, ref);
+  }
+  return Array.from(byKey.values()).sort((a, b) =>
+    `${a.sourceCollection}:${a.sourceId}`.localeCompare(`${b.sourceCollection}:${b.sourceId}`)
+  );
+}
+
+function tenantSourceCollections(sourceRefs: TenantSafeProjectionSourceReference[]) {
+  return Array.from(new Set(sourceRefs.map((item) => item.sourceCollection))).sort((a, b) => a.localeCompare(b));
+}
+
+function buildTenantDocumentAccessMetadata(params: {
+  leaseId?: string | null;
+  propertyId?: string | null;
+  unitId?: string | null;
+  tenantId?: string | null;
+}) {
+  const sourceRefs = normalizeTenantSourceRefs(deriveTenantSafeSourceRefs(params));
+  const sourceCollections = tenantSourceCollections(sourceRefs);
+  const metadata = deriveTenantSafeProjectionMetadata({
+    projectionName: "tenant_safe_document_access_projection",
+    scopeType: "tenant_document_access",
+    sourceCollections,
+    relationshipBasis: "Document access projection must be derived from authenticated tenant lease ownership.",
+  });
+  return { ...metadata, sourceCollections, sourceRefs };
+}
+
+function buildTenantLeaseProjectionMetadata(params: {
+  leaseId?: string | null;
+  propertyId?: string | null;
+  unitId?: string | null;
+  tenantId?: string | null;
+}) {
+  const sourceRefs = normalizeTenantSourceRefs(deriveTenantSafeSourceRefs(params));
+  const sourceCollections = tenantSourceCollections(sourceRefs);
+  const metadata = deriveTenantSafeProjectionMetadata({
+    projectionName: "tenant_safe_workspace_projection",
+    scopeType: "tenant_current_lease",
+    sourceCollections,
+    relationshipBasis: "Projection must be derived from the authenticated tenant's current lease relationship.",
+  });
+  return { ...metadata, sourceCollections, sourceRefs };
+}
+
+function buildTenantAttachmentProjectionMetadata(params: {
+  leaseId?: string | null;
+  propertyId?: string | null;
+  unitId?: string | null;
+  tenantId?: string | null;
+  attachmentIds?: string[];
+}) {
+  const sourceRefs = deriveTenantSafeSourceRefs(params);
+  for (const attachmentId of params.attachmentIds || []) {
+    if (attachmentId) sourceRefs.push({ sourceCollection: "ledgerAttachments", sourceId: attachmentId });
+  }
+  const normalizedRefs = normalizeTenantSourceRefs(sourceRefs);
+  const sourceCollections = tenantSourceCollections(normalizedRefs);
+  const metadata = deriveTenantSafeProjectionMetadata({
+    projectionName: "tenant_safe_attachment_projection",
+    scopeType: "tenant_attachment",
+    sourceCollections,
+    relationshipBasis: "Attachment projection must be derived from authenticated tenant workspace and tenant-safe document visibility.",
+  });
+  return { ...metadata, sourceCollections, sourceRefs: normalizedRefs };
+}
+
 async function buildTenantWorkspaceDisplayProjection(
   context: Awaited<ReturnType<typeof resolveTenancyContext>>,
   workspace: Awaited<ReturnType<typeof loadTenantWorkspaceData>>,
@@ -5237,6 +5307,7 @@ router.get("/application-completion", requireTenantWorkspaceIdentity, async (req
   }
 });
 
+// Primary tenant-safe lease projection route. A legacy duplicate registration exists below; keep this route first until a separate consolidation mission retires the duplicate.
 router.get("/lease", requireTenantWorkspaceIdentity, async (req: any, res) => {
   const context = await resolveWorkspaceContextOrRespond(req, res);
   if (!context) return;
@@ -5282,6 +5353,12 @@ router.get("/lease/document-url", requireTenantWorkspaceIdentity, async (req: an
     return res.json({
       ok: true,
       data: {
+        ...buildTenantDocumentAccessMetadata({
+          leaseId: context.leaseId,
+          propertyId: context.propertyId,
+          unitId: context.unitId,
+          tenantId: context.tenantId,
+        }),
         documentUrl: documentContext.documentUrl,
         displayLabel: documentContext.displayLabel,
         documentStatus: documentContext.documentStatus,
@@ -5527,6 +5604,7 @@ router.post("/leases/:leaseId/sign", requireTenantWorkspaceIdentity, async (req:
     const signatureMethod = req.body?.signatureMethod === "drawn" ? "drawn" : "typed";
     const nowIso = new Date().toISOString();
 
+    // Signature writes update tenant-visible state and append canonical events; historical signing evidence remains preserved.
     await leaseRef.set(
       {
         tenantSignedAt: nowIso,
@@ -7150,6 +7228,13 @@ router.get("/attachments", requireTenantWorkspaceIdentity, async (req: any, res)
 
     return res.json({
       ok: true,
+      ...buildTenantAttachmentProjectionMetadata({
+        leaseId: context.leaseId,
+        propertyId: context.propertyId,
+        unitId: context.unitId,
+        tenantId,
+        attachmentIds: documentWorkspace.items.map((item: any) => String(item?.id || "").trim()).filter(Boolean),
+      }),
       data: documentWorkspace.items,
       summary: documentWorkspace.summary,
       guidance: documentWorkspace.guidance,
@@ -7195,6 +7280,7 @@ router.get("/ledger/:ledgerItemId/attachments", requireTenant, async (req: any, 
   }
 });
 
+// Legacy duplicate lease route shadowed by the workspace-context route above. Preserve route order and leave consolidation to a separately scoped cleanup.
 router.get("/lease", requireTenant, async (req: any, res) => {
   try {
     const tenantId = req.user?.tenantId;
@@ -7309,6 +7395,12 @@ router.get("/lease", requireTenant, async (req: any, res) => {
 
     const lease = {
       ...(projectedLease || {
+        ...buildTenantLeaseProjectionMetadata({
+          leaseId,
+          propertyId,
+          unitId,
+          tenantId,
+        }),
         leaseId,
         startDate: null,
         endDate: null,

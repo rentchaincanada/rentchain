@@ -664,6 +664,9 @@ describe("tenantPortalRoutes foundation", () => {
 
     expect(res.status).toBe(200);
     expect(res.body?.data?.leaseId).toBe("lease-1");
+    expect(res.body?.data?.projectionProfile?.projectionName).toBe("tenant_safe_workspace_projection");
+    expect(res.body?.data?.projectionProfile?.scopeType).toBe("tenant_current_lease");
+    expect(res.body?.data?.redactionSummary?.redactedFieldGroups).toContain("payment_account_details");
     expect(res.body?.data?.signatureStatus).toBe("signed");
     expect(res.body?.data?.signatureReadinessDescription).toMatch(/current signing stage as complete/i);
     expect(res.body?.data?.tenantSignature).toEqual({
@@ -964,6 +967,13 @@ describe("tenantPortalRoutes foundation", () => {
     expect(res.status).toBe(200);
     expect(res.body?.data).toEqual(
       expect.objectContaining({
+        projectionProfile: expect.objectContaining({
+          projectionName: "tenant_safe_document_access_projection",
+          scopeType: "tenant_document_access",
+        }),
+        redactionSummary: expect.objectContaining({
+          redactedFieldGroups: expect.arrayContaining(["storage_paths", "provider_delivery_payloads"]),
+        }),
         documentUrl: "https://signed.example/leases/landlord-1/lease-1/lease-v1.pdf",
         displayLabel: "Signed lease document",
         documentStatus: "signed",
@@ -3359,6 +3369,15 @@ describe("tenantPortalRoutes foundation", () => {
     });
 
     expect(res.status).toBe(200);
+    expect(res.body?.projectionProfile).toEqual(
+      expect.objectContaining({
+        projectionName: "tenant_safe_attachment_projection",
+        scopeType: "tenant_attachment",
+      })
+    );
+    expect(res.body?.redactionSummary?.redactedFieldGroups).toEqual(
+      expect.arrayContaining(["storage_paths", "provider_delivery_payloads"])
+    );
     expect(Array.isArray(res.body?.data)).toBe(true);
     expect(res.body?.summary?.total).toBeGreaterThan(0);
     expect(res.body?.summary?.uploaded).toBeGreaterThanOrEqual(2);

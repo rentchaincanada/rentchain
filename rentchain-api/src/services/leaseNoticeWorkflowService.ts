@@ -1013,6 +1013,7 @@ export async function appendLeaseWorkflowEvent(input: {
   eventType: LeaseWorkflowEventType;
   eventData?: Record<string, unknown>;
 }) {
+  // Lease notice state changes keep the original notice fields intact and append workflow events for audit continuity.
   const ref = db.collection("leaseWorkflowEvents").doc();
   const payload = {
     id: ref.id,

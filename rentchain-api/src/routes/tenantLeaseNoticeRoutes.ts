@@ -9,6 +9,11 @@ import {
   lookupUserEmail,
   sendLeaseWorkflowEmail,
 } from "../services/leaseNoticeWorkflowService";
+import {
+  deriveTenantSafeProjectionMetadata,
+  deriveTenantSafeSourceRefs,
+  type TenantSafeProjectionSourceReference,
+} from "../services/tenantPortal/tenantSafeProjectionContract";
 
 const router = Router();
 router.use(authenticateJwt);
@@ -40,6 +45,87 @@ function appBaseUrl() {
   return String(process.env.PUBLIC_APP_URL || process.env.VITE_PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "");
 }
 
+function uniqueSourceCollections(sourceRefs: TenantSafeProjectionSourceReference[]) {
+  return Array.from(new Set(sourceRefs.map((item) => item.sourceCollection))).sort((a, b) => a.localeCompare(b));
+}
+
+function buildLeaseNoticeProjectionMetadata(notice: any) {
+  const sourceRefs = deriveTenantSafeSourceRefs({
+    leaseId: String(notice?.leaseId || "").trim() || null,
+    propertyId: String(notice?.propertyId || "").trim() || null,
+    unitId: String(notice?.unitId || "").trim() || null,
+    tenantId: String(notice?.tenantId || "").trim() || null,
+  });
+  const noticeId = String(notice?.id || "").trim();
+  if (noticeId) sourceRefs.push({ sourceCollection: "leaseNotices", sourceId: noticeId });
+  const sourceCollections = uniqueSourceCollections(sourceRefs);
+  const metadata = deriveTenantSafeProjectionMetadata({
+    projectionName: "tenant_safe_lease_notice_projection",
+    scopeType: "tenant_lease_notice",
+    sourceCollections,
+    relationshipBasis: "Lease notice projection must be derived from the authenticated tenant's lease notice relationship.",
+  });
+  return { ...metadata, sourceCollections, sourceRefs };
+}
+
+function projectTenantLeaseNotice(notice: any) {
+  const projected = {
+    id: String(notice?.id || "").trim(),
+    leaseId: String(notice?.leaseId || "").trim(),
+    landlordId: String(notice?.landlordId || "").trim() || null,
+    tenantId: String(notice?.tenantId || "").trim() || null,
+    propertyId: String(notice?.propertyId || "").trim() || null,
+    unitId: String(notice?.unitId || "").trim() || null,
+    noticeType: String(notice?.noticeType || "").trim() || "lease_notice",
+    legalTemplateKey: String(notice?.legalTemplateKey || "").trim() || null,
+    province: String(notice?.province || "").trim() || null,
+    leaseType: String(notice?.leaseType || "").trim() || null,
+    noticeDueAt: typeof notice?.noticeDueAt === "number" ? notice.noticeDueAt : null,
+    sentAt: typeof notice?.sentAt === "number" ? notice.sentAt : null,
+    deliveryStatus: String(notice?.deliveryStatus || "pending").trim() || "pending",
+    deliveryChannel: String(notice?.deliveryChannel || "").trim() || null,
+    rentChangeMode: String(notice?.rentChangeMode || "no_change").trim() || "no_change",
+    currentRent: typeof notice?.currentRent === "number" ? notice.currentRent : null,
+    proposedRent: typeof notice?.proposedRent === "number" ? notice.proposedRent : null,
+    newTermType: String(notice?.newTermType || "").trim() || null,
+    newTermStartDate: String(notice?.newTermStartDate || "").trim() || null,
+    newTermEndDate: String(notice?.newTermEndDate || "").trim() || null,
+    responseRequired: notice?.responseRequired !== false,
+    responseDeadlineAt: typeof notice?.responseDeadlineAt === "number" ? notice.responseDeadlineAt : null,
+    tenantResponse: String(notice?.tenantResponse || "pending").trim() || "pending",
+    tenantRespondedAt: typeof notice?.tenantRespondedAt === "number" ? notice.tenantRespondedAt : null,
+    tenantViewedAt: typeof notice?.tenantViewedAt === "number" ? notice.tenantViewedAt : null,
+    createdAt: typeof notice?.createdAt === "number" ? notice.createdAt : null,
+    updatedAt: typeof notice?.updatedAt === "number" ? notice.updatedAt : null,
+    metadata: {
+      noticeRuleVersion: String(notice?.metadata?.noticeRuleVersion || "").trim() || null,
+      summary: notice?.metadata?.summary
+        ? {
+            title: String(notice.metadata.summary.title || "").trim() || null,
+            body: String(notice.metadata.summary.body || "").trim() || null,
+          }
+        : null,
+    },
+  };
+  return { ...buildLeaseNoticeProjectionMetadata(projected), ...projected };
+}
+
+function buildLeaseNoticeCollectionMetadata(tenantId: string, items: any[]) {
+  const sourceRefs = deriveTenantSafeSourceRefs({ tenantId });
+  for (const item of items) {
+    const noticeId = String(item?.id || "").trim();
+    if (noticeId) sourceRefs.push({ sourceCollection: "leaseNotices", sourceId: noticeId });
+  }
+  const sourceCollections = uniqueSourceCollections(sourceRefs);
+  const metadata = deriveTenantSafeProjectionMetadata({
+    projectionName: "tenant_safe_lease_notice_projection",
+    scopeType: "tenant_lease_notice",
+    sourceCollections,
+    relationshipBasis: "Lease notice list projection must be scoped to the authenticated tenant's notice records.",
+  });
+  return { ...metadata, sourceCollections, sourceRefs };
+}
+
 router.get("/", async (req: any, res) => {
   try {
     const tenantId = getCanonicalTenantId(req);
@@ -47,7 +133,13 @@ router.get("/", async (req: any, res) => {
     const items = snap.docs
       .map((doc) => ({ id: doc.id, ...(doc.data() as any) }))
       .sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0));
-    return res.json({ ok: true, items, data: items });
+    const projectedItems = items.map(projectTenantLeaseNotice);
+    return res.json({
+      ok: true,
+      ...buildLeaseNoticeCollectionMetadata(tenantId, projectedItems),
+      items: projectedItems,
+      data: projectedItems,
+    });
   } catch (err: any) {
     console.error("[lease-notice] tenant-list failed", { message: err?.message || "failed" });
     return res.status(500).json({ ok: false, error: "TENANT_LEASE_NOTICE_LIST_FAILED" });
@@ -103,7 +195,14 @@ router.get("/:id", async (req: any, res) => {
       notice.deliveryStatus = notice.deliveryStatus === "sent" ? "viewed" : notice.deliveryStatus;
     }
 
-    return res.json({ ok: true, item: notice, data: notice, noResponse: computeNoResponseState(notice) });
+    const projectedNotice = projectTenantLeaseNotice(notice);
+    return res.json({
+      ok: true,
+      ...buildLeaseNoticeProjectionMetadata(projectedNotice),
+      item: projectedNotice,
+      data: projectedNotice,
+      noResponse: computeNoResponseState(notice),
+    });
   } catch (err: any) {
     console.error("[lease-notice] tenant-detail failed", { message: err?.message || "failed" });
     return res.status(500).json({ ok: false, error: "TENANT_LEASE_NOTICE_GET_FAILED" });
@@ -238,10 +337,15 @@ router.post("/:id/respond", async (req: any, res) => {
 
     return res.json({
       ok: true,
+      ...buildLeaseNoticeProjectionMetadata({ ...notice, tenantResponse: decision, tenantRespondedAt: now, updatedAt: now }),
       decision,
       noticeId,
       leaseId,
-      landlordNotification: notification,
+      landlordNotification: {
+        ok: notification?.ok,
+        attempted: notification?.attempted,
+        reason: notification?.reason || null,
+      },
       nextStatus: decision === "renew" ? "renewal_accepted" : "move_out_pending",
     });
   } catch (err: any) {

@@ -1,4 +1,5 @@
 import { tenantApiFetch } from "./tenantApiFetch";
+import type { TenantSafeProjectionMetadata } from "./tenantPortal";
 
 export type TenantAttachment = {
   id: string;
@@ -46,6 +47,7 @@ export type TenantAttachmentGuidance = {
 
 export async function getTenantAttachments(): Promise<{
   ok: boolean;
+} & TenantSafeProjectionMetadata & {
   data: TenantAttachment[];
   summary?: TenantAttachmentSummary;
   guidance?: TenantAttachmentGuidance;
@@ -53,6 +55,7 @@ export async function getTenantAttachments(): Promise<{
 }> {
   return tenantApiFetch<{
     ok: boolean;
+  } & TenantSafeProjectionMetadata & {
     data: TenantAttachment[];
     summary?: TenantAttachmentSummary;
     guidance?: TenantAttachmentGuidance;
