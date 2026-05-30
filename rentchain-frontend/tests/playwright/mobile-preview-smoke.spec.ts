@@ -37,6 +37,11 @@ for (const viewport of viewports) {
         const consoleErrors: string[] = [];
         const pageErrors: string[] = [];
 
+        testInfo.annotations.push({
+          type: "smoke-mode",
+          description: "non-role mobile preview smoke",
+        });
+
         page.on("console", (message) => {
           if (message.type() === "error") {
             consoleErrors.push(message.text());
