@@ -66,6 +66,7 @@ Proceed with:
 4. Delete remote branch: [BRANCH_NAME]
 5. Confirm clean working tree on main
 6. Write full merge summary to .handoff/merge-log.md
+7. Write: echo "# Ready for next mission" > .handoff/mission-current.md
 
 POST-MERGE OUTPUT REQUIRED:
 1. Merge confirmation
