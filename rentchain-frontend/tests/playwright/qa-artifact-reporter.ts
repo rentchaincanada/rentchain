@@ -1,6 +1,7 @@
 import { resolve } from "node:path";
 import type { FullConfig, FullResult, Reporter, TestCase, TestResult, TestStep, Suite } from "@playwright/test/reporter";
 import { generateQAReport, writeQAReportArtifact } from "./qa-reporter-helpers";
+import { writeDashboardIndexArtifact } from "./qa-dashboard-artifacts";
 
 /**
  * QA Artifact Reporter for Playwright
@@ -81,8 +82,9 @@ export default class QAArtifactReporter implements Reporter {
       // Determine output directory
       const outputDir = (this.config as any).outputDir || process.env.QA_ARTIFACT_DIR || "test-results";
 
-      // Write QA report artifact
+      // Write QA report and dashboard index artifacts
       writeQAReportArtifact(qaReport, outputDir);
+      const dashboardIndexPath = writeDashboardIndexArtifact(qaReport, outputDir, this.rootSuite);
 
       const generationDuration = Date.now() - generationStart;
       const totalDuration = Date.now() - this.startTime;
@@ -93,6 +95,7 @@ export default class QAArtifactReporter implements Reporter {
       console.log(`  Attachments processed: ${qaReport.rawAttachmentCount}`);
       console.log(`  Smoke findings: T:${qaReport.smokeFindings.tenant.routesTested} L:${qaReport.smokeFindings.landlord.routesTested} A:${qaReport.smokeFindings.admin.routesTested} routes tested`);
       console.log(`  Layout combinations: T:${qaReport.mobileLayoutRegression.tenant.combinationsTested} L:${qaReport.mobileLayoutRegression.landlord.combinationsTested} A:${qaReport.mobileLayoutRegression.admin.combinationsTested} tested`);
+      console.log(`  Dashboard index: ${resolve(dashboardIndexPath)}`);
       console.log(`  Artifact generation: ${generationDuration}ms (total test time: ${totalDuration}ms)`);
 
       // Performance check (should complete in <5 seconds)
