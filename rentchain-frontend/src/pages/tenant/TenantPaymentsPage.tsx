@@ -29,7 +29,8 @@ function optionalSurfaceError(reason: any, fallback: string): string | null {
 }
 
 export const TenantPaymentsPage: React.FC = () => {
-  const { lease } = useTenantOutletContext();
+  const tenantContext = useTenantOutletContext();
+  const lease = tenantContext?.lease ?? null;
   const [payments, setPayments] = useState<TenantPayment[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);

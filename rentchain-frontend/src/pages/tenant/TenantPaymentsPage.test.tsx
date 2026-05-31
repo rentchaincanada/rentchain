@@ -10,21 +10,31 @@ const tenantPortalApi = vi.hoisted(() => ({
   confirmTenantRentCharge: vi.fn(),
 }));
 
-vi.mock("../../api/tenantPortalApi", () => tenantPortalApi);
-
-vi.mock("./TenantLayout.clean", () => ({
-  useTenantOutletContext: () => ({
+const tenantLayout = vi.hoisted(() => ({
+  context: {
     lease: {
       propertyName: "123 Main St",
       unitNumber: "2",
     },
-  }),
+  } as { lease: { propertyName: string; unitNumber: string } | null } | null,
+}));
+
+vi.mock("../../api/tenantPortalApi", () => tenantPortalApi);
+
+vi.mock("./TenantLayout.clean", () => ({
+  useTenantOutletContext: () => tenantLayout.context,
 }));
 
 describe("TenantPaymentsPage", () => {
   beforeEach(() => {
     cleanup();
     vi.clearAllMocks();
+    tenantLayout.context = {
+      lease: {
+        propertyName: "123 Main St",
+        unitNumber: "2",
+      },
+    };
   });
 
   it("renders tenant payment history when auxiliary payment surfaces are unavailable", async () => {
@@ -52,5 +62,18 @@ describe("TenantPaymentsPage", () => {
     expect(screen.queryByText(/Request failed \(404\)/i)).not.toBeInTheDocument();
     expect(screen.getByText(/No rent charges issued yet/i)).toBeInTheDocument();
     expect(screen.queryByText("internal-payment-id-1")).not.toBeInTheDocument();
+  });
+
+  it("renders a safe empty state when tenant layout context is not ready", async () => {
+    tenantLayout.context = null;
+    tenantPortalApi.getTenantPayments.mockResolvedValue([]);
+    tenantPortalApi.getTenantPaymentsSummary.mockResolvedValue(null);
+    tenantPortalApi.getTenantRentCharges.mockResolvedValue([]);
+
+    render(<TenantPaymentsPage />);
+
+    expect(await screen.findByText(/Rent payments/i)).toBeInTheDocument();
+    expect(screen.getByText(/Your lease/i)).toBeInTheDocument();
+    expect(await screen.findByText(/No active lease found/i)).toBeInTheDocument();
   });
 });
