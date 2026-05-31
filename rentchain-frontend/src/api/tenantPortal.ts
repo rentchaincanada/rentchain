@@ -286,6 +286,8 @@ export type TenantWorkspaceMaintenance = TenantSafeProjectionMetadata & {
   }>;
   createdAt: number | null;
   updatedAt: number | null;
+  read?: boolean;
+  readAt?: number | null;
   statusHistory?: Array<{
     status: string | null;
     actorRole: string | null;

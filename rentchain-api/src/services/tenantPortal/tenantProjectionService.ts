@@ -1,3 +1,4 @@
+import { createHash } from "crypto";
 import { deriveLeaseExecution, type LeaseExecution } from "../leaseExecution/deriveLeaseExecution";
 import { derivePaymentReadiness, type PaymentReadiness } from "../paymentReadiness/derivePaymentReadiness";
 import {
@@ -156,6 +157,8 @@ type TenantMaintenanceProjection = TenantProjectionMetadataFields & {
   }>;
   createdAt: number | null;
   updatedAt: number | null;
+  read: boolean;
+  readAt: number | null;
   statusHistory: Array<{
     status: string | null;
     actorRole: string | null;
@@ -167,6 +170,50 @@ type TenantMaintenanceProjection = TenantProjectionMetadataFields & {
 function asString(value: unknown): string | null {
   const next = String(value || "").trim();
   return next || null;
+}
+
+function safeHash(value: string): string {
+  return createHash("sha256").update(value).digest("hex").slice(0, 12);
+}
+
+export function tenantSafeMaintenanceReferenceKey(recordId: string): string {
+  return `maintenance:${safeHash(`maintenanceRequests:${String(recordId || "").trim() || "request"}`)}`;
+}
+
+function safeSourceRef(sourceCollection: string, sourceId: string | null): TenantSafeProjectionSourceReference | null {
+  const normalizedCollection = asString(sourceCollection);
+  const normalizedSourceId = asString(sourceId);
+  if (!normalizedCollection || !normalizedSourceId) return null;
+  return {
+    sourceCollection: normalizedCollection,
+    sourceId: `${normalizedCollection}:${safeHash(`${normalizedCollection}:${normalizedSourceId}`)}`,
+  };
+}
+
+function deriveTenantSafeHashedSourceRefs(input: {
+  leaseId?: string | null;
+  propertyId?: string | null;
+  unitId?: string | null;
+  tenantId?: string | null;
+  maintenanceRequestId?: string | null;
+}): TenantSafeProjectionSourceReference[] {
+  const rawRefs = deriveTenantSafeSourceRefs({
+    leaseId: input.leaseId,
+    propertyId: input.propertyId,
+    unitId: input.unitId,
+    tenantId: input.tenantId,
+  });
+  const refs = rawRefs
+    .map((ref) => safeSourceRef(ref.sourceCollection, ref.sourceId))
+    .filter((ref): ref is TenantSafeProjectionSourceReference => Boolean(ref));
+  const maintenanceRef = safeSourceRef("maintenanceRequests", input.maintenanceRequestId || null);
+  if (maintenanceRef) refs.push(maintenanceRef);
+
+  const byKey = new Map<string, TenantSafeProjectionSourceReference>();
+  for (const ref of refs) byKey.set(`${ref.sourceCollection}:${ref.sourceId}`, ref);
+  return Array.from(byKey.values()).sort((left, right) =>
+    `${left.sourceCollection}:${left.sourceId}`.localeCompare(`${right.sourceCollection}:${right.sourceId}`)
+  );
 }
 
 function isScheduleADocumentUrl(value: unknown): boolean {
@@ -538,13 +585,13 @@ export function projectTenantMaintenance(recordId: string, data: any): TenantMai
             Boolean(entry.status || entry.actorRole || entry.message || entry.createdAt)
         )
     : [];
-  const sourceRefs = deriveTenantSafeSourceRefs({
+  const sourceRefs = deriveTenantSafeHashedSourceRefs({
     leaseId: asString(data?.leaseId),
     propertyId: asString(data?.propertyId),
     unitId: asString(data?.unitId) || asString(data?.unitNumber) || asString(data?.unit),
     tenantId: asString(data?.tenantId),
+    maintenanceRequestId: recordId,
   });
-  sourceRefs.push({ sourceCollection: "maintenanceRequests", sourceId: recordId });
   const sourceCollections = uniqueSourceCollections(sourceRefs);
   const metadata = deriveTenantSafeProjectionMetadata({
     projectionName: "tenant_safe_maintenance_projection",
@@ -557,7 +604,7 @@ export function projectTenantMaintenance(recordId: string, data: any): TenantMai
     ...metadata,
     sourceCollections,
     sourceRefs,
-    requestId: recordId,
+    requestId: tenantSafeMaintenanceReferenceKey(recordId),
     status: asString(data?.status),
     category: asString(data?.category),
     priority: asString(data?.priority),
@@ -729,6 +776,8 @@ export function projectTenantMaintenance(recordId: string, data: any): TenantMai
       : [],
     createdAt: toMillis(data?.createdAt),
     updatedAt: toMillis(data?.updatedAt),
+    read: false,
+    readAt: null,
     statusHistory,
   };
 }

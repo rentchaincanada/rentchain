@@ -18,6 +18,18 @@ const { setObservabilityWriteShouldFail, getObservabilityWriteShouldFail } = vi.
     },
   };
 });
+const { setCollectionReadShouldFail, getCollectionReadShouldFail } = vi.hoisted(() => {
+  const failingCollections = new Set<string>();
+  return {
+    setCollectionReadShouldFail(name: string, value: boolean) {
+      if (value) failingCollections.add(name);
+      else failingCollections.delete(name);
+    },
+    getCollectionReadShouldFail(name: string) {
+      return failingCollections.has(name);
+    },
+  };
+});
 
 const collections = new Map<string, Map<string, any>>();
 
@@ -47,6 +59,9 @@ function applyMerge(current: any, incoming: any) {
 }
 
 function queryCollection(name: string, filters: Array<{ field: string; op: string; value: any }>, limitCount?: number) {
+  if (getCollectionReadShouldFail(name)) {
+    throw new Error(`${name}_read_failed`);
+  }
   let docs = Array.from(ensureCollection(name).entries())
     .filter(([, data]) =>
       filters.every((filter) => {
@@ -68,6 +83,9 @@ function queryCollection(name: string, filters: Array<{ field: string; op: strin
 const dbMock = {
   collection: (name: string) => ({
     get: async () => {
+      if (getCollectionReadShouldFail(name)) {
+        throw new Error(`${name}_read_failed`);
+      }
       const docs = Array.from(ensureCollection(name).entries()).map(([id, data]) => ({
         id,
         exists: true,
@@ -79,11 +97,16 @@ const dbMock = {
       const docId = id || `doc_${ensureCollection(name).size + 1}`;
       return {
         id: docId,
-        get: async () => ({
-          id: docId,
-          exists: ensureCollection(name).has(docId),
-          data: () => clone(ensureCollection(name).get(docId)),
-        }),
+        get: async () => {
+          if (getCollectionReadShouldFail(name)) {
+            throw new Error(`${name}_read_failed`);
+          }
+          return {
+            id: docId,
+            exists: ensureCollection(name).has(docId),
+            data: () => clone(ensureCollection(name).get(docId)),
+          };
+        },
         set: async (value: any, opts?: { merge?: boolean }) => {
           if (name === "systemObservabilityEvents" && getObservabilityWriteShouldFail()) {
             throw new Error("observability_write_failed");
@@ -205,6 +228,8 @@ describe("tenantPortalRoutes foundation", () => {
       payment_intent: "pi_test_1",
     });
     setObservabilityWriteShouldFail(false);
+    setCollectionReadShouldFail("properties", false);
+    setCollectionReadShouldFail("maintenanceRequests", false);
     process.env.EMAIL_FROM = "noreply@example.com";
     process.env.GCS_UPLOAD_BUCKET = "test-bucket";
     getSignedDownloadUrlMock.mockReset();
@@ -4386,8 +4411,201 @@ describe("tenantPortalRoutes foundation", () => {
 
     expect(res.status).toBe(201);
     expect(res.body?.data?.title).toBe("Broken lock");
+    expect(String(res.body?.data?.requestId || "")).toMatch(/^maintenance:/);
+    expect(JSON.stringify(res.body?.data)).not.toContain("prop-1");
+    expect(JSON.stringify(res.body?.data)).not.toContain("unit-1");
+    expect(JSON.stringify(res.body?.data)).not.toContain("lease-1");
+    expect(JSON.stringify(res.body?.data)).not.toContain("landlord-1");
     expect(Array.from(ensureCollection("event_log").values()).some((event) => event.event_type === "tenant_maintenance_submitted")).toBe(true);
     expect(sendEmailMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns tenant maintenance without raw identifiers or cross-tenant requests", async () => {
+    ensureCollection("maintenanceRequests").set("maint-other", {
+      tenantId: "tenant-2",
+      propertyId: "prop-1",
+      unitId: "unit-other",
+      leaseId: "lease-other",
+      landlordId: "landlord-2",
+      status: "submitted",
+      title: "Other tenant request",
+      description: "Should not be visible",
+      billingStatus: "internal",
+      assessmentStatus: "landlord_only",
+      createdAt: 300,
+      updatedAt: 400,
+    });
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/maintenance-requests",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body?.data)).toBe(true);
+    expect(res.body?.data).toHaveLength(1);
+    expect(res.body?.data?.[0]?.title).toBe("Leaky tap");
+    expect(String(res.body?.data?.[0]?.requestId || "")).toMatch(/^maintenance:/);
+    const serialized = JSON.stringify(res.body?.data);
+    expect(serialized).not.toContain("maint-1");
+    expect(serialized).not.toContain("maint-other");
+    expect(serialized).not.toContain("prop-1");
+    expect(serialized).not.toContain("unit-1");
+    expect(serialized).not.toContain("lease-1");
+    expect(serialized).not.toContain("landlord-1");
+    expect(serialized).not.toContain("landlord-2");
+    expect(serialized).not.toContain("Should not be visible");
+    expect(serialized).not.toContain("billingStatus");
+    expect(serialized).not.toContain("assessmentStatus");
+  });
+
+  it("keeps maintenance list shape consistent with workspace maintenance", async () => {
+    const router = (await import("../tenantPortalRoutes")).default;
+    const headers = {
+      "x-test-user": JSON.stringify({
+        id: "user-1",
+        email: "tenant@example.com",
+        role: "tenant",
+        tenantId: "tenant-1",
+      }),
+    };
+
+    const listRes = await invokeRouter(router, {
+      method: "GET",
+      url: "/maintenance-requests",
+      headers,
+    });
+    const workspaceRes = await invokeRouter(router, {
+      method: "GET",
+      url: "/workspace",
+      headers,
+    });
+
+    expect(listRes.status).toBe(200);
+    expect(workspaceRes.status).toBe(200);
+    expect(listRes.body?.data).toEqual(workspaceRes.body?.data?.maintenance);
+  });
+
+  it("fails closed to an empty maintenance list when workspace maintenance loading fails", async () => {
+    setCollectionReadShouldFail("maintenanceRequests", true);
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/maintenance-requests",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.data).toEqual([]);
+  });
+
+  it("ignores forged maintenance context fields in tenant submissions", async () => {
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/maintenance-requests",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+      body: {
+        title: "Broken window",
+        description: "The bedroom window will not close",
+        category: "GENERAL",
+        priority: "NORMAL",
+        tenantId: "tenant-2",
+        propertyId: "prop-forged",
+        unitId: "unit-forged",
+        leaseId: "lease-forged",
+        landlordId: "landlord-forged",
+      },
+    });
+
+    expect(res.status).toBe(201);
+    const saved = Array.from(ensureCollection("maintenanceRequests").values()).find((item) => item.title === "Broken window");
+    expect(saved).toEqual(
+      expect.objectContaining({
+        tenantId: "tenant-1",
+        propertyId: "prop-1",
+        unitId: "unit-1",
+        leaseId: "lease-1",
+      })
+    );
+    expect(JSON.stringify(saved)).not.toContain("forged");
+    expect(JSON.stringify(res.body?.data)).not.toContain("forged");
+  });
+
+  it("rejects invalid maintenance submissions before writing", async () => {
+    const initialSize = ensureCollection("maintenanceRequests").size;
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/maintenance-requests",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+      body: {
+        title: "",
+        description: "Missing title",
+      },
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body?.error).toBe("TITLE_AND_DESCRIPTION_REQUIRED");
+    expect(ensureCollection("maintenanceRequests").size).toBe(initialSize);
+  });
+
+  it("fails closed on maintenance submission property lookup errors before writing", async () => {
+    const initialSize = ensureCollection("maintenanceRequests").size;
+    setCollectionReadShouldFail("properties", true);
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/maintenance-requests",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+      body: {
+        title: "Broken sink",
+        description: "Sink is leaking",
+      },
+    });
+
+    expect(res.status).toBe(403);
+    expect(res.body?.error).toBe("TENANT_CONTEXT_REQUIRED");
+    expect(ensureCollection("maintenanceRequests").size).toBe(initialSize);
   });
 
   it("keeps workspace maintenance submission when email delivery fails", async () => {
