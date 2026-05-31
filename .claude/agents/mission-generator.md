@@ -37,6 +37,7 @@ BASE: Start from latest origin/main.
 # Why This Matters
 [explain governance and safety stakes]
 
+
 # Strict Requirements
 - Do not widen auth/permissions
 - Do not expose raw IDs/tokens/secrets
@@ -93,9 +94,17 @@ PR URL: [URL once opened]
 Branch: [BRANCH_NAME]
 These fields are required for downstream review to function correctly.
 
+# Commit Hygiene
+BEFORE ANY COMMIT:
+- Read .handoff/RULES.md
+- Strip all Co-Authored-By trailers
+- No AI tool names in commit message, PR title, or description
+- Confirm zero AI references before pushing
+
 # Commit
 COMMIT: [one line commit message — no AI references, no Co-Authored-By]
 
+⚠️ THE FOLLOWING RULES APPLY TO THIS GENERATOR ONLY — DO NOT INCLUDE IN GENERATED MISSION OUTPUT:
 STRICT RULES:
 - Never touch source files
 - Never implement anything
