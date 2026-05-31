@@ -1,3 +1,4 @@
+import { createHash } from "crypto";
 import { db } from "../../config/firebase";
 import type { TenancyContext } from "./tenancyContextService";
 import {
@@ -143,6 +144,37 @@ export type TenantIdentitySummary = Pick<
 function asString(value: unknown): string | null {
   const next = String(value || "").trim();
   return next || null;
+}
+
+function safeHash(value: string): string {
+  return createHash("sha256").update(value).digest("hex").slice(0, 12);
+}
+
+function safeReferenceKey(kind: string, value: unknown): string | null {
+  const normalized = asString(value);
+  if (!normalized) return null;
+  return `${kind}-ref-${safeHash(`${kind}:${normalized}`)}`;
+}
+
+function safeSourceRef(ref: TenantSafeProjectionSourceReference): TenantSafeProjectionSourceReference | null {
+  const sourceCollection = asString(ref?.sourceCollection);
+  const sourceId = asString(ref?.sourceId);
+  if (!sourceCollection || !sourceId) return null;
+  return {
+    sourceCollection,
+    sourceId: `${sourceCollection}-ref-${safeHash(`${sourceCollection}:${sourceId}`)}`,
+  };
+}
+
+function safeSourceRefs(sourceRefs: TenantSafeProjectionSourceReference[]): TenantSafeProjectionSourceReference[] {
+  const byKey = new Map<string, TenantSafeProjectionSourceReference>();
+  for (const ref of sourceRefs || []) {
+    const next = safeSourceRef(ref);
+    if (next) byKey.set(`${next.sourceCollection}:${next.sourceId}`, next);
+  }
+  return Array.from(byKey.values()).sort((left, right) =>
+    `${left.sourceCollection}:${left.sourceId}`.localeCompare(`${right.sourceCollection}:${right.sourceId}`)
+  );
 }
 
 function normalizeEmail(value: unknown): string | null {
@@ -1088,6 +1120,123 @@ export async function loadTenantApplicationReuseProjection(params: {
           address: asString(nextOfKin?.address),
         }
       : null,
+  };
+}
+
+function safeProjectionMetadataFields<T extends TenantProjectionMetadataFields>(projection: T) {
+  const sourceRefs = safeSourceRefs(projection.sourceRefs || []);
+  return {
+    sourceCollections: sourceCollectionsFromRefs(sourceRefs),
+    sourceRefs,
+  };
+}
+
+function sanitizeProfileContext(context: TenantProfileProjection["context"]): TenantProfileProjection["context"] {
+  return {
+    authority: context.authority,
+    propertyId: safeReferenceKey("property", context.propertyId),
+    rc_prop_id: safeReferenceKey("property", context.rc_prop_id),
+    applicationId: safeReferenceKey("application", context.applicationId),
+    leaseId: safeReferenceKey("lease", context.leaseId),
+    tenantId: safeReferenceKey("tenant", context.tenantId),
+    unitId: safeReferenceKey("unit", context.unitId),
+    invitedEmail: normalizeEmail(context.invitedEmail),
+  };
+}
+
+function sanitizeNestedMetadata<T extends TenantProjectionMetadataFields>(projection: T | null): T | null {
+  if (!projection) return null;
+  return {
+    ...projection,
+    ...safeProjectionMetadataFields(projection),
+  };
+}
+
+function sanitizeProfileProperty(
+  property: TenantProfileProjection["profile"]["property"]
+): TenantProfileProjection["profile"]["property"] {
+  if (!property) return null;
+  return {
+    ...sanitizeNestedMetadata(property)!,
+    propertyId: safeReferenceKey("property", property.propertyId) || "",
+    rc_prop_id: safeReferenceKey("property", property.rc_prop_id),
+  };
+}
+
+function sanitizeProfileUnit(unit: TenantProfileProjection["profile"]["unit"]): TenantProfileProjection["profile"]["unit"] {
+  if (!unit) return null;
+  return {
+    unitId: safeReferenceKey("unit", unit.unitId),
+    label: unit.label,
+  };
+}
+
+function sanitizeProfileApplication(
+  application: TenantProfileProjection["profile"]["application"]
+): TenantProfileProjection["profile"]["application"] {
+  if (!application) return null;
+  return {
+    ...sanitizeNestedMetadata(application)!,
+    applicationId: safeReferenceKey("application", application.applicationId) || "",
+  };
+}
+
+function sanitizeLeaseDocumentContext(value: any) {
+  if (!value || typeof value !== "object") return value || null;
+  return {
+    ...value,
+    leaseId: safeReferenceKey("lease", value.leaseId) || undefined,
+    tenantId: safeReferenceKey("tenant", value.tenantId) || undefined,
+    propertyId: safeReferenceKey("property", value.propertyId) || undefined,
+    unitId: safeReferenceKey("unit", value.unitId) || undefined,
+    documentId: safeReferenceKey("document", value.documentId) || undefined,
+  };
+}
+
+function sanitizeProfileLease(
+  lease: TenantProfileProjection["profile"]["lease"]
+): TenantProfileProjection["profile"]["lease"] {
+  if (!lease) return null;
+  return {
+    ...sanitizeNestedMetadata(lease)!,
+    leaseId: safeReferenceKey("lease", lease.leaseId) || "",
+    leaseDocumentContext: sanitizeLeaseDocumentContext((lease as any).leaseDocumentContext),
+    scheduleADocumentContext: sanitizeLeaseDocumentContext((lease as any).scheduleADocumentContext),
+  } as TenantProfileProjection["profile"]["lease"];
+}
+
+export function sanitizeTenantProfileProjection(profile: TenantProfileProjection): TenantProfileProjection {
+  return {
+    ...profile,
+    ...safeProjectionMetadataFields(profile),
+    context: sanitizeProfileContext(profile.context),
+    profile: {
+      displayName: profile.profile.displayName,
+      email: profile.profile.email,
+      phone: profile.profile.phone,
+      authorityLabel: profile.profile.authorityLabel,
+      property: sanitizeProfileProperty(profile.profile.property),
+      unit: sanitizeProfileUnit(profile.profile.unit),
+      application: sanitizeProfileApplication(profile.profile.application),
+      lease: sanitizeProfileLease(profile.profile.lease),
+    },
+    identity: profile.identity,
+  };
+}
+
+export function sanitizeTenantApplicationReuseProjection(
+  projection: TenantApplicationReuseProjection
+): TenantApplicationReuseProjection {
+  return {
+    ...projection,
+    ...safeProjectionMetadataFields(projection),
+    applicant: projection.applicant,
+    currentAddress: projection.currentAddress,
+    timeAtCurrentAddressMonths: projection.timeAtCurrentAddressMonths,
+    currentRentAmountCents: projection.currentRentAmountCents,
+    employment: projection.employment,
+    workReference: projection.workReference,
+    nextOfKin: projection.nextOfKin,
   };
 }
 

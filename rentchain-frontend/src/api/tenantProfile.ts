@@ -2,16 +2,17 @@ import { tenantApiFetch } from "./tenantApiFetch";
 import type { TenantSafeProjectionMetadata } from "./tenantPortal";
 
 export type TenantProfileStatus = "verified" | "pending" | "missing" | "needs_review";
+export type TenantProfileSafeReference = string | null;
 
 export type TenantProfileData = TenantSafeProjectionMetadata & {
   context: {
     authority: "applicant" | "active_tenant" | "invite" | null;
-    propertyId: string | null;
-    rc_prop_id: string | null;
-    applicationId: string | null;
-    leaseId: string | null;
-    tenantId: string | null;
-    unitId: string | null;
+    propertyId: TenantProfileSafeReference;
+    rc_prop_id: TenantProfileSafeReference;
+    applicationId: TenantProfileSafeReference;
+    leaseId: TenantProfileSafeReference;
+    tenantId: TenantProfileSafeReference;
+    unitId: TenantProfileSafeReference;
     invitedEmail: string | null;
   };
   profile: {
@@ -20,8 +21,8 @@ export type TenantProfileData = TenantSafeProjectionMetadata & {
     phone: string | null;
     authorityLabel: string;
     property: (TenantSafeProjectionMetadata & {
-      propertyId: string;
-      rc_prop_id: string | null;
+      propertyId: Exclude<TenantProfileSafeReference, null>;
+      rc_prop_id: TenantProfileSafeReference;
       street1: string | null;
       street2: string | null;
       city: string | null;
@@ -32,11 +33,11 @@ export type TenantProfileData = TenantSafeProjectionMetadata & {
       features: string[];
     }) | null;
     unit: {
-      unitId: string | null;
+      unitId: TenantProfileSafeReference;
       label: string | null;
     } | null;
     application: (TenantSafeProjectionMetadata & {
-      applicationId: string;
+      applicationId: Exclude<TenantProfileSafeReference, null>;
       status: string | null;
       missingSteps: string[];
       nextActions: string[];
@@ -44,7 +45,7 @@ export type TenantProfileData = TenantSafeProjectionMetadata & {
       updatedAt: string | null;
     }) | null;
     lease: (TenantSafeProjectionMetadata & {
-      leaseId: string;
+      leaseId: Exclude<TenantProfileSafeReference, null>;
       startDate: string | null;
       endDate: string | null;
       monthlyRent: number | null;

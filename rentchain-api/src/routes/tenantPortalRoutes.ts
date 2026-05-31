@@ -33,6 +33,8 @@ import {
   loadTenantApplicationReuseProjection,
   loadTenantIdentityRecord,
   loadTenantProfileProjection,
+  sanitizeTenantApplicationReuseProjection,
+  sanitizeTenantProfileProjection,
 } from "../services/tenantPortal/tenantProfileService";
 import { deriveTenantCredibilitySignals } from "../services/tenantCredibility/deriveTenantCredibilitySignals";
 import { deriveIdentityTimeline } from "../services/identityTimeline/deriveIdentityTimeline";
@@ -2975,6 +2977,12 @@ function cleanProfileField(value: unknown, max = 120): string | null {
   return next || null;
 }
 
+const TENANT_PROFILE_PATCH_ALLOWED_FIELDS = new Set(["displayName", "phone"]);
+
+function getTenantProfilePatchFieldNames(body: any) {
+  return Object.keys(body && typeof body === "object" && !Array.isArray(body) ? body : {});
+}
+
 async function queryFirstDocument(collectionName: string, field: string, value: string | null) {
   const normalized = cleanProfileField(value, 160);
   if (!normalized) return null;
@@ -3010,9 +3018,10 @@ function buildTenantProfileActions(profile: Awaited<ReturnType<typeof loadTenant
 }
 
 function shapeTenantProfileResponse(profile: Awaited<ReturnType<typeof loadTenantProfileProjection>>) {
+  const tenantSafeProfile = sanitizeTenantProfileProjection(profile);
   return {
-    ...profile,
-    actions: buildTenantProfileActions(profile),
+    ...tenantSafeProfile,
+    actions: buildTenantProfileActions(tenantSafeProfile),
   };
 }
 
@@ -3021,7 +3030,15 @@ async function withTenantLeaseDocumentContext(profile: Awaited<ReturnType<typeof
   const leaseId = String(lease?.leaseId || profile?.context?.leaseId || "").trim();
   const tenantId = String(profile?.context?.tenantId || "").trim();
   if (!leaseId || !tenantId) return profile;
-  const leaseSnap = await db.collection("leases").doc(leaseId).get();
+  let leaseSnap: any = null;
+  try {
+    leaseSnap = await db.collection("leases").doc(leaseId).get();
+  } catch (err: any) {
+    console.warn("[tenant/profile] lease document context unavailable", {
+      message: err?.message || "failed",
+    });
+    return profile;
+  }
   if (!leaseSnap.exists) return profile;
   const leaseData = leaseSnap.data() as any;
   const leaseDocumentContext = await getTenantLeaseDocumentContext({
@@ -5086,7 +5103,7 @@ router.get("/application-reuse", requireTenantWorkspaceIdentity, async (req: any
       context,
       userEmail: String(req.user?.email || "").trim() || null,
     });
-    return res.json({ ok: true, data: projection });
+    return res.json({ ok: true, data: sanitizeTenantApplicationReuseProjection(projection) });
   } catch (err: any) {
     console.error("[tenant/application-reuse] failed", {
       userId: req.user?.id,
@@ -5100,9 +5117,13 @@ router.patch("/profile", requireTenantWorkspaceIdentity, async (req: any, res) =
   const context = await resolveWorkspaceContextOrRespond(req, res);
   if (!context) return;
 
+  const bodyFields = getTenantProfilePatchFieldNames(req.body);
+  if (bodyFields.some((field) => !TENANT_PROFILE_PATCH_ALLOWED_FIELDS.has(field))) {
+    return res.status(400).json({ ok: false, error: "TENANT_PROFILE_INVALID_FIELDS" });
+  }
   const displayName = cleanProfileField(req.body?.displayName, 120);
   const phone = cleanProfileField(req.body?.phone, 40);
-  const requestedFields = Object.keys(req.body || {}).filter((field) => ["displayName", "phone"].includes(field));
+  const requestedFields = bodyFields.filter((field) => TENANT_PROFILE_PATCH_ALLOWED_FIELDS.has(field));
   if (!requestedFields.length) {
     return res.status(400).json({ ok: false, error: "TENANT_PROFILE_FIELDS_REQUIRED" });
   }
