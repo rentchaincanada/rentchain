@@ -18,6 +18,7 @@ STEP 2 — Write EXACTLY this block to .handoff/mission-review.md.
 No other content. No headers. No narrative. Just these lines:
 
 BRANCH NAME: [PASS or FAIL]
+BRANCH REVIEWED: [branch name from mission-current.md]
 AUDIT FIRST: [PASS or FAIL]
 SCOPE DEFINED: [PASS or FAIL]
 GUARDRAILS PRESENT: [PASS or FAIL]
@@ -27,7 +28,7 @@ ACCEPTANCE CRITERIA: [PASS or FAIL]
 MERGE AUTH RULE: [PASS or FAIL]
 COMMIT HYGIENE: [PASS or FAIL]
 CO-AUTHOR CLEAN: [PASS or FAIL]
-BRANCH REVIEWED: [branch name from mission-current.md]
+MANUAL QA REQUIRED: [YES if mission touches frontend rendering, auth flow, routing, mobile layout, or user-visible behavior — NO if docs/config/tests only]
 
 VERDICT: [READY FOR GATE 1 or NEEDS REVISION or ESCALATE TO HUMAN]
 
