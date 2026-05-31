@@ -13,7 +13,10 @@ export type TenantSafeProjectionName =
   | "tenant_safe_property_projection"
   | "tenant_safe_lease_notice_projection"
   | "tenant_safe_document_access_projection"
-  | "tenant_safe_attachment_projection";
+  | "tenant_safe_attachment_projection"
+  | "tenant_safe_ledger_projection"
+  | "tenant_safe_payment_projection"
+  | "tenant_safe_balance_projection";
 
 export type TenantSafeProjectionScopeType =
   | "tenant_current_lease"
@@ -26,7 +29,10 @@ export type TenantSafeProjectionScopeType =
   | "tenant_property"
   | "tenant_lease_notice"
   | "tenant_document_access"
-  | "tenant_attachment";
+  | "tenant_attachment"
+  | "tenant_ledger"
+  | "tenant_payment"
+  | "tenant_balance";
 
 export type TenantSafeProjectionSensitivityClass = "sensitive";
 
@@ -148,6 +154,25 @@ const SURFACE_ALLOWED_FIELD_GROUPS: Record<TenantSafeProjectionScopeType, string
     "scoped_source_references",
     "operational_labels",
   ],
+  tenant_ledger: [
+    "tenant_visible_ledger_summary",
+    "tenant_visible_payment_lifecycle",
+    "tenant_visible_charge_summary",
+    "tenant_visible_balance_summary",
+    "operational_labels",
+  ],
+  tenant_payment: [
+    "tenant_visible_payment_lifecycle",
+    "tenant_visible_receipt_summary",
+    "tenant_visible_payment_rail_status",
+    "operational_labels",
+  ],
+  tenant_balance: [
+    "tenant_visible_balance_summary",
+    "tenant_visible_payment_lifecycle",
+    "tenant_visible_charge_summary",
+    "operational_labels",
+  ],
 };
 
 const EXCLUDED_FIELD_GROUPS = [
@@ -164,6 +189,10 @@ const EXCLUDED_FIELD_GROUPS = [
   "storage_paths",
   "provider_delivery_payloads",
   "landlord_internal_workflow_state",
+  "raw_financial_transaction_ids",
+  "payment_provider_references",
+  "settlement_metadata",
+  "internal_ledger_ids",
 ];
 
 const SURFACE_REDACTION_POLICIES: Record<TenantSafeProjectionScopeType, string> = {
@@ -188,6 +217,12 @@ const SURFACE_REDACTION_POLICIES: Record<TenantSafeProjectionScopeType, string> 
     "Expose only tenant-scoped document URL, status, label, and expiry; exclude storage paths, bucket names, provider payloads, raw document metadata, and unrelated documents.",
   tenant_attachment:
     "Expose only tenant-safe attachment labels, status, dates, and tenant-visible document links; exclude storage paths, bucket names, provider payloads, raw metadata, and unrelated evidence.",
+  tenant_ledger:
+    "Expose only tenant-visible ledger amounts, dates, labels, lifecycle, and derived display references; exclude raw ledger IDs, transaction IDs, landlord IDs, unit IDs, provider references, payment tokens, and settlement metadata.",
+  tenant_payment:
+    "Expose only tenant-visible payment rail status, lifecycle, receipt state, amount, and derived display references; exclude raw payment IDs, payment intent IDs, provider references, payment tokens, landlord IDs, unit IDs, and settlement metadata.",
+  tenant_balance:
+    "Expose only tenant-visible balance totals, dates, and derived display references; exclude raw event IDs, tenant IDs, landlord IDs, unit IDs, provider references, payment tokens, and settlement metadata.",
 };
 
 function uniqueSorted(values: string[]): string[] {

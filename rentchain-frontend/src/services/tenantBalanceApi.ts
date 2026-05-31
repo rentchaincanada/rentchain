@@ -2,7 +2,7 @@
 import { apiFetch } from "@/api/apiFetch";
 
 export interface TenantBalanceSummary {
-  tenantId: string;
+  tenantReference: string | null;
   totalCharges: number;
   totalPayments: number;
   totalAdjustments: number;
@@ -12,7 +12,6 @@ export interface TenantBalanceSummary {
   lastPaymentAmount: number | null;
   nextChargeDate: string | null;
   nextChargeAmount: number | null;
-  eventCount: number;
 }
 
 export async function fetchTenantBalance(

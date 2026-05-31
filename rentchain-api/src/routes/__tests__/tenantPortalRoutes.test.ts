@@ -775,7 +775,7 @@ describe("tenantPortalRoutes foundation", () => {
     });
 
     expect(res.status).toBe(200);
-    expect(res.body?.data?.latestPayment?.id).toBe("rp-1");
+    expect(res.body?.data?.latestPayment?.id).toMatch(/^payment-ref-/);
     expect(res.body?.data?.paymentExperience?.history).toHaveLength(2);
     expect(res.body?.data?.paymentExperience?.latestStatus).toBe("failed");
     expect(res.body?.data?.paymentExperience?.retryAvailable).toBe(true);
@@ -784,8 +784,69 @@ describe("tenantPortalRoutes foundation", () => {
       label: "Payment summary available",
       amountCents: 180000,
       paidAt: "2026-04-27T10:02:00.000Z",
-      leaseReference: "lease-1",
+      leaseReference: expect.stringMatching(/^lease-ref-/),
     });
+    expect(JSON.stringify(res.body)).not.toContain("rp-1");
+    expect(JSON.stringify(res.body)).not.toContain("cs_");
+    expect(JSON.stringify(res.body)).not.toContain("pi_");
+  });
+
+  it("returns tenant ledger entries without raw financial identifiers", async () => {
+    ensureCollection("tenantEvents").set("raw-ledger-event-1", {
+      tenantId: "tenant-1",
+      landlordId: "landlord-1",
+      unitId: "unit-1",
+      type: "RentCharged",
+      title: "Monthly rent",
+      description: "June rent",
+      amountCents: 180000,
+      currency: "cad",
+      period: "2026-06",
+      providerPaymentId: "pi_raw_provider",
+      settlementBatchId: "set_raw_1",
+      occurredAt: "2026-06-01T10:00:00.000Z",
+    });
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/ledger",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.projectionProfile).toEqual(
+      expect.objectContaining({
+        projectionName: "tenant_safe_ledger_projection",
+        scopeType: "tenant_ledger",
+      })
+    );
+    expect(res.body?.redactionSummary?.redactedFieldGroups).toEqual(
+      expect.arrayContaining(["internal_ledger_ids", "payment_provider_references", "settlement_metadata"])
+    );
+    expect(res.body?.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: expect.stringMatching(/^ledger-ref-/),
+          title: "Rent recorded",
+          amountCents: 180000,
+          period: "2026-06",
+        }),
+      ])
+    );
+    const payload = JSON.stringify(res.body);
+    expect(payload).not.toContain("raw-ledger-event-1");
+    expect(payload).not.toContain("landlord-1");
+    expect(payload).not.toContain("unit-1");
+    expect(payload).not.toContain("pi_raw_provider");
+    expect(payload).not.toContain("set_raw_1");
   });
 
   it("does not show lease signing complete for an active lease without signature metadata", async () => {
@@ -1497,37 +1558,41 @@ describe("tenantPortalRoutes foundation", () => {
     });
 
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({
-      ok: true,
-      data: {
+    expect(res.body?.projectionProfile).toEqual(
+      expect.objectContaining({
+        projectionName: "tenant_safe_payment_projection",
+        scopeType: "tenant_payment",
+      })
+    );
+    expect(res.body?.redactionSummary?.redactedFieldGroups).toEqual(
+      expect.arrayContaining(["raw_financial_transaction_ids", "payment_provider_references", "settlement_metadata"])
+    );
+    expect(res.body?.data).toEqual(
+      expect.objectContaining({
         paymentRail: {
           enabled: true,
           enabledAt: "2026-04-27T10:00:00.000Z",
           processor: "stripe",
           blockedReason: null,
         },
-        latestPayment: {
-          id: "rp-1",
+        latestPayment: expect.objectContaining({
           amountCents: 180000,
           currency: "cad",
           status: "paid",
-          paymentIntentId: null,
           createdAt: "2026-04-27T10:05:00.000Z",
           updatedAt: "2026-04-27T10:06:00.000Z",
           paidAt: "2026-04-27T10:06:00.000Z",
-        },
-        paymentExperience: {
+        }),
+        paymentExperience: expect.objectContaining({
           history: [
-            {
-              id: "rp-1",
+            expect.objectContaining({
               amountCents: 180000,
               currency: "cad",
               status: "paid",
-              paymentIntentId: null,
               createdAt: "2026-04-27T10:05:00.000Z",
               updatedAt: "2026-04-27T10:06:00.000Z",
               paidAt: "2026-04-27T10:06:00.000Z",
-            },
+            }),
           ],
           latestStatus: "paid",
           retryAvailable: false,
@@ -1536,11 +1601,15 @@ describe("tenantPortalRoutes foundation", () => {
             label: "Payment summary available",
             amountCents: 180000,
             paidAt: "2026-04-27T10:06:00.000Z",
-            leaseReference: "lease-1",
+            leaseReference: expect.stringMatching(/^lease-ref-/),
           },
-        },
-      },
-    });
+        }),
+      })
+    );
+    expect(res.body?.data?.latestPayment?.id).toMatch(/^payment-ref-/);
+    expect(JSON.stringify(res.body)).not.toContain("rp-1");
+    expect(JSON.stringify(res.body)).not.toContain("paymentIntentId");
+    expect(JSON.stringify(res.body)).not.toContain("lease-1");
   });
 
   it("records tenant lease signing metadata without storing raw signature data and stays idempotent", async () => {
