@@ -3453,6 +3453,16 @@ describe("tenantPortalRoutes foundation", () => {
     expect(res.body?.summary?.pendingReview).toBeTypeOf("number");
     expect(res.body?.guidance?.headline).toBeTypeOf("string");
     expect(res.body?.data?.[0]?.internalNotes).toBeUndefined();
+    expect(res.body?.data?.[0]?.tenantId).toBeUndefined();
+    expect(res.body?.data?.[0]?.leaseId).toBeUndefined();
+    expect(res.body?.data?.[0]?.draftId).toBeUndefined();
+    expect(res.body?.data?.[0]?.ledgerItemId).toBeUndefined();
+    expect(
+      res.body?.data?.every((item: any) => String(item.id || "").startsWith("document-ref-"))
+    ).toBe(true);
+    expect(
+      res.body?.data?.some((item: any) => String(item.tenantReference || "").startsWith("tenant-ref-"))
+    ).toBe(true);
     expect(res.body?.data).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -3511,6 +3521,7 @@ describe("tenantPortalRoutes foundation", () => {
 
     expect(res.status).toBe(200);
     expect(res.body?.summary?.total).toBeGreaterThan(0);
+    expect(res.body?.data?.some((item: any) => item.tenantId || item.leaseId || item.ledgerItemId)).toBe(false);
     expect(res.body?.data).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -3667,6 +3678,72 @@ describe("tenantPortalRoutes foundation", () => {
     });
 
     expect(res.status).toBe(401);
+  });
+
+  it("projects ledger attachment responses without raw document identifiers", async () => {
+    ensureCollection("ledgerAttachments").set("ledger-attachment-sensitive", {
+      tenantId: "tenant-1",
+      landlordId: "landlord-1",
+      leaseId: "lease-1",
+      draftId: "draft-1",
+      ledgerItemId: "ledger-1",
+      title: "Rent receipt",
+      fileName: "receipt.pdf",
+      purpose: "receipt",
+      purposeLabel: "Receipt",
+      url: "https://example.com/receipt.pdf",
+      storagePath: "ledgerAttachments/private/receipt.pdf",
+      providerPayload: { secret: true },
+      internalNotes: "do-not-expose",
+      createdAt: 900,
+    });
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/ledger/ledger-1/attachments",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.projectionProfile).toEqual(
+      expect.objectContaining({
+        projectionName: "tenant_safe_attachment_projection",
+        scopeType: "tenant_attachment",
+      })
+    );
+    expect(res.body?.ledgerReference).toMatch(/^ledger-ref-/);
+    expect(res.body?.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: expect.stringMatching(/^document-ref-/),
+          documentReference: expect.stringMatching(/^document-ref-/),
+          tenantReference: expect.stringMatching(/^tenant-ref-/),
+          leaseReference: expect.stringMatching(/^lease-ref-/),
+          draftReference: expect.stringMatching(/^draft-ref-/),
+          ledgerReference: expect.stringMatching(/^ledger-ref-/),
+          title: "Rent receipt",
+          fileName: "receipt.pdf",
+          url: "https://example.com/receipt.pdf",
+        }),
+      ])
+    );
+    const payload = JSON.stringify(res.body?.data);
+    expect(payload).not.toContain("tenant-1");
+    expect(payload).not.toContain("lease-1");
+    expect(payload).not.toContain("draft-1");
+    expect(payload).not.toContain("ledger-1");
+    expect(payload).not.toContain("landlord-1");
+    expect(payload).not.toContain("storagePath");
+    expect(payload).not.toContain("providerPayload");
+    expect(payload).not.toContain("do-not-expose");
   });
 
   it("returns tenant-safe profile data with edit and document entry actions", async () => {
