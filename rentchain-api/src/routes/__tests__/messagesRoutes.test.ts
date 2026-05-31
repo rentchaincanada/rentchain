@@ -9,6 +9,8 @@ const { sendEmailMock } = vi.hoisted(() => ({
 }));
 
 const collections = new Map<string, Map<string, any>>();
+const failingDocGets = new Set<string>();
+const queryLimits: Array<{ collection: string; field: string; op: string; count: number }> = [];
 
 function ensureCollection(name: string) {
   if (!collections.has(name)) collections.set(name, new Map<string, any>());
@@ -27,7 +29,10 @@ const dbMock = {
         id: docId,
         get: async () => ({
           id: docId,
-          exists: ensureCollection(name).has(docId),
+          exists: (() => {
+            if (failingDocGets.has(`${name}/${docId}`)) throw new Error(`forced ${name} lookup failure`);
+            return ensureCollection(name).has(docId);
+          })(),
           data: () => clone(ensureCollection(name).get(docId)),
         }),
         set: async (value: any, opts?: { merge?: boolean }) => {
@@ -36,12 +41,15 @@ const dbMock = {
         },
       };
     },
-    where: (field: string, _op: string, value: any) => ({
+    where: (field: string, op: string, value: any) => ({
       orderBy: () => ({
         limit: (count: number) => ({
           get: async () => {
+            queryLimits.push({ collection: name, field, op, count });
             const docs = Array.from(ensureCollection(name).entries())
-              .filter(([, data]) => data?.[field] === value)
+              .filter(([, data]) =>
+                op === "array-contains" ? Array.isArray(data?.[field]) && data[field].includes(value) : data?.[field] === value
+              )
               .slice(0, count)
               .map(([id, data]) => ({ id, data: () => clone(data) }));
             return { docs };
@@ -50,8 +58,11 @@ const dbMock = {
       }),
       limit: (count: number) => ({
         get: async () => {
+          queryLimits.push({ collection: name, field, op, count });
           const docs = Array.from(ensureCollection(name).entries())
-            .filter(([, data]) => data?.[field] === value)
+            .filter(([, data]) =>
+              op === "array-contains" ? Array.isArray(data?.[field]) && data[field].includes(value) : data?.[field] === value
+            )
             .slice(0, count)
             .map(([id, data]) => ({ id, data: () => clone(data) }));
           return { docs };
@@ -59,7 +70,9 @@ const dbMock = {
       }),
       get: async () => {
         const docs = Array.from(ensureCollection(name).entries())
-          .filter(([, data]) => data?.[field] === value)
+          .filter(([, data]) =>
+            op === "array-contains" ? Array.isArray(data?.[field]) && data[field].includes(value) : data?.[field] === value
+          )
           .map(([id, data]) => ({ id, data: () => clone(data) }));
         return { docs };
       },
@@ -148,6 +161,8 @@ async function invokeRouter(router: any, options: {
 describe("messagesRoutes notifications", () => {
   beforeEach(() => {
     collections.clear();
+    failingDocGets.clear();
+    queryLimits.length = 0;
     sendEmailMock.mockReset();
     sendEmailMock.mockResolvedValue(undefined);
     process.env.EMAIL_FROM = "noreply@example.com";
@@ -520,5 +535,209 @@ describe("messagesRoutes notifications", () => {
         unitDisplayLabel: "Unit 2A",
       })
     );
+  });
+
+  it("denies cross-tenant conversation detail access", async () => {
+    const router = await createRouter();
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/tenant/messages/conversation/conv-1",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "tenant-user-2",
+          tenantId: "tenant-2",
+          landlordId: "landlord-1",
+          role: "tenant",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(403);
+    expect(res.body).toEqual(expect.objectContaining({ error: "Forbidden" }));
+  });
+
+  it("resolves tenant ownership from a lease when conversation tenantId is missing", async () => {
+    ensureCollection("conversations").set("conv-lease-owned", {
+      landlordId: "landlord-1",
+      tenantId: null,
+      tenantEmail: null,
+      leaseId: "lease-owned",
+      unitId: "unit-1",
+    });
+    ensureCollection("leases").set("lease-owned", {
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      status: "active",
+    });
+    ensureCollection("messages").set("message-lease-owned", {
+      conversationId: "conv-lease-owned",
+      senderRole: "landlord",
+      body: "Lease-derived message",
+    });
+
+    const router = await createRouter();
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/tenant/messages/conversation/conv-lease-owned",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "tenant-user-1",
+          tenantId: "tenant-1",
+          landlordId: "landlord-1",
+          role: "tenant",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.conversation).toEqual(expect.objectContaining({ tenantId: "tenant-1" }));
+    expect(res.body?.messages).toHaveLength(1);
+  });
+
+  it("resolves tenant ownership from tenant email when conversation tenantId is missing", async () => {
+    ensureCollection("conversations").set("conv-email-owned", {
+      landlordId: "landlord-1",
+      tenantId: null,
+      tenantEmail: "tenant@example.com",
+      unitId: "unit-1",
+    });
+
+    const router = await createRouter();
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/tenant/messages/conversation/conv-email-owned",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "tenant-user-1",
+          tenantId: "tenant-1",
+          landlordId: "landlord-1",
+          role: "tenant",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.conversation).toEqual(
+      expect.objectContaining({
+        tenantId: "tenant-1",
+        tenantDisplayName: "Taylor Tenant",
+      })
+    );
+  });
+
+  it("uses a safe tenant label when tenant lookup fails for an owned conversation", async () => {
+    ensureCollection("conversations").set("conv-missing-tenant", {
+      landlordId: "landlord-1",
+      tenantId: "tenant-missing",
+      tenantEmail: null,
+      unitId: "unit-1",
+    });
+
+    const router = await createRouter();
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/tenant/messages/conversation/conv-missing-tenant",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "tenant-missing",
+          landlordId: "landlord-1",
+          role: "tenant",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.conversation?.tenantDisplayName).toBe("Unknown Tenant");
+    expect(res.body?.conversation?.tenantDisplayName).not.toBe("tenant-missing");
+  });
+
+  it("clamps inconsistent tenant read state in normalized conversation output", async () => {
+    ensureCollection("conversations").set("conv-read-state", {
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      lastMessageAt: 1000,
+      lastReadAtTenant: 2000,
+      lastReadAtLandlord: 3000,
+    });
+
+    const router = await createRouter();
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/tenant/messages/conversation/conv-read-state",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "tenant-user-1",
+          tenantId: "tenant-1",
+          landlordId: "landlord-1",
+          role: "tenant",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.conversation?.lastReadAtTenant).toBe(1000);
+    expect(res.body?.conversation?.lastReadAtLandlord).toBe(1000);
+  });
+
+  it("caps lease lookup candidates during tenant ownership recovery", async () => {
+    ensureCollection("conversations").set("conv-capped-leases", {
+      landlordId: "landlord-1",
+      tenantId: null,
+      unitId: "unit-1",
+    });
+    for (let i = 0; i < 12; i += 1) {
+      ensureCollection("leases").set(`lease-candidate-${i}`, {
+        landlordId: "landlord-1",
+        tenantId: i === 0 ? "tenant-1" : `tenant-${i + 10}`,
+        propertyId: "prop-1",
+        unitId: "unit-1",
+        status: "active",
+      });
+    }
+
+    const router = await createRouter();
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/tenant/messages/conversation/conv-capped-leases",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "tenant-user-1",
+          tenantId: "tenant-1",
+          landlordId: "landlord-1",
+          role: "tenant",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(queryLimits.filter((query) => query.collection === "leases").every((query) => query.count <= 10)).toBe(true);
+  });
+
+  it("returns an owned conversation when tenant lookup throws", async () => {
+    ensureCollection("conversations").set("conv-tenant-lookup-error", {
+      landlordId: "landlord-1",
+      tenantId: "tenant-error",
+      tenantEmail: "tenant.error@example.com",
+      unitId: "unit-1",
+    });
+    failingDocGets.add("tenants/tenant-error");
+
+    const router = await createRouter();
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/tenant/messages/conversation/conv-tenant-lookup-error",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "tenant-error",
+          landlordId: "landlord-1",
+          role: "tenant",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.conversation?.tenantDisplayName).toBe("tenant.error@example.com");
   });
 });

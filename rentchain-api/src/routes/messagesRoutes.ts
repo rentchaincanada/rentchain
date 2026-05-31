@@ -13,6 +13,8 @@ router.use(authenticateJwt);
 
 type Role = "landlord" | "tenant";
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MAX_LEASE_LOOKUP_CANDIDATES = 10;
+const MAX_TENANT_LOOKUP_CANDIDATES = 2;
 const CURRENT_LEASE_STATUSES = new Set([
   "active",
   "current",
@@ -37,6 +39,18 @@ function toMillis(v: any): number | null {
 function normalizeConversation(doc: any) {
   const data = doc.data() as any;
   const id = doc.id;
+  const lastMessageAt = toMillis(data.lastMessageAt) || null;
+  const normalizeReadState = (value: any, role: Role) => {
+    const readAt = toMillis(value) || null;
+    if (readAt != null && lastMessageAt != null && readAt > lastMessageAt) {
+      console.warn("[messages] read state exceeds last message timestamp", {
+        conversationId: id,
+        role,
+      });
+      return lastMessageAt;
+    }
+    return readAt;
+  };
   return {
     id,
     landlordId: data.landlordId || null,
@@ -49,9 +63,9 @@ function normalizeConversation(doc: any) {
     leaseId: data.leaseId || data.currentLeaseId || null,
     propertySnapshotLabel: data.propertyDisplayLabel || data.propertyName || data.propertyLabel || null,
     unitSnapshotLabel: data.unitDisplayLabel || data.unitLabel || data.unitNumber || null,
-    lastMessageAt: toMillis(data.lastMessageAt) || null,
-    lastReadAtLandlord: toMillis(data.lastReadAtLandlord) || null,
-    lastReadAtTenant: toMillis(data.lastReadAtTenant) || null,
+    lastMessageAt,
+    lastReadAtLandlord: normalizeReadState(data.lastReadAtLandlord, "landlord"),
+    lastReadAtTenant: normalizeReadState(data.lastReadAtTenant, "tenant"),
     createdAt: toMillis(data.createdAt) || null,
   };
 }
@@ -86,6 +100,13 @@ function buildTenantEmail(tenant: any) {
   );
 }
 
+function logLookupFailure(scope: string, context: Record<string, unknown>, err: any) {
+  console.warn(`[messages] ${scope} lookup failed`, {
+    ...context,
+    message: err?.message || "lookup_failed",
+  });
+}
+
 async function lookupPropertyIdForUnit(unitId: string | null) {
   const target = stringOrNull(unitId);
   if (!target) return null;
@@ -93,7 +114,8 @@ async function lookupPropertyIdForUnit(unitId: string | null) {
     const unitSnap = await db.collection("units").doc(target).get();
     if (!unitSnap.exists) return null;
     return stringOrNull((unitSnap.data() as any)?.propertyId);
-  } catch {
+  } catch (err: any) {
+    logLookupFailure("unit property", { unitId: target }, err);
     return null;
   }
 }
@@ -106,29 +128,38 @@ async function loadCurrentLeaseForTenant(tenantId: string | null, hintedLeaseId?
       const snap = await db.collection("leases").doc(targetLeaseId).get();
       if (snap.exists) return { id: snap.id, raw: snap.data() as any };
     }
-  } catch {
-    // continue to tenant-based lookups
+  } catch (err: any) {
+    logLookupFailure("lease by id", { tenantId: targetTenantId, leaseId: targetLeaseId }, err);
   }
   if (!targetTenantId) return null;
 
   const candidates: Array<{ id: string; raw: any }> = [];
   try {
-    const directSnap = await db.collection("leases").where("tenantId", "==", targetTenantId).limit(10).get();
-    for (const doc of directSnap.docs || []) candidates.push({ id: doc.id, raw: doc.data() as any });
-  } catch {
-    // ignore lookup failures
+    const directSnap = await db.collection("leases").where("tenantId", "==", targetTenantId).limit(MAX_LEASE_LOOKUP_CANDIDATES).get();
+    for (const doc of (directSnap.docs || []).slice(0, MAX_LEASE_LOOKUP_CANDIDATES)) {
+      candidates.push({ id: doc.id, raw: doc.data() as any });
+    }
+  } catch (err: any) {
+    logLookupFailure("leases by tenantId", { tenantId: targetTenantId, limit: MAX_LEASE_LOOKUP_CANDIDATES }, err);
   }
   try {
-    const arraySnap = await db.collection("leases").where("tenantIds", "array-contains", targetTenantId).limit(10).get();
-    for (const doc of arraySnap.docs || []) {
+    const arraySnap = await db.collection("leases").where("tenantIds", "array-contains", targetTenantId).limit(MAX_LEASE_LOOKUP_CANDIDATES).get();
+    for (const doc of (arraySnap.docs || []).slice(0, MAX_LEASE_LOOKUP_CANDIDATES)) {
       if (!candidates.some((candidate) => candidate.id === doc.id)) {
         candidates.push({ id: doc.id, raw: doc.data() as any });
       }
     }
-  } catch {
-    // ignore lookup failures
+  } catch (err: any) {
+    logLookupFailure("leases by tenantIds", { tenantId: targetTenantId, limit: MAX_LEASE_LOOKUP_CANDIDATES }, err);
   }
 
+  if (candidates.length > MAX_LEASE_LOOKUP_CANDIDATES) {
+    console.warn("[messages] lease lookup candidate cap applied", {
+      tenantId: targetTenantId,
+      count: candidates.length,
+      limit: MAX_LEASE_LOOKUP_CANDIDATES,
+    });
+  }
   candidates.sort((left, right) => {
     const currentScore = (raw: any) =>
       ["active", "current", "signed", "notice_pending", "renewal_pending", "renewal_accepted"].includes(
@@ -141,7 +172,7 @@ async function loadCurrentLeaseForTenant(tenantId: string | null, hintedLeaseId?
     return (toMillis(right.raw?.updatedAt || right.raw?.createdAt) || 0) - (toMillis(left.raw?.updatedAt || left.raw?.createdAt) || 0);
   });
 
-  return candidates[0] || null;
+  return candidates.slice(0, MAX_LEASE_LOOKUP_CANDIDATES)[0] || null;
 }
 
 function scoreLeaseForMessages(raw: any) {
@@ -177,8 +208,8 @@ async function loadCurrentLeaseForConversation(
   if (!unitId) return null;
 
   try {
-    const snap = await db.collection("leases").where("unitId", "==", unitId).limit(10).get();
-    const candidates = (snap.docs || [])
+    const snap = await db.collection("leases").where("unitId", "==", unitId).limit(MAX_LEASE_LOOKUP_CANDIDATES).get();
+    const candidates = (snap.docs || []).slice(0, MAX_LEASE_LOOKUP_CANDIDATES)
       .map((doc: any) => ({ id: doc.id, raw: doc.data() as any }))
       .filter((lease: any) => {
         const leaseLandlordId = stringOrNull(lease.raw?.landlordId);
@@ -193,7 +224,13 @@ async function loadCurrentLeaseForConversation(
       return (toMillis(right.raw?.updatedAt || right.raw?.createdAt) || 0) - (toMillis(left.raw?.updatedAt || left.raw?.createdAt) || 0);
     });
     return candidates[0] || null;
-  } catch {
+  } catch (err: any) {
+    logLookupFailure("leases by unitId", {
+      conversationId: conversation.id,
+      tenantId,
+      unitId,
+      limit: MAX_LEASE_LOOKUP_CANDIDATES,
+    }, err);
     return null;
   }
 }
@@ -206,17 +243,17 @@ async function loadTenantForConversation(conversation: ReturnType<typeof normali
     try {
       const directSnap = await db.collection("tenants").doc(tenantId).get();
       if (directSnap.exists) return { id: directSnap.id, raw: directSnap.data() as any };
-    } catch {
-      // continue through alternate tenant identifiers
+    } catch (err: any) {
+      logLookupFailure("tenant by id", { conversationId: conversation.id, tenantId }, err);
     }
 
     for (const field of ["tenantId", "userId", "uid"]) {
       try {
-        const snap = await db.collection("tenants").where(field, "==", tenantId).limit(2).get();
+        const snap = await db.collection("tenants").where(field, "==", tenantId).limit(MAX_TENANT_LOOKUP_CANDIDATES).get();
         const doc = snap.docs?.[0];
         if (doc) return { id: doc.id, raw: doc.data() as any };
-      } catch {
-        // continue through alternate tenant identifiers
+      } catch (err: any) {
+        logLookupFailure("tenant by alternate id", { conversationId: conversation.id, field, tenantId }, err);
       }
     }
   }
@@ -224,11 +261,11 @@ async function loadTenantForConversation(conversation: ReturnType<typeof normali
   if (tenantEmail && emailRegex.test(tenantEmail)) {
     for (const field of ["email", "applicantEmail"]) {
       try {
-        const snap = await db.collection("tenants").where(field, "==", tenantEmail).limit(2).get();
+        const snap = await db.collection("tenants").where(field, "==", tenantEmail).limit(MAX_TENANT_LOOKUP_CANDIDATES).get();
         const doc = snap.docs?.[0];
         if (doc) return { id: doc.id, raw: doc.data() as any };
-      } catch {
-        // continue through alternate email fields
+      } catch (err: any) {
+        logLookupFailure("tenant by email", { conversationId: conversation.id, field, tenantEmail }, err);
       }
     }
   }
@@ -239,15 +276,21 @@ async function loadTenantForConversation(conversation: ReturnType<typeof normali
     try {
       const tenantSnap = await db.collection("tenants").doc(leaseTenantId).get();
       if (tenantSnap.exists) return { id: tenantSnap.id, raw: tenantSnap.data() as any };
-    } catch {
-      // fall back to unresolved tenant display
+    } catch (err: any) {
+      logLookupFailure("tenant by lease tenantId", { conversationId: conversation.id, tenantId: leaseTenantId }, err);
     }
   }
 
+  console.warn("[messages] tenant lookup missed", {
+    conversationId: conversation.id,
+    tenantId,
+    tenantEmail: tenantEmail || null,
+  });
   return null;
 }
 
 async function enrichConversationDisplay<T extends ReturnType<typeof normalizeConversation>>(conversations: T[]) {
+  const conversationById = new Map(conversations.map((conversation) => [conversation.id, conversation]));
   const tenantEntries = await Promise.all(
     conversations.map(async (conversation) => [conversation.id, await loadTenantForConversation(conversation)] as const)
   );
@@ -270,7 +313,7 @@ async function enrichConversationDisplay<T extends ReturnType<typeof normalizeCo
       {
         id: tenant?.id || null,
         raw: tenant?.raw || null,
-        label: tenant?.raw ? buildTenantLabel(tenant.raw) : null,
+        label: tenant?.raw ? buildTenantLabel(tenant.raw) : stringOrNull(conversationById.get(conversationId)?.tenantEmail),
         email: tenant?.raw ? buildTenantEmail(tenant.raw) : null,
         unitLabel: tenant?.raw ? normalizeUnitLabel(tenant.raw?.unitLabel || tenant.raw?.unitNumber || tenant.raw?.unit) : null,
         unitId: tenant?.raw ? stringOrNull(tenant.raw?.unitId) : null,
@@ -291,8 +334,13 @@ async function enrichConversationDisplay<T extends ReturnType<typeof normalizeCo
   ) as string[];
   const units = await Promise.all(
     unitIds.map(async (unitId) => {
-      const snap = await db.collection("units").doc(unitId).get();
-      const raw = snap.exists ? (snap.data() as any) : null;
+      let raw = null;
+      try {
+        const snap = await db.collection("units").doc(unitId).get();
+        raw = snap.exists ? (snap.data() as any) : null;
+      } catch (err: any) {
+        logLookupFailure("unit hydration", { unitId }, err);
+      }
       return [
         unitId,
         {
@@ -330,8 +378,8 @@ async function enrichConversationDisplay<T extends ReturnType<typeof normalizeCo
           raw,
           label: normalizeUnitLabel(raw?.unitNumber || raw?.unitLabel || raw?.label || raw?.name),
         });
-      } catch {
-        // ignore unit hydration failures
+      } catch (err: any) {
+        logLookupFailure("lease unit hydration", { unitId }, err);
       }
     })
   );
@@ -352,8 +400,13 @@ async function enrichConversationDisplay<T extends ReturnType<typeof normalizeCo
   ) as string[];
   const properties = await Promise.all(
     propertyIds.map(async (propertyId) => {
-      const snap = await db.collection("properties").doc(propertyId).get();
-      return [propertyId, snap.exists ? (snap.data() as any) : null] as const;
+      try {
+        const snap = await db.collection("properties").doc(propertyId).get();
+        return [propertyId, snap.exists ? (snap.data() as any) : null] as const;
+      } catch (err: any) {
+        logLookupFailure("property hydration", { propertyId }, err);
+        return [propertyId, null] as const;
+      }
     })
   );
   const propertyById = new Map<string, any>(properties);
@@ -398,7 +451,11 @@ async function enrichConversationDisplay<T extends ReturnType<typeof normalizeCo
         stringOrNull(conversation.tenantEmail) ||
         stringOrNull(resolvedTenant?.email) ||
         buildTenantEmail(resolvedLease?.raw),
-      tenantDisplayName: resolvedTenant?.label || stringOrNull(conversation.tenantName) || stringOrNull(conversation.tenantEmail),
+      tenantDisplayName:
+        resolvedTenant?.label ||
+        stringOrNull(conversation.tenantName) ||
+        stringOrNull(conversation.tenantEmail) ||
+        "Unknown Tenant",
       propertyDisplayLabel: buildPropertyLabel(property) || stringOrNull(conversation.propertySnapshotLabel),
       unitDisplayLabel:
         resolvedUnit?.label ||
@@ -761,6 +818,67 @@ function getTenantContext(req: any) {
   };
 }
 
+function tenantMatchesAuth(tenant: any, tenantId: string | null) {
+  const target = stringOrNull(tenantId);
+  if (!target) return false;
+  return [
+    tenant?.id,
+    tenant?.tenantId,
+    tenant?.userId,
+    tenant?.uid,
+    tenant?.raw?.tenantId,
+    tenant?.raw?.userId,
+    tenant?.raw?.uid,
+  ]
+    .map(stringOrNull)
+    .some((value) => value === target);
+}
+
+function leaseMatchesTenant(lease: any, tenantId: string | null) {
+  const target = stringOrNull(tenantId);
+  if (!target) return false;
+  const direct = stringOrNull(lease?.raw?.tenantId) || stringOrNull(lease?.tenantId);
+  if (direct === target) return true;
+  const tenantIds: any[] = Array.isArray(lease?.raw?.tenantIds) ? lease.raw.tenantIds : Array.isArray(lease?.tenantIds) ? lease.tenantIds : [];
+  return tenantIds.map(stringOrNull).some((value) => value === target);
+}
+
+async function validateTenantConversationOwnership(
+  conversation: ReturnType<typeof normalizeConversation>,
+  ctx: ReturnType<typeof getTenantContext>,
+  route: string
+) {
+  const tenantId = stringOrNull(ctx.tenantId);
+  const landlordId = stringOrNull(ctx.landlordId);
+  if (!tenantId || !landlordId || conversation.landlordId !== landlordId) {
+    console.warn("[messages] tenant conversation ownership denied", {
+      route,
+      conversationId: conversation.id,
+      tenantId,
+      landlordId,
+      reason: "scope_mismatch",
+    });
+    return false;
+  }
+
+  if (tenantMatchesAuth({ id: conversation.tenantId }, tenantId)) return true;
+
+  const tenant = await loadTenantForConversation(conversation);
+  if (tenantMatchesAuth(tenant, tenantId)) return true;
+
+  const lease = await loadCurrentLeaseForConversation(conversation, tenant);
+  if (leaseMatchesTenant(lease, tenantId)) return true;
+
+  console.warn("[messages] tenant conversation ownership denied", {
+    route,
+    conversationId: conversation.id,
+    tenantId,
+    landlordId,
+    reason: "tenant_not_resolved",
+  });
+  return false;
+}
+
 router.get("/tenant/messages/conversation", requireTenant, async (req: any, res) => {
   const ctx = getTenantContext(req);
   if (!ctx.tenantId || !ctx.landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
@@ -784,9 +902,15 @@ router.get("/tenant/messages/conversation", requireTenant, async (req: any, res)
       });
       const created = await ref.get();
       const enriched = (await enrichConversationDisplay([normalizeConversation(created)]))[0];
+      if (!(await validateTenantConversationOwnership(enriched, ctx, "tenant.ensure.created"))) {
+        return res.status(403).json({ ok: false, error: "Forbidden" });
+      }
       return res.json({ ok: true, conversation: enriched });
     }
     const enriched = (await enrichConversationDisplay([normalizeConversation(snap)]))[0];
+    if (!(await validateTenantConversationOwnership(enriched, ctx, "tenant.ensure.existing"))) {
+      return res.status(403).json({ ok: false, error: "Forbidden" });
+    }
     return res.json({ ok: true, conversation: enriched });
   } catch (err: any) {
     console.error("[messages] tenant get/create conversation error", err);
@@ -807,7 +931,7 @@ router.get("/tenant/messages/conversation/:id", requireTenant, async (req: any, 
     const convoSnap = await db.collection("conversations").doc(id).get();
     if (!convoSnap.exists) return res.status(404).json({ ok: false, error: "Conversation not found" });
     const convo = (await enrichConversationDisplay([normalizeConversation(convoSnap)]))[0];
-    if (convo.tenantId !== ctx.tenantId || convo.landlordId !== ctx.landlordId) {
+    if (!(await validateTenantConversationOwnership(convo, ctx, "tenant.detail"))) {
       return res.status(403).json({ ok: false, error: "Forbidden" });
     }
 
@@ -839,7 +963,7 @@ router.post("/tenant/messages/conversation/:id", requireTenant, async (req: any,
     const convoSnap = await db.collection("conversations").doc(id).get();
     if (!convoSnap.exists) return res.status(404).json({ ok: false, error: "Conversation not found" });
     const convo = normalizeConversation(convoSnap);
-    if (convo.tenantId !== ctx.tenantId || convo.landlordId !== ctx.landlordId) {
+    if (!(await validateTenantConversationOwnership(convo, ctx, "tenant.send"))) {
       return res.status(403).json({ ok: false, error: "Forbidden" });
     }
 
@@ -870,7 +994,7 @@ router.post("/tenant/messages/conversation/:id/read", requireTenant, async (req:
     const convoSnap = await db.collection("conversations").doc(id).get();
     if (!convoSnap.exists) return res.status(404).json({ ok: false, error: "Conversation not found" });
     const convo = normalizeConversation(convoSnap);
-    if (convo.tenantId !== ctx.tenantId || convo.landlordId !== ctx.landlordId) {
+    if (!(await validateTenantConversationOwnership(convo, ctx, "tenant.read"))) {
       return res.status(403).json({ ok: false, error: "Forbidden" });
     }
 
