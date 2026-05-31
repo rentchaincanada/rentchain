@@ -1,6 +1,10 @@
 // src/routes/tenantBalanceRoutes.ts
 import { Router, Request, Response } from "express";
 import { getTenantBalance } from "../services/tenantBalanceService";
+import {
+  buildTenantFinancialProjectionMetadata,
+  projectTenantBalanceSummary,
+} from "../services/tenantPortal/tenantFinancialProjectionService";
 
 const router = Router();
 
@@ -21,7 +25,16 @@ router.get(
       }
 
       const summary = await getTenantBalance(tenantId);
-      res.json(summary);
+      const metadata = buildTenantFinancialProjectionMetadata({
+        projectionName: "tenant_safe_balance_projection",
+        scopeType: "tenant_balance",
+        sourceCollections: ["events"],
+        relationshipBasis: "Balance projection must be derived from the requested tenant financial event scope.",
+      });
+      res.json({
+        ...metadata,
+        ...projectTenantBalanceSummary(summary),
+      });
     } catch (err) {
       console.error("[GET /tenant-balance/:tenantId] error", err);
       const message = err instanceof Error ? err.message : "Unknown error";

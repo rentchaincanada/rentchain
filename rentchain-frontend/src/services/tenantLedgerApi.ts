@@ -6,16 +6,18 @@ const API_BASE_URL = API_BASE.replace(/\/$/, "");
 
 export interface TenantLedgerEvent {
   id: string;
-  tenantId: string;
   type: string; // e.g. "payment", "charge", "ai_insight"
-  occurredAt: string;
+  occurredAt: number;
+  date?: string;
+  amount: number;
+  balanceAfter?: number;
   description: string;
   meta?: Record<string, any>;
 }
 
 export async function fetchTenantLedger(
   tenantId: string
-): Promise<TenantLedgerEvent[]> {
+): Promise<{ events: TenantLedgerEvent[] }> {
   const url = `${API_BASE_URL}/tenantLedger/${tenantId}`;
   console.log("[Ledger] Fetching:", url);
 
@@ -26,7 +28,7 @@ export async function fetchTenantLedger(
     console.log(
       "[Ledger] No tenantLedger endpoint yet; returning empty events array."
     );
-    return [];
+    return { events: [] };
   }
 
   if (!res.ok) {
@@ -35,6 +37,6 @@ export async function fetchTenantLedger(
     throw new Error(`Failed to fetch tenant ledger: ${res.status}`);
   }
 
-  const data = (await res.json()) as TenantLedgerEvent[];
-  return data;
+  const data = (await res.json()) as { events?: TenantLedgerEvent[] } | TenantLedgerEvent[];
+  return Array.isArray(data) ? { events: data } : { events: Array.isArray(data.events) ? data.events : [] };
 }

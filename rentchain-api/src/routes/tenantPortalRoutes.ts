@@ -19,6 +19,12 @@ import {
   deriveTenantSafeSourceRefs,
   type TenantSafeProjectionSourceReference,
 } from "../services/tenantPortal/tenantSafeProjectionContract";
+import {
+  buildTenantFinancialProjectionMetadata,
+  projectTenantFinancialEvent,
+  projectTenantLedgerItem,
+  projectTenantRentPaymentSummary,
+} from "../services/tenantPortal/tenantFinancialProjectionService";
 import { deriveLeaseExecution } from "../services/leaseExecution/deriveLeaseExecution";
 import { recordTenantEvent } from "../services/tenantPortal/tenantEventLogService";
 import { redeemTenancyInvite } from "../services/tenantPortal/tenantInviteService";
@@ -2471,11 +2477,12 @@ async function loadTenantWorkspaceData(context: Awaited<ReturnType<typeof resolv
         })
       ).rentPaymentSummary
     : null;
+  const tenantSafeRentPaymentSummary = rentPaymentSummary ? projectTenantRentPaymentSummary(rentPaymentSummary) : null;
 
   return {
     property: propertyDoc ? projectTenantProperty(propertyDoc.id, propertyDoc.data) : null,
     application: applicationDoc ? projectTenantApplication(applicationDoc.id, applicationDoc.data) : null,
-    lease: lease ? { ...lease, leaseDocumentContext, scheduleADocumentContext, rentPaymentSummary } : null,
+    lease: lease ? { ...lease, leaseDocumentContext, scheduleADocumentContext, rentPaymentSummary: tenantSafeRentPaymentSummary } : null,
     maintenance: maintenanceItems
       .map((item) => projectTenantMaintenance(item.id, item.data))
       .sort((left, right) => Number(right.updatedAt || 0) - Number(left.updatedAt || 0)),
@@ -5495,7 +5502,7 @@ router.get("/leases/:leaseId/payments", requireTenantWorkspaceIdentity, async (r
     }
     const leaseData = (leaseSnap.data() as any) || {};
     const projectedLease = projectTenantLease(leaseId, leaseData);
-    const data = (
+    const data = projectTenantRentPaymentSummary((
       await buildLeasePaymentProjection({
         rawLease: leaseData,
         lease: {
@@ -5515,8 +5522,14 @@ router.get("/leases/:leaseId/payments", requireTenantWorkspaceIdentity, async (r
         leaseId,
         documentUrl: projectedLease.documentUrl,
       })
-    ).rentPaymentSummary;
-    return res.json({ ok: true, data });
+    ).rentPaymentSummary);
+    const paymentProjectionMetadata = buildTenantFinancialProjectionMetadata({
+      projectionName: "tenant_safe_payment_projection",
+      scopeType: "tenant_payment",
+      sourceCollections: ["leases", "rentPayments"],
+      relationshipBasis: "Payment projection must be derived from authenticated tenant lease ownership.",
+    });
+    return res.json({ ok: true, ...paymentProjectionMetadata, data });
   } catch (err: any) {
     console.error("[tenant/leases/:leaseId/payments] failed", {
       tenantId: context.tenantId,
@@ -7050,19 +7063,6 @@ router.get("/ledger", requireTenant, async (req: any, res) => {
       return null;
     };
 
-    const normalizeAmount = (amount: any): number | null => {
-      if (typeof amount !== "number" || Number.isNaN(amount)) return null;
-      return Math.round(amount * 100);
-    };
-
-    const mapType = (t: string): "rent" | "fee" | "adjustment" | "payment" => {
-      const type = (t || "").toLowerCase();
-      if (type.includes("payment")) return "payment";
-      if (type.includes("fee")) return "fee";
-      if (type.includes("adjust")) return "adjustment";
-      return "rent";
-    };
-
     const toPeriod = (date: any): string | null => {
       const ts = toMillis(date);
       if (!ts) return null;
@@ -7083,6 +7083,13 @@ router.get("/ledger", requireTenant, async (req: any, res) => {
       return "OTHER";
     };
 
+    const ledgerProjectionMetadata = buildTenantFinancialProjectionMetadata({
+      projectionName: "tenant_safe_ledger_projection",
+      scopeType: "tenant_ledger",
+      sourceCollections: ["ledgerEvents", "payments", "tenantEvents"],
+      relationshipBasis: "Ledger projection must be derived from authenticated tenant scope and tenant-owned financial events.",
+    });
+
     const items = (entries || []).map((entry: any) => {
       const occurredAt = toMillis(entry.date ?? entry.occurredAt);
       const purpose =
@@ -7092,25 +7099,13 @@ router.get("/ledger", requireTenant, async (req: any, res) => {
         "OTHER";
       const purposeLabel =
         entry.purposeLabel ?? entry?.meta?.purposeLabel ?? entry.period ?? null;
-      return {
-        id: entry.id,
-        type: mapType(entry.type || ""),
-        title:
-          mapType(entry.type || "") === "payment"
-            ? "Payment recorded"
-            : mapType(entry.type || "") === "fee"
-            ? "Fee recorded"
-            : mapType(entry.type || "") === "adjustment"
-            ? "Adjustment recorded"
-            : "Rent recorded",
-        description: entry.notes ?? entry.label ?? entry.description ?? undefined,
-        amountCents: normalizeAmount(entry.amount),
-        currency: entry.currency ?? null,
+      return projectTenantLedgerItem({
+        ...entry,
         period: entry.period ?? toPeriod(entry.date ?? entry.occurredAt),
-        purpose: purpose ?? null,
-        purposeLabel: purposeLabel ?? null,
+        purpose,
+        purposeLabel,
         occurredAt: occurredAt ?? Date.now(),
-      };
+      });
     });
 
     const fetchTenantEventsForLedger = async () => {
@@ -7147,29 +7142,14 @@ router.get("/ledger", requireTenant, async (req: any, res) => {
             const occurredAt = toMillis(ev.occurredAt ?? ev.createdAt);
             const purpose = ev.purpose ?? inferPurpose(ev.type || "");
             const purposeLabel = ev.purposeLabel ?? ev.period ?? null;
-            const mapType = (t: string): "rent" | "fee" | "adjustment" | "payment" => {
-              const type = (t || "").toLowerCase();
-              if (type.includes("payment") || type.includes("pay")) return "payment";
-              if (type.includes("fee")) return "fee";
-              if (type.includes("adjust") || type.includes("credit")) return "adjustment";
-              return "rent";
-            };
-            const normalizeAmount = (amount: any): number | null => {
-              if (typeof amount !== "number" || Number.isNaN(amount)) return null;
-              return Math.round(amount * 100);
-            };
-            return {
-              id: ev.id,
-              type: mapType(ev.type || ""),
-              title: ev.title || "Ledger entry",
-              description: ev.description || undefined,
-              amountCents: normalizeAmount(ev.amount ?? ev.amountCents),
-              currency: ev.currency ?? null,
+            return projectTenantFinancialEvent({
+              ...ev,
+              amount: typeof ev.amount === "number" ? ev.amount : typeof ev.amountCents === "number" ? ev.amountCents / 100 : null,
               period: ev.period ?? null,
               purpose: purpose ?? null,
               purposeLabel: purposeLabel ?? null,
               occurredAt: occurredAt ?? Date.now(),
-            };
+            });
           }) || [];
       const mergedMap = new Map<string, any>();
       [...items, ...eventItems].forEach((it) => {
@@ -7178,14 +7158,14 @@ router.get("/ledger", requireTenant, async (req: any, res) => {
       });
       const merged = Array.from(mergedMap.values());
       merged.sort((a, b) => b.occurredAt - a.occurredAt);
-      return res.json({ ok: true, data: merged.slice(0, 25) });
+      return res.json({ ok: true, ...ledgerProjectionMetadata, data: merged.slice(0, 25) });
     } catch (err) {
       console.warn("[tenant/ledger] event bridge failed; returning base ledger", {
         tenantId,
         err: (err as any)?.message,
       });
       items.sort((a, b) => b.occurredAt - a.occurredAt);
-      return res.json({ ok: true, data: items.slice(0, 25) });
+      return res.json({ ok: true, ...ledgerProjectionMetadata, data: items.slice(0, 25) });
     }
   } catch (err) {
     console.error("[tenantPortalRoutes] /tenant/ledger error", {

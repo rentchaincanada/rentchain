@@ -5,7 +5,6 @@ import {
   fetchTenantBalance,
   TenantBalanceSummary as BalanceSummary,
 } from "../../services/tenantBalanceApi";
-import { formatInternalReference } from "@/lib/identityReferences";
 
 interface TenantBalanceSummaryProps {
   tenantId: string | null;
@@ -180,7 +179,7 @@ export const TenantBalanceSummary: React.FC<TenantBalanceSummaryProps> = ({
             textAlign: "right",
           }}
         >
-          {formatInternalReference("tenant", tenantId)}
+          {summary?.tenantReference || "Tenant account"}
           {summary && (
             <div
               style={{
@@ -188,7 +187,7 @@ export const TenantBalanceSummary: React.FC<TenantBalanceSummaryProps> = ({
                 color: "#6b7280",
               }}
             >
-              {summary.eventCount} ledger events
+              Tenant-visible balance
             </div>
           )}
         </div>
