@@ -300,10 +300,10 @@ export default function TenantDashboardPage() {
   const attachmentsByLedgerId = useMemo(() => {
     const map = new Map<string, Attachment[]>();
     attachments.forEach((att) => {
-      if (!att.ledgerItemId) return;
-      const list = map.get(att.ledgerItemId) || [];
+      if (!att.ledgerReference) return;
+      const list = map.get(att.ledgerReference) || [];
       list.push(att);
-      map.set(att.ledgerItemId, list);
+      map.set(att.ledgerReference, list);
     });
     return map;
   }, [attachments]);

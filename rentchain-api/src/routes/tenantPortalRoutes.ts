@@ -137,6 +137,13 @@ function asString(value: unknown): string | null {
   return next || null;
 }
 
+function tenantPublicReference(kind: string, raw: unknown): string | null {
+  const value = String(raw || "").trim();
+  if (!value) return null;
+  const digest = createHash("sha256").update(`${kind}:${value}`).digest("hex").slice(0, 12);
+  return `${kind}-ref-${digest}`;
+}
+
 function displayStringUnlessId(value: unknown, rawId?: unknown): string | null {
   const next = asString(value);
   if (!next) return null;
@@ -238,6 +245,7 @@ type TenantDocumentStatus =
 
 type TenantDocumentItem = {
   id: string;
+  documentReference: string;
   label: string;
   category: string;
   status: TenantDocumentStatus;
@@ -245,10 +253,10 @@ type TenantDocumentItem = {
   title: string | null;
   purpose: string | null;
   purposeLabel: string | null;
-  tenantId: string | null;
-  leaseId: string | null;
-  draftId: string | null;
-  ledgerItemId: string | null;
+  tenantReference: string | null;
+  leaseReference: string | null;
+  draftReference: string | null;
+  ledgerReference: string | null;
   url: string | null;
   uploadedAt: number | null;
   nextAction: string | null;
@@ -3028,6 +3036,29 @@ function documentNextActionCopy(status: TenantDocumentStatus, nextAction: string
   }
 }
 
+function tenantDocumentReferences(raw: {
+  id?: unknown;
+  tenantId?: unknown;
+  leaseId?: unknown;
+  draftId?: unknown;
+  ledgerItemId?: unknown;
+}) {
+  const fallbackSeed =
+    asString(raw.id) ||
+    [raw.tenantId, raw.leaseId, raw.draftId, raw.ledgerItemId]
+      .map((value) => String(value || "").trim())
+      .filter(Boolean)
+      .join(":") ||
+    "document";
+  return {
+    documentReference: tenantPublicReference("document", fallbackSeed) || "document-ref-unavailable",
+    tenantReference: tenantPublicReference("tenant", raw.tenantId),
+    leaseReference: tenantPublicReference("lease", raw.leaseId),
+    draftReference: tenantPublicReference("draft", raw.draftId),
+    ledgerReference: tenantPublicReference("ledger", raw.ledgerItemId),
+  };
+}
+
 function isVisibleLeaseDocumentAttachment(raw: any): boolean {
   const category = String(raw?.category || "").trim().toLowerCase();
   const purpose = String(raw?.purpose || "").trim().toUpperCase();
@@ -3675,6 +3706,13 @@ function buildTenantDocumentWorkspace(params: {
     if (matchedAttachment?.id) {
       usedAttachmentIds.add(String(matchedAttachment.id));
     }
+    const references = tenantDocumentReferences({
+      id: matchedAttachment?.id || entry?.code || `document_${index + 1}`,
+      tenantId: matchedAttachment?.tenantId,
+      leaseId: matchedAttachment?.leaseId,
+      draftId: matchedAttachment?.draftId,
+      ledgerItemId: matchedAttachment?.ledgerItemId,
+    });
 
     const status = toTenantDocumentStatus({
       checklistStatus: String(entry?.status || ""),
@@ -3683,7 +3721,8 @@ function buildTenantDocumentWorkspace(params: {
     });
 
     return {
-      id: String(entry?.code || matchedAttachment?.id || `document_${index + 1}`),
+      id: references.documentReference,
+      documentReference: references.documentReference,
       label,
       category: documentCategoryForLabel(String(entry?.code || label)),
       status,
@@ -3691,10 +3730,10 @@ function buildTenantDocumentWorkspace(params: {
       title: matchedAttachment?.title ? String(matchedAttachment.title) : null,
       purpose: matchedAttachment?.purpose ? String(matchedAttachment.purpose) : null,
       purposeLabel: matchedAttachment?.purposeLabel ? String(matchedAttachment.purposeLabel) : null,
-      tenantId: matchedAttachment?.tenantId ? String(matchedAttachment.tenantId) : null,
-      leaseId: matchedAttachment?.leaseId ? String(matchedAttachment.leaseId) : null,
-      draftId: matchedAttachment?.draftId ? String(matchedAttachment.draftId) : null,
-      ledgerItemId: matchedAttachment?.ledgerItemId ? String(matchedAttachment.ledgerItemId) : null,
+      tenantReference: references.tenantReference,
+      leaseReference: references.leaseReference,
+      draftReference: references.draftReference,
+      ledgerReference: references.ledgerReference,
       url: matchedAttachment?.url ? String(matchedAttachment.url) : null,
       uploadedAt: Number(matchedAttachment?.createdAt || 0) || null,
       nextAction: documentNextActionCopy(status, String(entry?.nextStep || ""), Boolean(matchedAttachment?.url)),
@@ -3709,8 +3748,16 @@ function buildTenantDocumentWorkspace(params: {
   attachments.forEach((item, index) => {
     if (usedAttachmentIds.has(String(item?.id || ""))) return;
     const label = labelForAttachmentRecord(item);
+    const references = tenantDocumentReferences({
+      id: item?.id || `uploaded_document_${index + 1}`,
+      tenantId: item?.tenantId,
+      leaseId: item?.leaseId,
+      draftId: item?.draftId,
+      ledgerItemId: item?.ledgerItemId,
+    });
     items.push({
-      id: String(item?.id || `uploaded_document_${index + 1}`),
+      id: references.documentReference,
+      documentReference: references.documentReference,
       label,
       category: documentCategoryForLabel(label),
       status: "uploaded",
@@ -3718,10 +3765,10 @@ function buildTenantDocumentWorkspace(params: {
       title: item?.title ? String(item.title) : null,
       purpose: item?.purpose ? String(item.purpose) : null,
       purposeLabel: item?.purposeLabel ? String(item.purposeLabel) : null,
-      tenantId: item?.tenantId ? String(item.tenantId) : null,
-      leaseId: item?.leaseId ? String(item.leaseId) : null,
-      draftId: item?.draftId ? String(item.draftId) : null,
-      ledgerItemId: item?.ledgerItemId ? String(item.ledgerItemId) : null,
+      tenantReference: references.tenantReference,
+      leaseReference: references.leaseReference,
+      draftReference: references.draftReference,
+      ledgerReference: references.ledgerReference,
       url: item?.url ? String(item.url) : null,
       uploadedAt: Number(item?.createdAt || 0) || null,
       nextAction: "This file has been added to your record.",
@@ -5357,6 +5404,26 @@ router.get("/lease/document-url", requireTenantWorkspaceIdentity, async (req: an
     if (!documentContext.documentUrl || documentContext.documentStatus === "missing") {
       return res.status(404).json({ ok: false, error: "lease_document_not_found" });
     }
+    await recordTenantEvent({
+      eventType: "tenant_lease_document_accessed",
+      entityType: "tenant_lease_document",
+      entityId:
+        tenantPublicReference(
+          requestedDocument === "schedule-a" || requestedDocument === "schedule_a" || requestedDocument === "schedule"
+            ? "schedule-document"
+            : "lease-document",
+          `${context.leaseId}:${requestedDocument}`
+        ) || "document-ref-unavailable",
+      createdBy: String(req.user?.id || "").trim(),
+      context: {
+        authority: context.authority,
+        documentStatus: documentContext.documentStatus,
+        source: documentContext.source,
+      },
+      payload: {
+        displayLabel: documentContext.displayLabel,
+      },
+    });
     return res.json({
       ok: true,
       data: {
@@ -7205,6 +7272,19 @@ router.get("/attachments", requireTenantWorkspaceIdentity, async (req: any, res)
       leaseDocumentContext: workspaceData.lease?.leaseDocumentContext || (profile.profile?.lease as any)?.leaseDocumentContext || null,
       scheduleADocumentContext: workspaceData.lease?.scheduleADocumentContext || (profile.profile?.lease as any)?.scheduleADocumentContext || null,
     });
+    await recordTenantEvent({
+      eventType: "tenant_documents_viewed",
+      entityType: "tenant_document_workspace",
+      entityId: tenantPublicReference("tenant", tenantId) || "tenant-ref-unavailable",
+      createdBy: String(req.user?.id || "").trim(),
+      context: {
+        authority: context.authority,
+        documentCount: documentWorkspace.items.length,
+      },
+      payload: {
+        summary: documentWorkspace.summary,
+      },
+    });
 
     return res.json({
       ok: true,
@@ -7242,13 +7322,65 @@ router.get("/ledger/:ledgerItemId/attachments", requireTenant, async (req: any, 
     const snap = await db
       .collection("ledgerAttachments")
       .where("tenantId", "==", tenantId)
-      .where("ledgerItemId", "==", ledgerItemId)
       .limit(25)
       .get();
 
-    const data = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
-    data.sort((a, b) => (Number(b.createdAt || 0) || 0) - (Number(a.createdAt || 0) || 0));
-    return res.json({ ok: true, data });
+    const rawAttachments = snap.docs
+      .map((d) => ({ id: d.id, ...(d.data() as any) }))
+      .filter((item) => String(item?.ledgerItemId || "").trim() === ledgerItemId);
+    rawAttachments.sort((a, b) => (Number(b.createdAt || 0) || 0) - (Number(a.createdAt || 0) || 0));
+    const data: TenantDocumentItem[] = rawAttachments.map((item, index) => {
+      const label = labelForAttachmentRecord(item);
+      const references = tenantDocumentReferences({
+        id: item?.id || `ledger_attachment_${index + 1}`,
+        tenantId: item?.tenantId,
+        leaseId: item?.leaseId,
+        draftId: item?.draftId,
+        ledgerItemId: item?.ledgerItemId,
+      });
+      return {
+        id: references.documentReference,
+        documentReference: references.documentReference,
+        label,
+        category: documentCategoryForLabel(label),
+        status: "uploaded",
+        fileName: item?.fileName ? String(item.fileName) : null,
+        title: item?.title ? String(item.title) : null,
+        purpose: item?.purpose ? String(item.purpose) : null,
+        purposeLabel: item?.purposeLabel ? String(item.purposeLabel) : null,
+        tenantReference: references.tenantReference,
+        leaseReference: references.leaseReference,
+        draftReference: references.draftReference,
+        ledgerReference: references.ledgerReference,
+        url: item?.url ? String(item.url) : null,
+        uploadedAt: Number(item?.createdAt || 0) || null,
+        nextAction: "This file has been added to your record.",
+        actionAvailable: false,
+        actionLabel: null,
+        actionPath: null,
+        helpLabel: null,
+        helpPath: null,
+      };
+    });
+    await recordTenantEvent({
+      eventType: "tenant_ledger_attachments_viewed",
+      entityType: "tenant_ledger_attachments",
+      entityId: tenantPublicReference("ledger", ledgerItemId) || "ledger-ref-unavailable",
+      createdBy: String(req.user?.id || "").trim(),
+      context: {
+        documentCount: data.length,
+      },
+      payload: null,
+    });
+    return res.json({
+      ok: true,
+      ...buildTenantAttachmentProjectionMetadata({
+        tenantId,
+        attachmentIds: data.map((item) => String(item?.id || "").trim()).filter(Boolean),
+      }),
+      ledgerReference: tenantPublicReference("ledger", ledgerItemId),
+      data,
+    });
   } catch (err) {
     console.error("[tenant/ledger/:id/attachments] failed", {
       tenantId: req.user?.tenantId,

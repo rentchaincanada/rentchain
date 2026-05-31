@@ -3,10 +3,11 @@ import type { TenantSafeProjectionMetadata } from "./tenantPortal";
 
 export type TenantAttachment = {
   id: string;
-  tenantId?: string | null;
-  leaseId?: string | null;
-  draftId?: string | null;
-  ledgerItemId?: string | null;
+  documentReference?: string | null;
+  tenantReference?: string | null;
+  leaseReference?: string | null;
+  draftReference?: string | null;
+  ledgerReference?: string | null;
   title?: string | null;
   url?: string | null;
   purpose?: string | null;

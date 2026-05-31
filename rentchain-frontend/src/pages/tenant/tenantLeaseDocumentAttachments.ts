@@ -1,17 +1,22 @@
 import type { TenantAttachment } from "../../api/tenantAttachmentsApi";
 import type { TenantLeaseDocumentContext, TenantWorkspaceLease } from "../../api/tenantPortal";
 
+function referenceFor(kind: string, value: string): string {
+  return `${kind}-ref-${value.trim() || "current"}`;
+}
+
 function documentContextToAttachment(
   context: TenantLeaseDocumentContext | null | undefined,
   kind: "lease" | "schedule-a"
 ): TenantAttachment | null {
   if (!context || !context.documentUrl || context.documentStatus === "missing") return null;
-  const leaseId = String(context.leaseId || "current").trim() || "current";
   if (kind === "lease") {
+    const documentReference = referenceFor("document", "lease-document-context-current");
     return {
-      id: `lease-document-context-${leaseId}`,
-      tenantId: context.tenantId || null,
-      leaseId: context.leaseId || null,
+      id: documentReference,
+      documentReference,
+      tenantReference: context.tenantId ? referenceFor("tenant", "current") : null,
+      leaseReference: context.leaseId ? referenceFor("lease", "current") : null,
       title: "Lease document",
       label: "Lease document",
       category: "Lease documents",
@@ -25,10 +30,12 @@ function documentContextToAttachment(
       nextAction: "This tenant-safe lease document is linked to your lease workspace.",
     };
   }
+  const documentReference = referenceFor("document", "schedule-a-context-current");
   return {
-    id: `schedule-a-context-${leaseId}`,
-    tenantId: context.tenantId || null,
-    leaseId: context.leaseId || null,
+    id: documentReference,
+    documentReference,
+    tenantReference: context.tenantId ? referenceFor("tenant", "current") : null,
+    leaseReference: context.leaseId ? referenceFor("lease", "current") : null,
     title: "Schedule A",
     label: "Schedule A",
     category: "Lease documents / attachments",
@@ -57,7 +64,7 @@ export function mergeTenantAttachments(items: TenantAttachment[], leaseWorkspace
   for (const item of [...leaseWorkspaceItems, ...items]) {
     const key = [
       String(item.purpose || "").trim().toUpperCase(),
-      String(item.leaseId || "").trim(),
+      String(item.leaseReference || "").trim(),
       String(item.fileName || item.title || item.label || "").trim().toLowerCase(),
       String(item.url || "").trim(),
     ].join("|");

@@ -50,11 +50,11 @@ function isVisibleLeaseAttachment(item: TenantAttachment): boolean {
 
 function visibleLeaseKeys(item: TenantAttachment): string[] {
   if (!isVisibleLeaseAttachment(item)) return [];
-  const tenantId = String(item.tenantId || "").trim() || "tenant";
-  const leaseId = String(item.leaseId || "").trim();
+  const tenantRef = String(item.tenantReference || "").trim() || "tenant";
+  const leaseRef = String(item.leaseReference || "").trim();
   return [
-    `${tenantId}|lease:current|LEASE`,
-    leaseId ? `${tenantId}|lease:${leaseId}|LEASE` : null,
+    `${tenantRef}|lease:current|LEASE`,
+    leaseRef ? `${tenantRef}|lease:${leaseRef}|LEASE` : null,
   ].filter((value): value is string => Boolean(value));
 }
 
