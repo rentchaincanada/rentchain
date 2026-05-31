@@ -314,12 +314,17 @@ describe("tenant workspace lease linkage continuity", () => {
     );
     expect(profile.body.data.profile.lease).toEqual(
       expect.objectContaining({
-        leaseId: lifecycleContinuityIds.activeLeaseId,
+        leaseId: expect.stringMatching(/^lease-ref-/),
         status: "active",
         startDate: lifecycleContinuityDates.activeLeaseStart,
         endDate: lifecycleContinuityDates.activeLeaseEnd,
       }),
     );
+    const serializedProfileLease = JSON.stringify(profile.body.data.profile.lease);
+    expect(serializedProfileLease).not.toContain(lifecycleContinuityIds.activeLeaseId);
+    expect(serializedProfileLease).not.toContain(lifecycleContinuityIds.tenantId);
+    expect(serializedProfileLease).not.toContain(lifecycleContinuityIds.propertyId);
+    expect(serializedProfileLease).not.toContain(lifecycleContinuityIds.unit101Id);
   });
 
   it("resolves tenant lease route to the canonical lease context without raw ID display labels", async () => {

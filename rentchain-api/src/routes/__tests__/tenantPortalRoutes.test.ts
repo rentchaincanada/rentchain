@@ -228,6 +228,10 @@ describe("tenantPortalRoutes foundation", () => {
       payment_intent: "pi_test_1",
     });
     setObservabilityWriteShouldFail(false);
+    setCollectionReadShouldFail("applications", false);
+    setCollectionReadShouldFail("rentalApplications", false);
+    setCollectionReadShouldFail("tenants", false);
+    setCollectionReadShouldFail("leases", false);
     setCollectionReadShouldFail("properties", false);
     setCollectionReadShouldFail("maintenanceRequests", false);
     process.env.EMAIL_FROM = "noreply@example.com";
@@ -4020,6 +4024,146 @@ describe("tenantPortalRoutes foundation", () => {
     expect(res.body?.data?.profile?.internalNotes).toBeUndefined();
     expect(res.body?.data?.actions?.editableFields).toEqual(["displayName", "phone"]);
     expect(res.body?.data?.actions?.documentEntry?.path).toBe("/tenant/attachments");
+    expect(res.body?.data?.projectionProfile).toEqual(
+      expect.objectContaining({
+        projectionName: "tenant_safe_profile_projection",
+        scopeType: "tenant_profile",
+        audience: "tenant_workspace",
+        authorityBasis: "authenticated_tenant_scope",
+      })
+    );
+    expect(res.body?.data?.context).toEqual(
+      expect.objectContaining({
+        tenantId: expect.stringMatching(/^tenant-ref-/),
+        propertyId: expect.stringMatching(/^property-ref-/),
+        applicationId: expect.stringMatching(/^application-ref-/),
+        leaseId: expect.stringMatching(/^lease-ref-/),
+        unitId: expect.stringMatching(/^unit-ref-/),
+      })
+    );
+    expect(res.body?.data?.profile?.property?.propertyId).toMatch(/^property-ref-/);
+    expect(res.body?.data?.profile?.property?.rc_prop_id).toMatch(/^property-ref-/);
+    expect(res.body?.data?.profile?.application?.applicationId).toMatch(/^application-ref-/);
+    expect(res.body?.data?.profile?.lease?.leaseId).toMatch(/^lease-ref-/);
+    if (res.body?.data?.profile?.unit?.unitId) {
+      expect(res.body.data.profile.unit.unitId).toMatch(/^unit-ref-/);
+    }
+    expect(res.body?.data?.sourceRefs?.every((ref: any) => /-ref-/.test(String(ref.sourceId || "")))).toBe(true);
+    const serialized = JSON.stringify(res.body?.data);
+    expect(serialized).not.toContain("tenant-1");
+    expect(serialized).not.toContain("prop-1");
+    expect(serialized).not.toContain("rc-prop-1");
+    expect(serialized).not.toContain("app-1");
+    expect(serialized).not.toContain("lease-1");
+    expect(serialized).not.toContain("unit-1");
+    expect(serialized).not.toContain("landlord-1");
+    expect(serialized).not.toContain("do-not-expose");
+    expect(serialized).not.toContain("123-45-6789");
+    expect(["verified", "pending", "missing", "needs_review"]).toContain(res.body?.data?.identity?.overallStatus);
+    expect(
+      res.body?.data?.identity?.documentChecklist?.every((item: any) =>
+        ["verified", "pending", "missing", "needs_review"].includes(item.status)
+      )
+    ).toBe(true);
+  });
+
+  it("returns application reuse data with metadata and no raw context identifiers", async () => {
+    ensureCollection("applications").set("app-1", {
+      ...ensureCollection("applications").get("app-1"),
+      applicantEmail: "tenant@example.com",
+      firstName: "Taylor",
+      lastName: "Tenant",
+      applicantProfile: {
+        currentAddress: {
+          line1: "10 Harbour Road",
+          city: "Halifax",
+          provinceState: "NS",
+          postalCode: "B3H1A1",
+          country: "CA",
+        },
+        employment: {
+          employerName: "Harbour Clinic",
+          jobTitle: "Coordinator",
+          incomeAmountCents: 6400000,
+          incomeFrequency: "annual",
+          monthsAtJob: 18,
+        },
+        workReference: {
+          name: "Riley Manager",
+          phone: "902-555-0199",
+        },
+      },
+      nextOfKin: {
+        name: "Casey Contact",
+        relationship: "Sibling",
+        phone: "902-555-0188",
+        address: "Halifax",
+      },
+      landlordNotes: "private",
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+      leaseId: "lease-1",
+    });
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/application-reuse",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.data?.projectionProfile).toEqual(
+      expect.objectContaining({
+        projectionName: "tenant_safe_application_reuse_projection",
+        scopeType: "tenant_application_reuse",
+      })
+    );
+    expect(res.body?.data?.applicant).toEqual(
+      expect.objectContaining({
+        firstName: "Taylor",
+        lastName: "Tenant",
+        email: "tenant@example.com",
+      })
+    );
+    expect(res.body?.data?.employment?.employerName).toBe("Harbour Clinic");
+    expect(res.body?.data?.sourceRefs?.every((ref: any) => /-ref-/.test(String(ref.sourceId || "")))).toBe(true);
+    const serialized = JSON.stringify(res.body?.data);
+    expect(serialized).not.toContain("app-1");
+    expect(serialized).not.toContain("tenant-1");
+    expect(serialized).not.toContain("prop-1");
+    expect(serialized).not.toContain("lease-1");
+    expect(serialized).not.toContain("landlordNotes");
+  });
+
+  it("loads tenant profile safely when lease document context lookup fails", async () => {
+    setCollectionReadShouldFail("leases", true);
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/profile",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.data?.profile?.displayName).toBe("Taylor Tenant");
+    expect(JSON.stringify(res.body?.data)).not.toContain("lease-1");
+    expect(JSON.stringify(res.body)).not.toContain("leases_read_failed");
   });
 
   it("hydrates tenant me unit labels without exposing raw unit ids", async () => {
@@ -4235,9 +4379,15 @@ describe("tenantPortalRoutes foundation", () => {
     });
 
     expect(res.status).toBe(200);
-    expect(res.body?.data?.context?.applicationId).toBe("app-converted");
-    expect(res.body?.data?.profile?.application?.applicationId).toBe("app-converted");
+    expect(res.body?.data?.context?.applicationId).toMatch(/^application-ref-/);
+    expect(res.body?.data?.profile?.application?.applicationId).toMatch(/^application-ref-/);
     expect(res.body?.data?.profile?.lease?.leaseId).toBeTruthy();
+    const serialized = JSON.stringify(res.body?.data);
+    expect(serialized).not.toContain("app-converted");
+    expect(serialized).not.toContain("lease-array");
+    expect(serialized).not.toContain("tenant-1");
+    expect(serialized).not.toContain("prop-1");
+    expect(serialized).not.toContain("unit-1");
   });
 
   it("returns tenant-safe access visibility from existing share records", async () => {
@@ -4310,7 +4460,6 @@ describe("tenantPortalRoutes foundation", () => {
       body: {
         displayName: "Taylor Updated",
         phone: "902-555-0111",
-        internalNotes: "should-not-stick",
       },
     });
 
@@ -4326,9 +4475,76 @@ describe("tenantPortalRoutes foundation", () => {
     expect(ensureCollection("tenants").get("tenant-1")?.propertyId).toBeUndefined();
     expect(ensureCollection("tenants").get("tenant-1")?.unitId).toBeUndefined();
     expect(ensureCollection("tenants").get("tenant-1")?.currentLeaseId).toBeUndefined();
+    expect(JSON.stringify(res.body?.data)).not.toContain("tenant-1");
+    expect(JSON.stringify(res.body?.data)).not.toContain("prop-1");
+    expect(JSON.stringify(res.body?.data)).not.toContain("lease-1");
 
     const eventDocs = Array.from(ensureCollection("event_log").values());
-    expect(eventDocs.some((event) => event.event_type === "tenant_profile_updated")).toBe(true);
+    const updateEvent = eventDocs.find((event) => event.event_type === "tenant_profile_updated");
+    expect(updateEvent).toBeTruthy();
+    expect(updateEvent?.payload?.updatedFields).toEqual(["displayName", "phone"]);
+    expect(JSON.stringify(updateEvent?.payload || {})).not.toContain("Taylor Updated");
+    expect(JSON.stringify(updateEvent?.payload || {})).not.toContain("902-555-0111");
+  });
+
+  it("rejects unknown tenant profile patch fields with a generic error before writing", async () => {
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "PATCH",
+      url: "/profile",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+      body: {
+        displayName: "Taylor Updated",
+        internalNotes: "should-not-stick",
+      },
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body?.error).toBe("TENANT_PROFILE_INVALID_FIELDS");
+    expect(JSON.stringify(res.body)).not.toContain("internalNotes");
+    expect(ensureCollection("tenants").get("tenant-1")?.fullName).toBe("Taylor Tenant");
+    expect(ensureCollection("tenants").get("tenant-1")?.internalNotes).toBe("do-not-expose");
+    expect(ensureCollection("applications").get("app-1")?.applicantName).toBeUndefined();
+  });
+
+  it("rejects forged tenant profile context fields before writing", async () => {
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "PATCH",
+      url: "/profile",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+        }),
+      },
+      body: {
+        displayName: "Taylor Forged",
+        tenantId: "tenant-2",
+        leaseId: "lease-2",
+        propertyId: "prop-2",
+        unitId: "unit-2",
+        applicationId: "app-2",
+      },
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body?.error).toBe("TENANT_PROFILE_INVALID_FIELDS");
+    const serialized = JSON.stringify(res.body);
+    expect(serialized).not.toContain("tenantId");
+    expect(serialized).not.toContain("leaseId");
+    expect(serialized).not.toContain("propertyId");
+    expect(ensureCollection("tenants").get("tenant-1")?.fullName).toBe("Taylor Tenant");
+    expect(ensureCollection("tenants").has("tenant-2")).toBe(false);
   });
 
   it("allows phone-only tenant profile updates", async () => {
