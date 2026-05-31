@@ -8,6 +8,13 @@ export type TenantNotificationItem = {
   createdAt: string;
   status: "info" | "success" | "warning";
   relatedPath: string | null;
+  sourceRefs?: Array<{
+    sourceType: string;
+    referenceKey: string;
+    label: string;
+  }>;
+  read?: boolean;
+  readAt?: number | null;
 };
 
 export async function getTenantNotifications(): Promise<TenantNotificationItem[]> {

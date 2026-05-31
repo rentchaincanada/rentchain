@@ -192,10 +192,172 @@ describe("tenant notifications route", () => {
 
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body?.data)).toBe(true);
-    expect(res.body?.data.some((item: any) => item.type === "application")).toBe(true);
-    expect(res.body?.data.some((item: any) => item.type === "maintenance")).toBe(true);
-    expect(res.body?.data.some((item: any) => item.type === "message")).toBe(true);
+    const applicationItem = res.body?.data.find((item: any) => item.type === "application");
+    const maintenanceItem = res.body?.data.find((item: any) => item.type === "maintenance");
+    const messageItem = res.body?.data.find((item: any) => item.type === "message");
+    expect(applicationItem).toBeTruthy();
+    expect(maintenanceItem).toBeTruthy();
+    expect(messageItem).toBeTruthy();
+    expect(applicationItem?.sourceRefs?.[0]).toEqual(
+      expect.objectContaining({
+        sourceType: "application",
+        label: "Application",
+      })
+    );
+    expect(maintenanceItem?.relatedPath).toBe("/tenant/maintenance");
+    expect(res.body?.data.every((item: any) => typeof item.read === "boolean")).toBe(true);
     expect(JSON.stringify(res.body)).not.toContain("secret-token-hash");
     expect(JSON.stringify(res.body)).not.toContain("rawDecisionNotes");
+    expect(JSON.stringify(res.body)).not.toContain("app-1");
+    expect(JSON.stringify(res.body)).not.toContain("lease-1");
+    expect(JSON.stringify(res.body)).not.toContain("maint-1");
+    expect(JSON.stringify(res.body)).not.toContain("msg-1");
+    expect(JSON.stringify(res.body)).not.toContain("invite-1");
+  });
+
+  it("rejects unauthenticated notification and activity requests", async () => {
+    const router = (await import("../tenantPortalRoutes")).default;
+
+    const notificationsRes = await invokeRouter(router, {
+      method: "GET",
+      url: "/notifications",
+    });
+    const activityRes = await invokeRouter(router, {
+      method: "GET",
+      url: "/activity",
+    });
+
+    expect(notificationsRes.status).toBe(401);
+    expect(notificationsRes.body?.error).toBe("UNAUTHORIZED");
+    expect(activityRes.status).toBe(401);
+    expect(activityRes.body?.error).toBe("UNAUTHORIZED");
+  });
+
+  it("fails closed when tenant identity resolves to multiple property contexts", async () => {
+    ensureCollection("properties").set("prop-2", {
+      rc_prop_id: "rc-prop-2",
+      landlordId: "landlord-2",
+    });
+    ensureCollection("tenants").set("tenant-2", {
+      email: "tenant@example.com",
+      propertyId: "prop-2",
+    });
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/notifications",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-2",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(403);
+    expect(res.body?.error).toBe("AMBIGUOUS_TENANCY_CONTEXT");
+  });
+
+  it("uses safe fallbacks for incomplete source documents", async () => {
+    ensureCollection("maintenanceRequests").set("maint-raw-missing", {
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+    });
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/notifications",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+          leaseId: "lease-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    const fallbackItem = res.body?.data.find((item: any) => item.title === "Maintenance request");
+    expect(fallbackItem).toEqual(
+      expect.objectContaining({
+        type: "maintenance",
+        summary: "Status: submitted",
+        relatedPath: "/tenant/maintenance",
+      })
+    );
+    expect(JSON.stringify(fallbackItem)).not.toContain("maint-raw-missing");
+  });
+
+  it("marks notification read state idempotently with normalized timestamps", async () => {
+    const router = (await import("../tenantPortalRoutes")).default;
+    const headers = {
+      "x-test-user": JSON.stringify({
+        id: "user-1",
+        email: "tenant@example.com",
+        role: "tenant",
+        tenantId: "tenant-1",
+        leaseId: "lease-1",
+      }),
+    };
+
+    const feed = await invokeRouter(router, {
+      method: "GET",
+      url: "/notifications",
+      headers,
+    });
+    const item = feed.body?.data.find((entry: any) => entry.type === "maintenance");
+    expect(item?.id).toBeTruthy();
+
+    const firstRead = await invokeRouter(router, {
+      method: "POST",
+      url: `/notifications/${item.id}/read`,
+      headers,
+    });
+    const secondRead = await invokeRouter(router, {
+      method: "POST",
+      url: `/notifications/${item.id}/read`,
+      headers,
+    });
+
+    expect(firstRead.status).toBe(200);
+    expect(secondRead.status).toBe(200);
+    expect(secondRead.body?.readAt).toBe(firstRead.body?.readAt);
+    expect(ensureCollection("tenantNotificationReads").size).toBe(1);
+
+    const refreshed = await invokeRouter(router, {
+      method: "GET",
+      url: "/notifications",
+      headers,
+    });
+    const refreshedItem = refreshed.body?.data.find((entry: any) => entry.id === item.id);
+    expect(refreshedItem?.read).toBe(true);
+    expect(typeof refreshedItem?.readAt).toBe("number");
+    expect(refreshedItem.readAt).toBeLessThanOrEqual(Date.parse(refreshedItem.createdAt));
+  });
+
+  it("rejects read-state updates for notifications outside the tenant feed", async () => {
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/notifications/maintenance-not-owned/read",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+          leaseId: "lease-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(404);
+    expect(res.body?.error).toBe("NOTIFICATION_NOT_FOUND");
   });
 });

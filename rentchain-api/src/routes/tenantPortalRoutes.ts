@@ -58,7 +58,10 @@ import {
   markTenantCommunicationsRead,
   sendTenantCommunicationMessage,
 } from "../services/tenantPortal/tenantCommunicationsService";
-import { listTenantNotificationFeed } from "../services/tenantPortal/tenantNotificationsService";
+import {
+  listTenantNotificationFeed,
+  markTenantNotificationRead,
+} from "../services/tenantPortal/tenantNotificationsService";
 import { serializeEvidenceForAudience } from "../lib/workOrderEvidence";
 import {
   applyNotificationUpdate,
@@ -5278,6 +5281,50 @@ async function handleTenantNotifications(req: any, res: any) {
 }
 
 router.get("/notifications", requireTenantWorkspaceIdentity, handleTenantNotifications);
+
+router.post("/notifications/:id/read", requireTenantWorkspaceIdentity, async (req: any, res) => {
+  const context = await resolveWorkspaceContextOrRespond(req, res);
+  if (!context) return;
+
+  try {
+    const result = await markTenantNotificationRead({
+      context,
+      userId: String(req.user?.id || "").trim(),
+      userEmail: String(req.user?.email || "").trim() || null,
+      notificationId: String(req.params?.id || "").trim(),
+    });
+
+    if (!result.ok) {
+      const status = result.error === "NOTIFICATION_ID_REQUIRED" ? 400 : 404;
+      return res.status(status).json({ ok: false, error: result.error });
+    }
+
+    await recordTenantEvent({
+      eventType: "tenant_notification_read",
+      entityType: "tenant_notification",
+      entityId: result.readAt ? String(req.params?.id || "").trim() : "tenant_notification",
+      createdBy: String(req.user?.id || "").trim(),
+      context: {
+        authority: context.authority,
+        propertyId: context.propertyId,
+        rc_prop_id: context.rc_prop_id,
+        applicationId: context.applicationId,
+        leaseId: context.leaseId,
+      },
+      payload: {
+        readAt: result.readAt,
+      },
+    });
+
+    return res.json({ ok: true, readAt: result.readAt });
+  } catch (err: any) {
+    console.error("[tenant/notifications/:id/read] failed", {
+      userId: req.user?.id,
+      message: err?.message || "failed",
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_NOTIFICATION_READ_FAILED" });
+  }
+});
 
 router.get("/access", requireTenantWorkspaceIdentity, async (req: any, res) => {
   const context = await resolveWorkspaceContextOrRespond(req, res);

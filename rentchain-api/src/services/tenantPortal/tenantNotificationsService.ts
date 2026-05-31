@@ -1,6 +1,13 @@
+import { createHash } from "crypto";
 import { db } from "../../config/firebase";
 import type { TenancyContext } from "./tenancyContextService";
 import { loadTenantProfileProjection } from "./tenantProfileService";
+
+export type TenantNotificationSourceRef = {
+  sourceType: "application" | "identity" | "document" | "lease" | "maintenance" | "message" | "invite" | "system";
+  referenceKey: string;
+  label: string;
+};
 
 export type TenantNotificationItem = {
   id: string;
@@ -10,6 +17,9 @@ export type TenantNotificationItem = {
   createdAt: string;
   status: "info" | "success" | "warning";
   relatedPath: string | null;
+  sourceRefs: TenantNotificationSourceRef[];
+  read: boolean;
+  readAt: number | null;
 };
 
 function asString(value: unknown): string | null {
@@ -34,6 +44,50 @@ function toIso(value: any): string {
   return new Date(millis).toISOString();
 }
 
+function safeHash(value: string): string {
+  return createHash("sha256").update(value).digest("hex").slice(0, 12);
+}
+
+function tenantNotificationScopeKey(context: TenancyContext, userId: string): string {
+  return safeHash(
+    [
+      context.tenantId || "tenant",
+      context.applicationId || "application",
+      context.leaseId || "lease",
+      context.propertyId || "property",
+      userId || "user",
+    ].join(":")
+  );
+}
+
+function safeNotificationId(type: TenantNotificationItem["type"], value: string | null, fallback: string): string {
+  return `${type}-${safeHash(`${type}:${value || fallback}`)}`;
+}
+
+function safeSourceRef(
+  sourceType: TenantNotificationSourceRef["sourceType"],
+  value: string | null,
+  label: string,
+  fallback: string
+): TenantNotificationSourceRef {
+  return {
+    sourceType,
+    referenceKey: `${sourceType}:${safeHash(`${sourceType}:${value || fallback}`)}`,
+    label,
+  };
+}
+
+function notificationCreatedAtMs(item: Pick<TenantNotificationItem, "createdAt">): number {
+  return toMillis(item.createdAt) || Date.now();
+}
+
+function normalizeReadAt(readAt: unknown, createdAt: string): number | null {
+  const millis = toMillis(readAt);
+  if (!millis) return null;
+  const createdAtMs = notificationCreatedAtMs({ createdAt });
+  return Math.min(millis, createdAtMs);
+}
+
 async function queryDocs(collectionName: string, field: string, value: string | null, limit = 25) {
   const normalized = asString(value);
   if (!normalized) return [];
@@ -43,6 +97,38 @@ async function queryDocs(collectionName: string, field: string, value: string | 
   } catch {
     return [];
   }
+}
+
+async function loadTenantNotificationReadMap(params: {
+  context: TenancyContext;
+  userId: string;
+}): Promise<Map<string, number>> {
+  const scopeKey = tenantNotificationScopeKey(params.context, params.userId);
+  try {
+    const snap = await db.collection("tenantNotificationReads").where("tenantScopeKey", "==", scopeKey).limit(250).get();
+    const readMap = new Map<string, number>();
+    for (const doc of snap.docs || []) {
+      const data = (doc.data() as any) || {};
+      if (asString(data?.userId) !== asString(params.userId)) continue;
+      const notificationId = asString(data?.notificationId);
+      const readAtMs = toMillis(data?.readAtMs);
+      if (notificationId && readAtMs) readMap.set(notificationId, readAtMs);
+    }
+    return readMap;
+  } catch {
+    return new Map();
+  }
+}
+
+function applyReadState(items: TenantNotificationItem[], readMap: Map<string, number>): TenantNotificationItem[] {
+  return items.map((item) => {
+    const readAt = normalizeReadAt(readMap.get(item.id), item.createdAt);
+    return {
+      ...item,
+      read: Boolean(readAt),
+      readAt,
+    };
+  });
 }
 
 export async function listTenantNotificationFeed(params: {
@@ -62,20 +148,24 @@ export async function listTenantNotificationFeed(params: {
   const identity = profile.identity;
 
   if (application) {
+    const id = safeNotificationId("application", application.applicationId, "current");
     items.push({
-      id: `application-${application.applicationId}`,
+      id,
       type: "application",
       title: "Application status updated",
       summary: application.status ? `Current application status: ${application.status}.` : "Your application is active in the tenant workspace.",
       createdAt: application.updatedAt || application.createdAt || new Date().toISOString(),
       status: application.status && /approved|completed/i.test(application.status) ? "success" : "info",
       relatedPath: "/tenant/application",
+      sourceRefs: [safeSourceRef("application", application.applicationId, "Application", "current")],
+      read: false,
+      readAt: null,
     });
   }
 
   if (identity.identityVerification.status !== "verified") {
     items.push({
-      id: `identity-${params.context.propertyId || params.userId}`,
+      id: safeNotificationId("identity", params.context.propertyId || params.userId, "identity"),
       type: "identity",
       title: "Identity verification needs attention",
       summary:
@@ -88,6 +178,9 @@ export async function listTenantNotificationFeed(params: {
       createdAt: identity.identityVerification.updatedAt || new Date().toISOString(),
       status: identity.identityVerification.status === "needs_review" ? "warning" : "info",
       relatedPath: "/tenant/profile",
+      sourceRefs: [safeSourceRef("identity", params.context.propertyId || params.userId, "Identity verification", "identity")],
+      read: false,
+      readAt: null,
     });
   }
 
@@ -96,25 +189,32 @@ export async function listTenantNotificationFeed(params: {
     .slice(0, 4)
     .forEach((entry, index) => {
       items.push({
-        id: `document-${entry.code}-${index}`,
+        id: safeNotificationId("document", `${entry.code}-${index}`, "checklist"),
         type: "document",
         title: `${entry.label} is ${entry.status.replace(/_/g, " ")}`,
         summary: entry.nextStep || "Open your profile to see the current checklist and next steps.",
         createdAt: new Date().toISOString(),
         status: entry.status === "needs_review" || entry.status === "missing" ? "warning" : "info",
         relatedPath: "/tenant/profile",
+        sourceRefs: [safeSourceRef("document", entry.code, entry.label || "Document checklist", `checklist-${index}`)],
+        read: false,
+        readAt: null,
       });
     });
 
   if (lease) {
+    const id = safeNotificationId("lease", lease.leaseId, "current");
     items.push({
-      id: `lease-${lease.leaseId}`,
+      id,
       type: "lease",
       title: "Lease summary available",
       summary: lease.status ? `Your lease is currently ${lease.status}.` : "Your lease summary is available in the tenant workspace.",
       createdAt: lease.startDate || new Date().toISOString(),
       status: lease.status && /active|current/i.test(lease.status) ? "success" : "info",
       relatedPath: "/tenant/lease",
+      sourceRefs: [safeSourceRef("lease", lease.leaseId, "Lease summary", "current")],
+      read: false,
+      readAt: null,
     });
   }
 
@@ -123,13 +223,16 @@ export async function listTenantNotificationFeed(params: {
     maintenanceDocs.forEach((doc) => {
       const data = (doc.data() as any) || {};
       items.push({
-        id: `maintenance-${doc.id}`,
+        id: safeNotificationId("maintenance", doc.id, "request"),
         type: "maintenance",
         title: String(data?.title || "Maintenance request").trim() || "Maintenance request",
         summary: `Status: ${String(data?.status || "submitted").trim() || "submitted"}`,
         createdAt: toIso(data?.updatedAt || data?.createdAt),
         status: /blocked|cancelled|urgent/i.test(String(data?.status || "")) ? "warning" : "info",
-        relatedPath: `/tenant/maintenance/${doc.id}`,
+        relatedPath: "/tenant/maintenance",
+        sourceRefs: [safeSourceRef("maintenance", doc.id, "Maintenance request", "request")],
+        read: false,
+        readAt: null,
       });
     });
 
@@ -137,13 +240,16 @@ export async function listTenantNotificationFeed(params: {
     inviteDocs.forEach((doc) => {
       const data = (doc.data() as any) || {};
       items.push({
-        id: `invite-${doc.id}`,
+        id: safeNotificationId("invite", doc.id, "invite"),
         type: "invite",
         title: "Invite linked to your workspace",
         summary: "A tenancy invite was redeemed and linked to your tenant workspace.",
         createdAt: toIso(data?.redeemed_at || data?.created_at),
         status: "success",
         relatedPath: "/tenant/invite/redeem",
+        sourceRefs: [safeSourceRef("invite", doc.id, "Tenancy invite", "invite")],
+        read: false,
+        readAt: null,
       });
     });
   }
@@ -165,13 +271,16 @@ export async function listTenantNotificationFeed(params: {
           .slice(0, 4)
           .forEach((entry) => {
             items.push({
-              id: `message-${entry.id}`,
+              id: safeNotificationId("message", entry.id, "message"),
               type: "message",
               title: "New landlord message",
               summary: String(entry.data?.body || "").trim().slice(0, 180) || "You have a new message from your landlord.",
               createdAt: toIso(entry.data?.createdAt || entry.data?.createdAtMs),
               status: "info",
               relatedPath: "/tenant/messages",
+              sourceRefs: [safeSourceRef("message", entry.id, "Landlord message", "message")],
+              read: false,
+              readAt: null,
             });
           });
       }
@@ -180,7 +289,45 @@ export async function listTenantNotificationFeed(params: {
     }
   }
 
-  return items
+  const readMap = await loadTenantNotificationReadMap({
+    context: params.context,
+    userId: params.userId,
+  });
+
+  return applyReadState(items, readMap)
     .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
     .slice(0, 30);
+}
+
+export async function markTenantNotificationRead(params: {
+  context: TenancyContext;
+  userId: string;
+  userEmail?: string | null;
+  notificationId: string;
+}): Promise<{ ok: true; readAt: number } | { ok: false; error: "NOTIFICATION_ID_REQUIRED" | "NOTIFICATION_NOT_FOUND" }> {
+  const notificationId = asString(params.notificationId);
+  if (!notificationId) return { ok: false, error: "NOTIFICATION_ID_REQUIRED" };
+
+  const items = await listTenantNotificationFeed({
+    context: params.context,
+    userId: params.userId,
+    userEmail: params.userEmail,
+  });
+  const item = items.find((entry) => entry.id === notificationId);
+  if (!item) return { ok: false, error: "NOTIFICATION_NOT_FOUND" };
+
+  const readAt = normalizeReadAt(Date.now(), item.createdAt) || notificationCreatedAtMs(item);
+  const scopeKey = tenantNotificationScopeKey(params.context, params.userId);
+  await db.collection("tenantNotificationReads").doc(`${scopeKey}_${notificationId}`).set(
+    {
+      tenantScopeKey: scopeKey,
+      notificationId,
+      userId: params.userId,
+      readAtMs: readAt,
+      updatedAtMs: Date.now(),
+    },
+    { merge: true }
+  );
+
+  return { ok: true, readAt };
 }
