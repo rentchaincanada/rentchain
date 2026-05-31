@@ -205,7 +205,12 @@ export async function signTenantLease(leaseId: string): Promise<TenantLease> {
 }
 
 export async function getTenantPayments(): Promise<TenantPayment[]> {
-  return apiFetch<TenantPayment[]>("/tenant/payments");
+  const res = await apiFetch<any>("/tenant/payments");
+  if (Array.isArray(res)) return res as TenantPayment[];
+  if (Array.isArray(res?.data)) return res.data as TenantPayment[];
+  if (Array.isArray(res?.items)) return res.items as TenantPayment[];
+  if (Array.isArray(res?.payments)) return res.payments as TenantPayment[];
+  return [];
 }
 
 export async function getTenantLedger(): Promise<TenantLedgerEntry[]> {
@@ -217,7 +222,10 @@ export async function getTenantDocuments(): Promise<TenantDocument[]> {
 }
 
 export async function getTenantPaymentsSummary(): Promise<TenantPaymentsSummary> {
-  return apiFetch<TenantPaymentsSummary>("/tenant/payments/summary");
+  const res = await apiFetch<any>("/tenant/payments/summary");
+  if (res?.data && typeof res.data === "object") return res.data as TenantPaymentsSummary;
+  if (res?.summary && typeof res.summary === "object") return res.summary as TenantPaymentsSummary;
+  return res as TenantPaymentsSummary;
 }
 
 export interface TenantRentCharge {
@@ -232,7 +240,12 @@ export interface TenantRentCharge {
 }
 
 export async function getTenantRentCharges(): Promise<TenantRentCharge[]> {
-  return apiFetch<TenantRentCharge[]>("/tenant/rent-charges");
+  const res = await apiFetch<any>("/tenant/rent-charges");
+  if (Array.isArray(res)) return res as TenantRentCharge[];
+  if (Array.isArray(res?.data)) return res.data as TenantRentCharge[];
+  if (Array.isArray(res?.items)) return res.items as TenantRentCharge[];
+  if (Array.isArray(res?.charges)) return res.charges as TenantRentCharge[];
+  return [];
 }
 
 export async function confirmTenantRentCharge(id: string): Promise<{ ok: boolean; confirmedAt?: string }> {

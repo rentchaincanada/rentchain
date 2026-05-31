@@ -205,6 +205,10 @@ vi.mock("./pages/tenant/TenantApplicationStatusPage", () => ({
   },
 }));
 
+vi.mock("./pages/tenant/TenantPaymentsPage", () => ({
+  default: () => <h1>Tenant Payments</h1>,
+}));
+
 describe("Routes: /tenant", () => {
   it("renders the tenant-first landing page without landlord pricing content", async () => {
     const { default: App } = await import("./App");
@@ -801,6 +805,20 @@ describe("Routes: /tenant/application", () => {
 
     expect(await screen.findByText(/Tenant Application Status/i)).toBeInTheDocument();
     expect(screen.queryByText(/Dashboard/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("Routes: /tenant/payments", () => {
+  it("renders the tenant payments route without falling through to not found", async () => {
+    const { default: App } = await import("./App");
+    render(
+      <MemoryRouter initialEntries={["/tenant/payments"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Tenant Payments/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
   });
 });
 
