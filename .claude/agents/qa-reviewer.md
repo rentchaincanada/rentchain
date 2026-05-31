@@ -29,6 +29,7 @@ VALIDATION: [PASS or FAIL]
 BRANCH HYGIENE: [PASS or FAIL]
 DIFF SCOPE: [PASS or FAIL]
 COMMIT HYGIENE: [PASS or FAIL]
+MANUAL QA: [PASS if completed and documented in impl-summary — FAIL if required but not done — N/A if not required]
 
 VERDICT: [SAFE TO MERGE or NEEDS FIXES or ESCALATE TO HUMAN]
 
