@@ -144,6 +144,79 @@ function tenantPublicReference(kind: string, raw: unknown): string | null {
   return `${kind}-ref-${digest}`;
 }
 
+function dollarsFromCents(value: unknown): number | null {
+  const cents = Number(value);
+  if (!Number.isFinite(cents)) return null;
+  return Math.round(cents) / 100;
+}
+
+function normalizePaymentStatusForTenant(status: unknown): "on_time" | "late" | "partial" | "unpaid" | "unknown" {
+  const next = String(status || "").trim().toLowerCase();
+  if (next === "paid") return "on_time";
+  if (next === "payment_pending" || next === "checkout_created") return "partial";
+  if (next === "failed" || next === "expired") return "late";
+  if (next === "canceled") return "unpaid";
+  return "unknown";
+}
+
+function buildTenantPaymentsSummaryResponse(params: {
+  tenantId: string;
+  leaseId: string;
+  leaseData: any;
+  projectedSummary: ReturnType<typeof projectTenantRentPaymentSummary>;
+}) {
+  const monthlyRent = typeof params.leaseData?.monthlyRent === "number" ? params.leaseData.monthlyRent : null;
+  const rentDayOfMonth = typeof params.leaseData?.dueDay === "number" ? params.leaseData.dueDay : null;
+  const history = params.projectedSummary.paymentExperience.history || [];
+  const latestPaid = history.find((payment: any) => payment?.status === "paid") || null;
+  const latest = params.projectedSummary.latestPayment || history[0] || null;
+  const latestAmount = dollarsFromCents(latestPaid?.amountCents ?? latest?.amountCents);
+
+  return {
+    tenantReference: tenantPublicReference("tenant", params.tenantId),
+    leaseReference: tenantPublicReference("lease", params.leaseId),
+    rentAmount: monthlyRent,
+    rentDayOfMonth,
+    nextDueDate: null,
+    lastPayment: latest
+      ? {
+          paymentReference: latest?.id || null,
+          amount: latestAmount,
+          paidAt: latestPaid?.paidAt || latest?.paidAt || null,
+          dueDate: null,
+          status: normalizePaymentStatusForTenant(latestPaid?.status || latest?.status),
+        }
+      : null,
+    currentPeriod: {
+      periodStart: null,
+      periodEnd: null,
+      amountDue: monthlyRent,
+      amountPaid: latestPaid?.amountCents != null ? dollarsFromCents(latestPaid.amountCents) : null,
+      status: normalizePaymentStatusForTenant(params.projectedSummary.paymentExperience.latestStatus),
+    },
+    paymentRail: params.projectedSummary.paymentRail,
+    paymentExperience: params.projectedSummary.paymentExperience,
+  };
+}
+
+function projectTenantRentCharge(doc: any) {
+  const data = (doc?.data?.() || {}) as any;
+  return {
+    id: tenantPublicReference("rent-charge", doc?.id) || "rent-charge-ref-unavailable",
+    amount: typeof data?.amount === "number" && Number.isFinite(data.amount) ? data.amount : 0,
+    dueDate: asString(data?.dueDate),
+    period: asString(data?.period),
+    status: asString(data?.status) || "issued",
+    issuedAt: asString(data?.issuedAt) || asString(data?.createdAt),
+    confirmedAt: asString(data?.confirmedAt),
+    paidAt: asString(data?.paidAt),
+    description: asString(data?.description),
+    leaseReference: tenantPublicReference("lease", data?.leaseId),
+    propertyReference: tenantPublicReference("property", data?.propertyId),
+    unitReference: tenantPublicReference("unit", data?.unitId),
+  };
+}
+
 function displayStringUnlessId(value: unknown, rawId?: unknown): string | null {
   const next = asString(value);
   if (!next) return null;
@@ -7554,6 +7627,161 @@ router.get("/lease", requireTenant, async (req: any, res) => {
   } catch (err) {
     console.error("[tenantPortalRoutes] /tenant/lease error", err);
     return res.status(500).json({ ok: false, error: "TENANT_LEASE_FAILED" });
+  }
+});
+
+router.get("/payments/summary", requireTenantWorkspaceIdentity, async (req: any, res: any) => {
+  const context = await resolveWorkspaceContextOrRespond(req, res);
+  if (!context) return;
+  if (context.authority !== "active_tenant" || !context.tenantId) {
+    return res.status(403).json({ ok: false, error: "TENANT_CONTEXT_REQUIRED" });
+  }
+
+  if (!context.leaseId) {
+    const emptySummary = buildTenantPaymentsSummaryResponse({
+      tenantId: context.tenantId,
+      leaseId: "",
+      leaseData: {},
+      projectedSummary: projectTenantRentPaymentSummary({
+        paymentRail: {
+          enabled: false,
+          enabledAt: null,
+          processor: null,
+          blockedReason: null,
+        },
+        latestPayment: null,
+        paymentExperience: {
+          history: [],
+          latestStatus: null,
+          retryAvailable: false,
+          receiptSummary: {
+            available: false,
+            label: "No payment summary available yet",
+            amountCents: null,
+            paidAt: null,
+            leaseReference: null,
+          },
+        },
+      }),
+    });
+    const paymentProjectionMetadata = buildTenantFinancialProjectionMetadata({
+      projectionName: "tenant_safe_payment_projection",
+      scopeType: "tenant_payment",
+      sourceCollections: ["leases", "rentPayments"],
+      relationshipBasis: "Payment summary must be derived from authenticated tenant lease ownership.",
+    });
+    return res.json({ ok: true, ...paymentProjectionMetadata, data: emptySummary, summary: emptySummary });
+  }
+
+  try {
+    const leaseSnap = await db.collection("leases").doc(context.leaseId).get();
+    if (!leaseSnap.exists) {
+      return res.status(403).json({ ok: false, error: "TENANT_CONTEXT_REQUIRED" });
+    }
+    const leaseData = (leaseSnap.data() as any) || {};
+    const leaseTenantIds = [
+      asString(leaseData?.tenantId),
+      asString(leaseData?.primaryTenantId),
+      ...(Array.isArray(leaseData?.tenantIds) ? leaseData.tenantIds.map((value: any) => asString(value)) : []),
+    ].filter(Boolean);
+    if (!leaseTenantIds.includes(context.tenantId)) {
+      return res.status(403).json({ ok: false, error: "TENANT_CONTEXT_REQUIRED" });
+    }
+
+    const projectedLease = projectTenantLease(context.leaseId, leaseData);
+    const projectedPaymentSummary = projectTenantRentPaymentSummary(
+      (
+        await buildLeasePaymentProjection({
+          rawLease: leaseData,
+          lease: {
+            id: context.leaseId,
+            landlordId: asString(leaseData?.landlordId),
+            tenantId: asString(leaseData?.tenantId),
+            tenantIds: Array.isArray(leaseData?.tenantIds) ? leaseData.tenantIds : [],
+            primaryTenantId: asString(leaseData?.primaryTenantId),
+            propertyId: asString(leaseData?.propertyId),
+            unitId: asString(leaseData?.unitId),
+            unitNumber: asString(leaseData?.unitNumber),
+            monthlyRent: projectedLease.monthlyRent,
+            startDate: projectedLease.startDate,
+            endDate: projectedLease.endDate,
+            status: projectedLease.status,
+          },
+          leaseId: context.leaseId,
+          documentUrl: projectedLease.documentUrl,
+        })
+      ).rentPaymentSummary
+    );
+    const summary = buildTenantPaymentsSummaryResponse({
+      tenantId: context.tenantId,
+      leaseId: context.leaseId,
+      leaseData,
+      projectedSummary: projectedPaymentSummary,
+    });
+    const paymentProjectionMetadata = buildTenantFinancialProjectionMetadata({
+      projectionName: "tenant_safe_payment_projection",
+      scopeType: "tenant_payment",
+      sourceCollections: ["leases", "rentPayments"],
+      relationshipBasis: "Payment summary must be derived from authenticated tenant lease ownership.",
+    });
+    return res.json({ ok: true, ...paymentProjectionMetadata, data: summary, summary });
+  } catch (err: any) {
+    console.error("[tenant/payments/summary] failed", {
+      tenantId: context.tenantId,
+      leaseId: context.leaseId,
+      message: err?.message || "failed",
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_PAYMENT_SUMMARY_FAILED" });
+  }
+});
+
+router.get("/rent-charges", requireTenantWorkspaceIdentity, async (req: any, res: any) => {
+  const context = await resolveWorkspaceContextOrRespond(req, res);
+  if (!context) return;
+  if (context.authority !== "active_tenant" || !context.tenantId) {
+    return res.status(403).json({ ok: false, error: "TENANT_CONTEXT_REQUIRED" });
+  }
+
+  try {
+    if (context.leaseId) {
+      const leaseSnap = await db.collection("leases").doc(context.leaseId).get();
+      if (!leaseSnap.exists) {
+        return res.status(403).json({ ok: false, error: "TENANT_CONTEXT_REQUIRED" });
+      }
+      const leaseData = (leaseSnap.data() as any) || {};
+      const leaseTenantIds = [
+        asString(leaseData?.tenantId),
+        asString(leaseData?.primaryTenantId),
+        ...(Array.isArray(leaseData?.tenantIds) ? leaseData.tenantIds.map((value: any) => asString(value)) : []),
+      ].filter(Boolean);
+      if (!leaseTenantIds.includes(context.tenantId)) {
+        return res.status(403).json({ ok: false, error: "TENANT_CONTEXT_REQUIRED" });
+      }
+    }
+
+    const snap = await db.collection("rentCharges").where("tenantId", "==", context.tenantId).get();
+    const charges = ((snap.docs || []) as any[])
+      .filter((doc) => {
+        const data = (doc.data() as any) || {};
+        const chargeLeaseId = asString(data?.leaseId);
+        return !chargeLeaseId || !context.leaseId || chargeLeaseId === context.leaseId;
+      })
+      .map(projectTenantRentCharge)
+      .sort((left, right) => timestampToSort(right.dueDate || right.issuedAt) - timestampToSort(left.dueDate || left.issuedAt));
+    const chargeProjectionMetadata = buildTenantFinancialProjectionMetadata({
+      projectionName: "tenant_safe_balance_projection",
+      scopeType: "tenant_balance",
+      sourceCollections: ["rentCharges"],
+      relationshipBasis: "Rent charges must be derived from authenticated tenant ownership.",
+    });
+    return res.json({ ok: true, ...chargeProjectionMetadata, charges, items: charges, data: charges });
+  } catch (err: any) {
+    console.error("[tenant/rent-charges] failed", {
+      tenantId: context.tenantId,
+      leaseId: context.leaseId,
+      message: err?.message || "failed",
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_RENT_CHARGES_FAILED" });
   }
 });
 

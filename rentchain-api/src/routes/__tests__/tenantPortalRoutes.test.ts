@@ -1612,6 +1612,234 @@ describe("tenantPortalRoutes foundation", () => {
     expect(JSON.stringify(res.body)).not.toContain("lease-1");
   });
 
+  it("returns tenant payment summary at the current tenant payments summary surface", async () => {
+    ensureCollection("leases").set("lease-1", {
+      ...(ensureCollection("leases").get("lease-1") || {}),
+      landlordId: "landlord-1",
+      paymentRailEnabled: true,
+      paymentRailEnabledAt: "2026-04-27T10:00:00.000Z",
+      paymentRailProcessor: "stripe",
+      dueDay: 1,
+    });
+    ensureCollection("rentPayments").set("rp-summary-1", {
+      id: "rp-summary-1",
+      leaseId: "lease-1",
+      tenantId: "tenant-1",
+      landlordId: "landlord-1",
+      amountCents: 180000,
+      currency: "cad",
+      status: "paid",
+      processor: "stripe",
+      processorCheckoutSessionId: "cs_should_not_leak",
+      processorPaymentIntentId: "pi_should_not_leak",
+      paymentIntentId: "intent_should_not_leak",
+      createdAt: "2026-04-27T10:05:00.000Z",
+      updatedAt: "2026-04-27T10:06:00.000Z",
+      paidAt: "2026-04-27T10:06:00.000Z",
+    });
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/payments/summary",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+          leaseId: "lease-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.projectionProfile).toEqual(
+      expect.objectContaining({
+        projectionName: "tenant_safe_payment_projection",
+        scopeType: "tenant_payment",
+      })
+    );
+    expect(res.body?.data).toEqual(
+      expect.objectContaining({
+        tenantReference: expect.stringMatching(/^tenant-ref-/),
+        leaseReference: expect.stringMatching(/^lease-ref-/),
+        rentAmount: 1800,
+        rentDayOfMonth: 1,
+        lastPayment: expect.objectContaining({
+          paymentReference: expect.stringMatching(/^payment-ref-/),
+          amount: 1800,
+          paidAt: "2026-04-27T10:06:00.000Z",
+          status: "on_time",
+        }),
+        currentPeriod: expect.objectContaining({
+          amountDue: 1800,
+          amountPaid: 1800,
+          status: "on_time",
+        }),
+      })
+    );
+    expect(JSON.stringify(res.body)).not.toContain("rp-summary-1");
+    expect(JSON.stringify(res.body)).not.toContain("tenant-1");
+    expect(JSON.stringify(res.body)).not.toContain("lease-1");
+    expect(JSON.stringify(res.body)).not.toContain("landlord-1");
+    expect(JSON.stringify(res.body)).not.toContain("cs_should_not_leak");
+    expect(JSON.stringify(res.body)).not.toContain("pi_should_not_leak");
+    expect(JSON.stringify(res.body)).not.toContain("intent_should_not_leak");
+  });
+
+  it("returns empty zero tenant payment summary data when no rent payments exist", async () => {
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/payments/summary",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+          leaseId: "lease-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.data?.lastPayment).toBeNull();
+    expect(res.body?.data?.currentPeriod).toEqual(
+      expect.objectContaining({
+        amountDue: 1800,
+        amountPaid: null,
+        status: "unknown",
+      })
+    );
+    expect(res.body?.data?.paymentExperience?.history).toEqual([]);
+  });
+
+  it("returns tenant-scoped rent charges without exposing internal charge identifiers", async () => {
+    ensureCollection("rentCharges").set("charge-1", {
+      tenantId: "tenant-1",
+      landlordId: "landlord-1",
+      leaseId: "lease-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      amount: 1800,
+      dueDate: "2026-05-01",
+      period: "2026-05",
+      status: "issued",
+      storagePath: "gs://private/charge-1.pdf",
+      providerPayload: { hidden: true },
+      createdAt: "2026-04-20T00:00:00.000Z",
+    });
+    ensureCollection("rentCharges").set("charge-other-tenant", {
+      tenantId: "tenant-2",
+      landlordId: "landlord-2",
+      leaseId: "lease-2",
+      amount: 2500,
+      dueDate: "2026-05-01",
+      status: "issued",
+    });
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/rent-charges",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+          leaseId: "lease-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.projectionProfile).toEqual(
+      expect.objectContaining({
+        projectionName: "tenant_safe_balance_projection",
+        scopeType: "tenant_balance",
+      })
+    );
+    expect(res.body?.data).toEqual([
+      expect.objectContaining({
+        id: expect.stringMatching(/^rent-charge-ref-/),
+        amount: 1800,
+        dueDate: "2026-05-01",
+        period: "2026-05",
+        status: "issued",
+        leaseReference: expect.stringMatching(/^lease-ref-/),
+        propertyReference: expect.stringMatching(/^property-ref-/),
+        unitReference: expect.stringMatching(/^unit-ref-/),
+      }),
+    ]);
+    expect(JSON.stringify(res.body)).not.toContain("charge-1");
+    expect(JSON.stringify(res.body)).not.toContain("charge-other-tenant");
+    expect(JSON.stringify(res.body)).not.toContain("tenant-1");
+    expect(JSON.stringify(res.body)).not.toContain("tenant-2");
+    expect(JSON.stringify(res.body)).not.toContain("landlord-1");
+    expect(JSON.stringify(res.body)).not.toContain("gs://private");
+    expect(JSON.stringify(res.body)).not.toContain("providerPayload");
+  });
+
+  it("returns an empty tenant rent charge list when no tenant charges exist", async () => {
+    const router = (await import("../tenantPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/rent-charges",
+      headers: {
+        "x-test-user": JSON.stringify({
+          id: "user-1",
+          email: "tenant@example.com",
+          role: "tenant",
+          tenantId: "tenant-1",
+          leaseId: "lease-1",
+        }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.data).toEqual([]);
+    expect(res.body?.charges).toEqual([]);
+  });
+
+  it("rejects unauthenticated tenant payment read surfaces", async () => {
+    const router = (await import("../tenantPortalRoutes")).default;
+
+    const summary = await invokeRouter(router, { method: "GET", url: "/payments/summary" });
+    const charges = await invokeRouter(router, { method: "GET", url: "/rent-charges" });
+
+    expect(summary.status).toBe(401);
+    expect(charges.status).toBe(401);
+  });
+
+  it("rejects tenant payment read surfaces when requested lease context is not owned by the tenant", async () => {
+    ensureCollection("tenants").set("tenant-2", {
+      email: "other@example.com",
+      fullName: "Other Tenant",
+      propertyId: "prop-1",
+      currentLeaseId: "lease-1",
+    });
+
+    const router = (await import("../tenantPortalRoutes")).default;
+    const headers = {
+      "x-test-user": JSON.stringify({
+        id: "user-2",
+        email: "other@example.com",
+        role: "tenant",
+        tenantId: "tenant-2",
+        leaseId: "lease-1",
+      }),
+    };
+
+    const summary = await invokeRouter(router, { method: "GET", url: "/payments/summary", headers });
+    const charges = await invokeRouter(router, { method: "GET", url: "/rent-charges", headers });
+
+    expect(summary.status).toBe(403);
+    expect(charges.status).toBe(403);
+  });
+
   it("records tenant lease signing metadata without storing raw signature data and stays idempotent", async () => {
     ensureCollection("leases").set("lease-1", {
       tenantId: "tenant-1",
