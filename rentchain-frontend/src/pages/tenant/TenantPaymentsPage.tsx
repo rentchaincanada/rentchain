@@ -24,6 +24,10 @@ function formatDate(value?: string | null) {
   return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 }
 
+function optionalSurfaceError(reason: any, fallback: string): string | null {
+  return reason?.status === 404 ? null : reason?.message || fallback;
+}
+
 export const TenantPaymentsPage: React.FC = () => {
   const { lease } = useTenantOutletContext();
   const [payments, setPayments] = useState<TenantPayment[]>([]);
@@ -42,14 +46,29 @@ export const TenantPaymentsPage: React.FC = () => {
       setSummaryError(null);
       setChargesError(null);
       try {
-        const [history, summaryData, chargesData] = await Promise.all([
+        const [historyResult, summaryResult, chargesResult] = await Promise.allSettled([
           getTenantPayments(),
           getTenantPaymentsSummary(),
           getTenantRentCharges(),
         ]);
-        setPayments(history);
-        setSummary(summaryData);
-        setCharges(chargesData);
+        if (historyResult.status === "fulfilled") {
+          setPayments(Array.isArray(historyResult.value) ? historyResult.value : []);
+        } else {
+          setError(historyResult.reason?.message || "Failed to load payments");
+          setPayments([]);
+        }
+        if (summaryResult.status === "fulfilled") {
+          setSummary(summaryResult.value);
+        } else {
+          setSummary(null);
+          setSummaryError(optionalSurfaceError(summaryResult.reason, "Payment summary is unavailable"));
+        }
+        if (chargesResult.status === "fulfilled") {
+          setCharges(Array.isArray(chargesResult.value) ? chargesResult.value : []);
+        } else {
+          setCharges([]);
+          setChargesError(optionalSurfaceError(chargesResult.reason, "Rent charges are unavailable"));
+        }
       } catch (err: any) {
         setError(err?.message || "Failed to load payments");
         setSummaryError(err?.message || "Failed to load payments summary");
