@@ -38,7 +38,7 @@ function documentContextToAttachment(
     leaseReference: context.leaseId ? referenceFor("lease", "current") : null,
     title: "Schedule A",
     label: "Schedule A",
-    category: "Lease documents / attachments",
+    category: "Attachments",
     status: context.documentStatus === "pending" ? "pending_review" : "uploaded",
     purpose: "SCHEDULE_A",
     purposeLabel: "Schedule A",
@@ -62,11 +62,13 @@ export function mergeTenantAttachments(items: TenantAttachment[], leaseWorkspace
   const merged: TenantAttachment[] = [];
   const seen = new Set<string>();
   for (const item of [...leaseWorkspaceItems, ...items]) {
+    const purpose = String(item.purpose || item.purposeLabel || item.label || "").trim().toUpperCase();
+    const isLeasePackageDocument = purpose === "LEASE" || purpose === "SCHEDULE_A";
     const key = [
-      String(item.purpose || "").trim().toUpperCase(),
-      String(item.leaseReference || "").trim(),
+      purpose,
+      isLeasePackageDocument ? "lease-workspace" : String(item.leaseReference || "").trim(),
       String(item.fileName || item.title || item.label || "").trim().toLowerCase(),
-      String(item.url || "").trim(),
+      isLeasePackageDocument ? "" : String(item.url || "").trim(),
     ].join("|");
     const fallbackKey = String(item.id || key).trim();
     const finalKey = key.replace(/\|/g, "") ? key : fallbackKey;

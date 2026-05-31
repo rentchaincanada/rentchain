@@ -327,6 +327,16 @@ export default function TenantAttachmentsPage() {
           {vault.groupedItems.map((group) => (
             <TenantInfoCard key={group.category} heading={group.category} accent="#0f766e">
               <div style={{ display: "grid", gap: spacing.sm }}>
+                {group.actionPath && group.actionLabel ? (
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                    <Link to={group.actionPath} style={{ fontWeight: 700 }}>
+                      {group.actionLabel}
+                    </Link>
+                    <span style={{ color: textTokens.muted }}>
+                      Lease package details live in the lease workspace; this list only shows tenant-visible files.
+                    </span>
+                  </div>
+                ) : null}
                 {group.items.map((item) => {
                   const tone = statusTone(item.status);
                   return (
