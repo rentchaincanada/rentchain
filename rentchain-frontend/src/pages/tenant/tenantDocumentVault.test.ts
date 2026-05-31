@@ -66,7 +66,7 @@ describe("buildTenantDocumentVaultView", () => {
     expect(result.metrics.map((item) => item.value)).toEqual([3, 2, 1, 1]);
     expect(result.readyItems.map((item) => item.id)).toEqual(["doc-1", "doc-3"]);
     expect(result.missingItems.map((item) => item.id)).toEqual(["doc-2"]);
-    expect(result.groupedItems.map((group) => group.category)).toEqual(["Identity", "Income", "Lease"]);
+    expect(result.groupedItems.map((group) => group.category)).toEqual(["Identity", "Income", "Lease documents"]);
     expect(result.shareInsights[0]).toMatchObject({
       label: "Rental history",
       status: "shared",
@@ -183,7 +183,7 @@ describe("buildTenantDocumentVaultView", () => {
     expect(sourceItems).toHaveLength(5);
     expect(result.metrics.map((item) => item.value).slice(0, 3)).toEqual([2, 2, 0]);
     expect(result.readyItems.map((item) => item.id)).toEqual(["lease-generated-url", "identity-doc"]);
-    expect(result.groupedItems.find((group) => group.category === "Lease")?.items).toHaveLength(1);
+    expect(result.groupedItems.find((group) => group.category === "Lease documents")?.items).toHaveLength(1);
     expect(result.groupedItems.find((group) => group.category === "Identity")?.items).toHaveLength(1);
     expect(result.recentItems.map((item) => item.id)).toEqual(["lease-generated-url", "identity-doc"]);
   });
@@ -247,5 +247,48 @@ describe("buildTenantDocumentVaultView", () => {
     expect(result.groupedItems).toHaveLength(1);
     expect(result.groupedItems[0].items.map((item) => item.id)).toEqual(["lease-snapshot-4"]);
     expect(result.recentItems.map((item) => item.id)).toEqual(["lease-snapshot-4"]);
+  });
+
+  it("normalizes raw document keys and collapses duplicate Schedule A rows", () => {
+    const result = buildTenantDocumentVaultView({
+      items: [
+        {
+          id: "schedule-from-attachments",
+          label: "SCHEDULE_A — Schedule A",
+          title: "Schedule A",
+          category: "Attachments",
+          purpose: "SCHEDULE_A",
+          purposeLabel: "Schedule A",
+          fileName: "schedule-a.pdf",
+          url: "https://example.com/schedule-from-attachments.pdf",
+          status: "uploaded",
+          uploadedAt: 200,
+        },
+        {
+          id: "schedule-from-lease-context",
+          label: "SCHEDULE_A",
+          title: "Schedule A",
+          category: "Lease documents / attachments",
+          purpose: "SCHEDULE_A",
+          purposeLabel: "Schedule A",
+          fileName: "schedule-a.pdf",
+          url: "https://example.com/schedule-from-lease-context.pdf",
+          status: "uploaded",
+          uploadedAt: 100,
+        },
+      ],
+    });
+
+    expect(result.metrics[0].value).toBe(1);
+    expect(result.readyItems.map((item) => item.label)).toEqual(["Schedule A"]);
+    expect(result.recentItems.map((item) => item.label)).toEqual(["Schedule A"]);
+    expect(result.groupedItems).toEqual([
+      expect.objectContaining({
+        category: "Attachments",
+        items: [expect.objectContaining({ label: "Schedule A" })],
+      }),
+    ]);
+    expect(result.groupedItems.map((group) => group.category)).not.toContain("Lease documents / attachments");
+    expect(result.groupedItems.flatMap((group) => group.items.map((item) => item.label))).not.toContain("SCHEDULE_A");
   });
 });

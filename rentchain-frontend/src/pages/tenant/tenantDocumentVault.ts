@@ -11,6 +11,8 @@ type VaultMetric = {
 type VaultDocumentGroup = {
   category: string;
   items: TenantAttachment[];
+  actionPath?: string;
+  actionLabel?: string;
 };
 
 type VaultShareInsight = {
@@ -35,6 +37,93 @@ function isReadyToShare(item: TenantAttachment): boolean {
   return item.status === "uploaded" || item.status === "verified";
 }
 
+const DOCUMENT_LABELS: Record<string, string> = {
+  AGREEMENT: "Agreement",
+  APPLICATION: "Application",
+  BANK_STATEMENT: "Bank statement",
+  GOVERNMENT_ID: "Government ID",
+  IDENTITY: "Identity document",
+  INCOME: "Income document",
+  INSURANCE: "Insurance document",
+  LEASE: "Lease document",
+  PAYSTUB: "Paystub",
+  PHOTO_ID: "Photo ID",
+  PROOF_OF_INCOME: "Proof of income",
+  RENTAL_APPLICATION: "Rental application",
+  SCHEDULE_A: "Schedule A",
+};
+
+function normalizeDocumentToken(value: unknown): string {
+  return String(value || "")
+    .trim()
+    .replace(/[-\s]+/g, "_")
+    .replace(/[^a-zA-Z0-9_]/g, "")
+    .replace(/_+/g, "_")
+    .toUpperCase();
+}
+
+function titleCaseDocumentToken(value: string): string {
+  return value
+    .toLowerCase()
+    .split("_")
+    .filter(Boolean)
+    .map((part) => (part.length <= 2 ? part.toUpperCase() : `${part.charAt(0).toUpperCase()}${part.slice(1)}`))
+    .join(" ");
+}
+
+function readableDocumentLabel(value: unknown): string | null {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  const normalized = normalizeDocumentToken(raw);
+  if (!normalized) return null;
+  if (DOCUMENT_LABELS[normalized]) return DOCUMENT_LABELS[normalized];
+  if (/^[A-Z0-9]+(?:_[A-Z0-9]+)+$/.test(normalized) && raw === raw.toUpperCase()) return titleCaseDocumentToken(normalized);
+  return raw;
+}
+
+function tenantDocumentDisplayLabel(item: TenantAttachment): string {
+  const rawLabel = String(item.label || "").trim();
+  if (rawLabel && !rawLabel.includes("—") && rawLabel !== rawLabel.toUpperCase()) {
+    return readableDocumentLabel(rawLabel) || rawLabel;
+  }
+
+  const purposeLabel = readableDocumentLabel(item.purposeLabel);
+  if (purposeLabel) return purposeLabel;
+
+  const purpose = readableDocumentLabel(item.purpose);
+  const title = readableDocumentLabel(item.title);
+  if (rawLabel.includes("—")) {
+    const [, suffix] = rawLabel.split("—").map((part) => part.trim());
+    const suffixLabel = readableDocumentLabel(suffix);
+    if (suffixLabel) return suffixLabel;
+  }
+  const label = readableDocumentLabel(rawLabel);
+  if (label) return label;
+  if (title) return title;
+  if (purpose) return purpose;
+  return "Document";
+}
+
+function tenantDocumentCategory(item: TenantAttachment): string {
+  const category = String(item.category || "").trim();
+  const normalizedCategory = category.toLowerCase();
+  const purpose = normalizeDocumentToken(item.purpose);
+  const label = tenantDocumentDisplayLabel(item).toLowerCase();
+
+  if (normalizedCategory === "lease documents / attachments") return "Attachments";
+  if (purpose === "SCHEDULE_A" || label === "schedule a") return "Attachments";
+  if (purpose === "LEASE" || normalizedCategory === "lease") return "Lease documents";
+  return category || "Documents";
+}
+
+function normalizeTenantDocumentItem(item: TenantAttachment): TenantAttachment {
+  return {
+    ...item,
+    label: tenantDocumentDisplayLabel(item),
+    category: tenantDocumentCategory(item),
+  };
+}
+
 function needsAttention(item: TenantAttachment): boolean {
   return item.status === "missing" || item.status === "needs_attention" || item.status === "reupload_requested";
 }
@@ -45,16 +134,31 @@ function isVisibleLeaseAttachment(item: TenantAttachment): boolean {
   const purposeLabel = String(item.purposeLabel || "").trim().toLowerCase();
   const title = String(item.title || "").trim().toLowerCase();
   const label = String(item.label || "").trim().toLowerCase();
-  return category === "lease" || purpose === "LEASE" || purposeLabel === "lease" || title === "lease document" || label.includes("lease");
+  return (
+    category === "lease" ||
+    category === "lease documents" ||
+    purpose === "LEASE" ||
+    purpose === "SCHEDULE_A" ||
+    purposeLabel === "lease" ||
+    purposeLabel === "schedule a" ||
+    title === "lease document" ||
+    title === "schedule a" ||
+    label.includes("lease") ||
+    label === "schedule a"
+  );
 }
 
 function visibleLeaseKeys(item: TenantAttachment): string[] {
   if (!isVisibleLeaseAttachment(item)) return [];
   const tenantRef = String(item.tenantReference || "").trim() || "tenant";
   const leaseRef = String(item.leaseReference || "").trim();
+  const purpose = normalizeDocumentToken(item.purpose) || normalizeDocumentToken(item.label);
+  const fileName = String(item.fileName || item.title || item.label || "").trim().toLowerCase();
   return [
-    `${tenantRef}|lease:current|LEASE`,
-    leaseRef ? `${tenantRef}|lease:${leaseRef}|LEASE` : null,
+    purpose ? `${tenantRef}|document-purpose:${purpose}` : null,
+    purpose && fileName ? `${tenantRef}|document-purpose:${purpose}|file:${fileName}` : null,
+    `${tenantRef}|lease:current|${purpose || "LEASE"}`,
+    leaseRef ? `${tenantRef}|lease:${leaseRef}|${purpose || "LEASE"}` : null,
   ].filter((value): value is string => Boolean(value));
 }
 
@@ -151,7 +255,7 @@ export function buildTenantDocumentVaultView(params: {
   updatedAt?: number | null;
   access?: TenantAccessWorkspace | null;
 }): TenantDocumentVaultView {
-  const items = dedupeVisibleLeaseItems(Array.isArray(params.items) ? [...params.items] : []);
+  const items = dedupeVisibleLeaseItems(Array.isArray(params.items) ? params.items.map(normalizeTenantDocumentItem) : []);
   const readyItems = items.filter(isReadyToShare);
   const missingItems = items.filter(needsAttention);
   const recentItems = [...items]
@@ -169,6 +273,8 @@ export function buildTenantDocumentVaultView(params: {
   )
     .map(([category, grouped]) => ({
       category,
+      actionPath: category === "Lease documents" ? "/tenant/lease" : undefined,
+      actionLabel: category === "Lease documents" ? "Open lease details" : undefined,
       items: [...grouped].sort((a, b) => {
         const priority = statusRank(a.status) - statusRank(b.status);
         if (priority !== 0) return priority;

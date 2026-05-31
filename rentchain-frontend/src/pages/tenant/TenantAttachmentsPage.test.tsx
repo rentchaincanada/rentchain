@@ -203,6 +203,7 @@ describe("tenant attachments page", () => {
     expect(screen.getAllByText(/Schedule A/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/schedule-a\.pdf/i).length).toBeGreaterThan(0);
     expect(screen.getByRole("link", { name: /Open file/i })).toHaveAttribute("href", "https://signed.example/schedule-a.pdf");
+    expect(screen.queryByText(/SCHEDULE_A/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/support-operator/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/realActorId/i)).not.toBeInTheDocument();
   });
@@ -266,8 +267,71 @@ describe("tenant attachments page", () => {
     expect(screen.getAllByText(/Schedule A/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/schedule-a\.pdf/i).length).toBeGreaterThan(0);
     expect(screen.getByRole("link", { name: /Open file/i })).toHaveAttribute("href", "https://signed.example/schedule-a.pdf");
+    expect(screen.queryByText(/SCHEDULE_A/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Lease documents \/ attachments/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/tenant-1/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/schedule-a-doc/i)).not.toBeInTheDocument();
+  });
+
+  it("links lease document groups to lease details without exposing raw purpose keys", async () => {
+    tenantAttachmentsApi.getTenantAttachments.mockResolvedValue({
+      ok: true,
+      data: [],
+      summary: {
+        total: 0,
+        missing: 0,
+        uploaded: 0,
+        pendingReview: 0,
+        verified: 0,
+        needsAttention: 0,
+      },
+      guidance: {
+        headline: "Your current tenant-safe document record is up to date.",
+        nextSteps: [],
+        uploadEntryAvailable: false,
+        uploadEntryLabel: null,
+        uploadEntryPath: null,
+        supportPath: "/tenant/messages",
+        supportLabel: "Message your landlord",
+      },
+      updatedAt: null,
+    });
+    tenantPortalApi.getTenantLeaseWorkspace.mockResolvedValue({
+      leaseId: "lease-1",
+      startDate: null,
+      endDate: null,
+      monthlyRent: null,
+      status: "active",
+      documentUrl: null,
+      leaseDocumentContext: {
+        leaseId: "lease-1",
+        tenantId: "tenant-1",
+        propertyId: "property-1",
+        unitId: "unit-1",
+        leaseStatus: "active",
+        signingStatus: "signed",
+        documentStatus: "signed",
+        documentId: "lease-doc",
+        documentUrl: "https://signed.example/lease.pdf",
+        displayLabel: "Signed lease document",
+        source: "tenant-safe-lease-workspace",
+        confidence: "high",
+        warnings: [],
+      },
+      scheduleADocumentContext: null,
+    });
+
+    render(
+      <MemoryRouter>
+        <TenantAttachmentsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Document Vault Summary/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Open lease details/i })).toHaveAttribute("href", "/tenant/lease");
+    expect(screen.getAllByText(/Lease document/i).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/LEASE — Lease/i)).not.toBeInTheDocument();
+    expect(screen.queryByText("lease-doc")).not.toBeInTheDocument();
   });
 
   it("renders unauthorized state safely", async () => {
