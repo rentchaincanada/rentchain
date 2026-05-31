@@ -188,6 +188,8 @@ export type MaintenanceWorkflowItem = {
   landlordNote?: string | null;
   createdAt: number;
   updatedAt: number;
+  read?: boolean;
+  readAt?: number | null;
   statusHistory?: Array<{
     status: string;
     actorRole: string;
@@ -392,6 +394,8 @@ export async function createTenantMaintenance(payload: {
       status: String(data?.status || "submitted").toLowerCase() as MaintenanceWorkflowStatus,
       createdAt: data?.createdAt || Date.now(),
       updatedAt: data?.updatedAt || Date.now(),
+      read: data?.read === true,
+      readAt: typeof data?.readAt === "number" ? data.readAt : null,
     },
   };
 }
@@ -463,6 +467,8 @@ export async function listTenantMaintenance() {
     reworkHistory: mapReworkHistory((item as any).reworkHistory),
     createdAt: item.createdAt || Date.now(),
     updatedAt: item.updatedAt || item.createdAt || Date.now(),
+    read: (item as any).read === true,
+    readAt: typeof (item as any).readAt === "number" ? (item as any).readAt : null,
     statusHistory: Array.isArray(item.statusHistory)
       ? item.statusHistory.map((entry) => ({
           status: String(entry?.status || ""),
@@ -569,6 +575,8 @@ export async function getTenantMaintenance(id: string) {
     reworkReview: mapReworkReview((item as any)?.reworkReview),
     createdAt: item?.createdAt || Date.now(),
     updatedAt: item?.updatedAt || item?.createdAt || Date.now(),
+    read: (item as any)?.read === true,
+    readAt: typeof (item as any)?.readAt === "number" ? (item as any).readAt : null,
     statusHistory: Array.isArray(item?.statusHistory)
       ? item.statusHistory.map((entry) => ({
           status: String(entry?.status || ""),

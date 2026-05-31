@@ -13,6 +13,7 @@ import {
   projectTenantLease,
   projectTenantMaintenance,
   projectTenantProperty,
+  tenantSafeMaintenanceReferenceKey,
 } from "../services/tenantPortal/tenantProjectionService";
 import {
   deriveTenantSafeProjectionMetadata,
@@ -2571,6 +2572,19 @@ async function loadTenantWorkspaceData(context: Awaited<ReturnType<typeof resolv
       .map((item) => projectTenantMaintenance(item.id, item.data))
       .sort((left, right) => Number(right.updatedAt || 0) - Number(left.updatedAt || 0)),
   };
+}
+
+async function resolveTenantMaintenanceDocumentIdForRequest(tenantId: string | null, requestId: string | null) {
+  const normalizedTenantId = String(tenantId || "").trim();
+  const normalizedRequestId = String(requestId || "").trim();
+  if (!normalizedTenantId || !normalizedRequestId) return null;
+  if (!normalizedRequestId.startsWith("maintenance:")) return normalizedRequestId;
+
+  const snap = await db.collection("maintenanceRequests").where("tenantId", "==", normalizedTenantId).limit(50).get();
+  for (const doc of snap.docs || []) {
+    if (tenantSafeMaintenanceReferenceKey(doc.id) === normalizedRequestId) return doc.id;
+  }
+  return null;
 }
 
 function buildTenantWorkspaceContextMetadata(
@@ -5873,8 +5887,17 @@ router.post("/leases/:leaseId/sign", requireTenantWorkspaceIdentity, async (req:
 router.get("/maintenance-requests", requireTenantWorkspaceIdentity, async (req: any, res) => {
   const context = await resolveWorkspaceContextOrRespond(req, res);
   if (!context) return;
-  const workspace = await loadTenantWorkspaceData(context);
-  return res.json({ ok: true, data: workspace.maintenance });
+  try {
+    const workspace = await loadTenantWorkspaceData(context);
+    return res.json({ ok: true, data: workspace.maintenance });
+  } catch (err: any) {
+    console.warn("[tenant/workspace-maintenance] list failed closed", {
+      tenantId: context.tenantId,
+      propertyId: context.propertyId,
+      message: err?.message || "failed",
+    });
+    return res.json({ ok: true, data: [] });
+  }
 });
 
 router.post("/maintenance-requests", requireTenantWorkspaceIdentity, async (req: any, res) => {
@@ -5890,10 +5913,23 @@ router.post("/maintenance-requests", requireTenantWorkspaceIdentity, async (req:
     return res.status(400).json({ ok: false, error: "TITLE_AND_DESCRIPTION_REQUIRED" });
   }
 
-  const propertyDoc = await loadDocument("properties", context.propertyId);
+  let propertyDoc: Awaited<ReturnType<typeof loadDocument>> = null;
+  try {
+    propertyDoc = await loadDocument("properties", context.propertyId);
+  } catch (err: any) {
+    console.warn("[tenant/workspace-maintenance] property lookup failed closed", {
+      tenantId: context.tenantId,
+      message: err?.message || "failed",
+    });
+    return res.status(403).json({ ok: false, error: "TENANT_CONTEXT_REQUIRED" });
+  }
   const property = propertyDoc?.data || {};
   const now = Date.now();
   const ref = db.collection("maintenanceRequests").doc();
+  const category = String(req.body?.category || "GENERAL").trim().toUpperCase();
+  const priority = String(req.body?.priority || "NORMAL").trim().toUpperCase();
+  const allowedCategories = new Set(["PLUMBING", "ELECTRICAL", "HVAC", "APPLIANCE", "PEST", "CLEANING", "GENERAL", "OTHER", "SECURITY"]);
+  const allowedPriorities = new Set(["LOW", "NORMAL", "HIGH", "URGENT"]);
   const data = {
     id: ref.id,
     tenantId: context.tenantId,
@@ -5903,8 +5939,8 @@ router.post("/maintenance-requests", requireTenantWorkspaceIdentity, async (req:
     landlordId: String(property?.landlordId || "").trim() || null,
     title,
     description,
-    category: String(req.body?.category || "GENERAL").trim().toUpperCase(),
-    priority: String(req.body?.priority || "NORMAL").trim().toUpperCase(),
+    category: allowedCategories.has(category) ? category : "GENERAL",
+    priority: allowedPriorities.has(priority) ? priority : "NORMAL",
     status: "submitted",
     createdAt: now,
     updatedAt: now,
@@ -5931,6 +5967,7 @@ router.post("/maintenance-requests", requireTenantWorkspaceIdentity, async (req:
   });
   let emailed = false;
   let emailError: string | null = null;
+  const safeRequestId = tenantSafeMaintenanceReferenceKey(ref.id);
   try {
     const maintenanceNotifyEmail = String(process.env.MAINTENANCE_NOTIFY_EMAIL || "").trim();
     const adminEmails = getAdminEmails().filter((email) => emailRegex.test(email));
@@ -5967,7 +6004,7 @@ router.post("/maintenance-requests", requireTenantWorkspaceIdentity, async (req:
       const tenantName =
         String(tenantDoc?.data?.fullName || tenantDoc?.data?.name || req.user?.name || req.user?.email || "").trim() || "Unknown";
       const tenantEmail = String(tenantDoc?.data?.email || req.user?.email || "").trim() || null;
-      const propertyName = String(property?.name || property?.addressLine1 || context.propertyId || "").trim() || "Property";
+      const propertyName = String(property?.name || property?.addressLine1 || "").trim() || "Selected property";
       const baseUrl = (process.env.PUBLIC_APP_URL || process.env.VITE_PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "");
       const requestLink = `${baseUrl}/maintenance`;
       await sendEmail({
@@ -5976,13 +6013,13 @@ router.post("/maintenance-requests", requireTenantWorkspaceIdentity, async (req:
         replyTo: from,
         subject: `New maintenance request: ${title}`,
         text: buildEmailText({
-          intro: `A tenant submitted a new maintenance request.\nTenant: ${tenantName}${tenantEmail ? ` (${tenantEmail})` : ""}\nProperty: ${propertyName}\nCategory: ${data.category}\nPriority: ${data.priority}\nRequest ID: ${ref.id}\n\n${description}`,
+          intro: `A tenant submitted a new maintenance request.\nTenant: ${tenantName}${tenantEmail ? ` (${tenantEmail})` : ""}\nProperty: ${propertyName}\nCategory: ${data.category}\nPriority: ${data.priority}\nReference: ${safeRequestId}\n\n${description}`,
           ctaText: "Open maintenance",
           ctaUrl: requestLink,
         }),
         html: buildEmailHtml({
           title: "New maintenance request",
-          intro: `Tenant: ${tenantName}${tenantEmail ? ` (${tenantEmail})` : ""}. Property: ${propertyName}. Category: ${data.category}. Priority: ${data.priority}. Request ID: ${ref.id}.`,
+          intro: `Tenant: ${tenantName}${tenantEmail ? ` (${tenantEmail})` : ""}. Property: ${propertyName}. Category: ${data.category}. Priority: ${data.priority}. Reference: ${safeRequestId}.`,
           ctaText: "Open maintenance",
           ctaUrl: requestLink,
         }),
@@ -5992,13 +6029,29 @@ router.post("/maintenance-requests", requireTenantWorkspaceIdentity, async (req:
   } catch (err: any) {
     emailError = err?.message || "SEND_FAILED";
     console.error("[tenant/workspace-maintenance] email send failed", {
-      requestId: ref.id,
-      landlordId: data.landlordId,
+      requestReference: safeRequestId,
       message: err?.message || "send_failed",
     });
   }
 
-  return res.status(201).json({ ok: true, data: projectTenantMaintenance(ref.id, data), emailed, emailError });
+  const projection = projectTenantMaintenance(ref.id, data);
+  return res.status(201).json({
+    ok: true,
+    data: {
+      requestId: projection.requestId,
+      status: projection.status,
+      title: projection.title,
+      summary: projection.summary,
+      category: projection.category,
+      priority: projection.priority,
+      createdAt: projection.createdAt,
+      updatedAt: projection.updatedAt,
+      read: projection.read,
+      readAt: projection.readAt,
+    },
+    emailed,
+    emailError,
+  });
 });
 
 router.post("/invite/redeem", requireTenantWorkspaceIdentity, async (req: any, res) => {
@@ -8334,8 +8387,8 @@ async function buildTenantMaintenanceDetailResponse(docId: string, maintenanceDa
 
 router.get("/maintenance-requests/:id", requireTenant, async (req: any, res) => {
   try {
-    const tenantId = req.user?.tenantId;
-    const id = String(req.params?.id || "").trim();
+    const tenantId = String(req.user?.tenantId || "").trim();
+    const id = await resolveTenantMaintenanceDocumentIdForRequest(tenantId, String(req.params?.id || "").trim());
     if (!tenantId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
     if (!id) return res.status(404).json({ ok: false, error: "NOT_FOUND" });
     const doc = await db.collection("maintenanceRequests").doc(id).get();
