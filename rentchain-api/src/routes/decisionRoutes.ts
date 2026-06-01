@@ -19,6 +19,10 @@ import {
   summarizeDelinquencySignals,
 } from "../lib/payments/delinquencySignals";
 import type { RentPaymentRecord } from "../services/rentPayments/rentPaymentService";
+import { computeDecisionState } from "../services/stateMachines/stateComputation";
+import { decisionStateMachine } from "../services/stateMachines/decisionStateMachine";
+import { buildValidationSummary, validateDecisionTransition } from "../services/stateMachines/transitionValidation";
+import type { DecisionActionState, DecisionEvent } from "../services/stateMachines/types";
 
 const router = Router();
 
@@ -46,6 +50,19 @@ function actorEmailFromReq(req: any) {
 function isActiveDecisionStatus(status: unknown) {
   const normalized = asString(status || "detected", 40);
   return !["reviewed", "snoozed", "accepted", "dismissed", "resolved"].includes(normalized);
+}
+
+function logDecisionStateMarkers(actions: Array<Record<string, unknown>>) {
+  if (process.env.STATE_MACHINE_DEBUG !== "1") return;
+  const counts = new Map<string, number>();
+  for (const action of actions) {
+    const state = computeDecisionState(action);
+    counts.set(state, (counts.get(state) || 0) + 1);
+    if (!decisionStateMachine.states.includes(state)) {
+      console.warn("[state-machine] decision advisory invalid", { route: "decision_list" });
+    }
+  }
+  console.info("[state-machine] decision advisory", { count: actions.length, states: Object.fromEntries(counts) });
 }
 
 async function loadLeaseForDecisionAccess(req: any, leaseId: string) {
@@ -209,6 +226,7 @@ router.get("/", requireAuth, async (req: any, res: Response) => {
     if (!leaseId) return res.status(400).json({ ok: false, error: "decision_lease_id_required" });
     const model = await deriveLeaseDecisionReadModel(req, leaseId);
     if (!model.ok) return res.status(model.status).json({ ok: false, error: model.error });
+    logDecisionStateMarkers(model.actions as Array<Record<string, unknown>>);
     return res.json({
       ok: true,
       decisions: model.decisions,
@@ -225,6 +243,35 @@ router.get("/", requireAuth, async (req: any, res: Response) => {
   } catch (err: any) {
     console.error("[decisionRoutes] GET /api/decisions failed", err?.message || err);
     return res.status(500).json({ ok: false, error: "decision_list_failed" });
+  }
+});
+
+router.post("/validate-transition", requireAuth, async (req: any, res: Response) => {
+  try {
+    const leaseId = asString(req.body?.leaseId, 240);
+    const decisionId = asString(req.body?.decisionId, 600);
+    if (!leaseId || !decisionId) return res.status(400).json({ ok: false, error: "decision_validation_invalid" });
+    const model = await deriveLeaseDecisionReadModel(req, leaseId);
+    if (!model.ok) return res.status(model.status).json({ ok: false, error: model.error });
+    const action = model.actions.find((candidate: any) => asString(candidate?.decisionId, 600) === decisionId) || null;
+    const validation = validateDecisionTransition((action || {}) as Record<string, unknown>, {
+      to: String(req.body?.proposedTransition || req.body?.to || "") as DecisionActionState,
+      event: String(req.body?.event || "") as DecisionEvent,
+      context: {
+        actorRole: isAdmin(req) ? "admin" : "landlord",
+        actorId: actorIdFromReq(req),
+        authorized: true,
+        decisionId,
+        landlordId: model.landlordId,
+        actionRecordExists: Boolean(action),
+        sourceValid: model.decisions.some((decision) => decision.decisionId === decisionId),
+        snoozedUntil: asString(req.body?.snoozedUntil, 120) || null,
+      },
+    });
+    return res.status(200).json(buildValidationSummary(validation));
+  } catch (err: any) {
+    console.error("[state-machine] decision validation failed", { message: err?.message || "failed" });
+    return res.status(500).json({ ok: false, error: "decision_transition_validation_failed" });
   }
 });
 
