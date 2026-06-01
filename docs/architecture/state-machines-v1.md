@@ -186,6 +186,7 @@ Implemented in this mission:
 - `rentchain-api/src/services/stateMachines/transitionValidation.ts`
 - `rentchain-api/src/services/stateMachines/stateMachineRegistry.ts`
 - Advisory markers in screening operations, lease detail, maintenance list, payment list, and decision list routes.
+- Evidence provenance helpers, builders, storage, and admin review projections for advisory transition context.
 
 Not implemented in this mission:
 
@@ -195,8 +196,56 @@ Not implemented in this mission:
 - Adding cross-workflow synchronization.
 - Adding external exports of state machine metadata.
 
+## Evidence Provenance
+
+Evidence provenance extends the V1 state machine layer with metadata-only records that describe what supported a proposed transition at validation time. It remains advisory infrastructure: existing route behavior is unchanged, evidence capture is optional, and validators still return the same `valid`, `allowedTransitions`, and `reason` contract unless capture is explicitly requested.
+
+### Capture Flow
+
+1. A caller computes current state from persisted records.
+2. The workflow validator checks authority, current state, proposed state, event, and required context.
+3. When `captureEvidence` is enabled, the validator builds a side-band provenance event using `captureTransitionEvidence()`.
+4. Workflow-specific evidence builders produce safe references for the records that informed the transition.
+5. Advisory route markers may append the event through `appendProvenanceEvent()`.
+6. Capture failure is logged and does not block the existing route response.
+
+The provenance event records the workflow type, hashed workflow instance key, from/to state, event name, validation outcome, actor role, safe actor reference, UTC timestamp, evidence reference count, and redaction summary. It does not store raw record payloads or browser form state.
+
+### Safe References
+
+Evidence references use opaque keys generated from workflow type, reference type, and a stable hash of the source reference. Labels are fixed metadata labels such as `lease lifecycle state` or `payment provider status`; raw Firestore IDs, storage paths, provider payloads, tokens, credentials, request bodies, response bodies, and sensitive field dumps are excluded.
+
+The five evidence builders are:
+
+- `buildScreeningEvidence()` for application, order, transaction, and result state.
+- `buildLeaseEvidence()` for lease lifecycle and notice context.
+- `buildMaintenanceEvidence()` for work order, cost review, and completion evidence count.
+- `buildPaymentEvidence()` for payment record and provider status metadata.
+- `buildDecisionEvidence()` for decision source, action record, and source validity.
+
+### Timestamp And Immutability Rules
+
+All provenance timestamps are ISO 8601 UTC strings. Events are append-only and immutable: storage uses create semantics where available and refuses to overwrite an existing provenance event. Integrity validation rejects events that are not metadata-only, are not append-only, have non-UTC timestamps, expose raw actor IDs, or include restricted payload-like content.
+
+### Storage And Review
+
+`provenanceStorage.ts` provides internal append and read functions:
+
+- `appendProvenanceEvent()` appends one immutable event.
+- `getProvenanceEvent()` reads one event by event key.
+- `getProvenanceChain()` returns a chronological chain for one workflow instance.
+- `queryProvenanceEvents()` filters by workflow type, actor role, outcome, and date range.
+
+`provenanceReviewService.ts` provides admin/support/landlord-safe projections for audit review. Admins can query all provenance events, support can query metadata-only review fields, and landlords can query only matching landlord-scoped provenance. Tenant-facing surfaces do not receive provenance metadata in this mission.
+
+### Audit And Compliance
+
+Provenance chains enable decision forensics by preserving the metadata that was available when a transition was validated. A screening chain can show application, order, transaction, and result references in chronological order. A lease chain can show draft activation, notice preparation, end, and restore transitions. Maintenance chains can show assignment, scheduling, cost review, completion, and rework metadata. Payment chains can show processing, confirmation, failure, refund, or retry context. Decision chains can show appearance, review, snooze, dismissal, execution, failure, and reopen context.
+
+These chains are not exported to tenants or external systems. They are internal review infrastructure for audit, compliance, recovery, and future operator workflows.
+
 ## Future Work
 
-- Phase 2 Mission 3 should attach evidence provenance to transition events and advisory snapshots.
-- Phase 2 Mission 4 should reconcile derived decisions with stored action state and canonical timeline entries.
+- Phase 2 Mission 4 should reconcile derived decisions with stored action state and canonical timeline entries, then add operator recovery workflows on top of provenance chains.
 - A later enforcement mission can convert advisory route markers into blocking transition checks once migration risks are reviewed.
+- A later review UI mission can expose provenance chains to admin/support workspaces with explicit role gates and redaction summaries.

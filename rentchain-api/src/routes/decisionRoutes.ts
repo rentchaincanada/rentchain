@@ -21,6 +21,7 @@ import {
 import type { RentPaymentRecord } from "../services/rentPayments/rentPaymentService";
 import { computeDecisionState } from "../services/stateMachines/stateComputation";
 import { decisionStateMachine } from "../services/stateMachines/decisionStateMachine";
+import { appendProvenanceEvent } from "../services/stateMachines/provenanceStorage";
 import { buildValidationSummary, validateDecisionTransition } from "../services/stateMachines/transitionValidation";
 import type { DecisionActionState, DecisionEvent } from "../services/stateMachines/types";
 
@@ -257,6 +258,7 @@ router.post("/validate-transition", requireAuth, async (req: any, res: Response)
     const validation = validateDecisionTransition((action || {}) as Record<string, unknown>, {
       to: String(req.body?.proposedTransition || req.body?.to || "") as DecisionActionState,
       event: String(req.body?.event || "") as DecisionEvent,
+      captureEvidence: req.body?.captureEvidence === true,
       context: {
         actorRole: isAdmin(req) ? "admin" : "landlord",
         actorId: actorIdFromReq(req),
@@ -268,6 +270,16 @@ router.post("/validate-transition", requireAuth, async (req: any, res: Response)
         snoozedUntil: asString(req.body?.snoozedUntil, 120) || null,
       },
     });
+    if (validation.provenanceEvent) {
+      try {
+        await appendProvenanceEvent(validation.provenanceEvent, {
+          authority: { actorRole: isAdmin(req) ? "admin" : "landlord", landlordRef: model.landlordId },
+        });
+        res.setHeader("X-Provenance-Captured", "true");
+      } catch (error) {
+        console.warn("[provenance] decision capture skipped", { message: error instanceof Error ? error.message : "failed" });
+      }
+    }
     return res.status(200).json(buildValidationSummary(validation));
   } catch (err: any) {
     console.error("[state-machine] decision validation failed", { message: err?.message || "failed" });

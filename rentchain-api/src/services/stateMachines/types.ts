@@ -2,6 +2,8 @@ export type ActorRole = "tenant" | "landlord" | "admin" | "contractor" | "suppor
 
 export type RecordLike = Record<string, unknown>;
 
+export type ReviewWorkflowType = "screening" | "lease" | "maintenance" | "payment" | "decision";
+
 export type ScreeningApplicationState =
   | "NotRequested"
   | "ApplicationStarted"
@@ -151,6 +153,87 @@ export type TransitionValidationResult<S extends string = string> = {
   proposedState: S;
   allowedTransitions: S[];
   reason?: string;
+  provenanceEvent?: TransitionProvenanceEvent<S, string>;
+};
+
+export type EvidenceReferenceType =
+  | "application"
+  | "order"
+  | "transaction"
+  | "result"
+  | "lease"
+  | "notice"
+  | "work_order"
+  | "cost"
+  | "attachment"
+  | "payment"
+  | "provider_status"
+  | "decision"
+  | "action"
+  | "source";
+
+export type EvidenceReference = {
+  referenceKey: string;
+  referenceType: EvidenceReferenceType;
+  label: string;
+  metadataOnly: true;
+  rawIdsIncluded: false;
+  payloadIncluded: false;
+};
+
+export type ProvenanceActorSummary = {
+  actorRole: ActorRole;
+  actorRef: string | null;
+  rawActorIdsIncluded: false;
+};
+
+export type ProvenanceOutcome = "valid" | "invalid";
+
+export type ProvenanceMetadata = {
+  metadataOnly: true;
+  appendOnly: true;
+  visibilityClass: "admin_support_internal";
+  tenantVisible: false;
+  landlordVisible: false;
+  source: "state_machine_advisory";
+  timestampFormat: "iso_8601_utc";
+};
+
+export type TransitionProvenanceEvent<S extends string = string, E extends string = string> = {
+  eventId: string;
+  workflowType: ReviewWorkflowType;
+  workflowInstanceKey: string;
+  transition: {
+    from: S;
+    to: S;
+    event: E;
+    outcome: ProvenanceOutcome;
+    reason: string | null;
+  };
+  actor: ProvenanceActorSummary;
+  access: {
+    landlordRef: string | null;
+    tenantRef: string | null;
+    rawIdsIncluded: false;
+  };
+  occurredAt: string;
+  evidenceRefs: EvidenceReference[];
+  contextSummary: {
+    requiredContextPresent: boolean;
+    authorityResolved: boolean;
+    evidenceRefCount: number;
+    rawPayloadIncluded: false;
+  };
+  metadata: ProvenanceMetadata;
+  immutable: true;
+  redactionSummary: string;
+};
+
+export type EvidenceChain<S extends string = string, E extends string = string> = {
+  workflowType: ReviewWorkflowType;
+  workflowInstanceKey: string;
+  events: TransitionProvenanceEvent<S, E>[];
+  metadata: ProvenanceMetadata;
 };
 
 export type TransitionValidator<S extends string, C, E extends string> = (input: {
