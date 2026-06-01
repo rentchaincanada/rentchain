@@ -244,8 +244,45 @@ Provenance chains enable decision forensics by preserving the metadata that was 
 
 These chains are not exported to tenants or external systems. They are internal review infrastructure for audit, compliance, recovery, and future operator workflows.
 
+## Decision Continuity And Recovery
+
+Decision continuity adds a recovery layer on top of the advisory state machine and provenance infrastructure. The layer compares three metadata-only sources:
+
+- derived decision snapshots in `decisionContinuitySnapshots`
+- canonical recovery timeline entries in `canonicalRecoveryTimelineEntries`
+- transition provenance events in `transitionProvenanceEvents`
+
+The comparison produces a `DecisionReconciliation` summary with safe workflow keys, current canonical state, derived state, evidence count, divergence type, proposed decision, and manual-review requirement. Raw workflow identifiers and data-store keys are not returned in admin responses.
+
+### Divergence Types
+
+| Type | Meaning | Default proposed decision |
+| --- | --- | --- |
+| `NONE` | No recovery action is required. | `NO_ACTION` |
+| `MISSING_TRANSITION` | Canonical timeline state exists without matching derived state. | `ACCEPT_CANONICAL` |
+| `ORPHANED_DECISION` | Derived decision state exists without a canonical timeline source. | `EVIDENCE_REVIEW_REQUIRED` |
+| `EVIDENCE_MISMATCH` | Provenance transition state conflicts with derived state. | `EVIDENCE_REVIEW_REQUIRED` |
+| `METADATA_DIVERGENCE` | Canonical and derived states are both present but differ. | `ACCEPT_CANONICAL` |
+
+### Operator Recovery Flow
+
+Admin and support users can inspect and reconcile divergent workflows through `/api/admin/recovery/*`. Recovery actions append two immutable records:
+
+- `operatorRecoveryLogs` stores the decision, reason, safe operator reference, evidence summary, and immutable recovery metadata.
+- `canonicalRecoveryTimelineEntries` stores a timeline entry that can be included in canonical review timeline projections.
+
+The recovery service does not mutate underlying workflow records, decision action records, billing state, provider callback state, or tenant-facing read models. It records operator intent and evidence summary so a later enforcing workflow can consume the audit trail if explicitly authorized.
+
+### Access And Projection Rules
+
+- Recovery inspection and reconciliation are limited to admin/support authority.
+- Tenant and landlord users fail closed on recovery endpoints.
+- Recovery payloads use deterministic safe references and hashed workflow instance keys.
+- Evidence summaries contain counts, state labels, and timestamps only.
+- Recovery logs are append-only; duplicate reconciliation actions for the same divergence, decision, and reason code are rejected.
+
 ## Future Work
 
-- Phase 2 Mission 4 should reconcile derived decisions with stored action state and canonical timeline entries, then add operator recovery workflows on top of provenance chains.
+- A later enforcement mission can consume recovery logs to drive explicit workflow-state correction after migration risks are reviewed.
 - A later enforcement mission can convert advisory route markers into blocking transition checks once migration risks are reviewed.
 - A later review UI mission can expose provenance chains to admin/support workspaces with explicit role gates and redaction summaries.
