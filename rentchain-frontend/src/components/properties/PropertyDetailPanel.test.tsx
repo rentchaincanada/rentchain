@@ -578,8 +578,8 @@ describe("PropertyDetailPanel", () => {
           unitNumber: "201",
           monthlyRent: 1800,
           tenantName: "Future Tenant",
-          startDate: "2026-06-01",
-          endDate: "2027-05-31",
+          startDate: "2099-06-01",
+          endDate: "2100-05-31",
           status: "active",
           signatureStatus: "signed",
           createdAt: "2026-01-01T00:00:00.000Z",
@@ -627,7 +627,7 @@ describe("PropertyDetailPanel", () => {
     expect((await screen.findAllByText("Upcoming")).length).toBeGreaterThan(0);
     expect(screen.getAllByText("Occupied").length).toBeGreaterThan(0);
     expect(screen.getAllByRole("link", { name: "Future Tenant" }).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Ends May 31, 2027/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Ends May 31, 2100/).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("link", { name: "Current Tenant" }).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Ends Dec 31, 2026/).length).toBeGreaterThan(0);
     expect(screen.getByText("50%")).toBeInTheDocument();
