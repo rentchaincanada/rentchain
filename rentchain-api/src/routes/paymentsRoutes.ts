@@ -13,6 +13,10 @@ import { requirePermission } from "../middleware/requireAuthz";
 import { buildDatedExportFilename, setAttachmentExportHeaders } from "../lib/exports/exportResponse";
 import { db } from "../config/firebase";
 import { getEffectiveLandlordId, resolveRequestAuthority } from "../auth/requestAuthority";
+import { computePaymentState } from "../services/stateMachines/stateComputation";
+import { paymentStateMachine } from "../services/stateMachines/paymentStateMachine";
+import { buildValidationSummary, validatePaymentTransition } from "../services/stateMachines/transitionValidation";
+import type { PaymentEvent, PaymentState } from "../services/stateMachines/types";
 
 const router = Router();
 const paymentsEditRouter = Router();
@@ -29,6 +33,19 @@ const roleForReq = (req: any) => resolveRequestAuthority(req).actorRole;
 
 function landlordIdForReq(req: any): string {
   return String(getEffectiveLandlordId(req) || "").trim();
+}
+
+function logPaymentStateMarkers(records: Payment[]) {
+  if (process.env.STATE_MACHINE_DEBUG !== "1") return;
+  const counts = new Map<string, number>();
+  for (const record of records) {
+    const state = computePaymentState(record as unknown as Record<string, unknown>);
+    counts.set(state, (counts.get(state) || 0) + 1);
+    if (!paymentStateMachine.states.includes(state)) {
+      console.warn("[state-machine] payment advisory invalid", { route: "payments_list" });
+    }
+  }
+  console.info("[state-machine] payment advisory", { count: records.length, states: Object.fromEntries(counts) });
 }
 
 const PAYMENT_OWNER_FIELDS = ["landlordId", "ownerId", "userId", "createdByLandlordId"] as const;
@@ -682,6 +699,7 @@ router.get("/payments", requireAuth, async (req: any, res: Response) => {
   if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
   try {
     const results = await listVisiblePayments(landlordId, tenantId);
+    logPaymentStateMarkers(results);
     res.setHeader("x-payments-result-count", String(results.length));
     return res.json(results);
   } catch (err) {
@@ -737,6 +755,34 @@ async function handlePaymentSpreadsheetExport(req: any, res: Response) {
 
 router.get("/payments/export.xls", requireAuth, handlePaymentSpreadsheetExport);
 router.get("/payments/export.xlsx", requireAuth, handlePaymentSpreadsheetExport);
+
+router.post("/payments/validate-transition", requireAuth, requirePermission("payments.edit"), async (req: any, res: Response) => {
+  try {
+    const landlordId = landlordIdForReq(req);
+    const paymentId = String(req.body?.paymentId || "").trim();
+    if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+    if (!paymentId) return res.status(400).json({ ok: false, error: "paymentId is required" });
+    const payment = await getPersistedPaymentById(paymentId);
+    if (!payment) return res.status(404).json({ ok: false, error: "PAYMENT_NOT_FOUND" });
+    const validation = validatePaymentTransition(payment as unknown as Record<string, unknown>, {
+      to: String(req.body?.proposedTransition || req.body?.to || "") as PaymentState,
+      event: String(req.body?.event || "") as PaymentEvent,
+      context: {
+        actorRole: roleForReq(req) === "admin" ? "admin" : "landlord",
+        actorId: String(req.user?.id || req.user?.uid || req.user?.sub || "").trim() || null,
+        authorized: hasProvenPaymentOwnership(payment, landlordId, emptyPaymentOwnershipContext()),
+        paymentId,
+        paymentIntentId: String(req.body?.paymentIntentId || payment.paymentIntentId || "").trim() || null,
+        landlordId,
+        providerStatus: String(req.body?.providerStatus || payment.status || "").trim() || null,
+      },
+    });
+    return res.status(200).json(buildValidationSummary(validation));
+  } catch (err: any) {
+    console.error("[state-machine] payment validation failed", { message: err?.message || "failed" });
+    return res.status(500).json({ ok: false, error: "PAYMENT_TRANSITION_VALIDATION_FAILED" });
+  }
+});
 
 // POST /api/payments
 router.post(

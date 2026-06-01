@@ -71,6 +71,10 @@ import { deriveLeaseOccupancyCoherence } from "../lib/leases/deriveLeaseOccupanc
 import { evaluateJurisdictionPolicy } from "../lib/jurisdiction/operationalPolicyEvaluator";
 import { formatInternalReference, slugifyOperationalReference } from "../lib/identityReferences";
 import { syncPropertyUnitOccupancyForTenantContext } from "../services/tenantPortal/tenantOccupancySyncService";
+import { computeLeaseState } from "../services/stateMachines/stateComputation";
+import { leaseStateMachine } from "../services/stateMachines/leaseStateMachine";
+import { buildValidationSummary, validateLeaseTransition } from "../services/stateMachines/transitionValidation";
+import type { LeaseEvent, LeaseLifecycleState } from "../services/stateMachines/types";
 
 const router = Router();
 const LEDGER_COLLECTION = "ledgerEntries";
@@ -3072,6 +3076,35 @@ router.post("/:leaseId/restore", requireLandlord, async (req: any, res: Response
   }
 });
 
+router.post("/validate-transition", requireLandlord, async (req: any, res: Response) => {
+  try {
+    const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
+    const leaseId = String(req.body?.leaseId || "").trim();
+    if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
+    if (!leaseId) return res.status(400).json({ ok: false, error: "leaseId is required" });
+    const result = await getLeaseEntityForLandlord(leaseId, landlordId);
+    if (!result.ok) return res.status(result.status).json({ ok: false, error: result.error });
+    const validation = validateLeaseTransition(result.lease as Record<string, unknown>, {
+      to: String(req.body?.proposedTransition || req.body?.to || "") as LeaseLifecycleState,
+      event: String(req.body?.event || "") as LeaseEvent,
+      context: {
+        actorRole: "landlord",
+        actorId: String(req.user?.id || req.user?.uid || req.user?.sub || "").trim() || null,
+        authorized: true,
+        leaseId,
+        landlordId,
+        noticeId: String(req.body?.noticeId || "").trim() || null,
+        noticeRequired: req.body?.noticeRequired !== false,
+        restoreRequested: req.body?.restoreRequested === true,
+      },
+    });
+    return res.status(200).json(buildValidationSummary(validation));
+  } catch (err: any) {
+    console.error("[state-machine] lease validation failed", { message: err?.message || "failed" });
+    return res.status(500).json({ ok: false, error: "lease_transition_validation_failed" });
+  }
+});
+
 router.get("/:id", requireLandlord, async (req: any, res: Response) => {
   try {
     if (!(await enforceLeaseCapability(req, res))) return;
@@ -3079,6 +3112,10 @@ router.get("/:id", requireLandlord, async (req: any, res: Response) => {
     const result = await getLeaseEntityForLandlord(String(req.params?.id || "").trim(), landlordId);
     if (!result.ok) {
       return res.status(result.status).json({ error: result.error });
+    }
+    const leaseState = computeLeaseState(result.lease as Record<string, unknown>);
+    if (!leaseStateMachine.states.includes(leaseState)) {
+      console.warn("[state-machine] lease advisory invalid", { route: "lease_detail" });
     }
     if (result.source === "firestore") {
       return res.json({ lease: await enrichLeaseRow({ id: String(req.params?.id || "").trim(), ...(result.lease as any) }) });

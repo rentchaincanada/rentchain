@@ -9,6 +9,22 @@ import {
   ScreeningOpsError,
   startAdminScreeningOperation,
 } from "./screeningOpsService";
+import { computeScreeningState } from "../stateMachines/stateComputation";
+
+function logScreeningStateMarker(records: Array<{ status?: string | null }>) {
+  if (process.env.STATE_MACHINE_DEBUG !== "1") return;
+  const counts = new Map<string, number>();
+  for (const record of records) {
+    const status = String(record.status || "").trim().toLowerCase();
+    const state = computeScreeningState({
+      application: status === "cancelled" ? { screeningStatus: "cancelled" } : status === "blocked_transunion_not_connected" ? { screeningStatus: "failed" } : { id: "present" },
+      order: status === "requested" ? null : { id: "present", status: status === "completed" ? "paid" : "unpaid" },
+      result: status === "completed" ? { status: "complete" } : null,
+    });
+    counts.set(state, (counts.get(state) || 0) + 1);
+  }
+  console.info("[state-machine] screening advisory", { count: records.length, states: Object.fromEntries(counts) });
+}
 
 function handleError(res: Response, error: unknown) {
   if (error instanceof ScreeningOpsError) {
@@ -45,6 +61,7 @@ export async function getManualScreeningStatus(req: Request, res: Response) {
 export async function getAdminScreeningOps(req: Request, res: Response) {
   try {
     const operations = await listAdminScreeningOperations(String(req.query?.status || "").trim());
+    logScreeningStateMarker(operations);
     return res.status(200).json({ operations });
   } catch (error) {
     return handleError(res, error);
@@ -54,6 +71,7 @@ export async function getAdminScreeningOps(req: Request, res: Response) {
 export async function getAdminScreeningOp(req: Request, res: Response) {
   try {
     const operation = await getAdminScreeningOperation(req.params.id);
+    logScreeningStateMarker([operation]);
     return res.status(200).json({ operation });
   } catch (error) {
     return handleError(res, error);

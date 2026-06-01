@@ -29,6 +29,10 @@ import {
   computeWorkOrderNotifications,
 } from "../lib/maintenanceNotifications";
 import { writeCanonicalEvent } from "../lib/events/buildEvent";
+import { computeMaintenanceState } from "../services/stateMachines/stateComputation";
+import { maintenanceStateMachine } from "../services/stateMachines/maintenanceStateMachine";
+import { buildValidationSummary, validateMaintenanceTransition } from "../services/stateMachines/transitionValidation";
+import type { MaintenanceEvent, MaintenanceRequestState } from "../services/stateMachines/types";
 
 const router = Router();
 
@@ -118,6 +122,19 @@ const ALLOWED_COST_ATTACHMENT_MIME_TYPES = new Set([
 ]);
 
 router.use(authenticateJwt);
+
+function logMaintenanceStateMarkers(records: Array<Record<string, unknown>>, route: string) {
+  if (process.env.STATE_MACHINE_DEBUG !== "1") return;
+  const counts = new Map<string, number>();
+  for (const record of records) {
+    const state = computeMaintenanceState(record);
+    counts.set(state, (counts.get(state) || 0) + 1);
+    if (!maintenanceStateMachine.states.includes(state)) {
+      console.warn("[state-machine] maintenance advisory invalid", { route });
+    }
+  }
+  console.info("[state-machine] maintenance advisory", { route, count: records.length, states: Object.fromEntries(counts) });
+}
 
 function roleOf(req: any): string {
   return String(req.user?.actorRole || req.user?.role || "").trim().toLowerCase();
@@ -1223,10 +1240,49 @@ router.get("/maintenance-requests", async (req: any, res) => {
     const snap = await query.get();
     const items = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
     items.sort((a, b) => (Number(b.updatedAt || 0) || 0) - (Number(a.updatedAt || 0) || 0));
+    logMaintenanceStateMarkers(items, "maintenance_requests_list");
     return res.json({ ok: true, data: items });
   } catch (err) {
     console.error("[maintenance-requests] list failed", { err });
     return res.status(500).json({ ok: false, error: "MAINT_REQUEST_LIST_FAILED" });
+  }
+});
+
+router.post("/maintenance-requests/validate-transition", async (req: any, res) => {
+  try {
+    const role = roleOf(req);
+    if (role !== "landlord" && role !== "admin") {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+    const landlordId = landlordIdOf(req);
+    const workOrderId = String(req.body?.workOrderId || "").trim();
+    if (!landlordId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    if (!workOrderId) return res.status(400).json({ ok: false, error: "workOrderId is required" });
+    const snap = await db.collection("workOrders").doc(workOrderId).get();
+    if (!snap.exists) return res.status(404).json({ ok: false, error: "WORK_ORDER_NOT_FOUND" });
+    const workOrder: Record<string, unknown> = { id: snap.id, ...((snap.data() as Record<string, unknown>) || {}) };
+    if (String(workOrder.landlordId || "").trim() !== landlordId) {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+    const validation = validateMaintenanceTransition(workOrder, {
+      to: String(req.body?.proposedTransition || req.body?.to || "") as MaintenanceRequestState,
+      event: String(req.body?.event || "") as MaintenanceEvent,
+      context: {
+        actorRole: role === "admin" ? "admin" : "landlord",
+        actorId: String(req.user?.id || req.user?.uid || req.user?.sub || "").trim() || null,
+        authorized: true,
+        workOrderId,
+        landlordId,
+        assignedContractorId: String(req.body?.assignedContractorId || workOrder.assignedContractorId || "").trim() || null,
+        scheduledFor: req.body?.scheduledFor ?? null,
+        costTotalCents: typeof req.body?.costTotalCents === "number" ? req.body.costTotalCents : null,
+        evidenceCount: typeof req.body?.evidenceCount === "number" ? req.body.evidenceCount : null,
+      },
+    });
+    return res.status(200).json(buildValidationSummary(validation));
+  } catch (err: any) {
+    console.error("[state-machine] maintenance validation failed", { message: err?.message || "failed" });
+    return res.status(500).json({ ok: false, error: "MAINTENANCE_TRANSITION_VALIDATION_FAILED" });
   }
 });
 
@@ -1538,6 +1594,7 @@ router.get("/landlord/maintenance", async (req: any, res) => {
     if (statusFilter) {
       items = items.filter((item) => normalizeWorkflowStatus(item.status) === statusFilter);
     }
+    logMaintenanceStateMarkers(items, "landlord_maintenance_list");
     items = await normalizeLandlordMaintenanceLabels(items);
     items.sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0));
     return res.json({ ok: true, items, data: items });
