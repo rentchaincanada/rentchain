@@ -31,6 +31,7 @@ import {
 import { writeCanonicalEvent } from "../lib/events/buildEvent";
 import { computeMaintenanceState } from "../services/stateMachines/stateComputation";
 import { maintenanceStateMachine } from "../services/stateMachines/maintenanceStateMachine";
+import { appendProvenanceEvent } from "../services/stateMachines/provenanceStorage";
 import { buildValidationSummary, validateMaintenanceTransition } from "../services/stateMachines/transitionValidation";
 import type { MaintenanceEvent, MaintenanceRequestState } from "../services/stateMachines/types";
 
@@ -1267,6 +1268,7 @@ router.post("/maintenance-requests/validate-transition", async (req: any, res) =
     const validation = validateMaintenanceTransition(workOrder, {
       to: String(req.body?.proposedTransition || req.body?.to || "") as MaintenanceRequestState,
       event: String(req.body?.event || "") as MaintenanceEvent,
+      captureEvidence: req.body?.captureEvidence === true,
       context: {
         actorRole: role === "admin" ? "admin" : "landlord",
         actorId: String(req.user?.id || req.user?.uid || req.user?.sub || "").trim() || null,
@@ -1279,6 +1281,16 @@ router.post("/maintenance-requests/validate-transition", async (req: any, res) =
         evidenceCount: typeof req.body?.evidenceCount === "number" ? req.body.evidenceCount : null,
       },
     });
+    if (validation.provenanceEvent) {
+      try {
+        await appendProvenanceEvent(validation.provenanceEvent, {
+          authority: { actorRole: role === "admin" ? "admin" : "landlord", landlordRef: landlordId },
+        });
+        res.setHeader("X-Provenance-Captured", "true");
+      } catch (error) {
+        console.warn("[provenance] maintenance capture skipped", { message: error instanceof Error ? error.message : "failed" });
+      }
+    }
     return res.status(200).json(buildValidationSummary(validation));
   } catch (err: any) {
     console.error("[state-machine] maintenance validation failed", { message: err?.message || "failed" });

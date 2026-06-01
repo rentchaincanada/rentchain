@@ -11,6 +11,7 @@ import {
   postAdminScreeningOpStart,
   postManualScreeningRequest,
 } from "../services/screeningOps/screeningOpsController";
+import { appendProvenanceEvent } from "../services/stateMachines/provenanceStorage";
 import { buildValidationSummary, validateScreeningTransition } from "../services/stateMachines/transitionValidation";
 import type { ScreeningApplicationState, ScreeningEvent } from "../services/stateMachines/types";
 
@@ -26,6 +27,7 @@ router.post("/screening/validate-transition", requireAdmin, async (req: any, res
     const result = validateScreeningTransition(application, {
       to: String(req.body?.proposedTransition || req.body?.to || "") as ScreeningApplicationState,
       event: String(req.body?.event || "") as ScreeningEvent,
+      captureEvidence: req.body?.captureEvidence === true,
       context: {
         actorRole: "admin",
         actorId: String(req.user?.id || req.user?.uid || req.user?.sub || "").trim() || null,
@@ -38,6 +40,16 @@ router.post("/screening/validate-transition", requireAdmin, async (req: any, res
         failureCode: String(req.body?.failureCode || "").trim() || null,
       },
     });
+    if (result.provenanceEvent) {
+      try {
+        await appendProvenanceEvent(result.provenanceEvent, {
+          authority: { actorRole: "admin" },
+        });
+        res.setHeader("X-Provenance-Captured", "true");
+      } catch (error) {
+        console.warn("[provenance] screening capture skipped", { message: error instanceof Error ? error.message : "failed" });
+      }
+    }
     return res.status(200).json(buildValidationSummary(result));
   } catch (err: any) {
     console.error("[state-machine] screening validation failed", { message: err?.message || "failed" });

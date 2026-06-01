@@ -15,6 +15,7 @@ import { db } from "../config/firebase";
 import { getEffectiveLandlordId, resolveRequestAuthority } from "../auth/requestAuthority";
 import { computePaymentState } from "../services/stateMachines/stateComputation";
 import { paymentStateMachine } from "../services/stateMachines/paymentStateMachine";
+import { appendProvenanceEvent } from "../services/stateMachines/provenanceStorage";
 import { buildValidationSummary, validatePaymentTransition } from "../services/stateMachines/transitionValidation";
 import type { PaymentEvent, PaymentState } from "../services/stateMachines/types";
 
@@ -767,6 +768,7 @@ router.post("/payments/validate-transition", requireAuth, requirePermission("pay
     const validation = validatePaymentTransition(payment as unknown as Record<string, unknown>, {
       to: String(req.body?.proposedTransition || req.body?.to || "") as PaymentState,
       event: String(req.body?.event || "") as PaymentEvent,
+      captureEvidence: req.body?.captureEvidence === true,
       context: {
         actorRole: roleForReq(req) === "admin" ? "admin" : "landlord",
         actorId: String(req.user?.id || req.user?.uid || req.user?.sub || "").trim() || null,
@@ -777,6 +779,16 @@ router.post("/payments/validate-transition", requireAuth, requirePermission("pay
         providerStatus: String(req.body?.providerStatus || payment.status || "").trim() || null,
       },
     });
+    if (validation.provenanceEvent) {
+      try {
+        await appendProvenanceEvent(validation.provenanceEvent, {
+          authority: { actorRole: roleForReq(req) === "admin" ? "admin" : "landlord", landlordRef: landlordId },
+        });
+        res.setHeader("X-Provenance-Captured", "true");
+      } catch (error) {
+        console.warn("[provenance] payment capture skipped", { message: error instanceof Error ? error.message : "failed" });
+      }
+    }
     return res.status(200).json(buildValidationSummary(validation));
   } catch (err: any) {
     console.error("[state-machine] payment validation failed", { message: err?.message || "failed" });

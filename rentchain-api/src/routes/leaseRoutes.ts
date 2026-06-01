@@ -73,6 +73,7 @@ import { formatInternalReference, slugifyOperationalReference } from "../lib/ide
 import { syncPropertyUnitOccupancyForTenantContext } from "../services/tenantPortal/tenantOccupancySyncService";
 import { computeLeaseState } from "../services/stateMachines/stateComputation";
 import { leaseStateMachine } from "../services/stateMachines/leaseStateMachine";
+import { appendProvenanceEvent } from "../services/stateMachines/provenanceStorage";
 import { buildValidationSummary, validateLeaseTransition } from "../services/stateMachines/transitionValidation";
 import type { LeaseEvent, LeaseLifecycleState } from "../services/stateMachines/types";
 
@@ -3087,6 +3088,7 @@ router.post("/validate-transition", requireLandlord, async (req: any, res: Respo
     const validation = validateLeaseTransition(result.lease as Record<string, unknown>, {
       to: String(req.body?.proposedTransition || req.body?.to || "") as LeaseLifecycleState,
       event: String(req.body?.event || "") as LeaseEvent,
+      captureEvidence: req.body?.captureEvidence === true,
       context: {
         actorRole: "landlord",
         actorId: String(req.user?.id || req.user?.uid || req.user?.sub || "").trim() || null,
@@ -3098,6 +3100,16 @@ router.post("/validate-transition", requireLandlord, async (req: any, res: Respo
         restoreRequested: req.body?.restoreRequested === true,
       },
     });
+    if (validation.provenanceEvent) {
+      try {
+        await appendProvenanceEvent(validation.provenanceEvent, {
+          authority: { actorRole: "landlord", landlordRef: landlordId },
+        });
+        res.setHeader("X-Provenance-Captured", "true");
+      } catch (error) {
+        console.warn("[provenance] lease capture skipped", { message: error instanceof Error ? error.message : "failed" });
+      }
+    }
     return res.status(200).json(buildValidationSummary(validation));
   } catch (err: any) {
     console.error("[state-machine] lease validation failed", { message: err?.message || "failed" });
