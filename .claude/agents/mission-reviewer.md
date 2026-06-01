@@ -28,7 +28,7 @@ ACCEPTANCE CRITERIA: [PASS or FAIL]
 MERGE AUTH RULE: [PASS or FAIL]
 COMMIT HYGIENE: [PASS or FAIL]
 CO-AUTHOR CLEAN: [PASS or FAIL]
-MANUAL QA REQUIRED: [YES if mission touches frontend rendering, auth flow, routing, mobile layout, or user-visible behavior — NO if docs/config/tests only]
+MANUAL QA REQUIRED: [YES if mission touches frontend rendering, backend routes, auth flow, routing, mobile layout, or user-visible behavior — NO if docs/config/tests/agents only]
 
 VERDICT: [READY FOR GATE 1 or NEEDS REVISION or ESCALATE TO HUMAN]
 
