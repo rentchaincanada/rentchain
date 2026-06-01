@@ -18,6 +18,10 @@ vi.mock("./components/auth/RequireAdmin", () => ({
   RequireAdmin: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
+vi.mock("./components/auth/RequireRole", () => ({
+  RequireRole: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
+
 vi.mock("./components/layout/LandlordNav", () => ({
   LandlordNav: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
@@ -88,6 +92,10 @@ vi.mock("./pages/admin/AdminSupportEscalationsPage", () => ({
 
 vi.mock("./pages/admin/AdminReviewWorkspacesPage", () => ({
   default: () => <h1>Governed review workspaces</h1>,
+}));
+
+vi.mock("./pages/admin/AdminRecoveryWorkspacePage", () => ({
+  default: () => <h1>Recovery workspace</h1>,
 }));
 
 vi.mock("./pages/ReleaseGovernancePage", () => ({
@@ -663,6 +671,18 @@ describe("Routes: governed review workspace surfaces", () => {
     );
 
     expect(await screen.findByText(/Governed review workspaces/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
+  });
+
+  it("keeps the recovery workspace surface available for admin and support review", async () => {
+    const { default: App } = await import("./App");
+    render(
+      <MemoryRouter initialEntries={["/admin/recovery"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Recovery workspace/i)).toBeInTheDocument();
     expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
   });
 });
