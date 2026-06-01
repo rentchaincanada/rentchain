@@ -16,6 +16,24 @@ type MatrixRoute = {
   shellText?: RegExp[];
 };
 
+type DegradedScenarioName = "empty" | "server-error" | "forbidden" | "not-found" | "network-timeout" | "loading-delay";
+
+type DegradedEndpoint = {
+  pattern: string;
+  method?: string;
+  emptyBody: () => Record<string, unknown>;
+  successBody: () => Record<string, unknown>;
+};
+
+type HardenedTenantDegradedSurface = MatrixRoute & {
+  surface: "profile" | "documents" | "payments" | "messages" | "activity" | "maintenance";
+  endpoints: DegradedEndpoint[];
+  emptyText: RegExp[];
+  errorText: RegExp[];
+  loadingText: RegExp[];
+  restoredText: RegExp[];
+};
+
 const matrixViewports = [
   { name: "iphone", size: { width: 390, height: 844 } },
   { name: "android", size: { width: 412, height: 915 } },
@@ -76,10 +94,34 @@ const rawTenantReferencePatterns = [
   /smoke-unit-[a-z0-9-]*/i,
   /smoke-lease-[a-z0-9-]*/i,
   /smoke-landlord-[a-z0-9-]*/i,
+  /tenant-ref-[a-z0-9-]*/i,
+  /property-ref-[a-z0-9-]*/i,
+  /unit-ref-[a-z0-9-]*/i,
+  /lease-ref-[a-z0-9-]*/i,
+  /landlord-ref-[a-z0-9-]*/i,
   /tenant-[0-9a-f-]{6,}/i,
   /property-[0-9a-f-]{6,}/i,
   /lease-[0-9a-f-]{6,}/i,
   /unit-[0-9a-f-]{6,}/i,
+];
+
+const degradedTenantUnsafeTextPatterns = [
+  ...rawTenantReferencePatterns,
+  /authorization/i,
+  /bearer\s+[a-z0-9._-]+/i,
+  /storage\.googleapis\.com/i,
+  /firebase/i,
+  /stack trace/i,
+  /\bat\s+[A-Za-z0-9_$.[\]<]+ \(/i,
+];
+
+const degradedScenarioNames: DegradedScenarioName[] = [
+  "empty",
+  "server-error",
+  "forbidden",
+  "not-found",
+  "network-timeout",
+  "loading-delay",
 ];
 
 const safeProjectionMetadata = {
@@ -108,6 +150,436 @@ const safeProjectionMetadata = {
     redactionCount: 6,
   },
 };
+
+const tenantProfileSuccessBody = () => ({
+  ok: true,
+  data: {
+    ...safeProjectionMetadata,
+    context: {
+      authority: "active_tenant",
+      propertyId: "property-ref-degraded",
+      rc_prop_id: null,
+      applicationId: "application-ref-degraded",
+      leaseId: "lease-ref-degraded",
+      tenantId: "tenant-ref-degraded",
+      unitId: "unit-ref-degraded",
+      invitedEmail: "tenant.a@example.test",
+    },
+    profile: {
+      displayName: "Tenant Smoke A",
+      email: "tenant.a@example.test",
+      phone: "902-555-0100",
+      authorityLabel: "Active tenant",
+      property: {
+        ...safeProjectionMetadata,
+        propertyId: "property-ref-degraded",
+        rc_prop_id: null,
+        street1: "Smoke Property A",
+        street2: null,
+        city: "Halifax",
+        province: "NS",
+        postalCode: "B3J 0A1",
+        unitNumber: "Suite 101",
+        unitDisplayLabel: "Suite 101",
+        features: ["Managed maintenance"],
+      },
+      unit: { unitId: "unit-ref-degraded", label: "Suite 101" },
+      application: {
+        ...safeProjectionMetadata,
+        applicationId: "application-ref-degraded",
+        status: "approved",
+        missingSteps: [],
+        nextActions: ["Keep profile details current"],
+        createdAt: "2026-05-01T00:00:00.000Z",
+        updatedAt: "2026-05-31T00:00:00.000Z",
+      },
+      lease: {
+        ...safeProjectionMetadata,
+        leaseId: "lease-ref-degraded",
+        startDate: "2026-01-01",
+        endDate: "2026-12-31",
+        monthlyRent: 210000,
+        status: "active",
+        documentUrl: null,
+      },
+    },
+    identity: {
+      overallStatus: "verified",
+      identityVerification: {
+        status: "verified",
+        label: "Verified",
+        note: "Tenant identity is verified for this workspace.",
+        updatedAt: "2026-05-31T00:00:00.000Z",
+      },
+      documentChecklist: [
+        { code: "photo_id", label: "Photo ID", status: "verified", nextStep: null },
+        { code: "lease", label: "Lease document", status: "verified", nextStep: null },
+      ],
+      nextSteps: ["Review your profile details before submitting updates."],
+    },
+    actions: {
+      editableFields: ["displayName", "phone"],
+      documentEntry: {
+        available: true,
+        path: "/tenant/documents",
+        label: "Open tenant documents",
+        note: "Documents are scoped to this tenant workspace.",
+      },
+    },
+  },
+});
+
+const tenantProfileEmptyBody = () => ({
+  ...tenantProfileSuccessBody(),
+  data: {
+    ...tenantProfileSuccessBody().data,
+    identity: {
+      overallStatus: "pending",
+      identityVerification: {
+        status: "pending",
+        label: "Pending",
+        note: "Tenant identity is ready for review.",
+        updatedAt: null,
+      },
+      documentChecklist: [],
+      nextSteps: [],
+    },
+  },
+});
+
+const tenantAttachmentsSuccessBody = () => ({
+  ok: true,
+  ...safeProjectionMetadata,
+  data: [
+    {
+      id: "document-ref-lease-summary",
+      type: "document",
+      title: "Lease summary",
+      description: "Tenant-safe lease summary for Suite 101.",
+      fileUrl: null,
+      issuedAt: "2026-05-30T00:00:00.000Z",
+    },
+    {
+      id: "document-ref-maintenance-guide",
+      type: "notice",
+      title: "Maintenance access guide",
+      description: "How to coordinate maintenance access.",
+      fileUrl: null,
+      issuedAt: "2026-05-29T00:00:00.000Z",
+    },
+  ],
+  summary: { total: 2, missing: 0, uploaded: 2, pendingReview: 0, verified: 2, needsAttention: 0 },
+  guidance: {
+    headline: "Your document vault is ready.",
+    nextSteps: ["Keep your documents up to date."],
+    uploadEntryAvailable: true,
+    uploadEntryLabel: "Add documents to your profile",
+    uploadEntryPath: "/tenant/application",
+    supportPath: "/tenant/messages",
+    supportLabel: "Message your landlord",
+  },
+  updatedAt: "2026-05-31T00:00:00.000Z",
+});
+
+const tenantAttachmentsEmptyBody = () => ({
+  ok: true,
+  ...safeProjectionMetadata,
+  data: [],
+  summary: { total: 0, missing: 0, uploaded: 0, pendingReview: 0, verified: 0, needsAttention: 0 },
+  guidance: {
+    headline: "Your document vault is ready.",
+    nextSteps: ["Add documents to your tenant profile when needed."],
+    uploadEntryAvailable: true,
+    uploadEntryLabel: "Add documents to your profile",
+    uploadEntryPath: "/tenant/application",
+    supportPath: "/tenant/messages",
+    supportLabel: "Message your landlord",
+  },
+  updatedAt: null,
+});
+
+const tenantPaymentsSuccessBody = () => ({
+  ok: true,
+  data: [
+    {
+      id: "payment-ref-may-rent",
+      amount: 210000,
+      dueDate: "2026-05-01",
+      paidAt: "2026-05-01T12:00:00.000Z",
+      method: "bank transfer",
+      status: "paid",
+      notes: "May rent received",
+    },
+  ],
+});
+
+const tenantPaymentsEmptyBody = () => ({ ok: true, data: [] });
+
+const tenantPaymentsSummarySuccessBody = () => ({
+  ok: true,
+  data: {
+    tenantId: "tenant-ref-degraded",
+    leaseId: "lease-ref-degraded",
+    rentAmount: 210000,
+    rentDayOfMonth: 1,
+    nextDueDate: "2026-06-01",
+    lastPayment: {
+      amount: 210000,
+      paidAt: "2026-05-01T12:00:00.000Z",
+      dueDate: "2026-05-01",
+      status: "on_time",
+    },
+    currentPeriod: {
+      periodStart: "2026-05-01",
+      periodEnd: "2026-05-31",
+      amountDue: 210000,
+      amountPaid: 210000,
+      status: "on_time",
+    },
+  },
+});
+
+const tenantPaymentsSummaryEmptyBody = () => ({
+  ok: true,
+  data: {
+    tenantId: "tenant-ref-degraded",
+    leaseId: "lease-ref-degraded",
+    rentAmount: null,
+    rentDayOfMonth: null,
+    nextDueDate: null,
+    lastPayment: null,
+    currentPeriod: null,
+  },
+});
+
+const tenantRentChargesSuccessBody = () => ({
+  ok: true,
+  data: [
+    {
+      id: "rent-charge-ref-june",
+      amount: 210000,
+      dueDate: "2026-06-01",
+      periodStart: "2026-06-01",
+      periodEnd: "2026-06-30",
+      status: "open",
+      label: "June rent",
+    },
+  ],
+});
+
+const tenantRentChargesEmptyBody = () => ({ ok: true, data: [] });
+
+const tenantCommunicationsSuccessBody = () => ({
+  ok: true,
+  data: {
+    ...safeProjectionMetadata,
+    canSend: true,
+    canSendReason: null,
+    thread: {
+      id: "thread-ref-degraded",
+      landlordLabel: "Smoke Landlord A",
+      propertyId: "property-ref-degraded",
+      unitId: "unit-ref-degraded",
+      unreadCount: 1,
+      lastMessageAt: "2026-05-31T12:00:00.000Z",
+      messages: [
+        {
+          id: "message-ref-welcome",
+          senderRole: "landlord",
+          body: "Welcome to your tenant communications workspace.",
+          createdAt: "2026-05-31T12:00:00.000Z",
+          createdAtMs: 1780243200000,
+        },
+      ],
+    },
+  },
+});
+
+const tenantCommunicationsEmptyBody = () => ({
+  ok: true,
+  data: {
+    ...safeProjectionMetadata,
+    canSend: true,
+    canSendReason: null,
+    thread: {
+      id: "thread-ref-degraded",
+      landlordLabel: "Smoke Landlord A",
+      propertyId: "property-ref-degraded",
+      unitId: "unit-ref-degraded",
+      unreadCount: 0,
+      lastMessageAt: null,
+      messages: [],
+    },
+  },
+});
+
+const tenantNotificationsSuccessBody = () => ({
+  ok: true,
+  data: [
+    {
+      id: "notification-ref-profile",
+      type: "identity",
+      title: "Profile verified",
+      summary: "Your tenant profile is verified and ready for reuse.",
+      createdAt: "2026-05-31T12:00:00.000Z",
+      status: "success",
+      relatedPath: "/tenant/profile",
+      sourceRefs: [{ sourceType: "profile", referenceKey: "profile-ref-degraded", label: "Profile" }],
+      read: false,
+      readAt: null,
+    },
+  ],
+});
+
+const tenantNotificationsEmptyBody = () => ({ ok: true, data: [] });
+
+const tenantMaintenanceSuccessBody = () => ({
+  ok: true,
+  data: [
+    {
+      id: "maintenance-ref-kitchen-sink",
+      tenantId: "tenant-ref-degraded",
+      landlordId: "landlord-ref-degraded",
+      propertyId: "property-ref-degraded",
+      unitId: "unit-ref-degraded",
+      propertyLabel: "Smoke Property A",
+      unitLabel: "Suite 101",
+      title: "Kitchen sink follow-up",
+      description: "Tenant-safe maintenance request summary.",
+      category: "plumbing",
+      priority: "normal",
+      status: "submitted",
+      createdAt: 1780243200000,
+      updatedAt: 1780243200000,
+      read: false,
+      readAt: null,
+      notifications: { tenant: { requiresAccessConfirmation: false, requiresSignoff: false, requiresReworkAwareness: false } },
+    },
+  ],
+});
+
+const tenantMaintenanceEmptyBody = () => ({ ok: true, data: [] });
+
+const hardenedTenantDegradedSurfaces: HardenedTenantDegradedSurface[] = [
+  {
+    role: "tenant",
+    surface: "profile",
+    label: "tenant profile degraded",
+    path: "/tenant/profile",
+    shellText: [/profile/i],
+    endpoints: [
+      {
+        pattern: "**/api/tenant/profile",
+        emptyBody: tenantProfileEmptyBody,
+        successBody: tenantProfileSuccessBody,
+      },
+    ],
+    emptyText: [/No document checklist yet/i, /No pending next steps right now/i],
+    errorText: [/couldn't load this view|unable to load|temporarily unavailable|view not found|failed to fetch|forbidden|access unavailable|tenant login/i],
+    loadingText: [/Loading your profile/i],
+    restoredText: [/Profile/i, /Verified|Pending/i],
+  },
+  {
+    role: "tenant",
+    surface: "documents",
+    label: "tenant documents degraded",
+    path: "/tenant/documents",
+    shellText: [/documents|attachments/i],
+    endpoints: [
+      {
+        pattern: "**/api/tenant/attachments",
+        emptyBody: tenantAttachmentsEmptyBody,
+        successBody: tenantAttachmentsSuccessBody,
+      },
+    ],
+    emptyText: [/No documents in your vault yet/i],
+    errorText: [/couldn't load this view|unable to load|temporarily unavailable|view not found|failed to fetch|forbidden|access unavailable|tenant login/i],
+    loadingText: [/Loading your document checklist/i],
+    restoredText: [/Documents|Attachments|Issued items/i],
+  },
+  {
+    role: "tenant",
+    surface: "payments",
+    label: "tenant payments degraded",
+    path: "/tenant/payments",
+    shellText: [/payments/i],
+    endpoints: [
+      {
+        pattern: "**/api/tenant/payments",
+        emptyBody: tenantPaymentsEmptyBody,
+        successBody: tenantPaymentsSuccessBody,
+      },
+      {
+        pattern: "**/api/tenant/payments/summary",
+        emptyBody: tenantPaymentsSummaryEmptyBody,
+        successBody: tenantPaymentsSummarySuccessBody,
+      },
+      {
+        pattern: "**/api/tenant/rent-charges",
+        emptyBody: tenantRentChargesEmptyBody,
+        successBody: tenantRentChargesSuccessBody,
+      },
+    ],
+    emptyText: [/No payments recorded yet/i, /No rent charges issued yet/i],
+    errorText: [/couldn't load this view|unable to load|temporarily unavailable|view not found|failed to fetch|forbidden|access unavailable|tenant login|No payments recorded yet/i],
+    loadingText: [/Loading payments/i],
+    restoredText: [/Payments/i, /Rent/i],
+  },
+  {
+    role: "tenant",
+    surface: "messages",
+    label: "tenant messages degraded",
+    path: "/tenant/messages",
+    shellText: [/communications|messages/i],
+    endpoints: [
+      {
+        pattern: "**/api/tenant/communications",
+        emptyBody: tenantCommunicationsEmptyBody,
+        successBody: tenantCommunicationsSuccessBody,
+      },
+    ],
+    emptyText: [/No messages yet/i, /No thread activity yet/i],
+    errorText: [/couldn't load this view|unable to load|temporarily unavailable|view not found|failed to fetch|forbidden|access unavailable|tenant login/i],
+    loadingText: [/Loading your communications workspace/i],
+    restoredText: [/Communications|Messages/i],
+  },
+  {
+    role: "tenant",
+    surface: "activity",
+    label: "tenant activity degraded",
+    path: "/tenant/activity",
+    shellText: [/recent activity|notifications|feed/i],
+    endpoints: [
+      {
+        pattern: "**/api/tenant/notifications",
+        emptyBody: tenantNotificationsEmptyBody,
+        successBody: tenantNotificationsSuccessBody,
+      },
+    ],
+    emptyText: [/No recent activity yet/i],
+    errorText: [/couldn't load this view|unable to load|temporarily unavailable|view not found|failed to fetch|forbidden|access unavailable|tenant login/i],
+    loadingText: [/Loading your recent feed/i],
+    restoredText: [/Recent Activity|Notifications/i],
+  },
+  {
+    role: "tenant",
+    surface: "maintenance",
+    label: "tenant maintenance degraded",
+    path: "/tenant/maintenance",
+    shellText: [/maintenance/i],
+    endpoints: [
+      {
+        pattern: "**/api/tenant/maintenance-requests",
+        emptyBody: tenantMaintenanceEmptyBody,
+        successBody: tenantMaintenanceSuccessBody,
+      },
+    ],
+    emptyText: [/No maintenance requests yet/i, /Create a request/i],
+    errorText: [/Unable to load maintenance requests|couldn't load this view|unable to load|temporarily unavailable|view not found|failed to fetch|forbidden|access unavailable|tenant login/i],
+    loadingText: [/Loading maintenance requests/i],
+    restoredText: [/Maintenance/i, /Request/i],
+  },
+];
 
 function selectedRole() {
   const role = String(process.env.QA_ROLE || "mobile").trim().toLowerCase();
@@ -253,11 +725,100 @@ async function collectHardenedTenantSurfaceMetrics(page: Page) {
   }, rawTenantReferencePatterns.map((pattern) => pattern.source));
 }
 
+async function collectDegradedTenantSafetyMetrics(page: Page) {
+  return page.evaluate((unsafePatterns) => {
+    const bodyText = document.body.innerText || "";
+    return {
+      visibleUnsafeText: unsafePatterns.filter((pattern) => new RegExp(pattern, "i").test(bodyText)),
+    };
+  }, degradedTenantUnsafeTextPatterns.map((pattern) => pattern.source));
+}
+
+async function visibleTextMatches(page: Page, patterns: RegExp[]) {
+  return page.evaluate(
+    (patternSpecs) => {
+      const text = document.body.innerText || "";
+      return patternSpecs.some((pattern) => new RegExp(pattern.source, pattern.flags).test(text));
+    },
+    patterns.map((pattern) => ({ source: pattern.source, flags: pattern.flags })),
+  );
+}
+
 function shouldIgnoreHardenedTenantConsoleError(message: string) {
   return (
     /Direct fetch\(\) forbidden for \/api\. Use apiFetch\/apiJson\./i.test(message) ||
     /Each child in a list should have a unique "key" prop/i.test(message)
   );
+}
+
+function shouldIgnoreDegradedTenantConsoleError(message: string) {
+  return (
+    shouldIgnoreHardenedTenantConsoleError(message) ||
+    /Failed to load resource: the server responded with a status of (403|404|500)/i.test(message) ||
+    /net::ERR_(FAILED|TIMED_OUT|ABORTED)/i.test(message)
+  );
+}
+
+function degradedErrorBody(scenario: DegradedScenarioName) {
+  if (scenario === "forbidden") return { ok: false, message: "Forbidden" };
+  if (scenario === "not-found") return { ok: false, message: "Tenant view not found." };
+  return { ok: false, message: "Tenant view temporarily unavailable." };
+}
+
+function degradedStatus(scenario: DegradedScenarioName) {
+  if (scenario === "forbidden") return 403;
+  if (scenario === "not-found") return 404;
+  return 500;
+}
+
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function installDegradedTenantSurfaceScenario(
+  page: Page,
+  surface: HardenedTenantDegradedSurface,
+  scenario: DegradedScenarioName,
+) {
+  for (const endpoint of surface.endpoints) {
+    await page.route(endpoint.pattern, async (route) => {
+      const request = route.request();
+      if (request.method() !== (endpoint.method || "GET")) {
+        await route.fallback();
+        return;
+      }
+
+      if (scenario === "network-timeout") {
+        await route.abort("timedout");
+        return;
+      }
+
+      if (scenario === "loading-delay") {
+        await wait(2_000);
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify(endpoint.successBody()),
+        });
+        return;
+      }
+
+      if (scenario === "empty") {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify(endpoint.emptyBody()),
+        });
+        return;
+      }
+
+      await route.fulfill({
+        status: degradedStatus(scenario),
+        contentType: "application/json",
+        body: JSON.stringify(degradedErrorBody(scenario)),
+      });
+    });
+  }
 }
 
 async function installMobileLayoutMatrixOverrides(page: Page) {
@@ -1076,6 +1637,118 @@ async function runMobileLayoutMatrix(
   });
 }
 
+async function expectAnyVisibleText(page: Page, patterns: RegExp[], description: string) {
+  await expect
+    .poll(async () => visibleTextMatches(page, patterns), { message: description, timeout: 5_000 })
+    .toBe(true);
+}
+
+async function runHardenedTenantDegradedMatrix(
+  page: Page,
+  testInfo: TestInfo,
+  surface: HardenedTenantDegradedSurface,
+  viewportName: string,
+) {
+  const consoleErrors: string[] = [];
+  const pageErrors: string[] = [];
+  const authDetails = requireStorageStateDetailsForRole("tenant");
+  const authContext = roleAuthContext("tenant", authDetails);
+
+  testInfo.annotations.push({
+    type: "smoke-mode",
+    description: "hardened tenant degraded state validation",
+  });
+  testInfo.annotations.push({
+    type: "matrix-role",
+    description: "tenant",
+  });
+  testInfo.annotations.push({
+    type: "auth-mode",
+    description: `authenticated tenant via ${authDetails.source || "storage state"}`,
+  });
+  testInfo.annotations.push({
+    type: "degraded-scenarios",
+    description: degradedScenarioNames.join(", "),
+  });
+
+  page.on("console", (message) => {
+    if (message.type() === "error") consoleErrors.push(message.text());
+  });
+  page.on("pageerror", (error) => {
+    pageErrors.push(error.message);
+  });
+
+  await installRoleSmokeHarness(page, authContext);
+  await installMobileLayoutMatrixOverrides(page);
+  await installHardenedTenantSurfaceOverrides(page);
+
+  for (const scenario of degradedScenarioNames) {
+    await installDegradedTenantSurfaceScenario(page, surface, scenario);
+
+    const response = await page.goto(surface.path, { waitUntil: "domcontentloaded" });
+    if (response) {
+      expect(response.status(), `${surface.label} ${scenario} route response status`).toBeLessThan(500);
+    }
+
+    await expect(page.locator("body"), `${surface.label} ${scenario} body`).toBeVisible();
+    if (scenario === "loading-delay") {
+      await expectAnyVisibleText(page, surface.loadingText, `${surface.label} ${scenario} loading state`);
+    }
+    await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
+
+    if (scenario === "empty") {
+      await expectAnyVisibleText(page, surface.emptyText, `${surface.label} ${scenario} empty state`);
+    } else if (scenario === "loading-delay") {
+      await expectAnyVisibleText(page, surface.restoredText, `${surface.label} ${scenario} restored state`);
+    } else {
+      await expectAnyVisibleText(page, surface.errorText, `${surface.label} ${scenario} error state`);
+    }
+
+    const shellVisible = await visibleShellText(page, surface);
+    testInfo.annotations.push({
+      type: "matrix-shell",
+      description: `${surface.surface}:${scenario}:${shellVisible ? "matched shell" : "shell not visible"}`,
+    });
+    expect(shellVisible, `${surface.label} ${scenario} shell text`).toBe(true);
+
+    const metrics = await collectMobileLayoutMetrics(page);
+    await testInfo.attach(`${surface.surface}-${scenario}-mobile-layout-metrics`, {
+      contentType: "application/json",
+      body: Buffer.from(JSON.stringify({ route: surface.label, scenario, viewport: viewportName, ...metrics }, null, 2)),
+    });
+    expect(metrics.horizontalOverflow, `${surface.label} ${scenario} horizontal overflow`).toBeLessThanOrEqual(2);
+    expect(metrics.oversizedElements, `${surface.label} ${scenario} elements exceeding viewport width`).toEqual([]);
+    expect(metrics.fixedOverflowElements, `${surface.label} ${scenario} fixed/sticky navigation overflow`).toEqual([]);
+    expect(metrics.clippedInteractiveElements, `${surface.label} ${scenario} clipped interactive controls`).toEqual([]);
+
+    const safetyMetrics = await collectDegradedTenantSafetyMetrics(page);
+    await testInfo.attach(`${surface.surface}-${scenario}-tenant-safety-metrics`, {
+      contentType: "application/json",
+      body: Buffer.from(JSON.stringify({ route: surface.label, scenario, viewport: viewportName, ...safetyMetrics }, null, 2)),
+    });
+    expect(safetyMetrics.visibleUnsafeText, `${surface.label} ${scenario} visible unsafe tenant text`).toEqual([]);
+
+    await page.screenshot({
+      path: testInfo.outputPath(`${viewportName}-${surface.surface}-${scenario}-degraded.png`),
+      fullPage: true,
+    });
+  }
+
+  const reportableConsoleErrors = consoleErrors.filter((message) => !shouldIgnoreDegradedTenantConsoleError(message));
+  const ignoredConsoleErrors = consoleErrors.filter(shouldIgnoreDegradedTenantConsoleError);
+  if (ignoredConsoleErrors.length > 0) {
+    await testInfo.attach("hardened-tenant-degraded-ignored-console-noise", {
+      contentType: "application/json",
+      body: Buffer.from(JSON.stringify({ route: surface.label, viewport: viewportName, ignoredConsoleErrors }, null, 2)),
+    });
+  }
+
+  await reportSmokeFindings(testInfo, surface.label, reportableConsoleErrors, pageErrors, {
+    role: "tenant",
+    routeOrFeature: surface.path,
+  });
+}
+
 const role = selectedRole();
 const routes = role === "mobile" ? matrixRoutes : matrixRoutes.filter((route) => route.role === role);
 
@@ -1105,6 +1778,23 @@ test.describe("hardened tenant mobile continuity surfaces", () => {
             beforeNavigate: installHardenedTenantSurfaceOverrides,
             hardenedTenantSurface: true,
           });
+        });
+      }
+    });
+  }
+});
+
+test.describe("hardened tenant degraded state validation", () => {
+  const authDetails = requireStorageStateDetailsForRole("tenant");
+  test.use({ storageState: authDetails.storageState });
+
+  for (const viewport of hardenedTenantViewports) {
+    test.describe(viewport.name, () => {
+      test.use({ viewport: viewport.size });
+
+      for (const surface of hardenedTenantDegradedSurfaces) {
+        test(`${surface.label} degraded states render safely`, async ({ page }, testInfo) => {
+          await runHardenedTenantDegradedMatrix(page, testInfo, surface, viewport.name);
         });
       }
     });
