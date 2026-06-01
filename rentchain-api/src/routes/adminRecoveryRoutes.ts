@@ -80,6 +80,9 @@ router.post("/recovery/inspect", requireAuth, async (req: AuthRequest, res) => {
     });
   } catch (error) {
     const mapped = mapError(error);
+    if (mapped.status === 500) {
+      console.error("[recovery/inspect] unhandled error:", error instanceof Error ? error.message : String(error), error instanceof Error ? error.stack : "");
+    }
     return res.status(mapped.status).json({ ok: false, error: mapped.code });
   }
 });
