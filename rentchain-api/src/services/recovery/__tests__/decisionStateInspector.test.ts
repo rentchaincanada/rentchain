@@ -62,4 +62,35 @@ describe("decisionStateInspector", () => {
       })
     ).rejects.toThrow("recovery_inspection_forbidden");
   });
+
+  it("returns a degraded inspection for unsafe workflow reference formats", async () => {
+    const store = createRecoveryTestStore();
+    const inspection = await inspectWorkflowState({
+      workflowType: "lease",
+      workflowId: "leases/raw-lease-1",
+      authority: adminAuthority,
+      firestore: store,
+    });
+
+    expect(inspection).toMatchObject({
+      workflowType: "lease",
+      divergenceType: "NONE",
+      found: false,
+      degraded: true,
+      degradedReason: "invalid_workflow_reference",
+      evidence: {
+        evidenceRefCount: 0,
+        latestEvidenceAt: null,
+        evidenceState: null,
+        metadataOnly: true,
+      },
+    });
+    expect(inspection.workflowInstanceKey).toMatch(/^lease:instance:/);
+    expect(inspection.workflowInstanceKey).not.toContain("raw-lease-1");
+    expect(buildDecisionReconciliation(inspection)).toMatchObject({
+      proposedDecision: "NO_ACTION",
+      manualReviewRequired: false,
+      reasonCode: "NO_RECOVERY_REQUIRED",
+    });
+  });
 });

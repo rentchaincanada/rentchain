@@ -172,6 +172,32 @@ describe("adminRecoveryRoutes", () => {
     expect(JSON.stringify(inspected.body)).not.toContain("decision-route-1");
   });
 
+  it("returns safe degraded recovery diagnostics for unsafe lease references", async () => {
+    const router = (await import("../adminRecoveryRoutes")).default;
+
+    const inspected = await invokeRouter(router, {
+      method: "POST",
+      url: "/recovery/inspect",
+      user: { id: "admin-1", role: "admin" },
+      body: { workflowType: "lease", workflowId: "leases/raw-lease-1" },
+    });
+
+    expect(inspected.status).toBe(200);
+    expect(inspected.body).toMatchObject({
+      ok: true,
+      degraded: true,
+      degradedReason: "invalid_workflow_reference",
+      reconciliation: {
+        workflowType: "lease",
+        divergenceType: "NONE",
+        proposedDecision: "NO_ACTION",
+        reasonCode: "NO_RECOVERY_REQUIRED",
+        manualReviewRequired: false,
+      },
+    });
+    expect(JSON.stringify(inspected.body)).not.toContain("raw-lease-1");
+  });
+
   it("reconciles by append-only recovery log and exposes logs safely", async () => {
     const router = (await import("../adminRecoveryRoutes")).default;
     const key = workflowKey("payment", "payment-route-1");
