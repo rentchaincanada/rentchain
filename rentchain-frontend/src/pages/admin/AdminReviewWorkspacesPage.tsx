@@ -249,9 +249,28 @@ export default function AdminReviewWorkspacesPage() {
                 storage paths, tokens, secrets, debug payloads, and mutation controls are excluded.
               </div>
             </div>
-            <Button variant="secondary" onClick={() => void load()} disabled={loading}>
-              Refresh
-            </Button>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <Button variant="secondary" onClick={() => void load()} disabled={loading}>
+                Refresh
+              </Button>
+              <a
+                href="/admin/recovery"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  borderRadius: 999,
+                  padding: "10px 14px",
+                  fontWeight: 600,
+                  fontSize: "0.95rem",
+                  textDecoration: "none",
+                  border: "1px solid rgba(15, 23, 42, 0.12)",
+                  color: "#0f172a",
+                  background: "#f8fafc",
+                }}
+              >
+                Recovery workspace
+              </a>
+            </div>
           </div>
         </Section>
 
