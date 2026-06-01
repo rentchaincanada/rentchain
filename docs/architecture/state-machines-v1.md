@@ -270,8 +270,16 @@ Admin and support users can inspect and reconcile divergent workflows through `/
 
 - `operatorRecoveryLogs` stores the decision, reason, safe operator reference, evidence summary, and immutable recovery metadata.
 - `canonicalRecoveryTimelineEntries` stores a timeline entry that can be included in canonical review timeline projections.
+- `operatorRecoveryIntents` stores explicit operator intent before a future recovery action is invoked.
 
 The recovery service does not mutate underlying workflow records, decision action records, billing state, provider callback state, or tenant-facing read models. It records operator intent and evidence summary so a later enforcing workflow can consume the audit trail if explicitly authorized.
+
+### Recovery Intent And Gates
+
+The recovery workspace captures action intent through `POST /api/admin/recovery/:recoveryId/intent`.
+Intent capture requires an admin/support operator, a supported recovery action type, a required reason comment, and an explicit authorization confirmation flag. The stored intent is metadata-only, append-only, and keyed by deterministic safe recovery references.
+
+`POST /api/admin/recovery/:recoveryId/gate/validate` is a read-only enforcement gate diagnostic. It verifies that an intent exists, belongs to the current recovery reference, was captured by an operator role that remains valid for the request, and is still fresh within the configured gate window. Gate validation does not apply state correction; it only returns whether a future mutation workflow would be allowed to proceed.
 
 ### Access And Projection Rules
 
@@ -279,10 +287,12 @@ The recovery service does not mutate underlying workflow records, decision actio
 - Tenant and landlord users fail closed on recovery endpoints.
 - Recovery payloads use deterministic safe references and hashed workflow instance keys.
 - Evidence summaries contain counts, state labels, and timestamps only.
+- Recovery intent records expose action type, reason summary, operator role, and safe operator reference only.
 - Recovery logs are append-only; duplicate reconciliation actions for the same divergence, decision, and reason code are rejected.
+- Recovery intents are append-only; duplicate intent capture for the same recovery action is rejected.
 
 ## Future Work
 
-- A later enforcement mission can consume recovery logs to drive explicit workflow-state correction after migration risks are reviewed.
+- A later enforcement mission can consume recovery logs and satisfied recovery intent gates to drive explicit workflow-state correction after migration risks are reviewed.
 - A later enforcement mission can convert advisory route markers into blocking transition checks once migration risks are reviewed.
 - A later review UI mission can expose provenance chains to admin/support workspaces with explicit role gates and redaction summaries.

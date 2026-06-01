@@ -1,6 +1,7 @@
 import type {
   DecisionRecoveryInspection,
   OperatorRecoveryLog,
+  RecoveryActionIntent,
   RecoveryLogsResponse,
 } from "../../api/adminRecoveryApi";
 
@@ -65,10 +66,33 @@ export const recoveryLogFixture: OperatorRecoveryLog = {
   redactionSummary: "Raw workflow and actor identifiers are replaced with deterministic safe references.",
 };
 
+export const recoveryIntentFixture: RecoveryActionIntent = {
+  intentId: "recovery_intent:safe-intent-key",
+  recoveryId: "decision:instance:safe-workflow-key",
+  workflowType: "decision",
+  workflowInstanceKey: "decision:instance:safe-workflow-key",
+  actionType: "ACCEPT_CANONICAL",
+  reasonSummary: "Operator intends to accept canonical state after reviewing recovery evidence.",
+  authorizationConfirmed: true,
+  status: "captured",
+  operator: {
+    role: "admin",
+    operatorRef: "operator:safe-operator-key",
+    rawIdsIncluded: false,
+  },
+  capturedAt: "2026-06-01T12:10:00.000Z",
+  expiresAt: "2026-06-02T12:10:00.000Z",
+  metadataOnly: true,
+  appendOnly: true,
+  rawIdsIncluded: false,
+  redactionSummary: "Raw workflow and actor identifiers are replaced with deterministic safe references.",
+};
+
 export function getRecoveryLogsFixtureResponse(): RecoveryLogsResponse {
   return {
     ok: true,
     logs: [recoveryLogFixture],
+    intents: [recoveryIntentFixture],
     candidates: [recoveryInspectionFixture],
   };
 }

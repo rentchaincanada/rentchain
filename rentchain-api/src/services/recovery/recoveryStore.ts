@@ -1,5 +1,5 @@
 import { db } from "../../config/firebase";
-import type { OperatorRecoveryLog, RecoveryTimelineEntry } from "../../types/recovery";
+import type { OperatorRecoveryLog, RecoveryActionIntent, RecoveryTimelineEntry } from "../../types/recovery";
 
 type SnapshotLike = {
   exists?: boolean;
@@ -33,6 +33,7 @@ export type RecoveryFirestoreLike = {
 };
 
 export const OPERATOR_RECOVERY_LOGS_COLLECTION = "operatorRecoveryLogs";
+export const OPERATOR_RECOVERY_INTENTS_COLLECTION = "operatorRecoveryIntents";
 export const RECOVERY_TIMELINE_COLLECTION = "canonicalRecoveryTimelineEntries";
 export const DECISION_CONTINUITY_SNAPSHOTS_COLLECTION = "decisionContinuitySnapshots";
 
@@ -86,4 +87,8 @@ export function isRecoveryLog(value: Record<string, unknown>): value is Operator
 
 export function isRecoveryTimelineEntry(value: Record<string, unknown>): value is RecoveryTimelineEntry {
   return value.metadataOnly === true && value.appendOnly === true && value.entryType === "RECOVERY_ACTION";
+}
+
+export function isRecoveryActionIntent(value: Record<string, unknown>): value is RecoveryActionIntent {
+  return value.metadataOnly === true && value.appendOnly === true && value.status === "captured" && typeof value.intentId === "string";
 }
