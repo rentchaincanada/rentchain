@@ -21,7 +21,8 @@ export type ReviewTimelineEntryType =
   | "readiness_check"
   | "delinquency_review"
   | "maintenance_review"
-  | "redaction_note";
+  | "redaction_note"
+  | "recovery_action";
 
 export type ReviewTimelineEntryStatus = "info" | "review_required" | "blocked" | "completed" | "redacted";
 
@@ -33,6 +34,7 @@ export type ReviewTimelineSource =
   | "evidence_packs"
   | "institution_exports"
   | "audit_compliance"
+  | "operator_recovery"
   | "unknown";
 
 export type ReviewTimelineActor = {
@@ -91,6 +93,7 @@ export type DeriveCanonicalReviewTimelineInput = {
   institutionExportPackage?: Record<string, any> | null;
   auditComplianceReadiness?: Record<string, any> | null;
   canonicalEvents?: Array<Record<string, any>> | null;
+  recoveryLogs?: Array<Record<string, unknown>> | null;
   filters?: {
     entryType?: unknown;
     status?: unknown;

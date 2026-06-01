@@ -20,6 +20,7 @@ const KNOWN_ENTRY_TYPES: ReviewTimelineEntryType[] = [
   "delinquency_review",
   "maintenance_review",
   "redaction_note",
+  "recovery_action",
 ];
 const KNOWN_STATUSES: ReviewTimelineEntryStatus[] = ["info", "review_required", "blocked", "completed", "redacted"];
 const KNOWN_SOURCES: ReviewTimelineSource[] = [
@@ -30,6 +31,7 @@ const KNOWN_SOURCES: ReviewTimelineSource[] = [
   "evidence_packs",
   "institution_exports",
   "audit_compliance",
+  "operator_recovery",
   "unknown",
 ];
 
@@ -347,6 +349,28 @@ function readinessEntries(input: DeriveCanonicalReviewTimelineInput): ReviewTime
   );
 }
 
+function recoveryEntries(input: DeriveCanonicalReviewTimelineInput): ReviewTimelineEntry[] {
+  return (input.recoveryLogs || [])
+    .filter((log) => isRelated(log, input.scope, input.scopeId) || asString(log.workflowInstanceKey, 500) === input.scopeId)
+    .map((log) =>
+      entry({
+        key: asString(log.logId || log.timelineEntryId, 500) || "recovery_action",
+        entryType: "recovery_action",
+        timestamp: asString(log.createdAt || log.timestamp, 120),
+        label: asString(log.label, 180) || "Recovery action recorded",
+        description: asString(log.reasonSummary || log.description, 1200) || "Recovery action metadata recorded for manual review.",
+        status: log.reconciliationDecision === "EVIDENCE_REVIEW_REQUIRED" ? "review_required" : "completed",
+        actor: { type: "operator", id: null },
+        source: "operator_recovery",
+        sourceId: asString(log.logId || log.timelineEntryId, 500) || null,
+        destination: null,
+        redacted: false,
+        redactionReason: null,
+        blockedReason: null,
+      })
+    );
+}
+
 function filterValue<T extends string>(value: unknown, known: readonly T[]): T | null {
   const raw = asString(value, 80).toLowerCase();
   if (!raw || raw === "all") return null;
@@ -367,6 +391,7 @@ export function deriveCanonicalReviewTimeline(input: DeriveCanonicalReviewTimeli
     ...evidenceEntries(input),
     ...exportEntries(input),
     ...readinessEntries(input),
+    ...recoveryEntries(input),
   ].sort((a, b) => a.timestamp.localeCompare(b.timestamp) || a.source.localeCompare(b.source) || a.timelineEntryId.localeCompare(b.timelineEntryId));
 
   const entryType = filterValue(input.filters?.entryType, KNOWN_ENTRY_TYPES);
