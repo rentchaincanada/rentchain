@@ -31,6 +31,8 @@ export type WorkflowInspectionResult = {
   evidence: EvidenceSnapshot;
   divergenceType: DivergenceType;
   found: boolean;
+  degraded?: boolean;
+  degradedReason?: "invalid_workflow_reference";
 };
 
 function stateFromRecord(
@@ -73,6 +75,33 @@ function latestEvidence(events: TransitionProvenanceEvent[]): EvidenceSnapshot {
   };
 }
 
+function emptyEvidence(): EvidenceSnapshot {
+  return {
+    evidenceRefCount: 0,
+    latestEvidenceAt: null,
+    evidenceState: null,
+    metadataOnly: true,
+  };
+}
+
+function hasUnsafeWorkflowReference(value: string): boolean {
+  return value.includes("/") || value.includes("\\") || value.includes("\0");
+}
+
+function degradedInspection(input: WorkflowInspectionInput, reason: WorkflowInspectionResult["degradedReason"]): WorkflowInspectionResult {
+  return {
+    workflowType: input.workflowType,
+    workflowInstanceKey: workflowKey(input.workflowType, input.workflowId),
+    canonicalState: stateFromRecord(null, "none"),
+    derivedState: stateFromRecord(null, "none"),
+    evidence: emptyEvidence(),
+    divergenceType: "NONE",
+    found: false,
+    degraded: true,
+    degradedReason: reason,
+  };
+}
+
 export function detectDivergence(input: {
   canonicalState: RecoveryWorkflowState;
   derivedState: RecoveryWorkflowState;
@@ -97,6 +126,9 @@ export function detectDivergence(input: {
 export async function inspectWorkflowState(input: WorkflowInspectionInput): Promise<WorkflowInspectionResult> {
   if (!isOperatorAuthority(input.authority)) {
     throw new Error("recovery_inspection_forbidden");
+  }
+  if (hasUnsafeWorkflowReference(input.workflowId)) {
+    return degradedInspection(input, "invalid_workflow_reference");
   }
   const workflowInstanceKey = workflowKey(input.workflowType, input.workflowId);
   const [snapshot, timelineRecords, provenanceEvents] = await Promise.all([

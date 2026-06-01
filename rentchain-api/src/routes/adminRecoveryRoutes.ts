@@ -71,8 +71,13 @@ router.post("/recovery/inspect", requireAuth, async (req: AuthRequest, res) => {
     const id = workflowId(body.workflowId);
     if (!type || !id) return res.status(400).json({ ok: false, error: "WORKFLOW_REFERENCE_REQUIRED" });
     const inspection = await inspectWorkflowState({ workflowType: type, workflowId: id, authority });
-    if (!inspection.found) return res.status(404).json({ ok: false, error: "RECOVERY_WORKFLOW_NOT_FOUND" });
-    return res.json({ ok: true, reconciliation: buildDecisionReconciliation(inspection) });
+    if (!inspection.found && !inspection.degraded) return res.status(404).json({ ok: false, error: "RECOVERY_WORKFLOW_NOT_FOUND" });
+    return res.json({
+      ok: true,
+      reconciliation: buildDecisionReconciliation(inspection),
+      degraded: inspection.degraded === true,
+      degradedReason: inspection.degradedReason || null,
+    });
   } catch (error) {
     const mapped = mapError(error);
     return res.status(mapped.status).json({ ok: false, error: mapped.code });
