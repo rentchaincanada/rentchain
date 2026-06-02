@@ -1,7 +1,9 @@
 import admin from "firebase-admin";
 import { getFirestore } from "firebase-admin/firestore";
+import { assertSafeFirestoreEnvironment } from "./config/firestoreEnvironmentGuard";
 
 // IMPORTANT: make sure we only init once
+assertSafeFirestoreEnvironment();
 if (!admin.apps.length) {
   admin.initializeApp({
     // Use env vars if set, otherwise fall back to your actual project ID.
