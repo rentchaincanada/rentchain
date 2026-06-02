@@ -42,9 +42,9 @@ function safeLabel(value: string, fallback: string) {
 
 function metadataCell(labelText: string, value: string) {
   return (
-    <div style={{ display: "grid", gap: 2, minWidth: 0 }}>
-      <span style={{ color: "#64748b", fontSize: 11, fontWeight: 900, textTransform: "uppercase" }}>{labelText}</span>
-      <span style={{ color: "#0f172a", fontSize: 13, fontWeight: 900, overflowWrap: "anywhere" }}>{value}</span>
+    <div style={{ display: "grid", gap: 3, minWidth: 0 }}>
+      <span style={{ color: "#64748b", fontSize: 13, fontWeight: 900, textTransform: "uppercase", lineHeight: 1.4 }}>{labelText}</span>
+      <span style={{ color: "#0f172a", fontSize: 15, fontWeight: 900, overflowWrap: "anywhere", lineHeight: 1.4 }}>{value}</span>
     </div>
   );
 }
@@ -75,10 +75,14 @@ export function ReviewWorkspacePanel({ workspace }: { workspace: ReviewWorkspace
             background: "#dbeafe",
             color: "#1d4ed8",
             borderRadius: 999,
-            padding: "3px 9px",
-            fontSize: 12,
+            padding: "8px 12px",
+            fontSize: 13,
             fontWeight: 900,
             whiteSpace: "nowrap",
+            minHeight: 44,
+            display: "inline-flex",
+            alignItems: "center",
+            lineHeight: 1.4,
           }}
         >
           Manual only
@@ -88,7 +92,7 @@ export function ReviewWorkspacePanel({ workspace }: { workspace: ReviewWorkspace
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 150px), 1fr))",
+          gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 200px), 1fr))",
           gap: 8,
           minWidth: 0,
         }}
@@ -115,11 +119,31 @@ export function ReviewWorkspacePanel({ workspace }: { workspace: ReviewWorkspace
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {workspace.evidenceLinks.map((link) =>
               link.destination ? (
-                <Link key={`${link.label}:${link.destination}`} to={link.destination} style={{ color: "#2563eb", fontSize: 13, fontWeight: 900 }}>
+                <Link key={`${link.label}:${link.destination}`} to={link.destination} style={{
+                  color: "#2563eb",
+                  fontSize: 14,
+                  fontWeight: 900,
+                  padding: "8px 0",
+                  minHeight: 44,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  textDecoration: "none",
+                  borderRadius: 4,
+                  lineHeight: 1.4,
+                }}>
                   {safeLabel(link.label, "Source workflow evidence")}
                 </Link>
               ) : (
-                <span key={link.label} style={{ color: "#475569", fontSize: 13, fontWeight: 800 }}>
+                <span key={link.label} style={{
+                  color: "#475569",
+                  fontSize: 14,
+                  fontWeight: 800,
+                  padding: "8px 0",
+                  minHeight: 44,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  lineHeight: 1.4,
+                }}>
                   {safeLabel(link.label, "Source workflow evidence")}
                 </span>
               )
@@ -140,11 +164,15 @@ export function ReviewWorkspacePanel({ workspace }: { workspace: ReviewWorkspace
                 style={{
                   border: "1px solid #e2e8f0",
                   borderRadius: 999,
-                  padding: "3px 8px",
+                  padding: "8px 12px",
                   color: "#475569",
-                  fontSize: 12,
+                  fontSize: 13,
                   fontWeight: 800,
                   background: "#fff",
+                  minHeight: 44,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  lineHeight: 1.4,
                 }}
               >
                 {safeLabel(resource.label, `${label(resource.resourceType)} context`)}

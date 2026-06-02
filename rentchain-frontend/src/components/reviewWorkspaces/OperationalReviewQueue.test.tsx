@@ -79,11 +79,16 @@ describe("OperationalReviewQueue", () => {
       target: { value: "finance_reviewer" },
     });
 
+    // Should trigger confirmation dialog for the changes
+    expect(screen.getByRole('dialog', { name: /Confirm assignment changes/i })).toBeInTheDocument();
+
+    // Confirm the changes
+    fireEvent.click(screen.getByRole('button', { name: /Confirm changes/i }));
+
     expect(screen.getByText("Manual status: In review")).toBeInTheDocument();
     expect(screen.getByText("Manual assignment: Finance reviewer")).toBeInTheDocument();
     expect(screen.getByText("Assignment reason: Finance reviewer owns the next manual review step.")).toBeInTheDocument();
     expect(screen.getByText("Review status note: Operator review is actively underway.")).toBeInTheDocument();
-    expect(screen.queryByRole("button")).not.toBeInTheDocument();
     expect(screen.queryByText(/auto.?assign/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/auto.?resolution/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/mutate ledger/i)).not.toBeInTheDocument();
@@ -122,5 +127,106 @@ describe("OperationalReviewQueue", () => {
 
     expect(screen.getByText("0 reviewable")).toBeInTheDocument();
     expect(screen.getByText(/No reviewable operational queue items match the current filters/i)).toBeInTheDocument();
+  });
+
+  it("meets WCAG 2.1 touch target requirements for mobile accessibility", () => {
+    const { container } = render(
+      <MemoryRouter>
+        <OperationalReviewQueue items={[queueItem()]} />
+      </MemoryRouter>
+    );
+
+    // Check that interactive elements have adequate touch target sizing
+    const selectElements = container.querySelectorAll('select');
+    selectElements.forEach(select => {
+      const computedStyle = window.getComputedStyle(select);
+      const minHeight = parseInt(computedStyle.minHeight, 10);
+      expect(minHeight).toBeGreaterThanOrEqual(44); // WCAG 2.1 minimum
+    });
+
+    const linkElements = container.querySelectorAll('a');
+    linkElements.forEach(link => {
+      const computedStyle = window.getComputedStyle(link);
+      const minHeight = parseInt(computedStyle.minHeight, 10);
+      expect(minHeight).toBeGreaterThanOrEqual(44); // WCAG 2.1 minimum
+    });
+  });
+
+  it("includes proper aria attributes for form accessibility", () => {
+    render(
+      <MemoryRouter>
+        <OperationalReviewQueue items={[queueItem()]} />
+      </MemoryRouter>
+    );
+
+    const statusSelect = screen.getByLabelText("Review status for Review missing payment");
+    expect(statusSelect).toHaveAttribute('aria-describedby');
+
+    const assignmentSelect = screen.getByLabelText("Assigned reviewer for Review missing payment");
+    expect(assignmentSelect).toHaveAttribute('aria-describedby');
+
+    // Check for proper section aria-label
+    const controlsSection = screen.getByLabelText(/Manual review lifecycle controls/i);
+    expect(controlsSection).toBeInTheDocument();
+  });
+
+  it("displays confirmation dialog when assignment changes are made", () => {
+    render(
+      <MemoryRouter>
+        <OperationalReviewQueue items={[queueItem()]} />
+      </MemoryRouter>
+    );
+
+    // Change status to trigger confirmation
+    fireEvent.change(screen.getByLabelText("Review status for Review missing payment"), {
+      target: { value: "in_review" },
+    });
+
+    // Should show confirmation dialog
+    expect(screen.getByRole('dialog', { name: /Confirm assignment changes/i })).toBeInTheDocument();
+    expect(screen.getByText(/You're about to update the manual review assignment/i)).toBeInTheDocument();
+
+    // Should have properly sized confirmation buttons
+    const confirmButton = screen.getByRole('button', { name: /Confirm changes/i });
+    const cancelButton = screen.getByRole('button', { name: /Cancel/i });
+
+    expect(confirmButton).toBeInTheDocument();
+    expect(cancelButton).toBeInTheDocument();
+
+    const confirmStyle = window.getComputedStyle(confirmButton);
+    const cancelStyle = window.getComputedStyle(cancelButton);
+
+    expect(parseInt(confirmStyle.minHeight, 10)).toBeGreaterThanOrEqual(44);
+    expect(parseInt(cancelStyle.minHeight, 10)).toBeGreaterThanOrEqual(44);
+  });
+
+  it("prevents auto-submit and requires explicit confirmation for mobile UX", () => {
+    render(
+      <MemoryRouter>
+        <OperationalReviewQueue items={[queueItem()]} />
+      </MemoryRouter>
+    );
+
+    // Initially shows current status
+    expect(screen.getByText("Manual status: Open")).toBeInTheDocument();
+
+    // Change assignment
+    fireEvent.change(screen.getByLabelText("Assigned reviewer for Review missing payment"), {
+      target: { value: "finance_reviewer" },
+    });
+
+    // Status should still show original value until confirmed
+    expect(screen.getByText("Manual status: Open")).toBeInTheDocument();
+
+    // Should show pending state
+    expect(screen.getByText(/Change pending confirmation/i)).toBeInTheDocument();
+
+    // Click confirm to apply changes
+    const confirmButton = screen.getByRole('button', { name: /Confirm changes/i });
+    fireEvent.click(confirmButton);
+
+    // Now should show updated status
+    expect(screen.getByText("Manual assignment: Finance reviewer")).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 });
