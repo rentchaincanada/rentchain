@@ -10,6 +10,8 @@ Completed the Phase 2B lifecycle continuity fixtures mission as a fixture and te
 
 No backend routes, frontend routes, services, middleware, Firestore rules, infrastructure, dependencies, production data paths, or production source behavior were changed.
 
+Follow-up repair completed after PR CI: removed the frontend regression test dependency on backend lifecycle fixtures so frontend tests no longer import backend Firebase configuration or `firebase-admin`.
+
 ## Files Changed
 
 - `rentchain-api/src/__tests__/fixtures/lifecycleContinuityFixtures.ts`
@@ -18,6 +20,8 @@ No backend routes, frontend routes, services, middleware, Firestore rules, infra
 - `rentchain-api/src/routes/__tests__/governedReviewWorkspaceRoutes.test.ts`
 - `rentchain-api/src/routes/__tests__/landlordReviewTimelineRoutes.test.ts`
 - `rentchain-api/src/services/recovery/__tests__/recoveryIntentService.test.ts`
+- `rentchain-frontend/src/components/properties/PropertyOccupancyRegression.test.tsx`
+- `rentchain-frontend/src/test/fixtures/lifecycleContinuityFixtures.ts`
 - `.handoff/impl-summary.md`
 
 ## Implementation
@@ -29,6 +33,8 @@ No backend routes, frontend routes, services, middleware, Firestore rules, infra
 - Added admin recovery route coverage proving synthetic lifecycle candidates can be inspected through existing recovery endpoints without exposing raw workflow IDs.
 - Added governed review workspace route coverage for a synthetic lifecycle recovery workspace candidate, preserving internal metadata-only read behavior.
 - Added landlord review timeline coverage for synthetic maintenance lifecycle divergence through existing landlord-scoped timeline semantics.
+- Repaired the frontend occupancy regression test to import pure frontend-local lifecycle fixture builders instead of backend test fixtures.
+- Extended the frontend lifecycle fixture module with pure property, unit, tenant, and lease builders used by the regression test.
 
 ## Validation
 
@@ -36,6 +42,10 @@ No backend routes, frontend routes, services, middleware, Firestore rules, infra
 - `cd rentchain-api && npm test -- --runInBand src/routes/__tests__/landlordOperatorReviewRoutes.test.ts src/lib/canonicalAudit/__tests__/canonicalAuditEvent.test.ts src/services/stateMachines/__tests__/reviewWorkflowAudit.test.ts` passed under Node 20.20.2.
 - `cd rentchain-frontend && npm test -- --runInBand src/pages/admin/AdminReviewWorkspacesPage.test.tsx src/pages/ReviewTimelinePage.test.tsx src/pages/DecisionInboxPage.test.tsx src/components/operatorReviews/OperatorReviewSessionPanel.test.tsx` was attempted under Node 20.20.2 and failed because the frontend Vitest version rejects `--runInBand`.
 - `cd rentchain-frontend && npm test -- src/pages/admin/AdminReviewWorkspacesPage.test.tsx src/pages/ReviewTimelinePage.test.tsx src/pages/DecisionInboxPage.test.tsx src/components/operatorReviews/OperatorReviewSessionPanel.test.tsx` passed under Node 20.20.2.
+- `cd rentchain-frontend && npm test -- src/components/properties/PropertyOccupancyRegression.test.tsx` passed under Node 20.20.2 after the import repair.
+- `cd rentchain-frontend && npm run test` passed under Node 20.20.2 after the import repair: 289 test files and 1146 tests passed.
+- `cd rentchain-api && npm test -- --runInBand src/__tests__/fixtures/lifecycleContinuityFixtures.test.ts src/services/recovery/__tests__/recoveryIntentService.test.ts src/routes/__tests__/adminRecoveryRoutes.test.ts src/routes/__tests__/governedReviewWorkspaceRoutes.test.ts src/routes/__tests__/landlordReviewTimelineRoutes.test.ts src/routes/__tests__/landlordOperatorReviewRoutes.test.ts src/lib/canonicalAudit/__tests__/canonicalAuditEvent.test.ts src/services/stateMachines/__tests__/reviewWorkflowAudit.test.ts` passed under Node 20.20.2 after the import repair.
+- Confirmed no frontend source or test file imports `rentchain-api/src/config/firebase`, `rentchain-api/src/firebase`, `firebase-admin`, or the backend lifecycle continuity fixture module.
 - `git diff --check` passed.
 - Prohibited artifact text scan passed for changed files.
 
@@ -43,7 +53,7 @@ No backend routes, frontend routes, services, middleware, Firestore rules, infra
 
 Manual QA required: no.
 
-Reason: the mission changed backend test fixtures and test coverage only. No frontend rendering, backend route implementation, auth flow, routing, mobile layout, or user-visible behavior was changed.
+Reason: the mission changed test fixtures and test coverage only. No frontend rendering implementation, backend route implementation, auth flow, routing, mobile layout, or user-visible behavior was changed.
 
 Manual QA checklist reviewed from tests:
 
@@ -59,7 +69,8 @@ Manual QA checklist reviewed from tests:
 - Candidate listing through `/recovery/logs?includeCandidates=true` starts from snapshot records by current implementation, so timeline-only decision candidates are tested through direct inspect and intent capture rather than the list endpoint.
 - The governed review workspace persistence validator normalizes unsupported workspace types to existing canonical workspace types; the test asserts metadata-only behavior rather than introducing a new workspace type.
 - No production source files changed, so no package build was required by the mission rule.
+- PR CI previously failed because `PropertyOccupancyRegression.test.tsx` imported the backend lifecycle fixture module, which pulled backend Firebase configuration into the frontend test graph. That import path has been removed and replaced with frontend-local pure fixture builders.
 
 ## Recommended Next Step
 
-Proceed to Gate 1 review for PR creation after commit and push. After this mission merges, continue toward Phase 3 security and operational hardening.
+Keep PR #1080 in draft until remote CI is fully green after the repair push. After this mission merges, continue toward Phase 3 security and operational hardening.

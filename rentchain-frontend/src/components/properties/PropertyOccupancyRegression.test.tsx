@@ -11,7 +11,7 @@ import {
   lifecycleContinuityDates,
   lifecycleContinuityIds,
   lifecycleContinuityLabels,
-} from "../../../../rentchain-api/src/__tests__/fixtures/lifecycleContinuityFixtures";
+} from "../../test/fixtures/lifecycleContinuityFixtures";
 
 const mocks = vi.hoisted(() => ({
   updateProperty: vi.fn(),
