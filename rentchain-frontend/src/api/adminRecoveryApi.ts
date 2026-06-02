@@ -8,6 +8,8 @@ export type RecoveryDecisionType =
   | "EVIDENCE_REVIEW_REQUIRED"
   | "NO_ACTION";
 
+export type RecoveryActionType = Exclude<RecoveryDecisionType, "NO_ACTION">;
+
 export type RecoveryDivergenceType =
   | "NONE"
   | "MISSING_TRANSITION"
@@ -70,9 +72,40 @@ export type OperatorRecoveryLog = {
   redactionSummary: string;
 };
 
+export type RecoveryActionIntent = {
+  intentId: string;
+  recoveryId: string;
+  workflowType: RecoveryWorkflowType;
+  workflowInstanceKey: string;
+  actionType: RecoveryActionType;
+  reasonSummary: string;
+  authorizationConfirmed: true;
+  status: "captured";
+  operator: {
+    role: "admin" | "support";
+    operatorRef: string | null;
+    rawIdsIncluded: false;
+  };
+  capturedAt: string;
+  expiresAt: string;
+  metadataOnly: true;
+  appendOnly: true;
+  rawIdsIncluded: false;
+  redactionSummary: string;
+};
+
+export type RecoveryGateValidation = {
+  gateStatus: "satisfied" | "denied";
+  reason?: string;
+  intentStatus: RecoveryActionIntent["status"] | "missing";
+  authorizationValid: boolean;
+  intentFresh: boolean;
+};
+
 export type RecoveryLogsResponse = {
   ok: true;
   logs: OperatorRecoveryLog[];
+  intents: RecoveryActionIntent[];
   candidates: DecisionRecoveryInspection[];
 };
 
@@ -111,5 +144,39 @@ export async function fetchRecoveryLog(logId: string): Promise<{
 }> {
   return apiFetch<{ ok: true; recoveryLog: OperatorRecoveryLog }>(
     `/admin/recovery/logs/${encodeURIComponent(logId)}`
+  );
+}
+
+export async function captureRecoveryIntent(input: {
+  recoveryId: string;
+  actionType: RecoveryActionType;
+  reason: string;
+  authorizationConfirmed: boolean;
+}): Promise<{ ok: true; intent: RecoveryActionIntent }> {
+  return apiFetch<{ ok: true; intent: RecoveryActionIntent }>(
+    `/admin/recovery/${encodeURIComponent(input.recoveryId)}/intent`,
+    {
+      method: "POST",
+      body: {
+        actionType: input.actionType,
+        reason: input.reason,
+        authorizationConfirmed: input.authorizationConfirmed,
+      },
+    }
+  );
+}
+
+export async function validateRecoveryGate(input: {
+  recoveryId: string;
+  intentId: string;
+}): Promise<{ ok: true; gate: RecoveryGateValidation }> {
+  return apiFetch<{ ok: true; gate: RecoveryGateValidation }>(
+    `/admin/recovery/${encodeURIComponent(input.recoveryId)}/gate/validate`,
+    {
+      method: "POST",
+      body: {
+        intentId: input.intentId,
+      },
+    }
   );
 }

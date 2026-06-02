@@ -15,6 +15,8 @@ export type RecoveryDecisionType =
   | "EVIDENCE_REVIEW_REQUIRED"
   | "NO_ACTION";
 
+export type RecoveryActionType = Exclude<RecoveryDecisionType, "NO_ACTION">;
+
 export type DivergenceType =
   | "NONE"
   | "MISSING_TRANSITION"
@@ -100,4 +102,40 @@ export type RecoveryTimelineEntry = {
   metadataOnly: true;
   appendOnly: true;
   rawIdsIncluded: false;
+};
+
+export type RecoveryActionIntent = {
+  intentId: string;
+  recoveryId: string;
+  workflowType: ReviewWorkflowType;
+  workflowInstanceKey: string;
+  actionType: RecoveryActionType;
+  reasonSummary: string;
+  authorizationConfirmed: true;
+  status: "captured";
+  operator: {
+    role: "admin" | "support";
+    operatorRef: string | null;
+    rawIdsIncluded: false;
+  };
+  capturedAt: string;
+  expiresAt: string;
+  metadataOnly: true;
+  appendOnly: true;
+  rawIdsIncluded: false;
+  redactionSummary: string;
+};
+
+export type RecoveryIntentCaptureRequest = {
+  actionType: RecoveryActionType;
+  reason: string;
+  authorizationConfirmed: boolean;
+};
+
+export type RecoveryGateValidation = {
+  gateStatus: "satisfied" | "denied";
+  reason?: string;
+  intentStatus: RecoveryActionIntent["status"] | "missing";
+  authorizationValid: boolean;
+  intentFresh: boolean;
 };

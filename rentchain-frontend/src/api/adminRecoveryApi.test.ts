@@ -43,4 +43,46 @@ describe("adminRecoveryApi", () => {
 
     expect(mocks.apiFetchMock).toHaveBeenCalledWith("/admin/recovery/logs/operator_recovery%3Asafe-log-key");
   });
+
+  it("captures recovery action intent with required authorization payload", async () => {
+    const { captureRecoveryIntent } = await import("./adminRecoveryApi");
+
+    await captureRecoveryIntent({
+      recoveryId: "decision:instance:safe-workflow-key",
+      actionType: "ACCEPT_CANONICAL",
+      reason: "Operator reviewed recovery evidence.",
+      authorizationConfirmed: true,
+    });
+
+    expect(mocks.apiFetchMock).toHaveBeenCalledWith(
+      "/admin/recovery/decision%3Ainstance%3Asafe-workflow-key/intent",
+      {
+        method: "POST",
+        body: {
+          actionType: "ACCEPT_CANONICAL",
+          reason: "Operator reviewed recovery evidence.",
+          authorizationConfirmed: true,
+        },
+      }
+    );
+  });
+
+  it("validates recovery gates by safe recovery and intent keys", async () => {
+    const { validateRecoveryGate } = await import("./adminRecoveryApi");
+
+    await validateRecoveryGate({
+      recoveryId: "decision:instance:safe-workflow-key",
+      intentId: "recovery_intent:safe-intent-key",
+    });
+
+    expect(mocks.apiFetchMock).toHaveBeenCalledWith(
+      "/admin/recovery/decision%3Ainstance%3Asafe-workflow-key/gate/validate",
+      {
+        method: "POST",
+        body: {
+          intentId: "recovery_intent:safe-intent-key",
+        },
+      }
+    );
+  });
 });

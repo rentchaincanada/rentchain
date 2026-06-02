@@ -8,11 +8,16 @@ import {
   listRecentRecoveryActions,
 } from "../services/recovery/decisionReconciliationService";
 import {
+  captureRecoveryActionIntent,
+  listRecentRecoveryIntents,
+  validateRecoveryActionGate,
+} from "../services/recovery/recoveryIntentService";
+import {
   OPERATOR_RECOVERY_LOGS_COLLECTION,
   loadSnapshot,
 } from "../services/recovery/recoveryStore";
 import { asSafeText, normalizeRecoveryAuthority, stableRecoveryHash } from "../services/recovery/recoveryShared";
-import type { ReconciliationRequest, RecoveryAuthority } from "../types/recovery";
+import type { ReconciliationRequest, RecoveryAuthority, RecoveryIntentCaptureRequest } from "../types/recovery";
 
 type AuthRequest = Request & {
   user?: unknown;
@@ -52,6 +57,7 @@ function mapError(error: unknown): { status: number; code: string } {
   if (message.includes("forbidden")) return { status: 403, code: "FORBIDDEN" };
   if (message === "recovery_workflow_not_found") return { status: 404, code: "RECOVERY_WORKFLOW_NOT_FOUND" };
   if (message === "recovery_already_logged") return { status: 409, code: "RECOVERY_ALREADY_LOGGED" };
+  if (message === "recovery_intent_already_captured") return { status: 409, code: "RECOVERY_INTENT_ALREADY_CAPTURED" };
   if (message === "recovery_not_required") return { status: 409, code: "RECOVERY_NOT_REQUIRED" };
   if (message.includes("invalid") || message.includes("required")) return { status: 400, code: "RECOVERY_REQUEST_INVALID" };
   return { status: 500, code: "RECOVERY_ROUTE_FAILED" };
@@ -115,8 +121,9 @@ router.get("/recovery/logs", requireAuth, async (req: AuthRequest, res) => {
     const includeCandidates = String(req.query?.includeCandidates || "").toLowerCase() === "true";
     const limit = Number(req.query?.limit || 25);
     const logs = await listRecentRecoveryActions({ authority, limit });
+    const intents = await listRecentRecoveryIntents({ authority, limit });
     const candidates = includeCandidates ? await findWorkflowsNeedingRecovery({ authority, limit }) : [];
-    return res.json({ ok: true, logs, candidates });
+    return res.json({ ok: true, logs, intents, candidates });
   } catch (error) {
     const mapped = mapError(error);
     return res.status(mapped.status).json({ ok: false, error: mapped.code });
@@ -132,6 +139,45 @@ router.get("/recovery/logs/:logId", requireAuth, async (req: AuthRequest, res) =
       return res.status(404).json({ ok: false, error: "RECOVERY_LOG_NOT_FOUND" });
     }
     return res.json({ ok: true, recoveryLog: log });
+  } catch (error) {
+    const mapped = mapError(error);
+    return res.status(mapped.status).json({ ok: false, error: mapped.code });
+  }
+});
+
+router.post("/recovery/:recoveryId/intent", requireAuth, async (req: AuthRequest, res) => {
+  try {
+    const authority = authorityFromRequest(req);
+    if (!requireOperator(authority)) return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    const body = requestBody(req);
+    const request: RecoveryIntentCaptureRequest = {
+      actionType: String(body.actionType || "") as RecoveryIntentCaptureRequest["actionType"],
+      reason: asSafeText(body.reason, 800),
+      authorizationConfirmed: body.authorizationConfirmed === true,
+    };
+    const intent = await captureRecoveryActionIntent({
+      recoveryId: req.params.recoveryId,
+      request,
+      authority,
+    });
+    return res.status(201).json({ ok: true, intent });
+  } catch (error) {
+    const mapped = mapError(error);
+    return res.status(mapped.status).json({ ok: false, error: mapped.code });
+  }
+});
+
+router.post("/recovery/:recoveryId/gate/validate", requireAuth, async (req: AuthRequest, res) => {
+  try {
+    const authority = authorityFromRequest(req);
+    if (!requireOperator(authority)) return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    const body = requestBody(req);
+    const gate = await validateRecoveryActionGate({
+      recoveryId: req.params.recoveryId,
+      intentId: asSafeText(body.intentId, 300),
+      authority,
+    });
+    return res.json({ ok: true, gate });
   } catch (error) {
     const mapped = mapError(error);
     return res.status(mapped.status).json({ ok: false, error: mapped.code });

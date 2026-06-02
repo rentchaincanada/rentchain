@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { workflowKey } from "../../services/recovery/recoveryShared";
 import {
   DECISION_CONTINUITY_SNAPSHOTS_COLLECTION,
+  OPERATOR_RECOVERY_INTENTS_COLLECTION,
   OPERATOR_RECOVERY_LOGS_COLLECTION,
   RECOVERY_TIMELINE_COLLECTION,
 } from "../../services/recovery/recoveryStore";
@@ -239,5 +240,81 @@ describe("adminRecoveryRoutes", () => {
     expect(listed.status).toBe(200);
     expect(listed.body.logs).toHaveLength(1);
     expect(collections.get(OPERATOR_RECOVERY_LOGS_COLLECTION)?.size).toBe(1);
+  });
+
+  it("captures recovery action intent and validates enforcement gates without mutating state", async () => {
+    const router = (await import("../adminRecoveryRoutes")).default;
+    const key = workflowKey("decision", "decision-route-intent-1");
+    seed(DECISION_CONTINUITY_SNAPSHOTS_COLLECTION, key, {
+      workflowType: "decision",
+      workflowId: "decision-route-intent-1",
+      state: "Reviewed",
+    });
+
+    const captured = await invokeRouter(router, {
+      method: "POST",
+      url: `/recovery/${encodeURIComponent(key)}/intent`,
+      user: { id: "admin-1", role: "admin" },
+      body: {
+        actionType: "ACCEPT_CANONICAL",
+        reason: "Operator confirmed intent to accept canonical recovery state.",
+        authorizationConfirmed: true,
+      },
+    });
+    expect(captured.status).toBe(201);
+    expect(captured.body.intent).toMatchObject({
+      recoveryId: key,
+      actionType: "ACCEPT_CANONICAL",
+      status: "captured",
+      appendOnly: true,
+      rawIdsIncluded: false,
+    });
+    expect(JSON.stringify(captured.body)).not.toContain("decision-route-intent-1");
+    expect(collections.get(OPERATOR_RECOVERY_INTENTS_COLLECTION)?.size).toBe(1);
+    expect(collections.get(OPERATOR_RECOVERY_LOGS_COLLECTION)?.size || 0).toBe(0);
+
+    const intent = captured.body.intent as Record<string, unknown>;
+    const gate = await invokeRouter(router, {
+      method: "POST",
+      url: `/recovery/${encodeURIComponent(key)}/gate/validate`,
+      user: { id: "admin-1", role: "admin" },
+      body: { intentId: intent.intentId },
+    });
+    expect(gate.status).toBe(200);
+    expect(gate.body.gate).toMatchObject({
+      gateStatus: "satisfied",
+      authorizationValid: true,
+      intentFresh: true,
+    });
+  });
+
+  it("rejects recovery intent capture for unauthorized operators and invalid candidates", async () => {
+    const router = (await import("../adminRecoveryRoutes")).default;
+    const key = workflowKey("payment", "payment-route-intent-1");
+
+    const forbidden = await invokeRouter(router, {
+      method: "POST",
+      url: `/recovery/${encodeURIComponent(key)}/intent`,
+      user: { id: "tenant-1", role: "tenant" },
+      body: {
+        actionType: "ACCEPT_CANONICAL",
+        reason: "Tenant should not capture recovery intent.",
+        authorizationConfirmed: true,
+      },
+    });
+    expect(forbidden.status).toBe(403);
+
+    const missing = await invokeRouter(router, {
+      method: "POST",
+      url: `/recovery/${encodeURIComponent(key)}/intent`,
+      user: { id: "support-1", role: "support" },
+      body: {
+        actionType: "ACCEPT_CANONICAL",
+        reason: "Missing candidate.",
+        authorizationConfirmed: true,
+      },
+    });
+    expect(missing.status).toBe(404);
+    expect(missing.body.error).toBe("RECOVERY_WORKFLOW_NOT_FOUND");
   });
 });
