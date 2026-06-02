@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { CANONICAL_EVENTS_COLLECTION } from "../../lib/events/buildEvent";
+import { lifecycleContinuityDates, lifecycleContinuityIds } from "../../__tests__/fixtures/lifecycleContinuityFixtures";
 
 const { fakeDb, resetFakeDb, seedDoc } = vi.hoisted(() => {
   const store = new Map<string, Map<string, any>>();
@@ -202,6 +204,64 @@ describe("landlordReviewTimelineRoutes", () => {
       expect.arrayContaining([expect.objectContaining({ entryType: "redaction_note", status: "redacted", source: "evidence_packs" })])
     );
     expect(res.body.timeline.entries.every((item: any) => item.entryType === "redaction_note" && item.status === "redacted" && item.source === "evidence_packs")).toBe(true);
+  });
+
+  it("renders synthetic lifecycle divergence context through landlord-scoped timeline semantics", async () => {
+    seedDoc("properties", lifecycleContinuityIds.propertyId, {
+      landlordId: lifecycleContinuityIds.landlordId,
+      name: "Lifecycle fixture property",
+    });
+    seedDoc("maintenanceRequests", lifecycleContinuityIds.recoveryMaintenanceId, {
+      landlordId: lifecycleContinuityIds.landlordId,
+      propertyId: lifecycleContinuityIds.propertyId,
+      maintenanceRequestId: lifecycleContinuityIds.recoveryMaintenanceId,
+      workOrderId: lifecycleContinuityIds.recoveryMaintenanceId,
+      status: "cost_review",
+      title: "Lifecycle continuity fixture maintenance review",
+      createdAt: lifecycleContinuityDates.recoveryTimelineAt,
+      updatedAt: lifecycleContinuityDates.recoveryTimelineAt,
+    });
+    seedDoc(CANONICAL_EVENTS_COLLECTION, "lc-maintenance-review-event", {
+      landlordId: lifecycleContinuityIds.landlordId,
+      metadata: { landlordId: lifecycleContinuityIds.landlordId },
+      type: "lifecycle_fixture_maintenance_review",
+      summary: "Synthetic maintenance lifecycle divergence requires manual review.",
+      maintenanceRequestId: lifecycleContinuityIds.recoveryMaintenanceId,
+      workOrderId: lifecycleContinuityIds.recoveryMaintenanceId,
+      resource: { id: lifecycleContinuityIds.recoveryMaintenanceId },
+      actor: { type: "landlord", id: lifecycleContinuityIds.landlordId },
+      occurredAt: lifecycleContinuityDates.recoveryTimelineAt,
+    });
+    const router = (await import("../landlordReviewTimelineRoutes")).default;
+
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: `/review-timeline?scope=maintenance&scopeId=${encodeURIComponent(lifecycleContinuityIds.recoveryMaintenanceId)}`,
+      user: {
+        id: lifecycleContinuityIds.landlordId,
+        landlordId: lifecycleContinuityIds.landlordId,
+        role: "landlord",
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.timeline).toMatchObject({
+      scope: "maintenance",
+      scopeId: lifecycleContinuityIds.recoveryMaintenanceId,
+      manualReviewRequired: true,
+      externalSharingEnabled: false,
+      certificationIssued: false,
+    });
+    expect(res.body.timeline.entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          entryType: "canonical_event",
+          source: "canonical_events",
+          label: "lifecycle_fixture_maintenance_review",
+        }),
+      ])
+    );
+    expect(JSON.stringify(res.body.timeline)).not.toMatch(/token|secret|credential|bearer|gs:\/\/|storage\.googleapis\.com|providerPayload/i);
   });
 
   it("requires landlord scope and does not expose another landlord's source context", async () => {

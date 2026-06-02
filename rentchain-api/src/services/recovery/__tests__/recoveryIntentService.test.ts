@@ -3,10 +3,12 @@ import { CANONICAL_EVENTS_COLLECTION } from "../../../lib/events/buildEvent";
 import {
   DECISION_CONTINUITY_SNAPSHOTS_COLLECTION,
   OPERATOR_RECOVERY_INTENTS_COLLECTION,
+  OPERATOR_RECOVERY_LOGS_COLLECTION,
 } from "../recoveryStore";
 import { captureRecoveryActionIntent, validateRecoveryActionGate } from "../recoveryIntentService";
 import { workflowKey } from "../recoveryShared";
 import { createRecoveryTestStore } from "./recoveryTestStore";
+import { seedLifecycleRecoveryCandidates } from "../../../__tests__/fixtures/lifecycleContinuityFixtures";
 
 const adminAuthority = {
   role: "admin" as const,
@@ -250,6 +252,56 @@ describe("recoveryIntentService", () => {
           }),
         }),
       ])
+    );
+  });
+
+  it("captures advisory intents for deterministic lifecycle recovery candidates without mutating source state", async () => {
+    const store = createRecoveryTestStore();
+    const candidates = seedLifecycleRecoveryCandidates(store);
+
+    for (const candidate of candidates) {
+      const intent = await captureRecoveryActionIntent({
+        recoveryId: candidate.workflowInstanceKey,
+        authority: adminAuthority,
+        firestore: store,
+        now: "2026-06-02T13:00:00.000Z",
+        request: {
+          actionType: candidate.expectedDecision,
+          reason: `Lifecycle continuity fixture reviewed for ${candidate.workflowType}.`,
+          authorizationConfirmed: true,
+        },
+      });
+
+      expect(intent).toMatchObject({
+        recoveryId: candidate.workflowInstanceKey,
+        workflowType: candidate.workflowType,
+        workflowInstanceKey: candidate.workflowInstanceKey,
+        actionType: candidate.expectedDecision,
+        status: "captured",
+        metadataOnly: true,
+        appendOnly: true,
+        rawIdsIncluded: false,
+      });
+      await expect(
+        validateRecoveryActionGate({
+          recoveryId: candidate.workflowInstanceKey,
+          intentId: intent.intentId,
+          authority: adminAuthority,
+          firestore: store,
+          now: "2026-06-02T13:30:00.000Z",
+        })
+      ).resolves.toMatchObject({
+        gateStatus: "satisfied",
+        authorizationValid: true,
+        intentFresh: true,
+      });
+    }
+
+    const intents = await store.collection(OPERATOR_RECOVERY_INTENTS_COLLECTION).get();
+    expect(intents.docs).toHaveLength(candidates.length);
+    expect((await store.collection(OPERATOR_RECOVERY_LOGS_COLLECTION).get()).docs).toHaveLength(0);
+    expect(JSON.stringify(intents.docs.map((doc) => doc.data()))).not.toMatch(
+      /token|secret|credential|bearer|gs:\/\/|storage\.googleapis\.com|providerPayload/i
     );
   });
 });
