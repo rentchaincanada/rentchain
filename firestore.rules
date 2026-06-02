@@ -1,0 +1,13 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Local emulator only.
+    // Not intended for production deployment.
+    // Production Firestore rules require separate review.
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}

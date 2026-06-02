@@ -1,11 +1,13 @@
 // src/config/firebase.ts
 
 import admin from "firebase-admin";
+import { assertSafeFirestoreEnvironment } from "./firestoreEnvironmentGuard";
 
 // IMPORTANT: type this by hand, do NOT paste from browser/link
 const PROJECT_ID = "project-0d9658de-af29-4dc0-a99";
 
 // Initialize the Firebase Admin SDK once
+assertSafeFirestoreEnvironment();
 if (!admin.apps.length) {
   admin.initializeApp({
     // Use Application Default Credentials (ADC).
