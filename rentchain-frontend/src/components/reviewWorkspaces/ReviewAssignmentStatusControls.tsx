@@ -113,6 +113,10 @@ export function ReviewAssignmentStatusControls({
   const [assignment, setAssignment] = React.useState<ReviewAssignmentTarget>(() =>
     normalizeReviewAssignmentTarget(initialAssignment)
   );
+  const [pendingChanges, setPendingChanges] = React.useState<boolean>(false);
+  const [showConfirmation, setShowConfirmation] = React.useState<boolean>(false);
+  const [pendingStatus, setPendingStatus] = React.useState<ReviewLifecycleStatus | null>(null);
+  const [pendingAssignment, setPendingAssignment] = React.useState<ReviewAssignmentTarget | null>(null);
 
   React.useEffect(() => {
     setStatus(normalizeReviewLifecycleStatus(initialStatus));
@@ -123,13 +127,42 @@ export function ReviewAssignmentStatusControls({
   }, [initialAssignment]);
 
   function updateStatus(nextStatus: ReviewLifecycleStatus) {
-    setStatus(nextStatus);
-    onChange?.({ status: nextStatus, assignment });
+    if (nextStatus !== status) {
+      setPendingStatus(nextStatus);
+      setPendingChanges(true);
+      setShowConfirmation(true);
+    }
   }
 
   function updateAssignment(nextAssignment: ReviewAssignmentTarget) {
-    setAssignment(nextAssignment);
-    onChange?.({ status, assignment: nextAssignment });
+    if (nextAssignment !== assignment) {
+      setPendingAssignment(nextAssignment);
+      setPendingChanges(true);
+      setShowConfirmation(true);
+    }
+  }
+
+  function confirmChanges() {
+    if (pendingStatus !== null) {
+      setStatus(pendingStatus);
+      onChange?.({ status: pendingStatus, assignment });
+    }
+    if (pendingAssignment !== null) {
+      setAssignment(pendingAssignment);
+      onChange?.({ status, assignment: pendingAssignment });
+    }
+    resetPendingState();
+  }
+
+  function cancelChanges() {
+    resetPendingState();
+  }
+
+  function resetPendingState() {
+    setPendingStatus(null);
+    setPendingAssignment(null);
+    setPendingChanges(false);
+    setShowConfirmation(false);
   }
 
   return (
@@ -152,14 +185,20 @@ export function ReviewAssignmentStatusControls({
           records, or alter financial status.
         </span>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 160px), 1fr))", gap: 8 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))", gap: 12 }}>
         <label style={controlLabelStyle}>
           Manual review status
           <select
             aria-label={`Review status for ${title}`}
-            value={status}
+            aria-describedby={`${itemId}-status-help`}
+            aria-invalid={pendingChanges && pendingStatus !== null}
+            value={pendingStatus ?? status}
             onChange={(event) => updateStatus(event.target.value as ReviewLifecycleStatus)}
-            style={selectStyle}
+            style={{
+              ...selectStyle,
+              borderColor: pendingChanges && pendingStatus !== null ? "#f59e0b" : "#cbd5e1",
+              backgroundColor: pendingChanges && pendingStatus !== null ? "#fffbeb" : "#fff",
+            }}
           >
             {REVIEW_STATUS_OPTIONS.map((option) => (
               <option key={option.value} value={option.value}>
@@ -167,14 +206,23 @@ export function ReviewAssignmentStatusControls({
               </option>
             ))}
           </select>
+          <span id={`${itemId}-status-help`} style={{ fontSize: 12, color: "#64748b", lineHeight: 1.4 }}>
+            {pendingChanges && pendingStatus !== null ? "Change pending confirmation" : selectedStatusDescription(status)}
+          </span>
         </label>
         <label style={controlLabelStyle}>
           Assigned reviewer
           <select
             aria-label={`Assigned reviewer for ${title}`}
-            value={assignment}
+            aria-describedby={`${itemId}-assignment-help`}
+            aria-invalid={pendingChanges && pendingAssignment !== null}
+            value={pendingAssignment ?? assignment}
             onChange={(event) => updateAssignment(event.target.value as ReviewAssignmentTarget)}
-            style={selectStyle}
+            style={{
+              ...selectStyle,
+              borderColor: pendingChanges && pendingAssignment !== null ? "#f59e0b" : "#cbd5e1",
+              backgroundColor: pendingChanges && pendingAssignment !== null ? "#fffbeb" : "#fff",
+            }}
           >
             {REVIEW_ASSIGNMENT_OPTIONS.map((option) => (
               <option key={option.value} value={option.value}>
@@ -182,14 +230,89 @@ export function ReviewAssignmentStatusControls({
               </option>
             ))}
           </select>
+          <span id={`${itemId}-assignment-help`} style={{ fontSize: 12, color: "#64748b", lineHeight: 1.4 }}>
+            {pendingChanges && pendingAssignment !== null ? "Change pending confirmation" : selectedAssignmentReason(assignment)}
+          </span>
         </label>
       </div>
-      <div id={`${itemId}-manual-review-summary`} style={{ display: "grid", gap: 3, color: "#334155", fontSize: 12 }}>
-        <span>Manual status: {reviewStatusLabel(status)}</span>
-        <span>Manual assignment: {reviewAssignmentLabel(assignment)}</span>
-        <span>Assignment reason: {selectedAssignmentReason(assignment)}</span>
-        <span>Review status note: {selectedStatusDescription(status)}</span>
+      <div id={`${itemId}-manual-review-summary`} style={{ display: "grid", gap: 3, color: "#334155", fontSize: 13, lineHeight: 1.4 }}>
+        <span>Manual status: {reviewStatusLabel(pendingStatus ?? status)}</span>
+        <span>Manual assignment: {reviewAssignmentLabel(pendingAssignment ?? assignment)}</span>
+        <span>Assignment reason: {selectedAssignmentReason(pendingAssignment ?? assignment)}</span>
+        <span>Review status note: {selectedStatusDescription(pendingStatus ?? status)}</span>
       </div>
+
+      {showConfirmation && (
+        <div
+          role="dialog"
+          aria-labelledby={`${itemId}-confirmation-title`}
+          aria-describedby={`${itemId}-confirmation-description`}
+          style={{
+            border: "2px solid #f59e0b",
+            borderRadius: 8,
+            background: "#fffbeb",
+            padding: 12,
+            display: "grid",
+            gap: 10,
+            marginTop: 8,
+          }}
+        >
+          <div style={{ display: "grid", gap: 4 }}>
+            <strong id={`${itemId}-confirmation-title`} style={{ color: "#92400e", fontSize: 14 }}>
+              Confirm assignment changes
+            </strong>
+            <p id={`${itemId}-confirmation-description`} style={{ color: "#92400e", fontSize: 13, lineHeight: 1.4, margin: 0 }}>
+              You're about to update the manual review assignment. This change will be recorded in the audit trail but does not alter source records or route work automatically.
+            </p>
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button
+              onClick={confirmChanges}
+              style={{
+                backgroundColor: "#059669",
+                color: "#fff",
+                border: "none",
+                borderRadius: 6,
+                padding: "10px 16px",
+                fontSize: 14,
+                fontWeight: 600,
+                cursor: "pointer",
+                minHeight: 44,
+                minWidth: 80,
+              }}
+              aria-describedby={`${itemId}-confirm-help`}
+            >
+              Confirm changes
+            </button>
+            <button
+              onClick={cancelChanges}
+              style={{
+                backgroundColor: "#6b7280",
+                color: "#fff",
+                border: "none",
+                borderRadius: 6,
+                padding: "10px 16px",
+                fontSize: 14,
+                fontWeight: 600,
+                cursor: "pointer",
+                minHeight: 44,
+                minWidth: 80,
+              }}
+              aria-describedby={`${itemId}-cancel-help`}
+            >
+              Cancel
+            </button>
+          </div>
+          <div style={{ fontSize: 12, color: "#6b7280", lineHeight: 1.4 }}>
+            <span id={`${itemId}-confirm-help`} style={{ display: "block" }}>
+              Confirm: Apply the assignment changes and record in audit trail.
+            </span>
+            <span id={`${itemId}-cancel-help`} style={{ display: "block" }}>
+              Cancel: Discard changes and keep current assignment settings.
+            </span>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
@@ -205,9 +328,12 @@ const controlLabelStyle: React.CSSProperties = {
 const selectStyle: React.CSSProperties = {
   border: "1px solid #cbd5e1",
   borderRadius: 8,
-  padding: "8px 10px",
+  padding: "12px 14px",
   color: "#0f172a",
   background: "#fff",
   minWidth: 0,
   width: "100%",
+  minHeight: 44,
+  fontSize: 14,
+  lineHeight: 1.4,
 };
