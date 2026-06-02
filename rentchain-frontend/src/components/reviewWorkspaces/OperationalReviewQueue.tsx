@@ -1,4 +1,4 @@
-import React from "react";
+import React, { memo, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { Card } from "@/components/ui/Ui";
 import { ReviewAssignmentStatusControls } from "./ReviewAssignmentStatusControls";
@@ -47,8 +47,136 @@ function metadata(labelText: string, value: string | null | undefined) {
   );
 }
 
-export function OperationalReviewQueue({ items }: { items: OperationalReviewQueueItem[] }) {
-  const assignedCount = items.filter((item) => !/^unassigned$/i.test(item.assignmentLabel)).length;
+const OperationalReviewQueueCard = memo(function OperationalReviewQueueCard({ item }: { item: OperationalReviewQueueItem }) {
+  const display = useMemo(
+    () => ({
+      title: safeDisplayLabel(item.title, "Operational review item"),
+      context: safeDisplayLabel(item.contextLabel, "Operational review context"),
+      workspaceType: label(item.workspaceType),
+      sensitivity: label(item.sensitivityClass),
+      visibility: label(item.visibilityClass),
+      evidence: safeDisplayLabel(item.evidenceLabel, "Open source workflow evidence"),
+      relatedResource: safeDisplayLabel(item.relatedResourceLabel, "Scoped resource context"),
+    }),
+    [
+      item.contextLabel,
+      item.evidenceLabel,
+      item.relatedResourceLabel,
+      item.sensitivityClass,
+      item.title,
+      item.visibilityClass,
+      item.workspaceType,
+    ]
+  );
+
+  const metadataItems = useMemo(
+    () => [
+      { labelText: "Routing reason", value: item.routingReason },
+      { labelText: "Source", value: item.sourceLabel },
+      { labelText: "Review status", value: item.reviewStatus },
+      { labelText: "Assignment", value: item.assignmentLabel },
+      { labelText: "Workflow status", value: item.workflowStatus },
+      { labelText: "Financial status", value: item.financialStatus || null },
+      { labelText: "Sensitivity", value: display.sensitivity },
+      { labelText: "Visibility", value: display.visibility },
+    ],
+    [
+      display.sensitivity,
+      display.visibility,
+      item.assignmentLabel,
+      item.financialStatus,
+      item.reviewStatus,
+      item.routingReason,
+      item.sourceLabel,
+      item.workflowStatus,
+    ]
+  );
+
+  return (
+    <Card
+      style={{
+        borderRadius: 8,
+        padding: 12,
+        border: "1px solid rgba(15, 23, 42, 0.08)",
+        display: "grid",
+        gap: 10,
+        minWidth: 0,
+        overflowWrap: "anywhere",
+      }}
+    >
+      <div style={{ display: "grid", gap: 4, minWidth: 0 }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <span style={pillStyle("#fef3c7", "#92400e", "#fde68a")}>{item.reviewPriority}</span>
+          <span style={{ color: "#64748b", fontSize: 12, fontWeight: 900 }}>{display.workspaceType}</span>
+        </div>
+        <strong style={{ color: "#0f172a", fontSize: 15 }}>{display.title}</strong>
+        <span style={{ color: "#475569", fontSize: 13 }}>{display.context}</span>
+      </div>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 200px), 1fr))",
+          gap: 8,
+          minWidth: 0,
+        }}
+      >
+        {metadataItems.map((entry) => (
+          <React.Fragment key={entry.labelText}>{metadata(entry.labelText, entry.value)}</React.Fragment>
+        ))}
+      </div>
+
+      <ReviewAssignmentStatusControls
+        itemId={item.queueItemId}
+        title={display.title}
+        initialStatus={item.reviewStatus}
+        initialAssignment={item.assignmentLabel}
+      />
+
+      <div style={{ display: "grid", gap: 5 }}>
+        <span style={{ color: "#334155", fontSize: 12, fontWeight: 900 }}>Scoped evidence/resource links</span>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <Link to={item.destination} style={{
+            color: "#2563eb",
+            fontSize: 14,
+            fontWeight: 900,
+            padding: "8px 0",
+            minHeight: 44,
+            display: "inline-flex",
+            alignItems: "center",
+            textDecoration: "none",
+            borderRadius: 4
+          }}>
+            {display.evidence}
+          </Link>
+          <span
+            style={{
+              border: "1px solid #e2e8f0",
+              borderRadius: 999,
+              padding: "8px 12px",
+              color: "#475569",
+              fontSize: 13,
+              fontWeight: 800,
+              background: "#fff",
+              minHeight: 44,
+              display: "inline-flex",
+              alignItems: "center",
+              lineHeight: 1.4,
+            }}
+          >
+            {display.relatedResource}
+          </span>
+        </div>
+      </div>
+    </Card>
+  );
+});
+
+export const OperationalReviewQueue = memo(function OperationalReviewQueue({ items }: { items: OperationalReviewQueueItem[] }) {
+  const assignedCount = useMemo(
+    () => items.filter((item) => !/^unassigned$/i.test(item.assignmentLabel)).length,
+    [items]
+  );
 
   return (
     <Card
@@ -88,90 +216,7 @@ export function OperationalReviewQueue({ items }: { items: OperationalReviewQueu
           }}
         >
           {items.map((item) => (
-            <Card
-              key={item.queueItemId}
-              style={{
-                borderRadius: 8,
-                padding: 12,
-                border: "1px solid rgba(15, 23, 42, 0.08)",
-                display: "grid",
-                gap: 10,
-                minWidth: 0,
-                overflowWrap: "anywhere",
-              }}
-            >
-              <div style={{ display: "grid", gap: 4, minWidth: 0 }}>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                  <span style={pillStyle("#fef3c7", "#92400e", "#fde68a")}>{item.reviewPriority}</span>
-                  <span style={{ color: "#64748b", fontSize: 12, fontWeight: 900 }}>{label(item.workspaceType)}</span>
-                </div>
-                <strong style={{ color: "#0f172a", fontSize: 15 }}>{safeDisplayLabel(item.title, "Operational review item")}</strong>
-                <span style={{ color: "#475569", fontSize: 13 }}>
-                  {safeDisplayLabel(item.contextLabel, "Operational review context")}
-                </span>
-              </div>
-
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 200px), 1fr))",
-                  gap: 8,
-                  minWidth: 0,
-                }}
-              >
-                {metadata("Routing reason", item.routingReason)}
-                {metadata("Source", item.sourceLabel)}
-                {metadata("Review status", item.reviewStatus)}
-                {metadata("Assignment", item.assignmentLabel)}
-                {metadata("Workflow status", item.workflowStatus)}
-                {metadata("Financial status", item.financialStatus || null)}
-                {metadata("Sensitivity", label(item.sensitivityClass))}
-                {metadata("Visibility", label(item.visibilityClass))}
-              </div>
-
-              <ReviewAssignmentStatusControls
-                itemId={item.queueItemId}
-                title={safeDisplayLabel(item.title, "Operational review item")}
-                initialStatus={item.reviewStatus}
-                initialAssignment={item.assignmentLabel}
-              />
-
-              <div style={{ display: "grid", gap: 5 }}>
-                <span style={{ color: "#334155", fontSize: 12, fontWeight: 900 }}>Scoped evidence/resource links</span>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                  <Link to={item.destination} style={{
-                    color: "#2563eb",
-                    fontSize: 14,
-                    fontWeight: 900,
-                    padding: "8px 0",
-                    minHeight: 44,
-                    display: "inline-flex",
-                    alignItems: "center",
-                    textDecoration: "none",
-                    borderRadius: 4
-                  }}>
-                    {safeDisplayLabel(item.evidenceLabel, "Open source workflow evidence")}
-                  </Link>
-                  <span
-                    style={{
-                      border: "1px solid #e2e8f0",
-                      borderRadius: 999,
-                      padding: "8px 12px",
-                      color: "#475569",
-                      fontSize: 13,
-                      fontWeight: 800,
-                      background: "#fff",
-                      minHeight: 44,
-                      display: "inline-flex",
-                      alignItems: "center",
-                      lineHeight: 1.4,
-                    }}
-                  >
-                    {safeDisplayLabel(item.relatedResourceLabel, "Scoped resource context")}
-                  </span>
-                </div>
-              </div>
-            </Card>
+            <OperationalReviewQueueCard key={item.queueItemId} item={item} />
           ))}
         </div>
       ) : (
@@ -182,7 +227,7 @@ export function OperationalReviewQueue({ items }: { items: OperationalReviewQueu
       )}
     </Card>
   );
-}
+});
 
 function pillStyle(background: string, color: string, border: string): React.CSSProperties {
   return {

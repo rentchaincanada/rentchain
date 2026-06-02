@@ -1,4 +1,4 @@
-import React from "react";
+import React, { memo, useCallback, useMemo } from "react";
 import type { LandlordAgentDecision } from "@/api/landlordAnalyticsApi";
 import { aggregateDecisionStates, type DecisionExecutionFilter } from "./decisionExecutionAggregation";
 import { executionStateDisplay } from "./decisionExecutionDisplay";
@@ -20,9 +20,65 @@ function countLabel(value: number) {
   return value === 1 ? "1 decision" : `${value} decisions`;
 }
 
-export default function DecisionQueueSummary(props: Props) {
+type FilterButtonProps = {
+  value: DecisionExecutionFilter;
+  label: string;
+  count: number;
+  active: boolean;
+  onSelect: (filter: DecisionExecutionFilter) => void;
+  tone?: {
+    bg: string;
+    border: string;
+    text: string;
+  };
+};
+
+const DecisionQueueFilterButton = memo(function DecisionQueueFilterButton({
+  value,
+  label,
+  count,
+  active,
+  onSelect,
+  tone,
+}: FilterButtonProps) {
+  const handleClick = useCallback(() => onSelect(value), [onSelect, value]);
+  const activeBorder = tone?.border || "#0f172a";
+  const activeBackground = tone?.bg || "#0f172a";
+  const activeColor = tone?.text || "#fff";
+
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      aria-pressed={active}
+      style={{
+        borderRadius: 999,
+        border: active ? `1px solid ${activeBorder}` : "1px solid #cbd5e1",
+        background: active ? activeBackground : "#fff",
+        color: active ? activeColor : "#334155",
+        fontWeight: 700,
+        padding: "7px 12px",
+        cursor: "pointer",
+      }}
+    >
+      {label} · {count}
+    </button>
+  );
+});
+
+const DecisionQueueSummary = memo(function DecisionQueueSummary(props: Props) {
   const { decisions, filter, onFilterChange } = props;
-  const summary = aggregateDecisionStates(decisions);
+  const summary = useMemo(() => aggregateDecisionStates(decisions), [decisions]);
+  const stateFilters = useMemo(
+    () =>
+      ORDERED_STATES.map((state) => ({
+        state,
+        display: executionStateDisplay[state],
+        count: summary.counts[state],
+      })),
+    [summary]
+  );
+  const handleFilterChange = useCallback((nextFilter: DecisionExecutionFilter) => onFilterChange(nextFilter), [onFilterChange]);
 
   return (
     <section
@@ -49,73 +105,51 @@ export default function DecisionQueueSummary(props: Props) {
       </div>
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <button
-          type="button"
-          onClick={() => onFilterChange("all")}
-          aria-pressed={filter === "all"}
-          style={{
-            borderRadius: 999,
-            border: filter === "all" ? "1px solid #0f172a" : "1px solid #cbd5e1",
-            background: filter === "all" ? "#0f172a" : "#fff",
-            color: filter === "all" ? "#fff" : "#334155",
-            fontWeight: 700,
-            padding: "7px 12px",
-            cursor: "pointer",
-          }}
-        >
-          All decisions · {summary.total}
-        </button>
-        {ORDERED_STATES.map((state) => {
-          const display = executionStateDisplay[state];
-          const isActive = filter === state;
-          return (
-            <button
-              key={state}
-              type="button"
-              onClick={() => onFilterChange(state)}
-              aria-pressed={isActive}
-              style={{
-                borderRadius: 999,
-                border: `1px solid ${isActive ? display.badgeTone.border : "#cbd5e1"}`,
-                background: isActive ? display.badgeTone.bg : "#fff",
-                color: isActive ? display.badgeTone.text : "#334155",
-                fontWeight: 700,
-                padding: "7px 12px",
-                cursor: "pointer",
-              }}
-            >
-              {display.label} · {summary.counts[state]}
-            </button>
-          );
-        })}
+        <DecisionQueueFilterButton
+          value="all"
+          label="All decisions"
+          count={summary.total}
+          active={filter === "all"}
+          onSelect={handleFilterChange}
+        />
+        {stateFilters.map(({ state, display, count }) => (
+          <DecisionQueueFilterButton
+            key={state}
+            value={state}
+            label={display.label}
+            count={count}
+            active={filter === state}
+            onSelect={handleFilterChange}
+            tone={display.badgeTone}
+          />
+        ))}
       </div>
 
       <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}>
-        {ORDERED_STATES.map((state) => {
-          const display = executionStateDisplay[state];
-          return (
-            <div
-              key={state}
-              style={{
-                display: "grid",
-                gap: 4,
-                padding: 12,
-                borderRadius: 12,
-                border: `1px solid ${display.badgeTone.border}`,
-                background: display.badgeTone.bg,
-              }}
-            >
-              <div style={{ fontSize: "0.82rem", fontWeight: 700, color: display.badgeTone.text }}>
-                {display.label}
-              </div>
-              <div style={{ fontSize: "1.3rem", fontWeight: 800, color: "#0f172a" }}>
-                {summary.counts[state]}
-              </div>
-              <div style={{ fontSize: "0.84rem", color: "#475569" }}>{countLabel(summary.counts[state])}</div>
+        {stateFilters.map(({ state, display, count }) => (
+          <div
+            key={state}
+            style={{
+              display: "grid",
+              gap: 4,
+              padding: 12,
+              borderRadius: 12,
+              border: `1px solid ${display.badgeTone.border}`,
+              background: display.badgeTone.bg,
+            }}
+          >
+            <div style={{ fontSize: "0.82rem", fontWeight: 700, color: display.badgeTone.text }}>
+              {display.label}
             </div>
-          );
-        })}
+            <div style={{ fontSize: "1.3rem", fontWeight: 800, color: "#0f172a" }}>
+              {count}
+            </div>
+            <div style={{ fontSize: "0.84rem", color: "#475569" }}>{countLabel(count)}</div>
+          </div>
+        ))}
       </div>
     </section>
   );
-}
+});
+
+export default DecisionQueueSummary;
