@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { CANONICAL_EVENTS_COLLECTION } from "../../../lib/events/buildEvent";
 import {
   DECISION_CONTINUITY_SNAPSHOTS_COLLECTION,
   OPERATOR_RECOVERY_INTENTS_COLLECTION,
@@ -63,6 +64,22 @@ describe("recoveryIntentService", () => {
     expect(intent.intentId).toMatch(/^recovery_intent:/);
     expect(intent.workflowInstanceKey).not.toContain("decision-raw-intent-1");
     expect(store.read(OPERATOR_RECOVERY_INTENTS_COLLECTION, intent.intentId)).toBeTruthy();
+    const auditEvents = await store.collection(CANONICAL_EVENTS_COLLECTION).get();
+    expect(auditEvents.docs.map((doc) => doc.data())).toEqual([
+      expect.objectContaining({
+        eventType: "recovery_intent_captured",
+        sourceCollection: "canonicalEvents",
+        appendOnly: true,
+        rawIdsIncluded: false,
+        metadata: expect.objectContaining({
+          intentId: expect.stringMatching(/^recovery_intent:/),
+          actionType: "ACCEPT_CANONICAL",
+          reasonSummary: "Operator reviewed continuity evidence and intends canonical recovery.",
+          metadataOnly: true,
+          rawIdsIncluded: false,
+        }),
+      }),
+    ]);
   });
 
   it("rejects unauthorized and invalid recovery intent capture", async () => {
@@ -212,5 +229,27 @@ describe("recoveryIntentService", () => {
       authorizationValid: true,
       intentFresh: true,
     });
+
+    const auditEvents = (await store.collection(CANONICAL_EVENTS_COLLECTION).get()).docs.map((doc) => doc.data());
+    expect(auditEvents.filter((event) => event.eventType === "recovery_gate_validated")).toHaveLength(4);
+    expect(auditEvents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          eventType: "recovery_gate_validated",
+          metadata: expect.objectContaining({
+            validationOutcome: "passed",
+            authorizationValid: true,
+            intentFresh: true,
+          }),
+        }),
+        expect.objectContaining({
+          eventType: "recovery_gate_validated",
+          metadata: expect.objectContaining({
+            validationOutcome: "failed",
+            denialReason: "intent_stale",
+          }),
+        }),
+      ])
+    );
   });
 });

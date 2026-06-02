@@ -17,6 +17,7 @@ import { computePaymentState } from "../services/stateMachines/stateComputation"
 import { paymentStateMachine } from "../services/stateMachines/paymentStateMachine";
 import { appendProvenanceEvent } from "../services/stateMachines/provenanceStorage";
 import { buildValidationSummary, validatePaymentTransition } from "../services/stateMachines/transitionValidation";
+import { appendReviewStateTransitionAuditEvent } from "../lib/canonicalAudit/reviewStateTransitionAudit";
 import type { PaymentEvent, PaymentState } from "../services/stateMachines/types";
 
 const router = Router();
@@ -782,6 +783,10 @@ router.post("/payments/validate-transition", requireAuth, requirePermission("pay
     if (validation.provenanceEvent) {
       try {
         await appendProvenanceEvent(validation.provenanceEvent, {
+          authority: { actorRole: roleForReq(req) === "admin" ? "admin" : "landlord", landlordRef: landlordId },
+        });
+        await appendReviewStateTransitionAuditEvent({
+          provenanceEvent: validation.provenanceEvent,
           authority: { actorRole: roleForReq(req) === "admin" ? "admin" : "landlord", landlordRef: landlordId },
         });
         res.setHeader("X-Provenance-Captured", "true");

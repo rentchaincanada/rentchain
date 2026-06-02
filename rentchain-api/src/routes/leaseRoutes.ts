@@ -75,6 +75,7 @@ import { computeLeaseState } from "../services/stateMachines/stateComputation";
 import { leaseStateMachine } from "../services/stateMachines/leaseStateMachine";
 import { appendProvenanceEvent } from "../services/stateMachines/provenanceStorage";
 import { buildValidationSummary, validateLeaseTransition } from "../services/stateMachines/transitionValidation";
+import { appendReviewStateTransitionAuditEvent } from "../lib/canonicalAudit/reviewStateTransitionAudit";
 import type { LeaseEvent, LeaseLifecycleState } from "../services/stateMachines/types";
 
 const router = Router();
@@ -3103,6 +3104,10 @@ router.post("/validate-transition", requireLandlord, async (req: any, res: Respo
     if (validation.provenanceEvent) {
       try {
         await appendProvenanceEvent(validation.provenanceEvent, {
+          authority: { actorRole: "landlord", landlordRef: landlordId },
+        });
+        await appendReviewStateTransitionAuditEvent({
+          provenanceEvent: validation.provenanceEvent,
           authority: { actorRole: "landlord", landlordRef: landlordId },
         });
         res.setHeader("X-Provenance-Captured", "true");
