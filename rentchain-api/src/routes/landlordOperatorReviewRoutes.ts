@@ -2,7 +2,7 @@ import { Router } from "express";
 import { db } from "../config/firebase";
 import { requireAuth } from "../middleware/requireAuth";
 import { requireLandlord } from "../middleware/requireLandlord";
-import { writeCanonicalEvent } from "../lib/events/buildEvent";
+import { appendCanonicalAuditEvent, safeAuditReference } from "../lib/canonicalAudit/appendCanonicalAuditEvent";
 import {
   addOperatorReviewNote,
   buildOperatorReviewSession,
@@ -19,6 +19,7 @@ import {
   type OperatorReviewScope,
   type OperatorReviewSession,
 } from "../lib/operatorReviews/operatorReviewTypes";
+import type { CanonicalAuditEventType } from "../types/canonicalAuditEvent";
 
 const router = Router();
 
@@ -39,13 +40,9 @@ function actorFromReq(req: any) {
   });
 }
 
-function eventIdFor(input: { eventType: OperatorReviewEventType; reviewSessionId: string; at: string }) {
-  return [input.eventType, input.reviewSessionId, input.at]
-    .join(":")
-    .toLowerCase()
-    .replace(/[\/\\#?]+/g, "_")
-    .replace(/[^a-z0-9_.:-]+/g, "_")
-    .replace(/^_+|_+$/g, "");
+function auditEventTypeFor(eventType: OperatorReviewEventType): CanonicalAuditEventType {
+  if (eventType === "operator_review_session_opened") return "operator_review_opened";
+  return eventType;
 }
 
 async function writeReviewEvent(input: {
@@ -55,39 +52,33 @@ async function writeReviewEvent(input: {
   summary: string;
 }) {
   const occurredAt = input.session.updatedAt || new Date().toISOString();
-  await writeCanonicalEvent({
-    id: eventIdFor({
-      eventType: input.eventType,
-      reviewSessionId: input.session.reviewSessionId,
-      at: occurredAt,
-    }),
-    type: input.eventType,
-    domain: "system",
-    action: input.eventType,
-    status: input.session.status,
+  await appendCanonicalAuditEvent({
+    eventType: auditEventTypeFor(input.eventType),
     actor: {
-      type: input.actor.role === "admin" ? "admin" : "landlord",
-      id: input.actor.userId,
       role: input.actor.role,
-      displayName: input.actor.email || null,
+      operatorRef: input.actor.userId,
+      rawIdsIncluded: false,
     },
-    resource: {
-      type: "operator_review_session",
-      id: input.session.reviewSessionId,
-      parentType: input.session.scope,
-      parentId: input.session.scopeId,
+    authority: {
+      role: input.actor.role,
+      landlordRef: input.session.landlordId,
+      supportAllowed: false,
+      rawIdsIncluded: false,
     },
-    occurredAt,
-    visibility: "landlord",
-    summary: input.summary,
+    sourceReferenceId: input.session.reviewSessionId,
+    timestamp: occurredAt,
+    visibility: "landlord_operator_internal",
     metadata: {
-      landlordId: input.session.landlordId,
+      reviewSessionId: safeAuditReference("review_session", input.session.reviewSessionId),
       scope: input.session.scope,
-      scopeId: input.session.scopeId,
+      scopeId: safeAuditReference("review_scope", input.session.scopeId),
+      reviewStatus: input.session.status,
+      noteSummary: input.summary,
+      outcome: input.session.outcome?.result || null,
       manualOnly: true,
-      systemGenerated: false,
+      metadataOnly: true,
+      rawIdsIncluded: false,
     },
-    tags: ["operator_review", input.session.scope],
   });
 }
 

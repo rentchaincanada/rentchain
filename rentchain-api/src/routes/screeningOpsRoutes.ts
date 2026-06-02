@@ -13,6 +13,7 @@ import {
 } from "../services/screeningOps/screeningOpsController";
 import { appendProvenanceEvent } from "../services/stateMachines/provenanceStorage";
 import { buildValidationSummary, validateScreeningTransition } from "../services/stateMachines/transitionValidation";
+import { appendReviewStateTransitionAuditEvent } from "../lib/canonicalAudit/reviewStateTransitionAudit";
 import type { ScreeningApplicationState, ScreeningEvent } from "../services/stateMachines/types";
 
 const router = Router();
@@ -43,6 +44,10 @@ router.post("/screening/validate-transition", requireAdmin, async (req: any, res
     if (result.provenanceEvent) {
       try {
         await appendProvenanceEvent(result.provenanceEvent, {
+          authority: { actorRole: "admin" },
+        });
+        await appendReviewStateTransitionAuditEvent({
+          provenanceEvent: result.provenanceEvent,
           authority: { actorRole: "admin" },
         });
         res.setHeader("X-Provenance-Captured", "true");

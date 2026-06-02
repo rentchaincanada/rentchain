@@ -148,9 +148,10 @@ describe("landlordOperatorReviewRoutes", () => {
     expect(listDocs("operatorReviewSessions")).toHaveLength(1);
     expect(listDocs("canonicalEvents")).toEqual([
       expect.objectContaining({
-        type: "operator_review_session_opened",
-        domain: "system",
-        visibility: "landlord",
+        eventType: "operator_review_opened",
+        visibility: "landlord_operator_internal",
+        appendOnly: true,
+        rawIdsIncluded: false,
       }),
     ]);
   });
@@ -184,8 +185,8 @@ describe("landlordOperatorReviewRoutes", () => {
         outcome: expect.objectContaining({ result: "needs_follow_up" }),
       })
     );
-    expect(listDocs("canonicalEvents").map((event: any) => event.type)).toEqual([
-      "operator_review_session_opened",
+    expect(listDocs("canonicalEvents").map((event: any) => event.eventType)).toEqual([
+      "operator_review_opened",
       "operator_review_note_added",
       "operator_review_outcome_recorded",
       "operator_review_session_closed",

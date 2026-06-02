@@ -23,6 +23,7 @@ import { computeDecisionState } from "../services/stateMachines/stateComputation
 import { decisionStateMachine } from "../services/stateMachines/decisionStateMachine";
 import { appendProvenanceEvent } from "../services/stateMachines/provenanceStorage";
 import { buildValidationSummary, validateDecisionTransition } from "../services/stateMachines/transitionValidation";
+import { appendReviewStateTransitionAuditEvent } from "../lib/canonicalAudit/reviewStateTransitionAudit";
 import type { DecisionActionState, DecisionEvent } from "../services/stateMachines/types";
 
 const router = Router();
@@ -273,6 +274,10 @@ router.post("/validate-transition", requireAuth, async (req: any, res: Response)
     if (validation.provenanceEvent) {
       try {
         await appendProvenanceEvent(validation.provenanceEvent, {
+          authority: { actorRole: isAdmin(req) ? "admin" : "landlord", landlordRef: model.landlordId },
+        });
+        await appendReviewStateTransitionAuditEvent({
+          provenanceEvent: validation.provenanceEvent,
           authority: { actorRole: isAdmin(req) ? "admin" : "landlord", landlordRef: model.landlordId },
         });
         res.setHeader("X-Provenance-Captured", "true");

@@ -33,6 +33,7 @@ import { computeMaintenanceState } from "../services/stateMachines/stateComputat
 import { maintenanceStateMachine } from "../services/stateMachines/maintenanceStateMachine";
 import { appendProvenanceEvent } from "../services/stateMachines/provenanceStorage";
 import { buildValidationSummary, validateMaintenanceTransition } from "../services/stateMachines/transitionValidation";
+import { appendReviewStateTransitionAuditEvent } from "../lib/canonicalAudit/reviewStateTransitionAudit";
 import type { MaintenanceEvent, MaintenanceRequestState } from "../services/stateMachines/types";
 
 const router = Router();
@@ -1284,6 +1285,10 @@ router.post("/maintenance-requests/validate-transition", async (req: any, res) =
     if (validation.provenanceEvent) {
       try {
         await appendProvenanceEvent(validation.provenanceEvent, {
+          authority: { actorRole: role === "admin" ? "admin" : "landlord", landlordRef: landlordId },
+        });
+        await appendReviewStateTransitionAuditEvent({
+          provenanceEvent: validation.provenanceEvent,
           authority: { actorRole: role === "admin" ? "admin" : "landlord", landlordRef: landlordId },
         });
         res.setHeader("X-Provenance-Captured", "true");

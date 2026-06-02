@@ -1,4 +1,9 @@
 import type {
+  CanonicalAuditActor,
+  CanonicalAuditAuthority,
+  CanonicalAuditAuthorityRole,
+} from "../../types/canonicalAuditEvent";
+import type {
   RecoveryActionIntent,
   RecoveryActionType,
   RecoveryAuthority,
@@ -6,6 +11,7 @@ import type {
   RecoveryIntentCaptureRequest,
 } from "../../types/recovery";
 import type { ReviewWorkflowType } from "../stateMachines/types";
+import { appendCanonicalAuditEventSafely, safeAuditReference } from "../../lib/canonicalAudit/appendCanonicalAuditEvent";
 import { asSafeText, isOperatorAuthority, stableRecoveryHash, toUtcIso } from "./recoveryShared";
 import {
   DECISION_CONTINUITY_SNAPSHOTS_COLLECTION,
@@ -40,6 +46,27 @@ type ValidateGateInput = {
   firestore?: RecoveryFirestoreLike;
   now?: string;
 };
+
+function recoveryAuditRole(authority: RecoveryAuthority): CanonicalAuditAuthorityRole {
+  return authority.role === "admin" || authority.role === "support" ? authority.role : "system";
+}
+
+function auditAuthority(authority: RecoveryAuthority): CanonicalAuditAuthority {
+  return {
+    role: recoveryAuditRole(authority),
+    landlordRef: authority.landlordRef,
+    supportAllowed: authority.supportAllowed,
+    rawIdsIncluded: false as const,
+  };
+}
+
+function auditActor(authority: RecoveryAuthority): CanonicalAuditActor {
+  return {
+    role: recoveryAuditRole(authority),
+    operatorRef: authority.operatorRef,
+    rawIdsIncluded: false as const,
+  };
+}
 
 const ACTION_TYPES: RecoveryActionType[] = ["ACCEPT_CANONICAL", "ACCEPT_DERIVED", "EVIDENCE_REVIEW_REQUIRED"];
 
@@ -152,6 +179,26 @@ export async function captureRecoveryActionIntent(input: CaptureIntentInput): Pr
   };
 
   await appendDocument(OPERATOR_RECOVERY_INTENTS_COLLECTION, intent.intentId, intent, input.firestore);
+  await appendCanonicalAuditEventSafely(
+    {
+      eventType: "recovery_intent_captured",
+      actor: auditActor(input.authority),
+      authority: auditAuthority(input.authority),
+      sourceReferenceId: recoveryId,
+      timestamp: capturedAt,
+      metadata: {
+        intentId: intent.intentId,
+        recoveryId: safeAuditReference("recovery", recoveryId),
+        workflowType: candidate.workflowType,
+        actionType: request.actionType,
+        reasonSummary: request.reasonSummary,
+        authorityRole: recoveryAuditRole(input.authority),
+        metadataOnly: true,
+        rawIdsIncluded: false,
+      },
+    },
+    { firestore: input.firestore }
+  );
   return intent;
 }
 
@@ -163,13 +210,35 @@ export async function validateRecoveryActionGate(input: ValidateGateInput): Prom
 
   const rawIntent = await loadSnapshot(OPERATOR_RECOVERY_INTENTS_COLLECTION, intentKey, input.firestore);
   if (!rawIntent || rawIntent.metadataOnly !== true || rawIntent.appendOnly !== true || rawIntent.rawIdsIncluded !== false) {
-    return {
+    const result: RecoveryGateValidation = {
       gateStatus: "denied",
       reason: "intent_missing",
       intentStatus: "missing",
       authorizationValid: false,
       intentFresh: false,
     };
+    await appendCanonicalAuditEventSafely(
+      {
+        eventType: "recovery_gate_validated",
+        actor: auditActor(input.authority),
+        authority: auditAuthority(input.authority),
+        sourceReferenceId: recoveryId,
+        metadata: {
+          intentId: safeAuditReference("recovery_intent", intentKey),
+          recoveryId: safeAuditReference("recovery", recoveryId),
+          gateType: "recovery_action_intent",
+          validationOutcome: "failed",
+          intentStatus: result.intentStatus,
+          authorizationValid: result.authorizationValid,
+          intentFresh: result.intentFresh,
+          denialReason: result.reason || null,
+          metadataOnly: true,
+          rawIdsIncluded: false,
+        },
+      },
+      { firestore: input.firestore }
+    );
+    return result;
   }
 
   const intent = rawIntent as unknown as RecoveryActionIntent;
@@ -181,31 +250,97 @@ export async function validateRecoveryActionGate(input: ValidateGateInput): Prom
   const intentFresh = Number.isFinite(now) && Date.parse(intent.expiresAt) >= now;
 
   if (!authorizationValid) {
-    return {
+    const result: RecoveryGateValidation = {
       gateStatus: "denied",
       reason: "authorization_invalid",
       intentStatus: intent.status,
       authorizationValid: false,
       intentFresh,
     };
+    await appendCanonicalAuditEventSafely(
+      {
+        eventType: "recovery_gate_validated",
+        actor: auditActor(input.authority),
+        authority: auditAuthority(input.authority),
+        sourceReferenceId: recoveryId,
+        metadata: {
+          intentId: safeAuditReference("recovery_intent", intent.intentId),
+          recoveryId: safeAuditReference("recovery", recoveryId),
+          gateType: "recovery_action_intent",
+          validationOutcome: "failed",
+          intentStatus: result.intentStatus,
+          authorizationValid: result.authorizationValid,
+          intentFresh: result.intentFresh,
+          denialReason: result.reason || null,
+          metadataOnly: true,
+          rawIdsIncluded: false,
+        },
+      },
+      { firestore: input.firestore }
+    );
+    return result;
   }
 
   if (!intentFresh) {
-    return {
+    const result: RecoveryGateValidation = {
       gateStatus: "denied",
       reason: "intent_stale",
       intentStatus: intent.status,
       authorizationValid,
       intentFresh: false,
     };
+    await appendCanonicalAuditEventSafely(
+      {
+        eventType: "recovery_gate_validated",
+        actor: auditActor(input.authority),
+        authority: auditAuthority(input.authority),
+        sourceReferenceId: recoveryId,
+        metadata: {
+          intentId: safeAuditReference("recovery_intent", intent.intentId),
+          recoveryId: safeAuditReference("recovery", recoveryId),
+          gateType: "recovery_action_intent",
+          validationOutcome: "failed",
+          intentStatus: result.intentStatus,
+          authorizationValid: result.authorizationValid,
+          intentFresh: result.intentFresh,
+          denialReason: result.reason || null,
+          metadataOnly: true,
+          rawIdsIncluded: false,
+        },
+      },
+      { firestore: input.firestore }
+    );
+    return result;
   }
 
-  return {
+  const result: RecoveryGateValidation = {
     gateStatus: "satisfied",
     intentStatus: intent.status,
     authorizationValid,
     intentFresh,
   };
+  await appendCanonicalAuditEventSafely(
+    {
+      eventType: "recovery_gate_validated",
+      actor: auditActor(input.authority),
+      authority: auditAuthority(input.authority),
+      sourceReferenceId: recoveryId,
+      metadata: {
+        intentId: safeAuditReference("recovery_intent", intent.intentId),
+        recoveryId: safeAuditReference("recovery", recoveryId),
+        gateType: "recovery_action_intent",
+        validationOutcome: "passed",
+        intentStatus: result.intentStatus,
+        authorizationValid: result.authorizationValid,
+        intentFresh: result.intentFresh,
+        denialReason: result.reason || null,
+        metadataOnly: true,
+        rawIdsIncluded: false,
+      },
+    },
+    { firestore: input.firestore }
+  );
+  return result;
 }
 
 export async function listRecentRecoveryIntents(input: {
