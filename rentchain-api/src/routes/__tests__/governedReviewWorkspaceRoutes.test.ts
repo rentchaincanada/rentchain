@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { lifecycleContinuityDates, lifecycleContinuityIds } from "../../__tests__/fixtures/lifecycleContinuityFixtures";
 
 const { fakeDb, resetFakeDb, seedDoc } = vi.hoisted(() => {
   const store = new Map<string, Map<string, any>>();
@@ -151,6 +152,71 @@ describe("governedReviewWorkspaceRoutes", () => {
     });
   }
 
+  function seedLifecycleRecoveryWorkspace() {
+    seedDoc("governedReviewWorkspaceAppendLog", "lifecycle-recovery-workspace", {
+      record: {
+        workspaceType: "recovery_review",
+        title: "Lifecycle continuity recovery workspace",
+        summary: "Synthetic lifecycle recovery candidate for metadata-only review.",
+        workflowFamily: "lifecycle_continuity_recovery",
+        retentionClass: "recovery_review",
+        retentionReason: "fixture only lifecycle continuity review",
+        createdAt: lifecycleContinuityDates.recoveryTimelineAt,
+        lastAppendedAt: lifecycleContinuityDates.recoveryEvidenceAt,
+        safeEvidenceRefs: [
+          {
+            referenceType: "workflow",
+            referenceId: "lifecycle-recovery-safe-ref",
+            label: "Synthetic lease, payment, maintenance, and decision continuity evidence",
+          },
+        ],
+        appendEventRefs: [
+          {
+            eventType: "workspace_candidate_created",
+            eventSummary: "Synthetic lifecycle recovery candidate created for manual review.",
+            occurredAt: lifecycleContinuityDates.recoveryTimelineAt,
+          },
+        ],
+        relatedWorkspaceLinks: [
+          {
+            linkType: "lifecycle_recovery_candidate",
+            sourceSummary: {
+              kind: "recovery_candidate",
+              label: "Lifecycle continuity recovery candidate",
+              category: "recovery_review",
+              severity: "medium",
+              state: "manual_review_required",
+              metadataOnly: true,
+              rawIdsIncluded: false,
+            },
+            targetSummary: {
+              kind: "governed_review_workspace",
+              label: "Lifecycle continuity recovery workspace",
+              category: "recovery_review",
+              severity: "medium",
+              state: "metadata_review_ready",
+              metadataOnly: true,
+              rawIdsIncluded: false,
+            },
+            workflowFamily: "lifecycle_continuity_recovery",
+            metadataOnly: true,
+            visibilityClass: "admin_support_internal",
+            tenantVisible: false,
+            landlordVisible: false,
+            appendCompatible: true,
+            mutationControlsEnabled: false,
+          },
+        ],
+        fixtureIds: [
+          lifecycleContinuityIds.recoveryLeaseId,
+          lifecycleContinuityIds.recoveryPaymentId,
+          lifecycleContinuityIds.recoveryMaintenanceId,
+          lifecycleContinuityIds.recoveryDecisionId,
+        ],
+      },
+    });
+  }
+
   it("denies unauthenticated and non-admin access with route source headers", async () => {
     seedWorkspace();
     const router = (await import("../governedReviewWorkspaceRoutes")).default;
@@ -261,6 +327,47 @@ describe("governedReviewWorkspaceRoutes", () => {
     const post = await invokeRouter(router, { method: "POST", url: "/review-workspaces" });
     expect(post.status).toBe(404);
     expect(post.headers["x-route-source"]).toBe("governedReviewWorkspaceRoutes.ts");
+  });
+
+  it("returns lifecycle recovery workspace candidates as internal metadata only", async () => {
+    seedLifecycleRecoveryWorkspace();
+    const router = (await import("../governedReviewWorkspaceRoutes")).default;
+
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/review-workspaces?q=lifecycle",
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.workspaces).toHaveLength(1);
+    expect(res.body.workspaces[0]).toEqual(
+      expect.objectContaining({
+        metadataOnly: true,
+        visibilityClass: "admin_support_internal",
+        tenantVisible: false,
+        landlordVisible: false,
+        appendOnly: true,
+        mutationControlsEnabled: false,
+        rawPayloadAccessEnabled: false,
+      })
+    );
+    const detail = await invokeRouter(router, {
+      method: "GET",
+      url: `/review-workspaces/${encodeURIComponent(res.body.workspaces[0].workspaceId)}`,
+    });
+    expect(detail.status).toBe(200);
+    expect(detail.body.workspace.relatedWorkspaceLinks[0]).toEqual(
+      expect.objectContaining({
+        linkType: "incident_to_evidence",
+        metadataOnly: true,
+        visibilityClass: "admin_support_internal",
+        tenantVisible: false,
+        landlordVisible: false,
+        mutationControlsEnabled: false,
+      })
+    );
+    expect(detail.body.workspace.title).toBe("Lifecycle continuity recovery workspace");
+    expect(JSON.stringify(detail.body)).not.toMatch(/secret-token|bearer-secret|gs:\/\/|storage\.googleapis\.com|raw-provider-payload/i);
   });
 
   it("returns a safe empty state when no append records exist", async () => {

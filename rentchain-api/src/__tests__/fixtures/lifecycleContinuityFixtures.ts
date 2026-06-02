@@ -1,3 +1,12 @@
+import {
+  DECISION_CONTINUITY_SNAPSHOTS_COLLECTION,
+  RECOVERY_TIMELINE_COLLECTION,
+} from "../../services/recovery/recoveryStore";
+import { workflowKey } from "../../services/recovery/recoveryShared";
+import { buildEvidenceReference, captureTransitionEvidence } from "../../services/stateMachines/evidenceProvenance";
+import { PROVENANCE_EVENTS_COLLECTION } from "../../services/stateMachines/provenanceStorage";
+import type { EvidenceReference, ReviewWorkflowType, TransitionProvenanceEvent, WorkflowEvent, WorkflowState } from "../../services/stateMachines/types";
+
 export type LifecycleContinuityRecord = Record<string, unknown>;
 
 export type LifecycleContinuityLeaseKind = "active" | "upcoming" | "archived";
@@ -27,6 +36,11 @@ export const lifecycleContinuityIds = {
   ledgerEntryId: "lc_ledger_payment_001",
   obligationId: "lc_obligation_2026_06",
   decisionId: "lc_decision_manual_review_001",
+  maintenanceId: "lc_maintenance_cost_review_001",
+  recoveryLeaseId: "lc_recovery_lease_divergence_001",
+  recoveryPaymentId: "lc_recovery_payment_divergence_001",
+  recoveryDecisionId: "lc_recovery_decision_divergence_001",
+  recoveryMaintenanceId: "lc_recovery_maintenance_divergence_001",
   signedDocumentId: "lc_doc_signed_lease_001",
   generatedDocumentId: "lc_doc_generated_lease_001",
   importBatchId: "lc_import_batch_001",
@@ -45,6 +59,9 @@ export const lifecycleContinuityDates = {
   paymentDate: "2026-06-01",
   obligationDueDate: "2026-06-01T00:00:00.000Z",
   decisionCreatedAt: "2026-06-02T10:00:00.000Z",
+  recoveryTimelineAt: "2026-06-02T12:00:00.000Z",
+  recoverySnapshotAt: "2026-06-02T12:05:00.000Z",
+  recoveryEvidenceAt: "2026-06-02T12:10:00.000Z",
 } as const;
 
 export const lifecycleContinuityLabels = {
@@ -59,7 +76,42 @@ export const lifecycleContinuityLabels = {
   archivedTenantName: "Casey Past",
   activeLeaseLabel: "North Towers - Unit 101 Lease",
   upcomingLeaseLabel: "North Towers - Unit 103 Lease",
+  recoveryWorkspaceLabel: "Lifecycle continuity recovery workspace",
 } as const;
+
+type LifecycleRecoveryTransition = {
+  from: WorkflowState;
+  to: WorkflowState;
+  event: WorkflowEvent;
+};
+
+export type LifecycleRecoveryCandidate = {
+  workflowType: ReviewWorkflowType;
+  workflowId: string;
+  workflowInstanceKey: string;
+  snapshotId: string;
+  timelineEntryId: string;
+  expectedDivergenceType: "METADATA_DIVERGENCE" | "EVIDENCE_MISMATCH" | "MISSING_TRANSITION" | "ORPHANED_DECISION";
+  expectedDecision: "ACCEPT_CANONICAL" | "EVIDENCE_REVIEW_REQUIRED";
+  snapshot: LifecycleContinuityRecord;
+  timelineEntry: LifecycleContinuityRecord;
+  provenanceEvent: TransitionProvenanceEvent;
+  evidenceLabel: string;
+};
+
+type LifecycleRecoveryCandidateInput = {
+  workflowType: ReviewWorkflowType;
+  workflowId: string;
+  derivedState?: WorkflowState | null;
+  canonicalState?: WorkflowState | null;
+  evidenceState?: WorkflowState | null;
+  transition: LifecycleRecoveryTransition;
+  expectedDivergenceType: LifecycleRecoveryCandidate["expectedDivergenceType"];
+  expectedDecision: LifecycleRecoveryCandidate["expectedDecision"];
+  evidenceReferenceType: EvidenceReference["referenceType"];
+  evidenceLabel: string;
+  reasonSummary: string;
+};
 
 function cloneRecord<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
@@ -455,4 +507,166 @@ export function buildLifecycleContinuityScenario(): {
     signedDocument: buildLifecycleContinuityLeaseDocument("signed"),
     generatedDocument: buildLifecycleContinuityLeaseDocument("generated"),
   };
+}
+
+function recoveryEvidenceReference(input: LifecycleRecoveryCandidateInput): EvidenceReference {
+  const reference = buildEvidenceReference({
+    workflowType: input.workflowType,
+    referenceType: input.evidenceReferenceType,
+    referenceId: input.workflowId,
+    label: input.evidenceLabel,
+  });
+  if (!reference) throw new Error("lifecycle_recovery_fixture_evidence_missing");
+  return reference;
+}
+
+function buildLifecycleRecoveryCandidate(input: LifecycleRecoveryCandidateInput): LifecycleRecoveryCandidate {
+  const workflowInstanceKey = workflowKey(input.workflowType, input.workflowId);
+  const snapshotId = workflowInstanceKey;
+  const timelineEntryId = `lc_recovery_timeline:${input.workflowType}:${workflowInstanceKey.split(":").pop()}`;
+  const snapshot =
+    input.derivedState == null
+      ? null
+      : {
+          workflowType: input.workflowType,
+          workflowId: input.workflowId,
+          workflowInstanceKey,
+          state: input.derivedState,
+          status: input.derivedState,
+          lifecycleContinuityFixture: true,
+          fixtureOnly: true,
+          metadataOnly: true,
+          rawIdsIncluded: false,
+          createdAt: lifecycleContinuityDates.recoverySnapshotAt,
+          updatedAt: lifecycleContinuityDates.recoverySnapshotAt,
+        };
+  const timelineEntry =
+    input.canonicalState == null
+      ? null
+      : {
+          timelineEntryId,
+          workflowType: input.workflowType,
+          workflowInstanceKey,
+          state: input.canonicalState,
+          status: input.canonicalState,
+          timestamp: lifecycleContinuityDates.recoveryTimelineAt,
+          occurredAt: lifecycleContinuityDates.recoveryTimelineAt,
+          entryType: "LIFECYCLE_DIVERGENCE_FIXTURE",
+          reasonSummary: input.reasonSummary,
+          lifecycleContinuityFixture: true,
+          fixtureOnly: true,
+          metadataOnly: true,
+          appendOnly: true,
+          rawIdsIncluded: false,
+        };
+  const evidenceState = input.evidenceState || input.transition.to;
+  const provenanceEvent = captureTransitionEvidence({
+    workflowType: input.workflowType,
+    workflowInstanceId: input.workflowId,
+    currentState: input.transition.from,
+    proposedState: evidenceState,
+    event: input.transition.event,
+    context: {
+      actorRole: "landlord",
+      actorId: lifecycleContinuityIds.landlordId,
+      landlordId: lifecycleContinuityIds.landlordId,
+      tenantId: lifecycleContinuityIds.activeTenantId,
+      authorized: true,
+    },
+    validation: {
+      valid: true,
+      currentState: input.transition.from,
+      proposedState: evidenceState,
+      allowedTransitions: [evidenceState],
+    },
+    evidenceRefs: [recoveryEvidenceReference(input)],
+    occurredAt: lifecycleContinuityDates.recoveryEvidenceAt,
+  });
+
+  return {
+    workflowType: input.workflowType,
+    workflowId: input.workflowId,
+    workflowInstanceKey,
+    snapshotId,
+    timelineEntryId,
+    expectedDivergenceType: input.expectedDivergenceType,
+    expectedDecision: input.expectedDecision,
+    snapshot: snapshot || {},
+    timelineEntry: timelineEntry || {},
+    provenanceEvent,
+    evidenceLabel: input.evidenceLabel,
+  };
+}
+
+export function buildLifecycleRecoveryCandidates(): LifecycleRecoveryCandidate[] {
+  return [
+    buildLifecycleRecoveryCandidate({
+      workflowType: "lease",
+      workflowId: lifecycleContinuityIds.recoveryLeaseId,
+      derivedState: "Draft",
+      canonicalState: "Active",
+      evidenceState: "Draft",
+      transition: { from: "Draft", to: "Active", event: "activate" },
+      expectedDivergenceType: "METADATA_DIVERGENCE",
+      expectedDecision: "ACCEPT_CANONICAL",
+      evidenceReferenceType: "lease",
+      evidenceLabel: "Synthetic lease activation evidence",
+      reasonSummary: "Synthetic lease fixture diverges between draft snapshot and active timeline state.",
+    }),
+    buildLifecycleRecoveryCandidate({
+      workflowType: "payment",
+      workflowId: lifecycleContinuityIds.recoveryPaymentId,
+      derivedState: "Processing",
+      canonicalState: "Confirmed",
+      evidenceState: "Failed",
+      transition: { from: "Processing", to: "Failed", event: "fail" },
+      expectedDivergenceType: "EVIDENCE_MISMATCH",
+      expectedDecision: "EVIDENCE_REVIEW_REQUIRED",
+      evidenceReferenceType: "payment",
+      evidenceLabel: "Synthetic payment reconciliation evidence",
+      reasonSummary: "Synthetic payment fixture has evidence that conflicts with the derived payment state.",
+    }),
+    buildLifecycleRecoveryCandidate({
+      workflowType: "maintenance",
+      workflowId: lifecycleContinuityIds.recoveryMaintenanceId,
+      derivedState: "CostReview",
+      canonicalState: null,
+      transition: { from: "InProgress", to: "CostReview", event: "request_cost_review" },
+      expectedDivergenceType: "ORPHANED_DECISION",
+      expectedDecision: "EVIDENCE_REVIEW_REQUIRED",
+      evidenceReferenceType: "work_order",
+      evidenceLabel: "Synthetic maintenance cost review evidence",
+      reasonSummary: "Synthetic maintenance fixture has a derived state without a canonical timeline state.",
+    }),
+    buildLifecycleRecoveryCandidate({
+      workflowType: "decision",
+      workflowId: lifecycleContinuityIds.recoveryDecisionId,
+      derivedState: null,
+      canonicalState: "Reviewed",
+      transition: { from: "Appeared", to: "Reviewed", event: "review" },
+      expectedDivergenceType: "MISSING_TRANSITION",
+      expectedDecision: "ACCEPT_CANONICAL",
+      evidenceReferenceType: "decision",
+      evidenceLabel: "Synthetic decision review evidence",
+      reasonSummary: "Synthetic decision fixture has canonical review timeline state without a derived snapshot.",
+    }),
+  ];
+}
+
+export function seedLifecycleRecoveryCandidates(
+  store: {
+    seed: (collection: string, id: string, data: LifecycleContinuityRecord) => void;
+  },
+  candidates: LifecycleRecoveryCandidate[] = buildLifecycleRecoveryCandidates(),
+): LifecycleRecoveryCandidate[] {
+  for (const candidate of candidates) {
+    if (Object.keys(candidate.snapshot).length > 0) {
+      store.seed(DECISION_CONTINUITY_SNAPSHOTS_COLLECTION, candidate.snapshotId, candidate.snapshot);
+    }
+    if (Object.keys(candidate.timelineEntry).length > 0) {
+      store.seed(RECOVERY_TIMELINE_COLLECTION, candidate.timelineEntryId, candidate.timelineEntry);
+    }
+    store.seed(PROVENANCE_EVENTS_COLLECTION, candidate.provenanceEvent.eventId, candidate.provenanceEvent as unknown as LifecycleContinuityRecord);
+  }
+  return candidates;
 }

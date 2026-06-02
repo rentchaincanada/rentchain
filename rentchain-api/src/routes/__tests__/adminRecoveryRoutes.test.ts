@@ -6,6 +6,7 @@ import {
   OPERATOR_RECOVERY_LOGS_COLLECTION,
   RECOVERY_TIMELINE_COLLECTION,
 } from "../../services/recovery/recoveryStore";
+import { seedLifecycleRecoveryCandidates } from "../../__tests__/fixtures/lifecycleContinuityFixtures";
 
 const { collections, dbMock } = vi.hoisted(() => {
   type StoredRecord = Record<string, unknown>;
@@ -286,6 +287,46 @@ describe("adminRecoveryRoutes", () => {
       authorizationValid: true,
       intentFresh: true,
     });
+  });
+
+  it("inspects deterministic lifecycle recovery fixture candidates without exposing raw workflow ids", async () => {
+    const candidates = seedLifecycleRecoveryCandidates({ seed });
+    const router = (await import("../adminRecoveryRoutes")).default;
+
+    for (const candidate of candidates) {
+      const inspected = await invokeRouter(router, {
+        method: "POST",
+        url: "/recovery/inspect",
+        user: { id: "admin-1", role: "admin" },
+        body: { workflowType: candidate.workflowType, workflowId: candidate.workflowId },
+      });
+
+      expect(inspected.status).toBe(200);
+      expect(inspected.body.reconciliation).toMatchObject({
+        workflowType: candidate.workflowType,
+        workflowInstanceKey: candidate.workflowInstanceKey,
+        divergenceType: candidate.expectedDivergenceType,
+        proposedDecision: candidate.expectedDecision,
+        manualReviewRequired: true,
+      });
+      expect(JSON.stringify(inspected.body)).not.toContain(candidate.workflowId);
+    }
+
+    const listed = await invokeRouter(router, {
+      method: "GET",
+      url: "/recovery/logs?includeCandidates=true&limit=10",
+      user: { id: "support-1", role: "support" },
+    });
+    const listedBody = JSON.stringify(listed.body);
+    expect(listed.status).toBe(200);
+    expect((listed.body.candidates as unknown[]).length).toBe(
+      candidates.filter((candidate) => Object.keys(candidate.snapshot).length > 0).length
+    );
+    expect(listedBody).not.toMatch(/secret-token|bearer-secret|gs:\/\/|storage\.googleapis\.com|raw-provider-payload/i);
+    for (const candidate of candidates) {
+      expect(listedBody).not.toContain(candidate.workflowId);
+    }
+    expect(collections.get(OPERATOR_RECOVERY_LOGS_COLLECTION)?.size || 0).toBe(0);
   });
 
   it("rejects recovery intent capture for unauthorized operators and invalid candidates", async () => {
