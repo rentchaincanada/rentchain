@@ -1,4 +1,4 @@
-import React, { memo } from "react";
+import React, { memo, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { Button, Pill } from "../ui/Ui";
 import type { RegistryReviewItem } from "../../api/adminRegistryApi";
@@ -36,12 +36,37 @@ function formatLocation(parts: Array<string | null | undefined>) {
 }
 
 export const RegistryReviewQueueRow = memo(function RegistryReviewQueueRow({ item }: { item: RegistryReviewItem }) {
-  const propertyAddress = item.property
-    ? formatLocation([item.property.addressLine1, item.property.city, item.property.province, item.property.postalCode])
-    : "";
-  const candidateAddress = item.topCandidate
-    ? formatLocation([item.topCandidate.addressLine1, item.topCandidate.city, item.topCandidate.province, item.topCandidate.postalCode])
-    : "";
+  const propertyAddress = useMemo(
+    () =>
+      item.property
+        ? formatLocation([item.property.addressLine1, item.property.city, item.property.province, item.property.postalCode])
+        : "",
+    [item.property]
+  );
+  const candidateAddress = useMemo(
+    () =>
+      item.topCandidate
+        ? formatLocation([item.topCandidate.addressLine1, item.topCandidate.city, item.topCandidate.province, item.topCandidate.postalCode])
+        : "",
+    [item.topCandidate]
+  );
+  const recordPath = useMemo(
+    () => `/admin/registry/records/${encodeURIComponent(item.match.normalizedRecordId)}`,
+    [item.match.normalizedRecordId]
+  );
+  const propertyReviewPath = useMemo(
+    () => (item.match.propertyId ? `/admin/registry/properties/${encodeURIComponent(item.match.propertyId)}` : null),
+    [item.match.propertyId]
+  );
+  const candidateReviewPath = useMemo(
+    () =>
+      item.topCandidate
+        ? `/admin/registry/properties/${encodeURIComponent(item.topCandidate.propertyId)}?normalizedRecordId=${encodeURIComponent(
+            item.match.normalizedRecordId
+          )}`
+        : null,
+    [item.match.normalizedRecordId, item.topCandidate]
+  );
 
   return (
     <div style={rowStyle}>
@@ -81,19 +106,15 @@ export const RegistryReviewQueueRow = memo(function RegistryReviewQueueRow({ ite
       {item.reasonSummary?.length ? <div style={notesStyle}>Review notes: {item.reasonSummary.join(" ")}</div> : null}
       {!item.property && item.topCandidate ? <div style={bodyTextStyle}>Candidate score: {item.topCandidate.score}</div> : null}
       <div style={actionRowStyle}>
-        <Link to={`/admin/registry/records/${encodeURIComponent(item.match.normalizedRecordId)}`}>
+        <Link to={recordPath}>
           <Button variant="secondary">Open record</Button>
         </Link>
-        {item.match.propertyId ? (
-          <Link to={`/admin/registry/properties/${encodeURIComponent(item.match.propertyId)}`}>
+        {propertyReviewPath ? (
+          <Link to={propertyReviewPath}>
             <Button variant="secondary">Open property review</Button>
           </Link>
-        ) : item.topCandidate ? (
-          <Link
-            to={`/admin/registry/properties/${encodeURIComponent(item.topCandidate.propertyId)}?normalizedRecordId=${encodeURIComponent(
-              item.match.normalizedRecordId
-            )}`}
-          >
+        ) : candidateReviewPath ? (
+          <Link to={candidateReviewPath}>
             <Button variant="secondary">Open candidate review</Button>
           </Link>
         ) : null}

@@ -1,4 +1,4 @@
-import React, { startTransition, useDeferredValue, useEffect, useRef, useState } from "react";
+import React, { memo, startTransition, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { MacShell } from "../../components/layout/MacShell";
 import { Button, Card, Input, Pill, Section } from "../../components/ui/Ui";
@@ -18,7 +18,7 @@ const VIRTUAL_OVERSCAN = 3;
 
 type HeightMap = Record<string, number>;
 
-function MeasuredVirtualRow(props: {
+const MeasuredVirtualRow = memo(function MeasuredVirtualRow(props: {
   item: RegistryReviewItem;
   top: number;
   setHeightMap: React.Dispatch<React.SetStateAction<HeightMap>>;
@@ -55,9 +55,9 @@ function MeasuredVirtualRow(props: {
       <RegistryReviewQueueRow item={props.item} />
     </div>
   );
-}
+});
 
-function VirtualizedRegistryReviewList(props: {
+const VirtualizedRegistryReviewList = memo(function VirtualizedRegistryReviewList(props: {
   items: RegistryReviewItem[];
   resetKey: string;
 }) {
@@ -93,29 +93,40 @@ function VirtualizedRegistryReviewList(props: {
     return () => observer.disconnect();
   }, []);
 
-  const itemMetrics: Array<{ item: RegistryReviewItem; top: number; height: number }> = [];
-  let totalHeight = 0;
-  for (const item of props.items) {
-    const height = heightMap[item.match.id] || VIRTUAL_ROW_ESTIMATE;
-    itemMetrics.push({ item, top: totalHeight, height });
-    totalHeight += height + VIRTUAL_ROW_GAP;
-  }
-  totalHeight = Math.max(totalHeight - VIRTUAL_ROW_GAP, 0);
+  const { itemMetrics, totalHeight } = useMemo(() => {
+    const metrics: Array<{ item: RegistryReviewItem; top: number; height: number }> = [];
+    let nextTotalHeight = 0;
+    for (const item of props.items) {
+      const height = heightMap[item.match.id] || VIRTUAL_ROW_ESTIMATE;
+      metrics.push({ item, top: nextTotalHeight, height });
+      nextTotalHeight += height + VIRTUAL_ROW_GAP;
+    }
+    return {
+      itemMetrics: metrics,
+      totalHeight: Math.max(nextTotalHeight - VIRTUAL_ROW_GAP, 0),
+    };
+  }, [heightMap, props.items]);
 
   const viewportBottom = scrollTop + viewportHeight;
-  let startIndex = 0;
-  while (startIndex < itemMetrics.length && itemMetrics[startIndex].top + itemMetrics[startIndex].height < scrollTop) {
-    startIndex += 1;
-  }
-  startIndex = Math.max(0, startIndex - VIRTUAL_OVERSCAN);
+  const visibleItems = useMemo(() => {
+    let startIndex = 0;
+    while (startIndex < itemMetrics.length && itemMetrics[startIndex].top + itemMetrics[startIndex].height < scrollTop) {
+      startIndex += 1;
+    }
+    startIndex = Math.max(0, startIndex - VIRTUAL_OVERSCAN);
 
-  let endIndex = startIndex;
-  while (endIndex < itemMetrics.length && itemMetrics[endIndex].top < viewportBottom) {
-    endIndex += 1;
-  }
-  endIndex = Math.min(itemMetrics.length, endIndex + VIRTUAL_OVERSCAN);
+    let endIndex = startIndex;
+    while (endIndex < itemMetrics.length && itemMetrics[endIndex].top < viewportBottom) {
+      endIndex += 1;
+    }
+    endIndex = Math.min(itemMetrics.length, endIndex + VIRTUAL_OVERSCAN);
 
-  const visibleItems = itemMetrics.slice(startIndex, endIndex);
+    return itemMetrics.slice(startIndex, endIndex);
+  }, [itemMetrics, scrollTop, viewportBottom]);
+
+  const handleScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
+    setScrollTop(event.currentTarget.scrollTop);
+  }, []);
 
   return (
     <div
@@ -128,9 +139,7 @@ function VirtualizedRegistryReviewList(props: {
         minHeight: Math.min(VIRTUAL_LIST_HEIGHT, Math.max(280, props.items.length * 120)),
         paddingRight: 4,
       }}
-      onScroll={(event) => {
-        setScrollTop(event.currentTarget.scrollTop);
-      }}
+      onScroll={handleScroll}
     >
       <div style={{ position: "relative", height: totalHeight }}>
         {visibleItems.map((entry) => (
@@ -144,7 +153,7 @@ function VirtualizedRegistryReviewList(props: {
       </div>
     </div>
   );
-}
+});
 
 export default function AdminRegistryReviewPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -210,9 +219,9 @@ export default function AdminRegistryReviewPage() {
     };
   }, [matchStatus, searchQuery]);
 
-  const resetKey = `${matchStatus}:${searchQuery}`;
+  const resetKey = useMemo(() => `${matchStatus}:${searchQuery}`, [matchStatus, searchQuery]);
 
-  const loadMore = async () => {
+  const loadMore = useCallback(async () => {
     if (!nextCursor || loadingMore) return;
     try {
       setLoadingMore(true);
@@ -232,7 +241,7 @@ export default function AdminRegistryReviewPage() {
     } finally {
       setLoadingMore(false);
     }
-  };
+  }, [loadingMore, matchStatus, nextCursor, searchQuery]);
 
   return (
     <MacShell title="Admin · Registry Review">
