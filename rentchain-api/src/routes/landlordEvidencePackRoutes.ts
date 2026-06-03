@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { requireAuth } from "../middleware/requireAuth";
 import { requireLandlord } from "../middleware/requireLandlord";
 import { deriveAuditComplianceReadiness } from "../lib/auditCompliance/deriveAuditComplianceReadiness";

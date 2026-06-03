@@ -10,7 +10,7 @@ vi.mock("../../services/admin/adminAnalyticsSnapshot", () => ({
   loadAdminAnalyticsSnapshot,
 }));
 
-vi.mock("../../config/firebase", () => ({
+vi.mock("../../firebase", () => ({
   db: {
     collection: vi.fn(() => ({
       where: vi.fn(),

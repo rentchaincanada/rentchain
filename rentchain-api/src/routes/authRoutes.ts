@@ -23,7 +23,7 @@ import { signAuthToken, verifyAuthToken } from "../auth/jwt";
 import { validateLandlordCredentials } from "../services/authService";
 import { getOrCreateAccount } from "../services/accountService";
 import { getOrCreateLandlordProfile } from "../services/landlordProfileService";
-import { db, FieldValue } from "../config/firebase";
+import { db, FieldValue } from "../firebase";
 import { rateLimitAuth, rateLimitSimple } from "../middleware/rateLimit";
 import { requireAuth } from "../middleware/requireAuth";
 import { buildCanonicalSessionUserFromClaims } from "../services/sessionUserService";

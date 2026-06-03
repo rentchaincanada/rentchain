@@ -25,7 +25,7 @@ function buildEmptyQuery() {
   };
 }
 
-vi.mock("../../config/firebase", () => ({
+vi.mock("../../firebase", () => ({
   FieldValue: {
     serverTimestamp: () => "server-timestamp",
   },

@@ -22,7 +22,7 @@ const { fakeDb, resetFakeDb, seedDoc } = vi.hoisted(() => {
 
 let mockUser: any;
 
-vi.mock("../../config/firebase", () => ({ db: fakeDb }));
+vi.mock("../../firebase", () => ({ db: fakeDb }));
 vi.mock("../../config/planMatrix", () => ({
   getPricingHealth: () => ({ ok: true, missing: [], invalid: [], env: "test" }),
 }));

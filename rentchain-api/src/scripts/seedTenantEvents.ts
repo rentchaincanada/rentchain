@@ -1,4 +1,4 @@
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 
 async function seed(tenantId: string, landlordId: string) {
   const now = Date.now();

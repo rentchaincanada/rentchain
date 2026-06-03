@@ -74,7 +74,7 @@ const { dbMock, resetDb, upsertDoc, getDoc } = vi.hoisted(() => {
 
 const enqueueScreeningJobMock = vi.fn(async () => undefined);
 
-vi.mock("../../config/firebase", () => ({
+vi.mock("../../firebase", () => ({
   db: dbMock,
 }));
 

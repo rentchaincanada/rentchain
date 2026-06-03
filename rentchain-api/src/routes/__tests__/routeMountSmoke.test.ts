@@ -45,7 +45,7 @@ vi.mock("../../services/tenanciesService", () => ({
   listTenanciesByTenantId,
 }));
 
-vi.mock("../../config/firebase", () => ({
+vi.mock("../../firebase", () => ({
   db: {
     collection: () => ({
       doc: () => ({

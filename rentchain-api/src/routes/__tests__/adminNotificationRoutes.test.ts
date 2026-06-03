@@ -11,7 +11,7 @@ vi.mock("../../middleware/requireAuth", () => ({
   },
 }));
 
-vi.mock("../../config/firebase", () => ({
+vi.mock("../../firebase", () => ({
   db: {
     collection: () => ({
       async get() {

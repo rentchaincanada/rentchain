@@ -11,7 +11,7 @@ const { store, ensureCollection } = vi.hoisted(() => {
   return { store, ensureCollection };
 });
 
-vi.mock("../../../config/firebase", () => ({
+vi.mock("../../../firebase", () => ({
   db: {
     collection: (name: string) => ({
       async get() {

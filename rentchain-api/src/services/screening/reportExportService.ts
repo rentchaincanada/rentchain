@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import { db } from "../../config/firebase";
+import { db } from "../../firebase";
 import { FRONTEND_URL } from "../../config/screeningConfig";
 import { uploadBufferToGcs } from "../../lib/gcs";
 import { getFileReadStream } from "../../lib/gcsRead";

@@ -1,4 +1,4 @@
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 
 export async function fetchExistingUnitNumbersForProperty(propertyId: string): Promise<Set<string>> {
   const existing = new Set<string>();

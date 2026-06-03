@@ -1,6 +1,6 @@
 import { Request, Response, Router } from "express";
 import crypto from "crypto";
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { getBureauProvider } from "../services/screening/providers/bureauProvider";
 import { putPdfObject } from "../storage/pdfStore";
 import { writeScreeningEvent } from "../services/screening/screeningEvents";

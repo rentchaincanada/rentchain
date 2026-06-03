@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { Timestamp } from "firebase-admin/firestore";
-import { db, FieldValue } from "../config/firebase";
+import { db, FieldValue } from "../firebase";
 import { requireAuth } from "../middleware/requireAuth";
 import { requireLandlord } from "../middleware/requireLandlord";
 

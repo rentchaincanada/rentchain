@@ -15,7 +15,7 @@ import type {
   ScreeningOperationCompleteInput,
   ScreeningStatusView,
 } from "./screeningOpsTypes";
-import { db } from "../../config/firebase";
+import { db } from "../../firebase";
 
 type Actor = {
   id: string;

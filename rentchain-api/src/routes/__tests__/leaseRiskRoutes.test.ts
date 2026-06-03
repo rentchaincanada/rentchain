@@ -101,7 +101,7 @@ const { store, fakeDb, resetFakeDb, seedDoc } = vi.hoisted(() => {
 const buildLeaseRiskInput = vi.fn(async () => ({ monthlyRent: 1900, monthlyIncome: 4800 }));
 const safeAssessLeaseRisk = vi.fn(async () => sampleRisk);
 
-vi.mock("../../config/firebase", () => ({
+vi.mock("../../firebase", () => ({
   db: fakeDb,
 }));
 

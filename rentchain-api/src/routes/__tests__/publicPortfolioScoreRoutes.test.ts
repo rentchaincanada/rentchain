@@ -6,7 +6,7 @@ const getMock = vi.fn();
 const loadLandlordPortfolioHealthInputs = vi.fn();
 const derivePortfolioScoreExternal = vi.fn();
 
-vi.mock("../../config/firebase", () => ({
+vi.mock("../../firebase", () => ({
   db: {
     collection: vi.fn(() => ({
       where: whereMock,

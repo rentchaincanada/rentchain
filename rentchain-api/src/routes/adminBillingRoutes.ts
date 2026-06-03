@@ -2,7 +2,7 @@ import { Router } from "express";
 import admin from "firebase-admin";
 import { requireAdmin } from "../middleware/requireAdmin";
 import { getUsage } from "../services/billingUsage";
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 
 const router = Router();
 

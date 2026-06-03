@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { writeCanonicalEvent } from "../lib/events/buildEvent";
 import { loadAssignmentRecord, ADMIN_ASSIGNMENTS_COLLECTION } from "../lib/assignment/loadAssignmentRecord";
 import { setAssignmentOwner } from "../lib/assignment/setAssignmentOwner";

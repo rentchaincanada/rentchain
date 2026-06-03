@@ -6,7 +6,7 @@ import {
   type SystemObservabilitySummary,
   type SystemObservabilityWorkflow,
 } from "./observabilityTypes";
-import { db } from "../../config/firebase";
+import { db } from "../../firebase";
 
 function toMillis(value: unknown): number {
   const parsed = Date.parse(String(value || ""));

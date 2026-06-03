@@ -4,7 +4,7 @@ import {
   setReportingPaused,
   getPilotLandlordAllowlist,
 } from "../services/reporting/reportingConfig";
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { getProvider } from "../services/creditReporting/providerFactory";
 import { toMetro2LikeRecords } from "../services/creditReporting/metro2Model";
 import { getTenantCreditHistory } from "../services/tenantCreditProfileService";

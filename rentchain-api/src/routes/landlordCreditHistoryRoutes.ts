@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { requireRole } from "../middleware/requireRole";
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { getTenantCreditHistory } from "../services/tenantCreditProfileService";
 
 const router = Router();

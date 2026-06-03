@@ -1,4 +1,4 @@
-import { db } from "../../config/firebase";
+import { db } from "../../firebase";
 import type { WatchlistEntryV1 } from "./watchlistTypes";
 import { ADMIN_WATCHLISTS_COLLECTION } from "./loadWatchlistEntries";
 

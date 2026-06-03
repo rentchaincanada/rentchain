@@ -1,4 +1,4 @@
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { resolvePlanTier } from "../config/capabilities";
 
 type ResolveSource = "landlordId" | "email" | "ownerUid" | "tokenFallback";

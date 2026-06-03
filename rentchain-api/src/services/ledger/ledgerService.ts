@@ -1,4 +1,4 @@
-import { db } from "../..//config/firebase";
+import { db } from "../../firebase";
 import { canonicalize } from "../../lib/ledger/canonicalJson";
 import { sha256Hex } from "../../lib/ledger/hash";
 import {

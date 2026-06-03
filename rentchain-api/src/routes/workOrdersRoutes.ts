@@ -1,7 +1,7 @@
 import { Router } from "express";
 import crypto from "crypto";
 import multer from "multer";
-import { db, FieldValue } from "../config/firebase";
+import { db, FieldValue } from "../firebase";
 import { requireAuth } from "../middleware/requireAuth";
 import { sendEmail } from "../services/emailService";
 import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";

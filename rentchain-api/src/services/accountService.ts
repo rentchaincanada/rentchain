@@ -1,4 +1,4 @@
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { Account, PlanTier } from "../types/account";
 import { entitlementsForPlan } from "./planDefaults";
 

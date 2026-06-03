@@ -1,4 +1,4 @@
-import { db } from "../../config/firebase";
+import { db } from "../../firebase";
 import type { PaymentExecutionStatus, PaymentProvider, PaymentPurpose } from "./paymentTypes";
 
 export const PAYMENT_PROVIDER_EVENT_RECEIPTS_COLLECTION = "paymentProviderEventReceipts";

@@ -2,7 +2,7 @@ import { Router } from "express";
 import { requireAuth } from "../middleware/requireAuth";
 import { requireRole } from "../middleware/requireRole";
 import { getCountersSummary } from "../services/telemetryService";
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { isMicroLiveEnabledForLandlord } from "../services/microLive";
 
 const router = Router();

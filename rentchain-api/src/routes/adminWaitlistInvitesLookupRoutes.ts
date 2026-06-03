@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { requireAdmin } from "../middleware/requireAdmin";
 
 const router = Router();

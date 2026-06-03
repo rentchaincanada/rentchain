@@ -32,7 +32,7 @@ const { store, ensureCollection, constructEventMock, docRef } = vi.hoisted(() =>
   };
 });
 
-vi.mock("../../config/firebase", () => ({
+vi.mock("../../firebase", () => ({
   db: {
     collection: vi.fn((name: string) => ({
       doc: (id: string) => docRef(name, id),

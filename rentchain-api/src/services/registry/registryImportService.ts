@@ -1,4 +1,4 @@
-import { db } from "../../config/firebase";
+import { db } from "../../firebase";
 import { commitInBatches } from "../../imports/firestoreBatch";
 import { recordRegistryAuditEvent } from "./registryAuditService";
 import { uploadBufferToGcs } from "../../lib/gcs";

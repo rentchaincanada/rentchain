@@ -81,7 +81,7 @@ const { dbMock, resetDb, upsertDoc, sendEmailMock } = vi.hoisted(() => {
   };
 });
 
-vi.mock("../../config/firebase", () => ({ db: dbMock }));
+vi.mock("../../firebase", () => ({ db: dbMock }));
 
 vi.mock("../../email/templates/baseEmailTemplate", () => ({
   buildEmailHtml: vi.fn(() => "<p>email</p>"),

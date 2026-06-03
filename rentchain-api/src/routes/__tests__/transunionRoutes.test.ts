@@ -60,7 +60,7 @@ const { dbMock, resetDb, getDoc } = vi.hoisted(() => {
   };
 });
 
-vi.mock("../../config/firebase", () => ({ db: dbMock }));
+vi.mock("../../firebase", () => ({ db: dbMock }));
 
 vi.mock("../../middleware/requireLandlord", () => ({
   requireLandlord: (req: any, _res: any, next: any) => {

@@ -26,7 +26,7 @@ const { fakeDb, resetFakeDb, seedDoc } = vi.hoisted(() => {
 
 let mockUser: any;
 
-vi.mock("../../config/firebase", () => ({ db: fakeDb }));
+vi.mock("../../firebase", () => ({ db: fakeDb }));
 vi.mock("../../middleware/requireAuth", () => ({
   requireAuth: (req: any, res: any, next: any) => {
     if (!mockUser) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });

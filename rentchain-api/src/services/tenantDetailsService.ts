@@ -1,5 +1,5 @@
 // rentchain-api/src/services/tenantDetailsService.ts
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import {
   computeNoResponseState,
   getLeaseNoticeByLeaseId,

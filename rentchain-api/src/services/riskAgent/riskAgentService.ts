@@ -1,4 +1,4 @@
-import { db } from "../../config/firebase";
+import { db } from "../../firebase";
 import { listLedgerEventsV2 } from "../ledgerEventsFirestoreService";
 import { buildReviewSummary } from "../../lib/reviewSummary";
 import { computeTenantSignals } from "../tenantSignalsService";

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { requireAdmin } from "../middleware/requireAdmin";
 import { markScreeningComplete, markScreeningFailed } from "../services/screening/screeningOrchestrator";
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { writeScreeningEvent } from "../services/screening/screeningEvents";
 
 const router = Router();

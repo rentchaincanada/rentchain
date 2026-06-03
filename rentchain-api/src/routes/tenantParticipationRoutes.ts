@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { authenticateJwt } from "../middleware/authMiddleware";
 import { deriveTenantParticipationProfile } from "../lib/tenantParticipation/deriveTenantParticipationProfile";
 import type { TenantParticipationProfile, TenantParticipationStatus } from "../lib/tenantParticipation/tenantParticipationTypes";

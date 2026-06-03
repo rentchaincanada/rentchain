@@ -1,4 +1,4 @@
-import { db } from "../../config/firebase";
+import { db } from "../../firebase";
 import { getStuckThresholdMinutes, getSweepLimit } from "./reportingConfig";
 
 export async function sweepStuckSubmissions(opts?: {

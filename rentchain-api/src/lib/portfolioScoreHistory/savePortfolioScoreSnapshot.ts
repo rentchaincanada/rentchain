@@ -1,4 +1,4 @@
-import { db } from "../../config/firebase";
+import { db } from "../../firebase";
 import { derivePortfolioScore } from "../portfolioScore/derivePortfolioScore";
 import { loadPortfolioScoreSignals } from "../portfolioScore/loadPortfolioScoreSignals";
 import { buildPortfolioScoreSnapshot } from "./buildPortfolioScoreSnapshot";

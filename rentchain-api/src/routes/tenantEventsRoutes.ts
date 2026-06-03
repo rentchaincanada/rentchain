@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, FieldValue } from "../config/firebase";
+import { db, FieldValue } from "../firebase";
 import { authenticateJwt } from "../middleware/authMiddleware";
 
 const router = Router();

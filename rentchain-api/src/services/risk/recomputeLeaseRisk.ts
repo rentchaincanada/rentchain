@@ -1,5 +1,5 @@
 import type { Firestore } from "firebase-admin/firestore";
-import { db as defaultDb } from "../../config/firebase";
+import { db as defaultDb } from "../../firebase";
 import { buildLeaseRiskInput } from "./buildLeaseRiskInput";
 import { safeAssessLeaseRisk } from "./riskEngine";
 import { recomputeTenantScore, type TenantScoreRecomputeResult } from "./recomputeTenantScore";

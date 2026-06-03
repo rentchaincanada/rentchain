@@ -2,7 +2,7 @@
 import { Router } from "express";
 import { CAPABILITIES, resolvePlanTier } from "../config/capabilities";
 import { requireCapability } from "../entitlements/entitlements.middleware";
-import { db, FieldValue } from "../config/firebase";
+import { db, FieldValue } from "../firebase";
 import { normalizeProvince } from "../lib/province";
 import { ensureRegistrySource } from "../services/registry/registryImportService";
 import { getPropertyRegistryProjection, upsertPropertyRegistryProjection } from "../services/registry/registryStatusProjectionService";

@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import { db } from "../../config/firebase";
+import { db } from "../../firebase";
 import type { AssignmentRecordV1 } from "./assignmentTypes";
 
 export const ADMIN_ASSIGNMENTS_COLLECTION = "adminAssignments";

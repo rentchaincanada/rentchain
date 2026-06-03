@@ -68,7 +68,7 @@ const { fakeDb, resetStore, seedDoc, getTenantData } = vi.hoisted(() => {
 const listLedgerEventsV2 = vi.fn(async () => ({ items: [] }));
 const computeTenantScore = vi.fn(() => scoreFactory());
 
-vi.mock("../../config/firebase", () => ({ db: fakeDb }));
+vi.mock("../../firebase", () => ({ db: fakeDb }));
 vi.mock("../ledgerEventsFirestoreService", () => ({ listLedgerEventsV2 }));
 vi.mock("../risk/computeTenantScore", () => ({ computeTenantScore }));
 

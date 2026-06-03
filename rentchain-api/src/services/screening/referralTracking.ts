@@ -1,5 +1,5 @@
 import { createHash } from "crypto";
-import { db } from "../../config/firebase";
+import { db } from "../../firebase";
 
 export type ScreeningReferralStatus = "initiated" | "completed" | "expired";
 export type ScreeningReferralCompletionSource = "callback" | "manual" | "reconcile";

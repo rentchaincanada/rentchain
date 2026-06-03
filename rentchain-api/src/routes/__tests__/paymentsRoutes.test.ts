@@ -43,7 +43,7 @@ function buildQuery(name: string, filters: Array<{ field: string; value: any }> 
   };
 }
 
-vi.mock("../../config/firebase", () => ({
+vi.mock("../../firebase", () => ({
   db: {
     runTransaction: async (handler: any) =>
       handler({

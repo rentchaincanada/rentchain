@@ -1,4 +1,4 @@
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { CAPABILITIES, type CapabilityKey, resolvePlanTier } from "../config/capabilities";
 import { allCanonicalCapabilities } from "./entitlements/planCapabilities";
 

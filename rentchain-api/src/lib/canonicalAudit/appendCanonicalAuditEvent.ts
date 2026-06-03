@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import { db } from "../../config/firebase";
+import { db } from "../../firebase";
 import { CANONICAL_EVENTS_COLLECTION } from "../events/buildEvent";
 import type {
   CanonicalAuditActor,

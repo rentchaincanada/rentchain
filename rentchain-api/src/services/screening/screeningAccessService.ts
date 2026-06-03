@@ -1,5 +1,5 @@
 import admin from "firebase-admin";
-import { db } from "../../config/firebase";
+import { db } from "../../firebase";
 import { getScreeningHistoryDetail } from "./screeningHistoryService";
 
 export type ScreeningReportAccessResult =

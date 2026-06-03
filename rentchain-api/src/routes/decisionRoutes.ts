@@ -1,5 +1,5 @@
 import { Router, Response } from "express";
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { requireAuth } from "../middleware/requireAuth";
 import { deriveDecisions, type Decision } from "../lib/decisions/decisionEngine";
 import {

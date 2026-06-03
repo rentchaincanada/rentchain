@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { requireLandlordOrAdmin } from "../middleware/requireLandlordOrAdmin";
 import { requireAuth } from "../middleware/requireAuth";
 import { rateLimitTenantInvitesUser } from "../middleware/rateLimit";

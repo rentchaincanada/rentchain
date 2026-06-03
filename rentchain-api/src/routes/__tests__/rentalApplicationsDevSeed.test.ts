@@ -58,7 +58,7 @@ const { dbMock, resetStore, upsertApplication, getApplication } = vi.hoisted(() 
   };
 });
 
-vi.mock("../../config/firebase", () => ({ db: dbMock }));
+vi.mock("../../firebase", () => ({ db: dbMock }));
 
 vi.mock("../../middleware/authMiddleware", () => ({
   authenticateJwt: (req: any, _res: any, next: any) => {

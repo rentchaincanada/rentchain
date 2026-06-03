@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { requireMicroLiveAccess } from "../middleware/requireMicroLiveAccess";
 import { incrementCounter, logEvent } from "../services/telemetryService";
 

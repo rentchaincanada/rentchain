@@ -1,4 +1,4 @@
-import { db } from "../../config/firebase";
+import { db } from "../../firebase";
 import { normalizeContractorProfile } from "./loadContractorProfiles";
 
 function asString(value: unknown, max = 400) {

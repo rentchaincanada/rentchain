@@ -65,7 +65,7 @@ const requestMocks = vi.hoisted(() => ({
   getScreeningRequestById: vi.fn(),
 }));
 
-vi.mock("../../config/firebase", () => ({
+vi.mock("../../firebase", () => ({
   db: dbMock,
 }));
 

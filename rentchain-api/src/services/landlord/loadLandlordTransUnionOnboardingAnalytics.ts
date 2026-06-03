@@ -1,4 +1,4 @@
-import { db } from "../../config/firebase";
+import { db } from "../../firebase";
 import { CANONICAL_EVENTS_COLLECTION } from "../../lib/events/buildEvent";
 import type { CanonicalEventV1 } from "../../lib/events/eventTypes";
 

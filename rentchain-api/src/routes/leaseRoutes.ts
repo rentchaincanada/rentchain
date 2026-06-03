@@ -7,7 +7,7 @@ import {
   UpdateLeasePayload,
 } from "../services/leaseService";
 import { requireCapability } from "../services/capabilityGuard";
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { requireLandlord } from "../middleware/requireLandlord";
 import {
   applyPatch,

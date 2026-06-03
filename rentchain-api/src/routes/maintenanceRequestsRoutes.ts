@@ -1,6 +1,6 @@
 import { Router } from "express";
 import multer from "multer";
-import { db, FieldValue } from "../config/firebase";
+import { db, FieldValue } from "../firebase";
 import { authenticateJwt } from "../middleware/authMiddleware";
 import { verifyAuthToken } from "../auth/jwt";
 import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";

@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import { db } from "../../config/firebase";
+import { db } from "../../firebase";
 import { deriveInstitutionalHandoffStatus, type InstitutionalHandoffStatus } from "./deriveInstitutionalHandoffStatus";
 
 export const INSTITUTIONAL_HANDOFFS_COLLECTION = "institutionalHandoffs";

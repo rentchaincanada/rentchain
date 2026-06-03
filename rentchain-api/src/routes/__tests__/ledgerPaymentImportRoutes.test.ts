@@ -71,7 +71,7 @@ const { fakeDb, resetFakeDb, seedDoc, writeTracker } = vi.hoisted(() => {
   };
 });
 
-vi.mock("../../config/firebase", () => ({ db: fakeDb }));
+vi.mock("../../firebase", () => ({ db: fakeDb }));
 
 vi.mock("../../middleware/requireAuth", () => ({
   requireAuth: (req: any, _res: any, next: any) => {

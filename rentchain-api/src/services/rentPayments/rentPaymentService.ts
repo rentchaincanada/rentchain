@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import Stripe from "stripe";
-import { db } from "../../config/firebase";
+import { db } from "../../firebase";
 import { FRONTEND_URL } from "../../config/screeningConfig";
 import { writeCanonicalEvent } from "../../lib/events/buildEvent";
 import { createRentPaymentSession } from "../../lib/payments/paymentExecutionService";

@@ -10,7 +10,7 @@ import {
   finishImportJob,
   failImportJob,
 } from "../imports/importJobs";
-import { db, FieldValue } from "../config/firebase";
+import { db, FieldValue } from "../firebase";
 import { unitDocId } from "../imports/unitId";
 import { uploadCsv } from "../middleware/uploadCsv";
 import { uploadBufferToGcs } from "../lib/gcs";

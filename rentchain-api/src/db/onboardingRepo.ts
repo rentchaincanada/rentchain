@@ -1,4 +1,4 @@
-import { db, FieldValue } from "../config/firebase";
+import { db, FieldValue } from "../firebase";
 import { OnboardingState } from "../models/Onboarding";
 
 const STEP_KEYS: (keyof OnboardingState["steps"])[] = [

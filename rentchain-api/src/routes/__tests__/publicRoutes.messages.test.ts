@@ -77,7 +77,7 @@ const dbMock = {
   }),
 };
 
-vi.mock("../../config/firebase", () => ({
+vi.mock("../../firebase", () => ({
   db: dbMock,
   FieldValue: {
     serverTimestamp: () => "__server_timestamp__",

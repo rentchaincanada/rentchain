@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { requireRole } from "../middleware/requireRole";
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { getReportingRuntimeConfig, getPilotLandlordAllowlist } from "../services/reporting/reportingConfig";
 import { getTenantCreditHistory } from "../services/tenantCreditProfileService";
 import { hashPayload } from "../events/factory";

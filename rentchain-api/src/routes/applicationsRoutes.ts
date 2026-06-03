@@ -25,7 +25,7 @@ import {
   recordApplicationEvent,
   getApplicationEvents,
 } from "../services/applicationEventsService";
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { writeCanonicalEvent } from "../lib/events/buildEvent";
 
 const router = Router();

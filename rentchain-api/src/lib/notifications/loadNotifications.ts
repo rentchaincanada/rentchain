@@ -1,4 +1,4 @@
-import { db } from "../../config/firebase";
+import { db } from "../../firebase";
 import type { NotificationStatus } from "./notificationTypes";
 
 export const ADMIN_NOTIFICATIONS_COLLECTION = "adminNotifications";

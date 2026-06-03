@@ -15,7 +15,7 @@ vi.mock("../../services/admin/adminSubscriptionConversionInsights", () => ({
   loadAdminSubscriptionConversionInsights,
 }));
 
-vi.mock("../../config/firebase", () => ({
+vi.mock("../../firebase", () => ({
   db: {
     collection: vi.fn(() => ({
       where: vi.fn(),

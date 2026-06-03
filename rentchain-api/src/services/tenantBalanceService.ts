@@ -1,5 +1,5 @@
 // src/services/tenantBalanceService.ts
-import { firestore } from "../events/firestore";
+import { firestore } from "../firebase";
 
 export interface TenantBalanceSummary {
   tenantId: string;

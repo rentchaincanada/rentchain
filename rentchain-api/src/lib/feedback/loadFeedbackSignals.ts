@@ -1,4 +1,4 @@
-import { db } from "../../config/firebase";
+import { db } from "../../firebase";
 import type { TenantFeedbackV1 } from "./feedbackTypes";
 
 const TENANT_FEEDBACK_COLLECTION = "tenantFeedback";

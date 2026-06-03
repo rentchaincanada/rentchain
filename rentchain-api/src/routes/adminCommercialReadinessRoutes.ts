@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { getPricingHealth } from "../config/planMatrix";
 import { requireAuth } from "../middleware/requireAuth";
 import { requirePermission } from "../middleware/requireAuthz";

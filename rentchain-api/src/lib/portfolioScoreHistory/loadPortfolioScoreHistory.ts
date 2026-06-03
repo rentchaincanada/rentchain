@@ -1,4 +1,4 @@
-import { db } from "../../config/firebase";
+import { db } from "../../firebase";
 import { PORTFOLIO_SCORE_SNAPSHOTS_COLLECTION } from "./portfolioScoreHistoryConstants";
 import type { PortfolioScoreSnapshotV1 } from "./portfolioScoreHistoryTypes";
 

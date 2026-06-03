@@ -1,7 +1,7 @@
 import { Router } from "express";
 import jwt, { type Secret, type SignOptions } from "jsonwebtoken";
 import { JWT_EXPIRES_IN, JWT_SECRET } from "../config/authConfig";
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 
 const router = Router();
 

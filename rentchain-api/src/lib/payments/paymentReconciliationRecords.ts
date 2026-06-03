@@ -1,4 +1,4 @@
-import { db } from "../../config/firebase";
+import { db } from "../../firebase";
 import type { NormalizedProviderPaymentEvent } from "./paymentProviderAdapter";
 import type { PaymentReconciliationResult } from "./paymentReconciliation";
 import type { PaymentExecutionStatus, PaymentProvider, PaymentPurpose } from "./paymentTypes";

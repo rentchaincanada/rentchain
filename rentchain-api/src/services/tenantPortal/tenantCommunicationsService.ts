@@ -1,4 +1,4 @@
-import { db, FieldValue } from "../../config/firebase";
+import { db, FieldValue } from "../../firebase";
 import { buildEmailHtml, buildEmailText } from "../../email/templates/baseEmailTemplate";
 import { sendEmail } from "../emailService";
 import type { TenancyContext } from "./tenancyContextService";

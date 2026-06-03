@@ -1,4 +1,4 @@
-import { db } from "../../config/firebase";
+import { db } from "../../firebase";
 import type { CanonicalEventV1 } from "../events/eventTypes";
 import { deriveInsightForResource } from "../insights/deriveInsights";
 import { deriveScreeningReconciliation } from "../reconciliation/deriveScreeningReconciliation";

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import crypto from "crypto";
 import admin from "firebase-admin";
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { signAuthToken } from "../auth/jwt";
 
 const router = Router();

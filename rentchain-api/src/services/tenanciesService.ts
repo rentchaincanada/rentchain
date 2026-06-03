@@ -1,4 +1,4 @@
-import { db, FieldValue } from "../config/firebase";
+import { db, FieldValue } from "../firebase";
 
 export type TenancyStatus = "active" | "inactive";
 export type MoveOutReason =

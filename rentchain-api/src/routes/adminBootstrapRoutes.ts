@@ -1,6 +1,6 @@
 import { Router } from "express";
 import admin from "firebase-admin";
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 
 const router = Router();
 

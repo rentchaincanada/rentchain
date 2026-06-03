@@ -1,4 +1,4 @@
-import { db } from "../../config/firebase";
+import { db } from "../../firebase";
 import type { ScreeningResultSummary } from "./providers/types";
 import { writeScreeningEvent } from "./screeningEvents";
 import { writeCanonicalEvent } from "../../lib/events/buildEvent";

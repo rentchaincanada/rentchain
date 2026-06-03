@@ -1,6 +1,6 @@
 // src/routes/papMandateRoutes.ts
 import { Router, Request, Response } from "express";
-import { firestore } from "../events/firestore";
+import { firestore } from "../firebase";
 import {
   createPapMandate,
   getPapMandateById,

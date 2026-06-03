@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import { db, FieldValue } from "../../config/firebase";
+import { db, FieldValue } from "../../firebase";
 import { recordTenantEvent } from "./tenantEventLogService";
 
 export type CreateTenancyInviteInput = {

@@ -28,7 +28,7 @@ vi.mock("../../services/metrics/tuReferralReport", () => ({
   getTuReferralMetricsForMonth: getMetricsMock,
 }));
 
-vi.mock("../../config/firebase", () => ({
+vi.mock("../../firebase", () => ({
   db: {
     collection: () => ({
       where: () => ({

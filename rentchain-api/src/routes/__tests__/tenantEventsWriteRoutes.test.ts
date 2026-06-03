@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const tenantDocs = new Map<string, any>();
 const createdEvents: any[] = [];
 
-vi.mock("../../config/firebase", () => ({
+vi.mock("../../firebase", () => ({
   Timestamp: {
     fromMillis: (value: number) => ({ toMillis: () => value }),
     fromDate: (value: Date) => ({ toMillis: () => value.getTime() }),

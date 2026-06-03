@@ -1,4 +1,4 @@
-import { db } from "../../config/firebase";
+import { db } from "../../firebase";
 import { ADMIN_ALERT_STATES_COLLECTION } from "./loadAlertStates";
 
 export async function saveAlertAcknowledgement(input: {

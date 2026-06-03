@@ -1,7 +1,7 @@
 // src/ai/aiAgentService.ts
 
 import { openaiClient } from "../config/openai";
-import { firestore } from "../config/firebase";
+import { firestore } from "../firebase";
 import {
   AIAgentEvent,
   AIAgentTaskRequestedEvent,

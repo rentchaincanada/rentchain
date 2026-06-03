@@ -44,7 +44,7 @@ const telemetryMocks = vi.hoisted(() => ({
   incrementCounter: vi.fn(async () => undefined),
 }));
 
-vi.mock("../../config/firebase", () => ({
+vi.mock("../../firebase", () => ({
   db: dbMock,
 }));
 

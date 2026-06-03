@@ -2,7 +2,7 @@ import { Router } from "express";
 import { requireAuth } from "../middleware/requireAuth";
 import { requirePermission } from "../middleware/requireAuthz";
 import { appendLedgerEvent, verifyLedgerChain } from "../services/ledger/ledgerService";
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { requireCapability } from "../services/capabilityGuard";
 import multer from "multer";
 import path from "path";

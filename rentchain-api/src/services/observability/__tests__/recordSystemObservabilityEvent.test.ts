@@ -21,7 +21,7 @@ const { store, ensureCollection, setShouldFail, getShouldFail } = vi.hoisted(() 
   };
 });
 
-vi.mock("../../../config/firebase", () => ({
+vi.mock("../../../firebase", () => ({
   db: {
     collection: (name: string) => ({
       doc: (id: string) => ({

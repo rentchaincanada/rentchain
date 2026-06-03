@@ -1,5 +1,5 @@
 // src/services/eventProcessorService.ts
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { analyzeTenantPayments } from "./aiPaymentInsightService";
 import { createLedgerEvent } from "../events/envelope";
 import { ledgerService } from "./ledgerService";

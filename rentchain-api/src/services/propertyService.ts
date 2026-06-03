@@ -1,6 +1,6 @@
 // @ts-nocheck
 import crypto from "crypto";
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 
 export interface Unit {
   id: string;

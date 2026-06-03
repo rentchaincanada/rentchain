@@ -36,7 +36,7 @@ function browserClass(userAgent: string) {
 
 export async function recordPdfExportTelemetry(input: RecordPdfExportTelemetryInput): Promise<void> {
   try {
-    const { db } = await import("../../config/firebase");
+    const { db } = await import("../../firebase");
     const actor = actorFromRequest(input.req);
     const userId = actor.actorId;
     const landlordId = actor.landlordId;

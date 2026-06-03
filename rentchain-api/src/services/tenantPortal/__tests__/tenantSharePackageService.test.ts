@@ -64,7 +64,7 @@ const resolveTenancyContext = vi.fn();
 const loadTenantIdentityRecord = vi.fn();
 const loadTenantApplicationReuseProjection = vi.fn();
 
-vi.mock("../../../config/firebase", () => ({ db: dbMock }));
+vi.mock("../../../firebase", () => ({ db: dbMock }));
 vi.mock("../tenancyContextService", () => ({ resolveTenancyContext }));
 vi.mock("../tenantProfileService", () => ({ loadTenantApplicationReuseProjection, loadTenantIdentityRecord }));
 

@@ -1,4 +1,4 @@
-import { db } from "../../config/firebase";
+import { db } from "../../firebase";
 import type { ResolutionRecordV1, ResolutionStatus } from "./resolutionTypes";
 
 export const ADMIN_RESOLUTIONS_COLLECTION = "adminResolutions";

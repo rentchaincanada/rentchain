@@ -1,4 +1,4 @@
-import { db } from "../../config/firebase";
+import { db } from "../../firebase";
 
 export type TenancyAuthority = "applicant" | "active_tenant" | "invite";
 

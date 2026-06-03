@@ -44,7 +44,7 @@ const { collectionStore, dbMock, uploadBufferToGcsMock, getFileReadStreamMock } 
   return { collectionStore, dbMock, uploadBufferToGcsMock, getFileReadStreamMock };
 });
 
-vi.mock("../../config/firebase", () => ({
+vi.mock("../../firebase", () => ({
   db: dbMock,
 }));
 

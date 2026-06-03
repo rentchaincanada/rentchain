@@ -1,5 +1,5 @@
 // src/services/aiPaymentInsightService.ts
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { RentPaymentRecordedData } from "../events/financial/RentPaymentRecorded";
 import { RentPaymentAIInsightData } from "../events/ai/RentPaymentAIInsightGenerated";
 

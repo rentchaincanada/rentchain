@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { requireLandlord } from "../middleware/requireLandlord";
 import { recordRiskDecisionAudit } from "../services/riskAgent/riskDecisionAuditService";
 import { evaluateApplicationRisk, getLatestApplicationRisk } from "../services/riskAgent/riskAgentService";

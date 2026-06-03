@@ -1,4 +1,4 @@
-import { db } from "../../config/firebase";
+import { db } from "../../firebase";
 import type { RegistryAuditEventType, RegistrySourceKey } from "./registryTypes";
 import { compactObject, nowIso } from "./registryUtils";
 

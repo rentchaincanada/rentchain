@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import {
   deriveFinancialProjectionRows,
   type FinancialProjectionRow,

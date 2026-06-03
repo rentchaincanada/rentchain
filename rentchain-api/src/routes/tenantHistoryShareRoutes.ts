@@ -1,7 +1,7 @@
 import { Router } from "express";
 import crypto from "crypto";
 import { authenticateJwt } from "../middleware/authMiddleware";
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { listLedgerEventsV2 } from "../services/ledgerEventsFirestoreService";
 import { computeTenantSignals } from "../services/tenantSignalsService";
 

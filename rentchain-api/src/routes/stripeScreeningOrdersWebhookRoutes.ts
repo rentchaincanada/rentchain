@@ -1,6 +1,6 @@
 import { Request, Response, Router } from "express";
 import Stripe from "stripe";
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { getStripeClient } from "../services/stripeService";
 import { STRIPE_WEBHOOK_SECRET } from "../config/screeningConfig";
 import { stripeNotConfiguredResponse, isStripeNotConfiguredError } from "../lib/stripeNotConfigured";
