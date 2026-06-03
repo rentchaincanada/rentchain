@@ -85,6 +85,17 @@ Security telemetry retention is defined as internal, non-portable, non-exportabl
 
 Current risk posture: the strongest immutability semantics are in canonical audit helpers. Other audit/event collections are append-like by convention in the audited writers but are not uniformly protected by immutable helper semantics.
 
+### Verification
+
+Phase 3 audit immutability verification is documented in four companion files:
+
+- `docs/security/audit-immutability-contract-v1.md` defines the append-only contract for `events`, `adminAuditEvents`, `registryAuditLog`, `canonicalEvents`, and audit-adjacent ledger event collections.
+- `docs/security/audit-immutability-status-v1.md` records current writer semantics, including the full compliance of `appendCanonicalAuditEvent`, partial compliance of `writeCanonicalEvent`, and merge-risk posture of `eventDispatcher.recordDomainEvent`.
+- `docs/security/audit-immutability-verification-checklist-v1.md` gives design-time PR checks and read-only operator checks for staging and production.
+- `docs/security/audit-immutability-roadmap-v1.md` recommends report-only index-based verification as the next Phase 4 step before Firestore rules or schema-level enforcement.
+
+The verification contract does not implement runtime enforcement. It documents the current state: canonical audit records have explicit immutable markers, older event collections remain append-like by convention, and general event read routes should be reviewed for explicit route-level scope guards in a future mission.
+
 ## Firebase Initialization Security
 
 Backend Firebase Admin initialization runs the Firestore environment guard before initialization in both the canonical config path and the legacy wrapper (`rentchain-api/src/config/firebase.ts:3-18`, `rentchain-api/src/firebase.ts:1-18`). The canonical config exports Firestore, `db`, and `FieldValue`, and sets `ignoreUndefinedProperties` (`rentchain-api/src/config/firebase.ts:20-25`). It logs the configured project ID at startup (`rentchain-api/src/config/firebase.ts:27-28`).
