@@ -45,7 +45,7 @@ Current auth route issuance points include contractor signup, landlord signup, l
 
 Backend logout currently returns `{ "message": "Logged out" }` and does not revoke outstanding JWTs server-side (`rentchain-api/src/routes/authRoutes.ts:2144-2146`). Frontend logout clears local token state before calling backend logout when a token exists (`rentchain-frontend/src/context/AuthContext.tsx:496-513`). The frontend API logout call posts to `/api/auth/logout` and sends the current token as an Authorization header when provided (`rentchain-frontend/src/api/authApi.ts:256-261`).
 
-This contract records logout as client-token clearing plus backend acknowledgement. It does not claim full server-side revocation.
+This contract records logout as client-token clearing plus backend acknowledgement. It does not claim full server-side revocation. See `docs/security/logout-session-revocation-contract-v1.md` for the detailed logout, concurrent-session, trusted-device, and revocation-boundary contract.
 
 ## Password Recovery Contract
 

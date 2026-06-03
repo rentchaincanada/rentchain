@@ -1,26 +1,48 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import jwt from "jsonwebtoken";
 
 const mocks = vi.hoisted(() => ({
   sendEmail: vi.fn(async () => ({ ok: true })),
 }));
 
-vi.mock("../../config/firebase", () => ({
-  db: {
-    collection: () => ({
-      doc: () => ({
-        get: vi.fn(async () => ({ exists: false, data: () => undefined })),
-        set: vi.fn(async () => undefined),
-      }),
-      where: () => ({
-        limit: () => ({
-          get: vi.fn(async () => ({ empty: true, docs: [] })),
-        }),
+const dbMock = {
+  collection: () => ({
+    doc: () => ({
+      get: vi.fn(async () => ({ exists: false, data: () => undefined })),
+      set: vi.fn(async () => undefined),
+    }),
+    where: () => ({
+      limit: () => ({
+        get: vi.fn(async () => ({ empty: true, docs: [] })),
       }),
     }),
+  }),
+};
+
+const fieldValueMock = {
+  serverTimestamp: () => "__server_timestamp__",
+  arrayUnion: (...values: unknown[]) => values,
+};
+
+vi.mock("../../config/firebase", () => ({
+  db: dbMock,
+  FieldValue: fieldValueMock,
+}));
+
+vi.mock("../../firebase", () => ({
+  db: dbMock,
+  firestore: dbMock,
+  FieldValue: fieldValueMock,
+}));
+
+vi.mock("firebase-admin", () => ({
+  default: {
+    firestore: {
+      FieldValue: fieldValueMock,
+    },
   },
-  FieldValue: {
-    serverTimestamp: () => "__server_timestamp__",
-    arrayUnion: (...values: unknown[]) => values,
+  db: {
+    collection: dbMock.collection,
   },
 }));
 
@@ -31,7 +53,13 @@ vi.mock("../../services/emailService", () => ({
 
 async function invokeRouter(
   router: any,
-  options: { method: string; url: string; body?: any; headers?: Record<string, string> }
+  options: {
+    method: string;
+    url: string;
+    body?: any;
+    headers?: Record<string, string>;
+    path?: string;
+  }
 ) {
   return await new Promise<{ status: number; body: any; text: string }>((resolve, reject) => {
     const [pathWithQuery, queryRaw = ""] = options.url.split("?");
@@ -47,7 +75,7 @@ async function invokeRouter(
       method: options.method,
       url: options.url,
       originalUrl: options.url,
-      path: pathWithQuery,
+      path: options.path ?? pathWithQuery,
       body: options.body ?? {},
       headers,
       query,
@@ -113,11 +141,40 @@ async function invokeAuth(options: {
   url: string;
   body?: any;
   headers?: Record<string, string>;
+  path?: string;
 }) {
   return await invokeRouter(authRoutes, options);
 }
 
+async function invokeTenantAuth(options: {
+  method: string;
+  url: string;
+  body?: any;
+  headers?: Record<string, string>;
+}) {
+  return await invokeRouter(tenantAuthRoutes, options);
+}
+
+function makeAuthToken(options?: { expiresIn?: string; subject?: string }) {
+  return makeAuthTokenWithSecret("test-secret", options);
+}
+
+function makeAuthTokenWithSecret(secret: string, options?: { expiresIn?: string; subject?: string }) {
+  return jwt.sign(
+    {
+      sub: options?.subject ?? "landlord-session-1",
+      email: "landlord@example.test",
+      role: "landlord",
+      landlordId: options?.subject ?? "landlord-session-1",
+      ver: 1,
+    },
+    secret,
+    { expiresIn: options?.expiresIn ?? "7d" }
+  );
+}
+
 let authRoutes: typeof import("../authRoutes").default;
+let tenantAuthRoutes: typeof import("../tenantAuthRoutes").default;
 
 describe("auth recovery contract", () => {
   beforeEach(async () => {
@@ -126,6 +183,7 @@ describe("auth recovery contract", () => {
     delete process.env.EMAIL_FROM;
     delete process.env.FROM_EMAIL;
     authRoutes = (await import("../authRoutes")).default;
+    tenantAuthRoutes = (await import("../tenantAuthRoutes")).default;
   });
 
   it.each(["/refresh", "/resetPassword", "/verifyEmail"])(
@@ -160,6 +218,137 @@ describe("auth recovery contract", () => {
     expect(JSON.stringify(res.body)).not.toContain("token");
     expect(JSON.stringify(res.body)).not.toContain("session");
     expect(JSON.stringify(res.body)).not.toContain("revoked");
+  });
+
+  it("allows landlord logout without an authorization header", async () => {
+    const res = await invokeAuth({
+      method: "POST",
+      url: "/logout",
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ message: "Logged out" });
+  });
+
+  it("allows landlord logout with an invalid token because logout does not verify session state", async () => {
+    const res = await invokeAuth({
+      method: "POST",
+      url: "/logout",
+      headers: { Authorization: "Bearer invalid.token.value" },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ message: "Logged out" });
+  });
+
+  it("allows landlord logout with an expired token because logout does not check expiry", async () => {
+    const expiredToken = makeAuthToken({ expiresIn: "-1s" });
+
+    const res = await invokeAuth({
+      method: "POST",
+      url: "/logout",
+      headers: { Authorization: `Bearer ${expiredToken}` },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ message: "Logged out" });
+  });
+
+  it("does not revoke the submitted landlord token server-side after logout acknowledgement", async () => {
+    const token = makeAuthToken();
+
+    const logoutRes = await invokeAuth({
+      method: "POST",
+      url: "/logout",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(logoutRes.status).toBe(200);
+
+    const meRes = await invokeAuth({
+      method: "GET",
+      url: "/me",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    expect(meRes.status).toBe(200);
+    expect(meRes.body).toMatchObject({
+      ok: true,
+      user: {
+        id: "landlord-session-1",
+        role: "landlord",
+        landlordId: "landlord-session-1",
+      },
+    });
+  });
+
+  it("does not invalidate concurrent landlord sessions when one token is logged out", async () => {
+    const firstToken = makeAuthToken({ subject: "landlord-session-1" });
+    const secondToken = makeAuthToken({ subject: "landlord-session-2" });
+
+    const logoutRes = await invokeAuth({
+      method: "POST",
+      url: "/logout",
+      headers: { Authorization: `Bearer ${firstToken}` },
+    });
+    expect(logoutRes.status).toBe(200);
+
+    const secondSessionRes = await invokeAuth({
+      method: "GET",
+      url: "/me",
+      headers: { Authorization: `Bearer ${secondToken}` },
+    });
+
+    expect(secondSessionRes.status).toBe(200);
+    expect(secondSessionRes.body?.user?.id).toBe("landlord-session-2");
+  });
+
+  it("documents tenant logout as acknowledgement-only without token internals", async () => {
+    const res = await invokeTenantAuth({
+      method: "POST",
+      url: "/logout",
+      headers: { Authorization: "Bearer tenant.header.payload" },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ ok: true });
+    expect(JSON.stringify(res.body)).not.toContain("token");
+    expect(JSON.stringify(res.body)).not.toContain("session");
+    expect(JSON.stringify(res.body)).not.toContain("revoked");
+  });
+
+  it("allows tenant logout without token validation", async () => {
+    const noTokenRes = await invokeTenantAuth({
+      method: "POST",
+      url: "/logout",
+    });
+    const invalidTokenRes = await invokeTenantAuth({
+      method: "POST",
+      url: "/logout",
+      headers: { Authorization: "Bearer invalid.tenant.token" },
+    });
+
+    expect(noTokenRes.status).toBe(200);
+    expect(noTokenRes.body).toEqual({ ok: true });
+    expect(invalidTokenRes.status).toBe(200);
+    expect(invalidTokenRes.body).toEqual({ ok: true });
+  });
+
+  it("documents 2FA disablement as authenticated and without session revocation fields", async () => {
+    const token = makeAuthTokenWithSecret("rentchain-dev-jwt-secret", { subject: "landlord-demo" });
+
+    const res = await invokeAuth({
+      method: "POST",
+      url: "/2fa/disable",
+      path: "/api/auth/2fa/disable",
+      headers: { Authorization: `Bearer ${token}` },
+      body: { code: "123456" },
+    });
+
+    expect([400, 401]).toContain(res.status);
+    expect(res.body).toEqual(expect.objectContaining({ error: expect.any(String) }));
+    expect(res.body).not.toHaveProperty("revoked");
+    expect(res.body).not.toHaveProperty("revokedSessions");
+    expect(res.body).not.toHaveProperty("revokedTrustedDevices");
   });
 
   it("rejects password-reset confirmation notification with invalid email", async () => {
