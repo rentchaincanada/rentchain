@@ -1,76 +1,70 @@
-PR: #1080
-PR URL: https://github.com/rentchaincanada/rentchain/pull/1080
-Branch: test/lifecycle-continuity-fixtures-v1
+PR: #1085
+PR URL: https://github.com/rentchaincanada/rentchain/pull/1085
+Branch: feat/phase-3-auth-session-revocation-design-v1
 
 # Implementation Summary
 
 ## Scope
 
-Completed the Phase 2B lifecycle continuity fixtures mission as a fixture and test coverage change. The implementation extends existing backend lifecycle continuity fixtures and adds test coverage for synthetic recovery candidates, recovery intent capture, governed review workspace metadata, and landlord-scoped review timeline continuity.
+Completed Phase 3 Mission 4 as a documentation and design-validation test mission. The work documents future auth session revocation design options, incident response readiness, and current logout/session limitations without changing runtime auth behavior.
 
-No backend routes, frontend routes, services, middleware, Firestore rules, infrastructure, dependencies, production data paths, or production source behavior were changed.
-
-Follow-up repair completed after PR CI: removed the frontend regression test dependency on backend lifecycle fixtures so frontend tests no longer import backend Firebase configuration or `firebase-admin`.
+No auth routes, middleware, services, Firestore rules, Firestore indexes, infrastructure, dependencies, frontend behavior, production data, or runtime revocation behavior were changed.
 
 ## Files Changed
 
-- `rentchain-api/src/__tests__/fixtures/lifecycleContinuityFixtures.ts`
-- `rentchain-api/src/__tests__/fixtures/lifecycleContinuityFixtures.test.ts`
-- `rentchain-api/src/routes/__tests__/adminRecoveryRoutes.test.ts`
-- `rentchain-api/src/routes/__tests__/governedReviewWorkspaceRoutes.test.ts`
-- `rentchain-api/src/routes/__tests__/landlordReviewTimelineRoutes.test.ts`
-- `rentchain-api/src/services/recovery/__tests__/recoveryIntentService.test.ts`
-- `rentchain-frontend/src/components/properties/PropertyOccupancyRegression.test.tsx`
-- `rentchain-frontend/src/test/fixtures/lifecycleContinuityFixtures.ts`
-- `.handoff/impl-summary.md`
+- `docs/security/auth-incident-response-runbook-v1.md`
+- `docs/security/auth-session-revocation-glossary-v1.md`
+- `docs/security/logout-session-revocation-contract-v1.md`
+- `docs/security/security-inventory.md`
+- `docs/security/session-revocation-design-options-v1.md`
+- `docs/security/session-revocation-incident-scenarios-v1.md`
+- `rentchain-api/src/routes/__tests__/sessionRevocationDesignValidation.test.ts`
 
 ## Implementation
 
-- Added deterministic lifecycle recovery candidate builders for lease, payment, maintenance, and decision workflows.
-- Added fixture seeding for existing recovery collections: `decisionContinuitySnapshots`, `canonicalRecoveryTimelineEntries`, and `transitionProvenanceEvents`.
-- Added fixture tests proving deterministic output, metadata-only provenance, append-safe metadata, raw payload exclusion, and isolated test-store seeding.
-- Added recovery intent coverage proving lifecycle fixture candidates can capture advisory intents and validate gates without creating recovery logs or mutating source state.
-- Added admin recovery route coverage proving synthetic lifecycle candidates can be inspected through existing recovery endpoints without exposing raw workflow IDs.
-- Added governed review workspace route coverage for a synthetic lifecycle recovery workspace candidate, preserving internal metadata-only read behavior.
-- Added landlord review timeline coverage for synthetic maintenance lifecycle divergence through existing landlord-scoped timeline semantics.
-- Repaired the frontend occupancy regression test to import pure frontend-local lifecycle fixture builders instead of backend test fixtures.
-- Extended the frontend lifecycle fixture module with pure property, unit, tenant, and lease builders used by the regression test.
+- Added session revocation design options for session-record, JWT deny-list, and token-version models.
+- Added current-state versus future-design boundaries for each revocation model.
+- Added Firestore, audit, incident-response, and multi-device considerations for each design option.
+- Added an auth incident response runbook covering `auth_session`, `credential_secret`, and `admin_support_access` incident types.
+- Added incident scenario documentation for account compromise, malicious device registration, support console abuse, multi-tenant scope concern, and bulk auth incident handling.
+- Added a glossary defining session, token, token revocation, token fingerprint, token hash, session identity, device identity, incident response, mitigation, containment, remediation, audit linkage, audit immutability, and append-safe terminology.
+- Extended the logout/session revocation contract with current revocation gaps, design roadmap, and incident response integration.
+- Added pure design-validation tests asserting revocation design invariants without importing runtime auth modules or Firestore clients.
+- Normalized one pre-existing security inventory phrase so the mission's broad security-doc scan has zero `raw token`, `raw credential`, or `raw secret` matches.
 
 ## Validation
 
-- `cd rentchain-api && npm test -- --runInBand src/__tests__/fixtures/lifecycleContinuityFixtures.test.ts src/services/recovery/__tests__/recoveryIntentService.test.ts src/routes/__tests__/adminRecoveryRoutes.test.ts src/routes/__tests__/governedReviewWorkspaceRoutes.test.ts src/routes/__tests__/landlordReviewTimelineRoutes.test.ts` passed under Node 20.20.2.
-- `cd rentchain-api && npm test -- --runInBand src/routes/__tests__/landlordOperatorReviewRoutes.test.ts src/lib/canonicalAudit/__tests__/canonicalAuditEvent.test.ts src/services/stateMachines/__tests__/reviewWorkflowAudit.test.ts` passed under Node 20.20.2.
-- `cd rentchain-frontend && npm test -- --runInBand src/pages/admin/AdminReviewWorkspacesPage.test.tsx src/pages/ReviewTimelinePage.test.tsx src/pages/DecisionInboxPage.test.tsx src/components/operatorReviews/OperatorReviewSessionPanel.test.tsx` was attempted under Node 20.20.2 and failed because the frontend Vitest version rejects `--runInBand`.
-- `cd rentchain-frontend && npm test -- src/pages/admin/AdminReviewWorkspacesPage.test.tsx src/pages/ReviewTimelinePage.test.tsx src/pages/DecisionInboxPage.test.tsx src/components/operatorReviews/OperatorReviewSessionPanel.test.tsx` passed under Node 20.20.2.
-- `cd rentchain-frontend && npm test -- src/components/properties/PropertyOccupancyRegression.test.tsx` passed under Node 20.20.2 after the import repair.
-- `cd rentchain-frontend && npm run test` passed under Node 20.20.2 after the import repair: 289 test files and 1146 tests passed.
-- `cd rentchain-api && npm test -- --runInBand src/__tests__/fixtures/lifecycleContinuityFixtures.test.ts src/services/recovery/__tests__/recoveryIntentService.test.ts src/routes/__tests__/adminRecoveryRoutes.test.ts src/routes/__tests__/governedReviewWorkspaceRoutes.test.ts src/routes/__tests__/landlordReviewTimelineRoutes.test.ts src/routes/__tests__/landlordOperatorReviewRoutes.test.ts src/lib/canonicalAudit/__tests__/canonicalAuditEvent.test.ts src/services/stateMachines/__tests__/reviewWorkflowAudit.test.ts` passed under Node 20.20.2 after the import repair.
-- Confirmed no frontend source or test file imports `rentchain-api/src/config/firebase`, `rentchain-api/src/firebase`, `firebase-admin`, or the backend lifecycle continuity fixture module.
+- `npm --prefix rentchain-api run test:single -- src/routes/__tests__/sessionRevocationDesignValidation.test.ts src/routes/__tests__/authRecoveryContract.test.ts` passed: 2 test files and 41 tests passed.
+- `npm --prefix rentchain-api run build` passed.
+- `rg -n "raw token|raw credential|raw secret" docs/security/*.md` passed with zero matches.
+- `rg -n "export.*session|export.*revocation|export.*incident" docs/security/*.md` passed with zero matches.
 - `git diff --check` passed.
-- Prohibited artifact text scan passed for changed files.
+- `git diff --cached --check` passed.
+- Prohibited artifact text and credential-pattern scan passed for changed files.
+- Confirmed no package files, Firestore rules, runtime auth files, frontend files, infrastructure files, or production guard files were modified.
 
 ## Manual QA
 
 Manual QA required: no.
 
-Reason: the mission changed test fixtures and test coverage only. No frontend rendering implementation, backend route implementation, auth flow, routing, mobile layout, or user-visible behavior was changed.
+Reason: the mission changed documentation and backend design-validation tests only. No frontend rendering, backend route implementation, auth flow behavior, routing, mobile layout, or user-visible behavior was changed.
 
-Manual QA checklist reviewed from tests:
+Manual QA checklist reviewed from tests and documentation:
 
-- Synthetic fixture values are test-only and non-production.
-- Governed review workspace candidate remains metadata-only and admin/support internal.
-- Landlord review timeline fixture remains landlord-scoped and manual-review oriented.
-- Recovery intent fixture coverage captures advisory intent and validates gates without recovery logs or source-state mutation.
-- Tenant/landlord/admin separation is preserved by unchanged route guards and existing projection tests.
+- Current logout remains acknowledgement-only.
+- Current JWTs remain stateless and expiration-based unless future work implements revocation.
+- Future revocation designs are documented as non-runtime options.
+- Incident response guidance is manual and does not introduce automated containment.
+- Tenant, landlord, admin, and support separation remains unchanged.
 
 ## Known Limitations
 
-- The frontend mission command with `--runInBand` is incompatible with the installed frontend Vitest CLI, so the same frontend test files were rerun successfully without that flag.
-- Candidate listing through `/recovery/logs?includeCandidates=true` starts from snapshot records by current implementation, so timeline-only decision candidates are tested through direct inspect and intent capture rather than the list endpoint.
-- The governed review workspace persistence validator normalizes unsupported workspace types to existing canonical workspace types; the test asserts metadata-only behavior rather than introducing a new workspace type.
-- No production source files changed, so no package build was required by the mission rule.
-- PR CI previously failed because `PropertyOccupancyRegression.test.tsx` imported the backend lifecycle fixture module, which pulled backend Firebase configuration into the frontend test graph. That import path has been removed and replaced with frontend-local pure fixture builders.
+- This mission does not implement server-side session revocation.
+- This mission does not add session records, token denial records, token version fields, Firestore collections, indexes, or Firestore rules.
+- This mission does not add incident automation, revocation endpoints, account-wide logout, device listing, or device-specific logout.
+- Current logout semantics remain unchanged: frontend token clearing plus backend acknowledgement, without invalidating outstanding JWTs server-side.
+- PR #1085 is open as a draft for review and CI validation.
 
 ## Recommended Next Step
 
-Keep PR #1080 in draft until remote CI is fully green after the repair push. After this mission merges, continue toward Phase 3 security and operational hardening.
+Review PR #1085 and wait for CI. If approved and green, proceed through the normal QA gate. The recommended follow-up mission is Phase 4 implementation planning for a selected auth session revocation model.
