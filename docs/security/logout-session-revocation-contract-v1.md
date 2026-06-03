@@ -12,7 +12,7 @@ The current model is stateless for issued JWTs. Logout is client-side token clea
 
 `rentchain-api/src/routes/tenantAuthRoutes.ts` defines `POST /logout`, which returns status 200 with `{ "ok": true }` (`rentchain-api/src/routes/tenantAuthRoutes.ts:52-54`). The current `app.build.ts` route audit did not find this module mounted as `/api/tenant-auth/logout`; this document records the route module contract and does not change runtime mounting.
 
-Neither logout handler returns raw tokens, session identifiers, revocation metadata, storage paths, or provider payloads.
+Neither logout handler returns bearer values, session identifiers, revocation metadata, storage paths, or provider payloads.
 
 ## Logout Semantics
 
@@ -89,6 +89,37 @@ Current logout does not revoke:
 
 Current logout also does not write audit records, session records, or revocation records.
 
+## Current Revocation Gaps
+
+Current state does not provide:
+
+- A server-side active session inventory.
+- Per-session logout revocation.
+- Per-device revocation.
+- JWT deny-list lookup.
+- Token-version invalidation.
+- Trusted-device server-side revocation.
+- Account-wide concurrent-session invalidation.
+- Auth incident containment automation.
+
+These gaps are documented so future work can decide whether to implement server-side revocation without confusing the current logout acknowledgement with a stronger guarantee.
+
+## Design Roadmap
+
+Future revocation work should use `docs/security/session-revocation-design-options-v1.md` as the starting point. That document compares:
+
+- Session-record model for per-session and per-device control.
+- JWT deny-list model for token or issued-at cutoff denial.
+- Token-version model for user-wide invalidation.
+
+Any future implementation must remain a separate mission and must include route-level tests, projection-safety tests, append-safe audit linkage, and explicit tenant/landlord/admin separation.
+
+## Incident Response Integration
+
+Auth incidents should follow `docs/security/auth-incident-response-runbook-v1.md`. Current operational response remains manual and may include password reset, account disablement, admin permission removal, or support-console timeline review.
+
+The incident runbook links logout limitations to the future revocation design options. It does not change the current logout route, token verification path, or frontend token clearing behavior.
+
 ## Future Revocation Considerations
 
 If operational policy requires stronger logout semantics, future work should be a separate mission. Candidate designs include:
@@ -99,4 +130,4 @@ If operational policy requires stronger logout semantics, future work should be 
 - Trusted-device records with server-side revocation and device-level listing.
 - Account-wide or device-specific logout endpoints with route-level authorization and audit events.
 
-Any future revocation implementation must preserve tenant, landlord, admin, and support separation; avoid raw token storage; use hashed token identifiers where identifiers are needed; and include append-safe audit records for security-sensitive revocation events.
+Any future revocation implementation must preserve tenant, landlord, admin, and support separation; avoid storing bearer values; use hashed token identifiers where identifiers are needed; and include append-safe audit records for security-sensitive revocation events.
