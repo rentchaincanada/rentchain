@@ -1,7 +1,7 @@
 import { Router } from "express";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 
 const router = Router();
 

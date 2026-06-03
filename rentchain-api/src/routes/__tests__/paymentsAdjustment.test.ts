@@ -9,7 +9,7 @@ const mockFirebase = vi.hoisted(() => ({
   get: vi.fn(),
 }));
 
-vi.mock("../../config/firebase", () => ({
+vi.mock("../../firebase", () => ({
   db: {
     collection: mockFirebase.collection,
   },

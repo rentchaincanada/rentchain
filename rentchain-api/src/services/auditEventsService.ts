@@ -1,9 +1,5 @@
-import { getFirestore, FieldValue } from "firebase-admin/firestore";
-import { assertSafeFirestoreEnvironment } from "../config/firestoreEnvironmentGuard";
+import { db, FieldValue } from "../firebase";
 import { AuditEvent } from "../types/events";
-
-assertSafeFirestoreEnvironment();
-const db = getFirestore();
 
 export async function logAuditEvent(
   input: Omit<AuditEvent, "id" | "createdAt">

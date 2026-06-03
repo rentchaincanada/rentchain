@@ -1,4 +1,4 @@
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 
 export function microLiveDefaultEnabled() {
   const v = String(process.env.MICRO_LIVE_DEFAULT ?? "false").toLowerCase();

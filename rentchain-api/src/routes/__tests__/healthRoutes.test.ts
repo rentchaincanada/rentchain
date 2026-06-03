@@ -7,10 +7,18 @@ const firebaseMock = vi.hoisted(() => ({
 }));
 const originalNodeEnv = process.env.NODE_ENV;
 
-vi.mock("../../config/firebase", () => ({
+vi.mock("../../firebase", () => ({
   db: {
     listCollections: firebaseMock.listCollections,
   },
+  initializationState: () => ({
+    environment: "test",
+    mode: "emulator",
+    emulatorHost: "127.0.0.1:8080",
+    projectId: "project-0d9658de-af29-4dc0-a99",
+    timestamp: "2026-06-03T00:00:00.000Z",
+    caller: "health-test",
+  }),
 }));
 
 function buildApp() {
@@ -88,6 +96,7 @@ describe("healthRoutes", () => {
       revisionPresent: true,
       commitPresent: true,
       releaseShaPresent: true,
+      firebaseInitializationMode: "emulator",
     });
     expect(JSON.stringify(res.body)).not.toContain("release-secret-sha");
     expect(JSON.stringify(res.body)).not.toContain("00042-secret");
@@ -117,10 +126,15 @@ describe("healthRoutes", () => {
       status: "ok",
       service: "rentchain-api",
       checks: { routes: "ok", db: "skipped" },
+      firebaseInitializationMode: "emulator",
     });
 
     const db = await invokeApp(app, "GET", "/health/db");
     expect(db.status).toBe(200);
-    expect(db.body).toEqual({ status: "skipped", message: "No DB credentials configured" });
+    expect(db.body).toEqual({
+      status: "skipped",
+      firebaseInitializationMode: "emulator",
+      message: "No DB credentials configured",
+    });
   });
 });

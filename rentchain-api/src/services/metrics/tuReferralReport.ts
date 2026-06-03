@@ -1,4 +1,4 @@
-import { db } from "../../config/firebase";
+import { db } from "../../firebase";
 
 export type TuDailyPoint = { day: string; count: number };
 export type TuReferralMetricsPayload = {

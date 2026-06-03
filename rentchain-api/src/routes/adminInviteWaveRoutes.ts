@@ -1,6 +1,6 @@
 import { Router } from "express";
 import crypto from "crypto";
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { requireAuth } from "../middleware/requireAuth";
 import { requireRole } from "../middleware/requireRole";
 import { incrementCounter } from "../services/telemetryService";

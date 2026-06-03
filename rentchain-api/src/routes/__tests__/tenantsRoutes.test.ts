@@ -7,7 +7,7 @@ const deriveFinancialProjectionRowsMock = vi.fn();
 const leaseDocs = new Map<string, any>();
 const propertyDocs = new Map<string, any>();
 
-vi.mock("../../config/firebase", () => ({
+vi.mock("../../firebase", () => ({
   db: {
     collection: (name: string) => ({
       doc: (id?: string) => ({

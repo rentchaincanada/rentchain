@@ -1,4 +1,4 @@
-import { db } from "../../config/firebase";
+import { db } from "../../firebase";
 import type { AssignmentRecordV1 } from "./assignmentTypes";
 import { ADMIN_ASSIGNMENTS_COLLECTION } from "./loadAssignmentRecord";
 

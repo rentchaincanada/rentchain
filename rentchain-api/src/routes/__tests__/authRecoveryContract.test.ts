@@ -24,7 +24,7 @@ const fieldValueMock = {
   arrayUnion: (...values: unknown[]) => values,
 };
 
-vi.mock("../../config/firebase", () => ({
+vi.mock("../../firebase", () => ({
   db: dbMock,
   FieldValue: fieldValueMock,
 }));

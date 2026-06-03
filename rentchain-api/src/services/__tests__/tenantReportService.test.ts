@@ -9,7 +9,7 @@ function ensureCollection(name: string) {
   return collections.get(name)!;
 }
 
-vi.mock("../../config/firebase", () => ({
+vi.mock("../../firebase", () => ({
   db: {
     collection: (name: string) => ({
       doc: (id: string) => ({

@@ -11,7 +11,7 @@ const deriveLandlordTrustContext = vi.fn();
 const deriveTenantCredibilitySignals = vi.fn();
 const deriveLeaseExecution = vi.fn();
 
-vi.mock("../../../config/firebase", () => ({
+vi.mock("../../../firebase", () => ({
   db: dbMock,
 }));
 

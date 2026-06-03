@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { authenticateJwt } from "../middleware/authMiddleware";
 import { deriveOnboardingHardeningProfile } from "../lib/onboardingHardening/deriveOnboardingHardeningProfile";
 import type { OnboardingHardeningProfile, OnboardingHardeningStatus } from "../lib/onboardingHardening/onboardingHardeningTypes";

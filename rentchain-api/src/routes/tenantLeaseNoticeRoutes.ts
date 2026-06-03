@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { authenticateJwt } from "../middleware/authMiddleware";
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { getLeaseNoticeWorkflowFlag } from "../config/leaseNoticeRules";
 import {
   appendLeaseWorkflowEvent,

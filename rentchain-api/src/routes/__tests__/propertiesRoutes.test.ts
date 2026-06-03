@@ -152,7 +152,7 @@ vi.mock("../../middleware/requireAuthz", () => ({
   requirePermission: () => (_req: any, _res: any, next: any) => next(),
 }));
 
-vi.mock("../../config/firebase", () => ({
+vi.mock("../../firebase", () => ({
   db: dbMock,
   FieldValue: {
     increment: (n: number) => ({ __op: "inc", n }),

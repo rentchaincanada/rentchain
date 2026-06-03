@@ -48,7 +48,7 @@ const dbMock = {
   }),
 };
 
-vi.mock("../../config/firebase", () => ({ db: dbMock }));
+vi.mock("../../firebase", () => ({ db: dbMock }));
 vi.mock("../../middleware/requireAuth", () => ({
   requireAuth: (req: any, res: any, next: any) => {
     const header = String(req.headers["x-test-user"] || "").trim();

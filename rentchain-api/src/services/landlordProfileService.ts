@@ -1,5 +1,5 @@
 import { DEMO_LANDLORD, DEMO_LANDLORD_EMAIL } from "../config/authConfig";
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 
 export interface LandlordProfile {
   id: string;

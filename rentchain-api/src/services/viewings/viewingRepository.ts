@@ -1,4 +1,4 @@
-import { db } from "../../config/firebase";
+import { db } from "../../firebase";
 import type { ViewingOwnershipContext, ViewingRequestDoc } from "./viewingTypes";
 
 const VIEWING_REQUESTS_COLLECTION = "viewingRequests";

@@ -1,4 +1,4 @@
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { getStripeClient } from "./stripeService";
 import { getScreeningPricing } from "../billing/screeningPricing";
 import {

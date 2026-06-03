@@ -1,6 +1,6 @@
 import { Router } from "express";
 import crypto from "crypto";
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { getAdminEmails } from "../lib/adminEmails";
 import { sendEmail } from "../services/emailService";
 import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";

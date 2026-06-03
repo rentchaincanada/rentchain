@@ -58,7 +58,7 @@ const { fakeDb, resetFakeDb, listDocs } = vi.hoisted(() => {
 
 let mockUser: any;
 
-vi.mock("../../config/firebase", () => ({
+vi.mock("../../firebase", () => ({
   db: fakeDb,
 }));
 

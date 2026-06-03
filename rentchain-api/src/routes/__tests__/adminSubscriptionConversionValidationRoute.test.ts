@@ -20,7 +20,7 @@ vi.mock("../../services/admin/adminSubscriptionConversionValidation", () => ({
   loadAdminSubscriptionConversionValidation,
 }));
 
-vi.mock("../../config/firebase", () => ({
+vi.mock("../../firebase", () => ({
   db: {
     collection: vi.fn(() => ({
       where: vi.fn(),

@@ -1,4 +1,4 @@
-import { db } from "../../config/firebase";
+import { db } from "../../firebase";
 import { getTransUnionIntegrationPublic } from "../integrations/transunion/transunionService";
 import type {
   LandlordActivationSnapshot,

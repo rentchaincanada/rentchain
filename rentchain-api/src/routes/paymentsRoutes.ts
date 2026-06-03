@@ -11,7 +11,7 @@ import { recordPaymentEvent } from "../services/ledgerEventsService";
 import { requireAuth } from "../middleware/requireAuth";
 import { requirePermission } from "../middleware/requireAuthz";
 import { buildDatedExportFilename, setAttachmentExportHeaders } from "../lib/exports/exportResponse";
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { getEffectiveLandlordId, resolveRequestAuthority } from "../auth/requestAuthority";
 import { computePaymentState } from "../services/stateMachines/stateComputation";
 import { paymentStateMachine } from "../services/stateMachines/paymentStateMachine";

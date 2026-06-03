@@ -1,6 +1,6 @@
 import { Router } from "express";
 import crypto from "crypto";
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { getAdminEmails, isAdminEmail } from "../lib/adminEmails";
 import { requireAuth } from "../middleware/requireAuth";
 import { rateLimitLeads } from "../middleware/rateLimit";

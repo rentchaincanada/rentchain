@@ -1,4 +1,4 @@
-import { db } from "../../config/firebase";
+import { db } from "../../firebase";
 import { ADMIN_NOTIFICATIONS_COLLECTION } from "./loadNotifications";
 
 export async function saveNotificationState(input: {

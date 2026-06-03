@@ -2,7 +2,7 @@
 import jwt from "jsonwebtoken";
 import admin from "firebase-admin";
 import { JWT_EXPIRES_IN, JWT_SECRET } from "../config/authConfig";
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 
 export interface LandlordUser {
   id: string;

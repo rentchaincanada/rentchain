@@ -1,4 +1,4 @@
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { getEnvFlags } from "../config/requiredEnv";
 import { getProviderStatus } from "./screening/providerStatusService";
 

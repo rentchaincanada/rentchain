@@ -1,4 +1,4 @@
-import { db } from "../../config/firebase";
+import { db } from "../../firebase";
 import { normalizeContractorProfile } from "./loadContractorProfiles";
 import type { ContractorProfileV1 } from "./contractorTypes";
 

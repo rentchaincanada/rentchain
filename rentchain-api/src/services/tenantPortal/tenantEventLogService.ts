@@ -1,4 +1,4 @@
-import { db, FieldValue } from "../../config/firebase";
+import { db, FieldValue } from "../../firebase";
 
 export type TenantEventStatus = "recorded" | "pending" | "failed";
 

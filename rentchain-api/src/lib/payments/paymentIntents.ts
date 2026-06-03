@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import { db } from "../../config/firebase";
+import { db } from "../../firebase";
 import type { PaymentExecutionStatus, PaymentProvider, PaymentPurpose } from "./paymentTypes";
 
 export const PAYMENT_INTENTS_COLLECTION = "paymentIntents";

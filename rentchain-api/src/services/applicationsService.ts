@@ -1,5 +1,5 @@
 import type { Application, ApplicationStatus } from "../types/applications";
-import { db, FieldValue } from "../config/firebase";
+import { db, FieldValue } from "../firebase";
 import { recordAuditEvent } from "./auditEventService";
 
 // In-memory stub store; replace with real persistence when ready.

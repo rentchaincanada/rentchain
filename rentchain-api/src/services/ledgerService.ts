@@ -1,4 +1,4 @@
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { buildBlockchainFromLedgerEvents } from "../blockchain";
 import { saveChainHeadSnapshot } from "../services/chainHeadService";
 import { getTenantDetailBundle } from "../services/tenantDetailsService";

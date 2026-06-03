@@ -1,4 +1,4 @@
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { emitPropertyActivityEvent } from "./activityEventService";
 import { getPropertyById } from "./firestorePropertiesService";
 

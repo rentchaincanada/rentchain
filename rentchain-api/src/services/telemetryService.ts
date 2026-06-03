@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 
 function nowMs() {
   return Date.now();

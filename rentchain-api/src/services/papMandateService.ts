@@ -1,5 +1,5 @@
 // src/services/papMandateService.ts
-import { firestore } from "../events/firestore";
+import { firestore } from "../firebase";
 
 export type PapMandateStatus = "pending" | "active" | "revoked" | "expired";
 

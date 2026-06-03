@@ -2,7 +2,7 @@
 import crypto from "crypto";
 import { runScreeningWithCredits } from "./screeningsService";
 import { logAuditEvent } from "./auditEventsService";
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { sendEmail } from "./emailService";
 import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
 import { createTenancyIfMissing } from "./tenanciesService";

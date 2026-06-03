@@ -65,7 +65,7 @@ function buildQuery(name: string, rowsFactory: () => Array<{ id: string; exists:
   };
 }
 
-vi.mock("../../config/firebase", () => ({
+vi.mock("../../firebase", () => ({
   db: {
     collection: (name: string) => buildQuery(name, () => buildDocs(name)),
   },

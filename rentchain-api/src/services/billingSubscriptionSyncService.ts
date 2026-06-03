@@ -1,5 +1,5 @@
 import Stripe from "stripe";
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { resolvePlanFromPriceId, resolvePaidBillingPlan } from "../config/planMatrix";
 
 export type BillingTier = "starter" | "pro" | "elite";

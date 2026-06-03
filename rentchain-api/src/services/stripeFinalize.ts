@@ -1,4 +1,4 @@
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { enqueueScreeningJob } from "./screeningJobs";
 import { recordScreeningPaymentSucceeded } from "./screeningPaymentTransactionService";
 import { buildScreeningMonetizationPatch } from "./screening/screeningMonetizationService";

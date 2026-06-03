@@ -70,7 +70,7 @@ const recomputeTenantScore = vi.fn(async (tenantId: string) => ({
   generatedAt: "2026-03-18T00:00:00.000Z",
 }));
 
-vi.mock("../../config/firebase", () => ({ db: fakeDb }));
+vi.mock("../../firebase", () => ({ db: fakeDb }));
 vi.mock("../risk/buildLeaseRiskInput", () => ({ buildLeaseRiskInput }));
 vi.mock("../risk/riskEngine", () => ({ safeAssessLeaseRisk }));
 vi.mock("../risk/recomputeTenantScore", () => ({ recomputeTenantScore }));

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
 import jwt, { type Secret, type SignOptions } from "jsonwebtoken";
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { JWT_SECRET } from "../config/authConfig";
 
 const router = Router();

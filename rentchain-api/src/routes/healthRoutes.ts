@@ -1,17 +1,19 @@
 import express from "express";
 import { getVersion } from "../version";
-import { db } from "../config/firebase";
+import { db, initializationState } from "../firebase";
 import { safeDiagnosticBuildMetadata } from "../middleware/diagnosticSurfaceGuard";
 
 const router = express.Router();
 
 router.get("/", (_req, res) => {
+  const firebaseState = initializationState();
   res.json({
     ok: true,
     ...safeDiagnosticBuildMetadata(),
     releaseShaPresent: Boolean(String(process.env.RELEASE_SHA || "").trim()),
     reportingEnabled: process.env.REPORTING_ENABLED === "true",
     reportingDryRun: process.env.REPORTING_DRY_RUN === "true",
+    firebaseInitializationMode: firebaseState.mode,
   });
 });
 
@@ -24,6 +26,7 @@ router.get("/version", (_req, res) => {
 });
 
 router.get("/ready", async (_req, res) => {
+  const firebaseState = initializationState();
   const checks: Record<string, string> = {
     routes: "ok",
   };
@@ -42,6 +45,7 @@ router.get("/ready", async (_req, res) => {
         status: "fail",
         service: "rentchain-api",
         checks,
+        firebaseInitializationMode: firebaseState.mode,
         message: err?.message || "DB check failed",
       });
     }
@@ -51,20 +55,30 @@ router.get("/ready", async (_req, res) => {
     status: "ok",
     service: "rentchain-api",
     checks,
+    firebaseInitializationMode: firebaseState.mode,
   });
 });
 
 // Optional: db detail endpoint; return skipped when not configured
 router.get("/db", async (_req, res) => {
+  const firebaseState = initializationState();
   const hasDbCreds = Boolean(process.env.GOOGLE_APPLICATION_CREDENTIALS || process.env.FIREBASE_CONFIG);
   if (!hasDbCreds) {
-    return res.json({ status: "skipped", message: "No DB credentials configured" });
+    return res.json({
+      status: "skipped",
+      firebaseInitializationMode: firebaseState.mode,
+      message: "No DB credentials configured",
+    });
   }
   try {
     await db.listCollections();
-    return res.json({ status: "ok" });
+    return res.json({ status: "ok", firebaseInitializationMode: firebaseState.mode });
   } catch (err: any) {
-    return res.status(503).json({ status: "fail", message: err?.message || "DB check failed" });
+    return res.status(503).json({
+      status: "fail",
+      firebaseInitializationMode: firebaseState.mode,
+      message: err?.message || "DB check failed",
+    });
   }
 });
 

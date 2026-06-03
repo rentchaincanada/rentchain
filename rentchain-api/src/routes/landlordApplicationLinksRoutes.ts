@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { createHash, randomBytes } from "crypto";
 import { authenticateJwt } from "../middleware/authMiddleware";
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { requireCapability } from "../services/capabilityGuard";
 import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
 import { sendEmail } from "../services/emailService";

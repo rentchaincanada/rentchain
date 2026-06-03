@@ -113,7 +113,7 @@ const hoisted = vi.hoisted(() => {
   };
 });
 
-vi.mock("../../config/firebase", () => ({
+vi.mock("../../firebase", () => ({
   db: hoisted.dbMock,
 }));
 

@@ -1,6 +1,6 @@
 import express from "express";
 import { listRecordsForLandlord } from "../services/billingService";
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { requireAuth } from "../middleware/requireAuth";
 import { getStripeClient } from "../services/stripeService";
 import { stripeNotConfiguredResponse, isStripeNotConfiguredError } from "../lib/stripeNotConfigured";

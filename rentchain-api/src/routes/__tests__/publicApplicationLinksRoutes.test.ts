@@ -72,7 +72,7 @@ const { dbMock, resetDb, seedCollection, savedDocs, sendEmailMock, buildEmailTex
   };
 });
 
-vi.mock("../../config/firebase", () => ({ db: dbMock }));
+vi.mock("../../firebase", () => ({ db: dbMock }));
 vi.mock("../../services/emailService", () => ({ sendEmail: sendEmailMock }));
 vi.mock("../../email/templates/baseEmailTemplate", () => ({
   buildEmailText: buildEmailTextMock,

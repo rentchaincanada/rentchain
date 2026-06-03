@@ -23,7 +23,7 @@ function seedDoc(name: string, id: string, data: any) {
   ensureCollection(name).set(id, { id, data: clone(data) });
 }
 
-vi.mock("../../config/firebase", () => ({
+vi.mock("../../firebase", () => ({
   db: {
     collection(name: string) {
       return {

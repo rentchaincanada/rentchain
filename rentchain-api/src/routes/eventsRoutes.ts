@@ -1,6 +1,6 @@
 import express from "express";
 import crypto from "crypto";
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { incrementCounter } from "../services/telemetryService";
 
 const router = express.Router();

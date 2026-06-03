@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { deriveSharedPortfolioScoreView } from "../lib/portfolioScoreSharing/deriveSharedPortfolioScoreView";
 import { derivePortfolioScoreExternal } from "../lib/portfolioScoreExternal/derivePortfolioScoreExternal";
 import { loadLandlordPortfolioHealthInputs } from "../lib/portfolioHealth/loadLandlordPortfolioHealthInputs";

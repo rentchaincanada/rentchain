@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { requireAuth } from "../middleware/requireAuth";
 import type { CanonicalEventDomain, CanonicalEventV1 } from "../lib/events/eventTypes";
 import { CANONICAL_EVENTS_COLLECTION } from "../lib/events/buildEvent";

@@ -59,7 +59,7 @@ const { fakeDb, resetFakeDb, seedDoc, listDocs } = vi.hoisted(() => {
   };
 });
 
-vi.mock("../../config/firebase", () => ({
+vi.mock("../../firebase", () => ({
   db: fakeDb,
 }));
 

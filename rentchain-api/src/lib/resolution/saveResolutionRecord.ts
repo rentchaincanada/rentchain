@@ -1,4 +1,4 @@
-import { db } from "../../config/firebase";
+import { db } from "../../firebase";
 import type { ResolutionRecordV1 } from "./resolutionTypes";
 import { ADMIN_RESOLUTIONS_COLLECTION } from "./loadResolutionRecord";
 

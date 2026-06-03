@@ -1,4 +1,4 @@
-import { db } from "../../config/firebase";
+import { db } from "../../firebase";
 
 export const ADMIN_ALERT_STATES_COLLECTION = "adminAlertStates";
 

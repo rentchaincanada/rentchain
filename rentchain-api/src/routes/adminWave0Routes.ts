@@ -1,7 +1,7 @@
 import { Router } from "express";
 import crypto from "crypto";
 import { requireAdmin } from "../middleware/requireAdmin";
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { incrementCounter, logEvent } from "../services/telemetryService";
 
 const router = Router();

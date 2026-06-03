@@ -1,4 +1,4 @@
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 
 export const FINANCIAL_TRANSACTION_TYPES = [
   "maintenance_cost_recorded",

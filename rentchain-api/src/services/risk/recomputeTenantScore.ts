@@ -1,5 +1,5 @@
 import type { Firestore } from "firebase-admin/firestore";
-import { db as defaultDb } from "../../config/firebase";
+import { db as defaultDb } from "../../firebase";
 import { listLedgerEventsV2 } from "../ledgerEventsFirestoreService";
 import { CURRENT_LEASE_STATUSES, toMillisSafe } from "../leaseCanonicalizationService";
 import { computeTenantSignals } from "../tenantSignalsService";

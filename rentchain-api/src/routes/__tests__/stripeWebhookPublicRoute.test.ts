@@ -19,7 +19,7 @@ vi.mock("../../lib/stripeNotConfigured", () => ({
   isStripeNotConfiguredError: () => false,
 }));
 
-vi.mock("../../config/firebase", () => ({
+vi.mock("../../firebase", () => ({
   db: {
     collection: () => ({
       doc: () => ({

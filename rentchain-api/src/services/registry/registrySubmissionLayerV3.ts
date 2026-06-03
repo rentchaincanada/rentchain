@@ -1,4 +1,4 @@
-import { db, FieldValue } from "../../config/firebase";
+import { db, FieldValue } from "../../firebase";
 import { halifaxRentalRegistryManualPortalAdapter } from "./adapters/halifaxRentalRegistryManualPortalAdapter";
 import { loadRegistrySubmissionDraft, REGISTRY_SUBMISSION_DRAFT_COLLECTION } from "./halifaxRegistrySubmissionService";
 import { nowIso } from "./schemas/registrySchemaCommon";

@@ -1,4 +1,4 @@
-import { db } from "../../config/firebase";
+import { db } from "../../firebase";
 
 export const ACTIVATION_EVENT_NAMES = [
   "activation_property_created",

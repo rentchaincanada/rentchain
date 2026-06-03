@@ -1,5 +1,5 @@
 import { Response, NextFunction } from "express";
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { setUsage } from "../services/accountService";
 import type { LimitType } from "../utils/planLimits";
 import { limitError, wouldExceed } from "../utils/planLimits";

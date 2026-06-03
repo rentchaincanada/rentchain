@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { actorFromRequest, governanceMetadata, sanitizeTelemetryProps } from "../lib/governance/platformGovernance";
 import { safeErrorLog } from "../lib/logging/safeLogger";
 import { requireAuth } from "../middleware/requireAuth";

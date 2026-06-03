@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { writeCanonicalEvent } from "../lib/events/buildEvent";
 import { executeAutomation } from "../lib/automation/automationExecutor";
 import { normalizeCostReviewHistory, normalizeWorkOrderCost } from "../lib/maintenanceCost";

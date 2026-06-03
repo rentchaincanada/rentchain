@@ -56,7 +56,7 @@ const { store, dbMock, ensureCollection } = vi.hoisted(() => {
   return { store, dbMock, ensureCollection };
 });
 
-vi.mock("../../config/firebase", () => ({
+vi.mock("../../firebase", () => ({
   db: dbMock,
 }));
 

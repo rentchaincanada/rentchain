@@ -1,5 +1,5 @@
 // rentchain-api/src/services/chainHeadService.ts
-import { firestore } from "../config/firebase";
+import { firestore } from "../firebase";
 
 const COLLECTION = "chainHeads";
 

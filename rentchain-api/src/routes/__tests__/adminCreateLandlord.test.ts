@@ -17,7 +17,7 @@ vi.mock("firebase-admin", () => ({
   },
 }));
 
-vi.mock("../../config/firebase", () => ({
+vi.mock("../../firebase", () => ({
   db: {
     collection: (name: string) => {
       if (name === "users") {

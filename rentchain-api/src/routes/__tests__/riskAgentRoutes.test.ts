@@ -27,7 +27,7 @@ function listDocs(name: string) {
   return Array.from(ensureCollection(name).values()).map((entry) => clone({ id: entry.id, ...entry.data }));
 }
 
-vi.mock("../../config/firebase", () => ({
+vi.mock("../../firebase", () => ({
   db: {
     collection(name: string) {
       return {

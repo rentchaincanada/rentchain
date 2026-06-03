@@ -38,7 +38,7 @@ const { fakeDb, resetStore, seedDoc } = vi.hoisted(() => {
   };
 });
 
-vi.mock("../../config/firebase", () => ({ db: fakeDb }));
+vi.mock("../../firebase", () => ({ db: fakeDb }));
 
 describe("tenantScoreBackfillService", () => {
   beforeEach(() => {

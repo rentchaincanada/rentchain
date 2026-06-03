@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from "uuid";
-import { firestore } from "../config/firebase";
+import { firestore } from "../firebase";
 import { User } from "../types/user";
 
 const COLLECTION = "users";

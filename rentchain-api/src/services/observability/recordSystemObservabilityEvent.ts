@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import { db } from "../../config/firebase";
+import { db } from "../../firebase";
 import { safeOperationalLog } from "../../lib/logging/safeLogger";
 import {
   SYSTEM_OBSERVABILITY_EVENTS_COLLECTION,

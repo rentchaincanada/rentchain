@@ -1,5 +1,5 @@
 import type { Firestore } from "firebase-admin/firestore";
-import { db as defaultDb } from "../../config/firebase";
+import { db as defaultDb } from "../../firebase";
 import { CURRENT_LEASE_STATUSES } from "../leaseCanonicalizationService";
 import { recomputeLeaseRisk, type LeaseRiskRecomputeResult } from "./recomputeLeaseRisk";
 

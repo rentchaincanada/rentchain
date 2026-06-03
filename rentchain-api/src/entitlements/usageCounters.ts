@@ -1,4 +1,4 @@
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 
 export async function countPropertiesForLandlord(landlordId: string): Promise<number> {
   const snap = await db.collection("properties").where("landlordId", "==", landlordId).get();

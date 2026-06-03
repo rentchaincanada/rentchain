@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { capabilitiesForPlan, requiredPlanForCapability } from "../services/entitlements/planCapabilities";
 import { resolveLandlordAndTier } from "../lib/landlordResolver";
 import { requireAuth } from "../middleware/requireAuth";

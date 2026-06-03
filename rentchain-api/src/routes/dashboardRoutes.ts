@@ -1,7 +1,7 @@
 import express from "express";
 import { authenticateJwt } from "../middleware/authMiddleware";
 import { requireAuth } from "../middleware/requireAuth";
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { resolveLandlordAndTier } from "../lib/landlordResolver";
 import {
   computeNoResponseState,

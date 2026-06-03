@@ -1,6 +1,6 @@
 import { Router } from "express";
 import admin from "firebase-admin";
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { requireAdmin } from "../middleware/requireAdmin";
 import { getCountersSummary } from "../services/telemetryService";
 import { getStripeClient, isStripeConfigured } from "../services/stripeService";

@@ -1,4 +1,4 @@
-import { db } from "../../config/firebase";
+import { db } from "../../firebase";
 
 function asString(value: unknown, max = 240) {
   return String(value || "").trim().slice(0, max);

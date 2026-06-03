@@ -1,6 +1,6 @@
 // src/events/eventDispatcher.ts
 
-import { firestore } from "../config/firebase";
+import { firestore } from "../firebase";
 import { DomainEventInput, BaseDomainEvent } from "./domainEvents";
 import * as blockchain from "../blockchain";
 

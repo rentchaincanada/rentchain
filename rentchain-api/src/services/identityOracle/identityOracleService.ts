@@ -1,4 +1,4 @@
-import { db } from "../../config/firebase";
+import { db } from "../../firebase";
 import { normalizePid } from "../registry/registryUtils";
 import { HalifaxR400IdentityAdapter } from "./adapters/HalifaxR400IdentityAdapter";
 import { OntarioGatewayIdentityAdapter } from "./adapters/OntarioGatewayIdentityAdapter";

@@ -38,7 +38,7 @@ function docRef(collectionName: string, id?: string) {
   };
 }
 
-vi.mock("../../config/firebase", () => ({
+vi.mock("../../firebase", () => ({
   db: {
     batch: () => {
       const writes: Array<() => Promise<void>> = [];

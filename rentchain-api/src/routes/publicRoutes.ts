@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { db, FieldValue } from "../config/firebase";
+import { db, FieldValue } from "../firebase";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import { sendEmail, sendWaitlistConfirmation } from "../services/emailService";

@@ -1,4 +1,4 @@
-import { db } from "../../config/firebase";
+import { db } from "../../firebase";
 import type { RiskAgentEvaluation, RiskAgentLatestRecord, RiskAgentRunRecord } from "./riskTypes";
 
 function latestDocId(entityType: string, entityId: string): string {

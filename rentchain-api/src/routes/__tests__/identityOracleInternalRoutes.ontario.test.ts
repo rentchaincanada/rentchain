@@ -28,7 +28,7 @@ function getDoc(name: string, id: string) {
   return stored ? clone(stored.data) : null;
 }
 
-vi.mock("../../config/firebase", () => ({
+vi.mock("../../firebase", () => ({
   db: {
     collection(name: string) {
       return {

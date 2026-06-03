@@ -1,4 +1,4 @@
-import { db } from "../../../config/firebase";
+import { db } from "../../../firebase";
 import type { IdentityOracleSourceHealth, IdentityOracleSourceType } from "../identityOracleTypes";
 
 export const HALIFAX_R400_SOURCE_KEY = "halifax_r400";

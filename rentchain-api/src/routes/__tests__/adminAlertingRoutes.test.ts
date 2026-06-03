@@ -32,7 +32,7 @@ const { collections, dbMock } = vi.hoisted(() => {
   };
 });
 
-vi.mock("../../config/firebase", () => ({ db: dbMock }));
+vi.mock("../../firebase", () => ({ db: dbMock }));
 vi.mock("../../middleware/requireAuth", () => ({
   requireAuth: (req: any, res: any, next: any) => {
     if (!req.user) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });

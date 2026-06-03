@@ -2,7 +2,7 @@ import { createHash, randomBytes } from "crypto";
 import { Router } from "express";
 import { authenticateJwt } from "../middleware/authMiddleware";
 import { routeSource } from "../middleware/routeSource";
-import { db, FieldValue } from "../config/firebase";
+import { db, FieldValue } from "../firebase";
 import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
 import { sendEmail } from "../services/emailService";
 import { getEnvFlags } from "../config/requiredEnv";

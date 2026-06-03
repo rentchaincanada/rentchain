@@ -24,7 +24,7 @@ vi.mock("../../services/billingService", () => ({
   listRecordsForLandlord: vi.fn(() => []),
 }));
 
-vi.mock("../../config/firebase", () => ({
+vi.mock("../../firebase", () => ({
   db: {
     collection: () => ({
       doc: () => ({

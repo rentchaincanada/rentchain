@@ -1,5 +1,5 @@
 import { createHash } from "crypto";
-import { db } from "../../config/firebase";
+import { db } from "../../firebase";
 import type { TenancyContext } from "./tenancyContextService";
 import { loadTenantProfileProjection } from "./tenantProfileService";
 

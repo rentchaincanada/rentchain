@@ -1,4 +1,4 @@
-import { db } from "../../config/firebase";
+import { db } from "../../firebase";
 import type { WatchlistEntryV1 } from "./watchlistTypes";
 
 export const ADMIN_WATCHLISTS_COLLECTION = "adminWatchlists";

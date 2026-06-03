@@ -70,7 +70,7 @@ const {
   };
 });
 
-vi.mock("../../config/firebase", () => ({ db: dbMock }));
+vi.mock("../../firebase", () => ({ db: dbMock }));
 vi.mock("../../services/emailService", () => ({
   sendEmail: sendEmailMock,
 }));

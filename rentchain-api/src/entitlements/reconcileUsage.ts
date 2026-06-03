@@ -1,4 +1,4 @@
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 
 export async function reconcileLandlordUsage(landlordId: string) {
   const propsSnap = await db.collection("properties").where("landlordId", "==", landlordId).get();

@@ -2,7 +2,7 @@ import { Router } from "express";
 import { requireLandlord } from "../middleware/requireLandlord";
 import { rateLimit } from "../middleware/rateLimit";
 import { jsonError } from "../lib/httpResponse";
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { handleArtifactDownload } from "./importDownload.controller";
 // import { redactCsvColumns } from "../imports/csvRedact";
 

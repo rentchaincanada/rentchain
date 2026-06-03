@@ -1,5 +1,5 @@
 import type { Firestore } from "firebase-admin/firestore";
-import { db } from "../../config/firebase";
+import { db } from "../../firebase";
 import {
   CURRENT_LEASE_STATUSES,
   compareLeaseWinner,

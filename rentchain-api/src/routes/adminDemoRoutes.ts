@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { jsonError } from "../lib/httpResponse";
 import { requireLandlord } from "../middleware/requireLandlord";
 

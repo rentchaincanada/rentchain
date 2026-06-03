@@ -20,7 +20,7 @@ vi.mock("../screening/screeningHistoryService", () => ({
   getScreeningHistoryDetail: mocks.getScreeningHistoryDetail,
 }));
 
-vi.mock("../../config/firebase", () => ({
+vi.mock("../../firebase", () => ({
   db: mocks.dbMock,
 }));
 

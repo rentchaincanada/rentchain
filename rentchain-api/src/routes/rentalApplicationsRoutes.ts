@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { createHash, randomBytes } from "crypto";
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { authenticateJwt } from "../middleware/authMiddleware";
 import { attachAccount } from "../middleware/attachAccount";
 import { getStripeClient, isStripeConfigured } from "../services/stripeService";

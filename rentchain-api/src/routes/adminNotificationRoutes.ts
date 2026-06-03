@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { ADMIN_ASSIGNMENTS_COLLECTION } from "../lib/assignment/loadAssignmentRecord";
 import { deriveAdminAlerts } from "../lib/alerting/deriveAdminAlerts";
 import { loadAlertStates } from "../lib/alerting/loadAlertStates";

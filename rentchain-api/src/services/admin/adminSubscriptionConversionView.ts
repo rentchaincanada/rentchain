@@ -1,4 +1,4 @@
-import { db } from "../../config/firebase";
+import { db } from "../../firebase";
 
 export const SUBSCRIPTION_CONVERSION_FUNNEL_STEPS = [
   "pricing_page_viewed",

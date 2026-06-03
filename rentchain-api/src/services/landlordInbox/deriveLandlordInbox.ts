@@ -1,4 +1,4 @@
-import { db } from "../../config/firebase";
+import { db } from "../../firebase";
 import type { LandlordAgentDecision } from "../../lib/analytics/analyticsTypes";
 import { buildReviewSummary } from "../../lib/reviewSummary";
 import { deriveLandlordTrustContext } from "../../lib/trust/deriveLandlordTrustContext";

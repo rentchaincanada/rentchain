@@ -62,7 +62,7 @@ vi.mock("../../services/admin/adminAuditEvents", () => ({
   recordAdminAuditEvent: mocks.recordAdminAuditEventMock,
 }));
 
-vi.mock("../../config/firebase", () => ({
+vi.mock("../../firebase", () => ({
   db: {
     collection: () => ({
       doc: () => ({

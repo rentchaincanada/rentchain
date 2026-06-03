@@ -1,4 +1,4 @@
-import { db, FieldValue } from "../../config/firebase";
+import { db, FieldValue } from "../../firebase";
 import {
   CURRENT_LEASE_STATUSES,
   loadUnitsForProperty,

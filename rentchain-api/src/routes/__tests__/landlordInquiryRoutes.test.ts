@@ -7,7 +7,7 @@ const getMock = vi.fn().mockResolvedValue({ exists: false, data: () => null });
 const docMock = vi.fn(() => ({ get: getMock, set: setMock }));
 const collectionMock = vi.fn(() => ({ doc: docMock }));
 
-vi.mock("../../config/firebase", () => ({
+vi.mock("../../firebase", () => ({
   db: {
     collection: collectionMock,
   },

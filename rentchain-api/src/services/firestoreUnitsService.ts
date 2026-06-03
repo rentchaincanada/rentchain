@@ -1,5 +1,4 @@
-import { getFirestore } from "firebase-admin/firestore";
-import { assertSafeFirestoreEnvironment } from "../config/firestoreEnvironmentGuard";
+import { db } from "../firebase";
 
 export type UnitUpsert = {
   landlordId: string;
@@ -14,8 +13,6 @@ export type UnitUpsert = {
   updatedAt: string;
 };
 
-assertSafeFirestoreEnvironment();
-const db = getFirestore();
 const COL = "units";
 
 function unitDocId(propertyId: string, unitNumber: string) {

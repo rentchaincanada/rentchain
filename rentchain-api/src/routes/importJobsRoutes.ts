@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { requireLandlord } from "../middleware/requireLandlord";
 import { jsonError } from "../lib/httpResponse";
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { getSignedDownloadUrl } from "../lib/gcsSignedUrl";
 
 const router = Router();

@@ -1,5 +1,4 @@
-import { FieldValue } from "firebase-admin/firestore";
-import { db } from "../config/firebase";
+import { db, FieldValue } from "../firebase";
 import {
   ActionRequestStatus,
   PropertyActionRequest,

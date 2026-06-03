@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import { Router } from "express";
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { ADMIN_ASSIGNMENTS_COLLECTION } from "../lib/assignment/loadAssignmentRecord";
 import { requireAuth } from "../middleware/requireAuth";
 import { deriveAdminAlerts } from "../lib/alerting/deriveAdminAlerts";

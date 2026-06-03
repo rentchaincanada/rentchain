@@ -39,7 +39,7 @@ function buildQuery(collectionName: string, filters: Array<{ field: string; valu
   };
 }
 
-vi.mock("../../config/firebase", () => ({
+vi.mock("../../firebase", () => ({
   db: {
     collection(name: string) {
       return {

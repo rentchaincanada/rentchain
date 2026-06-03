@@ -4,7 +4,7 @@ const tenantDocs = new Map<string, any>();
 const propertyDocs = new Map<string, any>();
 const unitDocs = new Map<string, any>();
 
-vi.mock("../../config/firebase", () => ({
+vi.mock("../../firebase", () => ({
   db: {
     collection: (name: string) => {
       if (name === "properties") {

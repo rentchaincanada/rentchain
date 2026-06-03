@@ -1,4 +1,4 @@
-import { db } from "../../config/firebase";
+import { db } from "../../firebase";
 import { CURRENT_LEASE_STATUSES } from "../leaseCanonicalizationService";
 import { loadPropertyLeaseIntegrityDiagnostics, reportTenantPointerIssues } from "../leaseIntegrityService";
 

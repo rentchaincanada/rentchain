@@ -1,5 +1,5 @@
 // src/services/portfolioInsightsService.ts
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { getTenantsList, TenantRecord } from "./tenantDetailsService";
 
 export type PortfolioInsightSeverity = "info" | "warning" | "critical";

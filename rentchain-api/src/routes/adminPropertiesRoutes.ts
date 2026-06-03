@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, FieldValue } from "../config/firebase";
+import { db, FieldValue } from "../firebase";
 import { requireAuth } from "../middleware/requireAuth";
 import { requirePermission } from "../middleware/requireAuthz";
 import { listAdminProperties } from "../services/admin/adminPropertyView";

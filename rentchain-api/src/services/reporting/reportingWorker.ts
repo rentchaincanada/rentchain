@@ -1,4 +1,4 @@
-import { db } from "../../config/firebase";
+import { db } from "../../firebase";
 import { getReportingRuntimeConfig } from "./reportingConfig";
 import { getProvider } from "../creditReporting/providerFactory";
 import { getTenantCreditHistory } from "../tenantCreditProfileService";

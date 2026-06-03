@@ -1,4 +1,4 @@
-import { db } from "../../config/firebase";
+import { db } from "../../firebase";
 
 type FirestoreLike = Pick<FirebaseFirestore.Firestore, "collection">;
 

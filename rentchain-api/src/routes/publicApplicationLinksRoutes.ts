@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { createHash } from "crypto";
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { rateLimitPublicApply } from "../middleware/rateLimit";
 import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
 import { sendEmail } from "../services/emailService";

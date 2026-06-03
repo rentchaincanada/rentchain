@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 import { claimNextJob, enqueueScreeningJob, runJob } from "../services/screeningJobs";
 
 const router = Router();

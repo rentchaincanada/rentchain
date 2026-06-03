@@ -24,7 +24,7 @@ const sampleRisk = {
 const buildLeaseRiskInput = vi.fn(async () => ({ monthlyRent: 2100, monthlyIncome: 5000 }));
 const safeAssessLeaseRisk = vi.fn(async () => sampleRisk);
 
-vi.mock("../../config/firebase", () => ({
+vi.mock("../../firebase", () => ({
   db: {
     collection: () => ({
       get: async () => ({ docs: [] }),

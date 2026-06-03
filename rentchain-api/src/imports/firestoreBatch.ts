@@ -1,4 +1,4 @@
-import { db } from "../config/firebase";
+import { db } from "../firebase";
 
 export async function commitInBatches(
   ops: ((batch: FirebaseFirestore.WriteBatch) => void)[],
