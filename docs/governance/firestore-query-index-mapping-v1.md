@@ -23,7 +23,7 @@ This mapping serves as the foundation for query performance verification, index 
 
 ### Tenant Balance Calculation
 **Service Location**: `rentchain-api/src/services/tenantBalanceService.ts`
-**Query Pattern**: 
+**Query Pattern**:
 ```typescript
 firestore.collection("events").where("tenantId", "==", tenantId).get()
 ```

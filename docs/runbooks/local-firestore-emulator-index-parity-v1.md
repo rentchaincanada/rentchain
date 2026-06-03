@@ -46,7 +46,7 @@ service cloud.firestore {
     },
     "ui": {
       "enabled": true,
-      "host": "127.0.0.1", 
+      "host": "127.0.0.1",
       "port": 4000
     },
     "singleProjectMode": true
@@ -70,7 +70,7 @@ service cloud.firestore {
 - **Error Detection**: Index-related query failures not detected locally
 - **Development Experience**: Fast query execution, no index-related blocking
 
-#### Production Environment Behavior  
+#### Production Environment Behavior
 - **Query Execution**: Composite queries fail without appropriate custom indexes
 - **Performance**: Query performance directly dependent on index strategy
 - **Error Detection**: Missing indexes cause immediate query failures
@@ -88,7 +88,7 @@ service cloud.firestore {
 // Requires custom index in production, works locally without index
 firestore.collection("ledgerEventsV2")
   .where("landlordId", "==", landlordId)
-  .where("propertyId", "==", propertyId)  
+  .where("propertyId", "==", propertyId)
   .orderBy("occurredAt", "desc")
 ```
 
@@ -126,12 +126,12 @@ firestore.collection("registryMatches")
 
 #### 1. Index Configuration Verification
 **Frequency**: Before each deployment
-**Method**: 
+**Method**:
 ```bash
 # Verify index configuration is valid
 firebase deploy --only firestore:indexes --project preview
 
-# Check index deployment status  
+# Check index deployment status
 firebase firestore:indexes --project preview
 ```
 
@@ -151,7 +151,7 @@ firebase firestore:indexes --project preview
 - [ ] OrderBy queries: Confirm ordering field is included in composite index
 - [ ] Range queries: Verify range filter + additional filter index requirements
 
-#### 3. Preview Environment Testing  
+#### 3. Preview Environment Testing
 **Frequency**: Before production deployment
 **Method**: End-to-end testing in preview environment
 
@@ -173,7 +173,7 @@ describe('Query Index Coverage', () => {
       where: [['tenantId', '==', 'test']],
       orderBy: [['timestamp', 'desc']]
     };
-    
+
     expect(hasRequiredIndex(queryPattern)).toBe(true);
   });
 });
@@ -185,13 +185,13 @@ describe('Query Index Coverage', () => {
 describe('Query Performance', () => {
   it('should complete tenant balance query within 500ms', async () => {
     const startTime = Date.now();
-    
+
     await firestore.collection('events')
       .where('tenantId', '==', testTenantId)
       .orderBy('timestamp', 'desc')
       .limit(100)
       .get();
-      
+
     const duration = Date.now() - startTime;
     expect(duration).toBeLessThan(500);
   });
@@ -241,7 +241,7 @@ describe('Query Performance', () => {
 4. **Preview Testing**: Test query performance in preview environment
 5. **Performance Validation**: Confirm queries meet performance requirements
 
-#### Pre-Deployment Workflow  
+#### Pre-Deployment Workflow
 1. **Index Validation**: Deploy indexes to preview environment
 2. **Query Testing**: Execute all query patterns in preview environment
 3. **Performance Testing**: Measure query performance with realistic data
@@ -269,7 +269,7 @@ firebase firestore:indexes --project rentchain-preview
 ### Preview Data Management
 **Data Seeding for Index Testing**:
 - **Realistic Volume**: Seed preview with data volumes representative of production
-- **Query Pattern Coverage**: Include data that exercises all major query patterns  
+- **Query Pattern Coverage**: Include data that exercises all major query patterns
 - **Performance Baseline**: Use preview data to establish query performance baselines
 - **Edge Case Testing**: Include edge cases like large result sets, empty results, boundary conditions
 
@@ -283,7 +283,7 @@ firebase firestore:indexes --project rentchain-preview
 - **Memory Usage**: Low memory usage due to small datasets
 - **Concurrency**: Single developer, low concurrency load
 
-#### Preview Environment Performance  
+#### Preview Environment Performance
 - **Dataset Size**: Medium test datasets (1k-100k documents per collection)
 - **Query Speed**: Realistic performance (100ms-3 seconds depending on query)
 - **Memory Usage**: Realistic memory usage patterns
@@ -299,10 +299,10 @@ firebase firestore:indexes --project rentchain-preview
 
 #### Index Optimization
 - **Composite Index Design**: Optimize field order for query selectivity
-- **Index Minimization**: Remove unused indexes to reduce write overhead  
+- **Index Minimization**: Remove unused indexes to reduce write overhead
 - **Performance Monitoring**: Monitor index usage and query performance in production
 
-#### Query Optimization  
+#### Query Optimization
 - **Result Set Limiting**: Use appropriate `limit()` values for query result sets
 - **Filter Optimization**: Order filters by selectivity (most selective first)
 - **Pagination Strategy**: Implement efficient pagination for large result sets
@@ -318,7 +318,7 @@ firebase firestore:indexes --project rentchain-preview
 
 #### Symptom: Query fails in preview/production but works locally
 **Diagnosis**: Missing custom index for composite query
-**Solution**: 
+**Solution**:
 1. Identify query pattern requiring custom index
 2. Add index definition to `firestore.indexes.json`
 3. Deploy index to target environment

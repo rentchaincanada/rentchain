@@ -28,7 +28,7 @@ This verification serves as a security baseline for Phase 3 missions on preview/
 // Tenant balance calculation
 firestore.collection("events").where("tenantId", "==", tenantId)
 
-// Tenant payment history  
+// Tenant payment history
 firestore.collection("payments").where("tenantId", "==", tenantId).orderBy("paidAt", "desc")
 
 // Tenant ledger timeline
@@ -37,7 +37,7 @@ firestore.collection("ledgerEvents").where("data.tenantId", "==", tenantId).orde
 
 **Index Support Verification**:
 - ✅ `events` collection: `tenantId + timestamp + __name__ (DESC)` index available
-- ✅ `payments` collection: `tenantId + paidAt + __name__ (DESC)` index available  
+- ✅ `payments` collection: `tenantId + paidAt + __name__ (DESC)` index available
 - ✅ `ledgerEvents` collection: `data.tenantId + timestamp + __name__ (DESC)` index available
 
 **Scope Boundary Verification**:
@@ -48,7 +48,7 @@ firestore.collection("ledgerEvents").where("data.tenantId", "==", tenantId).orde
 
 **Security Assessment**: **LOW RISK** - Complete tenant isolation enforced at query level
 
-### Tenant Reporting and Credit Status  
+### Tenant Reporting and Credit Status
 **Projection Surface**: Tenant portal credit reporting consent and status
 **Query Patterns**:
 ```typescript
@@ -78,7 +78,7 @@ firestore.collection("creditProfiles").where("tenantId", "==", tenantId)
 // Tenant conversations
 firestore.collection("conversations").where("tenantId", "==", tenantId)
 
-// Tenant notices  
+// Tenant notices
 firestore.collection("tenantNotices").where("tenantId", "==", tenantId)
 
 // Message read receipts
@@ -201,7 +201,7 @@ firestore.collection("reportingConsents").where("landlordId", "==", landlordId).
 ## 5. Admin Diagnostics Projection Safety
 
 ### Admin Cross-Tenant Operations
-**Projection Surface**: Admin/support diagnostic and troubleshooting views  
+**Projection Surface**: Admin/support diagnostic and troubleshooting views
 **Query Patterns** (from `adminRoutes.ts`):
 ```typescript
 // Date range filtering
@@ -274,7 +274,7 @@ firestore.collection("decisionActions").where("landlordId", "==", landlordId).wh
 
 **Security Assessment**: **MEDIUM-HIGH RISK** - Evidence integrity critical, index and access control verification needed
 
-### Audit Trail Projections  
+### Audit Trail Projections
 **Projection Surface**: Audit trails for compliance and governance workflows
 **Query Patterns** (inferred from audit collections):
 ```typescript
@@ -291,7 +291,7 @@ firestore.collection("registryAuditLog").where("propertyId", "==", propertyId).o
 
 **Scope Boundary Verification**:
 - ✅ **Audit Scoping**: Audit trails properly scoped to specific resources
-- ✅ **Timeline Integrity**: Chronological ordering maintained for audit trails  
+- ✅ **Timeline Integrity**: Chronological ordering maintained for audit trails
 - ✅ **No Audit Mutation**: Read-only access to audit data
 - ✅ **Landlord/Property Isolation**: Audit access follows ownership boundaries
 
@@ -376,7 +376,7 @@ firestore.collection("registryImports").where("sourceKey", "==", sourceKey).orde
 
 ### Critical Performance Gaps
 1. **Tenant Communication Queries**: Missing composite indexes for messaging/conversation queries
-2. **Evidence Package Queries**: Review workflow queries lack defined index strategy  
+2. **Evidence Package Queries**: Review workflow queries lack defined index strategy
 3. **Export Generation Queries**: Large dataset exports may require optimization
 4. **Admin Diagnostic Queries**: Date/timestamp range queries may scan large result sets
 
@@ -399,7 +399,7 @@ firestore.collection("registryImports").where("sourceKey", "==", sourceKey).orde
 - Audit trail projections (read-only with good scoping)
 - Registry/import internal processing (proper source isolation)
 
-### Medium Risk (Requires Monitoring)  
+### Medium Risk (Requires Monitoring)
 - Admin diagnostic projections (cross-tenant access with role controls)
 - Tenant communication projections (privacy-critical, performance gaps)
 - Evidence package projections (governance-critical, verification needed)
@@ -427,7 +427,7 @@ firestore.collection("registryImports").where("sourceKey", "==", sourceKey).orde
 2. **Recovery Workflow Security**: Apply projection safety verification to recovery operations
 3. **Operational Incident Readiness**: Use query performance baseline for incident response planning
 
-### Future Monitoring Requirements  
+### Future Monitoring Requirements
 1. **Projection Safety Testing**: Automated verification that projections maintain scope isolation
 2. **Query Performance Monitoring**: Track query performance against index strategy
 3. **Export Audit Compliance**: Implement comprehensive export logging and retention policies

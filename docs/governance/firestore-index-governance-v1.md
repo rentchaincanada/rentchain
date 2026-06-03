@@ -107,14 +107,14 @@ firestore.collection("collection")
 - Result set size: XXX documents average, XXX documents maximum
 - Query frequency: XXX queries/day average, XXX queries/hour peak
 
-### Target Performance  
+### Target Performance
 - Target execution time: XXXms
 - User experience requirement: [tenant workspace|landlord dashboard|admin operations]
 - Performance priority: [critical|high|medium|low]
 
 ### Business Impact
 - User experience impact: [description]
-- Operational efficiency impact: [description]  
+- Operational efficiency impact: [description]
 - System reliability impact: [description]
 ```
 
@@ -130,7 +130,7 @@ firestore.collection("collection")
 ```json
 {
   "collectionGroup": "collectionName",
-  "queryScope": "COLLECTION", 
+  "queryScope": "COLLECTION",
   "fields": [
     {"fieldPath": "field1", "order": "ASCENDING"},
     {"fieldPath": "field2", "order": "ASCENDING"},
@@ -220,7 +220,7 @@ firestore.collection("collection")
 # Deploy indexes to preview environment
 firebase deploy --only firestore:indexes --project rentchain-preview
 
-# Deploy indexes to production environment  
+# Deploy indexes to production environment
 firebase deploy --only firestore:indexes --project rentchain-production
 
 # Monitor index status
@@ -280,7 +280,7 @@ firebase firestore:indexes --local --config firestore.indexes.json
 - **Index Field Reduction**: Minimize index fields to essential fields only
 - **Write Pattern Optimization**: Optimize application write patterns for index efficiency
 
-#### Storage Optimization  
+#### Storage Optimization
 **Index Storage Reduction**:
 - **Unused Index Removal**: Remove indexes with zero or minimal usage
 - **Redundant Index Elimination**: Eliminate indexes covered by other composite indexes
@@ -427,7 +427,7 @@ diff preview-indexes.json production-indexes.json
 - **Index Maintenance Efficiency**: Time to resolve index-related issues
 - **Governance Compliance**: Adherence to index approval and deployment processes
 
-#### Business Impact Metrics  
+#### Business Impact Metrics
 - **User Experience**: User-facing query performance and satisfaction
 - **Feature Performance**: Feature-specific query performance and reliability
 - **System Reliability**: Overall system stability and availability related to index performance
@@ -444,7 +444,7 @@ diff preview-indexes.json production-indexes.json
 
 **Report Distribution**: Backend team, product team, DevOps team, engineering leadership
 
-#### Quarterly Index Review  
+#### Quarterly Index Review
 **Review Contents**:
 - Comprehensive index strategy review and optimization opportunities
 - Index governance process effectiveness and improvement recommendations

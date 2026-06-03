@@ -22,7 +22,7 @@ This dependency analysis ensures that audit queries remain performant, complete,
 ## 3. Operational Audit Query Dependencies
 
 ### General Activity Timeline Queries
-**Collection**: `events`  
+**Collection**: `events`
 **Primary Index**: `landlordId + occurredAt + __name__ (DESC)`
 **Query Pattern**:
 ```typescript
@@ -46,7 +46,7 @@ firestore.collection("events")
 **Compliance Impact**: **MEDIUM** - Operational evidence for business workflow audit
 
 ### Property Activity Timeline Queries
-**Collection**: `events`  
+**Collection**: `events`
 **Primary Index**: `propertyId + timestamp + __name__ (DESC)`
 **Query Pattern**:
 ```typescript
@@ -69,7 +69,7 @@ firestore.collection("events")
 
 **Compliance Impact**: **MEDIUM** - Property operational evidence for maintenance and occupancy audit
 
-### Tenant Activity Timeline Queries  
+### Tenant Activity Timeline Queries
 **Collection**: `events`
 **Primary Index**: `tenantId + timestamp + __name__ (DESC)`
 **Query Pattern**:
@@ -97,7 +97,7 @@ firestore.collection("events")
 
 ### Ledger Event Timeline Queries
 **Collection**: `ledgerEvents`
-**Primary Indexes**: 
+**Primary Indexes**:
 - `data.tenantId + timestamp + __name__ (DESC)`
 - `data.propertyId + timestamp + __name__ (DESC)`
 - `eventType + timestamp + __name__ (DESC)`
@@ -109,7 +109,7 @@ firestore.collection("ledgerEvents")
   .where("data.tenantId", "==", tenantId)
   .orderBy("timestamp", "desc")
 
-// Property financial audit trail  
+// Property financial audit trail
 firestore.collection("ledgerEvents")
   .where("data.propertyId", "==", propertyId)
   .orderBy("timestamp", "desc")
@@ -154,7 +154,7 @@ firestore.collection("ledgerEventsV2")
   .where("propertyId", "==", propertyId)
   .orderBy("occurredAt", "desc")
 
-// Tenant financial audit (landlord perspective)  
+// Tenant financial audit (landlord perspective)
 firestore.collection("ledgerEventsV2")
   .where("landlordId", "==", landlordId)
   .where("tenantId", "==", tenantId)
@@ -259,7 +259,7 @@ firestore.collection("decisionActions")
 **Compliance Impact**: **CRITICAL** - Decision audit trail essential for governance compliance and evidence integrity
 
 ### Operator Review Session Audit Queries
-**Collection**: `operatorReviewSessions`  
+**Collection**: `operatorReviewSessions`
 **Query Patterns** (inferred from collection structure):
 ```typescript
 // Review session audit for specific landlord
@@ -294,7 +294,7 @@ firestore.collection("operatorReviewSessions")
 **Collection**: `registryAuditLog`
 **Primary Indexes**:
 - `registryRecordId + createdAt + __name__ (DESC)`
-- `propertyId + createdAt + __name__ (DESC)`  
+- `propertyId + createdAt + __name__ (DESC)`
 - `importBatchId + createdAt + __name__ (DESC)`
 
 **Query Patterns**:
@@ -361,7 +361,7 @@ firestore.collection("sessionAuditLog")
   .where("userId", "==", userId)
   .orderBy("timestamp", "desc")
 
-// Authentication event audit (if implemented)  
+// Authentication event audit (if implemented)
 firestore.collection("authAuditLog")
   .where("email", "==", email)
   .orderBy("timestamp", "desc")
@@ -482,7 +482,7 @@ firestore.collection("paymentReconciliationRecords")
 - ✅ **`registryImports`**: Import batch records, append-only operational pattern
 - ✅ **`payments`**: Financial records, strong append-only expectation
 
-#### Medium Immutability Compliance  
+#### Medium Immutability Compliance
 - ⚠️ **`events`**: Append-oriented but may allow updates in some workflows
 - ⚠️ **`ledgerEvents`/`ledgerEventsV2`**: Financial events, append-expected but not enforced
 - ⚠️ **`reportingConsents`**: Consent records should be immutable but verification needed
@@ -530,7 +530,7 @@ firestore.collection("paymentReconciliationRecords")
 - ✅ **Registry Audit**: Complete import and correlation audit query support
 - ✅ **Operational Audit**: Basic activity timeline and property audit coverage
 
-#### Partially-Covered Audit Domains  
+#### Partially-Covered Audit Domains
 - ⚠️ **Evidence Audit**: Evidence query patterns need index optimization and verification
 - ⚠️ **Compliance Audit**: Consent audit covered but financial compliance audit needs enhancement
 - ⚠️ **Decision Audit**: Decision workflow audit queries need performance optimization
@@ -556,7 +556,7 @@ firestore.collection("paymentReconciliationRecords")
 
 ### Immediate Index Implementation Required
 1. **Evidence Audit Indexes**: Implement composite indexes for `canonicalEvents` and `decisionActions`
-2. **Review Workflow Indexes**: Add performance indexes for `operatorReviewSessions` 
+2. **Review Workflow Indexes**: Add performance indexes for `operatorReviewSessions`
 3. **Security Audit Infrastructure**: Plan and implement security audit query strategy
 
 ### Phase 3 Mission Integration
