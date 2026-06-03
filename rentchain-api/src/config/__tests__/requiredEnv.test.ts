@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { assertRequiredEnv, getEnvFlags } from "../requiredEnv";
 
 const ENV_BACKUP = { ...process.env };
@@ -18,11 +18,78 @@ function setCommonRequiredEnv() {
   process.env.STRIPE_PRICE_STARTER_MONTHLY_LIVE = "price_starter";
   process.env.STRIPE_PRICE_PRO_MONTHLY_LIVE = "price_pro";
   process.env.STRIPE_PRICE_ELITE_MONTHLY_LIVE = "price_elite";
+  process.env.EMAIL_REPLY_TO = "dev@rentchain.local";
+  process.env.MAINTENANCE_NOTIFY_EMAIL = "dev@rentchain.local";
+  process.env.VERIFIED_SCREENING_NOTIFY_EMAIL = "dev@rentchain.local";
+  process.env.ADMIN_EMAILS = "dev@rentchain.local";
+  process.env.AUTH_BOOTSTRAP_TOKEN = "local_dev_bootstrap_token";
+  process.env.AUTH_LOGIN_ENABLED = "true";
+  process.env.PASSWORD_LOGIN_ENABLED = "true";
 }
 
 describe("requiredEnv provider-aware email requirements", () => {
   afterEach(() => {
+    vi.restoreAllMocks();
     resetEnv();
+  });
+
+  it("fails closed in production when hard requirements are missing", () => {
+    process.env = {
+      ...ENV_BACKUP,
+      NODE_ENV: "production",
+      FIRESTORE_EMULATOR_HOST: "127.0.0.1:8080",
+      ALLOW_LOCAL_PROD_FIRESTORE: "false",
+    };
+
+    expect(() => assertRequiredEnv()).toThrow(/\[boot\] missing required env vars:/);
+  });
+
+  it("warns but continues outside production when hard and recommended requirements are missing", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    process.env = {
+      ...ENV_BACKUP,
+      NODE_ENV: "development",
+      FIRESTORE_EMULATOR_HOST: "127.0.0.1:8080",
+      ALLOW_LOCAL_PROD_FIRESTORE: "false",
+    };
+
+    expect(() => assertRequiredEnv()).not.toThrow();
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("[boot] missing required env vars:"));
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("[boot] missing recommended env vars:"));
+  });
+
+  it("accepts completed local template placeholders without startup warnings", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    process.env = {
+      ...ENV_BACKUP,
+      NODE_ENV: "development",
+      APP_BASE_URL: "http://localhost:3000",
+      FRONTEND_URL: "http://localhost:5173",
+      PUBLIC_APP_URL: "http://localhost:5173",
+      FIRESTORE_EMULATOR_HOST: "127.0.0.1:8080",
+      ALLOW_LOCAL_PROD_FIRESTORE: "false",
+      JWT_SECRET: "local_dev_jwt_secret",
+      STRIPE_SECRET_KEY: "sk_test_local_placeholder",
+      STRIPE_WEBHOOK_SECRET: "whsec_local_placeholder",
+      INTERNAL_JOB_TOKEN: "local_dev_internal_job_token",
+      FIREBASE_API_KEY: "local_dev_firebase_api_key",
+      STRIPE_PRICE_STARTER_MONTHLY_LIVE: "price_local_starter",
+      STRIPE_PRICE_PRO_MONTHLY_LIVE: "price_local_pro",
+      STRIPE_PRICE_ELITE_MONTHLY_LIVE: "price_local_elite",
+      EMAIL_PROVIDER: "sendgrid",
+      SENDGRID_API_KEY: "sg_local_placeholder",
+      SENDGRID_FROM_EMAIL: "dev@rentchain.local",
+      EMAIL_REPLY_TO: "dev@rentchain.local",
+      MAINTENANCE_NOTIFY_EMAIL: "dev@rentchain.local",
+      VERIFIED_SCREENING_NOTIFY_EMAIL: "dev@rentchain.local",
+      ADMIN_EMAILS: "dev@rentchain.local",
+      AUTH_BOOTSTRAP_TOKEN: "local_dev_bootstrap_token",
+      AUTH_LOGIN_ENABLED: "true",
+      PASSWORD_LOGIN_ENABLED: "true",
+    };
+
+    expect(() => assertRequiredEnv()).not.toThrow();
+    expect(warn).not.toHaveBeenCalled();
   });
 
   it("passes for mailgun with mailgun env only and no sendgrid env", () => {
