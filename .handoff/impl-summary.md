@@ -1,66 +1,59 @@
-PR: #1093
-PR URL: https://github.com/rentchaincanada/rentchain/pull/1093
-Branch: feat/evidence-provenance-chain-v1
-Mission: Phase 4A Mission 2 - Evidence Provenance Chain Implementation
+PR: #1094
+PR URL: https://github.com/rentchaincanada/rentchain/pull/1094
+Branch: feat/evidence-retention-policy-engine-v1
+Mission: Phase 4A Mission 3 - Evidence Retention Policy Engine Implementation
 
 ## Summary
-Implemented the evidence provenance creation contract for Phase 4A evidence records.
+Implemented the evidence retention policy engine as a service-layer governance foundation for evidence lifecycle evaluation.
 
-The service now validates provenance metadata, authority scope, safe source references, sensitivity metadata, immutable flags, and duplicate append writes before persisting metadata-only evidence records.
+The engine defines immutable code-versioned retention policies, deterministic retention evaluation, lifecycle transition events, eligibility helpers, and audience-specific projection helpers without adding routes, workers, Firestore rules, deployment configuration, or production data mutation.
 
 ## Files Changed
-- docs/architecture/evidence-provenance-emission-patterns-v1.md
+- docs/architecture/evidence-retention-policy-engine-v1.md
+- docs/governance/evidence-record-governance-v1.md
 - rentchain-api/src/types/evidence-record-types.ts
 - rentchain-api/src/services/evidence-record-service.ts
-- rentchain-api/src/__tests__/evidenceIdentifier.test.ts
-- rentchain-api/src/__tests__/evidenceRecordService.test.ts
+- rentchain-api/src/services/evidence-retention-policy-registry.ts
+- rentchain-api/src/__tests__/evidenceRetentionPolicy.test.ts
+- rentchain-api/src/__tests__/fixtures/evidence-record-fixtures.ts
 
 ## Implementation Details
-- Added `EvidenceCreationAuthorityContext` to capture server-side actor, landlord, tenant, support, and purpose context for evidence creation.
-- Implemented deterministic safe source reference generation from source collection, resource type, and source resource ID.
-- Implemented actor and authority resolution helpers that derive safe actor, landlord, and tenant references without exposing raw IDs in provenance metadata.
-- Implemented `EvidenceRecordService.createEvidenceRecord()` with creation-only persistence through Firestore `create()` semantics.
-- Enforced immutable, append-only, metadata-only evidence record creation.
-- Enforced landlord, tenant, admin, and support authority boundaries.
-- Required purpose for admin and support evidence creation.
-- Rejected unsafe provenance markers, missing authority scope, duplicate evidence IDs, and raw/payload inclusion flags.
-- Documented emission patterns for ApplicationEvidence, ScreeningEvidence, DecisionEvidence, PaymentEvidence, MaintenanceEvidence, and AuditEvidence.
-- Covered supersession through new append-only records with `supersedesEvidenceId` and provenance-chain references.
+- Added retention policy types, evaluation context/result types, lifecycle transition event types, and audience-specific retention metadata projection types.
+- Expanded evidence retention metadata with applied policy rule, evaluation timestamp, archival/deletion eligibility timestamps, legal hold status, and lifecycle events.
+- Added immutable code-based retention policy registry tagged with `evidence_retention_policy_v1`.
+- Defined default retention schedules for ApplicationEvidence, ScreeningEvidence, DecisionEvidence, PaymentEvidence, MaintenanceEvidence, and AuditEvidence.
+- Implemented retention schedule resolution with fail-closed policy version validation.
+- Implemented retention policy evaluation with legal hold blocking, landlord override support, eligibility calculations, evaluator validation, and metadata-only output.
+- Implemented lifecycle transition event creation and append-copy record lifecycle updates without mutating the original record object.
+- Implemented archival and deletion eligibility helpers.
+- Implemented tenant, landlord, admin, and audit retention metadata projection helpers using allowlisted outputs.
+- Updated evidence governance documentation with retention enforcement rules and deferred worker/legal-hold boundaries.
 
 ## Scope Boundaries
 - No routes added.
 - No auth core changes.
 - No Firestore rules changes.
 - No deployment, CI, or infrastructure changes.
-- No evidence retrieval implementation.
-- No evidence pack derivation, export, signing, attestation, or sharing workflows.
-- No production data mutation or source collection migration.
+- No autonomous archival or deletion workers.
+- No legal hold management system.
+- No retention dashboard or operator interface.
+- No evidence retrieval by retention status.
+- No production evidence record mutation.
 
 ## Validation
-- Passed: `npm --prefix rentchain-api run test:single -- src/__tests__/evidenceRecordService.test.ts src/__tests__/evidenceIdentifier.test.ts`
-- Passed: targeted TypeScript compile for evidence record types, service, identifier utility, fixtures, and tests.
+- Passed: `npm --prefix rentchain-api run test:single -- src/__tests__/evidenceRetentionPolicy.test.ts src/__tests__/evidenceRecordService.test.ts`
+- Passed: `npm --prefix rentchain-api run test:single -- src/__tests__/evidenceIdentifier.test.ts`
 - Passed: `npm --prefix rentchain-api run build`
 - Passed: `git diff --check`
-- Checked: no `lint` script is defined in `rentchain-api/package.json`.
-- Checked: changed-file unsafe-marker scan found only policy text, service rejection patterns, and test sentinel values.
-
-## Full Test Suite
-`npm --prefix rentchain-api run test` was run outside the local sandbox after the sandbox run hit an environment bind restriction.
-
-The full backend suite still has unrelated existing failures outside this mission:
-- `leaseDraftRoutes.test.ts`
-- `recipientTrustReviewRoutes.test.ts`
-- `supportConsoleRoutes.test.ts`
-- `deriveDecisionExecutionMappings.test.ts`
-- `landlordAnalyticsSnapshot.test.ts`
-
-The focused evidence tests and backend build passed.
+- Checked: changed-file unsafe-marker scan found governance text, service rejection patterns, and test sentinel values only.
 
 ## Known Limitations
-- Evidence retrieval routes remain deferred.
-- Evidence pack derivation remains deferred.
-- Retention, archival, deletion, legal hold, signing, attestation, and external sharing remain future work.
-- Source-service emission integrations are documented but not wired into runtime service flows in this mission.
+- Archival workers remain deferred.
+- Deletion workers remain deferred.
+- Legal hold creation, release, and enforcement workflows remain deferred.
+- Retention status query routes remain deferred.
+- Evidence pack derivation using retention state remains deferred.
+- Firestore rule and index deployment remain deferred.
 
 ## Recommended Next Mission
-Phase 4A Mission 3 - source-service evidence emission integration or evidence pack derivation planning.
+Phase 4A Mission 4 - source-service lifecycle integration or evidence pack derivation planning.

@@ -1,0 +1,116 @@
+import type {
+  EvidenceClass,
+  EvidenceRetentionPolicyVersion,
+  RetentionPolicyRule,
+} from "../types/evidence-record-types";
+
+export const EVIDENCE_RETENTION_POLICY_VERSION: EvidenceRetentionPolicyVersion = "evidence_retention_policy_v1";
+
+export const EVIDENCE_RETENTION_POLICY_RULES: Readonly<Record<EvidenceClass, RetentionPolicyRule>> = {
+  ApplicationEvidence: {
+    policyId: "retention_application_evidence_v1",
+    policyVersion: EVIDENCE_RETENTION_POLICY_VERSION,
+    evidenceClass: "ApplicationEvidence",
+    retentionPeriod: 3,
+    retentionUnit: "years",
+    archiveAfterPeriod: 3,
+    archiveAfterUnit: "years",
+    deletionAfterPeriod: null,
+    deletionAfterUnit: "indefinite",
+    legalHoldOverrideAllowed: true,
+    auditEventCapture: "required",
+    immutable: true,
+    appliesRetroactively: false,
+    description: "Default application evidence retention aligned to common lease-cycle review windows.",
+  },
+  ScreeningEvidence: {
+    policyId: "retention_screening_evidence_v1",
+    policyVersion: EVIDENCE_RETENTION_POLICY_VERSION,
+    evidenceClass: "ScreeningEvidence",
+    retentionPeriod: 2,
+    retentionUnit: "years",
+    archiveAfterPeriod: 2,
+    archiveAfterUnit: "years",
+    deletionAfterPeriod: null,
+    deletionAfterUnit: "indefinite",
+    legalHoldOverrideAllowed: true,
+    auditEventCapture: "required",
+    immutable: true,
+    appliesRetroactively: false,
+    description: "Default screening evidence retention with restricted-data minimization posture.",
+  },
+  DecisionEvidence: {
+    policyId: "retention_decision_evidence_v1",
+    policyVersion: EVIDENCE_RETENTION_POLICY_VERSION,
+    evidenceClass: "DecisionEvidence",
+    retentionPeriod: 2,
+    retentionUnit: "years",
+    archiveAfterPeriod: 2,
+    archiveAfterUnit: "years",
+    deletionAfterPeriod: null,
+    deletionAfterUnit: "indefinite",
+    legalHoldOverrideAllowed: true,
+    auditEventCapture: "required",
+    immutable: true,
+    appliesRetroactively: false,
+    description: "Default decision evidence retention for manual-review and outcome history.",
+  },
+  PaymentEvidence: {
+    policyId: "retention_payment_evidence_v1",
+    policyVersion: EVIDENCE_RETENTION_POLICY_VERSION,
+    evidenceClass: "PaymentEvidence",
+    retentionPeriod: 7,
+    retentionUnit: "years",
+    archiveAfterPeriod: 7,
+    archiveAfterUnit: "years",
+    deletionAfterPeriod: null,
+    deletionAfterUnit: "indefinite",
+    legalHoldOverrideAllowed: true,
+    auditEventCapture: "required",
+    immutable: true,
+    appliesRetroactively: false,
+    description: "Default payment evidence retention aligned to accounting and tax review horizons.",
+  },
+  MaintenanceEvidence: {
+    policyId: "retention_maintenance_evidence_v1",
+    policyVersion: EVIDENCE_RETENTION_POLICY_VERSION,
+    evidenceClass: "MaintenanceEvidence",
+    retentionPeriod: 2,
+    retentionUnit: "years",
+    archiveAfterPeriod: 2,
+    archiveAfterUnit: "years",
+    deletionAfterPeriod: null,
+    deletionAfterUnit: "indefinite",
+    legalHoldOverrideAllowed: true,
+    auditEventCapture: "required",
+    immutable: true,
+    appliesRetroactively: false,
+    description: "Default maintenance evidence retention for work order and tenant request history.",
+  },
+  AuditEvidence: {
+    policyId: "retention_audit_evidence_v1",
+    policyVersion: EVIDENCE_RETENTION_POLICY_VERSION,
+    evidenceClass: "AuditEvidence",
+    retentionPeriod: null,
+    retentionUnit: "indefinite",
+    archiveAfterPeriod: null,
+    archiveAfterUnit: "indefinite",
+    deletionAfterPeriod: null,
+    deletionAfterUnit: "indefinite",
+    legalHoldOverrideAllowed: false,
+    auditEventCapture: "required",
+    immutable: true,
+    appliesRetroactively: false,
+    description: "Audit evidence is append-safe and retained indefinitely unless a future legal process governs otherwise.",
+  },
+};
+
+export function getEvidenceRetentionPolicyRule(
+  evidenceClass: EvidenceClass,
+  policyVersion: EvidenceRetentionPolicyVersion
+): RetentionPolicyRule {
+  if (policyVersion !== EVIDENCE_RETENTION_POLICY_VERSION) throw new Error("evidence_retention_policy_version_unknown");
+  const rule = EVIDENCE_RETENTION_POLICY_RULES[evidenceClass];
+  if (!rule) throw new Error("evidence_retention_policy_missing");
+  return rule;
+}

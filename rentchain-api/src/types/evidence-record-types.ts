@@ -110,11 +110,145 @@ export type EvidenceSensitivityMetadata = {
 };
 
 export type EvidenceRetentionMetadata = {
-  retentionPolicy: "deferred_phase_4" | "retain_while_source_exists" | "manual_review_required";
+  retentionPolicy:
+    | "deferred_phase_4"
+    | "retain_while_source_exists"
+    | "manual_review_required"
+    | "evidence_retention_policy_v1";
   retentionReviewRequired: boolean;
   archiveAfter: string | null;
-  deleteAfter: null;
+  deleteAfter: string | null;
+  appliedRetentionPolicyRule: RetentionPolicyRuleSummary | null;
+  evaluatedAt: string | null;
+  eligibleForArchivalAt: string | null;
+  eligibleForDeletionAt: string | null;
+  legalHoldStatus: EvidenceLegalHoldStatus;
+  lifecycleEvents: LifecycleTransitionEvent[];
 };
+
+export type EvidenceRetentionPolicyVersion = "evidence_retention_policy_v1";
+
+export type RetentionPeriodUnit = "days" | "months" | "years" | "indefinite";
+
+export type EvidenceLegalHoldStatus = "none" | "active";
+
+export type RetentionPolicyRule = {
+  policyId: string;
+  policyVersion: EvidenceRetentionPolicyVersion;
+  evidenceClass: EvidenceClass;
+  retentionPeriod: number | null;
+  retentionUnit: RetentionPeriodUnit;
+  archiveAfterPeriod: number | null;
+  archiveAfterUnit: RetentionPeriodUnit;
+  deletionAfterPeriod: number | null;
+  deletionAfterUnit: RetentionPeriodUnit;
+  legalHoldOverrideAllowed: boolean;
+  auditEventCapture: "required";
+  immutable: true;
+  appliesRetroactively: false;
+  description: string;
+};
+
+export type RetentionPolicyRuleSummary = Pick<
+  RetentionPolicyRule,
+  | "policyId"
+  | "policyVersion"
+  | "evidenceClass"
+  | "retentionPeriod"
+  | "retentionUnit"
+  | "archiveAfterPeriod"
+  | "archiveAfterUnit"
+  | "deletionAfterPeriod"
+  | "deletionAfterUnit"
+  | "legalHoldOverrideAllowed"
+  | "auditEventCapture"
+  | "immutable"
+  | "appliesRetroactively"
+>;
+
+export type RetentionEvaluatedBy = {
+  actorRole: EvidenceActorRole;
+  actorRef: string | null;
+  purpose: string;
+  rawIdsIncluded: false;
+};
+
+export type RetentionEvaluationContext = {
+  currentTimestamp: string | Date;
+  legalHoldStatus: EvidenceLegalHoldStatus | null;
+  landlordOverride?: {
+    retentionPeriod?: number;
+    retentionUnit?: Exclude<RetentionPeriodUnit, "indefinite">;
+    archiveAfterPeriod?: number;
+    archiveAfterUnit?: Exclude<RetentionPeriodUnit, "indefinite">;
+    deletionAfterPeriod?: number;
+    deletionAfterUnit?: Exclude<RetentionPeriodUnit, "indefinite">;
+    reason: string;
+  } | null;
+  policyVersion: EvidenceRetentionPolicyVersion;
+  evaluationReason: string;
+  evaluatedBy: RetentionEvaluatedBy;
+};
+
+export type RetentionEvaluationResult = {
+  evidenceId: string;
+  policyRule: RetentionPolicyRuleSummary;
+  evaluatedAt: string;
+  legalHoldStatus: EvidenceLegalHoldStatus;
+  eligibleForArchivalAt: string | null;
+  eligibleForDeletionAt: string | null;
+  archivalEligible: boolean;
+  deletionEligible: boolean;
+  lifecycleStatus: EvidenceRecordStatus;
+  evaluationReason: string;
+  evaluatedBy: RetentionEvaluatedBy;
+  rawIdsIncluded: false;
+};
+
+export type LifecycleTransitionEvent = {
+  eventId: string;
+  evidenceId: string;
+  priorStatus: EvidenceRecordStatus;
+  newStatus: EvidenceRecordStatus;
+  transitionReason: string;
+  evaluatedPolicyRule: RetentionPolicyRuleSummary;
+  evaluatedBy: RetentionEvaluatedBy;
+  timestamp: string;
+  auditTrailReference: string;
+  legalHoldStatus: EvidenceLegalHoldStatus;
+  rawIdsIncluded: false;
+  payloadIncluded: false;
+};
+
+export type RetentionMetadataProjectionAudience = "landlord" | "tenant" | "admin" | "audit";
+
+export type RetentionMetadataProjection =
+  | {
+      audience: "tenant";
+      status: EvidenceRecordStatus;
+      rawIdsIncluded: false;
+    }
+  | {
+      audience: "landlord";
+      retentionPolicy: EvidenceRetentionMetadata["retentionPolicy"];
+      appliedRetentionPolicyRule: RetentionPolicyRuleSummary | null;
+      eligibleForArchivalAt: string | null;
+      lifecycleEvents: Array<Pick<LifecycleTransitionEvent, "eventId" | "priorStatus" | "newStatus" | "timestamp" | "transitionReason">>;
+      rawIdsIncluded: false;
+    }
+  | {
+      audience: "admin";
+      retentionMetadata: EvidenceRetentionMetadata;
+      rawIdsIncluded: false;
+    }
+  | {
+      audience: "audit";
+      appliedRetentionPolicyRule: RetentionPolicyRuleSummary | null;
+      evaluatedAt: string | null;
+      legalHoldStatus: EvidenceLegalHoldStatus;
+      lifecycleEvents: Array<Pick<LifecycleTransitionEvent, "eventId" | "priorStatus" | "newStatus" | "timestamp" | "transitionReason" | "auditTrailReference">>;
+      rawIdsIncluded: false;
+    };
 
 export type EvidenceRecord = {
   evidenceId: string;
