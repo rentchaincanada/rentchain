@@ -1,69 +1,72 @@
-PR: #1095
-PR URL: https://github.com/rentchaincanada/rentchain/pull/1095
-Branch: feat/institutional-export-framework-v1
-Mission: Phase 4 Mission 4 - Institutional Export Framework
+# Implementation Summary - Phase 4 Mission 5: Evidence Package Builder
 
-## Summary
-Established the institutional export framework schema, validation, authorization, projection, and governance layer for future evidence export workflows.
+PR: #1096
+PR URL: https://github.com/rentchaincanada/rentchain/pull/1096
+Branch: feat/evidence-package-builder-v1
 
-The implementation is schema and pure service only. It does not add routes, persistence, evidence package assembly, export delivery, signing, external integrations, background jobs, Firestore rules, deployment changes, or production data mutation.
+## Scope Delivered
+
+Implemented the Phase 4 evidence package builder as a backend service-layer foundation for institutional export package assembly.
+
+The implementation adds pure assembly helpers for authorized export requests, landlord-scoped evidence filtering, lifecycle status filtering, institutional export projections, metadata-only manifest generation, deterministic SHA256 checksums, package validation, and read-only Firestore materialization through a narrow query adapter.
+
+The builder preserves the Phase 4B export framework boundaries: no routes, no persistence, no signing, no delivery, no background workers, no external integrations, no Firestore rules, and no production data mutation.
 
 ## Files Changed
-- docs/architecture/export-framework-v1.md
-- docs/governance/export-governance-v1.md
-- rentchain-api/src/types/export-recipient-types.ts
-- rentchain-api/src/types/export-profile-types.ts
-- rentchain-api/src/types/export-request-types.ts
-- rentchain-api/src/types/export-package-types.ts
-- rentchain-api/src/types/export-authorization-types.ts
-- rentchain-api/src/types/export-audit-types.ts
-- rentchain-api/src/types/export-projections.ts
-- rentchain-api/src/services/export-service.ts
-- rentchain-api/src/__tests__/export-types.test.ts
-- rentchain-api/src/__tests__/export-projections.test.ts
-- rentchain-api/src/__tests__/export-authorization.test.ts
 
-## Implementation Details
-- Added governed export recipient and purpose enumerations with explicit recipient-purpose mapping.
-- Added export profile, request, package, authorization, audit, and projection type contracts.
-- Implemented deterministic export profile, request, and package ID generation using hash-based `_v1_` identifiers.
-- Implemented pure validation helpers for export profiles, requests, and package skeletons.
-- Implemented pure entity constructors for export profiles, export requests, and export package skeletons with no Firestore persistence.
-- Implemented authorization validation for actor context, landlord scope, recipient-purpose mapping, request scope, and redaction override tightening.
-- Implemented allowlist landlord/admin projections for profiles, requests, and packages.
-- Added focused tests for ID determinism, schema validation, authorization rules, redaction tightening, projection safety, and purity.
-- Added export architecture and governance documentation with entity relationships, scope boundaries, recipient mapping, data minimization, audit accountability, and deferred work.
+- rentchain-api/src/services/evidence-package-builder-service.ts (new)
+- rentchain-api/src/services/__tests__/evidence-package-builder.test.ts (new)
+- rentchain-api/src/services/__tests__/evidence-package-builder-integration.test.ts (new)
+- docs/architecture/evidence-package-builder-v1.md (new)
+- .handoff/impl-summary.md (updated)
 
-## Scope Boundaries
-- No routes added.
-- No existing route behavior changed.
-- No Firestore reads, writes, rules, indexes, or migrations added.
-- No export persistence added.
-- No package assembly logic added.
-- No delivery mechanics added.
-- No signing, attestation, webhook, external API, or recipient portal added.
-- No frontend changes.
-- No protected areas touched.
+## Tests Passed
 
-## Validation
-- Passed: `npm --prefix rentchain-api run test:single -- src/__tests__/export-types.test.ts src/__tests__/export-projections.test.ts src/__tests__/export-authorization.test.ts`
-- Passed: `npm --prefix rentchain-api test -- export`
-- Passed: `npm --prefix rentchain-api run build`
-- Passed: `git diff --check`
-- Checked: changed-file unsafe-marker scan found governance prohibition text, validation regexes, and test sentinel values only.
+- `npm run test -- src/services/__tests__/evidence-package-builder.test.ts`: PASS
+- `npm run test -- src/services/__tests__/evidence-package-builder-integration.test.ts`: PASS
+- `npm run build` in `rentchain-api`: PASS
+- `git diff --check`: PASS
 
-## Manual QA
-- Manual preview QA was not required because this mission adds backend schema, pure service helpers, docs, and tests only.
-- Schema, authorization, projection, service helper, documentation, and type-safety checks are covered by focused tests and backend build.
+## Validation Notes
+
+- Initial targeted test run without Node 20 failed the repo preflight because the shell was using Node v25.8.1. Validation was rerun under Node v20.20.2.
+- `npm run test` in `rentchain-api` was run under Node v20.20.2 with escalation after the sandbox produced `listen EPERM` socket failures. The escalated run completed and reported unrelated pre-existing failures: 7 failed files, 20 failed tests, 429 passed files, 2117 passed tests.
+- Unrelated failing files from the full backend suite:
+  - `src/__tests__/tenantWorkspaceLeaseLinkageContinuity.test.ts`
+  - `src/routes/__tests__/governedReviewWorkspaceSmoke.test.ts`
+  - `src/routes/__tests__/leaseDraftRoutes.test.ts`
+  - `src/routes/__tests__/recipientTrustReviewRoutes.test.ts`
+  - `src/routes/__tests__/supportConsoleRoutes.test.ts`
+  - `src/lib/analytics/__tests__/deriveDecisionExecutionMappings.test.ts`
+  - `src/services/landlord/__tests__/landlordAnalyticsSnapshot.test.ts`
+- `npm run lint` was attempted in `rentchain-api`, but the package has no `lint` script.
+- Coverage percentage was not measured because the repo does not expose a coverage script for this package.
+
+## Acceptance Criteria Met
+
+- [x] Assembly engine implemented and tested.
+- [x] Evidence filtering by profile scope, request scope, date range, unit scope, retention status, and evidence class works correctly.
+- [x] Evidence projection applies Full, Redacted, and RedactedSensitive minimization with safe field allowlists.
+- [x] Raw IDs, storage paths, tokens, credentials, provider payloads, payment account details, and sensitive payloads are excluded from projected evidence.
+- [x] Package manifest generation and validation implemented.
+- [x] Deterministic SHA256 checksum generation implemented.
+- [x] Landlord scope validation rejects cross-landlord assembly.
+- [x] Export authorization validation is enforced through server-resolved assembly context.
+- [x] Redaction policy tightening is enforced through the export framework validation path.
+- [x] Empty evidence packages remain valid metadata-only package entities under the existing export package schema.
+- [x] No scope creep: no routes, persistence, signing, delivery, background workers, Firestore rules, deployment changes, or external integrations.
+- [x] TypeScript compilation succeeds.
+- [x] No unrelated source files modified.
 
 ## Known Limitations
-- No API routes or route authorization are implemented in this mission.
-- No export persistence is implemented in this mission.
-- Evidence package assembly is deferred.
-- Export delivery and delivery audit trails are deferred.
-- Signing, attestation, and external sharing are deferred.
-- Recipient consent and legal signature workflows are deferred.
-- UI/dashboard workflows are deferred.
+
+- This mission implements the assembly engine only; no persistence, signing, delivery, or audit trail storage.
+- Packages are in-memory objects; future missions must implement persistence and delivery.
+- Tenant-facing export and consent workflows remain deferred.
+- External integrations and recipient access control are out of scope.
+- Full backend suite still has unrelated pre-existing failures outside this mission scope.
+- Lint and coverage could not be completed because no package lint or coverage script exists.
 
 ## Recommended Next Mission
-Phase 4 Mission 5 - Evidence Package Builder using the institutional export profile and request framework.
+
+Phase 4 Mission 6: Export Audit Trails - Implement append-only audit trail persistence for export package assembly, signing, and delivery events. Audit trails will reference the evidence packages created by this mission.
