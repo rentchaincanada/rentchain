@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { evidenceRecordFixtureList } from "./fixtures/evidence-record-fixtures";
+import { EVIDENCE_CLASSES } from "../types/evidence-record-types";
 import {
   generateEvidenceId,
   parseEvidenceId,
@@ -50,6 +51,22 @@ describe("evidence identifier utilities", () => {
     expect(validateEvidenceId("screening-order-secret-id")).toBe(false);
     expect(validateEvidenceId("evr_v1_type_short_hash")).toBe(false);
     expect(parseEvidenceId("screening-order-secret-id").valid).toBe(false);
+  });
+
+  it("supports every evidence class without exposing raw source values", () => {
+    for (const evidenceClass of EVIDENCE_CLASSES) {
+      const evidenceId = generateEvidenceId(evidenceClass, `${evidenceClass}:raw-source-id`, {
+        evidenceClass,
+        projection: "metadata_only",
+        schemaVersion: "evidence_record_v1",
+      });
+      const parsed = parseEvidenceId(evidenceId);
+
+      expect(validateEvidenceId(evidenceId)).toBe(true);
+      expect(parsed.valid).toBe(true);
+      expect(evidenceId).not.toContain("raw-source-id");
+      expect(evidenceId).not.toContain(evidenceClass);
+    }
   });
 });
 

@@ -139,12 +139,23 @@ export type EvidenceRecord = {
   redactionSummary: string;
 };
 
+export type EvidenceCreationAuthorityContext = {
+  actorRole: EvidenceActorRole;
+  actorId?: string | null;
+  landlordId?: string | null;
+  tenantId?: string | null;
+  supportAllowed?: boolean;
+  purpose?: string | null;
+};
+
 export type CreateEvidenceRecordInput = {
   evidenceClass: EvidenceClass;
   evidenceType: string;
   landlordId: string;
   resourceType: EvidenceResourceType;
   resourceId: string;
+  label?: string;
+  creationAuthority?: EvidenceCreationAuthorityContext;
   provenanceMetadata: EvidenceProvenanceMetadata;
   sensitivityMetadata: EvidenceSensitivityMetadata;
   retentionMetadata?: EvidenceRetentionMetadata;
