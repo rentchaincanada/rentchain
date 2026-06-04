@@ -5,14 +5,25 @@ import type {
   EvidenceActorRole,
   EvidenceAuthorityRole,
   EvidenceCreationAuthorityContext,
+  EvidenceLegalHoldStatus,
   EvidenceProvenanceMetadata,
   EvidenceReference,
   EvidenceRecord,
+  EvidenceRecordStatus,
   EvidenceRecordProjection,
   EvidenceRecordQuery,
   EvidenceProjectionAudience,
   EvidenceRetentionMetadata,
   EvidenceSensitivityMetadata,
+  LifecycleTransitionEvent,
+  RetentionEvaluatedBy,
+  RetentionEvaluationContext,
+  RetentionEvaluationResult,
+  RetentionMetadataProjection,
+  RetentionMetadataProjectionAudience,
+  RetentionPeriodUnit,
+  RetentionPolicyRule,
+  RetentionPolicyRuleSummary,
 } from "../types/evidence-record-types";
 import {
   EVIDENCE_CLASSES,
@@ -24,6 +35,10 @@ import {
   generateEvidenceId,
   type EvidenceIdentifierMetadata,
 } from "../utils/evidence-identifier";
+import {
+  EVIDENCE_RETENTION_POLICY_VERSION,
+  getEvidenceRetentionPolicyRule,
+} from "./evidence-retention-policy-registry";
 
 type SnapshotLike = {
   exists?: boolean;
@@ -116,6 +131,12 @@ function defaultRetentionMetadata(): EvidenceRetentionMetadata {
     retentionReviewRequired: true,
     archiveAfter: null,
     deleteAfter: null,
+    appliedRetentionPolicyRule: null,
+    evaluatedAt: null,
+    eligibleForArchivalAt: null,
+    eligibleForDeletionAt: null,
+    legalHoldStatus: "none",
+    lifecycleEvents: [],
   };
 }
 
@@ -330,6 +351,71 @@ function validateEvidenceRecordInput(input: CreateEvidenceRecordInput): Evidence
   return { valid: true };
 }
 
+function retentionPolicySummary(rule: RetentionPolicyRule): RetentionPolicyRuleSummary {
+  return {
+    policyId: rule.policyId,
+    policyVersion: rule.policyVersion,
+    evidenceClass: rule.evidenceClass,
+    retentionPeriod: rule.retentionPeriod,
+    retentionUnit: rule.retentionUnit,
+    archiveAfterPeriod: rule.archiveAfterPeriod,
+    archiveAfterUnit: rule.archiveAfterUnit,
+    deletionAfterPeriod: rule.deletionAfterPeriod,
+    deletionAfterUnit: rule.deletionAfterUnit,
+    legalHoldOverrideAllowed: rule.legalHoldOverrideAllowed,
+    auditEventCapture: rule.auditEventCapture,
+    immutable: rule.immutable,
+    appliesRetroactively: rule.appliesRetroactively,
+  };
+}
+
+function assertValidRetentionEvaluator(evaluatedBy: RetentionEvaluatedBy): void {
+  if (!isEvidenceActorRole(evaluatedBy.actorRole)) throw new Error("evidence_retention_evaluator_role_invalid");
+  if (!evaluatedBy.purpose || hasRestrictedContent(evaluatedBy.purpose)) throw new Error("evidence_retention_evaluator_purpose_invalid");
+  if (evaluatedBy.rawIdsIncluded !== false) throw new Error("evidence_retention_evaluator_raw_ids_included");
+}
+
+function toRetentionDate(value: string | Date): Date {
+  const date = value instanceof Date ? value : new Date(value);
+  if (!Number.isFinite(date.getTime())) throw new Error("evidence_retention_timestamp_invalid");
+  return date;
+}
+
+function addRetentionPeriod(base: Date, period: number | null, unit: RetentionPeriodUnit): string | null {
+  if (unit === "indefinite") return null;
+  if (period === null || !Number.isFinite(period) || period < 0) throw new Error("evidence_retention_period_invalid");
+  const next = new Date(base.getTime());
+  if (unit === "days") next.setUTCDate(next.getUTCDate() + period);
+  if (unit === "months") next.setUTCMonth(next.getUTCMonth() + period);
+  if (unit === "years") next.setUTCFullYear(next.getUTCFullYear() + period);
+  return next.toISOString();
+}
+
+function compareUtc(now: Date, timestamp: string | null): boolean {
+  if (!timestamp) return false;
+  const parsed = Date.parse(timestamp);
+  if (!Number.isFinite(parsed)) return false;
+  return now.getTime() >= parsed;
+}
+
+function hasRawIdentifierMarker(value: unknown): boolean {
+  return /raw-|internal-|tenant-id|landlord-id|lease-id|unit-id|firestore|storage path/i.test(JSON.stringify(value ?? {}));
+}
+
+function validateRetentionMetadataProjectionSafe(value: unknown): void {
+  if (hasRestrictedContent(value) || hasRawIdentifierMarker(value)) throw new Error("evidence_retention_projection_unsafe");
+}
+
+function canTransitionEvidenceStatus(priorStatus: EvidenceRecordStatus, newStatus: EvidenceRecordStatus): boolean {
+  const allowed: Record<EvidenceRecordStatus, EvidenceRecordStatus[]> = {
+    active: ["superseded", "archived", "redacted"],
+    superseded: ["archived", "redacted"],
+    archived: ["redacted"],
+    redacted: [],
+  };
+  return allowed[priorStatus].includes(newStatus);
+}
+
 export class EvidenceRecordService {
   private readonly firestore?: EvidenceRecordFirestoreLike;
 
@@ -402,6 +488,196 @@ export class EvidenceRecordService {
     if (!ref.set) throw new Error("evidence_record_storage_unavailable");
     await ref.set(record, { merge: false });
     return record;
+  }
+
+  getRetentionSchedule(
+    evidenceClass: EvidenceRecord["evidenceClass"],
+    _landlordId: string,
+    policyVersion: RetentionEvaluationContext["policyVersion"]
+  ): RetentionPolicyRule {
+    return getEvidenceRetentionPolicyRule(evidenceClass, policyVersion);
+  }
+
+  evaluateRetentionPolicy(
+    evidenceRecord: EvidenceRecord,
+    context: RetentionEvaluationContext
+  ): RetentionEvaluationResult {
+    if (context.legalHoldStatus !== "none" && context.legalHoldStatus !== "active") {
+      throw new Error("evidence_retention_legal_hold_ambiguous");
+    }
+    if (context.policyVersion !== EVIDENCE_RETENTION_POLICY_VERSION) {
+      throw new Error("evidence_retention_policy_version_unknown");
+    }
+    if (!context.evaluationReason || hasRestrictedContent(context.evaluationReason)) {
+      throw new Error("evidence_retention_evaluation_reason_invalid");
+    }
+    assertValidRetentionEvaluator(context.evaluatedBy);
+
+    const evaluatedAt = toRetentionDate(context.currentTimestamp);
+    const rule = this.getRetentionSchedule(evidenceRecord.evidenceClass, evidenceRecord.landlordId, context.policyVersion);
+    const overriddenRule: RetentionPolicyRule = context.landlordOverride
+      ? {
+          ...rule,
+          retentionPeriod: context.landlordOverride.retentionPeriod ?? rule.retentionPeriod,
+          retentionUnit: context.landlordOverride.retentionUnit ?? rule.retentionUnit,
+          archiveAfterPeriod: context.landlordOverride.archiveAfterPeriod ?? rule.archiveAfterPeriod,
+          archiveAfterUnit: context.landlordOverride.archiveAfterUnit ?? rule.archiveAfterUnit,
+          deletionAfterPeriod: context.landlordOverride.deletionAfterPeriod ?? rule.deletionAfterPeriod,
+          deletionAfterUnit: context.landlordOverride.deletionAfterUnit ?? rule.deletionAfterUnit,
+        }
+      : rule;
+    if (context.landlordOverride && (!context.landlordOverride.reason || hasRestrictedContent(context.landlordOverride.reason))) {
+      throw new Error("evidence_retention_landlord_override_reason_invalid");
+    }
+
+    const createdAt = toRetentionDate(evidenceRecord.createdAt);
+    const legalHoldStatus: EvidenceLegalHoldStatus = context.legalHoldStatus;
+    const holdBlocksLifecycle = legalHoldStatus === "active" && overriddenRule.legalHoldOverrideAllowed;
+    const eligibleForArchivalAt = addRetentionPeriod(createdAt, overriddenRule.archiveAfterPeriod, overriddenRule.archiveAfterUnit);
+    const eligibleForDeletionAt = addRetentionPeriod(createdAt, overriddenRule.deletionAfterPeriod, overriddenRule.deletionAfterUnit);
+    const archivalEligible = holdBlocksLifecycle ? false : compareUtc(evaluatedAt, eligibleForArchivalAt);
+    const deletionEligible = holdBlocksLifecycle ? false : compareUtc(evaluatedAt, eligibleForDeletionAt);
+    const result: RetentionEvaluationResult = {
+      evidenceId: evidenceRecord.evidenceId,
+      policyRule: retentionPolicySummary(overriddenRule),
+      evaluatedAt: evaluatedAt.toISOString(),
+      legalHoldStatus,
+      eligibleForArchivalAt,
+      eligibleForDeletionAt,
+      archivalEligible,
+      deletionEligible,
+      lifecycleStatus: evidenceRecord.status,
+      evaluationReason: safeLabel(context.evaluationReason, "retention evaluation"),
+      evaluatedBy: context.evaluatedBy,
+      rawIdsIncluded: false,
+    };
+    validateRetentionMetadataProjectionSafe(result);
+    return result;
+  }
+
+  isEligibleForArchival(evidenceRecord: EvidenceRecord, currentTime: Date): boolean {
+    if (evidenceRecord.retentionMetadata.legalHoldStatus === "active") return false;
+    return compareUtc(currentTime, evidenceRecord.retentionMetadata.eligibleForArchivalAt || evidenceRecord.retentionMetadata.archiveAfter);
+  }
+
+  isEligibleForDeletion(evidenceRecord: EvidenceRecord, currentTime: Date): boolean {
+    if (evidenceRecord.retentionMetadata.legalHoldStatus === "active") return false;
+    return compareUtc(currentTime, evidenceRecord.retentionMetadata.eligibleForDeletionAt || evidenceRecord.retentionMetadata.deleteAfter);
+  }
+
+  createLifecycleTransitionEvent(input: {
+    evidenceRecord: EvidenceRecord;
+    newStatus: EvidenceRecordStatus;
+    transitionReason: string;
+    evaluation: RetentionEvaluationResult;
+    auditTrailReference?: string | null;
+  }): LifecycleTransitionEvent {
+    if (!canTransitionEvidenceStatus(input.evidenceRecord.status, input.newStatus)) {
+      throw new Error("evidence_lifecycle_transition_invalid");
+    }
+    if (!input.transitionReason || hasRestrictedContent(input.transitionReason)) {
+      throw new Error("evidence_lifecycle_transition_reason_invalid");
+    }
+    const timestamp = input.evaluation.evaluatedAt;
+    const event: LifecycleTransitionEvent = {
+      eventId: safeReference("evidence_lifecycle", [
+        input.evidenceRecord.evidenceId,
+        input.evidenceRecord.status,
+        input.newStatus,
+        timestamp,
+        input.transitionReason,
+      ]),
+      evidenceId: input.evidenceRecord.evidenceId,
+      priorStatus: input.evidenceRecord.status,
+      newStatus: input.newStatus,
+      transitionReason: safeLabel(input.transitionReason, "retention lifecycle transition"),
+      evaluatedPolicyRule: input.evaluation.policyRule,
+      evaluatedBy: input.evaluation.evaluatedBy,
+      timestamp,
+      auditTrailReference: input.auditTrailReference || safeReference("retention_audit", input.evidenceRecord.evidenceId),
+      legalHoldStatus: input.evaluation.legalHoldStatus,
+      rawIdsIncluded: false,
+      payloadIncluded: false,
+    };
+    validateRetentionMetadataProjectionSafe(event);
+    return event;
+  }
+
+  appendLifecycleTransitionEvent(
+    evidenceRecord: EvidenceRecord,
+    event: LifecycleTransitionEvent,
+    evaluation: RetentionEvaluationResult
+  ): EvidenceRecord {
+    if (event.evidenceId !== evidenceRecord.evidenceId) throw new Error("evidence_lifecycle_event_record_mismatch");
+    if (!canTransitionEvidenceStatus(evidenceRecord.status, event.newStatus)) throw new Error("evidence_lifecycle_transition_invalid");
+    const lifecycleEvents = [...evidenceRecord.retentionMetadata.lifecycleEvents, event];
+    return {
+      ...evidenceRecord,
+      status: event.newStatus,
+      retentionMetadata: {
+        retentionPolicy: "evidence_retention_policy_v1",
+        retentionReviewRequired: false,
+        archiveAfter: evaluation.eligibleForArchivalAt,
+        deleteAfter: evaluation.eligibleForDeletionAt,
+        appliedRetentionPolicyRule: evaluation.policyRule,
+        evaluatedAt: evaluation.evaluatedAt,
+        eligibleForArchivalAt: evaluation.eligibleForArchivalAt,
+        eligibleForDeletionAt: evaluation.eligibleForDeletionAt,
+        legalHoldStatus: evaluation.legalHoldStatus,
+        lifecycleEvents,
+      },
+    };
+  }
+
+  getRetentionMetadataProjection(
+    evidenceRecord: EvidenceRecord,
+    audience: RetentionMetadataProjectionAudience
+  ): RetentionMetadataProjection {
+    if (audience === "tenant") {
+      return {
+        audience,
+        status: evidenceRecord.status === "redacted" ? "redacted" : evidenceRecord.status === "archived" ? "archived" : "active",
+        rawIdsIncluded: false,
+      };
+    }
+    if (audience === "landlord") {
+      return {
+        audience,
+        retentionPolicy: evidenceRecord.retentionMetadata.retentionPolicy,
+        appliedRetentionPolicyRule: evidenceRecord.retentionMetadata.appliedRetentionPolicyRule,
+        eligibleForArchivalAt: evidenceRecord.retentionMetadata.eligibleForArchivalAt,
+        lifecycleEvents: evidenceRecord.retentionMetadata.lifecycleEvents.map((event) => ({
+          eventId: event.eventId,
+          priorStatus: event.priorStatus,
+          newStatus: event.newStatus,
+          timestamp: event.timestamp,
+          transitionReason: event.transitionReason,
+        })),
+        rawIdsIncluded: false,
+      };
+    }
+    if (audience === "admin") {
+      return {
+        audience,
+        retentionMetadata: evidenceRecord.retentionMetadata,
+        rawIdsIncluded: false,
+      };
+    }
+    return {
+      audience,
+      appliedRetentionPolicyRule: evidenceRecord.retentionMetadata.appliedRetentionPolicyRule,
+      evaluatedAt: evidenceRecord.retentionMetadata.evaluatedAt,
+      legalHoldStatus: evidenceRecord.retentionMetadata.legalHoldStatus,
+      lifecycleEvents: evidenceRecord.retentionMetadata.lifecycleEvents.map((event) => ({
+        eventId: event.eventId,
+        priorStatus: event.priorStatus,
+        newStatus: event.newStatus,
+        timestamp: event.timestamp,
+        transitionReason: event.transitionReason,
+        auditTrailReference: event.auditTrailReference,
+      })),
+      rawIdsIncluded: false,
+    };
   }
 
   /**

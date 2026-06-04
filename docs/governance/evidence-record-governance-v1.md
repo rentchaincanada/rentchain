@@ -105,7 +105,7 @@ Allowed lifecycle patterns:
 
 - new record for a new evidence variant
 - new record to supersede a prior record
-- future append-only lifecycle event to document archival or redaction state
+- append-only lifecycle event to document archival or redaction state
 
 Prohibited lifecycle patterns:
 
@@ -114,6 +114,34 @@ Prohibited lifecycle patterns:
 - deleting records to hide prior evidence
 - storing raw source payloads for convenience
 - using evidence records to mutate source workflow state
+
+## Retention Policy Enforcement
+
+Evidence retention is evaluated by the service-layer retention policy engine. Policies are defined in code, versioned with `evidence_retention_policy_v1`, and do not apply retroactively as mutable runtime database configuration.
+
+Retention governance rules:
+
+- policy evaluation must be deterministic by evidence class and policy version
+- legal hold status must be explicit; ambiguous legal hold status fails closed
+- active legal hold status blocks archive and deletion eligibility
+- lifecycle state changes must be represented by append-only lifecycle events
+- tenant projections must not expose retention policy rules, landlord schedules, or legal hold details
+- landlord projections may show retention policy summary and archive eligibility, but not legal hold details unless a future governed hold workflow authorizes it
+- admin and audit projections may include full retention metadata for governed review
+- raw Firestore IDs, tenant IDs, landlord IDs, unit IDs, lease IDs, storage paths, source payloads, tokens, credentials, and provider payloads must not appear in retention metadata projections
+
+Default code-versioned schedules:
+
+| Evidence class | Archive eligibility | Deletion eligibility |
+| --- | --- | --- |
+| `ApplicationEvidence` | 3 years | Deferred future deletion policy |
+| `ScreeningEvidence` | 2 years | Deferred future deletion policy |
+| `DecisionEvidence` | 2 years | Deferred future deletion policy |
+| `PaymentEvidence` | 7 years | Deferred future deletion policy |
+| `MaintenanceEvidence` | 2 years | Deferred future deletion policy |
+| `AuditEvidence` | Indefinite | Indefinite |
+
+Archival workers, deletion workers, legal hold management, retention routes, Firestore rule changes, and index deployment remain deferred.
 
 ## Relationship to Audit Events
 
@@ -132,4 +160,4 @@ Phase 4 follow-up missions must decide:
 - institutional export package schemas
 - consent and recipient policy integration
 - evidence verification, signing, and attestation
-- archival, retention, deletion, and legal hold workflows
+- archival worker execution, deletion execution, and legal hold workflows
