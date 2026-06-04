@@ -71,6 +71,7 @@ This table documents projection expectations by collection family. It is not a r
 
 | Collection/family | Default sensitivity | Supported projection categories | Prohibited/default-excluded data | Notes |
 | --- | --- | --- | --- | --- |
+| `evidenceRecords` | Sensitive/Restricted | Evidence, audit-only, landlord operational, tenant-safe own context, admin/support, future institutional export | Raw Firestore IDs as labels, raw source payloads, provider payloads, raw reports, payment account details, identity documents, message bodies, storage paths, tokens, credentials, debug dumps | Evidence records are immutable metadata references. They must use safe evidence identifiers and allowlist projections. |
 | `landlords`, `users`, `accounts` | Sensitive | Landlord operational, admin/support, internal-only | Password/auth secrets, tokens, unrelated role claims, raw session internals | Authority must resolve server-side through the shared resolver direction. |
 | `properties` | Operational | Tenant-safe limited context, landlord operational, evidence, institutional export | Cross-landlord data, raw internal IDs as labels | Property labels are often safe operational anchors. |
 | `units` | Operational | Tenant-safe own unit, landlord operational, evidence, institutional export | Stale occupant fields as truth, raw unit IDs as labels | Lease-derived occupancy should win for display projections. |
@@ -169,6 +170,19 @@ Evidence projections should not include:
 - Unrelated tenant or property records.
 
 The source data may remain append-oriented and complete for audit integrity. Redaction should happen in projection/export layers rather than by mutating canonical records.
+
+### Evidence Record Field Classification
+
+| Evidence record field group | Baseline class | Projection guidance |
+| --- | --- | --- |
+| `evidenceId`, `schemaVersion`, `evidenceClass`, `evidenceType`, `status`, `createdAt` | Operational/Sensitive | Safe for scoped evidence and audit projections when authority is resolved. |
+| Internal Firestore document ID, `landlordId`, `resourceId` | Internal/Sensitive | Server-side joins only. Do not use as display labels or external export references. |
+| `safeReference` | Sensitive | May be projected when labels and safe keys are used; raw IDs and payloads remain excluded. |
+| `provenanceMetadata.createdBy`, `provenanceMetadata.authority` | Sensitive | Audit-only, admin/support, and governed evidence projections; tenant-safe only when actor context belongs to the tenant and is allowlisted. |
+| `provenanceMetadata.source` | Sensitive/Restricted | Source collection and safe source key may be projected; raw source IDs and payloads must remain excluded. |
+| `sensitivityMetadata` and `redactionSummary` | Operational/Sensitive | Required in evidence and export projections to explain redaction boundaries. |
+| `retentionMetadata` | Internal/Sensitive | Admin/support and audit-only until retention policy is implemented. |
+| Supersession fields | Sensitive | Safe evidence IDs may be projected for audit continuity; internal source IDs remain excluded. |
 
 ## 9. Institutional Export Philosophy
 
