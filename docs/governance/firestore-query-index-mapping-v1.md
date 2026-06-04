@@ -18,6 +18,59 @@ This mapping serves as the foundation for query performance verification, index 
 | Administrative | Cross-tenant analytics, support diagnostics | Variable (operational) | Mixed - some require custom indexes |
 | Registry/Import | External data correlation, batch processing | Medium (operational) | Source-scoped composite indexes required |
 | Reporting | Credit reporting, analytics, export generation | Low-to-medium (periodic) | Mixed - depends on scope and filtering |
+| Evidence Records | Evidence pack derivation, audit references, future institutional export packages | Medium-to-high (governance-critical) | Landlord-scoped composite indexes required before runtime rollout |
+
+### Evidence Records Query Patterns
+
+**Planned Service Location**: `rentchain-api/src/services/evidence-record-service.ts`
+
+**Landlord evidence pack derivation**:
+
+```typescript
+firestore.collection("evidenceRecords")
+  .where("landlordId", "==", landlordId)
+  .where("resourceType", "==", resourceType)
+  .orderBy("createdAt", "desc")
+```
+
+**Index Requirement**: `evidenceRecords` collection - `landlordId + resourceType + createdAt + __name__ (DESC)`
+
+**Lifecycle review**:
+
+```typescript
+firestore.collection("evidenceRecords")
+  .where("landlordId", "==", landlordId)
+  .where("status", "==", status)
+  .orderBy("createdAt", "desc")
+```
+
+**Index Requirement**: `evidenceRecords` collection - `landlordId + status + createdAt + __name__ (DESC)`
+
+**Resource-specific evidence lookup**:
+
+```typescript
+firestore.collection("evidenceRecords")
+  .where("landlordId", "==", landlordId)
+  .where("resourceId", "==", resourceId)
+  .orderBy("createdAt", "desc")
+```
+
+**Index Requirement**: `evidenceRecords` collection - `landlordId + resourceId + createdAt + __name__ (DESC)`
+
+**Evidence class review**:
+
+```typescript
+firestore.collection("evidenceRecords")
+  .where("landlordId", "==", landlordId)
+  .where("evidenceClass", "==", evidenceClass)
+  .orderBy("createdAt", "desc")
+```
+
+**Index Requirement**: `evidenceRecords` collection - `landlordId + evidenceClass + createdAt + __name__ (DESC)`
+
+**Business Purpose**: Support future evidence pack derivation, audit review, lifecycle review, and institutional export preparation.
+
+**Scope Boundary**: All planned queries include `landlordId` to preserve landlord isolation. Tenant-safe retrieval must additionally verify tenant ownership server-side before projection.
 
 ## 3. Tenant Workspace Query Patterns
 
