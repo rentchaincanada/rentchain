@@ -1,59 +1,69 @@
-PR: #1094
-PR URL: https://github.com/rentchaincanada/rentchain/pull/1094
-Branch: feat/evidence-retention-policy-engine-v1
-Mission: Phase 4A Mission 3 - Evidence Retention Policy Engine Implementation
+PR: #1095
+PR URL: https://github.com/rentchaincanada/rentchain/pull/1095
+Branch: feat/institutional-export-framework-v1
+Mission: Phase 4 Mission 4 - Institutional Export Framework
 
 ## Summary
-Implemented the evidence retention policy engine as a service-layer governance foundation for evidence lifecycle evaluation.
+Established the institutional export framework schema, validation, authorization, projection, and governance layer for future evidence export workflows.
 
-The engine defines immutable code-versioned retention policies, deterministic retention evaluation, lifecycle transition events, eligibility helpers, and audience-specific projection helpers without adding routes, workers, Firestore rules, deployment configuration, or production data mutation.
+The implementation is schema and pure service only. It does not add routes, persistence, evidence package assembly, export delivery, signing, external integrations, background jobs, Firestore rules, deployment changes, or production data mutation.
 
 ## Files Changed
-- docs/architecture/evidence-retention-policy-engine-v1.md
-- docs/governance/evidence-record-governance-v1.md
-- rentchain-api/src/types/evidence-record-types.ts
-- rentchain-api/src/services/evidence-record-service.ts
-- rentchain-api/src/services/evidence-retention-policy-registry.ts
-- rentchain-api/src/__tests__/evidenceRetentionPolicy.test.ts
-- rentchain-api/src/__tests__/fixtures/evidence-record-fixtures.ts
+- docs/architecture/export-framework-v1.md
+- docs/governance/export-governance-v1.md
+- rentchain-api/src/types/export-recipient-types.ts
+- rentchain-api/src/types/export-profile-types.ts
+- rentchain-api/src/types/export-request-types.ts
+- rentchain-api/src/types/export-package-types.ts
+- rentchain-api/src/types/export-authorization-types.ts
+- rentchain-api/src/types/export-audit-types.ts
+- rentchain-api/src/types/export-projections.ts
+- rentchain-api/src/services/export-service.ts
+- rentchain-api/src/__tests__/export-types.test.ts
+- rentchain-api/src/__tests__/export-projections.test.ts
+- rentchain-api/src/__tests__/export-authorization.test.ts
 
 ## Implementation Details
-- Added retention policy types, evaluation context/result types, lifecycle transition event types, and audience-specific retention metadata projection types.
-- Expanded evidence retention metadata with applied policy rule, evaluation timestamp, archival/deletion eligibility timestamps, legal hold status, and lifecycle events.
-- Added immutable code-based retention policy registry tagged with `evidence_retention_policy_v1`.
-- Defined default retention schedules for ApplicationEvidence, ScreeningEvidence, DecisionEvidence, PaymentEvidence, MaintenanceEvidence, and AuditEvidence.
-- Implemented retention schedule resolution with fail-closed policy version validation.
-- Implemented retention policy evaluation with legal hold blocking, landlord override support, eligibility calculations, evaluator validation, and metadata-only output.
-- Implemented lifecycle transition event creation and append-copy record lifecycle updates without mutating the original record object.
-- Implemented archival and deletion eligibility helpers.
-- Implemented tenant, landlord, admin, and audit retention metadata projection helpers using allowlisted outputs.
-- Updated evidence governance documentation with retention enforcement rules and deferred worker/legal-hold boundaries.
+- Added governed export recipient and purpose enumerations with explicit recipient-purpose mapping.
+- Added export profile, request, package, authorization, audit, and projection type contracts.
+- Implemented deterministic export profile, request, and package ID generation using hash-based `_v1_` identifiers.
+- Implemented pure validation helpers for export profiles, requests, and package skeletons.
+- Implemented pure entity constructors for export profiles, export requests, and export package skeletons with no Firestore persistence.
+- Implemented authorization validation for actor context, landlord scope, recipient-purpose mapping, request scope, and redaction override tightening.
+- Implemented allowlist landlord/admin projections for profiles, requests, and packages.
+- Added focused tests for ID determinism, schema validation, authorization rules, redaction tightening, projection safety, and purity.
+- Added export architecture and governance documentation with entity relationships, scope boundaries, recipient mapping, data minimization, audit accountability, and deferred work.
 
 ## Scope Boundaries
 - No routes added.
-- No auth core changes.
-- No Firestore rules changes.
-- No deployment, CI, or infrastructure changes.
-- No autonomous archival or deletion workers.
-- No legal hold management system.
-- No retention dashboard or operator interface.
-- No evidence retrieval by retention status.
-- No production evidence record mutation.
+- No existing route behavior changed.
+- No Firestore reads, writes, rules, indexes, or migrations added.
+- No export persistence added.
+- No package assembly logic added.
+- No delivery mechanics added.
+- No signing, attestation, webhook, external API, or recipient portal added.
+- No frontend changes.
+- No protected areas touched.
 
 ## Validation
-- Passed: `npm --prefix rentchain-api run test:single -- src/__tests__/evidenceRetentionPolicy.test.ts src/__tests__/evidenceRecordService.test.ts`
-- Passed: `npm --prefix rentchain-api run test:single -- src/__tests__/evidenceIdentifier.test.ts`
+- Passed: `npm --prefix rentchain-api run test:single -- src/__tests__/export-types.test.ts src/__tests__/export-projections.test.ts src/__tests__/export-authorization.test.ts`
+- Passed: `npm --prefix rentchain-api test -- export`
 - Passed: `npm --prefix rentchain-api run build`
 - Passed: `git diff --check`
-- Checked: changed-file unsafe-marker scan found governance text, service rejection patterns, and test sentinel values only.
+- Checked: changed-file unsafe-marker scan found governance prohibition text, validation regexes, and test sentinel values only.
+
+## Manual QA
+- Manual preview QA was not required because this mission adds backend schema, pure service helpers, docs, and tests only.
+- Schema, authorization, projection, service helper, documentation, and type-safety checks are covered by focused tests and backend build.
 
 ## Known Limitations
-- Archival workers remain deferred.
-- Deletion workers remain deferred.
-- Legal hold creation, release, and enforcement workflows remain deferred.
-- Retention status query routes remain deferred.
-- Evidence pack derivation using retention state remains deferred.
-- Firestore rule and index deployment remain deferred.
+- No API routes or route authorization are implemented in this mission.
+- No export persistence is implemented in this mission.
+- Evidence package assembly is deferred.
+- Export delivery and delivery audit trails are deferred.
+- Signing, attestation, and external sharing are deferred.
+- Recipient consent and legal signature workflows are deferred.
+- UI/dashboard workflows are deferred.
 
 ## Recommended Next Mission
-Phase 4A Mission 4 - source-service lifecycle integration or evidence pack derivation planning.
+Phase 4 Mission 5 - Evidence Package Builder using the institutional export profile and request framework.
