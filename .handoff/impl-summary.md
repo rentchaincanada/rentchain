@@ -1,72 +1,64 @@
-# Implementation Summary - Phase 4 Mission 5: Evidence Package Builder
+# Implementation Summary - Phase 4 Mission 6: Export Audit Trail
 
-PR: #1096
-PR URL: https://github.com/rentchaincanada/rentchain/pull/1096
-Branch: feat/evidence-package-builder-v1
+PR: #1097
+PR URL: https://github.com/rentchaincanada/rentchain/pull/1097
+Branch: feat/export-audit-trail-v1
 
 ## Scope Delivered
 
-Implemented the Phase 4 evidence package builder as a backend service-layer foundation for institutional export package assembly.
+Implemented Export Audit Trail v1 as a service-layer append-only audit foundation for institutional export operations.
 
-The implementation adds pure assembly helpers for authorized export requests, landlord-scoped evidence filtering, lifecycle status filtering, institutional export projections, metadata-only manifest generation, deterministic SHA256 checksums, package validation, and read-only Firestore materialization through a narrow query adapter.
+The implementation adds canonicalEvents-backed export audit event payloads, deterministic safe references, immutable create-based append semantics, non-blocking append support, landlord-scoped query helpers, allowlist response projections, lifecycle helper functions for profile/request/package events, and package assembly audit emission when an audit adapter is supplied to the evidence package builder.
 
-The builder preserves the Phase 4B export framework boundaries: no routes, no persistence, no signing, no delivery, no background workers, no external integrations, no Firestore rules, and no production data mutation.
+No routes, Firestore rules, deployment configuration, signing operations, delivery operations, background workers, external integrations, dashboards, or production data migrations were added.
 
 ## Files Changed
 
-- rentchain-api/src/services/evidence-package-builder-service.ts (new)
-- rentchain-api/src/services/__tests__/evidence-package-builder.test.ts (new)
-- rentchain-api/src/services/__tests__/evidence-package-builder-integration.test.ts (new)
-- docs/architecture/evidence-package-builder-v1.md (new)
+- rentchain-api/src/types/export-audit-types.ts (extended safe event payload and response contracts)
+- rentchain-api/src/services/export-audit-trail-service.ts (new append/query/projection service)
+- rentchain-api/src/services/evidence-package-builder-service.ts (assembly audit emission integration when audit adapter is supplied)
+- rentchain-api/src/services/__tests__/export-audit-trail-service.test.ts (new unit tests)
+- rentchain-api/src/services/__tests__/export-audit-trail-integration.test.ts (new integration tests)
+- docs/architecture/export-audit-trail-v1.md (new architecture documentation)
 - .handoff/impl-summary.md (updated)
 
 ## Tests Passed
 
+- `npm run test -- src/services/__tests__/export-audit-trail-service.test.ts`: PASS
+- `npm run test -- src/services/__tests__/export-audit-trail-integration.test.ts`: PASS
 - `npm run test -- src/services/__tests__/evidence-package-builder.test.ts`: PASS
 - `npm run test -- src/services/__tests__/evidence-package-builder-integration.test.ts`: PASS
 - `npm run build` in `rentchain-api`: PASS
 - `git diff --check`: PASS
 
-## Validation Notes
-
-- Initial targeted test run without Node 20 failed the repo preflight because the shell was using Node v25.8.1. Validation was rerun under Node v20.20.2.
-- `npm run test` in `rentchain-api` was run under Node v20.20.2 with escalation after the sandbox produced `listen EPERM` socket failures. The escalated run completed and reported unrelated pre-existing failures: 7 failed files, 20 failed tests, 429 passed files, 2117 passed tests.
-- Unrelated failing files from the full backend suite:
-  - `src/__tests__/tenantWorkspaceLeaseLinkageContinuity.test.ts`
-  - `src/routes/__tests__/governedReviewWorkspaceSmoke.test.ts`
-  - `src/routes/__tests__/leaseDraftRoutes.test.ts`
-  - `src/routes/__tests__/recipientTrustReviewRoutes.test.ts`
-  - `src/routes/__tests__/supportConsoleRoutes.test.ts`
-  - `src/lib/analytics/__tests__/deriveDecisionExecutionMappings.test.ts`
-  - `src/services/landlord/__tests__/landlordAnalyticsSnapshot.test.ts`
-- `npm run lint` was attempted in `rentchain-api`, but the package has no `lint` script.
-- Coverage percentage was not measured because the repo does not expose a coverage script for this package.
-
 ## Acceptance Criteria Met
 
-- [x] Assembly engine implemented and tested.
-- [x] Evidence filtering by profile scope, request scope, date range, unit scope, retention status, and evidence class works correctly.
-- [x] Evidence projection applies Full, Redacted, and RedactedSensitive minimization with safe field allowlists.
-- [x] Raw IDs, storage paths, tokens, credentials, provider payloads, payment account details, and sensitive payloads are excluded from projected evidence.
-- [x] Package manifest generation and validation implemented.
-- [x] Deterministic SHA256 checksum generation implemented.
-- [x] Landlord scope validation rejects cross-landlord assembly.
-- [x] Export authorization validation is enforced through server-resolved assembly context.
-- [x] Redaction policy tightening is enforced through the export framework validation path.
-- [x] Empty evidence packages remain valid metadata-only package entities under the existing export package schema.
-- [x] No scope creep: no routes, persistence, signing, delivery, background workers, Firestore rules, deployment changes, or external integrations.
+- [x] Audit trail persistence implemented using canonicalEvents collection.
+- [x] Immutable append-only audit events written with Firestore create() semantics when available.
+- [x] Existing-document precheck plus `merge: false` fallback implemented for Firestore-like adapters without create().
+- [x] Safe references generated for actors, landlords, targets, and metadata using deterministic hashing.
+- [x] No raw Firestore IDs, landlord IDs, tenant IDs, unit IDs, lease IDs, storage paths, tokens, secrets, credentials, or provider payloads in audit records.
+- [x] Audit trail query helpers enforce landlord scope server-side through safe landlord references.
+- [x] Audit trail retrieval uses allowlist projection only.
+- [x] Package assembly audit emission integrated into `buildEvidencePackage()` when `auditTrailFirestore` is supplied.
+- [x] Lifecycle helper contracts added for profile creation/modification/archive, request authorization/denial, and package lifecycle events.
+- [x] Audit append failures can be non-blocking through `appendAuditEventSafely()`.
+- [x] Unit and integration tests cover immutability, safe references, append semantics, scope validation, projections, non-blocking failure handling, package assembly emission, and request authorization events.
 - [x] TypeScript compilation succeeds.
-- [x] No unrelated source files modified.
+- [x] No unrelated files modified.
+
+## Manual QA
+
+Manual preview QA is not required. This mission does not change frontend rendering, mobile layout, route behavior, auth flow, or user-visible UI. Service-layer behavior is covered by targeted unit/integration tests and TypeScript build validation.
 
 ## Known Limitations
 
-- This mission implements the assembly engine only; no persistence, signing, delivery, or audit trail storage.
-- Packages are in-memory objects; future missions must implement persistence and delivery.
-- Tenant-facing export and consent workflows remain deferred.
-- External integrations and recipient access control are out of scope.
-- Full backend suite still has unrelated pre-existing failures outside this mission scope.
-- Lint and coverage could not be completed because no package lint or coverage script exists.
+- No API routes or REST endpoints were added for audit retrieval.
+- Signing and delivery operations remain future work; this mission only provides audit event contracts for those lifecycle stages.
+- Audit dashboard, compliance reporting, recipient notification, recipient consent workflows, and external integrations remain deferred.
+- Firestore rules were not changed.
+- Full backend suite was not rerun for this mission; previous local full-suite failures outside export audit scope were documented during the prior mission.
 
 ## Recommended Next Mission
 
-Phase 4 Mission 6: Export Audit Trails - Implement append-only audit trail persistence for export package assembly, signing, and delivery events. Audit trails will reference the evidence packages created by this mission.
+Phase 4C signing and attestation foundation, or a narrow Phase 4B route mission to expose landlord/admin export audit trail retrieval behind explicit authorization.
