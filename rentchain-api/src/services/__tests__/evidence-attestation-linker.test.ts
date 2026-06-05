@@ -22,6 +22,7 @@ function event(attestationRef: string): AttestationChainEvent {
     signatureRef: "signature:bbbbbbbbbbbbbbbbbbbb",
     certificateRef: "certificate:cccccccccccccccccccccccccccccccc",
     signatureAlgorithm: "RSA-SHA256",
+    contentHash: "a".repeat(64),
     evidenceRef: null,
     eventSummary: "Export package signature metadata verified.",
     metadataOnly: true,

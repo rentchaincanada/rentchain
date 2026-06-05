@@ -9,6 +9,8 @@ Attestation Framework v1 establishes service-layer contracts for package signing
 
 The framework does not perform signing operations. It records lifecycle metadata, safe references, and immutable chain state so future signing and recipient verification missions can build on audited foundations.
 
+Evidence Hash Verification v1 adds deterministic package/evidence hashing and signature-reference metadata. It still does not perform private-key signing or external verification; it records and verifies metadata hashes through the same canonical event chain.
+
 ## Components
 
 The implementation adds:
@@ -17,6 +19,9 @@ The implementation adds:
 - `rentchain-api/src/services/attestation-service.ts`
 - `rentchain-api/src/services/attestation-certificate-manager.ts`
 - `rentchain-api/src/services/evidence-attestation-linker.ts`
+- `rentchain-api/src/lib/evidence-hash-service.ts`
+- `rentchain-api/src/services/signature-generation-service.ts`
+- `rentchain-api/src/services/hash-chain-validation-service.ts`
 
 The export audit event contract now includes:
 
@@ -71,6 +76,24 @@ Landlord-scoped query helpers filter by safe landlord and package references. `b
 
 `projectAttestationForLandlord()` returns an allowlisted landlord projection with only safe references, lifecycle state, timestamps, and algorithm labels.
 
+## Hash Verification
+
+Evidence Hash Verification v1 adds:
+
+- deterministic package hash computation from stable export metadata
+- deterministic evidence record hash computation from safe metadata fields
+- signature reference generation from package hash and algorithm
+- generated and verified signature events carrying the content hash
+- fail-closed hash-chain validation for missing lifecycle steps or hash mismatches
+
+Hash verification does not mutate evidence records or export packages. It reads package/evidence metadata, emits canonical audit events for signature lifecycle, and reconstructs chain state from immutable audit events.
+
+## Signing Execution
+
+The current signing layer creates metadata references only. It does not perform private-key operations, external certificate validation, or external timestamping. `recordGeneratedSignature()` creates a deterministic signature reference from the content hash and allowed algorithm. `recordVerifiedSignature()` validates the generated hash against the current package hash before appending a verified event.
+
+Verification failure is fail-closed: invalid hash format, missing generated event, missing signature reference, missing certificate reference, algorithm gaps, or hash mismatch returns an unsuccessful verification result and does not append a verified event.
+
 ## Portable Attestation Alignment
 
 This framework does not replace portable attestations. It complements them by adding package-level lifecycle evidence for future institutional export signing and trust-chain review.
@@ -107,3 +130,6 @@ Tests cover:
 - chain integrity failures for missing lifecycle steps
 - landlord-scoped attestation projections
 - export audit trail integration for signature event types
+- deterministic package/evidence hash computation
+- signature reference generation
+- hash-chain reconstruction and fail-closed verification

@@ -1,84 +1,88 @@
-# Implementation Summary - Phase 4 Mission 7: Attestation Framework
+# Implementation Summary - Phase 4C Mission 8: Evidence Hash Verification
 
-PR: #1098
-PR URL: https://github.com/rentchaincanada/rentchain/pull/1098
-Branch: feat/attestation-framework-v1
+PR: #1099
+PR URL: https://github.com/rentchaincanada/rentchain/pull/1099
+Branch: feat/evidence-hash-verification-v1
 
 ## Scope Delivered
 
-Implemented Attestation Framework v1 as a service-layer foundation for export package signature metadata, certificate references, evidence/package attestation links, and immutable attestation chain verification.
+Implemented Evidence Hash Verification v1 as a service-layer foundation for deterministic export package hashes, evidence record hashes, signature reference metadata, and fail-closed attestation hash-chain validation.
 
-The implementation extends the existing export audit trail with signature and attestation event types, emits those events through the existing canonicalEvents append path, adds deterministic metadata-only certificate references, adds pure evidence/package attestation linking helpers, and provides landlord-scoped chain reconstruction and allowlist projection helpers.
+The implementation adds pure SHA-256 hashing over canonical metadata, deterministic signature references from content hash and allowed algorithm, generated/verified signature event hash metadata, high-level signing workflow helpers in the attestation service, and hash-chain reconstruction/verification helpers.
 
-No routes, dashboards, signing execution, delivery mechanisms, recipient verification surfaces, external integrations, Firestore rules, background workers, dependency changes, or production data migrations were added.
+No routes, frontend surfaces, Firestore rules, deployment changes, dependency changes, external key integrations, background workers, production signing integrations, delivery mechanisms, recipient verification, or migrations were added.
 
 ## Files Changed
 
+- rentchain-api/src/lib/evidence-hash-service.ts
+- rentchain-api/src/lib/evidence-hash-service.test.ts
+- rentchain-api/src/services/signature-generation-service.ts
+- rentchain-api/src/services/hash-chain-validation-service.ts
+- rentchain-api/src/services/attestation-service.ts
+- rentchain-api/src/services/__tests__/signature-generation-service.test.ts
+- rentchain-api/src/services/__tests__/hash-chain-validation-service.test.ts
+- rentchain-api/src/services/__tests__/evidence-package-hash-integration.test.ts
+- rentchain-api/src/services/__tests__/attestation-service.test.ts
+- rentchain-api/src/services/__tests__/evidence-attestation-linker.test.ts
 - rentchain-api/src/types/attestation-types.ts
 - rentchain-api/src/types/export-audit-types.ts
-- rentchain-api/src/services/attestation-service.ts
-- rentchain-api/src/services/attestation-certificate-manager.ts
-- rentchain-api/src/services/evidence-attestation-linker.ts
-- rentchain-api/src/services/export-audit-trail-service.ts
 - rentchain-api/src/types/__tests__/attestation-types.test.ts
-- rentchain-api/src/services/__tests__/attestation-service.test.ts
-- rentchain-api/src/services/__tests__/attestation-certificate-manager.test.ts
-- rentchain-api/src/services/__tests__/evidence-attestation-linker.test.ts
-- rentchain-api/src/services/__tests__/attestation-integration.test.ts
-- rentchain-api/src/services/__tests__/export-audit-trail-integration.test.ts
+- docs/architecture/evidence-hash-verification-v1.md
 - docs/architecture/attestation-framework-v1.md
-- docs/architecture/export-audit-trail-v1.md
 - .handoff/impl-summary.md
 
 ## Tests Passed
 
-- `npm test -- src/types/__tests__/attestation-types.test.ts src/services/__tests__/attestation-service.test.ts src/services/__tests__/attestation-certificate-manager.test.ts src/services/__tests__/evidence-attestation-linker.test.ts src/services/__tests__/attestation-integration.test.ts src/services/__tests__/export-audit-trail-integration.test.ts`: PASS
-- `npm run test:single -- src/types/__tests__/attestation-types.test.ts src/services/__tests__/attestation-service.test.ts src/services/__tests__/attestation-certificate-manager.test.ts src/services/__tests__/evidence-attestation-linker.test.ts src/services/__tests__/attestation-integration.test.ts src/services/__tests__/export-audit-trail-integration.test.ts`: PASS
+- `npm test -- src/lib/evidence-hash-service.test.ts src/services/__tests__/signature-generation-service.test.ts src/services/__tests__/hash-chain-validation-service.test.ts src/services/__tests__/evidence-package-hash-integration.test.ts src/services/__tests__/attestation-service.test.ts`: PASS
+- `npm run test:single -- src/lib/evidence-hash-service.test.ts src/services/__tests__/signature-generation-service.test.ts src/services/__tests__/hash-chain-validation-service.test.ts src/services/__tests__/evidence-package-hash-integration.test.ts src/services/__tests__/attestation-service.test.ts`: PASS
 - `npm run build` in `rentchain-api`: PASS
 - `git diff --check`: PASS
 
 ## Acceptance Criteria Met
 
-- [x] Attestation type contracts added with safe references, immutable flags, and `rawIdsIncluded: false` / `payloadIncluded: false` constraints.
-- [x] Export audit event types extended with signature requested, signature generated, signature verified, attestation linked, and attestation revoked events.
-- [x] Non-blocking audit append helpers added for signature requested, generated, verified, and attestation linked events.
-- [x] Signature and attestation audit events are written through canonicalEvents with safe references and metadata-only payloads.
-- [x] Certificate manager generates deterministic safe certificate references and enforces `RSA-SHA256` / `ECDSA-SHA256` only.
-- [x] Certificate projection excludes certificate material and key material.
-- [x] Evidence/package attestation linker creates immutable metadata-only links without mutating evidence or package records.
-- [x] Chain builder reconstructs attestation lifecycle from canonical export audit events.
-- [x] Chain verifier rejects missing lifecycle steps, state regressions, invalid timestamps, reference mismatches, and raw/payload flags.
-- [x] Landlord projection helper returns allowlisted attestation data only and rejects landlord scope mismatch.
-- [x] Export audit integration tests confirm signature events appear in package audit trail without regressions.
-- [x] Architecture documentation describes implemented components, integration points, boundaries, validation, and deferred work.
+- [x] Deterministic SHA-256 hash computation added for export packages.
+- [x] Deterministic SHA-256 hash computation added for evidence records.
+- [x] Canonical normalization sorts object keys and normalizes undefined values to null.
+- [x] Package and evidence hash helpers are pure and do not mutate input objects.
+- [x] Signature reference generation is deterministic from hash and algorithm.
+- [x] `RSA-SHA256` and `ECDSA-SHA256` are accepted; unsupported algorithms are rejected.
+- [x] Signature metadata is metadata-only and excludes signature material, certificate material, and key material.
+- [x] Generated and verified signature audit events can carry content hashes.
+- [x] Attestation service helpers added for requesting, recording generated, and recording verified package signatures.
+- [x] Signing helpers validate `ExportAuthorizationContext` and enforce landlord scope.
+- [x] Hash-chain reconstruction and integrity validation added.
+- [x] Verification fails closed on invalid hash format, missing generated event, missing verified event, and hash mismatch.
+- [x] Full request -> generated -> verified workflow tested through canonical audit events.
+- [x] Evidence-attestation linking works with verified signature attestations.
+- [x] Mutation scan confirmed no evidence/package collection writes in new hash/signature services.
 - [x] No protected areas modified.
+- [x] No dependency changes.
 - [x] No unrelated files modified.
 
 ## Manual QA
 
-Manual preview QA is not required. This mission does not change frontend rendering, mobile layout, route behavior, auth flow, routing, or user-visible UI. Service-layer behavior is covered by targeted unit/integration tests and TypeScript build validation.
+Manual preview QA is not required. This mission does not change frontend rendering, mobile layout, routing, auth flow, API routes, or user-visible behavior. Service-layer behavior is covered by targeted unit/integration tests and TypeScript build validation.
 
 Manual checklist completed by code/test inspection:
 
-1. Attestation schema flags inspected: raw IDs, payloads, raw certificates, signature material, and key material are explicitly false where applicable.
-2. Certificate safe-reference determinism verified by tests with repeated registration inputs.
-3. Audit trail integration verified with mock canonicalEvents adapter for signature requested/generated events and full attestation chain events.
-4. Immutability verified through existing export audit create semantics and immutable/link flags.
-5. Projection safety verified through landlord projection tests and restricted literal scan of new attestation files.
-6. Landlord isolation verified through projection mismatch and linker query tests.
-7. Evidence linking verified through immutable link and evidence-attestation map tests.
-8. Certificate manager verified for accepted algorithms and rejected unsupported algorithms.
-9. Non-blocking append verified with failing Firestore-like adapter returning null.
+1. Hash determinism verified through repeated computation tests with identical package and evidence data.
+2. Hash stability verified by SHA-256 64-character lowercase hex checks.
+3. Signature reference generation verified as deterministic from content hash and algorithm.
+4. Chain integrity validation verified to reject missing events and hash mismatches.
+5. Authorization validation verified through raw flag, missing actor, missing landlord scope, and cross-landlord tests.
+6. Evidence/package immutability verified by tests and code inspection.
+7. Audit trail integration verified with mock canonicalEvents adapter for signature requested, generated, and verified events.
+8. Non-blocking append behavior verified with failing Firestore-like adapter returning null for request helper.
+9. Landlord scope enforcement verified through cross-landlord verification rejection.
 10. Architecture documentation reviewed for scope boundaries and deferred work.
 
 ## Known Limitations
 
-- No signing operation is implemented; only metadata lifecycle events and references are established.
-- No certificate storage, certificate content validation, HSM, KMS, PKI, recipient verification, delivery, or external integration was added.
+- Signature generation produces deterministic metadata references only; no private-key signing is implemented.
+- No certificate storage, external certificate validation, HSM, KMS, PKI, notary, timestamp authority, recipient verification, delivery, or external integration was added.
 - No HTTP routes, dashboards, Firestore rules, background workers, or migrations were added.
-- Chain verification validates event order and metadata integrity, not cryptographic signatures.
-- `npm run build:api` is not available in the repo root; `npm run build` was run in `rentchain-api` instead.
+- Hash-chain verification validates metadata hash integrity and lifecycle order, not external cryptographic proof.
 
 ## Recommended Next Mission
 
-Phase 4C signing execution planning or a narrow attestation route/read-model mission with explicit authorization requirements.
+Phase 4C trust workspace implementation or a narrow route/read-model mission for authorized attestation hash verification retrieval.

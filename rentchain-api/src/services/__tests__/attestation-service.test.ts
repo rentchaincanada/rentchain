@@ -7,8 +7,12 @@ import {
   appendSignatureVerifiedAuditEvent,
   buildAttestationChain,
   projectAttestationForLandlord,
+  recordGeneratedSignature,
+  recordVerifiedSignature,
+  requestSignatureForPackage,
   verifyAttestationChainIntegrity,
 } from "../attestation-service";
+import { computeEvidencePackageHash } from "../../lib/evidence-hash-service";
 import type { ExportAuthorizationContext } from "../../types/export-authorization-types";
 import type { ExportAuditEventPayload } from "../../types/export-audit-types";
 import type { ExportPackage } from "../../types/export-package-types";
@@ -268,5 +272,78 @@ describe("attestation service", () => {
       valid: false,
       errors: ["attestation_chain_missing_signature_generation"],
     });
+  });
+
+  it("requests and records generated package signatures with deterministic hash metadata", async () => {
+    const audit = createAuditStore();
+    const exportPackage = pkg();
+    const packageHash = computeEvidencePackageHash(exportPackage);
+
+    await requestSignatureForPackage(exportPackage, context(), {
+      attestationId: "attestation:helper",
+      timestamp: "2026-06-05T12:03:00.000Z",
+      firestore: audit.firestore,
+    });
+    await recordGeneratedSignature(exportPackage, packageHash, "RSA-SHA256", "certificate:helper", context(), {
+      attestationId: "attestation:helper",
+      timestamp: "2026-06-05T12:04:00.000Z",
+      firestore: audit.firestore,
+    });
+
+    const chain = await buildAttestationChain({
+      landlordId: landlordRef,
+      exportPackageId: exportPackage.exportPackageId,
+      attestationId: "attestation:helper",
+      firestore: audit.firestore,
+    });
+
+    expect(chain.events.map((event) => event.lifecycleState)).toEqual(["SignatureRequested", "SignatureGenerated"]);
+    expect(chain.events[1].contentHash).toBe(packageHash);
+    expect(JSON.stringify(exportPackage)).not.toContain("certificate-content");
+  });
+
+  it("records verified signatures only when generated hash matches", async () => {
+    const audit = createAuditStore();
+    const exportPackage = pkg();
+    const packageHash = computeEvidencePackageHash(exportPackage);
+
+    await requestSignatureForPackage(exportPackage, context(), {
+      attestationId: "attestation:verify",
+      timestamp: "2026-06-05T12:03:00.000Z",
+      firestore: audit.firestore,
+    });
+    await recordGeneratedSignature(exportPackage, packageHash, "ECDSA-SHA256", "certificate:verify", context(), {
+      attestationId: "attestation:verify",
+      timestamp: "2026-06-05T12:04:00.000Z",
+      firestore: audit.firestore,
+    });
+
+    const verified = await recordVerifiedSignature(exportPackage, packageHash, "attestation:verify", context(), {
+      timestamp: "2026-06-05T12:05:00.000Z",
+      firestore: audit.firestore,
+      evidenceReference: "evidence:eeeeeeeeeeeeeeeeeeee",
+    });
+    const mismatch = await recordVerifiedSignature(exportPackage, "b".repeat(64), "attestation:verify", context(), {
+      timestamp: "2026-06-05T12:06:00.000Z",
+      firestore: audit.firestore,
+    });
+
+    expect(verified).toMatchObject({ success: true, matchedHash: packageHash, errors: [] });
+    expect(mismatch.success).toBe(false);
+    expect(mismatch.errors).toContain("verification_hash_mismatch");
+    expect(audit.list().map((event) => event.eventType)).toEqual([
+      "ExportPackageSignatureRequested",
+      "ExportPackageSignatureGenerated",
+      "ExportPackageSignatureVerified",
+    ]);
+  });
+
+  it("rejects signing helper calls with invalid authorization context", async () => {
+    await expect(requestSignatureForPackage(pkg(), context({ rawIdsIncluded: true as false }))).rejects.toThrow(
+      "attestation_context_invalid"
+    );
+    await expect(requestSignatureForPackage(pkg(), context({ requestingActorScope: otherLandlordRef }))).rejects.toThrow(
+      "attestation_landlord_scope_mismatch"
+    );
   });
 });

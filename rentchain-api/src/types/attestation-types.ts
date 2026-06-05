@@ -51,6 +51,7 @@ export type SignatureMetadata = {
   signatureRef: string;
   signatureAlgorithm: SignatureAlgorithm;
   certificateRef: CertificateSafeReference;
+  contentHash: string;
   signedAt: string | null;
   verifiedAt: string | null;
   signerRef: string;
@@ -67,6 +68,7 @@ export type AttestationAuditMetadata = {
   signatureRef: string | null;
   certificateRef: CertificateSafeReference | null;
   signatureAlgorithm: SignatureAlgorithm | null;
+  contentHash: string | null;
   portableAttestationType: PortableAttestationType | null;
   lifecycleState: AttestationLifecycleState;
   linkedEvidenceRef: SafeEvidenceReference | null;
@@ -98,6 +100,7 @@ export type AttestationChainEvent = {
   signatureRef: string | null;
   certificateRef: CertificateSafeReference | null;
   signatureAlgorithm: SignatureAlgorithm | null;
+  contentHash: string | null;
   evidenceRef: SafeEvidenceReference | null;
   eventSummary: string;
   metadataOnly: true;
@@ -129,6 +132,7 @@ export type AttestationProjection = {
     timestamp: string;
     signatureAlgorithm: SignatureAlgorithm | null;
     certificateRef: CertificateSafeReference | null;
+    contentHash: string | null;
     evidenceRef: SafeEvidenceReference | null;
   }>;
   metadataOnly: true;
