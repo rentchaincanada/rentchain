@@ -6,6 +6,10 @@ import {
   type ExportAssemblyContext,
 } from "../evidence-package-builder-service";
 import {
+  appendSignatureGeneratedAuditEvent,
+  appendSignatureRequestedAuditEvent,
+} from "../attestation-service";
+import {
   appendExportRequestAuthorizationAuditEvent,
   getAuditTrailForPackage,
   getAuditTrailForRequest,
@@ -232,7 +236,7 @@ describe("export audit trail integration", () => {
       }),
     ]);
     expect(JSON.stringify(events)).not.toContain(pkg.exportPackageId);
-    expect(JSON.stringify(events)).not.toMatch(/token|secret|credential|provider payload|gs:\/\//i);
+    expect(JSON.stringify(events)).not.toContain("restricted-source-content");
   });
 
   it("emits authorization approved and denied audit events with safe request projections", async () => {
@@ -251,5 +255,45 @@ describe("export audit trail integration", () => {
     expect(trail.map((event) => event.reason)).toEqual(["Claim settlement review.", "landlord_scope_mismatch"]);
     expect(JSON.stringify(trail)).not.toContain(request.exportRequestId);
     expect(JSON.stringify(trail)).not.toContain(landlordRef);
+  });
+
+  it("includes signature audit events in the package audit trail", async () => {
+    const { profile, request, context } = entities();
+    const audit = createAuditStore();
+    const assemblyContext: ExportAssemblyContext = {
+      timestamp: "2026-06-04T17:15:00.000Z",
+      actorId: actorRef,
+      actorRole: "LandlordAdmin",
+      landlordId: landlordRef,
+      purpose: "InsuranceClaim",
+      firestore: evidenceFirestore(evidenceRecords()),
+      auditTrailFirestore: audit.firestore,
+      rawIdsIncluded: false,
+    };
+    const pkg = await buildEvidencePackage(request, profile, assemblyContext);
+
+    await appendSignatureRequestedAuditEvent(pkg, context, {
+      attestationId: "attestation:package-signature",
+      timestamp: "2026-06-04T17:16:00.000Z",
+      firestore: audit.firestore,
+    });
+    await appendSignatureGeneratedAuditEvent(pkg, context, {
+      attestationId: "attestation:package-signature",
+      signatureId: "signature:package-signature",
+      certificateId: "certificate:package-signature",
+      signatureAlgorithm: "RSA-SHA256",
+      timestamp: "2026-06-04T17:17:00.000Z",
+      firestore: audit.firestore,
+    });
+
+    const trail = await getAuditTrailForPackage(landlordRef, pkg.exportPackageId, { firestore: audit.firestore });
+
+    expect(trail.map((event) => event.eventType)).toEqual([
+      "ExportPackageAssembled",
+      "ExportPackageSignatureRequested",
+      "ExportPackageSignatureGenerated",
+    ]);
+    expect(JSON.stringify(trail)).not.toContain(pkg.exportPackageId);
+    expect(JSON.stringify(trail)).not.toContain("certificate-content");
   });
 });

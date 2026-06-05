@@ -44,11 +44,16 @@ The service supports the export lifecycle event types defined by `export-audit-t
 - `ExportRequestCancelled`
 - `ExportPackageAssembled`
 - `ExportPackageSigned`
+- `ExportPackageSignatureRequested`
+- `ExportPackageSignatureGenerated`
+- `ExportPackageSignatureVerified`
+- `ExportPackageAttestationLinked`
+- `ExportPackageAttestationRevoked`
 - `ExportPackageDelivered`
 - `ExportPackageArchived`
 - `ExportPackageRevoked`
 
-Signing, delivery, archiving, and revocation events are supported as service contracts only. The operations themselves remain deferred.
+Signing, attestation linking, delivery, archiving, and revocation events are supported as service contracts only. Signing execution, delivery, and recipient verification remain deferred.
 
 ## Safe References
 
@@ -93,6 +98,8 @@ The audit service also provides lifecycle helpers:
 - `appendExportPackageLifecycleAuditEvent()`
 
 These helpers let future service-layer callers emit profile, request, signing, delivery, archive, and revocation audit events without widening API routes or adding background workers.
+
+Attestation Framework v1 also emits package signature and attestation-link events through the same canonical event helper. Those events carry only safe references, lifecycle state, algorithm labels, and metadata-only flags.
 
 ## Non-Blocking Append
 
