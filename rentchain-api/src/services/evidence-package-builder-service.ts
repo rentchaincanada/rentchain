@@ -21,6 +21,8 @@ import type {
   ExportRequest,
   ExportScopeParameters,
 } from "../types/export-request-types";
+import type { ExportAuditTrailFirestoreLike } from "./export-audit-trail-service";
+import { appendAuditEventSafely } from "./export-audit-trail-service";
 import {
   createExportPackageEntity,
   validateExportPackage,
@@ -60,6 +62,7 @@ export type ExportAssemblyContext = {
   purpose: string;
   allowAuditStatusInclusion?: boolean;
   firestore?: EvidenceRecordFirestoreLike;
+  auditTrailFirestore?: ExportAuditTrailFirestoreLike;
   rawIdsIncluded: false;
 };
 
@@ -473,5 +476,36 @@ export async function buildEvidencePackage(
 ): Promise<ExportPackage> {
   validateAssemblyInputs(request, profile, context);
   const records = await materializeEvidenceRecords(context.landlordId, request, profile, exportDb(context.firestore));
-  return assembleEvidencePackage(request, profile, records, context);
+  const pkg = assembleEvidencePackage(request, profile, records, context);
+  if (context.auditTrailFirestore) {
+    await appendAuditEventSafely(
+      {
+        eventType: "ExportPackageAssembled",
+        targetType: "ExportPackage",
+        targetId: pkg.exportPackageId,
+        landlordId: context.landlordId,
+        context: {
+          requestingActorId: context.actorId,
+          requestingActorRole: context.actorRole,
+          requestingActorScope: context.landlordId,
+          requestingPurpose: context.purpose,
+          timestamp: context.timestamp,
+          rawIdsIncluded: false,
+        },
+        eventSummary: "Export package assembled.",
+        statusSummary: "assembled",
+        reason: context.purpose,
+        details: {
+          exportRequestRef: request.exportRequestId,
+          evidenceCount: pkg.packageMetadata.includedEvidenceCount,
+          checksumReference: pkg.packageMetadata.checksumValue ? `checksum:${pkg.packageMetadata.checksumValue.slice(0, 20)}` : null,
+          redactionPolicyApplied: pkg.evidenceManifest.redactionPolicyApplied,
+          metadataOnly: true,
+        },
+        timestamp: pkg.packageMetadata.assembledAt,
+      },
+      { firestore: context.auditTrailFirestore }
+    );
+  }
+  return pkg;
 }
