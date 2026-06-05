@@ -20,6 +20,9 @@ import {
   type ExportAuditTrailFirestoreLike,
 } from "./export-audit-trail-service";
 import { linkEvidenceToAttestation as createEvidenceAttestationLink } from "./evidence-attestation-linker";
+import { isSha256Hash } from "../lib/evidence-hash-service";
+import { generateSignature } from "./signature-generation-service";
+import type { VerificationResult } from "./hash-chain-validation-service";
 
 const ATTESTATION_EVENT_TYPES = new Set<ExportAuditEventType>([
   "ExportPackageSignatureRequested",
@@ -87,6 +90,10 @@ function algorithm(value: unknown): SignatureAlgorithm | null {
   return SIGNATURE_ALGORITHMS.includes(value as SignatureAlgorithm) ? (value as SignatureAlgorithm) : null;
 }
 
+function safeContentHash(value: unknown): string | null {
+  return isSha256Hash(value) ? value : null;
+}
+
 function assertContext(context: ExportAuthorizationContext, landlordId: string): void {
   if (context.rawIdsIncluded !== false || !context.requestingActorId) throw new Error("attestation_context_invalid");
   if (context.requestingActorScope !== landlordId && context.requestingActorRole !== "SystemService") {
@@ -100,13 +107,18 @@ function attestationDetails(input: {
   signatureId?: string | null;
   certificateId?: string | null;
   signatureAlgorithm?: SignatureAlgorithm | null;
+  contentHash?: string | null;
   evidenceReference?: string | null;
 }) {
+  if (input.contentHash !== undefined && input.contentHash !== null && !isSha256Hash(input.contentHash)) {
+    throw new Error("attestation_content_hash_invalid");
+  }
   return {
     attestationRef: attestationRef(input.attestationId),
     signatureRef: signatureRef(input.signatureId),
     certificateRef: certificateRef(input.certificateId),
     signatureAlgorithm: input.signatureAlgorithm || null,
+    contentHash: input.contentHash || null,
     lifecycleState: input.lifecycleState,
     linkedEvidenceRef: evidenceRef(input.evidenceReference),
     metadataOnly: true,
@@ -127,6 +139,7 @@ async function appendAttestationAuditEvent(input: {
   signatureId?: string | null;
   certificateId?: string | null;
   signatureAlgorithm?: SignatureAlgorithm | null;
+  contentHash?: string | null;
   evidenceReference?: string | null;
   timestamp?: string;
   firestore?: ExportAuditTrailFirestoreLike;
@@ -176,6 +189,7 @@ export async function appendSignatureGeneratedAuditEvent(
     signatureId: string;
     certificateId: string;
     signatureAlgorithm: SignatureAlgorithm;
+    contentHash?: string | null;
     reason?: string | null;
     timestamp?: string;
     firestore?: ExportAuditTrailFirestoreLike;
@@ -194,6 +208,7 @@ export async function appendSignatureGeneratedAuditEvent(
     signatureId: input.signatureId,
     certificateId: input.certificateId,
     signatureAlgorithm: input.signatureAlgorithm,
+    contentHash: input.contentHash,
     timestamp: input.timestamp,
     firestore: input.firestore,
   });
@@ -207,6 +222,7 @@ export async function appendSignatureVerifiedAuditEvent(
     signatureId: string;
     certificateId: string;
     signatureAlgorithm: SignatureAlgorithm;
+    contentHash?: string | null;
     reason?: string | null;
     timestamp?: string;
     firestore?: ExportAuditTrailFirestoreLike;
@@ -225,6 +241,7 @@ export async function appendSignatureVerifiedAuditEvent(
     signatureId: input.signatureId,
     certificateId: input.certificateId,
     signatureAlgorithm: input.signatureAlgorithm,
+    contentHash: input.contentHash,
     timestamp: input.timestamp,
     firestore: input.firestore,
   });
@@ -260,6 +277,115 @@ export function linkEvidenceToAttestation(input: Parameters<typeof createEvidenc
   return createEvidenceAttestationLink(input);
 }
 
+function packageAttestationId(pkg: ExportPackage, context: ExportAuthorizationContext): string {
+  return `attestation:${stableHash(["export_package_signature", pkg.exportPackageId, pkg.landlordId, context.requestingActorId])}`;
+}
+
+export async function requestSignatureForPackage(
+  pkg: ExportPackage,
+  context: ExportAuthorizationContext,
+  options: { attestationId?: string; reason?: string | null; timestamp?: string; firestore?: ExportAuditTrailFirestoreLike } = {}
+): Promise<ExportAuditEventPayload | null> {
+  assertContext(context, pkg.landlordId);
+  return appendSignatureRequestedAuditEvent(pkg, context, {
+    attestationId: options.attestationId || packageAttestationId(pkg, context),
+    reason: options.reason,
+    timestamp: options.timestamp,
+    firestore: options.firestore,
+  });
+}
+
+export async function recordGeneratedSignature(
+  pkg: ExportPackage,
+  hash: string,
+  signatureAlgorithm: SignatureAlgorithm,
+  certificateId: string,
+  context: ExportAuthorizationContext,
+  options: { attestationId?: string; reason?: string | null; timestamp?: string; firestore?: ExportAuditTrailFirestoreLike } = {}
+): Promise<ExportAuditEventPayload | null> {
+  assertContext(context, pkg.landlordId);
+  const signature = generateSignature(hash, signatureAlgorithm, context, {
+    certificateRef: certificateId,
+    signedAt: options.timestamp || context.timestamp,
+  });
+  return appendSignatureGeneratedAuditEvent(pkg, context, {
+    attestationId: options.attestationId || packageAttestationId(pkg, context),
+    signatureId: signature.signatureRef,
+    certificateId: signature.certificateRef,
+    signatureAlgorithm: signature.signatureAlgorithm,
+    contentHash: signature.contentHash,
+    reason: options.reason,
+    timestamp: options.timestamp,
+    firestore: options.firestore,
+  });
+}
+
+export async function recordVerifiedSignature(
+  pkg: ExportPackage,
+  hash: string,
+  attestationId: string,
+  context: ExportAuthorizationContext,
+  options: {
+    events?: readonly ExportAuditEventPayload[];
+    firestore?: ExportAuditTrailFirestoreLike;
+    evidenceReference?: string | null;
+    reason?: string | null;
+    timestamp?: string;
+  } = {}
+): Promise<VerificationResult> {
+  assertContext(context, pkg.landlordId);
+  const errors: string[] = [];
+  if (!isSha256Hash(hash)) errors.push("verification_hash_invalid");
+  const chain = await buildAttestationChain({
+    landlordId: pkg.landlordId,
+    exportPackageId: pkg.exportPackageId,
+    attestationId,
+    events: options.events,
+    firestore: options.firestore,
+  });
+  const chainIntegrity = verifyAttestationChainIntegrity(chain);
+  if (!chainIntegrity.valid) errors.push(...chainIntegrity.errors);
+  const generated = chain.events.find((event) => event.lifecycleState === "SignatureGenerated");
+  if (!generated) errors.push("verification_signature_generated_missing");
+  if (generated?.contentHash && generated.contentHash !== hash) errors.push("verification_hash_mismatch");
+  if (!generated?.contentHash) errors.push("verification_generated_hash_missing");
+  if (!generated?.signatureRef) errors.push("verification_signature_reference_missing");
+  if (!generated?.certificateRef) errors.push("verification_certificate_reference_missing");
+  if (!generated?.signatureAlgorithm) errors.push("verification_signature_algorithm_missing");
+  if (errors.length === 0 && generated) {
+    const event = await appendSignatureVerifiedAuditEvent(pkg, context, {
+      attestationId,
+      signatureId: generated.signatureRef as string,
+      certificateId: generated.certificateRef as string,
+      signatureAlgorithm: generated.signatureAlgorithm as SignatureAlgorithm,
+      contentHash: hash,
+      reason: options.reason,
+      timestamp: options.timestamp,
+      firestore: options.firestore,
+    });
+    if (!event) errors.push("verification_audit_append_failed");
+    if (options.evidenceReference) {
+      createEvidenceAttestationLink({
+        landlordId: pkg.landlordId,
+        attestationId,
+        evidenceRef: options.evidenceReference,
+        exportPackageId: pkg.exportPackageId,
+        linkedAt: options.timestamp || context.timestamp,
+      });
+    }
+  }
+  return {
+    success: errors.length === 0,
+    matchedHash: errors.length === 0 ? hash : null,
+    attestationRef: attestationRef(attestationId),
+    chainEventReferences: chain.events.map((event) => event.eventId),
+    errors,
+    metadataOnly: true,
+    rawIdsIncluded: false,
+    payloadIncluded: false,
+  };
+}
+
 function chainEventFromAuditEvent(event: ExportAuditEventPayload): AttestationChainEvent | null {
   if (!ATTESTATION_EVENT_TYPES.has(event.eventType)) return null;
   const state = STATE_BY_EVENT_TYPE[event.eventType];
@@ -275,6 +401,7 @@ function chainEventFromAuditEvent(event: ExportAuditEventPayload): AttestationCh
     signatureRef: signatureRef(details.signatureRef),
     certificateRef: certificateRef(details.certificateRef),
     signatureAlgorithm: algorithm(details.signatureAlgorithm),
+    contentHash: safeContentHash(details.contentHash),
     evidenceRef: evidenceRef(details.linkedEvidenceRef),
     eventSummary: event.metadata.eventSummary,
     metadataOnly: true,
@@ -373,6 +500,7 @@ export function projectAttestationForLandlord(landlordId: string, chain: Attesta
       timestamp: event.timestamp,
       signatureAlgorithm: event.signatureAlgorithm,
       certificateRef: event.certificateRef,
+      contentHash: event.contentHash,
       evidenceRef: event.evidenceRef,
     })),
     metadataOnly: true,

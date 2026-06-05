@@ -38,6 +38,7 @@ describe("attestation types", () => {
       signatureRef: "signature:cccccccccccccccccccc",
       signatureAlgorithm: "ECDSA-SHA256",
       certificateRef: certificate.certificateRef,
+      contentHash: "a".repeat(64),
       signedAt: "2026-06-05T00:01:00.000Z",
       verifiedAt: null,
       signerRef: "signer:dddddddddddddddddddd",

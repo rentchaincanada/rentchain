@@ -104,6 +104,7 @@ export type ExportAttestationAuditDetails = {
   signatureRef: string | null;
   certificateRef: string | null;
   signatureAlgorithm: "RSA-SHA256" | "ECDSA-SHA256" | null;
+  contentHash: string | null;
   lifecycleState:
     | "SignatureRequested"
     | "SignatureGenerated"
