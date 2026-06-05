@@ -8,6 +8,11 @@ export const EXPORT_AUDIT_EVENT_TYPES = [
   "ExportRequestCancelled",
   "ExportPackageAssembled",
   "ExportPackageSigned",
+  "ExportPackageSignatureRequested",
+  "ExportPackageSignatureGenerated",
+  "ExportPackageSignatureVerified",
+  "ExportPackageAttestationLinked",
+  "ExportPackageAttestationRevoked",
   "ExportPackageDelivered",
   "ExportPackageArchived",
   "ExportPackageRevoked",
@@ -92,6 +97,23 @@ export type ExportAuditEventPayload = {
   rawIdsIncluded: false;
   payloadIncluded: false;
   redactionSummary: string;
+};
+
+export type ExportAttestationAuditDetails = {
+  attestationRef: string;
+  signatureRef: string | null;
+  certificateRef: string | null;
+  signatureAlgorithm: "RSA-SHA256" | "ECDSA-SHA256" | null;
+  lifecycleState:
+    | "SignatureRequested"
+    | "SignatureGenerated"
+    | "SignatureVerified"
+    | "AttestationLinked"
+    | "AttestationRevoked";
+  linkedEvidenceRef: string | null;
+  metadataOnly: true;
+  rawIdsIncluded: false;
+  payloadIncluded: false;
 };
 
 export type ExportAuditTrailResponse = {

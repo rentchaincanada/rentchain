@@ -1,64 +1,84 @@
-# Implementation Summary - Phase 4 Mission 6: Export Audit Trail
+# Implementation Summary - Phase 4 Mission 7: Attestation Framework
 
-PR: #1097
-PR URL: https://github.com/rentchaincanada/rentchain/pull/1097
-Branch: feat/export-audit-trail-v1
+PR: #1098
+PR URL: https://github.com/rentchaincanada/rentchain/pull/1098
+Branch: feat/attestation-framework-v1
 
 ## Scope Delivered
 
-Implemented Export Audit Trail v1 as a service-layer append-only audit foundation for institutional export operations.
+Implemented Attestation Framework v1 as a service-layer foundation for export package signature metadata, certificate references, evidence/package attestation links, and immutable attestation chain verification.
 
-The implementation adds canonicalEvents-backed export audit event payloads, deterministic safe references, immutable create-based append semantics, non-blocking append support, landlord-scoped query helpers, allowlist response projections, lifecycle helper functions for profile/request/package events, and package assembly audit emission when an audit adapter is supplied to the evidence package builder.
+The implementation extends the existing export audit trail with signature and attestation event types, emits those events through the existing canonicalEvents append path, adds deterministic metadata-only certificate references, adds pure evidence/package attestation linking helpers, and provides landlord-scoped chain reconstruction and allowlist projection helpers.
 
-No routes, Firestore rules, deployment configuration, signing operations, delivery operations, background workers, external integrations, dashboards, or production data migrations were added.
+No routes, dashboards, signing execution, delivery mechanisms, recipient verification surfaces, external integrations, Firestore rules, background workers, dependency changes, or production data migrations were added.
 
 ## Files Changed
 
-- rentchain-api/src/types/export-audit-types.ts (extended safe event payload and response contracts)
-- rentchain-api/src/services/export-audit-trail-service.ts (new append/query/projection service)
-- rentchain-api/src/services/evidence-package-builder-service.ts (assembly audit emission integration when audit adapter is supplied)
-- rentchain-api/src/services/__tests__/export-audit-trail-service.test.ts (new unit tests)
-- rentchain-api/src/services/__tests__/export-audit-trail-integration.test.ts (new integration tests)
-- docs/architecture/export-audit-trail-v1.md (new architecture documentation)
-- .handoff/impl-summary.md (updated)
+- rentchain-api/src/types/attestation-types.ts
+- rentchain-api/src/types/export-audit-types.ts
+- rentchain-api/src/services/attestation-service.ts
+- rentchain-api/src/services/attestation-certificate-manager.ts
+- rentchain-api/src/services/evidence-attestation-linker.ts
+- rentchain-api/src/services/export-audit-trail-service.ts
+- rentchain-api/src/types/__tests__/attestation-types.test.ts
+- rentchain-api/src/services/__tests__/attestation-service.test.ts
+- rentchain-api/src/services/__tests__/attestation-certificate-manager.test.ts
+- rentchain-api/src/services/__tests__/evidence-attestation-linker.test.ts
+- rentchain-api/src/services/__tests__/attestation-integration.test.ts
+- rentchain-api/src/services/__tests__/export-audit-trail-integration.test.ts
+- docs/architecture/attestation-framework-v1.md
+- docs/architecture/export-audit-trail-v1.md
+- .handoff/impl-summary.md
 
 ## Tests Passed
 
-- `npm run test -- src/services/__tests__/export-audit-trail-service.test.ts`: PASS
-- `npm run test -- src/services/__tests__/export-audit-trail-integration.test.ts`: PASS
-- `npm run test -- src/services/__tests__/evidence-package-builder.test.ts`: PASS
-- `npm run test -- src/services/__tests__/evidence-package-builder-integration.test.ts`: PASS
+- `npm test -- src/types/__tests__/attestation-types.test.ts src/services/__tests__/attestation-service.test.ts src/services/__tests__/attestation-certificate-manager.test.ts src/services/__tests__/evidence-attestation-linker.test.ts src/services/__tests__/attestation-integration.test.ts src/services/__tests__/export-audit-trail-integration.test.ts`: PASS
+- `npm run test:single -- src/types/__tests__/attestation-types.test.ts src/services/__tests__/attestation-service.test.ts src/services/__tests__/attestation-certificate-manager.test.ts src/services/__tests__/evidence-attestation-linker.test.ts src/services/__tests__/attestation-integration.test.ts src/services/__tests__/export-audit-trail-integration.test.ts`: PASS
 - `npm run build` in `rentchain-api`: PASS
 - `git diff --check`: PASS
 
 ## Acceptance Criteria Met
 
-- [x] Audit trail persistence implemented using canonicalEvents collection.
-- [x] Immutable append-only audit events written with Firestore create() semantics when available.
-- [x] Existing-document precheck plus `merge: false` fallback implemented for Firestore-like adapters without create().
-- [x] Safe references generated for actors, landlords, targets, and metadata using deterministic hashing.
-- [x] No raw Firestore IDs, landlord IDs, tenant IDs, unit IDs, lease IDs, storage paths, tokens, secrets, credentials, or provider payloads in audit records.
-- [x] Audit trail query helpers enforce landlord scope server-side through safe landlord references.
-- [x] Audit trail retrieval uses allowlist projection only.
-- [x] Package assembly audit emission integrated into `buildEvidencePackage()` when `auditTrailFirestore` is supplied.
-- [x] Lifecycle helper contracts added for profile creation/modification/archive, request authorization/denial, and package lifecycle events.
-- [x] Audit append failures can be non-blocking through `appendAuditEventSafely()`.
-- [x] Unit and integration tests cover immutability, safe references, append semantics, scope validation, projections, non-blocking failure handling, package assembly emission, and request authorization events.
-- [x] TypeScript compilation succeeds.
+- [x] Attestation type contracts added with safe references, immutable flags, and `rawIdsIncluded: false` / `payloadIncluded: false` constraints.
+- [x] Export audit event types extended with signature requested, signature generated, signature verified, attestation linked, and attestation revoked events.
+- [x] Non-blocking audit append helpers added for signature requested, generated, verified, and attestation linked events.
+- [x] Signature and attestation audit events are written through canonicalEvents with safe references and metadata-only payloads.
+- [x] Certificate manager generates deterministic safe certificate references and enforces `RSA-SHA256` / `ECDSA-SHA256` only.
+- [x] Certificate projection excludes certificate material and key material.
+- [x] Evidence/package attestation linker creates immutable metadata-only links without mutating evidence or package records.
+- [x] Chain builder reconstructs attestation lifecycle from canonical export audit events.
+- [x] Chain verifier rejects missing lifecycle steps, state regressions, invalid timestamps, reference mismatches, and raw/payload flags.
+- [x] Landlord projection helper returns allowlisted attestation data only and rejects landlord scope mismatch.
+- [x] Export audit integration tests confirm signature events appear in package audit trail without regressions.
+- [x] Architecture documentation describes implemented components, integration points, boundaries, validation, and deferred work.
+- [x] No protected areas modified.
 - [x] No unrelated files modified.
 
 ## Manual QA
 
-Manual preview QA is not required. This mission does not change frontend rendering, mobile layout, route behavior, auth flow, or user-visible UI. Service-layer behavior is covered by targeted unit/integration tests and TypeScript build validation.
+Manual preview QA is not required. This mission does not change frontend rendering, mobile layout, route behavior, auth flow, routing, or user-visible UI. Service-layer behavior is covered by targeted unit/integration tests and TypeScript build validation.
+
+Manual checklist completed by code/test inspection:
+
+1. Attestation schema flags inspected: raw IDs, payloads, raw certificates, signature material, and key material are explicitly false where applicable.
+2. Certificate safe-reference determinism verified by tests with repeated registration inputs.
+3. Audit trail integration verified with mock canonicalEvents adapter for signature requested/generated events and full attestation chain events.
+4. Immutability verified through existing export audit create semantics and immutable/link flags.
+5. Projection safety verified through landlord projection tests and restricted literal scan of new attestation files.
+6. Landlord isolation verified through projection mismatch and linker query tests.
+7. Evidence linking verified through immutable link and evidence-attestation map tests.
+8. Certificate manager verified for accepted algorithms and rejected unsupported algorithms.
+9. Non-blocking append verified with failing Firestore-like adapter returning null.
+10. Architecture documentation reviewed for scope boundaries and deferred work.
 
 ## Known Limitations
 
-- No API routes or REST endpoints were added for audit retrieval.
-- Signing and delivery operations remain future work; this mission only provides audit event contracts for those lifecycle stages.
-- Audit dashboard, compliance reporting, recipient notification, recipient consent workflows, and external integrations remain deferred.
-- Firestore rules were not changed.
-- Full backend suite was not rerun for this mission; previous local full-suite failures outside export audit scope were documented during the prior mission.
+- No signing operation is implemented; only metadata lifecycle events and references are established.
+- No certificate storage, certificate content validation, HSM, KMS, PKI, recipient verification, delivery, or external integration was added.
+- No HTTP routes, dashboards, Firestore rules, background workers, or migrations were added.
+- Chain verification validates event order and metadata integrity, not cryptographic signatures.
+- `npm run build:api` is not available in the repo root; `npm run build` was run in `rentchain-api` instead.
 
 ## Recommended Next Mission
 
-Phase 4C signing and attestation foundation, or a narrow Phase 4B route mission to expose landlord/admin export audit trail retrieval behind explicit authorization.
+Phase 4C signing execution planning or a narrow attestation route/read-model mission with explicit authorization requirements.

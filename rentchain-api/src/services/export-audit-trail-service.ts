@@ -314,7 +314,16 @@ export async function appendExportPackageLifecycleAuditEvent(
   pkg: ExportPackage,
   eventType: Extract<
     ExportAuditEventType,
-    "ExportPackageAssembled" | "ExportPackageSigned" | "ExportPackageDelivered" | "ExportPackageArchived" | "ExportPackageRevoked"
+    | "ExportPackageAssembled"
+    | "ExportPackageSigned"
+    | "ExportPackageSignatureRequested"
+    | "ExportPackageSignatureGenerated"
+    | "ExportPackageSignatureVerified"
+    | "ExportPackageAttestationLinked"
+    | "ExportPackageAttestationRevoked"
+    | "ExportPackageDelivered"
+    | "ExportPackageArchived"
+    | "ExportPackageRevoked"
   >,
   context: ExportAuthorizationContext,
   options: { firestore?: ExportAuditTrailFirestoreLike; reason?: string | null } = {}
