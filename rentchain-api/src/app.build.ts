@@ -183,6 +183,7 @@ import screeningOpsRoutes from "./routes/screeningOpsRoutes";
 import leaseOverlapCleanupRoutes from "./routes/leaseOverlapCleanupRoutes";
 import riskAgentRoutes from "./routes/riskAgentRoutes";
 import decisionRoutes from "./routes/decisionRoutes";
+import attestationRoutes from "./routes/attestationRoutes";
 
 process.on("unhandledRejection", (reason) => {
   console.error("[FATAL] unhandledRejection", reason);
@@ -515,6 +516,9 @@ app.use("/api/landlord", routeSource("landlordOperationalRiskRoutes.ts"), landlo
 console.log("[route-mount] landlordOperationalRiskRoutes mounted at /api/landlord");
 app.use("/api/landlord", routeSource("landlordInteroperabilityAdapterRoutes.ts"), landlordInteroperabilityAdapterRoutes);
 console.log("[route-mount] landlordInteroperabilityAdapterRoutes mounted at /api/landlord");
+app.use("/api/attestation", rateLimitEvidenceExportReview);
+app.use("/api/attestation", routeSource("attestationRoutes.ts"), attestationRoutes);
+console.log("[route-mount] attestationRoutes mounted at /api/attestation");
 app.use("/api", routeSource("landlordActionRecommendationRoutes.ts"), landlordActionRecommendationRoutes);
 console.log("[route-mount] landlordActionRecommendationRoutes mounted at /api");
 app.use("/api", routeSource("tenantFeedbackRoutes.ts"), tenantFeedbackRoutes);
