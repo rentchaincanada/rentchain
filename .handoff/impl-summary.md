@@ -1,3 +1,6 @@
+PR: #1103
+PR URL: https://github.com/rentchaincanada/rentchain/pull/1103
+Branch: audit/product-readiness-v1
 Audit Branch: audit/product-readiness-v1
 Audit Date: 2026-06-05
 Status: Complete
