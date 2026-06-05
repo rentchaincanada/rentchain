@@ -16,11 +16,12 @@ export const EXPORT_AUDIT_EVENT_TYPES = [
   "ExportPackageDelivered",
   "ExportPackageArchived",
   "ExportPackageRevoked",
+  "TrustWorkspaceDerived",
 ] as const;
 
 export type ExportAuditEventType = (typeof EXPORT_AUDIT_EVENT_TYPES)[number];
 
-export const EXPORT_AUDIT_TARGET_TYPES = ["ExportProfile", "ExportRequest", "ExportPackage"] as const;
+export const EXPORT_AUDIT_TARGET_TYPES = ["ExportProfile", "ExportRequest", "ExportPackage", "TrustWorkspace"] as const;
 
 export type ExportAuditTargetType = (typeof EXPORT_AUDIT_TARGET_TYPES)[number];
 
