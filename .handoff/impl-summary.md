@@ -1,91 +1,59 @@
-# Implementation Summary - Evidence Export Trust Signoff v1
+Audit Branch: audit/product-readiness-v1
+Audit Date: 2026-06-05
+Status: Complete
+Key Findings:
+- Production Firestore rules are emulator-only and allow all reads/writes.
+- Screening defaults to mock/provider placeholders unless production provider setup is explicitly configured.
+- Lease execution supports drafts, PDFs, and tenant signing state, but no provider-backed e-signature completion is evident.
+- Billing checkout/status has a frontend-backend route mismatch and does not prove active Stripe subscription lifecycle.
+- Tenant portal and application paths depend on frontend environment flags that are not documented by a frontend `.env.example`.
 
-PR: #1102
-PR URL: https://github.com/rentchaincanada/rentchain/pull/1102
-Branch: feat/phase-4-evidence-export-trust-signoff-v1
+## Blockers (Revenue-Preventing)
 
-## Scope Delivered
+- Firestore production enforcement is not represented in the root rules file.
+- Screening integration is not market-ready for advertised provider breadth.
+- Lease execution lacks provider-backed signing or explicit launch-safe in-app signing scope.
+- Billing subscription status and checkout route alignment are insufficient for paying landlord activation.
+- Landlord payout and statement lifecycle is not closed.
 
-Implemented landlord evidence export trust signoff routes for Phase 4 evidence trust operations.
+## Critical (User-Visible Failures)
 
-The implementation adds authenticated landlord endpoints for trust workspace context retrieval and evidence export trust signoff initiation. The signoff route validates landlord scope, safe evidence and package references, institutional package type, audience, purpose, trust workspace evidence visibility, export readiness, and verified attestation context before creating a metadata-only signature request through the existing attestation service.
+- Tenant portal routes can resolve to coming-soon behavior when `VITE_TENANT_PORTAL_ENABLED` is absent or false.
+- Frontend `createCheckoutSession()` calls `/billing/create-checkout-session`, while backend exposes `/billing/checkout`, `/billing/subscribe`, and `/billing/upgrade`.
+- Application routes are split across legacy and newer route families, increasing QA/support ambiguity.
+- Frontend API base requirements are not documented by a frontend `.env.example`.
 
-The routes remain metadata-only and use safe response shapes. They do not mutate evidence records, export packages, attestation metadata, Firestore rules, deployment configuration, billing, pricing, entitlement logic, screening adapters, frontend UI, background workers, private-key signing, external callbacks, or delivery mechanics.
+## High-Priority (Adoption Friction)
 
-## Files Changed
+- Property publish does not prove tenant discoverability through a canonical search workflow.
+- Property geocoding/maps readiness is not evident in the create/publish path.
+- Tenant payment readiness is honest but blocked unless payment rails are explicitly enabled.
+- Governance/readiness pages outnumber completed revenue workflow surfaces.
 
-- rentchain-api/src/routes/landlordEvidenceExportTrustSignoffRoutes.ts
-- rentchain-api/src/routes/__tests__/landlordEvidenceExportTrustSignoffRoutes.test.ts
-- rentchain-api/src/app.build.ts
-- rentchain-api/src/lib/trustWorkspace/deriveTrustWorkspace.ts
-- rentchain-api/src/services/trust-workspace-service.ts
-- .handoff/impl-summary.md
+## Recommendations for v0.9 Sequencing
 
-## Tests and Validation
+1. Firestore production rules and cross-role denial tests.
+2. Billing checkout/status alignment and Stripe subscription verification.
+3. Screening provider completion for the selected v0.9 provider, with mock provider blocked outside approved test modes.
+4. Lease execution end-to-end decision and implementation: provider-backed signing or explicitly scoped in-app signing.
+5. Tenant portal configuration, frontend env example, and tenant application/discovery hardening.
+6. Landlord payout, statement, and rent payment reconciliation lifecycle.
 
-- `cd rentchain-api && npm ci`: PASS
-- `cd rentchain-api && npm test -- src/routes/__tests__/landlordEvidenceExportTrustSignoffRoutes.test.ts`: PASS
-- `cd rentchain-api && npm run build`: PASS
-- `git diff --check`: PASS
-- Restricted-term scan on changed source and test files: PASS
+See `.handoff/audit-product-readiness-findings.md` for the full detailed audit report.
 
-Full backend suite was run with `cd rentchain-api && npm run test`: FAIL with pre-existing failures outside this mission scope.
+## Validation
 
-Known failing areas from the full suite:
-- `src/routes/__tests__/leaseDraftRoutes.test.ts`
-- `src/routes/__tests__/recipientTrustReviewRoutes.test.ts`
-- `src/routes/__tests__/supportConsoleRoutes.test.ts`
-- `src/lib/analytics/__tests__/deriveDecisionExecutionMappings.test.ts`
-- `src/services/landlord/__tests__/landlordAnalyticsSnapshot.test.ts`
+Validation commands were run after the audit files were written.
 
-The new route test passed during focused validation and did not introduce failures in its test file.
-
-## Acceptance Criteria Met
-
-- [x] Added `GET /api/landlord/evidence-export-trust-context` with `requireAuth` and `requireLandlord`.
-- [x] Added `POST /api/landlord/evidence-export-trust-signoff` with `requireAuth` and `requireLandlord`.
-- [x] Integrated route registration through the backend app route mount.
-- [x] Used `getEffectiveLandlordId()` and `getTrustWorkspaceForUser()` for landlord-scoped trust context.
-- [x] Validated signoff request fields with bounded string handling.
-- [x] Enforced package type and institutional audience allowlists.
-- [x] Enforced safe evidence and package reference input format.
-- [x] Failed closed for missing evidence, missing package readiness, invalid attestation context, trust workspace failure, and signature request failure.
-- [x] Created signature request events through the existing attestation service.
-- [x] Used hashed safe actor and landlord references in attestation authorization context.
-- [x] Returned only safe error codes and safe attestation references.
-- [x] Avoided raw IDs, storage paths, provider payloads, tokens, and stack traces in responses.
-- [x] Added route tests for success, auth boundaries, validation, inaccessible evidence/package, invalid chain, workspace failure, and signature request failure.
-- [x] Preserved protected areas and avoided dependency changes.
+- Backend `npm test -- --coverage`: FAIL. Existing full-suite baseline failures remain: 7 test files failed, 20 tests failed, 446 files passed, 2183 tests passed. Failing areas include lease draft routes, recipient trust review routes, support console routes, analytics decision mapping, and landlord analytics snapshot coverage.
+- Backend `npm run build`: PASS.
+- Backend `npm run lint`: FAIL. `rentchain-api` does not define a `lint` script.
+- Frontend `npm test -- --coverage`: FAIL. Vitest coverage could not start because `@vitest/coverage-v8` is missing.
+- Frontend `npm run build`: PASS. Vite emitted a Node version warning for Node 20.11.1 and a large chunk warning, but the production build completed.
+- Frontend `npm run lint`: PASS.
+- `git diff --check`: PASS.
+- Handoff artifact restricted-term scan: PASS.
 
 ## Manual QA
 
-Manual QA is required because this mission adds backend routes and user-visible API behavior.
-
-Manual QA checklist for Gate 2:
-
-1. `GET /api/landlord/evidence-export-trust-context` without auth returns 401.
-2. `GET /api/landlord/evidence-export-trust-context` with a non-landlord user returns 403.
-3. `GET /api/landlord/evidence-export-trust-context` with a landlord user returns a metadata-only trust workspace context.
-4. Context response contains no raw landlord IDs, tenant IDs, evidence IDs, package IDs, storage paths, tokens, provider payloads, or stack traces.
-5. `POST /api/landlord/evidence-export-trust-signoff` without auth returns 401.
-6. `POST /api/landlord/evidence-export-trust-signoff` with a non-landlord user returns 403.
-7. Signoff POST with missing `evidenceRef`, missing `packageRef`, invalid `packageType`, invalid `audience`, or unsafe reference returns 400 with `INVALID_SCOPE`.
-8. Signoff POST with inaccessible evidence returns 404 with `EVIDENCE_NOT_FOUND`.
-9. Signoff POST with no export-ready package context returns 404 with `PACKAGE_NOT_FOUND`.
-10. Signoff POST with unverified attestation context returns 400 with `ATTESTATION_CHAIN_INVALID`.
-11. Valid signoff POST returns `{ ok: true, attestationRef, timestamp, status: "signature_requested" }`.
-12. Valid signoff response contains only safe references and no raw internal identifiers.
-13. Confirm evidence records and export package records are not mutated by signoff.
-14. Confirm only append-safe signature request audit behavior occurs.
-15. Confirm no protected areas were modified.
-
-## Known Limitations
-
-- This mission creates a signature request event only; it does not perform private-key signing, certificate issuance, KMS/HSM operations, or external institution delivery.
-- Trust context is derived through the existing Trust Workspace service; no new persistence or Firestore rules were added.
-- Full backend suite still has unrelated pre-existing failures in lease draft, recipient trust review, support console, and landlord analytics tests.
-- `npm ci` reports existing dependency audit warnings; no package files were changed by this mission.
-
-## Recommended Next Mission
-
-Phase 4 signoff validation and Gate 2 manual QA, followed by Phase 5 planning for signing execution and institutional delivery surfaces.
+Manual QA was not completed in a running local or staging environment because this audit turn did not include seeded accounts, credentials, or a running deployment. The audit provides code-reference reproduction steps and a required manual QA checklist for pre-launch validation.
