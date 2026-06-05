@@ -28,7 +28,7 @@ export type TrustWorkspaceDerivationInput = {
   evidenceRecords?: readonly EvidenceRecord[];
   auditEvents?: readonly ExportAuditEventPayload[];
   portableAttestations?: readonly PortableAttestation[];
-  exportReadinessRequests?: readonly Array<{
+  exportReadinessRequests?: ReadonlyArray<{
     audience: InstitutionalTrustExportAudience;
     purpose: InstitutionalTrustExportPurpose;
     exportRef?: string | null;
