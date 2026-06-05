@@ -1,80 +1,91 @@
-# Implementation Summary - Trust Workspace v1
+# Implementation Summary - Evidence Export Trust Signoff v1
 
-PR: #1101
-PR URL: https://github.com/rentchaincanada/rentchain/pull/1101
-Branch: feat/trust-workspace-v1
+PR: #1102
+PR URL: https://github.com/rentchaincanada/rentchain/pull/1102
+Branch: feat/phase-4-evidence-export-trust-signoff-v1
 
 ## Scope Delivered
 
-Implemented Trust Workspace v1 as a backend service-layer read model for evidence trust chain management.
+Implemented landlord evidence export trust signoff routes for Phase 4 evidence trust operations.
 
-The implementation adds metadata-only workspace types, deterministic derivation helpers, role-specific projection helpers, non-blocking descriptor audit event emission, and the `getTrustWorkspaceForUser()` service entry point. It composes existing evidence records, attestation hash verification, institutional trust export policy evaluation, and cross-organization trust derivation.
+The implementation adds authenticated landlord endpoints for trust workspace context retrieval and evidence export trust signoff initiation. The signoff route validates landlord scope, safe evidence and package references, institutional package type, audience, purpose, trust workspace evidence visibility, export readiness, and verified attestation context before creating a metadata-only signature request through the existing attestation service.
 
-No HTTP routes, dashboard UI, mutation paths, background workers, signing execution, delivery mechanisms, external integrations, Firestore rules, deployment configuration, billing, auth core, screening, pricing, or entitlement changes were added.
+The routes remain metadata-only and use safe response shapes. They do not mutate evidence records, export packages, attestation metadata, Firestore rules, deployment configuration, billing, pricing, entitlement logic, screening adapters, frontend UI, background workers, private-key signing, external callbacks, or delivery mechanics.
 
 ## Files Changed
 
-- rentchain-api/src/lib/trustWorkspace/trustWorkspaceTypes.ts
+- rentchain-api/src/routes/landlordEvidenceExportTrustSignoffRoutes.ts
+- rentchain-api/src/routes/__tests__/landlordEvidenceExportTrustSignoffRoutes.test.ts
+- rentchain-api/src/app.build.ts
 - rentchain-api/src/lib/trustWorkspace/deriveTrustWorkspace.ts
-- rentchain-api/src/lib/trustWorkspace/trustWorkspaceProjections.ts
-- rentchain-api/src/lib/trustWorkspace/trustWorkspaceEventEmission.ts
-- rentchain-api/src/lib/trustWorkspace/__tests__/trustWorkspace.test.ts
 - rentchain-api/src/services/trust-workspace-service.ts
-- rentchain-api/src/services/__tests__/trust-workspace-service.test.ts
-- rentchain-api/src/types/export-audit-types.ts
-- docs/architecture/trust-workspace-v1.md
 - .handoff/impl-summary.md
 
-## Tests Passed
+## Tests and Validation
 
-- `npm test -- src/lib/trustWorkspace/__tests__/trustWorkspace.test.ts`: PASS
-- `npm test -- src/services/__tests__/trust-workspace-service.test.ts`: PASS
-- `npm run build` in `rentchain-api`: PASS
+- `cd rentchain-api && npm ci`: PASS
+- `cd rentchain-api && npm test -- src/routes/__tests__/landlordEvidenceExportTrustSignoffRoutes.test.ts`: PASS
+- `cd rentchain-api && npm run build`: PASS
 - `git diff --check`: PASS
+- Restricted-term scan on changed source and test files: PASS
 
-All Node-based commands were run under Node 20.11.1.
+Full backend suite was run with `cd rentchain-api && npm run test`: FAIL with pre-existing failures outside this mission scope.
+
+Known failing areas from the full suite:
+- `src/routes/__tests__/leaseDraftRoutes.test.ts`
+- `src/routes/__tests__/recipientTrustReviewRoutes.test.ts`
+- `src/routes/__tests__/supportConsoleRoutes.test.ts`
+- `src/lib/analytics/__tests__/deriveDecisionExecutionMappings.test.ts`
+- `src/services/landlord/__tests__/landlordAnalyticsSnapshot.test.ts`
+
+The new route test passed during focused validation and did not introduce failures in its test file.
 
 ## Acceptance Criteria Met
 
-- [x] Added trust workspace type definitions with metadata-only, immutable, non-public, non-shareable flags.
-- [x] Added deterministic workspace context validation and workspace safe-reference generation.
-- [x] Added evidence chain summary derivation from evidence records with provenance safe references.
-- [x] Added attestation context derivation through existing attestation hash verification service.
-- [x] Added institutional export readiness summary using existing policy gate derivation.
-- [x] Added cross-organization trust context using existing trust derivation.
-- [x] Added landlord, tenant, admin, and support projection helpers.
-- [x] Tenant projection excludes attestation, export readiness, and cross-organization context.
-- [x] Landlord and support projections enforce landlord scope.
-- [x] Admin projection remains metadata-only.
-- [x] Added non-blocking `TrustWorkspaceDerived` audit event emission.
-- [x] Extended export audit event/target types for descriptor-only workspace derivation events.
-- [x] Added `getTrustWorkspaceForUser()` service entry point.
-- [x] Tests cover derivation, projection safety, role scope validation, export readiness, cross-org context, service integration, and event emission.
-- [x] No HTTP routes added.
-- [x] No protected areas modified.
-- [x] No dependency changes.
-- [x] No unrelated refactors.
+- [x] Added `GET /api/landlord/evidence-export-trust-context` with `requireAuth` and `requireLandlord`.
+- [x] Added `POST /api/landlord/evidence-export-trust-signoff` with `requireAuth` and `requireLandlord`.
+- [x] Integrated route registration through the backend app route mount.
+- [x] Used `getEffectiveLandlordId()` and `getTrustWorkspaceForUser()` for landlord-scoped trust context.
+- [x] Validated signoff request fields with bounded string handling.
+- [x] Enforced package type and institutional audience allowlists.
+- [x] Enforced safe evidence and package reference input format.
+- [x] Failed closed for missing evidence, missing package readiness, invalid attestation context, trust workspace failure, and signature request failure.
+- [x] Created signature request events through the existing attestation service.
+- [x] Used hashed safe actor and landlord references in attestation authorization context.
+- [x] Returned only safe error codes and safe attestation references.
+- [x] Avoided raw IDs, storage paths, provider payloads, tokens, and stack traces in responses.
+- [x] Added route tests for success, auth boundaries, validation, inaccessible evidence/package, invalid chain, workspace failure, and signature request failure.
+- [x] Preserved protected areas and avoided dependency changes.
 
 ## Manual QA
 
-Manual preview QA is not required for this mission because no HTTP routes, frontend rendering, mobile layout, auth flow, routing, or user-visible dashboard behavior were added.
+Manual QA is required because this mission adds backend routes and user-visible API behavior.
 
-Manual code/test inspection completed:
+Manual QA checklist for Gate 2:
 
-1. Confirmed no route files were added or mounted.
-2. Confirmed service layer only entry point: `getTrustWorkspaceForUser()`.
-3. Confirmed no Firestore rules, deployment, billing, auth core, screening, pricing, or entitlement files changed.
-4. Confirmed tenant projection excludes attestation, export readiness, and cross-organization context.
-5. Confirmed audit event emission is non-blocking and descriptor-only.
-6. Confirmed workspace summaries use safe references and metadata-only flags.
+1. `GET /api/landlord/evidence-export-trust-context` without auth returns 401.
+2. `GET /api/landlord/evidence-export-trust-context` with a non-landlord user returns 403.
+3. `GET /api/landlord/evidence-export-trust-context` with a landlord user returns a metadata-only trust workspace context.
+4. Context response contains no raw landlord IDs, tenant IDs, evidence IDs, package IDs, storage paths, tokens, provider payloads, or stack traces.
+5. `POST /api/landlord/evidence-export-trust-signoff` without auth returns 401.
+6. `POST /api/landlord/evidence-export-trust-signoff` with a non-landlord user returns 403.
+7. Signoff POST with missing `evidenceRef`, missing `packageRef`, invalid `packageType`, invalid `audience`, or unsafe reference returns 400 with `INVALID_SCOPE`.
+8. Signoff POST with inaccessible evidence returns 404 with `EVIDENCE_NOT_FOUND`.
+9. Signoff POST with no export-ready package context returns 404 with `PACKAGE_NOT_FOUND`.
+10. Signoff POST with unverified attestation context returns 400 with `ATTESTATION_CHAIN_INVALID`.
+11. Valid signoff POST returns `{ ok: true, attestationRef, timestamp, status: "signature_requested" }`.
+12. Valid signoff response contains only safe references and no raw internal identifiers.
+13. Confirm evidence records and export package records are not mutated by signoff.
+14. Confirm only append-safe signature request audit behavior occurs.
+15. Confirm no protected areas were modified.
 
 ## Known Limitations
 
-- Trust Workspace v1 is a service-layer foundation only.
-- No HTTP route, dashboard UI, signing flow, delivery flow, institution integration, background worker, or external submission was added.
-- Event emission uses the existing export audit trail helper and descriptor-only count metadata.
-- Runtime Cloud Run verification is not applicable until a route or user-facing consumer is added.
+- This mission creates a signature request event only; it does not perform private-key signing, certificate issuance, KMS/HSM operations, or external institution delivery.
+- Trust context is derived through the existing Trust Workspace service; no new persistence or Firestore rules were added.
+- Full backend suite still has unrelated pre-existing failures in lease draft, recipient trust review, support console, and landlord analytics tests.
+- `npm ci` reports existing dependency audit warnings; no package files were changed by this mission.
 
 ## Recommended Next Mission
 
-Phase 4 evidence export trust signoff service, or a narrow route mission that exposes this workspace through authenticated read-only API endpoints.
+Phase 4 signoff validation and Gate 2 manual QA, followed by Phase 5 planning for signing execution and institutional delivery surfaces.

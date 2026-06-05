@@ -157,6 +157,7 @@ import landlordInstitutionExportsRoutes from "./routes/landlordInstitutionExport
 import landlordAuditComplianceRoutes from "./routes/landlordAuditComplianceRoutes";
 import landlordOperatorReviewRoutes from "./routes/landlordOperatorReviewRoutes";
 import landlordEvidencePackRoutes from "./routes/landlordEvidencePackRoutes";
+import landlordEvidenceExportTrustSignoffRoutes from "./routes/landlordEvidenceExportTrustSignoffRoutes";
 import landlordReviewTimelineRoutes from "./routes/landlordReviewTimelineRoutes";
 import landlordIdentityLayerRoutes from "./routes/landlordIdentityLayerRoutes";
 import landlordSharingRoomRoutes from "./routes/landlordSharingRoomRoutes";
@@ -485,6 +486,9 @@ console.log("[route-mount] landlordOperatorReviewRoutes mounted at /api/landlord
 app.use("/api/landlord/evidence-packs", rateLimitEvidenceExportReview);
 app.use("/api/landlord", routeSource("landlordEvidencePackRoutes.ts"), landlordEvidencePackRoutes);
 console.log("[route-mount] landlordEvidencePackRoutes mounted at /api/landlord");
+app.use("/api/landlord/evidence-export-trust-signoff", rateLimitEvidenceExportReview);
+app.use("/api/landlord", routeSource("landlordEvidenceExportTrustSignoffRoutes.ts"), landlordEvidenceExportTrustSignoffRoutes);
+console.log("[route-mount] landlordEvidenceExportTrustSignoffRoutes mounted at /api/landlord");
 app.use("/api/landlord/review-timeline", rateLimitEvidenceExportReview);
 app.use("/api/landlord", routeSource("landlordReviewTimelineRoutes.ts"), landlordReviewTimelineRoutes);
 console.log("[route-mount] landlordReviewTimelineRoutes mounted at /api/landlord");

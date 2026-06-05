@@ -130,7 +130,7 @@ export async function getTrustWorkspaceForUser(
       auditEvents,
       portableAttestations: options.portableAttestations as readonly PortableAttestation[] | undefined,
       exportReadinessRequests: options.exportReadinessRequests as
-        | readonly Array<{
+        | ReadonlyArray<{
             audience: InstitutionalTrustExportAudience;
             purpose: InstitutionalTrustExportPurpose;
             exportRef?: string | null;
