@@ -1,8 +1,12 @@
 import React from "react";
 import { Button, Card, Input } from "../../components/ui/Ui";
 import { createContractorProfile, getContractorProfile, patchContractorProfile } from "../../api/workOrdersApi";
+import { getContractorPortalProfile, updateContractorPortalProfile } from "../../api/contractorPortalApi";
+import { useAuth } from "../../context/useAuth";
 
 export default function ContractorProfilePage() {
+  const { user } = useAuth();
+  const contractorId = String((user as any)?.contractorId || user?.id || "").trim();
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -19,12 +23,12 @@ export default function ContractorProfilePage() {
       setLoading(true);
       setError(null);
       try {
-        const profile = await getContractorProfile();
+        const profile = contractorId ? await getContractorPortalProfile(contractorId) : await getContractorProfile();
         if (profile) {
           setBusinessName(profile.businessName || "");
-          setContactName(profile.contactName || "");
+          setContactName((profile as any).contactName || profile.name || "");
           setPhone(profile.phone || "");
-          setServiceCategories((profile.serviceCategories || []).join(", "));
+          setServiceCategories(((profile as any).serviceCategories || profile.specialties || []).join(", "));
           setServiceAreas((profile.serviceAreas || []).join(", "));
           setBio(profile.bio || "");
         }
@@ -35,7 +39,7 @@ export default function ContractorProfilePage() {
       }
     };
     void load();
-  }, []);
+  }, [contractorId]);
 
   return (
     <div style={{ display: "grid", gap: 14 }}>
@@ -89,8 +93,13 @@ export default function ContractorProfilePage() {
                 const payload = {
                   businessName: businessName.trim(),
                   contactName: contactName.trim(),
+                  name: contactName.trim(),
                   phone: phone.trim(),
                   serviceCategories: serviceCategories
+                    .split(",")
+                    .map((v) => v.trim())
+                    .filter(Boolean),
+                  specialties: serviceCategories
                     .split(",")
                     .map((v) => v.trim())
                     .filter(Boolean),
@@ -100,10 +109,14 @@ export default function ContractorProfilePage() {
                     .filter(Boolean),
                   bio: bio.trim(),
                 };
-                try {
-                  await patchContractorProfile(payload);
-                } catch {
-                  await createContractorProfile(payload);
+                if (contractorId) {
+                  await updateContractorPortalProfile(contractorId, payload);
+                } else {
+                  try {
+                    await patchContractorProfile(payload);
+                  } catch {
+                    await createContractorProfile(payload);
+                  }
                 }
               } catch (err: any) {
                 setError(String(err?.message || "Failed to save profile"));
