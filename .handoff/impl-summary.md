@@ -1,5 +1,5 @@
-PR: #PENDING
-PR URL: PENDING
+PR: #1104
+PR URL: https://github.com/rentchaincanada/rentchain/pull/1104
 Branch: prep/screening-provider-integration-readiness-v1
 
 # Implementation Summary - Provider-Neutral Screening Integration Readiness v1
