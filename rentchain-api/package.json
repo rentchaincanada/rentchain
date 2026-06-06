@@ -35,6 +35,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@dropbox/sign": "1.10.0",
     "@google-cloud/firestore": "^8.0.0",
     "@google-cloud/pubsub": "^5.2.0",
     "@sendgrid/mail": "^8.1.6",

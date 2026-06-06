@@ -18,6 +18,7 @@ import {
   prettyRentPaymentStatus,
 } from "@/lib/payments/paymentStatusGuidance";
 import { isTargetedHiddenLeaseId } from "@/lib/testDataVisibilityTargets";
+import LeaseSigningDashboard from "@/components/LeaseSigningDashboard";
 import { downloadLeaseSummaryPdf } from "@/utils/leaseSummaryPdf";
 import { printSummaryDocument } from "@/utils/printSummary";
 import "./LandlordActiveLeasesPage.css";
@@ -528,105 +529,108 @@ export default function LandlordActiveLeasesPage() {
     const primaryDocumentUrl = primaryLeaseDocumentUrl(lease);
     const scheduleAUrl = scheduleADocumentUrl(lease);
     return (
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        {primaryDocumentUrl ? (
-          <button
-            type="button"
-            onClick={() => void openLeaseDocument(lease)}
-            disabled={documentBusyLeaseId === lease.id}
-            style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", textDecoration: "none", color: "#0f172a" }}
-          >
-            {documentBusyLeaseId === lease.id ? "Opening..." : "View lease"}
-          </button>
-        ) : (
-          <button
-            type="button"
-            disabled
-            title={scheduleAUrl ? "Only Schedule A is available for this record." : "No primary lease PDF is attached to this record."}
-            style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #e2e8f0", background: "#f8fafc", color: "#64748b" }}
-          >
-            Primary lease document unavailable
-          </button>
-        )}
-        <Link
-          to={summaryPath}
-          style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a", textDecoration: "none" }}
-        >
-          Lease summary
-        </Link>
-        {scheduleAUrl ? (
-          <button
-            type="button"
-            onClick={() => void openLeaseDocument(lease, "schedule-a")}
-            disabled={documentBusyLeaseId === lease.id}
-            style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", textDecoration: "none", color: "#0f172a" }}
-          >
-            {documentBusyLeaseId === lease.id ? "Opening..." : "View Schedule A"}
-          </button>
-        ) : null}
-        <Link to={ledgerPath} style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", textDecoration: "none", color: "#0f172a" }}>
-          Ledger
-        </Link>
-        {emailHref ? (
-          <a
-            href={emailHref}
-            style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", textDecoration: "none", color: "#0f172a" }}
-          >
-            Email
-          </a>
-        ) : (
-          <button
-            type="button"
-            disabled
-            style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #e2e8f0", background: "#f8fafc", color: "#94a3b8" }}
-          >
-            Email
-          </button>
-        )}
-        <button
-          type="button"
-          onClick={() => {
-            if (primaryLeaseDocumentUrl(lease)) {
-              void openLeaseDocument(lease);
-              return;
-            }
-            downloadLeaseSummaryPdf(lease);
-          }}
-          disabled={documentBusyLeaseId === lease.id}
-          style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a" }}
-        >
-          Save
-        </button>
-        {view === "archived" ? (
-          <button
-            type="button"
-            onClick={() => void handleRestore(lease)}
-            style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a" }}
-          >
-            Restore
-          </button>
-        ) : (
-          <>
-            {lease.rentPaymentSummary?.paymentRail.enabled !== true &&
-            lease.paymentReadiness?.readinessStatus === "ready_to_configure" ? (
-              <button
-                type="button"
-                onClick={() => void handleEnableRentCollection(lease)}
-                disabled={paymentRailBusyLeaseId === lease.id}
-                style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a" }}
-              >
-                {paymentRailBusyLeaseId === lease.id ? "Enabling..." : "Enable rent collection"}
-              </button>
-            ) : null}
+      <div style={{ display: "grid", gap: 12 }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {primaryDocumentUrl ? (
             <button
               type="button"
-              onClick={() => void handleArchive(lease)}
+              onClick={() => void openLeaseDocument(lease)}
+              disabled={documentBusyLeaseId === lease.id}
+              style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", textDecoration: "none", color: "#0f172a" }}
+            >
+              {documentBusyLeaseId === lease.id ? "Opening..." : "View lease"}
+            </button>
+          ) : (
+            <button
+              type="button"
+              disabled
+              title={scheduleAUrl ? "Only Schedule A is available for this record." : "No primary lease PDF is attached to this record."}
+              style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #e2e8f0", background: "#f8fafc", color: "#64748b" }}
+            >
+              Primary lease document unavailable
+            </button>
+          )}
+          <Link
+            to={summaryPath}
+            style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a", textDecoration: "none" }}
+          >
+            Lease summary
+          </Link>
+          {scheduleAUrl ? (
+            <button
+              type="button"
+              onClick={() => void openLeaseDocument(lease, "schedule-a")}
+              disabled={documentBusyLeaseId === lease.id}
+              style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", textDecoration: "none", color: "#0f172a" }}
+            >
+              {documentBusyLeaseId === lease.id ? "Opening..." : "View Schedule A"}
+            </button>
+          ) : null}
+          <Link to={ledgerPath} style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", textDecoration: "none", color: "#0f172a" }}>
+            Ledger
+          </Link>
+          {emailHref ? (
+            <a
+              href={emailHref}
+              style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", textDecoration: "none", color: "#0f172a" }}
+            >
+              Email
+            </a>
+          ) : (
+            <button
+              type="button"
+              disabled
+              style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #e2e8f0", background: "#f8fafc", color: "#94a3b8" }}
+            >
+              Email
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              if (primaryLeaseDocumentUrl(lease)) {
+                void openLeaseDocument(lease);
+                return;
+              }
+              downloadLeaseSummaryPdf(lease);
+            }}
+            disabled={documentBusyLeaseId === lease.id}
+            style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a" }}
+          >
+            Save
+          </button>
+          {view === "archived" ? (
+            <button
+              type="button"
+              onClick={() => void handleRestore(lease)}
               style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a" }}
             >
-              Archive lease
+              Restore
             </button>
-          </>
-        )}
+          ) : (
+            <>
+              {lease.rentPaymentSummary?.paymentRail.enabled !== true &&
+              lease.paymentReadiness?.readinessStatus === "ready_to_configure" ? (
+                <button
+                  type="button"
+                  onClick={() => void handleEnableRentCollection(lease)}
+                  disabled={paymentRailBusyLeaseId === lease.id}
+                  style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a" }}
+                >
+                  {paymentRailBusyLeaseId === lease.id ? "Enabling..." : "Enable rent collection"}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => void handleArchive(lease)}
+                style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a" }}
+              >
+                Archive lease
+              </button>
+            </>
+          )}
+        </div>
+        {view !== "archived" ? <LeaseSigningDashboard leaseId={lease.id} tenantEmail={lease.tenantEmail} /> : null}
       </div>
     );
   }

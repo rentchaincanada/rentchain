@@ -97,6 +97,7 @@ import stripeScreeningOrdersWebhookRoutes, {
   stripeWebhookHandler,
 } from "./routes/stripeScreeningOrdersWebhookRoutes";
 import { transunionWebhookHandler } from "./routes/transunionWebhookRoutes";
+import { signingWebhookHandler } from "./routes/webhooks/signingWebhookRoutes";
 import { requireAuth } from "./middleware/requireAuth";
 import { requirePermission } from "./middleware/requireAuthz";
 import screeningJobsAdminRoutes from "./routes/screeningJobsAdminRoutes";
@@ -227,6 +228,18 @@ app.post(
   express.raw({ type: "application/json" }),
   routeSource("transunionWebhookRoutes.ts"),
   transunionWebhookHandler
+);
+app.post(
+  "/webhooks/signing/:providerId?",
+  express.raw({ type: "application/json" }),
+  routeSource("signingWebhookRoutes.ts"),
+  signingWebhookHandler
+);
+app.post(
+  "/api/webhooks/signing/:providerId?",
+  express.raw({ type: "application/json" }),
+  routeSource("signingWebhookRoutes.ts"),
+  signingWebhookHandler
 );
 const jsonParser = express.json({
   limit: "10mb",

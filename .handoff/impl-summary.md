@@ -1,154 +1,90 @@
-PR: #1104
-PR URL: https://github.com/rentchaincanada/rentchain/pull/1104
-Branch: prep/screening-provider-integration-readiness-v1
+PR: #1105
+PR URL: https://github.com/rentchaincanada/rentchain/pull/1105
+Branch: feat/lease-execution-end-to-end-v1
 
-# Implementation Summary - Provider-Neutral Screening Integration Readiness v1
+# Implementation Summary
 
-## Scope Delivered
+Implemented Phase B lease execution signing foundation with provider-neutral backend orchestration, mock local workflow, Dropbox Sign production boundary, landlord signing controls, tenant signing URL support, webhook ingestion, and architecture/reference documentation.
 
-Established the Phase A provider-neutral screening workflow foundation across backend services, routes, Firestore rules, frontend screens, focused tests, and operational documentation.
+## Confirmed Findings
 
-The implementation adds consent tracking, landlord-initiated screening requests, webhook ingestion, result recording, decision recording, manual report metadata, safe landlord/admin projections, and provider registry scaffolding without adding a production provider adapter or changing existing legacy screening checkout/report behavior.
-
-## Provider-Neutral Architecture
-
-- Added `IScreeningProvider` contract and provider-neutral workflow types in `rentchain-api/src/types/providerNeutralScreening.ts`.
-- Added `ScreeningProviderRegistry` in `rentchain-api/src/services/screening/providers/providerNeutralRegistry.ts`.
-- Added empty-by-default provider registry initialization in `rentchain-api/src/config/screening.ts`.
-- Added provider contract documentation in `rentchain-api/src/services/screening/providers/README.md` and `rentchain-api/docs/SCREENING_PROVIDER_INTEGRATION.md`.
-- Preserved provider-neutral design: no vendor-specific implementation was added.
-
-## Backend Services and Routes
-
-- Added provider-neutral workflow service logic in `rentchain-api/src/services/screening/providerNeutralWorkflowService.ts`.
-- Added named service entry points for consent, request, webhook, result, decision, and manual report flows.
-- Added Firestore schema metadata in `rentchain-api/src/services/screening/firestore-schema.ts`.
-- Added routes in `rentchain-api/src/routes/providerNeutralScreeningRoutes.ts`.
-- Mounted routes in `rentchain-api/src/app.build.ts`.
-
-New API surfaces:
-- `POST /api/tenant/:tenantId/screeningConsent`
-- `DELETE /api/tenant/:tenantId/screeningConsent/:consentId`
-- `GET /api/tenant/:tenantId/screeningConsent`
-- `POST /api/landlord/units/:unitId/screeningRequest`
-- `GET /api/landlord/units/:unitId/screeningRequest`
-- `GET /api/landlord/units/:unitId/screeningRequest/:requestId`
-- `GET /api/landlord/units/:unitId/screeningRequest/:requestId/result`
-- `POST /api/landlord/units/:unitId/screeningRequest/:requestId/decision`
-- `POST /api/landlord/units/:unitId/screeningRequest/:requestId/manualReport`
-- `POST /api/webhook/screening/:providerId`
-- `GET /api/admin/screening/auditLog`
-- `GET /api/admin/screening/webhookLogs/:providerId`
-- `GET /api/admin/screening/webookLogs/:providerId`
-
-## Firestore Schema and Rules
-
-Updated `rentchain-api/firestore.rules` with explicit rules for:
-- `screeningConsents`
-- `screeningRequests`
-- `screeningResults`
-- `screeningWebhookLogs`
-
-Default deny remains in place. Tenant consent access, landlord request/result access, and admin audit access are scoped by role and ownership claims.
-
-## Frontend Surfaces
-
-- Added frontend API helper: `rentchain-frontend/src/api/providerNeutralScreeningApi.ts`.
-- Added tenant consent page: `rentchain-frontend/src/pages/tenant/ScreeningConsent.tsx`.
-- Added landlord request page: `rentchain-frontend/src/pages/landlord/ScreeningRequest.tsx`.
-- Added landlord decision page: `rentchain-frontend/src/pages/landlord/ScreeningDecision.tsx`.
-- Added shared status component: `rentchain-frontend/src/components/ScreeningStatus.tsx`.
-- Wired new routes in `rentchain-frontend/src/App.tsx`.
-
-Frontend routes:
-- `/tenant/screening/consent`
-- `/landlord/units/:unitId/screening`
-- `/landlord/units/:unitId/screening/:requestId/decision`
-
-## Projection and Safety Controls
-
-- Tenant endpoints expose consent state only.
-- Landlord endpoints expose safe request/result projections only.
-- Admin audit endpoints expose status, timestamps, safe audit entries, and payload digests.
-- Webhook logs store payload digests rather than raw provider payloads.
-- Webhook route fails closed for unregistered or unconfigured providers.
-- Manual report upload accepts PDF, JPEG, and PNG files only.
-- Existing screening checkout/report routes were not changed.
-
-## Tests Added
-
-Backend:
-- `rentchain-api/src/__tests__/services/screening/provider-registry.test.ts`
-- `rentchain-api/src/__tests__/services/screening/workflow.test.ts`
-- `rentchain-api/src/__tests__/routes/providerNeutralScreeningRoutes.test.ts`
-
-Frontend:
-- `rentchain-frontend/src/components/ScreeningStatus.test.tsx`
-- `rentchain-frontend/src/pages/tenant/ScreeningConsent.test.tsx`
+- Added provider-neutral signing interfaces, registry, mock provider, and Dropbox Sign adapter boundary under `rentchain-api/src/services/signing/providers/`.
+- Added lease signing orchestration using separate `leaseSigningRequests`, `leaseSigningEvents`, and metadata-only webhook dead-letter records.
+- Added derived lease signing state helper for `pending_signature`, `signed_future`, `active`, and terminal states without relying on broad lease status mutation.
+- Added landlord endpoints for send, status, signed-document download, and cancellation under existing `/api/leases/:leaseId/*` route ownership checks.
+- Added signing webhook routes at `/webhooks/signing/:providerId?` and `/api/webhooks/signing/:providerId?` with raw body handling before the JSON parser.
+- Extended tenant portal lease routes with tenant-safe signing status and hosted signing URL support while preserving the existing in-app signature metadata path.
+- Added landlord signing dashboard UI and tenant lease page redirect handling for provider-backed signing.
+- Added signing provider env examples and pinned `@dropbox/sign` metadata to `1.10.0`.
+- Added provider evaluation, schema, webhook, error-code, deployment checklist, and architecture documentation.
 
 ## Validation
 
-- Backend focused tests: PASS — `npm test -- providerNeutralScreening provider-registry workflow`
-- Backend screening tests: PASS — `npm test -- screening` with 25 files and 100 tests passing
-- Backend build: PASS — `npm run build`
-- Backend full suite: FAIL — 7 pre-existing failing test files, 20 failing tests, 449 files passing, 2192 tests passing
-- Backend lint: FAIL — `rentchain-api` has no `lint` script
-- Frontend focused tests: PASS — `npm test -- ScreeningStatus ScreeningConsent`
-- Frontend screening tests: PASS — `npm test -- screening` with 12 files and 39 tests passing
-- Frontend full suite: PASS — 291 files and 1149 tests passing
-- Frontend build: PASS — `npm run build`
-- Frontend lint: PASS — `npm run lint`
 - `git diff --check`: PASS
+- `npm test --prefix rentchain-api -- src/services/__tests__/leaseSigningService.test.ts src/services/signing/providers/__tests__/mockSigningProvider.test.ts`: PASS
+- `npm run build --prefix rentchain-api`: PASS
+- `npm run build --prefix rentchain-frontend`: PASS
+- `npm test --prefix rentchain-frontend`: PASS, 291 test files and 1149 tests
+- `npm test --prefix rentchain-api`: FAIL due sandbox `listen EPERM: operation not permitted 0.0.0.0` across existing route tests; 419 files and 2030 tests passed before failure, with failures matching the known full-suite environment limitation.
 
-Backend full-suite failures are outside this mission scope and match known baseline areas: lease draft routes, recipient trust review routes, support console routes, analytics decision mapping, and landlord analytics snapshot.
+## Manual QA Required
 
-## Manual QA
+Manual QA is required because this mission touches backend routes, auth-boundary behavior, webhook routing, frontend rendering, and user-visible lease signing workflows.
 
-Manual QA is required because this mission adds backend routes, frontend routes, and user-visible workflow behavior.
+Recommended manual QA:
+1. With backend/frontend running and `SIGNING_PROVIDER=mock`, verify unauthenticated landlord signing routes return 401.
+2. Log in as landlord, open active leases, send a lease for signature with a valid tenant email, and verify pending status appears.
+3. Verify invalid tenant email returns a safe error code and no stack trace.
+4. Log in as the involved tenant and verify tenant lease page shows provider signing status and opens the mock signing URL.
+5. Verify a non-involved tenant cannot access or sign the lease.
+6. Post a mock signed webhook to `/webhooks/signing/mock` and verify signing status becomes signed.
+7. Attempt duplicate webhook delivery and verify the status remains stable.
+8. Download signed document as landlord after signed webhook; verify a document URL is returned.
+9. Attempt signed-document download before signed state; verify safe 404 response.
+10. Cancel a pending request as landlord and verify tenant signing is no longer available.
+11. Confirm tenant responses do not include provider request IDs, provider event IDs, webhook metadata, or landlord-only fields.
+12. Confirm logs and stored signing events do not include API keys, webhook secrets, or raw provider payloads.
 
-Manual QA was not completed in this run because seeded tenant, landlord, and admin accounts plus local or staging storage configuration were not provided. Required scenarios are listed in `.handoff/mission-current.md` and include tenant consent, landlord request initiation, webhook simulator, decision workflow, manual report upload, role isolation, and provider registry checks.
+## Known Limitations
 
-## Known Limitations and Future Work
-
-- Provider registry starts empty by design; production provider registration remains future work.
-- No vendor-specific adapter was added in this mission.
-- Manual report upload requires `GCS_UPLOAD_BUCKET` at runtime.
-- Webhook logs intentionally store payload digests, not raw payloads, to preserve privacy boundaries.
-- Firestore rules rely on role and ownership claims being present in auth tokens.
-- Full backend suite still has pre-existing failures outside the screening workflow changes.
-- Backend lint remains unavailable until a backend lint script is added.
+- Dropbox Sign adapter is isolated behind the provider interface and package metadata is pinned, but production API calls remain a boundary implementation pending real credentials and provider sandbox verification.
+- Signed-document storage uses the existing GCS helper and requires bucket configuration before non-mock document retrieval in deployed environments.
+- Full backend suite is not clean in this sandbox because multiple pre-existing route tests hit `listen EPERM` on `0.0.0.0`; focused signing tests and builds pass.
+- E2E seeded-account workflow was not run locally because seeded accounts and provider sandbox credentials were not available.
 
 ## Files Changed
 
-- `.handoff/audit-screening-readiness.md`
-- `.handoff/impl-summary.md`
-- `rentchain-api/firestore.rules`
-- `rentchain-api/docs/SCREENING_OPERATIONS.md`
-- `rentchain-api/docs/SCREENING_PROVIDER_INTEGRATION.md`
+- `.env.example`
+- `rentchain-api/.env.example`
+- `rentchain-api/package.json`
+- `rentchain-api/package-lock.json`
 - `rentchain-api/src/app.build.ts`
-- `rentchain-api/src/config/screening.ts`
-- `rentchain-api/src/routes/providerNeutralScreeningRoutes.ts`
-- `rentchain-api/src/services/screening/*`
-- `rentchain-api/src/services/screening/providers/*`
-- `rentchain-api/src/types/providerNeutralScreening.ts`
-- `rentchain-api/src/__tests__/routes/providerNeutralScreeningRoutes.test.ts`
-- `rentchain-api/src/__tests__/services/screening/*`
-- `rentchain-frontend/src/App.tsx`
-- `rentchain-frontend/src/api/providerNeutralScreeningApi.ts`
-- `rentchain-frontend/src/components/ScreeningStatus.tsx`
-- `rentchain-frontend/src/components/ScreeningStatus.test.tsx`
-- `rentchain-frontend/src/pages/landlord/ScreeningRequest.tsx`
-- `rentchain-frontend/src/pages/landlord/ScreeningDecision.tsx`
-- `rentchain-frontend/src/pages/tenant/ScreeningConsent.tsx`
-- `rentchain-frontend/src/pages/tenant/ScreeningConsent.test.tsx`
+- `rentchain-api/src/routes/leaseRoutes.ts`
+- `rentchain-api/src/routes/tenantPortalRoutes.ts`
+- `rentchain-api/src/routes/webhooks/signingWebhookRoutes.ts`
+- `rentchain-api/src/services/leaseStateHelper.ts`
+- `rentchain-api/src/services/signing/leaseSigningService.ts`
+- `rentchain-api/src/services/signing/providers/*`
+- `rentchain-api/src/services/__tests__/leaseSigningService.test.ts`
+- `rentchain-frontend/src/api/leasesApi.ts`
+- `rentchain-frontend/src/api/tenantPortal.ts`
+- `rentchain-frontend/src/components/LeaseSigningDashboard.tsx`
+- `rentchain-frontend/src/pages/LandlordActiveLeasesPage.tsx`
+- `rentchain-frontend/src/pages/tenant/TenantLeasePage.tsx`
+- `docs/architecture/lease-execution-provider-integration-v1.md`
+- `.handoff/signing-provider-evaluation.md`
+- `.handoff/lease-signing-schema.md`
+- `.handoff/signing-webhook-spec.md`
+- `.handoff/signing-error-codes.md`
+- `.handoff/lease-signing-deployment-checklist.md`
 
-## Manual QA Results
-- All auth boundaries: 401 confirmed (items 6 complete) ✅
-- Webhook fail-closed: PROVIDER_NOT_CONFIGURED confirmed ✅
-- Error responses safe: no stack traces or internal paths ✅
-- Landlord screening page loads with correct empty state ✅
-- Tenant consent page loads with correct empty state ✅
-- FINDING: Consent page uses user?.id as fallback — may resolve to landlord ID if accessed by wrong role
-- FINDING: 403 on consent POST when landlord ID used as tenantId — correct backend rejection
-- Items 1-2 functional UI confirmed, full flow blocked by test data setup
-- Items 4-5 covered by automated tests (100 backend tests passing)
+## Acceptance Criteria Status
+
+- Provider-neutral signing service layer: PASS
+- Mock signing workflow: PASS
+- Landlord send/status/cancel/download routes: PASS
+- Tenant projected status/sign URL route support: PASS
+- Webhook validation and idempotent event append: PASS for mock and adapter boundary tests
+- Projection safety for tenant responses: PASS by route shape and summary review
+- Signed document storage path: PARTIAL, requires configured bucket for deployed verification
+- End-to-end seeded workflow: NOT RUN, environment limitation
