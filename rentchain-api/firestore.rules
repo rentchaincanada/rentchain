@@ -1,6 +1,73 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function role() {
+      return request.auth.token.role;
+    }
+
+    function userId() {
+      return request.auth.uid;
+    }
+
+    function tenantId() {
+      return request.auth.token.tenantId != null ? request.auth.token.tenantId : request.auth.uid;
+    }
+
+    function landlordId() {
+      return request.auth.token.landlordId != null ? request.auth.token.landlordId : request.auth.uid;
+    }
+
+    function isAdmin() {
+      return signedIn() && role() == "admin";
+    }
+
+    function isTenantOwner(resourceData) {
+      return signedIn() && role() == "tenant" && resourceData.tenantId == tenantId();
+    }
+
+    function isLandlordOwner(resourceData) {
+      return signedIn() && (role() == "landlord" || role() == "admin") && resourceData.landlordId == landlordId();
+    }
+
+    match /screeningConsents/{consentId} {
+      allow create: if signedIn()
+        && role() == "tenant"
+        && request.resource.data.tenantId == tenantId()
+        && request.resource.data.status == "active";
+      allow read: if isAdmin() || isTenantOwner(resource.data) || isLandlordOwner(resource.data);
+      allow update: if signedIn()
+        && role() == "tenant"
+        && resource.data.tenantId == tenantId()
+        && request.resource.data.tenantId == resource.data.tenantId
+        && request.resource.data.status == "revoked";
+      allow delete: if false;
+    }
+
+    match /screeningRequests/{requestId} {
+      allow create: if signedIn()
+        && (role() == "landlord" || role() == "admin")
+        && request.resource.data.landlordId == landlordId();
+      allow read: if isAdmin() || isLandlordOwner(resource.data);
+      allow update: if isAdmin() || isLandlordOwner(resource.data);
+      allow delete: if false;
+    }
+
+    match /screeningResults/{resultId} {
+      allow create, update: if isAdmin();
+      allow read: if isAdmin() || isLandlordOwner(resource.data);
+      allow delete: if false;
+    }
+
+    match /screeningWebhookLogs/{logId} {
+      allow create: if isAdmin();
+      allow read: if isAdmin();
+      allow update, delete: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }
