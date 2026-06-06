@@ -265,7 +265,30 @@ router.post("/:id/notice-preview", async (req: any, res) => {
       noticeType: (String(req.body?.noticeType || "").trim().toLowerCase() || undefined) as LeaseNoticeType | undefined,
     });
     if (!previewResult.ok) {
-      return res.status(400).json({ ok: false, error: previewResult.error });
+      if (previewResult.validation) {
+        await appendLeaseWorkflowEvent({
+          entityType: "lease",
+          entityId: leaseId,
+          leaseId,
+          landlordId,
+          tenantId: leaseResult.lease.tenantId,
+          propertyId: leaseResult.lease.propertyId,
+          unitId: leaseResult.lease.unitId,
+          actorType: "landlord",
+          actorId,
+          eventType: "lease_notice_validation_checked",
+          eventData: {
+            ok: previewResult.validation.ok,
+            checkedRules: previewResult.validation.checkedRules,
+            failedRules: previewResult.validation.failedRules,
+          },
+        });
+      }
+      return res.status(400).json({
+        ok: false,
+        error: previewResult.error,
+        failedRules: previewResult.failedRules,
+      });
     }
 
     console.info("[lease-notice] preview-generated", {

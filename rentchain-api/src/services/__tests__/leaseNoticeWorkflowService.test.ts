@@ -138,6 +138,7 @@ describe("leaseNoticeWorkflowService renewal operator inputs", () => {
       leaseType: "fixed_term",
       province: "NS",
       currentRent: 1650,
+      leaseStartDate: "2025-05-11",
       leaseEndDate: "2026-05-10",
       status: "active",
     });
@@ -164,6 +165,39 @@ describe("leaseNoticeWorkflowService renewal operator inputs", () => {
       version: "ns-v1",
       sensitivity: "restricted",
     });
+  });
+
+  it("fails preview generation before notice creation when lease prerequisites are incomplete", () => {
+    const lease = normalizeLeaseRecord("lease-1", {
+      landlordId: "landlord-1",
+      tenantId: "",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      leaseType: "fixed_term",
+      province: "NS",
+      currentRent: 1650,
+      leaseStartDate: "2025-05-11",
+      leaseEndDate: "2026-05-10",
+      status: "active",
+    });
+
+    const previewResult = buildPreview(lease, {
+      rentChangeMode: "no_change",
+      newTermType: "fixed_term",
+      newLeaseStartDate: "2026-05-11",
+      newLeaseEndDate: "2027-05-10",
+      responseDeadlineAt: Date.UTC(2026, 4, 1, 12, 0, 0, 0),
+    });
+
+    expect(previewResult.ok).toBe(false);
+    expect(previewResult.error).toBe("LEASE_NOTICE_VALIDATION_FAILED");
+    expect(previewResult.failedRules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "tenant_context_present",
+        }),
+      ])
+    );
   });
 
   it("builds one landlord-visible renewal dataset from end-date eligibility and preserves response buckets", async () => {
