@@ -16,6 +16,22 @@ vi.mock("../../middleware/requireAuth", () => ({
   },
 }));
 
+vi.mock("../../middleware/requireLandlord", () => ({
+  requireLandlord: (req: any, res: any, next: any) => {
+    const header = String(req.headers["x-test-user"] || "").trim();
+    if (!header) return res.status(401).json({ ok: false, error: "unauthenticated" });
+    req.user = JSON.parse(header);
+    const role = String(req.user?.role || "").trim().toLowerCase();
+    const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
+    if (role !== "landlord" && role !== "admin") {
+      return res.status(403).json({ ok: false, error: "Forbidden" });
+    }
+    if (!landlordId) return res.status(401).json({ ok: false, error: "Missing landlord context" });
+    req.user.landlordId = landlordId;
+    next();
+  },
+}));
+
 vi.mock("../../lib/landlordResolver", () => ({
   resolveLandlordAndTier: resolveLandlordAndTierMock,
 }));
@@ -142,7 +158,70 @@ describe("billingRoutes subscription status", () => {
       isActive: true,
       interval: null,
       renewalDate: null,
+      currentPeriodEnd: null,
+      statusSource: "plan_tier",
+      subscriptionStatusSource: "plan_tier",
     });
+  });
+
+  it("returns Stripe-derived subscription status fields without raw Stripe identifiers", async () => {
+    resolveLandlordAndTierMock.mockResolvedValue({
+      tier: "pro",
+      landlordIdResolved: "landlord-1",
+      landlordDocId: "landlord-1",
+      landlordPlanRaw: "pro",
+      source: "landlordId",
+    });
+    landlordDocGetMock.mockResolvedValue({
+      exists: true,
+      data: () => ({
+        plan: "pro",
+        stripeCustomerId: "cus_secret_123",
+        stripeSubscriptionId: "sub_secret_123",
+        subscriptionStatus: "active",
+        subscriptionInterval: "yearly",
+        currentPeriodEnd: 1_767_225_600_000,
+      }),
+    });
+
+    const router = (await import("../billingRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/subscription-status",
+      headers: {
+        "x-test-user": JSON.stringify({ id: "u1", landlordId: "landlord-1", role: "landlord", plan: "free" }),
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      ok: true,
+      tier: "pro",
+      planId: "pro",
+      status: "active",
+      interval: "year",
+      renewalDate: "2026-01-01T00:00:00.000Z",
+      currentPeriodEnd: "2026-01-01T00:00:00.000Z",
+      isActive: true,
+      statusSource: "stripe_subscription",
+    });
+    const payload = JSON.stringify(res.body);
+    expect(payload).not.toContain("cus_secret_123");
+    expect(payload).not.toContain("sub_secret_123");
+  });
+
+  it("denies tenant access to billing status", async () => {
+    const router = (await import("../billingRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/subscription-status",
+      headers: {
+        "x-test-user": JSON.stringify({ id: "tenant-user", tenantId: "tenant-1", role: "tenant" }),
+      },
+    });
+
+    expect(res.status).toBe(403);
+    expect(res.body).toEqual({ ok: false, error: "Forbidden" });
   });
 
   it("keeps the compatibility alias route and falls back to the token plan when needed", async () => {
@@ -237,6 +316,107 @@ describe("billingRoutes subscription status", () => {
         ],
       })
     );
+  });
+
+  it("creates checkout sessions through the canonical route with safe compatibility fields", async () => {
+    const createMock = vi.fn(async () => ({
+      id: "cs_test_123",
+      url: "https://checkout.stripe.test/session",
+    }));
+    getStripeClientMock.mockReturnValue({
+      checkout: {
+        sessions: {
+          create: createMock,
+        },
+      },
+    });
+
+    const router = (await import("../billingRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/checkout",
+      headers: {
+        "x-test-user": JSON.stringify({ id: "u1", landlordId: "landlord-1", role: "landlord", plan: "free" }),
+      },
+      body: {
+        tier: "starter",
+        interval: "monthly",
+        featureKey: "billing",
+        source: "billing_page",
+        redirectTo: "/billing",
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      ok: true,
+      sessionId: "cs_test_123",
+      url: "https://checkout.stripe.test/session",
+      checkoutUrl: "https://checkout.stripe.test/session",
+    });
+    expect(createMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: "subscription",
+        payment_method_types: ["card"],
+        metadata: expect.objectContaining({
+          landlordId: "landlord-1",
+          tier: "starter",
+          interval: "monthly",
+        }),
+      })
+    );
+  });
+
+  it("keeps create-checkout-session as a compatibility alias for stale clients", async () => {
+    getStripeClientMock.mockReturnValue({
+      checkout: {
+        sessions: {
+          create: vi.fn(async () => ({
+            id: "cs_alias_123",
+            url: "https://checkout.stripe.test/alias",
+          })),
+        },
+      },
+    });
+
+    const router = (await import("../billingRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/create-checkout-session",
+      headers: {
+        "x-test-user": JSON.stringify({ id: "u1", landlordId: "landlord-1", role: "landlord", plan: "free" }),
+      },
+      body: {
+        tier: "starter",
+        interval: "monthly",
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      ok: true,
+      sessionId: "cs_alias_123",
+      url: "https://checkout.stripe.test/alias",
+      checkoutUrl: "https://checkout.stripe.test/alias",
+    });
+  });
+
+  it("denies tenant access to checkout creation", async () => {
+    const router = (await import("../billingRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/checkout",
+      headers: {
+        "x-test-user": JSON.stringify({ id: "tenant-user", tenantId: "tenant-1", role: "tenant" }),
+      },
+      body: {
+        tier: "starter",
+        interval: "monthly",
+      },
+    });
+
+    expect(res.status).toBe(403);
+    expect(getStripeClientMock).not.toHaveBeenCalled();
   });
 
   it("returns the same controlled 503 when /subscribe hits the shared Stripe checkout failure path", async () => {

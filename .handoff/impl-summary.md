@@ -1,94 +1,128 @@
-PR: #1107
-PR URL: https://github.com/rentchaincanada/rentchain/pull/1107
-Branch: fix/notice-automation-validation-v1
+PR: #1108
+PR URL: https://github.com/rentchaincanada/rentchain/pull/1108
+Branch: fix/billing-checkout-alignment-v1
 
 # Implementation Summary
 
-Mission: Notice Automation Validation and Rule Enforcement
+Mission: Phase E - Billing Checkout Alignment for v0.9 Soft Launch
 
-Implemented deterministic notice automation validation for the existing lease notice workflow. The implementation stays inside the current notice service and landlord route surfaces, preserving the existing feature flag, landlord authorization middleware, tenant route protections, notice templates, delivery provider behavior, Firestore rules, billing, screening, and infrastructure.
+Aligned the subscription billing checkout contract across backend and frontend while preserving billing scope, landlord authorization, safe subscription status projection, and Track B deferral. The canonical subscription checkout route remains `POST /api/billing/checkout` because it was already registered in `app.build.ts`, documented by the public billing diagnostic probe, and used by the existing `startCheckout` helper. The stale frontend `billingApi.createCheckoutSession` path now calls the canonical route, while the backend keeps `/billing/create-checkout-session` as a compatibility alias for stale clients.
 
 ## Confirmed Findings
 
-- Current notice automation uses `leaseNoticeWorkflowService.ts`, `leaseNoticeLandlordRoutes.ts`, and `tenantLeaseNoticeRoutes.ts`; the older mission names `noticeService.ts` and `noticeRoutes.ts` are not present in the current source tree.
-- Landlord notice routes remain behind `requireLandlord` and the lease notice feature flag.
-- Tenant notice routes remain behind authenticated tenant role checks.
-- Existing policy evaluation remains in place for preview/send actions.
-- Existing tenant notice projections already redact landlord-only notes, internal workflow state, and provider delivery payloads.
+- Backend billing routes are mounted at `/api/billing` through `rentchain-api/src/app.build.ts`.
+- Current backend checkout route was `POST /billing/checkout`; frontend `billingApi.createCheckoutSession` was still calling `/billing/create-checkout-session`.
+- Existing `startCheckout` already called `/billing/checkout`, so keeping `/billing/checkout` as canonical avoids creating a second checkout contract.
+- Billing route auth previously used `requireAuth` directly on billing state and checkout routes; this mission moved those protected routes to `requireLandlord`.
+- Pricing and health routes remain public as non-sensitive read surfaces.
+- Subscription status previously inferred status from plan tier and returned null renewal fields without source labeling.
 
 ## Changes Made
 
-- Added pure notice validation rules in `rentchain-api/src/services/noticeValidationRules.ts`.
-- Added validation checks for lease state, tenant context, landlord context, property/unit context, rent terms, supported jurisdiction, allowed notice type, term dates, and response deadline.
-- Added compatibility wrappers for eviction, cure, and termination notice validation paths.
-- Updated `buildPreview` to fail closed with `LEASE_NOTICE_VALIDATION_FAILED` and safe `failedRules` before preview generation succeeds.
-- Updated send flow to reject invalid prerequisites before notice document creation.
-- Moved tenant delivery contact resolution ahead of notice creation so a missing or invalid tenant delivery contact does not create a pending notice.
-- Added append-safe validation audit events through `leaseWorkflowEvents` for validation failures and included validation context in notice creation audit data.
-- Updated landlord preview route to return safe validation failure payloads and append validation audit events when preview validation fails.
-- Added unit coverage for notice validation rules and service validation gating.
+- Updated protected backend billing routes to use `requireLandlord`:
+  - `GET /billing`
+  - `GET /billing/receipts/:id`
+  - `GET /billing/subscription-status`
+  - `GET /billing/billing/subscription-status`
+  - `POST /billing/checkout`
+  - `POST /billing/create-checkout-session`
+  - `POST /billing/subscribe`
+  - `POST /billing/upgrade`
+  - `GET /billing/session-status`
+  - `POST /billing/portal`
+- Added `POST /billing/create-checkout-session` as a compatibility alias to the shared checkout handler.
+- Updated checkout response to include `sessionId`, `url`, and `checkoutUrl` for compatibility with existing callers.
+- Added safe subscription status fields:
+  - `currentPeriodEnd`
+  - `statusSource`
+  - `subscriptionStatusSource`
+- Subscription status now uses stored synced subscription fields when present and labels the source as `stripe_subscription`; otherwise it labels plan-tier inference as `plan_tier`.
+- Updated `rentchain-frontend/src/api/billingApi.ts` so `createCheckoutSession` posts to `/billing/checkout`.
+- Added focused frontend API tests for checkout route alignment and safe subscription status normalization.
+- Updated backend billing route tests for landlord-only access, tenant denial, canonical checkout response, compatibility alias, and safe subscription status fields.
+- Added `.codex/docs/billing.md` documenting canonical subscription checkout, compatibility aliases, safe subscription status fields, and Track B deferral.
 
 ## Files Changed
 
-- `rentchain-api/src/services/noticeValidationRules.ts`
-- `rentchain-api/src/services/leaseNoticeWorkflowService.ts`
-- `rentchain-api/src/routes/leaseNoticeLandlordRoutes.ts`
-- `rentchain-api/src/services/__tests__/noticeValidationRules.test.ts`
-- `rentchain-api/src/services/__tests__/leaseNoticeWorkflowService.test.ts`
+- `rentchain-api/src/routes/billingRoutes.ts`
+- `rentchain-api/src/routes/__tests__/billingRoutes.test.ts`
+- `rentchain-frontend/src/api/billingApi.ts`
+- `rentchain-frontend/src/api/billingApi.test.ts`
+- `.codex/docs/billing.md`
 - `.handoff/impl-summary.md`
 
 ## Validation
 
-- `cd rentchain-api && source ~/.nvm/nvm.sh && nvm use 20 && npm run test:single -- src/services/__tests__/noticeValidationRules.test.ts src/services/__tests__/leaseNoticeWorkflowService.test.ts src/routes/__tests__/leaseNoticeLandlordRoutes.test.ts src/routes/__tests__/tenantLeaseNoticeRoutes.test.ts`
-  - PASS: 4 test files, 21 tests
+- `cd rentchain-api && source ~/.nvm/nvm.sh && nvm use 20 && npm run test:single -- src/routes/__tests__/billingRoutes.test.ts`
+  - PASS: 1 test file, 13 tests
+- `cd rentchain-frontend && source ~/.nvm/nvm.sh && nvm use 20 && npm run test:single -- src/api/billingApi.test.ts`
+  - PASS: 1 test file, 3 tests
+- `cd rentchain-frontend && source ~/.nvm/nvm.sh && nvm use 20 && npm run test:single -- src/pages/BillingPage.test.tsx src/hooks/useBillingStatus.test.tsx src/billing/openUpgradeFlow.test.ts`
+  - PASS: 3 test files, 8 tests
 - `cd rentchain-api && source ~/.nvm/nvm.sh && nvm use 20 && npm run build`
   - PASS
+- `cd rentchain-frontend && source ~/.nvm/nvm.sh && nvm use 20 && npm run build`
+  - PASS
+- `cd rentchain-frontend && source ~/.nvm/nvm.sh && nvm use 20 && npm run test`
+  - PASS: 293 test files, 1153 tests
 - `git diff --check`
   - PASS
 - `cd rentchain-api && source ~/.nvm/nvm.sh && nvm use 20 && npm run test`
-  - FAIL: full backend suite hit unrelated sandbox/pre-existing `listen EPERM: operation not permitted 0.0.0.0` failures in route tests outside the notice workflow. Targeted notice suites passed.
+  - FAIL: full backend suite hit unrelated local `listen EPERM: operation not permitted 0.0.0.0` failures in route tests outside billing. Focused billing backend tests passed.
 
 ## Manual QA
 
-Manual QA is required because this mission changes backend route behavior and user-visible API validation responses.
+Manual QA is required because this mission changes frontend checkout routing, backend billing route authorization, and user-visible billing/subscription behavior.
 
 Manual QA not completed in this local environment. Required preview QA:
 
-1. No auth on landlord notice preview/send endpoints returns 401.
-2. Landlord cannot preview/send notice for another landlord's lease; response is 403.
-3. Valid active lease with tenant contact, landlord context, property/unit context, rent terms, supported jurisdiction, term dates, and response deadline can generate a notice.
-4. Lease missing tenant context or tenant delivery contact fails with 400 and `LEASE_NOTICE_VALIDATION_FAILED`.
-5. Lease missing rent terms fails with 400 and safe `failedRules`.
-6. Unsupported jurisdiction or disallowed notice type fails with 400 and safe `failedRules`.
-7. Validation failures create append-safe `leaseWorkflowEvents` entries without creating notice documents.
-8. Tenant notice list/detail projections still exclude landlord-only notes, provider payloads, and internal workflow state.
+1. Log in as landlord and trigger checkout from billing/upgrade flow.
+   - Confirm the Network tab shows `POST /api/billing/checkout`.
+   - Confirm the request is not sent to `/api/billing/create-checkout-session`.
+   - Confirm the response includes a checkout redirect URL.
+2. Log in as landlord and load billing/account page.
+   - Confirm tier, status, interval, and renewal date display without raw Stripe customer IDs, subscription IDs, invoices, or provider payloads.
+3. Log in as tenant and attempt billing routes.
+   - Confirm subscription status and checkout creation are denied.
+4. Log out and attempt billing checkout/status routes.
+   - Confirm unauthenticated access is denied.
+5. Simulate Stripe unavailable or missing price configuration.
+   - Confirm checkout errors are safe and do not expose raw Stripe error details or stack traces.
+6. Confirm pricing display still loads from public billing pricing route.
+7. Confirm Track B payout/statement flows are not introduced or exposed.
 
 ## Protected Areas
 
-- No billing changes.
-- No auth core changes.
-- No screening provider changes.
-- No pricing or entitlement changes.
-- No CI/CD, deployment, Firestore rules, Terraform, or migration changes.
-- No frontend, templates, notice delivery routing, SMS, or external legal service changes.
+- No pricing or entitlement configuration changes.
+- No Stripe webhook changes.
+- No Stripe Connect, payout, statement, tenant rent payment settlement, or Track B implementation.
+- No Firestore rules changes.
+- No CI/CD, deployment, Terraform, or migration changes.
+- No new dependencies.
 
 ## Known Limitations
 
-- Validation treats canonical tenant/landlord context plus resolved tenant delivery email as the available contact boundary; deeper contact profile validation remains future work.
-- Full manual E2E requires seeded landlord/tenant leases and a configured preview email environment.
+- Subscription status can only be Stripe-derived when synced subscription fields are already stored on the landlord record.
+- When no synced subscription fields exist, status remains plan-tier inferred and is explicitly labeled with `statusSource: "plan_tier"`.
 - Full backend suite remains blocked locally by unrelated `listen EPERM` route-test failures.
+- Full checkout manual E2E requires seeded landlord accounts, configured Stripe price IDs, and a preview billing environment.
 
 ## Acceptance Criteria Status
 
-- Pure deterministic validation helpers: completed.
-- Validation gate before notice generation: completed.
-- Safe validation error payloads: completed.
-- Append-safe validation audit context: completed.
-- Authorization boundaries preserved: completed by existing route middleware and tests.
-- Projection safety preserved: completed by existing tenant projection tests.
-- No protected areas modified: completed.
+- Frontend checkout route alignment: completed.
+- Backend canonical checkout route: completed.
+- Compatibility alias for stale checkout clients: completed.
+- Landlord-only billing route access: completed.
+- Tenant billing route denial: completed in tests.
+- Safe subscription status response without raw Stripe IDs: completed.
+- Subscription status source labeling: completed.
+- Billing route documentation: completed.
+- Track B deferral documented: completed.
+- Backend focused billing tests: completed.
+- Frontend focused and full tests: completed.
+- Backend build and frontend build: completed.
 - Manual QA: pending preview environment.
 
 ## Recommended Next Mission
 
-Run manual preview QA for notice validation with seeded lease fixtures, then continue to Phase E billing checkout alignment if Gate 2 approves this mission.
+Run billing checkout manual preview QA with seeded landlord accounts and Stripe test price configuration, then continue to Phase F tenant portal environment documentation.

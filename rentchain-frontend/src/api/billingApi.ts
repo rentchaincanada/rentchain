@@ -41,7 +41,10 @@ export interface SubscriptionStatus {
   status: "active" | "past_due" | "canceled";
   interval?: "month" | "year" | null;
   renewalDate?: string | null;
+  currentPeriodEnd?: string | null;
   isActive?: boolean;
+  statusSource?: "stripe_subscription" | "plan_tier";
+  subscriptionStatusSource?: "stripe_subscription" | "plan_tier";
 }
 
 export async function fetchSubscriptionStatus(): Promise<SubscriptionStatus> {
@@ -61,11 +64,25 @@ export async function fetchSubscriptionStatus(): Promise<SubscriptionStatus> {
   }
 }
 
-export async function createCheckoutSession(): Promise<{ checkoutUrl: string }> {
-  const data = await apiJson<any>("/billing/create-checkout-session", {
+export type CreateCheckoutSessionInput = {
+  tier?: PaidPlan;
+  interval?: "monthly" | "yearly" | "month" | "year";
+  featureKey?: string;
+  source?: string;
+  redirectTo?: string;
+};
+
+export async function createCheckoutSession(input: CreateCheckoutSessionInput = {}): Promise<{
+  sessionId: string | null;
+  url: string;
+  checkoutUrl: string;
+}> {
+  const data = await apiJson<any>("/billing/checkout", {
     method: "POST",
+    body: JSON.stringify(input),
   });
-  return { checkoutUrl: data?.checkoutUrl ?? "" };
+  const url = data?.url ?? data?.checkoutUrl ?? "";
+  return { sessionId: data?.sessionId ?? null, url, checkoutUrl: url };
 }
 
 export async function createBillingPortalSession(): Promise<{ url: string }> {
