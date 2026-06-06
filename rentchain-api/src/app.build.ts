@@ -106,6 +106,7 @@ import adminScreeningResultsRoutes from "./routes/adminScreeningResultsRoutes";
 import adminScreeningUsageRoutes from "./routes/adminScreeningUsageRoutes";
 import screeningReportRoutes from "./routes/screeningReportRoutes";
 import screeningRoutes from "./routes/screeningRoutes";
+import providerNeutralScreeningRoutes from "./routes/providerNeutralScreeningRoutes";
 import telemetryRoutes from "./routes/telemetryRoutes";
 import invitesRoutes from "./routes/invitesRoutes";
 import accessRoutes from "./routes/accessRoutes";
@@ -391,6 +392,7 @@ app.use("/api/internal", rateLimitInternalJob);
 app.use("/api/internal", routeSource("internalReportsRoutes.ts"), internalReportsRoutes);
 app.use("/api/internal", routeSource("identityOracleInternalRoutes.ts"), identityOracleInternalRoutes);
 app.use("/api/internal", routeSource("applicationReminderInternalRoutes.ts"), applicationReminderInternalRoutes);
+app.use("/api", routeSource("providerNeutralScreeningRoutes.ts"), providerNeutralScreeningRoutes);
 
 // Auth decode (non-blocking if header missing)
 app.use(authenticateJwt);

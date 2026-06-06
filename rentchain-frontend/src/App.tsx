@@ -159,6 +159,8 @@ const SharedPortfolioScorePage = lazy(() => import("./pages/public/SharedPortfol
 const TenantSharePackagePage = lazy(() => import("./pages/public/TenantSharePackagePage"));
 const ActionRecommendationsPage = lazy(() => import("./pages/landlord/ActionRecommendationsPage"));
 const InvitesPage = lazy(() => import("./pages/landlord/InvitesPage"));
+const LandlordScreeningRequestPage = lazy(() => import("./pages/landlord/ScreeningRequest"));
+const LandlordScreeningDecisionPage = lazy(() => import("./pages/landlord/ScreeningDecision"));
 const MessagesPage = lazy(() => import("./pages/MessagesPage"));
 const MaintenanceRequestsPage = lazy(() => import("./pages/MaintenanceRequestsPage"));
 const LeaseLedgerPage = lazy(() => import("./pages/LeaseLedgerPage"));
@@ -206,6 +208,7 @@ const TenantProfilePage = lazy(() => import("./pages/tenant/TenantProfilePage"))
 const TenantAccessPage = lazy(() => import("./pages/tenant/TenantAccessPage"));
 const TenantAccountPage = lazy(() => import("./pages/tenant/TenantAccountPage"));
 const TenantScreeningInboxPage = lazy(() => import("./pages/tenant/TenantScreeningInboxPage"));
+const TenantScreeningConsentPage = lazy(() => import("./pages/tenant/ScreeningConsent"));
 const TenantMagicRedeemPage = lazy(() => import("./pages/tenant/TenantMagicRedeemPage"));
 const TenantInviteRedeemPage = lazy(() => import("./pages/tenant/TenantInviteRedeemPage"));
 const TenantMaintenanceRequestDetailPage = lazy(() => import("./pages/tenant/TenantMaintenanceRequestDetailPage"));
@@ -504,6 +507,30 @@ function App() {
             <RequireAuth>
               <LandlordNav>
                 <ApplicationsPage />
+              </LandlordNav>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/landlord/units/:unitId/screening"
+          element={
+            <RequireAuth>
+              <LandlordNav>
+                <Suspense fallback={null}>
+                  <LandlordScreeningRequestPage />
+                </Suspense>
+              </LandlordNav>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/landlord/units/:unitId/screening/:requestId/decision"
+          element={
+            <RequireAuth>
+              <LandlordNav>
+                <Suspense fallback={null}>
+                  <LandlordScreeningDecisionPage />
+                </Suspense>
               </LandlordNav>
             </RequireAuth>
           }
@@ -1669,6 +1696,10 @@ function App() {
         <Route
           path="/tenant/application"
           element={renderTenantShell(suspensePage(<TenantApplicationStatusPage />))}
+        />
+        <Route
+          path="/tenant/screening/consent"
+          element={renderTenantShell(suspensePage(<TenantScreeningConsentPage />))}
         />
         <Route
           path="/tenant/lease"
