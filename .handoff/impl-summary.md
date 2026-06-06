@@ -141,3 +141,14 @@ Manual QA was not completed in this run because seeded tenant, landlord, and adm
 - `rentchain-frontend/src/pages/landlord/ScreeningDecision.tsx`
 - `rentchain-frontend/src/pages/tenant/ScreeningConsent.tsx`
 - `rentchain-frontend/src/pages/tenant/ScreeningConsent.test.tsx`
+
+## Manual QA Results
+- All auth boundaries: 401 confirmed (items 6 complete) ✅
+- Webhook fail-closed: PROVIDER_NOT_CONFIGURED confirmed ✅
+- Error responses safe: no stack traces or internal paths ✅
+- Landlord screening page loads with correct empty state ✅
+- Tenant consent page loads with correct empty state ✅
+- FINDING: Consent page uses user?.id as fallback — may resolve to landlord ID if accessed by wrong role
+- FINDING: 403 on consent POST when landlord ID used as tenantId — correct backend rejection
+- Items 1-2 functional UI confirmed, full flow blocked by test data setup
+- Items 4-5 covered by automated tests (100 backend tests passing)
