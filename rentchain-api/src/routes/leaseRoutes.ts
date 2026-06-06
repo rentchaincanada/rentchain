@@ -77,6 +77,14 @@ import { appendProvenanceEvent } from "../services/stateMachines/provenanceStora
 import { buildValidationSummary, validateLeaseTransition } from "../services/stateMachines/transitionValidation";
 import { appendReviewStateTransitionAuditEvent } from "../lib/canonicalAudit/reviewStateTransitionAudit";
 import type { LeaseEvent, LeaseLifecycleState } from "../services/stateMachines/types";
+import {
+  cancelLeaseSigning,
+  downloadSignedLease,
+  loadLeaseSigningSnapshot,
+  sendLeaseForSignature,
+  signingErrorCode,
+  signingErrorStatus,
+} from "../services/signing/leaseSigningService";
 
 const router = Router();
 const LEDGER_COLLECTION = "ledgerEntries";
@@ -3046,6 +3054,96 @@ export async function handleLeaseDocumentUrl(req: any, res: Response) {
 }
 
 router.get("/:leaseId/document-url", requireLandlord, handleLeaseDocumentUrl);
+
+router.post("/:leaseId/send-for-signature", requireLandlord, async (req: any, res: Response) => {
+  try {
+    if (!(await enforceLeaseCapability(req, res))) return;
+    const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
+    const leaseId = String(req.params?.leaseId || "").trim();
+    if (!leaseId) return res.status(400).json({ ok: false, error: "lease_not_found" });
+    const result = await getLeaseEntityForLandlord(leaseId, landlordId);
+    if (!result.ok) return res.status(result.status).json({ ok: false, error: result.error === "Forbidden" ? "forbidden" : "lease_not_found" });
+    const tenantEmails = Array.isArray(req.body?.tenantEmails)
+      ? req.body.tenantEmails.map((value: unknown) => String(value || "").trim())
+      : [req.body?.tenantEmail].map((value) => String(value || "").trim()).filter(Boolean);
+    const snapshot = await sendLeaseForSignature({
+      leaseId,
+      lease: result.lease as any,
+      landlordId,
+      tenantEmails,
+      message: String(req.body?.message || "").trim() || null,
+    });
+    return res.status(200).json({
+      ok: true,
+      data: {
+        signingStatus: snapshot.signingStatus,
+        signingProviderId: snapshot.signingProviderId,
+        signingRequestId: snapshot.signingRequestId,
+        sentAt: snapshot.sentAt,
+        derivedLeaseState: snapshot.derivedLeaseState,
+      },
+    });
+  } catch (error: any) {
+    return res.status(signingErrorStatus(error)).json({ ok: false, error: signingErrorCode(error) });
+  }
+});
+
+router.get("/:leaseId/signing-status", requireLandlord, async (req: any, res: Response) => {
+  try {
+    if (!(await enforceLeaseCapability(req, res))) return;
+    const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
+    const leaseId = String(req.params?.leaseId || "").trim();
+    const result = await getLeaseEntityForLandlord(leaseId, landlordId);
+    if (!result.ok) return res.status(result.status).json({ ok: false, error: result.error === "Forbidden" ? "forbidden" : "lease_not_found" });
+    const snapshot = await loadLeaseSigningSnapshot({ leaseId, landlordId, lease: result.lease as any });
+    return res.status(200).json({ ok: true, data: snapshot });
+  } catch (error: any) {
+    return res.status(signingErrorStatus(error)).json({ ok: false, error: signingErrorCode(error) });
+  }
+});
+
+router.post("/:leaseId/download-signed", requireLandlord, async (req: any, res: Response) => {
+  try {
+    if (!(await enforceLeaseCapability(req, res))) return;
+    const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
+    const leaseId = String(req.params?.leaseId || "").trim();
+    const result = await getLeaseEntityForLandlord(leaseId, landlordId);
+    if (!result.ok) return res.status(result.status).json({ ok: false, error: result.error === "Forbidden" ? "forbidden" : "lease_not_found" });
+    const snapshot = await downloadSignedLease({ leaseId, landlordId, lease: result.lease as any });
+    if (!snapshot.documentUrl) return res.status(404).json({ ok: false, error: "signed_document_not_found" });
+    return res.status(200).json({
+      ok: true,
+      data: {
+        documentUrl: snapshot.documentUrl,
+        signingStatus: snapshot.signingStatus,
+        signedAt: snapshot.signedAt,
+      },
+    });
+  } catch (error: any) {
+    return res.status(signingErrorStatus(error)).json({ ok: false, error: signingErrorCode(error) });
+  }
+});
+
+router.post("/:leaseId/cancel-signing", requireLandlord, async (req: any, res: Response) => {
+  try {
+    if (!(await enforceLeaseCapability(req, res))) return;
+    const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
+    const leaseId = String(req.params?.leaseId || "").trim();
+    const result = await getLeaseEntityForLandlord(leaseId, landlordId);
+    if (!result.ok) return res.status(result.status).json({ ok: false, error: result.error === "Forbidden" ? "forbidden" : "lease_not_found" });
+    const snapshot = await cancelLeaseSigning({ leaseId, landlordId, lease: result.lease as any });
+    return res.status(200).json({
+      ok: true,
+      data: {
+        signingStatus: snapshot.signingStatus,
+        cancelledAt: snapshot.events.find((event) => event.type === "cancelled")?.occurredAt || null,
+        derivedLeaseState: snapshot.derivedLeaseState,
+      },
+    });
+  } catch (error: any) {
+    return res.status(signingErrorStatus(error)).json({ ok: false, error: signingErrorCode(error) });
+  }
+});
 
 router.post("/:leaseId/restore", requireLandlord, async (req: any, res: Response) => {
   try {

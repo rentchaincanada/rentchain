@@ -206,6 +206,59 @@ export interface LandlordActiveLease extends Lease {
   isArchived?: boolean;
 }
 
+export type LeaseSigningStatusResponse = {
+  signingStatus: "not_started" | "pending_signature" | "signed" | "rejected" | "expired" | "cancelled";
+  derivedLeaseState: string;
+  signingProviderId: string | null;
+  signingRequestId: string | null;
+  sentAt: string | null;
+  signedAt: string | null;
+  documentUrl: string | null;
+  events: Array<{
+    id: string;
+    type: string;
+    occurredAt: string;
+    actorRole: string;
+  }>;
+};
+
+export async function sendLeaseForSignature(
+  leaseId: string,
+  payload: { tenantEmails: string[]; message?: string }
+): Promise<LeaseSigningStatusResponse> {
+  const res = await apiJson<{ ok: boolean; data: LeaseSigningStatusResponse }>(
+    `/leases/${encodeURIComponent(leaseId)}/send-for-signature`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }
+  );
+  return res.data;
+}
+
+export async function getLeaseSigningStatus(leaseId: string): Promise<LeaseSigningStatusResponse> {
+  const res = await apiJson<{ ok: boolean; data: LeaseSigningStatusResponse }>(
+    `/leases/${encodeURIComponent(leaseId)}/signing-status`
+  );
+  return res.data;
+}
+
+export async function downloadSignedLease(leaseId: string): Promise<{ documentUrl: string; signingStatus: string; signedAt: string | null }> {
+  const res = await apiJson<{ ok: boolean; data: { documentUrl: string; signingStatus: string; signedAt: string | null } }>(
+    `/leases/${encodeURIComponent(leaseId)}/download-signed`,
+    { method: "POST", body: "{}" }
+  );
+  return res.data;
+}
+
+export async function cancelLeaseSigning(leaseId: string): Promise<{ signingStatus: string; cancelledAt: string | null; derivedLeaseState: string }> {
+  const res = await apiJson<{ ok: boolean; data: { signingStatus: string; cancelledAt: string | null; derivedLeaseState: string } }>(
+    `/leases/${encodeURIComponent(leaseId)}/cancel-signing`,
+    { method: "POST", body: "{}" }
+  );
+  return res.data;
+}
+
 export type RentPaymentHistoryItem = {
   id: string;
   amountCents: number;

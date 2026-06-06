@@ -137,6 +137,10 @@ export type TenantWorkspaceLease = TenantSafeProjectionMetadata & {
     } | null;
     paymentExperience: PaymentExperience;
   } | null;
+  providerSigningStatus?: "not_started" | "pending_signature" | "signed" | "rejected" | "expired" | "cancelled";
+  providerSignedAt?: string | null;
+  providerDerivedLeaseState?: "not_started" | "pending_signature" | "signed_future" | "active" | "rejected" | "expired" | "cancelled";
+  providerSigningAvailable?: boolean;
 };
 
 export type TenantLeaseDocumentContext = {
@@ -698,8 +702,16 @@ export async function getTenantLeasePaymentStatus(
   return res?.data;
 }
 
-export async function signTenantLease(leaseId: string): Promise<TenantWorkspaceLease | null> {
-  const res = await tenantApiFetch<{ ok: boolean; data: TenantWorkspaceLease | null }>(
+export type TenantLeaseSignResponse =
+  | TenantWorkspaceLease
+  | {
+      signingUrl: string | null;
+      signingProviderId: string;
+      signingStatus: "pending_signature";
+    };
+
+export async function signTenantLease(leaseId: string): Promise<TenantLeaseSignResponse | null> {
+  const res = await tenantApiFetch<{ ok: boolean; data: TenantLeaseSignResponse | null }>(
     `/tenant/leases/${encodeURIComponent(leaseId)}/sign`,
     {
       method: "POST",

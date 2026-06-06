@@ -97,6 +97,12 @@ import {
 import { recordSystemObservabilityEvent } from "../services/observability/recordSystemObservabilityEvent";
 import { buildLeasePaymentProjection } from "../services/projections/buildLeasePaymentProjection";
 import { getSignedDownloadUrl } from "../lib/gcsSignedUrl";
+import {
+  getTenantSigningUrl,
+  loadLeaseSigningSnapshot,
+  signingErrorCode,
+  signingErrorStatus,
+} from "../services/signing/leaseSigningService";
 
 const router = Router();
 router.use(authenticateJwt);
@@ -2540,7 +2546,22 @@ async function loadTenantWorkspaceData(context: Awaited<ReturnType<typeof resolv
           approvedDocumentUrl: leaseDocumentContext.documentUrl,
         }
       : leaseDoc?.data;
-  const lease = leaseDoc ? projectTenantLease(leaseDoc.id, leaseProjectionData) : null;
+  const leaseSigning = leaseDoc
+    ? await loadLeaseSigningSnapshot({
+        leaseId: leaseDoc.id,
+        landlordId: String(leaseDoc.data?.landlordId || "").trim() || null,
+        lease: leaseDoc.data,
+      }).catch(() => null)
+    : null;
+  const lease = leaseDoc
+    ? {
+        ...projectTenantLease(leaseDoc.id, leaseProjectionData),
+        providerSigningStatus: leaseSigning?.signingStatus || "not_started",
+        providerSignedAt: leaseSigning?.signedAt || null,
+        providerDerivedLeaseState: leaseSigning?.derivedLeaseState || "not_started",
+        providerSigningAvailable: leaseSigning?.signingStatus === "pending_signature",
+      }
+    : null;
   const rentPaymentSummary = lease
     ? (
         await buildLeasePaymentProjection({
@@ -5762,6 +5783,52 @@ router.get("/leases/:leaseId/payments", requireTenantWorkspaceIdentity, async (r
   }
 });
 
+router.get("/leases/:leaseId", requireTenantWorkspaceIdentity, async (req: any, res: any) => {
+  const context = await resolveWorkspaceContextOrRespond(req, res);
+  if (!context) return;
+  if (context.authority !== "active_tenant" || !context.tenantId) {
+    return res.status(403).json({ ok: false, error: "TENANT_CONTEXT_REQUIRED" });
+  }
+
+  const leaseId = String(req.params?.leaseId || "").trim();
+  if (!leaseId) return res.status(404).json({ ok: false, error: "lease_not_found" });
+  if (context.leaseId && String(context.leaseId).trim() !== leaseId) {
+    return res.status(403).json({ ok: false, error: "lease_not_owned_by_tenant" });
+  }
+
+  try {
+    const leaseSnap = await db.collection("leases").doc(leaseId).get();
+    if (!leaseSnap.exists) return res.status(404).json({ ok: false, error: "lease_not_found" });
+    const leaseData = (leaseSnap.data() as any) || {};
+    if (!leaseMatchesTenantIdentity(leaseData, context.tenantId, context.invitedEmail || req.user?.email)) {
+      return res.status(403).json({ ok: false, error: "lease_not_owned_by_tenant" });
+    }
+    const projectedLease = projectTenantLease(leaseId, leaseData);
+    const signing = await loadLeaseSigningSnapshot({
+      leaseId,
+      landlordId: String(leaseData?.landlordId || "").trim() || null,
+      lease: leaseData,
+    });
+    return res.json({
+      ok: true,
+      data: {
+        leaseData: projectedLease,
+        signingStatus: signing.signingStatus,
+        signedAt: signing.signedAt,
+        derivedLeaseState: signing.derivedLeaseState,
+        canSign: signing.signingStatus === "pending_signature",
+      },
+    });
+  } catch (err: any) {
+    console.error("[tenant/leases/:leaseId] failed", {
+      tenantId: context.tenantId,
+      leaseId,
+      message: err?.message || "failed",
+    });
+    return res.status(500).json({ ok: false, error: "TENANT_LEASE_SIGNING_STATUS_FAILED" });
+  }
+});
+
 router.post("/leases/:leaseId/sign", requireTenantWorkspaceIdentity, async (req: any, res) => {
   const context = await resolveWorkspaceContextOrRespond(req, res);
   if (!context) return;
@@ -5796,6 +5863,32 @@ router.post("/leases/:leaseId/sign", requireTenantWorkspaceIdentity, async (req:
       !leaseTenantIds.includes(String(context.tenantId || "").trim())
     ) {
       return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const providerSigning = await loadLeaseSigningSnapshot({
+      leaseId,
+      landlordId: String(leaseData?.landlordId || "").trim() || null,
+      lease: leaseData,
+    });
+    if (providerSigning.signingStatus === "pending_signature") {
+      try {
+        const signUrl = await getTenantSigningUrl({
+          leaseId,
+          lease: leaseData,
+          tenantId: String(context.tenantId),
+          tenantEmail: String(context.invitedEmail || req.user?.email || "").trim() || null,
+        });
+        return res.status(200).json({
+          ok: true,
+          data: {
+            signingUrl: signUrl.signingUrl,
+            signingProviderId: signUrl.signingProviderId,
+            signingStatus: providerSigning.signingStatus,
+          },
+        });
+      } catch (error: any) {
+        return res.status(signingErrorStatus(error)).json({ ok: false, error: signingErrorCode(error) });
+      }
     }
 
     const alreadySignedAt =

@@ -106,7 +106,16 @@ export default function TenantLeasePage() {
     setSigning(true);
     setError(null);
     try {
-      setData(await signTenantLease(data.leaseId));
+      const result = await signTenantLease(data.leaseId);
+      if (result && "signingUrl" in result) {
+        if (result.signingUrl) {
+          window.location.assign(result.signingUrl);
+          return;
+        }
+        setError("Lease signing is not available yet.");
+        return;
+      }
+      setData(result);
     } catch (err: any) {
       setError(err?.payload?.error || err?.message || "Unable to record your lease signature.");
     } finally {
@@ -166,6 +175,8 @@ export default function TenantLeasePage() {
   }
 
   const execution = data?.leaseExecution || null;
+  const providerSigningStatus = String(data?.providerSigningStatus || "not_started");
+  const providerSigningAvailable = data?.providerSigningAvailable === true || providerSigningStatus === "pending_signature";
   const leaseDocumentContext = data?.leaseDocumentContext || null;
   const scheduleADocumentContext = data?.scheduleADocumentContext || null;
   const rawLeaseDocumentUrl = String(leaseDocumentContext?.documentUrl || data?.documentUrl || "").trim();
@@ -435,11 +446,31 @@ export default function TenantLeasePage() {
           <TenantInfoCard heading="Lease Signing" accent="#7c3aed">
             <div style={{ display: "grid", gap: 12 }}>
               <div style={{ display: "grid", gap: 6 }}>
-                <div style={{ fontWeight: 800 }}>{data.signatureReadinessLabel || "Lease signing unavailable"}</div>
+                <div style={{ fontWeight: 800 }}>
+                  {providerSigningAvailable
+                    ? "Ready for signature"
+                    : providerSigningStatus === "signed"
+                    ? "Lease signature complete"
+                    : data.signatureReadinessLabel || "Lease signing unavailable"}
+                </div>
                 <div style={{ color: "var(--text-muted, #64748b)" }}>
-                  {data.signatureReadinessDescription || "Lease signing details are not available in this workspace yet."}
+                  {providerSigningAvailable
+                    ? "Open the secure signing session to review and sign the lease."
+                    : providerSigningStatus === "signed"
+                    ? "The provider-backed signing workflow is complete."
+                    : data.signatureReadinessDescription || "Lease signing details are not available in this workspace yet."}
                 </div>
               </div>
+
+              {providerSigningStatus !== "not_started" ? (
+                <TenantKeyValueGrid
+                  rows={[
+                    { label: "Provider signing", value: prettyStatus(providerSigningStatus) },
+                    { label: "Derived lease state", value: prettyStatus(data.providerDerivedLeaseState || "not_started") },
+                    { label: "Signed at", value: formatDate(data.providerSignedAt) },
+                  ]}
+                />
+              ) : null}
 
               {data.tenantSignature ? (
                 <TenantKeyValueGrid
@@ -486,10 +517,12 @@ export default function TenantLeasePage() {
                 {execution.requiredNextAction === "tenant_signature" && data?.leaseId ? (
                   <div style={{ display: "grid", gap: 8 }}>
                     <button type="button" onClick={() => void handleTenantSign()} disabled={signing}>
-                      {signing ? "Recording signature..." : "Confirm tenant signature"}
+                      {signing ? "Opening signing..." : providerSigningAvailable ? "Sign lease" : "Confirm tenant signature"}
                     </button>
                     <div style={{ color: "var(--text-muted, #64748b)" }}>
-                      This records tenant signature metadata for the current lease workflow without storing any drawn signature image.
+                      {providerSigningAvailable
+                        ? "The signing session opens through the configured provider and returns here after completion."
+                        : "This records tenant signature metadata for the current lease workflow without storing any drawn signature image."}
                     </div>
                   </div>
                 ) : null}
