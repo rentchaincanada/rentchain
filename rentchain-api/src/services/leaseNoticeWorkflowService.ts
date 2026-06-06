@@ -17,11 +17,13 @@ import { toAutopilotPolicySummary } from "../lib/policy/policyEvaluator";
 import { loadUnitsForProperty, resolveUnitReference } from "./leaseCanonicalizationService";
 import { isTargetedHiddenLeaseId } from "../lib/testDataVisibilityTargets";
 import { composeLeaseNoticeLegalDocument } from "../lib/legalDocuments/leaseNoticeComposition";
+import { validateNoticeAutomationPrerequisites, type NoticeValidationResult } from "./noticeValidationRules";
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export type LeaseWorkflowEventType =
   | "lease_notice_due"
+  | "lease_notice_validation_checked"
   | "lease_notice_preview_generated"
   | "lease_notice_sent"
   | "tenant_viewed_notice"
@@ -84,6 +86,7 @@ export type LeaseNoticeSendResult = {
   payload: {
     ok: boolean;
     error?: string;
+    failedRules?: NoticeValidationResult["failedRules"];
     noticeId?: string;
     delivery?: {
       ok?: boolean;
@@ -119,6 +122,14 @@ export type LeaseNoticeExecutionInputSnapshot = {
   newLeaseEndDate: string | null;
   responseDeadlineAt: number | null;
 };
+
+function serializeNoticeValidationResult(result: NoticeValidationResult) {
+  return {
+    ok: result.ok,
+    checkedRules: result.checkedRules,
+    failedRules: result.failedRules,
+  };
+}
 
 export type LeaseRenewalWorkflowBucket = "expiring" | "pending-response" | "no-response";
 
@@ -694,33 +705,42 @@ export async function getLeaseForTenantWorkflow(noticeId: string, tenantId: stri
 export function buildPreview(lease: LeaseWorkflowLease, input: LeaseNoticePreviewInput) {
   const rule = resolveLeaseNoticeRule({ province: lease.province, leaseType: lease.leaseType });
   if (!rule) {
-    return { ok: false as const, error: "RULE_NOT_SUPPORTED" };
+    return { ok: false as const, error: "RULE_NOT_SUPPORTED", failedRules: [], validation: null };
+  }
+  const validation = validateNoticeAutomationPrerequisites({ lease, previewInput: input });
+  if (!validation.ok) {
+    return {
+      ok: false as const,
+      error: "LEASE_NOTICE_VALIDATION_FAILED",
+      failedRules: validation.failedRules,
+      validation,
+    };
   }
   const noticeType = input.noticeType || determineNoticeType(lease);
   if (!rule.allowedNoticeTypes.includes(noticeType)) {
-    return { ok: false as const, error: "NOTICE_TYPE_NOT_ALLOWED" };
+    return { ok: false as const, error: "NOTICE_TYPE_NOT_ALLOWED", failedRules: [], validation: null };
   }
   if (!["no_change", "increase", "decrease", "undecided"].includes(input.rentChangeMode)) {
-    return { ok: false as const, error: "INVALID_RENT_CHANGE_MODE" };
+    return { ok: false as const, error: "INVALID_RENT_CHANGE_MODE", failedRules: [], validation: null };
   }
   const proposedRent = input.proposedRent ?? null;
   if ((input.rentChangeMode === "increase" || input.rentChangeMode === "decrease") && !(typeof proposedRent === "number" && Number.isFinite(proposedRent) && proposedRent > 0)) {
-    return { ok: false as const, error: "PROPOSED_RENT_REQUIRED" };
+    return { ok: false as const, error: "PROPOSED_RENT_REQUIRED", failedRules: [], validation: null };
   }
   if (input.rentChangeMode === "undecided" && !rule.allowUndecidedRent) {
-    return { ok: false as const, error: "UNDECIDED_RENT_NOT_ALLOWED" };
+    return { ok: false as const, error: "UNDECIDED_RENT_NOT_ALLOWED", failedRules: [], validation: null };
   }
   const newLeaseStartDate = toDateOnly(input.newLeaseStartDate);
   const newLeaseEndDate = toDateOnly(input.newLeaseEndDate || null);
   if (!newLeaseStartDate) {
-    return { ok: false as const, error: "NEW_LEASE_START_DATE_REQUIRED" };
+    return { ok: false as const, error: "NEW_LEASE_START_DATE_REQUIRED", failedRules: [], validation: null };
   }
   if (rule.requireTermDates && !newLeaseEndDate) {
-    return { ok: false as const, error: "NEW_LEASE_END_DATE_REQUIRED" };
+    return { ok: false as const, error: "NEW_LEASE_END_DATE_REQUIRED", failedRules: [], validation: null };
   }
   const responseDeadlineAt = toMillis(input.responseDeadlineAt);
   if (!responseDeadlineAt) {
-    return { ok: false as const, error: "RESPONSE_DEADLINE_REQUIRED" };
+    return { ok: false as const, error: "RESPONSE_DEADLINE_REQUIRED", failedRules: [], validation: null };
   }
   const noticeDueAt = lease.nextNoticeDueAt || (lease.leaseEndDate ? minusDays(lease.leaseEndDate, rule.noticeLeadDays) : null);
   const effectiveProposedRent =
@@ -775,7 +795,7 @@ export function buildPreview(lease: LeaseWorkflowLease, input: LeaseNoticePrevie
     },
     legalDocumentMetadata: legalDocument.metadata,
   };
-  return { ok: true as const, rule, preview };
+  return { ok: true as const, rule, preview, validation };
 }
 
 export async function performLeaseNoticeSendFromPreviewInput(params: {
@@ -789,7 +809,64 @@ export async function performLeaseNoticeSendFromPreviewInput(params: {
   const { leaseId, landlordId, actorId, lease, previewInput, autopilotPolicy } = params;
   const previewResult = buildPreview(lease, previewInput);
   if (!previewResult.ok) {
-    return { status: 400, payload: { ok: false, error: previewResult.error, autopilotPolicy } };
+    if (previewResult.validation) {
+      await appendLeaseWorkflowEvent({
+        entityType: "lease",
+        entityId: leaseId,
+        leaseId,
+        landlordId,
+        tenantId: lease.tenantId,
+        propertyId: lease.propertyId,
+        unitId: lease.unitId,
+        actorType: "landlord",
+        actorId,
+        eventType: "lease_notice_validation_checked",
+        eventData: serializeNoticeValidationResult(previewResult.validation),
+      });
+    }
+    return {
+      status: 400,
+      payload: {
+        ok: false,
+        error: previewResult.error,
+        failedRules: previewResult.failedRules,
+        autopilotPolicy,
+      },
+    };
+  }
+
+  const tenantEmail = await lookupUserEmail(lease.tenantId, ["tenants", "users"]);
+  if (!tenantEmail || !emailRegex.test(tenantEmail)) {
+    const contactFailure = {
+      code: "tenant_context_present" as const,
+      message: "Tenant delivery contact must resolve before notice generation.",
+    };
+    await appendLeaseWorkflowEvent({
+      entityType: "lease",
+      entityId: leaseId,
+      leaseId,
+      landlordId,
+      tenantId: lease.tenantId,
+      propertyId: lease.propertyId,
+      unitId: lease.unitId,
+      actorType: "landlord",
+      actorId,
+      eventType: "lease_notice_validation_checked",
+      eventData: {
+        ok: false,
+        checkedRules: [...previewResult.validation.checkedRules, "tenant_delivery_contact_resolved"],
+        failedRules: [contactFailure],
+      },
+    });
+    return {
+      status: 400,
+      payload: {
+        ok: false,
+        error: "LEASE_NOTICE_VALIDATION_FAILED",
+        failedRules: [contactFailure],
+        autopilotPolicy,
+      },
+    };
   }
 
   const noticeRef = db.collection("leaseNotices").doc();
@@ -864,11 +941,11 @@ export async function performLeaseNoticeSendFromPreviewInput(params: {
     eventData: {
       noticeType: baseNotice.noticeType,
       responseDeadlineAt: baseNotice.responseDeadlineAt,
+      validation: serializeNoticeValidationResult(previewResult.validation),
     },
   });
   await batch.commit();
 
-  const tenantEmail = await lookupUserEmail(lease.tenantId, ["tenants", "users"]);
   const tenantUrl = `${String(process.env.PUBLIC_APP_URL || process.env.VITE_PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "")}/tenant/login?next=${encodeURIComponent(`/tenant/lease-notices/${noticeRef.id}`)}`;
   const emailResult = await sendLeaseWorkflowEmail({
     eventKey: "lease_notice_sent_tenant",

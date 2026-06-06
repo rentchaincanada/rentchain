@@ -1,87 +1,94 @@
-PR: #1106
-PR URL: https://github.com/rentchaincanada/rentchain/pull/1106
-Branch: feat/contractor-portal-v1
+PR: #1107
+PR URL: https://github.com/rentchaincanada/rentchain/pull/1107
+Branch: fix/notice-automation-validation-v1
 
 # Implementation Summary
 
-Implemented Contractor Portal v1 as an additive contractor-scoped operational workspace foundation.
+Mission: Notice Automation Validation and Rule Enforcement
+
+Implemented deterministic notice automation validation for the existing lease notice workflow. The implementation stays inside the current notice service and landlord route surfaces, preserving the existing feature flag, landlord authorization middleware, tenant route protections, notice templates, delivery provider behavior, Firestore rules, billing, screening, and infrastructure.
 
 ## Confirmed Findings
 
-- Added `requireContractor` middleware that reuses existing authenticated session handling and accepts only contractor/admin roles.
-- Added contractor-scoped API routes under `/api/contractors/:contractorId/*` for assigned work orders, work-order detail, status updates, messages, and self-profile.
-- Added explicit contractor work-order projection allowlists that omit tenant identifiers, tenant household data, raw property IDs, raw unit IDs, payment data, screening data, and landlord billing data.
-- Added contractor status update handling with valid transition checks and append-safe `workOrderUpdates` event emission.
-- Added work-order-scoped contractor-landlord messaging through `contractorMessages`, with landlord/work-order relationship validation and companion `workOrderUpdates` audit notes.
-- Added contractor self-profile read/update through the scoped contractor route while keeping the existing profile page compatible with prior profile APIs.
-- Added `VITE_CONTRACTOR_PORTAL_ENABLED` and `CONTRACTOR_PORTAL_ENABLED` env documentation.
-- Added contractor portal governance/schema documentation in `.codex/docs/contractor-portal-v1.md` and `.codex/docs/database.md`.
+- Current notice automation uses `leaseNoticeWorkflowService.ts`, `leaseNoticeLandlordRoutes.ts`, and `tenantLeaseNoticeRoutes.ts`; the older mission names `noticeService.ts` and `noticeRoutes.ts` are not present in the current source tree.
+- Landlord notice routes remain behind `requireLandlord` and the lease notice feature flag.
+- Tenant notice routes remain behind authenticated tenant role checks.
+- Existing policy evaluation remains in place for preview/send actions.
+- Existing tenant notice projections already redact landlord-only notes, internal workflow state, and provider delivery payloads.
+
+## Changes Made
+
+- Added pure notice validation rules in `rentchain-api/src/services/noticeValidationRules.ts`.
+- Added validation checks for lease state, tenant context, landlord context, property/unit context, rent terms, supported jurisdiction, allowed notice type, term dates, and response deadline.
+- Added compatibility wrappers for eviction, cure, and termination notice validation paths.
+- Updated `buildPreview` to fail closed with `LEASE_NOTICE_VALIDATION_FAILED` and safe `failedRules` before preview generation succeeds.
+- Updated send flow to reject invalid prerequisites before notice document creation.
+- Moved tenant delivery contact resolution ahead of notice creation so a missing or invalid tenant delivery contact does not create a pending notice.
+- Added append-safe validation audit events through `leaseWorkflowEvents` for validation failures and included validation context in notice creation audit data.
+- Updated landlord preview route to return safe validation failure payloads and append validation audit events when preview validation fails.
+- Added unit coverage for notice validation rules and service validation gating.
 
 ## Files Changed
 
-- `.codex/docs/contractor-portal-v1.md`
-- `.codex/docs/database.md`
-- `.env.example`
-- `rentchain-api/.env.example`
-- `rentchain-api/src/app.build.ts`
-- `rentchain-api/src/middleware/requireContractor.ts`
-- `rentchain-api/src/middleware/__tests__/requireContractor.test.ts`
-- `rentchain-api/src/routes/contractorPortalRoutes.ts`
-- `rentchain-api/src/routes/__tests__/contractorPortalRoutes.test.ts`
-- `rentchain-api/src/services/contractorPortalService.ts`
-- `rentchain-frontend/src/App.tsx`
-- `rentchain-frontend/src/api/contractorPortalApi.ts`
-- `rentchain-frontend/src/pages/contractor/ContractorProfilePage.tsx`
-- `rentchain-frontend/src/pages/contractor/ContractorProfilePage.test.tsx`
+- `rentchain-api/src/services/noticeValidationRules.ts`
+- `rentchain-api/src/services/leaseNoticeWorkflowService.ts`
+- `rentchain-api/src/routes/leaseNoticeLandlordRoutes.ts`
+- `rentchain-api/src/services/__tests__/noticeValidationRules.test.ts`
+- `rentchain-api/src/services/__tests__/leaseNoticeWorkflowService.test.ts`
+- `.handoff/impl-summary.md`
 
 ## Validation
 
-- `npm test --prefix rentchain-api -- src/middleware/__tests__/requireContractor.test.ts src/routes/__tests__/contractorPortalRoutes.test.ts`: PASS, 2 files / 7 tests.
-- `npm run build --prefix rentchain-api`: PASS.
-- `npm test --prefix rentchain-frontend -- ContractorJobsPage ContractorProfilePage`: PASS, 2 files / 8 tests.
-- `npm run build --prefix rentchain-frontend`: PASS, with existing Vite chunk-size warning.
-- `git diff --check --cached`: PASS.
-- `npm test --prefix rentchain-frontend`: FAIL, 290 files / 1148 tests passed, 1 unrelated failure in `LandlordLeaseSummaryPage.test.tsx` expecting `.print-only-summary`.
-- `npm test --prefix rentchain-api`: FAIL, 421 files / 2037 tests passed before known sandbox/pre-existing route-test `listen EPERM: operation not permitted 0.0.0.0` failures.
+- `cd rentchain-api && source ~/.nvm/nvm.sh && nvm use 20 && npm run test:single -- src/services/__tests__/noticeValidationRules.test.ts src/services/__tests__/leaseNoticeWorkflowService.test.ts src/routes/__tests__/leaseNoticeLandlordRoutes.test.ts src/routes/__tests__/tenantLeaseNoticeRoutes.test.ts`
+  - PASS: 4 test files, 21 tests
+- `cd rentchain-api && source ~/.nvm/nvm.sh && nvm use 20 && npm run build`
+  - PASS
+- `git diff --check`
+  - PASS
+- `cd rentchain-api && source ~/.nvm/nvm.sh && nvm use 20 && npm run test`
+  - FAIL: full backend suite hit unrelated sandbox/pre-existing `listen EPERM: operation not permitted 0.0.0.0` failures in route tests outside the notice workflow. Targeted notice suites passed.
 
 ## Manual QA
 
-Manual QA is required because this mission touches backend routes, auth flow, frontend routing, and user-visible contractor behavior.
+Manual QA is required because this mission changes backend route behavior and user-visible API validation responses.
 
-Manual QA was not completed locally because no seeded contractor/landlord accounts, assigned work orders, or deployed preview session were available.
+Manual QA not completed in this local environment. Required preview QA:
 
-Recommended manual QA:
-1. Log in as a contractor and confirm `/contractor` loads the dashboard.
-2. Confirm contractor work-order list shows only assigned work.
-3. Confirm URL manipulation to another contractor id returns 403 through `/api/contractors/:contractorId/work-orders`.
-4. Open a work-order detail and confirm tenant names, tenant IDs, raw property IDs, raw unit IDs, rates, payments, screening, and billing data are absent.
-5. Update status from assigned to accepted, in-progress, and completed where applicable; confirm status history records append.
-6. Send a contractor-landlord message for an assigned work order; confirm unrelated landlord/work-order messages are denied.
-7. Update contractor profile fields and confirm they persist.
-8. Disable `VITE_CONTRACTOR_PORTAL_ENABLED` and confirm contractor routes show the coming-soon/fallback state.
-9. Check mobile layout for dashboard, jobs, detail, and profile.
+1. No auth on landlord notice preview/send endpoints returns 401.
+2. Landlord cannot preview/send notice for another landlord's lease; response is 403.
+3. Valid active lease with tenant contact, landlord context, property/unit context, rent terms, supported jurisdiction, term dates, and response deadline can generate a notice.
+4. Lease missing tenant context or tenant delivery contact fails with 400 and `LEASE_NOTICE_VALIDATION_FAILED`.
+5. Lease missing rent terms fails with 400 and safe `failedRules`.
+6. Unsupported jurisdiction or disallowed notice type fails with 400 and safe `failedRules`.
+7. Validation failures create append-safe `leaseWorkflowEvents` entries without creating notice documents.
+8. Tenant notice list/detail projections still exclude landlord-only notes, provider payloads, and internal workflow state.
+
+## Protected Areas
+
+- No billing changes.
+- No auth core changes.
+- No screening provider changes.
+- No pricing or entitlement changes.
+- No CI/CD, deployment, Firestore rules, Terraform, or migration changes.
+- No frontend, templates, notice delivery routing, SMS, or external legal service changes.
 
 ## Known Limitations
 
-- The frontend contractor jobs page still uses the existing `/api/contractor/jobs` maintenance workflow API for rich job execution actions; the new `/api/contractors/:contractorId/*` routes provide the mission-required scoped compatibility/read-model surfaces and profile API.
-- Backend route availability is documented with `CONTRACTOR_PORTAL_ENABLED`, but route mounting remains enabled; authorization remains the server-side safety boundary.
-- Landlord-side display of contractor messages/status remains dependent on existing `workOrderUpdates` surfaces; no new landlord messaging UI was added.
-- Full seeded end-to-end QA requires contractor accounts, landlord accounts, assigned work orders, and preview/staging configuration.
-- Full backend suite retains known sandbox route-test failures around `listen EPERM`.
-- Full frontend suite has an unrelated existing lease summary print-source test failure.
+- Validation treats canonical tenant/landlord context plus resolved tenant delivery email as the available contact boundary; deeper contact profile validation remains future work.
+- Full manual E2E requires seeded landlord/tenant leases and a configured preview email environment.
+- Full backend suite remains blocked locally by unrelated `listen EPERM` route-test failures.
 
 ## Acceptance Criteria Status
 
-- Contractor role middleware: PASS.
-- Contractor work-order list and detail route: PASS.
-- Contractor status update route with transition validation and append event: PASS.
-- Contractor-landlord message routes with assigned-work authorization: PASS.
-- Contractor self-profile routes: PASS.
-- Projection safety for contractor work-order response: PASS by explicit route/service allowlist and focused tests.
-- Contractor feature flag: PASS for frontend route gating.
-- Documentation: PASS.
-- Manual QA: NOT RUN, environment limitation.
+- Pure deterministic validation helpers: completed.
+- Validation gate before notice generation: completed.
+- Safe validation error payloads: completed.
+- Append-safe validation audit context: completed.
+- Authorization boundaries preserved: completed by existing route middleware and tests.
+- Projection safety preserved: completed by existing tenant projection tests.
+- No protected areas modified: completed.
+- Manual QA: pending preview environment.
 
 ## Recommended Next Mission
 
-Contractor portal landlord-side activity visibility and seeded preview QA.
+Run manual preview QA for notice validation with seeded lease fixtures, then continue to Phase E billing checkout alignment if Gate 2 approves this mission.
