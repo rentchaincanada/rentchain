@@ -59,6 +59,7 @@ import {
 import { getTenantToken } from "./lib/tenantAuth";
 
 const TENANT_PORTAL_ENABLED = import.meta.env.VITE_TENANT_PORTAL_ENABLED === "true";
+const CONTRACTOR_PORTAL_ENABLED = import.meta.env.VITE_CONTRACTOR_PORTAL_ENABLED !== "false";
 
 function lazyWithRetry<T extends React.ComponentType<any>>(
   importer: () => Promise<{ default: T }>,
@@ -1254,13 +1255,17 @@ function App() {
         <Route
           path="/contractor"
           element={
-            <RequireAuth>
-              <RequireRole allowed={["contractor", "admin"]} fallbackTo="/dashboard">
-                <ContractorNav>
-                  <ContractorDashboardPage />
-                </ContractorNav>
-              </RequireRole>
-            </RequireAuth>
+            CONTRACTOR_PORTAL_ENABLED ? (
+              <RequireAuth>
+                <RequireRole allowed={["contractor", "admin"]} fallbackTo="/dashboard">
+                  <ContractorNav>
+                    <ContractorDashboardPage />
+                  </ContractorNav>
+                </RequireRole>
+              </RequireAuth>
+            ) : (
+              <TenantPortalComingSoon />
+            )
           }
         />
         <Route path="/contractor/signup" element={<LegacyQueryInviteRedirect source="contractor" />} />
@@ -1269,37 +1274,49 @@ function App() {
         <Route
           path="/contractor/jobs"
           element={
-            <RequireAuth>
-              <RequireRole allowed={["contractor", "admin"]} fallbackTo="/dashboard">
-                <ContractorNav>
-                  <ContractorJobsPage />
-                </ContractorNav>
-              </RequireRole>
-            </RequireAuth>
+            CONTRACTOR_PORTAL_ENABLED ? (
+              <RequireAuth>
+                <RequireRole allowed={["contractor", "admin"]} fallbackTo="/dashboard">
+                  <ContractorNav>
+                    <ContractorJobsPage />
+                  </ContractorNav>
+                </RequireRole>
+              </RequireAuth>
+            ) : (
+              <TenantPortalComingSoon />
+            )
           }
         />
         <Route
           path="/contractor/jobs/:id"
           element={
-            <RequireAuth>
-              <RequireRole allowed={["contractor", "admin"]} fallbackTo="/dashboard">
-                <ContractorNav>
-                  <ContractorJobsPage />
-                </ContractorNav>
-              </RequireRole>
-            </RequireAuth>
+            CONTRACTOR_PORTAL_ENABLED ? (
+              <RequireAuth>
+                <RequireRole allowed={["contractor", "admin"]} fallbackTo="/dashboard">
+                  <ContractorNav>
+                    <ContractorJobsPage />
+                  </ContractorNav>
+                </RequireRole>
+              </RequireAuth>
+            ) : (
+              <TenantPortalComingSoon />
+            )
           }
         />
         <Route
           path="/contractor/profile"
           element={
-            <RequireAuth>
-              <RequireRole allowed={["contractor", "admin"]} fallbackTo="/dashboard">
-                <ContractorNav>
-                  <ContractorProfilePage />
-                </ContractorNav>
-              </RequireRole>
-            </RequireAuth>
+            CONTRACTOR_PORTAL_ENABLED ? (
+              <RequireAuth>
+                <RequireRole allowed={["contractor", "admin"]} fallbackTo="/dashboard">
+                  <ContractorNav>
+                    <ContractorProfilePage />
+                  </ContractorNav>
+                </RequireRole>
+              </RequireAuth>
+            ) : (
+              <TenantPortalComingSoon />
+            )
           }
         />
         {import.meta.env.DEV ? (

@@ -82,8 +82,40 @@ Reference for Firestore collections, document shapes, relationship rules, and se
 - `created_by`
 - processing status
 
+### contractorProfiles
+- contractor account linkage
+- display/business name
+- contact phone/email
+- specialties and service areas
+- availability status
+- landlord network metadata where applicable
+
+### workOrders
+- landlord-owned maintenance/work order record
+- assigned contractor linkage
+- property/unit display labels for safe projections
+- current operational status
+- schedule and due-date metadata
+
+### workOrderUpdates
+- append-safe work order activity event
+- work order linkage
+- actor role and actor reference
+- status/message/update type
+- timestamp
+
+### contractorMessages
+- contractor-landlord work-order message
+- contractor linkage
+- landlord linkage
+- work order linkage
+- sender role/name
+- message text
+- timestamp
+
 ## Relationship Model
 - landlord → property → unit → application → lease → tenant
+- landlord → work order → assigned contractor
 - applicants and active tenants must resolve through authority-based context
 - tenant access must derive from:
   - application relation
