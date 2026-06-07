@@ -15,7 +15,7 @@ import {
 } from "@/api/tenantsApi";
 import { createTenantEvent } from "@/api/tenantEventsWriteApi";
 import { spacing, radius, colors, text } from "../styles/tokens";
-import { Card, Section, Input } from "../components/ui/Ui";
+import { Card, Section, Input, Button, EmptyState, InlineError, SkeletonBlock } from "../components/ui/Ui";
 import { ResponsiveMasterDetail } from "../components/layout/ResponsiveMasterDetail";
 import { InviteTenantModal } from "../components/tenants/InviteTenantModal";
 import { TenantScorePill } from "../components/tenant/TenantScorePill";
@@ -671,34 +671,26 @@ const loadTenants = useCallback(async () => {
           masterTitle="Tenants"
           master={
             loading ? (
-              <div style={{ fontSize: 13, color: text.muted }}>Loading tenants.</div>
+              <SkeletonBlock lines={5} label="Loading tenants" />
             ) : error ? (
-              <div style={{ fontSize: 13, color: colors.danger }}>{error}</div>
+              <InlineError title="Tenants unavailable" message={error} retry={() => void loadTenants()} />
             ) : filteredTenants.length === 0 ? (
-              <div style={{ display: "grid", gap: 8 }}>
-                <div style={{ fontSize: 14, color: text.primary, fontWeight: 700 }}>No tenants yet</div>
-                <div style={{ fontSize: 13, color: text.muted }}>
-                  Tenant records help you track occupancy, communication, and payment history in one place.
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    track("empty_state_cta_clicked", { pageKey: "tenants", ctaKey: "invite_tenant" });
-                    handleInviteAction();
-                  }}
-                  style={{
-                    padding: "8px 12px",
-                    borderRadius: radius.md,
-                    border: `1px solid ${colors.border}`,
-                    background: colors.card,
-                    color: text.primary,
-                    cursor: "pointer",
-                    width: "fit-content",
-                  }}
-                >
-                  Invite your first tenant
-                </button>
-              </div>
+              <EmptyState
+                title="No tenants yet"
+                body="Tenant records help you track occupancy, communication, and payment history in one place."
+                action={
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => {
+                      track("empty_state_cta_clicked", { pageKey: "tenants", ctaKey: "invite_tenant" });
+                      handleInviteAction();
+                    }}
+                  >
+                    Invite your first tenant
+                  </Button>
+                }
+              />
             ) : (
               <div className="rc-tenants-list-scroll">
                 {filteredTenants.map((tenant: TenantWithTenancies) => {

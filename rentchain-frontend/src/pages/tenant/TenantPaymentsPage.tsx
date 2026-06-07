@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   getTenantPayments,
   getTenantPaymentsSummary,
@@ -17,6 +17,53 @@ const cardStyle: React.CSSProperties = {
   padding: "18px 20px",
   boxShadow: "0 12px 32px rgba(0,0,0,0.35)",
 };
+
+const stateCardStyle: React.CSSProperties = {
+  border: "1px solid rgba(255, 255, 255, 0.08)",
+  borderRadius: 14,
+  padding: "14px 16px",
+  background: "rgba(15, 23, 42, 0.56)",
+  color: "#e5e7eb",
+};
+
+const TenantPaymentSkeleton: React.FC = () => (
+  <div role="status" aria-live="polite" aria-label="Loading payments" style={{ display: "grid", gap: 10 }}>
+    {[0, 1, 2].map((index) => (
+      <div
+        key={index}
+        style={{
+          height: 14,
+          width: index === 2 ? "68%" : "100%",
+          borderRadius: 999,
+          background:
+            "linear-gradient(90deg, rgba(148,163,184,0.14), rgba(59,130,246,0.22), rgba(148,163,184,0.14))",
+        }}
+      />
+    ))}
+  </div>
+);
+
+const TenantPaymentState: React.FC<{
+  title: string;
+  body: string;
+  tone?: "neutral" | "error";
+  action?: React.ReactNode;
+}> = ({ title, body, tone = "neutral", action }) => (
+  <div
+    role={tone === "error" ? "alert" : undefined}
+    style={{
+      ...stateCardStyle,
+      borderColor: tone === "error" ? "rgba(248,113,113,0.32)" : "rgba(255,255,255,0.08)",
+      background: tone === "error" ? "rgba(127,29,29,0.32)" : stateCardStyle.background,
+      display: "grid",
+      gap: 8,
+    }}
+  >
+    <div style={{ fontWeight: 800 }}>{title}</div>
+    <div style={{ color: tone === "error" ? "#fecaca" : "#cbd5e1", lineHeight: 1.5 }}>{body}</div>
+    {action ? <div>{action}</div> : null}
+  </div>
+);
 
 function formatDate(value?: string | null) {
   if (!value) return "—";
@@ -39,47 +86,49 @@ export const TenantPaymentsPage: React.FC = () => {
   const [charges, setCharges] = useState<TenantRentCharge[]>([]);
   const [chargesError, setChargesError] = useState<string | null>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const loadPayments = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    setSummaryError(null);
+    setChargesError(null);
+    try {
+      const [historyResult, summaryResult, chargesResult] = await Promise.allSettled([
+        getTenantPayments(),
+        getTenantPaymentsSummary(),
+        getTenantRentCharges(),
+      ]);
+      if (historyResult.status === "fulfilled") {
+        setPayments(Array.isArray(historyResult.value) ? historyResult.value : []);
+      } else {
+        setError(historyResult.reason?.message || "Failed to load payments");
+        setPayments([]);
+      }
+      if (summaryResult.status === "fulfilled") {
+        setSummary(summaryResult.value);
+      } else {
+        setSummary(null);
+        setSummaryError(optionalSurfaceError(summaryResult.reason, "Payment summary is unavailable"));
+      }
+      if (chargesResult.status === "fulfilled") {
+        setCharges(Array.isArray(chargesResult.value) ? chargesResult.value : []);
+      } else {
+        setCharges([]);
+        setChargesError(optionalSurfaceError(chargesResult.reason, "Rent charges are unavailable"));
+      }
+    } catch (err: any) {
+      setError(err?.message || "Failed to load payments");
+      setSummaryError(err?.message || "Failed to load payments summary");
+      setChargesError(err?.message || "Failed to load rent charges");
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    const load = async () => {
-      setIsLoading(true);
-      setError(null);
-      setSummaryError(null);
-      setChargesError(null);
-      try {
-        const [historyResult, summaryResult, chargesResult] = await Promise.allSettled([
-          getTenantPayments(),
-          getTenantPaymentsSummary(),
-          getTenantRentCharges(),
-        ]);
-        if (historyResult.status === "fulfilled") {
-          setPayments(Array.isArray(historyResult.value) ? historyResult.value : []);
-        } else {
-          setError(historyResult.reason?.message || "Failed to load payments");
-          setPayments([]);
-        }
-        if (summaryResult.status === "fulfilled") {
-          setSummary(summaryResult.value);
-        } else {
-          setSummary(null);
-          setSummaryError(optionalSurfaceError(summaryResult.reason, "Payment summary is unavailable"));
-        }
-        if (chargesResult.status === "fulfilled") {
-          setCharges(Array.isArray(chargesResult.value) ? chargesResult.value : []);
-        } else {
-          setCharges([]);
-          setChargesError(optionalSurfaceError(chargesResult.reason, "Rent charges are unavailable"));
-        }
-      } catch (err: any) {
-        setError(err?.message || "Failed to load payments");
-        setSummaryError(err?.message || "Failed to load payments summary");
-        setChargesError(err?.message || "Failed to load rent charges");
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    void load();
-  }, []);
+    void loadPayments();
+  }, [loadPayments, refreshKey]);
 
   const renderStatusBadge = () => {
     const status = summary?.currentPeriod?.status ?? "unknown";
@@ -213,13 +262,37 @@ export const TenantPaymentsPage: React.FC = () => {
       </div>
 
       {error ? (
-        <div style={{ color: "#fca5a5" }}>{error}</div>
+        <TenantPaymentState
+          title="Payments unavailable"
+          body={error}
+          tone="error"
+          action={
+            <button
+              type="button"
+              onClick={() => setRefreshKey((value) => value + 1)}
+              style={{
+                padding: "8px 12px",
+                borderRadius: 10,
+                border: "1px solid rgba(248,113,113,0.36)",
+                background: "rgba(127,29,29,0.25)",
+                color: "#fecaca",
+                fontWeight: 800,
+                cursor: "pointer",
+              }}
+            >
+              Try again
+            </button>
+          }
+        />
       ) : isLoading ? (
-        <div style={{ color: "#cbd5e1" }}>Loading payments…</div>
+        <TenantPaymentSkeleton />
       ) : !lease ? (
-        <div style={{ color: "#9ca3af" }}>No active lease found.</div>
+        <TenantPaymentState
+          title="No active lease found"
+          body="Payment history appears after an active lease is linked to your tenant workspace."
+        />
       ) : payments.length === 0 ? (
-        <div style={{ color: "#9ca3af" }}>No payments recorded yet.</div>
+        <TenantPaymentState title="No payments yet" body="Recorded rent payments will appear here with date, amount, method, status, and notes." />
       ) : (
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 520 }}>
