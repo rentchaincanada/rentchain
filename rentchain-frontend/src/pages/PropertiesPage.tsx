@@ -8,7 +8,7 @@ import { PropertyActivityPanel } from "../components/property/PropertyActivityPa
 import { PropertyDetailPanel } from "../components/properties/PropertyDetailPanel";
 import { spacing, radius, shadows, colors, text } from "../styles/tokens";
 import { safeLocaleDate } from "../utils/format";
-import { Card, Section, Button } from "../components/ui/Ui";
+import { Card, Section, Button, EmptyState, InlineError, SkeletonBlock } from "../components/ui/Ui";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   listActionRequests,
@@ -665,9 +665,7 @@ const PropertiesPage: React.FC = () => {
           />
 
           {isLoadingProperties ? (
-            <div style={{ color: text.muted, fontSize: 13 }}>
-              Loading properties...
-            </div>
+            <SkeletonBlock lines={4} label="Loading properties" />
           ) : null}
           {!isLoadingProperties && properties.length === 0 ? (
             <div
@@ -1008,17 +1006,18 @@ const PropertiesPage: React.FC = () => {
               </div>
             </div>
             {actionRequestsLoading ? (
-              <div style={{ color: text.muted, fontSize: 13 }}>
-                Loading requests
-              </div>
+              <SkeletonBlock lines={3} height={12} label="Loading action requests" />
             ) : actionRequestsError ? (
-              <div style={{ color: colors.danger, fontSize: 13 }}>
-                {actionRequestsError}
-              </div>
+              <InlineError
+                title="Action requests unavailable"
+                message={actionRequestsError}
+                retry={() => selectedPropertyId && void fetchActionRequests(selectedPropertyId)}
+              />
             ) : actionRequests.length === 0 ? (
-              <div style={{ color: text.muted, fontSize: 13 }}>
-                No action requests for this property.
-              </div>
+              <EmptyState
+                title="No action requests"
+                body="This property has no open operational requests right now."
+              />
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {actionRequests.map((req) => (

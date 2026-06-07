@@ -59,14 +59,16 @@ export const Button: React.FC<ButtonProps> = ({
   variant = "primary",
   ...rest
 }) => {
+  const disabled = Boolean(rest.disabled);
   const base: React.CSSProperties = {
     borderRadius: radius.pill,
     padding: "10px 14px",
     fontWeight: 600,
     fontSize: "0.95rem",
-    cursor: "pointer",
+    cursor: disabled ? "not-allowed" : "pointer",
     transition: "background 0.15s ease, transform 0.12s ease, box-shadow 0.12s ease",
     border: "none",
+    opacity: disabled ? 0.62 : 1,
   };
 
   const variants: Record<string, React.CSSProperties> = {
@@ -96,11 +98,13 @@ export const Button: React.FC<ButtonProps> = ({
     <button
       style={{ ...base, ...variants[variant], ...style }}
       onMouseDown={(e) => {
+        if (e.currentTarget.disabled) return;
         e.currentTarget.style.transform = "translateY(1px)";
       }}
       onMouseUp={(e) => {
         e.currentTarget.style.transform = "translateY(0)";
       }}
+      aria-disabled={disabled || undefined}
       {...rest}
     >
       {children}
@@ -179,3 +183,94 @@ export const Pill: React.FC<
     </span>
   );
 };
+
+export const SkeletonBlock: React.FC<{
+  lines?: number;
+  height?: number;
+  label?: string;
+  style?: React.CSSProperties;
+}> = ({ lines = 3, height = 14, label = "Loading", style }) => (
+  <div
+    role="status"
+    aria-live="polite"
+    aria-label={label}
+    style={{
+      display: "grid",
+      gap: spacing.sm,
+      width: "100%",
+      ...style,
+    }}
+  >
+    {Array.from({ length: lines }).map((_, index) => (
+      <div
+        key={index}
+        style={{
+          height,
+          width: index === lines - 1 ? "72%" : "100%",
+          borderRadius: radius.pill,
+          background:
+            "linear-gradient(90deg, rgba(15,23,42,0.06), rgba(37,99,235,0.12), rgba(15,23,42,0.06))",
+          border: `1px solid ${colors.border}`,
+        }}
+      />
+    ))}
+  </div>
+);
+
+export const EmptyState: React.FC<{
+  title: string;
+  body: string;
+  action?: React.ReactNode;
+  style?: React.CSSProperties;
+}> = ({ title, body, action, style }) => (
+  <div
+    style={{
+      display: "grid",
+      gap: spacing.sm,
+      padding: spacing.md,
+      borderRadius: radius.lg,
+      border: `1px solid ${colors.border}`,
+      background: colors.panel,
+      color: text.primary,
+      ...style,
+    }}
+  >
+    <div style={{ fontSize: 15, fontWeight: 800 }}>{title}</div>
+    <div style={{ color: text.muted, lineHeight: 1.55 }}>{body}</div>
+    {action ? <div style={{ marginTop: 4 }}>{action}</div> : null}
+  </div>
+);
+
+export const InlineError: React.FC<{
+  title?: string;
+  message: string;
+  retry?: () => void;
+  style?: React.CSSProperties;
+}> = ({ title = "Unable to load this section", message, retry, style }) => (
+  <div
+    role="alert"
+    style={{
+      display: "grid",
+      gap: spacing.xs,
+      padding: spacing.md,
+      borderRadius: radius.md,
+      border: "1px solid rgba(239,68,68,0.22)",
+      background: "rgba(254,242,242,0.95)",
+      color: "#991b1b",
+      ...style,
+    }}
+  >
+    <div style={{ fontWeight: 800 }}>{title}</div>
+    <div style={{ color: "#7f1d1d", lineHeight: 1.5 }}>{message}</div>
+    {retry ? (
+      <Button
+        type="button"
+        variant="ghost"
+        onClick={retry}
+        style={{ width: "fit-content", color: "#991b1b", borderColor: "rgba(239,68,68,0.28)" }}
+      >
+        Try again
+      </Button>
+    ) : null}
+  </div>
+);

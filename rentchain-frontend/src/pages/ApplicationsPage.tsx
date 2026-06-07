@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Card, Section, Input, Button, Pill } from "../components/ui/Ui";
+import { Card, Section, Input, Button, Pill, EmptyState, InlineError, SkeletonBlock } from "../components/ui/Ui";
 import { spacing, colors, text, radius } from "../styles/tokens";
 import { fetchProperties } from "../api/propertiesApi";
 import {
@@ -490,6 +490,7 @@ const ApplicationsPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [applicationsRefreshKey, setApplicationsRefreshKey] = useState(0);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>(() => normalizeApplicationStatusParam(upgradeParams.get("status")) || "");
   const [propertyFilter, setPropertyFilter] = useState<string>("");
@@ -1217,7 +1218,7 @@ const ApplicationsPage: React.FC = () => {
     return () => {
       alive = false;
     };
-  }, [propertyFilter, statusFilter, selectedId]);
+  }, [applicationsRefreshKey, propertyFilter, statusFilter, selectedId]);
 
   useEffect(() => {
     let alive = true;
@@ -2572,27 +2573,30 @@ const ApplicationsPage: React.FC = () => {
           master={
             <div className="rc-applications-list" ref={applicationsListRef}>
               {loading ? (
-                <div style={{ color: text.muted }}>Loading applications...</div>
+                <SkeletonBlock lines={5} label="Loading applications" />
               ) : error ? (
-                <div style={{ color: colors.danger }}>{error}</div>
+                <InlineError
+                  title="Applications unavailable"
+                  message={error}
+                  retry={() => setApplicationsRefreshKey((value) => value + 1)}
+                />
               ) : filtered.length === 0 ? (
-                <div style={{ display: "grid", gap: 8 }}>
-                  <div style={{ color: text.primary, fontSize: 14, fontWeight: 700 }}>No applications yet</div>
-                  <div style={{ color: text.muted }}>
-                    Applications keep screening decisions and applicant details in one auditable flow.
-                  </div>
-                  <Button
-                    variant="secondary"
-                    onClick={() => {
-                      track("empty_state_cta_clicked", { pageKey: "applications", ctaKey: "create_application" });
-                      handleCreateApplication(false);
-                    }}
-                    style={{ width: "fit-content" }}
-                    disabled={!propertiesReady}
-                  >
-                    {propertiesLoaded ? "Send application link" : "Loading properties…"}
-                  </Button>
-                </div>
+                <EmptyState
+                  title="No applications yet"
+                  body="Applications keep screening decisions and applicant details in one auditable flow."
+                  action={
+                    <Button
+                      variant="secondary"
+                      onClick={() => {
+                        track("empty_state_cta_clicked", { pageKey: "applications", ctaKey: "create_application" });
+                        handleCreateApplication(false);
+                      }}
+                      disabled={!propertiesReady}
+                    >
+                      {propertiesLoaded ? "Send application link" : "Loading properties..."}
+                    </Button>
+                  }
+                />
               ) : (
                 <div style={{ display: "grid", gap: spacing.sm }}>
                   {isTransUnionConnected && !detail ? (
@@ -2839,9 +2843,12 @@ const ApplicationsPage: React.FC = () => {
           detail={
             <Section className="rc-applications-detail">
               {loadingDetail ? (
-                <div style={{ color: text.muted }}>Loading application...</div>
+                <SkeletonBlock lines={6} label="Loading application detail" />
               ) : !detail ? (
-                <div style={{ color: text.muted }}>Select an application to view details.</div>
+                <EmptyState
+                  title="Select an application"
+                  body="Choose an applicant from the list to review details, screening status, and next actions."
+                />
               ) : (
               <div style={{ display: "grid", gap: spacing.md }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: spacing.sm, flexWrap: "wrap" }}>
