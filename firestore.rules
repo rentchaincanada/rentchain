@@ -2,12 +2,571 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    /*
+      Production defense-in-depth rules for RentChain.
 
-    // Local emulator only.
-    // Not intended for production deployment.
-    // Production Firestore rules require separate review.
+      API middleware remains the canonical authorization layer. These rules
+      fail closed for direct Firestore client access using the same JWT custom
+      claim contract used by the API: role, landlordId, and tenantId.
+
+      Projection limitation: Firestore rules cannot redact individual fields
+      from a readable document. Tenant-facing documents must therefore remain
+      API-projected before persistence or be stored in tenant-safe collections.
+      The rules below enforce document-level ownership and immutable audit
+      semantics; API routes continue to enforce field-level projections.
+    */
+
+    function isAuthenticated() {
+      return request.auth != null && request.auth.uid is string && request.auth.uid.size() > 0;
+    }
+
+    function role() {
+      return isAuthenticated() && request.auth.token.role is string
+        ? request.auth.token.role
+        : "";
+    }
+
+    function landlordClaim() {
+      return isAuthenticated() && request.auth.token.landlordId is string
+        ? request.auth.token.landlordId
+        : request.auth.uid;
+    }
+
+    function tenantClaim() {
+      return isAuthenticated() && request.auth.token.tenantId is string
+        ? request.auth.token.tenantId
+        : request.auth.uid;
+    }
+
+    function isLandlord() {
+      return isAuthenticated() && role() == "landlord";
+    }
+
+    function isTenant() {
+      return isAuthenticated() && role() == "tenant";
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && (role() == "admin" || role() == "support" || role() == "operator");
+    }
+
+    function isOwner(landlordId) {
+      return isAuthenticated()
+        && landlordId is string
+        && landlordId.size() > 0
+        && landlordId == landlordClaim();
+    }
+
+    function isTenantOwner(tenantId) {
+      return isAuthenticated()
+        && tenantId is string
+        && tenantId.size() > 0
+        && tenantId == tenantClaim();
+    }
+
+    function existingLandlordId() {
+      return resource.data.landlordId;
+    }
+
+    function incomingLandlordId() {
+      return request.resource.data.landlordId;
+    }
+
+    function existingTenantId() {
+      return resource.data.tenantId;
+    }
+
+    function incomingTenantId() {
+      return request.resource.data.tenantId;
+    }
+
+    function landlordOwnsExisting() {
+      return isLandlord() && isOwner(existingLandlordId());
+    }
+
+    function landlordOwnsIncoming() {
+      return isLandlord() && isOwner(incomingLandlordId());
+    }
+
+    function tenantOwnsExisting() {
+      return isTenant() && isTenantOwner(existingTenantId());
+    }
+
+    function tenantOwnsIncoming() {
+      return isTenant() && isTenantOwner(incomingTenantId());
+    }
+
+    function landlordScopeStable() {
+      return !("landlordId" in resource.data)
+        || !("landlordId" in request.resource.data)
+        || request.resource.data.landlordId == resource.data.landlordId;
+    }
+
+    function tenantScopeStable() {
+      return !("tenantId" in resource.data)
+        || !("tenantId" in request.resource.data)
+        || request.resource.data.tenantId == resource.data.tenantId;
+    }
+
+    function hasOnlyTenantSafeLeaseFields() {
+      return request.resource.data.keys().hasOnly([
+        "id",
+        "leaseId",
+        "tenantId",
+        "landlordId",
+        "propertyId",
+        "unitId",
+        "propertyName",
+        "unitNumber",
+        "status",
+        "startDate",
+        "endDate",
+        "rentAmount",
+        "rentDueDay",
+        "depositAmount",
+        "createdAt",
+        "updatedAt"
+      ]);
+    }
+
+    function canReadLandlordScoped() {
+      return isAdmin() || landlordOwnsExisting();
+    }
+
+    function canWriteLandlordScoped() {
+      return isAdmin() || landlordOwnsIncoming();
+    }
+
+    function canUpdateLandlordScoped() {
+      return isAdmin() || (landlordOwnsExisting() && landlordOwnsIncoming() && landlordScopeStable());
+    }
+
+    function canReadTenantScoped() {
+      return isAdmin() || tenantOwnsExisting() || landlordOwnsExisting();
+    }
+
+    function canWriteTenantScoped() {
+      return isAdmin() || tenantOwnsIncoming() || landlordOwnsIncoming();
+    }
+
+    function canUpdateTenantScoped() {
+      return isAdmin()
+        || (tenantOwnsExisting() && tenantOwnsIncoming() && tenantScopeStable())
+        || (landlordOwnsExisting() && landlordOwnsIncoming() && landlordScopeStable());
+    }
+
+    function isAppendOnlyAuditCreate() {
+      return isAuthenticated()
+        && request.resource.data.keys().hasAny(["eventType", "type", "createdAt", "occurredAt", "timestamp"]);
+    }
+
+    function canReadAuditEvent() {
+      return isAdmin()
+        || (("landlordId" in resource.data) && isOwner(resource.data.landlordId))
+        || (("tenantId" in resource.data) && isTenantOwner(resource.data.tenantId));
+    }
+
+    function isPublicReadOnlyContent() {
+      return true;
+    }
+
+    match /properties/{propertyId} {
+      allow read: if canReadLandlordScoped()
+        || (isTenant() && ("tenantId" in resource.data) && isTenantOwner(resource.data.tenantId))
+        || resource.data.publicReadable == true;
+      allow create: if canWriteLandlordScoped();
+      allow update: if canUpdateLandlordScoped();
+      allow delete: if isAdmin() || landlordOwnsExisting();
+    }
+
+    match /units/{unitId} {
+      allow read: if canReadLandlordScoped()
+        || (isTenant() && ("tenantId" in resource.data) && isTenantOwner(resource.data.tenantId));
+      allow create: if canWriteLandlordScoped();
+      allow update: if canUpdateLandlordScoped();
+      allow delete: if isAdmin() || landlordOwnsExisting();
+    }
+
+    match /leases/{leaseId} {
+      allow read: if isAdmin() || landlordOwnsExisting() || tenantOwnsExisting();
+      allow create: if canWriteTenantScoped();
+      allow update: if canUpdateTenantScoped()
+        && (!isTenant() || hasOnlyTenantSafeLeaseFields());
+      allow delete: if isAdmin() || landlordOwnsExisting();
+    }
+
+    match /leaseDrafts/{draftId} {
+      allow read: if canReadLandlordScoped();
+      allow create: if canWriteLandlordScoped();
+      allow update: if canUpdateLandlordScoped();
+      allow delete: if isAdmin() || landlordOwnsExisting();
+    }
+
+    match /leaseSnapshots/{snapshotId} {
+      allow read: if canReadTenantScoped();
+      allow create: if canWriteTenantScoped();
+      allow update, delete: if false;
+    }
+
+    match /rentPayments/{paymentId} {
+      allow read: if canReadTenantScoped();
+      allow create: if canWriteTenantScoped();
+      allow update: if canUpdateTenantScoped();
+      allow delete: if isAdmin();
+    }
+
+    match /paymentIntents/{intentId} {
+      allow read: if canReadTenantScoped();
+      allow create: if canWriteTenantScoped();
+      allow update: if canUpdateTenantScoped();
+      allow delete: if isAdmin();
+    }
+
+    match /paymentReconciliationRecords/{recordId} {
+      allow read: if canReadTenantScoped();
+      allow create: if isAdmin() || landlordOwnsIncoming();
+      allow update, delete: if false;
+    }
+
+    match /billingRecords/{recordId} {
+      allow read: if isAdmin() || landlordOwnsExisting();
+      allow create, update: if isAdmin() || landlordOwnsIncoming();
+      allow delete: if isAdmin();
+    }
+
+    match /subscriptionStatus/{statusId} {
+      allow read: if isAdmin() || (isLandlord() && statusId == landlordClaim()) || landlordOwnsExisting();
+      allow create, update: if isAdmin() || landlordOwnsIncoming();
+      allow delete: if isAdmin();
+    }
+
+    match /users/{userId} {
+      allow read: if isAdmin() || (isAuthenticated() && userId == request.auth.uid);
+      allow create, update: if isAdmin() || (isAuthenticated() && userId == request.auth.uid);
+      allow delete: if isAdmin();
+    }
+
+    match /accounts/{accountId} {
+      allow read: if isAdmin() || (isAuthenticated() && accountId == request.auth.uid) || isOwner(accountId);
+      allow create, update: if isAdmin() || (isAuthenticated() && accountId == request.auth.uid) || isOwner(accountId);
+      allow delete: if isAdmin();
+    }
+
+    match /landlords/{landlordId} {
+      allow read: if isAdmin() || isOwner(landlordId);
+      allow create, update: if isAdmin() || isOwner(landlordId);
+      allow delete: if isAdmin();
+
+      match /settings/{settingId} {
+        allow read: if isAdmin() || isOwner(landlordId);
+        allow create, update: if isAdmin() || isOwner(landlordId);
+        allow delete: if isAdmin();
+      }
+    }
+
+    match /tenants/{tenantId} {
+      allow read: if isAdmin() || isTenantOwner(tenantId) || landlordOwnsExisting();
+      allow create: if isAdmin() || isTenantOwner(tenantId) || landlordOwnsIncoming();
+      allow update: if isAdmin()
+        || (isTenantOwner(tenantId) && tenantScopeStable())
+        || (landlordOwnsExisting() && landlordOwnsIncoming() && landlordScopeStable());
+      allow delete: if isAdmin();
+    }
+
+    match /tenantWorkspaces/{tenantId} {
+      allow read: if isAdmin() || isTenantOwner(tenantId);
+      allow create, update: if isAdmin() || isTenantOwner(tenantId);
+      allow delete: if isAdmin();
+
+      match /{workspaceCollection}/{workspaceDoc} {
+        allow read: if isAdmin() || isTenantOwner(tenantId);
+        allow create, update: if isAdmin() || isTenantOwner(tenantId);
+        allow delete: if isAdmin();
+      }
+    }
+
+    match /tenantProfiles/{tenantId} {
+      allow read: if isAdmin() || isTenantOwner(tenantId) || landlordOwnsExisting();
+      allow create, update: if isAdmin() || isTenantOwner(tenantId) || landlordOwnsIncoming();
+      allow delete: if isAdmin();
+    }
+
+    match /tenantDocuments/{documentId} {
+      allow read: if canReadTenantScoped();
+      allow create, update: if isAdmin() || tenantOwnsIncoming();
+      allow delete: if isAdmin() || tenantOwnsExisting();
+    }
+
+    match /tenantEvents/{eventId} {
+      allow read: if canReadTenantScoped();
+      allow create: if canWriteTenantScoped();
+      allow update, delete: if false;
+    }
+
+    match /tenantNotices/{noticeId} {
+      allow read: if canReadTenantScoped();
+      allow create: if isAdmin() || landlordOwnsIncoming();
+      allow update: if canUpdateTenantScoped();
+      allow delete: if isAdmin();
+    }
+
+    match /leaseNotices/{noticeId} {
+      allow read: if canReadTenantScoped();
+      allow create: if isAdmin() || landlordOwnsIncoming();
+      allow update: if canUpdateTenantScoped();
+      allow delete: if isAdmin();
+    }
+
+    match /rentalApplications/{applicationId} {
+      allow read: if canReadTenantScoped();
+      allow create: if isAdmin() || tenantOwnsIncoming() || landlordOwnsIncoming();
+      allow update: if canUpdateTenantScoped();
+      allow delete: if isAdmin() || landlordOwnsExisting();
+    }
+
+    match /applications/{applicationId} {
+      allow read: if canReadTenantScoped();
+      allow create: if isAdmin() || tenantOwnsIncoming() || landlordOwnsIncoming();
+      allow update: if canUpdateTenantScoped();
+      allow delete: if isAdmin() || landlordOwnsExisting();
+    }
+
+    match /applicationLinks/{linkId} {
+      allow read: if isAdmin() || landlordOwnsExisting();
+      allow create, update: if isAdmin() || landlordOwnsIncoming();
+      allow delete: if isAdmin();
+    }
+
+    match /screeningOrders/{orderId} {
+      allow read: if isAdmin() || landlordOwnsExisting();
+      allow create: if isAdmin() || landlordOwnsIncoming();
+      allow update: if isAdmin() || (landlordOwnsExisting() && landlordOwnsIncoming() && landlordScopeStable());
+      allow delete: if isAdmin();
+    }
+
+    match /screeningConsents/{consentId} {
+      allow read: if canReadTenantScoped();
+      allow create: if isAdmin() || tenantOwnsIncoming();
+      allow update: if isAdmin() || (tenantOwnsExisting() && tenantOwnsIncoming() && tenantScopeStable());
+      allow delete: if false;
+    }
+
+    match /screeningRequests/{requestId} {
+      allow read: if isAdmin() || landlordOwnsExisting();
+      allow create: if isAdmin() || landlordOwnsIncoming();
+      allow update: if isAdmin() || (landlordOwnsExisting() && landlordOwnsIncoming() && landlordScopeStable());
+      allow delete: if false;
+    }
+
+    match /screeningResults/{resultId} {
+      allow read: if isAdmin() || landlordOwnsExisting();
+      allow create, update: if isAdmin();
+      allow delete: if false;
+    }
+
+    match /screeningEvents/{eventId} {
+      allow read: if isAdmin() || landlordOwnsExisting();
+      allow create: if isAdmin() || landlordOwnsIncoming();
+      allow update, delete: if false;
+    }
+
+    match /screeningReferrals/{referralId} {
+      allow read: if isAdmin() || landlordOwnsExisting();
+      allow create, update: if isAdmin() || landlordOwnsIncoming();
+      allow delete: if isAdmin();
+    }
+
+    match /screeningWebhookLogs/{logId} {
+      allow read, create: if isAdmin();
+      allow update, delete: if false;
+    }
+
+    match /verifiedScreeningQueue/{queueId} {
+      allow read, create, update: if isAdmin();
+      allow delete: if false;
+    }
+
+    match /maintenanceRequests/{requestId} {
+      allow read: if canReadTenantScoped();
+      allow create: if isAdmin() || tenantOwnsIncoming() || landlordOwnsIncoming();
+      allow update: if canUpdateTenantScoped();
+      allow delete: if isAdmin() || landlordOwnsExisting();
+    }
+
+    match /workOrders/{workOrderId} {
+      allow read: if canReadLandlordScoped()
+        || (isAuthenticated() && resource.data.assignedContractorId == request.auth.uid)
+        || (isAuthenticated() && request.auth.uid in resource.data.invitedContractorIds);
+      allow create: if isAdmin() || landlordOwnsIncoming();
+      allow update: if isAdmin()
+        || (landlordOwnsExisting() && landlordOwnsIncoming() && landlordScopeStable())
+        || (isAuthenticated() && resource.data.assignedContractorId == request.auth.uid);
+      allow delete: if isAdmin();
+    }
+
+    match /workOrderUpdates/{updateId} {
+      allow read: if canReadLandlordScoped()
+        || (isAuthenticated() && resource.data.contractorId == request.auth.uid);
+      allow create: if isAdmin() || landlordOwnsIncoming() || (isAuthenticated() && request.resource.data.contractorId == request.auth.uid);
+      allow update, delete: if false;
+    }
+
+    match /contractorProfiles/{contractorId} {
+      allow read: if isAdmin() || (isAuthenticated() && contractorId == request.auth.uid) || landlordOwnsExisting();
+      allow create, update: if isAdmin() || (isAuthenticated() && contractorId == request.auth.uid);
+      allow delete: if isAdmin();
+    }
+
+    match /contractorInvites/{inviteId} {
+      allow read: if isAdmin() || landlordOwnsExisting();
+      allow create, update: if isAdmin() || landlordOwnsIncoming();
+      allow delete: if isAdmin();
+    }
+
+    match /messages/{messageId} {
+      allow read: if canReadTenantScoped();
+      allow create: if canWriteTenantScoped();
+      allow update: if canUpdateTenantScoped();
+      allow delete: if isAdmin();
+    }
+
+    match /threads/{threadId} {
+      allow read: if canReadTenantScoped();
+      allow create, update: if canWriteTenantScoped();
+      allow delete: if isAdmin();
+    }
+
+    match /events/{eventId} {
+      allow read: if canReadAuditEvent();
+      allow create: if isAppendOnlyAuditCreate();
+      allow update, delete: if false;
+    }
+
+    match /canonicalEvents/{eventId} {
+      allow read: if canReadAuditEvent();
+      allow create: if isAppendOnlyAuditCreate();
+      allow update, delete: if false;
+    }
+
+    match /auditEvents/{eventId} {
+      allow read: if canReadAuditEvent();
+      allow create: if isAppendOnlyAuditCreate();
+      allow update, delete: if false;
+    }
+
+    match /adminAuditEvents/{eventId} {
+      allow read, create: if isAdmin();
+      allow update, delete: if false;
+    }
+
+    match /registryAuditLog/{eventId} {
+      allow read: if isAdmin() || landlordOwnsExisting();
+      allow create: if isAdmin() || landlordOwnsIncoming();
+      allow update, delete: if false;
+    }
+
+    match /ledgerEvents/{eventId} {
+      allow read: if canReadTenantScoped();
+      allow create: if isAppendOnlyAuditCreate();
+      allow update, delete: if false;
+    }
+
+    match /leaseWorkflowEvents/{eventId} {
+      allow read: if canReadTenantScoped();
+      allow create: if isAppendOnlyAuditCreate();
+      allow update, delete: if false;
+    }
+
+    match /admin_expenses/{expenseId} {
+      allow read, create, update, delete: if isAdmin();
+    }
+
+    match /adminAssignments/{assignmentId} {
+      allow read, create, update, delete: if isAdmin();
+    }
+
+    match /adminAlertStates/{alertId} {
+      allow read, create, update, delete: if isAdmin();
+    }
+
+    match /adminWatchlists/{watchId} {
+      allow read, create, update, delete: if isAdmin();
+    }
+
+    match /statusIncidents/{incidentId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /statusComponents/{componentId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /helpContent/{contentId} {
+      allow read: if isPublicReadOnlyContent();
+      allow write: if isAdmin();
+    }
+
+    match /trustStatements/{statementId} {
+      allow read: if isPublicReadOnlyContent();
+      allow write: if isAdmin();
+    }
+
+    match /publicPortfolioScores/{scoreId} {
+      allow read: if resource.data.publicReadable == true;
+      allow write: if isAdmin();
+    }
+
+    match /tenantHistoryShares/{shareId} {
+      allow read: if resource.data.status == "active";
+      allow create, update: if isAdmin() || tenantOwnsIncoming() || landlordOwnsIncoming();
+      allow delete: if isAdmin();
+    }
+
+    match /importJobs/{jobId} {
+      allow read: if isAdmin() || landlordOwnsExisting();
+      allow create, update: if isAdmin() || landlordOwnsIncoming();
+      allow delete: if isAdmin();
+    }
+
+    match /landlordUsage/{landlordId} {
+      allow read: if isAdmin() || isOwner(landlordId);
+      allow create, update: if isAdmin() || isOwner(landlordId);
+      allow delete: if isAdmin();
+    }
+
+    match /usageEvents/{eventId} {
+      allow read: if isAdmin() || landlordOwnsExisting();
+      allow create: if isAdmin() || landlordOwnsIncoming();
+      allow update, delete: if false;
+    }
+
+    match /financialTransactions/{transactionId} {
+      allow read: if canReadLandlordScoped();
+      allow create, update: if isAdmin() || landlordOwnsIncoming();
+      allow delete: if isAdmin();
+    }
+
+    match /expenses/{expenseId} {
+      allow read: if canReadLandlordScoped();
+      allow create, update: if isAdmin() || landlordOwnsIncoming();
+      allow delete: if isAdmin() || landlordOwnsExisting();
+    }
+
+    match /telemetry_events/{eventId} {
+      allow read, create: if isAdmin();
+      allow update, delete: if false;
+    }
+
+    match /ai_events/{eventId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin();
+      allow update, delete: if false;
+    }
+
     match /{document=**} {
-      allow read, write: if true;
+      allow read, write: if false;
     }
   }
 }
