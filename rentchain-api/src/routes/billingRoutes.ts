@@ -1,7 +1,7 @@
 import express from "express";
 import { listRecordsForLandlord } from "../services/billingService";
 import { db } from "../firebase";
-import { requireAuth } from "../middleware/requireAuth";
+import { requireLandlord } from "../middleware/requireLandlord";
 import { getStripeClient } from "../services/stripeService";
 import { stripeNotConfiguredResponse, isStripeNotConfiguredError } from "../lib/stripeNotConfigured";
 import { FRONTEND_URL } from "../config/screeningConfig";
@@ -33,18 +33,64 @@ router.get("/health", (_req, res) => {
 
 type SubscriptionStatusTier = "free" | "starter" | "pro" | "elite";
 type SubscriptionStatusInterval = "month" | "year" | null;
+type SubscriptionStatusSource = "stripe_subscription" | "plan_tier";
 
 function normalizeSubscriptionStatusTier(input: any): SubscriptionStatusTier {
   return resolvePaidBillingPlan(input) || "free";
 }
 
+function toIsoDate(value: unknown): string | null {
+  if (value == null || value === "") return null;
+  const raw = typeof value === "number" ? value : String(value).trim();
+  const parsed =
+    typeof raw === "number"
+      ? raw
+      : /^\d+$/.test(raw)
+      ? Number(raw)
+      : Date.parse(raw);
+  if (!Number.isFinite(parsed)) return null;
+  return new Date(parsed).toISOString();
+}
+
+function toSubscriptionStatusInterval(value: unknown): SubscriptionStatusInterval {
+  const normalized = normalizeBillingInterval(value);
+  if (normalized === "monthly") return "month";
+  if (normalized === "yearly") return "year";
+  return null;
+}
+
+function normalizeSubscriptionStatus(value: unknown, tier: SubscriptionStatusTier): "active" | "past_due" | "canceled" {
+  const raw = String(value || "").trim().toLowerCase();
+  if (raw === "active" || raw === "trialing") return "active";
+  if (raw === "past_due") return "past_due";
+  if (raw === "canceled" || raw === "cancelled" || raw === "unpaid" || raw === "incomplete_expired") return "canceled";
+  return tier !== "free" ? "active" : "canceled";
+}
+
+async function loadSafeLandlordBillingState(landlordId: string | null) {
+  const id = String(landlordId || "").trim();
+  if (!id) return null;
+  try {
+    const snap = await db.collection("landlords").doc(id).get();
+    if (!snap.exists) return null;
+    return snap.data() as any;
+  } catch {
+    return null;
+  }
+}
+
 async function sendSubscriptionStatus(req: any, res: any) {
   const resolved = await resolveLandlordAndTier(req.user);
+  const landlordId = String(resolved?.landlordIdResolved || req.user?.landlordId || req.user?.id || "").trim() || null;
+  const landlord = await loadSafeLandlordBillingState(landlordId);
   const tier = normalizeSubscriptionStatusTier(resolved?.tier || req.user?.plan);
-  const interval: SubscriptionStatusInterval = null;
-  const renewalDate: string | null = null;
-  const isActive = tier !== "free";
-  const status = isActive ? "active" : "canceled";
+  const interval = toSubscriptionStatusInterval(landlord?.subscriptionInterval);
+  const currentPeriodEnd = toIsoDate(landlord?.currentPeriodEnd);
+  const renewalDate = currentPeriodEnd;
+  const subscriptionStatus = String(landlord?.subscriptionStatus || "").trim() || null;
+  const status = normalizeSubscriptionStatus(subscriptionStatus, tier);
+  const isActive = status === "active";
+  const statusSource: SubscriptionStatusSource = subscriptionStatus ? "stripe_subscription" : "plan_tier";
 
   return res.status(200).json({
     ok: true,
@@ -53,13 +99,16 @@ async function sendSubscriptionStatus(req: any, res: any) {
     status,
     interval,
     renewalDate,
+    currentPeriodEnd,
     isActive,
+    statusSource,
+    subscriptionStatusSource: statusSource,
   });
 }
 
-router.get("/subscription-status", requireAuth, sendSubscriptionStatus);
+router.get("/subscription-status", requireLandlord, sendSubscriptionStatus);
 // Compatibility alias in case any client still calls /api/billing/billing/subscription-status.
-router.get("/billing/subscription-status", requireAuth, sendSubscriptionStatus);
+router.get("/billing/subscription-status", requireLandlord, sendSubscriptionStatus);
 
 router.get("/pricing", (_req, res) => {
   res.setHeader("x-route-source", "billingRoutes.ts");
@@ -368,7 +417,7 @@ router.use((req, res, next) => {
 
 router.get(
   "/",
-  requireAuth,
+  requireLandlord,
   async (req: any, res) => {
     const landlordId = req.user?.landlordId || req.user?.id;
     if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
@@ -382,7 +431,7 @@ router.get(
 
 router.get(
   "/receipts/:id",
-  requireAuth,
+  requireLandlord,
   async (req: any, res) => {
     // NOTE: ensure the receipt belongs to this landlordId before exposing content
     res.type("html").send(`
@@ -455,7 +504,7 @@ async function handleCheckout(req: any, res: any) {
       cancel_url: `${frontendUrl}${appendBillingCanceled(redirectToValue)}`,
     });
 
-    return res.status(200).json({ ok: true, url: session.url });
+    return res.status(200).json({ ok: true, sessionId: session.id, url: session.url, checkoutUrl: session.url });
   } catch (err: any) {
     return sendStripeRouteError(
       res,
@@ -469,11 +518,12 @@ async function handleCheckout(req: any, res: any) {
   }
 }
 
-router.post("/checkout", requireAuth, handleCheckout);
-router.post("/subscribe", requireAuth, handleCheckout);
-router.post("/upgrade", requireAuth, handleCheckout);
+router.post("/checkout", requireLandlord, handleCheckout);
+router.post("/create-checkout-session", requireLandlord, handleCheckout);
+router.post("/subscribe", requireLandlord, handleCheckout);
+router.post("/upgrade", requireLandlord, handleCheckout);
 
-router.get("/session-status", requireAuth, async (req: any, res) => {
+router.get("/session-status", requireLandlord, async (req: any, res) => {
   const sessionId = String(req.query?.session_id || "").trim();
   if (!sessionId) {
     return res.status(400).json({ ok: false, error: "missing_session_id" });
@@ -557,7 +607,7 @@ router.get("/session-status", requireAuth, async (req: any, res) => {
   }
 });
 
-router.post("/portal", requireAuth, async (req: any, res) => {
+router.post("/portal", requireLandlord, async (req: any, res) => {
   try {
     const landlordId = req.user?.landlordId || req.user?.id;
     if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
