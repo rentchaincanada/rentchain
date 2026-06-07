@@ -9,21 +9,23 @@ import {
   TenantRentCharge,
 } from "../../api/tenantPortalApi";
 import { useTenantOutletContext } from "./TenantLayout.clean";
+import { colors, radius, shadows, text as textTokens } from "../../styles/tokens";
 
 const cardStyle: React.CSSProperties = {
-  background: "rgba(17, 24, 39, 0.8)",
-  border: "1px solid rgba(255, 255, 255, 0.05)",
-  borderRadius: 16,
+  background: colors.card,
+  border: `1px solid ${colors.border}`,
+  borderRadius: radius.lg,
   padding: "18px 20px",
-  boxShadow: "0 12px 32px rgba(0,0,0,0.35)",
+  boxShadow: shadows.md,
+  color: textTokens.primary,
 };
 
 const stateCardStyle: React.CSSProperties = {
-  border: "1px solid rgba(255, 255, 255, 0.08)",
-  borderRadius: 14,
+  border: `1px solid ${colors.border}`,
+  borderRadius: radius.md,
   padding: "14px 16px",
-  background: "rgba(15, 23, 42, 0.56)",
-  color: "#e5e7eb",
+  background: colors.panel,
+  color: textTokens.primary,
 };
 
 const TenantPaymentSkeleton: React.FC = () => (
@@ -34,9 +36,10 @@ const TenantPaymentSkeleton: React.FC = () => (
         style={{
           height: 14,
           width: index === 2 ? "68%" : "100%",
-          borderRadius: 999,
+          borderRadius: radius.pill,
           background:
-            "linear-gradient(90deg, rgba(148,163,184,0.14), rgba(59,130,246,0.22), rgba(148,163,184,0.14))",
+            "linear-gradient(90deg, rgba(15,23,42,0.06), rgba(37,99,235,0.12), rgba(15,23,42,0.06))",
+          border: `1px solid ${colors.border}`,
         }}
       />
     ))}
@@ -53,14 +56,14 @@ const TenantPaymentState: React.FC<{
     role={tone === "error" ? "alert" : undefined}
     style={{
       ...stateCardStyle,
-      borderColor: tone === "error" ? "rgba(248,113,113,0.32)" : "rgba(255,255,255,0.08)",
-      background: tone === "error" ? "rgba(127,29,29,0.32)" : stateCardStyle.background,
+      borderColor: tone === "error" ? "rgba(239,68,68,0.22)" : colors.border,
+      background: tone === "error" ? "rgba(254,242,242,0.95)" : stateCardStyle.background,
       display: "grid",
       gap: 8,
     }}
   >
     <div style={{ fontWeight: 800 }}>{title}</div>
-    <div style={{ color: tone === "error" ? "#fecaca" : "#cbd5e1", lineHeight: 1.5 }}>{body}</div>
+    <div style={{ color: tone === "error" ? "#7f1d1d" : textTokens.muted, lineHeight: 1.5 }}>{body}</div>
     {action ? <div>{action}</div> : null}
   </div>
 );
@@ -133,11 +136,11 @@ export const TenantPaymentsPage: React.FC = () => {
   const renderStatusBadge = () => {
     const status = summary?.currentPeriod?.status ?? "unknown";
     const palette: Record<string, { bg: string; color: string; label: string }> = {
-      on_time: { bg: "rgba(34,197,94,0.14)", color: "#bbf7d0", label: "On track" },
-      late: { bg: "rgba(248,113,113,0.16)", color: "#fecaca", label: "Late" },
-      partial: { bg: "rgba(234,179,8,0.16)", color: "#fef08a", label: "Partial" },
-      unpaid: { bg: "rgba(148,163,184,0.2)", color: "#e2e8f0", label: "Unpaid" },
-      unknown: { bg: "rgba(148,163,184,0.16)", color: "#cbd5e1", label: "Unknown" },
+      on_time: { bg: "#dcfce7", color: "#166534", label: "On track" },
+      late: { bg: "#fee2e2", color: "#991b1b", label: "Late" },
+      partial: { bg: "#fef3c7", color: "#92400e", label: "Partial" },
+      unpaid: { bg: "#f1f5f9", color: "#334155", label: "Unpaid" },
+      unknown: { bg: "#f1f5f9", color: "#334155", label: "Unknown" },
     };
     const colors = palette[status] || palette.unknown;
     return (
@@ -148,7 +151,7 @@ export const TenantPaymentsPage: React.FC = () => {
           color: colors.color,
           padding: "6px 10px",
           borderRadius: 10,
-          border: "1px solid rgba(59,130,246,0.15)",
+          border: `1px solid ${colors.border}`,
           fontWeight: 700,
         }}
       >
@@ -161,11 +164,11 @@ export const TenantPaymentsPage: React.FC = () => {
     <div style={cardStyle}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
         <div>
-          <div style={{ color: "#9ca3af", fontSize: 12, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+          <div style={{ color: textTokens.subtle, fontSize: 12, textTransform: "uppercase", letterSpacing: "0.04em" }}>
             Payment History
           </div>
           <div style={{ fontSize: 20, fontWeight: 700 }}>Rent payments</div>
-          <div style={{ color: "#9ca3af", fontSize: 13 }}>
+          <div style={{ color: textTokens.muted, fontSize: 13 }}>
             {lease?.propertyName || "Your lease"} · {lease?.unitNumber ? `Unit ${lease.unitNumber}` : "Unit"}
           </div>
         </div>
@@ -173,27 +176,27 @@ export const TenantPaymentsPage: React.FC = () => {
       </div>
 
       <div style={{ marginTop: 16, marginBottom: 12 }}>
-        <div style={{ color: "#9ca3af", fontSize: 12, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+        <div style={{ color: textTokens.subtle, fontSize: 12, textTransform: "uppercase", letterSpacing: "0.04em" }}>
           Rent Charges
         </div>
         <div style={{ fontSize: 16, fontWeight: 700 }}>Landlord-issued charges</div>
-        <div style={{ color: "#9ca3af", fontSize: 13, marginBottom: 6 }}>
+        <div style={{ color: textTokens.muted, fontSize: 13, marginBottom: 6 }}>
           Rent charges are issued by your landlord and recorded for transparency.
         </div>
         {chargesError ? (
-          <div style={{ color: "#fca5a5" }}>{chargesError}</div>
+          <div style={{ color: colors.danger }}>{chargesError}</div>
         ) : charges.length === 0 ? (
-          <div style={{ color: "#9ca3af" }}>No rent charges issued yet.</div>
+          <div style={{ color: textTokens.muted }}>No rent charges issued yet.</div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 6 }}>
             {charges.map((c) => (
               <div
                 key={c.id}
                 style={{
-                  border: "1px solid rgba(255,255,255,0.06)",
-                  borderRadius: 12,
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: radius.md,
                   padding: "10px 12px",
-                  background: "rgba(255,255,255,0.02)",
+                  background: colors.panel,
                   display: "flex",
                   justifyContent: "space-between",
                   alignItems: "center",
@@ -201,10 +204,10 @@ export const TenantPaymentsPage: React.FC = () => {
                 }}
               >
                 <div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: "#e5e7eb" }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: textTokens.primary }}>
                     ${c.amount?.toLocaleString()} · {c.period || "Period not set"}
                   </div>
-                  <div style={{ color: "#cbd5e1", fontSize: 13 }}>
+                  <div style={{ color: textTokens.muted, fontSize: 13 }}>
                     Due {formatDate(c.dueDate)} · Status: {c.status}
                   </div>
                 </div>
@@ -230,24 +233,24 @@ export const TenantPaymentsPage: React.FC = () => {
                     }}
                     style={{
                       padding: "6px 12px",
-                      borderRadius: 10,
-                      border: "1px solid rgba(59,130,246,0.35)",
-                      background: "rgba(59,130,246,0.1)",
-                      color: "#bfdbfe",
+                      borderRadius: radius.md,
+                      border: `1px solid ${colors.borderStrong}`,
+                      background: colors.accentSoft,
+                      color: colors.accent,
                       fontWeight: 700,
                       cursor: confirmingId === c.id ? "wait" : "pointer",
                     }}
                     disabled={confirmingId === c.id}
                   >
-                    {confirmingId === c.id ? "Confirming…" : "Confirm receipt"}
+                    {confirmingId === c.id ? "Confirming..." : "Confirm receipt"}
                   </button>
                 ) : (
                   <span
                     style={{
-                      background: "rgba(59,130,246,0.12)",
-                      color: "#bfdbfe",
+                      background: colors.accentSoft,
+                      color: colors.accent,
                       padding: "6px 10px",
-                      borderRadius: 12,
+                      borderRadius: radius.md,
                       fontSize: 12,
                       fontWeight: 700,
                     }}
@@ -272,10 +275,10 @@ export const TenantPaymentsPage: React.FC = () => {
               onClick={() => setRefreshKey((value) => value + 1)}
               style={{
                 padding: "8px 12px",
-                borderRadius: 10,
-                border: "1px solid rgba(248,113,113,0.36)",
-                background: "rgba(127,29,29,0.25)",
-                color: "#fecaca",
+                borderRadius: radius.md,
+                border: "1px solid rgba(239,68,68,0.28)",
+                background: "#fff",
+                color: "#991b1b",
                 fontWeight: 800,
                 cursor: "pointer",
               }}
@@ -297,7 +300,7 @@ export const TenantPaymentsPage: React.FC = () => {
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 520 }}>
             <thead>
-              <tr style={{ textAlign: "left", color: "#94a3b8", fontSize: 12, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              <tr style={{ textAlign: "left", color: textTokens.subtle, fontSize: 12, textTransform: "uppercase", letterSpacing: "0.05em" }}>
                 <th style={{ padding: "10px 6px" }}>Date</th>
                 <th style={{ padding: "10px 6px" }}>Amount</th>
                 <th style={{ padding: "10px 6px" }}>Method</th>
@@ -307,21 +310,21 @@ export const TenantPaymentsPage: React.FC = () => {
             </thead>
             <tbody>
               {payments.map((p) => (
-                <tr key={p.id} style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}>
-                  <td style={{ padding: "10px 6px", color: "#e5e7eb", fontWeight: 600 }}>
+                <tr key={p.id} style={{ borderTop: `1px solid ${colors.border}` }}>
+                  <td style={{ padding: "10px 6px", color: textTokens.primary, fontWeight: 600 }}>
                     {formatDate(p.paidAt || p.dueDate)}
                   </td>
-                  <td style={{ padding: "10px 6px", color: "#e5e7eb" }}>
+                  <td style={{ padding: "10px 6px", color: textTokens.primary }}>
                     {p.amount ? `$${p.amount.toLocaleString()}` : "—"}
                   </td>
-                  <td style={{ padding: "10px 6px", color: "#cbd5e1" }}>{p.method || "—"}</td>
+                  <td style={{ padding: "10px 6px", color: textTokens.muted }}>{p.method || "—"}</td>
                   <td style={{ padding: "10px 6px" }}>
                     <span
                       style={{
-                        background: "rgba(59,130,246,0.12)",
-                        color: "#bfdbfe",
+                        background: colors.accentSoft,
+                        color: colors.accent,
                         padding: "6px 10px",
-                        borderRadius: 12,
+                        borderRadius: radius.md,
                         fontSize: 12,
                         fontWeight: 700,
                       }}
@@ -329,7 +332,7 @@ export const TenantPaymentsPage: React.FC = () => {
                       {p.status || "Recorded"}
                     </span>
                   </td>
-                  <td style={{ padding: "10px 6px", color: "#cbd5e1" }}>{p.notes || "—"}</td>
+                  <td style={{ padding: "10px 6px", color: textTokens.muted }}>{p.notes || "—"}</td>
                 </tr>
               ))}
             </tbody>

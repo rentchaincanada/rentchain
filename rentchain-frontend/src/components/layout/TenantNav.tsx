@@ -18,6 +18,7 @@ const navItems = [
   { label: "Access", to: "/tenant/access" },
   { label: "Application", to: "/tenant/application" },
   { label: "Documents", to: "/tenant/documents" },
+  { label: "Payments", to: "/tenant/payments" },
   { label: "History", to: "/tenant/activity" },
   { label: "Lease", to: "/tenant/lease" },
   { label: "Maintenance", to: "/tenant/maintenance" },
