@@ -1,83 +1,73 @@
-PR: #1111
-PR URL: https://github.com/rentchaincanada/rentchain/pull/1111
-Branch: phase/firestore-rules-hardening-v1
+Branch: audit/soft-launch-certification-v1
+Certification result: FAIL
+PR: #1112
+PR URL: https://github.com/rentchaincanada/rentchain/pull/1112
 
 # Implementation Summary
 
 Date completed: 2026-06-07
 
-Mission: Phase H - Firestore Production Rules Hardening
+Mission: audit/soft-launch-certification-v1
 
 ## Scope Completed
 
-Replaced the permissive root Firestore rules file with a production-oriented ruleset that fails closed by default and enforces document-level separation across landlord, tenant, admin, support, and operator roles.
+Completed a documentation-only soft-launch certification audit. No source code, runtime behavior, routes, auth middleware, billing logic, screening provider logic, Firestore rules, deployment configuration, dependencies, or production data were changed.
 
-The implementation is limited to Firestore rules. No backend routes, frontend code, auth middleware, billing logic, screening provider code, deployment configuration, Terraform, dependencies, or Firestore indexes were changed.
+Deliverables produced:
+- .handoff/certification-report.md
+- .handoff/certification-reproduction-checklist.md
+- .handoff/impl-summary.md
 
-## Deliverables
+## Key Findings Summary
 
-- /Users/rentchain/dev/rentchain/firestore.rules
-- /Users/rentchain/dev/rentchain/.handoff/impl-summary.md
+- Soft launch is not certified because seeded landlord, tenant, contractor, and admin end-to-end workflows could not be executed in this environment.
+- Frontend validation passed: 293 test files and 1153 tests passed; frontend build passed.
+- Backend build passed, but full backend tests still failed: 453 of 461 test files passed, with 8 failing files and 21 failing tests.
+- Firestore rules and tenant-safe projection foundations are present, but launch certification still needs runtime cross-user access checks.
+- Two hardening items should be resolved before public availability: contractor message payloads should not expose raw landlord identifiers, and generic lease mutation/ledger routes need explicit role enforcement or negative-role tests.
 
-## Coverage
+## Critical Blockers Or Conditional Requirements
 
-- Added helper functions for authenticated role checks, landlord claim resolution, tenant claim resolution, ownership checks, and stable scope checks.
-- Added explicit landlord-scoped rules for properties, units, leases, lease drafts, rent payments, applications, maintenance, financial records, usage, and export-adjacent records.
-- Added explicit tenant-scoped rules for tenants, tenant workspaces, tenant profiles, tenant documents, tenant events, notices, applications, screening consents, maintenance requests, messages, and threads.
-- Added admin-only or admin-controlled rules for protected operational collections including admin state, webhook logs, verified screening queue, telemetry, status management, and public content publishing.
-- Added append-only behavior for audit and event collections by allowing create while denying update and delete.
-- Added immutable handling for snapshot and event-style collections where production data must not be mutated after creation.
-- Replaced the prior root catch-all allow rule with a final deny-all fallback.
+Critical blockers:
+- Seeded end-to-end certification was not completed.
+- Backend full test suite is not clean.
+
+Conditional requirements for re-audit:
+- Complete seeded landlord, tenant, contractor, admin, signing, notice, billing, screening, and security QA in preview/staging.
+- Fix or formally waive backend test failures with launch-impact rationale.
+- Replace contractor-facing raw landlord identifier output with safe references or remove it.
+- Add explicit role enforcement or tests for generic lease create/update/end and lease ledger routes.
+- Add Firestore rules role/path tests for critical collections and append-only audit paths.
 
 ## Validation Results
 
 Passed:
-- git diff --check
-- Firebase emulator syntax load using the root firestore.rules file on isolated local port 18080
 - npm --prefix rentchain-api run build
+- npm --prefix rentchain-frontend run build
+- npm --prefix rentchain-frontend run test -- --run
+- git diff --check
 
-Backend full-suite status:
-- npm --prefix rentchain-api run test -- --run was executed.
-- Result: 453 test files passed, 8 failed; 2213 tests passed, 21 failed.
-- The remaining failures are unrelated to firestore.rules and match known pre-existing backend suite failures in lease draft, recipient trust review, support console, property registry retry, decision mapping, and landlord analytics tests.
+Failed:
+- npm --prefix rentchain-api run test -- --run
+
+Backend test failure summary:
+- 8 failed files
+- 453 passed files
+- 21 failed tests
+- 2213 passed tests
 
 ## Manual QA
 
-Manual browser QA is not required for this mission because the change is a Firestore rules hardening mission with no frontend rendering, routes, navigation, mobile layout, or user-visible UI behavior changes.
+Manual seeded browser/API QA was required by the mission but was not completed because seeded landlord, tenant, contractor, and admin accounts plus configured test services were not available in this environment.
 
-Rules validation completed:
-- Root rules file loaded successfully through the Firebase Firestore emulator.
-- The ruleset denies all unmatched collections by default.
-- Audit and event collections deny update and delete.
-- Landlord and tenant reads/writes are scoped through claim-based ownership checks.
-- Sensitive provider, webhook, admin, telemetry, and verified queue collections are restricted to admin-controlled access.
+No credentials or raw account identifiers were written to the repository.
 
-## Protected Areas
+## Recommendation For Next Phase
 
-Untouched:
-- backend routes and services
-- frontend components and pages
-- auth middleware and token issuance
-- billing flows
-- screening provider adapters
-- pricing and entitlement logic
-- CI/CD and deployment configuration
-- Terraform infrastructure
-- dependencies
-- Firestore indexes
-- production migrations
+Hold public soft launch. Run a dedicated seeded soft-launch certification re-audit in preview/staging after resolving or formally waiving backend failures and the identified access/projection hardening items.
 
-## Known Limitations And Gaps
+## Changed Files
 
-- No rules-unit-testing suite was added because the mission prohibits dependency drift and requires the source change to remain limited to firestore.rules.
-- Firestore rules cannot redact individual fields from a readable document. Tenant-safe field projection remains enforced by API projections and tenant-safe persistence design.
-- This mission prepares the ruleset for review only. It does not deploy rules to production.
-- Backend full-suite failures remain pre-existing and unrelated to the rules change.
-
-## Readiness
-
-The scoped Firestore rules hardening change is ready for Gate 1 review. Syntax validation and backend build passed, the ruleset fails closed by default, protected areas remain untouched, and known limitations are documented.
-
-## Blockers
-
-No mission blockers found.
+- .handoff/certification-report.md
+- .handoff/certification-reproduction-checklist.md
+- .handoff/impl-summary.md
