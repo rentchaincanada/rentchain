@@ -482,6 +482,22 @@ describe("properties routes publish + defaults", () => {
     expect(res.body.items.map((item: any) => item.id).sort()).toEqual(["prop-a-managed", "prop-a-owned"]);
   });
 
+  it("blocks tenant users from the landlord property collection endpoint", async () => {
+    seedDoc("properties", "prop-a-owned", {
+      landlordId: "landlord-a",
+      ownerUserId: "landlord-a",
+      name: "A Owned",
+      createdAt: "2026-03-01T00:00:00.000Z",
+      portfolioStatus: "active",
+    });
+
+    const app = await createAppForUser({ id: "tenant-a", tenantId: "tenant-a", role: "tenant" });
+    const res = await request(app).get("/api/properties");
+
+    expect(res.status).toBe(403);
+    expect(res.body).toMatchObject({ ok: false, error: "Forbidden" });
+  });
+
   it("does not allow landlord query params to widen access to another landlord's properties", async () => {
     seedDoc("properties", "prop-a-owned", {
       landlordId: "landlord-a",

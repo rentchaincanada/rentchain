@@ -4,6 +4,7 @@ import { CAPABILITIES, resolvePlanTier } from "../config/capabilities";
 import { requireCapability } from "../entitlements/entitlements.middleware";
 import { db, FieldValue } from "../firebase";
 import { normalizeProvince } from "../lib/province";
+import { requireLandlord } from "../middleware/requireLandlord";
 import { ensureRegistrySource } from "../services/registry/registryImportService";
 import { getPropertyRegistryProjection, upsertPropertyRegistryProjection } from "../services/registry/registryStatusProjectionService";
 import {
@@ -201,7 +202,8 @@ async function loadPropertyOr404(propertyId: string) {
  * GET /api/properties
  * Returns properties for the authenticated landlord.
  */
-router.get("/", async (req: any, res) => {
+// Keep the collection route role-gated before landlord-scoped projection logic runs.
+router.get("/", requireLandlord, async (req: any, res) => {
   const role = String(req.user?.role || "").toLowerCase();
   const userId = String(req.user?.id || "").trim();
   const landlordId = resolveLandlordId(req);
