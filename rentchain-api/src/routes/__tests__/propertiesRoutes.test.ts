@@ -1071,7 +1071,7 @@ describe("properties routes publish + defaults", () => {
     expect(statusRes.body.filing.latestAttempt.attemptNumber).toBe(2);
   });
 
-  it("blocks retry when the ready package is stale relative to the draft", async () => {
+  it("refreshes a stale ready package once before retrying a failed attempt", async () => {
     const app = await createApp();
     seedDoc("properties", "prop-1", {
       landlordId: "landlord-1",
@@ -1115,8 +1115,11 @@ describe("properties routes publish + defaults", () => {
       .post("/api/properties/prop-1/registry-submission/filing-attempts/retry")
       .send({ attemptId: requestRes.body.request.attemptId });
 
-    expect(retryRes.status).toBe(400);
-    expect(String(retryRes.body.message || "")).toContain("Regenerate the ready package");
+    expect(retryRes.status).toBe(200);
+    expect(retryRes.body.ready.status).toBe("ready_to_file");
+    expect(retryRes.body.ready.audit.sourceDraftUpdatedAt).toEqual(expect.any(String));
+    expect(retryRes.body.attempt.attemptNumber).toBe(2);
+    expect(retryRes.body.request.attemptId).toBe(retryRes.body.attempt.attemptId);
   });
 
   it("does not allow retrying a confirmed attempt", async () => {
