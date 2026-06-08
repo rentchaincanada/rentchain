@@ -1,5 +1,5 @@
-PR: #PR_NUMBER_PENDING
-PR URL: PR_URL_PENDING
+PR: #1113
+PR URL: https://github.com/rentchaincanada/rentchain/pull/1113
 Branch: fix/soft-launch-blockers-v1
 
 # Implementation Summary
