@@ -1,93 +1,49 @@
-PR: #1113
-PR URL: https://github.com/rentchaincanada/rentchain/pull/1113
-Branch: fix/soft-launch-blockers-v1
+PR: #1118
+PR URL: https://github.com/rentchaincanada/rentchain/pull/1118
+Branch: fix/work-order-property-dropdown-v1
 
 # Implementation Summary
 
-Date completed: 2026-06-07
+## Mission
+Fix work order property dropdown frontend binding bug.
 
-Mission: Fix soft launch blockers (security, projection safety, governance)
+## Files Changed
+- `rentchain-frontend/src/pages/landlord/WorkOrderNewPage.tsx`
+- `rentchain-frontend/src/pages/landlord/WorkOrderNewPage.test.tsx`
 
-## Scope Completed
+## What Changed
+- Added property option normalization for both `id` and `propertyId` response shapes.
+- Added fallback labels from `name`, `addressLine1`, `address`, `displayName`, and `propertyName`.
+- Deduplicated property options by normalized property ID.
+- Disabled the property dropdown with an explicit empty option when no properties are available.
+- Reset stale unit selection and unit options whenever the selected property changes.
+- Preserved the existing `createWorkOrder` request payload and backend `propertyId` contract.
+- Added regression tests covering dropdown population, visible selection, stale unit clearing, and submitted `propertyId`.
 
-Resolved the three soft launch blockers named in the mission:
+## Governance
+- Scope limited to frontend landlord work order creation UI and tests.
+- No backend route, service, auth, Firestore rules, billing, screening, pricing, deployment, or dependency changes.
+- No permission widening.
+- No raw IDs, tokens, secrets, storage paths, or provider payloads exposed.
+- Backend authorization remains server-side through existing work order and property ownership checks.
+- Projection safety preserved; the change consumes existing landlord-scoped property responses only.
 
-- Added explicit landlord authorization middleware to generic lease and ledger route handlers in `rentchain-api/src/routes/leaseRoutes.ts`.
-- Removed raw landlord identifier exposure from contractor-facing message response projections in `rentchain-api/src/services/contractorPortalService.ts`.
-- Updated registry filing retry behavior in `rentchain-api/src/services/registry/registrySubmissionLayerV3.ts` so stale ready-package state is refreshed once before retry creation, with fail-closed readiness validation.
-
-No frontend, billing, auth core, screening adapter, pricing, CI/CD, Firestore rules, Terraform, dependency, or migration files were changed.
-
-## Files And Functions Changed
-
-Lease authorization:
-- `rentchain-api/src/routes/leaseRoutes.ts`
-  - `GET /`
-  - `POST /`
-  - `PUT /:id`
-  - `POST /:id/end`
-  - `GET /:leaseId/ledger`
-  - `POST /:leaseId/ledger/charge`
-  - `POST /:leaseId/ledger/payment`
-  - `GET /:leaseId/ledger/export.csv`
-  - `GET /:leaseId/ledger/export.pdf`
-- `rentchain-api/src/routes/__tests__/leaseRoutes.active.test.ts`
-  - Added negative-role coverage proving tenant-role requests are rejected before generic lease and ledger handlers execute.
-
-Contractor message projection:
-- `rentchain-api/src/services/contractorPortalService.ts`
-  - Added `projectContractorMessage`.
-  - Applied the projection to work-order embedded messages, list responses, and create responses.
-  - Preserved stored internal scope metadata for server-side authorization while removing raw landlord identifiers from contractor-facing output.
-- `rentchain-api/src/routes/__tests__/contractorPortalRoutes.test.ts`
-  - Added assertions that work-order and contractor message responses do not expose raw landlord identifiers.
-
-Properties registry retry:
-- `rentchain-api/src/services/registry/registrySubmissionLayerV3.ts`
-  - Updated `retryRegistryFilingAttempt` to refresh stale ready-package state once through `createRegistryFilingReadyPackage`.
-  - Added readiness validation after refresh so retry creation remains deterministic and fail-closed.
-- `rentchain-api/src/routes/__tests__/propertiesRoutes.test.ts`
-  - Updated stale ready-package retry coverage to confirm a refreshed ready package creates attempt 2 successfully.
-
-## Validation Results
-
-Passed:
-- `npm run test -- src/routes/__tests__/leaseRoutes.active.test.ts` in `rentchain-api` using Node 20.20.2
-- `npm run test -- src/routes/__tests__/contractorPortalRoutes.test.ts` in `rentchain-api` using Node 20.20.2
-- `npm run test -- src/routes/__tests__/propertiesRoutes.test.ts` in `rentchain-api` using Node 20.20.2
-- `npm run build` in `rentchain-api` using Node 20.20.2
-- `git diff --check`
-
-Full backend suite:
-- `npm run test` in `rentchain-api` using Node 20.20.2 was run.
-- Result: 454 passed test files, 7 failed test files; 2215 passed tests, 20 failed tests.
-- The failed files are the existing unrelated areas already identified by the soft launch certification audit: `leaseDraftRoutes`, `recipientTrustReviewRoutes`, `supportConsoleRoutes`, `deriveDecisionExecutionMappings`, and `landlordAnalyticsSnapshot`.
-
-Initial local test attempts under Node 25 failed repo preflight, then were rerun under Node 20.20.2. The properties route suite needed elevated local-server execution because the sandbox blocked Supertest from binding an ephemeral local port.
+## Validation
+- `npm --prefix rentchain-frontend run test -- src/pages/landlord/WorkOrderNewPage.test.tsx`: PASS, 2 tests.
+- `npm --prefix rentchain-api run test -- src/routes/__tests__/workOrdersRoutes.test.ts`: PASS, 21 tests.
+- `npm --prefix rentchain-frontend run test`: PASS, 294 files, 1155 tests.
+- `npm --prefix rentchain-frontend run build`: PASS.
+- `git diff --check`: PASS.
 
 ## Manual QA
-
-Manual preview/staging QA was not completed in this local environment. The mission-specific manual QA still requires a deployed preview/staging backend with seeded landlord, tenant, contractor, and admin accounts.
-
-Recommended manual QA before merge:
-1. Confirm unauthorized lease generic and ledger routes reject tenant/non-landlord roles.
-2. Confirm contractor message list, create, and work-order detail responses do not expose raw landlord identifiers.
-3. Confirm registry filing retry succeeds after a stale ready package refresh and remains bounded to a single refresh.
-
-## Acceptance Criteria Status
-
-- Lease route authorization blocker: resolved with explicit `requireLandlord` guards and focused negative-role tests.
-- Contractor raw identifier projection blocker: resolved with a shared contractor message projection and focused response-shape tests.
-- Properties retry blocker: resolved with single-refresh stale ready-package retry behavior and focused route test coverage.
-- Full backend test suite: still not clean because of unrelated pre-existing failures.
-- Diff scope: limited to the three named blocker areas and tests.
+- Manual browser QA not completed in this environment.
+- Full workflow requires seeded landlord, contractor, property, unit, and work order data with authenticated preview access.
+- Automated coverage verifies the frontend binding behavior and submitted payload for the affected form.
 
 ## Known Limitations
+- Existing work order edit UI does not expose property reassignment, and the backend patch route does not currently accept `propertyId`; no new route or API surface was added.
+- Contractor invite visibility in the contractor portal remains out of scope for a separate mission.
 
-- Full seeded preview/staging QA remains required before soft launch re-certification.
-- Full backend test suite remains blocked by unrelated pre-existing failures outside this mission scope.
-- Registry stale retry refresh is intentionally bounded to one ready-package regeneration and remains fail-closed if the refreshed package is not ready to file.
-
-## Recommended Next Phase
-
-After Gate 1 review and PR checks, run preview/staging manual QA for the three blocker fixes, then proceed to a dedicated seeded soft launch re-certification mission.
+## Recommended Follow-Up
+- Run preview manual QA with seeded accounts for the landlord work order creation flow.
+- Address contractor invite portal visibility as a separate scoped mission.
