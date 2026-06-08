@@ -2008,7 +2008,7 @@ async function enforceLeaseCapability(req: any, res: Response): Promise<boolean>
   return true;
 }
 
-router.get("/", (_req: Request, res: Response) => {
+router.get("/", requireLandlord, (_req: Request, res: Response) => {
   const leases = leaseService.getAll();
   res.json({ leases });
 });
@@ -3399,7 +3399,7 @@ router.get("/property/:propertyId", requireLandlord, async (req: any, res: Respo
   }
 });
 
-router.post("/", async (req: Request, res: Response) => {
+router.post("/", requireLandlord, async (req: Request, res: Response) => {
   try {
     if (!(await enforceLeaseCapability(req, res))) return;
     const body = req.body as Partial<CreateLeasePayload>;
@@ -3541,7 +3541,7 @@ router.post("/", async (req: Request, res: Response) => {
   }
 });
 
-router.put("/:id", async (req: any, res: Response) => {
+router.put("/:id", requireLandlord, async (req: any, res: Response) => {
   try {
     if (!(await enforceLeaseCapability(req, res))) return;
     const payload = req.body as UpdateLeasePayload;
@@ -3578,7 +3578,7 @@ router.put("/:id", async (req: any, res: Response) => {
   }
 });
 
-router.post("/:id/end", async (req: any, res: Response) => {
+router.post("/:id/end", requireLandlord, async (req: any, res: Response) => {
   try {
     if (!(await enforceLeaseCapability(req, res))) return;
     const endDate: string = req.body?.endDate || new Date().toISOString();
@@ -3734,7 +3734,7 @@ router.post("/:id/restore-active", requireLandlord, async (req: any, res: Respon
   }
 });
 
-router.get("/:leaseId/ledger", async (req: any, res: Response) => {
+router.get("/:leaseId/ledger", requireLandlord, async (req: any, res: Response) => {
   try {
     const landlordId = req.user?.landlordId || req.user?.id;
     if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
@@ -3859,7 +3859,7 @@ router.get("/:leaseId/ledger", async (req: any, res: Response) => {
   }
 });
 
-router.post("/:leaseId/ledger/charge", async (req: any, res: Response) => {
+router.post("/:leaseId/ledger/charge", requireLandlord, async (req: any, res: Response) => {
   try {
     const landlordId = req.user?.landlordId || req.user?.id;
     const createdBy = req.user?.id || req.user?.email || landlordId;
@@ -3905,7 +3905,7 @@ router.post("/:leaseId/ledger/charge", async (req: any, res: Response) => {
   }
 });
 
-router.post("/:leaseId/ledger/payment", async (req: any, res: Response) => {
+router.post("/:leaseId/ledger/payment", requireLandlord, async (req: any, res: Response) => {
   res.setHeader("x-route-source", "leaseRoutes.ts");
   res.setHeader("x-lease-payment-write-version", "canonical-payments-ledger-link-v1");
   try {
@@ -3995,7 +3995,7 @@ router.post("/:leaseId/ledger/payment", async (req: any, res: Response) => {
   }
 });
 
-router.get("/:leaseId/ledger/export.csv", async (req: any, res: Response) => {
+router.get("/:leaseId/ledger/export.csv", requireLandlord, async (req: any, res: Response) => {
   try {
     const landlordId = req.user?.landlordId || req.user?.id;
     if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
@@ -4053,7 +4053,7 @@ router.get("/:leaseId/ledger/export.csv", async (req: any, res: Response) => {
   }
 });
 
-router.get("/:leaseId/ledger/export.pdf", async (req: any, res: Response) => {
+router.get("/:leaseId/ledger/export.pdf", requireLandlord, async (req: any, res: Response) => {
   const startedAt = Date.now();
   try {
     const landlordId = req.user?.landlordId || req.user?.id;

@@ -1,6 +1,6 @@
 # Soft-Launch Certification Report
 
-Certification result: FAIL
+Certification result: PASS WITH CONDITIONS — Controlled pilot preparation only. Not public launch.
 
 Date: 2026-06-07
 Branch: audit/soft-launch-certification-v1
@@ -11,7 +11,23 @@ Soft launch is not certified. The codebase shows substantial readiness across te
 
 The automated validation also does not meet a clean launch bar. Frontend build and tests passed, and backend build passed, but the full backend suite still has 8 failing files and 21 failing tests after rerunning outside the sandbox. Some failures are known from prior sessions, but the launch certification gate cannot treat a non-clean backend suite plus unexecuted seeded workflows as a pass.
 
-Go/No-Go recommendation: NO-GO for public soft launch. Proceed only after seeded end-to-end certification is completed in a controlled preview/staging environment, backend suite failures are either fixed or formally waived with owner sign-off, and the listed security findings are resolved or accepted by a human release owner.
+Go/No-Go recommendation: PASS WITH CONDITIONS — Controlled pilot preparation only. Not public launch. Proceed only after seeded end-to-end certification is completed in a controlled preview/staging environment, backend suite failures are either fixed or formally waived with owner sign-off, and the listed security findings are resolved or accepted by a human release owner.
+
+## Updated Certification Status — PR #1113
+
+- Previous result: FAIL / NO-GO
+- Updated result: PASS WITH CONDITIONS
+- Date of update: 2026-06-07
+- Evidence: 60 focused backend tests passing (leaseRoutes 30, contractorPortalRoutes 5, propertiesRoutes 25)
+- Manual auth boundary: 401 confirmed on all fixed routes
+
+Conditions documented by operator review:
+1. Controlled pilot preparation only; not public launch.
+2. PR #1113 blocker fixes must remain present on `origin/main`.
+3. Focused backend coverage for the three fixed areas must remain passing.
+4. Manual auth boundary checks must remain confirmed on all fixed routes.
+5. Seeded preview/staging end-to-end QA remains required before public launch certification.
+6. Broader launch blockers and known backend suite failures remain outside this conditional pass and must be fixed, waived, or accepted by release ownership before public availability.
 
 ## Validation Commands
 

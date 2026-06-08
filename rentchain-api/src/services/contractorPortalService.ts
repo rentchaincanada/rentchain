@@ -81,6 +81,17 @@ function unitLabel(workOrder: any): string | null {
   return asOptionalString(workOrder?.unitLabel, 120) || asOptionalString(workOrder?.unitName, 120);
 }
 
+function projectContractorMessage(message: any, workOrderId?: string | null) {
+  return {
+    id: asString(message?.id, 160),
+    workOrderId: asString(workOrderId || message?.workOrderId, 160),
+    senderRole: asOptionalString(message?.senderRole, 40),
+    senderName: asOptionalString(message?.senderName, 180),
+    text: asOptionalString(message?.text, 2000) || "",
+    createdAt: toMillis(message?.createdAtMs || message?.createdAt),
+  };
+}
+
 function projectWorkOrder(workOrderId: string, workOrder: any, extras?: { updates?: any[]; messages?: any[] }) {
   const assignment = workOrder?.contractorAssignment && typeof workOrder.contractorAssignment === "object"
     ? workOrder.contractorAssignment
@@ -125,14 +136,7 @@ function projectWorkOrder(workOrderId: string, workOrder: any, extras?: { update
       actorRole: asOptionalString(update?.actorRole, 40),
       createdAt: toMillis(update?.createdAtMs || update?.createdAt),
     })),
-    messages: (extras?.messages || []).map((message) => ({
-      id: asString(message?.id, 160),
-      workOrderId,
-      senderRole: asOptionalString(message?.senderRole, 40),
-      senderName: asOptionalString(message?.senderName, 180),
-      text: asOptionalString(message?.text, 2000) || "",
-      createdAt: toMillis(message?.createdAtMs || message?.createdAt),
-    })),
+    messages: (extras?.messages || []).map((message) => projectContractorMessage(message, workOrderId)),
   };
 }
 
@@ -231,15 +235,7 @@ export async function listContractorPortalMessages(contractorId: string, workOrd
   return snap.docs
     .map((doc: any) => ({ id: doc.id, ...(doc.data() as any) }))
     .sort((a: any, b: any) => Number(b.createdAtMs || 0) - Number(a.createdAtMs || 0))
-    .map((message: any) => ({
-      id: asString(message.id, 160),
-      workOrderId: asString(message.workOrderId, 160),
-      landlordId: asString(message.landlordId, 160),
-      senderRole: asOptionalString(message.senderRole, 40),
-      senderName: asOptionalString(message.senderName, 180),
-      text: asOptionalString(message.text, 2000) || "",
-      createdAt: toMillis(message.createdAtMs || message.createdAt),
-    }));
+    .map((message: any) => projectContractorMessage(message));
 }
 
 export async function createContractorPortalMessage(input: {
@@ -285,7 +281,7 @@ export async function createContractorPortalMessage(input: {
     rawIdsIncluded: false,
     payloadIncluded: false,
   });
-  return { ok: true as const, message: { ...message, senderId: undefined } };
+  return { ok: true as const, message: projectContractorMessage(message) };
 }
 
 export async function getContractorPortalProfile(contractorId: string) {

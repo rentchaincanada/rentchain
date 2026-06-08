@@ -87,8 +87,15 @@ vi.mock("../../services/capabilityGuard", () => ({
 }));
 
 vi.mock("../../middleware/requireLandlord", () => ({
-  requireLandlord: (req: any, _res: any, next: any) => {
-    req.user = { id: "landlord-1", landlordId: "landlord-1", role: "landlord" };
+  requireLandlord: (req: any, res: any, next: any) => {
+    const header = String(req.headers?.["x-test-user"] || "").trim();
+    req.user = header
+      ? JSON.parse(header)
+      : { id: "landlord-1", landlordId: "landlord-1", role: "landlord" };
+    if (req.user.role !== "landlord" && req.user.role !== "admin") {
+      return res.status(403).json({ ok: false, error: "Forbidden" });
+    }
+    req.user.landlordId = req.user.landlordId || req.user.id;
     next();
   },
 }));
@@ -164,6 +171,29 @@ describe("leaseRoutes GET /active", () => {
     sendEmailMock.mockClear();
     sendEmailMock.mockResolvedValue(undefined);
     process.env.EMAIL_FROM = "noreply@example.com";
+  });
+
+  it("requires landlord authority before generic lease and ledger handlers execute", async () => {
+    const router = (await import("../leaseRoutes")).default;
+    const tenantHeaders = {
+      "x-test-user": JSON.stringify({ id: "tenant-1", tenantId: "tenant-1", role: "tenant" }),
+    };
+    const requests = [
+      { method: "GET", url: "/" },
+      { method: "POST", url: "/", body: { tenantId: "tenant-1", propertyId: "prop-1", unitNumber: "101", monthlyRent: 1000, startDate: "2026-01-01" } },
+      { method: "PUT", url: "/lease-1", body: { monthlyRent: 1100 } },
+      { method: "POST", url: "/lease-1/end", body: {} },
+      { method: "GET", url: "/lease-1/ledger" },
+      { method: "POST", url: "/lease-1/ledger/charge", body: { amountCents: 1000, date: "2026-01-01", type: "rent" } },
+      { method: "POST", url: "/lease-1/ledger/payment", body: { amountCents: 1000, date: "2026-01-01", method: "cash" } },
+      { method: "GET", url: "/lease-1/ledger/export.csv" },
+      { method: "GET", url: "/lease-1/ledger/export.pdf" },
+    ];
+
+    for (const item of requests) {
+      const res = await invokeRouter(router, { ...item, headers: tenantHeaders });
+      expect(res.status).toBe(403);
+    }
   });
 
   it("returns landlord-scoped active leases with tenant and document details", async () => {

@@ -644,12 +644,15 @@ export async function retryRegistryFilingAttempt(input: {
   attemptId?: string | null;
 }): Promise<{ attempt: RegistrySubmissionAttemptV3; request: RegistrySubmissionRequestV3; ready: RegistrySubmissionReadyV3 }> {
   const draft = await loadRegistrySubmissionDraft(input);
-  const ready = await loadDoc<RegistrySubmissionReadyV3>(REGISTRY_SUBMISSION_READY_COLLECTION, draft.draftId);
+  let ready = await loadDoc<RegistrySubmissionReadyV3>(REGISTRY_SUBMISSION_READY_COLLECTION, draft.draftId);
   if (!ready) {
     throw new Error("A filing package does not exist yet. Prepare a ready package before retrying.");
   }
   if (await isReadyPackageStale(draft.draftId, ready)) {
-    throw new Error("Draft has changed since this ready package was prepared. Regenerate the ready package before retrying.");
+    ready = await createRegistryFilingReadyPackage(input);
+  }
+  if (ready.status !== "ready_to_file") {
+    throw new Error("Registry submission retry cannot be created until the draft is ready to file.");
   }
 
   const baseAttempt =
