@@ -34,6 +34,13 @@ vi.mock("./components/layout/TenantNav", () => ({
   TenantNav: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
+vi.mock("./pages/contractor/ContractorInviteAcceptPage", () => ({
+  default: () => {
+    const location = useLocation();
+    return <h1>Contractor Invite Accept {location.pathname}{location.search}</h1>;
+  },
+}));
+
 let mockTenantToken: string | null = null;
 
 vi.mock("./context/useAuth", () => ({
@@ -838,6 +845,32 @@ describe("Routes: /tenant/payments", () => {
     );
 
     expect(await screen.findByText(/Tenant Payments/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("Routes: contractor invite acceptance", () => {
+  it("renders the contractor invite acceptance page for tokenized links", async () => {
+    const { default: App } = await import("./App");
+    render(
+      <MemoryRouter initialEntries={["/contractor/invite/invite-123"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Contractor Invite Accept \/contractor\/invite\/invite-123/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
+  });
+
+  it("renders the contractor invite acceptance page for query invite links", async () => {
+    const { default: App } = await import("./App");
+    render(
+      <MemoryRouter initialEntries={["/contractor/invite?invite=invite-123"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Contractor Invite Accept \/contractor\/invite\?invite=invite-123/i)).toBeInTheDocument();
     expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
   });
 });
