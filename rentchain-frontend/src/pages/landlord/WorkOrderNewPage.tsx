@@ -9,12 +9,49 @@ import { useAuth } from "../../context/useAuth";
 
 const priorities: WorkOrderPriority[] = ["low", "medium", "high", "urgent"];
 
+type PropertyOption = {
+  id: string;
+  name: string;
+};
+
+function normalizePropertyOption(property: any): PropertyOption | null {
+  const id = String(property?.id || property?.propertyId || "").trim();
+  if (!id) return null;
+
+  const name = String(
+    property?.name ||
+      property?.addressLine1 ||
+      property?.address ||
+      property?.displayName ||
+      property?.propertyName ||
+      "Property"
+  ).trim();
+
+  return { id, name: name || "Property" };
+}
+
+function normalizePropertyOptions(input: any): PropertyOption[] {
+  const items = Array.isArray(input?.items)
+    ? input.items
+    : Array.isArray(input?.properties)
+    ? input.properties
+    : Array.isArray(input)
+    ? input
+    : [];
+
+  const options = items
+    .map((property: any) => normalizePropertyOption(property))
+    .filter((property: PropertyOption | null): property is PropertyOption => Boolean(property));
+
+  return Array.from(new Map(options.map((property) => [property.id, property])).values());
+}
+
 export default function WorkOrderNewPage() {
   const nav = useNavigate();
   const { user } = useAuth();
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const [properties, setProperties] = React.useState<Array<{ id: string; name: string }>>([]);
+  const [properties, setProperties] = React.useState<PropertyOption[]>([]);
   const [units, setUnits] = React.useState<Array<{ id: string; unitNumber?: string }>>([]);
   const [invites, setInvites] = React.useState<ContractorInvite[]>([]);
 
@@ -34,17 +71,7 @@ export default function WorkOrderNewPage() {
     const run = async () => {
       try {
         const propRes = await fetchProperties();
-        const propItems = Array.isArray((propRes as any)?.items)
-          ? (propRes as any).items
-          : Array.isArray((propRes as any)?.properties)
-          ? (propRes as any).properties
-          : [];
-        const normalized = propItems
-          .map((p: any) => ({
-            id: String(p?.id || ""),
-            name: String(p?.name || p?.addressLine1 || "Property"),
-          }))
-          .filter((p: any) => p.id);
+        const normalized = normalizePropertyOptions(propRes);
         setProperties(normalized);
         setPropertyId(normalized[0]?.id || "");
       } catch {
@@ -60,6 +87,8 @@ export default function WorkOrderNewPage() {
   }, []);
 
   React.useEffect(() => {
+    setUnitId("");
+    setUnits([]);
     if (!propertyId) return;
     const load = async () => {
       try {
@@ -89,7 +118,13 @@ export default function WorkOrderNewPage() {
         {error ? <div style={{ color: "#b91c1c" }}>{error}</div> : null}
         <label style={{ display: "grid", gap: 6 }}>
           Property
-          <select value={propertyId} onChange={(e) => setPropertyId(e.target.value)} style={{ padding: 10, borderRadius: 8, border: "1px solid #cbd5e1" }}>
+          <select
+            value={propertyId}
+            onChange={(e) => setPropertyId(e.target.value)}
+            disabled={properties.length === 0}
+            style={{ padding: 10, borderRadius: 8, border: "1px solid #cbd5e1" }}
+          >
+            {properties.length === 0 ? <option value="">No properties available</option> : null}
             {properties.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
