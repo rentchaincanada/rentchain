@@ -166,6 +166,7 @@ describe("contractorPortalRoutes", () => {
       landlord: { name: "Landlord Ops" },
     });
     expect(JSON.stringify(res.body?.items?.[0])).not.toContain("tenant-1");
+    expect(JSON.stringify(res.body?.items?.[0])).not.toContain("landlord-1");
     expect(JSON.stringify(res.body?.items?.[0])).not.toContain("prop-raw");
     expect(JSON.stringify(res.body?.items?.[0])).not.toContain("unit-raw");
   });
@@ -211,6 +212,18 @@ describe("contractorPortalRoutes", () => {
 
     expect(res.status).toBe(201);
     expect(res.body?.message?.text).toBe("Arriving tomorrow morning.");
+    expect(res.body?.message?.landlordId).toBeUndefined();
+    expect(JSON.stringify(res.body?.message)).not.toContain("landlord-1");
+
+    const listRes = await invokeRouter(router, {
+      method: "GET",
+      url: "/contractors/contractor-1/messages",
+      params: { contractorId: "contractor-1" },
+      headers: { "x-test-user": JSON.stringify({ id: "contractor-1", role: "contractor" }) },
+    });
+    expect(listRes.status).toBe(200);
+    expect(listRes.body?.items?.[0]?.landlordId).toBeUndefined();
+    expect(JSON.stringify(listRes.body?.items?.[0])).not.toContain("landlord-1");
 
     const forbidden = await invokeRouter(router, {
       method: "POST",
