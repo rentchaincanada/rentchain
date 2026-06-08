@@ -79,15 +79,14 @@ router.post("/tenant-notices", authenticateJwt, async (req: any, res) => {
     if (!hasValidEmail) {
       emailError = "INVALID_TENANT_EMAIL";
     } else {
-      const apiKey = process.env.SENDGRID_API_KEY;
-      const from =
-        process.env.SENDGRID_FROM_EMAIL || process.env.SENDGRID_FROM || process.env.FROM_EMAIL;
-      const replyTo = process.env.SENDGRID_REPLY_TO || process.env.SENDGRID_REPLYTO_EMAIL;
+      const from = process.env.EMAIL_FROM || process.env.FROM_EMAIL;
+      const replyTo = process.env.EMAIL_REPLY_TO || process.env.REPLY_TO_EMAIL || from;
       const baseUrl = (process.env.PUBLIC_APP_URL || process.env.VITE_PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "");
       const noticeLink = `${baseUrl}/tenant/notices/${ref.id}`;
       const excerpt = trimmedBody.length > 400 ? `${trimmedBody.slice(0, 400)}...` : trimmedBody;
+      const mailgunConfigured = Boolean(process.env.MAILGUN_API_KEY && process.env.MAILGUN_DOMAIN && from);
 
-      if (!apiKey || !from) {
+      if (!mailgunConfigured) {
         emailError = "EMAIL_NOT_CONFIGURED";
       } else {
         try {
