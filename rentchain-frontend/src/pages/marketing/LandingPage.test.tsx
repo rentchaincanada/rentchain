@@ -58,7 +58,8 @@ describe("Marketing LandingPage", () => {
         /RentChain helps landlords across Canada stay on top of property details, tenant activity, maintenance, and the tasks that tend to fall through the cracks\./i
       )
     ).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "Start your first property" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: "Sign Up Free" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: "Log In" }).length).toBeGreaterThan(0);
     expect(
       screen.getByText(
         /Start with your first property, see how the workflow works, and decide on paid plans only after you understand the value inside the product\./i
@@ -87,7 +88,7 @@ describe("Marketing LandingPage", () => {
       </MemoryRouter>
     );
 
-    fireEvent.click(screen.getAllByRole("button", { name: "Start your first property" })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: "Sign Up Free" })[0]);
 
     expect(mocks.navigate).toHaveBeenCalledWith("/signup?next=/properties&intent=registry_readiness");
     expect(mocks.track).toHaveBeenCalledWith(
@@ -120,8 +121,20 @@ describe("Marketing LandingPage", () => {
       </MemoryRouter>
     );
 
-    fireEvent.click(screen.getAllByRole("button", { name: "Start your first property" })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: "Sign Up Free" })[0]);
 
     expect(mocks.navigate).toHaveBeenCalledWith("/properties?intent=registry_readiness");
+  });
+
+  it("routes returning users to login from the landing page CTA", () => {
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <LandingPage />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Log In" })[0]);
+
+    expect(mocks.navigate).toHaveBeenCalledWith("/login");
   });
 });

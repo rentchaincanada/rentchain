@@ -59,6 +59,20 @@ const sectionHeadingStyle: React.CSSProperties = {
   lineHeight: 1.2,
 };
 
+const ctaRowStyle: React.CSSProperties = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: spacing.sm,
+  alignItems: "center",
+};
+
+const ctaButtonStyle: React.CSSProperties = {
+  minHeight: 48,
+  minWidth: 148,
+  padding: "13px 20px",
+  fontWeight: 800,
+};
+
 const LandingPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -102,6 +116,10 @@ const LandingPage: React.FC = () => {
     }
 
     navigate("/signup?next=/properties&intent=registry_readiness");
+  };
+
+  const handleLoginCta = () => {
+    navigate("/login");
   };
 
   return (
@@ -187,9 +205,23 @@ const LandingPage: React.FC = () => {
                   Start with your first property, see how the workflow works, and decide on paid plans only after you understand the value inside the product.
                 </p>
               </div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: spacing.sm, alignItems: "center" }}>
-                <Button type="button" onClick={handlePrimaryCta}>
-                  Start your first property
+              <div style={ctaRowStyle}>
+                <Button
+                  type="button"
+                  onClick={handlePrimaryCta}
+                  aria-label="Sign Up Free"
+                  style={ctaButtonStyle}
+                >
+                  Sign Up Free
+                </Button>
+                <Button
+                  type="button"
+                  variant="navy"
+                  onClick={handleLoginCta}
+                  aria-label="Log In"
+                  style={ctaButtonStyle}
+                >
+                  Log In
                 </Button>
                 <div style={{ color: text.secondary, fontSize: "0.93rem", fontWeight: 600 }}>
                   No commitment to explore. Start free and upgrade only when your workflow needs more support.
@@ -421,9 +453,25 @@ const LandingPage: React.FC = () => {
                 system to get value on day one.
               </p>
             </div>
-              <Button type="button" onClick={handlePrimaryCta}>
-                Start your first property
-              </Button>
+              <div style={ctaRowStyle}>
+                <Button
+                  type="button"
+                  onClick={handlePrimaryCta}
+                  aria-label="Sign Up Free"
+                  style={ctaButtonStyle}
+                >
+                  Sign Up Free
+                </Button>
+                <Button
+                  type="button"
+                  variant="navy"
+                  onClick={handleLoginCta}
+                  aria-label="Log In"
+                  style={ctaButtonStyle}
+                >
+                  Log In
+                </Button>
+              </div>
           </div>
         </Card>
       </div>

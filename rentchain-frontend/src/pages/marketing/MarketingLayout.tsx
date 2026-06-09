@@ -32,6 +32,29 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
     fontWeight: 600,
   });
 
+  const primaryNavCtaStyle: React.CSSProperties = {
+    color: "#fff",
+    background: colors.accent,
+    padding: "9px 16px",
+    borderRadius: radius.pill,
+    textDecoration: "none",
+    fontWeight: 700,
+    boxShadow: shadows.sm,
+    whiteSpace: "nowrap",
+  };
+
+  const outlinedNavCtaStyle: React.CSSProperties = {
+    color: text.primary,
+    border: `1px solid ${colors.navy}`,
+    background: colors.panel,
+    padding: "9px 16px",
+    borderRadius: radius.pill,
+    textDecoration: "none",
+    fontWeight: 700,
+    boxShadow: shadows.sm,
+    whiteSpace: "nowrap",
+  };
+
   const onHover = (event: React.MouseEvent<HTMLElement>, active: boolean) => {
     event.currentTarget.style.color = active ? text.primary : text.muted;
   };
@@ -230,45 +253,13 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
               <>
                 <Link
                   to="/signup"
-                  style={{
-                    color: "#fff",
-                    background: colors.accent,
-                    padding: "8px 14px",
-                    borderRadius: radius.pill,
-                    textDecoration: "none",
-                    fontWeight: 600,
-                    boxShadow: shadows.sm,
-                  }}
+                  style={primaryNavCtaStyle}
                 >
                   {t("nav.sign_up_free")}
                 </Link>
                 <Link
-                  to="/request-access"
-                  style={{
-                    color: text.primary,
-                    border: `1px solid ${colors.border}`,
-                    background: colors.panel,
-                    padding: "8px 14px",
-                    borderRadius: radius.pill,
-                    textDecoration: "none",
-                    fontWeight: 600,
-                  }}
-                >
-                  {t("nav.request_access")}
-                </Link>
-                <Link
-                  to="/invite"
-                  style={{ color: text.muted, textDecoration: "none", fontWeight: 600 }}
-                  onMouseEnter={(e) => onHover(e, true)}
-                  onMouseLeave={(e) => onHover(e, false)}
-                >
-                  {t("nav.have_invite")}
-                </Link>
-                <Link
                   to="/login"
-                  style={{ color: text.muted, textDecoration: "none" }}
-                  onMouseEnter={(e) => onHover(e, true)}
-                  onMouseLeave={(e) => onHover(e, false)}
+                  style={outlinedNavCtaStyle}
                 >
                   {t("nav.login")}
                 </Link>
@@ -290,19 +281,18 @@ export const MarketingLayout: React.FC<MarketingLayoutProps> = ({ children }) =>
             >
               <Link
                 to={isAuthed ? "/dashboard" : "/signup"}
-                style={{
-                  color: "#fff",
-                  background: colors.accent,
-                  padding: "8px 14px",
-                  borderRadius: radius.pill,
-                  textDecoration: "none",
-                  fontWeight: 600,
-                  boxShadow: shadows.sm,
-                  whiteSpace: "nowrap",
-                }}
+                style={primaryNavCtaStyle}
                 >
                 {isAuthed ? t("nav.dashboard") : t("nav.sign_up_free")}
               </Link>
+              {!isAuthed ? (
+                <Link
+                  to="/login"
+                  style={outlinedNavCtaStyle}
+                >
+                  {t("nav.login")}
+                </Link>
+              ) : null}
               <button
                 type="button"
                 onClick={() => setMenuOpen((open) => !open)}
