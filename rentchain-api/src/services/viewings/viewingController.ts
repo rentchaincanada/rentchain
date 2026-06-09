@@ -6,6 +6,7 @@ import {
   getViewingRequestForLandlord,
   listViewingRequestsForLandlord,
   proposeViewingSlots,
+  rescheduleViewingRequest,
   selectViewingSlot,
   ViewingServiceError,
 } from "./viewingService";
@@ -102,6 +103,20 @@ export async function postCompleteViewing(req: Request, res: Response) {
 export async function postCancelViewing(req: Request, res: Response) {
   try {
     const data = await cancelViewingRequest(
+      String(req.params.id || ""),
+      landlordIdOf(req),
+      userIdOf(req),
+      req.body || {}
+    );
+    return res.status(200).json(data);
+  } catch (error) {
+    return handleError(res, error);
+  }
+}
+
+export async function postRescheduleViewing(req: Request, res: Response) {
+  try {
+    const data = await rescheduleViewingRequest(
       String(req.params.id || ""),
       landlordIdOf(req),
       userIdOf(req),

@@ -67,6 +67,10 @@ export type CancelViewingRequestInput = {
   cancelledReason?: string | null;
 };
 
+export type RescheduleViewingRequestInput = {
+  newScheduledTime?: string | null;
+};
+
 export type ViewingOwnershipContext = {
   landlordId: string | null;
   propertyId: string | null;

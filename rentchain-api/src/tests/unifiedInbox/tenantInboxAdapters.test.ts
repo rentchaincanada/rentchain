@@ -53,6 +53,30 @@ describe("tenant inbox adapters", () => {
     expect(JSON.stringify(event)).not.toContain("notification_raw_123");
   });
 
+  it("preserves viewing notification source kind in safe tenant projections", () => {
+    const event = adaptTenantNotificationToInboxEvent(
+      {
+        id: "viewing_notification_raw_123",
+        tenantWorkspaceId: "tenant_workspace_raw_abc",
+        sourceKind: "tenant.viewing",
+        title: "Viewing cancelled",
+        summary: "Your viewing has been cancelled.",
+        priority: "high",
+        createdAt: "2026-06-09T10:00:00.000Z",
+      },
+      tenantContext
+    );
+
+    expect(event).toMatchObject({
+      sourceKind: "tenant.viewing",
+      title: "Viewing cancelled",
+      body: "Your viewing has been cancelled.",
+      priority: "high",
+    });
+    expectTenantSafe(event!);
+    expect(JSON.stringify(event)).not.toContain("viewing_notification_raw_123");
+  });
+
   it("rejects cross-tenant and sensitive tenant records", () => {
     expect(
       adaptTenantNotificationToInboxEvent(

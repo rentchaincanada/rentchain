@@ -13,9 +13,11 @@ const {
   resetDb,
   seedCollection,
   getCollection,
+  setTransactionFailure,
 } = vi.hoisted(() => {
   const collections = new Map<string, Map<string, StoredDoc>>();
   let generatedId = 0;
+  let failTransaction = false;
 
   function ensureCollection(name: string) {
     if (!collections.has(name)) collections.set(name, new Map());
@@ -24,11 +26,44 @@ const {
 
   return {
     dbMock: {
+      async runTransaction(callback: any) {
+        const stagedSets: Array<{ name: string; id: string; payload: any; merge?: boolean }> = [];
+        const transaction = {
+          async get(ref: any) {
+            const entry = ensureCollection(ref.collectionName).get(ref.id);
+            return {
+              id: ref.id,
+              exists: Boolean(entry),
+              data: () => entry?.data,
+            };
+          },
+          set(ref: any, payload: any, options?: { merge?: boolean }) {
+            stagedSets.push({
+              name: ref.collectionName,
+              id: ref.id,
+              payload,
+              merge: options?.merge,
+            });
+          },
+        };
+        await callback(transaction);
+        if (failTransaction) throw new Error("transaction_failed");
+        for (const staged of stagedSets) {
+          const col = ensureCollection(staged.name);
+          if (staged.merge && col.has(staged.id)) {
+            const existing = col.get(staged.id)!;
+            col.set(staged.id, { id: staged.id, data: { ...(existing.data || {}), ...(staged.payload || {}) } });
+          } else {
+            col.set(staged.id, { id: staged.id, data: staged.payload || {} });
+          }
+        }
+      },
       collection: (name: string) => ({
         doc: (id?: string) => {
           const resolvedId = id || `generated-${++generatedId}`;
           return {
             id: resolvedId,
+            collectionName: name,
             async get() {
               const entry = ensureCollection(name).get(resolvedId);
               return {
@@ -64,11 +99,15 @@ const {
     resetDb: () => {
       collections.clear();
       generatedId = 0;
+      failTransaction = false;
     },
     seedCollection: (name: string, id: string, data: any) => {
       ensureCollection(name).set(id, { id, data });
     },
     getCollection: (name: string) => ensureCollection(name),
+    setTransactionFailure: (value: boolean) => {
+      failTransaction = value;
+    },
   };
 });
 
@@ -637,6 +676,245 @@ describe("viewingRoutes", () => {
     expect(res.status).toBe(200);
     expect(res.body.status).toBe("cancelled");
     expect(res.body.cancelledReason).toBe("Applicant no longer available");
+    const notifications = Array.from(getCollection("tenantNotifications").values());
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0].data).toEqual(expect.objectContaining({
+      notificationType: "viewing-cancelled",
+      recipientRole: "applicant",
+      applicantEmail: "jordan@example.com",
+      title: "Viewing cancelled",
+      rawIdsIncluded: false,
+    }));
+    expect(notifications[0].data.payload).toEqual(expect.objectContaining({
+      cancellationReason: "Applicant no longer available",
+    }));
+    expect(JSON.stringify(notifications[0].data)).not.toContain("view-7");
+    expect(Array.from(getCollection("viewingRequestEvents").values())).toHaveLength(1);
+  });
+
+  it("does not duplicate cancellation notifications when cancellation is retried", async () => {
+    const router = await createRouter();
+    seedCollection("viewingRequests", "view-cancel-retry", {
+      id: "view-cancel-retry",
+      landlordId: "landlord-1",
+      propertyId: "property-1",
+      unitId: "unit-1",
+      applicationId: null,
+      applicantName: "Jordan Lee",
+      applicantEmail: "jordan@example.com",
+      applicantPhone: null,
+      requestedMessage: null,
+      status: "scheduled",
+      proposedSlots: [],
+      selectedSlotId: null,
+      selectedSlot: null,
+      requestedAt: "2026-03-28T10:00:00.000Z",
+      scheduledAt: "2026-03-28T12:00:00.000Z",
+      createdAt: "2026-03-28T10:00:00.000Z",
+      updatedAt: "2026-03-28T12:00:00.000Z",
+    });
+
+    const first = await invokeRouter(router, {
+      method: "POST",
+      url: "/viewings/view-cancel-retry/cancel",
+      body: { cancelledReason: "Schedule changed" },
+    });
+    const second = await invokeRouter(router, {
+      method: "POST",
+      url: "/viewings/view-cancel-retry/cancel",
+      body: { cancelledReason: "Schedule changed" },
+    });
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect(second.body.status).toBe("cancelled");
+    expect(getCollection("tenantNotifications").size).toBe(1);
+    expect(getCollection("viewingRequestEvents").size).toBe(1);
+  });
+
+  it("reschedules a selected viewing and notifies the applicant", async () => {
+    const router = await createRouter();
+    seedCollection("viewingRequests", "view-reschedule", {
+      id: "view-reschedule",
+      landlordId: "landlord-1",
+      propertyId: "property-1",
+      unitId: "unit-1",
+      applicationId: null,
+      applicantName: "Jordan Lee",
+      applicantEmail: "jordan@example.com",
+      applicantPhone: null,
+      requestedMessage: null,
+      status: "scheduled",
+      proposedSlots: [
+        {
+          id: "slot-1",
+          startAt: "2026-04-02T18:00:00.000Z",
+          endAt: "2026-04-02T18:30:00.000Z",
+          isSelected: true,
+        },
+      ],
+      selectedSlotId: "slot-1",
+      selectedSlot: {
+        id: "slot-1",
+        startAt: "2026-04-02T18:00:00.000Z",
+        endAt: "2026-04-02T18:30:00.000Z",
+      },
+      requestedAt: "2026-03-28T10:00:00.000Z",
+      slotsProposedAt: "2026-03-28T11:00:00.000Z",
+      scheduledAt: "2026-03-28T12:00:00.000Z",
+      createdAt: "2026-03-28T10:00:00.000Z",
+      updatedAt: "2026-03-28T12:00:00.000Z",
+    });
+
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/viewings/view-reschedule/reschedule",
+      body: { newScheduledTime: "2026-04-03T19:00:00.000Z" },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe("scheduled");
+    expect(res.body.selectedSlot).toEqual(expect.objectContaining({
+      startAt: "2026-04-03T19:00:00.000Z",
+      endAt: "2026-04-03T19:30:00.000Z",
+    }));
+    const notifications = Array.from(getCollection("tenantNotifications").values());
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0].data).toEqual(expect.objectContaining({
+      notificationType: "viewing-rescheduled",
+      recipientRole: "applicant",
+      applicantEmail: "jordan@example.com",
+      title: "Viewing rescheduled",
+    }));
+    expect(notifications[0].data.payload).toEqual(expect.objectContaining({
+      oldTime: "2026-04-02T18:00:00.000Z",
+      newTime: "2026-04-03T19:00:00.000Z",
+    }));
+    expect(JSON.stringify(notifications[0].data)).not.toContain("view-reschedule");
+  });
+
+  it("does not duplicate reschedule notifications when target time is unchanged", async () => {
+    const router = await createRouter();
+    seedCollection("viewingRequests", "view-reschedule-retry", {
+      id: "view-reschedule-retry",
+      landlordId: "landlord-1",
+      propertyId: "property-1",
+      unitId: "unit-1",
+      applicationId: null,
+      applicantName: "Jordan Lee",
+      applicantEmail: "jordan@example.com",
+      applicantPhone: null,
+      requestedMessage: null,
+      status: "scheduled",
+      proposedSlots: [
+        {
+          id: "slot-1",
+          startAt: "2026-04-02T18:00:00.000Z",
+          endAt: "2026-04-02T18:30:00.000Z",
+          isSelected: true,
+        },
+      ],
+      selectedSlotId: "slot-1",
+      selectedSlot: {
+        id: "slot-1",
+        startAt: "2026-04-02T18:00:00.000Z",
+        endAt: "2026-04-02T18:30:00.000Z",
+      },
+      requestedAt: "2026-03-28T10:00:00.000Z",
+      slotsProposedAt: "2026-03-28T11:00:00.000Z",
+      scheduledAt: "2026-03-28T12:00:00.000Z",
+      createdAt: "2026-03-28T10:00:00.000Z",
+      updatedAt: "2026-03-28T12:00:00.000Z",
+    });
+
+    const first = await invokeRouter(router, {
+      method: "POST",
+      url: "/viewings/view-reschedule-retry/reschedule",
+      body: { newScheduledTime: "2026-04-03T19:00:00.000Z" },
+    });
+    const second = await invokeRouter(router, {
+      method: "POST",
+      url: "/viewings/view-reschedule-retry/reschedule",
+      body: { newScheduledTime: "2026-04-03T19:00:00.000Z" },
+    });
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect(getCollection("tenantNotifications").size).toBe(1);
+    expect(getCollection("viewingRequestEvents").size).toBe(1);
+  });
+
+  it("rejects cancellation and reschedule by the wrong landlord", async () => {
+    const router = await createRouter();
+    seedCollection("viewingRequests", "view-wrong-landlord", {
+      id: "view-wrong-landlord",
+      landlordId: "landlord-2",
+      propertyId: "property-2",
+      unitId: null,
+      applicationId: null,
+      applicantName: "Alex Doe",
+      applicantEmail: "alex@example.com",
+      applicantPhone: null,
+      requestedMessage: null,
+      status: "scheduled",
+      proposedSlots: [],
+      selectedSlotId: null,
+      selectedSlot: null,
+      requestedAt: "2026-03-28T10:00:00.000Z",
+      scheduledAt: "2026-03-28T12:00:00.000Z",
+      createdAt: "2026-03-28T10:00:00.000Z",
+      updatedAt: "2026-03-28T12:00:00.000Z",
+    });
+
+    const cancel = await invokeRouter(router, {
+      method: "POST",
+      url: "/viewings/view-wrong-landlord/cancel",
+      body: {},
+    });
+    const reschedule = await invokeRouter(router, {
+      method: "POST",
+      url: "/viewings/view-wrong-landlord/reschedule",
+      body: { newScheduledTime: "2026-04-03T19:00:00.000Z" },
+    });
+
+    expect(cancel.status).toBe(403);
+    expect(reschedule.status).toBe(403);
+    expect(getCollection("tenantNotifications").size).toBe(0);
+  });
+
+  it("rolls back viewing updates when notification transaction fails", async () => {
+    const router = await createRouter();
+    seedCollection("viewingRequests", "view-rollback", {
+      id: "view-rollback",
+      landlordId: "landlord-1",
+      propertyId: "property-1",
+      unitId: "unit-1",
+      applicationId: null,
+      applicantName: "Jordan Lee",
+      applicantEmail: "jordan@example.com",
+      applicantPhone: null,
+      requestedMessage: null,
+      status: "scheduled",
+      proposedSlots: [],
+      selectedSlotId: null,
+      selectedSlot: null,
+      requestedAt: "2026-03-28T10:00:00.000Z",
+      scheduledAt: "2026-03-28T12:00:00.000Z",
+      createdAt: "2026-03-28T10:00:00.000Z",
+      updatedAt: "2026-03-28T12:00:00.000Z",
+    });
+    setTransactionFailure(true);
+
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/viewings/view-rollback/cancel",
+      body: { cancelledReason: "Test failure" },
+    });
+
+    expect(res.status).toBe(500);
+    expect(getCollection("viewingRequests").get("view-rollback")?.data?.status).toBe("scheduled");
+    expect(getCollection("tenantNotifications").size).toBe(0);
+    expect(getCollection("viewingRequestEvents").size).toBe(0);
   });
 
   it("lists only landlord-owned viewing requests", async () => {

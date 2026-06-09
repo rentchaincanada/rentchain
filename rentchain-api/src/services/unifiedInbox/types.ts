@@ -11,6 +11,7 @@ export type SourceKind =
   | "tenant.lease"
   | "tenant.application"
   | "tenant.notice"
+  | "tenant.viewing"
   | "landlord.application"
   | "landlord.screening"
   | "landlord.lease"
