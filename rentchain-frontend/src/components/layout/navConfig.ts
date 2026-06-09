@@ -94,6 +94,14 @@ export const NAV_ITEMS: NavItem[] = [
     requiresLandlordOrAdmin: true,
   },
   {
+    id: "unified-inbox",
+    label: "Unified Inbox",
+    to: "/landlord/unified-inbox",
+    icon: Inbox,
+    showInDrawer: true,
+    requiresLandlordOrAdmin: true,
+  },
+  {
     id: "decision-inbox",
     label: "Decisions",
     to: "/decision-inbox",

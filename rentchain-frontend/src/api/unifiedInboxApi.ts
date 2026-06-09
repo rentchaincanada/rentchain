@@ -1,0 +1,68 @@
+import { apiFetch } from "./apiFetch";
+import { tenantApiFetch } from "./tenantApiFetch";
+
+export type UnifiedInboxRole = "tenant" | "landlord" | "contractor";
+
+export type UnifiedInboxPriority = "critical" | "high" | "normal" | "low";
+
+export type UnifiedInboxStatus = "unread" | "read" | "archived" | "muted" | "resolved";
+
+export type UnifiedInboxSourceKind =
+  | "tenant.message"
+  | "tenant.maintenance"
+  | "tenant.screening"
+  | "tenant.lease"
+  | "tenant.application"
+  | "tenant.notice"
+  | "tenant.viewing"
+  | "landlord.application"
+  | "landlord.screening"
+  | "landlord.lease"
+  | "landlord.maintenance"
+  | "landlord.message"
+  | "landlord.notice"
+  | "landlord.viewing"
+  | "landlord.work_order"
+  | "contractor.work_order"
+  | "contractor.message";
+
+export type UnifiedInboxRecord = {
+  id: string;
+  sourceKind: UnifiedInboxSourceKind;
+  sourceId: string;
+  audienceRole: UnifiedInboxRole;
+  audienceScopeKey: string;
+  title: string;
+  body: string;
+  priority: UnifiedInboxPriority;
+  status: UnifiedInboxStatus;
+  occurredAt: string;
+  readAt: string | null;
+  sourceRef: {
+    kind: UnifiedInboxSourceKind;
+    ref: string;
+  };
+  rawIdsIncluded: false;
+  tokensIncluded: false;
+  secretsIncluded: false;
+  providerPayloadIncluded: false;
+  storagePathIncluded: false;
+  privateNotesIncluded: false;
+};
+
+export type UnifiedInboxResponse = {
+  ok: true;
+  role: UnifiedInboxRole;
+  items: UnifiedInboxRecord[];
+  records: UnifiedInboxRecord[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
+export async function fetchUnifiedInbox(role: UnifiedInboxRole): Promise<UnifiedInboxResponse> {
+  if (role === "tenant") {
+    return tenantApiFetch<UnifiedInboxResponse>("/inbox");
+  }
+  return apiFetch<UnifiedInboxResponse>("/inbox");
+}

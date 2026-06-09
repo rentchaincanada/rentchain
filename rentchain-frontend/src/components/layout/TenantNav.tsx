@@ -12,6 +12,7 @@ type Props = {
 
 const navItems = [
   { label: "Dashboard", to: "/tenant/dashboard" },
+  { label: "Inbox", to: "/tenant/inbox" },
   { label: "Screening Requests", to: "/tenant/screening" },
   { label: "Profile", to: "/tenant/profile" },
   { label: "Onboarding", to: "/tenant/onboarding-hardening" },

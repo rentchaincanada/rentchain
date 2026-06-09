@@ -132,6 +132,7 @@ const PortfolioScoreHistoryPage = lazy(() => import("./pages/admin/PortfolioScor
 const PortfolioHealthSummaryPage = lazy(() => import("./pages/landlord/PortfolioHealthSummaryPage"));
 const LandlordAnalyticsPage = lazy(() => import("./pages/landlord/LandlordAnalyticsPage"));
 const LandlordInboxPage = lazy(() => import("./pages/landlord/LandlordInboxPage"));
+const UnifiedInboxPage = lazy(() => import("./pages/UnifiedInboxPage"));
 const OperationalCommandCenterPage = lazy(() => import("./pages/OperationalCommandCenterPage"));
 const DecisionInboxPage = lazy(() => import("./pages/DecisionInboxPage"));
 const AgentSupervisionPage = lazy(() => import("./pages/AgentSupervisionPage"));
@@ -580,6 +581,18 @@ function App() {
               <LandlordNav>
                 <Suspense fallback={null}>
                   <LandlordInboxPage />
+                </Suspense>
+              </LandlordNav>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/landlord/unified-inbox"
+          element={
+            <RequireAuth>
+              <LandlordNav>
+                <Suspense fallback={null}>
+                  <UnifiedInboxPage role="landlord" />
                 </Suspense>
               </LandlordNav>
             </RequireAuth>
@@ -1289,6 +1302,24 @@ function App() {
           }
         />
         <Route
+          path="/contractor/inbox"
+          element={
+            CONTRACTOR_PORTAL_ENABLED ? (
+              <RequireAuth>
+                <RequireRole allowed={["contractor", "admin"]} fallbackTo="/dashboard">
+                  <ContractorNav>
+                    <Suspense fallback={null}>
+                      <UnifiedInboxPage role="contractor" />
+                    </Suspense>
+                  </ContractorNav>
+                </RequireRole>
+              </RequireAuth>
+            ) : (
+              <TenantPortalComingSoon />
+            )
+          }
+        />
+        <Route
           path="/contractor/jobs/:id"
           element={
             CONTRACTOR_PORTAL_ENABLED ? (
@@ -1788,6 +1819,10 @@ function App() {
         <Route
           path="/tenant/messages"
           element={renderTenantShell(<TenantMessagesCenterPage />)}
+        />
+        <Route
+          path="/tenant/inbox"
+          element={renderTenantShell(suspensePage(<UnifiedInboxPage role="tenant" />))}
         />
         <Route
           path="/tenant/maintenance"

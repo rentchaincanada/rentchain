@@ -11,3 +11,4 @@ export * from "./tenantInboxAdapters";
 export * from "./landlordInboxAdapters";
 export * from "./contractorInboxAdapters";
 export * from "./deriveUnifiedInbox";
+export * from "./unifiedInboxService";
