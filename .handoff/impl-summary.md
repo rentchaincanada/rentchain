@@ -1,5 +1,5 @@
-PR: #PR_NUMBER_PENDING
-PR URL: PR_URL_PENDING
+PR: #1127
+PR URL: https://github.com/rentchaincanada/rentchain/pull/1127
 Branch: feat/unified-inbox-contractor-v1
 
 # Implementation Summary
