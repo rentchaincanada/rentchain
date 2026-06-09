@@ -9,4 +9,5 @@ export * from "./types";
 export * from "./safeInboxReferences";
 export * from "./tenantInboxAdapters";
 export * from "./landlordInboxAdapters";
+export * from "./contractorInboxAdapters";
 export * from "./deriveUnifiedInbox";

@@ -1,4 +1,8 @@
 import {
+  adaptContractorMessageToInboxEvent,
+  adaptContractorWorkOrderToInboxEvent,
+} from "./contractorInboxAdapters";
+import {
   adaptLandlordApplicationInboxToInboxEvent,
   adaptLandlordLeaseInboxToInboxEvent,
   adaptLandlordMaintenanceInboxToInboxEvent,
@@ -12,6 +16,7 @@ import {
   adaptTenantScreeningToInboxEvent,
 } from "./tenantInboxAdapters";
 import type {
+  ContractorScopeContext,
   LandlordScopeContext,
   TenantScopeContext,
   UnifiedInboxEvent,
@@ -32,6 +37,11 @@ type LandlordDerivationOptions = UnifiedInboxPaginationOptions & {
   screeningItems?: any[];
   leaseItems?: any[];
   maintenanceRequests?: any[];
+  messages?: any[];
+};
+
+type ContractorDerivationOptions = UnifiedInboxPaginationOptions & {
+  workOrders?: any[];
   messages?: any[];
 };
 
@@ -132,6 +142,21 @@ export async function deriveLandlordUnifiedInbox(
     ...(options.leaseItems || []).map((item) => adaptLandlordLeaseInboxToInboxEvent(item, context)),
     ...(options.maintenanceRequests || []).map((item) => adaptLandlordMaintenanceInboxToInboxEvent(item, context)),
     ...(options.messages || []).map((item) => adaptLandlordMessageInboxToInboxEvent(item, context)),
+  ].filter((item): item is UnifiedInboxEvent => Boolean(item));
+
+  return paginate(items, options);
+}
+
+export async function deriveContractorUnifiedInbox(
+  contractorId: string,
+  options: ContractorDerivationOptions = {}
+): Promise<UnifiedInboxPage> {
+  const context: ContractorScopeContext = { contractorId: String(contractorId || "").trim() };
+  if (!context.contractorId) return { items: [] };
+
+  const items = [
+    ...(options.workOrders || []).map((item) => adaptContractorWorkOrderToInboxEvent(item, context)),
+    ...(options.messages || []).map((item) => adaptContractorMessageToInboxEvent(item, context)),
   ].filter((item): item is UnifiedInboxEvent => Boolean(item));
 
   return paginate(items, options);
