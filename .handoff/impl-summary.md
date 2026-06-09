@@ -1,52 +1,46 @@
-PR: #1119
-PR URL: https://github.com/rentchaincanada/rentchain/pull/1119
-Branch: fix/contractor-invite-visibility-v1
+PR: #1120
+PR URL: https://github.com/rentchaincanada/rentchain/pull/1120
+Branch: fix/viewing-request-tenant-notification-v1
 
 # Implementation Summary
 
 ## Mission
-Establish contractor invite portal visibility and normalize contractor message projection safety.
+Tenant Viewing Time Confirmation Notification.
 
 ## Files Changed
-- `rentchain-api/src/services/contractorPortalService.ts`
-- `rentchain-api/src/routes/__tests__/contractorPortalRoutes.test.ts`
-- `rentchain-frontend/src/App.tsx`
-- `rentchain-frontend/src/App.routes.test.tsx`
-- `rentchain-frontend/src/api/contractorPortalApi.ts`
+- `rentchain-api/src/services/viewings/viewingService.ts`
+- `rentchain-api/src/routes/__tests__/viewingRoutes.test.ts`
 
 ## What Changed
-- Routed `/contractor/invite/:token` and `/contractor/invite?invite=...` to `ContractorInviteAcceptPage`.
-- Removed sender display names from contractor-visible message projection to prevent stored landlord/operator names from being returned in contractor message responses.
-- Kept stored internal contractor message metadata unchanged for server-side authorization and audit continuity.
-- Removed obsolete `landlordId` and `senderName` fields from the contractor message frontend response type.
-- Added backend tests proving listed and embedded contractor messages exclude landlord identifiers, sender identifiers, recipient role metadata, and landlord/operator display names.
-- Added frontend route tests proving both contractor invite URL forms render the invite acceptance page.
+- Added tenant-facing viewing confirmation email delivery after a landlord-selected slot is successfully persisted.
+- Resolved the recipient only from `ViewingRequestDoc.applicantEmail` and skipped notification when the value is missing or fails email format validation.
+- Built email content through the existing base email template helpers and existing `sendEmail` infrastructure.
+- Included readable UTC viewing date and time, safe label-based property/unit context, and slot notes when present.
+- Avoided raw property or unit ID fallback in tenant-facing email content by using generic location text when labels are unavailable.
+- Kept email delivery failures non-blocking so viewing scheduling still succeeds after persistence.
 
 ## Governance
-- Scope limited to contractor invite routing and contractor message projection safety.
-- No auth, Firestore rules, billing, screening, pricing, deployment, dependency, landlord workflow, tenant workflow, or admin workflow changes.
-- Contractor routes still use existing `requireContractor` middleware and self-scope checks.
-- Message storage remains append-safe; only contractor-facing projection changed.
-- Contractor message responses now use explicit whitelist projection fields.
+- Scope limited to backend viewing service notification behavior and viewing route tests.
+- No auth, route, Firestore rules, billing, screening, pricing, deployment, dependency, frontend, or data model changes.
+- Viewing slot selection remains landlord-only through the existing route guard.
+- Notification is additive only and does not alter the viewing request document shape.
+- Tenant-facing email content avoids raw IDs, tokens, storage paths, provider payloads, or debug details.
 
 ## Validation
-- `npm --prefix rentchain-api run test -- src/routes/__tests__/contractorPortalRoutes.test.ts`: PASS, 6 tests.
+- `npm --prefix rentchain-api run test -- src/routes/__tests__/viewingRoutes.test.ts`: PASS, 14 tests.
 - `npm --prefix rentchain-api run build`: PASS.
-- `npm --prefix rentchain-frontend run test -- src/App.routes.test.tsx src/pages/contractor/ContractorJobsPage.test.tsx`: PASS, 56 tests.
-- `npm --prefix rentchain-frontend run test`: PASS, 294 files, 1157 tests.
-- `npm --prefix rentchain-frontend run build`: PASS.
 - `git diff --check`: PASS.
 
 ## Manual QA
-- Manual browser QA not completed in this environment.
-- Full invite acceptance QA requires seeded preview contractor invite tokens and authenticated contractor test accounts.
-- Automated route and projection tests verify the mission-critical routing and response-shape behavior.
+- Manual browser/email QA not completed locally.
+- Full manual QA requires seeded viewing request data, landlord preview access, and configured email provider credentials.
+- Automated tests verify the mission-critical notification behavior, skip behavior, failure handling, and invalid selection behavior.
 
 ## Known Limitations
-- `/contractor/signup` remains on the existing legacy onboarding redirect path; this mission only wires `/contractor/invite/:token` and `/contractor/invite?invite=...`.
-- Contractor invite acceptance still depends on existing backend invite token state and account setup.
-- Stored internal contractor message records still retain landlord scope metadata for authorization; the contractor-facing projection removes that metadata.
+- Datetime rendering uses deterministic UTC text and does not add complex timezone preference handling.
+- Email delivery depends on configured provider environment variables.
+- The notification link uses the existing viewing email link pattern.
 
 ## Recommended Follow-Up
-- Run manual preview QA with seeded contractor invite tokens.
-- Verify contractor invite acceptance across unauthenticated, contractor-authenticated, and wrong-role authenticated sessions.
+- Run preview manual QA with seeded viewing requests and a configured email provider.
+- Confirm actual email delivery to a test applicant address after selecting a proposed viewing slot.
