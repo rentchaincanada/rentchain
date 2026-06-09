@@ -1,47 +1,57 @@
-PR: #1121
-PR URL: https://github.com/rentchaincanada/rentchain/pull/1121
-Branch: fix/landing-page-login-cta-v1
+PR: #1124
+PR URL: https://github.com/rentchaincanada/rentchain/pull/1124
+Branch: feat/unified-inbox-data-layer-v1
 
 # Implementation Summary
 
 ## Mission
-Establish a visually prominent Log In call-to-action on the landing page while preserving the existing signup flow.
+Implement the unified inbox data layer foundation with role-safe tenant and landlord source adapters.
 
 ## Files Changed
-- `rentchain-frontend/src/pages/marketing/LandingPage.tsx`
-- `rentchain-frontend/src/pages/marketing/LandingPage.test.tsx`
+- `rentchain-api/src/services/unifiedInbox/types.ts`
+- `rentchain-api/src/services/unifiedInbox/safeInboxReferences.ts`
+- `rentchain-api/src/services/unifiedInbox/tenantInboxAdapters.ts`
+- `rentchain-api/src/services/unifiedInbox/landlordInboxAdapters.ts`
+- `rentchain-api/src/services/unifiedInbox/deriveUnifiedInbox.ts`
+- `rentchain-api/src/services/unifiedInbox/index.ts`
+- `rentchain-api/src/services/unifiedInbox/__tests__/index.test.ts`
+- `rentchain-api/src/tests/unifiedInbox/safeInboxReferences.test.ts`
+- `rentchain-api/src/tests/unifiedInbox/tenantInboxAdapters.test.ts`
+- `rentchain-api/src/tests/unifiedInbox/landlordInboxAdapters.test.ts`
+- `rentchain-api/src/tests/unifiedInbox/deriveUnifiedInbox.test.ts`
 
 ## What Changed
-- Added co-equal `Sign Up Free` and `Log In` button CTAs in the landing page hero.
-- Added matching `Sign Up Free` and `Log In` CTAs in the closing landing page section.
-- Preserved the existing signup attribution behavior and destination: `/signup?next=/properties&intent=registry_readiness`.
-- Added explicit login CTA routing to `/login`.
-- Updated landing page tests to verify both CTAs render and route correctly.
+- Added canonical unified inbox event types with explicit tenant, landlord, and contractor role surfaces.
+- Added deterministic safe inbox ID, source reference, and scope key helpers using stable hash output.
+- Added pure tenant adapters for notifications, messages, maintenance, and screening source records.
+- Added pure landlord adapters for application, screening, lease, maintenance, and message source records.
+- Added derivation helpers that accept already-loaded source arrays, filter unsafe records, sort deterministically, and return cursor-paginated inbox pages.
+- Added projection tests for role scope filtering, sensitive-field rejection, safe identifier generation, source immutability, ordering, and pagination.
 
 ## Governance
-- Scope limited to the landing page component and its direct test.
-- No auth logic, signup logic, login logic, role-specific onboarding, backend routes, Firestore rules, billing, screening, pricing, deployment, or dependency changes.
-- No tenant, contractor, or landlord account creation behavior changed.
-- Future role-specific onboarding experience remains out of scope for a separate audit.
+- Scope limited to backend service-layer data shaping and tests.
+- No routes, UI, persistence writes, realtime subscriptions, background workers, Firestore rules, auth logic, billing, screening adapters, pricing, deployment, or dependency changes.
+- Tenant and landlord projections use explicit adapters and safe references.
+- Contractor implementation remains out of scope for this mission.
+- Source records are never mutated by adapters or derivation helpers.
 
 ## Validation
-- `npm --prefix rentchain-frontend run test -- src/pages/marketing/LandingPage.test.tsx`: PASS, 4 tests.
-- `npm --prefix rentchain-frontend run build`: PASS.
+- `npm --prefix rentchain-api test -- src/tests/unifiedInbox/`: PASS, 4 files, 12 tests.
+- `npm --prefix rentchain-api test -- src/services/unifiedInbox/`: PASS, 1 file, 1 test.
+- `npm --prefix rentchain-api run build`: PASS.
 - `git diff --check`: PASS.
+- `npm --prefix rentchain-api run lint -- src/services/unifiedInbox/ src/tests/unifiedInbox/`: NOT RUN, package has no `lint` script.
 
 ## Manual QA
-- Local browser QA completed with the dev gate unlocked in browser storage.
-- Desktop 1440x900: both CTAs visible, 48px minimum height, click targets route correctly.
-- Tablet 768x1024: both CTAs visible, stacked cleanly, 48px minimum height, click targets route correctly.
-- Mobile 375x812: both CTAs visible, stacked cleanly, 48px minimum height, click targets route correctly.
-- `Log In` routed to `/login`.
-- `Sign Up Free` routed to `/signup?next=/properties&intent=registry_readiness`.
+- N/A. This is a backend data-layer foundation with no routes, UI, or user-visible runtime behavior.
+- Role separation, projection safety, append safety, and no-mutation behavior are covered by automated tests and code inspection.
 
 ## Known Limitations
-- Screen reader testing with NVDA, JAWS, or VoiceOver was not completed in this environment.
-- Color contrast was reviewed through existing design tokens and button variants, not an external contrast tool.
-- Broader login/signup onboarding audit is intentionally deferred.
+- Derivation helpers accept already-loaded source records and do not perform Firestore reads in this mission.
+- Contractor inbox adapters are intentionally deferred.
+- Route integration, unread state persistence, realtime delivery, admin/support tooling, and UI rendering are intentionally deferred.
+- Backend lint could not run because the package has no lint script.
 
 ## Recommended Follow-Up
-- Run preview QA on the deployed Vercel URL after PR checks complete.
-- Schedule `audit/auth-onboarding-experience-v1` to review role-specific login and signup entry points.
+- Add route-level unified inbox retrieval after this data layer is reviewed and approved.
+- Add contractor adapters in a separate scoped mission after tenant and landlord projections are accepted.
