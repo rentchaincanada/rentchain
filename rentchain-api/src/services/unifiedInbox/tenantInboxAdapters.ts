@@ -36,6 +36,15 @@ const SENSITIVE_KEYS = [
   "rawId",
   "firestoreId",
   "contractorInternalNotes",
+  "schedulingMetadata",
+  "vendorIntegrationFields",
+  "adminEnforcementFlags",
+  "enforcementMetadata",
+  "internalProceduralNotes",
+  "paymentProcessingMetadata",
+  "landlordDecisionReasoning",
+  "riskAssessment",
+  "internalFlags",
 ];
 
 const TENANT_NOTIFICATION_SOURCE_KINDS: SourceKind[] = [
@@ -113,6 +122,28 @@ function hasUnsafeText(...values: unknown[]): boolean {
 function normalizeTenantSourceKind(value: unknown): SourceKind {
   const next = asString(value, "tenant.application", 80);
   return TENANT_NOTIFICATION_SOURCE_KINDS.includes(next as SourceKind) ? (next as SourceKind) : "tenant.application";
+}
+
+function tenantStatusForLifecycle(value: unknown, readAt: string | null): UnifiedInboxStatus {
+  const next = asString(value, "", 80).toLowerCase();
+  if (next === "completed" || next === "approved" || next === "acknowledged") return readAt ? "read" : "resolved";
+  if (next === "cancelled" || next === "canceled" || next === "rejected" || next === "expired") return "archived";
+  return normalizeStatus(next, readAt);
+}
+
+function tenantPriorityForStatus(value: unknown, fallback: UnifiedInboxPriority = "normal"): UnifiedInboxPriority {
+  const next = asString(value, "", 80).toLowerCase();
+  if (
+    next === "requested" ||
+    next === "pending_documents" ||
+    next === "resubmit_needed" ||
+    next === "deadline_approaching" ||
+    next === "requires_acknowledgment" ||
+    next === "served"
+  ) {
+    return "high";
+  }
+  return normalizePriority(next || fallback);
 }
 
 function makeTenantEvent(params: {
@@ -232,6 +263,106 @@ export function adaptTenantScreeningToInboxEvent(
     priority: normalizePriority(screeningRequest?.priority || (screeningStatus === "consent_pending" ? "high" : "normal")),
     status: normalizeStatus(screeningRequest?.inboxStatus, readAt),
     occurredAt: toIso(screeningRequest?.requestedAt || screeningRequest?.createdAt || screeningRequest?.updatedAt),
+    readAt,
+  });
+}
+
+export function adaptTenantViewingRequestToInboxEvent(
+  viewingRequest: any,
+  tenantScopeContext: TenantScopeContext
+): UnifiedInboxEvent | null {
+  if (!hasTenantScope(viewingRequest, tenantScopeContext) || hasSensitiveValues(viewingRequest)) return null;
+  const stableKey = asString(viewingRequest?.id || viewingRequest?.viewingRequestId, "", 240);
+  if (!stableKey) return null;
+  const status = asString(viewingRequest?.status, "requested", 80).toLowerCase();
+  const selectedStart = asString(viewingRequest?.selectedSlot?.startAt || viewingRequest?.scheduledFor || viewingRequest?.newTime, "", 120);
+  if (hasUnsafeText(viewingRequest?.requestedMessage, viewingRequest?.status, selectedStart)) return null;
+  const readAt = viewingRequest?.readAt ? toIso(viewingRequest.readAt) : null;
+  const title =
+    status === "scheduled"
+      ? "Viewing scheduled"
+      : status === "cancelled" || status === "canceled"
+      ? "Viewing cancelled"
+      : status === "slots_proposed"
+      ? "Viewing times proposed"
+      : status === "completed"
+      ? "Viewing completed"
+      : "Viewing request submitted";
+  const body = selectedStart
+    ? `Viewing status: ${status}. Scheduled time: ${toIso(selectedStart)}`
+    : `Viewing status: ${status}`;
+  return makeTenantEvent({
+    sourceKind: "tenant.viewing",
+    sourceStableKey: stableKey,
+    context: tenantScopeContext,
+    title,
+    body,
+    priority: tenantPriorityForStatus(status),
+    status: tenantStatusForLifecycle(status, readAt),
+    occurredAt: toIso(
+      viewingRequest?.updatedAt ||
+        viewingRequest?.scheduledAt ||
+        viewingRequest?.cancelledAt ||
+        viewingRequest?.requestedAt ||
+        viewingRequest?.createdAt
+    ),
+    readAt,
+  });
+}
+
+export function adaptTenantLeaseNoticeToInboxEvent(
+  notice: any,
+  tenantScopeContext: TenantScopeContext
+): UnifiedInboxEvent | null {
+  if (!hasTenantScope(notice, tenantScopeContext) || hasSensitiveValues(notice)) return null;
+  const stableKey = asString(notice?.id || notice?.noticeId || notice?.sourceKey, "", 240);
+  if (!stableKey) return null;
+  const noticeType = asString(notice?.noticeType || notice?.type, "lease_notice", 120);
+  const status = asString(notice?.status || notice?.noticeStatus, "served", 80).toLowerCase();
+  const deadline = asString(notice?.deadline || notice?.responseDeadline || notice?.expiresAt, "", 120);
+  if (hasUnsafeText(notice?.title, notice?.summary, noticeType, status, deadline)) return null;
+  const readAt = notice?.readAt || status === "acknowledged" ? toIso(notice?.readAt || notice?.acknowledgedAt || notice?.updatedAt) : null;
+  return makeTenantEvent({
+    sourceKind: "tenant.notice",
+    sourceStableKey: stableKey,
+    context: tenantScopeContext,
+    title: status === "acknowledged" ? "Lease notice acknowledged" : "Lease notice served",
+    body: deadline ? `Notice type: ${noticeType}. Deadline: ${toIso(deadline)}` : `Notice type: ${noticeType}`,
+    priority: tenantPriorityForStatus(status),
+    status: tenantStatusForLifecycle(status, readAt),
+    occurredAt: toIso(notice?.servedAt || notice?.createdAt || notice?.updatedAt),
+    readAt,
+  });
+}
+
+export function adaptTenantApplicationStatusToInboxEvent(
+  application: any,
+  tenantScopeContext: TenantScopeContext
+): UnifiedInboxEvent | null {
+  if (!hasTenantScope(application, tenantScopeContext) || hasSensitiveValues(application)) return null;
+  const stableKey = asString(application?.id || application?.applicationId || application?.sourceKey, "", 240);
+  if (!stableKey) return null;
+  const status = asString(application?.status || application?.applicationStatus, "started", 80).toLowerCase();
+  const nextAction = asString(application?.nextAction || application?.nextRequiredAction, "", 240);
+  if (hasUnsafeText(application?.title, application?.summary, status, nextAction)) return null;
+  const readAt = application?.readAt ? toIso(application.readAt) : null;
+  const title =
+    status === "approved"
+      ? "Application approved"
+      : status === "rejected"
+      ? "Application update"
+      : status === "pending_documents" || status === "resubmit_needed"
+      ? "Application action needed"
+      : "Application status updated";
+  return makeTenantEvent({
+    sourceKind: "tenant.application",
+    sourceStableKey: stableKey,
+    context: tenantScopeContext,
+    title,
+    body: nextAction || `Application status: ${status}`,
+    priority: tenantPriorityForStatus(status),
+    status: tenantStatusForLifecycle(status, readAt),
+    occurredAt: toIso(application?.submittedAt || application?.updatedAt || application?.createdAt),
     readAt,
   });
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   adaptContractorMessageToInboxEvent,
+  adaptContractorWorkOrderCommunicationToInboxEvent,
   adaptContractorWorkOrderToInboxEvent,
   deriveContractorUnifiedInbox,
   safeIdContainsRawValue,
@@ -72,7 +73,40 @@ describe("contractor inbox adapters", () => {
     expect(JSON.stringify(event)).not.toContain("landlord_raw_abc");
   });
 
+  it("projects work order communications with contractor scope", () => {
+    const event = adaptContractorWorkOrderCommunicationToInboxEvent(
+      {
+        id: "work_order_message_raw_1",
+        contractorId: "contractor_raw_abc",
+        workOrderId: "work_order_raw_1",
+        text: "Deadline approaching. Please confirm availability.",
+        createdAt: "2026-06-09T13:00:00.000Z",
+      },
+      context
+    );
+
+    expect(event).toMatchObject({
+      sourceKind: "contractor.message",
+      audienceRole: "contractor",
+      title: "Work order message from property manager",
+      priority: "high",
+    });
+    expect(JSON.stringify(event)).not.toContain("work_order_message_raw_1");
+    expect(JSON.stringify(event)).not.toContain("work_order_raw_1");
+    expect(JSON.stringify(event)).not.toContain("contractor_raw_abc");
+  });
+
   it("rejects cross-contractor and sensitive source records", () => {
+    expect(
+      adaptContractorWorkOrderCommunicationToInboxEvent(
+        {
+          id: "message_raw_2",
+          contractorId: "contractor_raw_abc",
+          text: "landlordId leaked in body",
+        },
+        context
+      )
+    ).toBeNull();
     expect(
       adaptContractorWorkOrderToInboxEvent(
         {
