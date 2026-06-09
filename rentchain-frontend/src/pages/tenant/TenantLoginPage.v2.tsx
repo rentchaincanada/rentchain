@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { apiFetch } from "../../api/apiFetch";
+import { LoginForm } from "../../components/auth/LoginForm";
 import {
   resolveTenantPostAuthDestination,
   TENANT_DEFAULT_DESTINATION,
@@ -63,52 +64,45 @@ const TenantLoginPageV2: React.FC = () => {
     }
   }
 
+  if (!sent) {
+    return (
+      <LoginForm
+        title="Tenant login"
+        subtitle="We will email you a one-time login link."
+        roleLabel="Tenant access"
+        email={email}
+        onEmailChange={setEmail}
+        passwordRequired={false}
+        showForgotPassword={false}
+        onSubmit={onSubmit}
+        isLoading={isSending}
+        disabled={!email.trim()}
+        error={error}
+        submitLabel="Email me a login link"
+        loadingLabel="Sending..."
+        statusMessage="Use the email associated with your tenant profile."
+        banner={
+          inviteToken
+            ? {
+                title: "Invite context detected",
+                body: "We will return you to onboarding after sign-in.",
+              }
+            : null
+        }
+        footer={
+          <div style={{ fontSize: 13, color: "#64748b" }}>
+            Have an invite link? Open it to accept your invite. <Link to="/">Back to main</Link>
+          </div>
+        }
+      />
+    );
+  }
+
   return (
     <div style={{ maxWidth: 480, margin: "48px auto", padding: 16 }}>
       <Card>
         <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800 }}>Tenant login</h1>
-        <p style={{ marginTop: 8, opacity: 0.75 }}>We’ll email you a one-time login link.</p>
-
-        {!sent ? (
-          <form onSubmit={onSubmit} style={{ display: "grid", gap: 12, marginTop: 16 }}>
-            <label style={{ display: "grid", gap: 6 }}>
-              <span style={{ fontSize: 13, opacity: 0.75 }}>Email</span>
-              <input
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="tenant@email.com"
-                style={{ padding: 10, borderRadius: 10, border: "1px solid rgba(0,0,0,0.15)" }}
-              />
-            </label>
-
-            {error ? <div style={{ color: "crimson" }}>{error}</div> : null}
-
-            <button
-              type="submit"
-              disabled={isSending || !email.trim()}
-              style={{
-                padding: "10px 12px",
-                borderRadius: 10,
-                border: "1px solid rgba(0,0,0,0.15)",
-                background: "black",
-                color: "white",
-                fontWeight: 700,
-                cursor: isSending || !email.trim() ? "not-allowed" : "pointer",
-              }}
-            >
-              {isSending ? "Sending…" : "Email me a login link"}
-            </button>
-
-          <div style={{ fontSize: 13, opacity: 0.75 }}>
-            Have an invite link? Open it to accept your invite. <Link to="/">Back to main</Link>
-          </div>
-          {inviteToken ? (
-            <div style={{ fontSize: 13, opacity: 0.75 }}>
-              Invite context detected. We will return you to onboarding after sign-in.
-            </div>
-          ) : null}
-        </form>
-        ) : (
+        <p style={{ marginTop: 8, opacity: 0.75 }}>We will email you a one-time login link.</p>
           <div style={{ marginTop: 16, display: "grid", gap: 10 }}>
             <div style={{ color: "green", fontWeight: 700 }}>
               If an account exists for that email, we sent a login link.
@@ -146,7 +140,6 @@ const TenantLoginPageV2: React.FC = () => {
               </button>
             </div>
           </div>
-        )}
       </Card>
     </div>
   );
