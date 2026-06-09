@@ -46,6 +46,7 @@ import billingRoutes from "./routes/billingRoutes";
 import tenantSignalsRoutes from "./routes/tenantSignalsRoutes";
 import reportingRoutes from "./routes/reportingRoutes";
 import tenantInvitesRoutes from "./routes/tenantInvitesRoutes";
+import tenantInboxRoutes from "./routes/tenantInboxRoutes";
 import tenantPortalRoutes from "./routes/tenantPortalRoutes";
 import recipientTrustReviewRoutes from "./routes/recipientTrustReviewRoutes";
 import tenantParticipationRoutes from "./routes/tenantParticipationRoutes";
@@ -594,6 +595,7 @@ app.use("/api/application-links", routeSource("landlordApplicationLinksRoutes.ts
 app.use("/api/tenant-invites", rateLimitTenantWorkspaceEntry);
 app.use("/api/tenant-invites", tenantInvitesRoutes);
 app.use("/api/tenant/invite", rateLimitTenantWorkspaceEntry);
+app.use("/api/tenant", routeSource("tenantInboxRoutes.ts"), tenantInboxRoutes);
 app.use("/api/tenant", routeSource("tenantPortalRoutes.ts"), tenantPortalRoutes);
 app.use("/api", referralsRoutes);
 app.use(
