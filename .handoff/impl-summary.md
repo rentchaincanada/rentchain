@@ -1,46 +1,47 @@
-PR: #1120
-PR URL: https://github.com/rentchaincanada/rentchain/pull/1120
-Branch: fix/viewing-request-tenant-notification-v1
+PR: #1121
+PR URL: https://github.com/rentchaincanada/rentchain/pull/1121
+Branch: fix/landing-page-login-cta-v1
 
 # Implementation Summary
 
 ## Mission
-Tenant Viewing Time Confirmation Notification.
+Establish a visually prominent Log In call-to-action on the landing page while preserving the existing signup flow.
 
 ## Files Changed
-- `rentchain-api/src/services/viewings/viewingService.ts`
-- `rentchain-api/src/routes/__tests__/viewingRoutes.test.ts`
+- `rentchain-frontend/src/pages/marketing/LandingPage.tsx`
+- `rentchain-frontend/src/pages/marketing/LandingPage.test.tsx`
 
 ## What Changed
-- Added tenant-facing viewing confirmation email delivery after a landlord-selected slot is successfully persisted.
-- Resolved the recipient only from `ViewingRequestDoc.applicantEmail` and skipped notification when the value is missing or fails email format validation.
-- Built email content through the existing base email template helpers and existing `sendEmail` infrastructure.
-- Included readable UTC viewing date and time, safe label-based property/unit context, and slot notes when present.
-- Avoided raw property or unit ID fallback in tenant-facing email content by using generic location text when labels are unavailable.
-- Kept email delivery failures non-blocking so viewing scheduling still succeeds after persistence.
+- Added co-equal `Sign Up Free` and `Log In` button CTAs in the landing page hero.
+- Added matching `Sign Up Free` and `Log In` CTAs in the closing landing page section.
+- Preserved the existing signup attribution behavior and destination: `/signup?next=/properties&intent=registry_readiness`.
+- Added explicit login CTA routing to `/login`.
+- Updated landing page tests to verify both CTAs render and route correctly.
 
 ## Governance
-- Scope limited to backend viewing service notification behavior and viewing route tests.
-- No auth, route, Firestore rules, billing, screening, pricing, deployment, dependency, frontend, or data model changes.
-- Viewing slot selection remains landlord-only through the existing route guard.
-- Notification is additive only and does not alter the viewing request document shape.
-- Tenant-facing email content avoids raw IDs, tokens, storage paths, provider payloads, or debug details.
+- Scope limited to the landing page component and its direct test.
+- No auth logic, signup logic, login logic, role-specific onboarding, backend routes, Firestore rules, billing, screening, pricing, deployment, or dependency changes.
+- No tenant, contractor, or landlord account creation behavior changed.
+- Future role-specific onboarding experience remains out of scope for a separate audit.
 
 ## Validation
-- `npm --prefix rentchain-api run test -- src/routes/__tests__/viewingRoutes.test.ts`: PASS, 14 tests.
-- `npm --prefix rentchain-api run build`: PASS.
+- `npm --prefix rentchain-frontend run test -- src/pages/marketing/LandingPage.test.tsx`: PASS, 4 tests.
+- `npm --prefix rentchain-frontend run build`: PASS.
 - `git diff --check`: PASS.
 
 ## Manual QA
-- Manual browser/email QA not completed locally.
-- Full manual QA requires seeded viewing request data, landlord preview access, and configured email provider credentials.
-- Automated tests verify the mission-critical notification behavior, skip behavior, failure handling, and invalid selection behavior.
+- Local browser QA completed with the dev gate unlocked in browser storage.
+- Desktop 1440x900: both CTAs visible, 48px minimum height, click targets route correctly.
+- Tablet 768x1024: both CTAs visible, stacked cleanly, 48px minimum height, click targets route correctly.
+- Mobile 375x812: both CTAs visible, stacked cleanly, 48px minimum height, click targets route correctly.
+- `Log In` routed to `/login`.
+- `Sign Up Free` routed to `/signup?next=/properties&intent=registry_readiness`.
 
 ## Known Limitations
-- Datetime rendering uses deterministic UTC text and does not add complex timezone preference handling.
-- Email delivery depends on configured provider environment variables.
-- The notification link uses the existing viewing email link pattern.
+- Screen reader testing with NVDA, JAWS, or VoiceOver was not completed in this environment.
+- Color contrast was reviewed through existing design tokens and button variants, not an external contrast tool.
+- Broader login/signup onboarding audit is intentionally deferred.
 
 ## Recommended Follow-Up
-- Run preview manual QA with seeded viewing requests and a configured email provider.
-- Confirm actual email delivery to a test applicant address after selecting a proposed viewing slot.
+- Run preview QA on the deployed Vercel URL after PR checks complete.
+- Schedule `audit/auth-onboarding-experience-v1` to review role-specific login and signup entry points.
