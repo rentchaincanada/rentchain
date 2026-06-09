@@ -45,6 +45,7 @@ const TENANT_NOTIFICATION_SOURCE_KINDS: SourceKind[] = [
   "tenant.message",
   "tenant.notice",
   "tenant.screening",
+  "tenant.viewing",
 ];
 
 // TENANT PROJECTION: tenant events must exclude landlord notes, provider payloads, raw IDs, admin decisions, and private operational notes.

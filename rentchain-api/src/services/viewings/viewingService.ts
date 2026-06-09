@@ -1,3 +1,4 @@
+import { createHash } from "crypto";
 import { db } from "../../firebase";
 import { buildEmailHtml, buildEmailText } from "../../email/templates/baseEmailTemplate";
 import { sendEmail } from "../emailService";
@@ -8,11 +9,13 @@ import {
   newViewingRequestId,
   resolveViewingOwnershipContext,
   saveViewingRequestDoc,
+  saveViewingRequestWithNotification,
 } from "./viewingRepository";
 import type {
   CancelViewingRequestInput,
   CreateViewingRequestInput,
   ProposeViewingSlotsInput,
+  RescheduleViewingRequestInput,
   SelectViewingSlotInput,
   SelectedViewingSlot,
   ViewingRequestDoc,
@@ -268,6 +271,10 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+function safeHash(value: string): string {
+  return createHash("sha256").update(value).digest("base64url").slice(0, 24);
+}
+
 function normalizeString(value: unknown): string {
   return String(value || "").trim();
 }
@@ -304,6 +311,112 @@ function validateDateString(value: string, fieldName: string) {
     throw new ViewingServiceError(400, "validation_failed", `${fieldName} must be a valid datetime.`);
   }
   return parsed;
+}
+
+function safeViewingRef(viewingRequestId: string): string {
+  return `viewing_v1_${safeHash(`viewing:${viewingRequestId}`)}`;
+}
+
+function notificationIdForViewing(params: {
+  type: "viewing-cancelled" | "viewing-rescheduled";
+  viewingRequestId: string;
+  transitionKey: string;
+}) {
+  return `viewing_notification_v1_${safeHash(`${params.type}:${params.viewingRequestId}:${params.transitionKey}`)}`;
+}
+
+function auditEventIdForViewing(params: {
+  type: "viewing_cancelled" | "viewing_rescheduled";
+  viewingRequestId: string;
+  transitionKey: string;
+}) {
+  return `viewing_event_v1_${safeHash(`${params.type}:${params.viewingRequestId}:${params.transitionKey}`)}`;
+}
+
+function tenantScopeKeyForViewing(viewingRequest: ViewingRequestDoc): string {
+  const directTenantId = optionalString((viewingRequest as any)?.tenantId || (viewingRequest as any)?.applicantTenantId);
+  if (directTenantId) return directTenantId;
+  return `applicant_email_v1_${safeHash(String(viewingRequest.applicantEmail || "").toLowerCase())}`;
+}
+
+function buildViewingTenantNotification(params: {
+  type: "viewing-cancelled" | "viewing-rescheduled";
+  viewingRequest: ViewingRequestDoc;
+  title: string;
+  summary: string;
+  transitionKey: string;
+  status: "info" | "warning";
+  occurredAt: string;
+  payload: Record<string, unknown>;
+}) {
+  const tenantId = tenantScopeKeyForViewing(params.viewingRequest);
+  const viewingReference = safeViewingRef(params.viewingRequest.id);
+  return {
+    id: notificationIdForViewing({
+      type: params.type,
+      viewingRequestId: params.viewingRequest.id,
+      transitionKey: params.transitionKey,
+    }),
+    tenantId,
+    tenantWorkspaceId: tenantId,
+    applicantEmail: optionalString(params.viewingRequest.applicantEmail),
+    recipientRole: "applicant",
+    type: "viewing",
+    notificationType: params.type,
+    sourceKind: "tenant.viewing",
+    sourceType: "viewing",
+    title: params.title,
+    summary: params.summary,
+    body: params.summary,
+    status: params.status,
+    priority: params.status === "warning" ? "high" : "normal",
+    relatedPath: "/viewings",
+    createdAt: params.occurredAt,
+    updatedAt: params.occurredAt,
+    readAt: null,
+    read: false,
+    viewingRequestId: viewingReference,
+    payload: {
+      ...params.payload,
+      viewingRequestId: viewingReference,
+      landlordName: "Landlord",
+    },
+    sourceRefs: [
+      {
+        sourceType: "viewing",
+        referenceKey: `viewing:${viewingReference}`,
+        label: "Viewing request",
+      },
+    ],
+    rawIdsIncluded: false,
+    payloadIncluded: false,
+  };
+}
+
+function buildViewingAuditEvent(params: {
+  type: "viewing_cancelled" | "viewing_rescheduled";
+  viewingRequest: ViewingRequestDoc;
+  actorUserId: string;
+  transitionKey: string;
+  occurredAt: string;
+  metadata: Record<string, unknown>;
+}) {
+  return {
+    id: auditEventIdForViewing({
+      type: params.type,
+      viewingRequestId: params.viewingRequest.id,
+      transitionKey: params.transitionKey,
+    }),
+    viewingRequestRef: safeViewingRef(params.viewingRequest.id),
+    landlordId: params.viewingRequest.landlordId,
+    actorRole: "landlord",
+    actorUserId: params.actorUserId,
+    eventType: params.type,
+    createdAt: params.occurredAt,
+    metadata: params.metadata,
+    rawIdsIncluded: false,
+    payloadIncluded: false,
+  };
 }
 
 function normalizeSlot(input: ViewingSlot, index: number): ViewingSlot {
@@ -546,6 +659,7 @@ export async function cancelViewingRequest(
   input: CancelViewingRequestInput
 ): Promise<ViewingRequestDoc> {
   const existing = await getViewingRequestForLandlord(viewingRequestId, landlordId);
+  if (existing.status === "cancelled") return notifyViewingCancelled(existing.id, landlordId, userId, input);
   if (!["requested", "slots_proposed", "scheduled"].includes(existing.status)) {
     throw new ViewingServiceError(
       409,
@@ -553,13 +667,162 @@ export async function cancelViewingRequest(
       "This viewing request cannot be cancelled."
     );
   }
-  const now = nowIso();
-  return saveViewingRequestDoc({
+  return notifyViewingCancelled(existing.id, landlordId, userId, input);
+}
+
+export async function notifyViewingCancelled(
+  viewingRequestId: string,
+  landlordId: string,
+  userIdOrReason?: string | null,
+  inputOrReason?: CancelViewingRequestInput | string | null
+): Promise<ViewingRequestDoc> {
+  const existing = await getViewingRequestForLandlord(viewingRequestId, landlordId);
+  const userId =
+    typeof inputOrReason === "object" && inputOrReason !== null
+      ? optionalString(userIdOrReason) || landlordId
+      : landlordId;
+  const cancellationReason =
+    typeof inputOrReason === "object" && inputOrReason !== null
+      ? optionalString(inputOrReason.cancelledReason)
+      : optionalString(inputOrReason || userIdOrReason);
+  const now = existing.status === "cancelled" && existing.cancelledAt ? existing.cancelledAt : nowIso();
+  const next: ViewingRequestDoc = {
     ...existing,
     status: "cancelled",
     cancelledAt: now,
-    cancelledReason: optionalString(input.cancelledReason),
+    cancelledReason: cancellationReason || existing.cancelledReason || null,
     updatedAt: now,
     updatedByUserId: userId,
+  };
+  const locationSummary = await resolveViewingLocationSummary(existing);
+  const transitionKey = "cancelled";
+  const notification = buildViewingTenantNotification({
+    type: "viewing-cancelled",
+    viewingRequest: next,
+    title: "Viewing cancelled",
+    summary: `Your viewing for ${locationSummary} has been cancelled.`,
+    transitionKey,
+    status: "warning",
+    occurredAt: now,
+    payload: {
+      cancellationReason: next.cancelledReason,
+    },
   });
+  const auditEvent = buildViewingAuditEvent({
+    type: "viewing_cancelled",
+    viewingRequest: next,
+    actorUserId: userId,
+    transitionKey,
+    occurredAt: now,
+    metadata: {
+      status: "cancelled",
+      cancellationReasonProvided: Boolean(next.cancelledReason),
+    },
+  });
+  return saveViewingRequestWithNotification({ viewingRequest: next, notification, auditEvent });
+}
+
+export async function rescheduleViewingRequest(
+  viewingRequestId: string,
+  landlordId: string,
+  userId: string,
+  input: RescheduleViewingRequestInput
+): Promise<ViewingRequestDoc> {
+  const existing = await getViewingRequestForLandlord(viewingRequestId, landlordId);
+  if (existing.status !== "scheduled" || !existing.selectedSlot) {
+    throw new ViewingServiceError(
+      409,
+      "invalid_status_transition",
+      "Only scheduled viewings can be rescheduled."
+    );
+  }
+  const newScheduledTime = requireString(input.newScheduledTime, "newScheduledTime");
+  const newStart = validateDateString(newScheduledTime, "newScheduledTime");
+  if (existing.selectedSlot.startAt === newStart.toISOString()) return existing;
+  return notifyViewingRescheduled(
+    existing.id,
+    landlordId,
+    userId,
+    existing.selectedSlot.startAt,
+    newStart.toISOString()
+  );
+}
+
+export async function notifyViewingRescheduled(
+  viewingRequestId: string,
+  landlordId: string,
+  userIdOrOldTime: string | Date,
+  oldTimeOrNewTime: string | Date,
+  maybeNewTime?: string | Date
+): Promise<ViewingRequestDoc> {
+  const existing = await getViewingRequestForLandlord(viewingRequestId, landlordId);
+  if (!existing.selectedSlot) {
+    throw new ViewingServiceError(
+      409,
+      "invalid_status_transition",
+      "A selected viewing time is required before rescheduling."
+    );
+  }
+
+  const userId = maybeNewTime == null ? landlordId : normalizeString(userIdOrOldTime);
+  const oldTimeInput = maybeNewTime == null ? userIdOrOldTime : oldTimeOrNewTime;
+  const newTimeInput = maybeNewTime == null ? oldTimeOrNewTime : maybeNewTime;
+  const oldStart = validateDateString(
+    oldTimeInput instanceof Date ? oldTimeInput.toISOString() : normalizeString(oldTimeInput),
+    "oldTime"
+  );
+  const newStart = validateDateString(
+    newTimeInput instanceof Date ? newTimeInput.toISOString() : normalizeString(newTimeInput),
+    "newScheduledTime"
+  );
+  if (oldStart.toISOString() === newStart.toISOString()) return existing;
+  const existingStart = validateDateString(existing.selectedSlot.startAt, "selectedSlot.startAt");
+  const existingEnd = validateDateString(existing.selectedSlot.endAt, "selectedSlot.endAt");
+  const durationMs = Math.max(15 * 60 * 1000, existingEnd.getTime() - existingStart.getTime());
+  const newEnd = new Date(newStart.getTime() + durationMs);
+  const now = nowIso();
+  const next: ViewingRequestDoc = {
+    ...existing,
+    status: "scheduled",
+    selectedSlot: {
+      ...existing.selectedSlot,
+      startAt: newStart.toISOString(),
+      endAt: newEnd.toISOString(),
+    },
+    proposedSlots: existing.proposedSlots.map((slot) =>
+      slot.id === existing.selectedSlot?.id
+        ? { ...slot, startAt: newStart.toISOString(), endAt: newEnd.toISOString(), isSelected: true }
+        : slot
+    ),
+    scheduledAt: now,
+    updatedAt: now,
+    updatedByUserId: userId || landlordId,
+  };
+  const locationSummary = await resolveViewingLocationSummary(existing);
+  const transitionKey = `${oldStart.toISOString()}-${newStart.toISOString()}`;
+  const notification = buildViewingTenantNotification({
+    type: "viewing-rescheduled",
+    viewingRequest: next,
+    title: "Viewing rescheduled",
+    summary: `Your viewing for ${locationSummary} has been rescheduled.`,
+    transitionKey,
+    status: "info",
+    occurredAt: now,
+    payload: {
+      oldTime: oldStart.toISOString(),
+      newTime: newStart.toISOString(),
+    },
+  });
+  const auditEvent = buildViewingAuditEvent({
+    type: "viewing_rescheduled",
+    viewingRequest: next,
+    actorUserId: userId || landlordId,
+    transitionKey,
+    occurredAt: now,
+    metadata: {
+      oldTime: oldStart.toISOString(),
+      newTime: newStart.toISOString(),
+    },
+  });
+  return saveViewingRequestWithNotification({ viewingRequest: next, notification, auditEvent });
 }
