@@ -1,19 +1,27 @@
 import {
   adaptContractorMessageToInboxEvent,
+  adaptContractorWorkOrderCommunicationToInboxEvent,
   adaptContractorWorkOrderToInboxEvent,
 } from "./contractorInboxAdapters";
 import {
   adaptLandlordApplicationInboxToInboxEvent,
+  adaptLandlordApplicationStatusToInboxEvent,
   adaptLandlordLeaseInboxToInboxEvent,
+  adaptLandlordLeaseNoticeToInboxEvent,
   adaptLandlordMaintenanceInboxToInboxEvent,
   adaptLandlordMessageInboxToInboxEvent,
   adaptLandlordScreeningInboxToInboxEvent,
+  adaptLandlordViewingRequestToInboxEvent,
+  adaptLandlordWorkOrderToInboxEvent,
 } from "./landlordInboxAdapters";
 import {
+  adaptTenantApplicationStatusToInboxEvent,
+  adaptTenantLeaseNoticeToInboxEvent,
   adaptTenantMaintenanceToInboxEvent,
   adaptTenantMessageToInboxEvent,
   adaptTenantNotificationToInboxEvent,
   adaptTenantScreeningToInboxEvent,
+  adaptTenantViewingRequestToInboxEvent,
 } from "./tenantInboxAdapters";
 import type {
   ContractorScopeContext,
@@ -30,6 +38,9 @@ type TenantDerivationOptions = UnifiedInboxPaginationOptions & {
   messages?: any[];
   maintenanceRequests?: any[];
   screeningRequests?: any[];
+  viewingRequests?: any[];
+  notices?: any[];
+  applicationStatusItems?: any[];
 };
 
 type LandlordDerivationOptions = UnifiedInboxPaginationOptions & {
@@ -38,11 +49,16 @@ type LandlordDerivationOptions = UnifiedInboxPaginationOptions & {
   leaseItems?: any[];
   maintenanceRequests?: any[];
   messages?: any[];
+  viewingRequests?: any[];
+  workOrders?: any[];
+  notices?: any[];
+  applicationStatusItems?: any[];
 };
 
 type ContractorDerivationOptions = UnifiedInboxPaginationOptions & {
   workOrders?: any[];
   messages?: any[];
+  workOrderCommunications?: any[];
 };
 
 const PRIORITY_RANK: Record<UnifiedInboxPriority, number> = {
@@ -124,6 +140,9 @@ export async function deriveTenantUnifiedInbox(
     ...(options.messages || []).map((item) => adaptTenantMessageToInboxEvent(item, tenantWorkspaceContext)),
     ...(options.maintenanceRequests || []).map((item) => adaptTenantMaintenanceToInboxEvent(item, tenantWorkspaceContext)),
     ...(options.screeningRequests || []).map((item) => adaptTenantScreeningToInboxEvent(item, tenantWorkspaceContext)),
+    ...(options.viewingRequests || []).map((item) => adaptTenantViewingRequestToInboxEvent(item, tenantWorkspaceContext)),
+    ...(options.notices || []).map((item) => adaptTenantLeaseNoticeToInboxEvent(item, tenantWorkspaceContext)),
+    ...(options.applicationStatusItems || []).map((item) => adaptTenantApplicationStatusToInboxEvent(item, tenantWorkspaceContext)),
   ].filter((item): item is UnifiedInboxEvent => Boolean(item));
 
   return paginate(items, options);
@@ -142,6 +161,10 @@ export async function deriveLandlordUnifiedInbox(
     ...(options.leaseItems || []).map((item) => adaptLandlordLeaseInboxToInboxEvent(item, context)),
     ...(options.maintenanceRequests || []).map((item) => adaptLandlordMaintenanceInboxToInboxEvent(item, context)),
     ...(options.messages || []).map((item) => adaptLandlordMessageInboxToInboxEvent(item, context)),
+    ...(options.viewingRequests || []).map((item) => adaptLandlordViewingRequestToInboxEvent(item, context)),
+    ...(options.workOrders || []).map((item) => adaptLandlordWorkOrderToInboxEvent(item, context)),
+    ...(options.notices || []).map((item) => adaptLandlordLeaseNoticeToInboxEvent(item, context)),
+    ...(options.applicationStatusItems || []).map((item) => adaptLandlordApplicationStatusToInboxEvent(item, context)),
   ].filter((item): item is UnifiedInboxEvent => Boolean(item));
 
   return paginate(items, options);
@@ -157,6 +180,7 @@ export async function deriveContractorUnifiedInbox(
   const items = [
     ...(options.workOrders || []).map((item) => adaptContractorWorkOrderToInboxEvent(item, context)),
     ...(options.messages || []).map((item) => adaptContractorMessageToInboxEvent(item, context)),
+    ...(options.workOrderCommunications || []).map((item) => adaptContractorWorkOrderCommunicationToInboxEvent(item, context)),
   ].filter((item): item is UnifiedInboxEvent => Boolean(item));
 
   return paginate(items, options);

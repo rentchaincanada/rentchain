@@ -168,3 +168,27 @@ export function adaptContractorMessageToInboxEvent(
     readAt,
   });
 }
+
+export function adaptContractorWorkOrderCommunicationToInboxEvent(
+  workOrderMessage: any,
+  contractorScopeContext: ContractorScopeContext
+): UnifiedInboxEvent | null {
+  if (!hasContractorScope(workOrderMessage, contractorScopeContext) || hasSensitiveValues(workOrderMessage)) return null;
+  const stableKey = asString(workOrderMessage?.id || workOrderMessage?.messageId || workOrderMessage?.workOrderUpdateId, "", 240);
+  if (!stableKey) return null;
+  const messageText = asString(workOrderMessage?.body || workOrderMessage?.text || workOrderMessage?.message || workOrderMessage?.summary, "", 1000);
+  const status = asString(workOrderMessage?.status || workOrderMessage?.workOrderStatus, "", 80);
+  if (hasUnsafeText(messageText, status, workOrderMessage?.landlordInternalNotes, workOrderMessage?.tenantNotes)) return null;
+  const readAt = workOrderMessage?.readAt ? toIso(workOrderMessage.readAt) : null;
+  return makeContractorEvent({
+    sourceKind: "contractor.message",
+    sourceStableKey: stableKey,
+    context: contractorScopeContext,
+    title: "Work order message from property manager",
+    body: messageText || (status ? `Work order status: ${status}` : "You have a work order update."),
+    priority: normalizePriority(workOrderMessage?.priority || (/deadline|urgent|overdue/i.test(messageText) ? "high" : "normal")),
+    status: normalizeStatus(workOrderMessage?.inboxStatus || workOrderMessage?.status, readAt),
+    occurredAt: toIso(workOrderMessage?.createdAt || workOrderMessage?.createdAtMs || workOrderMessage?.updatedAt),
+    readAt,
+  });
+}

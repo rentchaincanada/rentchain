@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   adaptLandlordApplicationInboxToInboxEvent,
+  adaptLandlordApplicationStatusToInboxEvent,
   adaptLandlordLeaseInboxToInboxEvent,
+  adaptLandlordLeaseNoticeToInboxEvent,
   adaptLandlordMaintenanceInboxToInboxEvent,
   adaptLandlordMessageInboxToInboxEvent,
   adaptLandlordScreeningInboxToInboxEvent,
+  adaptLandlordViewingRequestToInboxEvent,
+  adaptLandlordWorkOrderToInboxEvent,
 } from "../../services/unifiedInbox";
 
 const landlordContext = {
@@ -122,5 +126,104 @@ describe("landlord inbox adapters", () => {
     expectLandlordSafe(maintenanceEvent!);
     expectLandlordSafe(messageEvent!);
     expect(JSON.stringify({ lease, maintenance, message })).toBe(before);
+  });
+
+  it("adapts landlord viewing requests, work orders, notices, and application statuses", () => {
+    const viewing = adaptLandlordViewingRequestToInboxEvent(
+      {
+        id: "viewing_raw_123",
+        landlordId: "landlord_raw_abc",
+        applicantName: "Jordan Lee",
+        applicantEmail: "jordan@example.com",
+        status: "slots_proposed",
+        updatedAt: "2026-06-09T10:00:00.000Z",
+      },
+      landlordContext
+    );
+    const workOrder = adaptLandlordWorkOrderToInboxEvent(
+      {
+        id: "work_order_raw_123",
+        landlordId: "landlord_raw_abc",
+        category: "plumbing",
+        status: "overdue",
+        dueDate: "2026-06-10T12:00:00.000Z",
+      },
+      landlordContext
+    );
+    const notice = adaptLandlordLeaseNoticeToInboxEvent(
+      {
+        id: "notice_raw_123",
+        landlordId: "landlord_raw_abc",
+        tenantName: "Jordan Lee",
+        noticeType: "renewal_offer",
+        status: "served",
+        servedAt: "2026-06-09T11:00:00.000Z",
+      },
+      landlordContext
+    );
+    const application = adaptLandlordApplicationStatusToInboxEvent(
+      {
+        id: "application_raw_456",
+        landlordId: "landlord_raw_abc",
+        applicantName: "Jordan Lee",
+        status: "requires_decision",
+        updatedAt: "2026-06-09T12:00:00.000Z",
+      },
+      landlordContext
+    );
+
+    expect(viewing).toMatchObject({ sourceKind: "landlord.viewing", title: "Viewing needs confirmation", priority: "high" });
+    expect(workOrder).toMatchObject({ sourceKind: "landlord.work_order", title: "Work order update", priority: "high" });
+    expect(notice).toMatchObject({ sourceKind: "landlord.notice", title: "Notice sent to tenant" });
+    expect(application).toMatchObject({ sourceKind: "landlord.application", title: "Your decision needed", priority: "high" });
+    [viewing, workOrder, notice, application].forEach((event) => expectLandlordSafe(event!));
+    expect(JSON.stringify([viewing, workOrder, notice, application])).not.toContain("landlord_raw_abc");
+    expect(JSON.stringify([viewing, workOrder, notice, application])).not.toContain("work_order_raw_");
+  });
+
+  it("rejects new landlord source records outside scope or with sensitive fields", () => {
+    expect(
+      adaptLandlordViewingRequestToInboxEvent(
+        {
+          id: "viewing_raw_123",
+          landlordId: "landlord_other",
+          status: "requested",
+        },
+        landlordContext
+      )
+    ).toBeNull();
+    expect(
+      adaptLandlordWorkOrderToInboxEvent(
+        {
+          id: "work_order_raw_123",
+          landlordId: "landlord_raw_abc",
+          status: "assigned",
+          contractorInternalNotes: "private",
+        },
+        landlordContext
+      )
+    ).toBeNull();
+    expect(
+      adaptLandlordLeaseNoticeToInboxEvent(
+        {
+          id: "notice_raw_123",
+          landlordId: "landlord_raw_abc",
+          status: "served",
+          adminMetadata: { internal: true },
+        },
+        landlordContext
+      )
+    ).toBeNull();
+    expect(
+      adaptLandlordApplicationStatusToInboxEvent(
+        {
+          id: "application_raw_123",
+          landlordId: "landlord_raw_abc",
+          status: "requires_decision",
+          screeningReport: { raw: true },
+        },
+        landlordContext
+      )
+    ).toBeNull();
   });
 });

@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  adaptTenantApplicationStatusToInboxEvent,
+  adaptTenantLeaseNoticeToInboxEvent,
   adaptTenantMaintenanceToInboxEvent,
   adaptTenantMessageToInboxEvent,
   adaptTenantNotificationToInboxEvent,
   adaptTenantScreeningToInboxEvent,
+  adaptTenantViewingRequestToInboxEvent,
 } from "../../services/unifiedInbox";
 
 const tenantContext = {
@@ -145,5 +148,133 @@ describe("tenant inbox adapters", () => {
     expectTenantSafe(maintenanceEvent!);
     expectTenantSafe(screeningEvent!);
     expect(JSON.stringify({ maintenance, screening })).toBe(before);
+  });
+
+  it("adapts tenant viewing requests with lifecycle status mapping", () => {
+    const scheduled = adaptTenantViewingRequestToInboxEvent(
+      {
+        id: "viewing_raw_123",
+        tenantWorkspaceId: "tenant_workspace_raw_abc",
+        status: "scheduled",
+        selectedSlot: { startAt: "2026-06-10T18:00:00.000Z" },
+        updatedAt: "2026-06-09T13:00:00.000Z",
+      },
+      tenantContext
+    );
+    const cancelled = adaptTenantViewingRequestToInboxEvent(
+      {
+        id: "viewing_raw_124",
+        tenantWorkspaceId: "tenant_workspace_raw_abc",
+        status: "cancelled",
+        cancelledAt: "2026-06-09T14:00:00.000Z",
+      },
+      tenantContext
+    );
+
+    expect(scheduled).toMatchObject({
+      sourceKind: "tenant.viewing",
+      title: "Viewing scheduled",
+      priority: "normal",
+      status: "unread",
+    });
+    expect(cancelled).toMatchObject({
+      sourceKind: "tenant.viewing",
+      title: "Viewing cancelled",
+      priority: "normal",
+      status: "archived",
+    });
+    expectTenantSafe(scheduled!);
+    expectTenantSafe(cancelled!);
+    expect(JSON.stringify([scheduled, cancelled])).not.toContain("viewing_raw_");
+  });
+
+  it("rejects tenant viewing requests outside scope or with sensitive fields", () => {
+    expect(
+      adaptTenantViewingRequestToInboxEvent(
+        {
+          id: "viewing_raw_123",
+          tenantWorkspaceId: "other_workspace",
+          status: "scheduled",
+        },
+        tenantContext
+      )
+    ).toBeNull();
+    expect(
+      adaptTenantViewingRequestToInboxEvent(
+        {
+          id: "viewing_raw_124",
+          tenantWorkspaceId: "tenant_workspace_raw_abc",
+          status: "scheduled",
+          landlordNotes: "internal",
+        },
+        tenantContext
+      )
+    ).toBeNull();
+  });
+
+  it("adapts tenant lease notices and application statuses safely", () => {
+    const notice = adaptTenantLeaseNoticeToInboxEvent(
+      {
+        id: "notice_raw_123",
+        tenantId: "tenant_raw_abc",
+        noticeType: "renewal_offer",
+        status: "served",
+        deadline: "2026-06-30T12:00:00.000Z",
+        servedAt: "2026-06-09T12:00:00.000Z",
+      },
+      tenantContext
+    );
+    const application = adaptTenantApplicationStatusToInboxEvent(
+      {
+        id: "application_raw_123",
+        applicantTenantId: "tenant_raw_abc",
+        status: "pending_documents",
+        nextAction: "Upload requested documents.",
+        updatedAt: "2026-06-09T13:00:00.000Z",
+      },
+      tenantContext
+    );
+
+    expect(notice).toMatchObject({
+      sourceKind: "tenant.notice",
+      title: "Lease notice served",
+      priority: "high",
+      status: "unread",
+    });
+    expect(application).toMatchObject({
+      sourceKind: "tenant.application",
+      title: "Application action needed",
+      priority: "high",
+      status: "unread",
+    });
+    expectTenantSafe(notice!);
+    expectTenantSafe(application!);
+    expect(JSON.stringify([notice, application])).not.toContain("notice_raw_");
+    expect(JSON.stringify([notice, application])).not.toContain("application_raw_");
+  });
+
+  it("rejects tenant notice and application records with unsafe internals", () => {
+    expect(
+      adaptTenantLeaseNoticeToInboxEvent(
+        {
+          id: "notice_raw_123",
+          tenantId: "tenant_raw_abc",
+          status: "served",
+          adminEnforcementFlags: ["internal"],
+        },
+        tenantContext
+      )
+    ).toBeNull();
+    expect(
+      adaptTenantApplicationStatusToInboxEvent(
+        {
+          id: "application_raw_123",
+          applicantTenantId: "tenant_raw_abc",
+          status: "under_review",
+          screeningReport: { raw: true },
+        },
+        tenantContext
+      )
+    ).toBeNull();
   });
 });

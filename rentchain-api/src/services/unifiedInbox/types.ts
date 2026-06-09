@@ -17,6 +17,9 @@ export type SourceKind =
   | "landlord.lease"
   | "landlord.maintenance"
   | "landlord.message"
+  | "landlord.notice"
+  | "landlord.viewing"
+  | "landlord.work_order"
   | "contractor.work_order"
   | "contractor.message";
 

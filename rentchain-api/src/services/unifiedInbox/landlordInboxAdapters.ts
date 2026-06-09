@@ -34,6 +34,15 @@ const SENSITIVE_KEYS = [
   "secret",
   "rawId",
   "unrelatedContractorThread",
+  "contractorInternalNotes",
+  "pendingCostEstimate",
+  "pendingCostEstimates",
+  "costEstimatePendingApproval",
+  "evidence",
+  "privateEvidence",
+  "vendorIntegrationFields",
+  "internalSchedulingConflicts",
+  "riskAssessment",
 ];
 
 // LANDLORD PROJECTION: landlord events must exclude cross-landlord records, admin-only metadata, tenant private documents, and unrelated contractor threads.
@@ -65,6 +74,28 @@ function normalizeStatus(value: unknown, readAt: string | null): UnifiedInboxSta
   if (next === "archived" || next === "muted" || next === "resolved") return next;
   if (next === "completed") return "resolved";
   return readAt ? "read" : "unread";
+}
+
+function normalizeLifecycleStatus(value: unknown, readAt: string | null): UnifiedInboxStatus {
+  const next = asString(value, "", 80).toLowerCase();
+  if (next === "completed" || next === "approved" || next === "acknowledged") return "resolved";
+  if (next === "cancelled" || next === "canceled" || next === "rejected" || next === "expired") return "archived";
+  return normalizeStatus(next, readAt);
+}
+
+function normalizeLifecyclePriority(value: unknown, fallback: UnifiedInboxPriority = "normal"): UnifiedInboxPriority {
+  const next = asString(value, "", 80).toLowerCase();
+  if (
+    next === "requested" ||
+    next === "slots_proposed" ||
+    next === "requires_decision" ||
+    next === "screening_complete" ||
+    next === "deadline_approaching" ||
+    next === "overdue"
+  ) {
+    return "high";
+  }
+  return normalizePriority(next || fallback);
 }
 
 function hasLandlordScope(record: any, context: LandlordScopeContext): boolean {
@@ -226,6 +257,127 @@ export function adaptLandlordMessageInboxToInboxEvent(
     priority: normalizePriority(message?.priority),
     status: normalizeStatus(message?.status, readAt),
     occurredAt: toIso(message?.createdAt || message?.createdAtMs || message?.occurredAt),
+    readAt,
+  });
+}
+
+export function adaptLandlordViewingRequestToInboxEvent(
+  viewingRequest: any,
+  landlordScopeContext: LandlordScopeContext
+): UnifiedInboxEvent | null {
+  if (!hasLandlordScope(viewingRequest, landlordScopeContext) || hasSensitiveValues(viewingRequest)) return null;
+  const stableKey = asString(viewingRequest?.id || viewingRequest?.viewingRequestId, "", 240);
+  if (!stableKey) return null;
+  const status = asString(viewingRequest?.status, "requested", 80).toLowerCase();
+  const applicantName = asString(viewingRequest?.applicantName, "Applicant", 180);
+  const selectedStart = asString(viewingRequest?.selectedSlot?.startAt || viewingRequest?.scheduledFor, "", 120);
+  if (hasUnsafeText(applicantName, viewingRequest?.applicantEmail, status, selectedStart, viewingRequest?.cancelledReason)) return null;
+  const readAt = viewingRequest?.readAt ? toIso(viewingRequest.readAt) : null;
+  const title =
+    status === "scheduled"
+      ? "Applicant scheduled viewing"
+      : status === "cancelled" || status === "canceled"
+      ? "Viewing cancelled"
+      : status === "slots_proposed"
+      ? "Viewing needs confirmation"
+      : "Viewing request received";
+  const body = selectedStart ? `${applicantName} - ${status} at ${toIso(selectedStart)}` : `${applicantName} - ${status}`;
+  return makeLandlordEvent({
+    sourceKind: "landlord.viewing",
+    sourceStableKey: stableKey,
+    context: landlordScopeContext,
+    title,
+    body,
+    priority: normalizeLifecyclePriority(status),
+    status: normalizeLifecycleStatus(status, readAt),
+    occurredAt: toIso(
+      viewingRequest?.updatedAt ||
+        viewingRequest?.scheduledAt ||
+        viewingRequest?.cancelledAt ||
+        viewingRequest?.requestedAt ||
+        viewingRequest?.createdAt
+    ),
+    readAt,
+  });
+}
+
+export function adaptLandlordWorkOrderToInboxEvent(
+  workOrder: any,
+  landlordScopeContext: LandlordScopeContext
+): UnifiedInboxEvent | null {
+  if (!hasLandlordScope(workOrder, landlordScopeContext) || hasSensitiveValues(workOrder)) return null;
+  const stableKey = asString(workOrder?.id || workOrder?.workOrderId || workOrder?.maintenanceRequestId, "", 240);
+  if (!stableKey) return null;
+  const status = asString(workOrder?.status || workOrder?.contractorStatus, "assigned", 80).toLowerCase();
+  const category = asString(workOrder?.category || workOrder?.title, "Work order", 160);
+  const dueDate = asString(workOrder?.dueDate || workOrder?.scheduledFor || workOrder?.serviceWindowStartAt, "", 120);
+  if (hasUnsafeText(category, status, dueDate, workOrder?.contractorInternalNotes)) return null;
+  const readAt = workOrder?.readAt ? toIso(workOrder.readAt) : null;
+  return makeLandlordEvent({
+    sourceKind: "landlord.work_order",
+    sourceStableKey: stableKey,
+    context: landlordScopeContext,
+    title: status === "completed" ? "Work order completed" : "Work order update",
+    body: dueDate ? `${category} status: ${status}. Due: ${toIso(dueDate)}` : `${category} status: ${status}`,
+    priority: normalizeLifecyclePriority(status),
+    status: normalizeLifecycleStatus(status, readAt),
+    occurredAt: toIso(workOrder?.updatedAt || workOrder?.createdAt || workOrder?.assignedAt || workOrder?.dueDate),
+    readAt,
+  });
+}
+
+export function adaptLandlordLeaseNoticeToInboxEvent(
+  notice: any,
+  landlordScopeContext: LandlordScopeContext
+): UnifiedInboxEvent | null {
+  if (!hasLandlordScope(notice, landlordScopeContext) || hasSensitiveValues(notice)) return null;
+  const stableKey = asString(notice?.id || notice?.noticeId || notice?.sourceKey, "", 240);
+  if (!stableKey) return null;
+  const noticeType = asString(notice?.noticeType || notice?.type, "lease_notice", 120);
+  const tenantName = asString(notice?.tenantName, "Tenant", 180);
+  const status = asString(notice?.status || notice?.noticeStatus, "served", 80).toLowerCase();
+  if (hasUnsafeText(noticeType, tenantName, status, notice?.summary)) return null;
+  const readAt = notice?.readAt ? toIso(notice.readAt) : null;
+  return makeLandlordEvent({
+    sourceKind: "landlord.notice",
+    sourceStableKey: stableKey,
+    context: landlordScopeContext,
+    title: status === "acknowledged" ? "Tenant acknowledged notice" : "Notice sent to tenant",
+    body: `${tenantName} - ${noticeType} status: ${status}`,
+    priority: normalizeLifecyclePriority(status),
+    status: normalizeLifecycleStatus(status, readAt),
+    occurredAt: toIso(notice?.servedAt || notice?.createdAt || notice?.updatedAt),
+    readAt,
+  });
+}
+
+export function adaptLandlordApplicationStatusToInboxEvent(
+  application: any,
+  landlordScopeContext: LandlordScopeContext
+): UnifiedInboxEvent | null {
+  if (!hasLandlordScope(application, landlordScopeContext) || hasSensitiveValues(application)) return null;
+  const stableKey = asString(application?.id || application?.applicationId || application?.sourceKey, "", 240);
+  if (!stableKey) return null;
+  const status = asString(application?.status || application?.applicationStatus, "submitted", 80).toLowerCase();
+  const applicantName = asString(application?.applicantName, "Applicant", 180);
+  const nextAction = asString(application?.nextAction || application?.landlordNextAction, "", 240);
+  if (hasUnsafeText(status, applicantName, nextAction, application?.screeningReport)) return null;
+  const readAt = application?.readAt ? toIso(application.readAt) : null;
+  const title =
+    status === "requires_decision"
+      ? "Your decision needed"
+      : status === "screening_complete"
+      ? "Application screening complete"
+      : "Application status updated";
+  return makeLandlordEvent({
+    sourceKind: "landlord.application",
+    sourceStableKey: stableKey,
+    context: landlordScopeContext,
+    title,
+    body: nextAction || `${applicantName} application status: ${status}`,
+    priority: normalizeLifecyclePriority(status),
+    status: normalizeLifecycleStatus(status, readAt),
+    occurredAt: toIso(application?.submittedAt || application?.updatedAt || application?.createdAt),
     readAt,
   });
 }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  deriveContractorUnifiedInbox,
   deriveLandlordUnifiedInbox,
   deriveTenantUnifiedInbox,
   encodeUnifiedInboxCursor,
@@ -147,5 +148,161 @@ describe("derive unified inbox", () => {
     );
 
     expect(page.items).toHaveLength(1);
+  });
+
+  it("derives tenant mixed source events for viewing, notices, and application status", async () => {
+    const context = {
+      tenantWorkspaceId: "tenant_workspace_raw_abc",
+      tenantId: "tenant_raw_abc",
+    };
+    const page = await deriveTenantUnifiedInbox(context, {
+      viewingRequests: [
+        {
+          id: "viewing_raw_1",
+          tenantWorkspaceId: "tenant_workspace_raw_abc",
+          status: "scheduled",
+          selectedSlot: { startAt: "2026-06-09T15:00:00.000Z" },
+          updatedAt: "2026-06-09T15:00:00.000Z",
+        },
+      ],
+      notices: [
+        {
+          id: "notice_raw_1",
+          tenantId: "tenant_raw_abc",
+          noticeType: "renewal_offer",
+          status: "served",
+          servedAt: "2026-06-09T14:00:00.000Z",
+        },
+      ],
+      applicationStatusItems: [
+        {
+          id: "application_raw_1",
+          applicantTenantId: "tenant_raw_abc",
+          status: "pending_documents",
+          nextAction: "Upload documents.",
+          updatedAt: "2026-06-09T13:00:00.000Z",
+        },
+      ],
+      limit: 2,
+    });
+
+    expect(page.items.map((item) => item.sourceKind)).toEqual(["tenant.notice", "tenant.application"]);
+    expect(page.nextCursor).toBeTruthy();
+    expect(JSON.stringify(page.items)).not.toContain("tenant_raw_abc");
+    expect(JSON.stringify(page.items)).not.toContain("_raw_");
+
+    const secondPage = await deriveTenantUnifiedInbox(context, {
+      viewingRequests: [
+        {
+          id: "viewing_raw_1",
+          tenantWorkspaceId: "tenant_workspace_raw_abc",
+          status: "scheduled",
+          selectedSlot: { startAt: "2026-06-09T15:00:00.000Z" },
+          updatedAt: "2026-06-09T15:00:00.000Z",
+        },
+      ],
+      notices: [
+        {
+          id: "notice_raw_1",
+          tenantId: "tenant_raw_abc",
+          noticeType: "renewal_offer",
+          status: "served",
+          servedAt: "2026-06-09T14:00:00.000Z",
+        },
+      ],
+      applicationStatusItems: [
+        {
+          id: "application_raw_1",
+          applicantTenantId: "tenant_raw_abc",
+          status: "pending_documents",
+          nextAction: "Upload documents.",
+          updatedAt: "2026-06-09T13:00:00.000Z",
+        },
+      ],
+      limit: 2,
+      cursor: page.nextCursor,
+    });
+
+    expect(secondPage.items.map((item) => item.sourceKind)).toEqual(["tenant.viewing"]);
+  });
+
+  it("derives landlord mixed source events for viewing, work order, notice, and application status", async () => {
+    const page = await deriveLandlordUnifiedInbox("landlord_raw_abc", {
+      viewingRequests: [
+        {
+          id: "viewing_raw_1",
+          landlordId: "landlord_raw_abc",
+          applicantName: "Jordan Lee",
+          status: "slots_proposed",
+          updatedAt: "2026-06-09T14:00:00.000Z",
+        },
+      ],
+      workOrders: [
+        {
+          id: "work_order_raw_1",
+          landlordId: "landlord_raw_abc",
+          category: "plumbing",
+          status: "overdue",
+          updatedAt: "2026-06-09T13:00:00.000Z",
+        },
+      ],
+      notices: [
+        {
+          id: "notice_raw_1",
+          landlordId: "landlord_raw_abc",
+          tenantName: "Jordan Lee",
+          noticeType: "renewal_offer",
+          status: "served",
+          servedAt: "2026-06-09T12:00:00.000Z",
+        },
+      ],
+      applicationStatusItems: [
+        {
+          id: "application_raw_1",
+          landlordId: "landlord_raw_abc",
+          applicantName: "Jordan Lee",
+          status: "requires_decision",
+          updatedAt: "2026-06-09T11:00:00.000Z",
+        },
+      ],
+    });
+
+    expect(page.items.map((item) => item.sourceKind)).toEqual([
+      "landlord.viewing",
+      "landlord.work_order",
+      "landlord.application",
+      "landlord.notice",
+    ]);
+    expect(JSON.stringify(page.items)).not.toContain("landlord_raw_abc");
+    expect(JSON.stringify(page.items)).not.toContain("_raw_");
+  });
+
+  it("derives contractor work order communications separately from work orders", async () => {
+    const page = await deriveContractorUnifiedInbox("contractor_raw_abc", {
+      workOrders: [
+        {
+          id: "work_order_raw_1",
+          assignedContractorId: "contractor_raw_abc",
+          title: "Repair sink",
+          status: "assigned",
+          updatedAt: "2026-06-09T13:00:00.000Z",
+        },
+      ],
+      workOrderCommunications: [
+        {
+          id: "communication_raw_1",
+          contractorId: "contractor_raw_abc",
+          text: "Deadline approaching.",
+          createdAt: "2026-06-09T14:00:00.000Z",
+        },
+      ],
+    });
+
+    expect(page.items.map((item) => item.title)).toEqual([
+      "Work order message from property manager",
+      "Repair sink",
+    ]);
+    expect(JSON.stringify(page.items)).not.toContain("contractor_raw_abc");
+    expect(JSON.stringify(page.items)).not.toContain("_raw_");
   });
 });
