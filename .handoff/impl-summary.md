@@ -1,5 +1,5 @@
-PR: #PR_NUMBER_PENDING
-PR URL: PR_URL_PENDING
+PR: #1129
+PR URL: https://github.com/rentchaincanada/rentchain/pull/1129
 Branch: feat/unified-inbox-data-layer-expansion-v1
 
 # Implementation Summary
