@@ -15,7 +15,9 @@ export type SourceKind =
   | "landlord.screening"
   | "landlord.lease"
   | "landlord.maintenance"
-  | "landlord.message";
+  | "landlord.message"
+  | "contractor.work_order"
+  | "contractor.message";
 
 export type TenantScopeContext = {
   tenantWorkspaceId: string;

@@ -1,5 +1,7 @@
-import { Router } from "express";
+import { Router, type NextFunction, type Request, type Response } from "express";
+import { db } from "../firebase";
 import { requireContractor } from "../middleware/requireContractor";
+import { deriveContractorUnifiedInbox, type SourceKind, type UnifiedInboxEvent } from "../services/unifiedInbox";
 import {
   createContractorPortalMessage,
   getContractorPortalProfile,
@@ -11,6 +13,30 @@ import {
 } from "../services/contractorPortalService";
 
 const router = Router();
+const MAX_LIMIT = 100;
+const DEFAULT_LIMIT = 20;
+
+type ContractorInboxRequest = {
+  limit: number;
+  offset: number;
+  source: SourceKind | null;
+  dateFrom: string | null;
+  dateTo: string | null;
+};
+
+type ValidationResult =
+  | { ok: true; value: ContractorInboxRequest }
+  | { ok: false; status: number; error: string; message: string };
+
+const INBOX_SOURCE_MAP: Record<string, SourceKind> = {
+  maintenance: "contractor.work_order",
+  work_order: "contractor.work_order",
+  "work-order": "contractor.work_order",
+  workorder: "contractor.work_order",
+  "contractor.work_order": "contractor.work_order",
+  message: "contractor.message",
+  "contractor.message": "contractor.message",
+};
 
 function asString(value: unknown, max = 1000): string {
   return String(value || "").trim().slice(0, max);
@@ -22,6 +48,107 @@ function isAdmin(req: any) {
 
 function contractorIdFromUser(req: any) {
   return asString(req.user?.contractorId || req.user?.id, 160);
+}
+
+function parseInteger(value: unknown, fallback: number) {
+  if (value == null || value === "") return fallback;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed)) return null;
+  return parsed;
+}
+
+function parseIso(value: unknown): string | null {
+  const raw = asString(value, 120);
+  if (!raw) return null;
+  const parsed = Date.parse(raw);
+  if (!Number.isFinite(parsed)) return null;
+  return new Date(parsed).toISOString();
+}
+
+function validateInboxQuery(query: any): ValidationResult {
+  const limit = parseInteger(query?.limit, DEFAULT_LIMIT);
+  if (limit == null || limit < 1 || limit > MAX_LIMIT) {
+    return { ok: false, status: 400, error: "INVALID_LIMIT", message: "limit must be an integer between 1 and 100" };
+  }
+
+  const offset = parseInteger(query?.offset, 0);
+  if (offset == null || offset < 0) {
+    return { ok: false, status: 400, error: "INVALID_OFFSET", message: "offset must be a non-negative integer" };
+  }
+
+  const sourceRaw = asString(query?.source, 80).toLowerCase();
+  const source = sourceRaw ? INBOX_SOURCE_MAP[sourceRaw] : null;
+  if (sourceRaw && !source) {
+    return {
+      ok: false,
+      status: 400,
+      error: "INVALID_SOURCE",
+      message: "source must be one of maintenance, work_order, or message",
+    };
+  }
+
+  const dateFrom = parseIso(query?.dateFrom);
+  if (query?.dateFrom && !dateFrom) {
+    return { ok: false, status: 400, error: "INVALID_DATE_FROM", message: "dateFrom must be an ISO8601 timestamp" };
+  }
+
+  const dateTo = parseIso(query?.dateTo);
+  if (query?.dateTo && !dateTo) {
+    return { ok: false, status: 400, error: "INVALID_DATE_TO", message: "dateTo must be an ISO8601 timestamp" };
+  }
+
+  if (dateFrom && dateTo && Date.parse(dateFrom) > Date.parse(dateTo)) {
+    return { ok: false, status: 400, error: "INVALID_DATE_RANGE", message: "dateFrom must be earlier than dateTo" };
+  }
+
+  return { ok: true, value: { limit, offset, source, dateFrom, dateTo } };
+}
+
+function requireContractorInboxIdentity(req: Request, res: Response, next: NextFunction) {
+  const role = asString((req as any).user?.role || (req as any).user?.actorRole, 80).toLowerCase();
+  if (role !== "contractor") {
+    return res.status(403).json({ ok: false, error: "FORBIDDEN", message: "Contractor role is required" });
+  }
+  if (!contractorIdFromUser(req)) {
+    return res.status(403).json({ ok: false, error: "FORBIDDEN", message: "Contractor identity is required" });
+  }
+  return next();
+}
+
+async function loadCollection(name: string) {
+  const snap = await db.collection(name).get().catch(() => ({ docs: [] } as any));
+  return (snap?.docs || []).map((doc: any) => ({ id: doc.id, ...((doc.data() as any) || {}) }));
+}
+
+function recordContractorId(record: any) {
+  return asString(record?.assignedContractorId || record?.contractorId || record?.recipientContractorId, 160);
+}
+
+function filterContractorScopedRecords(records: any[], contractorId: string) {
+  return records.filter((record) => recordContractorId(record) === contractorId);
+}
+
+function matchesInboxDateRange(item: UnifiedInboxEvent, request: ContractorInboxRequest) {
+  const occurredAt = Date.parse(item.occurredAt);
+  if (!Number.isFinite(occurredAt)) return false;
+  if (request.dateFrom && occurredAt < Date.parse(request.dateFrom)) return false;
+  if (request.dateTo && occurredAt > Date.parse(request.dateTo)) return false;
+  return true;
+}
+
+function applyInboxFilters(items: UnifiedInboxEvent[], request: ContractorInboxRequest) {
+  return items.filter((item) => {
+    if (request.source && item.sourceKind !== request.source) return false;
+    return matchesInboxDateRange(item, request);
+  });
+}
+
+function hasCrossContractorScopeAttempt(query: any, contractorId: string) {
+  const requestedContractorId = asString(query?.contractorId, 160);
+  const requestedScopeKey = asString(query?.contractorScopeKey || query?.audienceScopeKey, 240);
+  if (requestedContractorId && requestedContractorId !== contractorId) return true;
+  if (requestedScopeKey && requestedScopeKey !== contractorId) return true;
+  return false;
 }
 
 function ensureSelf(req: any, res: any): string | null {
@@ -37,6 +164,44 @@ function ensureSelf(req: any, res: any): string | null {
   }
   return requested;
 }
+
+router.get("/contractor/inbox", requireContractor, requireContractorInboxIdentity, async (req: Request, res: Response) => {
+  try {
+    const contractorId = contractorIdFromUser(req);
+    const parsed = validateInboxQuery(req.query);
+    if (!parsed.ok) {
+      return res.status(parsed.status).json({ ok: false, error: parsed.error, message: parsed.message });
+    }
+    if (hasCrossContractorScopeAttempt(req.query, contractorId)) {
+      return res.status(403).json({ ok: false, error: "CONTRACTOR_SCOPE_FORBIDDEN", message: "Contractor scope is not available" });
+    }
+
+    const [workOrders, messages] = await Promise.all([
+      loadCollection("workOrders"),
+      loadCollection("contractorMessages"),
+    ]);
+
+    const request = parsed.value;
+    const safePage = await deriveContractorUnifiedInbox(contractorId, {
+      workOrders: filterContractorScopedRecords(workOrders, contractorId),
+      messages: filterContractorScopedRecords(messages, contractorId),
+      limit: MAX_LIMIT,
+    });
+    const filteredItems = applyInboxFilters(safePage.items, request);
+    const items = filteredItems.slice(request.offset, request.offset + request.limit);
+
+    return res.json({
+      ok: true,
+      items,
+      total: filteredItems.length,
+      limit: request.limit,
+      offset: request.offset,
+    });
+  } catch (err: any) {
+    console.error("[contractor-unified-inbox] failed", err?.message || err);
+    return res.status(500).json({ ok: false, error: "CONTRACTOR_INBOX_FAILED", message: "Unable to load inbox" });
+  }
+});
 
 router.get("/contractors/:contractorId/work-orders", requireContractor, async (req: any, res) => {
   try {
