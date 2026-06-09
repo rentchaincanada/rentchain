@@ -1,5 +1,5 @@
-PR: #PR_NUMBER_PENDING
-PR URL: PR_URL_PENDING
+PR: #1128
+PR URL: https://github.com/rentchaincanada/rentchain/pull/1128
 Branch: fix/viewing-cancellation-notification-v1
 
 # Implementation Summary
