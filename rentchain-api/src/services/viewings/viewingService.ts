@@ -147,6 +147,112 @@ async function notifyViewingRequestCreated(viewingRequest: ViewingRequestDoc) {
   });
 }
 
+async function resolveViewingLocationSummary(viewingRequest: ViewingRequestDoc): Promise<string> {
+  let propertyLabel: string | null = null;
+  let unitLabel: string | null = null;
+  const propertyId = optionalString(viewingRequest.propertyId);
+  const unitId = optionalString(viewingRequest.unitId);
+
+  if (propertyId) {
+    try {
+      const propertySnap = await db.collection("properties").doc(propertyId).get();
+      if (propertySnap.exists) {
+        const property = (propertySnap.data() as any) || {};
+        propertyLabel =
+          optionalString(property?.name) ||
+          optionalString(property?.addressLine1) ||
+          optionalString(property?.address) ||
+          optionalString(property?.displayName);
+      }
+    } catch {
+      // ignore property label lookup failure
+    }
+  }
+
+  if (unitId) {
+    try {
+      const unitSnap = await db.collection("units").doc(unitId).get();
+      if (unitSnap.exists) {
+        const unit = (unitSnap.data() as any) || {};
+        const unitNumber =
+          optionalString(unit?.unitNumber) ||
+          optionalString(unit?.number) ||
+          optionalString(unit?.name) ||
+          optionalString(unit?.displayName);
+        unitLabel = unitNumber ? `Unit ${unitNumber}` : null;
+      }
+    } catch {
+      // ignore unit label lookup failure
+    }
+  }
+
+  return [propertyLabel, unitLabel].filter(Boolean).join(" • ") || "the requested property";
+}
+
+function formatViewingSlotRange(slot: NonNullable<SelectedViewingSlot>): string {
+  const start = new Date(slot.startAt);
+  const end = new Date(slot.endAt);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return "the selected viewing time";
+  }
+
+  const startDate = start.toISOString().slice(0, 10);
+  const startTime = start.toISOString().slice(11, 16);
+  const endDate = end.toISOString().slice(0, 10);
+  const endTime = end.toISOString().slice(11, 16);
+  if (startDate === endDate) {
+    return `${startDate} from ${startTime} to ${endTime} UTC`;
+  }
+  return `${startDate} ${startTime} UTC to ${endDate} ${endTime} UTC`;
+}
+
+async function notifyViewingSlotSelected(viewingRequest: ViewingRequestDoc) {
+  const applicantEmail = optionalString(viewingRequest.applicantEmail)?.toLowerCase();
+  if (!applicantEmail || !EMAIL_REGEX.test(applicantEmail)) return;
+
+  const selectedSlot = viewingRequest.selectedSlot;
+  if (!selectedSlot) return;
+
+  const from =
+    process.env.EMAIL_FROM ||
+    process.env.SENDGRID_FROM_EMAIL ||
+    process.env.SENDGRID_FROM ||
+    process.env.FROM_EMAIL;
+  if (!from) return;
+
+  const baseUrl = (process.env.PUBLIC_APP_URL || process.env.VITE_PUBLIC_APP_URL || "https://www.rentchain.ai").replace(/\/$/, "");
+  const locationSummary = await resolveViewingLocationSummary(viewingRequest);
+  const slotRange = formatViewingSlotRange(selectedSlot);
+  const requestLink = `${baseUrl}/viewings`;
+  const bullets = [`When: ${slotRange}`, `Location: ${locationSummary}`];
+  if (selectedSlot.note) {
+    bullets.push(`Note: ${selectedSlot.note}`);
+  }
+
+  await sendEmail({
+    to: applicantEmail,
+    from,
+    replyTo: from,
+    subject: `Viewing confirmed for ${locationSummary}`,
+    text: buildEmailText({
+      intro: "Your viewing time has been confirmed.",
+      bullets,
+      ctaText: "Open viewings",
+      ctaUrl: requestLink,
+      footerNote: "You're receiving this because you requested a viewing through RentChain.",
+    }),
+    html: buildEmailHtml({
+      title: "Viewing time confirmed",
+      intro: "Your viewing time has been confirmed.",
+      bullets,
+      ctaText: "Open viewings",
+      ctaUrl: requestLink,
+      footerNote: "You're receiving this because you requested a viewing through RentChain.",
+      preheader: `Viewing confirmed for ${slotRange}.`,
+    }),
+  });
+}
+
 export class ViewingServiceError extends Error {
   statusCode: number;
   code: ViewingErrorCode;
@@ -399,7 +505,15 @@ export async function selectViewingSlot(
     updatedAt: now,
     updatedByUserId: userId,
   };
-  return saveViewingRequestDoc(next);
+  const saved = await saveViewingRequestDoc(next);
+  try {
+    await notifyViewingSlotSelected(saved);
+  } catch (error: any) {
+    console.error("[viewings] viewing slot confirmation email failed", {
+      message: error?.message || "send_failed",
+    });
+  }
+  return saved;
 }
 
 export async function completeViewingRequest(

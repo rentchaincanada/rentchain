@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { sendEmailMock } = vi.hoisted(() => ({
+const { buildEmailHtmlMock, buildEmailTextMock, sendEmailMock } = vi.hoisted(() => ({
+  buildEmailHtmlMock: vi.fn(() => "<p>email</p>"),
+  buildEmailTextMock: vi.fn(() => "email"),
   sendEmailMock: vi.fn(),
 }));
 
@@ -75,8 +77,8 @@ vi.mock("../../services/emailService", () => ({
   sendEmail: sendEmailMock,
 }));
 vi.mock("../../email/templates/baseEmailTemplate", () => ({
-  buildEmailHtml: vi.fn(() => "<p>email</p>"),
-  buildEmailText: vi.fn(() => "email"),
+  buildEmailHtml: buildEmailHtmlMock,
+  buildEmailText: buildEmailTextMock,
 }));
 vi.mock("../../middleware/rateLimit", () => ({
   rateLimitPublicApply: (_req: any, _res: any, next: any) => next(),
@@ -136,6 +138,8 @@ async function invokeRouter(router: any, options: {
 describe("viewingRoutes", () => {
   beforeEach(() => {
     resetDb();
+    buildEmailHtmlMock.mockClear();
+    buildEmailTextMock.mockClear();
     sendEmailMock.mockReset();
     sendEmailMock.mockResolvedValue(undefined);
     process.env.EMAIL_FROM = "noreply@example.com";
@@ -309,7 +313,203 @@ describe("viewingRoutes", () => {
     expect(res.status).toBe(200);
     expect(res.body.status).toBe("scheduled");
     expect(res.body.selectedSlotId).toBe("slot-1");
+    expect(res.body.selectedSlot).toEqual(expect.objectContaining({
+      id: "slot-1",
+      startAt: "2026-04-02T18:00:00.000Z",
+      endAt: "2026-04-02T18:30:00.000Z",
+    }));
     expect(res.body.proposedSlots[0].isSelected).toBe(true);
+    expect(sendEmailMock).toHaveBeenCalledTimes(1);
+    expect(sendEmailMock).toHaveBeenCalledWith(expect.objectContaining({
+      to: "jordan@example.com",
+      from: "noreply@example.com",
+      replyTo: "noreply@example.com",
+      subject: "Viewing confirmed for Harbour House • Unit 2A",
+    }));
+    expect(buildEmailTextMock).toHaveBeenCalledWith(expect.objectContaining({
+      intro: "Your viewing time has been confirmed.",
+      bullets: [
+        "When: 2026-04-02 from 18:00 to 18:30 UTC",
+        "Location: Harbour House • Unit 2A",
+        "Note: Front entrance",
+      ],
+      ctaText: "Open viewings",
+      ctaUrl: "https://www.rentchain.ai/viewings",
+    }));
+    expect(buildEmailHtmlMock).toHaveBeenCalledWith(expect.objectContaining({
+      title: "Viewing time confirmed",
+      preheader: "Viewing confirmed for 2026-04-02 from 18:00 to 18:30 UTC.",
+    }));
+  });
+
+  it("schedules a selected slot without notification when applicant email is missing", async () => {
+    const router = await createRouter();
+    seedCollection("viewingRequests", "view-missing-email", {
+      id: "view-missing-email",
+      landlordId: "landlord-1",
+      propertyId: "property-1",
+      unitId: "unit-1",
+      applicationId: null,
+      applicantName: "Jordan Lee",
+      applicantEmail: null,
+      applicantPhone: null,
+      requestedMessage: null,
+      status: "slots_proposed",
+      proposedSlots: [
+        {
+          id: "slot-1",
+          startAt: "2026-04-02T18:00:00.000Z",
+          endAt: "2026-04-02T18:30:00.000Z",
+          isSelected: false,
+        },
+      ],
+      selectedSlotId: null,
+      selectedSlot: null,
+      requestedAt: "2026-03-28T10:00:00.000Z",
+      slotsProposedAt: "2026-03-28T11:00:00.000Z",
+      createdAt: "2026-03-28T10:00:00.000Z",
+      updatedAt: "2026-03-28T11:00:00.000Z",
+    });
+
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/viewings/view-missing-email/select-slot",
+      body: { slotId: "slot-1" },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe("scheduled");
+    expect(sendEmailMock).not.toHaveBeenCalled();
+  });
+
+  it("schedules a selected slot without notification when applicant email is invalid", async () => {
+    const router = await createRouter();
+    seedCollection("viewingRequests", "view-invalid-email", {
+      id: "view-invalid-email",
+      landlordId: "landlord-1",
+      propertyId: "property-1",
+      unitId: "unit-1",
+      applicationId: null,
+      applicantName: "Jordan Lee",
+      applicantEmail: "not-an-email",
+      applicantPhone: null,
+      requestedMessage: null,
+      status: "slots_proposed",
+      proposedSlots: [
+        {
+          id: "slot-1",
+          startAt: "2026-04-02T18:00:00.000Z",
+          endAt: "2026-04-02T18:30:00.000Z",
+          isSelected: false,
+        },
+      ],
+      selectedSlotId: null,
+      selectedSlot: null,
+      requestedAt: "2026-03-28T10:00:00.000Z",
+      slotsProposedAt: "2026-03-28T11:00:00.000Z",
+      createdAt: "2026-03-28T10:00:00.000Z",
+      updatedAt: "2026-03-28T11:00:00.000Z",
+    });
+
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/viewings/view-invalid-email/select-slot",
+      body: { slotId: "slot-1" },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe("scheduled");
+    expect(sendEmailMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps selected slot scheduling when confirmation email delivery fails", async () => {
+    sendEmailMock.mockRejectedValueOnce(new Error("mail_failed"));
+    const router = await createRouter();
+    seedCollection("viewingRequests", "view-email-failure", {
+      id: "view-email-failure",
+      landlordId: "landlord-1",
+      propertyId: "property-1",
+      unitId: "unit-1",
+      applicationId: null,
+      applicantName: "Jordan Lee",
+      applicantEmail: "jordan@example.com",
+      applicantPhone: null,
+      requestedMessage: null,
+      status: "slots_proposed",
+      proposedSlots: [
+        {
+          id: "slot-1",
+          startAt: "2026-04-02T18:00:00.000Z",
+          endAt: "2026-04-02T18:30:00.000Z",
+          note: null,
+          isSelected: false,
+        },
+      ],
+      selectedSlotId: null,
+      selectedSlot: null,
+      requestedAt: "2026-03-28T10:00:00.000Z",
+      slotsProposedAt: "2026-03-28T11:00:00.000Z",
+      createdAt: "2026-03-28T10:00:00.000Z",
+      updatedAt: "2026-03-28T11:00:00.000Z",
+    });
+
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/viewings/view-email-failure/select-slot",
+      body: { slotId: "slot-1" },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe("scheduled");
+    expect(sendEmailMock).toHaveBeenCalledTimes(1);
+    expect(getCollection("viewingRequests").get("view-email-failure")?.data?.status).toBe("scheduled");
+  });
+
+  it("uses safe generic location text when property and unit labels are unavailable", async () => {
+    const router = await createRouter();
+    seedCollection("viewingRequests", "view-generic-location", {
+      id: "view-generic-location",
+      landlordId: "landlord-1",
+      propertyId: "property-missing",
+      unitId: "unit-missing",
+      applicationId: null,
+      applicantName: "Jordan Lee",
+      applicantEmail: "jordan@example.com",
+      applicantPhone: null,
+      requestedMessage: null,
+      status: "slots_proposed",
+      proposedSlots: [
+        {
+          id: "slot-1",
+          startAt: "2026-04-02T18:00:00.000Z",
+          endAt: "2026-04-02T18:30:00.000Z",
+          isSelected: false,
+        },
+      ],
+      selectedSlotId: null,
+      selectedSlot: null,
+      requestedAt: "2026-03-28T10:00:00.000Z",
+      slotsProposedAt: "2026-03-28T11:00:00.000Z",
+      createdAt: "2026-03-28T10:00:00.000Z",
+      updatedAt: "2026-03-28T11:00:00.000Z",
+    });
+
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/viewings/view-generic-location/select-slot",
+      body: { slotId: "slot-1" },
+    });
+
+    expect(res.status).toBe(200);
+    expect(sendEmailMock).toHaveBeenCalledWith(expect.objectContaining({
+      subject: "Viewing confirmed for the requested property",
+    }));
+    expect(buildEmailTextMock).toHaveBeenCalledWith(expect.objectContaining({
+      bullets: [
+        "When: 2026-04-02 from 18:00 to 18:30 UTC",
+        "Location: the requested property",
+      ],
+    }));
   });
 
   it("rejects selection of an unknown slot", async () => {
@@ -345,6 +545,7 @@ describe("viewingRoutes", () => {
 
     expect(res.status).toBe(400);
     expect(res.body.error).toBe("invalid_slot_selection");
+    expect(sendEmailMock).not.toHaveBeenCalled();
   });
 
   it("only completes from scheduled", async () => {
