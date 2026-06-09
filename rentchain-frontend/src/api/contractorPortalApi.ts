@@ -31,9 +31,7 @@ export type ContractorPortalWorkOrder = {
 export type ContractorPortalMessage = {
   id: string;
   workOrderId: string;
-  landlordId?: string | null;
   senderRole?: string | null;
-  senderName?: string | null;
   text: string;
   createdAt?: number | null;
 };

@@ -48,6 +48,7 @@ import TenantLeaseNoticesPage from "./pages/tenant/TenantLeaseNoticesPage";
 import TenantLeaseNoticeDetailPage from "./pages/tenant/TenantLeaseNoticeDetailPage";
 import PdfSamplePage from "./pages/PdfSamplePage";
 import ContractorDashboardPage from "./pages/contractor/ContractorDashboardPage";
+import ContractorInviteAcceptPage from "./pages/contractor/ContractorInviteAcceptPage";
 import ContractorJobsPage from "./pages/contractor/ContractorJobsPage";
 import ContractorProfilePage from "./pages/contractor/ContractorProfilePage";
 import { ContractorNav } from "./components/layout/ContractorNav";
@@ -1269,8 +1270,8 @@ function App() {
           }
         />
         <Route path="/contractor/signup" element={<LegacyQueryInviteRedirect source="contractor" />} />
-        <Route path="/contractor/invite/:token" element={<LegacyTokenInviteRedirect source="contractor" />} />
-        <Route path="/contractor/invite" element={<LegacyQueryInviteRedirect source="contractor" />} />
+        <Route path="/contractor/invite/:token" element={<ContractorInviteAcceptPage />} />
+        <Route path="/contractor/invite" element={<ContractorInviteAcceptPage />} />
         <Route
           path="/contractor/jobs"
           element={

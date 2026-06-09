@@ -147,6 +147,32 @@ describe("contractorPortalRoutes", () => {
       serviceCategories: ["plumbing"],
       availabilityStatus: "active",
     });
+    ensureCollection("contractorMessages").set("msg-1", {
+      id: "msg-1",
+      contractorId: "contractor-1",
+      landlordId: "landlord-1",
+      workOrderId: "wo-1",
+      senderRole: "landlord",
+      senderId: "landlord-1",
+      senderName: "Landlord Ops",
+      recipientRole: "contractor",
+      text: "Please confirm the appointment window.",
+      createdAtMs: 200,
+      rawIdsIncluded: false,
+      payloadIncluded: false,
+    });
+    ensureCollection("contractorMessages").set("msg-2", {
+      id: "msg-2",
+      contractorId: "contractor-2",
+      landlordId: "landlord-2",
+      workOrderId: "wo-2",
+      senderRole: "landlord",
+      senderId: "landlord-2",
+      senderName: "Other Landlord Ops",
+      recipientRole: "contractor",
+      text: "Private message for another contractor.",
+      createdAtMs: 300,
+    });
   });
 
   it("lists only the authenticated contractor's assigned work with safe projections", async () => {
@@ -213,6 +239,7 @@ describe("contractorPortalRoutes", () => {
     expect(res.status).toBe(201);
     expect(res.body?.message?.text).toBe("Arriving tomorrow morning.");
     expect(res.body?.message?.landlordId).toBeUndefined();
+    expect(res.body?.message?.senderName).toBeUndefined();
     expect(JSON.stringify(res.body?.message)).not.toContain("landlord-1");
 
     const listRes = await invokeRouter(router, {
@@ -222,8 +249,12 @@ describe("contractorPortalRoutes", () => {
       headers: { "x-test-user": JSON.stringify({ id: "contractor-1", role: "contractor" }) },
     });
     expect(listRes.status).toBe(200);
-    expect(listRes.body?.items?.[0]?.landlordId).toBeUndefined();
-    expect(JSON.stringify(listRes.body?.items?.[0])).not.toContain("landlord-1");
+    const listJson = JSON.stringify(listRes.body?.items || []);
+    expect(listJson).toContain("Please confirm the appointment window.");
+    expect(listJson).toContain("Arriving tomorrow morning.");
+    expect(listJson).not.toContain("landlord-1");
+    expect(listJson).not.toContain("Landlord Ops");
+    expect(listJson).not.toContain("Private message for another contractor.");
 
     const forbidden = await invokeRouter(router, {
       method: "POST",
@@ -233,6 +264,32 @@ describe("contractorPortalRoutes", () => {
       body: { workOrderId: "wo-1", landlordId: "landlord-2", text: "Wrong landlord." },
     });
     expect(forbidden.status).toBe(403);
+  });
+
+  it("projects embedded work-order messages without raw landlord context", async () => {
+    const router = (await import("../contractorPortalRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/contractors/contractor-1/work-orders/wo-1",
+      params: { contractorId: "contractor-1", workOrderId: "wo-1" },
+      headers: { "x-test-user": JSON.stringify({ id: "contractor-1", role: "contractor" }) },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.item?.messages).toEqual([
+      expect.objectContaining({
+        id: "msg-1",
+        workOrderId: "wo-1",
+        senderRole: "landlord",
+        text: "Please confirm the appointment window.",
+        createdAt: 200,
+      }),
+    ]);
+    const embeddedMessagesJson = JSON.stringify(res.body?.item?.messages || []);
+    expect(embeddedMessagesJson).not.toContain("landlord-1");
+    expect(embeddedMessagesJson).not.toContain("Landlord Ops");
+    expect(embeddedMessagesJson).not.toContain("senderId");
+    expect(embeddedMessagesJson).not.toContain("recipientRole");
   });
 
   it("reads and updates only the authenticated contractor profile", async () => {

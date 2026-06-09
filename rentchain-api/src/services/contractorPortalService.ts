@@ -86,7 +86,6 @@ function projectContractorMessage(message: any, workOrderId?: string | null) {
     id: asString(message?.id, 160),
     workOrderId: asString(workOrderId || message?.workOrderId, 160),
     senderRole: asOptionalString(message?.senderRole, 40),
-    senderName: asOptionalString(message?.senderName, 180),
     text: asOptionalString(message?.text, 2000) || "",
     createdAt: toMillis(message?.createdAtMs || message?.createdAt),
   };
