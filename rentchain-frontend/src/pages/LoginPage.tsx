@@ -2,8 +2,9 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import { useAuth } from "../context/useAuth";
-import { colors, spacing, text } from "../styles/tokens";
-import { Card, Input, Button } from "../components/ui/Ui";
+import { colors, text } from "../styles/tokens";
+import { Button } from "../components/ui/Ui";
+import { LoginForm } from "../components/auth/LoginForm";
 import { DEBUG_AUTH_KEY, JUST_LOGGED_IN_KEY } from "../lib/authKeys";
 import { getAuthToken } from "../lib/authToken";
 import { useToast } from "../components/ui/ToastProvider";
@@ -207,153 +208,40 @@ export const LoginPage: React.FC = () => {
   };
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        backgroundColor: colors.bg,
-        backgroundImage: colors.bgAmbient,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "clamp(16px, 5vw, 40px)",
-        overflowX: "hidden",
+    <LoginForm
+      title="Sign in to RentChain"
+      subtitle="Sign in to continue to your workspace."
+      roleLabel="Landlord and contractor access"
+      email={email}
+      onEmailChange={setEmail}
+      password={password}
+      onPasswordChange={setPassword}
+      onSubmit={(event) => {
+        event.preventDefault();
+        void handleLoginClick();
       }}
-    >
-      <Card elevated style={{ width: "min(460px, 92vw)", padding: spacing.lg }}>
-        <div style={{ marginBottom: spacing.xs, color: text.subtle, fontSize: "0.9rem" }}>
-          RentChain Secure Access
-        </div>
-        <h1
-          style={{
-            fontSize: "1.6rem",
-            fontWeight: 700,
-            marginBottom: spacing.md,
-            letterSpacing: "-0.01em",
-            color: text.primary,
-          }}
-        >
-          Sign in to RentChain
-        </h1>
-        <p style={{ marginTop: 0, marginBottom: spacing.sm, color: text.muted }}>
-          Sign in to continue to your workspace.
-        </p>
-        {new URLSearchParams(location.search).get("reason") === "expired" ? (
-          <div
-            style={{
-              marginBottom: spacing.sm,
-              padding: "8px 12px",
-              borderRadius: 10,
-              background: "rgba(239,68,68,0.08)",
-              border: "1px solid rgba(239,68,68,0.3)",
-              color: colors.danger,
-              fontWeight: 600,
-              fontSize: "0.9rem",
-            }}
-          >
-            Session expired. Please log in again.
-          </div>
-        ) : null}
-        {inviteBanner ? (
-          <div
-            style={{
-              marginBottom: spacing.sm,
-              padding: "8px 12px",
-              borderRadius: 10,
-              background: "rgba(37,99,235,0.08)",
-              border: "1px solid rgba(37,99,235,0.25)",
-              color: "#1d4ed8",
-              fontSize: "0.9rem",
-            }}
-          >
-            <div style={{ fontWeight: 700, marginBottom: 4 }}>{inviteBanner.title}</div>
-            <div>{inviteBanner.body}</div>
-          </div>
-        ) : null}
-
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            handleLoginClick();
-          }}
-          style={{ display: "flex", flexDirection: "column", gap: spacing.sm, width: "100%" }}
-        >
-          <label style={{ display: "flex", flexDirection: "column", gap: spacing.xs, width: "100%" }}>
-            <span style={{ fontSize: "0.9rem", color: text.muted }}>Email</span>
-            <Input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              onClick={(e) => e.stopPropagation()}
-              placeholder="you@example.com"
-              autoComplete="email"
-              style={{ width: "100%" }}
-              required
-            />
-          </label>
-
-          <label style={{ display: "flex", flexDirection: "column", gap: spacing.xs, width: "100%" }}>
-            <span style={{ fontSize: "0.9rem", color: text.muted }}>Password</span>
-            <Input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              onClick={(e) => e.stopPropagation()}
-              placeholder="••••••••"
-              autoComplete="current-password"
-              style={{ width: "100%" }}
-              required
-            />
-          </label>
-          <div style={{ display: "flex", justifyContent: "flex-end" }}>
-            <Link
-              to="/forgot-password"
-              style={{ color: colors.accent, fontWeight: 600, fontSize: "0.9rem" }}
-            >
-              Forgot password?
-            </Link>
-          </div>
-
+      isLoading={submitting || isLoading}
+      error={error}
+      statusMessage={expired ? "Session expired. Please log in again." : "Sign in to continue to your workspace."}
+      banner={
+        expired
+          ? { title: "Session expired", body: "Please log in again.", tone: "warning" }
+          : inviteBanner
+      }
+      demoAction={
+        import.meta.env.DEV ? (
           <Button
-            type="submit"
-            onClick={() => handleLoginClick()}
-            disabled={submitting || isLoading}
-            style={{
-              width: "100%",
-              opacity: submitting || isLoading ? 0.8 : 1,
-              cursor: submitting || isLoading ? "not-allowed" : "pointer",
-              justifyContent: "center",
-            }}
+            type="button"
+            variant="ghost"
+            onClick={handleDemoLogin}
+            style={{ width: "100%" }}
           >
-            {submitting ? "Signing in..." : "Sign in"}
+            Login as Demo (dev)
           </Button>
-
-          {import.meta.env.DEV && (
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={handleDemoLogin}
-              style={{ width: "100%" }}
-            >
-              Login as Demo (dev)
-            </Button>
-          )}
-        </form>
-
-        <div
-          style={{
-            marginTop: spacing.sm,
-            minHeight: "1.2rem",
-            fontSize: "0.9rem",
-            color: error ? colors.danger : text.muted,
-          }}
-        >
-          {error
-            ? error
-            : expired
-            ? "Session expired. Please log in again."
-            : "Sign in to continue to your workspace."}
-        </div>
-        <div style={{ marginTop: spacing.sm, display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
+        ) : null
+      }
+      footer={
+        <>
           <Link to="/signup" style={{ color: colors.accent, textDecoration: "none", fontWeight: 600 }}>
             Create free account
           </Link>
@@ -366,9 +254,9 @@ export const LoginPage: React.FC = () => {
           <Link to="/invite" style={{ color: text.muted, textDecoration: "none" }}>
             Have an invite?
           </Link>
-        </div>
-      </Card>
-    </div>
+        </>
+      }
+    />
   );
 };
 
