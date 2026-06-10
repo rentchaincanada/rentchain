@@ -155,8 +155,17 @@ describe("LandlordNav mobile drawer", () => {
     expect(within(tabbar).getByText("Dashboard")).toBeInTheDocument();
     expect(within(tabbar).getByText("Documents")).toBeInTheDocument();
     expect(within(tabbar).getByText("Leases")).toBeInTheDocument();
+    expect(within(tabbar).getByText("Inbox")).toBeInTheDocument();
     expect(within(tabbar).getByText("Messages")).toBeInTheDocument();
     expect(within(tabbar).getByText("More")).toBeInTheDocument();
+    expect(within(tabbar).getAllByRole("button").map((button) => button.textContent)).toEqual([
+      "Dashboard",
+      "Documents",
+      "Leases",
+      "Inbox",
+      "Messages",
+      "More",
+    ]);
     expect(within(tabbar).queryByText("Applications")).not.toBeInTheDocument();
     expect(within(tabbar).queryByText("Tenants")).not.toBeInTheDocument();
     expect(within(tabbar).queryByText("Properties")).not.toBeInTheDocument();
@@ -182,6 +191,16 @@ describe("LandlordNav mobile drawer", () => {
 
     fireEvent.click(within(tabbar).getByRole("button", { name: "Leases" }));
     expect(screen.getByTestId("current-path")).toHaveTextContent("/leases");
+
+    fireEvent.click(within(tabbar).getByRole("button", { name: "Inbox" }));
+    expect(screen.getByTestId("current-path")).toHaveTextContent("/landlord/unified-inbox");
+  });
+
+  it("marks the unified inbox tab active on the landlord unified inbox route", () => {
+    renderLandlordNav("/landlord/unified-inbox");
+
+    const tabbar = screen.getByRole("navigation", { name: "Bottom navigation" });
+    expect(within(tabbar).getByRole("button", { name: "Inbox" })).toHaveClass("active");
   });
 
   it("does not render the landlord bottom nav for admin role contexts", () => {

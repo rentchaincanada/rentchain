@@ -184,7 +184,7 @@
   border-top: 1px solid rgba(0, 0, 0, 0.08);
   background: #ffffff;
   padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px));
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   z-index: 20;
   box-sizing: border-box;
   max-width: 100%;
@@ -362,7 +362,7 @@
 
   .rc-landlord-mobile-tabbar {
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
     z-index: 100;
     width: 100%;
     max-width: 100%;
