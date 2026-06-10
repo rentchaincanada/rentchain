@@ -1,7 +1,7 @@
 # Property Onboarding Workflow Audit Report
 
-PR: #[NUMBER once opened]
-PR URL: [URL once opened]
+PR: #1133
+PR URL: https://github.com/rentchaincanada/rentchain/pull/1133
 Branch: audit/property-onboarding-workflow-v1
 
 ## Executive Summary
