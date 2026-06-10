@@ -1,5 +1,5 @@
-PR: #[NUMBER once opened]
-PR URL: [URL once opened]
+PR: #1134
+PR URL: https://github.com/rentchaincanada/rentchain/pull/1134
 Branch: fix/unit-csv-import-v1
 
 # Implementation Summary
