@@ -39,6 +39,9 @@ export const ContractorNav: React.FC<Props> = ({ children }) => {
             <NavLink to="/contractor" style={{ color: "#334155", textDecoration: "none" }}>
               Dashboard
             </NavLink>
+            <NavLink to="/contractor/inbox" style={{ color: "#334155", textDecoration: "none" }}>
+              Inbox
+            </NavLink>
             <NavLink to="/contractor/jobs" style={{ color: "#334155", textDecoration: "none" }}>
               Jobs
             </NavLink>
