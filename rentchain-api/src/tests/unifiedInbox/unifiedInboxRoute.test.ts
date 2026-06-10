@@ -33,6 +33,19 @@ vi.mock("../../middleware/requireAuth", () => ({
   },
 }));
 
+const PUBLIC_RECORD_KEYS = ["audienceRole", "body", "id", "occurredAt", "priority", "readAt", "sourceKind", "status", "title"];
+const EXCLUDED_RESPONSE_FIELDS = [
+  "sourceId",
+  "sourceRef",
+  "audienceScopeKey",
+  "rawIdsIncluded",
+  "tokensIncluded",
+  "secretsIncluded",
+  "providerPayloadIncluded",
+  "storagePathIncluded",
+  "privateNotesIncluded",
+];
+
 async function invokeRouter(
   router: { handle: (req: Record<string, unknown>, res: Record<string, unknown>, next: (error?: unknown) => void) => void },
   options: {
@@ -128,10 +141,16 @@ describe("unifiedInboxRoutes", () => {
 
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ ok: true, role: "tenant", total: 2 });
+    const body = res.body as { items: Array<Record<string, unknown>>; records: Array<Record<string, unknown>> };
+    expect(body.items.map((item) => Object.keys(item).sort())).toEqual([PUBLIC_RECORD_KEYS, PUBLIC_RECORD_KEYS]);
+    expect(body.records).toEqual(body.items);
     const json = JSON.stringify(res.body);
     expect(json).toContain("tenant.viewing");
     expect(json).not.toContain("tenant-workspace-1");
     expect(json).not.toContain("landlord-1");
+    for (const field of EXCLUDED_RESPONSE_FIELDS) {
+      expect(json).not.toContain(field);
+    }
   });
 
   it("returns the landlord projection and rejects tenant source filters", async () => {
@@ -148,8 +167,13 @@ describe("unifiedInboxRoutes", () => {
 
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ ok: true, role: "landlord", total: 1 });
+    const body = res.body as { items: Array<Record<string, unknown>> };
+    expect(body.items.map((item) => Object.keys(item).sort())).toEqual([PUBLIC_RECORD_KEYS]);
     expect(JSON.stringify(res.body)).toContain("landlord.work_order");
     expect(JSON.stringify(res.body)).not.toContain("work-order-1");
+    for (const field of EXCLUDED_RESPONSE_FIELDS) {
+      expect(JSON.stringify(res.body)).not.toContain(field);
+    }
 
     const forbiddenSource = await invokeRouter(router, {
       method: "GET",
@@ -175,7 +199,13 @@ describe("unifiedInboxRoutes", () => {
     });
     expect(contractor.status).toBe(200);
     expect(contractor.body).toMatchObject({ ok: true, role: "contractor", total: 1 });
-    expect(JSON.stringify(contractor.body)).not.toContain("contractor-1");
+    const body = contractor.body as { items: Array<Record<string, unknown>> };
+    expect(body.items.map((item) => Object.keys(item).sort())).toEqual([PUBLIC_RECORD_KEYS]);
+    const json = JSON.stringify(contractor.body);
+    expect(json).not.toContain("contractor-1");
+    for (const field of EXCLUDED_RESPONSE_FIELDS) {
+      expect(json).not.toContain(field);
+    }
 
     const admin = await invokeRouter(router, {
       method: "GET",

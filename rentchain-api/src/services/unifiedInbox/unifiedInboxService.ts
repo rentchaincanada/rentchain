@@ -4,7 +4,7 @@ import {
   deriveLandlordUnifiedInbox,
   deriveTenantUnifiedInbox,
 } from "./deriveUnifiedInbox";
-import type { SourceKind, UnifiedInboxEvent } from "./types";
+import type { SourceKind, UnifiedInboxEvent, UnifiedInboxPublicRecord } from "./types";
 
 const MAX_LIMIT = 100;
 const DEFAULT_LIMIT = 20;
@@ -64,8 +64,8 @@ export type UnifiedInboxContext = {
 export type UnifiedInboxResult = {
   ok: true;
   role: UnifiedInboxRole;
-  items: UnifiedInboxEvent[];
-  records: UnifiedInboxEvent[];
+  items: UnifiedInboxPublicRecord[];
+  records: UnifiedInboxPublicRecord[];
   total: number;
   limit: number;
   offset: number;
@@ -203,6 +203,20 @@ function applySafeFilters(items: UnifiedInboxEvent[], request: UnifiedInboxReque
   });
 }
 
+function toPublicInboxRecord(item: UnifiedInboxEvent): UnifiedInboxPublicRecord {
+  return {
+    id: item.id,
+    sourceKind: item.sourceKind,
+    audienceRole: item.audienceRole,
+    title: item.title,
+    body: item.body,
+    priority: item.priority,
+    status: item.status,
+    occurredAt: item.occurredAt,
+    readAt: item.readAt,
+  };
+}
+
 function assertNoCrossScopeAttempt(query: UnifiedInboxQuery, context: UnifiedInboxContext) {
   const tenantId = asString(query.tenantId, 240);
   const tenantWorkspaceId = asString(query.tenantWorkspaceId || query.workspaceId, 240);
@@ -325,7 +339,7 @@ export async function getUnifiedInbox(context: UnifiedInboxContext, query: Unifi
       : await loadContractorInbox(context);
 
   const filteredItems = applySafeFilters(page.items, request, context.role);
-  const items = filteredItems.slice(request.offset, request.offset + request.limit);
+  const items = filteredItems.slice(request.offset, request.offset + request.limit).map(toPublicInboxRecord);
 
   return {
     ok: true,

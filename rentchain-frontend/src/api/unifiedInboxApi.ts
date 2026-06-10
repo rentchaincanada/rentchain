@@ -29,25 +29,13 @@ export type UnifiedInboxSourceKind =
 export type UnifiedInboxRecord = {
   id: string;
   sourceKind: UnifiedInboxSourceKind;
-  sourceId: string;
   audienceRole: UnifiedInboxRole;
-  audienceScopeKey: string;
   title: string;
   body: string;
   priority: UnifiedInboxPriority;
   status: UnifiedInboxStatus;
   occurredAt: string;
   readAt: string | null;
-  sourceRef: {
-    kind: UnifiedInboxSourceKind;
-    ref: string;
-  };
-  rawIdsIncluded: false;
-  tokensIncluded: false;
-  secretsIncluded: false;
-  providerPayloadIncluded: false;
-  storagePathIncluded: false;
-  privateNotesIncluded: false;
 };
 
 export type UnifiedInboxResponse = {

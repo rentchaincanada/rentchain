@@ -24,6 +24,19 @@ const dbMock = {
 
 vi.mock("../../firebase", () => ({ db: dbMock }));
 
+const PUBLIC_RECORD_KEYS = ["audienceRole", "body", "id", "occurredAt", "priority", "readAt", "sourceKind", "status", "title"];
+const EXCLUDED_RESPONSE_FIELDS = [
+  "sourceId",
+  "sourceRef",
+  "audienceScopeKey",
+  "rawIdsIncluded",
+  "tokensIncluded",
+  "secretsIncluded",
+  "providerPayloadIncluded",
+  "storagePathIncluded",
+  "privateNotesIncluded",
+];
+
 describe("unified inbox service", () => {
   beforeEach(() => {
     collections.clear();
@@ -80,11 +93,16 @@ describe("unified inbox service", () => {
     expect(result.role).toBe("tenant");
     expect(result.items.map((item) => item.audienceRole)).toEqual(["tenant", "tenant"]);
     expect(result.items.map((item) => item.sourceKind)).toEqual(["tenant.viewing", "tenant.message"]);
+    expect(result.items.map((item) => Object.keys(item).sort())).toEqual([PUBLIC_RECORD_KEYS, PUBLIC_RECORD_KEYS]);
+    expect(result.records).toEqual(result.items);
     const json = JSON.stringify(result.items);
     expect(json).not.toContain("tenant-workspace-1");
     expect(json).not.toContain("viewing-1");
     expect(json).not.toContain("tenant-message-1");
     expect(json).not.toContain("secret token");
+    for (const field of EXCLUDED_RESPONSE_FIELDS) {
+      expect(json).not.toContain(field);
+    }
   });
 
   it("returns landlord and contractor projections for their own scopes only", async () => {
@@ -92,13 +110,21 @@ describe("unified inbox service", () => {
 
     const landlordResult = await getUnifiedInbox({ role: "landlord", landlordId: "landlord-1" }, {});
     expect(landlordResult.items.map((item) => item.sourceKind)).toEqual(["landlord.viewing", "landlord.work_order"]);
+    expect(landlordResult.items.map((item) => Object.keys(item).sort())).toEqual([PUBLIC_RECORD_KEYS, PUBLIC_RECORD_KEYS]);
     expect(JSON.stringify(landlordResult.items)).not.toContain("landlord-1");
     expect(JSON.stringify(landlordResult.items)).not.toContain("work-order-1");
+    for (const field of EXCLUDED_RESPONSE_FIELDS) {
+      expect(JSON.stringify(landlordResult.items)).not.toContain(field);
+    }
 
     const contractorResult = await getUnifiedInbox({ role: "contractor", contractorId: "contractor-1" }, {});
     expect(contractorResult.items.map((item) => item.sourceKind)).toEqual(["contractor.work_order", "contractor.message"]);
+    expect(contractorResult.items.map((item) => Object.keys(item).sort())).toEqual([PUBLIC_RECORD_KEYS, PUBLIC_RECORD_KEYS]);
     expect(JSON.stringify(contractorResult.items)).not.toContain("contractor-1");
     expect(JSON.stringify(contractorResult.items)).not.toContain("landlord-1");
+    for (const field of EXCLUDED_RESPONSE_FIELDS) {
+      expect(JSON.stringify(contractorResult.items)).not.toContain(field);
+    }
   });
 
   it("fails closed on cross-scope query attempts and invalid filters", async () => {

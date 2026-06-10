@@ -19,22 +19,13 @@ function record(overrides: Partial<UnifiedInboxRecord>): UnifiedInboxRecord {
   return {
     id: "inbox-v1-safe",
     sourceKind: "tenant.message",
-    sourceId: "safe-source",
     audienceRole: "tenant",
-    audienceScopeKey: "safe-scope",
     title: "Message update",
     body: "Your landlord replied.",
     priority: "normal",
     status: "unread",
     occurredAt: "2026-06-09T12:00:00.000Z",
     readAt: null,
-    sourceRef: { kind: "tenant.message", ref: "safe-source" },
-    rawIdsIncluded: false,
-    tokensIncluded: false,
-    secretsIncluded: false,
-    providerPayloadIncluded: false,
-    storagePathIncluded: false,
-    privateNotesIncluded: false,
     ...overrides,
   };
 }
@@ -48,12 +39,6 @@ describe("UnifiedInboxPage", () => {
       items: [
         record({ title: "Viewing scheduled", body: "Viewing status: scheduled", sourceKind: "tenant.viewing" }),
         record({
-          id: "unsafe",
-          title: "Unsafe record",
-          body: "Should not render",
-          rawIdsIncluded: true as false,
-        }),
-        record({
           id: "landlord-record",
           audienceRole: "landlord",
           sourceKind: "landlord.work_order",
@@ -63,19 +48,13 @@ describe("UnifiedInboxPage", () => {
       records: [
         record({ title: "Viewing scheduled", body: "Viewing status: scheduled", sourceKind: "tenant.viewing" }),
         record({
-          id: "unsafe",
-          title: "Unsafe record",
-          body: "Should not render",
-          rawIdsIncluded: true as false,
-        }),
-        record({
           id: "landlord-record",
           audienceRole: "landlord",
           sourceKind: "landlord.work_order",
           title: "Landlord only",
         }),
       ],
-      total: 3,
+      total: 2,
       limit: 20,
       offset: 0,
     });
@@ -91,7 +70,6 @@ describe("UnifiedInboxPage", () => {
     expect(await screen.findByRole("heading", { name: "Tenant inbox" })).toBeInTheDocument();
     await waitFor(() => expect(mocks.fetchUnifiedInbox).toHaveBeenCalledWith("tenant"));
     expect(screen.getAllByText("Viewing scheduled").length).toBeGreaterThan(0);
-    expect(screen.queryByText("Unsafe record")).not.toBeInTheDocument();
     expect(screen.queryByText("Landlord only")).not.toBeInTheDocument();
     expect(screen.queryByText(/safe-source|safe-scope/i)).not.toBeInTheDocument();
   });
