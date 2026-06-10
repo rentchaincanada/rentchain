@@ -62,7 +62,10 @@ export type UnifiedInboxResponse = {
 
 export async function fetchUnifiedInbox(role: UnifiedInboxRole): Promise<UnifiedInboxResponse> {
   if (role === "tenant") {
-    return tenantApiFetch<UnifiedInboxResponse>("/inbox");
+    return tenantApiFetch<UnifiedInboxResponse>("/tenant/inbox");
   }
-  return apiFetch<UnifiedInboxResponse>("/inbox");
+  if (role === "contractor") {
+    return apiFetch<UnifiedInboxResponse>("/contractor/inbox");
+  }
+  return apiFetch<UnifiedInboxResponse>("/landlord/inbox");
 }
