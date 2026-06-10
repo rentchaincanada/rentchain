@@ -1,48 +1,16 @@
 export function buildUnitsCsvTemplate() {
   const headers = [
     "unitNumber",
-    "floor",
-    "unitType",
-    "status",
+    "marketRent",
     "beds",
     "baths",
     "sqft",
-    "marketRent",
-    "deposit",
-    "utilitiesIncluded",
-    "amenities",
-    "notes",
+    "status",
   ];
 
   const exampleRows = [
-    [
-      "101",
-      "1",
-      "1br",
-      "vacant",
-      "1",
-      "1",
-      "610",
-      "1850",
-      "1850",
-      "heat;water",
-      "balcony;parking",
-      "Near elevator",
-    ],
-    [
-      "102",
-      "1",
-      "studio",
-      "occupied",
-      "0",
-      "1",
-      "450",
-      "1650",
-      "1650",
-      "heat",
-      "parking",
-      "",
-    ],
+    ["101", "1850", "1", "1", "610", "vacant"],
+    ["102", "1650", "0", "1", "450", "occupied"],
   ];
 
   const lines = [

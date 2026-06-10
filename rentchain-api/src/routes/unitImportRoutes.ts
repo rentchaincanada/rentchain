@@ -109,6 +109,7 @@ router.post("/", requireLandlord, async (req: any, res) => {
         bedrooms: raw?.bedrooms ?? raw?.beds ?? null,
         bathrooms: raw?.bathrooms ?? raw?.baths ?? null,
         sqft: raw?.sqft ?? null,
+        status: raw?.status === "occupied" ? "occupied" : raw?.status === "vacant" ? "vacant" : null,
         notes: raw?.notes ?? null,
       });
     }
@@ -223,14 +224,45 @@ async function runUnitImport(opts: {
     return {
       httpStatus: 200,
       body: {
-        ok: true,
+        ok: parsed.headers.valid && issues.length === 0,
         mode,
         requestId,
+        headers: parsed.headers,
         summary,
         issues: issues.slice(0, 200),
-        preview: insertable.slice(0, 25).map((x) => x.data),
+        preview: {
+          rows: parsed.preview.rows,
+          errors: issues.slice(0, 200),
+        },
       },
       report: { mode, summary, issues },
+    };
+  }
+
+  if (!parsed.headers.valid) {
+    if (jobRef) {
+      await failImportJob(jobRef, {
+        totalRows: parsed.totalRows,
+        attemptedValid: 0,
+        errorCount: issues.length,
+      });
+    }
+    return {
+      httpStatus: 400,
+      body: {
+        ok: false,
+        code: "CSV_HEADERS_INVALID",
+        error: "CSV headers are invalid; import aborted",
+        requestId,
+        headers: parsed.headers,
+        summary: { ...summary, issueCount: issues.length },
+        issues: issues.slice(0, 200),
+        preview: {
+          rows: parsed.preview.rows,
+          errors: issues.slice(0, 200),
+        },
+      },
+      report: { ok: false, mode, summary, issues },
     };
   }
 
@@ -251,6 +283,10 @@ async function runUnitImport(opts: {
         requestId,
         summary: { ...summary, issueCount: issues.length },
         issues: issues.slice(0, 200),
+        preview: {
+          rows: parsed.preview.rows,
+          errors: issues.slice(0, 200),
+        },
       },
       report: { ok: false, mode, summary, issues },
     };
@@ -270,6 +306,7 @@ async function runUnitImport(opts: {
         bedrooms: c.data.bedrooms ?? null,
         bathrooms: c.data.bathrooms ?? null,
         sqft: c.data.sqft ?? null,
+        status: c.data.status ?? "vacant",
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       });
@@ -324,12 +361,52 @@ async function runUnitImport(opts: {
     skippedCount,
     summary,
     issues: issues.slice(0, 200),
+    preview: {
+      rows: parsed.preview.rows,
+      errors: issues.slice(0, 200),
+    },
   };
 
   const report = { ok: true, mode, summary, issues, imported: wouldInsert };
 
   return { httpStatus: 200, body, report };
 }
+
+router.post("/csv-parse", requireLandlord, async (req: any, res, next) => {
+  const requestId = req.requestId;
+  try {
+    const { propertyId } = req.params as any;
+    const landlordId = (req as any).user?.landlordId || (req as any).user?.id;
+    const csvText = String(req.body?.csvText || "");
+
+    if (!propertyId) return jsonError(res, 400, "BAD_REQUEST", "propertyId required", undefined, requestId);
+    if (!landlordId) return jsonError(res, 401, "UNAUTHORIZED", "Unauthorized", undefined, requestId);
+    if (!csvText.trim()) return jsonError(res, 400, "BAD_REQUEST", "csvText required", undefined, requestId);
+
+    const propSnap = await db.collection("properties").doc(propertyId).get();
+    if (!propSnap.exists) {
+      return jsonError(res, 404, "NOT_FOUND", "Property not found", undefined, requestId);
+    }
+    const propData = propSnap.data() as any;
+    if (propData?.landlordId && propData.landlordId !== landlordId) {
+      return jsonError(res, 403, "FORBIDDEN", "Forbidden", undefined, requestId);
+    }
+
+    const result = await runUnitImport({
+      landlordId,
+      propertyId,
+      mode: "dryRun",
+      csvText,
+      requestId,
+      plan: req.user?.plan,
+      user: req.user,
+    });
+
+    return res.status(result.httpStatus).json(result.body);
+  } catch (e) {
+    return next(e);
+  }
+});
 
 router.post("/import", requireLandlord, async (req: any, res, next) => {
   const requestId = req.requestId;

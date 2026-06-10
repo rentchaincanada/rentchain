@@ -15,13 +15,17 @@ import {
   getPropertyMonthlyPayments,
   Payment,
 } from "@/api/paymentsApi";
-import { importUnitsCsv } from "../../api/unitsImportApi";
+import {
+  importUnitsCsv,
+  previewPropertyUnitsCsv,
+  type UnitCsvIssue,
+  type UnitCsvPreviewRow,
+} from "../../api/unitsImportApi";
 import { fetchUnitsForProperty } from "../../api/unitsApi";
 import { buildUnitsCsvTemplate, downloadTextFile } from "../../utils/csvTemplates";
 import { UnitsCsvPreviewModal } from "./UnitsCsvPreviewModal";
 import { UnitEditModal } from "./UnitEditModal";
 import { SendApplicationModal } from "./SendApplicationModal";
-import { parseCsvPreview } from "../../utils/csvPreview";
 import { useToast } from "../ui/ToastProvider";
 import { setOnboardingStep } from "../../api/onboardingApi";
 import { track } from "../../lib/analytics";
@@ -272,6 +276,8 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewHeaders, setPreviewHeaders] = useState<string[]>([]);
   const [previewRows, setPreviewRows] = useState<string[][]>([]);
+  const [unitCsvPreviewRows, setUnitCsvPreviewRows] = useState<UnitCsvPreviewRow[]>([]);
+  const [unitCsvIssues, setUnitCsvIssues] = useState<UnitCsvIssue[]>([]);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [pendingFilename, setPendingFilename] = useState<string>("");
   const [units, setUnits] = useState<any[]>([]);
@@ -373,7 +379,11 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
           (result?.summary?.duplicatesInCsv ?? 0) +
           (result?.summary?.conflicts ?? 0)) ??
         0;
-      const errCount = Array.isArray(result?.errors) ? result.errors.length : 0;
+      const errCount = Array.isArray(result?.issues)
+        ? result.issues.length
+        : Array.isArray(result?.errors)
+        ? result.errors.length
+        : 0;
       showToast({
         message: "Units imported",
         description: `Created ${created} | Updated ${updated} | Skipped ${skipped}${
@@ -384,6 +394,8 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
       setPreviewOpen(false);
       setPendingFile(null);
       setPendingFilename("");
+      setUnitCsvPreviewRows([]);
+      setUnitCsvIssues([]);
       setImportMessage(
         result?.message ||
           `Created ${created} | Updated ${updated} | Skipped ${skipped}${
@@ -1143,16 +1155,18 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                     if (!file || !property) return;
                     try {
                       const text = await readFileText(file);
-                      const { headers, rows } = parseCsvPreview(text, 10);
+                      const preview = await previewPropertyUnitsCsv(property.id, text);
                       setPendingFile(file);
                       setPendingFilename(file.name);
-                      setPreviewHeaders(headers);
-                      setPreviewRows(rows);
+                      setPreviewHeaders(preview.headers?.expected || []);
+                      setPreviewRows([]);
+                      setUnitCsvPreviewRows(preview.preview?.rows || preview.rows || []);
+                      setUnitCsvIssues(preview.preview?.errors || preview.issues || []);
                       setPreviewOpen(true);
                     } catch (err: any) {
                       showToast({
-                        message: "Failed to read CSV file",
-                        description: err?.message,
+                        message: "Failed to preview CSV file",
+                        description: err?.response?.data?.error || err?.message,
                         variant: "error",
                       });
                     }
@@ -2239,11 +2253,19 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
       ) : null}
       <UnitsCsvPreviewModal
         open={previewOpen}
-        onClose={() => setPreviewOpen(false)}
+        onClose={() => {
+          setPreviewOpen(false);
+          setPendingFile(null);
+          setPendingFilename("");
+          setUnitCsvPreviewRows([]);
+          setUnitCsvIssues([]);
+        }}
         onConfirm={confirmImport}
         filename={pendingFilename}
         headers={previewHeaders}
         rows={previewRows}
+        previewRows={unitCsvPreviewRows}
+        issues={unitCsvIssues}
         isImporting={isImporting}
       />
     </>

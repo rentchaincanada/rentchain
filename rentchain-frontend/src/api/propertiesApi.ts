@@ -9,6 +9,7 @@ export interface UnitInput {
   bedrooms?: number | null;
   bathrooms?: number | null;
   sqft?: number | null;
+  status?: "vacant" | "occupied" | null;
   utilitiesIncluded?: string[];
 }
 
