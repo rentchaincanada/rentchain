@@ -65,6 +65,11 @@ export type UnifiedInboxEvent = UnifiedInboxSafetyFlags & {
   sourceRef: UnifiedInboxSourceRef;
 };
 
+export type UnifiedInboxPublicRecord = Pick<
+  UnifiedInboxEvent,
+  "id" | "sourceKind" | "audienceRole" | "title" | "body" | "priority" | "status" | "occurredAt" | "readAt"
+>;
+
 export type UnifiedInboxPage = {
   items: UnifiedInboxEvent[];
   nextCursor?: string;

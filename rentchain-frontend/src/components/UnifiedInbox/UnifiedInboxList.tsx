@@ -64,15 +64,7 @@ function formatStatus(value: string) {
 }
 
 function isSafeRecordForRole(record: UnifiedInboxRecord, role: UnifiedInboxRole) {
-  return (
-    record.audienceRole === role &&
-    record.rawIdsIncluded === false &&
-    record.tokensIncluded === false &&
-    record.secretsIncluded === false &&
-    record.providerPayloadIncluded === false &&
-    record.storagePathIncluded === false &&
-    record.privateNotesIncluded === false
-  );
+  return record.audienceRole === role;
 }
 
 export function UnifiedInboxList({ records, role }: Props) {
