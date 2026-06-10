@@ -98,3 +98,13 @@ docs/reports/
 
 # Mission documentation — local only
 docs/missions/
+/mnt/skills/user/
+/mnt/skills
+/dev/rentchain/tools/
+
+# Cycle watcher sentinels and logs
+.handoff/.impl-summary-processed
+.handoff/.gate2-processed
+.handoff/.watcher-pids
+.handoff/.watch-handoff.log
+.handoff/.watch-gate2.log

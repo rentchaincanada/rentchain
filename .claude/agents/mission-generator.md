@@ -104,6 +104,10 @@ BEFORE ANY COMMIT:
 # Commit
 COMMIT: [one line commit message — no AI references, no Co-Authored-By]
 
+# Prompt Review
+After writing .handoff/mission-current.md, always end your response with:
+@mission-reviewer review .handoff/mission-current.md
+
 ⚠️ THE FOLLOWING RULES APPLY TO THIS GENERATOR ONLY — DO NOT INCLUDE IN GENERATED MISSION OUTPUT:
 STRICT RULES:
 - Never touch source files

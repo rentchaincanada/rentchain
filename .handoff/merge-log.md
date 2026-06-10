@@ -1,63 +1,136 @@
-# Merge Log
+# Merge Summary
 
-PR: #1129
-PR URL: https://github.com/rentchaincanada/rentchain/pull/1129
-Branch: feat/unified-inbox-data-layer-expansion-v1
-Base: main
-Head commit: 3d367f85fb3a78286cb4776290720c771f29a88c
-Merge commit: 4778e14f53da6c579e21d8478510a4094e272701
-Merged at: 2026-06-09T17:22:49Z
+Date: 2026-06-10
+Strategic status: PILOT 1 AUTHORIZED
 
-## Merge Confirmation
-- PR #1129 merged into `main` using standard merge with operator-provided admin authorization.
-- Local `main` synced with `origin/main`.
-- Local branch `feat/unified-inbox-data-layer-expansion-v1` deleted.
-- Remote branch `feat/unified-inbox-data-layer-expansion-v1` deleted.
+## Merged PRs
+
+### PR #1131
+- PR URL: https://github.com/rentchaincanada/rentchain/pull/1131
+- Branch: fix/unified-inbox-debug-metadata-removal-v1
+- Merge commit: 23bcc30f7d477bb0365222e61249c4a9620e471b
+- Result: already merged into `main` before this combined Gate 2 pass; live state re-verified.
+
+### PR #1132
+- PR URL: https://github.com/rentchaincanada/rentchain/pull/1132
+- Branch: fix/landlord-inbox-navigation-surface-v1
+- Merge commit: 9422dd403f25eaffa2a07980bd61c4cdb368bff6
+- Result: merged into `main` during this combined Gate 2 pass.
 
 ## Final Check Status
-- All required checks were green before merge.
-- backend: pass.
-- frontend: pass.
-- merge-gate: pass.
-- review check: pass.
-- Terraform Cloud/Rentchain/repo-id-KeMiLzWpFf7Yq2Zr: pass.
-- Vercel Preview Comments: pass.
-- Vercel `rentchain`: pass.
-- Vercel `rentchain-status`: pass.
-- post-review-comment: skipped.
 
-## Confirmed Scope
-- Added tenant adapters for viewing requests, lease notices, and application status records.
-- Added landlord adapters for viewing requests, work orders, lease notices, and application status records.
-- Added contractor adapter for work order communications.
-- Added landlord source kinds for viewing, notice, and work order events.
-- Extended tenant, landlord, and contractor derivation options to aggregate the new source arrays.
-- Added tests for scope validation, sensitive-field rejection, lifecycle status mapping, safe references, and mixed-source aggregation.
-- No routes, UI, persistence writes, Firestore rules, billing, screening, pricing, deployment, dependency, or auth core changes.
+### PR #1131
+- backend: pass
+- frontend: pass
+- merge-gate: pass
+- Terraform: pass
+- Vercel preview: pass
+- Vercel status: pass
+- review workflow: pass
+- post-review-comment: skipped
 
-## Validation Evidence
-- `npm --prefix rentchain-api test -- src/tests/unifiedInbox/tenantInboxAdapters.test.ts`: pass, 1 file, 8 tests.
-- `npm --prefix rentchain-api test -- src/tests/unifiedInbox/landlordInboxAdapters.test.ts`: pass, 1 file, 5 tests.
-- `npm --prefix rentchain-api test -- src/tests/unifiedInbox/contractorInboxAdapters.test.ts`: pass, 1 file, 5 tests.
-- `npm --prefix rentchain-api test -- src/tests/unifiedInbox/deriveUnifiedInbox.test.ts`: pass, 1 file, 7 tests.
-- `npm --prefix rentchain-api test -- src/tests/unifiedInbox/`: pass, 5 files, 27 tests.
-- `npm --prefix rentchain-api run build`: pass.
-- `git diff --check`: pass.
-- Gate 2 QA status: approved.
+### PR #1132
+- backend: pass
+- frontend: pass
+- merge-gate: pass
+- Terraform: pass
+- Vercel preview: pass
+- Vercel status: pass
+- review workflow: pass
+- post-review-comment: skipped
 
-## Manual QA Evidence
-- Manual QA not required for backend-only data-layer adapters with no UI, route, auth, or user-visible runtime behavior changes.
+## Scope Confirmation
 
-## Known Limitations
-- The new adapters are available for route/UI consumers but no new route or UI integration was added in this mission.
-- Source records with missing scope identifiers are rejected fail-closed.
-- Adapter tests use representative document shapes from existing route and service patterns; live Firestore shape variation should be validated when inbox UI consumes these arrays.
+### Mission 1: Debug Metadata Removed
+- Removed internal fields from public unified inbox API responses:
+  - `sourceId`
+  - `sourceRef`
+  - `audienceScopeKey`
+  - `rawIdsIncluded`
+  - `tokensIncluded`
+  - `secretsIncluded`
+  - `providerPayloadIncluded`
+  - `storagePathIncluded`
+  - `privateNotesIncluded`
+- Public unified inbox records remain constrained to allowlisted response fields.
+- No billing, auth, screening, deployment, dependency, or protected-area changes.
 
-## Unified Inbox Data Layer Expanded
-- Tenant sources: viewing requests, lease notices, application status.
-- Landlord sources: viewing requests, work orders, lease notices, application status.
-- Contractor sources: work order communications.
-- Tests: 27 unified inbox tests passing.
+### Mission 2: Landlord Mobile Navigation Surface
+- Added landlord mobile bottom navigation access to `/landlord/unified-inbox`.
+- Preserved existing More drawer control.
+- Updated mobile tab grid to six columns for the new Inbox entry plus existing controls.
+- No backend, route, auth, response-shape, or dependency changes.
 
-## Recommended Next Mission
-- feat/unified-inbox-navigation-v1 — build unified inbox UI on the completed landlord, tenant, and contractor data foundation.
+## Cleanup
+- Local `main` synced to `origin/main` at merge commit `9422dd403f25eaffa2a07980bd61c4cdb368bff6`.
+- Local branch `fix/unified-inbox-debug-metadata-removal-v1`: absent.
+- Remote branch `fix/unified-inbox-debug-metadata-removal-v1`: absent.
+- Local branch `fix/landlord-inbox-navigation-surface-v1`: deleted.
+- Remote branch `fix/landlord-inbox-navigation-surface-v1`: deleted.
+
+## Pilot 1 Authorization
+PILOT 1 AUTHORIZED.
+
+Pre-Pilot blockers resolved:
+- Mission 1: debug metadata removed from unified inbox API responses.
+- Mission 2: landlord mobile navigation includes unified inbox.
+- Data safety governance compliance achieved.
+- Mobile and desktop UX parity established for landlord unified inbox access.
+
+## Known Limitations For Pilot 1 Phase
+- Manual Network tab inspection remains required in Pilot 1 QA using staging or preview with seeded authenticated users.
+- Verify unified inbox response bodies contain only allowlisted public fields.
+- Verify no `sourceId`, `sourceRef`, `audienceScopeKey`, diagnostic flags, tokens, storage paths, provider payloads, or private notes appear in network responses.
+- Cross-role isolation requires seeded environment verification.
+- Full mobile breakpoint testing remains required for 375px, 390px, 393px, and 768px with authenticated landlords.
+
+## Post-Pilot 1 UX Priority Queue
+1. fix/profile-completion-v1
+2. fix/maintenance-file-upload-v1
+3. fix/lease-status-language-simplification-v1
+4. fix/primary-lease-document-v1
+5. fix/operations-page-simplification-v1
+6. fix/lease-ledger-financial-presentation-v1
+7. feat/dashboard-visualization-v1
+
+---
+
+## Pilot 1 Onboarding Findings — 2026-06-10
+
+### Status
+Pilot 1 remains active. Property onboarding is now the highest operational priority.
+
+### Critical Finding
+Self-serve property onboarding failed.
+- Property #1: FAIL
+- Property #2: FAIL
+- Property #3: PASS
+- Success rate: 33% — not acceptable for self-service onboarding.
+
+### Audit Hypotheses
+- CSV template edited in Apple Numbers or Google Sheets introduces BOM characters, trailing commas, or inconsistent line endings.
+- Optional "Unit & Rents" section during property creation does not show CSV preview.
+- CSV preview appears from property/units table upload but not from optional property creation flow.
+- Split implementation between two upload entry points — behavior and validation may differ.
+- Occupancy guide may be resolving units by placeholder IDs rather than persisted Firestore IDs.
+
+### Inbox Finding
+- /landlord/inbox and /landlord/unified-inbox both exist, creating navigation confusion.
+- Action: consolidate to single Inbox entry point. Legacy route to redirect.
+
+### Free Tier Finding
+- Manual applicant workflow vs Starter application invitations upgrade path is acceptable.
+- Explanation is not currently clear to new landlords.
+
+### Revised Priority Queue
+1. audit/property-onboarding-workflow-v1
+2. fix/unit-csv-import-v1
+3. fix/unit-manual-save-v1
+4. fix/occupancy-guide-unit-resolution-v1
+5. fix/inbox-route-consolidation-v1
+6. fix/free-tier-upgrade-path-clarity-v1
+7. feat/rentchain-help-assistant-v1
+8. (previous post-Pilot 1 UX queue follows after above)
+
+### Next Mission
+audit/property-onboarding-workflow-v1

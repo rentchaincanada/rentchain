@@ -90,3 +90,19 @@ STRICT RULES:
 - NEVER read git objects, git log, git history, or git show
 - NEVER guess PR numbers — write PR_NUMBER_PENDING if not in impl-summary.md
 - Output ONLY the single verdict line in chat
+
+DOCS-ONLY MISSION RULE:
+If impl-summary.md contains PR_NUMBER_PENDING, #[NUMBER once opened], or no PR URL,
+write this to .handoff/gate2-instruction.md instead of the merge instruction:
+
+Read .handoff/RULES.md before proceeding.
+
+Codex, this is a docs-only mission. No PR merge required.
+
+Proceed with:
+1. git add .handoff/
+2. git commit -m "docs: audit property onboarding workflow findings"
+3. git push origin audit/property-onboarding-workflow-v1
+4. Open PR for audit/property-onboarding-workflow-v1
+5. Write full summary to .handoff/merge-log.md
+6. Write: echo "# Ready for next mission" > .handoff/mission-current.md
