@@ -1,74 +1,115 @@
 # Current Platform State
 
-## Current
+## Platform Status
 
-RentChain currently has material foundations for:
+RentChain is in active Pilot 0 (internal portfolio).
+Pilot 1 authorization pending two pre-flight fixes.
 
-- landlord property, unit, tenant, application, lease, maintenance, message, document, and portfolio workflows
-- tenant portal profile, lease, document, message, maintenance, and trust/export-facing surfaces
-- Free, Starter, Pro, and Elite plan/capability tiers
-- backend-first entitlement/capability resolution
-- admin/support projection-safety helpers and tests
-- governed impersonation attribution and metadata-only audit continuity
-- admin security incident review surface
-- support escalation runbook helpers
-- support escalation history and manual review note helper contracts
-- admin support escalation review surface
-- governed review workspace models, append-readiness contracts, append adapter/helper foundations, read routes, admin page, navigation, and test-only fixtures
-- mobile landlord and tenant bottom navigation work
-- Cloud Run deployment verification docs and AI cowork protocol docs
+Main branch: commit after PR #1130 (feat/unified-inbox-navigation-v1)
+Certification: PASS WITH CONDITIONS
 
-Current admin/support governance surfaces are intentionally metadata-only, manual-review-oriented, and projection-safe.
+## Recent PR History
 
-Architecture diagrams and maps should be read as operational evolution maps. They combine current foundations, in-development hardening, and future roadmap layers. Do not treat every diagram node as live production behavior.
+| PR | Mission | Status |
+|---|---|---|
+| #1116 | Pilot workflow certification | merged |
+| #1117 | Tenant notices Mailgun fix | merged |
+| #1118 | Work order property dropdown fix | merged |
+| #1119 | Contractor invite portal visibility | merged |
+| #1120 | Viewing request tenant notification | merged |
+| #1121 | Landing page login CTA | merged |
+| #1122 | Login page UX consolidation | merged |
+| #1123 | Unified inbox event model audit | merged |
+| #1124 | Unified inbox data layer | merged |
+| #1125 | GET /api/landlord/inbox | merged |
+| #1126 | GET /api/tenant/inbox | merged |
+| #1127 | GET /api/contractor/inbox | merged |
+| #1128 | Viewing cancellation notification | merged |
+| #1129 | Unified inbox data layer expansion | merged |
+| #1130 | Unified inbox navigation — all 3 roles | merged |
 
-## Runtime Surface Audit Notes
+## Unified Inbox — Live
 
-Recent route and page inspection confirms these implemented runtime surface categories are materially present:
+- /landlord/unified-inbox: messages, viewings, work orders, notices, applications
+- /tenant/inbox: messages, notices, viewings, maintenance, application status
+- /contractor/inbox: work order communications
 
-- public/marketing, authentication, invite, application, help, legal, trust, security, status, and contact pages
-- landlord dashboard, billing, properties, tenants, applications, analytics, operations, decision inbox, agent supervision, institution exports, audit/compliance, evidence packs, review timeline, identity readiness, sharing-room, rental history, rental debt, settlement-readiness, regulatory, tokenization-readiness, network participant, cross-organization trust, portfolio, action recommendation, lease, ledger, payment, expense, work order, contractor, message, maintenance, account, and screening surfaces
-- tenant dashboard/workspace, application, lease, ledger, activity, participation, attachments/documents, notices, profile, screening, access, account, messages, maintenance, feedback, invite, and public sharing surfaces
-- admin dashboard, control tower, properties, tenants, leases, integrity, audit, security incidents, support escalations, review workspaces, screening usage, registry, observability, alerting, notification, release governance, public exposure, commercial readiness, controlled/production integration readiness, enterprise/municipal readiness, ecosystem coordination, platform credentialing, consumer reporting governance, portfolio score, support console, triage, and lease lifecycle review surfaces
-- Cloud Run API mounts for core public, authenticated, landlord, tenant, admin, support, review workspace, export/readiness, screening, billing/payment, maintenance, message, registry, audit, and observability route families
+Manual browser QA confirmed working.
 
-This audit establishes that a route, page, helper, or test exists. It does not by itself prove production data availability, live external integrations, full workflow execution, regulated compliance status, or every page's deployed freshness.
+Known issues before Pilot 1:
+- Debug metadata visible (Total visible records / Returned / Role)
+- Inbox not in landlord bottom nav
 
-## Unclear / Needs Verification
+## Test Accounts (Production Firebase)
 
-Treat the following as needing route-level, payload-level, or deployment verification before making production claims:
+- admin+landlord@rentchain.ai → UID: PmRAHPoO31dRpqtfp0RdXtL8Paw1 (plan: pro)
+- admin+tenant@rentchain.ai → UID: LpG2liFLA0dn5jIDH4MtE59L4CD2
+- admin+contractor@rentchain.ai → UID: olxqDL9gkfRbJwk78yKpw7BCxVa2
 
-- whether a specific preview or production environment is serving the latest Cloud Run backend revision
-- whether tenant portal behavior is enabled in a target environment through `VITE_TENANT_PORTAL_ENABLED`
-- whether a readiness page is backed by live operational data, static readiness summaries, test fixtures, or empty-state projections
-- whether any export/trust surface creates an external submission, signed package, legal artifact, or institution-facing handoff
-- whether identity, settlement, payment/disbursement, subsidy/program, government, insurer, lender, auditor, or inter-agency workflows have live integrations
-- whether admin/support review surfaces remain read-only, metadata-only, and free of mutation controls after future missions
+Firestore test data: test-property-001, test-unit-001, test-lease-001
+monthlyRent: 1500 (int64), baseRentCents: 150000, dueDay: 1
 
-## In Progress
+## Pilot 0 — COMPLETE
 
-Active direction includes:
+All conditions met. Stripe test mode validated. Elite upgrade confirmed.
 
-- improving tenant and landlord mobile workflows
-- tightening projection consistency between admin, landlord, and tenant views
-- building safe review workspace continuity across incidents, escalations, runbooks, notes, and evidence references
-- improving QA discipline for Vercel frontend previews and Cloud Run backend revision alignment
-- preparing Claude/Codex/Playwright cowork context and sandbox workflows
+## Pre-Pilot 1 Sequence
 
-`docs/execution/CURRENT_MISSION.md` appears to be a template placeholder rather than a live active mission source. Use explicit operator prompts and current PR/branch context as the current mission source of truth.
+1. fix/unified-inbox-debug-metadata-removal-v1 — NEXT
+2. fix/landlord-inbox-navigation-surface-v1
+Pilot 1 authorized after both complete.
 
-## Future / Strategic
+## Post-Pilot 1 UX Queue
 
-Future-facing areas in docs include:
+1. fix/profile-completion-v1
+2. fix/maintenance-file-upload-v1 (HIGH)
+3. fix/lease-status-language-simplification-v1
+4. fix/primary-lease-document-v1
+5. fix/operations-page-simplification-v1
+6. fix/lease-ledger-financial-presentation-v1
+7. feat/dashboard-visualization-v1
 
-- institution export and institutional trust export expansion
-- tenant identity readiness foundations and property/operator authority readiness
-- support escalation workflow execution after append-only governance is approved
-- governed review workspace production persistence, write governance, and supervised coordination beyond current read/helper foundations
-- tenant trust portability and controlled sharing
-- institutional partner and legal/compliance readiness
-- physical mobile/PDF QA confidence improvements
-- rental subsidy, housing program, government, welfare support, payment/disbursement, settlement coordination, and inter-agency workflows only after scoped governance and implementation missions
-- long-term interoperability and selective integrity verification after consent, projection, evidence, and review layers mature
+## Strategic Position
 
-Do not represent future-facing strategy as implemented production capability unless source code, routes, tests, and current PR context confirm it.
+Technology Readiness: 9/10
+Workflow Readiness: 8.5/10
+UX Readiness: 6.5/10
+
+Governing question: Does this reduce friction for landlords, tenants, contractors?
+Phase 5: PARKED (v2.0)
+Next milestone: First external paying landlord using RentChain successfully.
+
+## Active Conditions
+
+- Signing provider pending (Dropbox Sign / BoldSign)
+- Certn outreach in progress
+- GCS document upload wiring pending
+- Stripe test mode: validated
+
+## Claude Operating Style
+
+Direct, minimal responses. No long explanations.
+
+Auth boundary test pattern:
+PORT=3100 npm run dev 2>&1 | grep "listening" &
+sleep 5
+curl -s -o /dev/null -w "%{http_code}" http://localhost:3100/api/[route]
+kill %1
+
+Gate 2 manual override: document 401 result, write gate2-instruction.md, paste to Codex.
+Cowork: short summary after each merge.
+ChatGPT: full status at strategic checkpoints.
+Mission cycle: @mission-generator → @mission-reviewer → Gate 1 → Codex → @qa-reviewer → Gate 2 → merge.
+
+qa-reviewer override patterns:
+- Manual QA block on auth routes: test 401, document, manual Gate 2
+- Stale PR context: rewrite impl-summary.md header
+- Vague governance block: check mission-review.md, re-run or manual Gate 2
+
+## Tools
+
+- prepend-pr-header.sh: ~/dev/rentchain/tools/prepend-pr-header.sh
+- Cowork: post-merge cleanup
+- Handoff: .handoff/mission-current.md, impl-summary.md, qa-review.md, gate2-instruction.md, merge-log.md
+- Agents: mission-generator, mission-reviewer, qa-reviewer (Claude Code)
+- Codex: implementation
