@@ -134,3 +134,48 @@ Self-serve property onboarding failed.
 
 ### Next Mission
 audit/property-onboarding-workflow-v1
+
+---
+
+## Merge Summary - PR #1136 - 2026-06-11
+
+### PR
+- PR: #1136
+- URL: https://github.com/rentchaincanada/rentchain/pull/1136
+- Branch: fix/occupancy-guide-unit-resolution-v1
+- Base: main
+- Merge commit: 5d11c1949f2f3ec41cba17df74220e498f1905b7
+- Merge method: squash merge
+- Authorization: admin-authorized Gate 2 instruction in `.handoff/gate2-instruction.md`
+
+### Final Check Status
+- backend: pass
+- frontend: pass
+- codex-review: pass
+- merge-gate: pass
+- Terraform Cloud/Rentchain/repo-id-KeMiLzWpFf7Yq2Zr: pass
+- Vercel Preview Comments: pass
+- Vercel - rentchain: pass
+- Vercel - rentchain-status: pass
+- post-review-comment: skipped
+
+### Scope Confirmed
+- Blocked occupancy edit entry points from opening the unit edit modal when unit references are placeholders.
+- Added modal-level guard so unresolved unit IDs cannot submit to the unit update API.
+- Preserved persisted unit updates for occupancy status, tenant or occupant name, and lease end date.
+- Mapped missing-unit failures to a clear refresh/save-units message.
+- Added regression coverage for placeholder rejection and persisted occupancy fields.
+- No auth, Firestore rules, dependency, route, or schema changes were included.
+
+### Cleanup
+- Local `main` synced to `origin/main` at `5d11c1949f2f3ec41cba17df74220e498f1905b7`.
+- Local branch `fix/occupancy-guide-unit-resolution-v1`: deleted.
+- Remote branch `fix/occupancy-guide-unit-resolution-v1`: deleted.
+- Pre-existing local uncommitted work was preserved in stash entry `stash@{0}` before cleanup.
+
+### Known Limitations
+- GitHub reported `mergeStateStatus=BLOCKED` before merge because review was required; merge proceeded using the explicit admin-authorized Gate 2 instruction.
+- `post-review-comment` was skipped by its workflow and was not a blocker.
+
+### Recommended Next Mission
+fix/inbox-route-consolidation-v1
