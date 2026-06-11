@@ -3,7 +3,13 @@ import { db } from "../firebase";
 import { requireAuth } from "../middleware/requireAuth";
 import { requireLandlord } from "../middleware/requireLandlord";
 import { loadLandlordAnalyticsSnapshot } from "../services/landlord/landlordAnalyticsSnapshot";
-import { deriveLandlordUnifiedInbox, type SourceKind, type UnifiedInboxEvent } from "../services/unifiedInbox";
+import {
+  deriveLandlordUnifiedInbox,
+  toPublicInboxRecord,
+  type SourceKind,
+  type UnifiedInboxEvent,
+  type UnifiedInboxPublicRecord,
+} from "../services/unifiedInbox";
 
 const router = Router();
 
@@ -19,7 +25,7 @@ export type LandlordInboxRequest = {
   dateTo: string | null;
 };
 
-export type LandlordInboxItem = UnifiedInboxEvent;
+export type LandlordInboxItem = UnifiedInboxPublicRecord;
 
 export type LandlordInboxResponse = {
   ok: true;
@@ -230,7 +236,7 @@ router.get("/inbox", requireAuth, requireLandlord, async (req: Request, res: Res
     });
 
     const filteredItems = applySafeFilters(safePage.items, request);
-    const items = filteredItems.slice(request.offset, request.offset + request.limit);
+    const items = filteredItems.slice(request.offset, request.offset + request.limit).map(toPublicInboxRecord);
 
     return res.json({
       ok: true,

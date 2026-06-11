@@ -1,7 +1,13 @@
 import { Router, type NextFunction, type Request, type Response } from "express";
 import { db } from "../firebase";
 import { requireAuth } from "../middleware/requireAuth";
-import { deriveTenantUnifiedInbox, type SourceKind, type UnifiedInboxEvent } from "../services/unifiedInbox";
+import {
+  deriveTenantUnifiedInbox,
+  toPublicInboxRecord,
+  type SourceKind,
+  type UnifiedInboxEvent,
+  type UnifiedInboxPublicRecord,
+} from "../services/unifiedInbox";
 
 const router = Router();
 
@@ -16,7 +22,7 @@ type TenantInboxRequest = {
   dateTo: string | null;
 };
 
-export type TenantInboxItem = UnifiedInboxEvent;
+export type TenantInboxItem = UnifiedInboxPublicRecord;
 
 export type TenantInboxResponse = {
   ok: true;
@@ -261,7 +267,7 @@ router.get("/inbox", requireAuth, requireTenantInboxIdentity, async (req: Reques
     });
 
     const filteredItems = applySafeFilters(safePage.items, request);
-    const items = filteredItems.slice(request.offset, request.offset + request.limit);
+    const items = filteredItems.slice(request.offset, request.offset + request.limit).map(toPublicInboxRecord);
 
     return res.json({
       ok: true,
