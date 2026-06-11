@@ -55,6 +55,7 @@ vi.mock("@/api/paymentsApi", () => ({
 
 vi.mock("../../api/unitsImportApi", () => ({
   importUnitsCsv: vi.fn(),
+  previewPropertyUnitsCsv: vi.fn(),
 }));
 
 vi.mock("../../api/unitsApi", () => ({

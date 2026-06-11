@@ -5,6 +5,7 @@ import { requireCapability } from "../entitlements/entitlements.middleware";
 import { db, FieldValue } from "../firebase";
 import { normalizeProvince } from "../lib/province";
 import { requireLandlord } from "../middleware/requireLandlord";
+import { parseUnitsCsv } from "../imports/unitCsvImport.service";
 import { ensureRegistrySource } from "../services/registry/registryImportService";
 import { getPropertyRegistryProjection, upsertPropertyRegistryProjection } from "../services/registry/registryStatusProjectionService";
 import {
@@ -106,6 +107,7 @@ function normalizeUnits(units: any[]): Array<{
   bedrooms: number | null;
   bathrooms: number | null;
   sqft: number | null;
+  status: "vacant" | "occupied" | null;
 }> {
   return (Array.isArray(units) ? units : [])
     .map((u) => {
@@ -115,12 +117,14 @@ function normalizeUnits(units: any[]): Array<{
       const bedroomsRaw = u?.bedrooms ?? u?.beds ?? null;
       const bathroomsRaw = u?.bathrooms ?? u?.baths ?? null;
       const sqftRaw = u?.sqft ?? u?.squareFeet ?? null;
+      const statusRaw = String(u?.status || "").trim().toLowerCase();
       return {
         unitNumber,
         rent: Number.isFinite(Number(rentRaw)) ? Number(rentRaw) : null,
         bedrooms: Number.isFinite(Number(bedroomsRaw)) ? Number(bedroomsRaw) : null,
         bathrooms: Number.isFinite(Number(bathroomsRaw)) ? Number(bathroomsRaw) : null,
         sqft: Number.isFinite(Number(sqftRaw)) ? Number(sqftRaw) : null,
+        status: statusRaw === "occupied" || statusRaw === "vacant" ? statusRaw : null,
       };
     })
     .filter(Boolean) as Array<{
@@ -129,6 +133,7 @@ function normalizeUnits(units: any[]): Array<{
       bedrooms: number | null;
       bathrooms: number | null;
       sqft: number | null;
+      status: "vacant" | "occupied" | null;
     }>;
 }
 
@@ -157,6 +162,39 @@ function resolveLandlordId(req: any): string {
 function uniqueById<T extends { id: string }>(items: T[]): T[] {
   return Array.from(new Map(items.map((item) => [item.id, item])).values());
 }
+
+router.post("/units/csv-preview", requireLandlord, async (req: any, res) => {
+  const requestId =
+    String(req.headers["x-request-id"] || req.headers["x-requestid"] || req.headers["x-correlation-id"] || "")
+      .trim() || undefined;
+  const landlordId = req.user?.landlordId || req.user?.id;
+  if (!landlordId) {
+    return res.status(401).json({ ok: false, error: "Unauthorized", requestId });
+  }
+
+  const csvText = String(req.body?.csvText || "");
+  if (!csvText.trim()) {
+    return res.status(400).json({ ok: false, error: "csvText required", requestId });
+  }
+
+  const parsed = parseUnitsCsv(csvText);
+  return res.status(200).json({
+    ok: parsed.headers.valid && parsed.preview.errors.length === 0,
+    requestId,
+    mode: "preview",
+    headers: parsed.headers,
+    summary: {
+      totalRows: parsed.totalRows,
+      candidates: parsed.candidates.length,
+      invalid: parsed.invalid.length,
+      duplicatesInCsv: parsed.duplicatesInCsv.length,
+      issueCount: parsed.preview.errors.length,
+    },
+    preview: parsed.preview,
+    rows: parsed.preview.rows,
+    issues: parsed.preview.errors.slice(0, 200),
+  });
+});
 
 function isManagedByUser(item: any, userId: string): boolean {
   const managerIds = Array.isArray(item?.managerUserIds) ? item.managerUserIds.map((value: any) => String(value || "").trim()) : [];
@@ -455,7 +493,7 @@ router.post(
             bedrooms: unit.bedrooms,
             bathrooms: unit.bathrooms,
             sqft: unit.sqft,
-            status: "vacant",
+            status: unit.status || "vacant",
             createdAt: now,
             updatedAt: now,
             updatedAtServer: FieldValue.serverTimestamp(),

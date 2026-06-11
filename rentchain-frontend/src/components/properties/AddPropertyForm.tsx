@@ -7,6 +7,11 @@ import {
 } from "../../api/propertiesApi";
 import { colors, radius, text } from "../../styles/tokens";
 import { setOnboardingStep } from "../../api/onboardingApi";
+import {
+  previewUnitsCsv,
+  type UnitCsvPreviewResponse,
+  type UnitCsvPreviewRow,
+} from "../../api/unitsImportApi";
 import { useToast } from "@/components/ui/ToastProvider";
 import { PROVINCE_OPTIONS } from "@/lib/provinces";
 import { track } from "../../lib/analytics";
@@ -20,6 +25,7 @@ interface AddPropertyFormProps {
 
 interface UnitRow extends UnitInput {
   id: string;
+  status?: "vacant" | "occupied" | null;
 }
 
 const makeId = () =>
@@ -53,6 +59,9 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
   const [totalUnits, setTotalUnits] = useState<number | "">("");
   const [amenitiesText, setAmenitiesText] = useState("");
   const [units, setUnits] = useState<UnitRow[]>([emptyUnitRow()]);
+  const [csvPreview, setCsvPreview] = useState<UnitCsvPreviewResponse | null>(null);
+  const [csvFilename, setCsvFilename] = useState("");
+  const [isPreviewingCsv, setIsPreviewingCsv] = useState(false);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
@@ -74,11 +83,17 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
     .map((x) => x.trim())
     .filter(Boolean);
 
+  const clearCsvPreviewState = () => {
+    setCsvPreview(null);
+    setCsvFilename("");
+  };
+
   const handleUnitChange = (
     id: string,
     field: keyof UnitRow,
     value: string
   ) => {
+    clearCsvPreviewState();
     setUnits((prev) =>
       prev.map((u) => {
         if (u.id !== id) return u;
@@ -97,89 +112,68 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
   };
 
   const handleAddUnitRow = () => {
+    clearCsvPreviewState();
     setUnits((prev) => [...prev, emptyUnitRow()]);
   };
 
   const handleRemoveUnitRow = (id: string) => {
+    clearCsvPreviewState();
     setUnits((prev) => (prev.length <= 1 ? prev : prev.filter((u) => u.id !== id)));
   };
-
-  const parseUnitsCsv = (text: string): UnitRow[] => {
-    const lines = text
-      .split(/\r?\n/)
-      .map((l) => l.trim())
-      .filter(Boolean);
-
-    if (lines.length === 0) return [];
-
-    const [headerLine, ...dataLines] = lines;
-    const headers = headerLine.split(",").map((h) => h.trim().toLowerCase());
-
-    const idxUnit = headers.indexOf("unitnumber");
-    const idxRent = headers.indexOf("rent");
-    const idxBeds = headers.indexOf("bedrooms");
-    const idxBaths = headers.indexOf("bathrooms");
-    const idxSqft = headers.indexOf("sqft");
-
-    const rows: UnitRow[] = [];
-
-    for (const line of dataLines) {
-      const cols = line.split(",").map((c) => c.trim());
-      if (cols.length === 0) continue;
-
-      const unitNumber = idxUnit >= 0 ? cols[idxUnit] : cols[0] ?? "";
-
-      const rentRaw = idxRent >= 0 ? cols[idxRent] : "";
-      const rent = rentRaw ? Number(rentRaw) : NaN;
-
-      if (!unitNumber || Number.isNaN(rent)) {
-        continue;
-      }
-
-      const bedrooms =
-        idxBeds >= 0 && cols[idxBeds] ? Number(cols[idxBeds]) : null;
-      const bathrooms =
-        idxBaths >= 0 && cols[idxBaths] ? Number(cols[idxBaths]) : null;
-      const sqft = idxSqft >= 0 && cols[idxSqft] ? Number(cols[idxSqft]) : null;
-
-      rows.push({
-        id: makeId(),
-        unitNumber,
-        rent,
-        bedrooms,
-        bathrooms,
-        sqft,
-        utilitiesIncluded: [],
-      });
-    }
-
-    return rows;
-  };
-
   const handleCsvUpload: React.ChangeEventHandler<HTMLInputElement> = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    e.target.value = "";
 
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
       try {
         const text = String(reader.result ?? "");
-        const parsed = parseUnitsCsv(text);
-        if (parsed.length === 0) {
+        if (!text.trim()) {
           setErrorText(
-            "CSV parsed but no valid rows were found. Make sure headers include at least unitNumber and rent."
+            "CSV file appears empty or unreadable."
           );
           return;
         }
+        setIsPreviewingCsv(true);
+        const preview = await previewUnitsCsv(text);
+        setCsvPreview(preview);
+        setCsvFilename(file.name);
+        const rows = preview.preview?.rows || preview.rows || [];
+        const errors = preview.preview?.errors || preview.issues || [];
+        const validRows = rows.filter((row) => row.status === "valid");
+
+        if (errors.length > 0 || preview.headers?.valid === false) {
+          setErrorText("CSV preview found issues. Fix the CSV and upload it again before creating the property.");
+          setSuccessText(null);
+          return;
+        }
+
+        if (validRows.length === 0) {
+          setErrorText("CSV preview found no valid unit rows.");
+          setSuccessText(null);
+          return;
+        }
+
+        const parsed = validRows.map((row: UnitCsvPreviewRow) => ({
+          id: makeId(),
+          unitNumber: String(row.data.unitNumber || row.unitNumber || "").trim(),
+          rent: typeof row.data.rent === "number" ? row.data.rent : 0,
+          bedrooms: row.data.bedrooms ?? null,
+          bathrooms: row.data.bathrooms ?? null,
+          sqft: row.data.sqft ?? null,
+          status: row.data.status ?? null,
+          utilitiesIncluded: [],
+        }));
         setUnits(parsed);
         setTotalUnits(parsed.length);
         setErrorText(null);
-        setSuccessText(
-          `Loaded ${parsed.length} units from CSV. You can still edit them below before saving.`
-        );
+        setSuccessText(`Previewed ${parsed.length} units from CSV. Review the rows below before creating the property.`);
       } catch (err) {
-        console.error("Error parsing CSV", err);
-        setErrorText("Failed to parse CSV file");
+        console.error("Error previewing CSV", err);
+        setErrorText("Failed to preview CSV file");
+      } finally {
+        setIsPreviewingCsv(false);
       }
     };
     reader.onerror = () => {
@@ -211,6 +205,7 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
         bedrooms: u.bedrooms ?? null,
         bathrooms: u.bathrooms ?? null,
         sqft: u.sqft ?? null,
+        status: u.status ?? null,
         utilitiesIncluded: u.utilitiesIncluded ?? [],
       }));
 
@@ -221,6 +216,12 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
 
     if (!totalUnitCount || Number.isNaN(totalUnitCount)) {
       setErrorText("Total units is required (we auto-create units).");
+      return;
+    }
+
+    const csvErrors = csvPreview?.preview?.errors || csvPreview?.issues || [];
+    if (csvErrors.length > 0 || csvPreview?.headers?.valid === false) {
+      setErrorText("Resolve CSV preview issues before creating the property.");
       return;
     }
 
@@ -308,6 +309,9 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
       setIsSubmitting(false);
     }
   };
+
+  const csvPreviewIssues = csvPreview?.preview?.errors || csvPreview?.issues || [];
+  const isCreateDisabled = isSubmitting || isPreviewingCsv || csvPreviewIssues.length > 0 || csvPreview?.headers?.valid === false;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -619,10 +623,83 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
                   CSV template
                 </a>
                 <span style={{ color: "#9ca3af" }}>
-                  Expected headers: unitNumber, rent, bedrooms, bathrooms, sqft
+                  Expected headers: unitNumber, marketRent, beds, baths, sqft, status
                 </span>
               </div>
             </div>
+
+            {isPreviewingCsv ? (
+              <div style={{ fontSize: "0.82rem", color: "#475569" }}>Previewing CSV...</div>
+            ) : null}
+
+            {csvPreview ? (
+              <div
+                style={{
+                  border: "1px solid #dbe4f0",
+                  borderRadius: 10,
+                  background: "#ffffff",
+                  padding: 10,
+                  display: "grid",
+                  gap: 8,
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                  <div style={{ fontWeight: 700, fontSize: "0.86rem", color: "#0f172a" }}>
+                    CSV preview{csvFilename ? `: ${csvFilename}` : ""}
+                  </div>
+                  <div style={{ fontSize: "0.78rem", color: "#475569" }}>
+                    {(csvPreview.preview?.rows || csvPreview.rows || []).filter((row) => row.status === "valid").length} ready
+                    {" | "}
+                    {(csvPreview.preview?.errors || csvPreview.issues || []).length} issue(s)
+                  </div>
+                </div>
+                {(csvPreview.headers?.missing?.length || csvPreview.headers?.unknown?.length) ? (
+                  <div style={{ color: "#b91c1c", fontSize: "0.8rem", lineHeight: 1.45 }}>
+                    {csvPreview.headers.missing.length ? `Missing: ${csvPreview.headers.missing.join(", ")}. ` : ""}
+                    {csvPreview.headers.unknown.length ? `Unknown: ${csvPreview.headers.unknown.join(", ")}.` : ""}
+                  </div>
+                ) : null}
+                {(csvPreview.preview?.errors || csvPreview.issues || []).length ? (
+                  <div style={{ display: "grid", gap: 4 }}>
+                    {(csvPreview.preview?.errors || csvPreview.issues || []).slice(0, 5).map((issue, idx) => (
+                      <div key={`${issue.row}-${issue.code}-${idx}`} style={{ color: "#b91c1c", fontSize: "0.8rem" }}>
+                        {issue.message}
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.78rem" }}>
+                    <thead>
+                      <tr style={{ textAlign: "left", color: "#475569" }}>
+                        <th style={{ padding: "6px" }}>Row</th>
+                        <th style={{ padding: "6px" }}>Status</th>
+                        <th style={{ padding: "6px" }}>Unit</th>
+                        <th style={{ padding: "6px" }}>Rent</th>
+                        <th style={{ padding: "6px" }}>Beds</th>
+                        <th style={{ padding: "6px" }}>Baths</th>
+                        <th style={{ padding: "6px" }}>Sqft</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(csvPreview.preview?.rows || csvPreview.rows || []).slice(0, 12).map((row) => (
+                        <tr key={row.row} style={{ borderTop: "1px solid #e5e7eb" }}>
+                          <td style={{ padding: "6px" }}>{row.row}</td>
+                          <td style={{ padding: "6px", color: row.status === "valid" ? "#166534" : "#b91c1c" }}>
+                            {row.status}
+                          </td>
+                          <td style={{ padding: "6px" }}>{row.data.unitNumber || row.unitNumber || ""}</td>
+                          <td style={{ padding: "6px" }}>{row.data.rent ?? ""}</td>
+                          <td style={{ padding: "6px" }}>{row.data.bedrooms ?? ""}</td>
+                          <td style={{ padding: "6px" }}>{row.data.bathrooms ?? ""}</td>
+                          <td style={{ padding: "6px" }}>{row.data.sqft ?? ""}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : null}
 
             <div
               style={{
@@ -805,7 +882,7 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
 
       <button
         type="submit"
-        disabled={isSubmitting}
+        disabled={isCreateDisabled}
         style={{
           alignSelf: "flex-start",
           padding: "8px 20px",
@@ -815,11 +892,11 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
           color: "#f9fafb",
           fontSize: "0.85rem",
           fontWeight: 500,
-          cursor: isSubmitting ? "default" : "pointer",
-          opacity: isSubmitting ? 0.7 : 1,
+          cursor: isCreateDisabled ? "default" : "pointer",
+          opacity: isCreateDisabled ? 0.7 : 1,
         }}
       >
-        {isSubmitting ? "Saving..." : "Create property"}
+        {isSubmitting ? "Saving..." : isPreviewingCsv ? "Previewing CSV..." : "Create property"}
       </button>
     </form>
       )}

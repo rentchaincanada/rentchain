@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AddPropertyForm } from "./AddPropertyForm";
 
 const mocks = vi.hoisted(() => ({
@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   setOnboardingStepMock: vi.fn(),
   showToastMock: vi.fn(),
   useAuthMock: vi.fn(),
+  previewUnitsCsvMock: vi.fn(),
 }));
 
 vi.mock("../../api/propertiesApi", () => ({
@@ -16,6 +17,10 @@ vi.mock("../../api/propertiesApi", () => ({
 
 vi.mock("../../api/onboardingApi", () => ({
   setOnboardingStep: mocks.setOnboardingStepMock,
+}));
+
+vi.mock("../../api/unitsImportApi", () => ({
+  previewUnitsCsv: mocks.previewUnitsCsvMock,
 }));
 
 vi.mock("../../lib/analytics", () => ({
@@ -31,13 +36,40 @@ vi.mock("../../context/useAuth", () => ({
 }));
 
 describe("AddPropertyForm", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   beforeEach(() => {
+    mocks.createPropertyMock.mockReset();
     mocks.createPropertyMock.mockResolvedValue({
       property: { id: "prop-1", name: "Created Property", portfolioStatus: "active" },
     });
     mocks.trackMock.mockReset();
     mocks.setOnboardingStepMock.mockResolvedValue(undefined);
     mocks.showToastMock.mockReset();
+    mocks.previewUnitsCsvMock.mockResolvedValue({
+      ok: true,
+      headers: {
+        valid: true,
+        received: ["unitNumber", "marketRent", "beds", "baths", "sqft", "status"],
+        expected: ["unitNumber", "marketRent", "beds", "baths", "sqft", "status"],
+        missing: [],
+        unknown: [],
+      },
+      preview: {
+        errors: [],
+        rows: [
+          {
+            row: 2,
+            status: "valid",
+            unitNumber: "101",
+            data: { unitNumber: "101", rent: 1850, bedrooms: 1, bathrooms: 1, sqft: 610, status: "vacant" },
+            issues: [],
+          },
+        ],
+      },
+    });
     mocks.useAuthMock.mockReturnValue({
       user: { id: "user-1", plan: "free", role: "landlord" },
     });
@@ -92,6 +124,54 @@ describe("AddPropertyForm", () => {
           surface: "properties_page",
           source: "add_property_form",
           plan: "free",
+        })
+      );
+    });
+  });
+
+  it("previews CSV units through the backend parser before creating the property", async () => {
+    const { container } = render(<AddPropertyForm onCreated={vi.fn()} />);
+
+    fireEvent.change(screen.getAllByPlaceholderText("123 Main Street")[0], {
+      target: { value: "123 Main Street" },
+    });
+    fireEvent.change(screen.getAllByPlaceholderText("Halifax")[0], {
+      target: { value: "Halifax" },
+    });
+    fireEvent.change(screen.getAllByRole("spinbutton")[0], {
+      target: { value: "1" },
+    });
+    const unitsToggle = Array.from(container.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes("Units & Rents (Optional)")
+    );
+    expect(unitsToggle).toBeTruthy();
+    fireEvent.click(unitsToggle!);
+
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const file = new File(["unitNumber,marketRent\n101,1850"], "units.csv", { type: "text/csv" });
+    fireEvent.change(fileInput, { target: { files: [file] } });
+
+    await waitFor(() => {
+      expect(mocks.previewUnitsCsvMock).toHaveBeenCalledWith("unitNumber,marketRent\n101,1850");
+    });
+    expect(await screen.findByText(/CSV preview: units.csv/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Create property" })[0]);
+
+    await waitFor(() => {
+      expect(mocks.createPropertyMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          totalUnits: 1,
+          units: [
+            expect.objectContaining({
+              unitNumber: "101",
+              rent: 1850,
+              bedrooms: 1,
+              bathrooms: 1,
+              sqft: 610,
+              status: "vacant",
+            }),
+          ],
         })
       );
     });
