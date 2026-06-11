@@ -6,7 +6,7 @@ import { resolveRegistrySchemaForProperty } from "../../services/registry/schema
 
 type StoredDoc = { id: string; data: any };
 
-const { dbMock, resetDb, seedDoc } = vi.hoisted(() => {
+const { dbMock, resetDb, seedDoc, listDocs } = vi.hoisted(() => {
   const collections = new Map<string, Map<string, StoredDoc>>();
   let autoId = 0;
 
@@ -131,6 +131,7 @@ const { dbMock, resetDb, seedDoc } = vi.hoisted(() => {
     seedDoc: (collection: string, id: string, data: any) => {
       ensureCollection(collection).set(id, { id, data });
     },
+    listDocs: (collection: string) => Array.from(ensureCollection(collection).values()),
   };
 });
 
@@ -406,6 +407,95 @@ describe("properties routes publish + defaults", () => {
 
     expect(res.status).toBe(201);
     expect(res.body?.pid).toBe("AB-123_CD");
+  });
+
+  it("creates properties with valid manually entered units", async () => {
+    const app = await createApp();
+    const res = await request(app)
+      .post("/api/properties")
+      .send({
+        addressLine1: "100 Unit St",
+        city: "Halifax",
+        province: "NS",
+        totalUnits: 1,
+        units: [
+          {
+            unitNumber: "101",
+            rent: 1850,
+            bedrooms: 1,
+            bathrooms: 1,
+            sqft: 650,
+            status: "vacant",
+          },
+        ],
+      });
+
+    expect(res.status).toBe(201);
+    const units = listDocs("units");
+    expect(units).toHaveLength(1);
+    expect(units[0].data).toMatchObject({
+      landlordId: "landlord-1",
+      propertyId: res.body.id,
+      unitNumber: "101",
+      rent: 1850,
+      bedrooms: 1,
+      bathrooms: 1,
+      sqft: 650,
+      status: "vacant",
+    });
+  });
+
+  it("rejects invalid manually entered units before creating records", async () => {
+    const app = await createApp();
+    const res = await request(app)
+      .post("/api/properties")
+      .send({
+        addressLine1: "101 Unit St",
+        city: "Halifax",
+        province: "NS",
+        totalUnits: 2,
+        units: [
+          {
+            unitNumber: "101",
+            rent: 1850,
+          },
+          {
+            unitNumber: "",
+            rent: null,
+            bedrooms: 12,
+          },
+        ],
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({
+      error: "manual_unit_validation_failed",
+      message: "Some unit details need to be corrected before creating the property.",
+    });
+    expect(res.body.unitErrors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          index: 1,
+          position: 2,
+          field: "unitNumber",
+          message: "Unit number is required.",
+        }),
+        expect.objectContaining({
+          index: 1,
+          position: 2,
+          field: "marketRent",
+          message: "Rent is required.",
+        }),
+        expect.objectContaining({
+          index: 1,
+          position: 2,
+          field: "beds",
+          message: "Beds must be a whole number from 0 to 10.",
+        }),
+      ])
+    );
+    expect(listDocs("properties")).toHaveLength(0);
+    expect(listDocs("units")).toHaveLength(0);
   });
 
   it("rejects malformed pid values during create", async () => {

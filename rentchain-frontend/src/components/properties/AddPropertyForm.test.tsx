@@ -176,4 +176,99 @@ describe("AddPropertyForm", () => {
       );
     });
   });
+
+  it("displays manual unit save-time validation errors and allows retry after correction", async () => {
+    mocks.createPropertyMock
+      .mockRejectedValueOnce({
+        response: {
+          status: 400,
+          data: {
+            error: "manual_unit_validation_failed",
+            unitErrors: [
+              {
+                index: 0,
+                position: 1,
+                field: "marketRent",
+                message: "Rent is required.",
+              },
+            ],
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        property: { id: "prop-1", name: "Created Property", portfolioStatus: "active" },
+      });
+
+    const onCreated = vi.fn();
+    const { container } = render(<AddPropertyForm onCreated={onCreated} />);
+
+    fireEvent.change(screen.getAllByPlaceholderText("123 Main Street")[0], {
+      target: { value: "123 Main Street" },
+    });
+    fireEvent.change(screen.getAllByPlaceholderText("Halifax")[0], {
+      target: { value: "Halifax" },
+    });
+    fireEvent.change(screen.getAllByRole("spinbutton")[0], {
+      target: { value: "1" },
+    });
+
+    const unitsToggle = Array.from(container.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes("Units & Rents (Optional)")
+    );
+    expect(unitsToggle).toBeTruthy();
+    fireEvent.click(unitsToggle!);
+
+    fireEvent.change(screen.getByPlaceholderText("101"), {
+      target: { value: "101" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("1800"), {
+      target: { value: "" },
+    });
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Create property" })[0]);
+
+    expect(await screen.findByText("Rent is required.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Some unit details need to be corrected before creating the property.")
+    ).toBeInTheDocument();
+    expect(mocks.createPropertyMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        units: [
+          expect.objectContaining({
+            unitNumber: "101",
+            rent: null,
+          }),
+        ],
+      })
+    );
+
+    fireEvent.change(screen.getByPlaceholderText("1800"), {
+      target: { value: "1800" },
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText("Rent is required.")).not.toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Create property" })[0]);
+
+    await waitFor(() => {
+      expect(mocks.createPropertyMock).toHaveBeenCalledTimes(2);
+    });
+    expect(mocks.createPropertyMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        units: [
+          expect.objectContaining({
+            unitNumber: "101",
+            rent: 1800,
+          }),
+        ],
+      })
+    );
+    await waitFor(() => {
+      expect(onCreated).toHaveBeenCalledWith(
+        expect.objectContaining({ id: "prop-1" })
+      );
+    });
+  });
 });

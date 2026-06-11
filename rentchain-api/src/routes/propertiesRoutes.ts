@@ -6,6 +6,7 @@ import { db, FieldValue } from "../firebase";
 import { normalizeProvince } from "../lib/province";
 import { requireLandlord } from "../middleware/requireLandlord";
 import { parseUnitsCsv } from "../imports/unitCsvImport.service";
+import { validateManualUnitInputs } from "../imports/unitCsv.schema";
 import { ensureRegistrySource } from "../services/registry/registryImportService";
 import { getPropertyRegistryProjection, upsertPropertyRegistryProjection } from "../services/registry/registryStatusProjectionService";
 import {
@@ -99,42 +100,6 @@ function makeAddressKeyFromParts(street: string, city: string, province: string,
   const provinceKey = normalize(province);
   const postalKey = normalize(postal);
   return [streetKey, cityKey, provinceKey, postalKey].filter(Boolean).join("|");
-}
-
-function normalizeUnits(units: any[]): Array<{
-  unitNumber: string;
-  rent: number | null;
-  bedrooms: number | null;
-  bathrooms: number | null;
-  sqft: number | null;
-  status: "vacant" | "occupied" | null;
-}> {
-  return (Array.isArray(units) ? units : [])
-    .map((u) => {
-      const unitNumber = String(u?.unitNumber ?? u?.unit ?? u?.label ?? "").trim();
-      if (!unitNumber) return null;
-      const rentRaw = u?.rent ?? u?.marketRent ?? u?.monthlyRent ?? null;
-      const bedroomsRaw = u?.bedrooms ?? u?.beds ?? null;
-      const bathroomsRaw = u?.bathrooms ?? u?.baths ?? null;
-      const sqftRaw = u?.sqft ?? u?.squareFeet ?? null;
-      const statusRaw = String(u?.status || "").trim().toLowerCase();
-      return {
-        unitNumber,
-        rent: Number.isFinite(Number(rentRaw)) ? Number(rentRaw) : null,
-        bedrooms: Number.isFinite(Number(bedroomsRaw)) ? Number(bedroomsRaw) : null,
-        bathrooms: Number.isFinite(Number(bathroomsRaw)) ? Number(bathroomsRaw) : null,
-        sqft: Number.isFinite(Number(sqftRaw)) ? Number(sqftRaw) : null,
-        status: statusRaw === "occupied" || statusRaw === "vacant" ? statusRaw : null,
-      };
-    })
-    .filter(Boolean) as Array<{
-      unitNumber: string;
-      rent: number | null;
-      bedrooms: number | null;
-      bathrooms: number | null;
-      sqft: number | null;
-      status: "vacant" | "occupied" | null;
-    }>;
 }
 
 function parseScreeningRequiredBeforeApproval(input: any, fallback = true): boolean {
@@ -379,8 +344,16 @@ router.post(
       });
     }
 
-    const normalizedUnits = normalizeUnits(units);
-    const submittedUnitsCount = Array.isArray(units) ? units.length : 0;
+    const manualUnitValidation = validateManualUnitInputs(units);
+    if (!manualUnitValidation.valid) {
+      return res.status(400).json({
+        error: "manual_unit_validation_failed",
+        message: "Some unit details need to be corrected before creating the property.",
+        unitErrors: manualUnitValidation.issues,
+      });
+    }
+    const normalizedUnits = manualUnitValidation.units;
+    const submittedUnitsCount = normalizedUnits.length;
     const resolvedUnitCount =
       normalizedUnits.length > 0
         ? normalizedUnits.length

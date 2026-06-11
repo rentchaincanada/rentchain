@@ -28,6 +28,9 @@ interface UnitRow extends UnitInput {
   status?: "vacant" | "occupied" | null;
 }
 
+type ManualUnitErrorField = "unitNumber" | "rent" | "bedrooms" | "bathrooms" | "sqft" | "status";
+type ManualUnitErrorsById = Record<string, Partial<Record<ManualUnitErrorField, string[]>>>;
+
 const makeId = () =>
   typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
     ? crypto.randomUUID()
@@ -62,6 +65,7 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
   const [csvPreview, setCsvPreview] = useState<UnitCsvPreviewResponse | null>(null);
   const [csvFilename, setCsvFilename] = useState("");
   const [isPreviewingCsv, setIsPreviewingCsv] = useState(false);
+  const [manualUnitErrors, setManualUnitErrors] = useState<ManualUnitErrorsById>({});
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
@@ -88,12 +92,30 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
     setCsvFilename("");
   };
 
+  const clearManualUnitError = (id: string, field?: ManualUnitErrorField) => {
+    setManualUnitErrors((prev) => {
+      const existing = prev[id];
+      if (!existing) return prev;
+      if (!field) {
+        const { [id]: _removed, ...rest } = prev;
+        return rest;
+      }
+      const { [field]: _fieldRemoved, ...remainingFields } = existing;
+      if (Object.keys(remainingFields).length === 0) {
+        const { [id]: _removed, ...rest } = prev;
+        return rest;
+      }
+      return { ...prev, [id]: remainingFields };
+    });
+  };
+
   const handleUnitChange = (
     id: string,
     field: keyof UnitRow,
     value: string
   ) => {
     clearCsvPreviewState();
+    clearManualUnitError(id, field === "rent" ? "rent" : (field as ManualUnitErrorField));
     setUnits((prev) =>
       prev.map((u) => {
         if (u.id !== id) return u;
@@ -118,6 +140,7 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
 
   const handleRemoveUnitRow = (id: string) => {
     clearCsvPreviewState();
+    clearManualUnitError(id);
     setUnits((prev) => (prev.length <= 1 ? prev : prev.filter((u) => u.id !== id)));
   };
   const handleCsvUpload: React.ChangeEventHandler<HTMLInputElement> = (e) => {
@@ -186,22 +209,26 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
     e.preventDefault();
     setErrorText(null);
     setSuccessText(null);
+    setManualUnitErrors({});
 
     if (!addressLine1.trim() || !city.trim()) {
       setErrorText("Address and City are required.");
       return;
     }
 
-    const validUnits: UnitInput[] = units
-      .filter(
-        (u) =>
-          u.unitNumber.trim() &&
-          typeof u.rent === "number" &&
-          !Number.isNaN(u.rent)
-      )
-      .map((u) => ({
+    const attemptedUnitRows = units.filter((u) => {
+      if (u.unitNumber.trim()) return true;
+      if (u.rent !== null && u.rent !== 0 && !Number.isNaN(Number(u.rent))) return true;
+      if (u.bedrooms !== null && u.bedrooms !== undefined) return true;
+      if (u.bathrooms !== null && u.bathrooms !== undefined) return true;
+      if (u.sqft !== null && u.sqft !== undefined) return true;
+      if (u.status) return true;
+      return false;
+    });
+    const submittedUnitIds = attemptedUnitRows.map((u) => u.id);
+    const attemptedUnits = attemptedUnitRows.map((u) => ({
         unitNumber: u.unitNumber.trim(),
-        rent: Number(u.rent),
+        rent: u.rent,
         bedrooms: u.bedrooms ?? null,
         bathrooms: u.bathrooms ?? null,
         sqft: u.sqft ?? null,
@@ -212,7 +239,7 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
     const totalUnitCount =
       typeof totalUnits === "number" && totalUnits > 0
         ? totalUnits
-        : validUnits.length;
+        : attemptedUnits.length;
 
     if (!totalUnitCount || Number.isNaN(totalUnitCount)) {
       setErrorText("Total units is required (we auto-create units).");
@@ -236,7 +263,7 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
       country: country.trim() || undefined,
       totalUnits: totalUnitCount,
       amenities,
-      units: validUnits.length > 0 ? validUnits : undefined,
+      units: attemptedUnits.length > 0 ? (attemptedUnits as UnitInput[]) : undefined,
     };
 
     setIsSubmitting(true);
@@ -295,6 +322,37 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
           return;
         }
         setErrorText("A property with this address already exists.");
+        return;
+      }
+
+      const unitErrors = err?.response?.data?.unitErrors;
+      if (Array.isArray(unitErrors) && unitErrors.length > 0) {
+        const nextErrors: ManualUnitErrorsById = {};
+        for (const issue of unitErrors) {
+          const rowId = submittedUnitIds[Number(issue?.index)];
+          if (!rowId) continue;
+          const field =
+            issue?.field === "marketRent"
+              ? "rent"
+              : issue?.field === "beds"
+              ? "bedrooms"
+              : issue?.field === "baths"
+              ? "bathrooms"
+              : issue?.field;
+          if (!["unitNumber", "rent", "bedrooms", "bathrooms", "sqft", "status"].includes(field)) continue;
+          nextErrors[rowId] = {
+            ...nextErrors[rowId],
+            [field]: [...(nextErrors[rowId]?.[field as ManualUnitErrorField] || []), String(issue?.message || "This field needs correction.")],
+          };
+        }
+        setManualUnitErrors(nextErrors);
+        const msg = "Some unit details need to be corrected before creating the property.";
+        setErrorText(msg);
+        showToast({
+          message: "Unit details need attention",
+          description: msg,
+          variant: "error",
+        });
         return;
       }
 
@@ -725,7 +783,17 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
                   </tr>
                 </thead>
                 <tbody>
-                  {units.map((u) => (
+                  {units.map((u) => {
+                    const rowErrors = manualUnitErrors[u.id] || {};
+                    const fieldBorder = (field: ManualUnitErrorField) =>
+                      rowErrors[field]?.length ? "1px solid #dc2626" : "1px solid #374151";
+                    const renderFieldErrors = (field: ManualUnitErrorField) =>
+                      rowErrors[field]?.length ? (
+                        <div style={{ marginTop: 4, color: "#b91c1c", fontSize: "0.72rem", lineHeight: 1.25 }}>
+                          {rowErrors[field]?.join(" ")}
+                        </div>
+                      ) : null;
+                    return (
                     <tr key={u.id}>
                       <td style={{ padding: "4px 6px" }}>
                         <input
@@ -739,10 +807,11 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
                             width: "100%",
                             padding: 6,
                             borderRadius: 6,
-                            border: "1px solid #374151",
+                            border: fieldBorder("unitNumber"),
                             fontSize: "0.8rem",
                           }}
                         />
+                        {renderFieldErrors("unitNumber")}
                       </td>
                       <td style={{ padding: "4px 6px" }}>
                         <input
@@ -766,10 +835,11 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
                             width: "100%",
                             padding: 6,
                             borderRadius: 6,
-                            border: "1px solid #374151",
+                            border: fieldBorder("rent"),
                             fontSize: "0.8rem",
                           }}
                         />
+                        {renderFieldErrors("rent")}
                       </td>
                       <td style={{ padding: "4px 6px" }}>
                         <input
@@ -784,10 +854,11 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
                             width: "100%",
                             padding: 6,
                             borderRadius: 6,
-                            border: "1px solid #374151",
+                            border: fieldBorder("bedrooms"),
                             fontSize: "0.8rem",
                           }}
                         />
+                        {renderFieldErrors("bedrooms")}
                       </td>
                       <td style={{ padding: "4px 6px" }}>
                         <input
@@ -802,10 +873,11 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
                             width: "100%",
                             padding: 6,
                             borderRadius: 6,
-                            border: "1px solid #374151",
+                            border: fieldBorder("bathrooms"),
                             fontSize: "0.8rem",
                           }}
                         />
+                        {renderFieldErrors("bathrooms")}
                       </td>
                       <td style={{ padding: "4px 6px" }}>
                         <input
@@ -818,10 +890,11 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
                             width: "100%",
                             padding: 6,
                             borderRadius: 6,
-                            border: "1px solid #374151",
+                            border: fieldBorder("sqft"),
                             fontSize: "0.8rem",
                           }}
                         />
+                        {renderFieldErrors("sqft")}
                       </td>
                       <td style={{ padding: "4px 6px", textAlign: "right" }}>
                         <button
@@ -843,7 +916,8 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
                         </button>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
