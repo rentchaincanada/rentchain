@@ -79,6 +79,13 @@ describe("AddPropertyForm", () => {
     render(<AddPropertyForm />);
 
     expect(screen.getByText("Only three details are required to get started")).toBeInTheDocument();
+    expect(screen.getByText("Free tier keeps setup manual")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Free tier includes manual applicant intake and basic property management. Upgrade to Starter to send batch application invitations and enable tenant portals."
+      )
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Learn more" })).toHaveAttribute("href", "/pricing");
     expect(
       screen.getByText(
         "Enter the street address, city, and total units. You can add amenities, unit details, and compliance information after your first property is set up."

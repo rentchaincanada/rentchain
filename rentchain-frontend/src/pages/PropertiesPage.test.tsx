@@ -54,6 +54,10 @@ vi.mock("../components/properties/PropertySelector", () => ({
   PropertySelector: () => <div>Selector</div>,
 }));
 
+vi.mock("../components/billing/UpgradeCTA", () => ({
+  UpgradeCTA: ({ label }: { label?: string }) => <button type="button">{label || "Upgrade"}</button>,
+}));
+
 vi.mock("../components/ActionRequestsPanel", () => ({
   ActionRequestsPanel: () => <div>Actions</div>,
 }));
@@ -147,6 +151,24 @@ describe("PropertiesPage", () => {
     });
 
     expect(screen.getByText("Archived properties are hidden from active portfolio views but preserved for records and history.")).toBeInTheDocument();
+  });
+
+  it("shows free tier labels and upgrade guidance in the property overview", async () => {
+    render(
+      <MemoryRouter>
+        <PropertiesPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Free tier property workflow")).toBeInTheDocument();
+    expect(
+      screen.getAllByText(
+        "Free tier supports manual applicant intake and basic property management. Starter adds batch application invitations, screening workflow tools, and tenant portals."
+      ).length
+    ).toBeGreaterThan(0);
+    expect(screen.getByText("Active Property")).toBeInTheDocument();
+    expect(screen.getAllByText("Free tier").length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: "Upgrade to Starter" }).length).toBeGreaterThan(0);
   });
 
   it("shows a print action when a property is selected", async () => {

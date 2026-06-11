@@ -381,6 +381,22 @@ describe("ApplicationsPage", () => {
     expect(container.querySelector(".rc-applications-detail")).toBeTruthy();
   });
 
+  it("shows free-tier upgrade guidance near manual applicant intake", async () => {
+    render(
+      <MemoryRouter>
+        <ApplicationsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Manual applicant intake stays available on Free")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Starter adds batch application invitations, screening workflow tools, and tenant portals when you are ready to move beyond manual intake."
+      )
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Learn about Starter" })).toBeInTheDocument();
+  });
+
   it("provides a printable application summary action for the selected application", async () => {
     const { container } = render(
       <MemoryRouter>

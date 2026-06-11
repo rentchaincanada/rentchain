@@ -16,6 +16,7 @@ import { useToast } from "@/components/ui/ToastProvider";
 import { PROVINCE_OPTIONS } from "@/lib/provinces";
 import { track } from "../../lib/analytics";
 import { useAuth } from "../../context/useAuth";
+import { FREE_TIER_UPGRADE_GUIDANCE, TIER_GUIDANCE_LINKS } from "../../constants/tiers";
 import "../../styles/propertiesMobile.css";
 
 interface AddPropertyFormProps {
@@ -51,6 +52,7 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
   onExistingPropertyId,
 }) => {
   const { user } = useAuth();
+  const isFreePlan = String(user?.plan || "free").toLowerCase() === "free";
   const [name, setName] = useState("");
   const [pid, setPid] = useState("");
   const [addressLine1, setAddressLine1] = useState("");
@@ -417,6 +419,36 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
               and compliance information after your first property is set up.
             </div>
           </div>
+          {isFreePlan ? (
+            <div
+              style={{
+                borderRadius: 12,
+                border: "1px solid rgba(14,165,233,0.26)",
+                background: "rgba(240,249,255,0.94)",
+                padding: 12,
+                display: "grid",
+                gap: 8,
+              }}
+            >
+              <div style={{ fontSize: "0.92rem", fontWeight: 700, color: "#0f172a" }}>
+                {FREE_TIER_UPGRADE_GUIDANCE.propertyCreate.title}
+              </div>
+              <div style={{ fontSize: "0.84rem", color: "#475569", lineHeight: 1.5 }}>
+                {FREE_TIER_UPGRADE_GUIDANCE.propertyCreate.body}
+              </div>
+              <a
+                href={TIER_GUIDANCE_LINKS.upgradeDocsUrl}
+                style={{
+                  color: "#0369a1",
+                  fontSize: "0.84rem",
+                  fontWeight: 700,
+                  width: "fit-content",
+                }}
+              >
+                {FREE_TIER_UPGRADE_GUIDANCE.propertyCreate.ctaLabel}
+              </a>
+            </div>
+          ) : null}
           <div
             style={{
               display: "grid",
