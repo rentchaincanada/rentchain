@@ -1,5 +1,5 @@
-PR: #[NUMBER once opened]
-PR URL: [URL once opened]
+PR: #1139
+PR URL: https://github.com/rentchaincanada/rentchain/pull/1139
 Branch: fix/free-tier-upgrade-path-clarity-v1
 
 # Implementation Summary
