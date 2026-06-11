@@ -1,7 +1,7 @@
 # Implementation Summary
 
-PR: #[NUMBER once opened]
-PR URL: [URL once opened]
+PR: #1138
+PR URL: https://github.com/rentchaincanada/rentchain/pull/1138
 Branch: fix/unified-inbox-projection-regression-v1
 
 Mission: Apply Projection Safety to Legacy landlordInboxRoutes Endpoint
