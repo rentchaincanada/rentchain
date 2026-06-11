@@ -44,3 +44,7 @@ ABSOLUTE RULES:
 - Read ONLY the three files listed above
 - Output ONLY the single line in chat
 - If write fails, retry once immediately
+
+After writing .handoff/mission-review.md, always end your response with:
+
+@claude-gate1
