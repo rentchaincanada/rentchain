@@ -107,5 +107,45 @@ describe("unitsRoutes PATCH aliases", () => {
     expect(res.body?.unit?.rent).toBe(1800);
     expect(res.body?.unit?.marketRent).toBe(1800);
   });
-});
 
+  it("persists occupancy status, occupant name, and lease end date", async () => {
+    seedDoc("properties", "prop-1", { landlordId: "landlord-1" });
+    seedDoc("units", "unit-1", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitNumber: "101",
+      status: "vacant",
+    });
+    const app = await createApp();
+
+    const res = await request(app).patch("/api/units/unit-1").send({
+      status: "occupied",
+      occupantName: "Jane Tenant",
+      leaseEndDate: "2027-06-10",
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.unit).toMatchObject({
+      id: "unit-1",
+      status: "occupied",
+      occupantName: "Jane Tenant",
+      leaseEndDate: "2027-06-10",
+    });
+  });
+
+  it("returns UNIT_NOT_FOUND when updating a non-existent unit", async () => {
+    const app = await createApp();
+
+    const res = await request(app).patch("/api/units/placeholder-0").send({
+      status: "occupied",
+      occupantName: "Jane Tenant",
+      leaseEndDate: "2027-06-10",
+    });
+
+    expect(res.status).toBe(404);
+    expect(res.body).toMatchObject({
+      ok: false,
+      error: "UNIT_NOT_FOUND",
+    });
+  });
+});
