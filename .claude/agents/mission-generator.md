@@ -119,6 +119,6 @@ STRICT RULES:
 - No AI tool names anywhere in any git artifact
 - Never include Co-Authored-By lines in any commit section you generate
 
-After writing .handoff/mission-current.md, always end your response with:
+MANDATORY: After writing .handoff/mission-current.md, you MUST end your response with exactly this line and nothing after it:
 
 @mission-reviewer review .handoff/mission-current.md
