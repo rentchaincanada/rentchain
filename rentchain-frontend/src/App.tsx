@@ -62,6 +62,20 @@ import { getTenantToken } from "./lib/tenantAuth";
 const TENANT_PORTAL_ENABLED = import.meta.env.VITE_TENANT_PORTAL_ENABLED === "true";
 const CONTRACTOR_PORTAL_ENABLED = import.meta.env.VITE_CONTRACTOR_PORTAL_ENABLED !== "false";
 
+function LandlordInboxRedirect() {
+  const location = useLocation();
+  return (
+    <Navigate
+      to={{
+        pathname: "/landlord/unified-inbox",
+        search: location.search,
+        hash: location.hash,
+      }}
+      replace
+    />
+  );
+}
+
 function lazyWithRetry<T extends React.ComponentType<any>>(
   importer: () => Promise<{ default: T }>,
   retries = 1
@@ -131,7 +145,6 @@ const PortfolioScorePage = lazy(() => import("./pages/admin/PortfolioScorePage")
 const PortfolioScoreHistoryPage = lazy(() => import("./pages/admin/PortfolioScoreHistoryPage"));
 const PortfolioHealthSummaryPage = lazy(() => import("./pages/landlord/PortfolioHealthSummaryPage"));
 const LandlordAnalyticsPage = lazy(() => import("./pages/landlord/LandlordAnalyticsPage"));
-const LandlordInboxPage = lazy(() => import("./pages/landlord/LandlordInboxPage"));
 const UnifiedInboxPage = lazy(() => import("./pages/UnifiedInboxPage"));
 const OperationalCommandCenterPage = lazy(() => import("./pages/OperationalCommandCenterPage"));
 const DecisionInboxPage = lazy(() => import("./pages/DecisionInboxPage"));
@@ -578,11 +591,7 @@ function App() {
           path="/landlord/inbox"
           element={
             <RequireAuth>
-              <LandlordNav>
-                <Suspense fallback={null}>
-                  <LandlordInboxPage />
-                </Suspense>
-              </LandlordNav>
+              <LandlordInboxRedirect />
             </RequireAuth>
           }
         />
