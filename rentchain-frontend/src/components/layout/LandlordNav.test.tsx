@@ -182,6 +182,22 @@ describe("LandlordNav mobile drawer", () => {
     ]);
   });
 
+  it("shows one landlord drawer inbox entry pointing to the unified inbox", async () => {
+    renderLandlordNav();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open workspace pages" }));
+
+    const drawer = screen.getByRole("dialog", { name: "Navigation menu" });
+    const inboxButtons = within(drawer).getAllByRole("button", { name: "Inbox" });
+    expect(inboxButtons).toHaveLength(1);
+
+    fireEvent.click(inboxButtons[0]);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("current-path")).toHaveTextContent("/landlord/unified-inbox");
+    });
+  });
+
   it("navigates landlord mobile tabs to canonical routes", () => {
     renderLandlordNav();
 

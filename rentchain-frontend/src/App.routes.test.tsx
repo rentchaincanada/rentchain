@@ -125,6 +125,13 @@ vi.mock("./pages/landlord/LandlordAnalyticsPage", () => ({
   default: () => <h1>Landlord Analytics Dashboard</h1>,
 }));
 
+vi.mock("./pages/UnifiedInboxPage", () => ({
+  default: ({ role }: { role: string }) => {
+    const location = useLocation();
+    return <h1>{`Unified Inbox Page ${role} ${location.pathname}${location.search}${location.hash}`}</h1>;
+  },
+}));
+
 vi.mock("./pages/DecisionInboxPage", () => ({
   default: () => <h1>Decision Inbox Page</h1>,
 }));
@@ -332,6 +339,22 @@ describe("Routes: /decision-inbox", () => {
     );
 
     expect(await screen.findByText(/Decision Inbox Page/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("Routes: /landlord/inbox", () => {
+  it("redirects the legacy landlord inbox route to the unified inbox route", async () => {
+    const { default: App } = await import("./App");
+    render(
+      <MemoryRouter initialEntries={["/landlord/inbox?status=unread#updates"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(
+      await screen.findByText("Unified Inbox Page landlord /landlord/unified-inbox?status=unread#updates")
+    ).toBeInTheDocument();
     expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
   });
 });
