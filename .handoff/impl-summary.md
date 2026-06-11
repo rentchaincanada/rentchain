@@ -1,7 +1,7 @@
 # Implementation Summary
 
-PR: #[NUMBER once opened]
-PR URL: [URL once opened]
+PR: #1137
+PR URL: https://github.com/rentchaincanada/rentchain/pull/1137
 Branch: fix/inbox-route-consolidation-v1
 
 Mission: Consolidate Landlord Inbox Routes
