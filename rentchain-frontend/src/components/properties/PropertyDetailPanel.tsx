@@ -234,6 +234,11 @@ function safeStorageSet(key: string, value: string) {
   }
 }
 
+function isPersistedUnitId(unit: any) {
+  const id = String(unit?.id || unit?.unitId || unit?.uid || "").trim();
+  return Boolean(id) && !/^placeholder-/i.test(id);
+}
+
 export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
   property,
   onRefresh,
@@ -305,6 +310,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
   const [highlightedUnitKey, setHighlightedUnitKey] = useState<string | null>(null);
   const [blockedApplicationUpgradeUnitKey, setBlockedApplicationUpgradeUnitKey] = useState<string | null>(null);
   const [occupancyPromptDismissed, setOccupancyPromptDismissed] = useState(false);
+  const [unitResolutionError, setUnitResolutionError] = useState<string | null>(null);
   const [editComplianceExpanded, setEditComplianceExpanded] = useState(false);
   const [submissionAssistantOpen, setSubmissionAssistantOpen] = useState(false);
   const unitRowRefs = useRef<Record<string, HTMLTableRowElement | null>>({});
@@ -765,6 +771,23 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
       };
     },
     [getUnitOccupancyView]
+  );
+  const openUnitEdit = useCallback(
+    (unit: any) => {
+      if (!isPersistedUnitId(unit)) {
+        const message = "This unit is not ready for occupancy updates yet. Refresh the property after saving units, then try again.";
+        setUnitResolutionError(message);
+        showToast({
+          message: "Unit not ready",
+          description: message,
+          variant: "error",
+        });
+        return;
+      }
+      setUnitResolutionError(null);
+      setEditingUnit(getUnitForEdit(unit));
+    },
+    [getUnitForEdit, showToast]
   );
 
   const unitsNeedingOccupancySetup = useMemo(
@@ -1382,6 +1405,22 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
         </div>
       )}
 
+      {unitResolutionError ? (
+        <div
+          role="alert"
+          style={{
+            padding: 10,
+            borderRadius: 10,
+            border: "1px solid #fecdd3",
+            background: "#fef2f2",
+            color: "#991b1b",
+            fontSize: "0.9rem",
+          }}
+        >
+          {unitResolutionError}
+        </div>
+      ) : null}
+
       <PropertyCredibilitySummaryCard
         summary={credibilitySummary}
         leaseHref={property?.id ? `/leases?propertyId=${encodeURIComponent(String(property.id))}` : "/leases"}
@@ -1514,7 +1553,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                   type="button"
                   onClick={() => {
                     const targetUnit = unitsNeedingOccupancySetup[0] || displayedUnits[0] || null;
-                    setEditingUnit(targetUnit ? getUnitForEdit(targetUnit) : null);
+                    if (targetUnit) openUnitEdit(targetUnit);
                     dismissOccupancyPrompt();
                   }}
                   style={{
@@ -1762,7 +1801,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                           <button
                             type="button"
-                            onClick={() => setEditingUnit(getUnitForEdit(u))}
+                            onClick={() => openUnitEdit(u)}
                             style={{
                               padding: "6px 10px",
                               borderRadius: 8,
@@ -1936,7 +1975,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                 <div className="rc-unit-actions">
                   <button
                     type="button"
-                    onClick={() => setEditingUnit(getUnitForEdit(u))}
+                    onClick={() => openUnitEdit(u)}
                     style={{
                       padding: "6px 10px",
                       borderRadius: 8,

@@ -9,6 +9,11 @@ type Props = {
   onSaved: (unit: any) => void;
 };
 
+function isPersistedUnitId(unit: any) {
+  const id = String(unit?.id || unit?.unitId || unit?.uid || "").trim();
+  return Boolean(id) && !/^placeholder-/i.test(id);
+}
+
 export function UnitEditModal({ open, unit, onClose, onSaved }: Props) {
   const [unitNumber, setUnitNumber] = useState("");
   const [rent, setRent] = useState<string>("");
@@ -59,8 +64,8 @@ export function UnitEditModal({ open, unit, onClose, onSaved }: Props) {
   if (!open || !unit) return null;
 
   async function save() {
-    if (!unit.id) {
-      setError("Missing unit id");
+    if (!isPersistedUnitId(unit)) {
+      setError("This unit is not ready for occupancy updates yet. Refresh the property after saving units, then try again.");
       return;
     }
     setSaving(true);
@@ -75,16 +80,22 @@ export function UnitEditModal({ open, unit, onClose, onSaved }: Props) {
       payload.status = (status || "vacant").toLowerCase();
       payload.occupantName = payload.status === "occupied" ? occupantName.trim() || null : null;
       payload.leaseEndDate = payload.status === "occupied" ? leaseEndDate || null : null;
-      const resp: any = await updateUnit(String(unit.id), payload);
+      const unitId = String(unit.id || unit.unitId || unit.uid);
+      const resp: any = await updateUnit(unitId, payload);
       let updated = resp?.unit || { ...unit, ...payload };
       if (payload.status === "occupied" && leaseDocumentFile) {
-        const uploadedResp: any = await uploadUnitLeaseDocument(String(unit.id), leaseDocumentFile);
+        const uploadedResp: any = await uploadUnitLeaseDocument(unitId, leaseDocumentFile);
         updated = uploadedResp?.unit || { ...updated, leaseDocument: uploadedResp?.leaseDocument || null };
       }
       onSaved(updated);
       onClose();
     } catch (e: any) {
-      setError(e?.message || "Failed to save unit");
+      const message = String(e?.message || "");
+      setError(
+        message === "UNIT_NOT_FOUND"
+          ? "This unit could not be found. Refresh the property after saving units, then try again."
+          : message || "Failed to save unit"
+      );
     } finally {
       setSaving(false);
     }

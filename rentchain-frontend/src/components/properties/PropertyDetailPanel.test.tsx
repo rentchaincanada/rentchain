@@ -1,6 +1,6 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PropertyDetailPanel } from "./PropertyDetailPanel";
 
 const mocks = vi.hoisted(() => ({
@@ -107,6 +107,10 @@ vi.mock("@/components/properties/PropertyCredibilitySummaryCard", () => ({
 }));
 
 describe("PropertyDetailPanel", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   beforeEach(() => {
     mocks.updateProperty.mockResolvedValue({
       property: { id: "prop-1" },
@@ -693,6 +697,44 @@ describe("PropertyDetailPanel", () => {
 
     expect(screen.getByText("modal tenant: John Smith")).toBeInTheDocument();
     expect(screen.getByText("modal lease end: 2027-05-29")).toBeInTheDocument();
+  });
+
+  it("blocks occupancy setup when units only have placeholder references", async () => {
+    mocks.fetchUnitsForProperty.mockResolvedValue([]);
+
+    render(
+      <MemoryRouter>
+        <PropertyDetailPanel
+          property={{
+            id: "prop-1",
+            name: "Harbour View",
+            addressLine1: "12 Wharf Street",
+            city: "Halifax",
+            province: "NS",
+            postalCode: "B3H 1A1",
+            country: "Canada",
+            unitCount: 1,
+            totalUnits: 1,
+            amenities: [],
+            units: [],
+            createdAt: new Date().toISOString(),
+          }}
+          onRefresh={vi.fn()}
+        />
+      </MemoryRouter>
+    );
+
+    const setupButtons = await screen.findAllByRole("button", { name: "Set up current occupancy" });
+    fireEvent.click(setupButtons[0]);
+
+    expect(await screen.findByText(/not ready for occupancy updates/i)).toBeInTheDocument();
+    expect(screen.queryByTestId("unit-edit-modal")).not.toBeInTheDocument();
+    expect(mocks.showToast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: "Unit not ready",
+        variant: "error",
+      })
+    );
   });
 
   it("uses the updated archive confirmation copy before archiving", async () => {
