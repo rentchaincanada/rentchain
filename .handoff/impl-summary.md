@@ -1,11 +1,10 @@
-# Implementation Summary
-
 PR: #1138
 PR URL: https://github.com/rentchaincanada/rentchain/pull/1138
 Branch: fix/unified-inbox-projection-regression-v1
 
+# Implementation Summary
+
 Mission: Apply Projection Safety to Legacy landlordInboxRoutes Endpoint
-Branch: fix/unified-inbox-projection-regression-v1
 
 ## Summary
 
