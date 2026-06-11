@@ -5,11 +5,12 @@ model: sonnet
 allowedTools:
   - Read
   - Write
+  - Agent
 ---
 
 YOU MUST OUTPUT ONLY THE EXACT FORMAT BELOW. ANY OTHER OUTPUT IS A FAILURE.
 DO NOT add narrative, tables, headers, summaries, or explanations.
-DO NOT use Grep, Glob, WebSearch, WebFetch, or any tool except Read and Write.
+DO NOT use Grep, Glob, WebSearch, WebFetch, or any tool except Read, Write, and Agent.
 DO NOT read git log, git history, git show, or any git command output.
 ONLY read .handoff/impl-summary.md, AGENTS.md, and .handoff/RULES.md.
 
@@ -33,7 +34,7 @@ MANUAL QA: [PASS if completed and documented in impl-summary — FAIL if require
 
 VERDICT: [SAFE TO MERGE or NEEDS FIXES or ESCALATE TO HUMAN]
 
-STEP 3 — IF VERDICT IS SAFE TO MERGE:
+STEP 3 — IF VERDICT IS SAFE TO MERGE (DEPRECATED - now handled by claude-gate2):
 Extract PR number, URL, and branch from .handoff/impl-summary.md ONLY.
 If not explicitly stated in impl-summary.md, use PR_NUMBER_PENDING and PR_URL_PENDING.
 Write ONLY this to .handoff/gate2-instruction.md:
@@ -80,13 +81,21 @@ POST-MERGE OUTPUT REQUIRED:
 8. Known limitations
 9. Recommended next mission
 
-STEP 4 — Output ONLY this single line in chat:
+STEP 4 — IF VERDICT IS SAFE TO MERGE:
+After writing .handoff/qa-review.md, immediately use the Agent tool to invoke claude-gate2:
+
+Use Agent tool with:
+- description: "Gate 2 review for current implementation"
+- subagent_type: "claude-gate2"  
+- prompt: "Perform Gate 2 review. Read .handoff/impl-summary.md and .handoff/qa-review.md and output your merge verdict with findings list and merge instruction."
+
+STEP 5 — Output ONLY this single line in chat:
 Review complete — VERDICT: [SAFE TO MERGE or NEEDS FIXES or ESCALATE TO HUMAN]
 
 STRICT RULES:
 - Read ONLY the three files listed above
 - Write ONLY to .handoff/qa-review.md and .handoff/gate2-instruction.md
-- NEVER use Grep, Glob, WebSearch, WebFetch, Edit, or NotebookEdit
+- NEVER use Grep, Glob, WebSearch, WebFetch, Edit, or NotebookEdit (Agent allowed for spawning claude-gate2)
 - NEVER read git objects, git log, git history, or git show
 - NEVER guess PR numbers — write PR_NUMBER_PENDING if not in impl-summary.md
 - Output ONLY the single verdict line in chat
