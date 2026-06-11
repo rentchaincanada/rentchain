@@ -1,45 +1,48 @@
-PR: #1138
-PR URL: https://github.com/rentchaincanada/rentchain/pull/1138
-Branch: fix/unified-inbox-projection-regression-v1
+PR: #1139
+PR URL: https://github.com/rentchaincanada/rentchain/pull/1139
+Branch: fix/free-tier-upgrade-path-clarity-v1
 
 # Implementation Summary
 
-Mission: Apply Projection Safety to Legacy landlordInboxRoutes Endpoint
+Mission: Free Tier Upgrade Path Clarity
 
 ## Summary
 
-- Exported and reused the unified inbox public projection helper.
-- Applied `toPublicInboxRecord()` to the legacy landlord inbox response before returning items.
-- Applied the same public projection to tenant and contractor legacy inbox routes after audit found they also returned raw inbox events.
-- Updated landlord and tenant response types to use `UnifiedInboxPublicRecord`.
-- Updated landlord, tenant, contractor, and shared unified inbox route tests to assert the allowlisted public record shape and absence of internal fields.
+- Added shared tier guidance copy and upgrade documentation link constants.
+- Added a free-plan property creation callout explaining manual intake and Starter application invitation/tenant portal upgrade path.
+- Added a free-plan applications page banner near the applicant workflow with a contextual Starter CTA.
+- Added a free-plan property overview panel that labels each property as Free tier and provides an Upgrade to Starter CTA.
+- Preserved existing backend-driven entitlement checks and billing flows; no auth, pricing, entitlement, or billing route behavior changed.
+- Added focused frontend regression coverage for the new guidance copy and CTA surfaces.
 
 ## Files Changed
 
-- `rentchain-api/src/services/unifiedInbox/unifiedInboxService.ts`
-- `rentchain-api/src/routes/landlordInboxRoutes.ts`
-- `rentchain-api/src/routes/tenantInboxRoutes.ts`
-- `rentchain-api/src/routes/contractorPortalRoutes.ts`
-- `rentchain-api/src/routes/landlord.test.ts`
-- `rentchain-api/src/routes/tenant.test.ts`
-- `rentchain-api/src/routes/contractor.test.ts`
+- `rentchain-frontend/src/constants/tiers.ts`
+- `rentchain-frontend/src/constants/tiers.test.ts`
+- `rentchain-frontend/src/components/properties/AddPropertyForm.tsx`
+- `rentchain-frontend/src/components/properties/AddPropertyForm.test.tsx`
+- `rentchain-frontend/src/pages/ApplicationsPage.tsx`
+- `rentchain-frontend/src/pages/ApplicationsPage.test.tsx`
+- `rentchain-frontend/src/pages/PropertiesPage.tsx`
+- `rentchain-frontend/src/pages/PropertiesPage.test.tsx`
 - `.handoff/impl-summary.md`
 
 ## Validation
 
-- `source ~/.nvm/nvm.sh && nvm use 20.20.2 && npm run test -- src/routes/landlord.test.ts src/routes/tenant.test.ts src/routes/contractor.test.ts src/tests/unifiedInbox/unifiedInboxRoute.test.ts`
-- `source ~/.nvm/nvm.sh && nvm use 20.20.2 && npm run test -- src/tests/unifiedInbox/unifiedInboxService.test.ts`
-- `source ~/.nvm/nvm.sh && nvm use 20.20.2 && npm run build` in `rentchain-api`
+- `source ~/.nvm/nvm.sh && nvm use 20.20.2 && npm run test -- src/constants/tiers.test.ts src/components/properties/AddPropertyForm.test.tsx src/pages/ApplicationsPage.test.tsx src/pages/PropertiesPage.test.tsx` in `rentchain-frontend`
 - `source ~/.nvm/nvm.sh && nvm use 20.20.2 && npm run build` in `rentchain-frontend`
+- `source ~/.nvm/nvm.sh && nvm use 20.20.2 && npm run test -- src/routes/__tests__/tenantInvitesRoutes.test.ts src/routes/__tests__/rentalApplicationsDecisionActions.test.ts` in `rentchain-api`
 - `git diff --check`
 
 ## Manual QA
 
-- Not run locally. Preview/manual QA should verify `GET /api/landlord/inbox`, `GET /api/tenant/inbox`, and `GET /api/contractor/inbox` responses contain only the public inbox fields: `id`, `sourceKind`, `audienceRole`, `title`, `body`, `priority`, `status`, `occurredAt`, and `readAt`.
-- Network responses should not include `sourceId`, `sourceRef`, `audienceScopeKey`, safety flags, tokens, storage paths, provider payloads, or private notes.
+- Not run locally. Preview/manual QA should verify free-plan landlords see upgrade guidance during property creation, on the applications page, and in the property overview.
+- Preview/manual QA should verify guidance does not block property creation, manual applicant handling, or property selection workflows.
+- Preview/manual QA should verify tenant and contractor views do not show landlord tier guidance.
 
 ## Known Limitations
 
-- No auth, Firestore rules, source derivation, or route registration logic was changed.
+- No upgrade checkout flow, payment modal, pricing change, analytics event, entitlement change, or billing API change was included.
+- Backend route enforcement was verified with focused existing tests, but no backend source changes were made.
 - Frontend build still reports the existing large chunk warning; the build completed successfully.
-- Pre-existing unrelated local handoff/workflow-rule edits were preserved in a local stash before final validation.
+- Focused `PropertiesPage.test.tsx` still emits a pre-existing duplicate mocked property key warning in one test; assertions pass.

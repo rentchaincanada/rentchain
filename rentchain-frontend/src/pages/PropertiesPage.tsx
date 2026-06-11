@@ -35,6 +35,8 @@ import { resolveReturnToParam } from "../lib/propertyGate";
 import { useCapabilities } from "../hooks/useCapabilities";
 import { deriveUnitOccupancyFromLeases } from "../lib/leases/leaseLifecycle";
 import { printSummaryDocument } from "../utils/printSummary";
+import { UpgradeCTA } from "../components/billing/UpgradeCTA";
+import { FREE_TIER_UPGRADE_GUIDANCE } from "../constants/tiers";
 
 const PropertiesPage: React.FC = () => {
   const [properties, setProperties] = useState<Property[]>([]);
@@ -69,8 +71,9 @@ const PropertiesPage: React.FC = () => {
   const [leasePackOpen, setLeasePackOpen] = useState(false);
   const [leasePackInitialPropertyId, setLeasePackInitialPropertyId] = useState<string | null>(null);
   const { showToast } = useToast();
-  const { features } = useCapabilities();
+  const { caps, features } = useCapabilities();
   const currentProperties = properties?.length ?? 0;
+  const currentPlan = String(caps?.plan || "free").toLowerCase();
   const canInviteTenant = Boolean(features?.tenant_invites || features?.tenantInvites);
   const archiveHelpCopy =
     propertyView === "archived"
@@ -663,6 +666,73 @@ const PropertiesPage: React.FC = () => {
             selectedId={selectedPropertyId}
             onSelect={handleSelectProperty}
           />
+
+          {currentPlan === "free" && safeProperties.length > 0 ? (
+            <div
+              style={{
+                display: "grid",
+                gap: 10,
+                padding: 14,
+                borderRadius: radius.lg,
+                border: "1px solid rgba(14,165,233,0.26)",
+                background: "rgba(240,249,255,0.94)",
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
+                <div style={{ display: "grid", gap: 4, minWidth: 0 }}>
+                  <div style={{ color: text.primary, fontSize: 16, fontWeight: 800 }}>
+                    {FREE_TIER_UPGRADE_GUIDANCE.propertyOverview.title}
+                  </div>
+                  <div style={{ color: text.muted, fontSize: 13, lineHeight: 1.6 }}>
+                    {FREE_TIER_UPGRADE_GUIDANCE.propertyOverview.body}
+                  </div>
+                </div>
+                <UpgradeCTA
+                  featureKey="applications"
+                  label={FREE_TIER_UPGRADE_GUIDANCE.propertyOverview.ctaLabel}
+                  source="properties_free_tier_overview"
+                  presentation="inline"
+                  variant="secondary"
+                  size="sm"
+                />
+              </div>
+              <div style={{ display: "grid", gap: 6 }}>
+                {safeProperties.map((property) => (
+                  <div
+                    key={property.id}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      gap: 10,
+                      flexWrap: "wrap",
+                      padding: "8px 10px",
+                      borderRadius: radius.md,
+                      border: `1px solid ${colors.border}`,
+                      background: colors.card,
+                    }}
+                  >
+                    <div style={{ color: text.primary, fontSize: 13, fontWeight: 700, overflowWrap: "anywhere" }}>
+                      {property.name || property.addressLine1 || "Property"}
+                    </div>
+                    <span
+                      style={{
+                        borderRadius: radius.pill,
+                        border: "1px solid rgba(14,165,233,0.28)",
+                        background: "rgba(14,165,233,0.1)",
+                        color: "#0369a1",
+                        fontSize: 12,
+                        fontWeight: 800,
+                        padding: "3px 8px",
+                      }}
+                    >
+                      {FREE_TIER_UPGRADE_GUIDANCE.freeLabel}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
 
           {isLoadingProperties ? (
             <SkeletonBlock lines={4} label="Loading properties" />

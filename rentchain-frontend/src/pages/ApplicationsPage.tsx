@@ -112,6 +112,7 @@ import { FeatureGate } from "@/components/billing/FeatureGate";
 import { FeatureTeaser } from "@/components/billing/FeatureTeaser";
 import { UpgradeCTA } from "@/components/billing/UpgradeCTA";
 import { dispatchUpgradePrompt, resolveRequiredPlanLabel } from "@/lib/upgradePrompt";
+import { FREE_TIER_UPGRADE_GUIDANCE } from "@/constants/tiers";
 const statusOptions: RentalApplicationStatus[] = [
   "SUBMITTED",
   "IN_REVIEW",
@@ -2468,6 +2469,36 @@ const ApplicationsPage: React.FC = () => {
       </Card>
 
       <Card elevated className="rc-applications-grid">
+        {currentPlan === "free" ? (
+          <Card
+            style={{
+              marginBottom: spacing.md,
+              border: "1px solid rgba(14,165,233,0.26)",
+              background: "rgba(240,249,255,0.94)",
+              display: "grid",
+              gap: spacing.sm,
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", gap: spacing.sm, alignItems: "center", flexWrap: "wrap" }}>
+              <div style={{ display: "grid", gap: 4, minWidth: 0 }}>
+                <div style={{ fontWeight: 800, color: text.primary }}>
+                  {FREE_TIER_UPGRADE_GUIDANCE.applications.title}
+                </div>
+                <div style={{ color: text.muted, fontSize: 13, lineHeight: 1.6 }}>
+                  {FREE_TIER_UPGRADE_GUIDANCE.applications.body}
+                </div>
+              </div>
+              <UpgradeCTA
+                featureKey="applications"
+                label={FREE_TIER_UPGRADE_GUIDANCE.applications.ctaLabel}
+                source="applications_manual_intake_guidance"
+                presentation="inline"
+                variant="secondary"
+                size="sm"
+              />
+            </div>
+          </Card>
+        ) : null}
         <Card
           style={{
             marginBottom: spacing.md,
