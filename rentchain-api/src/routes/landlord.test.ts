@@ -47,6 +47,18 @@ const { fakeDb, resetFakeDb, seedDoc } = vi.hoisted(() => {
 
 const loadLandlordAnalyticsSnapshot = vi.fn();
 let mockUser: any = null;
+const PUBLIC_INBOX_KEYS = ["audienceRole", "body", "id", "occurredAt", "priority", "readAt", "sourceKind", "status", "title"];
+const EXCLUDED_INBOX_FIELDS = [
+  "sourceId",
+  "sourceRef",
+  "audienceScopeKey",
+  "rawIdsIncluded",
+  "tokensIncluded",
+  "secretsIncluded",
+  "providerPayloadIncluded",
+  "storagePathIncluded",
+  "privateNotesIncluded",
+];
 
 vi.mock("../firebase", () => ({
   db: fakeDb,
@@ -151,11 +163,11 @@ function expectSafeResponse(body: any) {
   expect(serialized).not.toContain("screeningReport");
   for (const item of body.items) {
     expect(item.id).toMatch(/^inbox_v1_/);
-    expect(item.sourceId).toMatch(/^inbox_v1_/);
-    expect(item.audienceScopeKey).toMatch(/^scope_v1_/);
-    expect(item.rawIdsIncluded).toBe(false);
-    expect(item.providerPayloadIncluded).toBe(false);
-    expect(item.storagePathIncluded).toBe(false);
+    expect(Object.keys(item).sort()).toEqual(PUBLIC_INBOX_KEYS);
+    expect(item.audienceRole).toBe("landlord");
+  }
+  for (const field of EXCLUDED_INBOX_FIELDS) {
+    expect(serialized).not.toContain(field);
   }
 }
 

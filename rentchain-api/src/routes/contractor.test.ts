@@ -96,6 +96,19 @@ function contractorHeader(overrides: Record<string, unknown> = {}) {
   };
 }
 
+const PUBLIC_INBOX_KEYS = ["audienceRole", "body", "id", "occurredAt", "priority", "readAt", "sourceKind", "status", "title"];
+const EXCLUDED_INBOX_FIELDS = [
+  "sourceId",
+  "sourceRef",
+  "audienceScopeKey",
+  "rawIdsIncluded",
+  "tokensIncluded",
+  "secretsIncluded",
+  "providerPayloadIncluded",
+  "storagePathIncluded",
+  "privateNotesIncluded",
+];
+
 function seedInboxData() {
   ensureCollection("workOrders").set("work_order_raw_1", {
     assignedContractorId: "contractor_raw_1",
@@ -204,7 +217,12 @@ describe("contractor inbox route", () => {
       "Contractor message",
     ]);
     expect(res.body.items.every((item: any) => item.audienceRole === "contractor")).toBe(true);
-    expect(res.body.items.every((item: any) => item.rawIdsIncluded === false)).toBe(true);
+    expect(res.body.items.map((item: any) => Object.keys(item).sort())).toEqual([
+      PUBLIC_INBOX_KEYS,
+      PUBLIC_INBOX_KEYS,
+      PUBLIC_INBOX_KEYS,
+      PUBLIC_INBOX_KEYS,
+    ]);
     const payload = JSON.stringify(res.body);
     expect(payload).not.toContain("contractor_raw_1");
     expect(payload).not.toContain("landlord_raw_1");
@@ -215,6 +233,9 @@ describe("contractor inbox route", () => {
     expect(payload).not.toContain("message_raw_");
     expect(payload).not.toContain('"providerPayload":');
     expect(payload).not.toContain("secret token");
+    for (const field of EXCLUDED_INBOX_FIELDS) {
+      expect(payload).not.toContain(field);
+    }
   });
 
   it("supports limit and offset pagination", async () => {

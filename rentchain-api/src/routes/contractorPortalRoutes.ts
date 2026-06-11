@@ -1,7 +1,12 @@
 import { Router, type NextFunction, type Request, type Response } from "express";
 import { db } from "../firebase";
 import { requireContractor } from "../middleware/requireContractor";
-import { deriveContractorUnifiedInbox, type SourceKind, type UnifiedInboxEvent } from "../services/unifiedInbox";
+import {
+  deriveContractorUnifiedInbox,
+  toPublicInboxRecord,
+  type SourceKind,
+  type UnifiedInboxEvent,
+} from "../services/unifiedInbox";
 import {
   createContractorPortalMessage,
   getContractorPortalProfile,
@@ -188,7 +193,7 @@ router.get("/contractor/inbox", requireContractor, requireContractorInboxIdentit
       limit: MAX_LIMIT,
     });
     const filteredItems = applyInboxFilters(safePage.items, request);
-    const items = filteredItems.slice(request.offset, request.offset + request.limit);
+    const items = filteredItems.slice(request.offset, request.offset + request.limit).map(toPublicInboxRecord);
 
     return res.json({
       ok: true,

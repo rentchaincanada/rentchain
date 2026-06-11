@@ -203,7 +203,7 @@ function applySafeFilters(items: UnifiedInboxEvent[], request: UnifiedInboxReque
   });
 }
 
-function toPublicInboxRecord(item: UnifiedInboxEvent): UnifiedInboxPublicRecord {
+export function toPublicInboxRecord(item: UnifiedInboxEvent): UnifiedInboxPublicRecord {
   return {
     id: item.id,
     sourceKind: item.sourceKind,
