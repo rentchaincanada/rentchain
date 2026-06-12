@@ -128,6 +128,19 @@ const COPY_MAP: Record<string, UpgradeCopy> = {
     secondaryCta: "Not now",
     requiredPlanLabel: "Starter",
   },
+  operations_signals: {
+    title: "Upgrade to unlock operations signals",
+    subtitle:
+      "Starter adds lease-driven operational signals, payment readiness, and document follow-up inside the command center.",
+    bullets: [
+      "Review lease lifecycle and document signals",
+      "Track payment readiness and follow-up needs",
+      "Keep operations visible without losing free-safe dashboard context",
+    ],
+    primaryCta: "Upgrade to Starter",
+    secondaryCta: "Not now",
+    requiredPlanLabel: "Starter",
+  },
   screening: {
     title: "Upgrade for richer rental operations",
     subtitle: "Free keeps guided setup usable today. Paid plans add more workflow, communication, and reporting depth.",
@@ -226,6 +239,7 @@ export function getUpgradeCopy(featureKey?: string): UpgradeCopy {
   if (key === "units.create") return COPY_MAP.units;
   if (key === "portfolio_score") return COPY_MAP.portfolio_score;
   if (key === "portfolio_action_recommendations") return COPY_MAP.portfolio_action_recommendations;
+  if (key === "operations_signals") return COPY_MAP.operations_signals;
   if (key === "marketplace_directory") return COPY_MAP.marketplace_directory;
   if (key === "marketplace_contractor_assignment") return COPY_MAP.marketplace_contractor_assignment;
   if (key === "portfolio.ai" || key === "ai.summary") return COPY_MAP["ai.insights"];

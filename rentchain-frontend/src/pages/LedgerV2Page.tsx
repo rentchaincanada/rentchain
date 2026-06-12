@@ -1,9 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createLedgerNoteV2, getLedgerEventV2, listLedgerV2, LedgerEventV2 } from "../api/ledgerV2";
-import { useCapabilities } from "@/hooks/useCapabilities";
-import { useUpgrade } from "@/context/UpgradeContext";
-import { colors, spacing } from "@/styles/tokens";
-import { upgradeStarterButtonStyle } from "@/lib/upgradeButtonStyles";
+import { LockedFeature } from "@/components/billing/LockedFeature";
+import { useEntitlements } from "@/hooks/useEntitlements";
+import { isUpgradeRequiredError } from "@/lib/gatedFeatureErrors";
 import { formatInternalReference } from "@/lib/identityReferences";
 
 type Filters = {
@@ -26,9 +25,8 @@ const EVENT_TYPES = [
 ] as const;
 
 export default function LedgerV2Page() {
-  const { features, loading: capsLoading } = useCapabilities();
-  const { openUpgrade } = useUpgrade();
-  const ledgerEnabled = features?.ledger !== false;
+  const entitlements = useEntitlements();
+  const ledgerEnabled = entitlements.hasCapability("ledger");
   const [filters, setFilters] = useState<Filters>({
     eventType: "ALL",
     search: "",
@@ -70,7 +68,7 @@ export default function LedgerV2Page() {
       });
       setItems(res.items || []);
     } catch (e: any) {
-      setError(e?.message || "Failed to load ledger");
+      setError(isUpgradeRequiredError(e) ? null : e?.message || "Failed to load ledger");
     } finally {
       setLoading(false);
     }
@@ -86,7 +84,7 @@ export default function LedgerV2Page() {
       const res = await getLedgerEventV2(id);
       setDetail(res.item);
     } catch (e: any) {
-      setError(e?.message || "Failed to load detail");
+      setError(isUpgradeRequiredError(e) ? null : e?.message || "Failed to load detail");
     }
   }
 
@@ -99,48 +97,19 @@ export default function LedgerV2Page() {
       setNoteSummary("");
       await load();
     } catch (e: any) {
-      setError(e?.message || "Failed to add note");
+      setError(isUpgradeRequiredError(e) ? null : e?.message || "Failed to add note");
     } finally {
       setAdding(false);
     }
   }
 
-  if (!capsLoading && !ledgerEnabled) {
+  if (!entitlements.loading && !ledgerEnabled) {
     return (
       <div style={{ padding: 20 }}>
-        <div
-          style={{
-            border: "1px solid rgba(148,163,184,0.35)",
-            borderRadius: 16,
-            padding: spacing.lg,
-            background: "#fff",
-            maxWidth: 640,
-          }}
-        >
-          <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 6 }}>
-            Upgrade to manage your rentals
-          </div>
-          <div style={{ color: "#64748b", fontSize: 14, marginBottom: 12 }}>
-            RentChain Screening is free. Rental management starts on Starter.
-          </div>
-          <button
-            type="button"
-            onClick={() =>
-              openUpgrade({
-                reason: "screening",
-                plan: "Screening",
-                copy: {
-                  title: "Upgrade to manage your rentals",
-                  body: "RentChain Screening is free. Rental management starts on Starter.",
-                },
-                ctaLabel: "Upgrade to Starter",
-              })
-            }
-            style={upgradeStarterButtonStyle}
-          >
-            Upgrade to Starter
-          </button>
-        </div>
+        <LockedFeature
+          featureKey="ledger"
+          ctaLabel="Upgrade to Starter"
+        />
       </div>
     );
   }

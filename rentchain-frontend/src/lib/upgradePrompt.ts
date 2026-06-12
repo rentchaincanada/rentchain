@@ -22,6 +22,7 @@ const FEATURE_REQUIRED_PLAN: Record<string, string> = {
   applications: "starter",
   application_links: "starter",
   leases: "starter",
+  operations_signals: "starter",
   maintenance: "starter",
   move_in_readiness: "starter",
   work_orders: "starter",

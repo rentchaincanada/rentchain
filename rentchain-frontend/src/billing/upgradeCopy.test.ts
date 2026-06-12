@@ -13,4 +13,11 @@ describe("getUpgradeCopy", () => {
     expect(copy.subtitle).toContain("Guided screening requests");
     expect(copy.bullets.join(" ")).toContain("request to review");
   });
+
+  it("centralizes operations locked-state copy", () => {
+    const copy = getUpgradeCopy("operations_signals");
+    expect(copy.title).toContain("operations signals");
+    expect(copy.subtitle).toContain("Starter");
+    expect(copy.bullets.join(" ")).toContain("free-safe dashboard context");
+  });
 });

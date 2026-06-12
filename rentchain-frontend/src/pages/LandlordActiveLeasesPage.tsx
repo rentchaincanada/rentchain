@@ -21,6 +21,9 @@ import { isTargetedHiddenLeaseId } from "@/lib/testDataVisibilityTargets";
 import LeaseSigningDashboard from "@/components/LeaseSigningDashboard";
 import { downloadLeaseSummaryPdf } from "@/utils/leaseSummaryPdf";
 import { printSummaryDocument } from "@/utils/printSummary";
+import { LockedFeature } from "@/components/billing/LockedFeature";
+import { useEntitlements } from "@/hooks/useEntitlements";
+import { isUpgradeRequiredError } from "@/lib/gatedFeatureErrors";
 import "./LandlordActiveLeasesPage.css";
 
 function formatCurrency(value: number | null | undefined) {
@@ -335,6 +338,8 @@ function renderJurisdictionPolicyGuidance(lease: LandlordActiveLease) {
 export default function LandlordActiveLeasesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const view = searchParams.get("view") === "archived" ? "archived" : "active";
+  const entitlements = useEntitlements();
+  const leasesEnabled = entitlements.hasCapability("leases");
   const [leases, setLeases] = React.useState<LandlordActiveLease[]>([]);
   const [candidates, setCandidates] = React.useState<LeaseReconciliationCandidate[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -373,6 +378,14 @@ export default function LandlordActiveLeasesPage() {
   }, []);
 
   const load = React.useCallback(async () => {
+    if (entitlements.loading) return;
+    if (!leasesEnabled) {
+      setLeases([]);
+      setCandidates([]);
+      setError(null);
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       setError(null);
@@ -386,13 +399,13 @@ export default function LandlordActiveLeasesPage() {
       setLeases(nextLeases);
       setCandidates(Array.isArray(candidateResponse?.candidates) ? candidateResponse.candidates : []);
     } catch (err: unknown) {
-      setError(errorMessage(err, "Failed to load lease operations."));
+      setError(isUpgradeRequiredError(err) ? null : errorMessage(err, "Failed to load lease operations."));
       setLeases([]);
       setCandidates([]);
     } finally {
       setLoading(false);
     }
-  }, [view]);
+  }, [entitlements.loading, leasesEnabled, view]);
 
   React.useEffect(() => {
     void load();
@@ -734,10 +747,16 @@ export default function LandlordActiveLeasesPage() {
         />
       </label>
 
-      {loading ? <div>Loading lease operations…</div> : null}
+      {entitlements.loading || loading ? <div>Loading lease operations…</div> : null}
+      {!entitlements.loading && !leasesEnabled ? (
+        <LockedFeature
+          featureKey="leases"
+          ctaLabel="Upgrade to Starter"
+        />
+      ) : null}
       {error ? <div style={{ color: "#b91c1c" }}>{error}</div> : null}
 
-      {!loading && view === "active" && candidates.length > 0 ? (
+      {!entitlements.loading && leasesEnabled && !loading && view === "active" && candidates.length > 0 ? (
         <div style={{ display: "grid", gap: 10, border: "1px solid #e2e8f0", borderRadius: 12, background: "#fff", padding: 16 }}>
           <div style={{ fontWeight: 800, color: "#0f172a" }}>Occupied units missing lease records</div>
           <div style={{ color: "#64748b", fontSize: 13 }}>
@@ -812,7 +831,7 @@ export default function LandlordActiveLeasesPage() {
         </div>
       ) : null}
 
-      {!loading && !error && leases.length === 0 ? (
+      {!entitlements.loading && leasesEnabled && !loading && !error && leases.length === 0 ? (
         <div
           style={{
             padding: 16,
@@ -826,7 +845,7 @@ export default function LandlordActiveLeasesPage() {
         </div>
       ) : null}
 
-      {!loading && !error && leases.length > 0 && filteredLeases.length === 0 ? (
+      {!entitlements.loading && leasesEnabled && !loading && !error && leases.length > 0 && filteredLeases.length === 0 ? (
         <div
           style={{
             padding: 16,
@@ -840,7 +859,7 @@ export default function LandlordActiveLeasesPage() {
         </div>
       ) : null}
 
-      {!loading && !error && filteredLeases.length > 0 && !isNarrowLayout ? (
+      {!entitlements.loading && leasesEnabled && !loading && !error && filteredLeases.length > 0 && !isNarrowLayout ? (
         <div style={{ overflowX: "auto", border: "1px solid #e2e8f0", borderRadius: 12, background: "#fff" }}>
           <table style={{ width: "100%", minWidth: 1040, borderCollapse: "collapse" }}>
             <thead>
@@ -951,7 +970,7 @@ export default function LandlordActiveLeasesPage() {
         </div>
       ) : null}
 
-      {!loading && !error && filteredLeases.length > 0 && isNarrowLayout ? (
+      {!entitlements.loading && leasesEnabled && !loading && !error && filteredLeases.length > 0 && isNarrowLayout ? (
         <div style={{ display: "grid", gap: 12 }}>
           {filteredLeases.map((lease) => (
             <div

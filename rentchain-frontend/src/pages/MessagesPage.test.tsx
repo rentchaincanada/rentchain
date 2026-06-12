@@ -27,6 +27,10 @@ vi.mock("@/context/UpgradeContext", () => ({
   useUpgrade: () => ({ openUpgrade: mocks.openUpgradeMock }),
 }));
 
+vi.mock("@/components/billing/LockedFeature", () => ({
+  LockedFeature: ({ featureKey }: { featureKey: string }) => <div>Locked feature: {featureKey}</div>,
+}));
+
 vi.mock("@/components/layout/ResponsiveMasterDetail", () => ({
   ResponsiveMasterDetail: ({ masterTitle, selectedLabel, masterDropdown, master, detail }: any) => (
     <div>
@@ -110,6 +114,22 @@ describe("MessagesPage", () => {
     expect(screen.getAllByText("Harbour View / Unit 2A").length).toBeGreaterThan(0);
     expect(screen.getByText("TT")).toBeInTheDocument();
     expect(screen.queryByText(/Tenant tenant-/i)).not.toBeInTheDocument();
+  });
+
+  it("shows a locked messages state without loading conversations when messaging is unavailable", async () => {
+    mocks.useCapabilitiesMock.mockReturnValue({
+      features: { messaging: false },
+      loading: false,
+    });
+
+    render(
+      <MemoryRouter>
+        <MessagesPage />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText("Locked feature: messaging")).toBeInTheDocument();
+    expect(mocks.fetchLandlordConversationsMock).not.toHaveBeenCalled();
   });
 
   it("marks an unread selected conversation read without exposing raw ids", async () => {

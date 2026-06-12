@@ -3,10 +3,9 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { fetchLedgerEvents, type LedgerEventStored } from "../api/ledgerApi";
 import { useToast } from "../components/ui/ToastProvider";
-import { useCapabilities } from "@/hooks/useCapabilities";
-import { useUpgrade } from "@/context/UpgradeContext";
-import { colors, spacing } from "@/styles/tokens";
-import { upgradeStarterButtonStyle } from "@/lib/upgradeButtonStyles";
+import { LockedFeature } from "@/components/billing/LockedFeature";
+import { useEntitlements } from "@/hooks/useEntitlements";
+import { isUpgradeRequiredError } from "@/lib/gatedFeatureErrors";
 
 function getEventDate(e: LedgerEventStored): Date {
   if (typeof e.ts === "number") return new Date(e.ts);
@@ -49,9 +48,8 @@ const LedgerPage: React.FC = () => {
   const [entries, setEntries] = useState<LedgerEventStored[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { features, loading: capsLoading } = useCapabilities();
-  const { openUpgrade } = useUpgrade();
-  const ledgerEnabled = features?.ledger !== false;
+  const entitlements = useEntitlements();
+  const ledgerEnabled = entitlements.hasCapability("ledger");
 
   useEffect(() => {
     let cancelled = false;
@@ -71,12 +69,16 @@ const LedgerPage: React.FC = () => {
       } catch (err) {
         console.error("[LedgerPage] Failed to load ledger", err);
         if (!cancelled) {
-          setError("Failed to load ledger");
-          showToast({
-            message: "Failed to load ledger",
-            description: "An error occurred while loading ledger entries.",
-            variant: "error",
-          });
+          if (isUpgradeRequiredError(err)) {
+            setError(null);
+          } else {
+            setError("Failed to load ledger");
+            showToast({
+              message: "Failed to load ledger",
+              description: "An error occurred while loading ledger entries.",
+              variant: "error",
+            });
+          }
         }
       } finally {
         if (!cancelled) {
@@ -169,40 +171,11 @@ const LedgerPage: React.FC = () => {
 
           {filterChip}
 
-          {!capsLoading && !ledgerEnabled ? (
-            <div
-              style={{
-                border: "1px solid rgba(148,163,184,0.35)",
-                borderRadius: 16,
-                padding: spacing.md,
-                background: "rgba(15,23,42,0.6)",
-                color: "#e2e8f0",
-              }}
-            >
-              <div style={{ fontWeight: 700, marginBottom: 6 }}>
-                Upgrade to manage your rentals
-              </div>
-              <div style={{ color: "#94a3b8", fontSize: 14, marginBottom: 12 }}>
-                RentChain Screening is free. Rental management starts on Starter.
-              </div>
-              <button
-                type="button"
-                onClick={() =>
-                  openUpgrade({
-                    reason: "screening",
-                    plan: "Screening",
-                    copy: {
-                      title: "Upgrade to manage your rentals",
-                      body: "RentChain Screening is free. Rental management starts on Starter.",
-                    },
-                    ctaLabel: "Upgrade to Starter",
-                  })
-                }
-                style={upgradeStarterButtonStyle}
-              >
-                Upgrade to Starter
-              </button>
-            </div>
+          {!entitlements.loading && !ledgerEnabled ? (
+            <LockedFeature
+              featureKey="ledger"
+              ctaLabel="Upgrade to Starter"
+            />
           ) : (
             <>
               {loading ? (

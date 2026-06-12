@@ -10,12 +10,15 @@ import {
 import { getActiveLeasesForLandlord, type LandlordActiveLease } from "@/api/leasesApi";
 import { fetchProperties, type Property } from "@/api/propertiesApi";
 import { MacShell } from "@/components/layout/MacShell";
+import { LockedFeature } from "@/components/billing/LockedFeature";
 import {
   OperationalReviewQueue,
   type OperationalReviewQueueItem,
 } from "@/components/reviewWorkspaces/OperationalReviewQueue";
 import { ReviewWorkspacePanel, type ReviewWorkspaceUiModel } from "@/components/reviewWorkspaces/ReviewWorkspacePanel";
 import { Card, Section } from "@/components/ui/Ui";
+import { useEntitlements } from "@/hooks/useEntitlements";
+import { isUpgradeRequiredError } from "@/lib/gatedFeatureErrors";
 
 type CommandCenterCategory =
   | "lease_lifecycle"
@@ -943,10 +946,13 @@ function errorMessage(error: unknown) {
 }
 
 export default function OperationalCommandCenterPage() {
+  const entitlements = useEntitlements();
+  const leaseSignalsEnabled = entitlements.hasCapability("leases");
   const [decisionData, setDecisionData] = React.useState<DecisionInboxResponse | null>(null);
   const [dashboardData, setDashboardData] = React.useState<DashboardSummaryData | null>(null);
   const [leases, setLeases] = React.useState<LandlordActiveLease[]>([]);
   const [properties, setProperties] = React.useState<Property[]>([]);
+  const [leaseSignalsLocked, setLeaseSignalsLocked] = React.useState(false);
   const [search, setSearch] = React.useState("");
   const [activeFilter, setActiveFilter] = React.useState<CommandCenterFilter>("all");
   const [activeSavedView, setActiveSavedView] = React.useState<SavedOperationalView>("all_operational");
@@ -961,19 +967,31 @@ export default function OperationalCommandCenterPage() {
   React.useEffect(() => {
     let mounted = true;
     (async () => {
+      if (entitlements.loading) return;
       try {
         setLoading(true);
         setError(null);
-        const [decisionResponse, dashboardResponse, leaseResponse, propertyResponse] = await Promise.all([
-          fetchDecisionInbox(),
-          fetchDashboardSummary(),
-          getActiveLeasesForLandlord(),
-          fetchProperties({ status: "active" }),
+        const leaseRequest = leaseSignalsEnabled
+          ? getActiveLeasesForLandlord()
+              .then((response) => ({ locked: false, leases: response.leases || [] }))
+              .catch((err) => {
+                if (isUpgradeRequiredError(err)) return { locked: true, leases: [] };
+                throw err;
+              })
+          : Promise.resolve({ locked: true, leases: [] as LandlordActiveLease[] });
+        const [[decisionResponse, dashboardResponse, propertyResponse], leaseResponse] = await Promise.all([
+          Promise.all([
+            fetchDecisionInbox(),
+            fetchDashboardSummary(),
+            fetchProperties({ status: "active" }),
+          ]),
+          leaseRequest,
         ]);
         if (!mounted) return;
         setDecisionData(decisionResponse);
         setDashboardData(dashboardResponse);
         setLeases(leaseResponse.leases || []);
+        setLeaseSignalsLocked(leaseResponse.locked);
         setProperties(propertyResponse.properties || propertyResponse.items || []);
       } catch (err) {
         if (!mounted) return;
@@ -985,7 +1003,7 @@ export default function OperationalCommandCenterPage() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [entitlements.loading, leaseSignalsEnabled]);
 
   const signals = React.useMemo(
     () => deriveCommandCenterSignals({ decisions: decisionData?.items || [], leases, properties }),
@@ -1092,6 +1110,35 @@ export default function OperationalCommandCenterPage() {
           >
             {categorySummary.map(({ category, config, total, critical, warning, info }) => {
               const Icon = config.icon;
+              if (leaseSignalsLocked && ["lease_lifecycle", "payments", "documents"].includes(category)) {
+                return (
+                  <Card
+                    key={category}
+                    style={{
+                      borderRadius: 8,
+                      padding: 14,
+                      display: "grid",
+                      alignContent: "start",
+                      gap: 8,
+                      width: "100%",
+                      minHeight: 150,
+                      minWidth: 0,
+                      boxSizing: "border-box",
+                      overflowWrap: "anywhere",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <Icon size={18} />
+                      <strong style={{ color: "#0f172a" }}>{config.label}</strong>
+                    </div>
+                    <LockedFeature
+                      featureKey="operations_signals"
+                      ctaLabel="Upgrade to Starter"
+                      compact
+                    />
+                  </Card>
+                );
+              }
               return (
                 <Link
                   key={category}
@@ -1326,7 +1373,7 @@ export default function OperationalCommandCenterPage() {
               </button>
             </div>
           </Card>
-          {loading ? <Card style={{ color: "#64748b", display: "grid", gap: 6 }}>Loading operational signals...</Card> : null}
+          {entitlements.loading || loading ? <Card style={{ color: "#64748b", display: "grid", gap: 6 }}>Loading operational signals...</Card> : null}
           {!loading && error ? (
             <Card style={{ color: "#b91c1c", display: "grid", gap: 6 }}>
               <strong>Operational command center could not load.</strong>

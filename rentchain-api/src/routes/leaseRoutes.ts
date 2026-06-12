@@ -6,7 +6,7 @@ import {
   leaseService,
   UpdateLeasePayload,
 } from "../services/leaseService";
-import { requireCapability } from "../services/capabilityGuard";
+import { buildUpgradeRequiredResponse, requireCapability } from "../services/capabilityGuard";
 import { db } from "../firebase";
 import { requireLandlord } from "../middleware/requireLandlord";
 import {
@@ -2002,7 +2002,11 @@ async function enforceLeaseCapability(req: any, res: Response): Promise<boolean>
   }
   const cap = await requireCapability(landlordId, "leases", req.user);
   if (!cap.ok) {
-    res.status(403).json({ error: "Upgrade required", capability: "leases", plan: cap.plan });
+    res.status(403).json(buildUpgradeRequiredResponse({
+      capability: "leases",
+      currentPlan: cap.plan,
+      source: "leaseRoutes",
+    }));
     return false;
   }
   return true;

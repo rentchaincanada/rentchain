@@ -1,5 +1,10 @@
 import { type CapabilityKey } from "../config/capabilities";
 import {
+  canonicalPlanLabel,
+  requiredPlanForCapability,
+  resolveCanonicalPlan,
+} from "./entitlements/planCapabilities";
+import {
   getEntitlementsForLandlord,
   getUserEntitlements,
   type UserEntitlements,
@@ -45,4 +50,27 @@ export async function requireCapability(
     return { ok: false, plan: entitlements.plan, error: "forbidden" };
   }
   return { ok: true, plan: entitlements.plan };
+}
+
+export function buildUpgradeRequiredResponse(params: {
+  capability: CapabilityKey | string;
+  currentPlan?: string | null;
+  source: string;
+}) {
+  const capability = String(params.capability || "").trim();
+  const currentPlan = resolveCanonicalPlan(params.currentPlan);
+  const requiredPlan = requiredPlanForCapability(capability) || "pro";
+  const requiredPlanLabel = canonicalPlanLabel(requiredPlan);
+
+  return {
+    ok: false,
+    error: "upgrade_required",
+    capability,
+    plan: currentPlan,
+    currentPlan,
+    requiredPlan,
+    source: params.source,
+    upgradePath: "/billing",
+    message: `${requiredPlanLabel} is required to use this feature.`,
+  };
 }

@@ -38,6 +38,11 @@ describe("planCapabilities entitlement aliases", () => {
     expect(requiredPlanForCapability("marketplace_contractor_assignment")).toBe("elite");
   });
 
+  it("resolves required plan without leaking capability casing differences", () => {
+    expect(requiredPlanForCapability("unitsTable")).toBe("free");
+    expect(requiredPlanForCapability("LEDGER")).toBe("starter");
+  });
+
   it("normalizes legacy aliases into canonical plans", () => {
     expect(resolveCanonicalPlan("screening")).toBe("free");
     expect(resolveCanonicalPlan("core")).toBe("starter");
