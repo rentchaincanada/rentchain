@@ -2025,7 +2025,23 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
         unit={editingUnit}
         onClose={() => setEditingUnit(null)}
         onSaved={(updated) => {
-          setUnits((prev) => prev.map((u) => (u?.id === updated?.id ? { ...u, ...updated } : u)));
+          const editingKey = String(editingUnit?.id || editingUnit?.unitId || editingUnit?.uid || "").trim();
+          const updatedKey = String(updated?.id || updated?.unitId || updated?.uid || "").trim();
+          if (!isPersistedUnitId(updated)) {
+            setUnitResolutionError("This unit is not ready for occupancy updates yet. Refresh the property after saving units, then try again.");
+            showToast({
+              title: "Unit not ready",
+              description: "Refresh the property after saving units, then try again.",
+              variant: "warning",
+            });
+            return;
+          }
+          setUnits((prev) =>
+            prev.map((u) => {
+              const currentKey = String(u?.id || u?.unitId || u?.uid || "").trim();
+              return currentKey === updatedKey || currentKey === editingKey ? { ...u, ...updated } : u;
+            })
+          );
           setEditingUnit(null);
         }}
       />

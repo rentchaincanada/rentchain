@@ -91,4 +91,36 @@ describe("UnitEditModal", () => {
       })
     );
   });
+
+  it("keeps the modal open when the update response omits a persisted ID", async () => {
+    const onClose = vi.fn();
+    const onSaved = vi.fn();
+    mocks.updateUnit.mockResolvedValue({
+      unit: {
+        status: "occupied",
+        occupantName: "Jane Tenant",
+      },
+    });
+
+    render(
+      <UnitEditModal
+        open
+        unit={{ id: "unit-1", unitNumber: "101", status: "vacant" }}
+        onClose={onClose}
+        onSaved={onSaved}
+      />
+    );
+
+    fireEvent.change(screen.getByLabelText("Status"), {
+      target: { value: "occupied" },
+    });
+    fireEvent.change(await screen.findByLabelText("Current tenant name"), {
+      target: { value: "Jane Tenant" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByText(/stable ID was not returned/i)).toBeInTheDocument();
+    expect(onSaved).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+  });
 });

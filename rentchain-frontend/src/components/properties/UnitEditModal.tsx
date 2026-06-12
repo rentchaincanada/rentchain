@@ -14,6 +14,15 @@ function isPersistedUnitId(unit: any) {
   return Boolean(id) && !/^placeholder-/i.test(id);
 }
 
+function resolveSavedUnit(response: any, fallbackUnit: any, payload: any) {
+  const updated = response?.unit || { ...fallbackUnit, ...payload };
+  if (!isPersistedUnitId(updated)) {
+    const err = new Error("UNIT_ID_UNRESOLVED");
+    throw err;
+  }
+  return updated;
+}
+
 export function UnitEditModal({ open, unit, onClose, onSaved }: Props) {
   const [unitNumber, setUnitNumber] = useState("");
   const [rent, setRent] = useState<string>("");
@@ -82,10 +91,14 @@ export function UnitEditModal({ open, unit, onClose, onSaved }: Props) {
       payload.leaseEndDate = payload.status === "occupied" ? leaseEndDate || null : null;
       const unitId = String(unit.id || unit.unitId || unit.uid);
       const resp: any = await updateUnit(unitId, payload);
-      let updated = resp?.unit || { ...unit, ...payload };
+      let updated = resolveSavedUnit(resp, unit, payload);
       if (payload.status === "occupied" && leaseDocumentFile) {
         const uploadedResp: any = await uploadUnitLeaseDocument(unitId, leaseDocumentFile);
-        updated = uploadedResp?.unit || { ...updated, leaseDocument: uploadedResp?.leaseDocument || null };
+        updated = resolveSavedUnit(
+          uploadedResp?.unit ? uploadedResp : { unit: { ...updated, leaseDocument: uploadedResp?.leaseDocument || null } },
+          updated,
+          {}
+        );
       }
       onSaved(updated);
       onClose();
@@ -94,6 +107,8 @@ export function UnitEditModal({ open, unit, onClose, onSaved }: Props) {
       setError(
         message === "UNIT_NOT_FOUND"
           ? "This unit could not be found. Refresh the property after saving units, then try again."
+          : message === "UNIT_ID_UNRESOLVED"
+          ? "The unit was saved, but its stable ID was not returned. Keep this modal open and try again, or refresh the property."
           : message || "Failed to save unit"
       );
     } finally {
@@ -113,7 +128,9 @@ export function UnitEditModal({ open, unit, onClose, onSaved }: Props) {
         zIndex: 4000,
         padding: 16,
       }}
-      onMouseDown={onClose}
+      onMouseDown={() => {
+        if (!saving) onClose();
+      }}
     >
       <div
         onMouseDown={(e) => e.stopPropagation()}
@@ -130,7 +147,7 @@ export function UnitEditModal({ open, unit, onClose, onSaved }: Props) {
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div style={{ fontWeight: 700, fontSize: 16 }}>Edit unit</div>
-          <Button onClick={onClose} style={{ padding: "6px 10px" }}>
+          <Button onClick={onClose} disabled={saving} style={{ padding: "6px 10px" }}>
             Close
           </Button>
         </div>
@@ -296,7 +313,7 @@ export function UnitEditModal({ open, unit, onClose, onSaved }: Props) {
         ) : null}
 
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-          <Button onClick={onClose} style={{ padding: "8px 12px" }}>
+          <Button onClick={onClose} disabled={saving} style={{ padding: "8px 12px" }}>
             Cancel
           </Button>
           <Button onClick={save} disabled={saving || !unitNumber} style={{ padding: "8px 12px" }}>

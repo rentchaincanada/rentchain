@@ -85,11 +85,24 @@ vi.mock("./UnitsCsvPreviewModal", () => ({
 }));
 
 vi.mock("./UnitEditModal", () => ({
-  UnitEditModal: ({ open, unit }: any) =>
+  UnitEditModal: ({ open, unit, onSaved }: any) =>
     open ? (
       <div data-testid="unit-edit-modal">
         <div>modal tenant: {unit?.occupantName || ""}</div>
         <div>modal lease end: {unit?.leaseEndDate || ""}</div>
+        <button
+          type="button"
+          onClick={() =>
+            onSaved?.({
+              id: "unit-persisted-2",
+              unitNumber: unit?.unitNumber || "101",
+              status: "occupied",
+              occupantName: "Pat Tenant",
+            })
+          }
+        >
+          Mock save persisted unit
+        </button>
       </div>
     ) : null,
 }));
@@ -735,6 +748,43 @@ describe("PropertyDetailPanel", () => {
         variant: "error",
       })
     );
+  });
+
+  it("replaces the edited unit when the save response returns a persisted ID", async () => {
+    mocks.fetchUnitsForProperty.mockResolvedValue([
+      { id: "unit-persisted-1", unitNumber: "101", status: "vacant" },
+    ]);
+
+    render(
+      <MemoryRouter>
+        <PropertyDetailPanel
+          property={{
+            id: "prop-1",
+            name: "Harbour View",
+            addressLine1: "12 Wharf Street",
+            city: "Halifax",
+            province: "NS",
+            postalCode: "B3H 1A1",
+            country: "Canada",
+            unitCount: 1,
+            totalUnits: 1,
+            amenities: [],
+            units: [],
+            createdAt: new Date().toISOString(),
+          }}
+          onRefresh={vi.fn()}
+        />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => expect(screen.getAllByRole("button", { name: "Edit" }).length).toBeGreaterThan(1));
+    fireEvent.click(screen.getAllByRole("button", { name: "Edit" }).at(-1)!);
+    fireEvent.click(screen.getByRole("button", { name: "Mock save persisted unit" }));
+
+    await waitFor(() => expect(screen.queryByTestId("unit-edit-modal")).not.toBeInTheDocument());
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Edit" }).at(-1)!);
+    expect(await screen.findByText("modal tenant: Pat Tenant")).toBeInTheDocument();
   });
 
   it("uses the updated archive confirmation copy before archiving", async () => {

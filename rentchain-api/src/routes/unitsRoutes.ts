@@ -103,6 +103,11 @@ function normalizeStatus(value: any): string {
   return String(value || "").trim().toLowerCase();
 }
 
+function isPlaceholderUnitId(value: any): boolean {
+  const id = String(value || "").trim();
+  return Boolean(id) && /^placeholder-/i.test(id);
+}
+
 async function attachSignedLeaseDocument(unit: any) {
   const leaseDocument = unit?.leaseDocument;
   if (!leaseDocument || typeof leaseDocument !== "object") return unit;
@@ -329,13 +334,14 @@ router.post(
     let created = 0;
     const batch = db.batch();
     const now = new Date();
+    const createdUnits: any[] = [];
 
     for (const u of units) {
       const unitNumber = String((u?.unitNumber ?? u?.label ?? u?.unit) || "").trim();
       if (!unitNumber) continue;
 
       const ref = db.collection("units").doc();
-      batch.set(ref, {
+      const unitRecord = {
         landlordId,
         propertyId,
         unitNumber,
@@ -347,6 +353,14 @@ router.post(
         createdAt: now,
         updatedAt: now,
         updatedAtServer: FieldValue.serverTimestamp(),
+      };
+      batch.set(ref, unitRecord);
+      createdUnits.push({
+        id: ref.id,
+        ...unitRecord,
+        createdAt: now.toISOString(),
+        updatedAt: now.toISOString(),
+        updatedAtServer: null,
       });
       created += 1;
     }
@@ -354,8 +368,25 @@ router.post(
     if (created === 0) {
       return res.status(400).json({ ok: false, error: "No valid units to create" });
     }
+    if (createdUnits.some((unit) => !unit.id || isPlaceholderUnitId(unit.id))) {
+      return res.status(500).json({
+        ok: false,
+        error: "UNIT_ID_UNRESOLVED",
+        code: "UNIT_ID_UNRESOLVED",
+        message: "Units could not be saved with stable IDs. Please try again.",
+      });
+    }
 
-    await batch.commit();
+    try {
+      await batch.commit();
+    } catch {
+      return res.status(500).json({
+        ok: false,
+        error: "UNIT_PERSISTENCE_FAILED",
+        code: "UNIT_PERSISTENCE_FAILED",
+        message: "Units could not be saved. Please try again.",
+      });
+    }
 
     try {
       const countSnap = await db
@@ -375,7 +406,7 @@ router.post(
       // ignore count update errors
     }
 
-    return res.json({ ok: true, created });
+    return res.json({ ok: true, created, units: createdUnits, items: createdUnits });
   }
 );
 
@@ -386,6 +417,14 @@ router.patch("/units/:unitId", authenticateJwt, requireLandlord, async (req: any
   if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
   if (!unitId) return res.status(400).json({ ok: false, error: "Missing unitId" });
   if (!(await enforceUnitsCapability(req, res))) return;
+  if (isPlaceholderUnitId(unitId)) {
+    return res.status(400).json({
+      ok: false,
+      error: "UNIT_ID_UNRESOLVED",
+      code: "UNIT_ID_UNRESOLVED",
+      message: "Save the unit before updating occupancy fields.",
+    });
+  }
 
   const ref = db.collection("units").doc(unitId);
   const snap = await ref.get();
