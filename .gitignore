@@ -110,3 +110,4 @@ docs/missions/
 .handoff/.watch-gate2.log
 .handoff/.mission-review-processed
 .handoff/.watch-mission-review.log
+.handoff/.hook.log
