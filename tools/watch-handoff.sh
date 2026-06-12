@@ -37,10 +37,9 @@ while true; do
     echo "[watch-handoff] $(date): impl-summary.md updated — triggering qa-reviewer..." | tee -a "$LOG"
     echo "$CONTENT_HASH" > "$SENTINEL"
 
-      cd "$REPO_ROOT" && claude --print "@qa-reviewer review .handoff/impl-summary.md" 2>&1 | tee -a "$LOG"
+    cd "$REPO_ROOT" && claude --print "@qa-reviewer review .handoff/impl-summary.md" 2>&1 | tee -a "$LOG"
 
-      echo "[watch-handoff] $(date): qa-reviewer chain complete." | tee -a "$LOG"
-    fi
+    echo "[watch-handoff] $(date): qa-reviewer chain complete." | tee -a "$LOG"
   fi
   sleep "$POLL_INTERVAL"
 done
