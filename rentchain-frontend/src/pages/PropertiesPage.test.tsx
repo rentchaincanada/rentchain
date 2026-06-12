@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import PropertiesPage from "./PropertiesPage";
@@ -49,9 +49,12 @@ vi.mock("../components/property/PropertyActivityPanel", () => ({
 }));
 
 vi.mock("../components/properties/PropertyDetailPanel", () => ({
-  PropertyDetailPanel: ({ property }: any) => (
+  PropertyDetailPanel: ({ property, onAddUnits }: any) => (
     <div>
       <div>Detail</div>
+      <button type="button" data-testid={`property-table-add-units-${property?.id || "none"}`} onClick={onAddUnits}>
+        Property table Add units
+      </button>
       {(property?.units || []).map((unit: any) => (
         <div key={String(unit?.id || unit?.unitNumber)}>{`${unit?.id}:${unit?.unitNumber}`}</div>
       ))}
@@ -123,6 +126,7 @@ vi.mock("../lib/analytics", () => ({
 
 describe("PropertiesPage", () => {
   beforeEach(() => {
+    cleanup();
     mocks.fetchPropertiesMock.mockReset();
     mocks.fetchCountsMock.mockReset();
     mocks.addUnitsManualMock.mockReset();
@@ -378,6 +382,32 @@ describe("PropertiesPage", () => {
             leaseEndDate: "2027-05-31",
           }),
         ]
+      );
+    });
+  });
+
+  it("opens the manual unit modal from the property table add units action", async () => {
+    render(
+      <MemoryRouter>
+        <PropertiesPage />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByTestId("property-table-add-units-prop-1"));
+    expect(await screen.findByText("Add Units")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Unit number 1"), { target: { value: "301" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save units" }));
+
+    await waitFor(() => {
+      expect(mocks.addUnitsManualMock).toHaveBeenCalledWith(
+        "prop-1",
+        expect.arrayContaining([
+          expect.objectContaining({
+            unitNumber: "301",
+            status: "vacant",
+          }),
+        ])
       );
     });
   });

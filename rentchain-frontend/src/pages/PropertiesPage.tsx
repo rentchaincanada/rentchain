@@ -151,6 +151,7 @@ const PropertiesPage: React.FC = () => {
   ]);
   const [savingUnits, setSavingUnits] = useState(false);
   const [unitModalError, setUnitModalError] = useState<string | null>(null);
+  const [unitModalSource, setUnitModalSource] = useState<"guided" | "propertyTable">("guided");
   const [actionRequestUpdating, setActionRequestUpdating] = useState(false);
   const [actionRequestUpdateError, setActionRequestUpdateError] = useState<string | null>(null);
   const location = useLocation();
@@ -414,6 +415,7 @@ const PropertiesPage: React.FC = () => {
   const handleSaveUnits = async (unitsOverride?: UnitInput[]) => {
     if (!activePropertyId) return;
     const { units: clean, error } = normalizeUnitDraftsForSubmit(unitsOverride || draftUnits);
+    const source = unitModalSource;
 
     if (error) {
       setUnitModalError(error);
@@ -451,7 +453,9 @@ const PropertiesPage: React.FC = () => {
       });
       setUnitModalError(null);
       setIsUnitsModalOpen(false);
-      navigate("/dashboard?onboarding=ready", { replace: true });
+      if (source === "guided") {
+        navigate("/dashboard?onboarding=ready", { replace: true });
+      }
     } catch (e: any) {
       setUnitModalError(unitSaveErrorMessage(e));
       showToast({
@@ -903,16 +907,17 @@ const PropertiesPage: React.FC = () => {
                   Units make the property usable for leases, applications, and rent tracking. This is the clearest next workflow step after creating the property.
                 </div>
                 <div>
-	                  <Button
-	                    onClick={() => {
-	                      if (!selectedPropertyId) return;
-	                      setActivePropertyId(selectedPropertyId);
-	                      setUnitModalError(null);
-	                      setDraftUnits([
-	                        { unitNumber: "", beds: 1, baths: 1, sqft: 500, marketRent: 1500, status: "vacant" },
-	                      ]);
-	                      setIsUnitsModalOpen(true);
-	                    }}
+                  <Button
+                    onClick={() => {
+                      if (!selectedPropertyId) return;
+                      setActivePropertyId(selectedPropertyId);
+                      setUnitModalError(null);
+                      setUnitModalSource("guided");
+                      setDraftUnits([
+                        { unitNumber: "", beds: 1, baths: 1, sqft: 500, marketRent: 1500, status: "vacant" },
+                      ]);
+                      setIsUnitsModalOpen(true);
+                    }}
                   >
                     Add a unit
                   </Button>
@@ -1002,6 +1007,7 @@ const PropertiesPage: React.FC = () => {
 	                        if (!selectedPropertyId) return;
 	                        setActivePropertyId(selectedPropertyId);
 	                        setUnitModalError(null);
+	                        setUnitModalSource("propertyTable");
 	                        setDraftUnits([
 	                          { unitNumber: "", beds: 1, baths: 1, sqft: 500, marketRent: 1500, status: "vacant" },
 	                        ]);
@@ -1082,6 +1088,16 @@ const PropertiesPage: React.FC = () => {
                 onOpenLeasePack={() => {
                   setLeasePackInitialPropertyId(selectedProperty?.id || null);
                   setLeasePackOpen(true);
+                }}
+                onAddUnits={() => {
+                  if (!selectedProperty?.id) return;
+                  setActivePropertyId(selectedProperty.id);
+                  setUnitModalError(null);
+                  setUnitModalSource("propertyTable");
+                  setDraftUnits([
+                    { unitNumber: "", beds: 1, baths: 1, sqft: 500, marketRent: 1500, status: "vacant" },
+                  ]);
+                  setIsUnitsModalOpen(true);
                 }}
                 openEditProperty={openEditProperty}
                 openSendApplication={openSendApplication}

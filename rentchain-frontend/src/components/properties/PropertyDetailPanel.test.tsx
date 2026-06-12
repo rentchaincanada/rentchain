@@ -787,6 +787,43 @@ describe("PropertyDetailPanel", () => {
     expect(await screen.findByText("modal tenant: Pat Tenant")).toBeInTheDocument();
   });
 
+  it("keeps add units manual and upload csv actions distinct", async () => {
+    const onAddUnits = vi.fn();
+    const inputClickSpy = vi.spyOn(HTMLInputElement.prototype, "click");
+
+    render(
+      <MemoryRouter>
+        <PropertyDetailPanel
+          property={{
+            id: "prop-1",
+            name: "Harbour View",
+            addressLine1: "12 Wharf Street",
+            city: "Halifax",
+            province: "NS",
+            postalCode: "B3H 1A1",
+            country: "Canada",
+            totalUnits: 1,
+            amenities: [],
+            units: [],
+            createdAt: new Date().toISOString(),
+          }}
+          onRefresh={vi.fn()}
+          onAddUnits={onAddUnits}
+        />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Add units" }));
+
+    expect(onAddUnits).toHaveBeenCalledTimes(1);
+    expect(inputClickSpy).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Upload CSV" }));
+
+    expect(inputClickSpy).toHaveBeenCalledTimes(1);
+    inputClickSpy.mockRestore();
+  });
+
   it("uses the updated archive confirmation copy before archiving", async () => {
     const confirmMock = vi.spyOn(window, "confirm").mockReturnValue(true);
 

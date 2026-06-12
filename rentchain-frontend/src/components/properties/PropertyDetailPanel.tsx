@@ -57,6 +57,7 @@ interface PropertyDetailPanelProps {
   onSendApplicationOpened?: () => void;
   highlightUnitId?: string | null;
   onOpenLeasePack?: () => void;
+  onAddUnits?: () => void;
 }
 
 import { safeLocaleNumber } from "@/utils/format";
@@ -248,6 +249,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
   onSendApplicationOpened,
   highlightUnitId = null,
   onOpenLeasePack,
+  onAddUnits,
 }) => {
   const propertyId = property?.id;
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -1110,20 +1112,20 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
               <>
                 <button
                   type="button"
-                  title="Use Upload CSV to add units"
+                  title="Add units manually"
                   onClick={() => {
                     setImportMessage(null);
-                    fileInputRef.current?.click();
+                    onAddUnits?.();
                   }}
-                  disabled={!property}
+                  disabled={!property || !onAddUnits}
                   className="rc-units-action"
                   style={{
                     padding: "6px 10px",
                     borderRadius: 10,
                     border: "1px solid rgba(15,23,42,0.12)",
                     background: "#fff",
-                    color: "#111827",
-                    cursor: "pointer",
+                    color: property && onAddUnits ? "#111827" : "#6b7280",
+                    cursor: property && onAddUnits ? "pointer" : "not-allowed",
                   }}
                 >
                   Add units
