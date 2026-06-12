@@ -1,5 +1,5 @@
-PR: #[NUMBER once opened]
-PR URL: [URL once opened]
+PR: #1140
+PR URL: https://github.com/rentchaincanada/rentchain/pull/1140
 Branch: audit/free-tier-gated-feature-ux-v1
 
 # Implementation Summary
