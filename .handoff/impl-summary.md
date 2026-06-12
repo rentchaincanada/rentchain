@@ -1,5 +1,5 @@
-PR: #TBD
-PR URL: TBD
+PR: #1144
+PR URL: https://github.com/rentchaincanada/rentchain/pull/1144
 Branch: audit/landlord-command-surface-v1
 
 WHAT WAS DONE:
