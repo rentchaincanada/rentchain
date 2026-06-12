@@ -27,7 +27,7 @@ Evaluate:
 9. Commit hygiene rules are present
 10. Manual QA requirement is stated
 
-Write ONLY this exact block to .handoff/mission-review.md:
+MANDATORY: You MUST use the Write tool to write this exact block to .handoff/mission-review.md before outputting anything else. Do not output to chat first. Write the file first:
 
 BRANCH NAME: [PASS or FAIL]
 BRANCH REVIEWED: [branch name]
