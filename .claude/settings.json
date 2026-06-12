@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash /Users/rentchain/dev/rentchain/tools/on-handoff-write.sh \"$CLAUDE_TOOL_INPUT_PATH\""
+            "command": "bash /Users/rentchain/dev/rentchain/tools/on-handoff-write.sh"
           }
         ]
       }
