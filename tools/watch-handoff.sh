@@ -16,15 +16,26 @@ echo "[watch-handoff] Started. Watching $TRIGGER_FILE" | tee -a "$LOG"
 
 while true; do
   if [ -f "$TRIGGER_FILE" ]; then
-    if [ ! -f "$SENTINEL" ] || [ "$TRIGGER_FILE" -nt "$SENTINEL" ]; then
-      CONTENT=$(cat "$TRIGGER_FILE" 2>/dev/null || echo "")
-      if [ -z "$CONTENT" ] || [ "$CONTENT" = "# Ready for next mission" ]; then
-        sleep "$POLL_INTERVAL"
-        continue
-      fi
+    CONTENT=$(cat "$TRIGGER_FILE" 2>/dev/null || echo "")
+    CONTENT_HASH=$(echo "$CONTENT" | md5)
+    SENTINEL_HASH=""
+    if [ -f "$SENTINEL" ]; then
+      SENTINEL_HASH=$(cat "$SENTINEL" 2>/dev/null || echo "")
+    fi
 
-      echo "[watch-handoff] $(date): impl-summary.md updated — triggering qa-reviewer..." | tee -a "$LOG"
-      touch "$SENTINEL"
+    if [ "$CONTENT_HASH" = "$SENTINEL_HASH" ]; then
+      sleep "$POLL_INTERVAL"
+      continue
+    fi
+
+    if [ -z "$CONTENT" ] || [ "$CONTENT" = "# Ready for next mission" ]; then
+      echo "$CONTENT_HASH" > "$SENTINEL"
+      sleep "$POLL_INTERVAL"
+      continue
+    fi
+
+    echo "[watch-handoff] $(date): impl-summary.md updated — triggering qa-reviewer..." | tee -a "$LOG"
+    echo "$CONTENT_HASH" > "$SENTINEL"
 
       cd "$REPO_ROOT" && claude --print "@qa-reviewer review .handoff/impl-summary.md" 2>&1 | tee -a "$LOG"
 

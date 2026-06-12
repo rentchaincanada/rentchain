@@ -33,7 +33,7 @@ Merge instruction: [Convert from draft and merge / Hold pending <action>].
 
 On SAFE TO MERGE verdict:
 - Write gate2-instruction.md to .handoff/gate2-instruction.md with merge authorization and PR details.
-- Instruct Codex: "Execute merge from .handoff/gate2-instruction.md"
+- Document automation boundary: Human must execute merge via Codex after Gate 2 approval.
 
 If blocked, state exactly what must be resolved before re-review.
 Never approve if required checks are not green.
