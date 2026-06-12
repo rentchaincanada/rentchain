@@ -33,9 +33,9 @@ while true; do
 
     echo "[watch-mission-review] $(date): READY FOR GATE 1 — triggering claude-gate1..." | tee -a "$LOG"
     echo "$CONTENT_HASH" > "$SENTINEL"
-    osascript -e 'display notification "Mission ready for Gate 1 review." with title "RentChain Cycle"'
+    osascript -e 'display notification "Mission ready. Gate 1 review firing." with title "RentChain Cycle"'
 
-    cd "$REPO_ROOT" && claude --print "@claude-gate1" 2>&1 | tee -a "$LOG"
+    cd "$REPO_ROOT" && claude --print "You are the Gate 1 reviewer. Read .handoff/mission-current.md and .handoff/mission-review.md and output your Gate 1 verdict. Do not ask clarifying questions. Output the verdict immediately." 2>&1 | tee -a "$LOG"
 
     echo "[watch-mission-review] $(date): claude-gate1 complete." | tee -a "$LOG"
   fi

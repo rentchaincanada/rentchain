@@ -25,7 +25,7 @@ case "$FILE" in
     CONTENT=$(cat "$FILE" 2>/dev/null || echo "")
     if echo "$CONTENT" | grep -q "READY FOR GATE 1"; then
       echo "[hook] $(date): mission-review.md READY FOR GATE 1 — firing @claude-gate1" >> "$LOG"
-      cd "$REPO_ROOT" && claude --print "@claude-gate1" >> "$LOG" 2>&1 &
+      cd "$REPO_ROOT" && claude --print "You are the Gate 1 reviewer. Read .handoff/mission-current.md and .handoff/mission-review.md and output your Gate 1 verdict. Do not ask clarifying questions. Output the verdict immediately." >> "$LOG" 2>&1 &
     fi
     ;;
   *".handoff/impl-summary.md")
