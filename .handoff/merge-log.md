@@ -443,3 +443,73 @@ fix/unit-guided-modal-save-v1
 
 ### Summary
 Unit guided modal save ID persistence fix merged; all checks green; stable ID validation prevents unresolved unit state.
+
+---
+
+## Strategic Update — 2026-06-12
+
+### Current Active Mission
+fix/numbers-csv-compatibility-v1
+
+### Carry-Forward: Messages/Inbox Relationship
+Must be resolved before fix/landlord-command-surface-simplification-v1:
+- Determine if /messages visibility on Free tier is intentional or accidental
+- Evaluate whether Messages should merge into Inbox or remain separate
+- Questions: Should Inbox become primary communication center?
+  Should Messages become an Inbox tab/filter?
+  Should Inbox replace Messages entirely for landlords?
+
+### Revised Priority Queue
+1. fix/numbers-csv-compatibility-v1
+2. Confirm /messages Free tier visibility (intentional or accidental)
+3. fix/landlord-command-surface-simplification-v1 (includes Messages/Inbox review)
+4. Continue Pilot 1 onboarding
+
+### Next Mission
+fix/numbers-csv-compatibility-v1
+
+---
+
+## Merge Summary - PR #1143 - 2026-06-12
+
+### PR
+- PR: #1143
+- URL: https://github.com/rentchaincanada/rentchain/pull/1143
+- Branch: fix/numbers-csv-compatibility-v1
+- Base: main
+- Merge commit: cb50cae6e824965c87637fbb66a37405939ed6da
+- Merge method: squash merge
+- Authorization: gate2-approved instruction in `.handoff/gate2-instruction.md`
+
+### Final Check Status
+- backend: pass
+- frontend: pass
+- merge-gate: pass
+- review workflow: pass
+- Terraform Cloud/Rentchain/repo-id-KeMiLzWpFf7Yq2Zr: pass
+- Vercel Preview Comments: pass
+- Vercel - rentchain: pass
+- Vercel - rentchain-status: pass
+- post-review-comment: skipped
+
+### Scope Confirmed
+- Unit CSV text normalization now handles BOM, replacement-character, null-byte, zero-width, no-break space, and CR-only line-ending cases.
+- Formatted numeric cells for rent, beds, baths, and square feet are normalized without changing the CSV template or API response contracts.
+- Frontend CSV preview normalization is aligned with backend parsing behavior.
+- Regression coverage was added for backend parser behavior, both preview entry points, frontend preview parsing, and property creation CSV preview acceptance.
+- No auth middleware, billing, Firestore rules, deployment, entitlement, dependency, route contract, or unit schema changes were included.
+
+### Cleanup
+- Local `main` synced to `origin/main` at `cb50cae6e824965c87637fbb66a37405939ed6da`.
+- Local branch `fix/numbers-csv-compatibility-v1`: deleted.
+- Remote branch `fix/numbers-csv-compatibility-v1`: deleted.
+
+### Known Limitations
+- Supertest route coverage required elevated local execution because the sandbox blocks binding a local test server port.
+- Frontend build still reports the existing large chunk warning.
+
+### Recommended Next Mission
+Confirm /messages Free tier visibility, then prepare fix/landlord-command-surface-simplification-v1 after the Messages/Inbox relationship is resolved.
+
+### Summary
+Numbers CSV compatibility fix merged; all checks green; property creation and property/unit table CSV previews now share normalized parser behavior for Numbers-style exports.
