@@ -108,3 +108,5 @@ docs/missions/
 .handoff/.watcher-pids
 .handoff/.watch-handoff.log
 .handoff/.watch-gate2.log
+.handoff/.mission-review-processed
+.handoff/.watch-mission-review.log
