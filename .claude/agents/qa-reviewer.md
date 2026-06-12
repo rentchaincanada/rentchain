@@ -115,3 +115,8 @@ Proceed with:
 4. Open PR for audit/property-onboarding-workflow-v1
 5. Write full summary to .handoff/merge-log.md
 6. Write: echo "# Ready for next mission" > .handoff/mission-current.md
+
+## Write Permission Confirmation
+You have explicit permission to overwrite .handoff/gate2-instruction.md on every SAFE TO MERGE verdict.
+This file is always replaced — never append, always overwrite with current PR details.
+Do not ask for permission. Write directly using the Write tool.
