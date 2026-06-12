@@ -8,11 +8,11 @@ import {
   type Conversation,
   type Message,
 } from "@/api/messagesApi";
-import { spacing, colors, text, radius } from "@/styles/tokens";
+import { spacing, colors, text } from "@/styles/tokens";
 import { ResponsiveMasterDetail } from "@/components/layout/ResponsiveMasterDetail";
 import { useCapabilities } from "@/hooks/useCapabilities";
-import { useUpgrade } from "@/context/UpgradeContext";
-import { upgradeStarterButtonStyle } from "@/lib/upgradeButtonStyles";
+import { LockedFeature } from "@/components/billing/LockedFeature";
+import { isUpgradeRequiredError } from "@/lib/gatedFeatureErrors";
 import "./MessagesPage.css";
 
 const POLL_CONVERSATIONS_MS = 15000;
@@ -169,7 +169,6 @@ export default function MessagesPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const { features, loading: capsLoading } = useCapabilities();
-  const { openUpgrade } = useUpgrade();
   const messagingEnabled = features?.messaging !== false;
   const conversationPollTimeoutRef = useRef<number | null>(null);
   const conversationPollFailureRef = useRef(0);
@@ -214,7 +213,7 @@ export default function MessagesPage() {
       setError(null);
       return true;
     } catch (err: any) {
-      setError(err?.message || "Failed to load conversations");
+      setError(isUpgradeRequiredError(err) ? null : err?.message || "Failed to load conversations");
       return false;
     } finally {
       if (!background) {
@@ -242,7 +241,7 @@ export default function MessagesPage() {
       hasLoadedThreadRef.current = true;
       setError(null);
     } catch (err: any) {
-      setError(err?.message || "Failed to load messages");
+      setError(isUpgradeRequiredError(err) ? null : err?.message || "Failed to load messages");
     } finally {
       if (!background) {
         setLoadingThread(false);
@@ -339,7 +338,7 @@ export default function MessagesPage() {
       } catch (err: any) {
         delete lastMarkedReadRef.current[selectedConversation.id];
         if (!cancelled) {
-          setError(err?.message || "Failed to mark conversation read");
+          setError(isUpgradeRequiredError(err) ? null : err?.message || "Failed to mark conversation read");
         }
       }
     })();
@@ -370,39 +369,10 @@ export default function MessagesPage() {
       <h1 style={{ marginBottom: spacing.md }}>Messages</h1>
       {error && <div style={{ color: colors.danger, marginBottom: spacing.sm }}>{error}</div>}
       {!capsLoading && !messagingEnabled ? (
-        <div
-          style={{
-            border: `1px solid ${colors.border}`,
-            borderRadius: radius.lg,
-            padding: spacing.lg,
-            background: colors.card,
-            maxWidth: 640,
-          }}
-        >
-          <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 6 }}>
-            Upgrade to manage your rentals
-          </div>
-          <div style={{ color: text.muted, fontSize: 14, marginBottom: 12 }}>
-            RentChain Screening is free. Rental management starts on Starter.
-          </div>
-          <button
-            type="button"
-            onClick={() =>
-              openUpgrade({
-                reason: "screening",
-                plan: "Screening",
-                copy: {
-                  title: "Upgrade to manage your rentals",
-                  body: "RentChain Screening is free. Rental management starts on Starter.",
-                },
-                ctaLabel: "Upgrade to Starter",
-              })
-            }
-            style={upgradeStarterButtonStyle}
-          >
-            Upgrade to Starter
-          </button>
-        </div>
+        <LockedFeature
+          featureKey="messaging"
+          ctaLabel="Upgrade to Starter"
+        />
       ) : (
       <div className="rc-messages-grid">
         <ResponsiveMasterDetail

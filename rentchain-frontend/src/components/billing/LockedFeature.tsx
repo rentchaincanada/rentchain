@@ -8,8 +8,8 @@ import { resolveRequiredPlan } from "@/lib/upgradePrompt";
 
 type Props = {
   featureKey: string;
-  title: string;
-  description: string;
+  title?: string;
+  description?: string;
   hint?: string;
   ctaLabel?: string;
   compact?: boolean;
@@ -50,8 +50,12 @@ export function LockedFeature({
         >
           Locked feature
         </div>
-        <div style={{ fontSize: compact ? 15 : 16, fontWeight: 800, color: text.primary }}>{title}</div>
-        <div style={{ color: text.muted, fontSize: 14, lineHeight: 1.6 }}>{description}</div>
+        <div style={{ fontSize: compact ? 15 : 16, fontWeight: 800, color: text.primary }}>
+          {title || copy.title}
+        </div>
+        <div style={{ color: text.muted, fontSize: 14, lineHeight: 1.6 }}>
+          {description || copy.subtitle}
+        </div>
         <div style={{ color: text.secondary, fontSize: 13, fontWeight: 700 }}>
           Available on {requiredPlanLabel}
         </div>

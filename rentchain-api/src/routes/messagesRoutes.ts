@@ -3,7 +3,7 @@ import { authenticateJwt } from "../middleware/authMiddleware";
 import { requireLandlord } from "../middleware/requireLandlord";
 import { requireAuth } from "../middleware/requireAuth";
 import { db, FieldValue } from "../firebase";
-import { requireCapability } from "../services/capabilityGuard";
+import { buildUpgradeRequiredResponse, requireCapability } from "../services/capabilityGuard";
 import { buildEmailHtml, buildEmailText } from "../email/templates/baseEmailTemplate";
 import { sendEmail } from "../services/emailService";
 import { getEffectiveLandlordId, getEffectiveTenantId, resolveRequestAuthority } from "../auth/requestAuthority";
@@ -678,7 +678,11 @@ async function enforceMessagingCapability(req: any, landlordId: string, res: any
   }
   const cap = await requireCapability(landlordId, "messaging", req.user);
   if (!cap.ok) {
-    res.status(403).json({ ok: false, error: "Upgrade required", capability: "messaging", plan: cap.plan });
+    res.status(403).json(buildUpgradeRequiredResponse({
+      capability: "messaging",
+      currentPlan: cap.plan,
+      source: "messagesRoutes",
+    }));
     return false;
   }
   return true;

@@ -23,6 +23,8 @@ const PLAN_ADDITIONS: Record<Plan, string[]> = {
     "ledger_basic",
     "ledger",
     "leases",
+    // Pilot 1 product decision: maintenance remains reachable on Free while landlord adoption is measured.
+    // Starter enforcement is deferred to the subscription-boundary alignment mission.
     "maintenance",
     "notices",
     "tenantPortal",
@@ -97,7 +99,7 @@ export function requiredPlanForCapability(capabilityInput?: string | null): Plan
   if (!capability) return null;
 
   for (const plan of CANONICAL_PLAN_ORDER) {
-    if (PLAN_ADDITIONS[plan].includes(capability)) {
+    if (PLAN_ADDITIONS[plan].some((candidate) => candidate.toLowerCase() === capability)) {
       return plan;
     }
   }

@@ -6,7 +6,7 @@ import {
   listLedgerEventsV2,
 } from "../services/ledgerEventsFirestoreService";
 import { computeLedgerEventHashV1 } from "../utils/ledgerHash";
-import { requireCapability } from "../services/capabilityGuard";
+import { buildUpgradeRequiredResponse, requireCapability } from "../services/capabilityGuard";
 
 const router = Router();
 router.use(authenticateJwt);
@@ -23,7 +23,11 @@ async function enforceLedgerCapability(req: any, res: any): Promise<boolean> {
   }
   const cap = await requireCapability(landlordId, "ledger", req.user);
   if (!cap.ok) {
-    res.status(403).json({ ok: false, error: "Upgrade required", capability: "ledger", plan: cap.plan });
+    res.status(403).json(buildUpgradeRequiredResponse({
+      capability: "ledger",
+      currentPlan: cap.plan,
+      source: "ledgerV2Routes",
+    }));
     return false;
   }
   return true;

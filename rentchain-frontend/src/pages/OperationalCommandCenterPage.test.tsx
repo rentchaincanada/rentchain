@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   getActiveLeasesForLandlord: vi.fn(),
   fetchProperties: vi.fn(),
   macShellProps: vi.fn(),
+  useEntitlements: vi.fn(),
 }));
 
 vi.mock("@/api/decisionInboxApi", async () => {
@@ -51,6 +52,14 @@ vi.mock("@/components/layout/MacShell", () => ({
     mocks.macShellProps(props);
     return <div>{children}</div>;
   },
+}));
+
+vi.mock("@/hooks/useEntitlements", () => ({
+  useEntitlements: () => mocks.useEntitlements(),
+}));
+
+vi.mock("@/components/billing/LockedFeature", () => ({
+  LockedFeature: ({ featureKey }: { featureKey: string }) => <div>Locked feature: {featureKey}</div>,
 }));
 
 afterEach(() => {
@@ -527,6 +536,17 @@ describe("deriveCommandCenterSignals", () => {
 
 describe("OperationalCommandCenterPage", () => {
   beforeEach(() => {
+    mocks.fetchDecisionInbox.mockReset();
+    mocks.fetchDashboardSummary.mockReset();
+    mocks.getActiveLeasesForLandlord.mockReset();
+    mocks.fetchProperties.mockReset();
+    mocks.macShellProps.mockReset();
+    mocks.useEntitlements.mockReset();
+    mocks.useEntitlements.mockReturnValue({
+      loading: false,
+      hasCapability: (key: string) => key === "leases",
+      requiredPlanFor: () => "starter",
+    });
     mocks.fetchDecisionInbox.mockResolvedValue({
       items: [decision()],
       filters: { severity: [], status: [], type: [], queue: [], workflowState: [], escalationLevel: [] },
@@ -637,6 +657,32 @@ describe("OperationalCommandCenterPage", () => {
     expect(screen.queryByText(/Property ZaeL9oqpJCSZPguWa6wR/i)).not.toBeInTheDocument();
     expect(screen.getAllByText("Open source workflow").length).toBeGreaterThan(0);
     expect(mocks.macShellProps).toHaveBeenCalledWith(expect.objectContaining({ title: "Operational command center" }));
+  });
+
+  it("keeps free-safe operations content visible when lease-driven signals are locked", async () => {
+    mocks.useEntitlements.mockReturnValue({
+      loading: false,
+      hasCapability: () => false,
+      requiredPlanFor: () => "starter",
+    });
+
+    render(
+      <MemoryRouter>
+        <OperationalCommandCenterPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole("heading", { name: "Operational command center" })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(mocks.fetchDecisionInbox).toHaveBeenCalled();
+      expect(mocks.fetchDashboardSummary).toHaveBeenCalled();
+      expect(mocks.fetchProperties).toHaveBeenCalledWith({ status: "active" });
+    });
+
+    expect(mocks.getActiveLeasesForLandlord).not.toHaveBeenCalled();
+    expect(screen.getAllByText("Locked feature: operations_signals").length).toBeGreaterThanOrEqual(3);
+    expect(screen.queryByText(/Operational command center could not load/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Upgrade required/i)).not.toBeInTheDocument();
   });
 
   it("filters and searches visible operational items without changing priority sorting", async () => {

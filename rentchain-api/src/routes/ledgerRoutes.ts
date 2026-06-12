@@ -3,7 +3,7 @@ import { requireAuth } from "../middleware/requireAuth";
 import { requirePermission } from "../middleware/requireAuthz";
 import { appendLedgerEvent, verifyLedgerChain } from "../services/ledger/ledgerService";
 import { db } from "../firebase";
-import { requireCapability } from "../services/capabilityGuard";
+import { buildUpgradeRequiredResponse, requireCapability } from "../services/capabilityGuard";
 import multer from "multer";
 import path from "path";
 import {
@@ -400,7 +400,11 @@ router.get("/", requireAuth, async (req: any, res) => {
   if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
   const cap = await requireCapability(landlordId, "ledger", req.user);
   if (!cap.ok) {
-    return res.status(403).json({ ok: false, error: "Upgrade required", capability: "ledger", plan: cap.plan });
+    return res.status(403).json(buildUpgradeRequiredResponse({
+      capability: "ledger",
+      currentPlan: cap.plan,
+      source: "ledgerRoutes",
+    }));
   }
 
   const limit = parseLimit(req.query?.limit, 50, 200);
@@ -458,7 +462,11 @@ router.post("/events", requireAuth, async (req: any, res) => {
   if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
   const cap = await requireCapability(landlordId, "ledger", req.user);
   if (!cap.ok) {
-    return res.status(403).json({ ok: false, error: "Upgrade required", capability: "ledger", plan: cap.plan });
+    return res.status(403).json(buildUpgradeRequiredResponse({
+      capability: "ledger",
+      currentPlan: cap.plan,
+      source: "ledgerRoutes",
+    }));
   }
   if (req.user?.role === "tenant") {
     return res.status(403).json({ ok: false, error: "Tenants cannot write ledger events" });
@@ -508,7 +516,11 @@ router.get("/verify", requireAuth, async (req: any, res) => {
   if (!landlordId) return res.status(401).json({ ok: false, error: "Unauthorized" });
   const cap = await requireCapability(landlordId, "ledger", req.user);
   if (!cap.ok) {
-    return res.status(403).json({ ok: false, error: "Upgrade required", capability: "ledger", plan: cap.plan });
+    return res.status(403).json(buildUpgradeRequiredResponse({
+      capability: "ledger",
+      currentPlan: cap.plan,
+      source: "ledgerRoutes",
+    }));
   }
   if (req.user?.role === "tenant") {
     return res.status(403).json({ ok: false, error: "Tenants cannot verify ledger" });

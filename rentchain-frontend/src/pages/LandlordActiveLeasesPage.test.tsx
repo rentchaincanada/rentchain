@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   archiveLeaseRecord: vi.fn(),
   restoreLeaseRecord: vi.fn(),
   printSummaryDocument: vi.fn(),
+  useEntitlements: vi.fn(),
 }));
 
 vi.mock("@/api/leasesApi", () => ({
@@ -30,6 +31,14 @@ vi.mock("@/utils/printSummary", () => ({
   printSummaryDocument: (...args: unknown[]) => mocks.printSummaryDocument(...args),
 }));
 
+vi.mock("@/hooks/useEntitlements", () => ({
+  useEntitlements: () => mocks.useEntitlements(),
+}));
+
+vi.mock("@/components/billing/LockedFeature", () => ({
+  LockedFeature: ({ featureKey }: { featureKey: string }) => <div>Locked feature: {featureKey}</div>,
+}));
+
 describe("LandlordActiveLeasesPage", () => {
   afterEach(() => {
     cleanup();
@@ -37,6 +46,11 @@ describe("LandlordActiveLeasesPage", () => {
 
   beforeEach(() => {
     mocks.printSummaryDocument.mockReset();
+    mocks.useEntitlements.mockReturnValue({
+      loading: false,
+      hasCapability: (key: string) => key === "leases",
+      requiredPlanFor: () => "starter",
+    });
     Object.defineProperty(window, "matchMedia", {
       writable: true,
       value: vi.fn().mockImplementation((query: string) => ({
@@ -187,6 +201,25 @@ describe("LandlordActiveLeasesPage", () => {
     mocks.restoreLeaseRecord.mockResolvedValue({ ok: true, lease: { id: "lease-2" } });
     vi.spyOn(window, "confirm").mockReturnValue(true);
     vi.spyOn(window, "open").mockReturnValue(null);
+  });
+
+  it("shows a locked lease state for free-tier users without calling paid lease APIs", async () => {
+    mocks.useEntitlements.mockReturnValue({
+      loading: false,
+      hasCapability: () => false,
+      requiredPlanFor: () => "starter",
+    });
+
+    render(
+      <MemoryRouter>
+        <LandlordActiveLeasesPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Locked feature: leases")).toBeInTheDocument();
+    expect(mocks.getActiveLeasesForLandlord).not.toHaveBeenCalled();
+    expect(mocks.getLeaseReconciliationCandidates).not.toHaveBeenCalled();
+    expect(screen.queryByText(/Upgrade required/i)).not.toBeInTheDocument();
   });
 
   it("renders active leases with ledger, email, save, and archive actions", async () => {
