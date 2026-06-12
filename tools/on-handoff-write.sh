@@ -14,6 +14,13 @@ if [ -z "$FILE" ]; then
 fi
 
 case "$FILE" in
+  *".handoff/mission-current.md")
+    CONTENT=$(cat "$FILE" 2>/dev/null || echo "")
+    if [ -n "$CONTENT" ] && [ "$CONTENT" != "# Ready for next mission" ]; then
+      echo "[hook] $(date): mission-current.md written — firing @mission-reviewer" >> "$LOG"
+      cd "$REPO_ROOT" && claude --print "@mission-reviewer review .handoff/mission-current.md" >> "$LOG" 2>&1 &
+    fi
+    ;;
   *".handoff/mission-review.md")
     CONTENT=$(cat "$FILE" 2>/dev/null || echo "")
     if echo "$CONTENT" | grep -q "READY FOR GATE 1"; then
