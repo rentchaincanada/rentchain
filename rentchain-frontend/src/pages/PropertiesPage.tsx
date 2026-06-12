@@ -23,7 +23,7 @@ import { fetchMonthlyOpsSnapshot } from "../api/actionSnapshotApi";
 import { asArray } from "../lib/asArray";
 import { arr, str } from "@/utils/safe";
 import { setOnboardingStep } from "../api/onboardingApi";
-import { addUnitsManual, type UnitInput } from "../api/unitsApi";
+import { addUnitsManual, type AddUnitsManualResponse, type UnitInput, type UnitRecord } from "../api/unitsApi";
 import { useToast } from "../components/ui/ToastProvider";
 import { unitsForProperty } from "../lib/propertyCounts";
 import { PropertySelector } from "../components/properties/PropertySelector";
@@ -37,6 +37,48 @@ import { deriveUnitOccupancyFromLeases } from "../lib/leases/leaseLifecycle";
 import { printSummaryDocument } from "../utils/printSummary";
 import { UpgradeCTA } from "../components/billing/UpgradeCTA";
 import { FREE_TIER_UPGRADE_GUIDANCE } from "../constants/tiers";
+
+function isPersistedUnitIdValue(value: any) {
+  const id = String(value || "").trim();
+  return Boolean(id) && !/^placeholder-/i.test(id);
+}
+
+function resolveCreatedUnits(response: AddUnitsManualResponse | undefined, requestedUnits: UnitInput[]): UnitRecord[] {
+  const returnedUnits = Array.isArray(response?.units)
+    ? response?.units
+    : Array.isArray(response?.items)
+      ? response?.items
+      : [];
+  if (!returnedUnits || returnedUnits.length < requestedUnits.length) {
+    const err = new Error("Saved units were not returned with stable IDs. Please try again.");
+    (err as any).code = "UNIT_ID_UNRESOLVED";
+    throw err;
+  }
+
+  return requestedUnits.map((requestedUnit, index) => {
+    const returnedUnit = returnedUnits[index] as UnitRecord | undefined;
+    const id = String(returnedUnit?.id || returnedUnit?.unitId || returnedUnit?.uid || "").trim();
+    if (!isPersistedUnitIdValue(id)) {
+      const err = new Error("Saved units were not returned with stable IDs. Please try again.");
+      (err as any).code = "UNIT_ID_UNRESOLVED";
+      throw err;
+    }
+    return {
+      ...requestedUnit,
+      ...returnedUnit,
+      id,
+      unitNumber: String(returnedUnit?.unitNumber || requestedUnit.unitNumber || "").trim(),
+    };
+  });
+}
+
+function unitSaveErrorMessage(error: any) {
+  const code = String(error?.code || error?.error || error?.message || "");
+  if (code === "UNIT_ID_UNRESOLVED" || code === "UNIT_PERSISTENCE_FAILED") {
+    return "Units could not be saved with stable IDs. Keep this form open and try again.";
+  }
+  return error?.message ?? "Could not save units";
+}
 
 const PropertiesPage: React.FC = () => {
   const [properties, setProperties] = useState<Property[]>([]);
@@ -342,7 +384,8 @@ const PropertiesPage: React.FC = () => {
 
     setSavingUnits(true);
     try {
-      await addUnitsManual(activePropertyId, clean);
+      const response = await addUnitsManual(activePropertyId, clean);
+      const persistedUnits = resolveCreatedUnits(response, clean);
       track("activation_unit_created", {
         surface: "properties_page",
         source: "manual_units_modal",
@@ -354,8 +397,9 @@ const PropertiesPage: React.FC = () => {
           String(p.id) === String(activePropertyId)
             ? {
                 ...p,
-                units: clean as any,
-                unitCount: clean.length,
+                units: persistedUnits as any,
+                unitCount: persistedUnits.length,
+                unitsCount: persistedUnits.length,
               }
             : p
         )
@@ -370,7 +414,7 @@ const PropertiesPage: React.FC = () => {
     } catch (e: any) {
       showToast({
         title: "Failed to save units",
-        description: e?.message ?? "Could not save units",
+        description: unitSaveErrorMessage(e),
         variant: "error",
       });
     } finally {

@@ -6,6 +6,8 @@ import PropertiesPage from "./PropertiesPage";
 const mocks = vi.hoisted(() => ({
   fetchPropertiesMock: vi.fn(),
   fetchCountsMock: vi.fn(),
+  addUnitsManualMock: vi.fn(),
+  showToastMock: vi.fn(),
   useToastMock: vi.fn(),
   useAuthMock: vi.fn(),
   useCapabilitiesMock: vi.fn(),
@@ -47,7 +49,14 @@ vi.mock("../components/property/PropertyActivityPanel", () => ({
 }));
 
 vi.mock("../components/properties/PropertyDetailPanel", () => ({
-  PropertyDetailPanel: () => <div>Detail</div>,
+  PropertyDetailPanel: ({ property }: any) => (
+    <div>
+      <div>Detail</div>
+      {(property?.units || []).map((unit: any) => (
+        <div key={String(unit?.id || unit?.unitNumber)}>{`${unit?.id}:${unit?.unitNumber}`}</div>
+      ))}
+    </div>
+  ),
 }));
 
 vi.mock("../components/properties/PropertySelector", () => ({
@@ -89,7 +98,7 @@ vi.mock("../api/onboardingApi", () => ({
 }));
 
 vi.mock("../api/unitsApi", () => ({
-  addUnitsManual: vi.fn(),
+  addUnitsManual: mocks.addUnitsManualMock,
 }));
 
 vi.mock("../components/ui/ToastProvider", () => ({
@@ -114,6 +123,14 @@ vi.mock("../lib/analytics", () => ({
 
 describe("PropertiesPage", () => {
   beforeEach(() => {
+    mocks.fetchPropertiesMock.mockReset();
+    mocks.fetchCountsMock.mockReset();
+    mocks.addUnitsManualMock.mockReset();
+    mocks.showToastMock.mockReset();
+    mocks.useToastMock.mockReset();
+    mocks.useAuthMock.mockReset();
+    mocks.useCapabilitiesMock.mockReset();
+    mocks.printSummaryDocumentMock.mockReset();
     mocks.fetchPropertiesMock.mockImplementation(async (filters?: any) => ({
       items:
         filters?.status === "archived"
@@ -121,7 +138,12 @@ describe("PropertiesPage", () => {
           : [{ id: "prop-1", name: "Active Property", portfolioStatus: "active" }],
     }));
     mocks.fetchCountsMock.mockResolvedValue({ counts: {} });
-    mocks.useToastMock.mockReturnValue({ showToast: vi.fn() });
+    mocks.addUnitsManualMock.mockResolvedValue({
+      ok: true,
+      created: 1,
+      units: [{ id: "unit-created-1", unitNumber: "101", beds: 1, baths: 1, sqft: 500, marketRent: 1500, status: "vacant" }],
+    });
+    mocks.useToastMock.mockReturnValue({ showToast: mocks.showToastMock });
     mocks.useAuthMock.mockReturnValue({
       user: { id: "user-1", plan: "free", role: "landlord" },
     });
@@ -166,7 +188,7 @@ describe("PropertiesPage", () => {
         "Free tier supports manual applicant intake and basic property management. Starter adds batch application invitations, screening workflow tools, and tenant portals."
       ).length
     ).toBeGreaterThan(0);
-    expect(screen.getByText("Active Property")).toBeInTheDocument();
+    expect(screen.getAllByText("Active Property").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Free tier").length).toBeGreaterThan(0);
     expect(screen.getAllByRole("button", { name: "Upgrade to Starter" }).length).toBeGreaterThan(0);
   });
@@ -262,5 +284,61 @@ describe("PropertiesPage", () => {
     expect(await screen.findByText("Move into the application workflow")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Send application" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Invite a tenant" })).not.toBeInTheDocument();
+  });
+
+  it("stores created units with persisted IDs from the save response", async () => {
+    mocks.fetchPropertiesMock.mockResolvedValue({ items: [] });
+
+    render(
+      <MemoryRouter>
+        <PropertiesPage />
+      </MemoryRouter>
+    );
+
+    const setupButtons = await screen.findAllByRole("button", {
+      name: "Complete property setup",
+    });
+    fireEvent.click(setupButtons[0]);
+    fireEvent.click(await screen.findByRole("button", { name: "Add a unit" }));
+    fireEvent.change(screen.getAllByRole("textbox")[0], { target: { value: "101" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save units" }));
+
+    await waitFor(() => {
+      expect(mocks.addUnitsManualMock).toHaveBeenCalledWith(
+        "prop-created",
+        expect.arrayContaining([expect.objectContaining({ unitNumber: "101" })])
+      );
+    });
+    expect(await screen.findByText("unit-created-1:101")).toBeInTheDocument();
+  });
+
+  it("keeps the unit modal open when created unit IDs are unresolved", async () => {
+    mocks.fetchPropertiesMock.mockResolvedValue({ items: [] });
+    mocks.addUnitsManualMock.mockResolvedValue({ ok: true, created: 1 });
+
+    render(
+      <MemoryRouter>
+        <PropertiesPage />
+      </MemoryRouter>
+    );
+
+    const setupButtons = await screen.findAllByRole("button", {
+      name: "Complete property setup",
+    });
+    fireEvent.click(setupButtons[0]);
+    fireEvent.click(await screen.findByRole("button", { name: "Add a unit" }));
+    fireEvent.change(screen.getAllByRole("textbox")[0], { target: { value: "101" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save units" }));
+
+    await waitFor(() => {
+      expect(mocks.showToastMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: "Failed to save units",
+          description: expect.stringContaining("stable IDs"),
+          variant: "error",
+        })
+      );
+    });
+    expect(screen.getByText("Add Units")).toBeInTheDocument();
   });
 });

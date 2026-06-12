@@ -11,6 +11,20 @@ export type UnitInput = {
   leaseEndDate?: string | null;
 };
 
+export type UnitRecord = UnitInput & {
+  id: string;
+  propertyId?: string;
+  unitId?: string;
+  uid?: string;
+};
+
+export type AddUnitsManualResponse = {
+  ok?: boolean;
+  created?: number;
+  units?: UnitRecord[];
+  items?: UnitRecord[];
+};
+
 export async function fetchUnitsForProperty(propertyId: string) {
   // Primary endpoint
   const res: any = await apiFetch(`/properties/${propertyId}/units`, {
@@ -27,11 +41,11 @@ export async function fetchUnitsForProperty(propertyId: string) {
   return [];
 }
 
-export async function addUnitsManual(propertyId: string, units: UnitInput[]) {
+export async function addUnitsManual(propertyId: string, units: UnitInput[]): Promise<AddUnitsManualResponse> {
   return apiFetch(`/properties/${propertyId}/units`, {
     method: "POST",
     body: JSON.stringify({ units }),
-  });
+  }) as Promise<AddUnitsManualResponse>;
 }
 
 export async function updateUnit(unitId: string, payload: any) {
