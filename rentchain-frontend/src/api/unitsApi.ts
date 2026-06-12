@@ -44,7 +44,7 @@ export async function fetchUnitsForProperty(propertyId: string) {
 export async function addUnitsManual(propertyId: string, units: UnitInput[]): Promise<AddUnitsManualResponse> {
   return apiFetch(`/properties/${propertyId}/units`, {
     method: "POST",
-    body: JSON.stringify({ units }),
+    body: { units },
   }) as Promise<AddUnitsManualResponse>;
 }
 

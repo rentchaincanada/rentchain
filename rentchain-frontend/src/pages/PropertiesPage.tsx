@@ -1459,6 +1459,25 @@ const UnitsModal = ({
     ]);
   const removeRow = (idx: number) =>
     setUnits(units.length <= 1 ? units : units.filter((_, i) => i !== idx));
+  const baseFieldStyle = {
+    width: "100%",
+    minWidth: 0,
+    boxSizing: "border-box" as const,
+    borderRadius: 8,
+    border: "1px solid rgba(148,163,184,0.45)",
+    padding: "7px 8px",
+  };
+  const activeOccupancyFieldStyle = {
+    ...baseFieldStyle,
+    border: "1px solid rgba(37,99,235,0.45)",
+    background: "white",
+    color: "#0f172a",
+  };
+  const inactiveOccupancyFieldStyle = {
+    ...baseFieldStyle,
+    background: "rgba(241,245,249,0.85)",
+    color: "#64748b",
+  };
   return (
     <div
       style={{
@@ -1469,16 +1488,21 @@ const UnitsModal = ({
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        padding: 16,
+        padding: "clamp(10px, 2vw, 24px)",
       }}
     >
       <div
         className="rc-modal-shell"
         style={{
           background: "white",
-          borderRadius: 16,
+          width: "min(1180px, calc(100vw - 24px))",
+          maxHeight: "min(860px, calc(100vh - 24px))",
+          display: "flex",
+          flexDirection: "column",
+          borderRadius: 12,
           border: "1px solid rgba(148,163,184,0.35)",
           boxShadow: "0 25px 60px rgba(15,23,42,0.25)",
+          overflow: "hidden",
         }}
       >
         <div style={{ padding: 16, borderBottom: "1px solid rgba(148,163,184,0.2)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
@@ -1497,9 +1521,20 @@ const UnitsModal = ({
           </button>
         </div>
 
-        <div className="rc-modal-body" style={{ padding: 16 }}>
+        <div className="rc-modal-body" style={{ padding: 16, overflow: "auto", minHeight: 0 }}>
           <div style={{ overflowX: "auto" }}>
-            <table className="rc-units-edit-table" style={{ width: "100%", borderCollapse: "collapse" }}>
+            <table className="rc-units-edit-table" style={{ width: "100%", minWidth: 980, tableLayout: "fixed", borderCollapse: "collapse" }}>
+              <colgroup>
+                <col style={{ width: "13%" }} />
+                <col style={{ width: "8%" }} />
+                <col style={{ width: "8%" }} />
+                <col style={{ width: "10%" }} />
+                <col style={{ width: "12%" }} />
+                <col style={{ width: "12%" }} />
+                <col style={{ width: "16%" }} />
+                <col style={{ width: "13%" }} />
+                <col style={{ width: "8%" }} />
+              </colgroup>
               <thead>
                 <tr>
                   {["Unit #", "Beds", "Baths", "Sqft", "Market Rent", "Status", "Occupant", "Lease End", ""].map((h) => (
@@ -1525,7 +1560,7 @@ const UnitsModal = ({
 	                        aria-label={`Unit number ${idx + 1}`}
 	                        value={u.unitNumber}
 	                        onChange={(e) => updateUnit(idx, "unitNumber", e.target.value)}
-	                        style={{ width: "100%", padding: 6 }}
+	                        style={baseFieldStyle}
 	                      />
 	                    </td>
 	                    <td style={{ padding: "6px" }}>
@@ -1534,7 +1569,7 @@ const UnitsModal = ({
 	                        type="number"
 	                        value={u.beds}
 	                        onChange={(e) => updateUnit(idx, "beds", e.target.value)}
-	                        style={{ width: "100%", padding: 6 }}
+	                        style={baseFieldStyle}
 	                      />
 	                    </td>
 	                    <td style={{ padding: "6px" }}>
@@ -1543,7 +1578,7 @@ const UnitsModal = ({
 	                        type="number"
 	                        value={u.baths}
 	                        onChange={(e) => updateUnit(idx, "baths", e.target.value)}
-	                        style={{ width: "100%", padding: 6 }}
+	                        style={baseFieldStyle}
 	                      />
 	                    </td>
 	                    <td style={{ padding: "6px" }}>
@@ -1552,7 +1587,7 @@ const UnitsModal = ({
 	                        type="number"
 	                        value={u.sqft}
 	                        onChange={(e) => updateUnit(idx, "sqft", e.target.value)}
-	                        style={{ width: "100%", padding: 6 }}
+	                        style={baseFieldStyle}
 	                      />
 	                    </td>
 	                    <td style={{ padding: "6px" }}>
@@ -1570,7 +1605,7 @@ const UnitsModal = ({
                             updateUnit(idx, "marketRent", "");
                           }
                         }}
-                        style={{ width: "100%", padding: 6 }}
+                        style={baseFieldStyle}
 	                      />
 	                    </td>
 	                    <td style={{ padding: "6px" }}>
@@ -1578,7 +1613,7 @@ const UnitsModal = ({
 	                        aria-label={`Status ${idx + 1}`}
 	                        value={u.status ?? "vacant"}
 	                        onChange={(e) => updateUnit(idx, "status", e.target.value)}
-	                        style={{ width: "100%", padding: 6 }}
+	                        style={baseFieldStyle}
 	                      >
 	                        <option value="vacant">Vacant</option>
 	                        <option value="occupied">Occupied</option>
@@ -1591,7 +1626,7 @@ const UnitsModal = ({
 	                        onChange={(e) => updateUnit(idx, "occupantName", e.target.value)}
 	                        disabled={(u.status ?? "vacant") !== "occupied"}
 	                        placeholder={(u.status ?? "vacant") === "occupied" ? "Tenant name" : "Vacant"}
-	                        style={{ width: "100%", padding: 6 }}
+	                        style={(u.status ?? "vacant") === "occupied" ? activeOccupancyFieldStyle : inactiveOccupancyFieldStyle}
 	                      />
 	                    </td>
 	                    <td style={{ padding: "6px" }}>
@@ -1601,7 +1636,7 @@ const UnitsModal = ({
 	                        value={u.leaseEndDate ?? ""}
 	                        onChange={(e) => updateUnit(idx, "leaseEndDate", e.target.value)}
 	                        disabled={(u.status ?? "vacant") !== "occupied"}
-	                        style={{ width: "100%", padding: 6 }}
+	                        style={(u.status ?? "vacant") === "occupied" ? activeOccupancyFieldStyle : inactiveOccupancyFieldStyle}
 	                      />
 	                    </td>
 	                    <td style={{ padding: "6px" }}>
@@ -1611,10 +1646,11 @@ const UnitsModal = ({
                         style={{
                           padding: "6px 10px",
                           borderRadius: 8,
-                          border: "1px solid rgba(148,163,184,0.35)",
-                          background: "transparent",
-                          cursor: "pointer",
-                        }}
+	                          border: "1px solid rgba(148,163,184,0.35)",
+	                          background: "transparent",
+	                          cursor: "pointer",
+	                          whiteSpace: "nowrap",
+	                        }}
                       >
                         Remove
                       </button>
