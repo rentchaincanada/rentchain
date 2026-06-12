@@ -3,6 +3,7 @@ import {
   EXPECTED_UNIT_CSV_HEADERS,
   UNIT_CSV_FIELD_MAP,
   UnitCsvRowSchema,
+  cleanText,
   mapRow,
   resolveUnitCsvField,
 } from "./unitCsv.schema";
@@ -42,10 +43,16 @@ export type ParsedUnitsCsv = {
   };
 };
 
+export function normalizeUnitCsvText(csvText: string): string {
+  return cleanText(csvText)
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n");
+}
+
 export function parseUnitsCsv(csvText: string): ParsedUnitsCsv {
-  const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: false });
+  const parsed = Papa.parse(normalizeUnitCsvText(csvText), { header: true, skipEmptyLines: false });
   const data = (parsed.data || []) as any[];
-  const receivedHeaders = (parsed.meta.fields || []).map((header) => String(header || "").replace(/^\uFEFF/, "").trim());
+  const receivedHeaders = (parsed.meta.fields || []).map((header) => cleanText(header).trim());
   const knownFields = new Set<string>();
   const unknown = receivedHeaders.filter((header) => {
     if (!header) return false;

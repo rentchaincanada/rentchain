@@ -95,6 +95,29 @@ describe("unit CSV preview routes", () => {
     });
   });
 
+  it("previews Numbers-style CSV through the property creation route", async () => {
+    const app = await createPropertiesApp();
+
+    const res = await request(app).post("/api/properties/units/csv-preview").send({
+      csvText: '\uFEFFunitNumber,marketRent,beds,baths,sqft,status\r101,"$1,850",1,1,610,vacant\r102,1\u00A0650,0,1,450,leased',
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(res.body.preview.rows).toEqual([
+      expect.objectContaining({
+        row: 2,
+        status: "valid",
+        data: expect.objectContaining({ unitNumber: "101", rent: 1850, status: "vacant" }),
+      }),
+      expect.objectContaining({
+        row: 3,
+        status: "valid",
+        data: expect.objectContaining({ unitNumber: "102", rent: 1650, status: "occupied" }),
+      }),
+    ]);
+  });
+
   it("previews property unit table CSV through the property-scoped route", async () => {
     seedDoc("properties", "prop-1", { landlordId: "landlord-1" });
     const app = await createUnitImportApp();
@@ -109,5 +132,21 @@ describe("unit CSV preview routes", () => {
     expect(res.body.preview.errors).toEqual([
       expect.objectContaining({ code: "HEADER_UNKNOWN", field: "privateColumn" }),
     ]);
+  });
+
+  it("previews Numbers-style CSV through the property-scoped route", async () => {
+    seedDoc("properties", "prop-1", { landlordId: "landlord-1" });
+    const app = await createUnitImportApp();
+
+    const csvText = Buffer.from("\uFEFFunitNumber,marketRent,beds\r101,1850,1", "utf16le").toString("utf8");
+    const res = await request(app).post("/api/properties/prop-1/units/csv-parse").send({ csvText });
+
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(res.body.preview.rows[0]).toMatchObject({
+      row: 2,
+      status: "valid",
+      data: { unitNumber: "101", rent: 1850, bedrooms: 1 },
+    });
   });
 });
