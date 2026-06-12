@@ -34,7 +34,7 @@ MANUAL QA: [PASS if completed and documented in impl-summary — FAIL if require
 
 VERDICT: [SAFE TO MERGE or NEEDS FIXES or ESCALATE TO HUMAN]
 
-STEP 3 — IF VERDICT IS SAFE TO MERGE (DEPRECATED - now handled by claude-gate2):
+STEP 3 — IF VERDICT IS SAFE TO MERGE:
 Extract PR number, URL, and branch from .handoff/impl-summary.md ONLY.
 If not explicitly stated in impl-summary.md, use PR_NUMBER_PENDING and PR_URL_PENDING.
 Write ONLY this to .handoff/gate2-instruction.md:
