@@ -155,6 +155,20 @@ describe("PropertiesPage", () => {
     mocks.printSummaryDocumentMock.mockResolvedValue(undefined);
   });
 
+  const openGuidedUnitModal = async () => {
+    render(
+      <MemoryRouter>
+        <PropertiesPage />
+      </MemoryRouter>
+    );
+
+    const setupButtons = await screen.findAllByRole("button", {
+      name: "Complete property setup",
+    });
+    fireEvent.click(setupButtons[0]);
+    fireEvent.click(await screen.findByRole("button", { name: "Add a unit" }));
+  };
+
   it("renders active and archived property filters", async () => {
     render(
       <MemoryRouter>
@@ -287,47 +301,106 @@ describe("PropertiesPage", () => {
   });
 
   it("stores created units with persisted IDs from the save response", async () => {
-    mocks.fetchPropertiesMock.mockResolvedValue({ items: [] });
+    mocks.fetchPropertiesMock
+      .mockResolvedValueOnce({ items: [] })
+      .mockResolvedValue({ items: [{ id: "prop-created", name: "Created Property", units: [{ id: "unit-created-1", unitNumber: "101" }] }] });
 
-    render(
-      <MemoryRouter>
-        <PropertiesPage />
-      </MemoryRouter>
-    );
+    await openGuidedUnitModal();
 
-    const setupButtons = await screen.findAllByRole("button", {
-      name: "Complete property setup",
-    });
-    fireEvent.click(setupButtons[0]);
-    fireEvent.click(await screen.findByRole("button", { name: "Add a unit" }));
-    fireEvent.change(screen.getAllByRole("textbox")[0], { target: { value: "101" } });
+    fireEvent.change(screen.getByLabelText("Unit number 1"), { target: { value: "101" } });
     fireEvent.click(screen.getByRole("button", { name: "Save units" }));
 
     await waitFor(() => {
       expect(mocks.addUnitsManualMock).toHaveBeenCalledWith(
         "prop-created",
-        expect.arrayContaining([expect.objectContaining({ unitNumber: "101" })])
+        expect.arrayContaining([
+          expect.objectContaining({
+            unitNumber: "101",
+            status: "vacant",
+            occupantName: null,
+            leaseEndDate: null,
+          }),
+        ])
       );
     });
+    const submitted = mocks.addUnitsManualMock.mock.calls[0][1][0];
+    expect(submitted).not.toHaveProperty("id");
+    expect(submitted).not.toHaveProperty("unitId");
+    expect(submitted).not.toHaveProperty("uid");
     expect(await screen.findByText("unit-created-1:101")).toBeInTheDocument();
+  });
+
+  it("submits occupied status and tenant details from the guided unit modal", async () => {
+    mocks.fetchPropertiesMock
+      .mockResolvedValueOnce({ items: [] })
+      .mockResolvedValue({ items: [{ id: "prop-created", name: "Created Property", units: [{ id: "unit-created-1", unitNumber: "202" }] }] });
+    mocks.addUnitsManualMock.mockResolvedValue({
+      ok: true,
+      created: 1,
+      units: [
+        {
+          id: "unit-created-1",
+          unitNumber: "202",
+          beds: 2,
+          baths: 1,
+          sqft: 700,
+          marketRent: 1800,
+          status: "occupied",
+          occupantName: "Alice Tenant",
+          leaseEndDate: "2027-05-31",
+        },
+      ],
+    });
+
+    await openGuidedUnitModal();
+
+    fireEvent.change(screen.getByLabelText("Unit number 1"), { target: { value: "202" } });
+    fireEvent.change(screen.getByLabelText("Beds 1"), { target: { value: "2" } });
+    fireEvent.change(screen.getByLabelText("Square footage 1"), { target: { value: "700" } });
+    fireEvent.change(screen.getByLabelText("Market rent 1"), { target: { value: "1800" } });
+    fireEvent.change(screen.getByLabelText("Status 1"), { target: { value: "occupied" } });
+    expect(screen.getByLabelText("Status 1")).toHaveValue("occupied");
+    fireEvent.change(screen.getByLabelText("Occupant name 1"), { target: { value: "Alice Tenant" } });
+    fireEvent.change(screen.getByLabelText("Lease end date 1"), { target: { value: "2027-05-31" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save units" }));
+
+    await waitFor(() => {
+      expect(mocks.addUnitsManualMock).toHaveBeenCalledWith(
+        "prop-created",
+        [
+          expect.objectContaining({
+            unitNumber: "202",
+            beds: 2,
+            sqft: 700,
+            marketRent: 1800,
+            status: "occupied",
+            occupantName: "Alice Tenant",
+            leaseEndDate: "2027-05-31",
+          }),
+        ]
+      );
+    });
+  });
+
+  it("keeps the guided unit modal open with inline validation when no unit is provided", async () => {
+    mocks.fetchPropertiesMock.mockResolvedValue({ items: [] });
+
+    await openGuidedUnitModal();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save units" }));
+
+    expect(mocks.addUnitsManualMock).not.toHaveBeenCalled();
+    expect(await screen.findByRole("alert")).toHaveTextContent("Add at least one unit number before saving.");
+    expect(screen.getByText("Add Units")).toBeInTheDocument();
   });
 
   it("keeps the unit modal open when created unit IDs are unresolved", async () => {
     mocks.fetchPropertiesMock.mockResolvedValue({ items: [] });
     mocks.addUnitsManualMock.mockResolvedValue({ ok: true, created: 1 });
 
-    render(
-      <MemoryRouter>
-        <PropertiesPage />
-      </MemoryRouter>
-    );
+    await openGuidedUnitModal();
 
-    const setupButtons = await screen.findAllByRole("button", {
-      name: "Complete property setup",
-    });
-    fireEvent.click(setupButtons[0]);
-    fireEvent.click(await screen.findByRole("button", { name: "Add a unit" }));
-    fireEvent.change(screen.getAllByRole("textbox")[0], { target: { value: "101" } });
+    fireEvent.change(screen.getByLabelText("Unit number 1"), { target: { value: "101" } });
     fireEvent.click(screen.getByRole("button", { name: "Save units" }));
 
     await waitFor(() => {

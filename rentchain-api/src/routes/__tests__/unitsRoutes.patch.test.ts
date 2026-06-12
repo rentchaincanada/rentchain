@@ -194,15 +194,38 @@ describe("unitsRoutes PATCH aliases", () => {
       .send({
         units: [
           { unitNumber: "101", beds: 1, baths: 1, sqft: 500, marketRent: 1500, status: "vacant" },
-          { unitNumber: "102", beds: 2, baths: 1, sqft: 700, marketRent: 1900, status: "vacant" },
+          {
+            unitNumber: "102",
+            beds: 2,
+            baths: 1,
+            sqft: 700,
+            marketRent: 1900,
+            status: "occupied",
+            occupantName: "Jane Tenant",
+            leaseEndDate: "2027-06-10",
+          },
         ],
       });
 
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ ok: true, created: 2 });
     expect(res.body.units).toHaveLength(2);
-    expect(res.body.units[0]).toMatchObject({ id: "units-auto-1", unitNumber: "101", propertyId: "prop-1" });
-    expect(res.body.units[1]).toMatchObject({ id: "units-auto-2", unitNumber: "102", propertyId: "prop-1" });
+    expect(res.body.units[0]).toMatchObject({
+      id: "units-auto-1",
+      unitNumber: "101",
+      propertyId: "prop-1",
+      status: "vacant",
+      occupantName: null,
+      leaseEndDate: null,
+    });
+    expect(res.body.units[1]).toMatchObject({
+      id: "units-auto-2",
+      unitNumber: "102",
+      propertyId: "prop-1",
+      status: "occupied",
+      occupantName: "Jane Tenant",
+      leaseEndDate: "2027-06-10",
+    });
     expect(res.body.items).toEqual(res.body.units);
   });
 });

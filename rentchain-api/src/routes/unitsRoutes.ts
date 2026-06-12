@@ -341,6 +341,9 @@ router.post(
       if (!unitNumber) continue;
 
       const ref = db.collection("units").doc();
+      const status = (u as any)?.status === "occupied" ? "occupied" : "vacant";
+      const occupantName = status === "occupied" ? String((u as any)?.occupantName || (u as any)?.tenantName || "").trim() || null : null;
+      const leaseEndDate = status === "occupied" ? String((u as any)?.leaseEndDate || "").trim() || null : null;
       const unitRecord = {
         landlordId,
         propertyId,
@@ -349,7 +352,9 @@ router.post(
         baths: typeof u?.baths === "number" ? u.baths : null,
         sqft: typeof u?.sqft === "number" ? u.sqft : null,
         marketRent: typeof u?.marketRent === "number" ? u.marketRent : null,
-        status: (u as any)?.status || "vacant",
+        status,
+        occupantName,
+        leaseEndDate,
         createdAt: now,
         updatedAt: now,
         updatedAtServer: FieldValue.serverTimestamp(),

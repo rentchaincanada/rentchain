@@ -80,6 +80,52 @@ function unitSaveErrorMessage(error: any) {
   return error?.message ?? "Could not save units";
 }
 
+function normalizeUnitDraftsForSubmit(units: UnitInput[]) {
+  const invalidPlaceholder = units.some((u: any) =>
+    [u?.id, u?.unitId, u?.uid].some((value) => String(value || "").trim().toLowerCase().startsWith("placeholder-"))
+  );
+  if (invalidPlaceholder) {
+    return {
+      units: [],
+      error: "This unit form still has temporary IDs. Close and reopen the form before saving.",
+    };
+  }
+
+  const normalized = units
+    .map((u) => {
+      const status = u.status === "occupied" ? "occupied" : "vacant";
+      const unit: UnitInput = {
+        unitNumber: String(u.unitNumber || "").trim(),
+        beds: Number(u.beds),
+        baths: Number(u.baths),
+        sqft: Number(u.sqft),
+        marketRent: Number(u.marketRent),
+        status,
+        occupantName: status === "occupied" ? String(u.occupantName || "").trim() || null : null,
+        leaseEndDate: status === "occupied" ? String(u.leaseEndDate || "").trim() || null : null,
+      };
+      return unit;
+    })
+    .filter((u) => u.unitNumber.length > 0);
+
+  if (normalized.length === 0) {
+    return { units: [], error: "Add at least one unit number before saving." };
+  }
+
+  const invalidNumbers = normalized.some(
+    (u) =>
+      !Number.isFinite(u.beds) ||
+      !Number.isFinite(u.baths) ||
+      !Number.isFinite(u.sqft) ||
+      !Number.isFinite(u.marketRent)
+  );
+  if (invalidNumbers) {
+    return { units: [], error: "Enter valid beds, baths, square footage, and rent before saving." };
+  }
+
+  return { units: normalized, error: null };
+}
+
 const PropertiesPage: React.FC = () => {
   const [properties, setProperties] = useState<Property[]>([]);
   const [propertyView, setPropertyView] = useState<"active" | "archived">("active");
@@ -104,6 +150,7 @@ const PropertiesPage: React.FC = () => {
     { unitNumber: "", beds: 1, baths: 1, sqft: 500, marketRent: 1500, status: "vacant" },
   ]);
   const [savingUnits, setSavingUnits] = useState(false);
+  const [unitModalError, setUnitModalError] = useState<string | null>(null);
   const [actionRequestUpdating, setActionRequestUpdating] = useState(false);
   const [actionRequestUpdateError, setActionRequestUpdateError] = useState<string | null>(null);
   const location = useLocation();
@@ -366,23 +413,15 @@ const PropertiesPage: React.FC = () => {
 
   const handleSaveUnits = async (unitsOverride?: UnitInput[]) => {
     if (!activePropertyId) return;
-    const clean = (unitsOverride || draftUnits)
-      .map((u) => ({
-        ...u,
-        unitNumber: u.unitNumber.trim(),
-        beds: Number(u.beds),
-        baths: Number(u.baths),
-        sqft: Number(u.sqft),
-        marketRent: Number(u.marketRent),
-      }))
-      .filter((u) => u.unitNumber.length > 0);
+    const { units: clean, error } = normalizeUnitDraftsForSubmit(unitsOverride || draftUnits);
 
-    if (clean.length === 0) {
-      showToast({ title: "Add at least one unit", variant: "warning" });
+    if (error) {
+      setUnitModalError(error);
       return;
     }
 
     setSavingUnits(true);
+    setUnitModalError(null);
     try {
       const response = await addUnitsManual(activePropertyId, clean);
       const persistedUnits = resolveCreatedUnits(response, clean);
@@ -404,14 +443,17 @@ const PropertiesPage: React.FC = () => {
             : p
         )
       );
+      await loadProperties();
       await setOnboardingStep("unitAdded", true).catch(() => {});
       showToast({
         title: "Portfolio ready  dashboard is live.",
         variant: "success",
       });
+      setUnitModalError(null);
       setIsUnitsModalOpen(false);
       navigate("/dashboard?onboarding=ready", { replace: true });
     } catch (e: any) {
+      setUnitModalError(unitSaveErrorMessage(e));
       showToast({
         title: "Failed to save units",
         description: unitSaveErrorMessage(e),
@@ -861,15 +903,16 @@ const PropertiesPage: React.FC = () => {
                   Units make the property usable for leases, applications, and rent tracking. This is the clearest next workflow step after creating the property.
                 </div>
                 <div>
-                  <Button
-                    onClick={() => {
-                      if (!selectedPropertyId) return;
-                      setActivePropertyId(selectedPropertyId);
-                      setDraftUnits([
-                        { unitNumber: "", beds: 1, baths: 1, sqft: 500, marketRent: 1500, status: "vacant" },
-                      ]);
-                      setIsUnitsModalOpen(true);
-                    }}
+	                  <Button
+	                    onClick={() => {
+	                      if (!selectedPropertyId) return;
+	                      setActivePropertyId(selectedPropertyId);
+	                      setUnitModalError(null);
+	                      setDraftUnits([
+	                        { unitNumber: "", beds: 1, baths: 1, sqft: 500, marketRent: 1500, status: "vacant" },
+	                      ]);
+	                      setIsUnitsModalOpen(true);
+	                    }}
                   >
                     Add a unit
                   </Button>
@@ -953,16 +996,17 @@ const PropertiesPage: React.FC = () => {
                     <div>
                       <strong>Add Unit</strong>  create units manually.
                     </div>
-                    <Button
-                      size="sm"
-                      onClick={() => {
-                        if (!selectedPropertyId) return;
-                        setActivePropertyId(selectedPropertyId);
-                        setDraftUnits([
-                          { unitNumber: "", beds: 1, baths: 1, sqft: 500, marketRent: 1500, status: "vacant" },
-                        ]);
-                        setIsUnitsModalOpen(true);
-                      }}
+	                    <Button
+	                      size="sm"
+	                      onClick={() => {
+	                        if (!selectedPropertyId) return;
+	                        setActivePropertyId(selectedPropertyId);
+	                        setUnitModalError(null);
+	                        setDraftUnits([
+	                          { unitNumber: "", beds: 1, baths: 1, sqft: 500, marketRent: 1500, status: "vacant" },
+	                        ]);
+	                        setIsUnitsModalOpen(true);
+	                      }}
                     >
                       Add units
                     </Button>
@@ -1224,11 +1268,15 @@ const PropertiesPage: React.FC = () => {
       />
       <UnitsModal
         open={isUnitsModalOpen}
-        onClose={() => setIsUnitsModalOpen(false)}
+        onClose={() => {
+          setUnitModalError(null);
+          setIsUnitsModalOpen(false);
+        }}
         units={draftUnits}
         setUnits={setDraftUnits}
         onSave={handleSaveUnits}
         saving={savingUnits}
+        error={unitModalError}
       />
       <LeasePackGeneratorModal
         open={leasePackOpen}
@@ -1375,6 +1423,7 @@ const UnitsModal = ({
   setUnits,
   onSave,
   saving,
+  error,
 }: {
   open: boolean;
   onClose: () => void;
@@ -1382,16 +1431,21 @@ const UnitsModal = ({
   setUnits: (u: UnitInput[]) => void;
   onSave: (unitsOverride?: UnitInput[]) => void;
   saving: boolean;
+  error?: string | null;
 }) => {
   if (!open) return null;
 
   const updateUnit = (idx: number, field: keyof UnitInput, value: any) => {
+    const nextValue =
+      field === "unitNumber" || field === "status" || field === "occupantName" || field === "leaseEndDate"
+        ? String(value)
+        : Number(value);
     setUnits(
       units.map((u, i) =>
         i === idx
           ? {
               ...u,
-              [field]: field === "unitNumber" ? String(value) : Number(value),
+              [field]: nextValue,
             }
           : u
       )
@@ -1405,17 +1459,6 @@ const UnitsModal = ({
     ]);
   const removeRow = (idx: number) =>
     setUnits(units.length <= 1 ? units : units.filter((_, i) => i !== idx));
-  const normalizedUnits = units
-    .map((u) => ({
-      unitNumber: String(u.unitNumber || "").trim(),
-      beds: Number(u.beds),
-      baths: Number(u.baths),
-      sqft: Number(u.sqft),
-      marketRent: Number(u.marketRent),
-      status: u.status === "occupied" ? "occupied" : "vacant",
-    }))
-    .filter((u) => u.unitNumber.length > 0);
-
   return (
     <div
       style={{
@@ -1459,7 +1502,7 @@ const UnitsModal = ({
             <table className="rc-units-edit-table" style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
                 <tr>
-                  {["Unit #", "Beds", "Baths", "Sqft", "Market Rent", "Status", ""].map((h) => (
+                  {["Unit #", "Beds", "Baths", "Sqft", "Market Rent", "Status", "Occupant", "Lease End", ""].map((h) => (
                     <th
                       key={h}
                       style={{
@@ -1475,44 +1518,49 @@ const UnitsModal = ({
                 </tr>
               </thead>
               <tbody>
-                {units.map((u, idx) => (
-                  <tr key={idx}>
-                    <td style={{ padding: "6px" }}>
-                      <input
-                        value={u.unitNumber}
-                        onChange={(e) => updateUnit(idx, "unitNumber", e.target.value)}
-                        style={{ width: "100%", padding: 6 }}
-                      />
-                    </td>
-                    <td style={{ padding: "6px" }}>
-                      <input
-                        type="number"
-                        value={u.beds}
-                        onChange={(e) => updateUnit(idx, "beds", e.target.value)}
-                        style={{ width: "100%", padding: 6 }}
-                      />
-                    </td>
-                    <td style={{ padding: "6px" }}>
-                      <input
-                        type="number"
-                        value={u.baths}
-                        onChange={(e) => updateUnit(idx, "baths", e.target.value)}
-                        style={{ width: "100%", padding: 6 }}
-                      />
-                    </td>
-                    <td style={{ padding: "6px" }}>
-                      <input
-                        type="number"
-                        value={u.sqft}
-                        onChange={(e) => updateUnit(idx, "sqft", e.target.value)}
-                        style={{ width: "100%", padding: 6 }}
-                      />
-                    </td>
-                    <td style={{ padding: "6px" }}>
-                      <input
-                        type="number"
-                        value={u.marketRent}
-                        onChange={(e) => updateUnit(idx, "marketRent", e.target.value)}
+	                {units.map((u, idx) => (
+	                  <tr key={idx}>
+	                    <td style={{ padding: "6px" }}>
+	                      <input
+	                        aria-label={`Unit number ${idx + 1}`}
+	                        value={u.unitNumber}
+	                        onChange={(e) => updateUnit(idx, "unitNumber", e.target.value)}
+	                        style={{ width: "100%", padding: 6 }}
+	                      />
+	                    </td>
+	                    <td style={{ padding: "6px" }}>
+	                      <input
+	                        aria-label={`Beds ${idx + 1}`}
+	                        type="number"
+	                        value={u.beds}
+	                        onChange={(e) => updateUnit(idx, "beds", e.target.value)}
+	                        style={{ width: "100%", padding: 6 }}
+	                      />
+	                    </td>
+	                    <td style={{ padding: "6px" }}>
+	                      <input
+	                        aria-label={`Baths ${idx + 1}`}
+	                        type="number"
+	                        value={u.baths}
+	                        onChange={(e) => updateUnit(idx, "baths", e.target.value)}
+	                        style={{ width: "100%", padding: 6 }}
+	                      />
+	                    </td>
+	                    <td style={{ padding: "6px" }}>
+	                      <input
+	                        aria-label={`Square footage ${idx + 1}`}
+	                        type="number"
+	                        value={u.sqft}
+	                        onChange={(e) => updateUnit(idx, "sqft", e.target.value)}
+	                        style={{ width: "100%", padding: 6 }}
+	                      />
+	                    </td>
+	                    <td style={{ padding: "6px" }}>
+	                      <input
+	                        aria-label={`Market rent ${idx + 1}`}
+	                        type="number"
+	                        value={u.marketRent}
+	                        onChange={(e) => updateUnit(idx, "marketRent", e.target.value)}
                         onFocus={() => {
                           if (
                             typeof window !== "undefined" &&
@@ -1523,20 +1571,41 @@ const UnitsModal = ({
                           }
                         }}
                         style={{ width: "100%", padding: 6 }}
-                      />
-                    </td>
-                    <td style={{ padding: "6px" }}>
-                      <select
-                        value={u.status ?? "vacant"}
-                        onChange={(e) => updateUnit(idx, "status", e.target.value)}
-                        style={{ width: "100%", padding: 6 }}
-                      >
-                        <option value="vacant">Vacant</option>
-                        <option value="occupied">Occupied</option>
-                      </select>
-                    </td>
-                    <td style={{ padding: "6px" }}>
-                      <button
+	                      />
+	                    </td>
+	                    <td style={{ padding: "6px" }}>
+	                      <select
+	                        aria-label={`Status ${idx + 1}`}
+	                        value={u.status ?? "vacant"}
+	                        onChange={(e) => updateUnit(idx, "status", e.target.value)}
+	                        style={{ width: "100%", padding: 6 }}
+	                      >
+	                        <option value="vacant">Vacant</option>
+	                        <option value="occupied">Occupied</option>
+	                      </select>
+	                    </td>
+	                    <td style={{ padding: "6px" }}>
+	                      <input
+	                        aria-label={`Occupant name ${idx + 1}`}
+	                        value={u.occupantName ?? ""}
+	                        onChange={(e) => updateUnit(idx, "occupantName", e.target.value)}
+	                        disabled={(u.status ?? "vacant") !== "occupied"}
+	                        placeholder={(u.status ?? "vacant") === "occupied" ? "Tenant name" : "Vacant"}
+	                        style={{ width: "100%", padding: 6 }}
+	                      />
+	                    </td>
+	                    <td style={{ padding: "6px" }}>
+	                      <input
+	                        aria-label={`Lease end date ${idx + 1}`}
+	                        type="date"
+	                        value={u.leaseEndDate ?? ""}
+	                        onChange={(e) => updateUnit(idx, "leaseEndDate", e.target.value)}
+	                        disabled={(u.status ?? "vacant") !== "occupied"}
+	                        style={{ width: "100%", padding: 6 }}
+	                      />
+	                    </td>
+	                    <td style={{ padding: "6px" }}>
+	                      <button
                         type="button"
                         onClick={() => removeRow(idx)}
                         style={{
@@ -1555,6 +1624,22 @@ const UnitsModal = ({
               </tbody>
             </table>
           </div>
+          {error ? (
+            <div
+              role="alert"
+              style={{
+                marginTop: 12,
+                padding: "10px 12px",
+                borderRadius: 10,
+                border: "1px solid rgba(220,38,38,0.24)",
+                background: "rgba(254,242,242,0.9)",
+                color: "#b91c1c",
+                fontSize: 13,
+              }}
+            >
+              {error}
+            </div>
+          ) : null}
         </div>
 
         <div className="rc-modal-footer" style={{ padding: 16, borderTop: "1px solid rgba(148,163,184,0.2)", display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
@@ -1587,7 +1672,7 @@ const UnitsModal = ({
             </button>
             <button
               type="button"
-              onClick={() => onSave(normalizedUnits)}
+              onClick={() => onSave(units)}
               disabled={saving}
               style={{
                 padding: "8px 12px",
