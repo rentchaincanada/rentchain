@@ -20,6 +20,51 @@ describe("parseUnitsCsv", () => {
     });
   });
 
+  it("parses Numbers-style CSVs with CR line endings and formatted numeric cells", () => {
+    const csv = [
+      "\uFEFFunitNumber,marketRent,beds,baths,sqft,status",
+      '101,"$1,850",1,1,610,vacant',
+      "102,1\u00A0650,0,1,450,leased",
+      ",,,,,",
+    ].join("\r");
+
+    const result = parseUnitsCsv(csv);
+
+    expect(result.headers).toMatchObject({ valid: true, missing: [], unknown: [] });
+    expect(result.preview.errors).toEqual([]);
+    expect(result.candidates).toHaveLength(2);
+    expect(result.candidates[0].data).toMatchObject({
+      unitNumber: "101",
+      rent: 1850,
+      bedrooms: 1,
+      bathrooms: 1,
+      sqft: 610,
+      status: "vacant",
+    });
+    expect(result.candidates[1].data).toMatchObject({
+      unitNumber: "102",
+      rent: 1650,
+      bedrooms: 0,
+      bathrooms: 1,
+      sqft: 450,
+      status: "occupied",
+    });
+  });
+
+  it("recovers UTF-16 BOM text when upload decoding leaves null bytes", () => {
+    const csv = Buffer.from("\uFEFFunitNumber,marketRent,beds\r101,1850,1", "utf16le").toString("utf8");
+
+    const result = parseUnitsCsv(csv);
+
+    expect(result.headers).toMatchObject({ valid: true, missing: [], unknown: [] });
+    expect(result.preview.errors).toEqual([]);
+    expect(result.candidates[0].data).toMatchObject({
+      unitNumber: "101",
+      rent: 1850,
+      bedrooms: 1,
+    });
+  });
+
   it("reports exact missing and unknown headers", () => {
     const result = parseUnitsCsv("marketRent,internalId\n1850,secret");
 

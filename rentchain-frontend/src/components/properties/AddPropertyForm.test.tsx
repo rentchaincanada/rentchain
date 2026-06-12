@@ -48,6 +48,7 @@ describe("AddPropertyForm", () => {
     mocks.trackMock.mockReset();
     mocks.setOnboardingStepMock.mockResolvedValue(undefined);
     mocks.showToastMock.mockReset();
+    mocks.previewUnitsCsvMock.mockReset();
     mocks.previewUnitsCsvMock.mockResolvedValue({
       ok: true,
       headers: {
@@ -178,6 +179,78 @@ describe("AddPropertyForm", () => {
               sqft: 610,
               status: "vacant",
             }),
+          ],
+        })
+      );
+    });
+  });
+
+  it("accepts Numbers-style CSV preview output before creating the property", async () => {
+    mocks.previewUnitsCsvMock.mockResolvedValueOnce({
+      ok: true,
+      headers: {
+        valid: true,
+        received: ["unitNumber", "marketRent", "beds", "baths", "sqft", "status"],
+        expected: ["unitNumber", "marketRent", "beds", "baths", "sqft", "status"],
+        missing: [],
+        unknown: [],
+      },
+      preview: {
+        errors: [],
+        rows: [
+          {
+            row: 2,
+            status: "valid",
+            unitNumber: "101",
+            data: { unitNumber: "101", rent: 1850, bedrooms: 1, bathrooms: 1, sqft: 610, status: "vacant" },
+            issues: [],
+          },
+          {
+            row: 3,
+            status: "valid",
+            unitNumber: "102",
+            data: { unitNumber: "102", rent: 1650, bedrooms: 0, bathrooms: 1, sqft: 450, status: "occupied" },
+            issues: [],
+          },
+        ],
+      },
+    });
+    const { container } = render(<AddPropertyForm onCreated={vi.fn()} />);
+
+    fireEvent.change(screen.getAllByPlaceholderText("123 Main Street")[0], {
+      target: { value: "123 Main Street" },
+    });
+    fireEvent.change(screen.getAllByPlaceholderText("Halifax")[0], {
+      target: { value: "Halifax" },
+    });
+    const unitsToggle = Array.from(container.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes("Units & Rents (Optional)")
+    );
+    expect(unitsToggle).toBeTruthy();
+    fireEvent.click(unitsToggle!);
+
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const file = new File(['\uFEFFunitNumber,marketRent,beds,baths,sqft,status\r101,"$1,850",1,1,610,vacant\r102,1\u00A0650,0,1,450,leased'], "numbers-units.csv", {
+      type: "text/csv",
+    });
+    fireEvent.change(fileInput, { target: { files: [file] } });
+
+    await waitFor(() => {
+      expect(mocks.previewUnitsCsvMock).toHaveBeenLastCalledWith(
+        'unitNumber,marketRent,beds,baths,sqft,status\r101,"$1,850",1,1,610,vacant\r102,1\u00A0650,0,1,450,leased'
+      );
+    });
+    expect(await screen.findByText(/CSV preview: numbers-units.csv/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Create property" })[0]);
+
+    await waitFor(() => {
+      expect(mocks.createPropertyMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          totalUnits: 2,
+          units: [
+            expect.objectContaining({ unitNumber: "101", rent: 1850, status: "vacant" }),
+            expect.objectContaining({ unitNumber: "102", rent: 1650, status: "occupied" }),
           ],
         })
       );

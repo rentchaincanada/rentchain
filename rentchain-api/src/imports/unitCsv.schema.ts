@@ -73,17 +73,32 @@ export const UNIT_CSV_FIELD_MAP = [
 export const EXPECTED_UNIT_CSV_HEADERS = UNIT_CSV_FIELD_MAP.map((entry) => entry.canonicalHeader);
 
 export function normalizeHeader(h: string) {
-  return h
-    .replace(/^\uFEFF/, "")
+  return cleanText(h)
     .trim()
     .toLowerCase()
     .replace(/\s+/g, "");
 }
 
+export function cleanText(value: any) {
+  return String(value ?? "")
+    .replace(/^\uFEFF/, "")
+    .replace(/^[\uFFFD]+/, "")
+    .replace(/\u0000/g, "")
+    .replace(/[\u200B-\u200D\u2060]/g, "")
+    .replace(/\u00A0/g, " ");
+}
+
 function cleanCell(value: any) {
   if (value === undefined || value === null) return undefined;
-  const text = String(value).trim();
+  const text = cleanText(value).trim();
   return text === "" ? undefined : text;
+}
+
+function cleanNumericCell(value: any) {
+  const text = cleanCell(value);
+  if (text === undefined) return undefined;
+  const normalized = text.replace(/[$£€]/g, "").replace(/(?<=\d)[,\s](?=\d{3}(\D|$))/g, "");
+  return normalized.trim();
 }
 
 function normalizeStatus(value: any) {
@@ -171,7 +186,12 @@ export function mapRow(raw: Record<string, any>) {
   for (const [k, v] of Object.entries(raw)) {
     const entry = resolveUnitCsvField(k);
     if (!entry) continue;
-    const value = entry.field === "status" ? normalizeStatus(v) : cleanCell(v);
+    const value =
+      entry.field === "status"
+        ? normalizeStatus(v)
+        : ["rent", "bedrooms", "bathrooms", "sqft"].includes(entry.field)
+          ? cleanNumericCell(v)
+          : cleanCell(v);
     if (value === undefined) continue;
     out[entry.field] = value;
   }

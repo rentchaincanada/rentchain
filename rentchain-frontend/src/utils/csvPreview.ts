@@ -1,6 +1,17 @@
+export function normalizeCsvPreviewText(text: string) {
+  return String(text ?? "")
+    .replace(/^\uFEFF/, "")
+    .replace(/^[\uFFFD]+/, "")
+    .replace(/\u0000/g, "")
+    .replace(/[\u200B-\u200D\u2060]/g, "")
+    .replace(/\u00A0/g, " ")
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n");
+}
+
 export function parseCsvPreview(text: string, maxRows = 10) {
-  const lines = text
-    .split(/\r?\n/)
+  const lines = normalizeCsvPreviewText(text)
+    .split("\n")
     .map((l) => l.trim())
     .filter(Boolean);
 
@@ -23,13 +34,13 @@ export function parseCsvPreview(text: string, maxRows = 10) {
         continue;
       }
       if (ch === "," && !inQuotes) {
-        out.push(cur.trim());
+        out.push(cur.replace(/^\uFEFF/, "").trim());
         cur = "";
         continue;
       }
       cur += ch;
     }
-    out.push(cur.trim());
+    out.push(cur.replace(/^\uFEFF/, "").trim());
     return out;
   };
 
