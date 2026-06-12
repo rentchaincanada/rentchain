@@ -1,72 +1,62 @@
-PR: #1140
-PR URL: https://github.com/rentchaincanada/rentchain/pull/1140
-Branch: audit/free-tier-gated-feature-ux-v1
+PR: #1141
+PR URL: https://github.com/rentchaincanada/rentchain/pull/1141
+Branch: fix/free-tier-gated-feature-ux-v1
 
 # Implementation Summary
 
-Mission: Audit Free Tier Gated Feature UX
+Mission: Fix free tier gated feature UX
 
 ## Summary
 
-- Completed a read-only audit of free tier gated and tier-sensitive UX surfaces.
-- Documented backend capability gate response shapes and frontend page-level handling.
-- Identified surfaces where gated features feel broken, generic, or inconsistently limited.
-- Documented full findings in `.handoff/mission-current.md`.
-- No runtime source files, routes, services, tests, billing logic, auth logic, entitlement logic, Firestore rules, or deployment files were changed.
+- Implemented locked feature states for free-tier users on lease operations, ledger, ledger v2, and messages.
+- Split operational command center loading so free-safe dashboard, decision inbox, and property signals still load while lease-driven lanes show locked guidance.
+- Normalized backend capability-denial payloads for leases, ledger, ledger v2, and messages.
+- Centralized operations-signal upgrade copy in `upgradeCopy.ts`.
+- Documented the Pilot 1 maintenance decision in the capability catalog without changing maintenance enforcement.
 
-## Totals
+## Backend Changes
 
-- Gated or tier-sensitive surfaces identified: 15
-- Critical findings: 4
-- High findings: 6
-- Medium findings: 5
-- Low findings: 3
+- Added `buildUpgradeRequiredResponse()` in `rentchain-api/src/services/capabilityGuard.ts`.
+- Updated ad hoc upgrade-required responses in:
+  - `rentchain-api/src/routes/leaseRoutes.ts`
+  - `rentchain-api/src/routes/ledgerRoutes.ts`
+  - `rentchain-api/src/routes/ledgerV2Routes.ts`
+  - `rentchain-api/src/routes/messagesRoutes.ts`
+- Preserved existing capability decisions and route structure.
+- Did not modify auth middleware, billing flows, pricing tables, Firestore rules, deployment configuration, or entitlement allow lists.
 
-## Critical Findings
+## Frontend Changes
 
-- Lease operations renders raw `Upgrade required` text instead of a locked feature state.
-- Operational command center collapses when the gated lease dependency fails.
-- Maintenance and work orders are listed as Starter capabilities but audited landlord routes do not enforce that capability.
-- Backend gate response shapes vary across core features.
+- Updated `LandlordActiveLeasesPage.tsx` to show `LockedFeature` for free-tier users before calling paid lease APIs.
+- Updated `OperationalCommandCenterPage.tsx` to keep free-safe content visible and render locked operations lanes for lease-driven signals.
+- Updated `LedgerPage.tsx`, `LedgerV2Page.tsx`, and `MessagesPage.tsx` to use the shared locked-state component.
+- Added `gatedFeatureErrors.ts` so stale backend denials do not surface raw upgrade errors.
+- Updated `LockedFeature` so feature title and description can default to centralized upgrade copy.
 
-## High Findings
+## Tests Added Or Updated
 
-- Decision inbox is not plan-gated, but Pilot 1 confusion suggests audience and plan status need clarification.
-- Unit table/import gates expose technical capability names.
-- Ledger pages mix client-side disabled states with raw backend gate errors.
-- Application links are proactively gated in UI, but backend copy remains inconsistent.
-- Onboarding hardening is externally reachable for authenticated landlords.
-- Analytics has client-only partial gating that should be documented and made visually consistent.
-
-## Recommended Follow-Up Order
-
-1. Normalize backend gate response helper for capability denials.
-2. Add locked-state page handling for `/leases`.
-3. Split `/operations` data loading so gated lease signals do not collapse the full page.
-4. Resolve maintenance/work order tier boundary and align route gates or product copy.
-5. Clarify `/decision-inbox` audience and plan status.
-6. Update unit table/import and ledger pages to use centralized locked feature UI.
-7. Keep application links and export gates as pattern references while normalizing payload details.
-
-## Files Changed
-
-- `.handoff/impl-summary.md`
-
-Local handoff notes updated:
-- `.handoff/mission-current.md`
+- `rentchain-api/src/services/__tests__/capabilityGuard.test.ts`
+- `rentchain-api/src/services/__tests__/planCapabilities.test.ts`
+- `rentchain-frontend/src/lib/gatedFeatureErrors.test.ts`
+- `rentchain-frontend/src/billing/upgradeCopy.test.ts`
+- `rentchain-frontend/src/pages/LandlordActiveLeasesPage.test.tsx`
+- `rentchain-frontend/src/pages/OperationalCommandCenterPage.test.tsx`
+- `rentchain-frontend/src/pages/MessagesPage.test.tsx`
 
 ## Validation
 
-- `git diff --check`
-- `git status --short`
-- Confirmed no source code files were edited for this audit mission.
+- Passed: `source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run test:single -- src/services/__tests__/capabilityGuard.test.ts src/services/__tests__/planCapabilities.test.ts` in `rentchain-api`.
+- Passed: `npm run test:single -- src/lib/gatedFeatureErrors.test.ts src/billing/upgradeCopy.test.ts src/pages/LandlordActiveLeasesPage.test.tsx src/pages/OperationalCommandCenterPage.test.tsx src/pages/MessagesPage.test.tsx` in `rentchain-frontend`.
+- Passed: `source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run build` in `rentchain-api`.
+- Passed: `source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && npm run build` in `rentchain-frontend`.
+- Passed: `git diff --check`.
 
 ## Manual QA
 
-- Not run locally. Audit-only mission; manual QA should review `.handoff/mission-current.md` findings against Pilot 1 reports.
+- Not run locally. This mission changes frontend rendering and should receive preview QA for free-tier, Starter, and Pro landlord accounts before merge.
 
 ## Known Limitations
 
-- Findings are code-audit based; no live preview session was run.
-- Pilot 1 session recordings were not available in this workspace.
-- Existing unrelated local changes were present before this mission and were not modified or staged.
+- Frontend build completed with the existing large chunk warning.
+- Full browser preview QA was not run in this workspace.
+- `.handoff/merge-log.md` had pre-existing local edits and was intentionally left unstaged.
