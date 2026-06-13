@@ -513,3 +513,70 @@ Confirm /messages Free tier visibility, then prepare fix/landlord-command-surfac
 
 ### Summary
 Numbers CSV compatibility fix merged; all checks green; property creation and property/unit table CSV previews now share normalized parser behavior for Numbers-style exports.
+
+---
+
+## Merge Summary - PR #1145 - 2026-06-13
+
+### PR
+- PR: #1145
+- URL: https://github.com/rentchaincanada/rentchain/pull/1145
+- Branch: fix/unit-guided-modal-status-v1
+- Base: main
+- Head commit: ae6e2ea70e38d7c3fca0ac5e48a1cade9fd2e554
+- Merge commit: fe5f344449ae4f904060ab53bb1b71651cfd55cd
+- Merge method: GitHub merge after required review path
+- Authorization: operator merge approval after backend parity confirmation
+
+### Final Check Status
+- backend: pass
+- frontend: pass
+- merge-gate: pass
+- review workflow: pass
+- Terraform Cloud/Rentchain/repo-id-KeMiLzWpFf7Yq2Zr: pass
+- Vercel Preview Comments: pass
+- Vercel - rentchain: pass
+- Vercel - rentchain-status: pass
+- post-review-comment: skipped
+
+### Backend Parity
+- Initial deployed backend image `rentchain-landlord-api:cb50cae` was identified as stale for the PR #1145 metadata/projection fixes.
+- Cloud Run was redeployed from PR #1145 head.
+- Final Cloud Run latest ready revision: `rentchain-landlord-api-01832-nzq`.
+- Final Cloud Run image: `rentchain-landlord-api:ae6e2ea`.
+- Final Cloud Run traffic: 100 percent to `rentchain-landlord-api-01832-nzq`.
+- Image `ae6e2ea` contains backend commits `5016160c` and `cbc1eb69`.
+
+### Scope Confirmed
+- Guided Add Units modal save now sends a valid non-empty units payload.
+- Property table Add units opens the manual Add Units modal instead of CSV upload.
+- Occupied unit metadata handling persists status, occupant/tenant name, and lease end date through create/update and property refresh paths.
+- CSV template/header support now includes optional occupant name and lease end date metadata.
+- CSV, Apple Numbers compatibility, manual unit save, guided modal save, Add Units action separation, occupied metadata persistence, and unit projection refresh issues from Pilot 1 were resolved in this repair stream.
+- No Phase 5 work, Help Assistant work, or unrelated command-surface feature work was started.
+
+### Cleanup
+- Local `main` synced to `origin/main` at `fe5f344449ae4f904060ab53bb1b71651cfd55cd`.
+- Local branch `fix/unit-guided-modal-status-v1`: deleted.
+- Remote branch `fix/unit-guided-modal-status-v1`: deleted.
+- Remote branch verification returned no remaining head for `fix/unit-guided-modal-status-v1`.
+- Final working tree status: clean on `main` after merge-log update commit.
+
+### Pilot 1 Continuation
+- Resume Pilot 1 onboarding with Landlord #2 and Landlord #3.
+- Track adoption findings, onboarding friction, support questions, and upgrade interest.
+- Carry forward audit findings from `audit/landlord-command-surface-v1`.
+
+### Prepared Next Mission
+fix/landlord-command-surface-simplification-v1
+
+Recommended scope:
+- Simplify `/decision-inbox` and `/operations` surfaces around landlord-facing "Needs Attention" work.
+- Clarify Dashboard vs Inbox vs Messages responsibilities.
+- Confirm `/messages` Free-tier visibility intent.
+- Reduce duplicate navigation entry points.
+- Hide or simplify overwhelming review/decision/governance language for landlords.
+- Do not begin Phase 5 or RentChain Help Assistant work before Pilot 1 findings are reviewed.
+
+### Summary
+PR #1145 merged after backend parity was corrected and branch policy review requirements were satisfied. Pilot 1 onboarding can resume with Landlord #2 and Landlord #3, with command-surface simplification prepared as the next focused mission.
