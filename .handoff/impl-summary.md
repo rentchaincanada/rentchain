@@ -1,5 +1,5 @@
-PR: #1145
-PR URL: https://github.com/rentchaincanada/rentchain/pull/1145
+PR: #1146
+PR URL: https://github.com/rentchaincanada/rentchain/pull/1146
 Branch: audit/free-tier-journey-v1
 
 WHAT WAS AUDITED:
