@@ -9,6 +9,10 @@ const mocks = vi.hoisted(() => ({
   getLeasesForProperty: vi.fn(),
   getPropertyMonthlyPayments: vi.fn(),
   fetchUnitsForProperty: vi.fn(),
+  addUnitsManual: vi.fn(),
+  patchCreatedUnitOccupancyMetadata: vi.fn(),
+  importUnitsCsv: vi.fn(),
+  previewPropertyUnitsCsv: vi.fn(),
   useCapabilities: vi.fn(),
   useEntitlements: vi.fn(),
   showToast: vi.fn(),
@@ -35,12 +39,14 @@ vi.mock("@/api/paymentsApi", () => ({
 }));
 
 vi.mock("../../api/unitsImportApi", () => ({
-  importUnitsCsv: vi.fn(),
-  previewPropertyUnitsCsv: vi.fn(),
+  importUnitsCsv: mocks.importUnitsCsv,
+  previewPropertyUnitsCsv: mocks.previewPropertyUnitsCsv,
 }));
 
 vi.mock("../../api/unitsApi", () => ({
   fetchUnitsForProperty: mocks.fetchUnitsForProperty,
+  addUnitsManual: mocks.addUnitsManual,
+  patchCreatedUnitOccupancyMetadata: mocks.patchCreatedUnitOccupancyMetadata,
 }));
 
 vi.mock("../ui/ToastProvider", () => ({
@@ -81,7 +87,17 @@ vi.mock("@/components/properties/HalifaxRegistrySubmissionAssistant", () => ({
 }));
 
 vi.mock("./UnitsCsvPreviewModal", () => ({
-  UnitsCsvPreviewModal: () => null,
+  UnitsCsvPreviewModal: ({ open, filename, previewRows = [], issues = [], onConfirm }: any) =>
+    open ? (
+      <div data-testid="units-csv-preview">
+        <div>{filename}</div>
+        <div>{previewRows.length} preview rows</div>
+        <div>{issues.length} issues</div>
+        <button type="button" onClick={onConfirm}>
+          Confirm import
+        </button>
+      </div>
+    ) : null,
 }));
 
 vi.mock("./UnitEditModal", () => ({
@@ -134,7 +150,19 @@ describe("PropertyDetailPanel", () => {
     mocks.getLeasesForProperty.mockResolvedValue({ leases: [], credibilitySummary: null });
     mocks.getPropertyMonthlyPayments.mockResolvedValue({ payments: [], total: 0 });
     mocks.fetchUnitsForProperty.mockResolvedValue([]);
+    mocks.addUnitsManual.mockResolvedValue({
+      ok: true,
+      created: 1,
+      units: [{ id: "unit-created-301", unitNumber: "301", status: "occupied" }],
+    });
+    mocks.patchCreatedUnitOccupancyMetadata.mockImplementation(async (units: any[]) => units);
+    mocks.importUnitsCsv.mockResolvedValue({ created: 1, updated: 0, skipped: 0 });
+    mocks.previewPropertyUnitsCsv.mockResolvedValue({ ok: true, preview: { rows: [], errors: [] } });
     mocks.showToast.mockReset();
+    mocks.addUnitsManual.mockClear();
+    mocks.patchCreatedUnitOccupancyMetadata.mockClear();
+    mocks.importUnitsCsv.mockClear();
+    mocks.previewPropertyUnitsCsv.mockClear();
     mocks.dispatchUpgradePrompt.mockReset();
     mocks.useCapabilities.mockReturnValue({
       caps: { plan: "starter" },
@@ -308,6 +336,74 @@ describe("PropertyDetailPanel", () => {
     expect(within(row).getByText(/Jane Tenant/)).toBeInTheDocument();
     expect(within(row).getByText(/Jun 10, 2027/)).toBeInTheDocument();
     expect(screen.getAllByText("50%").length).toBeGreaterThan(0);
+  });
+
+  it("imports the official occupancy metadata CSV template through the manual save path", async () => {
+    const onRefresh = vi.fn();
+    const { container } = render(
+      <MemoryRouter>
+        <PropertyDetailPanel
+          property={{
+            id: "prop-1",
+            name: "Harbour View",
+            addressLine1: "12 Wharf Street",
+            city: "Halifax",
+            province: "NS",
+            postalCode: "B3H 1A1",
+            country: "Canada",
+            totalUnits: 1,
+            amenities: [],
+            units: [],
+            createdAt: new Date().toISOString(),
+          }}
+          onRefresh={onRefresh}
+        />
+      </MemoryRouter>
+    );
+
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const csv =
+      "unitNumber,marketRent,beds,baths,sqft,status,occupantName,leaseEndDate\n" +
+      "301,2100,2,1.5,850,occupied,Jane Tenant,2027-06-10";
+    const file = new File([csv], "brooklyn template.csv", { type: "text/csv" });
+
+    fireEvent.change(input, { target: { files: [file] } });
+
+    expect(await screen.findByTestId("units-csv-preview")).toHaveTextContent("1 preview rows");
+    expect(mocks.previewPropertyUnitsCsv).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Confirm import" }));
+
+    await waitFor(() => {
+      expect(mocks.addUnitsManual).toHaveBeenCalledWith(
+        "prop-1",
+        [
+          expect.objectContaining({
+            unitNumber: "301",
+            marketRent: 2100,
+            beds: 2,
+            baths: 1.5,
+            sqft: 850,
+            status: "occupied",
+            occupantName: "Jane Tenant",
+            tenantName: "Jane Tenant",
+            leaseEndDate: "2027-06-10",
+          }),
+        ]
+      );
+    });
+    expect(mocks.patchCreatedUnitOccupancyMetadata).toHaveBeenCalledWith(
+      [expect.objectContaining({ id: "unit-created-301", unitNumber: "301" })],
+      [
+        expect.objectContaining({
+          status: "occupied",
+          occupantName: "Jane Tenant",
+          tenantName: "Jane Tenant",
+          leaseEndDate: "2027-06-10",
+        }),
+      ]
+    );
+    expect(mocks.importUnitsCsv).not.toHaveBeenCalled();
+    expect(onRefresh).toHaveBeenCalled();
   });
 
   it("shows manually occupied units when manual occupancy has a current lease end date", async () => {

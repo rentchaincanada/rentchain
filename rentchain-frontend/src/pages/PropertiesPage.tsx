@@ -23,7 +23,13 @@ import { fetchMonthlyOpsSnapshot } from "../api/actionSnapshotApi";
 import { asArray } from "../lib/asArray";
 import { arr, str } from "@/utils/safe";
 import { setOnboardingStep } from "../api/onboardingApi";
-import { addUnitsManual, type AddUnitsManualResponse, type UnitInput, type UnitRecord } from "../api/unitsApi";
+import {
+  addUnitsManual,
+  patchCreatedUnitOccupancyMetadata,
+  type AddUnitsManualResponse,
+  type UnitInput,
+  type UnitRecord,
+} from "../api/unitsApi";
 import { useToast } from "../components/ui/ToastProvider";
 import { unitsForProperty } from "../lib/propertyCounts";
 import { PropertySelector } from "../components/properties/PropertySelector";
@@ -453,7 +459,7 @@ const PropertiesPage: React.FC = () => {
     setUnitModalError(null);
     try {
       const response = await addUnitsManual(activePropertyId, clean);
-      const persistedUnits = resolveCreatedUnits(response, clean);
+      const persistedUnits = await patchCreatedUnitOccupancyMetadata(resolveCreatedUnits(response, clean), clean);
       track("activation_unit_created", {
         surface: "properties_page",
         source: "manual_units_modal",

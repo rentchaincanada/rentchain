@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   fetchPropertiesMock: vi.fn(),
   fetchCountsMock: vi.fn(),
   addUnitsManualMock: vi.fn(),
+  patchCreatedUnitOccupancyMetadataMock: vi.fn(),
   showToastMock: vi.fn(),
   useToastMock: vi.fn(),
   useAuthMock: vi.fn(),
@@ -104,6 +105,7 @@ vi.mock("../api/onboardingApi", () => ({
 
 vi.mock("../api/unitsApi", () => ({
   addUnitsManual: mocks.addUnitsManualMock,
+  patchCreatedUnitOccupancyMetadata: mocks.patchCreatedUnitOccupancyMetadataMock,
 }));
 
 vi.mock("../components/ui/ToastProvider", () => ({
@@ -137,6 +139,7 @@ describe("PropertiesPage", () => {
     mocks.fetchPropertiesMock.mockReset();
     mocks.fetchCountsMock.mockReset();
     mocks.addUnitsManualMock.mockReset();
+    mocks.patchCreatedUnitOccupancyMetadataMock.mockReset();
     mocks.showToastMock.mockReset();
     mocks.useToastMock.mockReset();
     mocks.useAuthMock.mockReset();
@@ -154,6 +157,7 @@ describe("PropertiesPage", () => {
       created: 1,
       units: [{ id: "unit-created-1", unitNumber: "101", beds: 1, baths: 1, sqft: 500, marketRent: 1500, status: "vacant" }],
     });
+    mocks.patchCreatedUnitOccupancyMetadataMock.mockImplementation(async (units: any[]) => units);
     mocks.useToastMock.mockReturnValue({ showToast: mocks.showToastMock });
     mocks.useAuthMock.mockReturnValue({
       user: { id: "user-1", plan: "free", role: "landlord" },
@@ -392,6 +396,25 @@ describe("PropertiesPage", () => {
         ]
       );
     });
+    await waitFor(() => {
+      expect(mocks.patchCreatedUnitOccupancyMetadataMock).toHaveBeenCalledWith(
+        [
+          expect.objectContaining({
+            id: "unit-created-1",
+            unitNumber: "202",
+            status: "occupied",
+          }),
+        ],
+        [
+          expect.objectContaining({
+            status: "occupied",
+            occupantName: "Alice Tenant",
+            tenantName: "Alice Tenant",
+            leaseEndDate: "2027-05-31",
+          }),
+        ]
+      );
+    });
   });
 
   it("keeps the user in property context after guided unit save", async () => {
@@ -473,6 +496,25 @@ describe("PropertiesPage", () => {
             leaseEndDate: "2027-06-10",
           }),
         ])
+      );
+    });
+    await waitFor(() => {
+      expect(mocks.patchCreatedUnitOccupancyMetadataMock).toHaveBeenCalledWith(
+        [
+          expect.objectContaining({
+            id: "unit-created-301",
+            unitNumber: "301",
+            status: "occupied",
+          }),
+        ],
+        [
+          expect.objectContaining({
+            status: "occupied",
+            occupantName: "Jane Tenant",
+            tenantName: "Jane Tenant",
+            leaseEndDate: "2027-06-10",
+          }),
+        ]
       );
     });
     expect(await screen.findByText("unit-created-301:301:2:1.5:occupied:Jane Tenant:2027-06-10")).toBeInTheDocument();

@@ -79,7 +79,7 @@ export function UnitsCsvPreviewModal({
                   <>
                     <thead>
                       <tr>
-                        {["Row", "Status", "Unit", "Rent", "Beds", "Baths", "Sqft"].map((h) => (
+                        {["Row", "Status", "Unit", "Rent", "Beds", "Baths", "Sqft", "Occupancy", "Occupant", "Lease End"].map((h) => (
                           <th
                             key={h}
                             style={{
@@ -126,6 +126,15 @@ export function UnitsCsvPreviewModal({
                           </td>
                           <td style={{ padding: "8px 12px", borderBottom: "1px solid rgba(15,23,42,0.06)" }}>
                             {row.data.sqft ?? ""}
+                          </td>
+                          <td style={{ padding: "8px 12px", borderBottom: "1px solid rgba(15,23,42,0.06)" }}>
+                            {row.data.status ?? ""}
+                          </td>
+                          <td style={{ padding: "8px 12px", borderBottom: "1px solid rgba(15,23,42,0.06)" }}>
+                            {row.data.occupantName || row.data.tenantName || ""}
+                          </td>
+                          <td style={{ padding: "8px 12px", borderBottom: "1px solid rgba(15,23,42,0.06)" }}>
+                            {row.data.leaseEndDate ?? ""}
                           </td>
                         </tr>
                       ))}
