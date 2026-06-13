@@ -6,11 +6,13 @@ export function buildUnitsCsvTemplate() {
     "baths",
     "sqft",
     "status",
+    "occupantName",
+    "leaseEndDate",
   ];
 
   const exampleRows = [
-    ["101", "1850", "1", "1", "610", "vacant"],
-    ["102", "1650", "0", "1", "450", "occupied"],
+    ["101", "1850", "1", "1", "610", "vacant", "", ""],
+    ["102", "1650", "0", "1", "450", "occupied", "Jane Tenant", "2027-06-10"],
   ];
 
   const lines = [

@@ -8,6 +8,7 @@ export type UnitInput = {
   marketRent?: number;
   status?: "vacant" | "occupied";
   occupantName?: string | null;
+  tenantName?: string | null;
   leaseEndDate?: string | null;
 };
 

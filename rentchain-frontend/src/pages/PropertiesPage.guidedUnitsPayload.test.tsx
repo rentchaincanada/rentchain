@@ -211,6 +211,7 @@ describe("PropertiesPage guided unit payload", () => {
                 unitNumber: "202",
                 status: "occupied",
                 occupantName: "Alice Tenant",
+                tenantName: "Alice Tenant",
                 leaseEndDate: "2027-05-31",
               }),
             ],

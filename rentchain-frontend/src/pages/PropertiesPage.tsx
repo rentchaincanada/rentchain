@@ -63,12 +63,24 @@ function resolveCreatedUnits(response: AddUnitsManualResponse | undefined, reque
       (err as any).code = "UNIT_ID_UNRESOLVED";
       throw err;
     }
-    return {
+    const requestedOccupantName = String(requestedUnit.occupantName || requestedUnit.tenantName || "").trim();
+    const returnedOccupantName = String(returnedUnit?.occupantName || returnedUnit?.tenantName || "").trim();
+    const requestedLeaseEndDate = String(requestedUnit.leaseEndDate || "").trim();
+    const returnedLeaseEndDate = String(returnedUnit?.leaseEndDate || "").trim();
+    const mergedUnit = {
       ...requestedUnit,
       ...returnedUnit,
       id,
       unitNumber: String(returnedUnit?.unitNumber || requestedUnit.unitNumber || "").trim(),
     };
+    if (!returnedOccupantName && requestedOccupantName) {
+      mergedUnit.occupantName = requestedOccupantName;
+      mergedUnit.tenantName = requestedOccupantName;
+    }
+    if (!returnedLeaseEndDate && requestedLeaseEndDate) {
+      mergedUnit.leaseEndDate = requestedLeaseEndDate;
+    }
+    return mergedUnit;
   });
 }
 
@@ -119,6 +131,8 @@ function normalizeUnitDraftsForSubmit(units: UnitInput[]) {
   const normalized = units
     .map((u) => {
       const status = u.status === "occupied" ? "occupied" : "vacant";
+      const occupantName = status === "occupied" ? String(u.occupantName || u.tenantName || "").trim() || null : null;
+      const leaseEndDate = status === "occupied" ? String(u.leaseEndDate || "").trim() || null : null;
       const unit: UnitInput = {
         unitNumber: String(u.unitNumber || "").trim(),
         beds: Number(u.beds),
@@ -126,8 +140,9 @@ function normalizeUnitDraftsForSubmit(units: UnitInput[]) {
         sqft: Number(u.sqft),
         marketRent: Number(u.marketRent),
         status,
-        occupantName: status === "occupied" ? String(u.occupantName || "").trim() || null : null,
-        leaseEndDate: status === "occupied" ? String(u.leaseEndDate || "").trim() || null : null,
+        occupantName,
+        tenantName: occupantName,
+        leaseEndDate,
       };
       return unit;
     })
@@ -424,19 +439,6 @@ const PropertiesPage: React.FC = () => {
     navigate({ pathname: location.pathname, search: next.toString() }, { replace: true });
   };
 
-  const handleManualUnitsComplete = async () => {
-    try {
-      await setOnboardingStep("unitAdded", true);
-    } catch {
-      // ignore
-    }
-    showToast({
-      message: "Unit saved",
-      variant: "success",
-    });
-    navigate("/dashboard?onboarding=ready", { replace: true });
-  };
-
   const handleSaveUnits = async (unitsOverride?: UnitInput[]) => {
     if (!activePropertyId) return;
     const { units: clean, error } = normalizeUnitDraftsForSubmit(unitsOverride || draftUnits);
@@ -477,9 +479,6 @@ const PropertiesPage: React.FC = () => {
       });
       setUnitModalError(null);
       setIsUnitsModalOpen(false);
-      if (source === "guided") {
-        navigate("/dashboard?onboarding=ready", { replace: true });
-      }
     } catch (e: any) {
       setUnitModalError(unitSaveErrorMessage(e));
       showToast({

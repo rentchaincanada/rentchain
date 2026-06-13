@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import PropertiesPage from "./PropertiesPage";
 
@@ -125,6 +125,11 @@ vi.mock("../utils/printSummary", () => ({
 vi.mock("../lib/analytics", () => ({
   track: vi.fn(),
 }));
+
+const LocationProbe = () => {
+  const location = useLocation();
+  return <div data-testid="current-route">{`${location.pathname}${location.search}`}</div>;
+};
 
 describe("PropertiesPage", () => {
   beforeEach(() => {
@@ -381,11 +386,39 @@ describe("PropertiesPage", () => {
             marketRent: 1800,
             status: "occupied",
             occupantName: "Alice Tenant",
+            tenantName: "Alice Tenant",
             leaseEndDate: "2027-05-31",
           }),
         ]
       );
     });
+  });
+
+  it("keeps the user in property context after guided unit save", async () => {
+    mocks.fetchPropertiesMock
+      .mockResolvedValueOnce({ items: [] })
+      .mockResolvedValue({ items: [{ id: "prop-created", name: "Created Property", units: [{ id: "unit-created-1", unitNumber: "101" }] }] });
+
+    render(
+      <MemoryRouter initialEntries={["/properties"]}>
+        <LocationProbe />
+        <PropertiesPage />
+      </MemoryRouter>
+    );
+
+    const setupButtons = await screen.findAllByRole("button", {
+      name: "Complete property setup",
+    });
+    fireEvent.click(setupButtons[0]);
+    fireEvent.click(await screen.findByRole("button", { name: "Add a unit" }));
+    fireEvent.change(screen.getByLabelText("Unit number 1"), { target: { value: "101" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save units" }));
+
+    await waitFor(() => {
+      expect(mocks.addUnitsManualMock).toHaveBeenCalled();
+    });
+    expect(screen.getByTestId("current-route")).toHaveTextContent(/^\/properties/);
+    expect(screen.getByTestId("current-route")).not.toHaveTextContent("/dashboard");
   });
 
   it("opens the manual unit modal from the property table add units action and preserves occupied unit metadata", async () => {
@@ -436,6 +469,7 @@ describe("PropertiesPage", () => {
             baths: 1.5,
             status: "occupied",
             occupantName: "Jane Tenant",
+            tenantName: "Jane Tenant",
             leaseEndDate: "2027-06-10",
           }),
         ])
