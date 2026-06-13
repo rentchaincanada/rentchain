@@ -1,5 +1,5 @@
-PR: #TBD
-PR URL: TBD
+PR: #1147
+PR URL: https://github.com/rentchaincanada/rentchain/pull/1147
 Branch: fix/free-tier-landlord-experience-v1
 
 WHAT WAS DONE:
@@ -22,7 +22,7 @@ KEY DECISIONS:
 
 CURRENT STATE:
 - Branch: fix/free-tier-landlord-experience-v1
-- PR: pending
+- PR: #1147
 - Source changes are frontend-only.
 - Handoff-only local files outside this mission were not staged.
 
