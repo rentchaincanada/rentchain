@@ -184,6 +184,19 @@ function buildUnitOccupancyView(unit: any, occupancy: UnitOccupancy) {
   };
 }
 
+function applySavedUnitOccupancy(unit: any, occupancy: UnitOccupancy): UnitOccupancy {
+  if (occupancy.status !== "vacant") return occupancy;
+  const savedStatus = String(unit?.occupancyStatus || unit?.status || "").trim().toLowerCase();
+  if (savedStatus === "occupied" || savedStatus === "leased" || savedStatus === "rented") {
+    return {
+      status: "occupied",
+      label: "Occupied",
+      lease: null,
+    };
+  }
+  return occupancy;
+}
+
 function unitOccupancyTone(status: UnitOccupancyStatus) {
   if (status === "occupied") {
     return { background: "rgba(34,197,94,0.1)", color: "#166534", dot: "#22c55e" };
@@ -753,7 +766,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
   const collectionRate =
     currentOccupiedRentTotal > 0 ? totalCollectedThisMonth / currentOccupiedRentTotal : 0;
   const getUnitOccupancy = useCallback(
-    (unit: any) => deriveUnitOccupancyFromLeases(unit, leases),
+    (unit: any) => applySavedUnitOccupancy(unit, deriveUnitOccupancyFromLeases(unit, leases)),
     [leases]
   );
   const getUnitOccupancyView = useCallback(

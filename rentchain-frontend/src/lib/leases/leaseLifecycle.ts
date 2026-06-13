@@ -230,9 +230,19 @@ function leaseIdentifiers(lease: LeaseLike): string[] {
   );
 }
 
-function hasManualCurrentOccupancy(unit: UnitLike): boolean {
+function hasManualOccupant(unit: UnitLike): boolean {
+  if (String(unit.occupantName || unit.tenantName || "").trim()) return true;
+  return Array.isArray(unit.occupants) && unit.occupants.some((occupant) => String(occupant || "").trim());
+}
+
+function hasCurrentManualLeaseEnd(unit: UnitLike, today: string | number | Date): boolean {
+  const endDay = toDay(unit.leaseEndDate ?? unit.leaseEnd);
+  return endDay != null && endDay >= todayDay(today);
+}
+
+function hasManualCurrentOccupancy(unit: UnitLike, today: string | number | Date): boolean {
   const status = normalize(unit.occupancyStatus || unit.status);
-  return status === "occupied";
+  return status === "occupied" && hasManualOccupant(unit) && hasCurrentManualLeaseEnd(unit, today);
 }
 
 function hasUnitArchivedSignal(unit: UnitLike): boolean {
