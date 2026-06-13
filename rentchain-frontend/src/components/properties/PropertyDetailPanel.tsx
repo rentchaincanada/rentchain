@@ -21,8 +21,15 @@ import {
   type UnitCsvIssue,
   type UnitCsvPreviewRow,
 } from "../../api/unitsImportApi";
-import { fetchUnitsForProperty } from "../../api/unitsApi";
+import {
+  addUnitsManual,
+  fetchUnitsForProperty,
+  patchCreatedUnitOccupancyMetadata,
+  type UnitInput,
+  type UnitRecord,
+} from "../../api/unitsApi";
 import { buildUnitsCsvTemplate, downloadTextFile } from "../../utils/csvTemplates";
+import { csvUsesOccupancyMetadataHeaders, parseUnitsCsvForManualImport } from "../../utils/csvPreview";
 import { UnitsCsvPreviewModal } from "./UnitsCsvPreviewModal";
 import { UnitEditModal } from "./UnitEditModal";
 import { SendApplicationModal } from "./SendApplicationModal";
@@ -57,6 +64,7 @@ interface PropertyDetailPanelProps {
   onSendApplicationOpened?: () => void;
   highlightUnitId?: string | null;
   onOpenLeasePack?: () => void;
+  onAddUnits?: () => void;
 }
 
 import { safeLocaleNumber } from "@/utils/format";
@@ -183,6 +191,19 @@ function buildUnitOccupancyView(unit: any, occupancy: UnitOccupancy) {
   };
 }
 
+function applySavedUnitOccupancy(unit: any, occupancy: UnitOccupancy): UnitOccupancy {
+  if (occupancy.status !== "vacant") return occupancy;
+  const savedStatus = String(unit?.occupancyStatus || unit?.status || "").trim().toLowerCase();
+  if (savedStatus === "occupied" || savedStatus === "leased" || savedStatus === "rented") {
+    return {
+      status: "occupied",
+      label: "Occupied",
+      lease: null,
+    };
+  }
+  return occupancy;
+}
+
 function unitOccupancyTone(status: UnitOccupancyStatus) {
   if (status === "occupied") {
     return { background: "rgba(34,197,94,0.1)", color: "#166534", dot: "#22c55e" };
@@ -239,6 +260,35 @@ function isPersistedUnitId(unit: any) {
   return Boolean(id) && !/^placeholder-/i.test(id);
 }
 
+function resolveCreatedCsvUnits(response: any, requestedUnits: UnitInput[]): UnitRecord[] {
+  const returnedUnits = Array.isArray(response?.units)
+    ? response.units
+    : Array.isArray(response?.items)
+    ? response.items
+    : [];
+  if (returnedUnits.length < requestedUnits.length) {
+    const err = new Error("Saved units were not returned with stable IDs. Please try again.");
+    (err as any).code = "UNIT_ID_UNRESOLVED";
+    throw err;
+  }
+
+  return requestedUnits.map((requestedUnit, index) => {
+    const returnedUnit = returnedUnits[index] as UnitRecord | undefined;
+    const id = String(returnedUnit?.id || returnedUnit?.unitId || returnedUnit?.uid || "").trim();
+    if (!id || /^placeholder-/i.test(id)) {
+      const err = new Error("Saved units were not returned with stable IDs. Please try again.");
+      (err as any).code = "UNIT_ID_UNRESOLVED";
+      throw err;
+    }
+    return {
+      ...requestedUnit,
+      ...returnedUnit,
+      id,
+      unitNumber: String(returnedUnit?.unitNumber || requestedUnit.unitNumber || "").trim(),
+    };
+  });
+}
+
 export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
   property,
   onRefresh,
@@ -248,6 +298,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
   onSendApplicationOpened,
   highlightUnitId = null,
   onOpenLeasePack,
+  onAddUnits,
 }) => {
   const propertyId = property?.id;
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -283,6 +334,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
   const [previewRows, setPreviewRows] = useState<string[][]>([]);
   const [unitCsvPreviewRows, setUnitCsvPreviewRows] = useState<UnitCsvPreviewRow[]>([]);
   const [unitCsvIssues, setUnitCsvIssues] = useState<UnitCsvIssue[]>([]);
+  const [localCsvUnits, setLocalCsvUnits] = useState<UnitInput[] | null>(null);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [pendingFilename, setPendingFilename] = useState<string>("");
   const [units, setUnits] = useState<any[]>([]);
@@ -374,22 +426,44 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
         });
         return;
       }
-      const idempotencyKey = `${property.id}:${pendingFile.name}:${pendingFile.size}:${pendingFile.lastModified}`;
-      const result = await importUnitsCsv(property.id, csvText, "partial", idempotencyKey);
-      const created = result?.createdCount ?? result?.created ?? result?.imported ?? result?.summary?.insertable ?? 0;
-      const updated = result?.updatedCount ?? result?.updated ?? 0;
-      const skipped =
-        result?.skippedCount ??
-        result?.skipped ??
-        ((result?.summary?.invalid ?? 0) +
-          (result?.summary?.duplicatesInCsv ?? 0) +
-          (result?.summary?.conflicts ?? 0)) ??
-        0;
-      const errCount = Array.isArray(result?.issues)
-        ? result.issues.length
-        : Array.isArray(result?.errors)
-        ? result.errors.length
-        : 0;
+      let result: any = null;
+      let created = 0;
+      let updated = 0;
+      let skipped = 0;
+      let errCount = 0;
+
+      if (localCsvUnits) {
+        if (localCsvUnits.length === 0) {
+          throw new Error("No valid units found in CSV.");
+        }
+        const response = await addUnitsManual(property.id, localCsvUnits);
+        const createdUnits = resolveCreatedCsvUnits(response, localCsvUnits);
+        await patchCreatedUnitOccupancyMetadata(createdUnits, localCsvUnits);
+        created = createdUnits.length;
+        skipped = unitCsvIssues.length;
+        errCount = unitCsvIssues.length;
+        result = {
+          message: `Created ${created} | Updated ${updated} | Skipped ${skipped}`,
+        };
+      } else {
+        const idempotencyKey = `${property.id}:${pendingFile.name}:${pendingFile.size}:${pendingFile.lastModified}`;
+        result = await importUnitsCsv(property.id, csvText, "partial", idempotencyKey);
+        created = result?.createdCount ?? result?.created ?? result?.imported ?? result?.summary?.insertable ?? 0;
+        updated = result?.updatedCount ?? result?.updated ?? 0;
+        skipped =
+          result?.skippedCount ??
+          result?.skipped ??
+          ((result?.summary?.invalid ?? 0) +
+            (result?.summary?.duplicatesInCsv ?? 0) +
+            (result?.summary?.conflicts ?? 0)) ??
+          0;
+        errCount = Array.isArray(result?.issues)
+          ? result.issues.length
+          : Array.isArray(result?.errors)
+          ? result.errors.length
+          : 0;
+      }
+
       showToast({
         message: "Units imported",
         description: `Created ${created} | Updated ${updated} | Skipped ${skipped}${
@@ -402,6 +476,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
       setPendingFilename("");
       setUnitCsvPreviewRows([]);
       setUnitCsvIssues([]);
+      setLocalCsvUnits(null);
       setImportMessage(
         result?.message ||
           `Created ${created} | Updated ${updated} | Skipped ${skipped}${
@@ -446,7 +521,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
     } finally {
       setIsImporting(false);
     }
-  }, [navigate, onRefresh, pendingFile, property?.id, readFileText, showToast]);
+  }, [currentPlan, localCsvUnits, onRefresh, pendingFile, property?.id, readFileText, showToast, unitCsvIssues.length]);
 
   const handleSendApplication = useCallback(
     (u: any) => {
@@ -751,7 +826,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
   const collectionRate =
     currentOccupiedRentTotal > 0 ? totalCollectedThisMonth / currentOccupiedRentTotal : 0;
   const getUnitOccupancy = useCallback(
-    (unit: any) => deriveUnitOccupancyFromLeases(unit, leases),
+    (unit: any) => applySavedUnitOccupancy(unit, deriveUnitOccupancyFromLeases(unit, leases)),
     [leases]
   );
   const getUnitOccupancyView = useCallback(
@@ -1110,20 +1185,20 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
               <>
                 <button
                   type="button"
-                  title="Use Upload CSV to add units"
+                  title="Add units manually"
                   onClick={() => {
                     setImportMessage(null);
-                    fileInputRef.current?.click();
+                    onAddUnits?.();
                   }}
-                  disabled={!property}
+                  disabled={!property || !onAddUnits}
                   className="rc-units-action"
                   style={{
                     padding: "6px 10px",
                     borderRadius: 10,
                     border: "1px solid rgba(15,23,42,0.12)",
                     background: "#fff",
-                    color: "#111827",
-                    cursor: "pointer",
+                    color: property && onAddUnits ? "#111827" : "#6b7280",
+                    cursor: property && onAddUnits ? "pointer" : "not-allowed",
                   }}
                 >
                   Add units
@@ -1178,15 +1253,26 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                     if (!file || !property) return;
                     try {
                       const text = await readFileText(file);
-                      const preview = await previewPropertyUnitsCsv(property.id, text);
+                      const localPreview = parseUnitsCsvForManualImport(text);
                       setPendingFile(file);
                       setPendingFilename(file.name);
-                      setPreviewHeaders(preview.headers?.expected || []);
-                      setPreviewRows([]);
-                      setUnitCsvPreviewRows(preview.preview?.rows || preview.rows || []);
-                      setUnitCsvIssues(preview.preview?.errors || preview.issues || []);
+                      if (csvUsesOccupancyMetadataHeaders(localPreview.headers)) {
+                        setPreviewHeaders(localPreview.headers);
+                        setPreviewRows(localPreview.rows);
+                        setUnitCsvPreviewRows(localPreview.previewRows);
+                        setUnitCsvIssues(localPreview.issues);
+                        setLocalCsvUnits(localPreview.units);
+                      } else {
+                        const preview = await previewPropertyUnitsCsv(property.id, text);
+                        setPreviewHeaders(preview.headers?.expected || []);
+                        setPreviewRows([]);
+                        setUnitCsvPreviewRows(preview.preview?.rows || preview.rows || []);
+                        setUnitCsvIssues(preview.preview?.errors || preview.issues || []);
+                        setLocalCsvUnits(null);
+                      }
                       setPreviewOpen(true);
                     } catch (err: any) {
+                      setLocalCsvUnits(null);
                       showToast({
                         message: "Failed to preview CSV file",
                         description: err?.response?.data?.error || err?.message,
@@ -1685,12 +1771,12 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                       ? formatCurrency(Number(rentVal) || 0)
                       : "--";
                   const bedsDisplay =
-                    (u as any).bedrooms ?? (u as any).bedrooms === 0
-                      ? (u as any).bedrooms
+                    bedsVal ?? bedsVal === 0
+                      ? bedsVal
                       : "-";
                   const bathsDisplay =
-                    (u as any).bathrooms ?? (u as any).bathrooms === 0
-                      ? (u as any).bathrooms
+                    bathsVal ?? bathsVal === 0
+                      ? bathsVal
                       : "-";
                   const sqftDisplay =
                     sqftVal ?? sqftVal === 0
@@ -1873,12 +1959,12 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                 ? formatCurrency(Number(rentVal) || 0)
                 : "--";
             const bedsDisplay =
-              (u as any).bedrooms ?? (u as any).bedrooms === 0
-                ? (u as any).bedrooms
+              bedsVal ?? bedsVal === 0
+                ? bedsVal
                 : "-";
             const bathsDisplay =
-              (u as any).bathrooms ?? (u as any).bathrooms === 0
-                ? (u as any).bathrooms
+              bathsVal ?? bathsVal === 0
+                ? bathsVal
                 : "-";
             const sqftDisplay =
               sqftVal ?? sqftVal === 0
@@ -2314,6 +2400,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
           setPendingFilename("");
           setUnitCsvPreviewRows([]);
           setUnitCsvIssues([]);
+          setLocalCsvUnits(null);
         }}
         onConfirm={confirmImport}
         filename={pendingFilename}

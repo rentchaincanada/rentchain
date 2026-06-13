@@ -7,6 +7,8 @@ export const UnitCsvRowSchema = z.object({
   bathrooms: z.coerce.number().min(0).max(10).optional(),
   sqft: z.coerce.number().int().nonnegative().optional(),
   status: z.enum(["vacant", "occupied"]).optional(),
+  occupantName: z.string().optional(),
+  leaseEndDate: z.string().optional(),
 });
 
 export type UnitCsvRow = z.infer<typeof UnitCsvRowSchema>;
@@ -27,6 +29,8 @@ export type ManualUnitValidationResult = {
     bathrooms: number | null;
     sqft: number | null;
     status: "vacant" | "occupied" | null;
+    occupantName: string | null;
+    leaseEndDate: string | null;
   }>;
   issues: ManualUnitValidationIssue[];
 };
@@ -67,6 +71,18 @@ export const UNIT_CSV_FIELD_MAP = [
     canonicalHeader: "status",
     required: false,
     aliases: ["status", "occupancy", "occupancy status"],
+  },
+  {
+    field: "occupantName",
+    canonicalHeader: "occupantName",
+    required: false,
+    aliases: ["occupantname", "occupant name", "tenantname", "tenant name", "tenant", "resident", "resident name"],
+  },
+  {
+    field: "leaseEndDate",
+    canonicalHeader: "leaseEndDate",
+    required: false,
+    aliases: ["leaseenddate", "lease end date", "leaseend", "lease end", "enddate", "end date"],
   },
 ] as const;
 
@@ -125,6 +141,12 @@ function hasManualUnitValue(unit: any) {
     unit.sqft,
     unit.squareFeet,
     unit.status,
+    unit.occupancyStatus,
+    unit.occupantName,
+    unit.tenantName,
+    unit.leaseEndDate,
+    unit.endDate,
+    unit.leaseEnd,
   ];
   return values.some((value) => {
     if (value === undefined || value === null) return false;
@@ -211,7 +233,9 @@ export function validateManualUnitInputs(units: any[]): ManualUnitValidationResu
       bedrooms: coerceOptionalNumber(unit?.beds ?? unit?.bedrooms),
       bathrooms: coerceOptionalNumber(unit?.baths ?? unit?.bathrooms),
       sqft: coerceOptionalNumber(unit?.sqft ?? unit?.squareFeet),
-      status: normalizeStatus(unit?.status),
+      status: normalizeStatus(unit?.status ?? unit?.occupancyStatus),
+      occupantName: cleanCell(unit?.occupantName ?? unit?.tenantName),
+      leaseEndDate: cleanCell(unit?.leaseEndDate ?? unit?.endDate ?? unit?.leaseEnd),
     };
 
     const unitNumberMissing = mapped.unitNumber === undefined;
@@ -257,6 +281,8 @@ export function validateManualUnitInputs(units: any[]): ManualUnitValidationResu
       bathrooms: parsed.data.bathrooms ?? null,
       sqft: parsed.data.sqft ?? null,
       status: parsed.data.status ?? null,
+      occupantName: parsed.data.status === "occupied" ? parsed.data.occupantName?.trim() || null : null,
+      leaseEndDate: parsed.data.status === "occupied" ? parsed.data.leaseEndDate?.trim() || null : null,
     });
   });
 

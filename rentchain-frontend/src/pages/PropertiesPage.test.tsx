@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import PropertiesPage from "./PropertiesPage";
 
@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   fetchPropertiesMock: vi.fn(),
   fetchCountsMock: vi.fn(),
   addUnitsManualMock: vi.fn(),
+  patchCreatedUnitOccupancyMetadataMock: vi.fn(),
   showToastMock: vi.fn(),
   useToastMock: vi.fn(),
   useAuthMock: vi.fn(),
@@ -49,11 +50,16 @@ vi.mock("../components/property/PropertyActivityPanel", () => ({
 }));
 
 vi.mock("../components/properties/PropertyDetailPanel", () => ({
-  PropertyDetailPanel: ({ property }: any) => (
+  PropertyDetailPanel: ({ property, onAddUnits }: any) => (
     <div>
       <div>Detail</div>
+      <button type="button" data-testid={`property-table-add-units-${property?.id || "none"}`} onClick={onAddUnits}>
+        Property table Add units
+      </button>
       {(property?.units || []).map((unit: any) => (
-        <div key={String(unit?.id || unit?.unitNumber)}>{`${unit?.id}:${unit?.unitNumber}`}</div>
+        <div key={String(unit?.id || unit?.unitNumber)}>
+          {`${unit?.id}:${unit?.unitNumber}:${unit?.beds ?? unit?.bedrooms ?? ""}:${unit?.baths ?? unit?.bathrooms ?? ""}:${unit?.status ?? unit?.occupancyStatus ?? ""}:${unit?.occupantName ?? unit?.tenantName ?? ""}:${unit?.leaseEndDate ?? ""}`}
+        </div>
       ))}
     </div>
   ),
@@ -99,6 +105,7 @@ vi.mock("../api/onboardingApi", () => ({
 
 vi.mock("../api/unitsApi", () => ({
   addUnitsManual: mocks.addUnitsManualMock,
+  patchCreatedUnitOccupancyMetadata: mocks.patchCreatedUnitOccupancyMetadataMock,
 }));
 
 vi.mock("../components/ui/ToastProvider", () => ({
@@ -121,11 +128,18 @@ vi.mock("../lib/analytics", () => ({
   track: vi.fn(),
 }));
 
+const LocationProbe = () => {
+  const location = useLocation();
+  return <div data-testid="current-route">{`${location.pathname}${location.search}`}</div>;
+};
+
 describe("PropertiesPage", () => {
   beforeEach(() => {
+    cleanup();
     mocks.fetchPropertiesMock.mockReset();
     mocks.fetchCountsMock.mockReset();
     mocks.addUnitsManualMock.mockReset();
+    mocks.patchCreatedUnitOccupancyMetadataMock.mockReset();
     mocks.showToastMock.mockReset();
     mocks.useToastMock.mockReset();
     mocks.useAuthMock.mockReset();
@@ -143,6 +157,7 @@ describe("PropertiesPage", () => {
       created: 1,
       units: [{ id: "unit-created-1", unitNumber: "101", beds: 1, baths: 1, sqft: 500, marketRent: 1500, status: "vacant" }],
     });
+    mocks.patchCreatedUnitOccupancyMetadataMock.mockImplementation(async (units: any[]) => units);
     mocks.useToastMock.mockReturnValue({ showToast: mocks.showToastMock });
     mocks.useAuthMock.mockReturnValue({
       user: { id: "user-1", plan: "free", role: "landlord" },
@@ -154,6 +169,20 @@ describe("PropertiesPage", () => {
     });
     mocks.printSummaryDocumentMock.mockResolvedValue(undefined);
   });
+
+  const openGuidedUnitModal = async () => {
+    render(
+      <MemoryRouter>
+        <PropertiesPage />
+      </MemoryRouter>
+    );
+
+    const setupButtons = await screen.findAllByRole("button", {
+      name: "Complete property setup",
+    });
+    fireEvent.click(setupButtons[0]);
+    fireEvent.click(await screen.findByRole("button", { name: "Add a unit" }));
+  };
 
   it("renders active and archived property filters", async () => {
     render(
@@ -287,10 +316,115 @@ describe("PropertiesPage", () => {
   });
 
   it("stores created units with persisted IDs from the save response", async () => {
-    mocks.fetchPropertiesMock.mockResolvedValue({ items: [] });
+    mocks.fetchPropertiesMock
+      .mockResolvedValueOnce({ items: [] })
+      .mockResolvedValue({ items: [{ id: "prop-created", name: "Created Property", units: [{ id: "unit-created-1", unitNumber: "101" }] }] });
+
+    await openGuidedUnitModal();
+
+    fireEvent.change(screen.getByLabelText("Unit number 1"), { target: { value: "101" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save units" }));
+
+    await waitFor(() => {
+      expect(mocks.addUnitsManualMock).toHaveBeenCalledWith(
+        "prop-created",
+        expect.arrayContaining([
+          expect.objectContaining({
+            unitNumber: "101",
+            status: "vacant",
+            occupantName: null,
+            leaseEndDate: null,
+          }),
+        ])
+      );
+    });
+    const submitted = mocks.addUnitsManualMock.mock.calls[0][1][0];
+    expect(submitted).not.toHaveProperty("id");
+    expect(submitted).not.toHaveProperty("unitId");
+    expect(submitted).not.toHaveProperty("uid");
+    expect(await screen.findByText("unit-created-1:101:1:1:vacant::")).toBeInTheDocument();
+  });
+
+  it("submits occupied status and tenant details from the guided unit modal", async () => {
+    mocks.fetchPropertiesMock
+      .mockResolvedValueOnce({ items: [] })
+      .mockResolvedValue({ items: [{ id: "prop-created", name: "Created Property", units: [{ id: "unit-created-1", unitNumber: "202" }] }] });
+    mocks.addUnitsManualMock.mockResolvedValue({
+      ok: true,
+      created: 1,
+      units: [
+        {
+          id: "unit-created-1",
+          unitNumber: "202",
+          beds: 2,
+          baths: 1,
+          sqft: 700,
+          marketRent: 1800,
+          status: "occupied",
+          occupantName: "Alice Tenant",
+          leaseEndDate: "2027-05-31",
+        },
+      ],
+    });
+
+    await openGuidedUnitModal();
+
+    fireEvent.change(screen.getByLabelText("Unit number 1"), { target: { value: "202" } });
+    fireEvent.change(screen.getByLabelText("Beds 1"), { target: { value: "2" } });
+    fireEvent.change(screen.getByLabelText("Square footage 1"), { target: { value: "700" } });
+    fireEvent.change(screen.getByLabelText("Market rent 1"), { target: { value: "1800" } });
+    fireEvent.change(screen.getByLabelText("Status 1"), { target: { value: "occupied" } });
+    expect(screen.getByLabelText("Status 1")).toHaveValue("occupied");
+    fireEvent.change(screen.getByLabelText("Occupant name 1"), { target: { value: "Alice Tenant" } });
+    fireEvent.change(screen.getByLabelText("Lease end date 1"), { target: { value: "2027-05-31" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save units" }));
+
+    await waitFor(() => {
+      expect(mocks.addUnitsManualMock).toHaveBeenCalledWith(
+        "prop-created",
+        [
+          expect.objectContaining({
+            unitNumber: "202",
+            beds: 2,
+            sqft: 700,
+            marketRent: 1800,
+            status: "occupied",
+            occupantName: "Alice Tenant",
+            tenantName: "Alice Tenant",
+            leaseEndDate: "2027-05-31",
+          }),
+        ]
+      );
+    });
+    await waitFor(() => {
+      expect(mocks.patchCreatedUnitOccupancyMetadataMock).toHaveBeenCalledWith(
+        [
+          expect.objectContaining({
+            id: "unit-created-1",
+            unitNumber: "202",
+            status: "occupied",
+          }),
+        ],
+        [
+          expect.objectContaining({
+            status: "occupied",
+            occupantName: "Alice Tenant",
+            tenantName: "Alice Tenant",
+            leaseEndDate: "2027-05-31",
+          }),
+        ]
+      );
+    });
+  });
+
+  it("keeps the user in property context after guided unit save", async () => {
+    mocks.fetchPropertiesMock
+      .mockResolvedValueOnce({ items: [] })
+      .mockResolvedValue({ items: [{ id: "prop-created", name: "Created Property", units: [{ id: "unit-created-1", unitNumber: "101" }] }] });
 
     render(
-      <MemoryRouter>
+      <MemoryRouter initialEntries={["/properties"]}>
+        <LocationProbe />
         <PropertiesPage />
       </MemoryRouter>
     );
@@ -300,34 +434,117 @@ describe("PropertiesPage", () => {
     });
     fireEvent.click(setupButtons[0]);
     fireEvent.click(await screen.findByRole("button", { name: "Add a unit" }));
-    fireEvent.change(screen.getAllByRole("textbox")[0], { target: { value: "101" } });
+    fireEvent.change(screen.getByLabelText("Unit number 1"), { target: { value: "101" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save units" }));
+
+    await waitFor(() => {
+      expect(mocks.addUnitsManualMock).toHaveBeenCalled();
+    });
+    expect(screen.getByTestId("current-route")).toHaveTextContent(/^\/properties/);
+    expect(screen.getByTestId("current-route")).not.toHaveTextContent("/dashboard");
+  });
+
+  it("opens the manual unit modal from the property table add units action and preserves occupied unit metadata", async () => {
+    mocks.addUnitsManualMock.mockResolvedValue({
+      ok: true,
+      created: 1,
+      units: [
+        {
+          id: "unit-created-301",
+          unitNumber: "301",
+          beds: 2,
+          baths: 1.5,
+          sqft: 850,
+          marketRent: 2100,
+          status: "occupied",
+          occupantName: "Jane Tenant",
+          leaseEndDate: "2027-06-10",
+        },
+      ],
+    });
+
+    render(
+      <MemoryRouter>
+        <PropertiesPage />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByTestId("property-table-add-units-prop-1"));
+    expect(await screen.findByText("Add Units")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Unit number 1"), { target: { value: "301" } });
+    fireEvent.change(screen.getByLabelText("Beds 1"), { target: { value: "2" } });
+    fireEvent.change(screen.getByLabelText("Baths 1"), { target: { value: "1.5" } });
+    fireEvent.change(screen.getByLabelText("Square footage 1"), { target: { value: "850" } });
+    fireEvent.change(screen.getByLabelText("Market rent 1"), { target: { value: "2100" } });
+    fireEvent.change(screen.getByLabelText("Status 1"), { target: { value: "occupied" } });
+    fireEvent.change(screen.getByLabelText("Occupant name 1"), { target: { value: "Jane Tenant" } });
+    fireEvent.change(screen.getByLabelText("Lease end date 1"), { target: { value: "2027-06-10" } });
     fireEvent.click(screen.getByRole("button", { name: "Save units" }));
 
     await waitFor(() => {
       expect(mocks.addUnitsManualMock).toHaveBeenCalledWith(
-        "prop-created",
-        expect.arrayContaining([expect.objectContaining({ unitNumber: "101" })])
+        "prop-1",
+        expect.arrayContaining([
+          expect.objectContaining({
+            unitNumber: "301",
+            beds: 2,
+            baths: 1.5,
+            status: "occupied",
+            occupantName: "Jane Tenant",
+            tenantName: "Jane Tenant",
+            leaseEndDate: "2027-06-10",
+          }),
+        ])
       );
     });
-    expect(await screen.findByText("unit-created-1:101")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(mocks.patchCreatedUnitOccupancyMetadataMock).toHaveBeenCalledWith(
+        [
+          expect.objectContaining({
+            id: "unit-created-301",
+            unitNumber: "301",
+            status: "occupied",
+          }),
+        ],
+        [
+          expect.objectContaining({
+            status: "occupied",
+            occupantName: "Jane Tenant",
+            tenantName: "Jane Tenant",
+            leaseEndDate: "2027-06-10",
+          }),
+        ]
+      );
+    });
+    expect(await screen.findByText("unit-created-301:301:2:1.5:occupied:Jane Tenant:2027-06-10")).toBeInTheDocument();
+    expect(mocks.showToastMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: "Unit saved",
+        variant: "success",
+      })
+    );
+  });
+
+  it("keeps the guided unit modal open with inline validation when no unit is provided", async () => {
+    mocks.fetchPropertiesMock.mockResolvedValue({ items: [] });
+
+    await openGuidedUnitModal();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save units" }));
+
+    expect(mocks.addUnitsManualMock).not.toHaveBeenCalled();
+    expect(await screen.findByRole("alert")).toHaveTextContent("Add at least one unit number before saving.");
+    expect(screen.getByText("Add Units")).toBeInTheDocument();
   });
 
   it("keeps the unit modal open when created unit IDs are unresolved", async () => {
     mocks.fetchPropertiesMock.mockResolvedValue({ items: [] });
     mocks.addUnitsManualMock.mockResolvedValue({ ok: true, created: 1 });
 
-    render(
-      <MemoryRouter>
-        <PropertiesPage />
-      </MemoryRouter>
-    );
+    await openGuidedUnitModal();
 
-    const setupButtons = await screen.findAllByRole("button", {
-      name: "Complete property setup",
-    });
-    fireEvent.click(setupButtons[0]);
-    fireEvent.click(await screen.findByRole("button", { name: "Add a unit" }));
-    fireEvent.change(screen.getAllByRole("textbox")[0], { target: { value: "101" } });
+    fireEvent.change(screen.getByLabelText("Unit number 1"), { target: { value: "101" } });
     fireEvent.click(screen.getByRole("button", { name: "Save units" }));
 
     await waitFor(() => {

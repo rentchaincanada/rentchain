@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 type StoredDoc = { id: string; data: any };
 
-const { dbMock, resetDb, seedDoc } = vi.hoisted(() => {
+const { dbMock, resetDb, seedDoc, getDoc } = vi.hoisted(() => {
   const collections = new Map<string, Map<string, StoredDoc>>();
   let autoCounter = 0;
 
@@ -85,6 +85,7 @@ const { dbMock, resetDb, seedDoc } = vi.hoisted(() => {
     seedDoc: (collection: string, id: string, data: any) => {
       ensureCollection(collection).set(id, { id, data });
     },
+    getDoc: (collection: string, id: string) => ensureCollection(collection).get(id)?.data,
   };
 });
 
@@ -194,15 +195,76 @@ describe("unitsRoutes PATCH aliases", () => {
       .send({
         units: [
           { unitNumber: "101", beds: 1, baths: 1, sqft: 500, marketRent: 1500, status: "vacant" },
-          { unitNumber: "102", beds: 2, baths: 1, sqft: 700, marketRent: 1900, status: "vacant" },
+          {
+            unitNumber: "102",
+            beds: 2,
+            baths: 1,
+            sqft: 700,
+            marketRent: 1900,
+            status: "occupied",
+            occupantName: "Jane Tenant",
+            leaseEndDate: "2027-06-10",
+          },
         ],
       });
 
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ ok: true, created: 2 });
     expect(res.body.units).toHaveLength(2);
-    expect(res.body.units[0]).toMatchObject({ id: "units-auto-1", unitNumber: "101", propertyId: "prop-1" });
-    expect(res.body.units[1]).toMatchObject({ id: "units-auto-2", unitNumber: "102", propertyId: "prop-1" });
+    expect(res.body.units[0]).toMatchObject({
+      id: "units-auto-1",
+      unitNumber: "101",
+      propertyId: "prop-1",
+      rent: 1500,
+      marketRent: 1500,
+      beds: 1,
+      bedrooms: 1,
+      baths: 1,
+      bathrooms: 1,
+      status: "vacant",
+      occupancyStatus: "vacant",
+      occupantName: null,
+      tenantName: null,
+      leaseEndDate: null,
+    });
+    expect(res.body.units[1]).toMatchObject({
+      id: "units-auto-2",
+      unitNumber: "102",
+      propertyId: "prop-1",
+      rent: 1900,
+      marketRent: 1900,
+      beds: 2,
+      bedrooms: 2,
+      baths: 1,
+      bathrooms: 1,
+      status: "occupied",
+      occupancyStatus: "occupied",
+      occupantName: "Jane Tenant",
+      tenantName: "Jane Tenant",
+      leaseEndDate: "2027-06-10",
+    });
     expect(res.body.items).toEqual(res.body.units);
+    expect(getDoc("properties", "prop-1")).toMatchObject({
+      unitCount: 2,
+      unitsCount: 2,
+      units: [
+        expect.objectContaining({
+          id: "units-auto-1",
+          unitNumber: "101",
+          status: "vacant",
+          occupantName: null,
+          leaseEndDate: null,
+        }),
+        expect.objectContaining({
+          id: "units-auto-2",
+          unitNumber: "102",
+          status: "occupied",
+          occupancyStatus: "occupied",
+          occupantName: "Jane Tenant",
+          tenantName: "Jane Tenant",
+          leaseEndDate: "2027-06-10",
+        }),
+      ],
+    });
   });
 });

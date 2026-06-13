@@ -231,16 +231,13 @@ function leaseIdentifiers(lease: LeaseLike): string[] {
 }
 
 function hasManualOccupant(unit: UnitLike): boolean {
-  return Boolean(
-    String(unit.occupantName || unit.tenantName || "").trim() ||
-      (Array.isArray(unit.occupants) && unit.occupants.some((value) => String(value || "").trim()))
-  );
+  if (String(unit.occupantName || unit.tenantName || "").trim()) return true;
+  return Array.isArray(unit.occupants) && unit.occupants.some((occupant) => String(occupant || "").trim());
 }
 
 function hasCurrentManualLeaseEnd(unit: UnitLike, today: string | number | Date): boolean {
   const endDay = toDay(unit.leaseEndDate ?? unit.leaseEnd);
-  if (endDay == null) return false;
-  return endDay >= todayDay(today);
+  return endDay != null && endDay >= todayDay(today);
 }
 
 function hasManualCurrentOccupancy(unit: UnitLike, today: string | number | Date): boolean {

@@ -23,7 +23,13 @@ import { fetchMonthlyOpsSnapshot } from "../api/actionSnapshotApi";
 import { asArray } from "../lib/asArray";
 import { arr, str } from "@/utils/safe";
 import { setOnboardingStep } from "../api/onboardingApi";
-import { addUnitsManual, type AddUnitsManualResponse, type UnitInput, type UnitRecord } from "../api/unitsApi";
+import {
+  addUnitsManual,
+  patchCreatedUnitOccupancyMetadata,
+  type AddUnitsManualResponse,
+  type UnitInput,
+  type UnitRecord,
+} from "../api/unitsApi";
 import { useToast } from "../components/ui/ToastProvider";
 import { unitsForProperty } from "../lib/propertyCounts";
 import { PropertySelector } from "../components/properties/PropertySelector";
@@ -63,13 +69,50 @@ function resolveCreatedUnits(response: AddUnitsManualResponse | undefined, reque
       (err as any).code = "UNIT_ID_UNRESOLVED";
       throw err;
     }
-    return {
+    const requestedOccupantName = String(requestedUnit.occupantName || requestedUnit.tenantName || "").trim();
+    const returnedOccupantName = String(returnedUnit?.occupantName || returnedUnit?.tenantName || "").trim();
+    const requestedLeaseEndDate = String(requestedUnit.leaseEndDate || "").trim();
+    const returnedLeaseEndDate = String(returnedUnit?.leaseEndDate || "").trim();
+    const mergedUnit = {
       ...requestedUnit,
       ...returnedUnit,
       id,
       unitNumber: String(returnedUnit?.unitNumber || requestedUnit.unitNumber || "").trim(),
     };
+    if (!returnedOccupantName && requestedOccupantName) {
+      mergedUnit.occupantName = requestedOccupantName;
+      mergedUnit.tenantName = requestedOccupantName;
+    }
+    if (!returnedLeaseEndDate && requestedLeaseEndDate) {
+      mergedUnit.leaseEndDate = requestedLeaseEndDate;
+    }
+    return mergedUnit;
   });
+}
+
+function mergePersistedUnits(existingUnits: any[] | undefined, persistedUnits: UnitRecord[]) {
+  const byId = new Map<string, any>();
+  const ordered: any[] = [];
+  for (const unit of Array.isArray(existingUnits) ? existingUnits : []) {
+    const key = String(unit?.id || unit?.unitId || unit?.uid || unit?.unitNumber || "").trim();
+    if (!key || /^placeholder-/i.test(key)) continue;
+    byId.set(key, unit);
+    ordered.push(unit);
+  }
+  for (const unit of persistedUnits) {
+    const key = String(unit?.id || unit?.unitId || unit?.uid || unit?.unitNumber || "").trim();
+    if (!key) continue;
+    if (byId.has(key)) {
+      const index = ordered.findIndex((item) => String(item?.id || item?.unitId || item?.uid || item?.unitNumber || "").trim() === key);
+      const merged = { ...byId.get(key), ...unit };
+      byId.set(key, merged);
+      if (index >= 0) ordered[index] = merged;
+      continue;
+    }
+    byId.set(key, unit);
+    ordered.push(unit);
+  }
+  return ordered;
 }
 
 function unitSaveErrorMessage(error: any) {
@@ -78,6 +121,55 @@ function unitSaveErrorMessage(error: any) {
     return "Units could not be saved with stable IDs. Keep this form open and try again.";
   }
   return error?.message ?? "Could not save units";
+}
+
+function normalizeUnitDraftsForSubmit(units: UnitInput[]) {
+  const invalidPlaceholder = units.some((u: any) =>
+    [u?.id, u?.unitId, u?.uid].some((value) => String(value || "").trim().toLowerCase().startsWith("placeholder-"))
+  );
+  if (invalidPlaceholder) {
+    return {
+      units: [],
+      error: "This unit form still has temporary IDs. Close and reopen the form before saving.",
+    };
+  }
+
+  const normalized = units
+    .map((u) => {
+      const status = u.status === "occupied" ? "occupied" : "vacant";
+      const occupantName = status === "occupied" ? String(u.occupantName || u.tenantName || "").trim() || null : null;
+      const leaseEndDate = status === "occupied" ? String(u.leaseEndDate || "").trim() || null : null;
+      const unit: UnitInput = {
+        unitNumber: String(u.unitNumber || "").trim(),
+        beds: Number(u.beds),
+        baths: Number(u.baths),
+        sqft: Number(u.sqft),
+        marketRent: Number(u.marketRent),
+        status,
+        occupantName,
+        tenantName: occupantName,
+        leaseEndDate,
+      };
+      return unit;
+    })
+    .filter((u) => u.unitNumber.length > 0);
+
+  if (normalized.length === 0) {
+    return { units: [], error: "Add at least one unit number before saving." };
+  }
+
+  const invalidNumbers = normalized.some(
+    (u) =>
+      !Number.isFinite(u.beds) ||
+      !Number.isFinite(u.baths) ||
+      !Number.isFinite(u.sqft) ||
+      !Number.isFinite(u.marketRent)
+  );
+  if (invalidNumbers) {
+    return { units: [], error: "Enter valid beds, baths, square footage, and rent before saving." };
+  }
+
+  return { units: normalized, error: null };
 }
 
 const PropertiesPage: React.FC = () => {
@@ -104,6 +196,8 @@ const PropertiesPage: React.FC = () => {
     { unitNumber: "", beds: 1, baths: 1, sqft: 500, marketRent: 1500, status: "vacant" },
   ]);
   const [savingUnits, setSavingUnits] = useState(false);
+  const [unitModalError, setUnitModalError] = useState<string | null>(null);
+  const [unitModalSource, setUnitModalSource] = useState<"guided" | "propertyTable">("guided");
   const [actionRequestUpdating, setActionRequestUpdating] = useState(false);
   const [actionRequestUpdateError, setActionRequestUpdateError] = useState<string | null>(null);
   const location = useLocation();
@@ -351,67 +445,48 @@ const PropertiesPage: React.FC = () => {
     navigate({ pathname: location.pathname, search: next.toString() }, { replace: true });
   };
 
-  const handleManualUnitsComplete = async () => {
-    try {
-      await setOnboardingStep("unitAdded", true);
-    } catch {
-      // ignore
-    }
-    showToast({
-      title: "Portfolio ready  dashboard is live.",
-      variant: "success",
-    });
-    navigate("/dashboard?onboarding=ready", { replace: true });
-  };
-
   const handleSaveUnits = async (unitsOverride?: UnitInput[]) => {
     if (!activePropertyId) return;
-    const clean = (unitsOverride || draftUnits)
-      .map((u) => ({
-        ...u,
-        unitNumber: u.unitNumber.trim(),
-        beds: Number(u.beds),
-        baths: Number(u.baths),
-        sqft: Number(u.sqft),
-        marketRent: Number(u.marketRent),
-      }))
-      .filter((u) => u.unitNumber.length > 0);
+    const { units: clean, error } = normalizeUnitDraftsForSubmit(unitsOverride || draftUnits);
+    const source = unitModalSource;
 
-    if (clean.length === 0) {
-      showToast({ title: "Add at least one unit", variant: "warning" });
+    if (error) {
+      setUnitModalError(error);
       return;
     }
 
     setSavingUnits(true);
+    setUnitModalError(null);
     try {
       const response = await addUnitsManual(activePropertyId, clean);
-      const persistedUnits = resolveCreatedUnits(response, clean);
+      const persistedUnits = await patchCreatedUnitOccupancyMetadata(resolveCreatedUnits(response, clean), clean);
       track("activation_unit_created", {
         surface: "properties_page",
         source: "manual_units_modal",
         route: typeof window !== "undefined" ? window.location.pathname : undefined,
       });
-      // Update local state so the units panel renders immediately
+      await loadProperties();
       setProperties((prev) =>
-        prev.map((p) =>
-          String(p.id) === String(activePropertyId)
-            ? {
-                ...p,
-                units: persistedUnits as any,
-                unitCount: persistedUnits.length,
-                unitsCount: persistedUnits.length,
-              }
-            : p
-        )
+        prev.map((p) => {
+          if (String(p.id) !== String(activePropertyId)) return p;
+          const mergedUnits = mergePersistedUnits((p as any).units, persistedUnits);
+          return {
+            ...p,
+            units: mergedUnits as any,
+            unitCount: mergedUnits.length,
+            unitsCount: mergedUnits.length,
+          };
+        })
       );
-      await setOnboardingStep("unitAdded", true).catch(() => {});
+      await Promise.resolve(setOnboardingStep("unitAdded", true)).catch(() => {});
       showToast({
-        title: "Portfolio ready  dashboard is live.",
+        message: persistedUnits.length === 1 ? "Unit saved" : "Units saved successfully",
         variant: "success",
       });
+      setUnitModalError(null);
       setIsUnitsModalOpen(false);
-      navigate("/dashboard?onboarding=ready", { replace: true });
     } catch (e: any) {
+      setUnitModalError(unitSaveErrorMessage(e));
       showToast({
         title: "Failed to save units",
         description: unitSaveErrorMessage(e),
@@ -865,6 +940,8 @@ const PropertiesPage: React.FC = () => {
                     onClick={() => {
                       if (!selectedPropertyId) return;
                       setActivePropertyId(selectedPropertyId);
+                      setUnitModalError(null);
+                      setUnitModalSource("guided");
                       setDraftUnits([
                         { unitNumber: "", beds: 1, baths: 1, sqft: 500, marketRent: 1500, status: "vacant" },
                       ]);
@@ -953,16 +1030,18 @@ const PropertiesPage: React.FC = () => {
                     <div>
                       <strong>Add Unit</strong>  create units manually.
                     </div>
-                    <Button
-                      size="sm"
-                      onClick={() => {
-                        if (!selectedPropertyId) return;
-                        setActivePropertyId(selectedPropertyId);
-                        setDraftUnits([
-                          { unitNumber: "", beds: 1, baths: 1, sqft: 500, marketRent: 1500, status: "vacant" },
-                        ]);
-                        setIsUnitsModalOpen(true);
-                      }}
+	                    <Button
+	                      size="sm"
+	                      onClick={() => {
+	                        if (!selectedPropertyId) return;
+	                        setActivePropertyId(selectedPropertyId);
+	                        setUnitModalError(null);
+	                        setUnitModalSource("propertyTable");
+	                        setDraftUnits([
+	                          { unitNumber: "", beds: 1, baths: 1, sqft: 500, marketRent: 1500, status: "vacant" },
+	                        ]);
+	                        setIsUnitsModalOpen(true);
+	                      }}
                     >
                       Add units
                     </Button>
@@ -1038,6 +1117,16 @@ const PropertiesPage: React.FC = () => {
                 onOpenLeasePack={() => {
                   setLeasePackInitialPropertyId(selectedProperty?.id || null);
                   setLeasePackOpen(true);
+                }}
+                onAddUnits={() => {
+                  if (!selectedProperty?.id) return;
+                  setActivePropertyId(selectedProperty.id);
+                  setUnitModalError(null);
+                  setUnitModalSource("propertyTable");
+                  setDraftUnits([
+                    { unitNumber: "", beds: 1, baths: 1, sqft: 500, marketRent: 1500, status: "vacant" },
+                  ]);
+                  setIsUnitsModalOpen(true);
                 }}
                 openEditProperty={openEditProperty}
                 openSendApplication={openSendApplication}
@@ -1224,11 +1313,15 @@ const PropertiesPage: React.FC = () => {
       />
       <UnitsModal
         open={isUnitsModalOpen}
-        onClose={() => setIsUnitsModalOpen(false)}
+        onClose={() => {
+          setUnitModalError(null);
+          setIsUnitsModalOpen(false);
+        }}
         units={draftUnits}
         setUnits={setDraftUnits}
         onSave={handleSaveUnits}
         saving={savingUnits}
+        error={unitModalError}
       />
       <LeasePackGeneratorModal
         open={leasePackOpen}
@@ -1375,6 +1468,7 @@ const UnitsModal = ({
   setUnits,
   onSave,
   saving,
+  error,
 }: {
   open: boolean;
   onClose: () => void;
@@ -1382,16 +1476,21 @@ const UnitsModal = ({
   setUnits: (u: UnitInput[]) => void;
   onSave: (unitsOverride?: UnitInput[]) => void;
   saving: boolean;
+  error?: string | null;
 }) => {
   if (!open) return null;
 
   const updateUnit = (idx: number, field: keyof UnitInput, value: any) => {
+    const nextValue =
+      field === "unitNumber" || field === "status" || field === "occupantName" || field === "leaseEndDate"
+        ? String(value)
+        : Number(value);
     setUnits(
       units.map((u, i) =>
         i === idx
           ? {
               ...u,
-              [field]: field === "unitNumber" ? String(value) : Number(value),
+              [field]: nextValue,
             }
           : u
       )
@@ -1405,17 +1504,25 @@ const UnitsModal = ({
     ]);
   const removeRow = (idx: number) =>
     setUnits(units.length <= 1 ? units : units.filter((_, i) => i !== idx));
-  const normalizedUnits = units
-    .map((u) => ({
-      unitNumber: String(u.unitNumber || "").trim(),
-      beds: Number(u.beds),
-      baths: Number(u.baths),
-      sqft: Number(u.sqft),
-      marketRent: Number(u.marketRent),
-      status: u.status === "occupied" ? "occupied" : "vacant",
-    }))
-    .filter((u) => u.unitNumber.length > 0);
-
+  const baseFieldStyle = {
+    width: "100%",
+    minWidth: 0,
+    boxSizing: "border-box" as const,
+    borderRadius: 8,
+    border: "1px solid rgba(148,163,184,0.45)",
+    padding: "7px 8px",
+  };
+  const activeOccupancyFieldStyle = {
+    ...baseFieldStyle,
+    border: "1px solid rgba(37,99,235,0.45)",
+    background: "white",
+    color: "#0f172a",
+  };
+  const inactiveOccupancyFieldStyle = {
+    ...baseFieldStyle,
+    background: "rgba(241,245,249,0.85)",
+    color: "#64748b",
+  };
   return (
     <div
       style={{
@@ -1426,16 +1533,21 @@ const UnitsModal = ({
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        padding: 16,
+        padding: "clamp(10px, 2vw, 24px)",
       }}
     >
       <div
         className="rc-modal-shell"
         style={{
           background: "white",
-          borderRadius: 16,
+          width: "min(1180px, calc(100vw - 24px))",
+          maxHeight: "min(860px, calc(100vh - 24px))",
+          display: "flex",
+          flexDirection: "column",
+          borderRadius: 12,
           border: "1px solid rgba(148,163,184,0.35)",
           boxShadow: "0 25px 60px rgba(15,23,42,0.25)",
+          overflow: "hidden",
         }}
       >
         <div style={{ padding: 16, borderBottom: "1px solid rgba(148,163,184,0.2)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
@@ -1454,12 +1566,23 @@ const UnitsModal = ({
           </button>
         </div>
 
-        <div className="rc-modal-body" style={{ padding: 16 }}>
+        <div className="rc-modal-body" style={{ padding: 16, overflow: "auto", minHeight: 0 }}>
           <div style={{ overflowX: "auto" }}>
-            <table className="rc-units-edit-table" style={{ width: "100%", borderCollapse: "collapse" }}>
+            <table className="rc-units-edit-table" style={{ width: "100%", minWidth: 980, tableLayout: "fixed", borderCollapse: "collapse" }}>
+              <colgroup>
+                <col style={{ width: "13%" }} />
+                <col style={{ width: "8%" }} />
+                <col style={{ width: "8%" }} />
+                <col style={{ width: "10%" }} />
+                <col style={{ width: "12%" }} />
+                <col style={{ width: "12%" }} />
+                <col style={{ width: "16%" }} />
+                <col style={{ width: "13%" }} />
+                <col style={{ width: "8%" }} />
+              </colgroup>
               <thead>
                 <tr>
-                  {["Unit #", "Beds", "Baths", "Sqft", "Market Rent", "Status", ""].map((h) => (
+                  {["Unit #", "Beds", "Baths", "Sqft", "Market Rent", "Status", "Occupant", "Lease End", ""].map((h) => (
                     <th
                       key={h}
                       style={{
@@ -1475,44 +1598,49 @@ const UnitsModal = ({
                 </tr>
               </thead>
               <tbody>
-                {units.map((u, idx) => (
-                  <tr key={idx}>
-                    <td style={{ padding: "6px" }}>
-                      <input
-                        value={u.unitNumber}
-                        onChange={(e) => updateUnit(idx, "unitNumber", e.target.value)}
-                        style={{ width: "100%", padding: 6 }}
-                      />
-                    </td>
-                    <td style={{ padding: "6px" }}>
-                      <input
-                        type="number"
-                        value={u.beds}
-                        onChange={(e) => updateUnit(idx, "beds", e.target.value)}
-                        style={{ width: "100%", padding: 6 }}
-                      />
-                    </td>
-                    <td style={{ padding: "6px" }}>
-                      <input
-                        type="number"
-                        value={u.baths}
-                        onChange={(e) => updateUnit(idx, "baths", e.target.value)}
-                        style={{ width: "100%", padding: 6 }}
-                      />
-                    </td>
-                    <td style={{ padding: "6px" }}>
-                      <input
-                        type="number"
-                        value={u.sqft}
-                        onChange={(e) => updateUnit(idx, "sqft", e.target.value)}
-                        style={{ width: "100%", padding: 6 }}
-                      />
-                    </td>
-                    <td style={{ padding: "6px" }}>
-                      <input
-                        type="number"
-                        value={u.marketRent}
-                        onChange={(e) => updateUnit(idx, "marketRent", e.target.value)}
+	                {units.map((u, idx) => (
+	                  <tr key={idx}>
+	                    <td style={{ padding: "6px" }}>
+	                      <input
+	                        aria-label={`Unit number ${idx + 1}`}
+	                        value={u.unitNumber}
+	                        onChange={(e) => updateUnit(idx, "unitNumber", e.target.value)}
+	                        style={baseFieldStyle}
+	                      />
+	                    </td>
+	                    <td style={{ padding: "6px" }}>
+	                      <input
+	                        aria-label={`Beds ${idx + 1}`}
+	                        type="number"
+	                        value={u.beds}
+	                        onChange={(e) => updateUnit(idx, "beds", e.target.value)}
+	                        style={baseFieldStyle}
+	                      />
+	                    </td>
+	                    <td style={{ padding: "6px" }}>
+	                      <input
+	                        aria-label={`Baths ${idx + 1}`}
+	                        type="number"
+	                        value={u.baths}
+	                        onChange={(e) => updateUnit(idx, "baths", e.target.value)}
+	                        style={baseFieldStyle}
+	                      />
+	                    </td>
+	                    <td style={{ padding: "6px" }}>
+	                      <input
+	                        aria-label={`Square footage ${idx + 1}`}
+	                        type="number"
+	                        value={u.sqft}
+	                        onChange={(e) => updateUnit(idx, "sqft", e.target.value)}
+	                        style={baseFieldStyle}
+	                      />
+	                    </td>
+	                    <td style={{ padding: "6px" }}>
+	                      <input
+	                        aria-label={`Market rent ${idx + 1}`}
+	                        type="number"
+	                        value={u.marketRent}
+	                        onChange={(e) => updateUnit(idx, "marketRent", e.target.value)}
                         onFocus={() => {
                           if (
                             typeof window !== "undefined" &&
@@ -1522,30 +1650,52 @@ const UnitsModal = ({
                             updateUnit(idx, "marketRent", "");
                           }
                         }}
-                        style={{ width: "100%", padding: 6 }}
-                      />
-                    </td>
-                    <td style={{ padding: "6px" }}>
-                      <select
-                        value={u.status ?? "vacant"}
-                        onChange={(e) => updateUnit(idx, "status", e.target.value)}
-                        style={{ width: "100%", padding: 6 }}
-                      >
-                        <option value="vacant">Vacant</option>
-                        <option value="occupied">Occupied</option>
-                      </select>
-                    </td>
-                    <td style={{ padding: "6px" }}>
-                      <button
+                        style={baseFieldStyle}
+	                      />
+	                    </td>
+	                    <td style={{ padding: "6px" }}>
+	                      <select
+	                        aria-label={`Status ${idx + 1}`}
+	                        value={u.status ?? "vacant"}
+	                        onChange={(e) => updateUnit(idx, "status", e.target.value)}
+	                        style={baseFieldStyle}
+	                      >
+	                        <option value="vacant">Vacant</option>
+	                        <option value="occupied">Occupied</option>
+	                      </select>
+	                    </td>
+	                    <td style={{ padding: "6px" }}>
+	                      <input
+	                        aria-label={`Occupant name ${idx + 1}`}
+	                        value={u.occupantName ?? ""}
+	                        onChange={(e) => updateUnit(idx, "occupantName", e.target.value)}
+	                        disabled={(u.status ?? "vacant") !== "occupied"}
+	                        placeholder={(u.status ?? "vacant") === "occupied" ? "Tenant name" : "Vacant"}
+	                        style={(u.status ?? "vacant") === "occupied" ? activeOccupancyFieldStyle : inactiveOccupancyFieldStyle}
+	                      />
+	                    </td>
+	                    <td style={{ padding: "6px" }}>
+	                      <input
+	                        aria-label={`Lease end date ${idx + 1}`}
+	                        type="date"
+	                        value={u.leaseEndDate ?? ""}
+	                        onChange={(e) => updateUnit(idx, "leaseEndDate", e.target.value)}
+	                        disabled={(u.status ?? "vacant") !== "occupied"}
+	                        style={(u.status ?? "vacant") === "occupied" ? activeOccupancyFieldStyle : inactiveOccupancyFieldStyle}
+	                      />
+	                    </td>
+	                    <td style={{ padding: "6px" }}>
+	                      <button
                         type="button"
                         onClick={() => removeRow(idx)}
                         style={{
                           padding: "6px 10px",
                           borderRadius: 8,
-                          border: "1px solid rgba(148,163,184,0.35)",
-                          background: "transparent",
-                          cursor: "pointer",
-                        }}
+	                          border: "1px solid rgba(148,163,184,0.35)",
+	                          background: "transparent",
+	                          cursor: "pointer",
+	                          whiteSpace: "nowrap",
+	                        }}
                       >
                         Remove
                       </button>
@@ -1555,6 +1705,22 @@ const UnitsModal = ({
               </tbody>
             </table>
           </div>
+          {error ? (
+            <div
+              role="alert"
+              style={{
+                marginTop: 12,
+                padding: "10px 12px",
+                borderRadius: 10,
+                border: "1px solid rgba(220,38,38,0.24)",
+                background: "rgba(254,242,242,0.9)",
+                color: "#b91c1c",
+                fontSize: 13,
+              }}
+            >
+              {error}
+            </div>
+          ) : null}
         </div>
 
         <div className="rc-modal-footer" style={{ padding: 16, borderTop: "1px solid rgba(148,163,184,0.2)", display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
@@ -1587,7 +1753,7 @@ const UnitsModal = ({
             </button>
             <button
               type="button"
-              onClick={() => onSave(normalizedUnits)}
+              onClick={() => onSave(units)}
               disabled={saving}
               style={{
                 padding: "8px 12px",

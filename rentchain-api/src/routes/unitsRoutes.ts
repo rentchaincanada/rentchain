@@ -108,6 +108,68 @@ function isPlaceholderUnitId(value: any): boolean {
   return Boolean(id) && /^placeholder-/i.test(id);
 }
 
+function optionalNumber(...values: any[]): number | null {
+  for (const value of values) {
+    if (value === undefined || value === null || value === "") continue;
+    const n = Number(value);
+    if (Number.isFinite(n)) return n;
+  }
+  return null;
+}
+
+function normalizeUnitStatus(...values: any[]): "vacant" | "occupied" {
+  for (const value of values) {
+    const status = normalizeStatus(value);
+    if (["occupied", "leased", "rented"].includes(status)) return "occupied";
+    if (["vacant", "available", "empty"].includes(status)) return "vacant";
+  }
+  return "vacant";
+}
+
+function parseUnitStatus(value: any): "vacant" | "occupied" | null {
+  const status = normalizeStatus(value);
+  if (["occupied", "leased", "rented"].includes(status)) return "occupied";
+  if (["vacant", "available", "empty"].includes(status)) return "vacant";
+  return null;
+}
+
+function normalizeCreateUnitInput(u: any, context: { landlordId: string; propertyId: string; unitNumber: string; now: Date }) {
+  const rent = optionalNumber(u?.marketRent, u?.rent, u?.monthlyRent);
+  const beds = optionalNumber(u?.beds, u?.bedrooms);
+  const baths = optionalNumber(u?.baths, u?.bathrooms);
+  const sqft = optionalNumber(u?.sqft, u?.squareFeet);
+  const status = normalizeUnitStatus(u?.status, u?.occupancyStatus);
+  const occupantName =
+    status === "occupied"
+      ? String(u?.occupantName || u?.tenantName || "").trim() || null
+      : null;
+  const leaseEndDate =
+    status === "occupied"
+      ? String(u?.leaseEndDate || u?.endDate || u?.leaseEnd || "").trim() || null
+      : null;
+
+  return {
+    landlordId: context.landlordId,
+    propertyId: context.propertyId,
+    unitNumber: context.unitNumber,
+    rent,
+    marketRent: rent,
+    beds,
+    bedrooms: beds,
+    baths,
+    bathrooms: baths,
+    sqft,
+    status,
+    occupancyStatus: status,
+    occupantName,
+    tenantName: occupantName,
+    leaseEndDate,
+    createdAt: context.now,
+    updatedAt: context.now,
+    updatedAtServer: FieldValue.serverTimestamp(),
+  };
+}
+
 async function attachSignedLeaseDocument(unit: any) {
   const leaseDocument = unit?.leaseDocument;
   if (!leaseDocument || typeof leaseDocument !== "object") return unit;
@@ -341,19 +403,7 @@ router.post(
       if (!unitNumber) continue;
 
       const ref = db.collection("units").doc();
-      const unitRecord = {
-        landlordId,
-        propertyId,
-        unitNumber,
-        beds: typeof u?.beds === "number" ? u.beds : null,
-        baths: typeof u?.baths === "number" ? u.baths : null,
-        sqft: typeof u?.sqft === "number" ? u.sqft : null,
-        marketRent: typeof u?.marketRent === "number" ? u.marketRent : null,
-        status: (u as any)?.status || "vacant",
-        createdAt: now,
-        updatedAt: now,
-        updatedAtServer: FieldValue.serverTimestamp(),
-      };
+      const unitRecord = normalizeCreateUnitInput(u, { landlordId, propertyId, unitNumber, now });
       batch.set(ref, unitRecord);
       createdUnits.push({
         id: ref.id,
@@ -394,9 +444,14 @@ router.post(
         .where("landlordId", "==", landlordId)
         .where("propertyId", "==", propertyId)
         .get();
+      const persistedUnits = countSnap.docs
+        .map((doc: any) => ({ id: doc.id, ...(doc.data() as any) }))
+        .sort((a: any, b: any) => String(a.unitNumber || "").localeCompare(String(b.unitNumber || "")));
       await db.collection("properties").doc(propertyId).set(
         {
+          units: persistedUnits,
           unitsCount: countSnap.size,
+          unitCount: countSnap.size,
           updatedAt: now.toISOString(),
           updatedAtServer: FieldValue.serverTimestamp(),
         },
@@ -454,8 +509,12 @@ router.patch("/units/:unitId", authenticateJwt, requireLandlord, async (req: any
     baths,
     notes,
     status,
+    occupancyStatus,
     occupantName,
+    tenantName,
     leaseEndDate,
+    endDate,
+    leaseEnd,
   } = req.body || {};
   const updates: any = {};
 
@@ -488,19 +547,24 @@ router.patch("/units/:unitId", authenticateJwt, requireLandlord, async (req: any
   if (notes !== undefined) {
     updates.notes = notes === null ? null : String(notes);
   }
-  if (status !== undefined) {
-    const valid = ["vacant", "occupied"];
-    if (!valid.includes(String(status))) {
+  const nextStatus = status ?? occupancyStatus;
+  if (nextStatus !== undefined) {
+    const normalizedStatus = parseUnitStatus(nextStatus);
+    if (!normalizedStatus) {
       return res.status(400).json({ ok: false, error: "Invalid status" });
     }
-    updates.status = String(status);
+    updates.status = normalizedStatus;
+    updates.occupancyStatus = normalizedStatus;
   }
-  if (occupantName !== undefined) {
-    const value = String(occupantName || "").trim();
+  const nextOccupantName = occupantName ?? tenantName;
+  if (nextOccupantName !== undefined) {
+    const value = String(nextOccupantName || "").trim();
     updates.occupantName = value || null;
+    updates.tenantName = value || null;
   }
-  if (leaseEndDate !== undefined) {
-    const value = String(leaseEndDate || "").trim();
+  const nextLeaseEndDate = leaseEndDate ?? endDate ?? leaseEnd;
+  if (nextLeaseEndDate !== undefined) {
+    const value = String(nextLeaseEndDate || "").trim();
     updates.leaseEndDate = value || null;
   }
 
