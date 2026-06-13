@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PropertyDetailPanel } from "./PropertyDetailPanel";
@@ -258,14 +258,18 @@ describe("PropertyDetailPanel", () => {
     );
   });
 
-  it("treats units without active lease records as vacant even when unit flags are stale", async () => {
+  it("shows direct saved unit occupancy and field aliases without active lease records", async () => {
     mocks.fetchUnitsForProperty.mockResolvedValue([
       {
         id: "unit-1",
         unitNumber: "101",
         status: "occupied",
         occupantName: "Jane Tenant",
-        rent: 1800,
+        leaseEndDate: "2027-06-10",
+        marketRent: 1800,
+        beds: 2,
+        baths: 1.5,
+        sqft: 850,
       },
       {
         id: "unit-2",
@@ -296,9 +300,14 @@ describe("PropertyDetailPanel", () => {
       </MemoryRouter>
     );
 
-    expect((await screen.findAllByText("Vacant")).length).toBeGreaterThan(0);
-    expect(screen.getAllByText("0%").length).toBeGreaterThan(0);
-    expect(screen.queryByText("Jane Tenant")).not.toBeInTheDocument();
+    const row = await screen.findByRole("row", { name: /101/i });
+    expect(within(row).getByText("$1,800")).toBeInTheDocument();
+    expect(within(row).getByText("2")).toBeInTheDocument();
+    expect(within(row).getByText("1.5")).toBeInTheDocument();
+    expect(within(row).getByText("Occupied")).toBeInTheDocument();
+    expect(within(row).getByText(/Jane Tenant/)).toBeInTheDocument();
+    expect(within(row).getByText(/Jun 10, 2027/)).toBeInTheDocument();
+    expect(screen.getAllByText("50%").length).toBeGreaterThan(0);
   });
 
   it("shows manually occupied units when manual occupancy has a current lease end date", async () => {

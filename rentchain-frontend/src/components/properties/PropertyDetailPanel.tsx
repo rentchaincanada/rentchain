@@ -1687,12 +1687,12 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                       ? formatCurrency(Number(rentVal) || 0)
                       : "--";
                   const bedsDisplay =
-                    (u as any).bedrooms ?? (u as any).bedrooms === 0
-                      ? (u as any).bedrooms
+                    bedsVal ?? bedsVal === 0
+                      ? bedsVal
                       : "-";
                   const bathsDisplay =
-                    (u as any).bathrooms ?? (u as any).bathrooms === 0
-                      ? (u as any).bathrooms
+                    bathsVal ?? bathsVal === 0
+                      ? bathsVal
                       : "-";
                   const sqftDisplay =
                     sqftVal ?? sqftVal === 0
@@ -1875,12 +1875,12 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                 ? formatCurrency(Number(rentVal) || 0)
                 : "--";
             const bedsDisplay =
-              (u as any).bedrooms ?? (u as any).bedrooms === 0
-                ? (u as any).bedrooms
+              bedsVal ?? bedsVal === 0
+                ? bedsVal
                 : "-";
             const bathsDisplay =
-              (u as any).bathrooms ?? (u as any).bathrooms === 0
-                ? (u as any).bathrooms
+              bathsVal ?? bathsVal === 0
+                ? bathsVal
                 : "-";
             const sqftDisplay =
               sqftVal ?? sqftVal === 0

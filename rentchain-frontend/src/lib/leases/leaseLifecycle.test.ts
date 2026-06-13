@@ -103,7 +103,7 @@ describe("leaseLifecycle", () => {
         ],
         today
       )
-    ).toMatchObject({ status: "vacant", label: "Vacant" });
+    ).toMatchObject({ status: "occupied", label: "Occupied" });
   });
 
   it("respects valid manual unit occupancy when only expired leases exist", () => {

@@ -72,6 +72,31 @@ function resolveCreatedUnits(response: AddUnitsManualResponse | undefined, reque
   });
 }
 
+function mergePersistedUnits(existingUnits: any[] | undefined, persistedUnits: UnitRecord[]) {
+  const byId = new Map<string, any>();
+  const ordered: any[] = [];
+  for (const unit of Array.isArray(existingUnits) ? existingUnits : []) {
+    const key = String(unit?.id || unit?.unitId || unit?.uid || unit?.unitNumber || "").trim();
+    if (!key || /^placeholder-/i.test(key)) continue;
+    byId.set(key, unit);
+    ordered.push(unit);
+  }
+  for (const unit of persistedUnits) {
+    const key = String(unit?.id || unit?.unitId || unit?.uid || unit?.unitNumber || "").trim();
+    if (!key) continue;
+    if (byId.has(key)) {
+      const index = ordered.findIndex((item) => String(item?.id || item?.unitId || item?.uid || item?.unitNumber || "").trim() === key);
+      const merged = { ...byId.get(key), ...unit };
+      byId.set(key, merged);
+      if (index >= 0) ordered[index] = merged;
+      continue;
+    }
+    byId.set(key, unit);
+    ordered.push(unit);
+  }
+  return ordered;
+}
+
 function unitSaveErrorMessage(error: any) {
   const code = String(error?.code || error?.error || error?.message || "");
   if (code === "UNIT_ID_UNRESOLVED" || code === "UNIT_PERSISTENCE_FAILED") {
@@ -406,7 +431,7 @@ const PropertiesPage: React.FC = () => {
       // ignore
     }
     showToast({
-      title: "Portfolio ready  dashboard is live.",
+      message: "Unit saved",
       variant: "success",
     });
     navigate("/dashboard?onboarding=ready", { replace: true });
@@ -432,23 +457,22 @@ const PropertiesPage: React.FC = () => {
         source: "manual_units_modal",
         route: typeof window !== "undefined" ? window.location.pathname : undefined,
       });
-      // Update local state so the units panel renders immediately
-      setProperties((prev) =>
-        prev.map((p) =>
-          String(p.id) === String(activePropertyId)
-            ? {
-                ...p,
-                units: persistedUnits as any,
-                unitCount: persistedUnits.length,
-                unitsCount: persistedUnits.length,
-              }
-            : p
-        )
-      );
       await loadProperties();
-      await setOnboardingStep("unitAdded", true).catch(() => {});
+      setProperties((prev) =>
+        prev.map((p) => {
+          if (String(p.id) !== String(activePropertyId)) return p;
+          const mergedUnits = mergePersistedUnits((p as any).units, persistedUnits);
+          return {
+            ...p,
+            units: mergedUnits as any,
+            unitCount: mergedUnits.length,
+            unitsCount: mergedUnits.length,
+          };
+        })
+      );
+      await Promise.resolve(setOnboardingStep("unitAdded", true)).catch(() => {});
       showToast({
-        title: "Portfolio ready  dashboard is live.",
+        message: persistedUnits.length === 1 ? "Unit saved" : "Units saved successfully",
         variant: "success",
       });
       setUnitModalError(null);

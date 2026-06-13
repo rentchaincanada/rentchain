@@ -47,12 +47,6 @@ router.get("/", requireLandlord, async (req: any, res) => {
       return res.status(403).json({ ok: false, error: "Forbidden" });
     }
 
-    // Prefer embedded units if present
-    if (Array.isArray(prop?.units)) {
-      return res.json({ ok: true, items: prop.units });
-    }
-
-    // Fallback to units collection if present
     const snap = await db
       .collection("units")
       .where("landlordId", "==", landlordId)
@@ -60,7 +54,11 @@ router.get("/", requireLandlord, async (req: any, res) => {
       .get();
 
     const items = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
-    return res.json({ ok: true, items });
+    if (items.length > 0 || !Array.isArray(prop?.units)) {
+      return res.json({ ok: true, items });
+    }
+
+    return res.json({ ok: true, items: prop.units });
   } catch (err: any) {
     console.error("[unitImportRoutes GET units] error", err?.message || err);
     return res.status(500).json({ ok: false, error: "Failed to load units" });
@@ -106,10 +104,17 @@ router.post("/", requireLandlord, async (req: any, res) => {
       byKey.set(key, {
         unitNumber,
         rent: raw?.rent ?? raw?.marketRent ?? null,
+        marketRent: raw?.marketRent ?? raw?.rent ?? null,
+        beds: raw?.beds ?? raw?.bedrooms ?? null,
         bedrooms: raw?.bedrooms ?? raw?.beds ?? null,
+        baths: raw?.baths ?? raw?.bathrooms ?? null,
         bathrooms: raw?.bathrooms ?? raw?.baths ?? null,
         sqft: raw?.sqft ?? null,
         status: raw?.status === "occupied" ? "occupied" : raw?.status === "vacant" ? "vacant" : null,
+        occupancyStatus: raw?.status === "occupied" ? "occupied" : raw?.status === "vacant" ? "vacant" : null,
+        occupantName: raw?.status === "occupied" ? String(raw?.occupantName || raw?.tenantName || "").trim() || null : null,
+        tenantName: raw?.status === "occupied" ? String(raw?.occupantName || raw?.tenantName || "").trim() || null : null,
+        leaseEndDate: raw?.status === "occupied" ? String(raw?.leaseEndDate || raw?.endDate || raw?.leaseEnd || "").trim() || null : null,
         notes: raw?.notes ?? null,
       });
     }
@@ -303,10 +308,17 @@ async function runUnitImport(opts: {
         propertyId,
         unitNumber: c.unitNumber,
         rent: c.data.rent ?? null,
+        marketRent: c.data.rent ?? null,
+        beds: c.data.bedrooms ?? null,
         bedrooms: c.data.bedrooms ?? null,
+        baths: c.data.bathrooms ?? null,
         bathrooms: c.data.bathrooms ?? null,
         sqft: c.data.sqft ?? null,
         status: c.data.status ?? "vacant",
+        occupancyStatus: c.data.status ?? "vacant",
+        occupantName: c.data.status === "occupied" ? c.data.occupantName ?? null : null,
+        tenantName: c.data.status === "occupied" ? c.data.occupantName ?? null : null,
+        leaseEndDate: c.data.status === "occupied" ? c.data.leaseEndDate ?? null : null,
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       });

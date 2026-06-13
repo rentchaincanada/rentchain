@@ -10,6 +10,9 @@ export interface UnitInput {
   bathrooms?: number | null;
   sqft?: number | null;
   status?: "vacant" | "occupied" | null;
+  occupantName?: string | null;
+  tenantName?: string | null;
+  leaseEndDate?: string | null;
   utilitiesIncluded?: string[];
 }
 

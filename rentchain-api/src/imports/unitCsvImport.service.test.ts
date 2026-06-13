@@ -51,6 +51,24 @@ describe("parseUnitsCsv", () => {
     });
   });
 
+  it("parses occupied metadata aliases for CSV imports", () => {
+    const csv = "unitNumber,marketRent,beds,baths,status,tenantName,leaseEndDate\n301,2100,2,1,occupied,Jane Tenant,2027-06-10";
+
+    const result = parseUnitsCsv(csv);
+
+    expect(result.headers).toMatchObject({ valid: true, missing: [], unknown: [] });
+    expect(result.preview.errors).toEqual([]);
+    expect(result.candidates[0].data).toMatchObject({
+      unitNumber: "301",
+      rent: 2100,
+      bedrooms: 2,
+      bathrooms: 1,
+      status: "occupied",
+      occupantName: "Jane Tenant",
+      leaseEndDate: "2027-06-10",
+    });
+  });
+
   it("recovers UTF-16 BOM text when upload decoding leaves null bytes", () => {
     const csv = Buffer.from("\uFEFFunitNumber,marketRent,beds\r101,1850,1", "utf16le").toString("utf8");
 
