@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 type StoredDoc = { id: string; data: any };
 
-const { dbMock, resetDb, seedDoc } = vi.hoisted(() => {
+const { dbMock, resetDb, seedDoc, getDoc } = vi.hoisted(() => {
   const collections = new Map<string, Map<string, StoredDoc>>();
   let autoCounter = 0;
 
@@ -85,6 +85,7 @@ const { dbMock, resetDb, seedDoc } = vi.hoisted(() => {
     seedDoc: (collection: string, id: string, data: any) => {
       ensureCollection(collection).set(id, { id, data });
     },
+    getDoc: (collection: string, id: string) => ensureCollection(collection).get(id)?.data,
   };
 });
 
@@ -243,5 +244,27 @@ describe("unitsRoutes PATCH aliases", () => {
       leaseEndDate: "2027-06-10",
     });
     expect(res.body.items).toEqual(res.body.units);
+    expect(getDoc("properties", "prop-1")).toMatchObject({
+      unitCount: 2,
+      unitsCount: 2,
+      units: [
+        expect.objectContaining({
+          id: "units-auto-1",
+          unitNumber: "101",
+          status: "vacant",
+          occupantName: null,
+          leaseEndDate: null,
+        }),
+        expect.objectContaining({
+          id: "units-auto-2",
+          unitNumber: "102",
+          status: "occupied",
+          occupancyStatus: "occupied",
+          occupantName: "Jane Tenant",
+          tenantName: "Jane Tenant",
+          leaseEndDate: "2027-06-10",
+        }),
+      ],
+    });
   });
 });

@@ -444,9 +444,14 @@ router.post(
         .where("landlordId", "==", landlordId)
         .where("propertyId", "==", propertyId)
         .get();
+      const persistedUnits = countSnap.docs
+        .map((doc: any) => ({ id: doc.id, ...(doc.data() as any) }))
+        .sort((a: any, b: any) => String(a.unitNumber || "").localeCompare(String(b.unitNumber || "")));
       await db.collection("properties").doc(propertyId).set(
         {
+          units: persistedUnits,
           unitsCount: countSnap.size,
+          unitCount: countSnap.size,
           updatedAt: now.toISOString(),
           updatedAtServer: FieldValue.serverTimestamp(),
         },

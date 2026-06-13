@@ -196,6 +196,41 @@ async function loadScopedPropertiesForUser(options: {
     .slice(0, options.limit);
 }
 
+async function hydratePropertiesWithUnitDocs(properties: any[], landlordId: string): Promise<any[]> {
+  if (!properties.length) return properties;
+  const propertyIds = new Set(properties.map((item) => String(item?.id || "").trim()).filter(Boolean));
+  if (!propertyIds.size) return properties;
+
+  try {
+    const snap = await db.collection("units").where("landlordId", "==", landlordId).get();
+    const unitsByProperty = new Map<string, any[]>();
+    for (const doc of snap.docs || []) {
+      const unit = { id: doc.id, ...(doc.data() as any) };
+      const propertyId = String(unit?.propertyId || "").trim();
+      if (!propertyIds.has(propertyId)) continue;
+      const units = unitsByProperty.get(propertyId) || [];
+      units.push(unit);
+      unitsByProperty.set(propertyId, units);
+    }
+
+    return properties.map((property) => {
+      const propertyId = String(property?.id || "").trim();
+      const units = unitsByProperty.get(propertyId);
+      if (!units) return property;
+      const sortedUnits = [...units].sort((a, b) => String(a.unitNumber || "").localeCompare(String(b.unitNumber || "")));
+      return {
+        ...property,
+        units: sortedUnits,
+        unitCount: sortedUnits.length,
+        unitsCount: sortedUnits.length,
+      };
+    });
+  } catch (err: any) {
+    console.warn("[GET /api/properties] unit hydration failed", err?.message || err);
+    return properties;
+  }
+}
+
 async function loadPropertyOr404(propertyId: string) {
   const snap = await db.collection("properties").doc(propertyId).get();
   if (!snap.exists) return null;
@@ -245,7 +280,9 @@ router.get("/", requireLandlord, async (req: any, res) => {
       adminOverridePathUsed: false,
     });
 
-    return res.json({ items: filteredItems, nextCursor: null });
+    const hydratedItems = await hydratePropertiesWithUnitDocs(filteredItems, landlordId);
+
+    return res.json({ items: hydratedItems, nextCursor: null });
   } catch (err: any) {
     console.error("[GET /api/properties] query failed", err);
     return res.status(500).json({
@@ -1382,7 +1419,31 @@ router.post(
 
     const { propertyId } = req.params;
     const units = Array.isArray(req.body?.units) ? req.body.units : [];
-    const unitCount = units.length;
+    const normalizedUnits = units
+      .map((raw: any) => {
+        const unitNumber = String(raw?.unitNumber || raw?.unit || raw?.label || "").trim();
+        if (!unitNumber) return null;
+        const status = String(raw?.status || raw?.occupancyStatus || "").trim().toLowerCase() === "occupied" ? "occupied" : "vacant";
+        const occupantName = status === "occupied" ? String(raw?.occupantName || raw?.tenantName || "").trim() || null : null;
+        const leaseEndDate = status === "occupied" ? String(raw?.leaseEndDate || raw?.endDate || raw?.leaseEnd || "").trim() || null : null;
+        return {
+          unitNumber,
+          rent: raw?.rent ?? raw?.marketRent ?? null,
+          marketRent: raw?.marketRent ?? raw?.rent ?? null,
+          beds: raw?.beds ?? raw?.bedrooms ?? null,
+          bedrooms: raw?.bedrooms ?? raw?.beds ?? null,
+          baths: raw?.baths ?? raw?.bathrooms ?? null,
+          bathrooms: raw?.bathrooms ?? raw?.baths ?? null,
+          sqft: raw?.sqft ?? raw?.squareFeet ?? null,
+          status,
+          occupancyStatus: status,
+          occupantName,
+          tenantName: occupantName,
+          leaseEndDate,
+        };
+      })
+      .filter(Boolean);
+    const unitCount = normalizedUnits.length;
 
     try {
       const docRef = db.collection("properties").doc(propertyId);
@@ -1403,7 +1464,7 @@ router.post(
       const delta = unitCount - previousCount;
 
       await db.runTransaction(async (tx) => {
-        tx.update(docRef, { unitCount });
+        tx.update(docRef, { unitCount, unitsCount: unitCount, units: normalizedUnits });
         if (delta !== 0) {
           const usageRef = db.collection("landlordUsage").doc(landlordId);
           tx.set(

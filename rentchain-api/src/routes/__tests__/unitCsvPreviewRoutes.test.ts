@@ -134,6 +134,33 @@ describe("unit CSV preview routes", () => {
     ]);
   });
 
+  it("accepts occupied metadata headers through the property-scoped route", async () => {
+    seedDoc("properties", "prop-1", { landlordId: "landlord-1" });
+    const app = await createUnitImportApp();
+
+    const res = await request(app).post("/api/properties/prop-1/units/csv-parse").send({
+      csvText: "unitNumber,marketRent,beds,baths,sqft,status,occupantName,leaseEndDate\n301,2100,2,1,850,occupied,Jane Tenant,2027-06-10",
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(res.body.headers.unknown).toEqual([]);
+    expect(res.body.headers.expected).toEqual(
+      expect.arrayContaining(["unitNumber", "marketRent", "beds", "baths", "sqft", "status", "occupantName", "leaseEndDate"])
+    );
+    expect(res.body.preview.errors).toEqual([]);
+    expect(res.body.preview.rows[0]).toMatchObject({
+      row: 2,
+      status: "valid",
+      data: expect.objectContaining({
+        unitNumber: "301",
+        status: "occupied",
+        occupantName: "Jane Tenant",
+        leaseEndDate: "2027-06-10",
+      }),
+    });
+  });
+
   it("previews Numbers-style CSV through the property-scoped route", async () => {
     seedDoc("properties", "prop-1", { landlordId: "landlord-1" });
     const app = await createUnitImportApp();
