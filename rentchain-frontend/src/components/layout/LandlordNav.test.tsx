@@ -148,27 +148,25 @@ describe("LandlordNav mobile drawer", () => {
     expect(screen.getByTestId("current-path")).toHaveTextContent("/payments");
   });
 
-  it("uses the requested landlord mobile app tabs", () => {
+  it("uses the free-tier landlord mobile app tabs in setup order", () => {
     renderLandlordNav();
 
     const tabbar = screen.getByRole("navigation", { name: "Bottom navigation" });
     expect(within(tabbar).getByText("Dashboard")).toBeInTheDocument();
-    expect(within(tabbar).getByText("Documents")).toBeInTheDocument();
-    expect(within(tabbar).getByText("Leases")).toBeInTheDocument();
+    expect(within(tabbar).getByText("Properties")).toBeInTheDocument();
+    expect(within(tabbar).getByText("Applicants")).toBeInTheDocument();
     expect(within(tabbar).getByText("Inbox")).toBeInTheDocument();
-    expect(within(tabbar).getByText("Messages")).toBeInTheDocument();
     expect(within(tabbar).getByText("More")).toBeInTheDocument();
     expect(within(tabbar).getAllByRole("button").map((button) => button.textContent)).toEqual([
       "Dashboard",
-      "Documents",
-      "Leases",
+      "Properties",
+      "Applicants",
       "Inbox",
-      "Messages",
       "More",
     ]);
-    expect(within(tabbar).queryByText("Applications")).not.toBeInTheDocument();
     expect(within(tabbar).queryByText("Tenants")).not.toBeInTheDocument();
-    expect(within(tabbar).queryByText("Properties")).not.toBeInTheDocument();
+    expect(within(tabbar).queryByText("Leases")).not.toBeInTheDocument();
+    expect(within(tabbar).queryByText("Messages")).not.toBeInTheDocument();
   });
 
   it("keeps the shared nav tab configuration aligned with the landlord mobile app tabs", async () => {
@@ -176,9 +174,9 @@ describe("LandlordNav mobile drawer", () => {
 
     expect(NAV_ITEMS.filter((item) => item.showInTabs).map((item) => item.label)).toEqual([
       "Dashboard",
-      "Documents",
-      "Leases",
-      "Messages",
+      "Properties",
+      "Applications",
+      "Inbox",
     ]);
   });
 
@@ -202,11 +200,11 @@ describe("LandlordNav mobile drawer", () => {
     renderLandlordNav();
 
     const tabbar = screen.getByRole("navigation", { name: "Bottom navigation" });
-    fireEvent.click(within(tabbar).getByRole("button", { name: "Documents" }));
-    expect(screen.getByTestId("current-path")).toHaveTextContent("/applications");
+    fireEvent.click(within(tabbar).getByRole("button", { name: "Properties" }));
+    expect(screen.getByTestId("current-path")).toHaveTextContent("/properties");
 
-    fireEvent.click(within(tabbar).getByRole("button", { name: "Leases" }));
-    expect(screen.getByTestId("current-path")).toHaveTextContent("/leases");
+    fireEvent.click(within(tabbar).getByRole("button", { name: "Applicants" }));
+    expect(screen.getByTestId("current-path")).toHaveTextContent("/applications");
 
     fireEvent.click(within(tabbar).getByRole("button", { name: "Inbox" }));
     expect(screen.getByTestId("current-path")).toHaveTextContent("/landlord/unified-inbox");

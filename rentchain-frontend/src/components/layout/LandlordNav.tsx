@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { FileText, Inbox, LayoutDashboard, Menu, MessagesSquare, ScrollText, X } from "lucide-react";
+import { Building2, Inbox, LayoutDashboard, Menu, ScrollText, X } from "lucide-react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import TopNav from "./TopNav";
 import { useAuth } from "../../context/useAuth";
@@ -18,10 +18,9 @@ type Props = {
 
 const landlordMobileTabs = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/applications", label: "Documents", icon: FileText },
-  { to: "/leases", label: "Leases", icon: ScrollText },
+  { to: "/properties", label: "Properties", icon: Building2 },
+  { to: "/applications", label: "Applicants", icon: ScrollText },
   { to: "/landlord/unified-inbox", label: "Inbox", icon: Inbox },
-  { to: "/messages", label: "Messages", icon: MessagesSquare, requiresMessaging: true },
 ];
 
 function includesAdminAuthority(value: unknown): boolean {

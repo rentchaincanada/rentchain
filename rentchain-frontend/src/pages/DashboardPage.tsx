@@ -268,6 +268,116 @@ function DashboardDecisionSummaryPanel({
   );
 }
 
+function FreeTierJourneyCard({
+  propertiesCount,
+  unitsCount,
+  applicantsCount,
+  screeningReady,
+  onAddProperty,
+  onAddUnit,
+  onAddApplicant,
+  onScreening,
+}: {
+  propertiesCount: number;
+  unitsCount: number;
+  applicantsCount: number;
+  screeningReady: boolean;
+  onAddProperty: () => void;
+  onAddUnit: () => void;
+  onAddApplicant: () => void;
+  onScreening: () => void;
+}) {
+  const steps = [
+    {
+      id: "property",
+      label: "Add property",
+      done: propertiesCount > 0,
+      helper: propertiesCount > 0 ? `${propertiesCount} propert${propertiesCount === 1 ? "y" : "ies"} added` : "Start with the rental address.",
+      action: onAddProperty,
+      actionLabel: propertiesCount > 0 ? "View properties" : "Add property",
+    },
+    {
+      id: "unit",
+      label: "Add unit",
+      done: unitsCount > 0,
+      helper: unitsCount > 0 ? `${unitsCount} unit${unitsCount === 1 ? "" : "s"} added` : "Add rent, beds, baths, and occupancy.",
+      action: onAddUnit,
+      actionLabel: unitsCount > 0 ? "View units" : "Add unit",
+    },
+    {
+      id: "applicant",
+      label: "Add applicant",
+      done: applicantsCount > 0,
+      helper: applicantsCount > 0 ? `${applicantsCount} applicant${applicantsCount === 1 ? "" : "s"} started` : "Send an application after a unit exists.",
+      action: onAddApplicant,
+      actionLabel: applicantsCount > 0 ? "View applicants" : "Add applicant",
+    },
+    {
+      id: "screening",
+      label: "Run screening",
+      done: screeningReady,
+      helper: screeningReady ? "Screening setup is connected." : "Screening is the upgrade-ready next step.",
+      action: onScreening,
+      actionLabel: screeningReady ? "Run screening" : "Review screening",
+    },
+  ];
+  const nextStep = steps.find((step) => !step.done) || steps[steps.length - 1];
+
+  return (
+    <Card
+      data-testid="free-tier-journey-card"
+      style={{
+        padding: spacing.md,
+        border: `1px solid ${colors.border}`,
+        display: "grid",
+        gap: spacing.md,
+      }}
+    >
+      <div style={{ display: "flex", justifyContent: "space-between", gap: spacing.md, flexWrap: "wrap" }}>
+        <div style={{ display: "grid", gap: 4, minWidth: 0 }}>
+          <div style={{ fontWeight: 800, fontSize: 18 }}>Start in order</div>
+          <div style={{ color: text.muted, lineHeight: 1.55 }}>
+            Free tier works best when setup follows property, unit, applicant, screening, then lease.
+          </div>
+        </div>
+        <Button onClick={nextStep.action}>{nextStep.actionLabel}</Button>
+      </div>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 160px), 1fr))",
+          gap: spacing.sm,
+        }}
+      >
+        {steps.map((step, index) => (
+          <button
+            key={step.id}
+            type="button"
+            onClick={step.action}
+            style={{
+              textAlign: "left",
+              border: `1px solid ${step.done ? "rgba(16,185,129,0.35)" : colors.border}`,
+              background: step.done ? "rgba(236,253,245,0.88)" : colors.panel,
+              borderRadius: 8,
+              padding: 12,
+              display: "grid",
+              gap: 6,
+              cursor: "pointer",
+              minWidth: 0,
+            }}
+          >
+            <div style={{ color: step.done ? "#047857" : text.muted, fontSize: 12, fontWeight: 900 }}>
+              Step {index + 1}
+            </div>
+            <div style={{ color: text.primary, fontWeight: 800 }}>{step.label}</div>
+            <div style={{ color: text.muted, fontSize: 13, lineHeight: 1.45 }}>{step.helper}</div>
+          </button>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
 const DashboardPage: React.FC = () => {
   // Guardrail: declare derived values used in hook deps above the hooks that depend on them.
   const [data, setData] = React.useState<any | null>(null);
@@ -630,22 +740,6 @@ const DashboardPage: React.FC = () => {
 
   const fallbackActions = React.useMemo(() => {
     const items: Array<{ id: string; title: string; severity: "info"; href: string }> = [];
-    if (SCREENING_ENABLED && canManualScreen && (kpis.screeningsCount ?? 0) === 0) {
-      items.push({
-        id: "run-first-screening",
-        title: "Set up screening workflow",
-        severity: "info",
-        href: "/applications?openTransUnionAccess=1",
-      });
-    }
-    if (tenantCount === 0) {
-      items.push({
-        id: "invite-tenant",
-        title: "Invite a tenant",
-        severity: "info",
-        href: "/tenants",
-      });
-    }
     if (derivedPropertiesCount === 0) {
       items.push({
         id: "add-property",
@@ -654,8 +748,32 @@ const DashboardPage: React.FC = () => {
         href: "/properties",
       });
     }
+    if (derivedPropertiesCount > 0 && derivedUnitsCount === 0) {
+      items.push({
+        id: "add-unit",
+        title: "Add a unit",
+        severity: "info",
+        href: "/properties?openAddUnit=1",
+      });
+    }
+    if (derivedUnitsCount > 0 && applicationsCount === 0) {
+      items.push({
+        id: "add-applicant",
+        title: "Add an applicant",
+        severity: "info",
+        href: "/applications?openSendApplication=1",
+      });
+    }
+    if (SCREENING_ENABLED && canManualScreen && applicationsCount > 0 && (kpis.screeningsCount ?? 0) === 0) {
+      items.push({
+        id: "run-first-screening",
+        title: "Set up screening workflow",
+        severity: "info",
+        href: "/applications?openTransUnionAccess=1",
+      });
+    }
     return items;
-  }, [canManualScreen, derivedPropertiesCount, kpis.screeningsCount, tenantCount]);
+  }, [applicationsCount, canManualScreen, derivedPropertiesCount, derivedUnitsCount, kpis.screeningsCount]);
   const actions = Array.isArray(data?.actions) && data.actions.length > 0 ? data.actions : fallbackActions;
   const leaseNoticeSummary = data?.leaseNoticeSummary || {
     expiringSoon: 0,
@@ -832,6 +950,19 @@ const DashboardPage: React.FC = () => {
         ) : null}
 
         {dataReady ? (
+          <FreeTierJourneyCard
+            propertiesCount={derivedPropertiesCount}
+            unitsCount={derivedUnitsCount}
+            applicantsCount={applicationsCount}
+            screeningReady={screeningSetupComplete}
+            onAddProperty={() => navigate("/properties?focus=addProperty")}
+            onAddUnit={() => navigate("/properties?openAddUnit=1")}
+            onAddApplicant={handleCreateApplicationClick}
+            onScreening={() => navigate(screeningSetupComplete ? "/applications" : "/applications?openTransUnionAccess=1")}
+          />
+        ) : null}
+
+        {dataReady ? (
           <div
             data-testid="dashboard-kpi-decision-stack"
             style={{
@@ -854,11 +985,6 @@ const DashboardPage: React.FC = () => {
                 openActionsCount: "/dashboard#open-actions",
                 delinquentCount: "/payments?filter=delinquent",
               }}
-            />
-            <DashboardDecisionSummaryPanel
-              decisions={dashboardDecisions}
-              pendingId={decisionActionPendingId}
-              onAction={handleDashboardDecisionAction}
             />
           </div>
         ) : null}
@@ -1023,6 +1149,22 @@ const DashboardPage: React.FC = () => {
                 </Button>
                 <Button
                   variant="secondary"
+                  onClick={() => navigate("/properties?openAddUnit=1")}
+                  aria-label="Add unit"
+                  disabled={progressLoading}
+                >
+                  Add unit
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={handleCreateApplicationClick}
+                  aria-label="Add applicant"
+                  disabled={progressLoading}
+                >
+                  Add applicant
+                </Button>
+                <Button
+                  variant="secondary"
                   onClick={() => navigate("/tenants?invite=1")}
                   aria-label="Invite tenant"
                   disabled={progressLoading}
@@ -1036,14 +1178,6 @@ const DashboardPage: React.FC = () => {
                   disabled={progressLoading}
                 >
                   Generate Lease Pack
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={handleCreateApplicationClick}
-                  aria-label="Send application link"
-                  disabled={progressLoading}
-                >
-                  Send application link
                 </Button>
                 <Button
                   variant="secondary"
@@ -1206,6 +1340,26 @@ const DashboardPage: React.FC = () => {
               </div>
             ) : null}
           </Card>
+        ) : null}
+
+        {dataReady ? (
+          <details
+            style={{
+              border: `1px solid ${colors.border}`,
+              borderRadius: 8,
+              padding: spacing.md,
+              background: colors.card,
+            }}
+          >
+            <summary style={{ cursor: "pointer", fontWeight: 800 }}>Decision inbox summary</summary>
+            <div style={{ marginTop: spacing.md }}>
+              <DashboardDecisionSummaryPanel
+                decisions={dashboardDecisions}
+                pendingId={decisionActionPendingId}
+                onAction={handleDashboardDecisionAction}
+              />
+            </div>
+          </details>
         ) : null}
 
         {dataReady && canUseReferrals ? (
