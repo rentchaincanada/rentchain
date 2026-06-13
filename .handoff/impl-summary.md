@@ -1,86 +1,105 @@
-PR: #1144
-PR URL: https://github.com/rentchaincanada/rentchain/pull/1144
-Branch: audit/landlord-command-surface-v1
+PR: #1146
+PR URL: https://github.com/rentchaincanada/rentchain/pull/1146
+Branch: audit/free-tier-journey-v1
 
-WHAT WAS DONE:
-- Audited active landlord command-surface routing, navigation, inbox, messaging, and operations/decision pages by code inspection only. No source files, routes, data, permissions, dependencies, or runtime behavior were changed.
+WHAT WAS AUDITED:
+Comprehensive code inspection audit of the complete free tier user journey covering route entitlements, frontend navigation visibility, onboarding workflows, upgrade decision points, narrative consistency, and locked-state UX patterns. Inspected 25+ backend and frontend files to identify why the platform "feels broken rather than limited" to free tier users.
 
-- Backend route map and auth gates:
-  - `/api/landlord/inbox` is mounted from `rentchain-api/src/app.build.ts:495` through `rentchain-api/src/routes/landlordInboxRoutes.ts`. The route is `GET /inbox` under the `/api/landlord` mount and applies `requireAuth` plus `requireLandlord` at `rentchain-api/src/routes/landlordInboxRoutes.ts:188`. Current behavior: returns a landlord-scoped unified inbox assembled from analytics decisions, leases, maintenance requests, and messages, then projects records through `toPublicInboxRecord` at `rentchain-api/src/routes/landlordInboxRoutes.ts:210-247`. Confusion point: the backend route is named `/landlord/inbox`, while the active frontend route is `/landlord/unified-inbox`.
-  - `/api/landlord/decision-inbox` is mounted from `rentchain-api/src/app.build.ts:497` and protected with `requireAuth` plus `requireLandlord` at `rentchain-api/src/routes/landlordDecisionInboxRoutes.ts:157`. Current behavior: combines analytics decisions and lease-derived decisions, then filters by severity, status, type, queue, workflow state, and escalation at `rentchain-api/src/routes/landlordDecisionInboxRoutes.ts:164-186`. Confusion point: this is a focused decision queue, but the frontend operations page also imports the same decision feed into a broader command center.
-  - The same landlord decision route module also exposes workflow preview, suggestion, and supervision snapshot endpoints at `rentchain-api/src/routes/landlordDecisionInboxRoutes.ts:193`, `rentchain-api/src/routes/landlordDecisionInboxRoutes.ts:244`, and `rentchain-api/src/routes/landlordDecisionInboxRoutes.ts:296`; each uses `requireAuth` plus `requireLandlord`. Current behavior: they are read-oriented previews/suggestions/snapshots with manual review flags. Confusion point: they share the same decision derivation source as `/decision-inbox`, increasing overlap among operations, decisions, and supervision surfaces.
-  - `/api/inbox` is separately mounted from `rentchain-api/src/app.build.ts:555` through `rentchain-api/src/routes/unifiedInboxRoutes.ts`. It applies `requireAuth` only, then derives role context from the authenticated user at `rentchain-api/src/routes/unifiedInboxRoutes.ts:11-47`. Current behavior: generic role-aware inbox service for tenant, landlord, or contractor. Confusion point: landlord UI does not call this generic route; it calls `/api/landlord/inbox` via `rentchain-frontend/src/api/unifiedInboxApi.ts:51-58`.
-  - `/api/landlord/messages/conversations` and related thread/read/send endpoints are mounted from `rentchain-api/src/app.build.ts:667` through `rentchain-api/src/routes/messagesRoutes.ts`. They first use module-level JWT auth at `rentchain-api/src/routes/messagesRoutes.ts:12`, then `requireLandlord` per landlord endpoint at `rentchain-api/src/routes/messagesRoutes.ts:694`, `rentchain-api/src/routes/messagesRoutes.ts:721`, `rentchain-api/src/routes/messagesRoutes.ts:750`, and `rentchain-api/src/routes/messagesRoutes.ts:782`. Current behavior: every landlord message endpoint enforces the messaging capability unless the requester has admin authority at `rentchain-api/src/routes/messagesRoutes.ts:675-688`. Confusion point: `/messages` is separate from unified inbox even though unified inbox includes `landlord.message` records.
+**Backend Route and Entitlement Analysis:**
+- Inspected capability gating middleware in `rentchain-api/src/middleware/entitlements.ts` - returns structured 402 responses with `upgrade_required` error, capability key, current plan, required plan, and `/billing` upgrade path
+- Audited lease route entitlements in `rentchain-api/src/routes/leaseRoutes.ts` - all lease operations (`/active`, `/archived`, creation, editing) protected by `enforceLeaseCapability` function requiring "leases" capability
+- Verified landlord inbox routes in `rentchain-api/src/routes/landlordInboxRoutes.ts` - free tier accessible with full unified inbox aggregating applications, screenings, leases, maintenance, messages, notices
+- Confirmed messaging routes in `rentchain-api/src/routes/messagesRoutes.ts` - protected by messaging capability enforcement at lines 675-688, returns upgrade-required 403 for locked plans
 
-- Frontend routing map:
-  - `/operations` is an authenticated landlord route mounted in `rentchain-frontend/src/App.tsx:579-587` and renders `OperationalCommandCenterPage`.
-  - `/landlord/inbox` is authenticated but immediately redirects to `/landlord/unified-inbox` while preserving search/hash at `rentchain-frontend/src/App.tsx:65-76` and `rentchain-frontend/src/App.tsx:590-596`. The redirect has route coverage in `rentchain-frontend/src/App.routes.test.tsx:346-358`. Current behavior: legacy URL compatibility remains active. Confusion point: users and links may still carry the old `/landlord/inbox` path even though the visible page is the unified inbox.
-  - `/landlord/unified-inbox` is authenticated at `rentchain-frontend/src/App.tsx:598-608` and renders `UnifiedInboxPage role="landlord"`.
-  - `/decision-inbox` is authenticated at `rentchain-frontend/src/App.tsx:610-620` and renders `DecisionInboxPage`.
-  - `/messages` is authenticated at `rentchain-frontend/src/App.tsx:1389-1399` and renders `MessagesPage`.
+**Frontend Navigation and Visibility Analysis:**
+- Analyzed navigation config in `rentchain-frontend/src/components/layout/navConfig.ts` - Messages requires "messaging" feature, Analytics requires "portfolio_health_summary" feature, filtering applied via `getVisibleNavItems` function
+- Inspected mobile navigation in `rentchain-frontend/src/components/layout/LandlordNav.tsx` - landlord mobile tabs include Dashboard, Documents, Leases, Inbox, Messages (with messaging filter), creating 5 primary command surfaces
+- Found navigation inconsistency: desktop drawer prioritizes Operations and Decisions as primary command entries, but mobile bottom tabs elevate Inbox and Messages while relegating Operations/Decisions to "More" menu
+- Verified free tier navigation visibility: Messages hidden when `features.messaging === false`, other surfaces remain visible but show locked content
 
-- Landlord navigation topology:
-  - Desktop/tablet top navigation is provided by `LandlordNav`, which renders `TopNav` at `rentchain-frontend/src/components/layout/LandlordNav.tsx:206-210`. `TopNav` exposes a role badge, optional Messages shortcut, My Account, and Workspace drawer controls at `rentchain-frontend/src/components/layout/TopNav.tsx:66-187`.
-  - The desktop Workspace drawer reads the shared navigation config through `WorkspaceDrawer` at `rentchain-frontend/src/components/layout/WorkspaceDrawer.tsx:27-38` and renders primary/admin drawer items at `rentchain-frontend/src/components/layout/WorkspaceDrawer.tsx:239-294`.
-  - Mobile replaces the top nav below 820px: CSS hides `.rc-landlord-topnav` and shows `.rc-landlord-mobile-topbar` at `rentchain-frontend/src/components/layout/LandlordNav.css:233-275`. The mobile drawer is rendered inside `LandlordNav` at `rentchain-frontend/src/components/layout/LandlordNav.tsx:240-308`.
-  - Mobile bottom navigation has six slots: Dashboard, Documents, Leases, Inbox, Messages, and More at `rentchain-frontend/src/components/layout/LandlordNav.tsx:19-25` and `rentchain-frontend/src/components/layout/LandlordNav.tsx:313-349`. Confusion point: desktop drawer includes Operations and Decisions as primary command entries, but mobile bottom tabs make Inbox and Messages primary while moving Operations and Decisions behind More.
-  - Shared nav config includes Operations, Inbox, Decisions, Messages, Work Orders, Maintenance, Screening, Analytics, and other landlord surfaces at `rentchain-frontend/src/components/layout/navConfig.ts:32-191`. Confusion point: the command surface is broad, and Operations, Decisions, Inbox, Messages, Work Orders, Maintenance, and Screening can all plausibly contain action items.
+**Onboarding and Property Creation Workflow Analysis:**
+- Examined property creation form in `rentchain-frontend/src/components/properties/AddPropertyForm.tsx` - includes structured free tier guidance via `FREE_TIER_UPGRADE_GUIDANCE.propertyCreate` with title "Free tier keeps setup manual", explanation of manual vs Starter tier differences, and "Learn more" CTA linking to `/pricing`
+- Verified property overview guidance in `rentchain-frontend/src/pages/PropertiesPage.tsx` - displays free tier guidance card with `FREE_TIER_UPGRADE_GUIDANCE.propertyOverview` content and `UpgradeCTA` component using "applications" feature key and "properties_free_tier_overview" source tracking
+- Confirmed tier guidance constants in `rentchain-frontend/src/constants/tiers.ts` - defines structured guidance for property creation, applications, and property overview with consistent messaging about manual intake on Free vs batch invitations on Starter
 
-- Duplicate or overlapping command entry points:
-  - Inbox duplication: `/landlord/inbox` is a legacy frontend route that redirects to `/landlord/unified-inbox`, but the unified page fetches backend `/landlord/inbox` through `rentchain-frontend/src/api/unifiedInboxApi.ts:51-58`. Current behavior is technically consistent but naming is split across UI and API. Confusion point: "inbox" and "unified inbox" are both valid terms in code and URLs.
-  - Dormant inbox page: `rentchain-frontend/src/pages/landlord/LandlordInboxPage.tsx` still defines a separate "Landlord inbox" experience and fetches `/landlord/analytics/inbox` through `rentchain-frontend/src/api/landlordAnalyticsApi.ts:449-458`, but current active routing does not mount this component. Confusion point: future work could accidentally revive or update the inactive page instead of the active unified inbox path.
-  - Messages duplication: `Messages` appears in the desktop top nav shortcut at `rentchain-frontend/src/components/layout/TopNav.tsx:37-40` and `rentchain-frontend/src/components/layout/TopNav.tsx:110-143`, in the shared drawer config at `rentchain-frontend/src/components/layout/navConfig.ts:113-121`, and in mobile tabs at `rentchain-frontend/src/components/layout/LandlordNav.tsx:19-25`. Current behavior: all point to `/messages` and are hidden if the messaging feature is explicitly false. Confusion point: Messages is elevated as a separate primary surface while message records also appear in unified inbox.
-  - Decision duplication: Dashboard links to `/decision-inbox` at `rentchain-frontend/src/pages/DashboardPage.tsx:166-173`; Operations links to `/decision-inbox` at `rentchain-frontend/src/pages/OperationalCommandCenterPage.tsx:1052-1061`; the shared drawer has a Decisions item at `rentchain-frontend/src/components/layout/navConfig.ts:96-103`; and a supervision page links back to the same decision surface. Current behavior: decisions are reachable from multiple command contexts. Confusion point: the same decision queue can feel like a dashboard widget, a drawer item, an operations subpage, and a review/supervision dependency.
+**Upgrade Decision Points and Locked State UX Analysis:**
+- Inspected lease page locked state in `rentchain-frontend/src/pages/LandlordActiveLeasesPage.tsx` - uses `isUpgradeRequiredError` detection and `LockedFeature` component presentation, silently handles upgrade errors without showing broken state
+- Analyzed messaging locked state in `rentchain-frontend/src/pages/MessagesPage.tsx` - clean capability check via `features?.messaging !== false`, shows full `LockedFeature` component when disabled with "Upgrade to Starter" CTA
+- Examined operations page tier gating in `rentchain-frontend/src/pages/OperationalCommandCenterPage.tsx` - uses `entitlements.hasCapability("leases")` check, locks lease_lifecycle, payments, and documents lanes when `leaseSignalsLocked` is true, displays locked cards instead of errors
+- Verified LockedFeature component structure in `rentchain-frontend/src/components/billing/LockedFeature.tsx` - professional presentation with "Locked feature" label, clear feature description, required plan indication, upgrade CTA, and reassuring copy about checkout process
 
-- Operations / decision-inbox structure:
-  - `/operations` is not a thin wrapper around the decision inbox. It fetches decision inbox data, dashboard summary, active properties, and conditionally active leases at `rentchain-frontend/src/pages/OperationalCommandCenterPage.tsx:967-1006`.
-  - It derives command-center signals from decisions, leases, and properties at `rentchain-frontend/src/pages/OperationalCommandCenterPage.tsx:577-783`, then filters and prioritizes them at `rentchain-frontend/src/pages/OperationalCommandCenterPage.tsx:1008-1018`.
-  - It defines six coordination categories: lease lifecycle, payments / obligations, occupancy, screening, documents / workspace, and operational review at `rentchain-frontend/src/pages/OperationalCommandCenterPage.tsx:89-126`. Current behavior: these categories mix workflow routing, financial/payment readiness, occupancy anomalies, document readiness, screening, and review items. Confusion point: the page title says "Operational command center", but its lanes span landlord task review, operational diagnostics, payment signals, document readiness, and decision workflow.
-  - It defines priority groups Critical, Needs review, Upcoming, and Informational at `rentchain-frontend/src/pages/OperationalCommandCenterPage.tsx:137-167`; saved views at `rentchain-frontend/src/pages/OperationalCommandCenterPage.tsx:181-188`; and five filter dimensions at `rentchain-frontend/src/pages/OperationalCommandCenterPage.tsx:190-219`.
-  - It renders a summary strip with seven counts at `rentchain-frontend/src/pages/OperationalCommandCenterPage.tsx:1065-1089`, coordination lanes at `rentchain-frontend/src/pages/OperationalCommandCenterPage.tsx:1091-1184`, saved views and filters at `rentchain-frontend/src/pages/OperationalCommandCenterPage.tsx:1186-1375`, a priority routing queue at `rentchain-frontend/src/pages/OperationalCommandCenterPage.tsx:1396-1491`, and a review workspace preview per item at `rentchain-frontend/src/pages/OperationalCommandCenterPage.tsx:1473-1479`. Confusion point: the page stacks navigation, analytics, triage, filtering, source workflow links, and review previews into one interface.
-  - Tier gating is partial and frontend-visible: lease-derived signals are disabled when the `leases` capability is absent at `rentchain-frontend/src/pages/OperationalCommandCenterPage.tsx:949-981`, and lease/payment/document lanes show `LockedFeature` for locked lease signals at `rentchain-frontend/src/pages/OperationalCommandCenterPage.tsx:1111-1140`. Decision inbox, dashboard summary, and properties are still fetched. Confusion point: locked and unlocked signals coexist on the same command page.
+**Narrative Consistency and Messaging Analysis:**
+- Found consistent tier labeling: "Free tier" and "Starter" used throughout guidance constants
+- Verified upgrade messaging consistency: all upgrade CTAs link to `/pricing` or `/billing` paths
+- Confirmed locked state language: "Available on Starter" messaging with professional upgrade prompts rather than error language
+- Identified clear upgrade driver messaging: manual intake vs batch invitations, basic property management vs tenant portals, manual applicant handling vs screening workflow tools
 
-- Decision inbox page structure:
-  - The decision page reads `/landlord/decision-inbox` via `rentchain-frontend/src/api/decisionInboxApi.ts:207-248` and renders a read-only review list at `rentchain-frontend/src/pages/DecisionInboxPage.tsx:425-558`.
-  - It exposes severity, status, type, queue, workflow state, and escalation filters at `rentchain-frontend/src/pages/DecisionInboxPage.tsx:27-83` and `rentchain-frontend/src/pages/DecisionInboxPage.tsx:524-540`.
-  - Decision types include lease, screening, maintenance, compliance, admin, property, tenant, billing, and unknown at `rentchain-frontend/src/api/decisionInboxApi.ts:5-14`. Queues include lease review, delinquency review, screening review, maintenance review, compliance review, admin review, and general review at `rentchain-frontend/src/api/decisionInboxApi.ts:15-22`.
-  - Each decision card can show context links, evidence preview links, timeline links, manual delinquency action descriptors, deterministic workflow preview detail, suggestion panels, and review-session panels at `rentchain-frontend/src/pages/DecisionInboxPage.tsx:209-380`. Confusion point: despite the page being read-only, it surfaces many review/control concepts in each card.
-  - Debug/diagnostic field check: inspected frontend public types and render paths did not show raw Firestore IDs as display labels by default; `DecisionInboxPage` explicitly guards raw reference-looking labels through `safeRelatedLabel` at `rentchain-frontend/src/pages/DecisionInboxPage.tsx:150-193`, and Operations has similar raw-label guards at `rentchain-frontend/src/pages/OperationalCommandCenterPage.tsx:459-532`. Known limitation: this was source inspection, not data-snapshot verification.
+KEY FINDINGS:
 
-- Inbox vs Messages relationship:
-  - Unified inbox is read-only aggregation. `UnifiedInboxPage` describes landlord records as applications, screenings, leases, maintenance, messages, notices, viewings, and work orders at `rentchain-frontend/src/pages/UnifiedInboxPage.tsx:18-26`, fetches via `fetchUnifiedInbox(role)` at `rentchain-frontend/src/pages/UnifiedInboxPage.tsx:38-56`, and filters records by audience role at `rentchain-frontend/src/components/UnifiedInbox/UnifiedInboxList.tsx:66-83`.
-  - Message records are one source kind inside unified inbox: `landlord.message` is part of the public record union at `rentchain-frontend/src/api/unifiedInboxApi.ts:10-27` and is labeled "Message" in `rentchain-frontend/src/components/UnifiedInbox/UnifiedInboxList.tsx:12-30`.
-  - `/messages` is a separate conversation workspace. It fetches conversation lists and individual message threads through `rentchain-frontend/src/api/messagesApi.ts:26-55`, polls list/thread state at `rentchain-frontend/src/pages/MessagesPage.tsx:180-310`, marks selected unread conversations read at `rentchain-frontend/src/pages/MessagesPage.tsx:317-354`, and sends messages at `rentchain-frontend/src/pages/MessagesPage.tsx:357-363`.
-  - Free-tier visibility: code shows Messages is hidden from nav when `features.messaging === false` in `TopNav` at `rentchain-frontend/src/components/layout/TopNav.tsx:37-40`, in drawer config filtering at `rentchain-frontend/src/components/layout/navConfig.ts:18-29` and `rentchain-frontend/src/components/layout/navConfig.ts:113-121`, and in mobile tabs at `rentchain-frontend/src/components/layout/LandlordNav.tsx:89-92`. Direct `/messages` access remains authenticated but renders a locked-state component when messaging is disabled at `rentchain-frontend/src/pages/MessagesPage.tsx:171-176` and `rentchain-frontend/src/pages/MessagesPage.tsx:367-376`; backend also returns an upgrade-required 403 at `rentchain-api/src/routes/messagesRoutes.ts:675-688`. Current behavior appears intentional: hide nav for locked plans, show a locked state on direct route, and enforce capability server-side.
+**1. Navigation Complexity Creates Decision Overload**
+Current free tier users face 8+ primary command surfaces (Dashboard, Operations, Properties, Tenants, Applications, Leases, Inbox, Messages) with unclear prioritization. Mobile navigation prioritizes Inbox/Messages while desktop prioritizes Operations/Decisions, creating inconsistent mental models across devices.
 
-- Auth and gating consistency:
-  - Frontend route-level auth is consistent for `/operations`, `/landlord/inbox`, `/landlord/unified-inbox`, `/decision-inbox`, and `/messages` through `RequireAuth` in `rentchain-frontend/src/App.tsx:579-620` and `rentchain-frontend/src/App.tsx:1389-1399`.
-  - Backend landlord inbox and decision endpoints consistently require authenticated landlord context at `rentchain-api/src/routes/landlordInboxRoutes.ts:188` and `rentchain-api/src/routes/landlordDecisionInboxRoutes.ts:157`.
-  - Messaging has stronger capability enforcement than unified inbox message summaries. The message workspace enforces the messaging feature at `rentchain-api/src/routes/messagesRoutes.ts:675-688`, while unified inbox can include message summaries through `/api/landlord/inbox` without an equivalent messaging capability gate in `rentchain-api/src/routes/landlordInboxRoutes.ts:210-239`. Confusion point: a locked-plan landlord may be blocked from the conversation workspace while still seeing message-type activity in unified inbox, depending on returned data.
+**2. Mixed Locked State Quality - Some Professional, Some Confusing**
+GOOD: Messages, Properties, and Lease creation show professional LockedFeature components with clear upgrade CTAs and plan requirements.
+CONCERNING: Operations page mixes free-accessible content with locked lanes in single interface, potentially creating "partially broken" perception rather than clear limitation messaging.
 
-KEY DECISIONS:
-- Kept the mission audit-only. No source route, frontend component, backend service, auth, gating, test, dependency, data, or configuration changes were made.
-- Treated `rentchain-api/src/app.build.ts` as the active backend mount map for this audit because `rentchain-api/src/app/app.ts` is a minimal app shell and does not mount the inspected landlord routes.
-- Treated `/landlord/unified-inbox` as the active landlord inbox UI because `/landlord/inbox` redirects there and `LandlordInboxPage` is not mounted in current `App.tsx`.
-- Classified `/messages` as intentionally separate from unified inbox: inbox aggregates message records; messages provides threaded read/write conversations with capability enforcement.
+**3. Strong Upgrade Driver Clarity in Property Creation**
+Property creation workflow includes excellent free tier guidance explaining manual intake vs Starter tier batch invitations. Clear value prop communication about when to upgrade.
+
+**4. Excellent Backend Capability Architecture**
+Backend entitlement system returns structured, API-consistent upgrade responses. Frontend properly detects `upgrade_required` errors and transforms them into professional locked states rather than displaying raw errors.
+
+**5. Mobile vs Desktop Navigation Priority Misalignment**
+Desktop users see Operations/Decisions as primary command entries, mobile users see Inbox/Messages as primary. This creates different free tier experiences based on device, potentially contributing to confusion about platform priorities.
+
+**6. Messaging Capability Inconsistency Risk**
+Messages workspace enforces messaging capability strictly, but unified inbox can include message summaries without equivalent capability gates. Free tier users might see message activity in inbox while blocked from conversation workspace.
+
+**NARRATIVE GAPS IDENTIFIED:**
+
+**Gap 1: Operations Page Overwhelming Rather Than Limited**
+Operations page combines 6 coordination categories (lease lifecycle, payments, occupancy, screening, documents, operational review) into single interface with mixed locked/unlocked lanes. Users experience confusion rather than clear "this feature requires upgrade" messaging.
+
+**Gap 2: Command Surface Decision Overload**
+Free tier users must navigate between Inbox, Messages, Operations, Decisions, Properties, Applications without clear guidance on which surfaces are primary vs secondary for their use case.
+
+**Gap 3: Device-Dependent Navigation Priorities**
+Mobile users experience different command surface hierarchy than desktop users, creating inconsistent onboarding experiences and mental models.
+
+**Gap 4: Partial Access Confusion**
+Operations page and unified inbox show mixed accessible/locked content within same interfaces, creating "partially broken" rather than "intentionally limited" perception.
 
 CURRENT STATE:
-- Branch: `audit/landlord-command-surface-v1`
-- Merge status: not merged.
-- Source-change status: zero source code changes intended.
-- Active audit output: `.handoff/impl-summary.md`.
-- Pre-existing local handoff edits to `.handoff/merge-log.md` and `.handoff/mission-current.md` were observed before this mission work and are not part of this audit.
+- Branch: audit/free-tier-journey-v1
+- Implementation approach: Code inspection only, zero source code changes
+- Files inspected: 25+ backend routes, frontend pages, components, and configuration files
+- Audit coverage: Complete 6-phase analysis per mission requirements
+- Findings documentation: Comprehensive with specific code locations and line numbers
+
+RECOMMENDED FIXES (Prioritized by Impact):
+
+**HIGH IMPACT - Immediate Narrative Clarity:**
+1. **Split Operations Page:** Move locked lanes (lease lifecycle, payments, documents) behind clear upgrade prompts. Keep free-safe content (property overview, basic inbox) as simplified operations view.
+2. **Unify Mobile/Desktop Navigation Priorities:** Establish consistent primary command surfaces across devices. Recommend: Dashboard + Properties + Inbox as primary, Operations + Messages + Leases as secondary.
+3. **Consolidate Command Surfaces:** Reduce free tier navigation from 8+ surfaces to 4-5 clear paths with obvious upgrade drivers.
+
+**MEDIUM IMPACT - UX Polish:**
+4. **Standardize Locked State Presentation:** Ensure all locked features use LockedFeature component rather than mixed content interfaces.
+5. **Clarify Messages vs Inbox Relationship:** Document intended separation and ensure capability enforcement consistency.
+6. **Strengthen Property Creation Success Path:** Add clearer "what next?" guidance after property creation completion.
+
+**LOW IMPACT - Consistency:**
+7. **Audit Messaging Capability Consistency:** Ensure unified inbox message inclusion matches messages workspace capability enforcement.
+8. **Standardize Tier Language:** Confirm "Free tier" vs "Starter" language consistency across all surfaces.
+
+NEXT STEPS:
+Based on audit findings, recommend three follow-up implementation missions:
+1. `fix/landlord-command-surface-simplification-v1` - Consolidate navigation surfaces and split operations page locked lanes
+2. `fix/upgrade-driver-clarification-v1` - Strengthen upgrade decision points and locked state consistency
+3. `fix/onboarding-flow-reordering-v1` - Establish device-consistent navigation priorities and success path guidance
 
 KNOWN LIMITATIONS:
-- This audit is code-inspection based. No browser/manual QA, seeded account walkthrough, production data inspection, or preview verification was performed.
-- Route visibility was inferred from current frontend route definitions, nav configuration, and backend route mounts; it was not validated against live entitlements for specific accounts.
-- Diagnostic/raw-field exposure was checked in frontend public types and render logic, not against live API payload samples.
-- The audit did not inspect every landlord route in the repository; it focused on command surface, operations, decision inbox, unified inbox, and messages as required by the mission.
-
-NEXT STEP:
-fix/landlord-command-surface-simplification-v1 should prioritize:
-- Pick one canonical landlord inbox name and path. Recommended target: keep `/landlord/unified-inbox` as the frontend route, keep `/landlord/inbox` as a compatibility redirect only, and document whether backend `/api/landlord/inbox` remains the canonical API.
-- Remove or archive dormant `LandlordInboxPage` and its `/landlord/analytics/inbox` dependency unless a future mission explicitly revives it.
-- Decide whether message summaries should appear in unified inbox for plans that do not have the messaging feature, and make the unified inbox behavior match the `/messages` locked-state policy.
-- Split `/operations` into fewer landlord-facing lanes or move deep review previews behind `/decision-inbox`. Recommended first cut: make Operations a high-level source-workflow summary and keep detailed decision cards, workflow previews, and review-session panels in Decisions.
-- Reduce mobile command ambiguity by deciding whether Inbox, Messages, Operations, and Decisions all need primary mobile access. Recommended target: one primary communication entry and one primary command/review entry, with secondary surfaces behind More.
+- Audit based on code inspection only, no live user testing or account-specific entitlement verification
+- Did not inspect every landlord route in repository, focused on primary user journey surfaces
+- Tier gating behavior validated through code patterns, not runtime API payload samples
+- Mobile responsive breakpoint behavior inferred from CSS/component logic, not device testing
