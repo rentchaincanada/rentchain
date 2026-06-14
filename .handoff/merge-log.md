@@ -914,3 +914,46 @@ gate2-instruction.md must include explicit admin authorization on every Gate 2.
 - Free landlord onboarding and dashboard applicant-count fix are complete.
 - `.handoff/mission-current.md` was already in ready state.
 - Ready for the next governed mission.
+
+---
+
+## Merge Complete — PR #1153 — 2026-06-14T15:26:20Z
+
+### PR
+- PR: #1153
+- URL: https://github.com/rentchaincanada/rentchain/pull/1153
+- Branch: fix/lease-signing-email-submit-governance-v1
+- Merge commit: be507a9c601de2a6b7596804543a3220a4468ed6
+
+### Merge Confirmation
+- Gate 2 authorization: explicitly approved by operator after preview QA passed
+- Merge method: squash merge
+- PR state after merge: MERGED
+- PR head at merge: 3722675681161c2550f665368481d18d97b3f321
+
+### Scope Confirmation
+- Delayed tenant email hydration in the lease signing panel is fixed.
+- Mock and stub signing dispatch are explicit in API responses, UI copy, persisted request/event metadata, and canonical audit metadata.
+- Lease signing route version signal was added for safe preview/backend parity checks.
+- Resend-after-cancel current signing state now resolves to `pending_signature` while preserving historical `sent -> cancelled -> sent` timeline events.
+- Real signing-provider email delivery remains tracked separately as issue #1154.
+
+### Validation Before Merge
+- PR checks green:
+  - Vercel rentchain
+  - Vercel rentchain-status
+  - Terraform Cloud
+- Cloud Run backend parity restored before final preview QA: `rentchain-landlord-api` served image tag `37226756` with 100% traffic to revision `rentchain-landlord-api-01838-dk4`.
+- Manual preview QA passed after Cloud Run parity was restored.
+
+### Cleanup Confirmation
+- Local main synced with `origin/main`.
+- Local branch `fix/lease-signing-email-submit-governance-v1` deleted.
+- Remote branch `fix/lease-signing-email-submit-governance-v1` deleted; `git ls-remote --heads` returned no remote head.
+- Working tree status after merge: `main...origin/main` with intentional local handoff update in `.handoff/merge-log.md`.
+
+### Current State
+- `main` includes PR #1153.
+- Lease signing email submit, mock dispatch disclosure, and resend-after-cancel state handling are complete.
+- Follow-up real signing-provider dispatch issue opened: #1154.
+- Ready for final handoff-log commit and clean-tree confirmation.
