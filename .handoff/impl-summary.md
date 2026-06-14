@@ -1,5 +1,5 @@
-PR: #TBD
-PR URL: TBD
+PR: #1148
+PR URL: https://github.com/rentchaincanada/rentchain/pull/1148
 Branch: audit/dashboard-engagement-v1
 
 WHAT WAS AUDITED:
