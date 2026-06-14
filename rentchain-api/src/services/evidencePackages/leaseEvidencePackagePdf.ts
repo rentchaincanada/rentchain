@@ -1,9 +1,31 @@
 import PDFDocument from "pdfkit";
 import type { LeaseEvidencePackage, LeaseEvidencePackageSection } from "./leaseEvidencePackageTypes";
 
+const SOURCE_LABELS: Record<string, string> = {
+  canonicalEvents: "Audit event",
+  events: "Audit event",
+  ledgerAttachments: "Document record",
+  ledgerEntries: "Payment ledger entry",
+  leaseNotices: "Notice record",
+  leaseSigningEvents: "Signing event",
+  leaseSigningRequests: "Signing request",
+  leases: "Lease record",
+  maintenanceRequests: "Maintenance request",
+  messages: "Message record",
+  payments: "Payment record",
+  properties: "Property record",
+  rentPayments: "Payment record",
+  tenants: "Tenant record",
+  units: "Unit record",
+};
+
 function line(doc: PDFKit.PDFDocument, label: string, value: unknown) {
   doc.font("Helvetica-Bold").text(`${label}: `, { continued: true });
   doc.font("Helvetica").text(String(value ?? "Not recorded"));
+}
+
+function sourceLabel(sourceCollection: string): string {
+  return SOURCE_LABELS[sourceCollection] || "Source record";
 }
 
 function sectionStatus(section: LeaseEvidencePackageSection): string {
@@ -58,7 +80,7 @@ export async function renderLeaseEvidencePackagePdf(pkg: LeaseEvidencePackage): 
         if (doc.y > 720) doc.addPage();
         doc.font("Helvetica-Bold").fontSize(10).text(item.label);
         doc.font("Helvetica").fontSize(8).fillColor("#4b5563").text(
-          [item.timestamp || "Timestamp not recorded", item.sourceCollection, item.sourceReference].join(" | ")
+          [item.timestamp || "Timestamp not recorded", sourceLabel(item.sourceCollection)].join(" | ")
         );
         doc.fillColor("#000000");
         addWrappedText(doc, item.description);
@@ -67,23 +89,6 @@ export async function renderLeaseEvidencePackagePdf(pkg: LeaseEvidencePackage): 
       doc.moveDown(0.35);
     }
 
-    doc.addPage();
-    doc.font("Helvetica-Bold").fontSize(12).text("Source References");
-    doc.moveDown(0.25);
-    const sourceReferences = pkg.governance.sourceReferences.slice(0, 80);
-    if (!sourceReferences.length) {
-      addWrappedText(doc, "No source references were available.");
-    } else {
-      sourceReferences.forEach((ref) => {
-        doc.font("Helvetica").fontSize(8).text(`${ref.sourceCollection} | ${ref.sourceReference}`);
-      });
-    }
-    if (pkg.governance.sourceReferences.length > sourceReferences.length) {
-      doc.moveDown(0.25);
-      addWrappedText(doc, `${pkg.governance.sourceReferences.length - sourceReferences.length} additional references omitted from PDF display.`);
-    }
-
     doc.end();
   });
 }
-
