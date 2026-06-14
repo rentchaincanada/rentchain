@@ -28,6 +28,15 @@ function isVisibleActiveTenant(raw: any) {
   return raw?.hiddenFromActiveLists !== true && !isTargetedHiddenTenantId(raw?.id);
 }
 
+function isVisibleActiveProperty(raw: any) {
+  return raw?.hiddenFromActiveLists !== true && normalizePortfolioStatus(raw?.portfolioStatus) === "active";
+}
+
+function isApplicationScopedToActiveProperty(raw: any, activePropertyIds: Set<string>) {
+  const propertyId = String(raw?.propertyId || "").trim();
+  return Boolean(propertyId && activePropertyIds.has(propertyId));
+}
+
 // Set route source header for debugging
 router.use((req, res, next) => {
   res.setHeader("x-route-source", "dashboardRoutes");
@@ -168,7 +177,7 @@ router.get("/summary", requireAuth, async (req: any, res) => {
   const properties = propertiesSnap.docs.map((doc) => ({ id: doc.id, ...(doc.data() as any) }));
   const activePropertyIds = new Set(
     properties
-      .filter((property) => normalizePortfolioStatus(property?.portfolioStatus) === "active")
+      .filter(isVisibleActiveProperty)
       .map((property) => String(property?.id || "").trim())
       .filter(Boolean)
   );
@@ -179,7 +188,10 @@ router.get("/summary", requireAuth, async (req: any, res) => {
 
   const screeningOrders = screeningSnap.docs.map((doc) => ({ id: doc.id, ...(doc.data() as any) }));
   const screeningsCount = screeningOrders.length;
-  const applicationsCount = applicationsSnap.size;
+  const scopedApplications = applicationsSnap.docs
+    .map((doc) => ({ id: doc.id, ...(doc.data() as any) }))
+    .filter((application) => isApplicationScopedToActiveProperty(application, activePropertyIds));
+  const applicationsCount = scopedApplications.length;
   const tenantCredibilityRecords = tenantsSnap.docs.map((doc) => {
     const raw = doc.data() as any;
     return {
