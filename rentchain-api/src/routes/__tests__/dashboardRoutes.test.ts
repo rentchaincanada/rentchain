@@ -208,6 +208,11 @@ describe("dashboardRoutes GET /summary", () => {
       propertyId: "prop-active",
       hiddenFromActiveLists: false,
     });
+    seedDoc("applications", "application-1", {
+      landlordId: "landlord-1",
+      propertyId: "prop-active",
+      unitId: "unit-1",
+    });
 
     const app = await makeApp();
     const response = await invokeSummary(app);
@@ -221,6 +226,112 @@ describe("dashboardRoutes GET /summary", () => {
         }),
       ])
     );
+  });
+
+  it("counts only applications scoped to active visible landlord properties", async () => {
+    seedDoc("properties", "prop-active", {
+      landlordId: "landlord-1",
+      portfolioStatus: "active",
+      units: [{ id: "unit-1" }],
+    });
+    seedDoc("properties", "prop-archived", {
+      landlordId: "landlord-1",
+      portfolioStatus: "archived",
+      units: [{ id: "unit-2" }],
+    });
+    seedDoc("properties", "prop-hidden", {
+      landlordId: "landlord-1",
+      portfolioStatus: "active",
+      hiddenFromActiveLists: true,
+      units: [{ id: "unit-3" }],
+    });
+    seedDoc("applications", "application-active", {
+      landlordId: "landlord-1",
+      propertyId: "prop-active",
+      unitId: "unit-1",
+    });
+    seedDoc("applications", "application-archived", {
+      landlordId: "landlord-1",
+      propertyId: "prop-archived",
+      unitId: "unit-2",
+    });
+    seedDoc("applications", "application-hidden", {
+      landlordId: "landlord-1",
+      propertyId: "prop-hidden",
+      unitId: "unit-3",
+    });
+    seedDoc("applications", "application-missing-property", {
+      landlordId: "landlord-1",
+      propertyId: "missing-property",
+      unitId: "unit-4",
+    });
+    seedDoc("applications", "application-other-landlord", {
+      landlordId: "other-landlord",
+      propertyId: "prop-active",
+      unitId: "unit-1",
+    });
+
+    const app = await makeApp();
+    const response = await invokeSummary(app);
+
+    expect(response.status).toBe(200);
+    expect(response.body?.data?.kpis?.applicationsCount).toBe(1);
+    expect(response.body?.data?.actions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "run-first-screening",
+          href: "/applications?openTransUnionAccess=1",
+        }),
+      ])
+    );
+  });
+
+  it("does not let stale landlordId-only applications satisfy applicant setup", async () => {
+    seedDoc("properties", "prop-active", {
+      landlordId: "landlord-1",
+      portfolioStatus: "active",
+      units: [{ id: "unit-1" }],
+    });
+    seedDoc("applications", "application-missing-property", {
+      landlordId: "landlord-1",
+      propertyId: "missing-property",
+      unitId: "unit-2",
+    });
+    seedDoc("applications", "application-no-property", {
+      landlordId: "landlord-1",
+      unitId: "unit-3",
+    });
+
+    const app = await makeApp();
+    const response = await invokeSummary(app);
+
+    expect(response.status).toBe(200);
+    expect(response.body?.data?.kpis?.applicationsCount).toBe(0);
+    expect(response.body?.data?.actions).toEqual([
+      expect.objectContaining({
+        id: "add-applicant",
+        href: "/applications?openSendApplication=1",
+      }),
+    ]);
+  });
+
+  it("recommends applicant intake before screening when property and unit context exist", async () => {
+    seedDoc("properties", "prop-active", {
+      landlordId: "landlord-1",
+      portfolioStatus: "active",
+      units: [{ id: "unit-1" }],
+    });
+
+    const app = await makeApp();
+    const response = await invokeSummary(app);
+
+    expect(response.status).toBe(200);
+    expect(response.body?.data?.actions).toEqual([
+      expect.objectContaining({
+        id: "add-applicant",
+        href: "/applications?openSendApplication=1",
+      }),
+    ]);
   });
 
   it("derives expiring, pending, and no-response counts from the shared renewal dataset", async () => {
@@ -258,5 +369,26 @@ describe("dashboardRoutes GET /summary", () => {
         withinDays: 120,
       })
     );
+  });
+
+  it("routes free applicant intake to manual Applications guidance instead of the link modal", async () => {
+    resolveLandlordAndTierMock.mockResolvedValue({ tier: "free" });
+    seedDoc("properties", "prop-active", {
+      landlordId: "landlord-1",
+      portfolioStatus: "active",
+      units: [{ id: "unit-1" }],
+    });
+
+    const app = await makeApp();
+    const response = await invokeSummary(app);
+
+    expect(response.status).toBe(200);
+    expect(response.body?.data?.actions).toEqual([
+      expect.objectContaining({
+        id: "add-applicant",
+        title: "Track an applicant",
+        href: "/applications",
+      }),
+    ]);
   });
 });

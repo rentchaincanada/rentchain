@@ -1,4 +1,5 @@
 import { getApplicationPrereqState } from "./applicationPrereqs";
+import { normalizePlan, type Plan } from "./plan";
 
 export type OnboardingStep = {
   key: string;
@@ -20,6 +21,7 @@ type BuildArgs = {
   track: (eventName: string, props?: Record<string, unknown>) => void;
   propertiesCount?: number;
   unitsCount?: number;
+  plan?: Plan | string;
 };
 
 export function buildOnboardingSteps({
@@ -28,22 +30,11 @@ export function buildOnboardingSteps({
   track,
   propertiesCount = 0,
   unitsCount = 0,
+  plan = "free",
 }: BuildArgs): OnboardingStep[] {
   const prereq = getApplicationPrereqState({ propertiesCount, unitsCount });
-  const routeToInviteTenant = () => {
-    if (prereq.missingProperty) {
-      track("onboarding_step_clicked", { stepKey: "tenantInvited", blockedBy: "no_property" });
-      navigate("/properties?focus=addProperty");
-      return;
-    }
-    if (prereq.missingUnit) {
-      track("onboarding_step_clicked", { stepKey: "tenantInvited", blockedBy: "no_units" });
-      navigate("/properties?openAddUnit=1");
-      return;
-    }
-    track("onboarding_step_clicked", { stepKey: "tenantInvited" });
-    navigate("/tenants?invite=1");
-  };
+  const currentPlan = normalizePlan(plan);
+  const isFreePlan = currentPlan === "free";
   const routeToCreateApplication = () => {
     if (prereq.missingProperty) {
       track("onboarding_step_clicked", { stepKey: "applicationCreated", blockedBy: "no_property" });
@@ -56,7 +47,7 @@ export function buildOnboardingSteps({
       return;
     }
     track("onboarding_step_clicked", { stepKey: "applicationCreated" });
-    navigate("/applications?autoSelectProperty=1&openSendApplication=1");
+    navigate(isFreePlan ? "/applications" : "/applications?autoSelectProperty=1&openSendApplication=1");
   };
 
   return [
@@ -74,7 +65,7 @@ export function buildOnboardingSteps({
     {
       key: "unitAdded",
       title: "Add units",
-      description: "Add units so you can invite tenants and track rent.",
+      description: "Add units so applicants and lease records have property context.",
       isComplete: !!onboarding.steps.unitAdded,
       actionLabel: "Add units",
       onAction: () => {
@@ -83,54 +74,57 @@ export function buildOnboardingSteps({
       },
     },
     {
-      key: "tenantInvited",
-      title: "Invite a tenant",
+      key: "applicationCreated",
+      title: "Add an applicant",
       description: prereq.missingProperty
-        ? "Add your first property to unlock tenant invites."
+        ? "Add your first property before starting applicant intake."
         : prereq.missingUnit
-        ? "Add a unit before inviting tenants so each invite is tied to the right rental."
-        : "Send your first tenant invite.",
-      isComplete: !!onboarding.steps.tenantInvited,
+        ? "Add a unit before starting applicant intake."
+        : isFreePlan
+        ? "Track applicant intake manually on Free. Starter adds secure application links."
+        : "Send an application link or start an applicant record.",
+      isComplete: !!onboarding.steps.applicationCreated,
       actionLabel: prereq.missingProperty
         ? "Add property"
         : prereq.missingUnit
         ? "Add unit"
-        : "Invite tenant",
-      onAction: routeToInviteTenant,
-    },
-    {
-      key: "applicationCreated",
-      title: "Create an application",
-      description: "Invite an applicant or start an application record.",
-      isComplete: !!onboarding.steps.applicationCreated,
-      actionLabel: "Send application link",
+        : isFreePlan
+        ? "Track applicant"
+        : "Add applicant",
       onAction: routeToCreateApplication,
       isPrimary: true,
     },
     {
       key: "exportPreviewed",
-      title: "Preview export (Pro)",
-      description: "See the export preview and unlock Pro when you're ready.",
+      title: "Run screening",
+      description: onboarding.steps.applicationCreated
+        ? "Review screening setup from Applications when the applicant is ready."
+        : "Add an applicant before screening appears.",
       isComplete: !!onboarding.steps.exportPreviewed,
-      actionLabel: "Preview export",
+      actionLabel: onboarding.steps.applicationCreated ? "Review screening" : isFreePlan ? "Track applicant" : "Add applicant",
       onAction: () => {
         track("onboarding_step_clicked", { stepKey: "exportPreviewed" });
-        const url = "/sample/screening_report_sample.pdf";
-        if (typeof window !== "undefined") {
-          window.location.assign(url);
+        if (!onboarding.steps.applicationCreated) {
+          routeToCreateApplication();
           return;
         }
-        navigate(url);
+        navigate("/applications?openTransUnionAccess=1");
       },
     },
     {
       key: "leasePackGenerated",
-      title: "Generate lease pack",
-      description: "Choose a property and download a province lease pack bundle or individual docs.",
+      title: "Create lease",
+      description: onboarding.steps.applicationCreated
+        ? "Create the lease after applicant and screening context exists."
+        : "Add an applicant before preparing lease documents.",
       isComplete: !!onboarding.steps.leasePackGenerated,
-      actionLabel: "Generate Lease Pack",
+      actionLabel: onboarding.steps.applicationCreated ? "Create lease" : isFreePlan ? "Track applicant" : "Add applicant",
       onAction: () => {
         track("onboarding_step_clicked", { stepKey: "leasePackGenerated" });
+        if (!onboarding.steps.applicationCreated) {
+          routeToCreateApplication();
+          return;
+        }
         navigate("/properties?openLeasePack=1");
       },
     },

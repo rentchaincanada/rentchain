@@ -8,6 +8,7 @@ export type DashboardKpis = {
   openActionsCount: number;
   delinquentCount: number;
   screeningsCount?: number;
+  applicationsCount?: number;
 };
 
 export type DashboardRent = {

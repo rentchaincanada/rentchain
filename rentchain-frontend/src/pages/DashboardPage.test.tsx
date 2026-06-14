@@ -387,6 +387,115 @@ describe("DashboardPage", () => {
     expect(screen.queryByRole("button", { name: /dismiss/i })).not.toBeInTheDocument();
   });
 
+  it("starts new landlords with Add Property and hides tenant invite and screening CTAs", async () => {
+    mocks.useAuthMock.mockReturnValue({
+      user: { id: "landlord-1", role: "", actorRole: "landlord", plan: "free" },
+      ready: true,
+      isLoading: false,
+      authStatus: "authed",
+    });
+    mocks.useCapabilitiesMock.mockReturnValue({
+      caps: { plan: "free" },
+      features: {},
+      loading: false,
+    });
+    mocks.fetchDashboardSummaryMock.mockResolvedValue({
+      kpis: {
+        propertiesCount: 0,
+        unitsCount: 0,
+        tenantsCount: 0,
+        openActionsCount: 0,
+        delinquentCount: 0,
+        screeningsCount: 0,
+        applicationsCount: 0,
+      },
+      actions: [
+        {
+          id: "run-first-screening",
+          title: "Run your first screening",
+          severity: "info",
+          href: "/applications?openTransUnionAccess=1",
+        },
+        {
+          id: "invite-tenant",
+          title: "Invite a tenant",
+          severity: "info",
+          href: "/tenants",
+        },
+      ],
+      events: [],
+    });
+    mocks.fetchPropertiesMock.mockResolvedValue({ properties: [] });
+
+    render(
+      <ToastProvider>
+        <MemoryRouter>
+          <DashboardPage />
+        </MemoryRouter>
+      </ToastProvider>
+    );
+
+    expect(await screen.findByTestId("free-tier-journey-card")).toBeInTheDocument();
+    expect(screen.getByText("Start in order")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Add property" }).length).toBeGreaterThan(0);
+    expect(screen.getByText("Add a property before unit setup.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Invite tenant" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Run screening" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Set up screening workflow" })).not.toBeInTheDocument();
+  });
+
+  it("uses scoped dashboard application counts and routes Free Step 3 to manual intake", async () => {
+    mocks.useAuthMock.mockReturnValue({
+      user: { id: "landlord-1", role: "", actorRole: "landlord", plan: "free" },
+      ready: true,
+      isLoading: false,
+      authStatus: "authed",
+    });
+    mocks.useCapabilitiesMock.mockReturnValue({
+      caps: { plan: "free" },
+      features: {},
+      loading: false,
+    });
+    mocks.useApplicationsMock.mockReturnValue({
+      applications: [{ id: "demo-1" }, { id: "demo-2" }],
+      loading: false,
+    });
+    mocks.fetchDashboardSummaryMock.mockResolvedValue({
+      kpis: {
+        propertiesCount: 1,
+        unitsCount: 1,
+        tenantsCount: 0,
+        openActionsCount: 1,
+        delinquentCount: 0,
+        screeningsCount: 0,
+        applicationsCount: 0,
+      },
+      actions: [],
+      events: [],
+    });
+    mocks.fetchPropertiesMock.mockResolvedValue({
+      properties: [{ id: "property-1", name: "Main Street", units: [{ id: "unit-1" }] }],
+    });
+
+    render(
+      <ToastProvider>
+        <MemoryRouter>
+          <DashboardPage />
+        </MemoryRouter>
+      </ToastProvider>
+    );
+
+    expect(await screen.findByTestId("free-tier-journey-card")).toBeInTheDocument();
+    expect(screen.queryByText("2 applicants started")).not.toBeInTheDocument();
+    expect(screen.getByText("Track applicant intake after a unit exists.")).toBeInTheDocument();
+    screen.getAllByRole("button", { name: "Track applicant" })[0].click();
+    expect(mocks.navigateMock).toHaveBeenCalledWith("/applications");
+    expect(mocks.navigateMock).not.toHaveBeenCalledWith(
+      expect.objectContaining({ search: expect.stringContaining("openSendApplication") }),
+      expect.anything()
+    );
+  });
+
   it("prioritizes the free-tier setup journey before review-heavy dashboard work", async () => {
     mocks.fetchDashboardSummaryMock.mockResolvedValue({
       kpis: {
@@ -535,6 +644,10 @@ describe("DashboardPage", () => {
   });
 
   it("opens an explanation from the action required Info button", async () => {
+    mocks.useApplicationsMock.mockReturnValue({
+      applications: [{ id: "application-1" }],
+      loading: false,
+    });
     mocks.fetchDashboardSummaryMock.mockResolvedValue({
       kpis: {
         propertiesCount: 1,
@@ -593,6 +706,10 @@ describe("DashboardPage", () => {
   });
 
   it("routes the provider funnel CTA to applications once TransUnion is connected", async () => {
+    mocks.useApplicationsMock.mockReturnValue({
+      applications: [{ id: "application-1" }],
+      loading: false,
+    });
     mocks.fetchDashboardSummaryMock.mockResolvedValue({
       kpis: {
         propertiesCount: 1,
@@ -642,6 +759,10 @@ describe("DashboardPage", () => {
   });
 
   it("routes the quick screening CTA to setup until TransUnion is connected, then to applications", async () => {
+    mocks.useApplicationsMock.mockReturnValue({
+      applications: [{ id: "application-1" }],
+      loading: false,
+    });
     mocks.fetchDashboardSummaryMock.mockResolvedValue({
       kpis: {
         propertiesCount: 1,
@@ -700,6 +821,10 @@ describe("DashboardPage", () => {
 
     mocks.navigateMock.mockReset();
     cleanup();
+    mocks.useApplicationsMock.mockReturnValue({
+      applications: [{ id: "application-1" }],
+      loading: false,
+    });
     mocks.fetchLandlordTransUnionOnboardingAnalyticsMock.mockResolvedValue({
       totals: {
         viewed: 3,
