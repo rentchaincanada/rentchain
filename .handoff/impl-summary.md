@@ -28,7 +28,7 @@ CURRENT STATE:
 VALIDATION:
 - Frontend targeted tests passed:
   - `npm run test:single -- src/components/billing/LockedFeature.test.tsx src/constants/tiers.test.ts src/pages/ExpensesPage.test.tsx`
-  - `npm run test:single -- src/components/billing/FeatureGate.test.tsx` (after fixing message expectation)
+  - `npm run test:single -- src/components/billing/FeatureGate.test.tsx` (after fixing message expectation and committing fix)
 - Backend targeted tests passed:
   - `npm run test:single -- src/services/__tests__/capabilityGuard.test.ts`
   - `npm run test:single -- src/routes/__tests__/expensesRoutes.test.ts`
@@ -37,6 +37,7 @@ VALIDATION:
 - Frontend build passed:
   - `npm run build`
 - `git diff --check` passed (after fixing trailing whitespace).
+- Test fix committed: d779cf20 "fix: update FeatureGate test expectation for new upgrade messaging"
 - Note: the first sandboxed backend route test run failed with `listen EPERM: operation not permitted 0.0.0.0`; rerunning the same route suite outside the sandbox passed.
 - Frontend build retained an existing large chunk warning; build completed successfully.
 

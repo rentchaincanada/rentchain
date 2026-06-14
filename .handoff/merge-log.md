@@ -580,3 +580,286 @@ Recommended scope:
 
 ### Summary
 PR #1145 merged after backend parity was corrected and branch policy review requirements were satisfied. Pilot 1 onboarding can resume with Landlord #2 and Landlord #3, with command-surface simplification prepared as the next focused mission.
+
+---
+
+## Pilot 1 Adoption Finding — Landlord 2 — 2026-06-12
+
+### Outcome
+Platform largely worked. No critical technical failures.
+Challenge is narrative clarity, not reliability.
+
+### Critical Findings
+1. Decision Inbox should not be a prominent Free-tier destination
+2. Action Required ordering is backwards:
+   Current: Run screening → Invite tenant → Add property
+   Expected: Add property → Add unit → Invite applicant → Run screening → Create lease
+3. Screening remains strongest upgrade blocker until Certn is connected
+
+### High Findings
+- Invite tenant gating occurs too late in the flow
+- Screening modal confusing
+- Header/modal overlap issue
+
+### Positive Signals (same as Landlord 1)
+Dashboard, Analytics, Work Orders, Payments, Expenses
+
+### Strategic Conclusion
+Challenge is no longer reliability.
+Challenge is: "What should I do next?" and "Why should I upgrade?"
+
+### Revised Priority Queue
+1. audit/free-tier-journey-v1 — map full Free tier narrative
+2. Collect Landlord #3 findings
+3. fix/landlord-command-surface-simplification-v1 (after audit + Landlord #3)
+4. feat/rentchain-help-assistant-v1 (hold)
+
+### Hold
+Large command-surface redesign — hold until Landlord #3 findings collected.
+
+### Next Mission
+audit/free-tier-journey-v1
+
+COMPLETED: audit/free-tier-journey-v1 (PR #1146) - Comprehensive free tier journey audit identifying navigation complexity, mixed locked-state quality, and device-dependent navigation inconsistencies.
+
+---
+
+## Pilot 1 Adoption Finding — Landlord 3 — 2026-06-13
+
+### Outcome
+Platform works. Narrative and command surfaces do not.
+Pattern confirmed across all three landlords.
+
+### Most Important Business Finding
+"Without screening, this platform is not useful on free tier."
+Screening = primary value trigger.
+Certn integration = highest commercial priority.
+
+### Confirmed Positive Signals (all 3 landlords)
+Dashboard, Analytics, Work Orders, Payments, Expenses, Properties
+
+### Confirmed Negative Signals (all 3 landlords)
+Decision Inbox, Operations, Review-oriented workflows, Technical wording, Unclear actions
+
+### Revised Next Mission
+fix/free-tier-landlord-experience-v1
+Focus: first 30 minutes, onboarding journey, dashboard experience, action ordering, upgrade narrative
+
+### Dashboard Direction (Free tier)
+Prioritize: Properties, Units, Applicants, Screening, Leases
+De-emphasize: Decision Inbox, Operations, Institutional concepts, Advanced review workflows
+
+### Target Action Order
+1. Add property
+2. Add unit
+3. Add applicant
+4. Run screening
+5. Create lease
+
+### Certn Integration
+Highest commercial priority.
+Must be sequenced after free-tier experience improvements.
+Screening without a live provider undermines upgrade intent.
+
+### Revised Priority Queue
+1. fix/free-tier-landlord-experience-v1
+2. Certn integration (commercial priority)
+3. fix/upgrade-driver-clarification-v1
+4. fix/onboarding-flow-reordering-v1
+
+### Hold
+feat/rentchain-help-assistant-v1 — hold until experience improvements stable
+
+---
+
+## Pilot 1 Adoption Finding — Landlord 3 — 2026-06-13
+
+### Outcome
+Platform works. Narrative and command surfaces do not.
+Pattern confirmed across all three landlords.
+
+### Most Important Business Finding
+"Without screening, this platform is not useful on free tier."
+Screening = primary value trigger.
+Certn integration = highest commercial priority.
+
+### Confirmed Positive Signals (all 3 landlords)
+Dashboard, Analytics, Work Orders, Payments, Expenses, Properties
+
+### Confirmed Negative Signals (all 3 landlords)
+Decision Inbox, Operations, Review-oriented workflows, Technical wording, Unclear actions
+
+### Revised Next Mission
+fix/free-tier-landlord-experience-v1
+Focus: first 30 minutes, onboarding journey, dashboard experience, action ordering, upgrade narrative
+
+### Dashboard Direction (Free tier)
+Prioritize: Properties, Units, Applicants, Screening, Leases
+De-emphasize: Decision Inbox, Operations, Institutional concepts, Advanced review workflows
+
+### Target Action Order
+1. Add property
+2. Add unit
+3. Add applicant
+4. Run screening
+5. Create lease
+
+### Certn Integration
+Highest commercial priority.
+Must be sequenced after free-tier experience improvements.
+Screening without a live provider undermines upgrade intent.
+
+### Revised Priority Queue
+1. fix/free-tier-landlord-experience-v1
+2. Certn integration (commercial priority)
+3. fix/upgrade-driver-clarification-v1
+4. fix/onboarding-flow-reordering-v1
+
+### Hold
+feat/rentchain-help-assistant-v1 — hold until experience improvements stable
+
+---
+
+## Strategic Status Update — 2026-06-13
+
+### Platform Position
+Pilot 1 active. All prior phases complete.
+
+### Pilot 1 Achievements (PRs #1133–#1147)
+Onboarding reliability, CSV compatibility, free-tier UX, experience flow — all resolved.
+
+### Three-Landlord Consolidated Signal
+Liked: Dashboard, Analytics, Work Orders, Payments, Expenses, Properties
+Confusing: Decision Inbox, Operations, Technical wording, Review workflows
+Primary value trigger: Screening (all 3 landlords)
+
+### Strategic Conclusion
+Platform is no longer proving "Can it work?"
+Platform is now proving "Will landlords use it daily?"
+
+### Certn Status
+Contact established. Awaiting response.
+Immediately elevated to #1 priority once API/sandbox access confirmed.
+
+### Revised Priority Queue
+1. audit/dashboard-engagement-v1
+2. fix/upgrade-driver-clarification-v1
+3. fix/onboarding-flow-reordering-v1
+4. Dashboard 2.0 (after audit)
+5. Certn integration (when available)
+
+### Hold
+fix/landlord-command-surface-simplification-v1 — hold, use audit findings as design input
+feat/rentchain-help-assistant-v1 — hold
+
+### Next Mission
+audit/dashboard-engagement-v1
+
+### Gate 2 Note
+Admin override now required on all PR merges due to REVIEW_REQUIRED branch policy.
+gate2-instruction.md must include explicit admin authorization on every Gate 2.
+
+---
+
+## Merge Complete — PR #1148 — 2026-06-14T06:53:52Z
+
+### PR
+- PR: #1148
+- URL: https://github.com/rentchaincanada/rentchain/pull/1148
+- Branch: audit/dashboard-engagement-v1
+- Merge commit: 156b53d0f67f844510db0bb435c3fe827fad8644
+
+### Merge Confirmation
+- Gate 2 authorization: approved
+- Admin override: authorized in `.handoff/gate2-instruction.md`
+- Merge method: squash merge
+- PR state after merge: MERGED
+- PR head at merge: 2de3af233d374f996378f5935eb080a02d039c06
+
+### Scope Confirmation
+- Audit-only mission completed
+- Changed files in PR: `.handoff/impl-summary.md`
+- Zero source code changes
+- Dashboard engagement audit documented:
+  - dashboard structure and widget hierarchy
+  - widget effectiveness categories
+  - free-tier journey flow
+  - responsive/mobile observations
+  - test coverage and optimization notes
+  - prioritized Dashboard 2.0 recommendations
+
+### Validation Before Merge
+- PR checks green:
+  - backend
+  - frontend
+  - merge-gate
+  - codex-review
+  - Vercel preview comments
+  - Vercel rentchain
+  - Vercel rentchain-status
+  - Terraform Cloud
+- `mergeStateStatus: BLOCKED` was due to REVIEW_REQUIRED branch policy.
+- Admin override was explicitly authorized for this Gate 2 merge.
+
+### Cleanup Confirmation
+- Local main synced with `origin/main`.
+- Local branch `audit/dashboard-engagement-v1` absent after merge.
+- Remote branch `audit/dashboard-engagement-v1` deleted; `git ls-remote --heads` returned no remote head.
+- Working tree status after merge: `main...origin/main` with intentional local handoff updates in `.handoff/merge-log.md` and `.handoff/mission-current.md`.
+
+### Current State
+- `main` includes PR #1148.
+- Dashboard engagement audit is complete.
+- `.handoff/mission-current.md` reset to ready state.
+- Ready for the next governed mission.
+
+---
+
+## Merge Complete — PR #1149 — 2026-06-14T08:47:57Z
+
+### PR
+- PR: #1149
+- URL: https://github.com/rentchaincanada/rentchain/pull/1149
+- Branch: fix/upgrade-driver-clarification-v1
+- Merge commit: 79472a497b39956b6a1e37c6d894b85fe53238af
+
+### Merge Confirmation
+- Gate 2 authorization: approved
+- Admin override: authorized in `.handoff/gate2-instruction.md`
+- Merge method: squash merge
+- PR state after merge: MERGED
+- PR head at merge: d779cf202f2ff33ab058a121e5b09d4567014523
+
+### Scope Confirmation
+- Upgrade messaging and locked-state UX mission completed.
+- Backend upgrade response shape now includes `userMessage`, `requiredTier`, and `upgradeDrivers`.
+- Frontend locked-state UI uses canonical upgrade driver messaging.
+- Expenses import/export locked state uses the styled locked feature component.
+- Navigation-back and refresh persistence issue for the Expenses locked feature was fixed before merge.
+- FeatureGate test dependency fix was included in the final PR head.
+
+### Validation Before Merge
+- PR checks green:
+  - backend
+  - frontend
+  - merge-gate
+  - codex-review
+  - Vercel preview comments
+  - Vercel rentchain
+  - Vercel rentchain-status
+  - Terraform Cloud
+- `mergeStateStatus: BLOCKED` was due to REVIEW_REQUIRED branch policy.
+- Admin override was explicitly authorized for this Gate 2 merge.
+
+### Cleanup Confirmation
+- Local main synced with `origin/main`.
+- Local branch `fix/upgrade-driver-clarification-v1` deleted.
+- Remote branch `fix/upgrade-driver-clarification-v1` deleted; `git ls-remote --heads` returned no remote head.
+- Pre-existing local handoff edits were preserved in `stash@{0}` and reapplied after main sync.
+- Working tree status after handoff update: `main...origin/main` with intentional local handoff updates in `.handoff/impl-summary.md`, `.handoff/merge-log.md`, and `.handoff/mission-current.md`.
+
+### Current State
+- `main` includes PR #1149.
+- Upgrade driver clarification mission is complete.
+- `.handoff/mission-current.md` reset to ready state.
+- Ready for the next governed mission.
