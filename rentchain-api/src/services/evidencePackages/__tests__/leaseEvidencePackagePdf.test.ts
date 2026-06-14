@@ -26,6 +26,23 @@ function packageFixture(): LeaseEvidencePackage {
         "signature_events",
         "audit_trail",
       ],
+      verification: {
+        manifestVersion: "lease_evidence_manifest_v1",
+        hashAlgorithm: "sha256",
+        manifestHash: "a".repeat(64),
+        packageVersion: "lease-evidence-package-pdf-v1",
+        evidencePackageId: "lep_test_package",
+        generatedAt: "2026-06-14T12:00:00.000Z",
+        sourceReferenceCount: 4,
+        sourceCollections: ["canonicalEvents", "leaseSigningRequests", "leases", "messages"],
+        sectionSourceCounts: [
+          { sectionKey: "cover_summary", itemCount: 1, sourceCollections: ["leases"] },
+          { sectionKey: "messages", itemCount: 1, sourceCollections: ["messages"] },
+          { sectionKey: "payments", itemCount: 1, sourceCollections: ["ledgerEntries"] },
+          { sectionKey: "signature_events", itemCount: 1, sourceCollections: ["leaseSigningRequests"] },
+          { sectionKey: "audit_trail", itemCount: 1, sourceCollections: ["canonicalEvents"] },
+        ],
+      },
       sourceReferences: [
         { sourceCollection: "leases", sourceReference: "leases:c46d6f2b5e6a8d17d240" },
         { sourceCollection: "messages", sourceReference: "messages:097bc6c0f4e698e3fb27" },
@@ -133,6 +150,14 @@ describe("lease evidence package PDF renderer", () => {
     expect(text).toContain("Generated At");
     expect(text).toContain("Package Type");
     expect(text).toContain("Sections Included");
+    expect(text).toContain("Verification Summary");
+    expect(text).toContain("Manifest Version");
+    expect(text).toContain("Hash Algorithm");
+    expect(text).toContain("Manifest Hash");
+    expect(text).toContain("Package Version");
+    expect(text).toContain("lease_evidence_manifest_v1");
+    expect(text).toContain("sha256");
+    expect(text).toContain("lease-evidence-package-pdf-v1");
     expect(text).toContain("Lease record");
     expect(text).toContain("Message record");
     expect(text).toContain("Payment ledger entry");

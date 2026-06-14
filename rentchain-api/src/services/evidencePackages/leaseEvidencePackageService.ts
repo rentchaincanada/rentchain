@@ -576,5 +576,6 @@ export function auditMetadataForLeaseEvidencePackage(pkg: LeaseEvidencePackage) 
     generatedAt: pkg.governance.generatedAt,
     packageType: pkg.governance.packageType,
     sectionsIncluded: pkg.governance.sectionsIncluded,
+    ...(pkg.governance.verification || {}),
   };
 }

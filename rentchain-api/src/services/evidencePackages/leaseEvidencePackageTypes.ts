@@ -42,6 +42,7 @@ export type LeaseEvidencePackageGovernance = {
     sourceReference: string;
   }>;
   sectionsIncluded: LeaseEvidencePackageSectionKey[];
+  verification?: LeaseEvidencePackageVerificationMetadata;
 };
 
 export type LeaseEvidencePackage = {
@@ -51,3 +52,43 @@ export type LeaseEvidencePackage = {
   sections: LeaseEvidencePackageSection[];
 };
 
+export type LeaseEvidencePackageSectionSourceCount = {
+  sectionKey: LeaseEvidencePackageSectionKey;
+  itemCount: number;
+  sourceCollections: string[];
+};
+
+export type LeaseEvidencePackageSourceManifest = {
+  totalSourceReferences: number;
+  sourceCollections: string[];
+  sourceCountsByCollection: Record<string, number>;
+  sectionSourceCounts: LeaseEvidencePackageSectionSourceCount[];
+};
+
+export type LeaseEvidencePackageManifest = {
+  manifestVersion: "lease_evidence_manifest_v1";
+  packageVersion: "lease-evidence-package-pdf-v1";
+  evidencePackageId: string;
+  leaseId: string;
+  landlordId: string;
+  packageType: "lease_evidence_pdf";
+  generatedAt: string;
+  generatedBy: {
+    actorType: "landlord";
+    actorId: string;
+  };
+  sectionsIncluded: LeaseEvidencePackageSectionKey[];
+  sourceManifest: LeaseEvidencePackageSourceManifest;
+};
+
+export type LeaseEvidencePackageVerificationMetadata = {
+  manifestVersion: LeaseEvidencePackageManifest["manifestVersion"];
+  hashAlgorithm: "sha256";
+  manifestHash: string;
+  packageVersion: LeaseEvidencePackageManifest["packageVersion"];
+  evidencePackageId: string;
+  generatedAt: string;
+  sourceReferenceCount: number;
+  sourceCollections: string[];
+  sectionSourceCounts: LeaseEvidencePackageSectionSourceCount[];
+};

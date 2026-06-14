@@ -187,6 +187,7 @@ describe("landlordEvidencePackageGenerationRoutes", () => {
     expect(res.headers["x-rentchain-governance"]).toBe("metadata-only");
     expect(res.headers["x-evidence-package-route-version"]).toBe("lease-evidence-package-pdf-v1");
     expect(res.buffer.toString("latin1", 0, 5)).toBe("%PDF-");
+    expect(writeCanonicalEventMock).toHaveBeenCalledTimes(1);
     expect(writeCanonicalEventMock).toHaveBeenCalledWith(
       expect.objectContaining({
         domain: "lease",
@@ -198,10 +199,32 @@ describe("landlordEvidencePackageGenerationRoutes", () => {
           generatedBy: "landlord-1",
           packageType: "lease_evidence_pdf",
           sectionsIncluded: expect.arrayContaining(["cover_summary", "audit_trail"]),
+          manifestVersion: "lease_evidence_manifest_v1",
+          hashAlgorithm: "sha256",
+          manifestHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+          packageVersion: "lease-evidence-package-pdf-v1",
+          sourceReferenceCount: expect.any(Number),
+          sourceCollections: expect.arrayContaining(["leases", "payments", "canonicalEvents"]),
+          sectionSourceCounts: expect.arrayContaining([
+            expect.objectContaining({
+              sectionKey: "cover_summary",
+              itemCount: 1,
+              sourceCollections: expect.arrayContaining(["leases"]),
+            }),
+            expect.objectContaining({
+              sectionKey: "audit_trail",
+              itemCount: 1,
+              sourceCollections: expect.arrayContaining(["canonicalEvents"]),
+            }),
+          ]),
         }),
       })
     );
-    expect(JSON.stringify(writeCanonicalEventMock.mock.calls[0][0].metadata)).not.toContain("pi_secret_123");
+    const metadataJson = JSON.stringify(writeCanonicalEventMock.mock.calls[0][0].metadata);
+    expect(metadataJson).not.toContain("pi_secret_123");
+    expect(metadataJson).not.toContain("sourceReference\":\"");
+    expect(metadataJson).not.toContain("payments:");
+    expect(metadataJson).not.toContain("processorPaymentIntentId");
   });
 
   it("returns 403 for another landlord and does not write an audit event", async () => {
