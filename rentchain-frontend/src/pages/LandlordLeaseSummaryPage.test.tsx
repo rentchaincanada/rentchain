@@ -7,12 +7,17 @@ import { buildLeaseSummaryPdfSource } from "@/utils/leaseSummaryPdf";
 const mocks = vi.hoisted(() => ({
   getLeaseById: vi.fn(),
   printSummaryDocument: vi.fn(),
+  downloadAuthenticatedExport: vi.fn(),
 }));
 
 const originalWindowPrintDescriptor = Object.getOwnPropertyDescriptor(window, "print");
 
 vi.mock("@/api/leasesApi", () => ({
   getLeaseById: mocks.getLeaseById,
+}));
+
+vi.mock("@/api/exportDownload", () => ({
+  downloadAuthenticatedExport: (...args: unknown[]) => mocks.downloadAuthenticatedExport(...args),
 }));
 
 vi.mock("@/utils/printSummary", () => ({
@@ -24,6 +29,11 @@ describe("LandlordLeaseSummaryPage", () => {
     mocks.getLeaseById.mockReset();
     mocks.printSummaryDocument.mockReset();
     mocks.printSummaryDocument.mockResolvedValue(undefined);
+    mocks.downloadAuthenticatedExport.mockReset();
+    mocks.downloadAuthenticatedExport.mockResolvedValue({
+      blob: new Blob(["%PDF-1.4"], { type: "application/pdf" }),
+      filename: "lease-evidence-package.pdf",
+    });
     mocks.getLeaseById.mockResolvedValue({
       lease: {
         id: "lease-1",
@@ -111,6 +121,7 @@ describe("LandlordLeaseSummaryPage", () => {
     expect(screen.queryByText(/gs:\/\//i)).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open ledger" })).toHaveAttribute("href", "/leases/lease-1/ledger");
     expect(screen.getByRole("button", { name: "Print / Save PDF" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Download evidence package" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Back to leases" })).toHaveAttribute("href", "/leases");
   });
 
@@ -256,6 +267,32 @@ describe("LandlordLeaseSummaryPage", () => {
     Object.defineProperty(window, "print", {
       configurable: true,
       value: originalPrint,
+    });
+  });
+
+  it("downloads the governed backend evidence package PDF", async () => {
+    render(
+      <MemoryRouter initialEntries={["/leases/lease-1/summary"]}>
+        <Routes>
+          <Route path="/leases/:leaseId/summary" element={<LandlordLeaseSummaryPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Download evidence package" }));
+
+    await waitFor(() => {
+      expect(mocks.downloadAuthenticatedExport).toHaveBeenCalledWith(
+        expect.objectContaining({
+          path: "/landlord/evidence-packages/leases/lease-1.pdf",
+          fallbackFilename: "lease-evidence-package-lease-1.pdf",
+          observability: {
+            exportType: "lease_evidence_package",
+            renderingPath: "backend_pdfkit",
+          },
+        })
+      );
+      expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled();
     });
   });
 
