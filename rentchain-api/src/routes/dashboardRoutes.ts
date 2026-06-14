@@ -345,6 +345,7 @@ router.get("/summary", requireAuth, async (req: any, res) => {
   const tierResolved = await resolveLandlordAndTier(req.user);
   const tier = tierResolved.tier;
   const isStarter = tier === "starter";
+  const isFree = tier === "free";
 
   const actions: Array<{ id: string; title: string; severity: "info"; href: string }> = [];
   if (isStarter) {
@@ -372,9 +373,9 @@ router.get("/summary", requireAuth, async (req: any, res) => {
     } else if (applicationsCount === 0) {
       actions.push({
         id: "add-applicant",
-        title: "Add an applicant",
+        title: isFree ? "Track an applicant" : "Add an applicant",
         severity: "info",
-        href: "/applications?openSendApplication=1",
+        href: isFree ? "/applications" : "/applications?openSendApplication=1",
       });
     } else if (screeningsCount === 0) {
       actions.push({

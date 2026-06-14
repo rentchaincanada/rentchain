@@ -394,6 +394,11 @@ describe("DashboardPage", () => {
       isLoading: false,
       authStatus: "authed",
     });
+    mocks.useCapabilitiesMock.mockReturnValue({
+      caps: { plan: "free" },
+      features: {},
+      loading: false,
+    });
     mocks.fetchDashboardSummaryMock.mockResolvedValue({
       kpis: {
         propertiesCount: 0,
@@ -402,6 +407,7 @@ describe("DashboardPage", () => {
         openActionsCount: 0,
         delinquentCount: 0,
         screeningsCount: 0,
+        applicationsCount: 0,
       },
       actions: [
         {
@@ -436,6 +442,58 @@ describe("DashboardPage", () => {
     expect(screen.queryByRole("button", { name: "Invite tenant" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Run screening" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Set up screening workflow" })).not.toBeInTheDocument();
+  });
+
+  it("uses scoped dashboard application counts and routes Free Step 3 to manual intake", async () => {
+    mocks.useAuthMock.mockReturnValue({
+      user: { id: "landlord-1", role: "", actorRole: "landlord", plan: "free" },
+      ready: true,
+      isLoading: false,
+      authStatus: "authed",
+    });
+    mocks.useCapabilitiesMock.mockReturnValue({
+      caps: { plan: "free" },
+      features: {},
+      loading: false,
+    });
+    mocks.useApplicationsMock.mockReturnValue({
+      applications: [{ id: "demo-1" }, { id: "demo-2" }],
+      loading: false,
+    });
+    mocks.fetchDashboardSummaryMock.mockResolvedValue({
+      kpis: {
+        propertiesCount: 1,
+        unitsCount: 1,
+        tenantsCount: 0,
+        openActionsCount: 1,
+        delinquentCount: 0,
+        screeningsCount: 0,
+        applicationsCount: 0,
+      },
+      actions: [],
+      events: [],
+    });
+    mocks.fetchPropertiesMock.mockResolvedValue({
+      properties: [{ id: "property-1", name: "Main Street", units: [{ id: "unit-1" }] }],
+    });
+
+    render(
+      <ToastProvider>
+        <MemoryRouter>
+          <DashboardPage />
+        </MemoryRouter>
+      </ToastProvider>
+    );
+
+    expect(await screen.findByTestId("free-tier-journey-card")).toBeInTheDocument();
+    expect(screen.queryByText("2 applicants started")).not.toBeInTheDocument();
+    expect(screen.getByText("Track applicant intake after a unit exists.")).toBeInTheDocument();
+    screen.getAllByRole("button", { name: "Track applicant" })[0].click();
+    expect(mocks.navigateMock).toHaveBeenCalledWith("/applications");
+    expect(mocks.navigateMock).not.toHaveBeenCalledWith(
+      expect.objectContaining({ search: expect.stringContaining("openSendApplication") }),
+      expect.anything()
+    );
   });
 
   it("prioritizes the free-tier setup journey before review-heavy dashboard work", async () => {

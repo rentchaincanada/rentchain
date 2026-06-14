@@ -1,4 +1,5 @@
 import { getApplicationPrereqState } from "./applicationPrereqs";
+import { normalizePlan, type Plan } from "./plan";
 
 export type OnboardingStep = {
   key: string;
@@ -20,6 +21,7 @@ type BuildArgs = {
   track: (eventName: string, props?: Record<string, unknown>) => void;
   propertiesCount?: number;
   unitsCount?: number;
+  plan?: Plan | string;
 };
 
 export function buildOnboardingSteps({
@@ -28,8 +30,11 @@ export function buildOnboardingSteps({
   track,
   propertiesCount = 0,
   unitsCount = 0,
+  plan = "free",
 }: BuildArgs): OnboardingStep[] {
   const prereq = getApplicationPrereqState({ propertiesCount, unitsCount });
+  const currentPlan = normalizePlan(plan);
+  const isFreePlan = currentPlan === "free";
   const routeToCreateApplication = () => {
     if (prereq.missingProperty) {
       track("onboarding_step_clicked", { stepKey: "applicationCreated", blockedBy: "no_property" });
@@ -42,7 +47,7 @@ export function buildOnboardingSteps({
       return;
     }
     track("onboarding_step_clicked", { stepKey: "applicationCreated" });
-    navigate("/applications?autoSelectProperty=1&openSendApplication=1");
+    navigate(isFreePlan ? "/applications" : "/applications?autoSelectProperty=1&openSendApplication=1");
   };
 
   return [
@@ -75,9 +80,17 @@ export function buildOnboardingSteps({
         ? "Add your first property before starting applicant intake."
         : prereq.missingUnit
         ? "Add a unit before starting applicant intake."
+        : isFreePlan
+        ? "Track applicant intake manually on Free. Starter adds secure application links."
         : "Send an application link or start an applicant record.",
       isComplete: !!onboarding.steps.applicationCreated,
-      actionLabel: prereq.missingProperty ? "Add property" : prereq.missingUnit ? "Add unit" : "Add applicant",
+      actionLabel: prereq.missingProperty
+        ? "Add property"
+        : prereq.missingUnit
+        ? "Add unit"
+        : isFreePlan
+        ? "Track applicant"
+        : "Add applicant",
       onAction: routeToCreateApplication,
       isPrimary: true,
     },
@@ -88,7 +101,7 @@ export function buildOnboardingSteps({
         ? "Review screening setup from Applications when the applicant is ready."
         : "Add an applicant before screening appears.",
       isComplete: !!onboarding.steps.exportPreviewed,
-      actionLabel: onboarding.steps.applicationCreated ? "Review screening" : "Add applicant",
+      actionLabel: onboarding.steps.applicationCreated ? "Review screening" : isFreePlan ? "Track applicant" : "Add applicant",
       onAction: () => {
         track("onboarding_step_clicked", { stepKey: "exportPreviewed" });
         if (!onboarding.steps.applicationCreated) {
@@ -105,7 +118,7 @@ export function buildOnboardingSteps({
         ? "Create the lease after applicant and screening context exists."
         : "Add an applicant before preparing lease documents.",
       isComplete: !!onboarding.steps.leasePackGenerated,
-      actionLabel: onboarding.steps.applicationCreated ? "Create lease" : "Add applicant",
+      actionLabel: onboarding.steps.applicationCreated ? "Create lease" : isFreePlan ? "Track applicant" : "Add applicant",
       onAction: () => {
         track("onboarding_step_clicked", { stepKey: "leasePackGenerated" });
         if (!onboarding.steps.applicationCreated) {

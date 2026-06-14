@@ -3,8 +3,60 @@ import { APPLICATIONS } from "../../services/applicationsService";
 
 const writeCanonicalEvent = vi.fn().mockResolvedValue(undefined);
 
+const { fakeDb, resetFakeDb, seedDoc } = vi.hoisted(() => {
+  const store = new Map<string, Map<string, any>>();
+  function ensureCollection(name: string) {
+    if (!store.has(name)) store.set(name, new Map());
+    return store.get(name)!;
+  }
+  function docsFor(name: string, filters: Array<{ field: string; value: any }>) {
+    return Array.from(ensureCollection(name).entries())
+      .filter(([, data]) => filters.every((filter) => data?.[filter.field] === filter.value))
+      .map(([id, data]) => ({ id, data: () => data }));
+  }
+  function makeQuery(name: string, filters: Array<{ field: string; value: any }> = []) {
+    return {
+      where: (field: string, _op: string, value: any) => makeQuery(name, [...filters, { field, value }]),
+      limit: () => makeQuery(name, filters),
+      get: async () => {
+        const docs = docsFor(name, filters);
+        return { docs, empty: docs.length === 0, size: docs.length };
+      },
+    };
+  }
+  return {
+    fakeDb: {
+      collection: (name: string) => ({
+        where: (field: string, op: string, value: any) => makeQuery(name, [{ field, value }]),
+        limit: () => makeQuery(name),
+        get: async () => makeQuery(name).get(),
+        doc: (id: string) => ({
+          get: async () => ({
+            exists: ensureCollection(name).has(id),
+            id,
+            data: () => ensureCollection(name).get(id),
+          }),
+        }),
+      }),
+    },
+    resetFakeDb: () => store.clear(),
+    seedDoc: (name: string, id: string, data: any) => ensureCollection(name).set(id, data),
+  };
+});
+
 vi.mock("../../lib/events/buildEvent", () => ({
   writeCanonicalEvent,
+}));
+
+vi.mock("../../firebase", () => ({
+  db: fakeDb,
+}));
+
+vi.mock("../../middleware/authMiddleware", () => ({
+  authenticateJwt: (req: any, _res: any, next: any) => {
+    req.user = { id: "landlord-1", landlordId: "landlord-1", role: "landlord" };
+    next();
+  },
 }));
 
 async function invokeRouter(router: any, options: { method: string; url: string; body?: any }) {
@@ -103,6 +155,7 @@ function buildPayload(overrides: Record<string, any> = {}) {
 describe("applicationsRoutes apply with RentChain metadata", () => {
   beforeEach(() => {
     APPLICATIONS.splice(0, APPLICATIONS.length);
+    resetFakeDb();
     vi.clearAllMocks();
   });
 
@@ -148,5 +201,23 @@ describe("applicationsRoutes apply with RentChain metadata", () => {
         }),
       })
     );
+  });
+
+  it("does not leak legacy in-memory applications into landlord-scoped list responses", async () => {
+    APPLICATIONS.push(buildPayload({ id: "legacy-demo", landlordId: "other-landlord" }) as any);
+    seedDoc("applications", "other-firestore", {
+      landlordId: "other-landlord",
+      applicant: { firstName: "Other", lastName: "Landlord" },
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+    const router = (await import("../applicationsRoutes")).default;
+
+    const res = await invokeRouter(router, {
+      method: "GET",
+      url: "/applications",
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual([]);
   });
 });

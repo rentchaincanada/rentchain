@@ -526,9 +526,7 @@ router.get("/applications", async (req: any, res) => {
     const toMillis = (v: any) => (v?.toMillis?.() ?? Date.parse(v || "") ?? 0);
     items.sort((a, b) => (toMillis(b.createdAt) || 0) - (toMillis(a.createdAt) || 0));
 
-    // Fallback to in-memory if Firestore empty (legacy/demo)
-    const result = items.length ? items : getApplications().map(normalizeApplicantFields);
-    return res.status(200).json(result);
+    return res.status(200).json(items);
   } catch (err: any) {
     console.error("[applications] list failed", err?.message || err);
     return res.status(500).json({ ok: false, error: "Failed to load applications" });

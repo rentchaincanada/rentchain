@@ -26,10 +26,10 @@ describe("buildOnboardingSteps", () => {
       "Run screening",
       "Create lease",
     ]);
-    expect(steps.find((step) => step.title === "Run screening")?.actionLabel).toBe("Add applicant");
+    expect(steps.find((step) => step.title === "Run screening")?.actionLabel).toBe("Track applicant");
   });
 
-  it("routes screening and lease actions through applicant setup until an application exists", () => {
+  it("routes free screening and lease actions through manual applicant intake until an application exists", () => {
     const navigate = vi.fn();
     const track = vi.fn();
     const steps = buildOnboardingSteps({
@@ -46,14 +46,39 @@ describe("buildOnboardingSteps", () => {
       track,
       propertiesCount: 1,
       unitsCount: 1,
+      plan: "free",
     });
 
     steps.find((step) => step.title === "Run screening")?.onAction();
     steps.find((step) => step.title === "Create lease")?.onAction();
 
     expect(navigate).toHaveBeenCalledTimes(2);
-    expect(navigate).toHaveBeenNthCalledWith(1, "/applications?autoSelectProperty=1&openSendApplication=1");
-    expect(navigate).toHaveBeenNthCalledWith(2, "/applications?autoSelectProperty=1&openSendApplication=1");
+    expect(navigate).toHaveBeenNthCalledWith(1, "/applications");
+    expect(navigate).toHaveBeenNthCalledWith(2, "/applications");
     expect(track).toHaveBeenCalledWith("onboarding_step_clicked", { stepKey: "applicationCreated" });
+  });
+
+  it("routes paid applicant setup to the application link workflow", () => {
+    const navigate = vi.fn();
+    const steps = buildOnboardingSteps({
+      onboarding: {
+        steps: {
+          propertyAdded: true,
+          unitAdded: true,
+          applicationCreated: false,
+          exportPreviewed: false,
+          leasePackGenerated: false,
+        },
+      },
+      navigate,
+      track: vi.fn(),
+      propertiesCount: 1,
+      unitsCount: 1,
+      plan: "starter",
+    });
+
+    steps.find((step) => step.title === "Add an applicant")?.onAction();
+
+    expect(navigate).toHaveBeenCalledWith("/applications?autoSelectProperty=1&openSendApplication=1");
   });
 });

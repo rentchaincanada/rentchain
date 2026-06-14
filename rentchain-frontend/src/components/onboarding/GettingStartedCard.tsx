@@ -9,6 +9,7 @@ type GettingStartedCardProps = {
   screeningsCount?: number;
   onAddProperty: () => void;
   onAddApplicant?: () => void;
+  applicantActionLabel?: string;
 };
 
 type StepRowProps = {
@@ -56,6 +57,7 @@ export const GettingStartedCard: React.FC<GettingStartedCardProps> = ({
   screeningsCount = 0,
   onAddProperty,
   onAddApplicant,
+  applicantActionLabel = "Add first applicant",
 }) => {
   const propertyDone = propertiesCount > 0;
   const unitDone = unitsCount > 0;
@@ -103,8 +105,8 @@ export const GettingStartedCard: React.FC<GettingStartedCardProps> = ({
           }
           action={
             propertyDone && unitDone && onAddApplicant ? (
-              <Button onClick={onAddApplicant} aria-label="Add first applicant">
-                Add first applicant
+              <Button onClick={onAddApplicant} aria-label={applicantActionLabel}>
+                {applicantActionLabel}
               </Button>
             ) : (
               <span style={{ color: text.muted, fontSize: 13 }}>Complete the prior step to continue.</span>

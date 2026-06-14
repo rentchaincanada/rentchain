@@ -283,4 +283,25 @@ describe("dashboardRoutes GET /summary", () => {
       })
     );
   });
+
+  it("routes free applicant intake to manual Applications guidance instead of the link modal", async () => {
+    resolveLandlordAndTierMock.mockResolvedValue({ tier: "free" });
+    seedDoc("properties", "prop-active", {
+      landlordId: "landlord-1",
+      portfolioStatus: "active",
+      units: [{ id: "unit-1" }],
+    });
+
+    const app = await makeApp();
+    const response = await invokeSummary(app);
+
+    expect(response.status).toBe(200);
+    expect(response.body?.data?.actions).toEqual([
+      expect.objectContaining({
+        id: "add-applicant",
+        title: "Track an applicant",
+        href: "/applications",
+      }),
+    ]);
+  });
 });

@@ -34,6 +34,7 @@ import { SCREENING_ENABLED } from "../config/screening";
 import { openUpgradeFlow } from "@/billing/openUpgradeFlow";
 import { UpgradeNudgeInlineCard } from "@/features/upgradeNudges/UpgradeNudgeInlineCard";
 import { canUseTimeline, normalizeTimelinePlan } from "@/features/automation/timeline/timelineEntitlements";
+import { normalizePlan } from "@/lib/plan";
 import { getLandlordActivation, type LandlordActivationSummary } from "@/api/activationApi";
 import {
   fetchLandlordTransUnionOnboardingAnalytics,
@@ -274,6 +275,7 @@ function FreeTierJourneyCard({
   applicantsCount,
   screeningReady,
   leaseReady,
+  applicantActionLabel,
   onAddProperty,
   onAddUnit,
   onAddApplicant,
@@ -285,6 +287,7 @@ function FreeTierJourneyCard({
   applicantsCount: number;
   screeningReady: boolean;
   leaseReady: boolean;
+  applicantActionLabel: string;
   onAddProperty: () => void;
   onAddUnit: () => void;
   onAddApplicant: () => void;
@@ -322,10 +325,10 @@ function FreeTierJourneyCard({
       helper: hasApplicant
         ? `${applicantsCount} applicant${applicantsCount === 1 ? "" : "s"} started`
         : hasUnit
-        ? "Send an application after a unit exists."
+        ? "Track applicant intake after a unit exists."
         : "Add a unit before applicant intake.",
       action: hasUnit ? onAddApplicant : hasProperty ? onAddUnit : onAddProperty,
-      actionLabel: hasUnit ? (hasApplicant ? "View applicants" : "Add applicant") : hasProperty ? "Add unit" : "Add property",
+      actionLabel: hasUnit ? (hasApplicant ? "View applicants" : applicantActionLabel) : hasProperty ? "Add unit" : "Add property",
     },
     {
       id: "screening",
@@ -424,7 +427,7 @@ const DashboardPage: React.FC = () => {
   const { applications, loading: applicationsLoading } = useApplications();
   const { tenants, loading: tenantsLoading } = useTenants();
   const { user, ready: authReady, isLoading: authLoading } = useAuth();
-  const { features } = useCapabilities();
+  const { caps, features } = useCapabilities();
   const { showToast } = useToast();
   const location = useLocation();
   const navigate = useNavigate();
@@ -439,6 +442,8 @@ const DashboardPage: React.FC = () => {
   const isLandlord = roleLower === "landlord";
   const timelineEnabled = canUseTimeline(user?.plan || "");
   const planNormalized = normalizeTimelinePlan(user?.plan || "");
+  const currentPlan = normalizePlan(caps?.plan || user?.plan || "free");
+  const isFreePlan = currentPlan === "free";
   const shouldConsiderTimelineNudge = meLoaded && !isAdmin && !timelineEnabled;
   const [showTimelineNudge, setShowTimelineNudge] = React.useState(false);
   const timelineNudgeViewedRef = React.useRef(false);
@@ -717,7 +722,8 @@ const DashboardPage: React.FC = () => {
 
   const derivedPropertiesCount = properties.length;
   const derivedUnitsCount = properties.reduce((sum, p) => sum + unitsForProperty(p), 0);
-  const applicationsCount = applications.length;
+  const applicationsCount =
+    typeof data?.kpis?.applicationsCount === "number" ? data.kpis.applicationsCount : applications.length;
   const tenantCount = tenants.length;
   const kpis = {
     propertiesCount: derivedPropertiesCount,
@@ -794,9 +800,9 @@ const DashboardPage: React.FC = () => {
     if (derivedUnitsCount > 0 && applicationsCount === 0) {
       items.push({
         id: "add-applicant",
-        title: "Add an applicant",
+        title: isFreePlan ? "Track an applicant" : "Add an applicant",
         severity: "info",
-        href: "/applications?openSendApplication=1",
+        href: isFreePlan ? "/applications" : "/applications?openSendApplication=1",
       });
     }
     if (SCREENING_ENABLED && canManualScreen && applicationsCount > 0 && (kpis.screeningsCount ?? 0) === 0) {
@@ -808,7 +814,7 @@ const DashboardPage: React.FC = () => {
       });
     }
     return items;
-  }, [applicationsCount, canManualScreen, derivedPropertiesCount, derivedUnitsCount, kpis.screeningsCount]);
+  }, [applicationsCount, canManualScreen, derivedPropertiesCount, derivedUnitsCount, isFreePlan, kpis.screeningsCount]);
   const rawActions = Array.isArray(data?.actions) && data.actions.length > 0 ? data.actions : fallbackActions;
   const visibleActions = rawActions.filter((item: any) => {
     const id = String(item?.id || "");
@@ -860,6 +866,24 @@ const DashboardPage: React.FC = () => {
       });
       setPendingPropertyAction("create_application");
       setPropertyGateOpen(true);
+      return;
+    }
+    if (prereq.missingUnit) {
+      track("onboarding_step_clicked", {
+        stepKey: "applicationCreated",
+        blockedBy: "no_units",
+        source: "dashboard",
+      });
+      navigate("/properties?openAddUnit=1");
+      return;
+    }
+    if (isFreePlan) {
+      track("onboarding_step_clicked", {
+        stepKey: "applicationCreated",
+        source: "dashboard",
+        mode: "manual_intake",
+      });
+      navigate("/applications");
       return;
     }
     track("onboarding_step_clicked", {
@@ -1004,6 +1028,7 @@ const DashboardPage: React.FC = () => {
             applicantsCount={applicationsCount}
             screeningReady={screeningSetupComplete}
             leaseReady={false}
+            applicantActionLabel={isFreePlan ? "Track applicant" : "Add applicant"}
             onAddProperty={() => navigate("/properties?focus=addProperty")}
             onAddUnit={() => navigate("/properties?openAddUnit=1")}
             onAddApplicant={handleCreateApplicationClick}
@@ -1211,10 +1236,10 @@ const DashboardPage: React.FC = () => {
                   <Button
                     variant="secondary"
                     onClick={handleCreateApplicationClick}
-                    aria-label="Add applicant"
+                    aria-label={isFreePlan ? "Track applicant" : "Add applicant"}
                     disabled={progressLoading}
                   >
-                    Add applicant
+                    {isFreePlan ? "Track applicant" : "Add applicant"}
                   </Button>
                 ) : null}
                 {hasApplicantContext ? (
@@ -1287,9 +1312,10 @@ const DashboardPage: React.FC = () => {
                     onboarding,
                     navigate,
                     track,
-                    propertiesCount: derivedPropertiesCount,
-                    unitsCount: derivedUnitsCount,
-                  })}
+                  propertiesCount: derivedPropertiesCount,
+                  unitsCount: derivedUnitsCount,
+                  plan: currentPlan,
+                })}
                   loading={progressLoading}
                   onDismiss={() => onboarding.dismissOnboarding()}
                 />
@@ -1326,6 +1352,7 @@ const DashboardPage: React.FC = () => {
             screeningsCount={kpis.screeningsCount ?? 0}
             onAddProperty={() => navigate("/properties")}
             onAddApplicant={handleCreateApplicationClick}
+            applicantActionLabel={isFreePlan ? "Track applicant manually" : "Add first applicant"}
           />
         ) : null}
 
