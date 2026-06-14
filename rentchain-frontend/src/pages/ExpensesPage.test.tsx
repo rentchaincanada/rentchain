@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   useCapabilitiesMock: vi.fn(),
   previewExpenseImportMock: vi.fn(),
   confirmExpenseImportRowsMock: vi.fn(),
+  lockedFeatureMock: vi.fn(),
 }));
 
 vi.mock("../api/expensesApi", async () => {
@@ -36,6 +37,17 @@ vi.mock("../api/propertiesApi", () => ({
 
 vi.mock("../hooks/useCapabilities", () => ({
   useCapabilities: mocks.useCapabilitiesMock,
+}));
+
+vi.mock("../components/billing/LockedFeature", () => ({
+  LockedFeature: (props: any) => {
+    mocks.lockedFeatureMock(props);
+    return (
+      <div data-testid="locked-feature">
+        {props.featureName} / {props.requiredTier} / {props.upgradeDrivers?.join(", ")}
+      </div>
+    );
+  },
 }));
 
 vi.mock("../components/expenses/AddExpenseModal", () => ({
@@ -66,9 +78,10 @@ describe("ExpensesPage", () => {
     });
     mocks.previewExpenseImportMock.mockReset();
     mocks.confirmExpenseImportRowsMock.mockReset();
+    mocks.lockedFeatureMock.mockClear();
   });
 
-  it("shows the Pro upgrade prompt for import/export on free plans", async () => {
+  it("shows the canonical Pro locked feature for import/export on free plans", async () => {
     mocks.useCapabilitiesMock.mockReturnValue({
       caps: { plan: "free" },
       features: { "expenses.import": false },
@@ -77,7 +90,15 @@ describe("ExpensesPage", () => {
 
     render(<ExpensesPage />);
 
-    expect(await screen.findByText("Upgrade to Pro to import receipts, PDFs, CSVs, and spreadsheets with AI-assisted review.")).toBeInTheDocument();
+    expect(await screen.findByTestId("locked-feature")).toHaveTextContent("Expense import and exports / pro / Expenses, Analytics");
+    expect(mocks.lockedFeatureMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        featureKey: "expenses.import",
+        requiredTier: "pro",
+        upgradeDrivers: ["Expenses", "Analytics"],
+        ctaLabel: "Upgrade to Pro",
+      })
+    );
     expect(screen.queryByRole("button", { name: "Export CSV" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Export Spreadsheet (.xls)" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Print / Save PDF" })).not.toBeInTheDocument();

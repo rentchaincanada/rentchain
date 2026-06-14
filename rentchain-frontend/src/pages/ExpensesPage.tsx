@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useRef } from "react";
 import { Card, Button } from "../components/ui/Ui";
 import { spacing, text, colors } from "../styles/tokens";
 import {
@@ -13,6 +13,7 @@ import {
 } from "../api/expensesApi";
 import { fetchProperties } from "../api/propertiesApi";
 import { AddExpenseModal } from "../components/expenses/AddExpenseModal";
+import { LockedFeature } from "../components/billing/LockedFeature";
 import { ExpenseImportReviewTable } from "../components/expenses/ExpenseImportReviewTable";
 import { ExpenseImportSummaryCard } from "../components/expenses/ExpenseImportSummaryCard";
 import { ExpenseImportUploadCard } from "../components/expenses/ExpenseImportUploadCard";
@@ -140,7 +141,20 @@ const ExpensesPage: React.FC = () => {
     errors: string[];
   }>(null);
   const [isMobile, setIsMobile] = React.useState(false);
-  const proExpensesEnabled = features?.["expenses.import"] !== false && ["pro", "elite"].includes(String(caps?.plan || ""));
+
+  // Use stable capability state with ref to prevent revert on navigation transitions
+  // Only update the computed value when we have confident capability data
+  const stableProExpensesEnabled = useRef(false);
+  const hasCapabilities = caps && typeof caps === "object" && caps.plan && features && typeof features === "object";
+
+  // Only update the stable value when hasCapabilities is true - never during loading/transitions
+  if (hasCapabilities) {
+    stableProExpensesEnabled.current = features?.["expenses.import"] !== false &&
+      ["pro", "elite"].includes(String(caps?.plan || ""));
+  }
+
+  const shouldShowLoading = capsLoading && !hasCapabilities;
+  const proExpensesEnabled = stableProExpensesEnabled.current;
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -340,7 +354,7 @@ const ExpensesPage: React.FC = () => {
           </div>
         </div>
         <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap", justifyContent: "flex-end" }}>
-          {capsLoading ? null : proExpensesEnabled ? (
+          {shouldShowLoading ? null : proExpensesEnabled ? (
             <>
               <Button variant="secondary" onClick={() => void triggerDownload("csv")} disabled={exporting !== null}>
                 {exporting === "csv" ? "Exporting..." : "Export CSV"}
@@ -408,7 +422,16 @@ const ExpensesPage: React.FC = () => {
         </div>
       </Card>
 
-      {capsLoading ? null : proExpensesEnabled ? (
+      {shouldShowLoading ? (
+        <Card style={{ padding: spacing.md, border: `1px solid ${colors.border}` }}>
+          <div style={{ fontWeight: 700, marginBottom: 10 }}>Loading expense tools...</div>
+          <div style={{ display: "grid", gap: 8 }}>
+            <div style={{ height: 12, borderRadius: 999, background: "rgba(15,23,42,0.08)" }} />
+            <div style={{ height: 12, width: "80%", borderRadius: 999, background: "rgba(15,23,42,0.08)" }} />
+            <div style={{ height: 12, width: "60%", borderRadius: 999, background: "rgba(15,23,42,0.08)" }} />
+          </div>
+        </Card>
+      ) : proExpensesEnabled ? (
         <ExpenseImportUploadCard
           files={importFiles}
           loading={importing}
@@ -419,15 +442,15 @@ const ExpensesPage: React.FC = () => {
           onPreview={() => void handlePreviewImport()}
         />
       ) : (
-        <Card style={{ display: "grid", gap: spacing.md }}>
-          <div style={{ fontWeight: 700 }}>Import expenses</div>
-          <div style={{ display: "grid", gap: 6 }}>
-            <div style={{ color: text.primary, fontSize: 14 }}>Manual expense tracking is available now.</div>
-            <div style={{ color: text.muted, fontSize: 13 }}>
-              Upgrade to Pro to import receipts, PDFs, CSVs, and spreadsheets with AI-assisted review.
-            </div>
-          </div>
-        </Card>
+        <LockedFeature
+          featureKey="expenses.import"
+          featureName="Expense import and exports"
+          title="Upgrade to import and export expenses"
+          description="Manual expense tracking is available now. Pro adds receipt, PDF, CSV, and spreadsheet import plus accountant-ready exports."
+          requiredTier="pro"
+          upgradeDrivers={["Expenses", "Analytics"]}
+          ctaLabel="Upgrade to Pro"
+        />
       )}
 
       {previewSummary ? (

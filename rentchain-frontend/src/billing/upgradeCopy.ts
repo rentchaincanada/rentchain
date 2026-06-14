@@ -90,6 +90,22 @@ const COPY_MAP: Record<string, UpgradeCopy> = {
     secondaryCta: "Not now",
     requiredPlanLabel: "Pro",
   },
+  "expenses.import": {
+    title: "Upgrade to import and export expenses",
+    subtitle: "Manual expense tracking stays available now. Pro adds receipt, PDF, CSV, and spreadsheet import plus accountant-ready exports.",
+    bullets: ["Import receipts, PDFs, CSVs, and spreadsheets", "Review extracted expense rows before saving", "Export cleaner expense reports for accounting"],
+    primaryCta: "Upgrade to Pro",
+    secondaryCta: "Not now",
+    requiredPlanLabel: "Pro",
+  },
+  "expenses.export": {
+    title: "Upgrade to import and export expenses",
+    subtitle: "Manual expense tracking stays available now. Pro adds receipt, PDF, CSV, and spreadsheet import plus accountant-ready exports.",
+    bullets: ["Import receipts, PDFs, CSVs, and spreadsheets", "Review extracted expense rows before saving", "Export cleaner expense reports for accounting"],
+    primaryCta: "Upgrade to Pro",
+    secondaryCta: "Not now",
+    requiredPlanLabel: "Pro",
+  },
   maintenance: {
     title: "Upgrade to run maintenance in one workflow",
     subtitle: "Starter adds maintenance and work order tools so requests, updates, and follow-through stay organized.",
@@ -234,6 +250,8 @@ export function getUpgradeCopy(featureKey?: string): UpgradeCopy {
   if (key === "tenantportal") return COPY_MAP.screening;
   if (key === "move_in_readiness" || key === "work_orders") return COPY_MAP.maintenance;
   if (key === "pdf_export") return COPY_MAP.exports;
+  if (key === "expenses_import" || key === "expenses.import") return COPY_MAP["expenses.import"];
+  if (key === "expenses_export" || key === "expenses.export") return COPY_MAP["expenses.export"];
   if (key === "review_summary") return COPY_MAP.tenant_screening;
   if (key === "properties.create") return COPY_MAP.properties;
   if (key === "units.create") return COPY_MAP.units;

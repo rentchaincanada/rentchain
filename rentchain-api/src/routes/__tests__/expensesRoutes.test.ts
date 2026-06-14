@@ -175,7 +175,14 @@ describe("expenses routes", () => {
     });
 
     expect(res.status).toBe(403);
-    expect(res.body.error).toBe("UPGRADE_REQUIRED");
+    expect(res.body).toMatchObject({
+      error: "upgrade_required",
+      requiredPlan: "pro",
+      requiredTier: "pro",
+      userMessage: "Upgrade to Pro to unlock Expenses, Analytics.",
+      upgradeDrivers: ["Expenses", "Analytics"],
+      upgradePath: "/pricing?tier=pro",
+    });
   });
 
   it("imports a RentChain-exported csv shape and skips unknown property rows with reasons", async () => {

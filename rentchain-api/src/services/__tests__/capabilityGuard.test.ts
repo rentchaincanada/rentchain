@@ -16,9 +16,29 @@ describe("buildUpgradeRequiredResponse", () => {
       plan: "free",
       currentPlan: "free",
       requiredPlan: "starter",
+      requiredTier: "starter",
+      userMessage: "Upgrade to Starter to unlock Payments, Analytics.",
+      upgradeDrivers: ["Payments", "Analytics"],
       source: "ledgerRoutes",
-      upgradePath: "/billing",
+      upgradePath: "/pricing?tier=starter",
       message: "Starter is required to use this feature.",
+    });
+  });
+
+  it("includes expense upgrade drivers for import and export gates", () => {
+    expect(
+      buildUpgradeRequiredResponse({
+        capability: "expenses.export",
+        currentPlan: "free",
+        source: "expensesRoutes",
+      })
+    ).toMatchObject({
+      error: "upgrade_required",
+      requiredPlan: "pro",
+      requiredTier: "pro",
+      userMessage: "Upgrade to Pro to unlock Expenses, Analytics.",
+      upgradeDrivers: ["Expenses", "Analytics"],
+      upgradePath: "/pricing?tier=pro",
     });
   });
 });

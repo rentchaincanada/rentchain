@@ -5,26 +5,39 @@ import { UpgradeCTA } from "./UpgradeCTA";
 import { getUpgradeCopy } from "@/billing/upgradeCopy";
 import { normalizePlanLabel } from "@/billing/planLabel";
 import { resolveRequiredPlan } from "@/lib/upgradePrompt";
+import {
+  getUpgradeDriversForFeature,
+  UPGRADE_DRIVER_DESCRIPTIONS,
+  type UpgradeDriver,
+} from "@/constants/tiers";
 
 type Props = {
   featureKey: string;
+  featureName?: string;
   title?: string;
   description?: string;
   hint?: string;
   ctaLabel?: string;
+  requiredTier?: string;
+  upgradeDrivers?: UpgradeDriver[];
   compact?: boolean;
 };
 
 export function LockedFeature({
   featureKey,
+  featureName,
   title,
   description,
   hint,
   ctaLabel,
+  requiredTier,
+  upgradeDrivers,
   compact = false,
 }: Props) {
   const copy = getUpgradeCopy(featureKey);
-  const requiredPlanLabel = normalizePlanLabel(resolveRequiredPlan(featureKey) || "pro");
+  const requiredPlan = requiredTier || resolveRequiredPlan(featureKey) || "pro";
+  const requiredPlanLabel = normalizePlanLabel(requiredPlan);
+  const drivers = upgradeDrivers?.length ? upgradeDrivers : getUpgradeDriversForFeature(featureKey);
   const valueBullets = copy.bullets?.slice(0, compact ? 2 : 3) || [];
 
   return (
@@ -43,12 +56,12 @@ export function LockedFeature({
           style={{
             fontSize: 11,
             fontWeight: 800,
-            letterSpacing: "0.06em",
+            letterSpacing: 0,
             textTransform: "uppercase",
             color: "#1d4ed8",
           }}
         >
-          Locked feature
+          {featureName || "Locked feature"}
         </div>
         <div style={{ fontSize: compact ? 15 : 16, fontWeight: 800, color: text.primary }}>
           {title || copy.title}
@@ -59,6 +72,22 @@ export function LockedFeature({
         <div style={{ color: text.secondary, fontSize: 13, fontWeight: 700 }}>
           Available on {requiredPlanLabel}
         </div>
+        {drivers.length ? (
+          <div style={{ display: "grid", gap: 6 }}>
+            <div style={{ color: text.secondary, fontSize: 13, fontWeight: 800 }}>
+              Upgrade drivers: {drivers.join(", ")}
+            </div>
+            {!compact ? (
+              <ul style={{ margin: 0, paddingLeft: "1.1rem", color: text.muted, fontSize: 13, lineHeight: 1.55, display: "grid", gap: 4 }}>
+                {drivers.map((driver) => (
+                  <li key={driver}>
+                    <strong>{driver}:</strong> {UPGRADE_DRIVER_DESCRIPTIONS[driver]}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        ) : null}
         {hint ? <div style={{ color: text.secondary, fontSize: 12 }}>{hint}</div> : null}
         {valueBullets.length ? (
           <ul style={{ margin: 0, paddingLeft: "1.1rem", color: text.muted, fontSize: 13, lineHeight: 1.55, display: "grid", gap: 4 }}>
@@ -77,7 +106,7 @@ export function LockedFeature({
           variant="secondary"
         />
         <div style={{ color: text.muted, fontSize: 12, lineHeight: 1.5 }}>
-          Opens a quick upgrade prompt first. Checkout only begins if you choose to continue.
+          Review upgrade options before checkout. Checkout only begins if you choose to continue.
         </div>
       </div>
     </Card>

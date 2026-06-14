@@ -22,6 +22,37 @@ type RequestUserLike = {
   entitlements?: UserEntitlements;
 };
 
+const UPGRADE_DRIVER_COPY: Record<string, string[]> = {
+  leases: ["Screening", "Payments"],
+  ledger: ["Payments", "Analytics"],
+  ledger_basic: ["Payments", "Analytics"],
+  ledger_verified: ["Payments", "Analytics"],
+  messaging: ["Work Orders"],
+  operations_signals: ["Analytics", "Payments", "Work Orders", "Screening"],
+  maintenance: ["Work Orders"],
+  work_orders: ["Work Orders"],
+  "expenses.import": ["Expenses", "Analytics"],
+  "expenses.export": ["Expenses", "Analytics"],
+  expenses_import: ["Expenses", "Analytics"],
+  expenses_export: ["Expenses", "Analytics"],
+  exports: ["Expenses", "Analytics"],
+  exports_basic: ["Expenses", "Analytics"],
+  pdf_export: ["Expenses", "Analytics"],
+  screening: ["Screening"],
+  screening_workflow: ["Screening"],
+};
+
+function resolveUpgradeDrivers(capability: string): string[] {
+  const normalized = capability.trim().toLowerCase();
+  if (UPGRADE_DRIVER_COPY[normalized]) return UPGRADE_DRIVER_COPY[normalized];
+  if (normalized.includes("expense") || normalized.includes("export")) return ["Expenses", "Analytics"];
+  if (normalized.includes("ledger") || normalized.includes("payment")) return ["Payments", "Analytics"];
+  if (normalized.includes("message")) return ["Work Orders"];
+  if (normalized.includes("screening")) return ["Screening"];
+  if (normalized.includes("work_order") || normalized.includes("maintenance")) return ["Work Orders"];
+  return ["Analytics"];
+}
+
 export async function requireCapability(
   landlordId: string,
   capability: CapabilityKey,
@@ -61,6 +92,9 @@ export function buildUpgradeRequiredResponse(params: {
   const currentPlan = resolveCanonicalPlan(params.currentPlan);
   const requiredPlan = requiredPlanForCapability(capability) || "pro";
   const requiredPlanLabel = canonicalPlanLabel(requiredPlan);
+  const upgradeDrivers = resolveUpgradeDrivers(capability);
+  const driverCopy = upgradeDrivers.join(", ");
+  const userMessage = `Upgrade to ${requiredPlanLabel} to unlock ${driverCopy}.`;
 
   return {
     ok: false,
@@ -69,8 +103,11 @@ export function buildUpgradeRequiredResponse(params: {
     plan: currentPlan,
     currentPlan,
     requiredPlan,
+    requiredTier: requiredPlan,
+    userMessage,
+    upgradeDrivers,
     source: params.source,
-    upgradePath: "/billing",
+    upgradePath: `/pricing?tier=${requiredPlan}`,
     message: `${requiredPlanLabel} is required to use this feature.`,
   };
 }
