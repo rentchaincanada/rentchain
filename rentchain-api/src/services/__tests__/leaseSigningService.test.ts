@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const collections = new Map<string, Map<string, any>>();
+const writeCanonicalEventMock = vi.fn(async () => undefined);
 
 function ensureCollection(name: string) {
   if (!collections.has(name)) collections.set(name, new Map());
@@ -54,7 +55,7 @@ vi.mock("../../firebase", () => ({
 }));
 
 vi.mock("../../lib/events/buildEvent", () => ({
-  writeCanonicalEvent: vi.fn(async () => undefined),
+  writeCanonicalEvent: writeCanonicalEventMock,
 }));
 
 vi.mock("../../lib/gcs", () => ({
@@ -68,6 +69,7 @@ vi.mock("../../lib/gcsSignedUrl", () => ({
 describe("leaseSigningService", () => {
   beforeEach(() => {
     collections.clear();
+    writeCanonicalEventMock.mockClear();
     process.env.SIGNING_PROVIDER = "mock";
     process.env.PUBLIC_APP_URL = "http://localhost:5173";
   });
@@ -86,6 +88,14 @@ describe("leaseSigningService", () => {
     expect(snapshot.providerRequestRef).toMatch(/^mock_ref_/);
     expect(snapshot.providerRequestRef).not.toContain("lease-1");
     expect(snapshot.events.map((event) => event.type)).toEqual(["sent"]);
+    expect(writeCanonicalEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "signing_sent",
+        actor: expect.objectContaining({ role: "landlord", type: "landlord" }),
+        resource: { id: "lease-1", type: "lease" },
+        status: "sent",
+      })
+    );
   });
 
   it("derives terminal states from appended webhook events", async () => {

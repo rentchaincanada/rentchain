@@ -3,8 +3,9 @@ import { leaseService } from "../../services/leaseService";
 
 const getSignedDownloadUrlMock = vi.fn(async () => "https://signed.example.com/lease.pdf");
 const sendEmailMock = vi.fn(async () => undefined);
+const writeCanonicalEventMock = vi.fn(async () => undefined);
 
-const { fakeDb, resetFakeDb, seedDoc } = vi.hoisted(() => {
+const { fakeDb, listDocs, resetFakeDb, seedDoc } = vi.hoisted(() => {
   const store = new Map<string, Map<string, any>>();
   let idSeq = 0;
 
@@ -60,6 +61,7 @@ const { fakeDb, resetFakeDb, seedDoc } = vi.hoisted(() => {
       idSeq = 0;
     },
     seedDoc: (name: string, id: string, data: any) => ensureCollection(name).set(id, { id, data }),
+    listDocs: (name: string) => Array.from(ensureCollection(name).values()).map((doc) => ({ id: doc.id, data: doc.data })),
     fakeDb: {
       runTransaction: async (callback: any) =>
         callback({
@@ -118,6 +120,10 @@ vi.mock("../../services/emailService", () => ({
   sendEmail: sendEmailMock,
 }));
 
+vi.mock("../../lib/events/buildEvent", () => ({
+  writeCanonicalEvent: writeCanonicalEventMock,
+}));
+
 vi.mock("../../services/stripeService", () => ({
   isStripeConfigured: () => true,
 }));
@@ -169,8 +175,11 @@ describe("leaseRoutes GET /active", () => {
     leaseService.getAll().splice(0);
     getSignedDownloadUrlMock.mockClear();
     sendEmailMock.mockClear();
+    writeCanonicalEventMock.mockClear();
     sendEmailMock.mockResolvedValue(undefined);
     process.env.EMAIL_FROM = "noreply@example.com";
+    process.env.SIGNING_PROVIDER = "mock";
+    process.env.PUBLIC_APP_URL = "http://localhost:5173";
   });
 
   it("requires landlord authority before generic lease and ledger handlers execute", async () => {
@@ -791,6 +800,127 @@ describe("leaseRoutes GET /active", () => {
     expect(res.body?.leaseNotification).toEqual(
       expect.objectContaining({ attempted: false, sent: false, reason: "tenant_email_missing" })
     );
+    expect(sendEmailMock).not.toHaveBeenCalled();
+  });
+
+  it("sends a lease signing request for a landlord-scoped lease and records governed signing events", async () => {
+    seedDoc("leases", "lease-1", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      tenantId: "tenant-1",
+      unitId: "unit-1",
+      monthlyRent: 1850,
+      startDate: "2026-01-01",
+      endDate: "2026-12-31",
+      status: "active",
+      documentUrl: "https://files.example.com/lease-1.pdf",
+    });
+
+    const router = (await import("../leaseRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/lease-1/send-for-signature",
+      body: { tenantEmails: ["tenant@example.com"], message: "Please sign." },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.data).toEqual(
+      expect.objectContaining({
+        signingStatus: "pending_signature",
+        signingProviderId: "mock",
+        derivedLeaseState: "pending_signature",
+      })
+    );
+
+    const requests = listDocs("leaseSigningRequests");
+    expect(requests).toHaveLength(1);
+    expect(requests[0].data).toEqual(
+      expect.objectContaining({
+        leaseId: "lease-1",
+        landlordId: "landlord-1",
+        providerId: "mock",
+        documentUrl: "https://files.example.com/lease-1.pdf",
+        rawIdsIncluded: false,
+        payloadIncluded: false,
+      })
+    );
+    expect(requests[0].data.tenantEmailHashes).toHaveLength(1);
+    expect(requests[0].data.providerRequestRef).toMatch(/^mock_ref_/);
+    expect(requests[0].data.providerRequestRef).not.toContain("lease-1");
+
+    const events = listDocs("leaseSigningEvents");
+    expect(events).toHaveLength(1);
+    expect(events[0].data).toEqual(
+      expect.objectContaining({
+        leaseId: "lease-1",
+        landlordId: "landlord-1",
+        providerId: "mock",
+        type: "sent",
+        actorRole: "landlord",
+      })
+    );
+    expect(writeCanonicalEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "signing_sent",
+        actor: expect.objectContaining({ role: "landlord", type: "landlord" }),
+        resource: { id: "lease-1", type: "lease" },
+        status: "sent",
+      })
+    );
+    expect(sendEmailMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects invalid lease signing recipients without dispatching or writing events", async () => {
+    seedDoc("leases", "lease-1", {
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      status: "active",
+      documentUrl: "https://files.example.com/lease-1.pdf",
+    });
+
+    const router = (await import("../leaseRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/lease-1/send-for-signature",
+      body: { tenantEmails: ["not-an-email"] },
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ ok: false, error: "invalid_tenant_email" });
+    expect(listDocs("leaseSigningRequests")).toHaveLength(0);
+    expect(listDocs("leaseSigningEvents")).toHaveLength(0);
+    expect(writeCanonicalEventMock).not.toHaveBeenCalled();
+    expect(sendEmailMock).not.toHaveBeenCalled();
+  });
+
+  it("prevents tenants and other landlords from submitting lease signing requests", async () => {
+    seedDoc("leases", "lease-1", {
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      status: "active",
+      documentUrl: "https://files.example.com/lease-1.pdf",
+    });
+    const router = (await import("../leaseRoutes")).default;
+
+    const tenantRes = await invokeRouter(router, {
+      method: "POST",
+      url: "/lease-1/send-for-signature",
+      headers: { "x-test-user": JSON.stringify({ id: "tenant-1", tenantId: "tenant-1", role: "tenant" }) },
+      body: { tenantEmails: ["tenant@example.com"] },
+    });
+    expect(tenantRes.status).toBe(403);
+
+    const otherLandlordRes = await invokeRouter(router, {
+      method: "POST",
+      url: "/lease-1/send-for-signature",
+      headers: { "x-test-user": JSON.stringify({ id: "landlord-2", landlordId: "landlord-2", role: "landlord" }) },
+      body: { tenantEmails: ["tenant@example.com"] },
+    });
+    expect(otherLandlordRes.status).toBe(403);
+    expect(otherLandlordRes.body).toEqual({ ok: false, error: "forbidden" });
+    expect(listDocs("leaseSigningRequests")).toHaveLength(0);
+    expect(listDocs("leaseSigningEvents")).toHaveLength(0);
+    expect(writeCanonicalEventMock).not.toHaveBeenCalled();
     expect(sendEmailMock).not.toHaveBeenCalled();
   });
 

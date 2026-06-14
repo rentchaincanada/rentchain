@@ -25,6 +25,12 @@ export function LeaseSigningDashboard({ leaseId, tenantEmail }: Props) {
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
+  React.useEffect(() => {
+    const nextTenantEmail = String(tenantEmail || "").trim();
+    if (!nextTenantEmail) return;
+    setEmail((current) => (current.trim() ? current : nextTenantEmail));
+  }, [tenantEmail]);
+
   const refresh = React.useCallback(async () => {
     if (!leaseId) return;
     try {
