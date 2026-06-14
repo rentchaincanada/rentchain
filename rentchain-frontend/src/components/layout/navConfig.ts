@@ -43,7 +43,7 @@ export const NAV_ITEMS: NavItem[] = [
     label: "Operations",
     to: "/operations",
     icon: ClipboardList,
-    showInDrawer: true,
+    showInDrawer: false,
     requiresLandlordOrAdmin: true,
   },
   {
@@ -52,6 +52,7 @@ export const NAV_ITEMS: NavItem[] = [
     to: "/properties",
     icon: Building2,
     showInDrawer: true,
+    showInTabs: true,
   },
   {
     id: "tenants",
@@ -66,6 +67,7 @@ export const NAV_ITEMS: NavItem[] = [
     to: "/applications",
     icon: ScrollText,
     showInDrawer: true,
+    showInTabs: true,
   },
   {
     id: "documents",
@@ -73,7 +75,7 @@ export const NAV_ITEMS: NavItem[] = [
     to: "/applications",
     icon: FileText,
     showInDrawer: false,
-    showInTabs: true,
+    showInTabs: false,
     requiresLandlordOrAdmin: true,
   },
   {
@@ -82,7 +84,7 @@ export const NAV_ITEMS: NavItem[] = [
     to: "/leases",
     icon: ScrollText,
     showInDrawer: true,
-    showInTabs: true,
+    showInTabs: false,
     requiresLandlordOrAdmin: true,
   },
   {
@@ -91,6 +93,7 @@ export const NAV_ITEMS: NavItem[] = [
     to: "/landlord/unified-inbox",
     icon: Inbox,
     showInDrawer: true,
+    showInTabs: true,
     requiresLandlordOrAdmin: true,
   },
   {
@@ -98,7 +101,7 @@ export const NAV_ITEMS: NavItem[] = [
     label: "Decisions",
     to: "/decision-inbox",
     icon: Inbox,
-    showInDrawer: true,
+    showInDrawer: false,
     requiresLandlordOrAdmin: true,
   },
   {
@@ -116,7 +119,7 @@ export const NAV_ITEMS: NavItem[] = [
     to: "/messages",
     icon: MessagesSquare,
     showInDrawer: true,
-    showInTabs: true,
+    showInTabs: false,
     requiresFeature: "messaging",
   },
   {

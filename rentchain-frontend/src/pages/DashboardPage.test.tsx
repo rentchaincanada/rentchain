@@ -387,6 +387,57 @@ describe("DashboardPage", () => {
     expect(screen.queryByRole("button", { name: /dismiss/i })).not.toBeInTheDocument();
   });
 
+  it("prioritizes the free-tier setup journey before review-heavy dashboard work", async () => {
+    mocks.fetchDashboardSummaryMock.mockResolvedValue({
+      kpis: {
+        propertiesCount: 1,
+        unitsCount: 0,
+        tenantsCount: 0,
+        openActionsCount: 0,
+        delinquentCount: 0,
+        screeningsCount: 0,
+      },
+      actions: [],
+      events: [],
+      decisions: [
+        {
+          decisionId: "decision:review_overdue_rent:lease-1",
+          leaseId: "lease-1",
+          propertyId: "property-1",
+          unitId: "unit-1",
+          decisionType: "review_overdue_rent",
+          severity: "critical",
+          status: "detected",
+          reason: "Rent past due date",
+          metadata: {},
+        },
+      ],
+    });
+    mocks.fetchPropertiesMock.mockResolvedValue({
+      properties: [{ id: "property-1", name: "Main Street", units: [] }],
+    });
+
+    render(
+      <ToastProvider>
+        <MemoryRouter>
+          <DashboardPage />
+        </MemoryRouter>
+      </ToastProvider>
+    );
+
+    expect(await screen.findByTestId("free-tier-journey-card")).toBeInTheDocument();
+    expect(screen.getByText("Start in order")).toBeInTheDocument();
+    expect(screen.getByText("Step 1")).toBeInTheDocument();
+    expect(screen.getByText("Step 2")).toBeInTheDocument();
+    expect(screen.getAllByText("Add unit").length).toBeGreaterThan(0);
+    expect(screen.getByText("Decision inbox summary")).toBeInTheDocument();
+
+    const actionRequired = screen.getByText("Action required").closest("div");
+    expect(actionRequired).not.toBeNull();
+    expect(screen.getAllByText("Add a unit").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Set up screening workflow")).not.toBeInTheDocument();
+  });
+
   it("keeps dashboard recent activity ledger CTA label consistent when lease context is missing", async () => {
     mocks.fetchDashboardSummaryMock.mockResolvedValue({
       kpis: {
@@ -541,7 +592,7 @@ describe("DashboardPage", () => {
     expect(assignMock).toHaveBeenCalledWith("/applications?openTransUnionAccess=1");
   });
 
-  it("routes the screening setup CTA to the applications TransUnion onboarding path", async () => {
+  it("routes the provider funnel CTA to applications once TransUnion is connected", async () => {
     mocks.fetchDashboardSummaryMock.mockResolvedValue({
       kpis: {
         propertiesCount: 1,
@@ -584,8 +635,8 @@ describe("DashboardPage", () => {
     );
 
     expect(await screen.findByText("Provider setup funnel")).toBeInTheDocument();
-    screen.getAllByRole("button", { name: "Open" })[0].click();
-    expect(assignMock).toHaveBeenCalledWith("/applications?openTransUnionAccess=1");
+    screen.getAllByRole("button", { name: "Run screening" })[0].click();
+    expect(mocks.navigateMock).toHaveBeenCalledWith("/applications");
     expect(screen.getByText("Started → Connected 50%")).toBeInTheDocument();
     expect(screen.getByText("1 onboarding start still need credential connection.")).toBeInTheDocument();
   });
