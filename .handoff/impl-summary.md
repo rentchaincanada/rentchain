@@ -1,5 +1,5 @@
-PR: #TBD
-PR URL: TBD
+PR: #1149
+PR URL: https://github.com/rentchaincanada/rentchain/pull/1149
 Branch: fix/upgrade-driver-clarification-v1
 
 WHAT WAS DONE:
