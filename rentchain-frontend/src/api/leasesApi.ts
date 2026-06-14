@@ -211,6 +211,10 @@ export type LeaseSigningStatusResponse = {
   derivedLeaseState: string;
   signingProviderId: string | null;
   signingRequestId: string | null;
+  providerDispatchMode?: string | null;
+  providerDispatchStatus?: string | null;
+  providerDispatchMessage?: string | null;
+  routeVersion?: string | null;
   sentAt: string | null;
   signedAt: string | null;
   documentUrl: string | null;

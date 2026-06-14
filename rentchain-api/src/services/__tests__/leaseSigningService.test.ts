@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const collections = new Map<string, Map<string, any>>();
+const writeCanonicalEventMock = vi.fn(async () => undefined);
 
 function ensureCollection(name: string) {
   if (!collections.has(name)) collections.set(name, new Map());
@@ -54,7 +55,7 @@ vi.mock("../../firebase", () => ({
 }));
 
 vi.mock("../../lib/events/buildEvent", () => ({
-  writeCanonicalEvent: vi.fn(async () => undefined),
+  writeCanonicalEvent: writeCanonicalEventMock,
 }));
 
 vi.mock("../../lib/gcs", () => ({
@@ -68,6 +69,7 @@ vi.mock("../../lib/gcsSignedUrl", () => ({
 describe("leaseSigningService", () => {
   beforeEach(() => {
     collections.clear();
+    writeCanonicalEventMock.mockClear();
     process.env.SIGNING_PROVIDER = "mock";
     process.env.PUBLIC_APP_URL = "http://localhost:5173";
   });
@@ -85,7 +87,27 @@ describe("leaseSigningService", () => {
     expect(snapshot.signingRequestId).toMatch(/^lsr_/);
     expect(snapshot.providerRequestRef).toMatch(/^mock_ref_/);
     expect(snapshot.providerRequestRef).not.toContain("lease-1");
+    expect(snapshot.providerDispatchMode).toBe("mock");
+    expect(snapshot.providerDispatchStatus).toBe("mocked_no_email");
     expect(snapshot.events.map((event) => event.type)).toEqual(["sent"]);
+    expect(snapshot.events[0]).toEqual(
+      expect.objectContaining({
+        providerDispatchMode: "mock",
+        providerDispatchStatus: "mocked_no_email",
+      })
+    );
+    expect(writeCanonicalEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "signing_sent",
+        actor: expect.objectContaining({ role: "landlord", type: "landlord" }),
+        resource: { id: "lease-1", type: "lease" },
+        status: "sent",
+        metadata: expect.objectContaining({
+          providerDispatchMode: "mock",
+          providerDispatchStatus: "mocked_no_email",
+        }),
+      })
+    );
   });
 
   it("derives terminal states from appended webhook events", async () => {
@@ -119,5 +141,48 @@ describe("leaseSigningService", () => {
     expect(snapshot.signingStatus).toBe("signed");
     expect(snapshot.derivedLeaseState).toBe("active");
     expect(snapshot.events.map((event) => event.type)).toContain("signed");
+  });
+
+  it("resolves current state to pending after resending a cancelled signing request", async () => {
+    const { cancelLeaseSigning, loadLeaseSigningSnapshot, sendLeaseForSignature } = await import("../signing/leaseSigningService");
+    const lease = { startDate: "2026-01-01", documentUrl: "https://example.com/lease.pdf" };
+
+    const initial = await sendLeaseForSignature({
+      leaseId: "lease-1",
+      landlordId: "landlord-1",
+      lease,
+      tenantEmails: ["tenant@example.com"],
+    });
+    expect(initial.signingStatus).toBe("pending_signature");
+
+    const cancelled = await cancelLeaseSigning({
+      leaseId: "lease-1",
+      landlordId: "landlord-1",
+      lease,
+    });
+    expect(cancelled.signingStatus).toBe("cancelled");
+
+    const resent = await sendLeaseForSignature({
+      leaseId: "lease-1",
+      landlordId: "landlord-1",
+      lease,
+      tenantEmails: ["tenant@example.com"],
+    });
+    const snapshot = await loadLeaseSigningSnapshot({
+      leaseId: "lease-1",
+      landlordId: "landlord-1",
+      lease,
+    });
+
+    expect(resent.signingStatus).toBe("pending_signature");
+    expect(resent.derivedLeaseState).toBe("pending_signature");
+    expect(snapshot.signingStatus).toBe("pending_signature");
+    expect(snapshot.derivedLeaseState).toBe("pending_signature");
+    expect(snapshot.events.map((event) => event.type)).toEqual(["sent", "cancelled", "sent"]);
+    expect(Array.from(ensureCollection("leaseSigningRequests").values())[0]).toEqual(
+      expect.objectContaining({
+        currentSigningStatus: "pending_signature",
+      })
+    );
   });
 });

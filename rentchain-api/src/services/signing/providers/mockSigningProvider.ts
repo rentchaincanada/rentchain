@@ -36,6 +36,9 @@ export class MockSigningProvider implements ISigningProvider {
       providerRequestId,
       signingUrl: `${process.env.PUBLIC_APP_URL || "http://localhost:5173"}/tenant/lease?mockSigningRequest=${providerRequestId}`,
       expiresAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+      dispatchMode: "mock",
+      dispatchStatus: "mocked_no_email",
+      dispatchMessage: "Mock signing provider recorded the request without sending email.",
     };
   }
 

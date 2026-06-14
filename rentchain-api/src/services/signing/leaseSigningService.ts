@@ -21,6 +21,9 @@ export type LeaseSigningEvent = {
   occurredAt: string;
   actorRole: "landlord" | "tenant" | "provider" | "system";
   signerEmailHash?: string | null;
+  providerDispatchMode?: string | null;
+  providerDispatchStatus?: string | null;
+  providerDispatchMessage?: string | null;
 };
 
 export type LeaseSigningSnapshot = {
@@ -29,6 +32,9 @@ export type LeaseSigningSnapshot = {
   signingProviderId: string | null;
   signingRequestId: string | null;
   providerRequestRef: string | null;
+  providerDispatchMode: string | null;
+  providerDispatchStatus: string | null;
+  providerDispatchMessage: string | null;
   sentAt: string | null;
   signedAt: string | null;
   documentUrl: string | null;
@@ -38,9 +44,13 @@ export type LeaseSigningSnapshot = {
 const REQUESTS = "leaseSigningRequests";
 const EVENTS = "leaseSigningEvents";
 const DEAD_LETTERS = "leaseSigningWebhookDeadLetters";
+let lastGeneratedTimestampMs = 0;
 
 function nowIso() {
-  return new Date().toISOString();
+  const current = Date.now();
+  const next = current <= lastGeneratedTimestampMs ? lastGeneratedTimestampMs + 1 : current;
+  lastGeneratedTimestampMs = next;
+  return new Date(next).toISOString();
 }
 
 function digest(value: string, length = 16) {
@@ -77,13 +87,39 @@ function asDateMillis(value: any): number {
 }
 
 function statusFromEvents(events: LeaseSigningEvent[]): LeaseSigningStatus {
-  const types = events.map((event) => event.type);
-  if (types.includes("signed")) return "signed";
-  if (types.includes("cancelled")) return "cancelled";
-  if (types.includes("rejected")) return "rejected";
-  if (types.includes("expired")) return "expired";
-  if (types.includes("sent") || types.includes("viewed")) return "pending_signature";
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const type = events[index]?.type;
+    if (type === "signed") return "signed";
+    if (type === "cancelled") return "cancelled";
+    if (type === "rejected") return "rejected";
+    if (type === "expired") return "expired";
+    if (type === "sent" || type === "viewed") return "pending_signature";
+  }
   return "not_started";
+}
+
+function statusFromEventType(type: SigningProviderEventType): LeaseSigningStatus | null {
+  if (type === "signed") return "signed";
+  if (type === "cancelled") return "cancelled";
+  if (type === "rejected") return "rejected";
+  if (type === "expired") return "expired";
+  if (type === "sent" || type === "viewed") return "pending_signature";
+  return null;
+}
+
+function normalizeStoredStatus(value: unknown): LeaseSigningStatus | null {
+  const status = String(value || "").trim();
+  if (
+    status === "not_started" ||
+    status === "pending_signature" ||
+    status === "signed" ||
+    status === "rejected" ||
+    status === "expired" ||
+    status === "cancelled"
+  ) {
+    return status;
+  }
+  return null;
 }
 
 function projectEvent(doc: any): LeaseSigningEvent {
@@ -94,6 +130,9 @@ function projectEvent(doc: any): LeaseSigningEvent {
     occurredAt: String(data?.occurredAt || ""),
     actorRole: data?.actorRole || "system",
     signerEmailHash: data?.signerEmailHash || null,
+    providerDispatchMode: data?.providerDispatchMode || null,
+    providerDispatchStatus: data?.providerDispatchStatus || null,
+    providerDispatchMessage: data?.providerDispatchMessage || null,
   };
 }
 
@@ -116,6 +155,9 @@ async function appendSigningEvent(input: {
   actorRole: "landlord" | "tenant" | "provider" | "system";
   signerEmail?: string | null;
   providerEventId?: string | null;
+  providerDispatchMode?: string | null;
+  providerDispatchStatus?: string | null;
+  providerDispatchMessage?: string | null;
 }) {
   const occurredAt = input.occurredAt || nowIso();
   const id = eventIdFor(input.requestId, input.type, occurredAt, input.providerEventId || "");
@@ -132,11 +174,25 @@ async function appendSigningEvent(input: {
     type: input.type,
     actorRole: input.actorRole,
     signerEmailHash: emailHash(input.signerEmail),
+    providerDispatchMode: input.providerDispatchMode || null,
+    providerDispatchStatus: input.providerDispatchStatus || null,
+    providerDispatchMessage: input.providerDispatchMessage || null,
     occurredAt,
     createdAt: FieldValue.serverTimestamp(),
     rawIdsIncluded: false,
     payloadIncluded: false,
   });
+  const currentSigningStatus = statusFromEventType(input.type);
+  if (currentSigningStatus) {
+    await db.collection(REQUESTS).doc(input.requestId).set(
+      {
+        currentSigningStatus,
+        currentStatusAt: occurredAt,
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+  }
   await writeCanonicalEvent({
     domain: "lease",
     action: `signing_${input.type}`,
@@ -153,6 +209,8 @@ async function appendSigningEvent(input: {
     metadata: {
       requestRef: input.requestId,
       providerRef: safeProviderRef(input.providerId, input.providerRequestId),
+      providerDispatchMode: input.providerDispatchMode || null,
+      providerDispatchStatus: input.providerDispatchStatus || null,
     },
   }).catch(() => undefined);
   return id;
@@ -180,6 +238,9 @@ export async function loadLeaseSigningSnapshot(input: {
       signingProviderId: null,
       signingRequestId: null,
       providerRequestRef: null,
+      providerDispatchMode: null,
+      providerDispatchStatus: null,
+      providerDispatchMessage: null,
       sentAt: null,
       signedAt: null,
       documentUrl: null,
@@ -187,15 +248,22 @@ export async function loadLeaseSigningSnapshot(input: {
     };
   }
   const events = await loadEvents(request.id);
-  const signingStatus = statusFromEvents(events);
+  const signingStatus = normalizeStoredStatus(request.data?.currentSigningStatus) || statusFromEvents(events);
   const signedAt = events.find((event) => event.type === "signed")?.occurredAt || null;
+  const sentAt = [...events].reverse().find((event) => event.type === "sent")?.occurredAt || String(request.data?.sentAt || "") || null;
+  const providerId = String(request.data?.providerId || "");
+  const providerDispatchMode = String(request.data?.providerDispatchMode || (providerId === "mock" ? "mock" : "")).trim() || null;
+  const providerDispatchStatus = String(request.data?.providerDispatchStatus || (providerId === "mock" ? "mocked_no_email" : "")).trim() || null;
   return {
     signingStatus,
     derivedLeaseState: deriveLeaseSigningState({ lease: input.lease || {}, signingStatus }),
-    signingProviderId: String(request.data?.providerId || ""),
+    signingProviderId: providerId,
     signingRequestId: request.id,
     providerRequestRef: String(request.data?.providerRequestRef || ""),
-    sentAt: events.find((event) => event.type === "sent")?.occurredAt || String(request.data?.sentAt || "") || null,
+    providerDispatchMode,
+    providerDispatchStatus,
+    providerDispatchMessage: String(request.data?.providerDispatchMessage || (providerId === "mock" ? "Mock signing provider recorded the request without sending email." : "")).trim() || null,
+    sentAt,
     signedAt,
     documentUrl: String(request.data?.signedDocumentUrl || request.data?.documentUrl || "") || null,
     events,
@@ -234,8 +302,8 @@ export async function sendLeaseForSignature(input: {
   const now = nowIso();
   const requestRef = db.collection(REQUESTS).doc(requestId);
   const existing = await requestRef.get();
-  if (!existing.exists) {
-    await requestRef.set({
+  await requestRef.set(
+    {
       leaseId: input.leaseId,
       landlordId: input.landlordId,
       providerId,
@@ -244,12 +312,17 @@ export async function sendLeaseForSignature(input: {
       tenantEmailHashes: emails.map(emailHash),
       documentUrl,
       expiresAt: sent.expiresAt || null,
+      providerDispatchMode: sent.dispatchMode || null,
+      providerDispatchStatus: sent.dispatchStatus || null,
+      providerDispatchMessage: sent.dispatchMessage || null,
       sentAt: now,
-      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+      createdAt: existing.exists ? existing.data()?.createdAt || FieldValue.serverTimestamp() : FieldValue.serverTimestamp(),
       rawIdsIncluded: false,
       payloadIncluded: false,
-    });
-  }
+    },
+    { merge: true }
+  );
   await appendSigningEvent({
     requestId,
     leaseId: input.leaseId,
@@ -259,6 +332,9 @@ export async function sendLeaseForSignature(input: {
     type: "sent",
     occurredAt: now,
     actorRole: "landlord",
+    providerDispatchMode: sent.dispatchMode || null,
+    providerDispatchStatus: sent.dispatchStatus || null,
+    providerDispatchMessage: sent.dispatchMessage || null,
   });
   return loadLeaseSigningSnapshot({ leaseId: input.leaseId, landlordId: input.landlordId, lease: input.lease });
 }

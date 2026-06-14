@@ -29,6 +29,9 @@ export type SigningProviderSendResult = {
   providerRequestId: string;
   signingUrl?: string | null;
   expiresAt?: string | null;
+  dispatchMode?: "real" | "sandbox" | "mock" | "stub";
+  dispatchStatus?: "accepted" | "mocked_no_email" | "stubbed_no_email";
+  dispatchMessage?: string | null;
 };
 
 export type SigningProviderSigningUrlInput = {
