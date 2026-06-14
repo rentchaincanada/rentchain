@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { generateLeaseEvidencePackage } from "../leaseEvidencePackageService";
+import { renderLeaseEvidencePackagePdf } from "../leaseEvidencePackagePdf";
 
 function createStore() {
   const store = new Map<string, Map<string, any>>();
@@ -56,6 +57,15 @@ function seedLease(store: ReturnType<typeof createStore>, overrides: Record<stri
     ],
     ...overrides,
   });
+}
+
+function decodedPdfText(pdf: Buffer): string {
+  const raw = pdf.toString("latin1");
+  const chunks: string[] = [];
+  for (const match of raw.matchAll(/<([0-9a-fA-F]+)>/g)) {
+    chunks.push(Buffer.from(match[1], "hex").toString("latin1"));
+  }
+  return chunks.join("");
 }
 
 describe("lease evidence package service", () => {
@@ -168,6 +178,40 @@ describe("lease evidence package service", () => {
     expect(serialized).not.toContain("storagePath");
   });
 
+  it("uses human-readable property and unit labels in the generated PDF instead of unit document IDs", async () => {
+    const store = createStore();
+    const rawUnitDocumentId = "a1O2tQcdEZ7t6y3GHT5G";
+    seedLease(store, {
+      propertyId: "property-coburg",
+      unitId: rawUnitDocumentId,
+      propertyName: null,
+      unitNumber: null,
+      unitLabel: null,
+      tenantName: null,
+    });
+    store.seed("properties", "property-coburg", {
+      name: "Coburg Rd",
+    });
+    store.seed("units", rawUnitDocumentId, {
+      unitNumber: "6",
+    });
+
+    const pkg = await generateLeaseEvidencePackage({
+      leaseId: "lease-raw-firestore-id-123456789",
+      landlordId: "landlord-1",
+      generatedBy: "landlord-1",
+      generatedAt: "2026-06-14T12:00:00.000Z",
+      firestore: store.firestore as any,
+    });
+    const pdf = await renderLeaseEvidencePackagePdf(pkg);
+    const text = decodedPdfText(pdf);
+
+    expect(pkg.subtitle).toContain("Coburg Rd · Unit 6");
+    expect(text).toContain("Coburg Rd");
+    expect(text).toContain("Unit 6");
+    expect(text).not.toContain(rawUnitDocumentId);
+  });
+
   it("rejects cross-landlord lease access", async () => {
     const store = createStore();
     seedLease(store);
@@ -182,4 +226,3 @@ describe("lease evidence package service", () => {
     ).rejects.toMatchObject({ message: "forbidden", status: 403 });
   });
 });
-
