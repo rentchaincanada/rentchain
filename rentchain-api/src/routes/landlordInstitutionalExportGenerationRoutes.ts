@@ -36,6 +36,7 @@ function codeFor(error: any): string {
 }
 
 function institutionalExportRouteVersion(_req: any, res: any, next: any) {
+  res.setHeader("X-Institutional-Export-Route-Version", INSTITUTIONAL_EXPORT_VERSION);
   res.setHeader("X-RentChain-Institutional-Export-Version", INSTITUTIONAL_EXPORT_VERSION);
   return next();
 }

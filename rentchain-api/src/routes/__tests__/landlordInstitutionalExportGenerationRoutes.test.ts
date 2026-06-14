@@ -215,6 +215,7 @@ describe("landlordInstitutionalExportGenerationRoutes", () => {
     expect(res.headers["x-rentchain-governance"]).toBe("metadata-only");
     expect(res.headers["x-rentchain-export-sensitivity"]).toBe("confidential");
     expect(res.headers["x-rentchain-retention-category"]).toBe("export_metadata");
+    expect(res.headers["x-institutional-export-route-version"]).toBe("institutional-export-framework-v1");
     expect(res.headers["x-rentchain-institutional-export-id"]).toMatch(/^instexp_[a-f0-9]{24}$/);
     expect(res.headers["x-rentchain-institutional-export-version"]).toBe("institutional-export-framework-v1");
     expect(res.headers["x-rentchain-evidence-package-id"]).toMatch(/^lep_[a-f0-9]{24}$/);
