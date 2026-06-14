@@ -149,6 +149,7 @@ router.get("/summary", requireAuth, async (req: any, res) => {
     invitesSnap,
     referralsSnap,
     screeningSnap,
+    applicationsSnap,
     ledgerEventsSnap,
     leasesSnap,
     leaseNoticesSnap,
@@ -158,6 +159,7 @@ router.get("/summary", requireAuth, async (req: any, res) => {
     db.collection("tenantInvites").where("landlordId", "==", landlordId).limit(20).get(),
     db.collection("referrals").where("referrerLandlordId", "==", landlordId).limit(20).get(),
     db.collection("screeningOrders").where("landlordId", "==", landlordId).limit(30).get(),
+    db.collection("applications").where("landlordId", "==", landlordId).limit(30).get(),
     db.collection("ledgerEvents").where("landlordId", "==", landlordId).limit(20).get(),
     db.collection("leases").where("landlordId", "==", landlordId).limit(400).get(),
     db.collection("leaseNotices").where("landlordId", "==", landlordId).limit(400).get(),
@@ -177,6 +179,7 @@ router.get("/summary", requireAuth, async (req: any, res) => {
 
   const screeningOrders = screeningSnap.docs.map((doc) => ({ id: doc.id, ...(doc.data() as any) }));
   const screeningsCount = screeningOrders.length;
+  const applicationsCount = applicationsSnap.size;
   const tenantCredibilityRecords = tenantsSnap.docs.map((doc) => {
     const raw = doc.data() as any;
     return {
@@ -352,28 +355,40 @@ router.get("/summary", requireAuth, async (req: any, res) => {
       href: "/billing",
     });
   } else {
-    if (screeningsCount === 0) {
-      actions.push({
-        id: "run-first-screening",
-        title: "Run your first screening",
-        severity: "info",
-        href: "/applications?openTransUnionAccess=1",
-      });
-    }
-    if (activeTenantsCount === 0) {
-      actions.push({
-        id: "invite-tenant",
-        title: "Invite a tenant",
-        severity: "info",
-        href: "/tenants",
-      });
-    }
     if (propertiesSnap.empty) {
       actions.push({
         id: "add-property",
         title: "Add a property",
         severity: "info",
         href: "/properties",
+      });
+    } else if (unitsCount === 0) {
+      actions.push({
+        id: "add-unit",
+        title: "Add a unit",
+        severity: "info",
+        href: "/properties?openAddUnit=1",
+      });
+    } else if (applicationsCount === 0) {
+      actions.push({
+        id: "add-applicant",
+        title: "Add an applicant",
+        severity: "info",
+        href: "/applications?openSendApplication=1",
+      });
+    } else if (screeningsCount === 0) {
+      actions.push({
+        id: "run-first-screening",
+        title: "Run your first screening",
+        severity: "info",
+        href: "/applications?openTransUnionAccess=1",
+      });
+    } else if (activeTenantsCount === 0) {
+      actions.push({
+        id: "invite-tenant",
+        title: "Invite a tenant",
+        severity: "info",
+        href: "/tenants",
       });
     }
   }
@@ -386,6 +401,7 @@ router.get("/summary", requireAuth, async (req: any, res) => {
       openActionsCount: actions.length,
       delinquentCount: 0,
       screeningsCount,
+      applicationsCount,
     },
     rent: {
       month,

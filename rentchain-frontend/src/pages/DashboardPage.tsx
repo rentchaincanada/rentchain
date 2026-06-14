@@ -273,52 +273,87 @@ function FreeTierJourneyCard({
   unitsCount,
   applicantsCount,
   screeningReady,
+  leaseReady,
   onAddProperty,
   onAddUnit,
   onAddApplicant,
   onScreening,
+  onCreateLease,
 }: {
   propertiesCount: number;
   unitsCount: number;
   applicantsCount: number;
   screeningReady: boolean;
+  leaseReady: boolean;
   onAddProperty: () => void;
   onAddUnit: () => void;
   onAddApplicant: () => void;
   onScreening: () => void;
+  onCreateLease: () => void;
 }) {
+  const hasProperty = propertiesCount > 0;
+  const hasUnit = unitsCount > 0;
+  const hasApplicant = applicantsCount > 0;
   const steps = [
     {
       id: "property",
       label: "Add property",
-      done: propertiesCount > 0,
-      helper: propertiesCount > 0 ? `${propertiesCount} propert${propertiesCount === 1 ? "y" : "ies"} added` : "Start with the rental address.",
+      done: hasProperty,
+      helper: hasProperty ? `${propertiesCount} propert${propertiesCount === 1 ? "y" : "ies"} added` : "Start with the rental address.",
       action: onAddProperty,
-      actionLabel: propertiesCount > 0 ? "View properties" : "Add property",
+      actionLabel: hasProperty ? "View properties" : "Add property",
     },
     {
       id: "unit",
       label: "Add unit",
-      done: unitsCount > 0,
-      helper: unitsCount > 0 ? `${unitsCount} unit${unitsCount === 1 ? "" : "s"} added` : "Add rent, beds, baths, and occupancy.",
-      action: onAddUnit,
-      actionLabel: unitsCount > 0 ? "View units" : "Add unit",
+      done: hasUnit,
+      helper: hasUnit
+        ? `${unitsCount} unit${unitsCount === 1 ? "" : "s"} added`
+        : hasProperty
+        ? "Add rent, beds, baths, and occupancy."
+        : "Add a property before unit setup.",
+      action: hasProperty ? onAddUnit : onAddProperty,
+      actionLabel: hasProperty ? (hasUnit ? "View units" : "Add unit") : "Add property",
     },
     {
       id: "applicant",
       label: "Add applicant",
-      done: applicantsCount > 0,
-      helper: applicantsCount > 0 ? `${applicantsCount} applicant${applicantsCount === 1 ? "" : "s"} started` : "Send an application after a unit exists.",
-      action: onAddApplicant,
-      actionLabel: applicantsCount > 0 ? "View applicants" : "Add applicant",
+      done: hasApplicant,
+      helper: hasApplicant
+        ? `${applicantsCount} applicant${applicantsCount === 1 ? "" : "s"} started`
+        : hasUnit
+        ? "Send an application after a unit exists."
+        : "Add a unit before applicant intake.",
+      action: hasUnit ? onAddApplicant : hasProperty ? onAddUnit : onAddProperty,
+      actionLabel: hasUnit ? (hasApplicant ? "View applicants" : "Add applicant") : hasProperty ? "Add unit" : "Add property",
     },
     {
       id: "screening",
       label: "Run screening",
-      done: screeningReady,
-      helper: screeningReady ? "Screening setup is connected." : "Screening is the upgrade-ready next step.",
-      action: onScreening,
-      actionLabel: screeningReady ? "Run screening" : "Review screening",
+      done: hasApplicant && screeningReady,
+      helper: hasApplicant
+        ? screeningReady
+          ? "Screening setup is connected."
+          : "Screening is the upgrade-ready next step."
+        : "Add an applicant before screening appears.",
+      action: hasApplicant ? onScreening : hasUnit ? onAddApplicant : hasProperty ? onAddUnit : onAddProperty,
+      actionLabel: hasApplicant
+        ? screeningReady
+          ? "Run screening"
+          : "Review screening"
+        : hasUnit
+        ? "Add applicant"
+        : hasProperty
+        ? "Add unit"
+        : "Add property",
+    },
+    {
+      id: "lease",
+      label: "Create lease",
+      done: hasApplicant && leaseReady,
+      helper: hasApplicant ? "Prepare lease documents after applicant and screening context." : "Add an applicant before lease setup.",
+      action: hasApplicant ? onCreateLease : hasUnit ? onAddApplicant : hasProperty ? onAddUnit : onAddProperty,
+      actionLabel: hasApplicant ? "Create lease" : hasUnit ? "Add applicant" : hasProperty ? "Add unit" : "Add property",
     },
   ];
   const nextStep = steps.find((step) => !step.done) || steps[steps.length - 1];
@@ -774,7 +809,16 @@ const DashboardPage: React.FC = () => {
     }
     return items;
   }, [applicationsCount, canManualScreen, derivedPropertiesCount, derivedUnitsCount, kpis.screeningsCount]);
-  const actions = Array.isArray(data?.actions) && data.actions.length > 0 ? data.actions : fallbackActions;
+  const rawActions = Array.isArray(data?.actions) && data.actions.length > 0 ? data.actions : fallbackActions;
+  const visibleActions = rawActions.filter((item: any) => {
+    const id = String(item?.id || "");
+    if (id === "add-unit") return derivedPropertiesCount > 0;
+    if (id === "add-applicant") return derivedUnitsCount > 0;
+    if (id === "run-first-screening") return applicationsCount > 0;
+    if (id === "invite-tenant") return derivedPropertiesCount > 0 && derivedUnitsCount > 0;
+    return true;
+  });
+  const actions = visibleActions.length > 0 ? visibleActions : fallbackActions;
   const leaseNoticeSummary = data?.leaseNoticeSummary || {
     expiringSoon: 0,
     pendingResponse: 0,
@@ -788,8 +832,12 @@ const DashboardPage: React.FC = () => {
   const countsReady = !propsLoading && !applicationsLoading && !tenantsLoading && !invitesLoading;
   const hasNoProperties = dataReady && (kpis?.propertiesCount ?? 0) === 0;
   const hasNoApplications = dataReady && applicationsCount === 0;
+  const hasPortfolioContext = derivedPropertiesCount > 0;
+  const hasUnitContext = derivedUnitsCount > 0;
+  const hasApplicantContext = applicationsCount > 0;
   const showEmptyCTA = hasNoProperties;
   const showGettingStartedCard = isLandlord && showEmptyCTA;
+  const showScreeningWorkflowCard = dataReady && hasApplicantContext;
   const progressLoading = !dataReady || onboarding.loading;
   const showOnboardingSkeleton = onboarding.loading && !isAdmin;
   const showStarterOnboarding =
@@ -858,11 +906,11 @@ const DashboardPage: React.FC = () => {
     if (!prev.propertyAdded && derivedSteps.propertyAdded) {
       showToast({ message: "Nice — add units next.", variant: "success" });
     } else if (!prev.unitAdded && derivedSteps.unitAdded) {
-      showToast({ message: "Great — invite a tenant next.", variant: "success" });
+      showToast({ message: "Great — add an applicant next.", variant: "success" });
     } else if (!prev.tenantInvited && derivedSteps.tenantInvited) {
       showToast({ message: "Invite sent — create an application next.", variant: "success" });
     } else if (!prev.applicationCreated && derivedSteps.applicationCreated) {
-      showToast({ message: "Application started — preview export next.", variant: "success" });
+      showToast({ message: "Application started — screening is next.", variant: "success" });
     }
     prevDerivedRef.current = {
       propertyAdded: derivedSteps.propertyAdded,
@@ -955,10 +1003,12 @@ const DashboardPage: React.FC = () => {
             unitsCount={derivedUnitsCount}
             applicantsCount={applicationsCount}
             screeningReady={screeningSetupComplete}
+            leaseReady={false}
             onAddProperty={() => navigate("/properties?focus=addProperty")}
             onAddUnit={() => navigate("/properties?openAddUnit=1")}
             onAddApplicant={handleCreateApplicationClick}
             onScreening={() => navigate(screeningSetupComplete ? "/applications" : "/applications?openTransUnionAccess=1")}
+            onCreateLease={() => navigate("/properties?openLeasePack=1")}
           />
         ) : null}
 
@@ -1133,7 +1183,7 @@ const DashboardPage: React.FC = () => {
                 loading={loading}
                 viewAllEnabled={false}
                 title="Action required"
-                emptyLabel="No pending actions. Add a property or invite a tenant to begin."
+                emptyLabel="No pending actions. Add a property to begin setup."
               />
             </div>
             <Card style={{ padding: spacing.md, border: `1px solid ${colors.border}` }}>
@@ -1147,38 +1197,36 @@ const DashboardPage: React.FC = () => {
                 >
                   Add property
                 </Button>
-                <Button
-                  variant="secondary"
-                  onClick={() => navigate("/properties?openAddUnit=1")}
-                  aria-label="Add unit"
-                  disabled={progressLoading}
-                >
-                  Add unit
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={handleCreateApplicationClick}
-                  aria-label="Add applicant"
-                  disabled={progressLoading}
-                >
-                  Add applicant
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={() => navigate("/tenants?invite=1")}
-                  aria-label="Invite tenant"
-                  disabled={progressLoading}
-                >
-                  Invite tenant
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={() => navigate("/properties?openLeasePack=1")}
-                  aria-label="Generate lease pack"
-                  disabled={progressLoading}
-                >
-                  Generate Lease Pack
-                </Button>
+                {hasPortfolioContext ? (
+                  <Button
+                    variant="secondary"
+                    onClick={() => navigate("/properties?openAddUnit=1")}
+                    aria-label="Add unit"
+                    disabled={progressLoading}
+                  >
+                    Add unit
+                  </Button>
+                ) : null}
+                {hasUnitContext ? (
+                  <Button
+                    variant="secondary"
+                    onClick={handleCreateApplicationClick}
+                    aria-label="Add applicant"
+                    disabled={progressLoading}
+                  >
+                    Add applicant
+                  </Button>
+                ) : null}
+                {hasApplicantContext ? (
+                  <Button
+                    variant="secondary"
+                    onClick={() => navigate("/properties?openLeasePack=1")}
+                    aria-label="Create lease"
+                    disabled={progressLoading}
+                  >
+                    Create lease
+                  </Button>
+                ) : null}
                 <Button
                   variant="secondary"
                   onClick={() => setAddExpenseOpen(true)}
@@ -1187,19 +1235,21 @@ const DashboardPage: React.FC = () => {
                 >
                   Add Expense
                 </Button>
-                {!SCREENING_ENABLED ? (
-                  <Button variant="primary" onClick={() => navigate("/applications")}>
-                    {screeningWorkflowLabel}
-                  </Button>
-                ) : screeningSetupComplete ? (
-                  <Button variant="primary" onClick={() => navigate("/applications")}>
-                    Run screening
-                  </Button>
-                ) : (
-                  <Button variant="primary" onClick={() => navigate("/applications?openTransUnionAccess=1")}>
-                    Set up screening workflow
-                  </Button>
-                )}
+                {hasApplicantContext ? (
+                  !SCREENING_ENABLED ? (
+                    <Button variant="primary" onClick={() => navigate("/applications")}>
+                      {screeningWorkflowLabel}
+                    </Button>
+                  ) : screeningSetupComplete ? (
+                    <Button variant="primary" onClick={() => navigate("/applications")}>
+                      Run screening
+                    </Button>
+                  ) : (
+                    <Button variant="primary" onClick={() => navigate("/applications?openTransUnionAccess=1")}>
+                      Set up screening workflow
+                    </Button>
+                  )
+                ) : null}
               </div>
             </Card>
           </div>
@@ -1272,9 +1322,10 @@ const DashboardPage: React.FC = () => {
           <GettingStartedCard
             propertiesCount={derivedPropertiesCount}
             unitsCount={derivedUnitsCount}
-            tenantsCount={tenantCount}
-            inviteTenantHref="/tenants?invite=1"
+            applicationsCount={applicationsCount}
+            screeningsCount={kpis.screeningsCount ?? 0}
             onAddProperty={() => navigate("/properties")}
+            onAddApplicant={handleCreateApplicationClick}
           />
         ) : null}
 
@@ -1282,31 +1333,31 @@ const DashboardPage: React.FC = () => {
         !showStarterOnboarding &&
         derivedSteps.propertyAdded &&
         derivedSteps.unitAdded &&
-        derivedSteps.tenantInvited ? (
+        derivedSteps.applicationCreated ? (
           <Card style={{ padding: spacing.md }}>
-            <div style={{ fontWeight: 700, marginBottom: 6 }}>Your portfolio is set up 🎉</div>
+            <div style={{ fontWeight: 700, marginBottom: 6 }}>Your applicant workflow is set up</div>
             <div style={{ color: text.muted, marginBottom: 12 }}>
-              Next up: create your first application.
+              Next up: review screening workflow setup.
             </div>
-            <Button onClick={handleCreateApplicationClick}>
-              Send application link
+            <Button onClick={() => navigate(screeningSetupComplete ? "/applications" : "/applications?openTransUnionAccess=1")}>
+              {screeningSetupComplete ? "Run screening" : "Set up screening workflow"}
             </Button>
           </Card>
         ) : null}
 
-        {dataReady && !showEmptyCTA && hasNoApplications ? (
+        {dataReady && !showEmptyCTA && hasNoApplications && hasUnitContext ? (
           <Card style={{ padding: spacing.md, border: `1px solid ${colors.border}` }}>
-            <div style={{ fontWeight: 700, marginBottom: 6 }}>Next: create an application</div>
+            <div style={{ fontWeight: 700, marginBottom: 6 }}>Next: add an applicant</div>
             <div style={{ color: text.muted, marginBottom: 12 }}>
-              Invite a tenant or send an application link to keep your pipeline moving.
+              Send an application link once the property and unit are ready.
             </div>
             <Button onClick={handleCreateApplicationClick}>
-              Send application link
+              Add applicant
             </Button>
           </Card>
         ) : null}
 
-        {dataReady ? (
+        {showScreeningWorkflowCard ? (
           <Card style={{ padding: spacing.md, border: `1px solid ${colors.border}` }}>
             <div style={{ fontWeight: 700, marginBottom: 6 }}>Screening workflow</div>
             <div style={{ color: text.muted, marginBottom: 12 }}>
@@ -1322,7 +1373,7 @@ const DashboardPage: React.FC = () => {
           </Card>
         ) : null}
 
-        {dataReady && SCREENING_ENABLED ? (
+        {showScreeningWorkflowCard && SCREENING_ENABLED ? (
           <Card style={{ padding: spacing.md, border: `1px solid ${colors.border}` }}>
             <div style={{ fontWeight: 700, marginBottom: 6 }}>Provider setup funnel</div>
             <div style={{ color: text.muted, marginBottom: 12 }}>

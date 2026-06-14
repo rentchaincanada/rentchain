@@ -1,14 +1,14 @@
 import React from "react";
-import { Link } from "react-router-dom";
 import { Card, Button } from "../ui/Ui";
 import { colors, radius, spacing, text } from "../../styles/tokens";
 
 type GettingStartedCardProps = {
   propertiesCount: number;
   unitsCount: number;
-  tenantsCount: number;
-  inviteTenantHref?: string;
+  applicationsCount?: number;
+  screeningsCount?: number;
   onAddProperty: () => void;
+  onAddApplicant?: () => void;
 };
 
 type StepRowProps = {
@@ -52,20 +52,21 @@ function StepRow({ done, title, description, action }: StepRowProps) {
 export const GettingStartedCard: React.FC<GettingStartedCardProps> = ({
   propertiesCount,
   unitsCount,
-  tenantsCount,
-  inviteTenantHref,
+  applicationsCount = 0,
+  screeningsCount = 0,
   onAddProperty,
+  onAddApplicant,
 }) => {
   const propertyDone = propertiesCount > 0;
   const unitDone = unitsCount > 0;
-  const tenantDone = tenantsCount > 0;
-  const canInviteTenant = propertyDone && unitDone && Boolean(inviteTenantHref);
+  const applicantDone = applicationsCount > 0;
+  const screeningDone = screeningsCount > 0;
 
   return (
     <Card style={{ padding: spacing.md, border: `1px solid ${colors.border}` }}>
       <div style={{ fontWeight: 700, marginBottom: spacing.xs }}>Getting started</div>
       <div style={{ color: text.muted, marginBottom: spacing.md }}>
-        Start your portfolio setup with these three steps.
+        Start your portfolio setup in the order landlords validated during onboarding.
       </div>
 
       <div style={{ display: "grid", gap: spacing.sm }}>
@@ -91,33 +92,43 @@ export const GettingStartedCard: React.FC<GettingStartedCardProps> = ({
         />
 
         <StepRow
-          done={tenantDone}
-          title="3. Invite first tenant"
+          done={applicantDone}
+          title="3. Add first applicant"
           description={
             !propertyDone
-              ? "Add a property first so tenant records have a home."
+              ? "Add a property first so applicant records have a home."
               : !unitDone
-              ? "Add at least one unit before inviting a tenant."
-              : "Invite a tenant to start collecting applications and screening consent."
+              ? "Add at least one unit before starting applicant intake."
+              : "Send an application link or start the applicant record for the unit."
           }
           action={
-            canInviteTenant ? (
-              <Link
-                to={inviteTenantHref}
-                style={{
-                  display: "inline-block",
-                  color: colors.accent,
-                  fontWeight: 600,
-                  textDecoration: "none",
-                }}
-              >
-                Invite first tenant
-              </Link>
+            propertyDone && unitDone && onAddApplicant ? (
+              <Button onClick={onAddApplicant} aria-label="Add first applicant">
+                Add first applicant
+              </Button>
             ) : (
-              <span style={{ color: text.muted, fontSize: 13 }}>
-                Complete this step to continue.
-              </span>
+              <span style={{ color: text.muted, fontSize: 13 }}>Complete the prior step to continue.</span>
             )
+          }
+        />
+
+        <StepRow
+          done={screeningDone}
+          title="4. Run screening"
+          description={
+            applicantDone
+              ? "Open the screening workflow once applicant context exists."
+              : "Add an applicant before screening becomes the next step."
+          }
+        />
+
+        <StepRow
+          done={false}
+          title="5. Create lease"
+          description={
+            applicantDone
+              ? "Prepare lease documents after applicant and screening context exists."
+              : "Applicant context comes before lease preparation."
           }
         />
       </div>

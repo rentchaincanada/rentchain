@@ -208,6 +208,11 @@ describe("dashboardRoutes GET /summary", () => {
       propertyId: "prop-active",
       hiddenFromActiveLists: false,
     });
+    seedDoc("applications", "application-1", {
+      landlordId: "landlord-1",
+      propertyId: "prop-active",
+      unitId: "unit-1",
+    });
 
     const app = await makeApp();
     const response = await invokeSummary(app);
@@ -221,6 +226,25 @@ describe("dashboardRoutes GET /summary", () => {
         }),
       ])
     );
+  });
+
+  it("recommends applicant intake before screening when property and unit context exist", async () => {
+    seedDoc("properties", "prop-active", {
+      landlordId: "landlord-1",
+      portfolioStatus: "active",
+      units: [{ id: "unit-1" }],
+    });
+
+    const app = await makeApp();
+    const response = await invokeSummary(app);
+
+    expect(response.status).toBe(200);
+    expect(response.body?.data?.actions).toEqual([
+      expect.objectContaining({
+        id: "add-applicant",
+        href: "/applications?openSendApplication=1",
+      }),
+    ]);
   });
 
   it("derives expiring, pending, and no-response counts from the shared renewal dataset", async () => {
