@@ -157,6 +157,7 @@ import landlordPortfolioScoreRoutes from "./routes/landlordPortfolioScoreRoutes"
 import landlordPortfolioScoreSharingRoutes from "./routes/landlordPortfolioScoreSharingRoutes";
 import landlordInboxRoutes from "./routes/landlordInboxRoutes";
 import landlordDecisionInboxRoutes from "./routes/landlordDecisionInboxRoutes";
+import landlordInstitutionalExportGenerationRoutes from "./routes/landlordInstitutionalExportGenerationRoutes";
 import landlordInstitutionExportsRoutes from "./routes/landlordInstitutionExportsRoutes";
 import landlordAuditComplianceRoutes from "./routes/landlordAuditComplianceRoutes";
 import landlordOperatorReviewRoutes from "./routes/landlordOperatorReviewRoutes";
@@ -497,6 +498,9 @@ app.use("/api/landlord", routeSource("landlordInboxRoutes.ts"), landlordInboxRou
 console.log("[route-mount] landlordInboxRoutes mounted at /api/landlord");
 app.use("/api/landlord", routeSource("landlordDecisionInboxRoutes.ts"), landlordDecisionInboxRoutes);
 console.log("[route-mount] landlordDecisionInboxRoutes mounted at /api/landlord");
+app.use("/api/landlord/institutional-exports", rateLimitEvidenceExportReview);
+app.use("/api/landlord", routeSource("landlordInstitutionalExportGenerationRoutes.ts"), landlordInstitutionalExportGenerationRoutes);
+console.log("[route-mount] landlordInstitutionalExportGenerationRoutes mounted at /api/landlord");
 app.use("/api/landlord/institution-exports", rateLimitEvidenceExportReview);
 app.use("/api/landlord", routeSource("landlordInstitutionExportsRoutes.ts"), landlordInstitutionExportsRoutes);
 console.log("[route-mount] landlordInstitutionExportsRoutes mounted at /api/landlord");
