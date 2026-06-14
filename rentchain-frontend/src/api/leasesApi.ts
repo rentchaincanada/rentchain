@@ -214,6 +214,7 @@ export type LeaseSigningStatusResponse = {
   providerDispatchMode?: string | null;
   providerDispatchStatus?: string | null;
   providerDispatchMessage?: string | null;
+  routeVersion?: string | null;
   sentAt: string | null;
   signedAt: string | null;
   documentUrl: string | null;

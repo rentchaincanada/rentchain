@@ -824,12 +824,14 @@ describe("leaseRoutes GET /active", () => {
     });
 
     expect(res.status).toBe(200);
+    expect(res.headers["x-lease-signing-route-version"]).toBe("lease-signing-dispatch-metadata-v1");
     expect(res.body?.data).toEqual(
       expect.objectContaining({
         signingStatus: "pending_signature",
         signingProviderId: "mock",
         providerDispatchMode: "mock",
         providerDispatchStatus: "mocked_no_email",
+        routeVersion: "lease-signing-dispatch-metadata-v1",
         derivedLeaseState: "pending_signature",
       })
     );

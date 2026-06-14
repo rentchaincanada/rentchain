@@ -87,6 +87,7 @@ import {
 } from "../services/signing/leaseSigningService";
 
 const router = Router();
+const LEASE_SIGNING_ROUTE_VERSION = "lease-signing-dispatch-metadata-v1";
 const LEDGER_COLLECTION = "ledgerEntries";
 const LEASE_NOTES_COLLECTION = "leaseNotes";
 const PAYMENT_METHODS = new Set(["cash", "etransfer", "cheque", "bank", "card", "other"]);
@@ -3061,6 +3062,7 @@ router.get("/:leaseId/document-url", requireLandlord, handleLeaseDocumentUrl);
 
 router.post("/:leaseId/send-for-signature", requireLandlord, async (req: any, res: Response) => {
   try {
+    res.setHeader("x-lease-signing-route-version", LEASE_SIGNING_ROUTE_VERSION);
     if (!(await enforceLeaseCapability(req, res))) return;
     const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
     const leaseId = String(req.params?.leaseId || "").trim();
@@ -3086,6 +3088,7 @@ router.post("/:leaseId/send-for-signature", requireLandlord, async (req: any, re
         providerDispatchMode: snapshot.providerDispatchMode,
         providerDispatchStatus: snapshot.providerDispatchStatus,
         providerDispatchMessage: snapshot.providerDispatchMessage,
+        routeVersion: LEASE_SIGNING_ROUTE_VERSION,
         sentAt: snapshot.sentAt,
         derivedLeaseState: snapshot.derivedLeaseState,
       },
@@ -3097,13 +3100,14 @@ router.post("/:leaseId/send-for-signature", requireLandlord, async (req: any, re
 
 router.get("/:leaseId/signing-status", requireLandlord, async (req: any, res: Response) => {
   try {
+    res.setHeader("x-lease-signing-route-version", LEASE_SIGNING_ROUTE_VERSION);
     if (!(await enforceLeaseCapability(req, res))) return;
     const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
     const leaseId = String(req.params?.leaseId || "").trim();
     const result = await getLeaseEntityForLandlord(leaseId, landlordId);
     if (!result.ok) return res.status(result.status).json({ ok: false, error: result.error === "Forbidden" ? "forbidden" : "lease_not_found" });
     const snapshot = await loadLeaseSigningSnapshot({ leaseId, landlordId, lease: result.lease as any });
-    return res.status(200).json({ ok: true, data: snapshot });
+    return res.status(200).json({ ok: true, data: { ...snapshot, routeVersion: LEASE_SIGNING_ROUTE_VERSION } });
   } catch (error: any) {
     return res.status(signingErrorStatus(error)).json({ ok: false, error: signingErrorCode(error) });
   }
