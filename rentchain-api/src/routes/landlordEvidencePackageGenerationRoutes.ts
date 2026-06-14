@@ -11,6 +11,7 @@ import {
 import { renderLeaseEvidencePackagePdf } from "../services/evidencePackages/leaseEvidencePackagePdf";
 
 const router = Router();
+const EVIDENCE_PACKAGE_ROUTE_VERSION = "lease-evidence-package-pdf-v1";
 
 function asString(value: unknown, max = 500): string {
   return String(value ?? "").trim().slice(0, max);
@@ -30,7 +31,12 @@ function codeFor(error: any): string {
   return "LEASE_EVIDENCE_PACKAGE_GENERATION_FAILED";
 }
 
-router.get("/evidence-packages/leases/:leaseId.pdf", requireAuth, requireLandlord, async (req: any, res) => {
+function evidencePackageRouteVersion(_req: any, res: any, next: any) {
+  res.setHeader("x-evidence-package-route-version", EVIDENCE_PACKAGE_ROUTE_VERSION);
+  return next();
+}
+
+router.get("/evidence-packages/leases/:leaseId.pdf", evidencePackageRouteVersion, requireAuth, requireLandlord, async (req: any, res) => {
   try {
     const landlordId = asString(getEffectiveLandlordId(req), 240);
     const leaseId = asString(req.params?.leaseId, 240);
@@ -74,4 +80,3 @@ router.get("/evidence-packages/leases/:leaseId.pdf", requireAuth, requireLandlor
 });
 
 export default router;
-

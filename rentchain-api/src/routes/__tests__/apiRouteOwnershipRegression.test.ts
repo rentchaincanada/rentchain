@@ -215,6 +215,7 @@ async function buildRuntimeOwnershipApp() {
   const { handleLeaseDocumentUrl } = await import("../leaseRoutes");
   const messagesRoutes = (await import("../messagesRoutes")).default;
   const landlordEvidencePackRoutes = (await import("../landlordEvidencePackRoutes")).default;
+  const landlordEvidencePackageGenerationRoutes = (await import("../landlordEvidencePackageGenerationRoutes")).default;
   const internalReportsRoutes = (await import("../internalReportsRoutes")).default;
   const telemetryRoutes = (await import("../telemetryRoutes")).default;
   const screeningRoutes = (await import("../screeningRoutes")).default;
@@ -231,6 +232,7 @@ async function buildRuntimeOwnershipApp() {
   app.get("/api/leases/:leaseId/document-url", routeSource("leaseRoutes.ts"), requireLandlord, handleLeaseDocumentUrl);
   app.use("/api", routeSource("messagesRoutes.ts"), messagesRoutes);
   app.use("/api/landlord", routeSource("landlordEvidencePackRoutes.ts"), landlordEvidencePackRoutes);
+  app.use("/api/landlord", routeSource("landlordEvidencePackageGenerationRoutes.ts"), landlordEvidencePackageGenerationRoutes);
   app.use("/api/internal", routeSource("internalReportsRoutes.ts"), internalReportsRoutes);
   app.get("/api/__probe/revision", routeSource("app.build.ts:/api/__probe/revision"), (_req, res) =>
     res.json({
@@ -295,6 +297,9 @@ describe("API route ownership regression", () => {
     const tenantsMount = source.indexOf('app.use("/api/tenants", routeSource("tenantsRoutes.ts"), tenantsRoutes)');
     const telemetryMount = source.indexOf('app.use("/api", routeSource("telemetryRoutes.ts"), telemetryRoutes)');
     const screeningRoutesMount = source.indexOf('app.use("/api", routeSource("screeningRoutes.ts"), screeningRoutes)');
+    const evidencePackageMount = source.indexOf(
+      'app.use("/api/landlord", routeSource("landlordEvidencePackageGenerationRoutes.ts"), landlordEvidencePackageGenerationRoutes)'
+    );
     const statusMount = source.indexOf('app.use("/api/status", statusRoutes)');
     const paymentsBroadMount = source.indexOf('app.use("/api", routeSource("paymentsRoutes.ts"), paymentsRoutes)');
     const publicPortfolioMount = source.indexOf('app.use("/api", routeSource("publicPortfolioScoreRoutes.ts"), publicPortfolioScoreRoutes)');
@@ -314,6 +319,7 @@ describe("API route ownership regression", () => {
     expect(tenantsMount).toBeGreaterThan(-1);
     expect(telemetryMount).toBeGreaterThan(-1);
     expect(screeningRoutesMount).toBeGreaterThan(-1);
+    expect(evidencePackageMount).toBeGreaterThan(-1);
     expect(statusMount).toBeGreaterThan(-1);
     expect(paymentsBroadMount).toBeGreaterThan(-1);
     expect(publicPortfolioMount).toBeGreaterThan(-1);
@@ -337,6 +343,7 @@ describe("API route ownership regression", () => {
     expect(screeningRoutesMount).toBeLessThan(expensesMount);
     expect(telemetryMount).toBeLessThan(riskAgentMount);
     expect(screeningRoutesMount).toBeLessThan(riskAgentMount);
+    expect(evidencePackageMount).toBeLessThan(screeningJobsMount);
     expect(buildProbeRoute).toBeLessThan(riskAgentMount);
     expect(tenantPortalMount).toBeLessThan(referralsMount);
     expect(tenantPortalMount).toBeLessThan(screeningJobsMount);
@@ -466,6 +473,16 @@ describe("API route ownership regression", () => {
     });
     expect(evidenceRes.status).toBe(401);
     expect(evidenceRes.headers["x-route-source"]).toBe("landlordEvidencePackRoutes.ts");
+
+    const evidencePackageRes = await invokeApp(app, {
+      method: "GET",
+      url: "/api/landlord/evidence-packages/leases/lease-missing.pdf",
+      headers: { authorization: "Bearer landlord-token" },
+    });
+    expect(evidencePackageRes.status).toBe(401);
+    expect(evidencePackageRes.headers["x-route-source"]).toBe("landlordEvidencePackageGenerationRoutes.ts");
+    expect(evidencePackageRes.headers["x-evidence-package-route-version"]).toBe("lease-evidence-package-pdf-v1");
+    expect(evidencePackageRes.headers["x-route-source"]).not.toBe("screeningJobsAdminRoutes.ts");
 
     const internalRes = await invokeApp(app, {
       method: "POST",

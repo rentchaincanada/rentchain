@@ -185,6 +185,7 @@ describe("landlordEvidencePackageGenerationRoutes", () => {
     expect(res.headers["content-type"]).toBe("application/pdf");
     expect(res.headers["content-disposition"]).toMatch(/rentchain-lease-evidence-package-\d{4}-\d{2}-\d{2}\.pdf/);
     expect(res.headers["x-rentchain-governance"]).toBe("metadata-only");
+    expect(res.headers["x-evidence-package-route-version"]).toBe("lease-evidence-package-pdf-v1");
     expect(res.buffer.toString("latin1", 0, 5)).toBe("%PDF-");
     expect(writeCanonicalEventMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -211,6 +212,7 @@ describe("landlordEvidencePackageGenerationRoutes", () => {
     const res = await invokeRouter(router, { method: "GET", url: "/evidence-packages/leases/lease-1.pdf" });
 
     expect(res.status).toBe(403);
+    expect(res.headers["x-evidence-package-route-version"]).toBe("lease-evidence-package-pdf-v1");
     expect(res.body.error).toBe("FORBIDDEN");
     expect(writeCanonicalEventMock).not.toHaveBeenCalled();
   });
@@ -221,6 +223,7 @@ describe("landlordEvidencePackageGenerationRoutes", () => {
     const res = await invokeRouter(router, { method: "GET", url: "/evidence-packages/leases/missing-lease.pdf" });
 
     expect(res.status).toBe(404);
+    expect(res.headers["x-evidence-package-route-version"]).toBe("lease-evidence-package-pdf-v1");
     expect(res.body.error).toBe("LEASE_NOT_FOUND");
     expect(writeCanonicalEventMock).not.toHaveBeenCalled();
   });
@@ -236,4 +239,3 @@ describe("landlordEvidencePackageGenerationRoutes", () => {
     expect(res.buffer.length).toBeGreaterThan(1000);
   });
 });
-
