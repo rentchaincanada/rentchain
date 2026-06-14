@@ -828,6 +828,8 @@ describe("leaseRoutes GET /active", () => {
       expect.objectContaining({
         signingStatus: "pending_signature",
         signingProviderId: "mock",
+        providerDispatchMode: "mock",
+        providerDispatchStatus: "mocked_no_email",
         derivedLeaseState: "pending_signature",
       })
     );
@@ -840,6 +842,8 @@ describe("leaseRoutes GET /active", () => {
         landlordId: "landlord-1",
         providerId: "mock",
         documentUrl: "https://files.example.com/lease-1.pdf",
+        providerDispatchMode: "mock",
+        providerDispatchStatus: "mocked_no_email",
         rawIdsIncluded: false,
         payloadIncluded: false,
       })
@@ -857,6 +861,8 @@ describe("leaseRoutes GET /active", () => {
         providerId: "mock",
         type: "sent",
         actorRole: "landlord",
+        providerDispatchMode: "mock",
+        providerDispatchStatus: "mocked_no_email",
       })
     );
     expect(writeCanonicalEventMock).toHaveBeenCalledWith(
@@ -865,6 +871,10 @@ describe("leaseRoutes GET /active", () => {
         actor: expect.objectContaining({ role: "landlord", type: "landlord" }),
         resource: { id: "lease-1", type: "lease" },
         status: "sent",
+        metadata: expect.objectContaining({
+          providerDispatchMode: "mock",
+          providerDispatchStatus: "mocked_no_email",
+        }),
       })
     );
     expect(sendEmailMock).not.toHaveBeenCalled();

@@ -30,6 +30,9 @@ const pendingStatus: LeaseSigningStatusResponse = {
   signingStatus: "pending_signature",
   signingProviderId: "mock",
   signingRequestId: "lsr_landlord_lease",
+  providerDispatchMode: "mock",
+  providerDispatchStatus: "mocked_no_email",
+  providerDispatchMessage: "Mock signing provider recorded the request without sending email.",
   sentAt: "2026-06-14T12:00:00.000Z",
 };
 
@@ -63,6 +66,7 @@ describe("LeaseSigningDashboard", () => {
       });
     });
     await waitFor(() => expect(screen.getByText(/status: pending signature/i)).toBeInTheDocument());
+    expect(screen.getByText(/no signature email was sent/i)).toBeInTheDocument();
   });
 
   it("shows validation failures returned by the signing endpoint", async () => {

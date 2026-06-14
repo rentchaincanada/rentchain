@@ -38,6 +38,9 @@ export class DropboxSignProvider implements ISigningProvider {
       providerRequestId: `dropbox_${sha(`${input.landlordId}:${input.leaseId}:${Date.now()}`)}`,
       signingUrl: null,
       expiresAt: null,
+      dispatchMode: "stub",
+      dispatchStatus: "stubbed_no_email",
+      dispatchMessage: "Dropbox Sign provider is configured as a local stub and did not send email.",
     };
   }
 

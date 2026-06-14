@@ -87,13 +87,25 @@ describe("leaseSigningService", () => {
     expect(snapshot.signingRequestId).toMatch(/^lsr_/);
     expect(snapshot.providerRequestRef).toMatch(/^mock_ref_/);
     expect(snapshot.providerRequestRef).not.toContain("lease-1");
+    expect(snapshot.providerDispatchMode).toBe("mock");
+    expect(snapshot.providerDispatchStatus).toBe("mocked_no_email");
     expect(snapshot.events.map((event) => event.type)).toEqual(["sent"]);
+    expect(snapshot.events[0]).toEqual(
+      expect.objectContaining({
+        providerDispatchMode: "mock",
+        providerDispatchStatus: "mocked_no_email",
+      })
+    );
     expect(writeCanonicalEventMock).toHaveBeenCalledWith(
       expect.objectContaining({
         action: "signing_sent",
         actor: expect.objectContaining({ role: "landlord", type: "landlord" }),
         resource: { id: "lease-1", type: "lease" },
         status: "sent",
+        metadata: expect.objectContaining({
+          providerDispatchMode: "mock",
+          providerDispatchStatus: "mocked_no_email",
+        }),
       })
     );
   });

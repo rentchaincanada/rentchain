@@ -13,6 +13,8 @@ describe("MockSigningProvider", () => {
 
     expect(sent.providerRequestId).toMatch(/^mock_/);
     expect(sent.signingUrl).toContain(sent.providerRequestId);
+    expect(sent.dispatchMode).toBe("mock");
+    expect(sent.dispatchStatus).toBe("mocked_no_email");
 
     const signingUrl = await provider.getSigningUrl({
       providerRequestId: sent.providerRequestId,

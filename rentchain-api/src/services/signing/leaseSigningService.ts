@@ -21,6 +21,9 @@ export type LeaseSigningEvent = {
   occurredAt: string;
   actorRole: "landlord" | "tenant" | "provider" | "system";
   signerEmailHash?: string | null;
+  providerDispatchMode?: string | null;
+  providerDispatchStatus?: string | null;
+  providerDispatchMessage?: string | null;
 };
 
 export type LeaseSigningSnapshot = {
@@ -29,6 +32,9 @@ export type LeaseSigningSnapshot = {
   signingProviderId: string | null;
   signingRequestId: string | null;
   providerRequestRef: string | null;
+  providerDispatchMode: string | null;
+  providerDispatchStatus: string | null;
+  providerDispatchMessage: string | null;
   sentAt: string | null;
   signedAt: string | null;
   documentUrl: string | null;
@@ -94,6 +100,9 @@ function projectEvent(doc: any): LeaseSigningEvent {
     occurredAt: String(data?.occurredAt || ""),
     actorRole: data?.actorRole || "system",
     signerEmailHash: data?.signerEmailHash || null,
+    providerDispatchMode: data?.providerDispatchMode || null,
+    providerDispatchStatus: data?.providerDispatchStatus || null,
+    providerDispatchMessage: data?.providerDispatchMessage || null,
   };
 }
 
@@ -116,6 +125,9 @@ async function appendSigningEvent(input: {
   actorRole: "landlord" | "tenant" | "provider" | "system";
   signerEmail?: string | null;
   providerEventId?: string | null;
+  providerDispatchMode?: string | null;
+  providerDispatchStatus?: string | null;
+  providerDispatchMessage?: string | null;
 }) {
   const occurredAt = input.occurredAt || nowIso();
   const id = eventIdFor(input.requestId, input.type, occurredAt, input.providerEventId || "");
@@ -132,6 +144,9 @@ async function appendSigningEvent(input: {
     type: input.type,
     actorRole: input.actorRole,
     signerEmailHash: emailHash(input.signerEmail),
+    providerDispatchMode: input.providerDispatchMode || null,
+    providerDispatchStatus: input.providerDispatchStatus || null,
+    providerDispatchMessage: input.providerDispatchMessage || null,
     occurredAt,
     createdAt: FieldValue.serverTimestamp(),
     rawIdsIncluded: false,
@@ -153,6 +168,8 @@ async function appendSigningEvent(input: {
     metadata: {
       requestRef: input.requestId,
       providerRef: safeProviderRef(input.providerId, input.providerRequestId),
+      providerDispatchMode: input.providerDispatchMode || null,
+      providerDispatchStatus: input.providerDispatchStatus || null,
     },
   }).catch(() => undefined);
   return id;
@@ -180,6 +197,9 @@ export async function loadLeaseSigningSnapshot(input: {
       signingProviderId: null,
       signingRequestId: null,
       providerRequestRef: null,
+      providerDispatchMode: null,
+      providerDispatchStatus: null,
+      providerDispatchMessage: null,
       sentAt: null,
       signedAt: null,
       documentUrl: null,
@@ -189,12 +209,18 @@ export async function loadLeaseSigningSnapshot(input: {
   const events = await loadEvents(request.id);
   const signingStatus = statusFromEvents(events);
   const signedAt = events.find((event) => event.type === "signed")?.occurredAt || null;
+  const providerId = String(request.data?.providerId || "");
+  const providerDispatchMode = String(request.data?.providerDispatchMode || (providerId === "mock" ? "mock" : "")).trim() || null;
+  const providerDispatchStatus = String(request.data?.providerDispatchStatus || (providerId === "mock" ? "mocked_no_email" : "")).trim() || null;
   return {
     signingStatus,
     derivedLeaseState: deriveLeaseSigningState({ lease: input.lease || {}, signingStatus }),
-    signingProviderId: String(request.data?.providerId || ""),
+    signingProviderId: providerId,
     signingRequestId: request.id,
     providerRequestRef: String(request.data?.providerRequestRef || ""),
+    providerDispatchMode,
+    providerDispatchStatus,
+    providerDispatchMessage: String(request.data?.providerDispatchMessage || (providerId === "mock" ? "Mock signing provider recorded the request without sending email." : "")).trim() || null,
     sentAt: events.find((event) => event.type === "sent")?.occurredAt || String(request.data?.sentAt || "") || null,
     signedAt,
     documentUrl: String(request.data?.signedDocumentUrl || request.data?.documentUrl || "") || null,
@@ -244,6 +270,9 @@ export async function sendLeaseForSignature(input: {
       tenantEmailHashes: emails.map(emailHash),
       documentUrl,
       expiresAt: sent.expiresAt || null,
+      providerDispatchMode: sent.dispatchMode || null,
+      providerDispatchStatus: sent.dispatchStatus || null,
+      providerDispatchMessage: sent.dispatchMessage || null,
       sentAt: now,
       createdAt: FieldValue.serverTimestamp(),
       rawIdsIncluded: false,
@@ -259,6 +288,9 @@ export async function sendLeaseForSignature(input: {
     type: "sent",
     occurredAt: now,
     actorRole: "landlord",
+    providerDispatchMode: sent.dispatchMode || null,
+    providerDispatchStatus: sent.dispatchStatus || null,
+    providerDispatchMessage: sent.dispatchMessage || null,
   });
   return loadLeaseSigningSnapshot({ leaseId: input.leaseId, landlordId: input.landlordId, lease: input.lease });
 }

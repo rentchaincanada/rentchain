@@ -18,6 +18,19 @@ function pretty(value: unknown) {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+function dispatchNotice(status: LeaseSigningStatusResponse | null) {
+  if (!status || status.signingStatus !== "pending_signature") return null;
+  const dispatchMode = String(status.providerDispatchMode || "").trim().toLowerCase();
+  const dispatchStatus = String(status.providerDispatchStatus || "").trim().toLowerCase();
+  if (dispatchMode === "mock" || dispatchStatus === "mocked_no_email") {
+    return "Mock signing request recorded. No signature email was sent by this preview provider.";
+  }
+  if (dispatchMode === "stub" || dispatchStatus === "stubbed_no_email") {
+    return "Sandbox signing request recorded. No signature email was sent by the configured signing stub.";
+  }
+  return null;
+}
+
 export function LeaseSigningDashboard({ leaseId, tenantEmail }: Props) {
   const [status, setStatus] = React.useState<LeaseSigningStatusResponse | null>(null);
   const [email, setEmail] = React.useState(String(tenantEmail || ""));
@@ -88,6 +101,7 @@ export function LeaseSigningDashboard({ leaseId, tenantEmail }: Props) {
   const canSend = signingStatus === "not_started" || signingStatus === "cancelled" || signingStatus === "expired" || signingStatus === "rejected";
   const canCancel = signingStatus === "pending_signature";
   const canDownload = signingStatus === "signed";
+  const noEmailNotice = dispatchNotice(status);
 
   return (
     <section style={{ display: "grid", gap: 12 }}>
@@ -122,6 +136,7 @@ export function LeaseSigningDashboard({ leaseId, tenantEmail }: Props) {
           ))}
         </div>
       ) : null}
+      {noEmailNotice ? <div style={{ color: "#92400e" }}>{noEmailNotice}</div> : null}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         {canCancel ? <button type="button" onClick={() => void cancel()} disabled={busy}>Cancel signing</button> : null}
         {canDownload ? <button type="button" onClick={() => void download()} disabled={busy}>Download signed document</button> : null}
