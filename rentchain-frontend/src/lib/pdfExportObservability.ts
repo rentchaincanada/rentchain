@@ -16,6 +16,7 @@ export type PdfExportType =
   | "tenant_report"
   | "lease_ledger"
   | "lease_summary"
+  | "lease_evidence_package"
   | "schedule_a"
   | "transunion_usage"
   | "print_summary"

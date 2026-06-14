@@ -1,7 +1,9 @@
 import React from "react";
 import { Link, useParams } from "react-router-dom";
+import { downloadAuthenticatedExport } from "@/api/exportDownload";
 import { getLeaseById, type LandlordActiveLease } from "@/api/leasesApi";
 import { LeaseDocumentView } from "@/components/leases/LeaseDocumentView";
+import { triggerDocumentDownload } from "@/lib/documentRendering";
 import { downloadLeaseSummaryPdf } from "@/utils/leaseSummaryPdf";
 import { printSummaryDocument } from "@/utils/printSummary";
 
@@ -72,6 +74,24 @@ export default function LandlordLeaseSummaryPage() {
     downloadLeaseSummaryPdf(lease);
   }
 
+  async function handleDownloadEvidencePackage() {
+    if (!lease) return;
+    try {
+      const { blob, filename } = await downloadAuthenticatedExport({
+        path: `/landlord/evidence-packages/leases/${encodeURIComponent(lease.id)}.pdf`,
+        fallbackFilename: `lease-evidence-package-${encodeURIComponent(lease.id)}.pdf`,
+        errorMessage: "Failed to download evidence package.",
+        observability: {
+          exportType: "lease_evidence_package",
+          renderingPath: "backend_pdfkit",
+        },
+      });
+      triggerDocumentDownload({ blob, filename, urlApi: URL });
+    } catch (err: unknown) {
+      setError(errorMessage(err, "Failed to download evidence package."));
+    }
+  }
+
   return (
     <div style={{ display: "grid", gap: 16 }}>
       <div style={{ display: "grid", gap: 6 }}>
@@ -95,6 +115,14 @@ export default function LandlordLeaseSummaryPage() {
           style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a" }}
         >
           Print / Save PDF
+        </button>
+        <button
+          type="button"
+          onClick={() => void handleDownloadEvidencePackage()}
+          disabled={!lease}
+          style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #cbd5e1", background: "#fff", color: "#0f172a" }}
+        >
+          Download evidence package
         </button>
         <Link
           to="/leases"
