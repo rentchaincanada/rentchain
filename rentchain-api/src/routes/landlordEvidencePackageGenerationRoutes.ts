@@ -8,10 +8,14 @@ import {
   auditMetadataForLeaseEvidencePackage,
   generateLeaseEvidencePackage,
 } from "../services/evidencePackages/leaseEvidencePackageService";
+import {
+  buildLeaseEvidencePackageVerificationMetadata,
+  LEASE_EVIDENCE_PACKAGE_VERSION,
+} from "../services/evidencePackages/leaseEvidencePackageManifest";
 import { renderLeaseEvidencePackagePdf } from "../services/evidencePackages/leaseEvidencePackagePdf";
 
 const router = Router();
-const EVIDENCE_PACKAGE_ROUTE_VERSION = "lease-evidence-package-pdf-v1";
+const EVIDENCE_PACKAGE_ROUTE_VERSION = LEASE_EVIDENCE_PACKAGE_VERSION;
 
 function asString(value: unknown, max = 500): string {
   return String(value ?? "").trim().slice(0, max);
@@ -42,6 +46,7 @@ router.get("/evidence-packages/leases/:leaseId.pdf", evidencePackageRouteVersion
     const leaseId = asString(req.params?.leaseId, 240);
     const generatedBy = asString(req.user?.id || req.user?.uid || req.user?.email || landlordId, 240);
     const pkg = await generateLeaseEvidencePackage({ leaseId, landlordId, generatedBy });
+    pkg.governance.verification = buildLeaseEvidencePackageVerificationMetadata(pkg);
     const pdf = await renderLeaseEvidencePackagePdf(pkg);
 
     await writeCanonicalEvent({

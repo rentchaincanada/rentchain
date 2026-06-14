@@ -63,6 +63,18 @@ export async function renderLeaseEvidencePackagePdf(pkg: LeaseEvidencePackage): 
     line(doc, "Sections Included", pkg.governance.sectionsIncluded.join(", "));
     doc.moveDown();
 
+    if (pkg.governance.verification) {
+      doc.font("Helvetica-Bold").fontSize(12).text("Verification Summary");
+      doc.moveDown(0.25);
+      doc.fontSize(9);
+      line(doc, "Evidence Package ID", pkg.governance.verification.evidencePackageId);
+      line(doc, "Manifest Version", pkg.governance.verification.manifestVersion);
+      line(doc, "Hash Algorithm", pkg.governance.verification.hashAlgorithm);
+      line(doc, "Manifest Hash", pkg.governance.verification.manifestHash);
+      line(doc, "Package Version", pkg.governance.verification.packageVersion);
+      doc.moveDown();
+    }
+
     for (const section of pkg.sections) {
       if (doc.y > 700) doc.addPage();
       doc.font("Helvetica-Bold").fontSize(13).text(section.title);
