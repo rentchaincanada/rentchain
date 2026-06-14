@@ -142,4 +142,47 @@ describe("leaseSigningService", () => {
     expect(snapshot.derivedLeaseState).toBe("active");
     expect(snapshot.events.map((event) => event.type)).toContain("signed");
   });
+
+  it("resolves current state to pending after resending a cancelled signing request", async () => {
+    const { cancelLeaseSigning, loadLeaseSigningSnapshot, sendLeaseForSignature } = await import("../signing/leaseSigningService");
+    const lease = { startDate: "2026-01-01", documentUrl: "https://example.com/lease.pdf" };
+
+    const initial = await sendLeaseForSignature({
+      leaseId: "lease-1",
+      landlordId: "landlord-1",
+      lease,
+      tenantEmails: ["tenant@example.com"],
+    });
+    expect(initial.signingStatus).toBe("pending_signature");
+
+    const cancelled = await cancelLeaseSigning({
+      leaseId: "lease-1",
+      landlordId: "landlord-1",
+      lease,
+    });
+    expect(cancelled.signingStatus).toBe("cancelled");
+
+    const resent = await sendLeaseForSignature({
+      leaseId: "lease-1",
+      landlordId: "landlord-1",
+      lease,
+      tenantEmails: ["tenant@example.com"],
+    });
+    const snapshot = await loadLeaseSigningSnapshot({
+      leaseId: "lease-1",
+      landlordId: "landlord-1",
+      lease,
+    });
+
+    expect(resent.signingStatus).toBe("pending_signature");
+    expect(resent.derivedLeaseState).toBe("pending_signature");
+    expect(snapshot.signingStatus).toBe("pending_signature");
+    expect(snapshot.derivedLeaseState).toBe("pending_signature");
+    expect(snapshot.events.map((event) => event.type)).toEqual(["sent", "cancelled", "sent"]);
+    expect(Array.from(ensureCollection("leaseSigningRequests").values())[0]).toEqual(
+      expect.objectContaining({
+        currentSigningStatus: "pending_signature",
+      })
+    );
+  });
 });

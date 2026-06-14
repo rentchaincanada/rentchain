@@ -44,9 +44,13 @@ export type LeaseSigningSnapshot = {
 const REQUESTS = "leaseSigningRequests";
 const EVENTS = "leaseSigningEvents";
 const DEAD_LETTERS = "leaseSigningWebhookDeadLetters";
+let lastGeneratedTimestampMs = 0;
 
 function nowIso() {
-  return new Date().toISOString();
+  const current = Date.now();
+  const next = current <= lastGeneratedTimestampMs ? lastGeneratedTimestampMs + 1 : current;
+  lastGeneratedTimestampMs = next;
+  return new Date(next).toISOString();
 }
 
 function digest(value: string, length = 16) {
@@ -83,13 +87,39 @@ function asDateMillis(value: any): number {
 }
 
 function statusFromEvents(events: LeaseSigningEvent[]): LeaseSigningStatus {
-  const types = events.map((event) => event.type);
-  if (types.includes("signed")) return "signed";
-  if (types.includes("cancelled")) return "cancelled";
-  if (types.includes("rejected")) return "rejected";
-  if (types.includes("expired")) return "expired";
-  if (types.includes("sent") || types.includes("viewed")) return "pending_signature";
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const type = events[index]?.type;
+    if (type === "signed") return "signed";
+    if (type === "cancelled") return "cancelled";
+    if (type === "rejected") return "rejected";
+    if (type === "expired") return "expired";
+    if (type === "sent" || type === "viewed") return "pending_signature";
+  }
   return "not_started";
+}
+
+function statusFromEventType(type: SigningProviderEventType): LeaseSigningStatus | null {
+  if (type === "signed") return "signed";
+  if (type === "cancelled") return "cancelled";
+  if (type === "rejected") return "rejected";
+  if (type === "expired") return "expired";
+  if (type === "sent" || type === "viewed") return "pending_signature";
+  return null;
+}
+
+function normalizeStoredStatus(value: unknown): LeaseSigningStatus | null {
+  const status = String(value || "").trim();
+  if (
+    status === "not_started" ||
+    status === "pending_signature" ||
+    status === "signed" ||
+    status === "rejected" ||
+    status === "expired" ||
+    status === "cancelled"
+  ) {
+    return status;
+  }
+  return null;
 }
 
 function projectEvent(doc: any): LeaseSigningEvent {
@@ -152,6 +182,17 @@ async function appendSigningEvent(input: {
     rawIdsIncluded: false,
     payloadIncluded: false,
   });
+  const currentSigningStatus = statusFromEventType(input.type);
+  if (currentSigningStatus) {
+    await db.collection(REQUESTS).doc(input.requestId).set(
+      {
+        currentSigningStatus,
+        currentStatusAt: occurredAt,
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+  }
   await writeCanonicalEvent({
     domain: "lease",
     action: `signing_${input.type}`,
@@ -207,8 +248,9 @@ export async function loadLeaseSigningSnapshot(input: {
     };
   }
   const events = await loadEvents(request.id);
-  const signingStatus = statusFromEvents(events);
+  const signingStatus = normalizeStoredStatus(request.data?.currentSigningStatus) || statusFromEvents(events);
   const signedAt = events.find((event) => event.type === "signed")?.occurredAt || null;
+  const sentAt = [...events].reverse().find((event) => event.type === "sent")?.occurredAt || String(request.data?.sentAt || "") || null;
   const providerId = String(request.data?.providerId || "");
   const providerDispatchMode = String(request.data?.providerDispatchMode || (providerId === "mock" ? "mock" : "")).trim() || null;
   const providerDispatchStatus = String(request.data?.providerDispatchStatus || (providerId === "mock" ? "mocked_no_email" : "")).trim() || null;
@@ -221,7 +263,7 @@ export async function loadLeaseSigningSnapshot(input: {
     providerDispatchMode,
     providerDispatchStatus,
     providerDispatchMessage: String(request.data?.providerDispatchMessage || (providerId === "mock" ? "Mock signing provider recorded the request without sending email." : "")).trim() || null,
-    sentAt: events.find((event) => event.type === "sent")?.occurredAt || String(request.data?.sentAt || "") || null,
+    sentAt,
     signedAt,
     documentUrl: String(request.data?.signedDocumentUrl || request.data?.documentUrl || "") || null,
     events,
@@ -260,8 +302,8 @@ export async function sendLeaseForSignature(input: {
   const now = nowIso();
   const requestRef = db.collection(REQUESTS).doc(requestId);
   const existing = await requestRef.get();
-  if (!existing.exists) {
-    await requestRef.set({
+  await requestRef.set(
+    {
       leaseId: input.leaseId,
       landlordId: input.landlordId,
       providerId,
@@ -274,11 +316,13 @@ export async function sendLeaseForSignature(input: {
       providerDispatchStatus: sent.dispatchStatus || null,
       providerDispatchMessage: sent.dispatchMessage || null,
       sentAt: now,
-      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+      createdAt: existing.exists ? existing.data()?.createdAt || FieldValue.serverTimestamp() : FieldValue.serverTimestamp(),
       rawIdsIncluded: false,
       payloadIncluded: false,
-    });
-  }
+    },
+    { merge: true }
+  );
   await appendSigningEvent({
     requestId,
     leaseId: input.leaseId,
