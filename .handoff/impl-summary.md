@@ -28,6 +28,7 @@ CURRENT STATE:
 VALIDATION:
 - Frontend targeted tests passed:
   - `npm run test:single -- src/components/billing/LockedFeature.test.tsx src/constants/tiers.test.ts src/pages/ExpensesPage.test.tsx`
+  - `npm run test:single -- src/components/billing/FeatureGate.test.tsx` (after fixing message expectation)
 - Backend targeted tests passed:
   - `npm run test:single -- src/services/__tests__/capabilityGuard.test.ts`
   - `npm run test:single -- src/routes/__tests__/expensesRoutes.test.ts`
@@ -35,7 +36,7 @@ VALIDATION:
   - `npm run build`
 - Frontend build passed:
   - `npm run build`
-- `git diff --check` passed.
+- `git diff --check` passed (after fixing trailing whitespace).
 - Note: the first sandboxed backend route test run failed with `listen EPERM: operation not permitted 0.0.0.0`; rerunning the same route suite outside the sandbox passed.
 - Frontend build retained an existing large chunk warning; build completed successfully.
 
@@ -48,6 +49,7 @@ FILES CHANGED:
 - `rentchain-frontend/src/constants/tiers.test.ts`
 - `rentchain-frontend/src/components/billing/LockedFeature.tsx`
 - `rentchain-frontend/src/components/billing/LockedFeature.test.tsx`
+- `rentchain-frontend/src/components/billing/FeatureGate.test.tsx`
 - `rentchain-frontend/src/billing/upgradeCopy.ts`
 - `rentchain-frontend/src/lib/upgradePrompt.ts`
 - `rentchain-frontend/src/pages/ExpensesPage.tsx`
@@ -61,3 +63,31 @@ KNOWN LIMITATIONS:
 
 NEXT STEP:
 - Review PR, run preview QA for Free-tier locked surfaces, and then proceed to the next adoption-flow mission only after this upgrade messaging pass is accepted.
+
+## Manual QA Results — Vercel Preview
+
+Step 1: PARTIAL — /expenses canonical LockedFeature renders on first load but reverts
+to plain text "Import expenses / Upgrade to Pro..." after page refresh.
+State persistence issue — component may have conditional fallback to old text implementation.
+Step 2: PASS — Other locked surfaces consistent with canonical component
+Step 3: N/A — Could not test CTA link after LockedFeature reverted on refresh
+Step 4: PASS — Mobile layout 375px confirmed, no overflow
+
+FINDING 1 (medium): /expenses LockedFeature reverts to plain text after refresh —
+conditional render or hydration issue. Blocks full acceptance criteria.
+
+FINDING 2 (low): /payments missing single payment add — CSV upload only.
+Log as follow-up mission fix/payments-manual-entry-v1.
+
+## Manual QA Results — Final (after navigation-back fix)
+
+Step 1: PASS — /expenses LockedFeature displays correctly on Free tier
+Step 2: PASS — CTA → /pricing → browser back → /expenses: LockedFeature persists
+Step 3: PASS — Hard refresh: LockedFeature persists
+
+Root cause resolved: useRef stable state prevents LockedFeature from reverting
+during navigation transitions when useCapabilities briefly shows loading: true.
+
+FINDING 2 (low): /payments missing single payment add — log as follow-up mission.
+
+Manual QA: PASS — all three checks confirmed on Vercel preview.

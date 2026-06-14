@@ -44,7 +44,7 @@ describe("FeatureGate", () => {
     expect(screen.getByRole("button", { name: "Upgrade to Starter" })).toBeInTheDocument();
     expect(screen.getByText("Available on Starter")).toBeInTheDocument();
     expect(
-      screen.getByText("Opens a quick upgrade prompt first. Checkout only begins if you choose to continue.")
+      screen.getByText("Review upgrade options before checkout. Checkout only begins if you choose to continue.")
     ).toBeInTheDocument();
     expect(screen.queryByText("Full feature")).not.toBeInTheDocument();
   });
