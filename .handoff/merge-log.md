@@ -863,3 +863,54 @@ gate2-instruction.md must include explicit admin authorization on every Gate 2.
 - Upgrade driver clarification mission is complete.
 - `.handoff/mission-current.md` reset to ready state.
 - Ready for the next governed mission.
+
+---
+
+## Merge Complete — PR #1150 — 2026-06-14T10:41:08Z
+
+### PR
+- PR: #1150
+- URL: https://github.com/rentchaincanada/rentchain/pull/1150
+- Branch: fix/onboarding-flow-reordering-v1
+- Merge commit: b8f81eceda100362e849191c26fd36e2445217c5
+
+### Merge Confirmation
+- Gate 2 authorization: approved after manual preview QA passed
+- Admin override: authorized only for REVIEW_REQUIRED branch policy
+- Merge method: squash merge
+- PR state after merge: MERGED
+- PR head at merge: 5f3832de53789743aa7f6dc165151640388ef788
+
+### Scope Confirmation
+- Free landlord onboarding now follows property, unit, applicant, screening, and lease order.
+- Dashboard and setup CTAs avoid screening or tenant invite actions before required setup context exists.
+- Dashboard applicant counts are scoped to applications tied to active visible landlord properties.
+- Free Step 3 routes to Applications manual guidance without opening the application-link modal.
+- Paid-plan Step 3 application-link behavior remains intact.
+- Lease signing email submit issue remains tracked separately as issue #1151.
+
+### Validation Before Merge
+- PR checks green:
+  - backend
+  - frontend
+  - merge-gate
+  - codex-review
+  - Vercel preview comments
+  - Vercel rentchain
+  - Vercel rentchain-status
+  - Terraform Cloud
+- `mergeStateStatus: BLOCKED` was due to REVIEW_REQUIRED branch policy.
+- Cloud Run backend parity restored before final preview QA: `rentchain-landlord-api` served image tag `5f3832de` with 100% traffic to revision `rentchain-landlord-api-01835-7rs`.
+- Manual preview QA passed after Cloud Run parity was restored.
+
+### Cleanup Confirmation
+- Local main synced with `origin/main`.
+- Local branch `fix/onboarding-flow-reordering-v1` deleted.
+- Remote branch `fix/onboarding-flow-reordering-v1` deleted; `git ls-remote --heads` returned no remote head.
+- Working tree status after merge: `main...origin/main` with intentional local handoff update in `.handoff/merge-log.md`.
+
+### Current State
+- `main` includes PR #1150.
+- Free landlord onboarding and dashboard applicant-count fix are complete.
+- `.handoff/mission-current.md` was already in ready state.
+- Ready for the next governed mission.
