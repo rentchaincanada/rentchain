@@ -1,142 +1,63 @@
-PR: #1148
-PR URL: https://github.com/rentchaincanada/rentchain/pull/1148
-Branch: audit/dashboard-engagement-v1
+PR: #TBD
+PR URL: TBD
+Branch: fix/upgrade-driver-clarification-v1
 
-WHAT WAS AUDITED:
-Comprehensive code inspection audit of landlord dashboard engagement patterns, widget effectiveness, user journey optimization, and mobile experience. Inspected 15+ dashboard components, layouts, and user flows to establish baseline for Dashboard 2.0 implementation and identify high-value vs low-value engagement patterns based on Pilot 1 findings.
+WHAT WAS DONE:
+- Standardized backend upgrade-required payloads from the shared capability guard.
+- Added `userMessage`, `requiredTier`, `upgradeDrivers`, and tier-specific `upgradePath` to capability-denial responses while preserving legacy fields such as `requiredPlan`, `currentPlan`, `capability`, and `message`.
+- Updated the Pro-only expense import/export guard to use the shared upgrade response shape.
+- Added canonical frontend upgrade driver constants for Analytics, Payments, Work Orders, Expenses, and Screening.
+- Extended the locked-state component to show the feature name, required tier, upgrade drivers, driver descriptions, and a styled upgrade CTA.
+- Replaced the Expenses page plain-text import/export lock with the canonical locked-state component.
+- Added expense import/export upgrade copy and required-plan mappings so the Pro expense gate does not fall back to generic copy.
 
-**Phase 1: Dashboard Structure Analysis**
-- Main dashboard layout in `rentchain-frontend/src/pages/DashboardPage.tsx` uses flexbox vertical column with gap spacing, responsive padding (mobile: spacing.sm top/spacing.md bottom, desktop: spacing.md/spacing.lg)
-- **Core Widget Hierarchy (in render order):**
-  1. **FreeTierJourneyCard** - 4-step onboarding sequence (property → unit → applicant → screening)
-  2. **KpiStrip** - 5 key metrics (properties, units, tenants, open actions, delinquencies) 
-  3. **PortfolioCredibilitySummaryCard** - portfolio health summary with lease/review links
-  4. **Lease Notice Status Card** - conditional render for lease renewals (expiring, pending, renewed, quitting)
-  5. **UpgradeNudgeInlineCard** - Pro tier automation timeline promotion
-  6. **Post-Upgrade Content Card** - success messaging after plan upgrades
-  7. **LandlordActivationFlowCard** - institutional onboarding flow
-  8. **StarterOnboardingPanel** - lazy-loaded onboarding steps with error boundary
-- **Widget Loading States**: All major widgets implement skeleton loading with consistent styling (12px height bars, 999px border-radius, rgba opacity)
-- **Error Handling**: Dashboard has comprehensive error boundary with retry functionality, onboarding crash protection
-
-**Phase 2: Widget Effectiveness Assessment**
-- **HIGH-VALUE WIDGETS (Pilot 1 validated):**
-  - **FreeTierJourneyCard**: Clear 4-step progression with completion tracking, next-step highlighting, descriptive helpers ("Start with the rental address", "Add rent, beds, baths, and occupancy")
-  - **KpiStrip**: Essential metrics with direct links (Properties→/properties, Units→/properties, Tenants→/tenants, Open Actions→/dashboard#open-actions, Delinquencies→/payments?filter=delinquent)
-  - **PortfolioCredibilitySummaryCard**: Portfolio health with actionable links to /leases and /applications?status=review
-  - **Post-Upgrade Success Content**: Immediate gratification for upgrade completion
-- **MEDIUM-VALUE WIDGETS (Context dependent):**
-  - **Lease Notice Status**: High value when applicable (renewal periods) but conditionally rendered only when notices exist
-  - **LandlordActivationFlowCard**: Institution-focused, may confuse individual landlords
-- **LOW-VALUE WIDGETS (Pilot 1 feedback: confusing):**
-  - **UpgradeNudgeInlineCard**: Interrupts workflow, focuses on Pro tier automation rather than immediate needs
-  - **StarterOnboardingPanel**: Complex lazy-loaded onboarding that can crash (error boundary required)
-
-**Phase 3: User Journey Flow Documentation**
-- **Primary Free Tier Journey** (FreeTierJourneyCard implementation):
-  1. **Add property**: Entry point, "Start with the rental address" → navigate("/properties?focus=addProperty")
-  2. **Add unit**: "Add rent, beds, baths, and occupancy" → navigate("/properties?openAddUnit=1")  
-  3. **Add applicant**: "Send an application after a unit exists" → handleCreateApplicationClick modal
-  4. **Run screening**: "Screening is the upgrade-ready next step" → navigate("/applications" or "/applications?openTransUnionAccess=1")
-- **Navigation Patterns**: 
-  - Property focus uses URL query params (?focus=addProperty, ?openAddUnit=1)
-  - Application creation uses modal workflow with property gating
-  - Screening workflow branches based on setup completion status
-- **Action Completion Tracking**: Each step shows completion state with count-based helpers ("2 properties added", "1 unit added", "3 applicants started")
-- **Next Step Logic**: `nextStep = steps.find((step) => !step.done) || steps[steps.length - 1]` always shows actionable next step
-
-**Phase 4: Responsiveness and Mobile Experience Audit**
-- **Breakpoint Implementation**: Single breakpoint at 768px via `window.matchMedia("(max-width: 768px)").matches`
-- **Mobile Layout Adaptations**:
-  - **Padding**: Mobile reduces to spacing.sm/spacing.md vs desktop spacing.md/spacing.lg
-  - **KpiStrip**: Desktop uses `repeat(auto-fit, minmax(min(100%, 160px), 1fr))`, mobile switches to `1fr` single column
-  - **FreeTierJourneyCard**: Maintains grid layout with auto-fit columns, min 160px
-- **Mobile-Specific Behaviors**: isMobile state tracked for analytics, rendering decisions, and component layout adaptations
-- **Responsive Concerns**: Single 768px breakpoint may not adequately serve tablet range (769px-1024px), components assume binary mobile/desktop states
-
-**Phase 5: Test Coverage and Optimization Analysis**
-- **Data Loading Patterns**: Dashboard uses multiple useEffect hooks for data fetching (dashboardSummary, properties, applications, tenants, activation, referrals)
-- **Performance Optimizations**: 
-  - StarterOnboardingPanel lazy-loaded with React.Suspense
-  - Error boundaries prevent widget crashes from breaking entire dashboard
-  - Loading states implemented consistently across widgets
-- **Analytics Integration**: Track events for journey progression, upgrade nudges, welcome modal interactions
-- **Test Infrastructure**: Dashboard has data-testid attributes ("dashboard-kpi-decision-stack", "free-tier-journey-card") for testing
-
-KEY FINDINGS:
-
-**1. Clear Journey Structure Success**
-FreeTierJourneyCard provides excellent user progression with 4-step sequence, completion tracking, and contextual helpers. This directly addresses Pilot 1 feedback about needing clear action ordering.
-
-**2. Widget Hierarchy Misalignment**  
-High-value widgets (Journey, KPIs, Portfolio Health) are properly prioritized, but low-value widgets (upgrade nudges, complex onboarding) interrupt the core workflow. Pilot 1 landlords valued Dashboard but found decision-heavy interfaces confusing.
-
-**3. Responsive Design Gaps**
-Single 768px breakpoint creates binary mobile/desktop experience without tablet optimization. KpiStrip and other grid components may not render optimally on tablet devices (769px-1024px).
-
-**4. Excellent Data Integration Architecture**
-Dashboard successfully aggregates data from properties, applications, tenants, activation, and referrals APIs with proper loading states and error handling. This creates comprehensive landlord overview.
-
-**5. Analytics and Tracking Well-Implemented**
-Comprehensive event tracking for user interactions, journey progression, and upgrade flows provides good foundation for measuring engagement improvements.
-
-**6. Onboarding Complexity vs Simplicity Trade-off**
-FreeTierJourneyCard provides simple, clear guidance while StarterOnboardingPanel adds institutional complexity. The simple approach aligns better with Pilot 1 feedback about preferring straightforward workflows.
-
-ENGAGEMENT PATTERN ANALYSIS:
-
-**High-Engagement Components:**
-- Properties/Units/Applicants counters (direct action tracking)
-- Next-step highlighting in journey card (clear progression)
-- Portfolio health summary (actionable insights)
-- Direct navigation links (minimal clicks to action)
-
-**Low-Engagement Risk Components:**
-- Upgrade nudges interrupting workflow
-- Complex multi-step onboarding panels  
-- Conditional widgets that appear/disappear unpredictably
-- Institution-focused activation flows for individual landlords
-
-**Mobile Experience Quality:**
-- Core journey card works well on mobile
-- KPI metrics readable and accessible
-- Navigation links appropriately sized
-- Single breakpoint limits optimization opportunities
+KEY DECISIONS:
+- Entitlement checks were not changed. The mission explicitly required messaging standardization without widening or weakening auth, billing, or plan enforcement.
+- Existing locked pages for leases, ledger, messages, and operations already use the canonical locked-state component or the shared capability guard, so the patch extends those shared pieces rather than duplicating page-level logic.
+- Maintenance/work-order entitlement behavior was left unchanged because the current capability map documents maintenance as reachable on Free during Pilot 1 measurement.
+- Expenses remain manually usable on Free; only import/export surfaces show the Pro locked state.
+- Operations remains a derived frontend coordination page in the current codebase; there is no separate browser-used `/api/landlord/operations` route to patch in this mission.
 
 CURRENT STATE:
-- Branch: audit/dashboard-engagement-v1
-- Implementation approach: Code inspection only, zero source code changes
-- Components analyzed: 15+ dashboard widgets, layout components, responsive patterns
-- User journey mapping: Complete 4-step free tier progression documented
-- Mobile experience: Single breakpoint pattern identified with optimization opportunities
+- Branch: fix/upgrade-driver-clarification-v1
+- PR: pending
+- Backend upgrade response shape is standardized for shared capability-guarded routes and expense import/export gates.
+- Frontend locked-state UI now exposes consistent upgrade-driver messaging.
+- Manual preview QA has not been run in this environment.
 
-RECOMMENDED DASHBOARD 2.0 IMPROVEMENTS (Prioritized by Pilot 1 Impact):
+VALIDATION:
+- Frontend targeted tests passed:
+  - `npm run test:single -- src/components/billing/LockedFeature.test.tsx src/constants/tiers.test.ts src/pages/ExpensesPage.test.tsx`
+- Backend targeted tests passed:
+  - `npm run test:single -- src/services/__tests__/capabilityGuard.test.ts`
+  - `npm run test:single -- src/routes/__tests__/expensesRoutes.test.ts`
+- Backend build passed:
+  - `npm run build`
+- Frontend build passed:
+  - `npm run build`
+- `git diff --check` passed.
+- Note: the first sandboxed backend route test run failed with `listen EPERM: operation not permitted 0.0.0.0`; rerunning the same route suite outside the sandbox passed.
+- Frontend build retained an existing large chunk warning; build completed successfully.
 
-**HIGH IMPACT - Core Engagement:**
-1. **Maintain Journey Card Prominence**: FreeTierJourneyCard is the highest-value widget - keep at top of dashboard with clear next-step highlighting
-2. **Optimize KPI Strip for Action**: Add quick-action buttons to KPI items (e.g., "Add Property" button next to property count)
-3. **Reduce Upgrade Nudge Interruption**: Move UpgradeNudgeInlineCard below fold or to sidebar to avoid workflow interruption
-4. **Simplify Mobile Navigation**: Ensure 4-step journey works perfectly on mobile with touch-friendly targets
-
-**MEDIUM IMPACT - Layout Optimization:**
-5. **Implement Tablet Breakpoint**: Add 769px-1024px breakpoint for better tablet experience, especially for KpiStrip grid layout
-6. **Streamline Onboarding Options**: Choose between FreeTierJourneyCard (simple) and StarterOnboardingPanel (complex) - don't show both simultaneously
-7. **Improve Conditional Widget Predictability**: Make lease notice status and activation flow widgets more consistently positioned when they appear
-
-**LOW IMPACT - Polish:**
-8. **Enhance Loading State Consistency**: Standardize skeleton loading patterns across all widgets
-9. **Optimize Analytics Tracking**: Add more granular engagement tracking for individual widget interactions
-10. **Improve Error Recovery**: Enhance error boundary messaging and retry mechanisms
-
-NEXT STEPS:
-Based on audit findings, recommend Dashboard 2.0 implementation mission focusing on:
-1. `fix/dashboard-engagement-optimization-v1` - Widget hierarchy improvements and mobile experience
-2. `fix/dashboard-journey-enhancement-v1` - Journey card enhancements and action integration
-3. `fix/dashboard-responsive-redesign-v1` - Tablet breakpoint implementation and layout optimization
+FILES CHANGED:
+- `rentchain-api/src/services/capabilityGuard.ts`
+- `rentchain-api/src/services/__tests__/capabilityGuard.test.ts`
+- `rentchain-api/src/routes/expensesRoutes.ts`
+- `rentchain-api/src/routes/__tests__/expensesRoutes.test.ts`
+- `rentchain-frontend/src/constants/tiers.ts`
+- `rentchain-frontend/src/constants/tiers.test.ts`
+- `rentchain-frontend/src/components/billing/LockedFeature.tsx`
+- `rentchain-frontend/src/components/billing/LockedFeature.test.tsx`
+- `rentchain-frontend/src/billing/upgradeCopy.ts`
+- `rentchain-frontend/src/lib/upgradePrompt.ts`
+- `rentchain-frontend/src/pages/ExpensesPage.tsx`
+- `rentchain-frontend/src/pages/ExpensesPage.test.tsx`
+- `.handoff/impl-summary.md`
 
 KNOWN LIMITATIONS:
-- Audit based on code inspection only, no live user interaction testing or heatmap analysis  
-- Widget effectiveness assessment based on Pilot 1 feedback patterns, not quantitative engagement metrics
-- Mobile responsiveness evaluated through component logic, not actual device testing
-- Performance analysis focused on code patterns, not runtime performance measurement
-- User journey mapping covers happy path, not error/edge case flows
+- No live browser preview QA was run.
+- No Cloud Run deployment verification was performed because this mission only changes response copy/shape and frontend locked-state rendering, not deployment configuration.
+- Existing non-mission local handoff edits remain unstaged in `.handoff/merge-log.md` and `.handoff/mission-current.md`.
+
+NEXT STEP:
+- Review PR, run preview QA for Free-tier locked surfaces, and then proceed to the next adoption-flow mission only after this upgrade messaging pass is accepted.

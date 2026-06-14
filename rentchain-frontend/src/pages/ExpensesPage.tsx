@@ -13,6 +13,7 @@ import {
 } from "../api/expensesApi";
 import { fetchProperties } from "../api/propertiesApi";
 import { AddExpenseModal } from "../components/expenses/AddExpenseModal";
+import { LockedFeature } from "../components/billing/LockedFeature";
 import { ExpenseImportReviewTable } from "../components/expenses/ExpenseImportReviewTable";
 import { ExpenseImportSummaryCard } from "../components/expenses/ExpenseImportSummaryCard";
 import { ExpenseImportUploadCard } from "../components/expenses/ExpenseImportUploadCard";
@@ -419,15 +420,15 @@ const ExpensesPage: React.FC = () => {
           onPreview={() => void handlePreviewImport()}
         />
       ) : (
-        <Card style={{ display: "grid", gap: spacing.md }}>
-          <div style={{ fontWeight: 700 }}>Import expenses</div>
-          <div style={{ display: "grid", gap: 6 }}>
-            <div style={{ color: text.primary, fontSize: 14 }}>Manual expense tracking is available now.</div>
-            <div style={{ color: text.muted, fontSize: 13 }}>
-              Upgrade to Pro to import receipts, PDFs, CSVs, and spreadsheets with AI-assisted review.
-            </div>
-          </div>
-        </Card>
+        <LockedFeature
+          featureKey="expenses.import"
+          featureName="Expense import and exports"
+          title="Upgrade to import and export expenses"
+          description="Manual expense tracking is available now. Pro adds receipt, PDF, CSV, and spreadsheet import plus accountant-ready exports."
+          requiredTier="pro"
+          upgradeDrivers={["Expenses", "Analytics"]}
+          ctaLabel="Upgrade to Pro"
+        />
       )}
 
       {previewSummary ? (

@@ -23,6 +23,7 @@ import type {
   ExpenseUnitOption,
 } from "../services/expenses/expenseIngestionTypes";
 import { writeCanonicalEvent } from "../lib/events/buildEvent";
+import { buildUpgradeRequiredResponse } from "../services/capabilityGuard";
 
 const router = Router();
 
@@ -195,12 +196,13 @@ async function requireProExpenseAccess(req: any, res: any) {
   const entitlements = await getExpenseEntitlements(req);
   if (entitlements.role !== "admin" && !["pro", "elite"].includes(String(entitlements.plan || ""))) {
     res.status(403).json({
-      ok: false,
-      error: "UPGRADE_REQUIRED",
+      ...buildUpgradeRequiredResponse({
+        capability: "expenses.export",
+        currentPlan: entitlements.plan,
+        source: "expensesRoutes",
+      }),
       featureKey: "expenses.export",
-      requiredPlan: "pro",
       currentPlan: entitlements.plan,
-      message: "Upgrade to Pro for CSV import and accountant-ready exports.",
     });
     return null;
   }
