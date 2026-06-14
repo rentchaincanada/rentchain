@@ -184,11 +184,39 @@ function item(input: {
   };
 }
 
-function leaseTitle(lease: any): string {
+function propertyDisplayLabel(lease: any, property?: RecordWithId | null): string {
+  return cleanText(
+    property?.data?.name ||
+      property?.data?.propertyName ||
+      property?.data?.address ||
+      property?.data?.propertyAddress ||
+      lease?.propertyName ||
+      lease?.propertyLabel ||
+      lease?.propertyAddress,
+    140
+  );
+}
+
+function unitDisplayLabel(lease: any, unit?: RecordWithId | null): string {
+  const value = cleanText(
+    unit?.data?.unitNumber ||
+      unit?.data?.unitLabel ||
+      unit?.data?.label ||
+      unit?.data?.name ||
+      unit?.data?.unit ||
+      lease?.unitNumber ||
+      lease?.unitLabel,
+    80
+  );
+  if (!value) return "";
+  return /^unit\b/i.test(value) ? value : `Unit ${value}`;
+}
+
+function leaseTitle(lease: any, property?: RecordWithId | null, unit?: RecordWithId | null): string {
   return cleanText(
     [
-      lease?.propertyName || lease?.propertyLabel || lease?.propertyAddress,
-      lease?.unitNumber || lease?.unitLabel || lease?.unitId ? `Unit ${lease?.unitNumber || lease?.unitLabel || lease?.unitId}` : "",
+      propertyDisplayLabel(lease, property),
+      unitDisplayLabel(lease, unit),
       lease?.tenantName || lease?.primaryTenantName,
     ].filter(Boolean).join(" · "),
     220
@@ -262,8 +290,8 @@ function partiesItems(lease: RecordWithId, tenant: RecordWithId | null, property
       label: "Property and unit",
       description: cleanText(
         [
-          property?.data?.name || property?.data?.propertyName || raw.propertyName || raw.propertyLabel || "Property",
-          unit?.data?.unitNumber || raw.unitNumber || raw.unitLabel ? `Unit ${unit?.data?.unitNumber || raw.unitNumber || raw.unitLabel}` : "",
+          propertyDisplayLabel(raw, property) || "Property",
+          unitDisplayLabel(raw, unit),
         ].filter(Boolean).join(" · "),
         220
       ),
@@ -498,7 +526,7 @@ export async function generateLeaseEvidencePackage(input: GenerateLeaseEvidenceP
     section("cover_summary", [
       item({
         label: "Evidence package generated",
-        description: `${leaseTitle(lease.data)} evidence package generated for manual review.`,
+        description: `${leaseTitle(lease.data, sources.property, sources.unit)} evidence package generated for manual review.`,
         timestamp: generatedAt,
         sourceCollection: "leases",
         sourceId: lease.id,
@@ -524,7 +552,7 @@ export async function generateLeaseEvidencePackage(input: GenerateLeaseEvidenceP
 
   return {
     title: "Lease Evidence Package",
-    subtitle: leaseTitle(lease.data),
+    subtitle: leaseTitle(lease.data, sources.property, sources.unit),
     governance: {
       evidencePackageId: `lep_${stableHash([landlordId, leaseId, generatedAt], 24)}`,
       generatedBy: cleanText(input.generatedBy, 240) || "unknown",
