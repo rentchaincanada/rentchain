@@ -95,14 +95,18 @@ Phase 3 should focus on identity and trust infrastructure, including:
 
 These additions should extend existing review, evidence, timeline, policy, and supervision layers rather than creating parallel identity workflows.
 
-## Phase 4 Institutional/Financial Rails Roadmap
+## Phase 4 Evidence, Export, And Institutional Trust Roadmap
 
-Phase 4 should prepare institution and financial rails without bypassing the foundation guardrails:
+Phase 4 should prepare evidence, export, trust, and signing-dispatch foundations without bypassing the foundation guardrails.
 
-- institutional sharing room
-- verified rental history ledger
-- settlement rail readiness
-- regulatory profile layer
-- policy-gated institutional submission review
+Locked next mission order:
 
-Future rails must remain permissioned, auditable, redaction-aware, and operator-controlled until explicit execution missions authorize controlled actions.
+1. `feat/evidence-package-generation-v1`
+2. `feat/evidence-chain-custody-v1`
+3. `feat/institutional-export-framework-v1`
+4. `feat/trust-and-compliance-center-v1`
+5. `feat/signing-provider-real-dispatch-v1`
+
+Evidence package generation should come first because it is the next platform-defining capability. Chain of custody should follow immediately because evidence without integrity metadata is weaker. Institutional export should build on evidence packages and custody metadata. The trust and compliance center should centralize governance after export and evidence primitives exist. Real signing-provider dispatch remains a separate external integration mission after governance foundations are stronger.
+
+Future institutional and signing-provider rails must remain permissioned, auditable, redaction-aware, and operator-controlled until explicit execution missions authorize controlled actions.

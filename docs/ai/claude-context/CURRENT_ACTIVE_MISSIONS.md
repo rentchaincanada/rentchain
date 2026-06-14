@@ -48,8 +48,8 @@ This mission sequence maps to the architecture layers in `ARCHITECTURE.md` and `
 - **Phase 1 — AI Collaboration & QA Infrastructure** supports Layer 5 by improving deployment verification, Playwright readiness, QA artifacts, and supervised AI cowork process.
 - **Phase 2 — Tenant & Operational Continuity Foundations** supports Layer 1 by hardening tenant, landlord, lease, document, occupancy, engagement, and property continuity surfaces.
 - **Phase 3 — Governed Review Workspace Hardening** supports Layers 2 and 4 by strengthening security incident, support escalation, review workspace, append-event, and metadata-only routing foundations.
-- **Phase 4 — Security & Operational Hardening** supports Layers 4 and 5 by protecting route scope, projection safety, sessions, telemetry, dependencies, and support/admin access.
-- **Phase 5 — Evidence, Export & Institutional Trust** supports Layer 3 by expanding consent-aware evidence, export, trust, allowlist, and attestation readiness.
+- **Phase 4 — Evidence, Export & Institutional Trust Foundations** supports Layer 3 by expanding consent-aware evidence packages, chain-of-custody metadata, institutional export readiness, trust/compliance governance, and signing-provider dispatch only after the evidence and governance primitives are stronger.
+- **Phase 5 — Security & Operational Hardening** supports Layers 4 and 5 by protecting route scope, projection safety, sessions, telemetry, dependencies, and support/admin access.
 - **Phase 6 — Institutional Coordination Readiness** supports Layer 6 and remains planned/readiness-oriented until scoped missions verify specific institutional workflows.
 - **Phase 7 — Long-Term Interoperability & Integrity Readiness** supports Layer 7 and remains roadmap-oriented until governance, consent, projection, evidence, and review layers mature.
 
@@ -102,7 +102,21 @@ Purpose: harden governed review workspaces before adding any mutation controls o
 - `feat/review-workspace-audit-export-readiness-v1` — prepare admin-only, metadata-safe export readiness.
 - `feat/review-workspace-cross-surface-readiness-summaries-v1` — summarize security, escalation, evidence, and export readiness across surfaces.
 
-### Phase 4 — Security & Operational Hardening
+### Phase 4 — Evidence, Export & Institutional Trust Foundations
+
+Purpose: expand evidence and export readiness while preserving consent, redaction, chain-of-custody integrity, projection safety, and manual governance before adding real signing-provider dispatch.
+
+Locked next mission order:
+
+1. `feat/evidence-package-generation-v1` — generate governed evidence packages from existing evidence/export primitives without external delivery or unsupported legal claims.
+2. `feat/evidence-chain-custody-v1` — add deterministic integrity and custody metadata after package generation exists.
+3. `feat/institutional-export-framework-v1` — build institutional export orchestration on top of evidence packages and custody metadata.
+4. `feat/trust-and-compliance-center-v1` — centralize governance, trust, and compliance visibility after evidence/export primitives are available.
+5. `feat/signing-provider-real-dispatch-v1` — add real signing-provider dispatch after governance foundations are stronger; keep issue #1154 open until this mission is explicitly activated.
+
+Out of scope for the sequence update: signing-provider implementation, external delivery, provider configuration changes, production data changes, or product UI/backend implementation.
+
+### Phase 5 — Security & Operational Hardening
 
 Purpose: strengthen operational security posture, support boundaries, and route/projection safety.
 
@@ -115,21 +129,6 @@ Purpose: strengthen operational security posture, support boundaries, and route/
 - support/admin route-scope regression protection
 - telemetry and screening route governance
 - admin/support access governance
-
-### Phase 5 — Evidence, Export & Institutional Trust
-
-Purpose: expand evidence and export readiness while preserving consent, redaction, and projection safety.
-
-- export integrity and signature foundations
-- institutional export allowlist governance
-- consent governance timeline
-- institutional trust export framework hardening
-- recipient-authenticated access readiness
-- trust export adoption readiness
-- portable attestation readiness
-- institution interoperability readiness
-- institution legal and compliance readiness
-- external legal review preparation
 
 ### Phase 6 — Institutional Coordination Readiness
 
