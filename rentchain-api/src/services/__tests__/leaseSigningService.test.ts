@@ -258,7 +258,7 @@ describe("leaseSigningService", () => {
     });
     const { processSigningWebhook } = await import("../signing/leaseSigningService");
 
-    await expect(processSigningWebhook({ providerId: "boldsign", headers: {}, body: { event: { event_type: "callback_test" } } })).resolves.toBeUndefined();
+    await expect(processSigningWebhook({ providerId: "boldsign", headers: {}, body: { event: { event_type: "callback_test" } } })).resolves.toEqual({});
 
     const deadLetters = Array.from(ensureCollection("leaseSigningWebhookDeadLetters").values());
     expect(deadLetters).toHaveLength(1);
@@ -272,6 +272,41 @@ describe("leaseSigningService", () => {
       })
     );
     expect(JSON.stringify(deadLetters)).not.toContain("evt_callback_test_raw");
+    expect(ensureCollection("leaseSigningEvents").size).toBe(0);
+    expect(writeCanonicalEventMock).not.toHaveBeenCalled();
+  });
+
+  it("returns Dropbox Sign account callback acknowledgement text without writing success events", async () => {
+    const { signingProviderRegistry } = await import("../signing/providers");
+    signingProviderRegistry.register("dropbox_sign", {
+      getProviderId: () => "dropbox_sign",
+      getName: () => "Dropbox Sign test provider",
+      isConfigured: () => true,
+      sendForSignature: async () => {
+        throw new Error("not_used");
+      },
+      getSigningUrl: async () => null,
+      cancelRequest: async () => true,
+      downloadSignedDocument: async () => null,
+      verifyWebhookSignature: async () => true,
+      parseWebhookPayload: async () => ({
+        providerRequestId: null,
+        providerEventId: "evt_callback_test_raw",
+        providerEventType: "callback_test",
+        type: "sent",
+        occurredAt: "2026-01-02T00:00:00.000Z",
+        accountCallback: true,
+      }),
+    });
+    const { processSigningWebhook } = await import("../signing/leaseSigningService");
+
+    await expect(processSigningWebhook({ providerId: "dropbox_sign", headers: {}, body: { event: { event_type: "callback_test" } } })).resolves.toEqual({
+      providerResponseText: "Hello API Event Received",
+    });
+
+    const deadLetters = Array.from(ensureCollection("leaseSigningWebhookDeadLetters").values());
+    expect(deadLetters).toHaveLength(1);
+    expect(deadLetters[0]).toEqual(expect.objectContaining({ status: "account_callback_acknowledged", payloadIncluded: false }));
     expect(ensureCollection("leaseSigningEvents").size).toBe(0);
     expect(writeCanonicalEventMock).not.toHaveBeenCalled();
   });
@@ -299,7 +334,7 @@ describe("leaseSigningService", () => {
     });
     const { processSigningWebhook } = await import("../signing/leaseSigningService");
 
-    await expect(processSigningWebhook({ providerId: "boldsign", headers: {}, body: { signature_request: {} } })).resolves.toBeUndefined();
+    await expect(processSigningWebhook({ providerId: "boldsign", headers: {}, body: { signature_request: {} } })).resolves.toEqual({});
 
     const deadLetters = Array.from(ensureCollection("leaseSigningWebhookDeadLetters").values());
     expect(deadLetters).toHaveLength(1);

@@ -6,12 +6,15 @@ export async function signingWebhookHandler(req: Request & { rawBody?: Buffer },
     .trim()
     .toLowerCase();
   try {
-    await processSigningWebhook({
+    const result = await processSigningWebhook({
       providerId,
       headers: req.headers,
       body: req.body,
       rawBody: Buffer.isBuffer(req.body) ? req.body : req.rawBody,
     });
+    if (result.providerResponseText) {
+      return res.status(200).type("text/plain").send(result.providerResponseText);
+    }
     return res.status(200).json({ ok: true });
   } catch (error: any) {
     const status = signingErrorStatus(error);

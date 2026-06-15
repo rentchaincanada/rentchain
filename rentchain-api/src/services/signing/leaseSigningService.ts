@@ -439,7 +439,11 @@ export async function downloadSignedLease(input: { leaseId: string; lease: Recor
   return loadLeaseSigningSnapshot({ leaseId: input.leaseId, landlordId: input.landlordId, lease: input.lease });
 }
 
-export async function processSigningWebhook(input: { providerId: string; headers: any; body: any; rawBody?: Buffer }) {
+export type SigningWebhookProcessResult = {
+  providerResponseText?: string;
+};
+
+export async function processSigningWebhook(input: { providerId: string; headers: any; body: any; rawBody?: Buffer }): Promise<SigningWebhookProcessResult> {
   const provider = signingProviderRegistry.getProvider(input.providerId);
   if (!provider?.isConfigured()) {
     await db.collection(DEAD_LETTERS).doc(`dl_${digest(`${input.providerId}:${Date.now()}`, 24)}`).set({
@@ -477,7 +481,7 @@ export async function processSigningWebhook(input: { providerId: string; headers
       rawIdsIncluded: false,
       payloadIncluded: false,
     });
-    return;
+    return provider.getProviderId() === "dropbox_sign" ? { providerResponseText: "Hello API Event Received" } : {};
   }
   const providerRequestId = String(parsed.providerRequestId || "");
   const requestSnap = await db.collection(REQUESTS).where("providerRequestRef", "==", safeProviderRef(provider.getProviderId(), providerRequestId)).limit(1).get();
@@ -493,7 +497,7 @@ export async function processSigningWebhook(input: { providerId: string; headers
       rawIdsIncluded: false,
       payloadIncluded: false,
     });
-    return;
+    return {};
   }
   const data = requestDoc.data() as any;
   await appendSigningEvent({
@@ -508,6 +512,7 @@ export async function processSigningWebhook(input: { providerId: string; headers
     signerEmail: parsed.signerEmail || null,
     occurredAt: parsed.occurredAt,
   });
+  return {};
 }
 
 export function signingErrorStatus(error: any) {
