@@ -226,6 +226,37 @@ export type LeaseSigningStatusResponse = {
   }>;
 };
 
+export type PrimaryLeaseDocument = {
+  id: string;
+  leaseId: string;
+  landlordId: string;
+  tenantIds: string[];
+  documentType: "primary_lease";
+  jurisdictionCode: string;
+  templateVersion: string;
+  templateEffectiveDate: string;
+  counselReviewStatus: "draft" | "reviewed" | "approved" | "deprecated";
+  sourceReferences: string[];
+  generatedAt: string;
+  generatedBy: string | null;
+  documentHash: string;
+  manifestHash: string;
+  providerAccessUrlExpiresAt: string | null;
+  status: "generated" | "locked" | "expired" | "superseded";
+  lockedAt: string | null;
+  lockedBy: string | null;
+  signingRequestId: string | null;
+  storageRef: null;
+  previewUrl?: string | null;
+  sourceSummary?: {
+    adapterStatus: string;
+    signingEnabled: boolean;
+    productionApproved: boolean;
+    templateEffectiveDate?: string;
+    sourceReferences?: string[];
+  };
+};
+
 export async function sendLeaseForSignature(
   leaseId: string,
   payload: { tenantEmails: string[]; message?: string }
@@ -238,6 +269,25 @@ export async function sendLeaseForSignature(
     }
   );
   return res.data;
+}
+
+export async function getPrimaryLeaseDocument(
+  leaseId: string,
+  options?: { includePreviewUrl?: boolean }
+): Promise<PrimaryLeaseDocument | null> {
+  const query = options?.includePreviewUrl ? "?includePreviewUrl=1" : "";
+  const res = await apiJson<{ ok: boolean; document: PrimaryLeaseDocument | null }>(
+    `/leases/${encodeURIComponent(leaseId)}/primary-document${query}`
+  );
+  return res.document;
+}
+
+export async function generatePrimaryLeaseDocument(leaseId: string): Promise<PrimaryLeaseDocument> {
+  const res = await apiJson<{ ok: boolean; document: PrimaryLeaseDocument }>(
+    `/leases/${encodeURIComponent(leaseId)}/primary-document/generate`,
+    { method: "POST", body: "{}" }
+  );
+  return res.document;
 }
 
 export async function getLeaseSigningStatus(leaseId: string): Promise<LeaseSigningStatusResponse> {

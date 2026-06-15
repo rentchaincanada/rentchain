@@ -72,6 +72,25 @@ function safeProviderRef(providerId: string, providerRequestId: string) {
   return `${providerId}_ref_${digest(`${providerId}:${providerRequestId}`, 24)}`;
 }
 
+function safeDocumentMetadataFromRequest(data: any) {
+  return {
+    documentId: String(data?.documentId || "") || null,
+    documentHash: String(data?.documentHash || "") || null,
+    manifestHash: String(data?.manifestHash || "") || null,
+    templateVersion: String(data?.templateVersion || "") || null,
+    jurisdictionCode: String(data?.jurisdictionCode || "") || null,
+  };
+}
+
+function safeProviderMetadataFromRequest(data: any) {
+  return {
+    providerDispatchMode: String(data?.providerDispatchMode || "") || null,
+    providerDispatchStatus: String(data?.providerDispatchStatus || "") || null,
+    providerDispatchMessage: String(data?.providerDispatchMessage || "") || null,
+    providerTestMode: data?.providerTestMode === true ? true : data?.providerTestMode === false ? false : null,
+  };
+}
+
 function requestIdFor(landlordId: string, leaseId: string, providerId: string) {
   return `lsr_${digest(`${landlordId}:${leaseId}:${providerId}`, 24)}`;
 }
@@ -165,6 +184,14 @@ async function appendSigningEvent(input: {
   providerDispatchStatus?: string | null;
   providerDispatchMessage?: string | null;
   providerTestMode?: boolean | null;
+  documentMetadata?: {
+    documentId?: string | null;
+    documentHash?: string | null;
+    manifestHash?: string | null;
+    templateVersion?: string | null;
+    jurisdictionCode?: string | null;
+    providerAccessUrlExpiresAt?: string | null;
+  } | null;
 }) {
   const occurredAt = input.occurredAt || nowIso();
   const id = eventIdFor(input.requestId, input.type, occurredAt, input.providerEventId || "");
@@ -185,6 +212,11 @@ async function appendSigningEvent(input: {
     providerDispatchStatus: input.providerDispatchStatus || null,
     providerDispatchMessage: input.providerDispatchMessage || null,
     providerTestMode: input.providerTestMode ?? null,
+    documentId: input.documentMetadata?.documentId || null,
+    documentHash: input.documentMetadata?.documentHash || null,
+    manifestHash: input.documentMetadata?.manifestHash || null,
+    templateVersion: input.documentMetadata?.templateVersion || null,
+    jurisdictionCode: input.documentMetadata?.jurisdictionCode || null,
     occurredAt,
     createdAt: FieldValue.serverTimestamp(),
     rawIdsIncluded: false,
@@ -220,6 +252,11 @@ async function appendSigningEvent(input: {
       providerDispatchMode: input.providerDispatchMode || null,
       providerDispatchStatus: input.providerDispatchStatus || null,
       providerTestMode: input.providerTestMode ?? null,
+      documentId: input.documentMetadata?.documentId || null,
+      documentHash: input.documentMetadata?.documentHash || null,
+      manifestHash: input.documentMetadata?.manifestHash || null,
+      templateVersion: input.documentMetadata?.templateVersion || null,
+      jurisdictionCode: input.documentMetadata?.jurisdictionCode || null,
     },
   }).catch(() => undefined);
   return id;
@@ -274,7 +311,7 @@ export async function loadLeaseSigningSnapshot(input: {
     providerDispatchMessage: String(request.data?.providerDispatchMessage || (providerId === "mock" ? "Mock signing provider recorded the request without sending email." : "")).trim() || null,
     sentAt,
     signedAt,
-    documentUrl: String(request.data?.signedDocumentUrl || request.data?.documentUrl || "") || null,
+    documentUrl: String(request.data?.signedDocumentUrl || "") || null,
     events,
   };
 }
@@ -285,6 +322,15 @@ export async function sendLeaseForSignature(input: {
   landlordId: string;
   tenantEmails: string[];
   message?: string | null;
+  providerDocumentUrl?: string | null;
+  documentMetadata?: {
+    documentId?: string | null;
+    documentHash?: string | null;
+    manifestHash?: string | null;
+    templateVersion?: string | null;
+    jurisdictionCode?: string | null;
+    providerAccessUrlExpiresAt?: string | null;
+  } | null;
 }) {
   const provider = getConfiguredSigningProvider();
   if (!provider?.isConfigured()) throw Object.assign(new Error("provider_unavailable"), { status: 503 });
@@ -296,7 +342,13 @@ export async function sendLeaseForSignature(input: {
     throw Object.assign(new Error("invalid_tenant_email"), { status: 400 });
   }
 
-  const documentUrl = String(input.lease?.documentUrl || input.lease?.approvedDocumentUrl || input.lease?.documentRef || "").trim();
+  const documentUrl = String(
+    input.providerDocumentUrl ||
+      input.lease?.documentUrl ||
+      input.lease?.approvedDocumentUrl ||
+      input.lease?.documentRef ||
+      ""
+  ).trim();
   const sent = await provider.sendForSignature({
     leaseId: input.leaseId,
     landlordId: input.landlordId,
@@ -319,12 +371,17 @@ export async function sendLeaseForSignature(input: {
       providerRequestRef: safeProviderRef(providerId, sent.providerRequestId),
       providerRequestId: sent.providerRequestId,
       tenantEmailHashes: emails.map(emailHash),
-      documentUrl,
       expiresAt: sent.expiresAt || null,
       providerDispatchMode: sent.dispatchMode || null,
       providerDispatchStatus: sent.dispatchStatus || null,
       providerDispatchMessage: sent.dispatchMessage || null,
       providerTestMode: sent.providerTestMode ?? null,
+      documentId: input.documentMetadata?.documentId || null,
+      documentHash: input.documentMetadata?.documentHash || null,
+      manifestHash: input.documentMetadata?.manifestHash || null,
+      templateVersion: input.documentMetadata?.templateVersion || null,
+      jurisdictionCode: input.documentMetadata?.jurisdictionCode || null,
+      providerAccessUrlExpiresAt: input.documentMetadata?.providerAccessUrlExpiresAt || null,
       sentAt: now,
       updatedAt: FieldValue.serverTimestamp(),
       createdAt: existing.exists ? existing.data()?.createdAt || FieldValue.serverTimestamp() : FieldValue.serverTimestamp(),
@@ -346,6 +403,7 @@ export async function sendLeaseForSignature(input: {
     providerDispatchStatus: sent.dispatchStatus || null,
     providerDispatchMessage: sent.dispatchMessage || null,
     providerTestMode: sent.providerTestMode ?? null,
+    documentMetadata: input.documentMetadata || null,
   });
   return loadLeaseSigningSnapshot({ leaseId: input.leaseId, landlordId: input.landlordId, lease: input.lease });
 }
@@ -378,6 +436,8 @@ export async function getTenantSigningUrl(input: {
     type: "viewed",
     actorRole: "tenant",
     signerEmail: input.tenantEmail || null,
+    ...safeProviderMetadataFromRequest(request.data),
+    documentMetadata: safeDocumentMetadataFromRequest(request.data),
   });
   return { signingUrl: url, signingProviderId: provider.getProviderId() };
 }
@@ -397,6 +457,8 @@ export async function cancelLeaseSigning(input: { leaseId: string; lease: Record
     providerRequestId: String(request.data?.providerRequestId || ""),
     type: "cancelled",
     actorRole: "landlord",
+    ...safeProviderMetadataFromRequest(request.data),
+    documentMetadata: safeDocumentMetadataFromRequest(request.data),
   });
   return loadLeaseSigningSnapshot({ leaseId: input.leaseId, landlordId: input.landlordId, lease: input.lease });
 }
@@ -435,6 +497,8 @@ export async function downloadSignedLease(input: { leaseId: string; lease: Recor
     providerRequestId: String(request.data?.providerRequestId || ""),
     type: "downloaded",
     actorRole: "landlord",
+    ...safeProviderMetadataFromRequest(request.data),
+    documentMetadata: safeDocumentMetadataFromRequest(request.data),
   });
   return loadLeaseSigningSnapshot({ leaseId: input.leaseId, landlordId: input.landlordId, lease: input.lease });
 }
@@ -511,6 +575,8 @@ export async function processSigningWebhook(input: { providerId: string; headers
     actorRole: "provider",
     signerEmail: parsed.signerEmail || null,
     occurredAt: parsed.occurredAt,
+    ...safeProviderMetadataFromRequest(data),
+    documentMetadata: safeDocumentMetadataFromRequest(data),
   });
   return {};
 }

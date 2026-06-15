@@ -233,6 +233,8 @@ describe("LandlordActiveLeasesPage", () => {
     expect(document.querySelector(".rc-leases-page")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Print / Save PDF" })).toBeInTheDocument();
     expect(screen.getAllByText("Lease fully executed").length).toBeGreaterThan(0);
+    expect(screen.queryByText(/Needs review: Draft lease · Review needed occupancy/i)).not.toBeInTheDocument();
+    expect(screen.queryByText("Lease execution review recommended")).not.toBeInTheDocument();
     expect(screen.getAllByText("Expiring soon").length).toBeGreaterThan(0);
     expect(screen.getByText(/Prepare renewal notice/i)).toBeInTheDocument();
     expect(screen.getByText("NS workflow guidance")).toBeInTheDocument();

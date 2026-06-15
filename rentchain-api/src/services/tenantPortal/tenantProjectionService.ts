@@ -331,6 +331,9 @@ export function deriveTenantSafeLeaseReadinessMetadata(
   const normalizedDocumentStatus = normalizeStatus(
     data?.documentStatus || data?.leaseDocumentStatus || data?.pdfStatus || data?.generationStatus
   );
+  const normalizedSigningStatus = normalizeStatus(
+    data?.currentSigningStatus || data?.signingStatus || data?.leaseSigningStatus || data?.providerSigningStatus
+  );
   const documentWorkflowPending =
     Boolean(documentWorkflowStartedAt) ||
     ["pending", "preparing", "generating", "generated", "ready_for_review", "review_pending"].includes(
@@ -366,6 +369,12 @@ export function deriveTenantSafeLeaseReadinessMetadata(
       : "No approved lease document link is available in this workspace yet.";
 
   const signatureStatus: TenantLeaseProjection["signatureStatus"] = (() => {
+    if (["signed", "completed", "complete"].includes(normalizedSigningStatus)) {
+      return "signed";
+    }
+    if (["sent", "viewed", "pending", "pending_signature"].includes(normalizedSigningStatus)) {
+      return "awaiting_tenant_signature";
+    }
     if (tenantSignedAt && landlordSignedAt) {
       return "signed";
     }
