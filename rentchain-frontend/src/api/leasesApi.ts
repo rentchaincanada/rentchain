@@ -207,7 +207,7 @@ export interface LandlordActiveLease extends Lease {
 }
 
 export type LeaseSigningStatusResponse = {
-  signingStatus: "not_started" | "pending_signature" | "signed" | "rejected" | "expired" | "cancelled";
+  signingStatus: "not_started" | "pending_signature" | "signed" | "rejected" | "expired" | "cancelled" | "failed";
   derivedLeaseState: string;
   signingProviderId: string | null;
   signingRequestId: string | null;

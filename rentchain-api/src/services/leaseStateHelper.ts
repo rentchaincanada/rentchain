@@ -8,7 +8,7 @@ function asIsoDate(value: unknown): string | null {
   return new Date(parsed).toISOString().slice(0, 10);
 }
 
-export type DerivedLeaseSigningState = "not_started" | "pending_signature" | "signed_future" | "active" | "rejected" | "expired" | "cancelled";
+export type DerivedLeaseSigningState = "not_started" | "pending_signature" | "signed_future" | "active" | "rejected" | "expired" | "cancelled" | "failed";
 
 export function deriveLeaseSigningState(input: {
   lease: Record<string, unknown>;
@@ -16,7 +16,7 @@ export function deriveLeaseSigningState(input: {
   now?: Date;
 }): DerivedLeaseSigningState {
   const status = String(input.signingStatus || "").trim();
-  if (status === "rejected" || status === "expired" || status === "cancelled") return status as DerivedLeaseSigningState;
+  if (status === "rejected" || status === "expired" || status === "cancelled" || status === "failed") return status as DerivedLeaseSigningState;
   if (status !== "signed") return status === "pending_signature" ? "pending_signature" : "not_started";
 
   const startDate = asIsoDate(input.lease?.startDate || input.lease?.leaseStart || input.lease?.leaseStartDate);

@@ -78,4 +78,39 @@ describe("LeaseSigningDashboard", () => {
     await waitFor(() => expect(screen.getByText("invalid_tenant_email")).toBeInTheDocument());
     expect(screen.getByRole("button", { name: /send for signature/i })).toBeEnabled();
   });
+
+  it("shows real provider dispatch without mock no-email warning", async () => {
+    vi.mocked(getLeaseSigningStatus).mockResolvedValueOnce({
+      ...pendingStatus,
+      signingProviderId: "dropbox_sign",
+      providerDispatchMode: "sandbox",
+      providerDispatchStatus: "accepted",
+      providerDispatchMessage: "Dropbox Sign accepted the request in test mode.",
+    });
+
+    render(<LeaseSigningDashboard leaseId="lease-1" tenantEmail="tenant@example.com" />);
+
+    await waitFor(() => expect(screen.getByText(/dropbox sign accepted the request in test mode/i)).toBeInTheDocument());
+    expect(screen.queryByText(/no signature email was sent/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/raw-provider-request/i)).not.toBeInTheDocument();
+  });
+
+  it("renders failed signing state safely and allows retry", async () => {
+    vi.mocked(getLeaseSigningStatus).mockResolvedValueOnce({
+      ...notStartedStatus,
+      signingStatus: "failed",
+      derivedLeaseState: "failed",
+      signingProviderId: "dropbox_sign",
+      signingRequestId: "lsr_safe_ref",
+      providerDispatchMode: "real",
+      providerDispatchStatus: "failed",
+      providerDispatchMessage: "Signing provider could not accept the request.",
+    });
+
+    render(<LeaseSigningDashboard leaseId="lease-1" tenantEmail="tenant@example.com" />);
+
+    await waitFor(() => expect(screen.getByText(/status: failed/i)).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: /send for signature/i })).toBeEnabled();
+    expect(screen.queryByText(/raw-provider-request/i)).not.toBeInTheDocument();
+  });
 });

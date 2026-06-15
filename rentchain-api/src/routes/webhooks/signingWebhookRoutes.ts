@@ -10,7 +10,7 @@ export async function signingWebhookHandler(req: Request & { rawBody?: Buffer },
       providerId,
       headers: req.headers,
       body: req.body,
-      rawBody: req.rawBody,
+      rawBody: Buffer.isBuffer(req.body) ? req.body : req.rawBody,
     });
     return res.status(200).json({ ok: true });
   } catch (error: any) {
