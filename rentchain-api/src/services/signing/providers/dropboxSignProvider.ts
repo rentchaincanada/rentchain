@@ -1,4 +1,4 @@
-import { createHash, createHmac, timingSafeEqual } from "crypto";
+import { createHash } from "crypto";
 import type {
   ISigningProvider,
   SigningProviderDocumentResult,
@@ -11,12 +11,6 @@ import type {
 
 function sha(value: string) {
   return createHash("sha256").update(value).digest("hex").slice(0, 16);
-}
-
-function safeCompare(a: string, b: string) {
-  const left = Buffer.from(a);
-  const right = Buffer.from(b);
-  return left.length === right.length && timingSafeEqual(left, right);
 }
 
 function boolEnv(value: unknown) {
@@ -165,13 +159,16 @@ export class DropboxSignProvider implements ISigningProvider {
   }
 
   async verifyWebhookSignature(input: SigningProviderWebhookInput) {
-    const secret = String(process.env.SIGNING_PROVIDER_WEBHOOK_SECRET || "").trim();
-    if (!secret) return false;
-    const raw = input.rawBody?.toString("utf8") || (Buffer.isBuffer(input.body) ? input.body.toString("utf8") : JSON.stringify(input.body || {}));
-    const supplied = String((input.headers as any)?.["x-dropbox-signature"] || (input.headers as any)?.["x-hellosign-signature"] || "").trim();
-    if (!supplied) return false;
-    const expected = createHmac("sha256", secret).update(raw).digest("hex");
-    return safeCompare(supplied, expected);
+    const callbackKey = String(process.env.SIGNING_PROVIDER_WEBHOOK_SECRET || process.env.SIGNING_PROVIDER_API_KEY || "").trim();
+    if (!callbackKey) return false;
+    try {
+      const sdk = await loadDropboxSignSdk();
+      const parsed = parseMaybeJsonBuffer(input.rawBody || input.body);
+      const eventCallback = sdk.EventCallbackRequest?.init ? sdk.EventCallbackRequest.init(parsed) : parsed;
+      return sdk.EventCallbackHelper.isValid(callbackKey, eventCallback);
+    } catch {
+      return false;
+    }
   }
 
   async parseWebhookPayload(body: any): Promise<SigningProviderParsedWebhook> {

@@ -61,7 +61,7 @@ KNOWN LIMITATIONS:
 - Real Dropbox Sign dispatch requires preview/runtime config:
   - `SIGNING_PROVIDER=dropbox_sign`
   - `SIGNING_PROVIDER_API_KEY`
-  - `SIGNING_PROVIDER_WEBHOOK_SECRET`
+  - `SIGNING_PROVIDER_WEBHOOK_SECRET` set to the Dropbox Sign API key/callback verification key used to validate callback `event_hash`
   - `SIGNING_PROVIDER_CALLBACK_URL`
   - `SIGNING_PROVIDER_TEST_MODE=true`
 - `npm ci` was run for `rentchain-api` to restore the declared `@dropbox/sign` dependency locally; no manifest changes were made.

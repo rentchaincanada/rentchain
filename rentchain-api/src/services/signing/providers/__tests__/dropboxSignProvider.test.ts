@@ -12,11 +12,39 @@ vi.mock("@dropbox/sign", () => ({
       signatureRequestSend = signatureRequestSendMock;
       signatureRequestFiles = signatureRequestFilesMock;
     },
+    EventCallbackRequest: {
+      init: (data: any) => ({
+        event: {
+          eventTime: data?.event?.event_time,
+          eventType: data?.event?.event_type,
+          eventHash: data?.event?.event_hash,
+        },
+      }),
+    },
+    EventCallbackHelper: {
+      isValid: (apiKey: string, eventCallback: any) =>
+        eventCallback?.event?.eventHash ===
+        createHmac("sha256", apiKey).update(`${eventCallback?.event?.eventTime}${eventCallback?.event?.eventType}`).digest("hex"),
+    },
   },
   SignatureRequestApi: class {
     username = "";
     signatureRequestSend = signatureRequestSendMock;
     signatureRequestFiles = signatureRequestFilesMock;
+  },
+  EventCallbackRequest: {
+    init: (data: any) => ({
+      event: {
+        eventTime: data?.event?.event_time,
+        eventType: data?.event?.event_type,
+        eventHash: data?.event?.event_hash,
+      },
+    }),
+  },
+  EventCallbackHelper: {
+    isValid: (apiKey: string, eventCallback: any) =>
+      eventCallback?.event?.eventHash ===
+      createHmac("sha256", apiKey).update(`${eventCallback?.event?.eventTime}${eventCallback?.event?.eventType}`).digest("hex"),
   },
 }));
 
@@ -25,7 +53,7 @@ describe("DropboxSignProvider", () => {
     signatureRequestSendMock.mockReset();
     signatureRequestFilesMock.mockReset();
     process.env.SIGNING_PROVIDER_API_KEY = "dropbox-key";
-    process.env.SIGNING_PROVIDER_WEBHOOK_SECRET = "webhook-secret";
+    process.env.SIGNING_PROVIDER_WEBHOOK_SECRET = "dropbox-key";
     process.env.SIGNING_PROVIDER_TEST_MODE = "true";
     delete process.env.SIGNING_PROVIDER_CALLBACK_URL;
   });
@@ -103,17 +131,20 @@ describe("DropboxSignProvider", () => {
   it("verifies webhook signatures and parses Dropbox Sign lifecycle events", async () => {
     const provider = new DropboxSignProvider();
     const body = JSON.stringify({
-      event: { event_type: "signature_request_all_signed", event_hash: "evt_1", event_time: 1780000000 },
+      event: {
+        event_type: "signature_request_all_signed",
+        event_hash: createHmac("sha256", "dropbox-key").update("1780000000signature_request_all_signed").digest("hex"),
+        event_time: 1780000000,
+      },
       signature_request: { signature_request_id: "raw_provider_request_123" },
       signature: { signer_email_address: "Tenant@Example.com" },
     });
-    const signature = createHmac("sha256", "webhook-secret").update(body).digest("hex");
-
-    await expect(provider.verifyWebhookSignature({ headers: { "x-dropbox-signature": signature }, body: Buffer.from(body) })).resolves.toBe(true);
-    await expect(provider.verifyWebhookSignature({ headers: { "x-dropbox-signature": "bad" }, body: Buffer.from(body) })).resolves.toBe(false);
+    await expect(provider.verifyWebhookSignature({ headers: {}, body: Buffer.from(body) })).resolves.toBe(true);
+    process.env.SIGNING_PROVIDER_WEBHOOK_SECRET = "wrong-key";
+    await expect(provider.verifyWebhookSignature({ headers: {}, body: Buffer.from(body) })).resolves.toBe(false);
     await expect(provider.parseWebhookPayload(Buffer.from(body))).resolves.toEqual({
       providerRequestId: "raw_provider_request_123",
-      providerEventId: "evt_1",
+      providerEventId: createHmac("sha256", "dropbox-key").update("1780000000signature_request_all_signed").digest("hex"),
       type: "signed",
       signerEmail: "tenant@example.com",
       occurredAt: "2026-05-28T20:26:40.000Z",
