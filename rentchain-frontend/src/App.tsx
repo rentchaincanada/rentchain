@@ -152,6 +152,7 @@ const AgentSupervisionPage = lazy(() => import("./pages/AgentSupervisionPage"));
 const InstitutionExportsPage = lazy(() => import("./pages/InstitutionExportsPage"));
 const RecipientTrustReviewPage = lazy(() => import("./pages/RecipientTrustReviewPage"));
 const AuditCompliancePage = lazy(() => import("./pages/AuditCompliancePage"));
+const TrustComplianceCenterPage = lazy(() => import("./pages/TrustComplianceCenterPage"));
 const EvidencePackPage = lazy(() => import("./pages/EvidencePackPage"));
 const ReviewTimelinePage = lazy(() => import("./pages/ReviewTimelinePage"));
 const IdentityLayerPage = lazy(() => import("./pages/IdentityLayerPage"));
@@ -650,6 +651,18 @@ function App() {
               <LandlordNav>
                 <Suspense fallback={null}>
                   <AuditCompliancePage />
+                </Suspense>
+              </LandlordNav>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/trust-compliance"
+          element={
+            <RequireAuth>
+              <LandlordNav>
+                <Suspense fallback={null}>
+                  <TrustComplianceCenterPage />
                 </Suspense>
               </LandlordNav>
             </RequireAuth>
