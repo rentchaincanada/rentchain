@@ -160,6 +160,7 @@ import landlordDecisionInboxRoutes from "./routes/landlordDecisionInboxRoutes";
 import landlordInstitutionalExportGenerationRoutes from "./routes/landlordInstitutionalExportGenerationRoutes";
 import landlordInstitutionExportsRoutes from "./routes/landlordInstitutionExportsRoutes";
 import landlordAuditComplianceRoutes from "./routes/landlordAuditComplianceRoutes";
+import landlordTrustComplianceRoutes from "./routes/landlordTrustComplianceRoutes";
 import landlordOperatorReviewRoutes from "./routes/landlordOperatorReviewRoutes";
 import landlordEvidencePackRoutes from "./routes/landlordEvidencePackRoutes";
 import landlordEvidencePackageGenerationRoutes from "./routes/landlordEvidencePackageGenerationRoutes";
@@ -506,6 +507,8 @@ app.use("/api/landlord", routeSource("landlordInstitutionExportsRoutes.ts"), lan
 console.log("[route-mount] landlordInstitutionExportsRoutes mounted at /api/landlord");
 app.use("/api/landlord", routeSource("landlordAuditComplianceRoutes.ts"), landlordAuditComplianceRoutes);
 console.log("[route-mount] landlordAuditComplianceRoutes mounted at /api/landlord");
+app.use("/api/landlord", routeSource("landlordTrustComplianceRoutes.ts"), landlordTrustComplianceRoutes);
+console.log("[route-mount] landlordTrustComplianceRoutes mounted at /api/landlord");
 app.use("/api/landlord/operator-reviews", rateLimitEvidenceExportReview);
 app.use("/api/landlord", routeSource("landlordOperatorReviewRoutes.ts"), landlordOperatorReviewRoutes);
 console.log("[route-mount] landlordOperatorReviewRoutes mounted at /api/landlord");

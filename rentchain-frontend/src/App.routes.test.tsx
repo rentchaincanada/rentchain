@@ -148,6 +148,10 @@ vi.mock("./pages/AuditCompliancePage", () => ({
   default: () => <h1>Audit Compliance Readiness Page</h1>,
 }));
 
+vi.mock("./pages/TrustComplianceCenterPage", () => ({
+  default: () => <h1>Trust Compliance Center Page</h1>,
+}));
+
 vi.mock("./pages/EvidencePackPage", () => ({
   default: () => <h1>Evidence Pack Preview Page</h1>,
 }));
@@ -397,6 +401,20 @@ describe("Routes: /audit-compliance", () => {
     );
 
     expect(await screen.findByText(/Audit Compliance Readiness Page/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("Routes: /trust-compliance", () => {
+  it("renders the read-only trust compliance center route", async () => {
+    const { default: App } = await import("./App");
+    render(
+      <MemoryRouter initialEntries={["/trust-compliance"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Trust Compliance Center Page/i)).toBeInTheDocument();
     expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
   });
 });
