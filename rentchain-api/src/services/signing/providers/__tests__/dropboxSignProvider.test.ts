@@ -174,4 +174,41 @@ describe("DropboxSignProvider", () => {
       providerEventType: "callback_test",
     });
   });
+
+  it("verifies multipart Dropbox Sign account callback tests with a json field", async () => {
+    const provider = new DropboxSignProvider();
+    const eventHash = createHmac("sha256", "dropbox-key").update("1780000000callback_test").digest("hex");
+    const json = JSON.stringify({
+      event: {
+        event_type: "callback_test",
+        event_hash: eventHash,
+        event_time: 1780000000,
+      },
+      account: { account_id: "acct_redacted" },
+    });
+    const boundary = "----RentChainDropboxSignCallbackTest";
+    const body = [
+      `--${boundary}`,
+      'Content-Disposition: form-data; name="json"',
+      "",
+      json,
+      `--${boundary}--`,
+      "",
+    ].join("\r\n");
+
+    await expect(
+      provider.verifyWebhookSignature({
+        headers: { "content-type": `multipart/form-data; boundary=${boundary}` },
+        body: Buffer.from(body),
+      })
+    ).resolves.toBe(true);
+    await expect(provider.parseWebhookPayload(Buffer.from(body))).resolves.toEqual({
+      providerRequestId: null,
+      providerEventId: eventHash,
+      type: "sent",
+      occurredAt: "2026-05-28T20:26:40.000Z",
+      accountCallback: true,
+      providerEventType: "callback_test",
+    });
+  });
 });

@@ -55,8 +55,34 @@ function parseMaybeJsonBuffer(body: unknown) {
     const params = new URLSearchParams(raw);
     const json = params.get("json");
     if (json) return JSON.parse(json);
+    const multipartJson = extractMultipartJsonField(raw);
+    if (multipartJson) return JSON.parse(multipartJson);
     throw new Error("signing_webhook_payload_invalid");
   }
+}
+
+function extractMultipartJsonField(raw: string) {
+  const nameMatch = /name="json"|name=json/i.exec(raw);
+  if (!nameMatch) return "";
+  const headerEnd = raw.indexOf("\r\n\r\n", nameMatch.index);
+  if (headerEnd < 0) return "";
+  const valueStart = headerEnd + 4;
+  const boundaryStart = raw.indexOf("\r\n--", valueStart);
+  const value = raw.slice(valueStart, boundaryStart >= 0 ? boundaryStart : undefined).trim();
+  return value || "";
+}
+
+function safeWebhookBodyShape(input: SigningProviderWebhookInput) {
+  const raw = input.rawBody || (Buffer.isBuffer(input.body) ? input.body : undefined);
+  const text = raw?.toString("utf8") || "";
+  return {
+    contentType: String((input.headers as any)?.["content-type"] || "").split(";")[0].slice(0, 80),
+    bodyKind: raw ? "buffer" : typeof input.body,
+    bodyLength: raw?.length || 0,
+    hasUrlEncodedJson: text.includes("json="),
+    hasMultipartJson: /name="json"|name=json/i.test(text),
+    looksJson: text.trim().startsWith("{"),
+  };
 }
 
 async function loadDropboxSignSdk() {
@@ -165,8 +191,21 @@ export class DropboxSignProvider implements ISigningProvider {
       const sdk = await loadDropboxSignSdk();
       const parsed = parseMaybeJsonBuffer(input.rawBody || input.body);
       const eventCallback = sdk.EventCallbackRequest?.init ? sdk.EventCallbackRequest.init(parsed) : parsed;
-      return sdk.EventCallbackHelper.isValid(callbackKey, eventCallback);
-    } catch {
+      const valid = sdk.EventCallbackHelper.isValid(callbackKey, eventCallback);
+      if (!valid) {
+        console.warn("[dropbox-sign-webhook] verification failed", {
+          ...safeWebhookBodyShape(input),
+          hasEventTime: Boolean(eventCallback?.event?.eventTime),
+          hasEventType: Boolean(eventCallback?.event?.eventType),
+          hasEventHash: Boolean(eventCallback?.event?.eventHash),
+        });
+      }
+      return valid;
+    } catch (error: any) {
+      console.warn("[dropbox-sign-webhook] verification parse failed", {
+        ...safeWebhookBodyShape(input),
+        reason: safeMessage(error?.message || "parse_failed"),
+      });
       return false;
     }
   }
