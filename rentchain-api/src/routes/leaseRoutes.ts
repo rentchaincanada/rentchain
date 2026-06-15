@@ -3069,12 +3069,13 @@ router.post("/:leaseId/send-for-signature", requireLandlord, async (req: any, re
     if (!leaseId) return res.status(400).json({ ok: false, error: "lease_not_found" });
     const result = await getLeaseEntityForLandlord(leaseId, landlordId);
     if (!result.ok) return res.status(result.status).json({ ok: false, error: result.error === "Forbidden" ? "forbidden" : "lease_not_found" });
+    const signingDocumentUrl = await loadLeaseDocumentUrlForLease(result.lease as any);
     const tenantEmails = Array.isArray(req.body?.tenantEmails)
       ? req.body.tenantEmails.map((value: unknown) => String(value || "").trim())
       : [req.body?.tenantEmail].map((value) => String(value || "").trim()).filter(Boolean);
     const snapshot = await sendLeaseForSignature({
       leaseId,
-      lease: result.lease as any,
+      lease: signingDocumentUrl ? { ...(result.lease as any), documentUrl: signingDocumentUrl } : (result.lease as any),
       landlordId,
       tenantEmails,
       message: String(req.body?.message || "").trim() || null,

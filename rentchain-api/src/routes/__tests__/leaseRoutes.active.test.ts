@@ -882,6 +882,50 @@ describe("leaseRoutes GET /active", () => {
     expect(sendEmailMock).not.toHaveBeenCalled();
   });
 
+  it("resolves storage-backed primary lease documents before sending for signature", async () => {
+    getSignedDownloadUrlMock.mockResolvedValueOnce("https://signed.example.com/provider-readable-lease.pdf");
+    seedDoc("leases", "lease-storage-doc", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      tenantId: "tenant-1",
+      unitId: "unit-1",
+      monthlyRent: 1850,
+      startDate: "2026-01-01",
+      endDate: "2026-12-31",
+      status: "active",
+      documentUrl: "https://storage.googleapis.com/lease-documents/leases/landlord-1/lease-storage-doc/lease-v1.pdf?X-Goog-Expires=1",
+      leaseDocument: {
+        bucket: "lease-documents",
+        path: "leases/landlord-1/lease-storage-doc/lease-v1.pdf",
+      },
+    });
+
+    const router = (await import("../leaseRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/lease-storage-doc/send-for-signature",
+      body: { tenantEmails: ["tenant@example.com"], message: "Please sign." },
+    });
+
+    expect(res.status).toBe(200);
+    expect(getSignedDownloadUrlMock).toHaveBeenCalledWith({
+      bucket: "lease-documents",
+      path: "leases/landlord-1/lease-storage-doc/lease-v1.pdf",
+      expiresMinutes: 30,
+    });
+    const requests = listDocs("leaseSigningRequests");
+    expect(requests).toHaveLength(1);
+    expect(requests[0].data).toEqual(
+      expect.objectContaining({
+        leaseId: "lease-storage-doc",
+        providerId: "mock",
+        documentUrl: "https://signed.example.com/provider-readable-lease.pdf",
+      })
+    );
+    expect(JSON.stringify(requests)).not.toContain("X-Goog-Expires=1");
+    expect(writeCanonicalEventMock).toHaveBeenCalledTimes(1);
+  });
+
   it("rejects invalid lease signing recipients without dispatching or writing events", async () => {
     seedDoc("leases", "lease-1", {
       landlordId: "landlord-1",
