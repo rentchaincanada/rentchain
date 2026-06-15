@@ -55,11 +55,13 @@ export type SigningProviderWebhookInput = {
 };
 
 export type SigningProviderParsedWebhook = {
-  providerRequestId: string;
+  providerRequestId?: string | null;
   providerEventId: string;
   type: SigningProviderEventType;
   signerEmail?: string | null;
   occurredAt: string;
+  accountCallback?: boolean;
+  providerEventType?: string | null;
 };
 
 export interface ISigningProvider {

@@ -467,16 +467,41 @@ export async function processSigningWebhook(input: { providerId: string; headers
     });
     throw error;
   }
-  const requestSnap = await db.collection(REQUESTS).where("providerRequestRef", "==", safeProviderRef(provider.getProviderId(), parsed.providerRequestId)).limit(1).get();
+  if (!parsed.providerRequestId && parsed.accountCallback) {
+    await db.collection(DEAD_LETTERS).doc(`dl_${digest(`${input.providerId}:${parsed.providerEventId || Date.now()}`, 24)}`).set({
+      providerId: input.providerId,
+      status: "account_callback_acknowledged",
+      providerEventRef: safeProviderRef(provider.getProviderId(), parsed.providerEventId || ""),
+      providerEventType: parsed.providerEventType || null,
+      createdAt: FieldValue.serverTimestamp(),
+      rawIdsIncluded: false,
+      payloadIncluded: false,
+    });
+    return;
+  }
+  const providerRequestId = String(parsed.providerRequestId || "");
+  const requestSnap = await db.collection(REQUESTS).where("providerRequestRef", "==", safeProviderRef(provider.getProviderId(), providerRequestId)).limit(1).get();
   const requestDoc = requestSnap.docs?.[0];
-  if (!requestDoc) throw Object.assign(new Error("lease_not_found"), { status: 404 });
+  if (!requestDoc) {
+    await db.collection(DEAD_LETTERS).doc(`dl_${digest(`${input.providerId}:${parsed.providerEventId || Date.now()}`, 24)}`).set({
+      providerId: input.providerId,
+      status: "request_not_found",
+      providerRequestRef: safeProviderRef(provider.getProviderId(), providerRequestId),
+      providerEventRef: safeProviderRef(provider.getProviderId(), parsed.providerEventId || ""),
+      providerEventType: parsed.providerEventType || null,
+      createdAt: FieldValue.serverTimestamp(),
+      rawIdsIncluded: false,
+      payloadIncluded: false,
+    });
+    return;
+  }
   const data = requestDoc.data() as any;
   await appendSigningEvent({
     requestId: requestDoc.id,
     leaseId: String(data?.leaseId || ""),
     landlordId: String(data?.landlordId || ""),
     providerId: provider.getProviderId(),
-    providerRequestId: parsed.providerRequestId,
+    providerRequestId,
     providerEventId: parsed.providerEventId,
     type: parsed.type,
     actorRole: "provider",

@@ -185,13 +185,27 @@ export class DropboxSignProvider implements ISigningProvider {
       eventType.includes("complete") || eventType.includes("all_signed") || eventType.includes("sign") ? "signed" :
       "sent";
     const providerRequestId = String(request?.signature_request_id || body?.signature_request_id || body?.providerRequestId || "").trim();
-    if (!providerRequestId) throw new Error("signing_webhook_request_missing");
+    const providerEventId = String(event?.event_hash || event?.event_id || sha(JSON.stringify(body))).trim();
+    if (!providerRequestId) {
+      if (eventType === "callback_test" || Boolean(body?.account) || Boolean(body?.template)) {
+        return {
+          providerRequestId: null,
+          providerEventId,
+          type: "sent",
+          occurredAt: eventTimeToIso(event?.event_time || event?.time || event?.created_at),
+          accountCallback: true,
+          providerEventType: eventType || null,
+        };
+      }
+      throw new Error("signing_webhook_request_missing");
+    }
     return {
       providerRequestId,
-      providerEventId: String(event?.event_hash || event?.event_id || sha(JSON.stringify(body))).trim(),
+      providerEventId,
       type: mapped as any,
       signerEmail: String(body?.signature?.signer_email_address || body?.signerEmail || "").trim().toLowerCase() || null,
       occurredAt: eventTimeToIso(event?.event_time || event?.time || event?.created_at),
+      providerEventType: eventType || null,
     };
   }
 }

@@ -148,6 +148,30 @@ describe("DropboxSignProvider", () => {
       type: "signed",
       signerEmail: "tenant@example.com",
       occurredAt: "2026-05-28T20:26:40.000Z",
+      providerEventType: "signature_request_all_signed",
+    });
+  });
+
+  it("acknowledges verified Dropbox Sign account callback tests without a signature request", async () => {
+    const provider = new DropboxSignProvider();
+    const eventHash = createHmac("sha256", "dropbox-key").update("1780000000callback_test").digest("hex");
+    const body = JSON.stringify({
+      event: {
+        event_type: "callback_test",
+        event_hash: eventHash,
+        event_time: 1780000000,
+      },
+      account: { account_id: "acct_redacted" },
+    });
+
+    await expect(provider.verifyWebhookSignature({ headers: {}, body: Buffer.from(body) })).resolves.toBe(true);
+    await expect(provider.parseWebhookPayload(Buffer.from(body))).resolves.toEqual({
+      providerRequestId: null,
+      providerEventId: eventHash,
+      type: "sent",
+      occurredAt: "2026-05-28T20:26:40.000Z",
+      accountCallback: true,
+      providerEventType: "callback_test",
     });
   });
 });

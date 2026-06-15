@@ -234,6 +234,92 @@ describe("leaseSigningService", () => {
     expect(writeCanonicalEventMock).not.toHaveBeenCalled();
   });
 
+  it("acknowledges verified provider account callback tests without signing events", async () => {
+    const { signingProviderRegistry } = await import("../signing/providers");
+    signingProviderRegistry.register("boldsign", {
+      getProviderId: () => "boldsign",
+      getName: () => "Account callback test provider",
+      isConfigured: () => true,
+      sendForSignature: async () => {
+        throw new Error("not_used");
+      },
+      getSigningUrl: async () => null,
+      cancelRequest: async () => true,
+      downloadSignedDocument: async () => null,
+      verifyWebhookSignature: async () => true,
+      parseWebhookPayload: async () => ({
+        providerRequestId: null,
+        providerEventId: "evt_callback_test_raw",
+        providerEventType: "callback_test",
+        type: "sent",
+        occurredAt: "2026-01-02T00:00:00.000Z",
+        accountCallback: true,
+      }),
+    });
+    const { processSigningWebhook } = await import("../signing/leaseSigningService");
+
+    await expect(processSigningWebhook({ providerId: "boldsign", headers: {}, body: { event: { event_type: "callback_test" } } })).resolves.toBeUndefined();
+
+    const deadLetters = Array.from(ensureCollection("leaseSigningWebhookDeadLetters").values());
+    expect(deadLetters).toHaveLength(1);
+    expect(deadLetters[0]).toEqual(
+      expect.objectContaining({
+        providerId: "boldsign",
+        status: "account_callback_acknowledged",
+        providerEventType: "callback_test",
+        rawIdsIncluded: false,
+        payloadIncluded: false,
+      })
+    );
+    expect(JSON.stringify(deadLetters)).not.toContain("evt_callback_test_raw");
+    expect(ensureCollection("leaseSigningEvents").size).toBe(0);
+    expect(writeCanonicalEventMock).not.toHaveBeenCalled();
+  });
+
+  it("acknowledges verified provider callbacks that do not correlate to a local request", async () => {
+    const { signingProviderRegistry } = await import("../signing/providers");
+    signingProviderRegistry.register("boldsign", {
+      getProviderId: () => "boldsign",
+      getName: () => "Unknown request provider",
+      isConfigured: () => true,
+      sendForSignature: async () => {
+        throw new Error("not_used");
+      },
+      getSigningUrl: async () => null,
+      cancelRequest: async () => true,
+      downloadSignedDocument: async () => null,
+      verifyWebhookSignature: async () => true,
+      parseWebhookPayload: async () => ({
+        providerRequestId: "raw-provider-request-missing",
+        providerEventId: "evt_missing_request_raw",
+        providerEventType: "signature_request_sent",
+        type: "sent",
+        occurredAt: "2026-01-02T00:00:00.000Z",
+      }),
+    });
+    const { processSigningWebhook } = await import("../signing/leaseSigningService");
+
+    await expect(processSigningWebhook({ providerId: "boldsign", headers: {}, body: { signature_request: {} } })).resolves.toBeUndefined();
+
+    const deadLetters = Array.from(ensureCollection("leaseSigningWebhookDeadLetters").values());
+    expect(deadLetters).toHaveLength(1);
+    expect(deadLetters[0]).toEqual(
+      expect.objectContaining({
+        providerId: "boldsign",
+        status: "request_not_found",
+        providerRequestRef: expect.stringMatching(/^boldsign_ref_/),
+        providerEventRef: expect.stringMatching(/^boldsign_ref_/),
+        providerEventType: "signature_request_sent",
+        rawIdsIncluded: false,
+        payloadIncluded: false,
+      })
+    );
+    expect(JSON.stringify(deadLetters)).not.toContain("raw-provider-request-missing");
+    expect(JSON.stringify(deadLetters)).not.toContain("evt_missing_request_raw");
+    expect(ensureCollection("leaseSigningEvents").size).toBe(0);
+    expect(writeCanonicalEventMock).not.toHaveBeenCalled();
+  });
+
   it("handles duplicate webhooks idempotently and maps declined expired cancelled and failed events", async () => {
     const { processSigningWebhook, sendLeaseForSignature, loadLeaseSigningSnapshot } = await import("../signing/leaseSigningService");
     await sendLeaseForSignature({
