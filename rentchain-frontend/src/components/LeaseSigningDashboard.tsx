@@ -28,6 +28,12 @@ function dispatchNotice(status: LeaseSigningStatusResponse | null) {
   if (dispatchMode === "stub" || dispatchStatus === "stubbed_no_email") {
     return "Sandbox signing request recorded. No signature email was sent by the configured signing stub.";
   }
+  if (dispatchMode === "sandbox") {
+    return status.providerDispatchMessage || "Dropbox Sign accepted the request in test mode.";
+  }
+  if (dispatchMode === "real" || dispatchStatus === "accepted" || dispatchStatus === "sent") {
+    return status.providerDispatchMessage || "Signature request sent by the signing provider.";
+  }
   return null;
 }
 
@@ -98,7 +104,7 @@ export function LeaseSigningDashboard({ leaseId, tenantEmail }: Props) {
   }
 
   const signingStatus = status?.signingStatus || "not_started";
-  const canSend = signingStatus === "not_started" || signingStatus === "cancelled" || signingStatus === "expired" || signingStatus === "rejected";
+  const canSend = signingStatus === "not_started" || signingStatus === "cancelled" || signingStatus === "expired" || signingStatus === "rejected" || signingStatus === "failed";
   const canCancel = signingStatus === "pending_signature";
   const canDownload = signingStatus === "signed";
   const noEmailNotice = dispatchNotice(status);

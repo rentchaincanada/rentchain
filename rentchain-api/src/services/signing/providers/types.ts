@@ -7,6 +7,7 @@ export type SigningProviderEventType =
   | "rejected"
   | "expired"
   | "cancelled"
+  | "failed"
   | "downloaded";
 
 export type SigningProviderSigner = {
@@ -30,8 +31,9 @@ export type SigningProviderSendResult = {
   signingUrl?: string | null;
   expiresAt?: string | null;
   dispatchMode?: "real" | "sandbox" | "mock" | "stub";
-  dispatchStatus?: "accepted" | "mocked_no_email" | "stubbed_no_email";
+  dispatchStatus?: "accepted" | "sent" | "failed" | "mocked_no_email" | "stubbed_no_email";
   dispatchMessage?: string | null;
+  providerTestMode?: boolean;
 };
 
 export type SigningProviderSigningUrlInput = {
@@ -53,11 +55,13 @@ export type SigningProviderWebhookInput = {
 };
 
 export type SigningProviderParsedWebhook = {
-  providerRequestId: string;
+  providerRequestId?: string | null;
   providerEventId: string;
   type: SigningProviderEventType;
   signerEmail?: string | null;
   occurredAt: string;
+  accountCallback?: boolean;
+  providerEventType?: string | null;
 };
 
 export interface ISigningProvider {

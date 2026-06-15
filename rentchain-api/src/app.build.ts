@@ -238,13 +238,13 @@ app.post(
 );
 app.post(
   "/webhooks/signing/:providerId?",
-  express.raw({ type: "application/json" }),
+  express.raw({ type: "*/*" }),
   routeSource("signingWebhookRoutes.ts"),
   signingWebhookHandler
 );
 app.post(
   "/api/webhooks/signing/:providerId?",
-  express.raw({ type: "application/json" }),
+  express.raw({ type: "*/*" }),
   routeSource("signingWebhookRoutes.ts"),
   signingWebhookHandler
 );

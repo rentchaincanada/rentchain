@@ -13,7 +13,8 @@ export type LeaseSigningStatus =
   | "signed"
   | "rejected"
   | "expired"
-  | "cancelled";
+  | "cancelled"
+  | "failed";
 
 export type LeaseSigningEvent = {
   id: string;
@@ -24,6 +25,7 @@ export type LeaseSigningEvent = {
   providerDispatchMode?: string | null;
   providerDispatchStatus?: string | null;
   providerDispatchMessage?: string | null;
+  providerTestMode?: boolean | null;
 };
 
 export type LeaseSigningSnapshot = {
@@ -91,6 +93,7 @@ function statusFromEvents(events: LeaseSigningEvent[]): LeaseSigningStatus {
     const type = events[index]?.type;
     if (type === "signed") return "signed";
     if (type === "cancelled") return "cancelled";
+    if (type === "failed") return "failed";
     if (type === "rejected") return "rejected";
     if (type === "expired") return "expired";
     if (type === "sent" || type === "viewed") return "pending_signature";
@@ -101,6 +104,7 @@ function statusFromEvents(events: LeaseSigningEvent[]): LeaseSigningStatus {
 function statusFromEventType(type: SigningProviderEventType): LeaseSigningStatus | null {
   if (type === "signed") return "signed";
   if (type === "cancelled") return "cancelled";
+  if (type === "failed") return "failed";
   if (type === "rejected") return "rejected";
   if (type === "expired") return "expired";
   if (type === "sent" || type === "viewed") return "pending_signature";
@@ -115,7 +119,8 @@ function normalizeStoredStatus(value: unknown): LeaseSigningStatus | null {
     status === "signed" ||
     status === "rejected" ||
     status === "expired" ||
-    status === "cancelled"
+    status === "cancelled" ||
+    status === "failed"
   ) {
     return status;
   }
@@ -133,6 +138,7 @@ function projectEvent(doc: any): LeaseSigningEvent {
     providerDispatchMode: data?.providerDispatchMode || null,
     providerDispatchStatus: data?.providerDispatchStatus || null,
     providerDispatchMessage: data?.providerDispatchMessage || null,
+    providerTestMode: data?.providerTestMode === true ? true : data?.providerTestMode === false ? false : null,
   };
 }
 
@@ -158,6 +164,7 @@ async function appendSigningEvent(input: {
   providerDispatchMode?: string | null;
   providerDispatchStatus?: string | null;
   providerDispatchMessage?: string | null;
+  providerTestMode?: boolean | null;
 }) {
   const occurredAt = input.occurredAt || nowIso();
   const id = eventIdFor(input.requestId, input.type, occurredAt, input.providerEventId || "");
@@ -177,6 +184,7 @@ async function appendSigningEvent(input: {
     providerDispatchMode: input.providerDispatchMode || null,
     providerDispatchStatus: input.providerDispatchStatus || null,
     providerDispatchMessage: input.providerDispatchMessage || null,
+    providerTestMode: input.providerTestMode ?? null,
     occurredAt,
     createdAt: FieldValue.serverTimestamp(),
     rawIdsIncluded: false,
@@ -211,6 +219,7 @@ async function appendSigningEvent(input: {
       providerRef: safeProviderRef(input.providerId, input.providerRequestId),
       providerDispatchMode: input.providerDispatchMode || null,
       providerDispatchStatus: input.providerDispatchStatus || null,
+      providerTestMode: input.providerTestMode ?? null,
     },
   }).catch(() => undefined);
   return id;
@@ -295,7 +304,7 @@ export async function sendLeaseForSignature(input: {
     title: "Lease signature request",
     message: input.message || null,
     signers: emails.map((email) => ({ email, role: "tenant" as const })),
-    callbackUrl: process.env.SIGNING_CALLBACK_URL || null,
+    callbackUrl: process.env.SIGNING_PROVIDER_CALLBACK_URL || process.env.SIGNING_CALLBACK_URL || null,
   });
   const providerId = provider.getProviderId();
   const requestId = requestIdFor(input.landlordId, input.leaseId, providerId);
@@ -315,6 +324,7 @@ export async function sendLeaseForSignature(input: {
       providerDispatchMode: sent.dispatchMode || null,
       providerDispatchStatus: sent.dispatchStatus || null,
       providerDispatchMessage: sent.dispatchMessage || null,
+      providerTestMode: sent.providerTestMode ?? null,
       sentAt: now,
       updatedAt: FieldValue.serverTimestamp(),
       createdAt: existing.exists ? existing.data()?.createdAt || FieldValue.serverTimestamp() : FieldValue.serverTimestamp(),
@@ -335,6 +345,7 @@ export async function sendLeaseForSignature(input: {
     providerDispatchMode: sent.dispatchMode || null,
     providerDispatchStatus: sent.dispatchStatus || null,
     providerDispatchMessage: sent.dispatchMessage || null,
+    providerTestMode: sent.providerTestMode ?? null,
   });
   return loadLeaseSigningSnapshot({ leaseId: input.leaseId, landlordId: input.landlordId, lease: input.lease });
 }
@@ -428,7 +439,11 @@ export async function downloadSignedLease(input: { leaseId: string; lease: Recor
   return loadLeaseSigningSnapshot({ leaseId: input.leaseId, landlordId: input.landlordId, lease: input.lease });
 }
 
-export async function processSigningWebhook(input: { providerId: string; headers: any; body: any; rawBody?: Buffer }) {
+export type SigningWebhookProcessResult = {
+  providerResponseText?: string;
+};
+
+export async function processSigningWebhook(input: { providerId: string; headers: any; body: any; rawBody?: Buffer }): Promise<SigningWebhookProcessResult> {
   const provider = signingProviderRegistry.getProvider(input.providerId);
   if (!provider?.isConfigured()) {
     await db.collection(DEAD_LETTERS).doc(`dl_${digest(`${input.providerId}:${Date.now()}`, 24)}`).set({
@@ -440,25 +455,64 @@ export async function processSigningWebhook(input: { providerId: string; headers
     });
     throw Object.assign(new Error("provider_unavailable"), { status: 503 });
   }
-  const verified = await provider.verifyWebhookSignature(input);
+  const rawBody = input.rawBody || (Buffer.isBuffer(input.body) ? input.body : undefined);
+  const verified = await provider.verifyWebhookSignature({ ...input, rawBody });
   if (!verified) throw Object.assign(new Error("webhook_validation_failed"), { status: 400 });
-  const parsed = await provider.parseWebhookPayload(input.body);
-  const requestSnap = await db.collection(REQUESTS).where("providerRequestRef", "==", safeProviderRef(provider.getProviderId(), parsed.providerRequestId)).limit(1).get();
+  let parsed;
+  try {
+    parsed = await provider.parseWebhookPayload(input.body);
+  } catch (error) {
+    await db.collection(DEAD_LETTERS).doc(`dl_${digest(`${input.providerId}:${Date.now()}`, 24)}`).set({
+      providerId: input.providerId,
+      status: "payload_parse_failed",
+      createdAt: FieldValue.serverTimestamp(),
+      rawIdsIncluded: false,
+      payloadIncluded: false,
+    });
+    throw error;
+  }
+  if (!parsed.providerRequestId && parsed.accountCallback) {
+    await db.collection(DEAD_LETTERS).doc(`dl_${digest(`${input.providerId}:${parsed.providerEventId || Date.now()}`, 24)}`).set({
+      providerId: input.providerId,
+      status: "account_callback_acknowledged",
+      providerEventRef: safeProviderRef(provider.getProviderId(), parsed.providerEventId || ""),
+      providerEventType: parsed.providerEventType || null,
+      createdAt: FieldValue.serverTimestamp(),
+      rawIdsIncluded: false,
+      payloadIncluded: false,
+    });
+    return provider.getProviderId() === "dropbox_sign" ? { providerResponseText: "Hello API Event Received" } : {};
+  }
+  const providerRequestId = String(parsed.providerRequestId || "");
+  const requestSnap = await db.collection(REQUESTS).where("providerRequestRef", "==", safeProviderRef(provider.getProviderId(), providerRequestId)).limit(1).get();
   const requestDoc = requestSnap.docs?.[0];
-  if (!requestDoc) throw Object.assign(new Error("lease_not_found"), { status: 404 });
+  if (!requestDoc) {
+    await db.collection(DEAD_LETTERS).doc(`dl_${digest(`${input.providerId}:${parsed.providerEventId || Date.now()}`, 24)}`).set({
+      providerId: input.providerId,
+      status: "request_not_found",
+      providerRequestRef: safeProviderRef(provider.getProviderId(), providerRequestId),
+      providerEventRef: safeProviderRef(provider.getProviderId(), parsed.providerEventId || ""),
+      providerEventType: parsed.providerEventType || null,
+      createdAt: FieldValue.serverTimestamp(),
+      rawIdsIncluded: false,
+      payloadIncluded: false,
+    });
+    return {};
+  }
   const data = requestDoc.data() as any;
   await appendSigningEvent({
     requestId: requestDoc.id,
     leaseId: String(data?.leaseId || ""),
     landlordId: String(data?.landlordId || ""),
     providerId: provider.getProviderId(),
-    providerRequestId: parsed.providerRequestId,
+    providerRequestId,
     providerEventId: parsed.providerEventId,
     type: parsed.type,
     actorRole: "provider",
     signerEmail: parsed.signerEmail || null,
     occurredAt: parsed.occurredAt,
   });
+  return {};
 }
 
 export function signingErrorStatus(error: any) {

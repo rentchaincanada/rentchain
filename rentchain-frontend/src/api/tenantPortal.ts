@@ -137,7 +137,7 @@ export type TenantWorkspaceLease = TenantSafeProjectionMetadata & {
     } | null;
     paymentExperience: PaymentExperience;
   } | null;
-  providerSigningStatus?: "not_started" | "pending_signature" | "signed" | "rejected" | "expired" | "cancelled";
+  providerSigningStatus?: "not_started" | "pending_signature" | "signed" | "rejected" | "expired" | "cancelled" | "failed";
   providerSignedAt?: string | null;
   providerDerivedLeaseState?: "not_started" | "pending_signature" | "signed_future" | "active" | "rejected" | "expired" | "cancelled";
   providerSigningAvailable?: boolean;
