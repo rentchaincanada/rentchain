@@ -81,6 +81,25 @@ describe("signingWebhookHandler", () => {
     expect(res.json).not.toHaveBeenCalled();
   });
 
+  it("returns exact Dropbox Sign acknowledgement for successful lifecycle callbacks", async () => {
+    processSigningWebhookMock.mockResolvedValueOnce({});
+    const req: any = {
+      params: { providerId: "dropbox_sign" },
+      query: {},
+      headers: { "content-type": "application/json" },
+      body: { event: { event_type: "signature_request_signed" } },
+    };
+    const res = makeRes();
+
+    await signingWebhookHandler(req, res);
+
+    expect(processSigningWebhookMock).toHaveBeenCalledWith(expect.objectContaining({ providerId: "dropbox_sign" }));
+    expect(res.statusCode).toBe(200);
+    expect(res.type).toHaveBeenCalledWith("text/plain");
+    expect(res.body).toBe("Hello API Event Received");
+    expect(res.json).not.toHaveBeenCalled();
+  });
+
   it("preserves JSON acknowledgement for normal webhook processing", async () => {
     processSigningWebhookMock.mockResolvedValueOnce({});
     const req: any = { params: { providerId: "mock" }, query: {}, headers: {}, body: { ok: true } };
