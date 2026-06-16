@@ -331,6 +331,22 @@ function compactPolicyActionLabel(policyKey: string, fallback: string) {
   }
 }
 
+function policySummaryHref(leaseId: string, policyKey: string) {
+  const base = `/leases/${encodeURIComponent(leaseId)}/summary`;
+  switch (policyKey) {
+    case "rent_increase_workflow_availability":
+    case "deposit_workflow_review":
+      return `${base}#lease-section-rent-payment`;
+    case "lease_execution_readiness":
+    case "lease_renewal_review":
+    case "move_out_preparation":
+    case "notice_workflow_readiness":
+      return `${base}#lease-section-audit-events`;
+    default:
+      return base;
+  }
+}
+
 function renderJurisdictionPolicyGuidance(lease: LandlordActiveLease) {
   const policies = Array.isArray(lease.jurisdictionPolicies) ? lease.jurisdictionPolicies : [];
   if (policies.length === 0) return null;
@@ -355,7 +371,7 @@ function renderJurisdictionPolicyGuidance(lease: LandlordActiveLease) {
       {visiblePolicies.map((policy) => (
         <Link
           key={`${policy.policyKey}:${policy.sourceRuleKey}`}
-          to={`/leases/${encodeURIComponent(lease.id)}/summary`}
+          to={policySummaryHref(lease.id, policy.policyKey)}
           title={`${policy.label}: ${policy.recommendation}`}
           style={{
             display: "inline-flex",
