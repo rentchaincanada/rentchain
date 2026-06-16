@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   getArchivedLeasesForLandlord: vi.fn(),
   enableLeasePaymentRail: vi.fn(),
   getLeaseReconciliationCandidates: vi.fn(),
+  downloadSignedLease: vi.fn(),
   refreshLeaseDocumentUrl: vi.fn(),
   convertUnitReferenceToLease: vi.fn(),
   archiveLeaseRecord: vi.fn(),
@@ -21,6 +22,7 @@ vi.mock("@/api/leasesApi", () => ({
   getArchivedLeasesForLandlord: mocks.getArchivedLeasesForLandlord,
   enableLeasePaymentRail: mocks.enableLeasePaymentRail,
   getLeaseReconciliationCandidates: mocks.getLeaseReconciliationCandidates,
+  downloadSignedLease: mocks.downloadSignedLease,
   refreshLeaseDocumentUrl: mocks.refreshLeaseDocumentUrl,
   convertUnitReferenceToLease: mocks.convertUnitReferenceToLease,
   archiveLeaseRecord: mocks.archiveLeaseRecord,
@@ -182,6 +184,12 @@ describe("LandlordActiveLeasesPage", () => {
       refreshMode: "signed_url",
       expiresInSeconds: 1800,
     });
+    mocks.downloadSignedLease.mockReset();
+    mocks.downloadSignedLease.mockResolvedValue({
+      documentUrl: "https://example.com/signed-lease-fresh.pdf",
+      signingStatus: "signed",
+      signedAt: "2026-01-02T00:00:00.000Z",
+    });
     mocks.convertUnitReferenceToLease.mockResolvedValue({
       ok: true,
       lease: { id: "lease-9" },
@@ -295,6 +303,62 @@ describe("LandlordActiveLeasesPage", () => {
     await waitFor(() => expect(mocks.refreshLeaseDocumentUrl).toHaveBeenCalledWith("lease-stale", { document: "schedule-a" }));
     expect(window.open).not.toHaveBeenCalled();
     expect(await screen.findByText("refresh failed")).toBeInTheDocument();
+  });
+
+  it("opens a fresh signed document when a signed lease primary document refresh is unavailable", async () => {
+    mocks.refreshLeaseDocumentUrl.mockReset();
+    mocks.refreshLeaseDocumentUrl.mockRejectedValueOnce(new Error("lease_document_not_found"));
+    mocks.downloadSignedLease.mockResolvedValueOnce({
+      documentUrl: "https://example.com/fresh-signed-download.pdf",
+      signingStatus: "signed",
+      signedAt: "2026-01-02T00:00:00.000Z",
+    });
+    mocks.getActiveLeasesForLandlord.mockResolvedValue({
+      leases: [
+        {
+          id: "lease-signed",
+          propertyId: "prop-1",
+          propertyName: "Coburg Rd",
+          unitNumber: "6",
+          monthlyRent: 1800,
+          startDate: "2026-01-01",
+          endDate: "2026-12-31",
+          status: "active",
+          tenantName: "Chip Milo",
+          tenantEmail: "hello+cob6tenant@rentchain.ai",
+          documentUrl: "https://storage.googleapis.com/signed-lease-documents/stale.pdf?X-Goog-Signature=expired",
+          signingStatus: "signed",
+          leaseExecution: {
+            executionStatus: "fully_executed",
+            executionLabel: "Lease fully executed",
+            executionDescription: "The signing workflow is complete.",
+            requiredNextAction: "none",
+            tenantSignatureStatus: "completed",
+            landlordSignatureStatus: "completed",
+            pdfStatus: "generated",
+            completedAt: "2026-01-02T00:00:00.000Z",
+          },
+        },
+      ],
+    });
+
+    render(
+      <MemoryRouter>
+        <LandlordActiveLeasesPage />
+      </MemoryRouter>
+    );
+
+    vi.mocked(window.open).mockClear();
+    fireEvent.click(await screen.findByRole("button", { name: "View lease" }));
+
+    await waitFor(() => expect(mocks.refreshLeaseDocumentUrl).toHaveBeenCalledWith("lease-signed"));
+    await waitFor(() => expect(mocks.downloadSignedLease).toHaveBeenCalledWith("lease-signed"));
+    expect(window.open).toHaveBeenCalledWith("https://example.com/fresh-signed-download.pdf", "_blank", "noreferrer");
+    expect(window.open).not.toHaveBeenCalledWith(
+      expect.stringContaining("X-Goog-Signature=expired"),
+      expect.anything(),
+      expect.anything()
+    );
   });
 
   it("shows Schedule A as a separate action without replacing the lease summary action", async () => {

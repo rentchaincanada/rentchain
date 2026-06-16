@@ -7,6 +7,7 @@ import {
   getActiveLeasesForLandlord,
   getArchivedLeasesForLandlord,
   getLeaseReconciliationCandidates,
+  downloadSignedLease,
   refreshLeaseDocumentUrl,
   restoreLeaseRecord,
   type LandlordActiveLease,
@@ -109,6 +110,12 @@ function scheduleADocumentUrl(lease: LandlordActiveLease) {
   if (explicit) return explicit;
   const legacy = String(lease.documentUrl || "").trim();
   return isScheduleADocumentUrl(legacy) ? legacy : "";
+}
+
+function isSignedLeaseRecord(lease: LandlordActiveLease) {
+  const signingStatus = String((lease as any).currentSigningStatus || (lease as any).signingStatus || "").trim().toLowerCase();
+  const executionStatus = String(lease.leaseExecution?.executionStatus || "").trim().toLowerCase();
+  return signingStatus === "signed" || executionStatus === "fully_executed" || lease.signatureStatus === "signed";
 }
 
 function normalizePhoneInput(value: string) {
@@ -467,6 +474,18 @@ export default function LandlordActiveLeasesPage() {
       if (!nextUrl) throw new Error("Lease document is not available.");
       window.open(nextUrl, "_blank", "noreferrer");
     } catch (err: unknown) {
+      if (documentKind === "lease" && !primaryRefreshReturnedScheduleA && isSignedLeaseRecord(lease)) {
+        try {
+          const signedDocument = await downloadSignedLease(lease.id);
+          const signedUrl = String(signedDocument?.documentUrl || "").trim();
+          if (signedUrl) {
+            window.open(signedUrl, "_blank", "noreferrer");
+            return;
+          }
+        } catch {
+          // Keep the original document-refresh error visible below.
+        }
+      }
       if (!primaryRefreshReturnedScheduleA && canUseLegacyDocumentFallback(fallbackUrl)) {
         window.open(fallbackUrl, "_blank", "noreferrer");
         return;

@@ -43,6 +43,14 @@ export type LeaseSigningSnapshot = {
   events: LeaseSigningEvent[];
 };
 
+export type SignedLeaseDocumentDownload = {
+  documentUrl: string | null;
+  expiresInSeconds: number | null;
+  documentHash: string | null;
+  signedDocumentStoredAt: string | null;
+  source: "signedDocument" | "legacySignedDocumentUrl" | null;
+};
+
 const REQUESTS = "leaseSigningRequests";
 const EVENTS = "leaseSigningEvents";
 const DEAD_LETTERS = "leaseSigningWebhookDeadLetters";
@@ -112,6 +120,65 @@ function asDateMillis(value: any): number {
   if (typeof value?.toMillis === "function") return value.toMillis();
   const parsed = Date.parse(String(value));
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function parseGcsUrlStorageRef(value: unknown): { bucket: string; path: string; source: "legacySignedDocumentUrl" } | null {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  try {
+    const parsed = new URL(raw);
+    if (parsed.hostname === "storage.googleapis.com") {
+      const [bucket, ...pathParts] = parsed.pathname.replace(/^\/+/, "").split("/");
+      const path = pathParts.join("/");
+      if (bucket && path) return { bucket, path: decodeURIComponent(path), source: "legacySignedDocumentUrl" };
+    }
+    if (parsed.hostname.endsWith(".storage.googleapis.com")) {
+      const bucket = parsed.hostname.replace(/\.storage\.googleapis\.com$/, "");
+      const path = parsed.pathname.replace(/^\/+/, "");
+      if (bucket && path) return { bucket, path: decodeURIComponent(path), source: "legacySignedDocumentUrl" };
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function signedDocumentStorageRefFromRequest(data: any): { bucket: string; path: string; source: "signedDocument" | "legacySignedDocumentUrl" } | null {
+  const signedDocument = data?.signedDocument || {};
+  const bucket = String(signedDocument.bucket || signedDocument.storageBucket || "").trim();
+  const path = String(signedDocument.path || signedDocument.storagePath || signedDocument.objectKey || "").trim();
+  if (bucket && path) return { bucket, path, source: "signedDocument" };
+  return parseGcsUrlStorageRef(data?.signedDocumentUrl);
+}
+
+function collapseEventsForProjection(events: LeaseSigningEvent[]) {
+  let latestSigned: LeaseSigningEvent | null = null;
+  for (const event of events) {
+    if (event.type === "signed") latestSigned = event;
+  }
+  return events.filter((event) => event.type !== "signed").concat(latestSigned ? [latestSigned] : []).sort((a, b) => asDateMillis(a.occurredAt) - asDateMillis(b.occurredAt));
+}
+
+async function signedDocumentDownloadFromRequest(data: any): Promise<SignedLeaseDocumentDownload> {
+  const ref = signedDocumentStorageRefFromRequest(data);
+  if (!ref) {
+    return {
+      documentUrl: null,
+      expiresInSeconds: null,
+      documentHash: String(data?.signedDocumentHash || "") || null,
+      signedDocumentStoredAt: String(data?.signedDocumentStoredAt || "") || null,
+      source: null,
+    };
+  }
+  const expiresMinutes = 30;
+  const documentUrl = await getSignedDownloadUrl({ bucket: ref.bucket, path: ref.path, expiresMinutes });
+  return {
+    documentUrl,
+    expiresInSeconds: expiresMinutes * 60,
+    documentHash: String(data?.signedDocumentHash || "") || null,
+    signedDocumentStoredAt: String(data?.signedDocumentStoredAt || "") || null,
+    source: ref.source,
+  };
 }
 
 function statusFromEvents(events: LeaseSigningEvent[]): LeaseSigningStatus {
@@ -302,11 +369,12 @@ export async function loadLeaseSigningSnapshot(input: {
   }
   const events = await loadEvents(request.id);
   const signingStatus = normalizeStoredStatus(request.data?.currentSigningStatus) || statusFromEvents(events);
-  const signedAt = events.find((event) => event.type === "signed")?.occurredAt || null;
+  const signedAt = [...events].reverse().find((event) => event.type === "signed")?.occurredAt || null;
   const sentAt = [...events].reverse().find((event) => event.type === "sent")?.occurredAt || String(request.data?.sentAt || "") || null;
   const providerId = String(request.data?.providerId || "");
   const providerDispatchMode = String(request.data?.providerDispatchMode || (providerId === "mock" ? "mock" : "")).trim() || null;
   const providerDispatchStatus = String(request.data?.providerDispatchStatus || (providerId === "mock" ? "mocked_no_email" : "")).trim() || null;
+  const signedDocument = signingStatus === "signed" ? await signedDocumentDownloadFromRequest(request.data) : null;
   return {
     signingStatus,
     derivedLeaseState: deriveLeaseSigningState({ lease: input.lease || {}, signingStatus }),
@@ -318,9 +386,37 @@ export async function loadLeaseSigningSnapshot(input: {
     providerDispatchMessage: String(request.data?.providerDispatchMessage || (providerId === "mock" ? "Mock signing provider recorded the request without sending email." : "")).trim() || null,
     sentAt,
     signedAt,
-    documentUrl: String(request.data?.signedDocumentUrl || "") || null,
-    events,
+    documentUrl: signedDocument?.documentUrl || null,
+    events: collapseEventsForProjection(events),
   };
+}
+
+export async function getSignedLeaseDocumentDownload(input: {
+  leaseId: string;
+  landlordId: string;
+}): Promise<SignedLeaseDocumentDownload> {
+  const request = await loadLatestRequest(input.leaseId, input.landlordId);
+  if (!request) {
+    return {
+      documentUrl: null,
+      expiresInSeconds: null,
+      documentHash: null,
+      signedDocumentStoredAt: null,
+      source: null,
+    };
+  }
+  const events = await loadEvents(request.id);
+  const signingStatus = normalizeStoredStatus(request.data?.currentSigningStatus) || statusFromEvents(events);
+  if (signingStatus !== "signed") {
+    return {
+      documentUrl: null,
+      expiresInSeconds: null,
+      documentHash: String(request.data?.signedDocumentHash || "") || null,
+      signedDocumentStoredAt: String(request.data?.signedDocumentStoredAt || "") || null,
+      source: null,
+    };
+  }
+  return signedDocumentDownloadFromRequest(request.data);
 }
 
 export async function sendLeaseForSignature(input: {
@@ -475,8 +571,25 @@ export async function downloadSignedLease(input: { leaseId: string; lease: Recor
   const request = await loadLatestRequest(input.leaseId, input.landlordId);
   if (!request) throw Object.assign(new Error("lease_not_found"), { status: 404 });
   const events = await loadEvents(request.id);
-  if (statusFromEvents(events) !== "signed") throw Object.assign(new Error("signed_document_not_found"), { status: 404 });
-  if (request.data?.signedDocumentUrl) return loadLeaseSigningSnapshot({ leaseId: input.leaseId, landlordId: input.landlordId, lease: input.lease });
+  const signingStatus = normalizeStoredStatus(request.data?.currentSigningStatus) || statusFromEvents(events);
+  if (signingStatus !== "signed") throw Object.assign(new Error("signed_document_not_found"), { status: 404 });
+  const existingSignedDocumentRef = signedDocumentStorageRefFromRequest(request.data);
+  if (existingSignedDocumentRef) {
+    if (existingSignedDocumentRef.source === "legacySignedDocumentUrl") {
+      await db.collection(REQUESTS).doc(request.id).set(
+        {
+          signedDocument: {
+            bucket: existingSignedDocumentRef.bucket,
+            path: existingSignedDocumentRef.path,
+            internalReferenceOnly: true,
+          },
+          signedDocumentUrl: null,
+        },
+        { merge: true }
+      );
+    }
+    return loadLeaseSigningSnapshot({ leaseId: input.leaseId, landlordId: input.landlordId, lease: input.lease });
+  }
   const provider = signingProviderRegistry.getProvider(String(request.data?.providerId || ""));
   if (!provider?.isConfigured()) throw Object.assign(new Error("provider_unavailable"), { status: 503 });
   const doc = await provider.downloadSignedDocument(String(request.data?.providerRequestId || ""));
@@ -488,10 +601,16 @@ export async function downloadSignedLease(input: { leaseId: string; lease: Recor
     buffer: doc.buffer,
     metadata: { leaseSigningRequestId: request.id },
   });
-  const documentUrl = await getSignedDownloadUrl({ bucket: uploaded.bucket, path: uploaded.path, expiresMinutes: 30 });
   await db.collection(REQUESTS).doc(request.id).set(
     {
-      signedDocumentUrl: documentUrl,
+      signedDocument: {
+        bucket: uploaded.bucket,
+        path: uploaded.path,
+        contentType: doc.contentType,
+        fileName: doc.fileName,
+        internalReferenceOnly: true,
+      },
+      signedDocumentUrl: null,
       signedDocumentHash: createHash("sha256").update(doc.buffer).digest("hex"),
       signedDocumentStoredAt: nowIso(),
     },
