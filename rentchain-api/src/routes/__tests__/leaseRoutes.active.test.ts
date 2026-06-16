@@ -4,6 +4,9 @@ import { leaseService } from "../../services/leaseService";
 const getSignedDownloadUrlMock = vi.fn(async () => "https://signed.example.com/lease.pdf");
 const sendEmailMock = vi.fn(async () => undefined);
 const writeCanonicalEventMock = vi.fn(async () => undefined);
+const getPrimaryLeaseDocumentSummaryMock = vi.fn(async () => null);
+const generatePrimaryLeaseDocumentMock = vi.fn();
+const lockPrimaryLeaseDocumentForSigningMock = vi.fn();
 
 const { fakeDb, listDocs, resetFakeDb, seedDoc } = vi.hoisted(() => {
   const store = new Map<string, Map<string, any>>();
@@ -124,6 +127,12 @@ vi.mock("../../lib/events/buildEvent", () => ({
   writeCanonicalEvent: writeCanonicalEventMock,
 }));
 
+vi.mock("../../services/leaseDocuments/leaseDocumentService", () => ({
+  getPrimaryLeaseDocumentSummary: getPrimaryLeaseDocumentSummaryMock,
+  generatePrimaryLeaseDocument: generatePrimaryLeaseDocumentMock,
+  lockPrimaryLeaseDocumentForSigning: lockPrimaryLeaseDocumentForSigningMock,
+}));
+
 vi.mock("../../services/stripeService", () => ({
   isStripeConfigured: () => true,
 }));
@@ -176,6 +185,11 @@ describe("leaseRoutes GET /active", () => {
     getSignedDownloadUrlMock.mockClear();
     sendEmailMock.mockClear();
     writeCanonicalEventMock.mockClear();
+    getPrimaryLeaseDocumentSummaryMock.mockReset();
+    getPrimaryLeaseDocumentSummaryMock.mockResolvedValue(null);
+    generatePrimaryLeaseDocumentMock.mockReset();
+    lockPrimaryLeaseDocumentForSigningMock.mockReset();
+    lockPrimaryLeaseDocumentForSigningMock.mockRejectedValue(Object.assign(new Error("signing_document_url_required"), { status: 400 }));
     sendEmailMock.mockResolvedValue(undefined);
     process.env.EMAIL_FROM = "noreply@example.com";
     process.env.SIGNING_PROVIDER = "mock";
@@ -384,6 +398,218 @@ describe("leaseRoutes GET /active", () => {
           }),
         }),
       })
+    );
+  });
+
+  it("projects generated primary lease document availability from leaseDocuments metadata", async () => {
+    getPrimaryLeaseDocumentSummaryMock.mockResolvedValueOnce({
+      id: "ldoc_generated",
+      leaseId: "lease-primary-doc",
+      landlordId: "landlord-1",
+      documentType: "primary_lease",
+      jurisdictionCode: "CA_NS",
+      templateVersion: "ca-ns-primary-lease-draft-v1",
+      counselReviewStatus: "draft",
+      status: "generated",
+      documentHash: "doc_hash_generated",
+      manifestHash: "manifest_hash_generated",
+      storageRef: null,
+      previewUrl: "https://signed.example.com/primary-generated-preview.pdf",
+    });
+    seedDoc("properties", "prop-1", { landlordId: "landlord-1", name: "Harbour View", province: "NS" });
+    seedDoc("tenants", "tenant-1", { landlordId: "landlord-1", fullName: "Jane Tenant", email: "jane@example.com" });
+    seedDoc("leases", "lease-primary-doc", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      tenantId: "tenant-1",
+      tenantIds: ["tenant-1"],
+      primaryTenantId: "tenant-1",
+      unitId: "unit-1",
+      unitNumber: "101",
+      monthlyRent: 1850,
+      dueDay: 1,
+      startDate: "2026-01-01",
+      endDate: "2099-12-31",
+      status: "active",
+    });
+
+    const router = (await import("../leaseRoutes")).default;
+    const res = await invokeRouter(router, { method: "GET", url: "/active" });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.leases?.[0]).toEqual(
+      expect.objectContaining({
+        documentUrl: "https://signed.example.com/primary-generated-preview.pdf",
+        leasePdfStatus: "available",
+        leasePdfLabel: "Lease document available",
+        signatureStatus: "not_started",
+        leaseExecution: expect.objectContaining({
+          executionStatus: "draft",
+          pdfStatus: "generated",
+        }),
+      })
+    );
+    expect(JSON.stringify(res.body)).not.toContain("lease-documents/");
+  });
+
+  it("projects pending signature state from the current signing request", async () => {
+    getPrimaryLeaseDocumentSummaryMock.mockResolvedValueOnce({
+      id: "ldoc_pending",
+      leaseId: "lease-pending-signature",
+      landlordId: "landlord-1",
+      documentType: "primary_lease",
+      jurisdictionCode: "CA_NS",
+      templateVersion: "ca-ns-primary-lease-draft-v1",
+      counselReviewStatus: "draft",
+      status: "locked",
+      documentHash: "doc_hash_pending",
+      manifestHash: "manifest_hash_pending",
+      storageRef: null,
+      previewUrl: "https://signed.example.com/primary-pending-preview.pdf",
+    });
+    seedDoc("properties", "prop-1", { landlordId: "landlord-1", name: "Harbour View", province: "NS" });
+    seedDoc("tenants", "tenant-1", { landlordId: "landlord-1", fullName: "Jane Tenant", email: "jane@example.com" });
+    seedDoc("leases", "lease-pending-signature", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      tenantId: "tenant-1",
+      tenantIds: ["tenant-1"],
+      primaryTenantId: "tenant-1",
+      unitId: "unit-1",
+      unitNumber: "101",
+      monthlyRent: 1850,
+      dueDay: 1,
+      startDate: "2026-01-01",
+      endDate: "2099-12-31",
+      status: "active",
+    });
+    seedDoc("leaseSigningRequests", "request-pending", {
+      leaseId: "lease-pending-signature",
+      landlordId: "landlord-1",
+      currentSigningStatus: "pending_signature",
+      currentStatusAt: "2026-01-02T12:00:00.000Z",
+      sentAt: "2026-01-02T12:00:00.000Z",
+      documentId: "ldoc_pending",
+      documentHash: "doc_hash_pending",
+      manifestHash: "manifest_hash_pending",
+      jurisdictionCode: "CA_NS",
+      templateVersion: "ca-ns-primary-lease-draft-v1",
+      providerDispatchMode: "sandbox",
+      providerDispatchStatus: "accepted",
+      providerTestMode: true,
+    });
+
+    const router = (await import("../leaseRoutes")).default;
+    const res = await invokeRouter(router, { method: "GET", url: "/active" });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.leases?.[0]).toEqual(
+      expect.objectContaining({
+        signatureStatus: "awaiting_tenant_signature",
+        signatureReadinessLabel: "Awaiting tenant signature",
+        leaseExecution: expect.objectContaining({
+          executionStatus: "ready_for_tenant_signature",
+          executionLabel: "Waiting for tenant signature",
+          requiredNextAction: "tenant_signature",
+        }),
+        stateCoherence: expect.objectContaining({
+          leaseOperationalState: "pending_execution",
+          flags: expect.objectContaining({
+            leaseMarkedActiveBeforeExecution: true,
+          }),
+        }),
+      })
+    );
+  });
+
+  it("projects signed provider lifecycle as executed while preserving payment setup warnings", async () => {
+    getPrimaryLeaseDocumentSummaryMock.mockResolvedValueOnce({
+      id: "ldoc_signed",
+      leaseId: "lease-signed-provider",
+      landlordId: "landlord-1",
+      documentType: "primary_lease",
+      jurisdictionCode: "CA_NS",
+      templateVersion: "ca-ns-primary-lease-draft-v1",
+      counselReviewStatus: "draft",
+      status: "locked",
+      documentHash: "doc_hash_signed",
+      manifestHash: "manifest_hash_signed",
+      storageRef: null,
+      previewUrl: "https://signed.example.com/primary-signed-preview.pdf",
+    });
+    seedDoc("properties", "prop-1", { landlordId: "landlord-1", name: "Harbour View", province: "NS" });
+    seedDoc("tenants", "tenant-1", { landlordId: "landlord-1", fullName: "Jane Tenant", email: "jane@example.com" });
+    seedDoc("leases", "lease-signed-provider", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      tenantId: "tenant-1",
+      tenantIds: ["tenant-1"],
+      primaryTenantId: "tenant-1",
+      unitId: "unit-1",
+      unitNumber: "101",
+      monthlyRent: 1850,
+      startDate: "2026-01-01",
+      endDate: "2099-12-31",
+      status: "active",
+    });
+    seedDoc("leaseSigningRequests", "request-signed", {
+      leaseId: "lease-signed-provider",
+      landlordId: "landlord-1",
+      currentSigningStatus: "signed",
+      currentStatusAt: "2026-01-03T12:00:00.000Z",
+      sentAt: "2026-01-02T12:00:00.000Z",
+      documentId: "ldoc_signed",
+      documentHash: "doc_hash_signed",
+      manifestHash: "manifest_hash_signed",
+      jurisdictionCode: "CA_NS",
+      templateVersion: "ca-ns-primary-lease-draft-v1",
+      providerAccessUrlExpiresAt: "2026-01-02T16:00:00.000Z",
+      providerDispatchMode: "sandbox",
+      providerDispatchStatus: "accepted",
+      providerTestMode: true,
+    });
+
+    const router = (await import("../leaseRoutes")).default;
+    const res = await invokeRouter(router, { method: "GET", url: "/active" });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.leases?.[0]).toEqual(
+      expect.objectContaining({
+        signatureStatus: "signed",
+        signatureReadinessLabel: "Lease signing complete",
+        leaseExecution: expect.objectContaining({
+          executionStatus: "fully_executed",
+          executionLabel: "Lease fully executed",
+          requiredNextAction: "none",
+          completedAt: "2026-01-03T12:00:00.000Z",
+        }),
+        stateCoherence: expect.objectContaining({
+          coherenceStatus: "coherent",
+          leaseExecutionState: "executed",
+          leaseOperationalState: "active",
+          flags: expect.objectContaining({
+            leaseMarkedActiveBeforeExecution: false,
+            requiresReview: false,
+          }),
+        }),
+        paymentReadiness: expect.objectContaining({
+          readinessStatus: "not_ready",
+          rentTerms: expect.objectContaining({
+            dueDateAvailable: false,
+            leaseExecuted: true,
+          }),
+        }),
+      })
+    );
+    expect(JSON.stringify(res.body)).not.toContain("providerRequestId");
+    expect(JSON.stringify(res.body)).not.toContain("X-Goog-Signature");
+    expect(JSON.stringify(res.body)).not.toContain("lease-documents/");
+    expect(res.body?.leases?.[0]?.jurisdictionPolicies).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          policyKey: "lease_execution_readiness",
+        }),
+      ])
     );
   });
 
@@ -650,6 +876,84 @@ describe("leaseRoutes GET /active", () => {
     expect(scheduleRes.body?.error).toBe("schedule_a_document_not_found");
   });
 
+  it("returns primary lease document summaries without projecting raw storage refs", async () => {
+    getPrimaryLeaseDocumentSummaryMock.mockResolvedValueOnce({
+      id: "ldoc_1",
+      leaseId: "lease-1",
+      landlordId: "landlord-1",
+      documentType: "primary_lease",
+      jurisdictionCode: "CA_NS",
+      templateVersion: "ca-ns-primary-lease-draft-v1",
+      counselReviewStatus: "draft",
+      status: "generated",
+      documentHash: "doc_hash",
+      manifestHash: "manifest_hash",
+      storageRef: null,
+      previewUrl: "https://signed.example.com/primary-preview.pdf",
+    });
+    seedDoc("leases", "lease-1", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      tenantId: "tenant-1",
+      status: "active",
+    });
+
+    const router = (await import("../leaseRoutes")).default;
+    const res = await invokeRouter(router, { method: "GET", url: "/lease-1/primary-document" });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.document).toEqual(expect.objectContaining({ id: "ldoc_1", storageRef: null }));
+    expect(getPrimaryLeaseDocumentSummaryMock).toHaveBeenCalledWith(
+      expect.objectContaining({ leaseId: "lease-1", landlordId: "landlord-1", includePreviewUrl: false })
+    );
+    expect(JSON.stringify(res.body)).not.toContain("lease-documents/");
+  });
+
+  it("generates primary lease document metadata through the lease route", async () => {
+    generatePrimaryLeaseDocumentMock.mockResolvedValueOnce({
+      id: "ldoc_2",
+      leaseId: "lease-1",
+      landlordId: "landlord-1",
+      documentType: "primary_lease",
+      jurisdictionCode: "CA_NS",
+      templateVersion: "ca-ns-primary-lease-draft-v1",
+      counselReviewStatus: "draft",
+      status: "generated",
+      documentHash: "doc_hash",
+      manifestHash: "manifest_hash",
+      storageRef: null,
+    });
+    seedDoc("properties", "prop-1", { landlordId: "landlord-1", name: "Coburg Rd", province: "NS" });
+    seedDoc("units", "unit-6", { landlordId: "landlord-1", propertyId: "prop-1", unitNumber: "6" });
+    seedDoc("tenants", "tenant-1", { landlordId: "landlord-1", fullName: "Chip Milo", email: "hello+cob6tenant@rentchain.ai" });
+    seedDoc("leases", "lease-1", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      tenantId: "tenant-1",
+      tenantIds: ["tenant-1"],
+      unitId: "unit-6",
+      unitNumber: "6",
+      province: "NS",
+      status: "active",
+    });
+
+    const router = (await import("../leaseRoutes")).default;
+    const res = await invokeRouter(router, { method: "POST", url: "/lease-1/primary-document/generate" });
+
+    expect(res.status).toBe(201);
+    expect(res.body?.document).toEqual(expect.objectContaining({ id: "ldoc_2", storageRef: null }));
+    expect(generatePrimaryLeaseDocumentMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        leaseId: "lease-1",
+        lease: expect.objectContaining({ id: "lease-1", landlordId: "landlord-1" }),
+        property: expect.objectContaining({ id: "prop-1", name: "Coburg Rd" }),
+        unit: expect.objectContaining({ id: "unit-6", unitNumber: "6" }),
+        tenants: [expect.objectContaining({ id: "tenant-1", email: "hello+cob6tenant@rentchain.ai" })],
+      })
+    );
+    expect(JSON.stringify(res.body)).not.toContain("lease-documents/");
+  });
+
   it("does not use app-domain lease PDF paths as document URL fallback", async () => {
     seedDoc("properties", "prop-1", { landlordId: "landlord-1", name: "Coburg Rd" });
     seedDoc("tenants", "tenant-1", { landlordId: "landlord-1", fullName: "Chip Milo", email: "hello+cob6tenant@rentchain.ai" });
@@ -804,6 +1108,17 @@ describe("leaseRoutes GET /active", () => {
   });
 
   it("sends a lease signing request for a landlord-scoped lease and records governed signing events", async () => {
+    lockPrimaryLeaseDocumentForSigningMock.mockResolvedValueOnce({
+      providerDocumentUrl: "https://signed.example.com/provider-lease.pdf",
+      document: {
+        id: "ldoc_1",
+        documentHash: "doc_hash",
+        manifestHash: "manifest_hash",
+        templateVersion: "ca-ns-primary-lease-draft-v1",
+        jurisdictionCode: "CA_NS",
+        providerAccessUrlExpiresAt: "2026-01-01T04:00:00.000Z",
+      },
+    });
     seedDoc("leases", "lease-1", {
       landlordId: "landlord-1",
       propertyId: "prop-1",
@@ -843,13 +1158,18 @@ describe("leaseRoutes GET /active", () => {
         leaseId: "lease-1",
         landlordId: "landlord-1",
         providerId: "mock",
-        documentUrl: "https://files.example.com/lease-1.pdf",
+        documentId: "ldoc_1",
+        documentHash: "doc_hash",
+        manifestHash: "manifest_hash",
+        providerAccessUrlExpiresAt: "2026-01-01T04:00:00.000Z",
         providerDispatchMode: "mock",
         providerDispatchStatus: "mocked_no_email",
         rawIdsIncluded: false,
         payloadIncluded: false,
       })
     );
+    expect(requests[0].data.documentUrl).toBeUndefined();
+    expect(JSON.stringify(requests)).not.toContain("https://signed.example.com/provider-lease.pdf");
     expect(requests[0].data.tenantEmailHashes).toHaveLength(1);
     expect(requests[0].data.providerRequestRef).toMatch(/^mock_ref_/);
     expect(requests[0].data.providerRequestRef).not.toContain("lease-1");
@@ -883,7 +1203,17 @@ describe("leaseRoutes GET /active", () => {
   });
 
   it("resolves storage-backed primary lease documents before sending for signature", async () => {
-    getSignedDownloadUrlMock.mockResolvedValueOnce("https://signed.example.com/provider-readable-lease.pdf");
+    lockPrimaryLeaseDocumentForSigningMock.mockResolvedValueOnce({
+      providerDocumentUrl: "https://signed.example.com/provider-readable-lease.pdf",
+      document: {
+        id: "ldoc_storage",
+        documentHash: "doc_hash",
+        manifestHash: "manifest_hash",
+        templateVersion: "ca-ns-primary-lease-draft-v1",
+        jurisdictionCode: "CA_NS",
+        providerAccessUrlExpiresAt: "2026-01-01T04:00:00.000Z",
+      },
+    });
     seedDoc("leases", "lease-storage-doc", {
       landlordId: "landlord-1",
       propertyId: "prop-1",
@@ -908,22 +1238,51 @@ describe("leaseRoutes GET /active", () => {
     });
 
     expect(res.status).toBe(200);
-    expect(getSignedDownloadUrlMock).toHaveBeenCalledWith({
-      bucket: "lease-documents",
-      path: "leases/landlord-1/lease-storage-doc/lease-v1.pdf",
-      expiresMinutes: 30,
-    });
+    expect(lockPrimaryLeaseDocumentForSigningMock).toHaveBeenCalledWith(
+      expect.objectContaining({ leaseId: "lease-storage-doc", landlordId: "landlord-1" })
+    );
     const requests = listDocs("leaseSigningRequests");
     expect(requests).toHaveLength(1);
     expect(requests[0].data).toEqual(
       expect.objectContaining({
         leaseId: "lease-storage-doc",
         providerId: "mock",
-        documentUrl: "https://signed.example.com/provider-readable-lease.pdf",
+        documentId: "ldoc_storage",
+        providerAccessUrlExpiresAt: "2026-01-01T04:00:00.000Z",
       })
     );
+    expect(requests[0].data.documentUrl).toBeUndefined();
+    expect(JSON.stringify(requests)).not.toContain("https://signed.example.com/provider-readable-lease.pdf");
     expect(JSON.stringify(requests)).not.toContain("X-Goog-Expires=1");
     expect(writeCanonicalEventMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not use Schedule A alone as the primary signing document", async () => {
+    seedDoc("leases", "lease-schedule-only", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      tenantId: "tenant-1",
+      status: "active",
+      scheduleADocument: {
+        bucket: "lease-documents",
+        path: "leases/landlord-1/lease-schedule-only/schedule-a-v1.pdf",
+      },
+    });
+
+    const router = (await import("../leaseRoutes")).default;
+    const res = await invokeRouter(router, {
+      method: "POST",
+      url: "/lease-schedule-only/send-for-signature",
+      body: { tenantEmails: ["tenant@example.com"] },
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ ok: false, error: "signing_document_url_required" });
+    expect(lockPrimaryLeaseDocumentForSigningMock).toHaveBeenCalledWith(
+      expect.objectContaining({ leaseId: "lease-schedule-only", landlordId: "landlord-1" })
+    );
+    expect(listDocs("leaseSigningRequests")).toHaveLength(0);
+    expect(writeCanonicalEventMock).not.toHaveBeenCalled();
   });
 
   it("rejects invalid lease signing recipients without dispatching or writing events", async () => {

@@ -85,6 +85,11 @@ import {
   signingErrorCode,
   signingErrorStatus,
 } from "../services/signing/leaseSigningService";
+import {
+  generatePrimaryLeaseDocument,
+  getPrimaryLeaseDocumentSummary,
+  lockPrimaryLeaseDocumentForSigning,
+} from "../services/leaseDocuments/leaseDocumentService";
 
 const router = Router();
 const LEASE_SIGNING_ROUTE_VERSION = "lease-signing-dispatch-metadata-v1";
@@ -1302,6 +1307,84 @@ async function countLeaseLedgerPaymentActivity(leaseId: string, landlordId: stri
   }
 }
 
+function normalizeProjectionStatus(value: unknown): string {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+}
+
+function latestTimestampMillis(data: any, keys: string[]) {
+  return Math.max(...keys.map((key) => toMillis(data?.[key])).filter((value) => Number.isFinite(value)), 0);
+}
+
+async function loadLatestLeaseSigningRequestForProjection(leaseId: string, landlordId: string | null) {
+  const normalizedLeaseId = String(leaseId || "").trim();
+  const normalizedLandlordId = String(landlordId || "").trim();
+  if (!normalizedLeaseId || !normalizedLandlordId) return null;
+  try {
+    const snap = await db
+      .collection("leaseSigningRequests")
+      .where("leaseId", "==", normalizedLeaseId)
+      .where("landlordId", "==", normalizedLandlordId)
+      .get();
+    return (snap.docs || [])
+      .map((doc: any) => ({ id: doc.id, ...((doc.data() as any) || {}) }))
+      .sort(
+        (a: any, b: any) =>
+          latestTimestampMillis(b, ["currentStatusAt", "signedAt", "sentAt", "updatedAt", "createdAt"]) -
+          latestTimestampMillis(a, ["currentStatusAt", "signedAt", "sentAt", "updatedAt", "createdAt"])
+      )[0] || null;
+  } catch (err) {
+    console.error("[leaseRoutes] loadLatestLeaseSigningRequestForProjection error", err);
+    return null;
+  }
+}
+
+async function loadLatestSigningSignedEventForProjection(leaseId: string) {
+  const normalizedLeaseId = String(leaseId || "").trim();
+  if (!normalizedLeaseId) return null;
+  try {
+    const snap = await db.collection("canonicalEvents").where("action", "==", "signing_signed").limit(100).get();
+    return (snap.docs || [])
+      .map((doc: any) => ({ id: doc.id, ...((doc.data() as any) || {}) }))
+      .filter((event: any) => String(event?.resource?.type || "") === "lease")
+      .filter((event: any) => String(event?.resource?.id || "") === normalizedLeaseId)
+      .sort((a: any, b: any) => latestTimestampMillis(b, ["occurredAt", "recordedAt"]) - latestTimestampMillis(a, ["occurredAt", "recordedAt"]))[0] || null;
+  } catch {
+    return null;
+  }
+}
+
+function buildLeaseProjectionRaw(input: {
+  raw: any;
+  signingRequest: any | null;
+  signingSignedEvent: any | null;
+  primaryDocument: any | null;
+}) {
+  const signingStatus = normalizeProjectionStatus(input.signingRequest?.currentSigningStatus);
+  const signedByRequest = ["signed", "completed", "complete"].includes(signingStatus);
+  const signedByEvent = Boolean(input.signingSignedEvent);
+  const currentStatusAt =
+    String(input.signingRequest?.currentStatusAt || input.signingSignedEvent?.occurredAt || input.signingSignedEvent?.recordedAt || "").trim() || null;
+  const documentStatus = String(input.primaryDocument?.status || input.signingRequest?.documentStatus || "").trim() || null;
+  return {
+    ...input.raw,
+    currentSigningStatus: signedByRequest || signedByEvent ? "signed" : signingStatus || input.raw?.currentSigningStatus,
+    currentStatusAt: currentStatusAt || input.raw?.currentStatusAt || null,
+    signingStatus: signedByRequest || signedByEvent ? "signed" : signingStatus || input.raw?.signingStatus,
+    sentAt: input.signingRequest?.sentAt || input.raw?.sentAt || null,
+    documentStatus: documentStatus || input.raw?.documentStatus || null,
+    leaseDocumentStatus: documentStatus || input.raw?.leaseDocumentStatus || null,
+    documentGeneratedAt: input.primaryDocument?.generatedAt || input.raw?.documentGeneratedAt || null,
+    documentId: input.signingRequest?.documentId || input.primaryDocument?.id || input.raw?.documentId || null,
+    documentHash: input.signingRequest?.documentHash || input.primaryDocument?.documentHash || input.raw?.documentHash || null,
+    manifestHash: input.signingRequest?.manifestHash || input.primaryDocument?.manifestHash || input.raw?.manifestHash || null,
+    jurisdictionCode: input.signingRequest?.jurisdictionCode || input.primaryDocument?.jurisdictionCode || input.raw?.jurisdictionCode || null,
+    templateVersion: input.signingRequest?.templateVersion || input.primaryDocument?.templateVersion || input.raw?.templateVersion || null,
+  };
+}
+
 function hydrateLeaseUnitDisplayFieldsFromUnits<T extends Record<string, any>>(
   lease: T,
   units: any[]
@@ -1324,15 +1407,23 @@ function hydrateLeaseUnitDisplayFieldsFromUnits<T extends Record<string, any>>(
 async function enrichLeaseRow(raw: any) {
   const lease = normalizeLeaseRow(raw.id, raw);
   const propertyId = String(lease.propertyId || "").trim();
+  const landlordId = String(lease.landlordId || "").trim() || null;
   const tenantId =
     String(lease.primaryTenantId || lease.tenantId || lease.tenantIds?.[0] || "").trim() || null;
 
-  const [propertySnap, tenantSnap, documentUrl, scheduleAUrl] = await Promise.all([
+  const [propertySnap, tenantSnap, legacyDocumentUrl, scheduleAUrl, primaryDocument, signingRequest, signingSignedEvent] = await Promise.all([
     propertyId ? db.collection("properties").doc(propertyId).get().catch(() => null) : Promise.resolve(null),
     tenantId ? db.collection("tenants").doc(tenantId).get().catch(() => null) : Promise.resolve(null),
     loadLeaseDocumentUrlForLease(raw),
     loadScheduleAUrlForLease(raw),
+    landlordId
+      ? getPrimaryLeaseDocumentSummary({ leaseId: lease.id, landlordId, includePreviewUrl: true }).catch(() => null)
+      : Promise.resolve(null),
+    loadLatestLeaseSigningRequestForProjection(lease.id, landlordId),
+    loadLatestSigningSignedEventForProjection(lease.id),
   ]);
+  const documentUrl = legacyDocumentUrl || String(primaryDocument?.previewUrl || "").trim() || null;
+  const projectionRaw = buildLeaseProjectionRaw({ raw, signingRequest, signingSignedEvent, primaryDocument });
 
   const propertyData = propertySnap?.exists ? propertySnap.data() : null;
   const propertyName =
@@ -1357,7 +1448,7 @@ async function enrichLeaseRow(raw: any) {
   const tenantEmail =
     tenantSnap?.exists ? String(tenantSnap.data()?.email || "").trim() || null : null;
   const leasePaymentProjection = await buildLeasePaymentProjection({
-    rawLease: raw,
+    rawLease: projectionRaw,
     lease: {
       id: lease.id,
       landlordId: String(lease.landlordId || "").trim() || null,
@@ -1378,7 +1469,6 @@ async function enrichLeaseRow(raw: any) {
   const leaseReadiness = leasePaymentProjection.leaseReadiness;
   const paymentReadiness = leasePaymentProjection.paymentReadiness;
   const rentPaymentSummary = leasePaymentProjection.rentPaymentSummary;
-  const landlordId = String(lease.landlordId || "").trim() || null;
   const [unitOccupancy, ledgerPaymentCount] = await Promise.all([
     loadLeaseUnitOccupancySnapshot(lease, landlordId),
     countLeaseLedgerPaymentActivity(lease.id, landlordId),
@@ -3060,6 +3150,77 @@ export async function handleLeaseDocumentUrl(req: any, res: Response) {
 
 router.get("/:leaseId/document-url", requireLandlord, handleLeaseDocumentUrl);
 
+async function buildPrimaryLeaseDocumentContext(leaseId: string, lease: any, req: any) {
+  const landlordId = String(lease?.landlordId || req.user?.landlordId || req.user?.id || "").trim();
+  const propertyId = String(lease?.propertyId || "").trim();
+  const unitId = String(lease?.unitId || "").trim();
+  const tenantIds = Array.isArray(lease?.tenantIds)
+    ? lease.tenantIds.map((value: any) => String(value || "").trim()).filter(Boolean)
+    : [lease?.primaryTenantId, lease?.tenantId].map((value) => String(value || "").trim()).filter(Boolean);
+  const [propertySnap, unitSnap, landlordSnap, ...tenantSnaps] = await Promise.all([
+    propertyId ? db.collection("properties").doc(propertyId).get().catch(() => null) : Promise.resolve(null),
+    unitId ? db.collection("units").doc(unitId).get().catch(() => null) : Promise.resolve(null),
+    landlordId ? db.collection("users").doc(landlordId).get().catch(() => null) : Promise.resolve(null),
+    ...tenantIds.map((tenantId: string) => db.collection("tenants").doc(tenantId).get().catch(() => null)),
+  ]);
+  return {
+    leaseId,
+    lease: { id: leaseId, ...lease },
+    landlord:
+      (landlordSnap as any)?.exists
+        ? { id: landlordId, ...(landlordSnap as any).data() }
+        : { id: landlordId, displayName: req.user?.displayName || req.user?.name || req.user?.email || "Landlord" },
+    property: (propertySnap as any)?.exists ? { id: propertyId, ...(propertySnap as any).data() } : null,
+    unit: (unitSnap as any)?.exists ? { id: unitId, ...(unitSnap as any).data() } : null,
+    tenants: tenantSnaps
+      .filter((snap: any) => snap?.exists)
+      .map((snap: any) => ({ id: snap.id, ...snap.data() })),
+    actorId: String(req.user?.id || req.user?.email || landlordId).trim() || null,
+  };
+}
+
+function leaseDocumentErrorStatus(error: any) {
+  return Number(error?.status || 500);
+}
+
+function leaseDocumentErrorCode(error: any) {
+  const code = String(error?.message || "lease_document_generation_unavailable");
+  return code.includes(" ") ? "lease_document_generation_unavailable" : code;
+}
+
+router.get("/:leaseId/primary-document", requireLandlord, async (req: any, res: Response) => {
+  try {
+    if (!(await enforceLeaseCapability(req, res))) return;
+    const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
+    const leaseId = String(req.params?.leaseId || "").trim();
+    const result = await getLeaseEntityForLandlord(leaseId, landlordId);
+    if (!result.ok) return res.status(result.status).json({ ok: false, error: result.error === "Forbidden" ? "forbidden" : "lease_not_found" });
+    const document = await getPrimaryLeaseDocumentSummary({
+      leaseId,
+      landlordId,
+      includePreviewUrl: String(req.query?.includePreviewUrl || "") === "1",
+    });
+    return res.status(200).json({ ok: true, document });
+  } catch (error: any) {
+    return res.status(leaseDocumentErrorStatus(error)).json({ ok: false, error: leaseDocumentErrorCode(error) });
+  }
+});
+
+router.post("/:leaseId/primary-document/generate", requireLandlord, async (req: any, res: Response) => {
+  try {
+    if (!(await enforceLeaseCapability(req, res))) return;
+    const landlordId = String(req.user?.landlordId || req.user?.id || "").trim();
+    const leaseId = String(req.params?.leaseId || "").trim();
+    const result = await getLeaseEntityForLandlord(leaseId, landlordId);
+    if (!result.ok) return res.status(result.status).json({ ok: false, error: result.error === "Forbidden" ? "forbidden" : "lease_not_found" });
+    const context = await buildPrimaryLeaseDocumentContext(leaseId, result.lease as any, req);
+    const document = await generatePrimaryLeaseDocument(context);
+    return res.status(201).json({ ok: true, document });
+  } catch (error: any) {
+    return res.status(leaseDocumentErrorStatus(error)).json({ ok: false, error: leaseDocumentErrorCode(error) });
+  }
+});
+
 router.post("/:leaseId/send-for-signature", requireLandlord, async (req: any, res: Response) => {
   try {
     res.setHeader("x-lease-signing-route-version", LEASE_SIGNING_ROUTE_VERSION);
@@ -3069,16 +3230,35 @@ router.post("/:leaseId/send-for-signature", requireLandlord, async (req: any, re
     if (!leaseId) return res.status(400).json({ ok: false, error: "lease_not_found" });
     const result = await getLeaseEntityForLandlord(leaseId, landlordId);
     if (!result.ok) return res.status(result.status).json({ ok: false, error: result.error === "Forbidden" ? "forbidden" : "lease_not_found" });
-    const signingDocumentUrl = await loadLeaseDocumentUrlForLease(result.lease as any);
     const tenantEmails = Array.isArray(req.body?.tenantEmails)
       ? req.body.tenantEmails.map((value: unknown) => String(value || "").trim())
       : [req.body?.tenantEmail].map((value) => String(value || "").trim()).filter(Boolean);
+    const validTenantEmails = tenantEmails.filter(Boolean);
+    if (!validTenantEmails.length || validTenantEmails.some((email: string) => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) {
+      return res.status(400).json({ ok: false, error: "invalid_tenant_email" });
+    }
+    const requestIdHint = `${landlordId}:${leaseId}:signing`;
+    const lockedDocument = await lockPrimaryLeaseDocumentForSigning({
+      leaseId,
+      landlordId,
+      actorId: String(req.user?.id || req.user?.email || landlordId).trim() || null,
+      signingRequestId: requestIdHint,
+    });
     const snapshot = await sendLeaseForSignature({
       leaseId,
-      lease: signingDocumentUrl ? { ...(result.lease as any), documentUrl: signingDocumentUrl } : (result.lease as any),
+      lease: result.lease as any,
       landlordId,
-      tenantEmails,
+      tenantEmails: validTenantEmails,
       message: String(req.body?.message || "").trim() || null,
+      providerDocumentUrl: lockedDocument.providerDocumentUrl,
+      documentMetadata: {
+        documentId: lockedDocument.document.id,
+        documentHash: lockedDocument.document.documentHash,
+        manifestHash: lockedDocument.document.manifestHash,
+        templateVersion: lockedDocument.document.templateVersion,
+        jurisdictionCode: lockedDocument.document.jurisdictionCode,
+        providerAccessUrlExpiresAt: lockedDocument.document.providerAccessUrlExpiresAt,
+      },
     });
     return res.status(200).json({
       ok: true,

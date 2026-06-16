@@ -119,6 +119,15 @@ describe("leaseSigningService", () => {
       leaseId: "lease-1",
       landlordId: "landlord-1",
       lease: { startDate: "2026-01-01" },
+      providerDocumentUrl: "https://signed.example.com/provider-fetch.pdf?X-Goog-Signature=secret",
+      documentMetadata: {
+        documentId: "ldoc_signed",
+        documentHash: "doc_hash_signed",
+        manifestHash: "manifest_hash_signed",
+        jurisdictionCode: "CA_NS",
+        templateVersion: "ca-ns-primary-lease-draft-v1",
+        providerAccessUrlExpiresAt: "2026-01-01T04:00:00.000Z",
+      },
       tenantEmails: ["tenant@example.com"],
     });
     const storedRequest = Array.from(ensureCollection("leaseSigningRequests").values())[0];
@@ -144,6 +153,25 @@ describe("leaseSigningService", () => {
     expect(snapshot.signingStatus).toBe("signed");
     expect(snapshot.derivedLeaseState).toBe("active");
     expect(snapshot.events.map((event) => event.type)).toContain("signed");
+    expect(writeCanonicalEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "signing_signed",
+        metadata: expect.objectContaining({
+          documentId: "ldoc_signed",
+          documentHash: "doc_hash_signed",
+          manifestHash: "manifest_hash_signed",
+          jurisdictionCode: "CA_NS",
+          templateVersion: "ca-ns-primary-lease-draft-v1",
+          providerRef: expect.stringMatching(/^mock_ref_/),
+          providerDispatchMode: "mock",
+          providerDispatchStatus: "mocked_no_email",
+        }),
+      })
+    );
+    const canonicalPayload = JSON.stringify(writeCanonicalEventMock.mock.calls);
+    expect(canonicalPayload).not.toContain("https://signed.example.com");
+    expect(canonicalPayload).not.toContain("X-Goog-Signature");
+    expect(canonicalPayload).not.toContain(storedRequest.providerRequestId);
   });
 
   it("fails closed for explicitly configured Dropbox Sign when config is missing", async () => {
@@ -190,14 +218,30 @@ describe("leaseSigningService", () => {
     const snapshot = await sendLeaseForSignature({
       leaseId: "lease-1",
       landlordId: "landlord-1",
-      lease: { startDate: "2026-01-01", documentUrl: "https://example.com/lease.pdf" },
+      lease: { startDate: "2026-01-01" },
+      providerDocumentUrl: "https://signed.example.com/provider-fetch.pdf?X-Goog-Signature=secret",
+      documentMetadata: {
+        documentId: "ldoc_1",
+        documentHash: "doc_hash",
+        manifestHash: "manifest_hash",
+        jurisdictionCode: "CA_NS",
+        templateVersion: "ca-ns-primary-lease-draft-v1",
+        providerAccessUrlExpiresAt: "2026-01-01T04:00:00.000Z",
+      },
       tenantEmails: ["tenant@example.com"],
     });
 
     const storedRequest = Array.from(ensureCollection("leaseSigningRequests").values())[0];
     expect(storedRequest.providerRequestId).toBe("raw-provider-request-123");
+    expect(storedRequest.documentUrl).toBeUndefined();
+    expect(storedRequest.providerAccessUrlExpiresAt).toBe("2026-01-01T04:00:00.000Z");
+    expect(storedRequest.documentId).toBe("ldoc_1");
+    expect(storedRequest.documentHash).toBe("doc_hash");
+    expect(storedRequest.manifestHash).toBe("manifest_hash");
     expect(snapshot.providerRequestRef).toMatch(/^boldsign_ref_/);
     expect(JSON.stringify(snapshot)).not.toContain("raw-provider-request-123");
+    expect(JSON.stringify(storedRequest)).not.toContain("https://signed.example.com");
+    expect(JSON.stringify(storedRequest)).not.toContain("X-Goog-Signature");
     expect(writeCanonicalEventMock).toHaveBeenCalledWith(
       expect.objectContaining({
         action: "signing_sent",
@@ -205,10 +249,16 @@ describe("leaseSigningService", () => {
           providerDispatchMode: "sandbox",
           providerDispatchStatus: "accepted",
           providerTestMode: true,
+          documentId: "ldoc_1",
+          documentHash: "doc_hash",
+          manifestHash: "manifest_hash",
+          jurisdictionCode: "CA_NS",
+          templateVersion: "ca-ns-primary-lease-draft-v1",
         }),
       })
     );
     expect(JSON.stringify(writeCanonicalEventMock.mock.calls)).not.toContain("raw-provider-request-123");
+    expect(JSON.stringify(writeCanonicalEventMock.mock.calls)).not.toContain("https://signed.example.com");
   });
 
   it("rejects webhook signature failures without writing events", async () => {

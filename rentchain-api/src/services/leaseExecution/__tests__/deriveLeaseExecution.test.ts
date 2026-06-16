@@ -122,4 +122,43 @@ describe("deriveLeaseExecution", () => {
     expect(result.landlordSignatureStatus).toBe("blocked");
     expect(result.completedAt).toBeNull();
   });
+
+  it("derives fully_executed from provider signing completion state", () => {
+    const result = deriveLeaseExecution({
+      leaseId: "lease-1",
+      documentUrl: "https://example.com/lease.pdf",
+      startDate: "2026-05-01",
+      monthlyRent: 1800,
+      status: "active",
+      raw: {
+        currentSigningStatus: "signed",
+        currentStatusAt: "2026-05-09T12:00:00.000Z",
+      },
+    });
+
+    expect(result.executionStatus).toBe("fully_executed");
+    expect(result.executionLabel).toBe("Lease fully executed");
+    expect(result.requiredNextAction).toBe("none");
+    expect(result.tenantSignatureStatus).toBe("completed");
+    expect(result.landlordSignatureStatus).toBe("completed");
+    expect(result.completedAt).toBe("2026-05-09T12:00:00.000Z");
+  });
+
+  it("derives ready_for_tenant_signature from provider pending signature state", () => {
+    const result = deriveLeaseExecution({
+      leaseId: "lease-1",
+      documentUrl: "https://example.com/lease.pdf",
+      startDate: "2026-05-01",
+      monthlyRent: 1800,
+      status: "active",
+      raw: {
+        currentSigningStatus: "pending_signature",
+        currentStatusAt: "2026-05-09T12:00:00.000Z",
+      },
+    });
+
+    expect(result.executionStatus).toBe("ready_for_tenant_signature");
+    expect(result.executionLabel).toBe("Waiting for tenant signature");
+    expect(result.requiredNextAction).toBe("tenant_signature");
+  });
 });

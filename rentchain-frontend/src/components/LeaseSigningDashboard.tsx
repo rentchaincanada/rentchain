@@ -2,9 +2,12 @@ import React from "react";
 import {
   cancelLeaseSigning,
   downloadSignedLease,
+  generatePrimaryLeaseDocument,
+  getPrimaryLeaseDocument,
   getLeaseSigningStatus,
   sendLeaseForSignature,
   type LeaseSigningStatusResponse,
+  type PrimaryLeaseDocument,
 } from "../api/leasesApi";
 
 type Props = {
@@ -42,7 +45,10 @@ export function LeaseSigningDashboard({ leaseId, tenantEmail }: Props) {
   const [email, setEmail] = React.useState(String(tenantEmail || ""));
   const [message, setMessage] = React.useState("");
   const [busy, setBusy] = React.useState(false);
+  const [documentBusy, setDocumentBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [documentError, setDocumentError] = React.useState<string | null>(null);
+  const [primaryDocument, setPrimaryDocument] = React.useState<PrimaryLeaseDocument | null>(null);
 
   React.useEffect(() => {
     const nextTenantEmail = String(tenantEmail || "").trim();
@@ -53,7 +59,12 @@ export function LeaseSigningDashboard({ leaseId, tenantEmail }: Props) {
   const refresh = React.useCallback(async () => {
     if (!leaseId) return;
     try {
-      setStatus(await getLeaseSigningStatus(leaseId));
+      const [nextStatus, nextDocument] = await Promise.all([
+        getLeaseSigningStatus(leaseId),
+        getPrimaryLeaseDocument(leaseId).catch(() => null),
+      ]);
+      setStatus(nextStatus);
+      setPrimaryDocument(nextDocument);
     } catch {
       setStatus(null);
     }
@@ -64,6 +75,10 @@ export function LeaseSigningDashboard({ leaseId, tenantEmail }: Props) {
   }, [refresh]);
 
   async function submit() {
+    if (!primaryDocument || (primaryDocument.status !== "generated" && primaryDocument.status !== "locked")) {
+      setError("Generate a primary lease PDF before sending for signature.");
+      return;
+    }
     const tenantEmails = email.split(",").map((item) => item.trim()).filter(Boolean);
     setBusy(true);
     setError(null);
@@ -73,6 +88,33 @@ export function LeaseSigningDashboard({ leaseId, tenantEmail }: Props) {
       setError(err?.body?.error || err?.message || "Unable to send lease for signature.");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function generateDocument() {
+    setDocumentBusy(true);
+    setDocumentError(null);
+    setError(null);
+    try {
+      setPrimaryDocument(await generatePrimaryLeaseDocument(leaseId));
+    } catch (err: any) {
+      setDocumentError(err?.body?.error || err?.message || "Primary lease document is unavailable for this jurisdiction.");
+    } finally {
+      setDocumentBusy(false);
+    }
+  }
+
+  async function previewDocument() {
+    setDocumentBusy(true);
+    setDocumentError(null);
+    try {
+      const next = await getPrimaryLeaseDocument(leaseId, { includePreviewUrl: true });
+      setPrimaryDocument(next);
+      if (next?.previewUrl) window.open(next.previewUrl, "_blank", "noreferrer");
+    } catch (err: any) {
+      setDocumentError(err?.body?.error || err?.message || "Primary lease document preview is unavailable.");
+    } finally {
+      setDocumentBusy(false);
     }
   }
 
@@ -105,6 +147,7 @@ export function LeaseSigningDashboard({ leaseId, tenantEmail }: Props) {
 
   const signingStatus = status?.signingStatus || "not_started";
   const canSend = signingStatus === "not_started" || signingStatus === "cancelled" || signingStatus === "expired" || signingStatus === "rejected" || signingStatus === "failed";
+  const hasPrimaryDocument = Boolean(primaryDocument && (primaryDocument.status === "generated" || primaryDocument.status === "locked"));
   const canCancel = signingStatus === "pending_signature";
   const canDownload = signingStatus === "signed";
   const noEmailNotice = dispatchNotice(status);
@@ -119,6 +162,30 @@ export function LeaseSigningDashboard({ leaseId, tenantEmail }: Props) {
       </div>
       {canSend ? (
         <div style={{ display: "grid", gap: 8 }}>
+          <div style={{ display: "grid", gap: 6, padding: 10, border: "1px solid #e5e7eb", borderRadius: 8 }}>
+            <div style={{ fontWeight: 800 }}>Primary lease PDF</div>
+            <div style={{ color: "#64748b", fontSize: 13 }}>
+              {primaryDocument
+                ? `Status: ${pretty(primaryDocument.status)} · ${primaryDocument.jurisdictionCode} · ${primaryDocument.counselReviewStatus}`
+                : "No primary lease PDF generated yet."}
+            </div>
+            {primaryDocument?.sourceSummary?.productionApproved === false ? (
+              <div style={{ color: "#92400e", fontSize: 13 }}>
+                Jurisdiction template is draft/test and requires counsel review before production signing.
+              </div>
+            ) : null}
+            {documentError ? <div style={{ color: "#b91c1c", fontSize: 13 }}>{documentError}</div> : null}
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button type="button" onClick={() => void generateDocument()} disabled={documentBusy || busy}>
+                {documentBusy ? "Working..." : "Generate Primary Lease PDF"}
+              </button>
+              {primaryDocument ? (
+                <button type="button" onClick={() => void previewDocument()} disabled={documentBusy || busy}>
+                  Preview Lease Document
+                </button>
+              ) : null}
+            </div>
+          </div>
           <label style={{ display: "grid", gap: 4, fontWeight: 700 }}>
             Tenant email
             <input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="tenant@example.com" />
@@ -127,7 +194,7 @@ export function LeaseSigningDashboard({ leaseId, tenantEmail }: Props) {
             Message
             <textarea value={message} onChange={(event) => setMessage(event.target.value)} rows={3} />
           </label>
-          <button type="button" onClick={() => void submit()} disabled={busy || !email.trim()}>
+          <button type="button" onClick={() => void submit()} disabled={busy || !email.trim() || !hasPrimaryDocument}>
             {busy ? "Sending..." : "Send for Signature"}
           </button>
         </div>
