@@ -295,19 +295,19 @@ describe("LandlordActiveLeasesPage", () => {
     expect(screen.getByText("NS Workflow Guidance:")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Renewal Review" })).toHaveAttribute(
       "href",
-      "/leases/lease-1/summary?section=audit-events#lease-section-audit-events"
+      "/leases/lease-1/workflows/renewal"
     );
     expect(screen.getByRole("link", { name: "Rent Increase Workflow" })).toHaveAttribute(
       "href",
-      "/leases/lease-1/summary?section=rent-payment#lease-section-rent-payment"
+      "/leases/lease-1/workflows/rent-increase"
     );
     expect(screen.getByRole("link", { name: "Notice Workflow" })).toHaveAttribute(
       "href",
-      "/leases/lease-1/summary?section=audit-events#lease-section-audit-events"
+      "/leases/lease-1/workflows/notice"
     );
     expect(screen.getByRole("link", { name: "Deposit Workflow" })).toHaveAttribute(
       "href",
-      "/leases/lease-1/summary?section=rent-payment#lease-section-rent-payment"
+      "/leases/lease-1/workflows/deposit"
     );
     expect(screen.getByText("Verify local requirements.")).toBeInTheDocument();
     expect(screen.queryByText("Lease renewal review recommended")).not.toBeInTheDocument();
@@ -346,24 +346,16 @@ describe("LandlordActiveLeasesPage", () => {
     await screen.findByText("NS Workflow Guidance:");
 
     fireEvent.click(screen.getByRole("link", { name: "Rent Increase Workflow" }));
-    expect(screen.getByTestId("current-location")).toHaveTextContent(
-      "/leases/lease-1/summary?section=rent-payment#lease-section-rent-payment"
-    );
+    expect(screen.getByTestId("current-location")).toHaveTextContent("/leases/lease-1/workflows/rent-increase");
 
     fireEvent.click(screen.getByRole("link", { name: "Deposit Workflow" }));
-    expect(screen.getByTestId("current-location")).toHaveTextContent(
-      "/leases/lease-1/summary?section=rent-payment#lease-section-rent-payment"
-    );
+    expect(screen.getByTestId("current-location")).toHaveTextContent("/leases/lease-1/workflows/deposit");
 
     fireEvent.click(screen.getByRole("link", { name: "Notice Workflow" }));
-    expect(screen.getByTestId("current-location")).toHaveTextContent(
-      "/leases/lease-1/summary?section=audit-events#lease-section-audit-events"
-    );
+    expect(screen.getByTestId("current-location")).toHaveTextContent("/leases/lease-1/workflows/notice");
 
     fireEvent.click(screen.getByRole("link", { name: "Renewal Review" }));
-    expect(screen.getByTestId("current-location")).toHaveTextContent(
-      "/leases/lease-1/summary?section=audit-events#lease-section-audit-events"
-    );
+    expect(screen.getByTestId("current-location")).toHaveTextContent("/leases/lease-1/workflows/renewal");
   });
 
   it("does not open stale GCS or app-domain lease document fallbacks when refresh fails", async () => {
