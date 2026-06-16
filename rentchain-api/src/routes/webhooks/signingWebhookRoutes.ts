@@ -20,6 +20,10 @@ export function signingWebhookBrowserReturnHandler(_req: Request, res: Response)
     .send("Lease signing completed. You may close this page or return to RentChain.");
 }
 
+function requiresDropboxSignPlainTextAck(providerId: string) {
+  return providerId === "dropbox_sign" || providerId === "hellosign";
+}
+
 export async function signingWebhookHandler(req: Request & { rawBody?: Buffer }, res: Response) {
   const providerId = String(req.params?.providerId || req.query?.provider || process.env.SIGNING_PROVIDER || "mock")
     .trim()
@@ -31,6 +35,9 @@ export async function signingWebhookHandler(req: Request & { rawBody?: Buffer },
       body: req.body,
       rawBody: Buffer.isBuffer(req.body) ? req.body : req.rawBody,
     });
+    if (requiresDropboxSignPlainTextAck(providerId)) {
+      return res.status(200).type("text/plain").send("Hello API Event Received");
+    }
     if (result.providerResponseText) {
       return res.status(200).type("text/plain").send(result.providerResponseText);
     }
