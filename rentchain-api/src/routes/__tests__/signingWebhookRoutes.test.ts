@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { signingWebhookHandler } from "../webhooks/signingWebhookRoutes";
+import { signingWebhookBrowserReturnHandler, signingWebhookHandler } from "../webhooks/signingWebhookRoutes";
 
 const { processSigningWebhookMock } = vi.hoisted(() => ({
   processSigningWebhookMock: vi.fn(),
@@ -33,6 +33,16 @@ function makeRes() {
       res.headers.set("content-type", "application/json");
       return res;
     }),
+    redirect: vi.fn((code: number, value: string) => {
+      res.statusCode = code;
+      res.body = value;
+      res.headers.set("location", value);
+      return res;
+    }),
+    setHeader: vi.fn((key: string, value: string) => {
+      res.headers.set(key.toLowerCase(), value);
+      return res;
+    }),
   };
   return res;
 }
@@ -41,6 +51,10 @@ describe("signingWebhookHandler", () => {
   beforeEach(() => {
     processSigningWebhookMock.mockReset();
     delete process.env.SIGNING_PROVIDER;
+    delete process.env.PUBLIC_APP_URL;
+    delete process.env.APP_BASE_URL;
+    delete process.env.SIGNING_PROVIDER_RETURN_URL;
+    delete process.env.SIGNING_RETURN_URL;
   });
 
   it("returns Dropbox Sign account callback acknowledgement as exact plain text", async () => {
@@ -76,5 +90,25 @@ describe("signingWebhookHandler", () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.json).toHaveBeenCalledWith({ ok: true });
+  });
+
+  it("redirects browser GET returns without processing webhook lifecycle", async () => {
+    process.env.PUBLIC_APP_URL = "https://preview.rentchain.ai";
+    const req: any = {
+      params: { providerId: "dropbox_sign" },
+      query: { event: "signature_request_signed", signature_request_id: "raw-provider-id" },
+      headers: {},
+      body: undefined,
+    };
+    const res = makeRes();
+
+    signingWebhookBrowserReturnHandler(req, res);
+
+    expect(processSigningWebhookMock).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(303);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(res.headers.get("location")).toBe("https://preview.rentchain.ai/signing/complete");
+    expect(res.body).toBe("https://preview.rentchain.ai/signing/complete");
+    expect(JSON.stringify(res.body)).not.toContain("raw-provider-id");
   });
 });

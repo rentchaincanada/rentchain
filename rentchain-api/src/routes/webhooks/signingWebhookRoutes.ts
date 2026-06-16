@@ -1,6 +1,18 @@
 import { Request, Response } from "express";
 import { processSigningWebhook, signingErrorCode, signingErrorStatus } from "../../services/signing/leaseSigningService";
 
+function frontendSigningCompleteUrl() {
+  const explicit = String(process.env.SIGNING_PROVIDER_RETURN_URL || process.env.SIGNING_RETURN_URL || "").trim();
+  if (explicit) return explicit;
+  const appBaseUrl = String(process.env.PUBLIC_APP_URL || process.env.APP_BASE_URL || "").trim().replace(/\/+$/, "");
+  return appBaseUrl ? `${appBaseUrl}/signing/complete` : "/signing/complete";
+}
+
+export function signingWebhookBrowserReturnHandler(_req: Request, res: Response) {
+  res.setHeader("Cache-Control", "no-store");
+  return res.redirect(303, frontendSigningCompleteUrl());
+}
+
 export async function signingWebhookHandler(req: Request & { rawBody?: Buffer }, res: Response) {
   const providerId = String(req.params?.providerId || req.query?.provider || process.env.SIGNING_PROVIDER || "mock")
     .trim()

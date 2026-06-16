@@ -293,6 +293,7 @@ describe("API route ownership regression", () => {
     const leaseDocumentUrlRoute = source.indexOf(
       'app.get("/api/leases/:leaseId/document-url", routeSource("leaseRoutes.ts"), requireLandlord, handleLeaseDocumentUrl)'
     );
+    const signingWebhookBrowserReturnRoute = source.indexOf('app.get(\n  "/api/webhooks/signing/:providerId?"');
     const leasesMount = source.indexOf('app.use("/api/leases", routeSource("leaseRoutes.ts"), leaseRoutes)');
     const tenantsMount = source.indexOf('app.use("/api/tenants", routeSource("tenantsRoutes.ts"), tenantsRoutes)');
     const telemetryMount = source.indexOf('app.use("/api", routeSource("telemetryRoutes.ts"), telemetryRoutes)');
@@ -315,6 +316,7 @@ describe("API route ownership regression", () => {
     expect(ledgerMount).toBeGreaterThan(-1);
     expect(decisionsMount).toBeGreaterThan(-1);
     expect(leaseDocumentUrlRoute).toBeGreaterThan(-1);
+    expect(signingWebhookBrowserReturnRoute).toBeGreaterThan(-1);
     expect(leasesMount).toBeGreaterThan(-1);
     expect(tenantsMount).toBeGreaterThan(-1);
     expect(telemetryMount).toBeGreaterThan(-1);
@@ -334,6 +336,8 @@ describe("API route ownership regression", () => {
     expect(ledgerMount).toBeLessThan(screeningJobsMount);
     expect(decisionsMount).toBeLessThan(screeningJobsMount);
     expect(leaseDocumentUrlRoute).toBeLessThan(screeningJobsMount);
+    expect(signingWebhookBrowserReturnRoute).toBeLessThan(riskAgentMount);
+    expect(signingWebhookBrowserReturnRoute).toBeLessThan(apiCatchall);
     expect(leasesMount).toBeLessThan(screeningJobsMount);
     expect(tenantsMount).toBeLessThan(screeningJobsMount);
     expect(statusMount).toBeLessThan(paymentsBroadMount);

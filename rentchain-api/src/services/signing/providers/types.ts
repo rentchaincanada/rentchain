@@ -24,6 +24,7 @@ export type SigningProviderSendInput = {
   message?: string | null;
   signers: SigningProviderSigner[];
   callbackUrl?: string | null;
+  returnUrl?: string | null;
 };
 
 export type SigningProviderSendResult = {
