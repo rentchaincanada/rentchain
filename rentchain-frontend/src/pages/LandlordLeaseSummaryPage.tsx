@@ -37,6 +37,22 @@ function sectionTargetFromLocation(location: { hash: string; search: string }) {
   return null;
 }
 
+function workflowFocusForSection(sectionId: string | null) {
+  if (sectionId === "lease-section-rent-payment") {
+    return {
+      title: "Rent and Payment workflow focus",
+      description: "Review rent terms, deposit handling, rent collection readiness, and payment setup context in this section.",
+    };
+  }
+  if (sectionId === "lease-section-audit-events") {
+    return {
+      title: "Audit and Events workflow focus",
+      description: "Review execution, notice, renewal, move-out, and lifecycle context in this section.",
+    };
+  }
+  return null;
+}
+
 export default function LandlordLeaseSummaryPage() {
   const { leaseId = "" } = useParams();
   const location = useLocation();
@@ -44,6 +60,7 @@ export default function LandlordLeaseSummaryPage() {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const activeSectionId = sectionTargetFromLocation(location);
+  const workflowFocus = workflowFocusForSection(activeSectionId);
 
   React.useEffect(() => {
     let active = true;
@@ -80,6 +97,7 @@ export default function LandlordLeaseSummaryPage() {
     if (!lease || loading || !activeSectionId) return;
     const frame = window.requestAnimationFrame(() => {
       const target = document.getElementById(activeSectionId);
+      target?.focus({ preventScroll: true });
       target?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
     return () => window.cancelAnimationFrame(frame);
@@ -155,6 +173,25 @@ export default function LandlordLeaseSummaryPage() {
 
       {loading ? <div>Loading lease summary…</div> : null}
       {error ? <div style={{ color: "#b91c1c" }}>{error}</div> : null}
+
+      {workflowFocus ? (
+        <div
+          role="status"
+          aria-live="polite"
+          style={{
+            border: "1px solid #bfdbfe",
+            borderRadius: 10,
+            background: "#eff6ff",
+            color: "#1e3a8a",
+            padding: "10px 12px",
+            display: "grid",
+            gap: 3,
+          }}
+        >
+          <div style={{ fontWeight: 800 }}>{workflowFocus.title}</div>
+          <div style={{ fontSize: 13, color: "#334155" }}>{workflowFocus.description}</div>
+        </div>
+      ) : null}
 
       {lease ? (
         <>

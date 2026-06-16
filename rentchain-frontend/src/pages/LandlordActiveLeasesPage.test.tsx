@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import LandlordActiveLeasesPage from "./LandlordActiveLeasesPage";
 
@@ -40,6 +40,11 @@ vi.mock("@/hooks/useEntitlements", () => ({
 vi.mock("@/components/billing/LockedFeature", () => ({
   LockedFeature: ({ featureKey }: { featureKey: string }) => <div>Locked feature: {featureKey}</div>,
 }));
+
+function LocationProbe() {
+  const location = useLocation();
+  return <div data-testid="current-location">{`${location.pathname}${location.search}${location.hash}`}</div>;
+}
 
 describe("LandlordActiveLeasesPage", () => {
   afterEach(() => {
@@ -328,6 +333,37 @@ describe("LandlordActiveLeasesPage", () => {
     await waitFor(() => expect(mocks.archiveLeaseRecord).toHaveBeenCalledWith("lease-1"));
     fireEvent.click(screen.getByRole("button", { name: "Print / Save PDF" }));
     expect(mocks.printSummaryDocument).toHaveBeenCalledWith("summary");
+  });
+
+  it("navigates compact workflow buttons to distinct summary section URLs", async () => {
+    render(
+      <MemoryRouter>
+        <LocationProbe />
+        <LandlordActiveLeasesPage />
+      </MemoryRouter>
+    );
+
+    await screen.findByText("NS Workflow Guidance:");
+
+    fireEvent.click(screen.getByRole("link", { name: "Rent Increase Workflow" }));
+    expect(screen.getByTestId("current-location")).toHaveTextContent(
+      "/leases/lease-1/summary?section=rent-payment#lease-section-rent-payment"
+    );
+
+    fireEvent.click(screen.getByRole("link", { name: "Deposit Workflow" }));
+    expect(screen.getByTestId("current-location")).toHaveTextContent(
+      "/leases/lease-1/summary?section=rent-payment#lease-section-rent-payment"
+    );
+
+    fireEvent.click(screen.getByRole("link", { name: "Notice Workflow" }));
+    expect(screen.getByTestId("current-location")).toHaveTextContent(
+      "/leases/lease-1/summary?section=audit-events#lease-section-audit-events"
+    );
+
+    fireEvent.click(screen.getByRole("link", { name: "Renewal Review" }));
+    expect(screen.getByTestId("current-location")).toHaveTextContent(
+      "/leases/lease-1/summary?section=audit-events#lease-section-audit-events"
+    );
   });
 
   it("does not open stale GCS or app-domain lease document fallbacks when refresh fails", async () => {

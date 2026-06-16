@@ -44,7 +44,9 @@ function Section({
   return (
     <section
       id={anchorIds ? id : undefined}
+      tabIndex={anchorIds ? -1 : undefined}
       aria-labelledby={titleId}
+      data-workflow-target={highlighted ? "true" : undefined}
       style={{
         display: "grid",
         gap: 10,

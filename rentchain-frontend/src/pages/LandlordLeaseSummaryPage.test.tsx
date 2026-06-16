@@ -146,6 +146,7 @@ describe("LandlordLeaseSummaryPage", () => {
 
   it("scrolls to and highlights requested lease summary workflow sections after data loads", async () => {
     const scrollIntoView = vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(() => undefined);
+    const focus = vi.spyOn(HTMLElement.prototype, "focus").mockImplementation(() => undefined);
 
     render(
       <MemoryRouter initialEntries={["/leases/lease-1/summary?section=rent-payment#lease-section-rent-payment"]}>
@@ -158,8 +159,13 @@ describe("LandlordLeaseSummaryPage", () => {
     expect(await screen.findByText("Lease summary")).toBeInTheDocument();
     const target = document.getElementById("lease-section-rent-payment");
 
+    expect(screen.getByRole("status")).toHaveTextContent("Rent and Payment workflow focus");
+    expect(screen.getByRole("status")).toHaveTextContent("Review rent terms, deposit handling, rent collection readiness");
     expect(target).toBeTruthy();
+    expect(target).toHaveAttribute("data-workflow-target", "true");
+    expect(target).toHaveAttribute("tabindex", "-1");
     await waitFor(() => {
+      expect(focus).toHaveBeenCalledWith({ preventScroll: true });
       expect(scrollIntoView).toHaveBeenCalledWith({ behavior: "smooth", block: "start" });
     });
     expect(target).toHaveStyle({ background: "#eff6ff" });
