@@ -46,6 +46,19 @@ Webhook:
 1. `POST /webhooks/signing/:providerId?`
 2. `POST /api/webhooks/signing/:providerId?`
 
+Signer browser return:
+1. `GET /signing/complete`
+
+Provider configuration must keep the signer browser return URL separate from the
+webhook callback URL:
+- `SIGNING_PROVIDER_RETURN_URL` should point to the frontend completion route,
+  for example `https://<frontend-host>/signing/complete`.
+- `SIGNING_PROVIDER_CALLBACK_URL` remains the backend webhook endpoint,
+  for example `https://<api-host>/api/webhooks/signing/dropbox_sign`.
+
+These URLs must not be the same. Browser GET returns are safe acknowledgements
+only and must not drive signing lifecycle state.
+
 ## Security Boundaries
 
 - Landlord endpoints require landlord authentication and lease ownership.
@@ -53,6 +66,9 @@ Webhook:
 - Tenant projections never include provider request IDs, webhook metadata, landlord-only fields, or provider payloads.
 - Audit records use hashes and safe provider references.
 - Webhook payloads are not stored.
+- Verified POST webhooks remain the authoritative source for provider lifecycle
+  mutations. Browser GET returns must not write signing events or canonical
+  events.
 
 ## Recovery
 
