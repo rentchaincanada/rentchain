@@ -76,15 +76,19 @@ describe("DropboxSignProvider", () => {
       title: "Lease signature request",
       signers: [{ email: "tenant@example.com", role: "tenant" }],
       message: "Please sign.",
+      callbackUrl: "https://api.example.com/api/webhooks/signing/dropbox_sign",
+      returnUrl: "https://app.example.com/signing/complete",
     });
 
     expect(signatureRequestSendMock).toHaveBeenCalledWith(
       expect.objectContaining({
         fileUrls: ["https://files.example.com/lease.pdf"],
         testMode: true,
+        signingRedirectUrl: "https://app.example.com/signing/complete",
         metadata: { leaseId: "lease-1", landlordId: "landlord-1" },
       })
     );
+    expect(signatureRequestSendMock.mock.calls[0]?.[0]?.signingRedirectUrl).not.toContain("/api/webhooks/signing");
     expect(result).toEqual(
       expect.objectContaining({
         providerRequestId: "raw_provider_request_123",

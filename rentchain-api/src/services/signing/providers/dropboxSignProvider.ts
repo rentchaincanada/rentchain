@@ -112,7 +112,7 @@ export class DropboxSignProvider implements ISigningProvider {
       const apiCaller = new sdk.SignatureRequestApi();
       apiCaller.username = String(process.env.SIGNING_PROVIDER_API_KEY || "").trim();
       const testMode = boolEnv(process.env.SIGNING_PROVIDER_TEST_MODE);
-      const callbackUrl = String(process.env.SIGNING_PROVIDER_CALLBACK_URL || input.callbackUrl || "").trim() || undefined;
+      const returnUrl = String(input.returnUrl || "").trim() || undefined;
       const request = {
         title: input.title.slice(0, 255),
         subject: input.title.slice(0, 255),
@@ -135,7 +135,7 @@ export class DropboxSignProvider implements ISigningProvider {
           phone: false,
           defaultType: "type",
         },
-        ...(callbackUrl ? { signingRedirectUrl: callbackUrl } : {}),
+        ...(returnUrl ? { signingRedirectUrl: returnUrl } : {}),
       };
       const response = await apiCaller.signatureRequestSend(request as any);
       const body = response?.body || response || {};

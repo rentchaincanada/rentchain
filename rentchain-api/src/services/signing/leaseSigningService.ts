@@ -63,6 +63,13 @@ function normalizeEmail(value: unknown) {
   return String(value || "").trim().toLowerCase();
 }
 
+function signingReturnUrl() {
+  const explicit = String(process.env.SIGNING_PROVIDER_RETURN_URL || process.env.SIGNING_RETURN_URL || "").trim();
+  if (explicit) return explicit;
+  const appBaseUrl = String(process.env.PUBLIC_APP_URL || process.env.APP_BASE_URL || "").trim().replace(/\/+$/, "");
+  return appBaseUrl ? `${appBaseUrl}/signing/complete` : null;
+}
+
 function emailHash(value: unknown) {
   const email = normalizeEmail(value);
   return email ? digest(`email:${email}`, 24) : null;
@@ -357,6 +364,7 @@ export async function sendLeaseForSignature(input: {
     message: input.message || null,
     signers: emails.map((email) => ({ email, role: "tenant" as const })),
     callbackUrl: process.env.SIGNING_PROVIDER_CALLBACK_URL || process.env.SIGNING_CALLBACK_URL || null,
+    returnUrl: signingReturnUrl(),
   });
   const providerId = provider.getProviderId();
   const requestId = requestIdFor(input.landlordId, input.leaseId, providerId);

@@ -15,6 +15,7 @@ import SignupPage from "./pages/SignupPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import AuthActionPage from "./pages/AuthActionPage";
 import AuthOnboardPage from "./pages/AuthOnboardPage";
+import SigningCompletePage from "./pages/SigningCompletePage";
 import TenantLoginPageV2 from "./pages/tenant/TenantLoginPage.v2";
 import InviteRedeemPage from "./pages/InviteRedeemPage";
 import NotFoundPage from "./pages/NotFoundPage";
@@ -404,6 +405,7 @@ function App() {
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/auth/action" element={<AuthActionPage />} />
         <Route path="/auth/onboard" element={<AuthOnboardPage />} />
+        <Route path="/signing/complete" element={<SigningCompletePage />} />
         <Route
           path="/tenant/login"
           element={TENANT_PORTAL_ENABLED ? <TenantLoginPageV2 /> : <TenantPortalComingSoon />}
