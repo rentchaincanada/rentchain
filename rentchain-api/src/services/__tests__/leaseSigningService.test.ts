@@ -447,6 +447,166 @@ describe("leaseSigningService", () => {
     expect(snapshot.derivedLeaseState).toBe("failed");
   });
 
+  it("stores signed document storage metadata and returns a fresh signed URL without persisting it", async () => {
+    const { signingProviderRegistry } = await import("../signing/providers");
+    signingProviderRegistry.register("boldsign", {
+      getProviderId: () => "boldsign",
+      getName: () => "Boldsign download provider",
+      isConfigured: () => true,
+      sendForSignature: async () => ({
+        providerRequestId: "raw-provider-request-download",
+        dispatchMode: "sandbox",
+        dispatchStatus: "accepted",
+        providerTestMode: true,
+      }),
+      getSigningUrl: async () => null,
+      cancelRequest: async () => true,
+      downloadSignedDocument: async () => ({
+        fileName: "signed lease.pdf",
+        contentType: "application/pdf",
+        buffer: Buffer.from("signed-pdf"),
+      }),
+      verifyWebhookSignature: async () => true,
+      parseWebhookPayload: async () => ({
+        providerRequestId: "raw-provider-request-download",
+        providerEventId: "evt_signed_download",
+        type: "signed",
+        occurredAt: "2026-01-02T00:00:00.000Z",
+      }),
+    });
+    process.env.SIGNING_PROVIDER = "boldsign";
+    const { downloadSignedLease, sendLeaseForSignature } = await import("../signing/leaseSigningService");
+    await sendLeaseForSignature({
+      leaseId: "lease-1",
+      landlordId: "landlord-1",
+      lease: { startDate: "2026-01-01" },
+      providerDocumentUrl: "https://example.com/primary.pdf",
+      tenantEmails: ["tenant@example.com"],
+    });
+    const [[requestId]] = Array.from(ensureCollection("leaseSigningRequests").entries());
+    ensureCollection("leaseSigningRequests").get(requestId).currentSigningStatus = "signed";
+    ensureCollection("leaseSigningEvents").set("event-signed-download", {
+      requestId,
+      leaseId: "lease-1",
+      landlordId: "landlord-1",
+      providerId: "boldsign",
+      providerRequestRef: "boldsign_ref_safe",
+      type: "signed",
+      actorRole: "provider",
+      occurredAt: "2026-01-02T00:00:00.000Z",
+    });
+
+    const snapshot = await downloadSignedLease({ leaseId: "lease-1", landlordId: "landlord-1", lease: { startDate: "2026-01-01" } });
+    const storedRequest = Array.from(ensureCollection("leaseSigningRequests").values())[0];
+
+    expect(snapshot.documentUrl).toContain("https://signed.example/lease-signing/");
+    expect(storedRequest.signedDocument).toEqual(
+      expect.objectContaining({
+        bucket: "bucket",
+        path: expect.stringContaining("signed-lease.pdf"),
+        contentType: "application/pdf",
+        internalReferenceOnly: true,
+      })
+    );
+    expect(storedRequest.signedDocumentUrl).toBeNull();
+    expect(storedRequest.signedDocumentHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(JSON.stringify(storedRequest)).not.toContain("https://signed.example/");
+    expect(JSON.stringify(storedRequest)).not.toContain("X-Goog");
+    expect(JSON.stringify(snapshot)).not.toContain("raw-provider-request-download");
+  });
+
+  it("returns fresh signed document URLs from stored metadata and collapses duplicate signed events in projections", async () => {
+    const { loadLeaseSigningSnapshot } = await import("../signing/leaseSigningService");
+    ensureCollection("leaseSigningRequests").set("request-1", {
+      leaseId: "lease-1",
+      landlordId: "landlord-1",
+      providerId: "mock",
+      providerRequestId: "raw-provider-request-duplicate",
+      providerRequestRef: "mock_ref_safe",
+      currentSigningStatus: "signed",
+      signedDocument: {
+        bucket: "bucket",
+        path: "lease-signing/landlord/request-1/signed.pdf",
+        internalReferenceOnly: true,
+      },
+      signedDocumentUrl: "https://storage.googleapis.com/bucket/lease-signing/landlord/request-1/signed.pdf?X-Goog-Signature=stale",
+      signedDocumentHash: "signed_hash",
+      signedDocumentStoredAt: "2026-01-02T00:10:00.000Z",
+      sentAt: "2026-01-01T00:00:00.000Z",
+    });
+    ensureCollection("leaseSigningEvents").set("event-sent", {
+      requestId: "request-1",
+      leaseId: "lease-1",
+      landlordId: "landlord-1",
+      type: "sent",
+      actorRole: "landlord",
+      occurredAt: "2026-01-01T00:00:00.000Z",
+    });
+    ensureCollection("leaseSigningEvents").set("event-signed-1", {
+      requestId: "request-1",
+      leaseId: "lease-1",
+      landlordId: "landlord-1",
+      type: "signed",
+      actorRole: "provider",
+      occurredAt: "2026-01-02T00:00:00.000Z",
+    });
+    ensureCollection("leaseSigningEvents").set("event-signed-2", {
+      requestId: "request-1",
+      leaseId: "lease-1",
+      landlordId: "landlord-1",
+      type: "signed",
+      actorRole: "provider",
+      occurredAt: "2026-01-02T00:05:00.000Z",
+    });
+
+    const snapshot = await loadLeaseSigningSnapshot({ leaseId: "lease-1", landlordId: "landlord-1", lease: { startDate: "2026-01-01" } });
+
+    expect(snapshot.documentUrl).toBe("https://signed.example/lease-signing/landlord/request-1/signed.pdf");
+    expect(snapshot.signedAt).toBe("2026-01-02T00:05:00.000Z");
+    expect(snapshot.events.map((event) => event.type)).toEqual(["sent", "signed"]);
+    expect(snapshot.events.find((event) => event.type === "signed")?.occurredAt).toBe("2026-01-02T00:05:00.000Z");
+    expect(JSON.stringify(snapshot)).not.toContain("X-Goog-Signature");
+    expect(JSON.stringify(snapshot)).not.toContain("raw-provider-request-duplicate");
+  });
+
+  it("converts legacy persisted signed URLs into internal signed document metadata on download", async () => {
+    const { downloadSignedLease } = await import("../signing/leaseSigningService");
+    ensureCollection("leaseSigningRequests").set("request-legacy", {
+      leaseId: "lease-legacy",
+      landlordId: "landlord-1",
+      providerId: "mock",
+      providerRequestId: "raw-provider-request-legacy",
+      providerRequestRef: "mock_ref_safe",
+      currentSigningStatus: "signed",
+      signedDocumentUrl:
+        "https://storage.googleapis.com/signed-lease-documents/lease-signing/landlord/request-legacy/signed.pdf?X-Goog-Signature=expired",
+      signedDocumentHash: "legacy_hash",
+      signedDocumentStoredAt: "2026-01-02T00:10:00.000Z",
+      sentAt: "2026-01-01T00:00:00.000Z",
+    });
+    ensureCollection("leaseSigningEvents").set("event-signed-legacy", {
+      requestId: "request-legacy",
+      leaseId: "lease-legacy",
+      landlordId: "landlord-1",
+      type: "signed",
+      actorRole: "provider",
+      occurredAt: "2026-01-02T00:00:00.000Z",
+    });
+
+    const snapshot = await downloadSignedLease({ leaseId: "lease-legacy", landlordId: "landlord-1", lease: { startDate: "2026-01-01" } });
+    const storedRequest = ensureCollection("leaseSigningRequests").get("request-legacy");
+
+    expect(snapshot.documentUrl).toBe("https://signed.example/lease-signing/landlord/request-legacy/signed.pdf");
+    expect(storedRequest.signedDocument).toEqual({
+      bucket: "signed-lease-documents",
+      path: "lease-signing/landlord/request-legacy/signed.pdf",
+      internalReferenceOnly: true,
+    });
+    expect(storedRequest.signedDocumentUrl).toBeNull();
+    expect(JSON.stringify(snapshot)).not.toContain("X-Goog-Signature=expired");
+    expect(JSON.stringify(storedRequest)).not.toContain("X-Goog-Signature=expired");
+  });
+
   it("resolves current state to pending after resending a cancelled signing request", async () => {
     const { cancelLeaseSigning, loadLeaseSigningSnapshot, sendLeaseForSignature } = await import("../signing/leaseSigningService");
     const lease = { startDate: "2026-01-01", documentUrl: "https://example.com/lease.pdf" };

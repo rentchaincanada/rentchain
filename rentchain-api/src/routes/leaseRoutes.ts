@@ -80,6 +80,7 @@ import type { LeaseEvent, LeaseLifecycleState } from "../services/stateMachines/
 import {
   cancelLeaseSigning,
   downloadSignedLease,
+  getSignedLeaseDocumentDownload,
   loadLeaseSigningSnapshot,
   sendLeaseForSignature,
   signingErrorCode,
@@ -3105,6 +3106,25 @@ export async function handleLeaseDocumentUrl(req: any, res: Response) {
 
     const leaseCheck = await getLeaseEntityForLandlord(leaseId, landlordId);
     if (!leaseCheck.ok) return res.status(leaseCheck.status).json({ ok: false, error: leaseCheck.error });
+
+    if (!wantsScheduleA) {
+      const signedDocument = await getSignedLeaseDocumentDownload({ leaseId, landlordId });
+      if (signedDocument.documentUrl) {
+        return res.status(200).json({
+          ok: true,
+          documentUrl: signedDocument.documentUrl,
+          refreshMode: "signed_url",
+          expiresInSeconds: signedDocument.expiresInSeconds,
+          documentKind: "signed-lease",
+          documentHash: signedDocument.documentHash,
+          signedDocumentStoredAt: signedDocument.signedDocumentStoredAt,
+          documentRef: {
+            source: signedDocument.source,
+            internalReferenceOnly: true,
+          },
+        });
+      }
+    }
 
     const storageRef = wantsScheduleA
       ? await loadScheduleAStorageRefForLease(leaseCheck.lease as any)

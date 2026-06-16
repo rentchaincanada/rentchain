@@ -670,6 +670,83 @@ describe("leaseRoutes GET /active", () => {
     expect(JSON.stringify(refreshRes.body)).not.toContain("signed-expired.pdf");
   });
 
+  it("refreshes signed lease document URLs from signing request storage metadata without exposing storage refs", async () => {
+    getSignedDownloadUrlMock.mockResolvedValueOnce("https://signed.example.com/fresh-signed-lease.pdf");
+    seedDoc("properties", "prop-1", { landlordId: "landlord-1", name: "Harbour View" });
+    seedDoc("tenants", "tenant-1", { landlordId: "landlord-1", fullName: "Jane Tenant", email: "jane@example.com" });
+    seedDoc("leases", "lease-signed", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      tenantId: "tenant-1",
+      primaryTenantId: "tenant-1",
+      tenantIds: ["tenant-1"],
+      unitId: "unit-1",
+      unitNumber: "101",
+      monthlyRent: 1850,
+      startDate: "2026-01-01",
+      endDate: "2099-12-31",
+      status: "active",
+      leaseDocument: {
+        bucket: "lease-documents",
+        path: "leases/landlord-1/lease-signed/primary.pdf",
+      },
+    });
+    seedDoc("leaseSigningRequests", "request-signed", {
+      leaseId: "lease-signed",
+      landlordId: "landlord-1",
+      providerId: "dropbox_sign",
+      providerRequestId: "raw-provider-request-id",
+      providerRequestRef: "dropbox_sign_ref_safe",
+      currentSigningStatus: "signed",
+      signedDocument: {
+        bucket: "signed-lease-documents",
+        path: "lease-signing/landlord-1/request-signed/signed.pdf",
+        internalReferenceOnly: true,
+      },
+      signedDocumentHash: "signed_doc_hash",
+      signedDocumentStoredAt: "2026-01-02T00:10:00.000Z",
+      signedDocumentUrl: "https://storage.googleapis.com/signed-lease-documents/lease-signing/landlord-1/request-signed/signed.pdf?X-Goog-Signature=stale",
+      createdAt: "2026-01-02T00:00:00.000Z",
+    });
+    seedDoc("leaseSigningEvents", "event-signed", {
+      requestId: "request-signed",
+      leaseId: "lease-signed",
+      landlordId: "landlord-1",
+      type: "signed",
+      occurredAt: "2026-01-02T00:05:00.000Z",
+      actorRole: "provider",
+    });
+
+    const router = (await import("../leaseRoutes")).default;
+    const refreshRes = await invokeRouter(router, { method: "GET", url: "/lease-signed/document-url" });
+
+    expect(refreshRes.status).toBe(200);
+    expect(refreshRes.body).toEqual(
+      expect.objectContaining({
+        ok: true,
+        documentUrl: "https://signed.example.com/fresh-signed-lease.pdf",
+        refreshMode: "signed_url",
+        expiresInSeconds: 1800,
+        documentKind: "signed-lease",
+        documentHash: "signed_doc_hash",
+        signedDocumentStoredAt: "2026-01-02T00:10:00.000Z",
+      })
+    );
+    expect(refreshRes.body?.documentRef).toEqual({
+      source: "signedDocument",
+      internalReferenceOnly: true,
+    });
+    expect(getSignedDownloadUrlMock).toHaveBeenCalledWith({
+      bucket: "signed-lease-documents",
+      path: "lease-signing/landlord-1/request-signed/signed.pdf",
+      expiresMinutes: 30,
+    });
+    expect(JSON.stringify(refreshRes.body)).not.toContain("signed-lease-documents");
+    expect(JSON.stringify(refreshRes.body)).not.toContain("lease-signing/landlord-1");
+    expect(JSON.stringify(refreshRes.body)).not.toContain("raw-provider-request-id");
+    expect(JSON.stringify(refreshRes.body)).not.toContain("X-Goog-Signature");
+  });
+
   it("refreshes legacy persisted GCS signed URLs instead of returning stale URLs", async () => {
     getSignedDownloadUrlMock.mockResolvedValueOnce("https://signed.example.com/fresh-legacy-list.pdf");
     getSignedDownloadUrlMock.mockResolvedValueOnce("https://signed.example.com/fresh-legacy-click.pdf");
