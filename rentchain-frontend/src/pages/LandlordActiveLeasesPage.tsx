@@ -336,12 +336,12 @@ function policySummaryHref(leaseId: string, policyKey: string) {
   switch (policyKey) {
     case "rent_increase_workflow_availability":
     case "deposit_workflow_review":
-      return `${base}#lease-section-rent-payment`;
+      return `${base}?section=rent-payment#lease-section-rent-payment`;
     case "lease_execution_readiness":
     case "lease_renewal_review":
     case "move_out_preparation":
     case "notice_workflow_readiness":
-      return `${base}#lease-section-audit-events`;
+      return `${base}?section=audit-events#lease-section-audit-events`;
     default:
       return base;
   }

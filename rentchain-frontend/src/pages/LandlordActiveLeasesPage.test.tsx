@@ -288,10 +288,22 @@ describe("LandlordActiveLeasesPage", () => {
     expect(screen.getAllByText("Expiring soon").length).toBeGreaterThan(0);
     expect(screen.getByText(/Prepare renewal notice/i)).toBeInTheDocument();
     expect(screen.getByText("NS Workflow Guidance:")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Renewal Review" })).toHaveAttribute("href", "/leases/lease-1/summary#lease-section-audit-events");
-    expect(screen.getByRole("link", { name: "Rent Increase Workflow" })).toHaveAttribute("href", "/leases/lease-1/summary#lease-section-rent-payment");
-    expect(screen.getByRole("link", { name: "Notice Workflow" })).toHaveAttribute("href", "/leases/lease-1/summary#lease-section-audit-events");
-    expect(screen.getByRole("link", { name: "Deposit Workflow" })).toHaveAttribute("href", "/leases/lease-1/summary#lease-section-rent-payment");
+    expect(screen.getByRole("link", { name: "Renewal Review" })).toHaveAttribute(
+      "href",
+      "/leases/lease-1/summary?section=audit-events#lease-section-audit-events"
+    );
+    expect(screen.getByRole("link", { name: "Rent Increase Workflow" })).toHaveAttribute(
+      "href",
+      "/leases/lease-1/summary?section=rent-payment#lease-section-rent-payment"
+    );
+    expect(screen.getByRole("link", { name: "Notice Workflow" })).toHaveAttribute(
+      "href",
+      "/leases/lease-1/summary?section=audit-events#lease-section-audit-events"
+    );
+    expect(screen.getByRole("link", { name: "Deposit Workflow" })).toHaveAttribute(
+      "href",
+      "/leases/lease-1/summary?section=rent-payment#lease-section-rent-payment"
+    );
     expect(screen.getByText("Verify local requirements.")).toBeInTheDocument();
     expect(screen.queryByText("Lease renewal review recommended")).not.toBeInTheDocument();
     expect(screen.queryByText("Rent increase workflow metadata available")).not.toBeInTheDocument();
