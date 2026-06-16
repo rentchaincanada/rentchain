@@ -304,15 +304,44 @@ function renderLifecycleSummary(lease: LandlordActiveLease) {
   );
 }
 
+function jurisdictionWorkflowTitle(lease: LandlordActiveLease) {
+  const policies = Array.isArray(lease.jurisdictionPolicies) ? lease.jurisdictionPolicies : [];
+  const jurisdiction = policies[0]?.jurisdiction;
+  if (jurisdiction === "NS") return "NS Workflow Guidance";
+  if (jurisdiction === "ON") return "ON Workflow Guidance";
+  return "Jurisdiction Workflow Guidance";
+}
+
+function compactPolicyActionLabel(policyKey: string, fallback: string) {
+  switch (policyKey) {
+    case "rent_increase_workflow_availability":
+      return "Rent Increase Workflow";
+    case "notice_workflow_readiness":
+      return "Notice Workflow";
+    case "deposit_workflow_review":
+      return "Deposit Workflow";
+    case "lease_renewal_review":
+      return "Renewal Review";
+    case "move_out_preparation":
+      return "Move-Out Prep";
+    case "lease_execution_readiness":
+      return "Execution Review";
+    default:
+      return fallback.replace(/\s+(available|recommended)$/i, "");
+  }
+}
+
 function renderJurisdictionPolicyGuidance(lease: LandlordActiveLease) {
   const policies = Array.isArray(lease.jurisdictionPolicies) ? lease.jurisdictionPolicies : [];
   if (policies.length === 0) return null;
-  const visiblePolicies = policies.slice(0, 3);
+  const visiblePolicies = policies.slice(0, 6);
   return (
     <div
       style={{
-        display: "grid",
-        gap: 6,
+        display: "flex",
+        gap: 8,
+        flexWrap: "wrap",
+        alignItems: "center",
         marginTop: 8,
         padding: "8px 10px",
         border: "1px solid #bfdbfe",
@@ -322,22 +351,29 @@ function renderJurisdictionPolicyGuidance(lease: LandlordActiveLease) {
         fontSize: 12,
       }}
     >
-      <div style={{ fontWeight: 800 }}>
-        {policies[0]?.jurisdiction === "NS"
-          ? "NS workflow guidance"
-          : policies[0]?.jurisdiction === "ON"
-          ? "ON workflow guidance"
-          : "Jurisdiction workflow guidance"}
-      </div>
+      <div style={{ fontWeight: 800, marginRight: 2 }}>{jurisdictionWorkflowTitle(lease)}:</div>
       {visiblePolicies.map((policy) => (
-        <div key={`${policy.policyKey}:${policy.sourceRuleKey}`} style={{ display: "grid", gap: 2 }}>
-          <div style={{ fontWeight: policy.severity === "warning" || policy.severity === "critical" ? 800 : 700 }}>
-            {policy.label}
-          </div>
-          <div>{policy.recommendation}</div>
-        </div>
+        <Link
+          key={`${policy.policyKey}:${policy.sourceRuleKey}`}
+          to={`/leases/${encodeURIComponent(lease.id)}/summary`}
+          title={`${policy.label}: ${policy.recommendation}`}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            minHeight: 24,
+            padding: "3px 8px",
+            borderRadius: 999,
+            border: "1px solid #bfdbfe",
+            background: "#fff",
+            color: policy.severity === "warning" || policy.severity === "critical" ? "#92400e" : "#1d4ed8",
+            fontWeight: 800,
+            textDecoration: "none",
+          }}
+        >
+          {compactPolicyActionLabel(policy.policyKey, policy.label)}
+        </Link>
       ))}
-      <div style={{ color: "#475569" }}>Workflow guidance only — verify local legal requirements.</div>
+      <div style={{ color: "#475569" }}>Verify local requirements.</div>
     </div>
   );
 }
