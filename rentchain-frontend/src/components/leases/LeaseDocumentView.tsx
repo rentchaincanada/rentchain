@@ -33,10 +33,31 @@ function prettyLeaseStatus(value: string | null | undefined) {
   return normalized.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
-function Section({ id, title, children }: React.PropsWithChildren<{ id: string; title: string }>) {
+function Section({
+  id,
+  title,
+  anchorIds = true,
+  highlighted = false,
+  children,
+}: React.PropsWithChildren<{ id: string; title: string; anchorIds?: boolean; highlighted?: boolean }>) {
   const titleId = `${id}-heading`;
   return (
-    <section aria-labelledby={titleId} style={{ display: "grid", gap: 10, paddingTop: 18, borderTop: "1px solid #e2e8f0" }}>
+    <section
+      id={anchorIds ? id : undefined}
+      tabIndex={anchorIds ? -1 : undefined}
+      aria-labelledby={titleId}
+      data-workflow-target={highlighted ? "true" : undefined}
+      style={{
+        display: "grid",
+        gap: 10,
+        padding: highlighted ? "18px 14px 14px" : "18px 0 0",
+        borderTop: highlighted ? "2px solid #2563eb" : "1px solid #e2e8f0",
+        borderRadius: highlighted ? 8 : 0,
+        background: highlighted ? "#eff6ff" : "transparent",
+        scrollMarginTop: 96,
+        transition: "background-color 160ms ease, border-color 160ms ease",
+      }}
+    >
       <h2 id={titleId} style={{ margin: 0, fontSize: 16, letterSpacing: 0, color: "#0f172a" }}>{title}</h2>
       <div style={{ display: "grid", gap: 8 }}>{children}</div>
     </section>
@@ -54,7 +75,15 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-export function LeaseDocumentView({ lease }: { lease: LandlordActiveLease }) {
+export function LeaseDocumentView({
+  lease,
+  activeSectionId = null,
+  anchorIds = true,
+}: {
+  lease: LandlordActiveLease;
+  activeSectionId?: string | null;
+  anchorIds?: boolean;
+}) {
   const documentDefinition = composeLeaseSummaryLegalDocument(lease, {
     currency: formatCurrency,
     date: formatDate,
@@ -94,7 +123,13 @@ export function LeaseDocumentView({ lease }: { lease: LandlordActiveLease }) {
       </header>
 
       {documentDefinition.sections.map((section) => (
-        <Section key={section.id} id={`lease-section-${section.id}`} title={section.title}>
+        <Section
+          key={section.id}
+          id={`lease-section-${section.id}`}
+          title={section.title}
+          anchorIds={anchorIds}
+          highlighted={activeSectionId === `lease-section-${section.id}`}
+        >
           {section.fields.length ? (
             <dl style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 14, margin: 0 }}>
               {section.fields.map((field) => (

@@ -1,5 +1,5 @@
 import React from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useParams } from "react-router-dom";
 import { downloadAuthenticatedExport } from "@/api/exportDownload";
 import { getLeaseById, type LandlordActiveLease } from "@/api/leasesApi";
 import { LeaseDocumentView } from "@/components/leases/LeaseDocumentView";
@@ -27,11 +27,40 @@ function prettyLeaseStatus(value: string | null | undefined) {
   return normalized.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
+function sectionTargetFromLocation(location: { hash: string; search: string }) {
+  const hashTarget = location.hash.replace(/^#/, "").trim();
+  if (hashTarget) return hashTarget;
+  const section = new URLSearchParams(location.search).get("section");
+  if (!section) return null;
+  if (section === "rent-payment") return "lease-section-rent-payment";
+  if (section === "audit-events") return "lease-section-audit-events";
+  return null;
+}
+
+function workflowFocusForSection(sectionId: string | null) {
+  if (sectionId === "lease-section-rent-payment") {
+    return {
+      title: "Rent and Payment workflow focus",
+      description: "Review rent terms, deposit handling, rent collection readiness, and payment setup context in this section.",
+    };
+  }
+  if (sectionId === "lease-section-audit-events") {
+    return {
+      title: "Audit and Events workflow focus",
+      description: "Review execution, notice, renewal, move-out, and lifecycle context in this section.",
+    };
+  }
+  return null;
+}
+
 export default function LandlordLeaseSummaryPage() {
   const { leaseId = "" } = useParams();
+  const location = useLocation();
   const [lease, setLease] = React.useState<LandlordActiveLease | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
+  const activeSectionId = sectionTargetFromLocation(location);
+  const workflowFocus = workflowFocusForSection(activeSectionId);
 
   React.useEffect(() => {
     let active = true;
@@ -63,6 +92,16 @@ export default function LandlordLeaseSummaryPage() {
       active = false;
     };
   }, [leaseId]);
+
+  React.useEffect(() => {
+    if (!lease || loading || !activeSectionId) return;
+    const frame = window.requestAnimationFrame(() => {
+      const target = document.getElementById(activeSectionId);
+      target?.focus({ preventScroll: true });
+      target?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeSectionId, lease, loading]);
 
   const ledgerPath = lease ? `/leases/${encodeURIComponent(lease.id)}/ledger` : `/leases/${encodeURIComponent(leaseId)}/ledger`;
   async function handlePrintOrSavePdf() {
@@ -135,11 +174,30 @@ export default function LandlordLeaseSummaryPage() {
       {loading ? <div>Loading lease summary…</div> : null}
       {error ? <div style={{ color: "#b91c1c" }}>{error}</div> : null}
 
+      {workflowFocus ? (
+        <div
+          role="status"
+          aria-live="polite"
+          style={{
+            border: "1px solid #bfdbfe",
+            borderRadius: 10,
+            background: "#eff6ff",
+            color: "#1e3a8a",
+            padding: "10px 12px",
+            display: "grid",
+            gap: 3,
+          }}
+        >
+          <div style={{ fontWeight: 800 }}>{workflowFocus.title}</div>
+          <div style={{ fontSize: 13, color: "#334155" }}>{workflowFocus.description}</div>
+        </div>
+      ) : null}
+
       {lease ? (
         <>
-          <LeaseDocumentView lease={lease} />
+          <LeaseDocumentView lease={lease} activeSectionId={activeSectionId} />
           <div className="print-only print-only-summary" aria-hidden="true">
-            <LeaseDocumentView lease={lease} />
+            <LeaseDocumentView lease={lease} anchorIds={false} />
           </div>
         </>
       ) : null}

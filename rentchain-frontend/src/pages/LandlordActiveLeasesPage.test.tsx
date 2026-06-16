@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import LandlordActiveLeasesPage from "./LandlordActiveLeasesPage";
 
@@ -40,6 +40,11 @@ vi.mock("@/hooks/useEntitlements", () => ({
 vi.mock("@/components/billing/LockedFeature", () => ({
   LockedFeature: ({ featureKey }: { featureKey: string }) => <div>Locked feature: {featureKey}</div>,
 }));
+
+function LocationProbe() {
+  const location = useLocation();
+  return <div data-testid="current-location">{`${location.pathname}${location.search}${location.hash}`}</div>;
+}
 
 describe("LandlordActiveLeasesPage", () => {
   afterEach(() => {
@@ -154,6 +159,48 @@ describe("LandlordActiveLeasesPage", () => {
               disclaimer:
                 "RentChain provides operational workflow guidance only. It does not provide legal advice, create legal conclusions, or replace review of current provincial forms and rules.",
             },
+            {
+              jurisdiction: "NS",
+              policyKey: "rent_increase_workflow_availability",
+              status: "ok",
+              severity: "info",
+              label: "Rent increase workflow metadata available",
+              reason: "This jurisdiction has rent increase workflow metadata configured for operational review.",
+              recommendation: "Use the guided workflow as a review aid and verify current local requirements before sending notices.",
+              sourceRuleKey: "NS.rent_increase_workflow",
+              confidence: "medium",
+              legalAdvice: false,
+              disclaimer:
+                "RentChain provides operational workflow guidance only. It does not provide legal advice, create legal conclusions, or replace review of current provincial forms and rules.",
+            },
+            {
+              jurisdiction: "NS",
+              policyKey: "notice_workflow_readiness",
+              status: "ok",
+              severity: "info",
+              label: "Notice workflow guidance available",
+              reason: "Province-aware notice workflow metadata is available for landlord review.",
+              recommendation: "Prepare notice workflow steps manually and verify local legal requirements before delivery.",
+              sourceRuleKey: "NS.notice_workflow_readiness",
+              confidence: "medium",
+              legalAdvice: false,
+              disclaimer:
+                "RentChain provides operational workflow guidance only. It does not provide legal advice, create legal conclusions, or replace review of current provincial forms and rules.",
+            },
+            {
+              jurisdiction: "NS",
+              policyKey: "deposit_workflow_review",
+              status: "review",
+              severity: "info",
+              label: "Deposit workflow review available",
+              reason: "This jurisdiction has deposit workflow metadata flagged for operational review.",
+              recommendation: "Review deposit handling as part of the lease workflow without treating this as a compliance determination.",
+              sourceRuleKey: "NS.deposit_workflow_review",
+              confidence: "medium",
+              legalAdvice: false,
+              disclaimer:
+                "RentChain provides operational workflow guidance only. It does not provide legal advice, create legal conclusions, or replace review of current provincial forms and rules.",
+            },
           ],
         },
       ],
@@ -245,9 +292,29 @@ describe("LandlordActiveLeasesPage", () => {
     expect(screen.queryByText("Lease execution review recommended")).not.toBeInTheDocument();
     expect(screen.getAllByText("Expiring soon").length).toBeGreaterThan(0);
     expect(screen.getByText(/Prepare renewal notice/i)).toBeInTheDocument();
-    expect(screen.getByText("NS workflow guidance")).toBeInTheDocument();
-    expect(screen.getByText("Lease renewal review recommended")).toBeInTheDocument();
-    expect(screen.getByText("Workflow guidance only — verify local legal requirements.")).toBeInTheDocument();
+    expect(screen.getByText("NS Workflow Guidance:")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Renewal Review" })).toHaveAttribute(
+      "href",
+      "/leases/lease-1/summary?section=audit-events#lease-section-audit-events"
+    );
+    expect(screen.getByRole("link", { name: "Rent Increase Workflow" })).toHaveAttribute(
+      "href",
+      "/leases/lease-1/summary?section=rent-payment#lease-section-rent-payment"
+    );
+    expect(screen.getByRole("link", { name: "Notice Workflow" })).toHaveAttribute(
+      "href",
+      "/leases/lease-1/summary?section=audit-events#lease-section-audit-events"
+    );
+    expect(screen.getByRole("link", { name: "Deposit Workflow" })).toHaveAttribute(
+      "href",
+      "/leases/lease-1/summary?section=rent-payment#lease-section-rent-payment"
+    );
+    expect(screen.getByText("Verify local requirements.")).toBeInTheDocument();
+    expect(screen.queryByText("Lease renewal review recommended")).not.toBeInTheDocument();
+    expect(screen.queryByText("Rent increase workflow metadata available")).not.toBeInTheDocument();
+    expect(screen.queryByText("Notice workflow guidance available")).not.toBeInTheDocument();
+    expect(screen.queryByText("Deposit workflow review available")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Prepare notice workflow steps manually/i)).not.toBeInTheDocument();
     expect(screen.getAllByText(/Rent terms ready for future setup/i).length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: /Enable rent collection/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "View lease" })).toBeInTheDocument();
@@ -266,6 +333,37 @@ describe("LandlordActiveLeasesPage", () => {
     await waitFor(() => expect(mocks.archiveLeaseRecord).toHaveBeenCalledWith("lease-1"));
     fireEvent.click(screen.getByRole("button", { name: "Print / Save PDF" }));
     expect(mocks.printSummaryDocument).toHaveBeenCalledWith("summary");
+  });
+
+  it("navigates compact workflow buttons to distinct summary section URLs", async () => {
+    render(
+      <MemoryRouter>
+        <LocationProbe />
+        <LandlordActiveLeasesPage />
+      </MemoryRouter>
+    );
+
+    await screen.findByText("NS Workflow Guidance:");
+
+    fireEvent.click(screen.getByRole("link", { name: "Rent Increase Workflow" }));
+    expect(screen.getByTestId("current-location")).toHaveTextContent(
+      "/leases/lease-1/summary?section=rent-payment#lease-section-rent-payment"
+    );
+
+    fireEvent.click(screen.getByRole("link", { name: "Deposit Workflow" }));
+    expect(screen.getByTestId("current-location")).toHaveTextContent(
+      "/leases/lease-1/summary?section=rent-payment#lease-section-rent-payment"
+    );
+
+    fireEvent.click(screen.getByRole("link", { name: "Notice Workflow" }));
+    expect(screen.getByTestId("current-location")).toHaveTextContent(
+      "/leases/lease-1/summary?section=audit-events#lease-section-audit-events"
+    );
+
+    fireEvent.click(screen.getByRole("link", { name: "Renewal Review" }));
+    expect(screen.getByTestId("current-location")).toHaveTextContent(
+      "/leases/lease-1/summary?section=audit-events#lease-section-audit-events"
+    );
   });
 
   it("does not open stale GCS or app-domain lease document fallbacks when refresh fails", async () => {

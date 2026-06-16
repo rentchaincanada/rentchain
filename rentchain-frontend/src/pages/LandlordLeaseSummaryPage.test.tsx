@@ -82,6 +82,21 @@ describe("LandlordLeaseSummaryPage", () => {
       configurable: true,
       value: vi.fn(),
     });
+    Object.defineProperty(window, "requestAnimationFrame", {
+      configurable: true,
+      value: (callback: FrameRequestCallback) => {
+        callback(0);
+        return 1;
+      },
+    });
+    Object.defineProperty(window, "cancelAnimationFrame", {
+      configurable: true,
+      value: vi.fn(),
+    });
+    Object.defineProperty(Element.prototype, "scrollIntoView", {
+      configurable: true,
+      value: vi.fn(),
+    });
     HTMLAnchorElement.prototype.click = vi.fn();
   });
 
@@ -115,6 +130,10 @@ describe("LandlordLeaseSummaryPage", () => {
     expect(screen.getAllByText("Rent and Payment Terms").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Clauses and Additional Terms").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Audit and Events").length).toBeGreaterThan(0);
+    expect(document.getElementById("lease-section-rent-payment")).toBeTruthy();
+    expect(document.getElementById("lease-section-audit-events")).toBeTruthy();
+    expect(document.querySelectorAll("#lease-section-rent-payment")).toHaveLength(1);
+    expect(document.querySelectorAll("#lease-section-audit-events")).toHaveLength(1);
     expect(mocks.getLeaseById).toHaveBeenCalledWith("lease-1");
     expect(screen.getAllByText("Coburg Rd").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Tony Wenpeng").length).toBeGreaterThan(0);
@@ -123,6 +142,33 @@ describe("LandlordLeaseSummaryPage", () => {
     expect(screen.getByRole("button", { name: "Print / Save PDF" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Download evidence package" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Back to leases" })).toHaveAttribute("href", "/leases");
+  });
+
+  it("scrolls to and highlights requested lease summary workflow sections after data loads", async () => {
+    const scrollIntoView = vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(() => undefined);
+    const focus = vi.spyOn(HTMLElement.prototype, "focus").mockImplementation(() => undefined);
+
+    render(
+      <MemoryRouter initialEntries={["/leases/lease-1/summary?section=rent-payment#lease-section-rent-payment"]}>
+        <Routes>
+          <Route path="/leases/:leaseId/summary" element={<LandlordLeaseSummaryPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Lease summary")).toBeInTheDocument();
+    const target = document.getElementById("lease-section-rent-payment");
+
+    expect(screen.getByRole("status")).toHaveTextContent("Rent and Payment workflow focus");
+    expect(screen.getByRole("status")).toHaveTextContent("Review rent terms, deposit handling, rent collection readiness");
+    expect(target).toBeTruthy();
+    expect(target).toHaveAttribute("data-workflow-target", "true");
+    expect(target).toHaveAttribute("tabindex", "-1");
+    await waitFor(() => {
+      expect(focus).toHaveBeenCalledWith({ preventScroll: true });
+      expect(scrollIntoView).toHaveBeenCalledWith({ behavior: "smooth", block: "start" });
+    });
+    expect(target).toHaveStyle({ background: "#eff6ff" });
   });
 
   it("renders a non-empty printable lease summary source for browser print preview", async () => {
