@@ -148,6 +148,17 @@ describe("leaseDocumentService", () => {
     );
   });
 
+  it("keeps CA_NS legal gate metadata while using production-ready required notices", async () => {
+    const { caNsLeaseDocumentAdapter } = await import("../jurisdictions/caNsAdapter");
+
+    const requiredNotices = caNsLeaseDocumentAdapter.requiredNotices.join(" ");
+    expect(requiredNotices).toContain("Nova Scotia requirements");
+    expect(requiredNotices).not.toMatch(/draft\/test|production signing|counsel-approved/i);
+    expect(caNsLeaseDocumentAdapter.counselReviewStatus).toBe("draft");
+    expect(caNsLeaseDocumentAdapter.productionApproved).toBe(false);
+    expect(caNsLeaseDocumentAdapter.signingEnabled).toBe(false);
+  });
+
   it("fails closed for missing jurisdiction adapters without success events", async () => {
     const { generatePrimaryLeaseDocument } = await import("../leaseDocumentService");
     await expect(

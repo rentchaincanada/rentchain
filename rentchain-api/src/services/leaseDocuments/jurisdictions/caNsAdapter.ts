@@ -24,6 +24,35 @@ function collectPdf(write: (doc: PDFKit.PDFDocument) => void): Promise<Buffer> {
   });
 }
 
+function configuredBoolean(name: string): boolean | null {
+  const explicit = String(process.env[name] || "").trim().toLowerCase();
+  if (explicit === "true" || explicit === "1") return true;
+  if (explicit === "false" || explicit === "0") return false;
+  return null;
+}
+
+function isTestDocumentMode() {
+  const documentGenerationMode = configuredBoolean("LEASE_DOCUMENT_GENERATION_TEST_MODE");
+  if (documentGenerationMode !== null) return documentGenerationMode;
+  const legacyDocumentSourceMode = configuredBoolean("SIGNING_DOCUMENT_SOURCE_TEST_MODE");
+  if (legacyDocumentSourceMode !== null) return legacyDocumentSourceMode;
+  const signingProviderTestMode = configuredBoolean("SIGNING_PROVIDER_TEST_MODE");
+  if (signingProviderTestMode !== null) return signingProviderTestMode;
+  return String(process.env.NODE_ENV || "").trim().toLowerCase() !== "production";
+}
+
+function productionReadinessNotice() {
+  const base =
+    "Generated lease package. Review all details and applicable Nova Scotia requirements before signing. RentChain does not provide legal advice or guarantee enforceability.";
+  return isTestDocumentMode() ? `Preview/test environment: ${base}` : base;
+}
+
+function closingReadinessNotice() {
+  const base =
+    "Generated from RentChain lease workflow using provincial workflow inputs. Review all lease details and applicable Nova Scotia requirements before use. RentChain does not provide legal advice, certification, notarization, or an enforceability guarantee.";
+  return isTestDocumentMode() ? `Preview/test environment: ${base}` : base;
+}
+
 export const caNsLeaseDocumentAdapter: JurisdictionLeaseDocumentAdapter = {
   jurisdictionCode: "CA_NS",
   templateVersion: "ca-ns-primary-lease-draft-v1",
@@ -69,7 +98,7 @@ export const caNsLeaseDocumentAdapter: JurisdictionLeaseDocumentAdapter = {
   ],
   requiredNotices: [
     "Schedule A statutory conditions are required as an attachment/section and remain distinct from the primary document source.",
-    "This draft/test adapter is not legal advice and is not counsel-approved for production signing.",
+    "Generated lease packages must be reviewed against applicable Nova Scotia requirements before use.",
   ],
   prohibitedClauseChecks: ["unsafe_additional_clauses_unreviewed"],
   languageRequirements: ["en-CA"],
@@ -94,9 +123,10 @@ export const caNsLeaseDocumentAdapter: JurisdictionLeaseDocumentAdapter = {
 
       doc.fontSize(18).text("Primary Residential Lease Document", { align: "center" });
       doc.moveDown(0.35);
-      doc.fontSize(9).fillColor("#555").text("Template status: draft/test. Not legal advice. Counsel review required before production signing.", {
-        align: "center",
-      });
+      doc
+        .fontSize(9)
+        .fillColor("#555")
+        .text(productionReadinessNotice(), { align: "center" });
       doc.fillColor("#111").moveDown();
 
       const section = (title: string) => {
@@ -166,7 +196,10 @@ export const caNsLeaseDocumentAdapter: JurisdictionLeaseDocumentAdapter = {
       doc.text("Landlord signature: _____________________________   Date: ______________");
 
       doc.moveDown();
-      doc.fontSize(8).fillColor("#555").text("This generated draft is provided for workflow testing. It is not legal advice, certification, notarization, or an enforceability guarantee.");
+      doc
+        .fontSize(8)
+        .fillColor("#555")
+        .text(closingReadinessNotice());
     });
   },
 };

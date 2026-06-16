@@ -171,7 +171,7 @@ export function LeaseSigningDashboard({ leaseId, tenantEmail }: Props) {
             </div>
             {primaryDocument?.sourceSummary?.productionApproved === false ? (
               <div style={{ color: "#92400e", fontSize: 13 }}>
-                Jurisdiction template is draft/test and requires counsel review before production signing.
+                Review all lease details and applicable provincial requirements before signing. RentChain does not provide legal advice or guarantee enforceability.
               </div>
             ) : null}
             {documentError ? <div style={{ color: "#b91c1c", fontSize: 13 }}>{documentError}</div> : null}

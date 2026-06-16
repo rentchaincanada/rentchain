@@ -131,6 +131,19 @@ describe("LeaseSigningDashboard", () => {
     expect(screen.queryByText(/lease-documents/i)).not.toBeInTheDocument();
   });
 
+  it("shows calm legal boundary copy without draft/test production-signing language", async () => {
+    render(<LeaseSigningDashboard leaseId="lease-1" tenantEmail="tenant@example.com" />);
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(/review all lease details and applicable provincial requirements before signing/i)
+      ).toBeInTheDocument()
+    );
+    expect(screen.getByText(/rentchain does not provide legal advice or guarantee enforceability/i)).toBeInTheDocument();
+    expect(screen.queryByText(/draft\/test/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/production signing/i)).not.toBeInTheDocument();
+  });
+
   it("renders jurisdiction unavailable state safely", async () => {
     vi.mocked(getPrimaryLeaseDocument).mockResolvedValueOnce(null);
     vi.mocked(generatePrimaryLeaseDocument).mockRejectedValueOnce({ body: { error: "jurisdiction_template_unavailable" } });
