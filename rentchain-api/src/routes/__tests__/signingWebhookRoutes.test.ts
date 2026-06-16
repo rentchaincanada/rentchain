@@ -111,4 +111,24 @@ describe("signingWebhookHandler", () => {
     expect(res.body).toBe("https://preview.rentchain.ai/signing/complete");
     expect(JSON.stringify(res.body)).not.toContain("raw-provider-id");
   });
+
+  it("acknowledges browser GET returns safely when no frontend return URL is configured", async () => {
+    const req: any = {
+      params: { providerId: "dropbox_sign" },
+      query: { event: "signature_request_signed", signature_request_id: "raw-provider-id" },
+      headers: {},
+      body: undefined,
+    };
+    const res = makeRes();
+
+    signingWebhookBrowserReturnHandler(req, res);
+
+    expect(processSigningWebhookMock).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(res.headers.get("content-type")).toBe("text/plain");
+    expect(res.headers.get("location")).toBeUndefined();
+    expect(res.body).toBe("Lease signing completed. You may close this page or return to RentChain.");
+    expect(JSON.stringify(res.body)).not.toContain("raw-provider-id");
+  });
 });
