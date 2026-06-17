@@ -50,10 +50,10 @@ function asList(value: unknown): string[] {
 }
 
 function consentValue(value: unknown): string {
-  if (typeof value === "boolean") return value ? "consented" : "not_consented";
+  if (typeof value === "boolean") return value ? "consented" : "";
   const cleaned = cleanString(value, 80).toLowerCase();
   if (["yes", "true", "consent", "consented", "provided"].includes(cleaned)) return "consented";
-  if (["no", "false", "declined", "not_consented"].includes(cleaned)) return "not_consented";
+  if (["no", "false", "declined", "not_consented"].includes(cleaned)) return "";
   return cleaned;
 }
 
@@ -120,6 +120,7 @@ export function deriveNovaScotiaFormPReadiness(input: PrimaryLeaseDocumentInput)
   const property = input.property || {};
   const unit = input.unit || {};
   const tenants = input.tenants || [];
+  const firstTenant = tenants[0] || {};
   const overrides = input.formPFields || null;
   const tenantNames = tenants
     .map((tenant) => firstNonEmpty(tenant.fullName, tenant.name, tenant.displayName, tenant.email))
@@ -130,23 +131,36 @@ export function deriveNovaScotiaFormPReadiness(input: PrimaryLeaseDocumentInput)
   const tenantServiceEmail = firstNonEmpty(
     lease.tenantServiceEmail,
     lease.serviceEmail,
+    firstTenant.serviceEmail,
     tenantEmails[0]
   );
   const landlordEmailConsent = consentValue(
     lease.landlordEmailServiceConsent ??
       lease.landlordEmailServiceConsentStatus ??
       lease.emailServiceConsent?.landlordConsentStatus ??
-      lease.emailServiceConsent?.landlordConsented
+      lease.emailServiceConsent?.landlordConsented ??
+      landlord.emailServiceConsent ??
+      landlord.emailServiceConsentStatus ??
+      landlord.emailServiceConsent?.consentStatus ??
+      landlord.emailServiceConsent?.consented
   );
   const tenantEmailConsent = consentValue(
     lease.tenantEmailServiceConsent ??
       lease.tenantEmailServiceConsentStatus ??
       lease.emailServiceConsent?.tenantConsentStatus ??
-      lease.emailServiceConsent?.tenantConsented
+      lease.emailServiceConsent?.tenantConsented ??
+      firstTenant.emailServiceConsent ??
+      firstTenant.emailServiceConsentStatus ??
+      firstTenant.emailServiceConsent?.consentStatus ??
+      firstTenant.emailServiceConsent?.consented
   );
   const emailConsentCapturedAt = firstNonEmpty(
     lease.emailServiceConsentCapturedAt,
-    lease.emailServiceConsent?.capturedAt
+    lease.emailServiceConsent?.capturedAt,
+    firstTenant.emailServiceConsentCapturedAt,
+    firstTenant.emailServiceConsent?.capturedAt,
+    landlord.emailServiceConsentCapturedAt,
+    landlord.emailServiceConsent?.capturedAt
   );
   const unitNumber = firstNonEmpty(unit.unitNumber, unit.label, lease.unitNumber);
   const fullAddress = [
@@ -199,10 +213,10 @@ export function deriveNovaScotiaFormPReadiness(input: PrimaryLeaseDocumentInput)
     { sectionKey: "security_deposit", fieldKey: "deposit_status", label: "Deposit status", value: firstNonEmpty(lease.depositStatus), conditional: true },
     { sectionKey: "security_deposit", fieldKey: "deposit_accounting_placeholder", label: "Deposit accounting / Form R placeholder", value: firstNonEmpty(lease.depositAccountingStatus), conditional: true },
 
-    { sectionKey: "service_notices", fieldKey: "landlord_email_service_consent", label: "Landlord email service consent", value: landlordEmailConsent, conditional: true },
-    { sectionKey: "service_notices", fieldKey: "tenant_email_service_consent", label: "Tenant email service consent", value: tenantEmailConsent, conditional: true },
-    { sectionKey: "service_notices", fieldKey: "landlord_service_email", label: "Landlord service email", value: landlordServiceEmail, conditional: true },
-    { sectionKey: "service_notices", fieldKey: "tenant_service_email", label: "Tenant service email", value: tenantServiceEmail, conditional: true },
+    { sectionKey: "service_notices", fieldKey: "landlord_email_service_consent", label: "Landlord email service consent", value: landlordEmailConsent, required: true },
+    { sectionKey: "service_notices", fieldKey: "tenant_email_service_consent", label: "Tenant email service consent", value: tenantEmailConsent, required: true },
+    { sectionKey: "service_notices", fieldKey: "landlord_service_email", label: "Landlord service email", value: landlordServiceEmail, required: true },
+    { sectionKey: "service_notices", fieldKey: "tenant_service_email", label: "Tenant service email", value: tenantServiceEmail, required: true },
     { sectionKey: "service_notices", fieldKey: "email_service_consent_captured_at", label: "Email service consent captured timestamp", value: emailConsentCapturedAt, conditional: true },
     { sectionKey: "service_notices", fieldKey: "notice_method_acknowledgement", label: "Notice/service method acknowledgement", value: firstNonEmpty(lease.noticeMethodAcknowledgement), conditional: true },
 

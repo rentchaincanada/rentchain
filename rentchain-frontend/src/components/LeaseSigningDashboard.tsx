@@ -187,8 +187,20 @@ export function LeaseSigningDashboard({ leaseId, tenantEmail }: Props) {
                       .slice(0, 3)
                       .map((item) => item.label)
                       .join(", ")}
-                    {primaryDocument.leaseReadiness.blockingItems.length > 3 ? "…" : ""}
+                    {primaryDocument.leaseReadiness.blockingItems.length > 3
+                      ? `, and ${primaryDocument.leaseReadiness.blockingItems.length - 3} more`
+                      : ""}
                   </div>
+                ) : null}
+                {primaryDocument.leaseReadiness.blockingItems.length > 3 ? (
+                  <details>
+                    <summary style={{ cursor: "pointer", fontWeight: 700 }}>View all missing Form P fields</summary>
+                    <ul style={{ margin: "6px 0 0 18px", padding: 0 }}>
+                      {primaryDocument.leaseReadiness.blockingItems.map((item) => (
+                        <li key={`${item.sectionKey}:${item.fieldKey}`}>{item.label}</li>
+                      ))}
+                    </ul>
+                  </details>
                 ) : null}
               </div>
             ) : null}
