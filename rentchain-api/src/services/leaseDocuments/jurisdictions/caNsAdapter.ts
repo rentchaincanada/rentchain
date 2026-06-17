@@ -16,6 +16,79 @@ function money(centsOrDollars: unknown) {
   return dollars.toLocaleString("en-CA", { style: "currency", currency: "CAD" });
 }
 
+function formPValue(input: PrimaryLeaseDocumentInput, section: string, key: string): unknown {
+  const field = (input.formPFields as any)?.[section]?.[key];
+  if (!field) return null;
+  if (typeof field === "object" && !Array.isArray(field)) {
+    if (String(field.status || "").trim() === "not_applicable") return "Not applicable";
+    return field.value ?? null;
+  }
+  return field;
+}
+
+function consentLabel(value: unknown): string {
+  const raw = String(value ?? "").trim().toLowerCase();
+  if (!raw) return "";
+  if (["true", "yes", "consented", "provided"].includes(raw)) return "provided";
+  if (["false", "no", "declined", "not_consented"].includes(raw)) return "not provided";
+  return String(value ?? "").trim();
+}
+
+export function buildEmailServiceConsentDisplay(input: PrimaryLeaseDocumentInput): string {
+  const lease = input.lease || {};
+  const landlord = input.landlord || {};
+  const tenants = input.tenants || [];
+  const tenantEmails = tenants
+    .map((tenant) => text(tenant.serviceEmail || tenant.email, ""))
+    .filter(Boolean);
+  const landlordServiceEmail = text(
+    formPValue(input, "service_notices", "landlord_service_email") ||
+      lease.landlordServiceEmail ||
+      landlord.serviceEmail ||
+      landlord.email,
+    ""
+  );
+  const tenantServiceEmail = text(
+    formPValue(input, "service_notices", "tenant_service_email") ||
+      lease.tenantServiceEmail ||
+      lease.serviceEmail ||
+      tenantEmails[0],
+    ""
+  );
+  const landlordConsent = consentLabel(
+    formPValue(input, "service_notices", "landlord_email_service_consent") ||
+      lease.landlordEmailServiceConsent ||
+      lease.emailServiceConsent?.landlordConsentStatus ||
+      lease.emailServiceConsent?.landlordConsented
+  );
+  const tenantConsent = consentLabel(
+    formPValue(input, "service_notices", "tenant_email_service_consent") ||
+      lease.tenantEmailServiceConsent ||
+      lease.emailServiceConsent?.tenantConsentStatus ||
+      lease.emailServiceConsent?.tenantConsented
+  );
+  const capturedAt = text(
+    formPValue(input, "service_notices", "email_service_consent_captured_at") ||
+      lease.emailServiceConsentCapturedAt ||
+      lease.emailServiceConsent?.capturedAt,
+    ""
+  );
+  if (!landlordConsent && !tenantConsent) {
+    return "Landlord and tenant consent details required before production use.";
+  }
+  const parts = [
+    landlordConsent ? `Landlord consent: ${landlordConsent}` : "",
+    landlordServiceEmail ? `landlord service email: ${landlordServiceEmail}` : "",
+    tenantConsent ? `tenant consent: ${tenantConsent}` : "",
+    tenantServiceEmail ? `tenant service email: ${tenantServiceEmail}` : "",
+    capturedAt ? `captured: ${capturedAt}` : "",
+  ].filter(Boolean);
+  if (!parts.length) {
+    return "Landlord and tenant consent details required before production use.";
+  }
+  return `${parts.join("; ")}. Verify applicable provincial requirements before relying on electronic service.`;
+}
+
 function collectPdf(write: (doc: PDFKit.PDFDocument) => void): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ margin: 54, size: "LETTER" });
@@ -193,7 +266,7 @@ export const caNsLeaseDocumentAdapter: JurisdictionLeaseDocumentAdapter = {
       row("Rental arrears", "Required Form P terms apply.");
       row("Tenant notice to quit", "Required Form P terms apply.");
       row("Landlord notice to quit", "Required Form P terms apply.");
-      row("Email service of documents", "Landlord and tenant consent details required before production use.");
+      row("Email service of documents", buildEmailServiceConsentDisplay(input));
       row("How to serve notices/documents", "Required Form P service terms apply.");
 
       section("Inspection, Rules, and General Terms");
