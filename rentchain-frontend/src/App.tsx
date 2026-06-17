@@ -184,6 +184,7 @@ const MaintenanceRequestsPage = lazy(() => import("./pages/MaintenanceRequestsPa
 const LeaseLedgerPage = lazy(() => import("./pages/LeaseLedgerPage"));
 const LandlordActiveLeasesPage = lazy(() => import("./pages/LandlordActiveLeasesPage"));
 const LandlordLeaseSummaryPage = lazy(() => import("./pages/LandlordLeaseSummaryPage"));
+const LandlordLeaseWorkflowPage = lazy(() => import("./pages/LandlordLeaseWorkflowPage"));
 const ApplicationReviewSummaryPage = lazy(() => import("./pages/ApplicationReviewSummaryPage"));
 const ReferralsPage = lazy(() => import("./pages/ReferralsPage"));
 const AccountPage = lazy(() => import("./pages/AccountPage"));
@@ -1650,6 +1651,18 @@ function App() {
               <LandlordNav>
                 <Suspense fallback={null}>
                   <LandlordLeaseSummaryPage />
+                </Suspense>
+              </LandlordNav>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/leases/:leaseId/workflows/:workflowKey"
+          element={
+            <RequireAuth>
+              <LandlordNav>
+                <Suspense fallback={null}>
+                  <LandlordLeaseWorkflowPage />
                 </Suspense>
               </LandlordNav>
             </RequireAuth>
