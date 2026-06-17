@@ -5,7 +5,7 @@ import { uploadBufferToGcs } from "../../lib/gcs";
 import { writeCanonicalEvent } from "../../lib/events/buildEvent";
 import { deriveLeaseSigningState, type DerivedLeaseSigningState } from "../leaseStateHelper";
 import { getConfiguredSigningProvider, signingProviderRegistry } from "./providers";
-import type { ISigningProvider, SigningProviderEventType } from "./providers/types";
+import type { ISigningProvider, SigningProviderEventType, SigningProviderFieldPlacement } from "./providers/types";
 
 export type LeaseSigningStatus =
   | "not_started"
@@ -265,6 +265,7 @@ async function appendSigningEvent(input: {
     templateVersion?: string | null;
     jurisdictionCode?: string | null;
     providerAccessUrlExpiresAt?: string | null;
+    signingFieldPlacement?: SigningProviderFieldPlacement | null;
   } | null;
 }) {
   const occurredAt = input.occurredAt || nowIso();
@@ -433,6 +434,7 @@ export async function sendLeaseForSignature(input: {
     templateVersion?: string | null;
     jurisdictionCode?: string | null;
     providerAccessUrlExpiresAt?: string | null;
+    signingFieldPlacement?: SigningProviderFieldPlacement | null;
   } | null;
 }) {
   const provider = getConfiguredSigningProvider();
@@ -461,6 +463,7 @@ export async function sendLeaseForSignature(input: {
     signers: emails.map((email) => ({ email, role: "tenant" as const })),
     callbackUrl: process.env.SIGNING_PROVIDER_CALLBACK_URL || process.env.SIGNING_CALLBACK_URL || null,
     returnUrl: signingReturnUrl(),
+    fieldPlacement: input.documentMetadata?.signingFieldPlacement || null,
   });
   const providerId = provider.getProviderId();
   const requestId = requestIdFor(input.landlordId, input.leaseId, providerId);

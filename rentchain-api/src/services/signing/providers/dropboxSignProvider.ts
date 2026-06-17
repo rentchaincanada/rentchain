@@ -36,6 +36,27 @@ function validProviderReadableUrl(value: unknown) {
   }
 }
 
+function buildFormFieldsPerDocument(input: SigningProviderSendInput) {
+  if (input.fieldPlacement?.provider !== "dropbox_sign") return undefined;
+  const maxSignerIndex = input.signers.length - 1;
+  const fields = (input.fieldPlacement.fields || [])
+    .filter((field) => field.signerIndex >= 0 && field.signerIndex <= maxSignerIndex)
+    .map((field) => ({
+      documentIndex: field.documentIndex,
+      apiId: field.apiId,
+      type: field.type,
+      signer: field.signerIndex,
+      page: field.page,
+      x: field.x,
+      y: field.y,
+      width: field.width,
+      height: field.height,
+      required: field.required,
+      name: field.name,
+    }));
+  return fields.length ? fields : undefined;
+}
+
 function eventTimeToIso(value: unknown) {
   const raw = String(value || "").trim();
   const numeric = Number(raw);
@@ -113,6 +134,7 @@ export class DropboxSignProvider implements ISigningProvider {
       apiCaller.username = String(process.env.SIGNING_PROVIDER_API_KEY || "").trim();
       const testMode = boolEnv(process.env.SIGNING_PROVIDER_TEST_MODE);
       const returnUrl = String(input.returnUrl || "").trim() || undefined;
+      const formFieldsPerDocument = buildFormFieldsPerDocument(input);
       const request = {
         title: input.title.slice(0, 255),
         subject: input.title.slice(0, 255),
@@ -135,6 +157,7 @@ export class DropboxSignProvider implements ISigningProvider {
           phone: false,
           defaultType: "type",
         },
+        ...(formFieldsPerDocument ? { formFieldsPerDocument } : {}),
         ...(returnUrl ? { signingRedirectUrl: returnUrl } : {}),
       };
       const response = await apiCaller.signatureRequestSend(request as any);

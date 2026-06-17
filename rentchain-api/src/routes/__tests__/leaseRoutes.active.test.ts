@@ -1194,6 +1194,25 @@ describe("leaseRoutes GET /active", () => {
         templateVersion: "ca-ns-primary-lease-draft-v1",
         jurisdictionCode: "CA_NS",
         providerAccessUrlExpiresAt: "2026-01-01T04:00:00.000Z",
+        signingFieldPlacement: {
+          provider: "dropbox_sign",
+          placementVersion: "dropbox_sign_form_fields_v1",
+          fields: [
+            {
+              apiId: "tenant_signature",
+              type: "signature",
+              signerRole: "tenant",
+              signerIndex: 0,
+              documentIndex: 0,
+              page: 2,
+              x: 170,
+              y: 165,
+              width: 270,
+              height: 52,
+              required: true,
+            },
+          ],
+        },
       },
     });
     seedDoc("leases", "lease-1", {
@@ -1329,6 +1348,7 @@ describe("leaseRoutes GET /active", () => {
       })
     );
     expect(requests[0].data.documentUrl).toBeUndefined();
+    expect(requests[0].data.signingFieldPlacement).toBeUndefined();
     expect(JSON.stringify(requests)).not.toContain("https://signed.example.com/provider-readable-lease.pdf");
     expect(JSON.stringify(requests)).not.toContain("X-Goog-Expires=1");
     expect(writeCanonicalEventMock).toHaveBeenCalledTimes(1);

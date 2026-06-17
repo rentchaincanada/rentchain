@@ -3278,6 +3278,7 @@ router.post("/:leaseId/send-for-signature", requireLandlord, async (req: any, re
         templateVersion: lockedDocument.document.templateVersion,
         jurisdictionCode: lockedDocument.document.jurisdictionCode,
         providerAccessUrlExpiresAt: lockedDocument.document.providerAccessUrlExpiresAt,
+        signingFieldPlacement: lockedDocument.document.signingFieldPlacement || null,
       },
     });
     return res.status(200).json({

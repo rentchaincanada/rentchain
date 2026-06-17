@@ -15,6 +15,28 @@ export type LeaseDocumentStorageRef = {
   path: string;
 };
 
+export type LeaseDocumentSigningPlacementField = {
+  apiId: string;
+  type: "signature" | "date_signed";
+  signerRole: "tenant" | "landlord";
+  signerIndex: number;
+  documentIndex: number;
+  page: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  required: boolean;
+  name?: string;
+};
+
+export type LeaseDocumentSigningFieldPlacement = {
+  provider: "dropbox_sign";
+  placementVersion: "dropbox_sign_form_fields_v1";
+  fields: LeaseDocumentSigningPlacementField[];
+  landlordPlacementPrepared: boolean;
+};
+
 export type LeaseDocumentMetadata = {
   id: string;
   leaseId: string;
@@ -36,6 +58,7 @@ export type LeaseDocumentMetadata = {
   lockedAt: string | null;
   lockedBy: string | null;
   signingRequestId: string | null;
+  signingFieldPlacement?: LeaseDocumentSigningFieldPlacement | null;
   supersededAt?: string | null;
   supersededByDocumentId?: string | null;
   sourceSummary: {
@@ -47,7 +70,7 @@ export type LeaseDocumentMetadata = {
   };
 };
 
-export type LeaseDocumentProjection = Omit<LeaseDocumentMetadata, "storageRef"> & {
+export type LeaseDocumentProjection = Omit<LeaseDocumentMetadata, "storageRef" | "signingFieldPlacement"> & {
   storageRef: null;
   previewUrl?: string | null;
 };
@@ -76,5 +99,11 @@ export type JurisdictionLeaseDocumentAdapter = {
   languageRequirements: string[];
   statutoryReferences: string[];
   sourceReferences: string[];
-  renderPrimaryLeasePdf(input: PrimaryLeaseDocumentInput): Promise<Buffer>;
+  renderPrimaryLeasePdf(input: PrimaryLeaseDocumentInput): Promise<
+    | Buffer
+    | {
+        pdfBuffer: Buffer;
+        signingFieldPlacement?: LeaseDocumentSigningFieldPlacement | null;
+      }
+  >;
 };

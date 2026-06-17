@@ -78,6 +78,54 @@ describe("DropboxSignProvider", () => {
       message: "Please sign.",
       callbackUrl: "https://api.example.com/api/webhooks/signing/dropbox_sign",
       returnUrl: "https://app.example.com/signing/complete",
+      fieldPlacement: {
+        provider: "dropbox_sign",
+        placementVersion: "dropbox_sign_form_fields_v1",
+        fields: [
+          {
+            apiId: "tenant_signature",
+            type: "signature",
+            signerRole: "tenant",
+            signerIndex: 0,
+            documentIndex: 0,
+            page: 2,
+            x: 170,
+            y: 165,
+            width: 270,
+            height: 52,
+            required: true,
+            name: "Tenant signature",
+          },
+          {
+            apiId: "tenant_date_signed",
+            type: "date_signed",
+            signerRole: "tenant",
+            signerIndex: 0,
+            documentIndex: 0,
+            page: 2,
+            x: 455,
+            y: 175,
+            width: 92,
+            height: 28,
+            required: true,
+            name: "Tenant date signed",
+          },
+          {
+            apiId: "landlord_signature",
+            type: "signature",
+            signerRole: "landlord",
+            signerIndex: 1,
+            documentIndex: 0,
+            page: 2,
+            x: 170,
+            y: 260,
+            width: 270,
+            height: 52,
+            required: false,
+            name: "Landlord signature",
+          },
+        ],
+      },
     });
 
     expect(signatureRequestSendMock).toHaveBeenCalledWith(
@@ -86,8 +134,28 @@ describe("DropboxSignProvider", () => {
         testMode: true,
         signingRedirectUrl: "https://app.example.com/signing/complete",
         metadata: { leaseId: "lease-1", landlordId: "landlord-1" },
+        formFieldsPerDocument: [
+          expect.objectContaining({
+            apiId: "tenant_signature",
+            type: "signature",
+            signer: 0,
+            page: 2,
+            x: 170,
+            y: 165,
+          }),
+          expect.objectContaining({
+            apiId: "tenant_date_signed",
+            type: "date_signed",
+            signer: 0,
+            page: 2,
+            x: 455,
+            y: 175,
+          }),
+        ],
       })
     );
+    expect(signatureRequestSendMock.mock.calls[0]?.[0]?.formFieldsPerDocument).toHaveLength(2);
+    expect(JSON.stringify(signatureRequestSendMock.mock.calls[0]?.[0]?.formFieldsPerDocument)).not.toContain("landlord_signature");
     expect(signatureRequestSendMock.mock.calls[0]?.[0]?.signingRedirectUrl).not.toContain("/api/webhooks/signing");
     expect(result).toEqual(
       expect.objectContaining({

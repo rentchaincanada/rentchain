@@ -46,8 +46,9 @@ function tenantIdsFromLease(lease: Record<string, any>) {
 }
 
 function safeProjection(doc: LeaseDocumentMetadata, previewUrl?: string | null): LeaseDocumentProjection {
+  const { signingFieldPlacement: _signingFieldPlacement, ...projected } = doc;
   return {
-    ...doc,
+    ...projected,
     storageRef: null,
     previewUrl: previewUrl || null,
   };
@@ -162,7 +163,9 @@ export async function generatePrimaryLeaseDocument(input: PrimaryLeaseDocumentIn
     throw error;
   }
 
-  const pdfBuffer = await adapter.renderPrimaryLeasePdf(input);
+  const rendered = await adapter.renderPrimaryLeasePdf(input);
+  const pdfBuffer = Buffer.isBuffer(rendered) ? rendered : rendered.pdfBuffer;
+  const signingFieldPlacement = Buffer.isBuffer(rendered) ? null : rendered.signingFieldPlacement || null;
   const documentHash = digest(pdfBuffer);
   const generatedAt = nowIso();
   const tenantIds = tenantIdsFromLease(lease);
@@ -223,6 +226,7 @@ export async function generatePrimaryLeaseDocument(input: PrimaryLeaseDocumentIn
     lockedAt: null,
     lockedBy: null,
     signingRequestId: null,
+    signingFieldPlacement,
     sourceSummary: {
       adapterStatus: adapter.counselReviewStatus,
       signingEnabled: adapter.signingEnabled,
