@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildEmailServiceConsentDisplay } from "../caNsAdapter";
+import { buildEmailServiceConsentDisplay, buildLeaseDeliveryReadinessDisplay } from "../caNsAdapter";
 
 function input(overrides: Record<string, any> = {}) {
   return {
@@ -70,5 +70,39 @@ describe("CA_NS adapter email-service consent display", () => {
     expect(display).toContain("landlord service email: landlord-service@example.com");
     expect(display).toContain("tenant service email: tenant-service@example.com");
     expect(display).toContain("captured: 2026-06-17T11:00:00.000Z");
+  });
+});
+
+describe("CA_NS adapter lease delivery readiness display", () => {
+  it("renders operational delivery tracking without legal claims", () => {
+    const display = buildLeaseDeliveryReadinessDisplay(
+      input({
+        lease: {
+          signedLeaseCopyDeliveryStatus: "delivered",
+          signedLeaseCopyDeliveryMethod: "email",
+          signedLeaseCopyDeliveredAt: "2026-06-17T14:00:00.000Z",
+          actCopyDelivery: {
+            status: "acknowledged",
+            method: "email",
+            deliveredAt: "2026-06-17T14:05:00.000Z",
+            actLinkIncluded: true,
+          },
+        },
+      })
+    );
+
+    expect(display).toContain("Signed lease copy delivery: delivered");
+    expect(display).toContain("Act copy/link delivery: acknowledged");
+    expect(display).toContain("Act copy/link recorded");
+    expect(display).toContain("Operational tracking only");
+    expect(display).toContain("verify applicable provincial requirements");
+    expect(display).not.toMatch(/legal advice|certif|enforceability guarantee/i);
+  });
+
+  it("renders missing delivery tracking as not recorded", () => {
+    const display = buildLeaseDeliveryReadinessDisplay(input());
+
+    expect(display).toContain("Signed lease copy delivery: not recorded");
+    expect(display).toContain("Act copy/link delivery: not recorded");
   });
 });

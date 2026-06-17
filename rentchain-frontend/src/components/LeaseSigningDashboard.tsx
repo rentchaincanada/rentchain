@@ -40,6 +40,34 @@ function dispatchNotice(status: LeaseSigningStatusResponse | null) {
   return null;
 }
 
+function formPField(document: PrimaryLeaseDocument | null, section: string, key: string) {
+  return (document?.formPFields as any)?.[section]?.[key] || null;
+}
+
+function fieldStatusLabel(document: PrimaryLeaseDocument | null, section: string, key: string) {
+  const field = formPField(document, section, key);
+  const status = String(field?.status || "").trim().toLowerCase();
+  const value = String(field?.value || "").trim();
+  if (status === "provided") return value ? pretty(value) : "Provided";
+  if (status === "not_applicable") return "Not applicable";
+  if (status === "pending") return "Pending";
+  return "Not recorded";
+}
+
+function deliveryReadinessItems(document: PrimaryLeaseDocument | null) {
+  if (!document?.formPFields?.signatures_delivery) return [];
+  return [
+    {
+      label: "Signed lease copy",
+      value: fieldStatusLabel(document, "signatures_delivery", "signed_lease_copy_delivery_status"),
+    },
+    {
+      label: "Act copy/link",
+      value: fieldStatusLabel(document, "signatures_delivery", "act_copy_delivery_status"),
+    },
+  ];
+}
+
 export function LeaseSigningDashboard({ leaseId, tenantEmail }: Props) {
   const [status, setStatus] = React.useState<LeaseSigningStatusResponse | null>(null);
   const [email, setEmail] = React.useState(String(tenantEmail || ""));
@@ -151,6 +179,7 @@ export function LeaseSigningDashboard({ leaseId, tenantEmail }: Props) {
   const canCancel = signingStatus === "pending_signature";
   const canDownload = signingStatus === "signed";
   const noEmailNotice = dispatchNotice(status);
+  const deliveryItems = deliveryReadinessItems(primaryDocument);
 
   return (
     <section style={{ display: "grid", gap: 12 }}>
@@ -202,6 +231,18 @@ export function LeaseSigningDashboard({ leaseId, tenantEmail }: Props) {
                     </ul>
                   </details>
                 ) : null}
+              </div>
+            ) : null}
+            {deliveryItems.length ? (
+              <div style={{ display: "grid", gap: 4, color: "#475569", fontSize: 13 }}>
+                <div style={{ fontWeight: 800 }}>Lease delivery readiness</div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {deliveryItems.map((item) => (
+                    <span key={item.label} style={{ border: "1px solid #e2e8f0", borderRadius: 6, padding: "3px 6px", background: "#f8fafc" }}>
+                      {item.label}: {item.value}
+                    </span>
+                  ))}
+                </div>
               </div>
             ) : null}
             {documentError ? <div style={{ color: "#b91c1c", fontSize: 13 }}>{documentError}</div> : null}
