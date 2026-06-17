@@ -174,6 +174,24 @@ export function LeaseSigningDashboard({ leaseId, tenantEmail }: Props) {
                 Jurisdiction template is draft/test and requires counsel review before production signing.
               </div>
             ) : null}
+            {primaryDocument?.leaseReadiness ? (
+              <div style={{ display: "grid", gap: 4, color: "#475569", fontSize: 13 }}>
+                <div>
+                  Form P readiness: {pretty(primaryDocument.leaseReadiness.overallStatus)} ·{" "}
+                  {primaryDocument.leaseReadiness.completionPercent}% complete
+                </div>
+                {primaryDocument.leaseReadiness.blockingItems.length ? (
+                  <div>
+                    Missing required fields:{" "}
+                    {primaryDocument.leaseReadiness.blockingItems
+                      .slice(0, 3)
+                      .map((item) => item.label)
+                      .join(", ")}
+                    {primaryDocument.leaseReadiness.blockingItems.length > 3 ? "…" : ""}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
             {documentError ? <div style={{ color: "#b91c1c", fontSize: 13 }}>{documentError}</div> : null}
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <button type="button" onClick={() => void generateDocument()} disabled={documentBusy || busy}>

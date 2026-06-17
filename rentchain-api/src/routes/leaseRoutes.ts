@@ -3195,6 +3195,10 @@ async function buildPrimaryLeaseDocumentContext(leaseId: string, lease: any, req
     tenants: tenantSnaps
       .filter((snap: any) => snap?.exists)
       .map((snap: any) => ({ id: snap.id, ...snap.data() })),
+    formPFields:
+      req.body?.formPFields && typeof req.body.formPFields === "object" && !Array.isArray(req.body.formPFields)
+        ? req.body.formPFields
+        : null,
     actorId: String(req.user?.id || req.user?.email || landlordId).trim() || null,
   };
 }
