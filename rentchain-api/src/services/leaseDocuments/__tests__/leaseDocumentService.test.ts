@@ -135,6 +135,20 @@ describe("leaseDocumentService", () => {
     expect(document.documentHash).toMatch(/^[a-f0-9]{64}$/);
     expect(document.manifestHash).toMatch(/^[a-f0-9]{64}$/);
     expect(document.storageRef).toBeNull();
+    expect(document.leaseReadiness).toEqual(
+      expect.objectContaining({
+        version: "ns_form_p_readiness_v1",
+        jurisdictionCode: "CA_NS",
+        overallStatus: expect.any(String),
+        completionPercent: expect.any(Number),
+      })
+    );
+    expect(document.formPFields?.parties?.landlord_legal_name).toEqual(
+      expect.objectContaining({ status: "provided", value: "Landlord" })
+    );
+    expect(document.formPFields?.premises?.unit_number).toEqual(
+      expect.objectContaining({ status: "provided", value: "101" })
+    );
     expect((document as any).signingFieldPlacement).toBeUndefined();
     expect(JSON.stringify(document)).not.toContain("lease-documents/");
     expect(listDocs("leaseDocuments")).toHaveLength(1);
@@ -165,8 +179,45 @@ describe("leaseDocumentService", () => {
         metadata: expect.objectContaining({
           templateEffectiveDate: "2026-06-15",
           sourceReferences: ["Nova Scotia Form P Standard Lease Form reference upload"],
+          leaseReadiness: expect.objectContaining({
+            version: "ns_form_p_readiness_v1",
+            completionPercent: expect.any(Number),
+            sectionStatuses: expect.arrayContaining([
+              expect.objectContaining({ key: "parties", status: expect.any(String) }),
+            ]),
+          }),
         }),
       })
+    );
+  });
+
+  it("persists explicit Form P not applicable states on generated primary lease documents", async () => {
+    const { generatePrimaryLeaseDocument } = await import("../leaseDocumentService");
+    const document = await generatePrimaryLeaseDocument({
+      leaseId: "lease-1",
+      lease: lease(),
+      landlord: { name: "Landlord" },
+      property: { name: "Harbour View" },
+      unit: { unitNumber: "101" },
+      tenants: [{ fullName: "Tenant One" }],
+      actorId: "actor-1",
+      formPFields: {
+        term: {
+          public_housing: { status: "not_applicable" },
+        },
+        premises: {
+          agent: { status: "not_applicable" },
+        },
+      },
+    });
+
+    expect(document.formPFields?.term?.public_housing.status).toBe("not_applicable");
+    expect(document.formPFields?.premises?.agent.status).toBe("not_applicable");
+    expect(document.leaseReadiness?.nonBlockingItems).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ fieldKey: "public_housing", status: "not_applicable" }),
+        expect.objectContaining({ fieldKey: "agent", status: "not_applicable" }),
+      ])
     );
   });
 

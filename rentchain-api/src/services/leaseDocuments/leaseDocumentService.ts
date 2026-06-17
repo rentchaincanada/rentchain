@@ -3,6 +3,7 @@ import { db, FieldValue } from "../../firebase";
 import { getSignedDownloadUrl } from "../../lib/gcsSignedUrl";
 import { writeCanonicalEvent } from "../../lib/events/buildEvent";
 import { putPdfObject } from "../../storage/pdfStore";
+import { deriveNovaScotiaFormPReadiness } from "./leaseFormPReadiness";
 import {
   assertAdapterAllowedForGeneration,
   assertAdapterAllowedForSigning,
@@ -103,6 +104,20 @@ async function writeLeaseDocumentEvent(params: {
       documentHash: params.document.documentHash,
       manifestHash: params.document.manifestHash,
       status: params.document.status,
+      leaseReadiness: params.document.leaseReadiness
+        ? {
+            version: params.document.leaseReadiness.version,
+            overallStatus: params.document.leaseReadiness.overallStatus,
+            completionPercent: params.document.leaseReadiness.completionPercent,
+            missingFieldCount: params.document.leaseReadiness.missingFields.length,
+            blockingItemCount: params.document.leaseReadiness.blockingItems.length,
+            sectionStatuses: params.document.leaseReadiness.sectionStatuses.map((section) => ({
+              key: section.key,
+              status: section.status,
+              completionPercent: section.completionPercent,
+            })),
+          }
+        : null,
     },
   });
 }
@@ -164,6 +179,10 @@ export async function generatePrimaryLeaseDocument(input: PrimaryLeaseDocumentIn
   }
 
   const rendered = await adapter.renderPrimaryLeasePdf(input);
+  const { formPFields, leaseReadiness } =
+    adapter.jurisdictionCode === "CA_NS"
+      ? deriveNovaScotiaFormPReadiness(input)
+      : { formPFields: null, leaseReadiness: null };
   const pdfBuffer = Buffer.isBuffer(rendered) ? rendered : rendered.pdfBuffer;
   const signingFieldPlacement = Buffer.isBuffer(rendered) ? null : rendered.signingFieldPlacement || null;
   const documentHash = digest(pdfBuffer);
@@ -227,6 +246,8 @@ export async function generatePrimaryLeaseDocument(input: PrimaryLeaseDocumentIn
     lockedBy: null,
     signingRequestId: null,
     signingFieldPlacement,
+    formPFields,
+    leaseReadiness,
     sourceSummary: {
       adapterStatus: adapter.counselReviewStatus,
       signingEnabled: adapter.signingEnabled,

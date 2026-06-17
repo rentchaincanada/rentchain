@@ -248,6 +248,28 @@ export type PrimaryLeaseDocument = {
   signingRequestId: string | null;
   storageRef: null;
   previewUrl?: string | null;
+  formPFields?: Record<string, Record<string, {
+    key: string;
+    label: string;
+    status: "provided" | "not_applicable" | "pending" | "missing";
+    value?: string | number | boolean | string[] | null;
+    note?: string | null;
+  }>> | null;
+  leaseReadiness?: {
+    version: "ns_form_p_readiness_v1";
+    jurisdictionCode: "CA_NS";
+    overallStatus: "complete" | "incomplete" | "pending";
+    completionPercent: number;
+    missingFields: Array<{ sectionKey: string; fieldKey: string; label: string }>;
+    blockingItems: Array<{ sectionKey: string; fieldKey: string; label: string }>;
+    nonBlockingItems: Array<{ sectionKey: string; fieldKey: string; label: string; status: "pending" | "not_applicable" }>;
+    sectionStatuses: Array<{
+      key: string;
+      label: string;
+      status: "complete" | "incomplete" | "not_applicable" | "pending";
+      completionPercent: number;
+    }>;
+  } | null;
   sourceSummary?: {
     adapterStatus: string;
     signingEnabled: boolean;
@@ -282,10 +304,13 @@ export async function getPrimaryLeaseDocument(
   return res.document;
 }
 
-export async function generatePrimaryLeaseDocument(leaseId: string): Promise<PrimaryLeaseDocument> {
+export async function generatePrimaryLeaseDocument(
+  leaseId: string,
+  payload?: { formPFields?: Record<string, Record<string, unknown>> }
+): Promise<PrimaryLeaseDocument> {
   const res = await apiJson<{ ok: boolean; document: PrimaryLeaseDocument }>(
     `/leases/${encodeURIComponent(leaseId)}/primary-document/generate`,
-    { method: "POST", body: "{}" }
+    { method: "POST", body: JSON.stringify(payload || {}) }
   );
   return res.document;
 }

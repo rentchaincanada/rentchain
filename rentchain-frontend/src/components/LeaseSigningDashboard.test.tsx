@@ -62,6 +62,23 @@ const primaryDocument: PrimaryLeaseDocument = {
   lockedBy: null,
   signingRequestId: null,
   storageRef: null,
+  leaseReadiness: {
+    version: "ns_form_p_readiness_v1",
+    jurisdictionCode: "CA_NS",
+    overallStatus: "incomplete",
+    completionPercent: 58,
+    missingFields: [{ sectionKey: "parties", fieldKey: "occupants", label: "Occupants/adult occupants/children" }],
+    blockingItems: [{ sectionKey: "parties", fieldKey: "occupants", label: "Occupants/adult occupants/children" }],
+    nonBlockingItems: [{ sectionKey: "term", fieldKey: "public_housing", label: "Public housing", status: "pending" }],
+    sectionStatuses: [
+      {
+        key: "parties",
+        label: "Parties",
+        status: "incomplete",
+        completionPercent: 80,
+      },
+    ],
+  },
   sourceSummary: {
     adapterStatus: "draft",
     signingEnabled: false,
@@ -128,6 +145,15 @@ describe("LeaseSigningDashboard", () => {
 
     await waitFor(() => expect(generatePrimaryLeaseDocument).toHaveBeenCalledWith("lease-1"));
     await waitFor(() => expect(screen.getByRole("button", { name: /send for signature/i })).toBeEnabled());
+    expect(screen.queryByText(/lease-documents/i)).not.toBeInTheDocument();
+  });
+
+  it("renders Form P readiness status without exposing internal document storage", async () => {
+    render(<LeaseSigningDashboard leaseId="lease-1" tenantEmail="tenant@example.com" />);
+
+    await waitFor(() => expect(screen.getByText(/form p readiness: incomplete/i)).toBeInTheDocument());
+    expect(screen.getByText(/58% complete/i)).toBeInTheDocument();
+    expect(screen.getByText(/missing required fields: occupants/i)).toBeInTheDocument();
     expect(screen.queryByText(/lease-documents/i)).not.toBeInTheDocument();
   });
 
