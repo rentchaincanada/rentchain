@@ -118,6 +118,13 @@ function isSignedLeaseRecord(lease: LandlordActiveLease) {
   return signingStatus === "signed" || executionStatus === "fully_executed" || lease.signatureStatus === "signed";
 }
 
+function canOpenPrimaryLeaseDocumentFromList(lease: LandlordActiveLease) {
+  const value = primaryLeaseDocumentUrl(lease);
+  if (!value) return false;
+  if (isSignedLeaseRecord(lease)) return true;
+  return canUseLegacyDocumentFallback(value);
+}
+
 function normalizePhoneInput(value: string) {
   return String(value || "").replace(/\D/g, "").slice(0, 15);
 }
@@ -615,11 +622,12 @@ export default function LandlordActiveLeasesPage() {
   function renderLeaseActions(lease: LandlordActiveLease) {
     const { ledgerPath, summaryPath, emailHref } = buildLeaseActionMeta(lease);
     const primaryDocumentUrl = primaryLeaseDocumentUrl(lease);
+    const canOpenPrimaryDocument = canOpenPrimaryLeaseDocumentFromList(lease);
     const scheduleAUrl = scheduleADocumentUrl(lease);
     return (
       <div style={{ display: "grid", gap: 12 }}>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {primaryDocumentUrl ? (
+          {canOpenPrimaryDocument ? (
             <button
               type="button"
               onClick={() => void openLeaseDocument(lease)}
@@ -627,6 +635,15 @@ export default function LandlordActiveLeasesPage() {
               style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #cbd5e1", textDecoration: "none", color: "#0f172a" }}
             >
               {documentBusyLeaseId === lease.id ? "Opening..." : "View lease"}
+            </button>
+          ) : primaryDocumentUrl ? (
+            <button
+              type="button"
+              disabled
+              title="Use Preview Lease Document in the lease signing panel for generated draft lease PDFs."
+              style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #e2e8f0", background: "#f8fafc", color: "#64748b" }}
+            >
+              Use Preview Lease Document
             </button>
           ) : (
             <button
@@ -676,7 +693,7 @@ export default function LandlordActiveLeasesPage() {
           <button
             type="button"
             onClick={() => {
-              if (primaryLeaseDocumentUrl(lease)) {
+              if (canOpenPrimaryDocument) {
                 void openLeaseDocument(lease);
                 return;
               }

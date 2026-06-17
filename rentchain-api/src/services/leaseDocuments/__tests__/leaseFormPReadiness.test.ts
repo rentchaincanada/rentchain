@@ -88,6 +88,119 @@ describe("deriveNovaScotiaFormPReadiness", () => {
     );
   });
 
+  it("derives structured email-service consent readiness fields", () => {
+    const result = deriveNovaScotiaFormPReadiness(
+      baseInput({
+        lease: {
+          landlordEmailServiceConsent: true,
+          tenantEmailServiceConsent: "consented",
+          landlordServiceEmail: "service-landlord@example.com",
+          tenantServiceEmail: "service-tenant@example.com",
+          emailServiceConsentCapturedAt: "2026-06-17T10:00:00.000Z",
+        },
+      })
+    );
+
+    expect(result.formPFields.service_notices.landlord_email_service_consent).toEqual(
+      expect.objectContaining({ status: "provided", value: "consented" })
+    );
+    expect(result.formPFields.service_notices.tenant_email_service_consent).toEqual(
+      expect.objectContaining({ status: "provided", value: "consented" })
+    );
+    expect(result.formPFields.service_notices.landlord_service_email).toEqual(
+      expect.objectContaining({ status: "provided", value: "service-landlord@example.com" })
+    );
+    expect(result.formPFields.service_notices.tenant_service_email).toEqual(
+      expect.objectContaining({ status: "provided", value: "service-tenant@example.com" })
+    );
+    expect(result.formPFields.service_notices.email_service_consent_captured_at).toEqual(
+      expect.objectContaining({ status: "provided", value: "2026-06-17T10:00:00.000Z" })
+    );
+  });
+
+  it("treats email addresses without explicit email-service consent as blocking readiness gaps", () => {
+    const result = deriveNovaScotiaFormPReadiness(baseInput());
+
+    expect(result.formPFields.service_notices.landlord_service_email).toEqual(
+      expect.objectContaining({ status: "provided", value: "landlord@example.com" })
+    );
+    expect(result.formPFields.service_notices.tenant_service_email).toEqual(
+      expect.objectContaining({ status: "provided", value: "tenant@example.com" })
+    );
+    expect(result.formPFields.service_notices.landlord_email_service_consent.status).toBe("missing");
+    expect(result.formPFields.service_notices.tenant_email_service_consent.status).toBe("missing");
+    expect(result.leaseReadiness.blockingItems).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ fieldKey: "landlord_email_service_consent" }),
+        expect.objectContaining({ fieldKey: "tenant_email_service_consent" }),
+      ])
+    );
+  });
+
+  it("marks tenant service email missing when the tenant record has no email or service email", () => {
+    const result = deriveNovaScotiaFormPReadiness(
+      baseInput({
+        tenants: [{ fullName: "Tenant One" }],
+      })
+    );
+
+    expect(result.formPFields.service_notices.tenant_service_email.status).toBe("missing");
+    expect(result.leaseReadiness.blockingItems).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ fieldKey: "tenant_service_email", label: "Tenant service email" }),
+      ])
+    );
+  });
+
+  it("consumes explicit landlord and tenant email-service consent from party records", () => {
+    const result = deriveNovaScotiaFormPReadiness(
+      baseInput({
+        landlord: {
+          emailServiceConsent: true,
+          emailServiceConsentCapturedAt: "2026-06-17T12:00:00.000Z",
+        },
+        tenants: [
+          {
+            fullName: "Tenant One",
+            email: "tenant@example.com",
+            emailServiceConsentStatus: "consented",
+          },
+        ],
+      })
+    );
+
+    expect(result.formPFields.service_notices.landlord_email_service_consent.status).toBe("provided");
+    expect(result.formPFields.service_notices.tenant_email_service_consent.status).toBe("provided");
+    expect(result.formPFields.service_notices.email_service_consent_captured_at).toEqual(
+      expect.objectContaining({ status: "provided", value: "2026-06-17T12:00:00.000Z" })
+    );
+  });
+
+  it("supports explicit not applicable state for email-service consent", () => {
+    const result = deriveNovaScotiaFormPReadiness(
+      baseInput({
+        formPFields: {
+          service_notices: {
+            landlord_email_service_consent: { status: "not_applicable", note: "Email service not used." },
+            tenant_email_service_consent: { status: "not_applicable", note: "Email service not used." },
+            landlord_service_email: { status: "not_applicable" },
+            tenant_service_email: { status: "not_applicable" },
+            email_service_consent_captured_at: { status: "not_applicable" },
+          },
+        },
+      })
+    );
+
+    expect(result.formPFields.service_notices.landlord_email_service_consent.status).toBe("not_applicable");
+    expect(result.formPFields.service_notices.tenant_email_service_consent.status).toBe("not_applicable");
+    expect(result.leaseReadiness.nonBlockingItems).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ fieldKey: "landlord_email_service_consent", status: "not_applicable" }),
+        expect.objectContaining({ fieldKey: "tenant_email_service_consent", status: "not_applicable" }),
+      ])
+    );
+  });
+
   it("marks missing required fields as blocking readiness items", () => {
     const result = deriveNovaScotiaFormPReadiness(
       baseInput({

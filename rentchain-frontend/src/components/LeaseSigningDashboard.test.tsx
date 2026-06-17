@@ -67,8 +67,22 @@ const primaryDocument: PrimaryLeaseDocument = {
     jurisdictionCode: "CA_NS",
     overallStatus: "incomplete",
     completionPercent: 58,
-    missingFields: [{ sectionKey: "parties", fieldKey: "occupants", label: "Occupants/adult occupants/children" }],
-    blockingItems: [{ sectionKey: "parties", fieldKey: "occupants", label: "Occupants/adult occupants/children" }],
+    missingFields: [
+      { sectionKey: "parties", fieldKey: "occupants", label: "Occupants/adult occupants/children" },
+      { sectionKey: "term", fieldKey: "term_type", label: "Term type" },
+      { sectionKey: "rent_payments", fieldKey: "due_day", label: "Due day" },
+      { sectionKey: "service_notices", fieldKey: "tenant_service_email", label: "Tenant service email" },
+      { sectionKey: "service_notices", fieldKey: "tenant_email_service_consent", label: "Tenant email service consent" },
+      { sectionKey: "service_notices", fieldKey: "landlord_email_service_consent", label: "Landlord email service consent" },
+    ],
+    blockingItems: [
+      { sectionKey: "parties", fieldKey: "occupants", label: "Occupants/adult occupants/children" },
+      { sectionKey: "term", fieldKey: "term_type", label: "Term type" },
+      { sectionKey: "rent_payments", fieldKey: "due_day", label: "Due day" },
+      { sectionKey: "service_notices", fieldKey: "tenant_service_email", label: "Tenant service email" },
+      { sectionKey: "service_notices", fieldKey: "tenant_email_service_consent", label: "Tenant email service consent" },
+      { sectionKey: "service_notices", fieldKey: "landlord_email_service_consent", label: "Landlord email service consent" },
+    ],
     nonBlockingItems: [{ sectionKey: "term", fieldKey: "public_housing", label: "Public housing", status: "pending" }],
     sectionStatuses: [
       {
@@ -153,7 +167,11 @@ describe("LeaseSigningDashboard", () => {
 
     await waitFor(() => expect(screen.getByText(/form p readiness: incomplete/i)).toBeInTheDocument());
     expect(screen.getByText(/58% complete/i)).toBeInTheDocument();
-    expect(screen.getByText(/missing required fields: occupants/i)).toBeInTheDocument();
+    expect(screen.getByText(/missing required fields: occupants\/adult occupants\/children, term type, due day, and 3 more/i)).toBeInTheDocument();
+    expect(screen.getByText(/view all missing form p fields/i)).toBeInTheDocument();
+    expect(screen.getByText(/tenant service email/i)).toBeInTheDocument();
+    expect(screen.getByText(/tenant email service consent/i)).toBeInTheDocument();
+    expect(screen.getByText(/landlord email service consent/i)).toBeInTheDocument();
     expect(screen.queryByText(/lease-documents/i)).not.toBeInTheDocument();
   });
 

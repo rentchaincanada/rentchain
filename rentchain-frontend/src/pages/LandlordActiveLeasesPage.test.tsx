@@ -451,6 +451,49 @@ describe("LandlordActiveLeasesPage", () => {
     );
   });
 
+  it("does not expose View lease for generated draft primary-document previews", async () => {
+    mocks.refreshLeaseDocumentUrl.mockReset();
+    mocks.getActiveLeasesForLandlord.mockResolvedValue({
+      leases: [
+        {
+          id: "lease-draft-generated",
+          propertyId: "prop-1",
+          propertyName: "Coburg Rd",
+          unitNumber: "6",
+          monthlyRent: 1800,
+          startDate: "2026-01-01",
+          endDate: "2026-12-31",
+          status: "active",
+          tenantName: "Chip Milo",
+          tenantEmail: "hello+cob6tenant@rentchain.ai",
+          documentUrl:
+            "https://storage.googleapis.com/rentchain-lease-documents/lease-documents/hash/lease-draft-generated.pdf?X-Goog-Expires=1800",
+          signingStatus: "not_started",
+          leaseExecution: {
+            executionStatus: "draft",
+            executionLabel: "Draft lease",
+            executionDescription: "The generated lease is available for preview before signing.",
+            requiredNextAction: "tenant_signature",
+            tenantSignatureStatus: "needed",
+            landlordSignatureStatus: "not_required",
+            pdfStatus: "generated",
+            completedAt: null,
+          },
+        },
+      ],
+    });
+
+    render(
+      <MemoryRouter>
+        <LandlordActiveLeasesPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole("button", { name: "Use Preview Lease Document" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "View lease" })).not.toBeInTheDocument();
+    expect(mocks.refreshLeaseDocumentUrl).not.toHaveBeenCalled();
+  });
+
   it("shows Schedule A as a separate action without replacing the lease summary action", async () => {
     mocks.getActiveLeasesForLandlord.mockResolvedValue({
       leases: [
