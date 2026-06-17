@@ -16,6 +16,25 @@ export type SigningProviderSigner = {
   role?: "tenant" | "landlord";
 };
 
+export type SigningProviderFieldPlacement = {
+  provider: "dropbox_sign";
+  placementVersion: "dropbox_sign_form_fields_v1";
+  fields: Array<{
+    apiId: string;
+    type: "signature" | "date_signed";
+    signerRole: "tenant" | "landlord";
+    signerIndex: number;
+    documentIndex: number;
+    page: number;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    required: boolean;
+    name?: string;
+  }>;
+};
+
 export type SigningProviderSendInput = {
   leaseId: string;
   landlordId: string;
@@ -25,6 +44,7 @@ export type SigningProviderSendInput = {
   signers: SigningProviderSigner[];
   callbackUrl?: string | null;
   returnUrl?: string | null;
+  fieldPlacement?: SigningProviderFieldPlacement | null;
 };
 
 export type SigningProviderSendResult = {

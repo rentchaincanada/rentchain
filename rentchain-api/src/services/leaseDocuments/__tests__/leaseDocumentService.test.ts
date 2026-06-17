@@ -135,8 +135,30 @@ describe("leaseDocumentService", () => {
     expect(document.documentHash).toMatch(/^[a-f0-9]{64}$/);
     expect(document.manifestHash).toMatch(/^[a-f0-9]{64}$/);
     expect(document.storageRef).toBeNull();
+    expect((document as any).signingFieldPlacement).toBeUndefined();
     expect(JSON.stringify(document)).not.toContain("lease-documents/");
     expect(listDocs("leaseDocuments")).toHaveLength(1);
+    expect(listDocs("leaseDocuments")[0].data.signingFieldPlacement).toEqual(
+      expect.objectContaining({
+        provider: "dropbox_sign",
+        placementVersion: "dropbox_sign_form_fields_v1",
+        landlordPlacementPrepared: true,
+        fields: expect.arrayContaining([
+          expect.objectContaining({
+            apiId: "tenant_signature",
+            type: "signature",
+            signerRole: "tenant",
+            signerIndex: 0,
+          }),
+          expect.objectContaining({
+            apiId: "tenant_date_signed",
+            type: "date_signed",
+            signerRole: "tenant",
+            signerIndex: 0,
+          }),
+        ]),
+      })
+    );
     expect(writeCanonicalEventMock).toHaveBeenCalledWith(
       expect.objectContaining({
         action: "lease_document_generated",

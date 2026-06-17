@@ -1,5 +1,9 @@
 import PDFDocument from "pdfkit";
-import type { JurisdictionLeaseDocumentAdapter, PrimaryLeaseDocumentInput } from "../leaseDocumentTypes";
+import type {
+  JurisdictionLeaseDocumentAdapter,
+  LeaseDocumentSigningFieldPlacement,
+  PrimaryLeaseDocumentInput,
+} from "../leaseDocumentTypes";
 
 function text(value: unknown, fallback = "Not provided") {
   const next = String(value ?? "").trim();
@@ -22,6 +26,44 @@ function collectPdf(write: (doc: PDFKit.PDFDocument) => void): Promise<Buffer> {
     write(doc);
     doc.end();
   });
+}
+
+function buildDropboxSignPlacement(signaturePage: number): LeaseDocumentSigningFieldPlacement {
+  return {
+    provider: "dropbox_sign",
+    placementVersion: "dropbox_sign_form_fields_v1",
+    landlordPlacementPrepared: true,
+    fields: [
+      {
+        apiId: "tenant_signature",
+        type: "signature",
+        signerRole: "tenant",
+        signerIndex: 0,
+        documentIndex: 0,
+        page: signaturePage,
+        x: 170,
+        y: 165,
+        width: 270,
+        height: 52,
+        required: true,
+        name: "Tenant signature",
+      },
+      {
+        apiId: "tenant_date_signed",
+        type: "date_signed",
+        signerRole: "tenant",
+        signerIndex: 0,
+        documentIndex: 0,
+        page: signaturePage,
+        x: 455,
+        y: 175,
+        width: 92,
+        height: 28,
+        required: true,
+        name: "Tenant date signed",
+      },
+    ],
+  };
 }
 
 export const caNsLeaseDocumentAdapter: JurisdictionLeaseDocumentAdapter = {
@@ -80,7 +122,12 @@ export const caNsLeaseDocumentAdapter: JurisdictionLeaseDocumentAdapter = {
   ],
   sourceReferences: ["Nova Scotia Form P Standard Lease Form reference upload"],
   async renderPrimaryLeasePdf(input: PrimaryLeaseDocumentInput) {
-    return collectPdf((doc) => {
+    let pageNumber = 1;
+    let signaturePage = 1;
+    const pdfBuffer = await collectPdf((doc) => {
+      doc.on("pageAdded", () => {
+        pageNumber += 1;
+      });
       const lease = input.lease || {};
       const property = input.property || {};
       const unit = input.unit || {};
@@ -160,13 +207,35 @@ export const caNsLeaseDocumentAdapter: JurisdictionLeaseDocumentAdapter = {
       section("Attachments");
       doc.text("Schedule A statutory conditions and addenda must be attached/initialed where required and do not replace this primary lease document.");
 
-      section("Signature Acknowledgement");
-      doc.text("Tenant signature: _______________________________   Date: ______________");
-      doc.moveDown(0.5);
-      doc.text("Landlord signature: _____________________________   Date: ______________");
+      doc.addPage();
+      signaturePage = pageNumber;
+      doc.fontSize(16).fillColor("#111").text("Sign and Date", { align: "center" });
+      doc.moveDown(0.7);
+      doc.fontSize(10).text("Review the lease details and applicable provincial requirements before signing. RentChain does not provide legal advice or guarantee enforceability.");
+
+      doc.moveDown(2);
+      doc.font("Helvetica-Bold").fontSize(10).text("Tenant signature", 72, 150);
+      doc.font("Helvetica").moveTo(170, 207).lineTo(440, 207).stroke("#111");
+      doc.text("Date", 455, 150);
+      doc.moveTo(455, 207).lineTo(547, 207).stroke("#111");
+
+      doc.font("Helvetica-Bold").text("Landlord signature", 72, 245);
+      doc.font("Helvetica").moveTo(170, 302).lineTo(440, 302).stroke("#111");
+      doc.text("Date", 455, 245);
+      doc.moveTo(455, 302).lineTo(547, 302).stroke("#111");
+      doc.fontSize(8).fillColor("#555").text(
+        "Landlord signature placement is prepared for a future countersignature flow. The current Dropbox Sign request places the tenant signature and signing date.",
+        72,
+        330,
+        { width: 476 }
+      );
 
       doc.moveDown();
       doc.fontSize(8).fillColor("#555").text("This generated draft is provided for workflow testing. It is not legal advice, certification, notarization, or an enforceability guarantee.");
     });
+    return {
+      pdfBuffer,
+      signingFieldPlacement: buildDropboxSignPlacement(signaturePage),
+    };
   },
 };
