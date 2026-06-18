@@ -51,7 +51,7 @@ function fieldStatusLabel(document: PrimaryLeaseDocument | null, section: string
   if (status === "provided") return value ? pretty(value) : "Provided";
   if (status === "not_applicable") return "Not applicable";
   if (status === "pending") return "Pending";
-  return "Not recorded";
+  return "Not recorded in RentChain";
 }
 
 function deliveryReadinessItems(document: PrimaryLeaseDocument | null) {
@@ -242,6 +242,9 @@ export function LeaseSigningDashboard({ leaseId, tenantEmail }: Props) {
                       {item.label}: {item.value}
                     </span>
                   ))}
+                </div>
+                <div style={{ color: "#64748b", fontSize: 12 }}>
+                  Tracks RentChain-recorded delivery evidence only.
                 </div>
               </div>
             ) : null}

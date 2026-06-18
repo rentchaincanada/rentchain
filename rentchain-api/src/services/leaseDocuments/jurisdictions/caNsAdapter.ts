@@ -153,10 +153,10 @@ export function buildLeaseDeliveryReadinessDisplay(input: PrimaryLeaseDocumentIn
     ? "Act copy/link recorded"
     : "";
   const items = [
-    signedStatus ? `Signed lease copy delivery: ${signedStatus}` : "Signed lease copy delivery: not recorded",
+    signedStatus ? `Signed lease copy delivery: ${signedStatus}` : "Signed lease copy delivery: not recorded in RentChain",
     signedMethod ? `method: ${signedMethod}` : "",
     signedAt ? `delivered: ${signedAt}` : "",
-    actStatus ? `Act copy/link delivery: ${actStatus}` : "Act copy/link delivery: not recorded",
+    actStatus ? `Act copy/link delivery: ${actStatus}` : "Act copy/link delivery: not recorded in RentChain",
     actAccess,
     actMethod ? `method: ${actMethod}` : "",
     actAt ? `delivered: ${actAt}` : "",

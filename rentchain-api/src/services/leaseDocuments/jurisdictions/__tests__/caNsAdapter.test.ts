@@ -102,7 +102,7 @@ describe("CA_NS adapter lease delivery readiness display", () => {
   it("renders missing delivery tracking as not recorded", () => {
     const display = buildLeaseDeliveryReadinessDisplay(input());
 
-    expect(display).toContain("Signed lease copy delivery: not recorded");
-    expect(display).toContain("Act copy/link delivery: not recorded");
+    expect(display).toContain("Signed lease copy delivery: not recorded in RentChain");
+    expect(display).toContain("Act copy/link delivery: not recorded in RentChain");
   });
 });

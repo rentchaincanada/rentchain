@@ -190,7 +190,8 @@ describe("LeaseSigningDashboard", () => {
     expect(screen.getByText(/landlord email service consent/i)).toBeInTheDocument();
     expect(screen.getByText(/lease delivery readiness/i)).toBeInTheDocument();
     expect(screen.getByText(/signed lease copy: pending/i)).toBeInTheDocument();
-    expect(screen.getByText(/act copy\/link: not recorded/i)).toBeInTheDocument();
+    expect(screen.getByText(/act copy\/link: not recorded in rentchain/i)).toBeInTheDocument();
+    expect(screen.getByText(/tracks rentchain-recorded delivery evidence only/i)).toBeInTheDocument();
     expect(screen.queryByText(/lease-documents/i)).not.toBeInTheDocument();
   });
 
