@@ -200,6 +200,118 @@ function normalizeTenantEmail(value: any): string | null {
   return next && next.includes("@") ? next : null;
 }
 
+const TENANT_PROFILE_LEASE_STATUSES = new Set([
+  "active",
+  "current",
+  "notice_pending",
+  "renewal_pending",
+  "renewal_accepted",
+  "move_out_pending",
+  "signed",
+  "signed_future",
+  "fully_executed",
+  "pending_signature",
+  "sent",
+  "ready_for_tenant_signature",
+  "tenant_signed",
+  "ready_for_landlord_signature",
+  "landlord_signed",
+]);
+
+function isTenantProfileLeaseCandidate(raw: Record<string, unknown>): boolean {
+  const status = normalizeIdentityString((raw as any)?.status);
+  const signingStatus = normalizeIdentityString(
+    (raw as any)?.currentSigningStatus ||
+      (raw as any)?.signingStatus ||
+      (raw as any)?.leaseSigningStatus ||
+      (raw as any)?.providerSigningStatus
+  );
+  return isCurrentLeaseStatus(status) || TENANT_PROFILE_LEASE_STATUSES.has(status) || TENANT_PROFILE_LEASE_STATUSES.has(signingStatus);
+}
+
+function latestTimestampMillis(record: Record<string, unknown> | null | undefined, keys: string[]): number {
+  if (!record) return 0;
+  return Math.max(0, ...keys.map((key) => toMillis((record as any)?.[key]) || 0));
+}
+
+async function loadLatestLeaseSigningRequest(leaseId: string | null | undefined, landlordId?: string | null) {
+  const normalizedLeaseId = String(leaseId || "").trim();
+  const normalizedLandlordId = String(landlordId || "").trim();
+  if (!normalizedLeaseId) return null;
+  try {
+    let query: FirebaseFirestore.Query = db.collection("leaseSigningRequests").where("leaseId", "==", normalizedLeaseId);
+    if (normalizedLandlordId) query = query.where("landlordId", "==", normalizedLandlordId);
+    const snap = await query.get();
+    return (
+      (snap.docs || [])
+        .map((doc: any) => ({ id: doc.id, ...((doc.data() as any) || {}) }))
+        .sort(
+          (a: any, b: any) =>
+            latestTimestampMillis(b, ["currentStatusAt", "signedAt", "sentAt", "updatedAt", "createdAt"]) -
+            latestTimestampMillis(a, ["currentStatusAt", "signedAt", "sentAt", "updatedAt", "createdAt"])
+        )[0] || null
+    );
+  } catch (err) {
+    console.error("[tenantDetailsService] loadLatestLeaseSigningRequest error", err);
+    return null;
+  }
+}
+
+async function loadLatestSigningSignedEvent(leaseId: string | null | undefined) {
+  const normalizedLeaseId = String(leaseId || "").trim();
+  if (!normalizedLeaseId) return null;
+  try {
+    const snap = await db.collection("canonicalEvents").where("action", "==", "signing_signed").limit(100).get();
+    return (
+      (snap.docs || [])
+        .map((doc: any) => ({ id: doc.id, ...((doc.data() as any) || {}) }))
+        .filter((event: any) => String(event?.resource?.type || "") === "lease")
+        .filter((event: any) => String(event?.resource?.id || "") === normalizedLeaseId)
+        .sort(
+          (a: any, b: any) =>
+            latestTimestampMillis(b, ["occurredAt", "recordedAt", "createdAt"]) -
+            latestTimestampMillis(a, ["occurredAt", "recordedAt", "createdAt"])
+        )[0] || null
+    );
+  } catch (err) {
+    console.error("[tenantDetailsService] loadLatestSigningSignedEvent error", err);
+    return null;
+  }
+}
+
+function buildTenantProfileLeaseRawProjection(params: {
+  raw: Record<string, unknown> | null;
+  signingRequest: any | null;
+  signingSignedEvent: any | null;
+}): Record<string, unknown> | null {
+  if (!params.raw) return null;
+  const signingStatus = normalizeIdentityString(params.signingRequest?.currentSigningStatus);
+  const signedByRequest = ["signed", "completed", "complete"].includes(signingStatus);
+  const signedByEvent = Boolean(params.signingSignedEvent);
+  const currentStatusAt =
+    pickString(params.signingRequest?.currentStatusAt, params.signingSignedEvent?.occurredAt, params.signingSignedEvent?.recordedAt) ||
+    null;
+
+  return {
+    ...params.raw,
+    currentSigningStatus:
+      signedByRequest || signedByEvent
+        ? "signed"
+        : signingStatus || (params.raw as any)?.currentSigningStatus || null,
+    signingStatus:
+      signedByRequest || signedByEvent
+        ? "signed"
+        : signingStatus || (params.raw as any)?.signingStatus || null,
+    currentStatusAt: currentStatusAt || (params.raw as any)?.currentStatusAt || null,
+    sentAt: params.signingRequest?.sentAt || (params.raw as any)?.sentAt || null,
+    documentId: params.signingRequest?.documentId || (params.raw as any)?.documentId || null,
+    documentHash: params.signingRequest?.documentHash || (params.raw as any)?.documentHash || null,
+    manifestHash: params.signingRequest?.manifestHash || (params.raw as any)?.manifestHash || null,
+    jurisdictionCode: params.signingRequest?.jurisdictionCode || (params.raw as any)?.jurisdictionCode || null,
+    templateVersion: params.signingRequest?.templateVersion || (params.raw as any)?.templateVersion || null,
+  };
+}
+
 function isHiddenFromActiveLists(tenant: Pick<TenantRecord, "id" | "hiddenFromActiveLists">) {
   return tenant.hiddenFromActiveLists === true || isTargetedHiddenTenantId(tenant.id);
 }
@@ -345,7 +457,7 @@ async function loadCurrentLeaseSnapshot(tenant: TenantRecord | null, landlordId?
 
     const currentEntries = Array.from(candidates.entries()).filter(([, raw]) => {
       const landlordMatch = !landlordId || String((raw as any)?.landlordId || "").trim() === String(landlordId);
-      return landlordMatch && isCurrentLeaseStatus((raw as any)?.status);
+      return landlordMatch && isTenantProfileLeaseCandidate(raw);
     });
     if (!currentEntries.length) return null;
 
@@ -604,15 +716,22 @@ export async function getTenantDetailBundle(tenantId: string, opts: TenantQueryO
   }
 
   const currentLeaseRecord = await loadCurrentLeaseSnapshot(tenant, landlordId);
-  const currentLeaseRaw = await loadLeaseRawById(currentLeaseRecord?.id || null);
-  const [tenantInviteState, tenantTenancies, applicationRaw] = await Promise.all([
+  const baseCurrentLeaseRaw = await loadLeaseRawById(currentLeaseRecord?.id || null);
+  const [tenantInviteState, tenantTenancies, applicationRaw, latestSigningRequest, latestSigningSignedEvent] = await Promise.all([
     loadLatestTenantInviteState(tenant, landlordId),
     tenant ? listTenanciesByTenantId(tenant.id, { landlordId }).catch((err) => {
       console.error("[tenantDetailsService] listTenanciesByTenantId error", err);
       return [];
     }) : Promise.resolve([]),
     loadApplicationRawById(tenant?.applicationId || null),
+    loadLatestLeaseSigningRequest(currentLeaseRecord?.id || null, landlordId),
+    loadLatestSigningSignedEvent(currentLeaseRecord?.id || null),
   ]);
+  const currentLeaseRaw = buildTenantProfileLeaseRawProjection({
+    raw: baseCurrentLeaseRaw,
+    signingRequest: latestSigningRequest,
+    signingSignedEvent: latestSigningSignedEvent,
+  });
   const currentTenancy = tenantTenancies[0] || buildDerivedTenancyFromTenant(tenant);
   const property = await loadPropertyRecord(currentLeaseRecord?.propertyId || tenant?.propertyId || null);
   const unit = await loadUnitRecord(

@@ -65,6 +65,23 @@ describe("buildMoveInRequirements", () => {
     expect(leaseSigned?.source).toBe("lease_status");
   });
 
+  it("marks lease signed from provider signing status without relying on generic signedAt", () => {
+    const requirements = buildMoveInRequirements({
+      lease: { status: "signed_future" },
+      leaseRaw: {
+        status: "signed_future",
+        currentSigningStatus: "signed",
+        currentStatusAt: "2026-05-09T12:00:00.000Z",
+      },
+    });
+
+    const leaseSigned = requirements.items.find((item) => item.key === "lease_signed");
+    expect(leaseSigned?.state).toBe("complete");
+    expect(leaseSigned?.updatedAt).toBe("2026-05-09T12:00:00.000Z");
+    expect(leaseSigned?.source).toBe("signing_request");
+    expect(leaseSigned?.note).toBeNull();
+  });
+
   it("returns unknown when there is no move-in context", () => {
     const requirements = buildMoveInRequirements({ tenant: { id: "tenant-1" } });
 
