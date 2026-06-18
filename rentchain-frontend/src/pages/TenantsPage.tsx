@@ -184,6 +184,48 @@ function getTenantCurrentLeaseId(
   return String(currentLease?.id || tenant?.currentLeaseId || "").trim();
 }
 
+function buildTenantLeaseLink(
+  tenant?: TenantApiModel | null,
+  currentLease?: TenantLeaseSummary | null
+) {
+  const signedDocumentUrl = String(currentLease?.signedDocumentUrl || "").trim();
+  if (signedDocumentUrl) {
+    return {
+      href: signedDocumentUrl,
+      external: true,
+    };
+  }
+  const currentLeaseId = getTenantCurrentLeaseId(tenant, currentLease);
+  return currentLeaseId
+    ? {
+        href: `/leases/${encodeURIComponent(currentLeaseId)}/summary`,
+        external: false,
+      }
+    : null;
+}
+
+function TenantLeaseLink({
+  link,
+  children,
+}: {
+  link: ReturnType<typeof buildTenantLeaseLink>;
+  children: React.ReactNode;
+}) {
+  if (!link) return <>{children}</>;
+  if (link.external) {
+    return (
+      <a href={link.href} target="_blank" rel="noreferrer" style={{ fontWeight: 700, color: "#2563eb" }}>
+        {children}
+      </a>
+    );
+  }
+  return (
+    <Link to={link.href} style={{ fontWeight: 700, color: "#2563eb" }}>
+      {children}
+    </Link>
+  );
+}
+
 type TenantsErrorBoundaryState = {
   hasError: boolean;
   debugId: string;
@@ -480,9 +522,7 @@ const loadTenants = useCallback(async () => {
   const selectedLeaseLedgerPath = selectedCurrentLeaseId
     ? `/leases/${encodeURIComponent(selectedCurrentLeaseId)}/ledger`
     : null;
-  const selectedLeaseSummaryPath = selectedCurrentLeaseId
-    ? `/leases/${encodeURIComponent(selectedCurrentLeaseId)}/summary`
-    : null;
+  const selectedLeaseLink = buildTenantLeaseLink(selectedTenant, selectedCurrentLease);
 
   const filteredTenants = useMemo(() => {
     const base = tenants || [];
@@ -961,13 +1001,7 @@ const loadTenants = useCallback(async () => {
                       <Card>
                         <div style={{ fontSize: 11, fontWeight: 700, color: text.muted }}>Current lease link</div>
                         <div style={{ marginTop: 4, fontSize: 14, color: text.primary }}>
-                          {selectedLeaseSummaryPath ? (
-                            <Link to={selectedLeaseSummaryPath} style={{ fontWeight: 700, color: "#2563eb" }}>
-                              {selectedTenantLinkage.leaseLabel}
-                            </Link>
-                          ) : (
-                            selectedTenantLinkage.leaseLabel
-                          )}
+                          <TenantLeaseLink link={selectedLeaseLink}>{selectedTenantLinkage.leaseLabel}</TenantLeaseLink>
                         </div>
                       </Card>
                       <Card>
@@ -1051,13 +1085,7 @@ const loadTenants = useCallback(async () => {
                         <div>
                           <div style={{ fontSize: 11, fontWeight: 700, color: text.muted }}>Current lease</div>
                           <div style={{ marginTop: 4, fontSize: 14, color: text.primary }}>
-                            {selectedLeaseSummaryPath ? (
-                              <Link to={selectedLeaseSummaryPath} style={{ fontWeight: 700, color: "#2563eb" }}>
-                                {selectedTenantLinkage.leaseLabel}
-                              </Link>
-                            ) : (
-                              selectedTenantLinkage.leaseLabel
-                            )}
+                            <TenantLeaseLink link={selectedLeaseLink}>{selectedTenantLinkage.leaseLabel}</TenantLeaseLink>
                           </div>
                         </div>
                       </div>

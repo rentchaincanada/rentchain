@@ -6,6 +6,7 @@ const unitDocs = new Map<string, any>();
 const leaseDocs = new Map<string, any>();
 const signingRequestDocs = new Map<string, any>();
 const canonicalEventDocs = new Map<string, any>();
+const getSignedLeaseDocumentDownloadMock = vi.hoisted(() => vi.fn());
 
 function collectionFor(name: string) {
   if (name === "tenants") return tenantDocs;
@@ -114,6 +115,10 @@ vi.mock("../tenantMoveInReadinessService", () => ({
 vi.mock("../tenanciesService", () => ({
   buildDerivedTenancyFromTenant: vi.fn(() => null),
   listTenanciesByTenantId: vi.fn(async () => []),
+}));
+
+vi.mock("../signing/leaseSigningService", () => ({
+  getSignedLeaseDocumentDownload: getSignedLeaseDocumentDownloadMock,
 }));
 
 describe("getTenantsList", () => {
@@ -279,6 +284,14 @@ describe("getTenantDetailBundle", () => {
     leaseDocs.clear();
     signingRequestDocs.clear();
     canonicalEventDocs.clear();
+    getSignedLeaseDocumentDownloadMock.mockReset();
+    getSignedLeaseDocumentDownloadMock.mockResolvedValue({
+      documentUrl: null,
+      expiresInSeconds: null,
+      documentHash: null,
+      signedDocumentStoredAt: null,
+      source: null,
+    });
   });
 
   it("projects signed lease signing request state into tenant profile readiness and coherence", async () => {
@@ -328,6 +341,13 @@ describe("getTenantDetailBundle", () => {
       jurisdictionCode: "CA_NS",
       templateVersion: "ca-ns-form-p-draft-v1",
     });
+    getSignedLeaseDocumentDownloadMock.mockResolvedValue({
+      documentUrl: "https://storage.googleapis.com/rentchain-documents-prod/lease-signing/1?X-Goog-Signature=safe",
+      expiresInSeconds: 1800,
+      documentHash: "hash-1",
+      signedDocumentStoredAt: "2026-06-10T12:05:00.000Z",
+      source: "signedDocument",
+    });
     canonicalEventDocs.set("event-1", {
       action: "signing_signed",
       resource: { type: "lease", id: "lease-1" },
@@ -342,8 +362,16 @@ describe("getTenantDetailBundle", () => {
         id: "lease-1",
         status: "active",
         unit: "6",
+        signedDocumentUrl:
+          "https://storage.googleapis.com/rentchain-documents-prod/lease-signing/1?X-Goog-Signature=safe",
+        signedDocumentExpiresInSeconds: 1800,
+        signedDocumentSource: "signedDocument",
       })
     );
+    expect(getSignedLeaseDocumentDownloadMock).toHaveBeenCalledWith({
+      leaseId: "lease-1",
+      landlordId: "landlord-1",
+    });
     expect(bundle.lifecycle).toEqual(
       expect.objectContaining({
         lifecycleState: "active",
@@ -365,5 +393,50 @@ describe("getTenantDetailBundle", () => {
         note: null,
       })
     );
+  });
+
+  it("falls back to internal lease summary when no signed document source is available", async () => {
+    tenantDocs.set("tenant-1", {
+      landlordId: "landlord-1",
+      fullName: "Unsigned Tenant",
+      propertyId: "property-1",
+      unitId: "unit-1",
+      currentLeaseId: "lease-1",
+      status: "Current",
+    });
+    propertyDocs.set("property-1", { landlordId: "landlord-1", name: "Oxford Suites" });
+    unitDocs.set("unit-1", {
+      landlordId: "landlord-1",
+      propertyId: "property-1",
+      unitNumber: "6",
+      status: "occupied",
+      occupancyStatus: "occupied",
+    });
+    leaseDocs.set("lease-1", {
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      propertyId: "property-1",
+      unitId: "unit-1",
+      status: "pending_signature",
+      startDate: "2026-07-01",
+      endDate: "2027-06-30",
+      monthlyRent: 1800,
+    });
+
+    const { getTenantDetailBundle } = await import("../tenantDetailsService");
+    const bundle = await getTenantDetailBundle("tenant-1", { landlordId: "landlord-1" });
+
+    expect(bundle.currentLease).toEqual(
+      expect.objectContaining({
+        id: "lease-1",
+        signedDocumentUrl: null,
+        signedDocumentExpiresInSeconds: null,
+        signedDocumentSource: null,
+      })
+    );
+    expect(getSignedLeaseDocumentDownloadMock).toHaveBeenCalledWith({
+      leaseId: "lease-1",
+      landlordId: "landlord-1",
+    });
   });
 });
