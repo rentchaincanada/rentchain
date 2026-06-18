@@ -260,6 +260,64 @@ describe("TenantsPage", () => {
     expect(screen.queryByText("No current lease linked")).not.toBeInTheDocument();
   });
 
+  it("prefers the signed lease document URL for tenant profile lease links when available", async () => {
+    mocks.useCapabilitiesMock.mockReturnValue({
+      features: { tenant_invites: true },
+    });
+    mocks.fetchTenantsMock.mockResolvedValue([
+      {
+        id: "tenant-1",
+        fullName: "Taylor Tenant",
+        email: "tenant@example.com",
+        propertyName: "Main Street",
+        propertyId: "property-1",
+        unit: "Unit 4",
+        unitId: "unit-4",
+        currentLeaseId: "lease-signed-1",
+      },
+    ]);
+    mocks.fetchTenantTenanciesMock.mockResolvedValue([
+      { id: "tenancy-1", tenantId: "tenant-1", status: "active", unitLabel: "Unit 4" },
+    ]);
+    mocks.useTenantDetailMock.mockReturnValue({
+      bundle: {
+        tenant: { id: "tenant-1", fullName: "Taylor Tenant" },
+        currentLease: {
+          id: "lease-signed-1",
+          tenantId: "tenant-1",
+          propertyId: "property-1",
+          propertyName: "Main Street",
+          unitId: "unit-4",
+          unit: "Unit 4",
+          leaseStart: "2026-01-01",
+          leaseEnd: null,
+          monthlyRent: 1850,
+          status: "active",
+          signedDocumentUrl: "https://storage.googleapis.com/rentchain-documents-prod/lease-signing/1?X-Goog-Signature=safe",
+          signedDocumentExpiresInSeconds: 1800,
+          signedDocumentSource: "signedDocument",
+        },
+      },
+      loading: false,
+      error: null,
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/tenants?tenantId=tenant-1"]}>
+        <TenantsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Tenant actions")).toBeInTheDocument();
+    const leaseLinks = screen.getAllByRole("link", { name: "Main Street · Unit 4 · Lease" });
+    expect(leaseLinks.length).toBeGreaterThan(0);
+    expect(leaseLinks[0]).toHaveAttribute(
+      "href",
+      "https://storage.googleapis.com/rentchain-documents-prod/lease-signing/1?X-Goog-Signature=safe"
+    );
+    expect(leaseLinks[0]).toHaveAttribute("target", "_blank");
+  });
+
   it("uses the current lease as the active unit link when tenancy registration is stale", async () => {
     mocks.useCapabilitiesMock.mockReturnValue({
       features: { tenant_invites: true },

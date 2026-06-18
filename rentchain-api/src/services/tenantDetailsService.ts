@@ -33,6 +33,7 @@ import {
   type TenantLifecycleResult,
 } from "../lib/tenants/deriveTenantLifecycle";
 import { deriveLeaseOccupancyCoherence } from "../lib/leases/deriveLeaseOccupancyCoherence";
+import { getSignedLeaseDocumentDownload } from "./signing/leaseSigningService";
 
 export interface TenantRecord {
   id: string;
@@ -77,6 +78,9 @@ export interface TenantLease {
   leaseEnd: string | null;
   monthlyRent: number;
   status?: string | null;
+  signedDocumentUrl?: string | null;
+  signedDocumentExpiresInSeconds?: number | null;
+  signedDocumentSource?: "signedDocument" | "legacySignedDocumentUrl" | null;
 }
 
 export interface TenantPaymentDto {
@@ -617,6 +621,28 @@ async function loadLatestTenantInviteState(tenant: TenantRecord | null, landlord
   }
 }
 
+async function loadSignedLeaseDocumentLink(leaseId: string | null | undefined, landlordId?: string | null) {
+  const normalizedLeaseId = String(leaseId || "").trim();
+  const normalizedLandlordId = String(landlordId || "").trim();
+  if (!normalizedLeaseId || !normalizedLandlordId) return null;
+  try {
+    const signedDocument = await getSignedLeaseDocumentDownload({
+      leaseId: normalizedLeaseId,
+      landlordId: normalizedLandlordId,
+    });
+    const documentUrl = String(signedDocument?.documentUrl || "").trim();
+    if (!documentUrl) return null;
+    return {
+      signedDocumentUrl: documentUrl,
+      signedDocumentExpiresInSeconds: signedDocument.expiresInSeconds ?? null,
+      signedDocumentSource: signedDocument.source ?? null,
+    };
+  } catch (err) {
+    console.error("[tenantDetailsService] loadSignedLeaseDocumentLink error", err);
+    return null;
+  }
+}
+
 export async function getTenantsList(opts: TenantQueryOptions = {}): Promise<TenantRecord[]> {
   const landlordId = opts.landlordId?.trim?.() ? String(opts.landlordId).trim() : null;
   const excludeHiddenFromActiveLists = opts.excludeHiddenFromActiveLists === true;
@@ -741,6 +767,7 @@ export async function getTenantDetailBundle(tenantId: string, opts: TenantQueryO
     landlordId
   );
   const latestLeaseNoticeSummary = await loadLatestLeaseNoticeSummary(currentLeaseRecord?.id || null, currentLeaseRecord?.status || null);
+  const signedDocumentLink = await loadSignedLeaseDocumentLink(currentLeaseRecord?.id || null, landlordId);
 
   const lease: TenantLease | null = currentLeaseRecord
     ? {
@@ -757,6 +784,9 @@ export async function getTenantDetailBundle(tenantId: string, opts: TenantQueryO
         leaseEnd: currentLeaseRecord.leaseEndDate,
         monthlyRent: Number(currentLeaseRecord.currentRent || 0),
         status: currentLeaseRecord.status,
+        signedDocumentUrl: signedDocumentLink?.signedDocumentUrl || null,
+        signedDocumentExpiresInSeconds: signedDocumentLink?.signedDocumentExpiresInSeconds ?? null,
+        signedDocumentSource: signedDocumentLink?.signedDocumentSource || null,
       }
     : tenant
     ? {

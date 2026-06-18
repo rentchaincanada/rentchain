@@ -26,6 +26,9 @@ export interface TenantLeaseSummary {
   leaseEnd: string | null;
   monthlyRent: string | number;
   status?: string | null;
+  signedDocumentUrl?: string | null;
+  signedDocumentExpiresInSeconds?: number | null;
+  signedDocumentSource?: "signedDocument" | "legacySignedDocumentUrl" | null;
 }
 
 export interface TenantPropertySummary {
