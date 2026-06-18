@@ -1383,6 +1383,8 @@ function buildLeaseProjectionRaw(input: {
     manifestHash: input.signingRequest?.manifestHash || input.primaryDocument?.manifestHash || input.raw?.manifestHash || null,
     jurisdictionCode: input.signingRequest?.jurisdictionCode || input.primaryDocument?.jurisdictionCode || input.raw?.jurisdictionCode || null,
     templateVersion: input.signingRequest?.templateVersion || input.primaryDocument?.templateVersion || input.raw?.templateVersion || null,
+    formPFields: input.raw?.formPFields || input.primaryDocument?.formPFields || null,
+    leaseReadiness: input.raw?.leaseReadiness || input.primaryDocument?.leaseReadiness || null,
   };
 }
 

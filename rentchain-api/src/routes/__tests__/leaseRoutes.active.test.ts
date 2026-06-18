@@ -522,7 +522,7 @@ describe("leaseRoutes GET /active", () => {
     );
   });
 
-  it("projects signed provider lifecycle as executed while preserving payment setup warnings", async () => {
+  it("projects signed provider lifecycle and Form P rent terms from the primary document", async () => {
     getPrimaryLeaseDocumentSummaryMock.mockResolvedValueOnce({
       id: "ldoc_signed",
       leaseId: "lease-signed-provider",
@@ -536,6 +536,15 @@ describe("leaseRoutes GET /active", () => {
       manifestHash: "manifest_hash_signed",
       storageRef: null,
       previewUrl: "https://signed.example.com/primary-signed-preview.pdf",
+      formPFields: {
+        rent_payments: {
+          due_day: {
+            label: "Due day",
+            status: "provided",
+            value: 1,
+          },
+        },
+      },
     });
     seedDoc("properties", "prop-1", { landlordId: "landlord-1", name: "Harbour View", province: "NS" });
     seedDoc("tenants", "tenant-1", { landlordId: "landlord-1", fullName: "Jane Tenant", email: "jane@example.com" });
@@ -593,9 +602,9 @@ describe("leaseRoutes GET /active", () => {
           }),
         }),
         paymentReadiness: expect.objectContaining({
-          readinessStatus: "not_ready",
+          readinessStatus: "ready_to_configure",
           rentTerms: expect.objectContaining({
-            dueDateAvailable: false,
+            dueDateAvailable: true,
             leaseExecuted: true,
           }),
         }),
