@@ -102,6 +102,10 @@ function includesKeyword(value: unknown, keywords: string[]) {
   return keywords.some((keyword) => text.includes(keyword));
 }
 
+function normalizeStatus(value: unknown): string {
+  return String(value || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+}
+
 function hasDepositReceiptEvidence(payments: Array<{ notes?: unknown; method?: unknown }>, ledger: Array<{ notes?: unknown; type?: unknown }>) {
   const keywords = ["deposit", "security deposit"];
   return payments.some((payment) =>
@@ -164,8 +168,19 @@ export function buildMoveInRequirements(params: MoveInRequirementsParams): MoveI
   const leaseSignedAt =
     firstIso((leaseRaw as any)?.tenantSignature, ["signedAt"]) ||
     firstIso(leaseRaw, ["tenantSignedAt", "tenantSignatureCompletedAt", "fullySignedAt", "signatureCompletedAt"]);
+  const providerSigningStatus = normalizeStatus(
+    (leaseRaw as any)?.currentSigningStatus ||
+      (leaseRaw as any)?.signingStatus ||
+      (leaseRaw as any)?.leaseSigningStatus ||
+      (leaseRaw as any)?.providerSigningStatus
+  );
+  const providerSigned = ["signed", "completed", "complete"].includes(providerSigningStatus);
+  const providerSignedAt = providerSigned
+    ? firstIso(leaseRaw, ["currentStatusAt", "signingCompletedAt", "providerSignedAt", "fullyExecutedAt"])
+    : null;
   const leaseSigned = Boolean(
     leaseSignedAt ||
+      providerSigned ||
       firstBoolean(leaseRaw, ["leaseSigned", "isSigned", "signed"])
   );
 
@@ -254,8 +269,8 @@ export function buildMoveInRequirements(params: MoveInRequirementsParams): MoveI
       label: "Lease signed",
       required: hasLeaseContext,
       complete: hasLeaseContext ? leaseSigned : null,
-      source: leaseSignedAt ? "lease" : hasLeaseContext ? "lease_status" : null,
-      updatedAt: leaseSignedAt,
+      source: leaseSignedAt ? "lease" : providerSigned ? "signing_request" : hasLeaseContext ? "lease_status" : null,
+      updatedAt: leaseSignedAt || providerSignedAt,
       note: leaseSigned ? null : "Lease signature pending",
       unknownWhenOptional: true,
     }),

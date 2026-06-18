@@ -152,23 +152,27 @@ function describeTenantLinkage(
   const primaryProperty = tenant.propertyName || tenant.propertyId || "No property linked";
   const primaryUnit = tenant.unit || tenant.unitLabel || tenant.unitId || "No unit linked";
   const currentLeaseId = String(currentLease?.id || tenant.currentLeaseId || "").trim();
+  const hasCurrentLeaseLink = Boolean(currentLeaseId);
   const leaseLabel = currentLeaseId
     ? [primaryProperty !== "No property linked" ? primaryProperty : null, primaryUnit !== "No unit linked" ? primaryUnit : null, "Lease"]
         .filter(Boolean)
         .join(" · ")
     : "No current lease linked";
+  const activeTenancyCount = activeTenancies.length || (hasCurrentLeaseLink ? 1 : 0);
 
   return {
     propertyLabel: primaryProperty,
     unitLabel: primaryUnit,
     leaseLabel,
     leaseId: currentLeaseId || null,
-    activeTenancyCount: activeTenancies.length,
+    activeTenancyCount,
     linkageNote:
       !tenant.propertyId && !tenant.unitId && !currentLeaseId
         ? "This tenant record has no canonical property, unit, or current lease linkage yet."
         : activeTenancies.length === 0
-        ? "No active tenancy registrations are linked to this tenant."
+        ? hasCurrentLeaseLink
+          ? "Current lease links this tenant to the active lease and unit; no separate active tenancy registration is recorded yet."
+          : "No active tenancy registrations are linked to this tenant."
         : "Tenant profile links remain separate from tenancy and lease lifecycle state.",
   };
 }
