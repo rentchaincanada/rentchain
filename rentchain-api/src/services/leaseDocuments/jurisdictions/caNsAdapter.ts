@@ -89,6 +89,81 @@ export function buildEmailServiceConsentDisplay(input: PrimaryLeaseDocumentInput
   return `${parts.join("; ")}. Verify applicable provincial requirements before relying on electronic service.`;
 }
 
+function deliveryLabel(value: unknown): string {
+  const raw = String(value ?? "").trim().toLowerCase();
+  if (!raw) return "";
+  if (["not_started", "not started", "missing"].includes(raw)) return "not started";
+  if (["pending", "sent"].includes(raw)) return "pending";
+  if (["delivered", "provided", "complete", "completed"].includes(raw)) return "delivered";
+  if (["acknowledged", "confirmed", "viewed", "received"].includes(raw)) return "acknowledged";
+  if (["not_applicable", "not applicable"].includes(raw)) return "not applicable";
+  return String(value ?? "").trim();
+}
+
+function yesLabel(value: unknown): string {
+  const raw = String(value ?? "").trim().toLowerCase();
+  if (["yes", "true", "provided", "included", "delivered"].includes(raw)) return "yes";
+  return "";
+}
+
+export function buildLeaseDeliveryReadinessDisplay(input: PrimaryLeaseDocumentInput): string {
+  const lease = input.lease || {};
+  const signedStatus = deliveryLabel(
+    formPValue(input, "signatures_delivery", "signed_lease_copy_delivery_status") ||
+      lease.signedLeaseCopyDeliveryStatus ||
+      lease.signedLeaseCopyDelivery?.status
+  );
+  const signedMethod = text(
+    formPValue(input, "signatures_delivery", "signed_lease_copy_delivery_method") ||
+      lease.signedLeaseCopyDeliveryMethod ||
+      lease.signedLeaseCopyDelivery?.method,
+    ""
+  );
+  const signedAt = text(
+    formPValue(input, "signatures_delivery", "signed_lease_copy_delivered_at") ||
+      lease.signedLeaseCopyDeliveredAt ||
+      lease.signedLeaseCopyDelivery?.deliveredAt,
+    ""
+  );
+  const actStatus = deliveryLabel(
+    formPValue(input, "signatures_delivery", "act_copy_delivery_status") ||
+      lease.actCopyDeliveryStatus ||
+      lease.actCopyDelivery?.status ||
+      lease.residentialTenanciesActDelivery?.status
+  );
+  const actMethod = text(
+    formPValue(input, "signatures_delivery", "act_copy_delivery_method") ||
+      lease.actCopyDeliveryMethod ||
+      lease.actCopyDelivery?.method ||
+      lease.residentialTenanciesActDelivery?.method,
+    ""
+  );
+  const actAt = text(
+    formPValue(input, "signatures_delivery", "act_copy_delivered_at") ||
+      lease.actCopyDeliveredAt ||
+      lease.actCopyDelivery?.deliveredAt ||
+      lease.residentialTenanciesActDelivery?.deliveredAt,
+    ""
+  );
+  const actAccess = yesLabel(formPValue(input, "signatures_delivery", "act_copy_or_link_provided") || lease.actCopyOrLinkProvided)
+    || yesLabel(lease.actCopyDelivery?.actLinkIncluded)
+    || yesLabel(lease.actCopyDelivery?.actCopyProvided)
+    || yesLabel(lease.residentialTenanciesActDelivery?.actLinkIncluded)
+    || yesLabel(lease.residentialTenanciesActDelivery?.actCopyProvided)
+    ? "Act copy/link recorded"
+    : "";
+  const items = [
+    signedStatus ? `Signed lease copy delivery: ${signedStatus}` : "Signed lease copy delivery: not recorded in RentChain",
+    signedMethod ? `method: ${signedMethod}` : "",
+    signedAt ? `delivered: ${signedAt}` : "",
+    actStatus ? `Act copy/link delivery: ${actStatus}` : "Act copy/link delivery: not recorded in RentChain",
+    actAccess,
+    actMethod ? `method: ${actMethod}` : "",
+    actAt ? `delivered: ${actAt}` : "",
+  ].filter(Boolean);
+  return `${items.join("; ")}. Operational tracking only; verify applicable provincial requirements.`;
+}
+
 function collectPdf(write: (doc: PDFKit.PDFDocument) => void): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ margin: 54, size: "LETTER" });
@@ -279,6 +354,7 @@ export const caNsLeaseDocumentAdapter: JurisdictionLeaseDocumentAdapter = {
 
       section("Attachments");
       doc.text("Schedule A statutory conditions and addenda must be attached/initialed where required and do not replace this primary lease document.");
+      row("Lease delivery readiness", buildLeaseDeliveryReadinessDisplay(input));
 
       doc.addPage();
       signaturePage = pageNumber;

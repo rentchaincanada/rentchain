@@ -13,6 +13,7 @@ type FieldSpec = {
   fieldKey: string;
   label: string;
   value?: unknown;
+  status?: FormPFieldStatus;
   required?: boolean;
   conditional?: boolean;
   note?: string | null;
@@ -88,7 +89,7 @@ function fieldFromSpec(spec: FieldSpec, overrides?: Record<string, any> | null):
   }
 
   const value = override?.value ?? spec.value;
-  const status: FormPFieldStatus = hasValue(value) ? "provided" : spec.conditional ? "pending" : "missing";
+  const status: FormPFieldStatus = spec.status || (hasValue(value) ? "provided" : spec.conditional ? "pending" : "missing");
   return {
     key: spec.fieldKey,
     label: spec.label,
@@ -96,6 +97,30 @@ function fieldFromSpec(spec: FieldSpec, overrides?: Record<string, any> | null):
     value: hasValue(value) ? (Array.isArray(value) ? asList(value) : (value as any)) : null,
     note: cleanString(override?.note || spec.note || "") || null,
   };
+}
+
+function normalizeDeliveryStatus(value: unknown): "" | "not_started" | "pending" | "delivered" | "acknowledged" | "not_applicable" {
+  const cleaned = cleanString(value, 80).toLowerCase();
+  if (!cleaned) return "";
+  if (["not_started", "not started", "none", "missing"].includes(cleaned)) return "not_started";
+  if (["pending", "in_progress", "in progress", "queued", "sent"].includes(cleaned)) return "pending";
+  if (["delivered", "provided", "complete", "completed"].includes(cleaned)) return "delivered";
+  if (["acknowledged", "confirmed", "viewed", "received"].includes(cleaned)) return "acknowledged";
+  if (["not_applicable", "not applicable", "n/a", "na"].includes(cleaned)) return "not_applicable";
+  return "";
+}
+
+function deliveryStatusForField(status: string, allowNotApplicable = true): FormPFieldStatus {
+  if (status === "delivered" || status === "acknowledged") return "provided";
+  if (status === "pending") return "pending";
+  if (allowNotApplicable && status === "not_applicable") return "not_applicable";
+  return "missing";
+}
+
+function booleanProvided(value: unknown): "yes" | "" {
+  if (value === true) return "yes";
+  const cleaned = cleanString(value, 40).toLowerCase();
+  return ["yes", "true", "provided", "included", "delivered"].includes(cleaned) ? "yes" : "";
 }
 
 function sectionStatus(fields: FormPFieldEntry[]): FormPSectionReadiness["status"] {
@@ -161,6 +186,49 @@ export function deriveNovaScotiaFormPReadiness(input: PrimaryLeaseDocumentInput)
     firstTenant.emailServiceConsent?.capturedAt,
     landlord.emailServiceConsentCapturedAt,
     landlord.emailServiceConsent?.capturedAt
+  );
+  const actCopyStatus = normalizeDeliveryStatus(
+    lease.actCopyDeliveryStatus ||
+      lease.actCopyDelivery?.status ||
+      lease.residentialTenanciesActDeliveryStatus ||
+      lease.residentialTenanciesActDelivery?.status
+  );
+  const actCopyMethod = firstNonEmpty(
+    lease.actCopyDeliveryMethod,
+    lease.actCopyDelivery?.method,
+    lease.residentialTenanciesActDeliveryMethod,
+    lease.residentialTenanciesActDelivery?.method
+  );
+  const actCopyDeliveredAt = firstNonEmpty(
+    lease.actCopyDeliveredAt,
+    lease.actCopyDelivery?.deliveredAt,
+    lease.residentialTenanciesActDeliveredAt,
+    lease.residentialTenanciesActDelivery?.deliveredAt
+  );
+  const actLinkIncluded = booleanProvided(
+    lease.actLinkIncluded ?? lease.actCopyDelivery?.actLinkIncluded ?? lease.residentialTenanciesActDelivery?.actLinkIncluded
+  );
+  const actCopyProvided = booleanProvided(
+    lease.actCopyProvided ?? lease.actCopyDelivery?.actCopyProvided ?? lease.residentialTenanciesActDelivery?.actCopyProvided
+  );
+  const actCopyOrLinkProvided = actLinkIncluded || actCopyProvided ? "yes" : "";
+  const signedLeaseCopyStatus = normalizeDeliveryStatus(
+    lease.signedLeaseCopyDeliveryStatus || lease.signedLeaseCopyDelivery?.status || lease.signedLeaseDelivery?.status
+  );
+  const signedLeaseCopyMethod = firstNonEmpty(
+    lease.signedLeaseCopyDeliveryMethod,
+    lease.signedLeaseCopyDelivery?.method,
+    lease.signedLeaseDelivery?.method
+  );
+  const signedLeaseCopyDeliveredAt = firstNonEmpty(
+    lease.signedLeaseCopyDeliveredAt,
+    lease.signedLeaseCopyDelivery?.deliveredAt,
+    lease.signedLeaseDelivery?.deliveredAt
+  );
+  const signedLeaseCopyAcknowledgedAt = firstNonEmpty(
+    lease.signedLeaseCopyAcknowledgedAt,
+    lease.signedLeaseCopyDelivery?.acknowledgedAt,
+    lease.signedLeaseDelivery?.acknowledgedAt
   );
   const unitNumber = firstNonEmpty(unit.unitNumber, unit.label, lease.unitNumber);
   const fullAddress = [
@@ -228,8 +296,82 @@ export function deriveNovaScotiaFormPReadiness(input: PrimaryLeaseDocumentInput)
     { sectionKey: "attachments_condition_report", fieldKey: "schedule_a_reference", label: "Schedule A reference", value: firstNonEmpty(lease.scheduleAUrl, lease.scheduleAReference, "Schedule A attached/sectioned separately"), required: true },
     { sectionKey: "attachments_condition_report", fieldKey: "addenda_list", label: "Addenda list", value: asList(lease.addendaList), conditional: true },
 
-    { sectionKey: "signatures_delivery", fieldKey: "signed_lease_copy_delivery", label: "Signed lease copy delivery readiness", value: firstNonEmpty(lease.signedLeaseCopyDeliveryStatus), conditional: true },
-    { sectionKey: "signatures_delivery", fieldKey: "act_copy_delivery", label: "Act copy/link delivery readiness", value: firstNonEmpty(lease.actCopyDeliveryStatus), conditional: true },
+    {
+      sectionKey: "signatures_delivery",
+      fieldKey: "signed_lease_copy_delivery_status",
+      label: "Signed lease copy delivery status",
+      value: signedLeaseCopyStatus,
+      status: deliveryStatusForField(signedLeaseCopyStatus, false),
+    },
+    {
+      sectionKey: "signatures_delivery",
+      fieldKey: "signed_lease_copy_delivery_method",
+      label: "Signed lease copy delivery method",
+      value: signedLeaseCopyMethod,
+      status: signedLeaseCopyStatus === "pending" ? "pending" : undefined,
+      conditional: true,
+    },
+    {
+      sectionKey: "signatures_delivery",
+      fieldKey: "signed_lease_copy_delivered_at",
+      label: "Signed lease copy delivery timestamp",
+      value: signedLeaseCopyDeliveredAt || signedLeaseCopyAcknowledgedAt,
+      status: signedLeaseCopyStatus === "pending" ? "pending" : undefined,
+      conditional: true,
+    },
+    {
+      sectionKey: "signatures_delivery",
+      fieldKey: "signed_lease_copy_acknowledgement",
+      label: "Signed lease tenant delivery confirmation",
+      value: signedLeaseCopyAcknowledgedAt,
+      conditional: true,
+    },
+    {
+      sectionKey: "signatures_delivery",
+      fieldKey: "act_copy_delivery_status",
+      label: "Residential Tenancies Act copy/link delivery status",
+      value: actCopyStatus,
+      status: deliveryStatusForField(actCopyStatus),
+    },
+    {
+      sectionKey: "signatures_delivery",
+      fieldKey: "act_copy_delivery_method",
+      label: "Residential Tenancies Act delivery method",
+      value: actCopyMethod,
+      status: actCopyStatus === "pending" ? "pending" : undefined,
+      conditional: true,
+    },
+    {
+      sectionKey: "signatures_delivery",
+      fieldKey: "act_copy_delivered_at",
+      label: "Residential Tenancies Act delivery timestamp",
+      value: actCopyDeliveredAt,
+      status: actCopyStatus === "pending" ? "pending" : undefined,
+      conditional: true,
+    },
+    {
+      sectionKey: "signatures_delivery",
+      fieldKey: "act_copy_or_link_provided",
+      label: "Residential Tenancies Act copy or link provided",
+      value: actCopyOrLinkProvided,
+      status: actCopyStatus === "not_applicable" ? "not_applicable" : undefined,
+    },
+    {
+      sectionKey: "signatures_delivery",
+      fieldKey: "act_link_included",
+      label: "Residential Tenancies Act link included",
+      value: actLinkIncluded,
+      status: actCopyStatus === "not_applicable" ? "not_applicable" : undefined,
+      conditional: true,
+    },
+    {
+      sectionKey: "signatures_delivery",
+      fieldKey: "act_copy_provided",
+      label: "Residential Tenancies Act copy provided",
+      value: actCopyProvided,
+      status: actCopyStatus === "not_applicable" ? "not_applicable" : undefined,
+      conditional: true,
+    },
   ];
 
   const grouped = SECTION_ORDER.reduce((acc, key) => ({ ...acc, [key]: {} }), {} as FormPStructuredFields);

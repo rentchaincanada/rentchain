@@ -62,6 +62,22 @@ const primaryDocument: PrimaryLeaseDocument = {
   lockedBy: null,
   signingRequestId: null,
   storageRef: null,
+  formPFields: {
+    signatures_delivery: {
+      signed_lease_copy_delivery_status: {
+        key: "signed_lease_copy_delivery_status",
+        label: "Signed lease copy delivery status",
+        status: "pending",
+        value: "pending",
+      },
+      act_copy_delivery_status: {
+        key: "act_copy_delivery_status",
+        label: "Residential Tenancies Act copy/link delivery status",
+        status: "missing",
+        value: null,
+      },
+    },
+  },
   leaseReadiness: {
     version: "ns_form_p_readiness_v1",
     jurisdictionCode: "CA_NS",
@@ -172,6 +188,10 @@ describe("LeaseSigningDashboard", () => {
     expect(screen.getByText(/tenant service email/i)).toBeInTheDocument();
     expect(screen.getByText(/tenant email service consent/i)).toBeInTheDocument();
     expect(screen.getByText(/landlord email service consent/i)).toBeInTheDocument();
+    expect(screen.getByText(/lease delivery readiness/i)).toBeInTheDocument();
+    expect(screen.getByText(/signed lease copy: pending/i)).toBeInTheDocument();
+    expect(screen.getByText(/act copy\/link: not recorded in rentchain/i)).toBeInTheDocument();
+    expect(screen.getByText(/tracks rentchain-recorded delivery evidence only/i)).toBeInTheDocument();
     expect(screen.queryByText(/lease-documents/i)).not.toBeInTheDocument();
   });
 

@@ -201,6 +201,76 @@ describe("deriveNovaScotiaFormPReadiness", () => {
     );
   });
 
+  it("derives Act copy/link and signed lease copy delivery readiness fields", () => {
+    const result = deriveNovaScotiaFormPReadiness(
+      baseInput({
+        lease: {
+          signedLeaseCopyDeliveryStatus: "delivered",
+          signedLeaseCopyDeliveryMethod: "email",
+          signedLeaseCopyDeliveredAt: "2026-06-17T14:00:00.000Z",
+          actCopyDelivery: {
+            status: "acknowledged",
+            method: "email",
+            deliveredAt: "2026-06-17T14:05:00.000Z",
+            actLinkIncluded: true,
+            actCopyProvided: false,
+          },
+        },
+      })
+    );
+
+    expect(result.formPFields.signatures_delivery.signed_lease_copy_delivery_status).toEqual(
+      expect.objectContaining({ status: "provided", value: "delivered" })
+    );
+    expect(result.formPFields.signatures_delivery.signed_lease_copy_delivery_method).toEqual(
+      expect.objectContaining({ status: "provided", value: "email" })
+    );
+    expect(result.formPFields.signatures_delivery.act_copy_delivery_status).toEqual(
+      expect.objectContaining({ status: "provided", value: "acknowledged" })
+    );
+    expect(result.formPFields.signatures_delivery.act_copy_or_link_provided).toEqual(
+      expect.objectContaining({ status: "provided", value: "yes" })
+    );
+    expect(result.formPFields.signatures_delivery.act_link_included).toEqual(
+      expect.objectContaining({ status: "provided", value: "yes" })
+    );
+  });
+
+  it("surfaces missing delivery requirements as blocking Form P readiness gaps", () => {
+    const result = deriveNovaScotiaFormPReadiness(baseInput());
+
+    expect(result.leaseReadiness.blockingItems).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ fieldKey: "signed_lease_copy_delivery_status" }),
+        expect.objectContaining({ fieldKey: "act_copy_delivery_status" }),
+        expect.objectContaining({ fieldKey: "act_copy_or_link_provided" }),
+      ])
+    );
+  });
+
+  it("supports not applicable state for Act copy/link delivery", () => {
+    const result = deriveNovaScotiaFormPReadiness(
+      baseInput({
+        formPFields: {
+          signatures_delivery: {
+            act_copy_delivery_status: { status: "not_applicable", note: "Not applicable for this workflow." },
+            act_copy_or_link_provided: { status: "not_applicable" },
+            act_link_included: { status: "not_applicable" },
+            act_copy_provided: { status: "not_applicable" },
+          },
+        },
+      })
+    );
+
+    expect(result.formPFields.signatures_delivery.act_copy_delivery_status.status).toBe("not_applicable");
+    expect(result.formPFields.signatures_delivery.act_copy_or_link_provided.status).toBe("not_applicable");
+    expect(result.leaseReadiness.nonBlockingItems).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ fieldKey: "act_copy_delivery_status", status: "not_applicable" }),
+      ])
+    );
+  });
+
   it("marks missing required fields as blocking readiness items", () => {
     const result = deriveNovaScotiaFormPReadiness(
       baseInput({
