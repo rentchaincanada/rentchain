@@ -106,7 +106,7 @@ async function loadDecisionActionsForLease(leaseId: string) {
   return (snap?.docs || []).map((doc: any) => ({ id: doc.id, ...((doc.data() as any) || {}) }));
 }
 
-async function deriveLeaseDecisionsForInbox(landlordId: string): Promise<Decision[]> {
+export async function deriveLeaseDecisionsForInbox(landlordId: string): Promise<Decision[]> {
   const leases = await loadLandlordLeases(landlordId);
   const nested = await Promise.all(
     leases.map(async (lease) => {
