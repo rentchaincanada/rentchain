@@ -47,6 +47,13 @@ export type LeasePaymentProjection = {
   rentPaymentSummary: RentPaymentSummary;
 };
 
+function numberFromFormPField(raw: any, sectionKey: string, fieldKey: string): number | null {
+  const field = raw?.formPFields?.[sectionKey]?.[fieldKey];
+  if (!field || String(field.status || "").trim() !== "provided") return null;
+  const value = Number(field.value);
+  return Number.isFinite(value) ? value : null;
+}
+
 export async function buildLeasePaymentProjection(
   input: BuildLeasePaymentProjectionInput
 ): Promise<LeasePaymentProjection> {
@@ -57,12 +64,16 @@ export async function buildLeasePaymentProjection(
     leaseId,
     documentUrl: input.documentUrl ?? null,
   });
+  const dueDay =
+    typeof raw?.dueDay === "number"
+      ? raw.dueDay
+      : numberFromFormPField(raw, "rent_payments", "due_day");
   const paymentReadiness = derivePaymentReadiness({
     leaseId,
     monthlyRent: lease.monthlyRent,
     startDate: lease.startDate,
     endDate: lease.endDate,
-    dueDay: typeof raw?.dueDay === "number" ? raw.dueDay : null,
+    dueDay,
     tenantId:
       asProjectionString(lease.tenantId) ||
       asProjectionString(lease.primaryTenantId) ||
