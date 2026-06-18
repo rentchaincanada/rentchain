@@ -16,6 +16,7 @@ Reviewed source areas:
 - Notices and lease expiry workflows.
 - Property action requests.
 - Tenant portal as a downstream state source.
+- Unified inbox, landlord/tenant messages, tenant portal communications, contractor messages, and communication-derived follow-up.
 
 This is a documentation-only audit. It does not change code, routes, UI, database records, Cloud Run, Vercel, or tests.
 
@@ -41,6 +42,9 @@ This is a documentation-only audit. It does not change code, routes, UI, databas
 | Notices | `leaseNoticeWorkflowService`, tenant/landlord notice routes | Notice due, sent, viewed, pending response, no response, renew/quit. | Lease workflow pages, Dashboard summary. | Should feed Upcoming/Warning queue lanes. |
 | Property action requests | `actionRequestsService`, `PropertiesPage` | Open property action requests. | `/properties?panel=actionRequests`. | Missing canonical queue integration. |
 | Tenant portal | Tenant portal services and frontend tenant pages | Tenant-facing documents/payments/maintenance/profile status. | Tenant portal. | State source only; landlord queue should consume only landlord-actionable items. |
+| Unified inbox events | `unifiedInboxService`, unified inbox adapters | Role-scoped activity stream across messages, maintenance, lease, application, notice, viewing, work orders. | `/landlord/unified-inbox`, tenant/contractor inboxes. | Activity source, not canonical decision queue. |
+| Landlord/tenant messages | `messagesRoutes.ts`, `MessagesPage.tsx`, tenant communications services | Conversations, unread/read state, tenant reply context. | `/messages`, tenant portal communications. | Message workspace source; queue only when actionable. |
+| Contractor messages/work-order communication | contractor inbox adapters, work order communications | Contractor work-order messages, schedule/access/cost communication. | Contractor inbox and maintenance/work-order contexts. | Missing canonical queue integration for landlord-response-required items. |
 
 ## Duplicates
 
@@ -53,6 +57,8 @@ This is a documentation-only audit. It does not change code, routes, UI, databas
 | Lease lifecycle summary versus notice workflow | Expiry, renewal, no-response, and notice deadlines can appear in dashboard summary, lease profile, and workflow pages. | Notice workflow owns notice action. Lease lifecycle owns status. Operations owns prioritization. |
 | Maintenance labels versus operational decisions | Maintenance uses "needs attention" and "needs review" labels outside Decision Inbox. | Maintenance should emit queue items for submitted, blocked, cancelled, stalled, or cost-review cases. |
 | Property action requests versus operations | Properties has action requests that are not clearly represented in Operations. | Property action requests should feed property-owned Needs Review queue items. |
+| Unified Inbox versus Decision Queue | Unified Inbox contains activity records that can look like decisions. | Unified Inbox should remain activity; queue should promote only actionable message-derived items. |
+| Messages versus Dashboard | Unread messages can inflate attention surfaces if all unread state is treated as action. | Dashboard should show only urgent/awaiting-response communication counts and top critical message decisions. |
 
 ## Conflicts
 
@@ -78,6 +84,11 @@ This is a documentation-only audit. It does not change code, routes, UI, databas
 | Tenant portal invite dispatch/activation mismatch | Move-in readiness can show stale invite state. | Needs Review item owned by Tenants only when move-in is blocked. |
 | Notice response deadline/no response | Renewal/no-response risk should not be only a lease-page detail. | Upcoming before deadline; Warning/Critical after deadline depending business rule. |
 | Lease document source/download failures | Document access can block signing, evidence, and landlord confidence. | Critical if signed lease access fails; Warning if draft preview unavailable. |
+| Tenant awaiting landlord reply | Reply responsibility is operational work but currently lives mainly in messaging surfaces. | Needs Review or Warning item owned by Tenant/Messaging depending urgency. |
+| Urgent high-priority tenant message | Unread urgent communication can require same-day landlord action. | Warning or Critical item owned by Tenant or Operations. |
+| Contractor quote/schedule response | Contractor workflow can stall until landlord approves or responds. | Needs Review or Warning item owned by Maintenance. |
+| Notice-relevant message | Communication can affect lease/notice timing or evidence context. | Upcoming/Warning item owned by Notices or Lease workflow. |
+| Support escalation message | Support/admin escalation may require landlord action. | Warning/Critical item owned by Operations, with support-safe projection only. |
 
 ## Recommended Hierarchy
 
@@ -120,7 +131,7 @@ type LandlordDecisionQueueItem = {
   summary: string;
   sourceGenerator: string;
   relatedResource: {
-    type: "lease" | "tenant" | "property" | "unit" | "payment" | "maintenance_request" | "application" | "notice" | "portfolio";
+    type: "lease" | "tenant" | "property" | "unit" | "payment" | "maintenance_request" | "application" | "notice" | "message_thread" | "portfolio";
     id: string;
     safeLabel: string;
   } | null;
@@ -200,7 +211,7 @@ Recommended next sprint:
 
 Mission objective:
 
-Create a backend normalization layer that adapts existing decision inbox items, lease state coherence, payment readiness, lease lifecycle/notice timing, maintenance readiness, and property action requests into one landlord decision queue response for Operations and Dashboard 2.0.
+Create a backend normalization layer that adapts existing decision inbox items, lease state coherence, payment readiness, lease lifecycle/notice timing, maintenance readiness, property action requests, and actionable messaging/unified-inbox signals into one landlord decision queue response for Operations and Dashboard 2.0.
 
 Suggested first implementation boundaries:
 
@@ -209,7 +220,8 @@ Suggested first implementation boundaries:
 3. No new collection.
 4. No mutation workflow.
 5. Preserve existing Decision Inbox route while adding normalized response.
-6. Add tests for severity normalization, duplicate suppression, source routing, and no raw ID labels.
+6. Include messaging source types such as `message_thread`, `message_unread_priority`, `message_notice_relevance`, `message_maintenance_follow_up`, `message_support_escalation`, and `unified_inbox_event`.
+7. Add tests for severity normalization, duplicate suppression, source routing, messaging noise suppression, and no raw ID labels.
 
 ## Non-Goals
 
@@ -219,4 +231,3 @@ Suggested first implementation boundaries:
 - No queue persistence decision.
 - No autonomous workflow execution.
 - No legal/compliance certification language.
-
