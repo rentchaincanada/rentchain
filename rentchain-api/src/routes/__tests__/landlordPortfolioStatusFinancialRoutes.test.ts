@@ -97,7 +97,7 @@ describe("landlordPortfolioStatusFinancialRoutes", () => {
           monthlyRentCents: 120000,
         },
       ],
-      tenants: [],
+      tenants: [{ id: "tenant-1", landlordId: "landlord-1", propertyId: "property-1", currentLeaseId: "lease-1" }],
       rentPayments: [
         {
           id: "payment-1",
@@ -124,6 +124,16 @@ describe("landlordPortfolioStatusFinancialRoutes", () => {
     });
 
     expect(response.status).toBe(200);
+    expect(Object.keys(response.body).sort()).toEqual([
+      "confidence",
+      "dataQualityFlags",
+      "financialSnapshot",
+      "generatedAt",
+      "landlordId",
+      "ok",
+      "portfolioStatus",
+      "version",
+    ]);
     expect(response.body.ok).toBe(true);
     expect(response.body.version).toBe("landlord_portfolio_status_financial_v1");
     expect(response.body.landlordId).toBe("landlord-1");
@@ -152,6 +162,10 @@ describe("landlordPortfolioStatusFinancialRoutes", () => {
     expect(response.body.dataQualityFlags).toContain("unit_lease_occupancy_conflict");
     expect(JSON.stringify(response.body)).not.toContain("providerRequestId");
     expect(JSON.stringify(response.body)).not.toContain("gs://");
+    expect(JSON.stringify(response.body)).not.toContain("unit-1");
+    expect(JSON.stringify(response.body)).not.toContain("lease-1");
+    expect(JSON.stringify(response.body)).not.toContain("tenant-1");
+    expect(JSON.stringify(response.body)).not.toContain("payment-1");
   });
 
   it("does not allow arbitrary landlord lookup from query params", async () => {
