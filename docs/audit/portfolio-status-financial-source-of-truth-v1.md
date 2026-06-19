@@ -20,10 +20,10 @@ Dashboard 2.0 should not build Portfolio Status or Financial Snapshot directly f
 
 Recommended approach:
 
-1. Use the normalized Decision Queue for critical issue counts once the Decision Queue API is merged.
-2. Create a read-only backend normalization service before Dashboard 2.0 UI implementation:
-   - Suggested service: `landlordPortfolioStatusFinancialService`.
-   - Suggested future route: `GET /api/landlord/portfolio-status-financial-summary`.
+1. Use the merged normalized Decision Queue API for critical issue counts.
+2. Use the pending read-only backend normalization service in PR #1191 once its narrow stabilization fixes land:
+   - Service: `landlordPortfolioStatusFinancialService`.
+   - Future route still needed: `GET /api/landlord/portfolio-status-financial-summary`.
 3. Derive occupancy from deduped active property/unit records plus authoritative lease lifecycle and lease occupancy coherence, not from unit status alone.
 4. Derive rent roll and expected rent from active/current executed leases with valid rent terms.
 5. Derive collected rent and outstanding rent from landlord-scoped ledger/payment records through a backend aggregation layer, not frontend dashboard fallbacks.
@@ -44,7 +44,7 @@ Recommended approach:
 | Dashboard rent fields | `GET /api/dashboard/summary` rent object | Not safe for Financial Snapshot. Values are currently zeroed. | Low for rent/financial use. |
 | Dashboard overview | `/dashboard/overview` frontend callers and placeholder/fallback shapes | Not safe for Dashboard 2.0 financial truth. | Low until backend source is normalized and scoped. |
 | Portfolio overview service | Existing portfolio overview-style service shapes | Useful reference shape only. | Low until landlord scoping and source rules are verified. |
-| Decision Queue | Normalized decision queue service/API once merged | Critical issue counts and top decision preview. | High for attention state after API merge. |
+| Decision Queue | Merged normalized decision queue service/API | Critical issue counts and top decision preview. | High for attention state. |
 
 ## Occupancy Source Of Truth
 
@@ -233,7 +233,7 @@ Vacancy should be derived from unit inventory plus lease lifecycle, not from uni
 
 ## Data Quality Flags
 
-The future backend normalization service should return explicit data quality flags so Dashboard 2.0 can degrade honestly instead of showing false precision.
+The backend normalization service should return explicit data quality flags so Dashboard 2.0 can degrade honestly instead of showing false precision.
 
 Recommended flags:
 
@@ -244,23 +244,23 @@ Recommended flags:
 | `payment_source_unavailable` | Payment source could not be loaded or has insufficient confidence. | Show unavailable/degraded financial state, not zero. |
 | `ledger_source_unavailable` | Ledger source could not be loaded. | Degrade collected/outstanding rent. |
 | `unit_sources_split` | Embedded property units and standalone unit records both exist. | Deduplicate and flag review if counts disagree. |
-| `unit_lease_occupancy_conflict` | Unit occupancy does not agree with lease lifecycle. | Count as review required, not clean occupied/vacant. |
+| `unit_lease_occupancy_conflict` | Unit occupancy does not agree with lease lifecycle. | Classify current executed leases by lease lifecycle, then surface conflict/review context without undercounting occupancy. |
 | `tenant_lease_link_conflict` | Tenant current lease/status does not agree with active lease projection. | Count as review required and route to tenant/lease workspace. |
 | `missing_rent_terms` | Active/current lease lacks rent amount, due day, or required rent terms. | Exclude from confident expected rent and surface setup warning. |
 | `stale_lifecycle_projection` | Lease status field and derived lifecycle disagree. | Use lifecycle helper and flag for review. |
 | `vacancy_value_unavailable` | Vacancy count exists but rent/market rent value is missing. | Show vacancy count without dollar impact. |
 
-## Recommended Backend Normalization
+## Backend Normalization Status
 
-Before Dashboard 2.0 UI implementation, add a read-only backend service.
+Before Dashboard 2.0 UI implementation, land the pending PR #1191 read-only backend service with narrow stabilization fixes for fail-closed landlord scoping and lease-authoritative occupancy classification.
 
-Suggested name:
+Service:
 
 ```ts
 landlordPortfolioStatusFinancialService
 ```
 
-Suggested responsibilities:
+Responsibilities:
 
 - Accept `landlordId`, `period`, and optional simple filters.
 - Load landlord-scoped active properties.
@@ -275,7 +275,7 @@ Suggested responsibilities:
 - Never write audit events.
 - Never send notifications.
 
-Suggested future endpoint:
+Future endpoint still needed:
 
 ```http
 GET /api/landlord/portfolio-status-financial-summary
@@ -309,8 +309,8 @@ type LandlordPortfolioStatusFinancialSummary = {
 
 | Dashboard section | Use now | Avoid now | Required before implementation |
 | --- | --- | --- | --- |
-| Portfolio Status | Decision Queue critical count after API merge; active property/unit counts with backend normalization. | Unit status alone, tenant status alone, unscoped overview services. | Portfolio status normalization service. |
-| Decision Queue | Normalized Decision Queue API once merged. | Frontend-derived decision duplication. | None beyond API merge and route contract. |
+| Portfolio Status | Merged Decision Queue critical count; active property/unit counts with backend normalization after #1191 stabilization. | Unit status alone, tenant status alone, unscoped overview services. | Portfolio status normalization service and future route exposure. |
+| Decision Queue | Merged normalized Decision Queue API. | Frontend-derived decision duplication. | None beyond API merge and route contract. |
 | Upcoming Actions | Normalized upcoming queue items, lease notice summary as supporting context. | Mixing all lease guidance into Dashboard. | Queue-backed upcoming adapter. |
 | Financial Snapshot | Normalized lease rent terms plus payment/ledger aggregation. | Dashboard summary rent fields, `/dashboard/overview` fallbacks. | Financial normalization service. |
 | Portfolio Detail | Compact routing counts from active property/unit/lease/tenant sources. | Full source tables and raw readiness lists. | Same portfolio normalization service or a compact companion projection. |
@@ -324,7 +324,7 @@ type LandlordPortfolioStatusFinancialSummary = {
 3. Notice-period lease counts unit as notice period.
 4. Expired/terminated/cancelled lease does not count as occupied.
 5. Unit marked occupied but no active executed lease becomes review required.
-6. Active executed lease on unit marked vacant becomes review required.
+6. Active executed lease on unit marked vacant counts as occupied and produces a conflict/review flag.
 7. Tenant active/current without coherent lease/unit relationship becomes review required.
 8. Embedded property unit and standalone unit records are deduped.
 9. Hidden/archived properties or units are excluded from active inventory.
@@ -355,7 +355,7 @@ type LandlordPortfolioStatusFinancialSummary = {
 ## Recommended Implementation Sequence
 
 1. `feat/landlord-portfolio-status-financial-normalization-v1`
-   - Add read-only backend service.
+   - Land PR #1191 read-only backend service after narrow stabilization fixes.
    - No UI.
    - No source mutation.
    - Add occupancy, vacancy, rent, payment, and data-quality tests.
