@@ -8,6 +8,10 @@ import type { LandlordPortfolioStatusFinancialResponse } from "@/api/landlordPor
 const mocks = vi.hoisted(() => ({
   fetchLandlordDecisionQueueMock: vi.fn(),
   fetchLandlordPortfolioStatusFinancialMock: vi.fn(),
+  fetchApplicationsMock: vi.fn(),
+  fetchTenantsMock: vi.fn(),
+  fetchUnifiedInboxMock: vi.fn(),
+  listWorkOrdersMock: vi.fn(),
 }));
 
 vi.mock("@/api/landlordDecisionQueueApi", () => ({
@@ -16,6 +20,22 @@ vi.mock("@/api/landlordDecisionQueueApi", () => ({
 
 vi.mock("@/api/landlordPortfolioStatusFinancialApi", () => ({
   fetchLandlordPortfolioStatusFinancial: mocks.fetchLandlordPortfolioStatusFinancialMock,
+}));
+
+vi.mock("@/api/applicationsApi", () => ({
+  fetchApplications: mocks.fetchApplicationsMock,
+}));
+
+vi.mock("@/api/tenantsApi", () => ({
+  fetchTenants: mocks.fetchTenantsMock,
+}));
+
+vi.mock("@/api/unifiedInboxApi", () => ({
+  fetchUnifiedInbox: mocks.fetchUnifiedInboxMock,
+}));
+
+vi.mock("@/api/workOrdersApi", () => ({
+  listWorkOrders: mocks.listWorkOrdersMock,
 }));
 
 function installMatchMedia(matches = false) {
@@ -200,14 +220,24 @@ describe("DashboardPage", () => {
     installMatchMedia(false);
     mocks.fetchLandlordPortfolioStatusFinancialMock.mockResolvedValue(portfolioResponse());
     mocks.fetchLandlordDecisionQueueMock.mockResolvedValue(queueResponse());
+    mocks.fetchApplicationsMock.mockResolvedValue([{ id: "app-1", status: "SUBMITTED" }, { id: "app-2", status: "APPROVED" }]);
+    mocks.fetchTenantsMock.mockResolvedValue([{ id: "tenant-1" }, { id: "tenant-2" }, { id: "tenant-3" }]);
+    mocks.listWorkOrdersMock.mockResolvedValue([{ id: "wo-1", status: "open" }, { id: "wo-2", status: "completed" }]);
+    mocks.fetchUnifiedInboxMock.mockResolvedValue({ ok: true, role: "landlord", items: [], records: [], total: 4, limit: 50, offset: 0 });
   });
 
   it("renders Dashboard 2.0 sections from the portfolio and decision queue contracts", async () => {
     renderDashboard();
 
-    expect(await screen.findByText("Operational Home")).toBeInTheDocument();
-    expect(screen.getByTestId("portfolio-status-section")).toHaveTextContent("Portfolio Status");
+    expect(await screen.findByTestId("portfolio-status-section")).toHaveTextContent("Portfolio Health");
+    expect(screen.getByTestId("portfolio-status-section")).toHaveTextContent("Properties");
+    expect(screen.getByTestId("portfolio-status-section")).toHaveTextContent("Units");
+    expect(screen.getByTestId("portfolio-status-section")).toHaveTextContent("Occupied");
+    expect(screen.getByTestId("portfolio-status-section")).toHaveTextContent("Vacant");
     expect(screen.getByTestId("portfolio-status-section")).toHaveTextContent("80%");
+    expect(screen.getByTestId("portfolio-counts-row")).toHaveTextContent("Applications Pending");
+    expect(screen.getByTestId("portfolio-counts-row")).toHaveTextContent("Tenants");
+    expect(screen.getByRole("link", { name: /Unified Messages/i })).toHaveAttribute("href", "/landlord/inbox");
     expect(screen.getByTestId("decision-queue-section")).toHaveTextContent("Decision Queue Preview");
     expect(screen.getByTestId("decision-queue-section")).toHaveTextContent("Resolve lease renewal");
     expect(screen.getByTestId("upcoming-actions-section")).toHaveTextContent("Upcoming Actions");
@@ -216,8 +246,13 @@ describe("DashboardPage", () => {
 
     expect(mocks.fetchLandlordPortfolioStatusFinancialMock).toHaveBeenCalledWith({ periodMonth: expect.stringMatching(/^\d{4}-\d{2}$/) });
     expect(mocks.fetchLandlordDecisionQueueMock).toHaveBeenCalledWith({ status: "open_state", limit: 6 });
+    expect(mocks.fetchApplicationsMock).toHaveBeenCalled();
+    expect(mocks.fetchTenantsMock).toHaveBeenCalled();
+    expect(mocks.listWorkOrdersMock).toHaveBeenCalled();
+    expect(mocks.fetchUnifiedInboxMock).toHaveBeenCalledWith("landlord");
     expect(screen.queryByText("lease-1")).not.toBeInTheDocument();
     expect(screen.queryByText("payment-1")).not.toBeInTheDocument();
+    expect(screen.queryByText("A lease needs a renewal decision before the notice window closes.")).not.toBeInTheDocument();
   });
 
   it("keeps decision queue content visible when portfolio data fails", async () => {
@@ -227,7 +262,7 @@ describe("DashboardPage", () => {
 
     expect((await screen.findAllByText("Portfolio API unavailable")).length).toBeGreaterThan(0);
     expect((await screen.findAllByText("Resolve lease renewal")).length).toBeGreaterThan(0);
-    expect(screen.getByTestId("decision-queue-section")).toHaveTextContent("Full queue");
+    expect(screen.getByTestId("decision-queue-section")).toHaveTextContent("View Full Queue");
   });
 
   it("shows degraded and unavailable metric states with data-quality flags", async () => {
