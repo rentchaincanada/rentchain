@@ -170,7 +170,7 @@ describe("landlordPortfolioStatusFinancialService", () => {
 
     expect(summary.portfolioStatus).toEqual(
       expect.objectContaining({
-        occupiedUnits: 0,
+        occupiedUnits: 1,
         vacantUnits: 1,
         reviewRequiredUnits: 2,
       })
@@ -232,10 +232,70 @@ describe("landlordPortfolioStatusFinancialService", () => {
       ledgerEntries: [],
     });
 
-    expect(summary.portfolioStatus.occupiedUnits).toBe(0);
+    expect(summary.portfolioStatus.occupiedUnits).toBe(1);
     expect(summary.portfolioStatus.reviewRequiredUnits).toBe(1);
     expect(summary.portfolioStatus.leasesRequiringReview).toBe(0);
     expect(summary.portfolioStatus.dataQualityFlags).toContain("unit_lease_occupancy_conflict");
+  });
+
+  it("fails closed on explicit landlord mismatches before related-entity fallback", () => {
+    const summary = deriveLandlordPortfolioStatusFinancialSummary({
+      landlordId: "landlord-1",
+      generatedAt,
+      properties: [
+        {
+          id: "property-1",
+          landlordId: "landlord-1",
+          units: [
+            { id: "unit-1", status: "occupied" },
+            { id: "unit-2", status: "occupied" },
+          ],
+        },
+      ],
+      units: [
+        { id: "unit-3", landlordId: "landlord-2", propertyId: "property-1", status: "vacant" },
+      ],
+      leases: [
+        {
+          id: "lease-1",
+          landlordId: "landlord-1",
+          propertyId: "property-1",
+          unitId: "unit-1",
+          tenantId: "tenant-1",
+          status: "active",
+          signedAt: "2026-05-15T12:00:00.000Z",
+          startDate: "2026-06-01",
+          endDate: "2027-05-31",
+          monthlyRent: 1000,
+        },
+        {
+          id: "lease-2",
+          landlordId: "landlord-2",
+          propertyId: "property-1",
+          unitId: "unit-2",
+          tenantId: "tenant-2",
+          status: "active",
+          signedAt: "2026-05-15T12:00:00.000Z",
+          startDate: "2026-06-01",
+          endDate: "2027-05-31",
+          monthlyRent: 2000,
+        },
+      ],
+      tenants: [
+        { id: "tenant-1", landlordId: "landlord-1", currentLeaseId: "lease-1", status: "active" },
+        { id: "tenant-2", landlordId: "landlord-2", propertyId: "property-1", currentLeaseId: "lease-1", status: "active" },
+      ],
+      ledgerEntries: [
+        { id: "payment-1", landlordId: "landlord-2", leaseId: "lease-1", tenantId: "tenant-1", amountCents: 100000, effectiveDate: "2026-06-02" },
+        { id: "payment-2", leaseId: "lease-1", tenantId: "tenant-1", amountCents: 25000, effectiveDate: "2026-06-03" },
+      ],
+    });
+
+    expect(summary.portfolioStatus.totalUnits).toBe(2);
+    expect(summary.portfolioStatus.activeLeaseCount).toBe(1);
+    expect(summary.financialSnapshot.expectedMonthlyRentCents).toBe(100000);
+    expect(summary.financialSnapshot.collectedCurrentMonthCents).toBe(25000);
+    expect(summary.portfolioStatus.dataQualityFlags).not.toContain("tenant_lease_link_conflict");
   });
 
   it("filters cross-landlord properties, leases, tenants, and payments", () => {

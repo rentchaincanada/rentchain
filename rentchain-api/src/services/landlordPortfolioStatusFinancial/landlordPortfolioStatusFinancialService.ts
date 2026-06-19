@@ -155,6 +155,11 @@ function scopedByLandlord(record: Record<string, unknown>, landlordId: string): 
   return asString(record.landlordId, 240) === landlordId;
 }
 
+function hasMismatchedExplicitLandlord(record: Record<string, unknown>, landlordId: string): boolean {
+  const recordLandlordId = asString(record.landlordId, 240);
+  return Boolean(recordLandlordId && recordLandlordId !== landlordId);
+}
+
 function unitKey(input: { id?: unknown; propertyId?: unknown; unitId?: unknown; unitNumber?: unknown }): string {
   const id = asString(input.id || input.unitId, 240);
   if (id) return `id:${id}`;
@@ -216,10 +221,11 @@ function normalizeUnits(
   }
 
   for (const rawUnit of units || []) {
+    if (hasMismatchedExplicitLandlord(rawUnit, landlordId)) continue;
     const propertyId = asString(rawUnit.propertyId, 240);
     const scoped =
       scopedByLandlord(rawUnit, landlordId) ||
-      (propertyId && scopedPropertyIds.has(propertyId));
+      (!asString(rawUnit.landlordId, 240) && propertyId && scopedPropertyIds.has(propertyId));
     if (!scoped || isHiddenOrArchived(rawUnit)) continue;
     const unit = normalizeUnit(rawUnit);
     if (byKey.has(unit.key)) flags.add("unit_sources_split");
@@ -253,7 +259,10 @@ function normalizeLeases(
   generatedAt: string
 ): NormalizedLease[] {
   return (leases || [])
-    .filter((lease) => scopedByLandlord(lease, landlordId) || scopedPropertyIds.has(asString(lease.propertyId, 240)))
+    .filter((lease) => {
+      if (hasMismatchedExplicitLandlord(lease, landlordId)) return false;
+      return scopedByLandlord(lease, landlordId) || (!asString(lease.landlordId, 240) && scopedPropertyIds.has(asString(lease.propertyId, 240)));
+    })
     .filter((lease) => !isHiddenOrArchived(lease))
     .map((lease) => {
       const lifecycle = deriveLeaseLifecycleState(lease as any, generatedAt);
@@ -282,7 +291,10 @@ function normalizeTenants(
   scopedPropertyIds: Set<string>
 ): PortfolioTenantRecord[] {
   return (tenants || [])
-    .filter((tenant) => scopedByLandlord(tenant, landlordId) || scopedPropertyIds.has(asString(tenant.propertyId, 240)))
+    .filter((tenant) => {
+      if (hasMismatchedExplicitLandlord(tenant, landlordId)) return false;
+      return scopedByLandlord(tenant, landlordId) || (!asString(tenant.landlordId, 240) && scopedPropertyIds.has(asString(tenant.propertyId, 240)));
+    })
     .filter((tenant) => !isHiddenOrArchived(tenant));
 }
 
@@ -299,11 +311,13 @@ function normalizePayments(
 ): NormalizedPayment[] {
   return (records || [])
     .filter((record) => {
+      if (hasMismatchedExplicitLandlord(record, landlordId)) return false;
       const scoped =
         scopedByLandlord(record, landlordId) ||
-        context.leaseIds.has(asString(record.leaseId, 240)) ||
-        context.tenantIds.has(asString(record.tenantId, 240)) ||
-        context.propertyIds.has(asString(record.propertyId, 240));
+        (!asString(record.landlordId, 240) &&
+          (context.leaseIds.has(asString(record.leaseId, 240)) ||
+            context.tenantIds.has(asString(record.tenantId, 240)) ||
+            context.propertyIds.has(asString(record.propertyId, 240))));
       if (!scoped) return false;
       const status = normalizeToken(record.status || record.paymentStatus);
       return !["failed", "void", "voided", "cancelled", "canceled", "refunded"].includes(status);
@@ -431,16 +445,19 @@ export function deriveLandlordPortfolioStatusFinancialSummary(
       occupancyFlags.add("unit_lease_occupancy_conflict");
       continue;
     }
-    if ((active.length > 0 || notice.length > 0) && ["vacant", "available"].includes(unitOccupancy)) {
-      reviewRequiredUnits += 1;
-      occupancyFlags.add("unit_lease_occupancy_conflict");
-      continue;
-    }
     if (active.length > 0) {
+      if (["vacant", "available"].includes(unitOccupancy)) {
+        reviewRequiredUnits += 1;
+        occupancyFlags.add("unit_lease_occupancy_conflict");
+      }
       occupiedUnits += 1;
       continue;
     }
     if (notice.length > 0) {
+      if (["vacant", "available"].includes(unitOccupancy)) {
+        reviewRequiredUnits += 1;
+        occupancyFlags.add("unit_lease_occupancy_conflict");
+      }
       noticePeriodUnits += 1;
       continue;
     }
