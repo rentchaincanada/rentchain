@@ -205,6 +205,39 @@ describe("landlordPortfolioStatusFinancialService", () => {
     expect(summary.portfolioStatus.signedFutureLeaseCount).toBe(1);
   });
 
+  it("matches leases to units by property and unit number when the lease has no unit document id", () => {
+    const summary = deriveLandlordPortfolioStatusFinancialSummary({
+      landlordId: "landlord-1",
+      generatedAt,
+      properties: [
+        {
+          id: "property-1",
+          landlordId: "landlord-1",
+          units: [{ id: "unit-doc-1", unitNumber: "6", status: "vacant" }],
+        },
+      ],
+      leases: [
+        {
+          id: "lease-1",
+          landlordId: "landlord-1",
+          propertyId: "property-1",
+          unitNumber: "6",
+          status: "active",
+          signedAt: "2026-05-15T12:00:00.000Z",
+          startDate: "2026-06-01",
+          endDate: "2027-05-31",
+          monthlyRent: 1600,
+        },
+      ],
+      ledgerEntries: [],
+    });
+
+    expect(summary.portfolioStatus.occupiedUnits).toBe(0);
+    expect(summary.portfolioStatus.reviewRequiredUnits).toBe(1);
+    expect(summary.portfolioStatus.leasesRequiringReview).toBe(0);
+    expect(summary.portfolioStatus.dataQualityFlags).toContain("unit_lease_occupancy_conflict");
+  });
+
   it("filters cross-landlord properties, leases, tenants, and payments", () => {
     const summary = deriveLandlordPortfolioStatusFinancialSummary({
       landlordId: "landlord-1",

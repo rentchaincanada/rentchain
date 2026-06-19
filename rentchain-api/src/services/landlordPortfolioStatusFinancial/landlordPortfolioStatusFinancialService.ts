@@ -163,6 +163,13 @@ function unitKey(input: { id?: unknown; propertyId?: unknown; unitId?: unknown; 
   return propertyId || unitNumber ? `property:${propertyId}:unit:${unitNumber || "unknown"}` : "unit:unknown";
 }
 
+function unitLookupKeys(unit: NormalizedUnit): string[] {
+  const keys = new Set<string>();
+  keys.add(unitKey(unit));
+  if (unit.propertyId && unit.unitNumber) keys.add(`property:${unit.propertyId}:unit:${unit.unitNumber.toLowerCase()}`);
+  return Array.from(keys);
+}
+
 function leaseUnitKeys(lease: NormalizedLease): string[] {
   const keys = new Set<string>();
   if (lease.unitId) keys.add(`id:${lease.unitId}`);
@@ -407,7 +414,13 @@ export function deriveLandlordPortfolioStatusFinancialSummary(
   let reviewRequiredUnits = 0;
 
   for (const unit of units) {
-    const leasesForUnit = currentLeaseByUnitKey.get(unitKey(unit)) || [];
+    const leasesForUnit = Array.from(
+      new Map(
+        unitLookupKeys(unit)
+          .flatMap((key) => currentLeaseByUnitKey.get(key) || [])
+          .map((lease) => [lease.id, lease])
+      ).values()
+    );
     const active = leasesForUnit.filter((lease) => lease.lifecycleState === "active");
     const notice = leasesForUnit.filter((lease) => lease.lifecycleState === "notice_period");
     const upcoming = leasesForUnit.filter((lease) => lease.lifecycleState === "signed_future");
@@ -539,7 +552,7 @@ export function deriveLandlordPortfolioStatusFinancialSummary(
     activeLeaseCount: currentLeases.length,
     currentLeaseCount: currentLeases.length,
     signedFutureLeaseCount: signedFutureLeases.length,
-    leasesRequiringReview: leases.filter((lease) => lease.isReviewRequired).length + reviewRequiredUnits,
+    leasesRequiringReview: leases.filter((lease) => lease.isReviewRequired).length,
     criticalOpenIssues: input.operationalIssues?.critical == null ? null : Math.max(0, Math.floor(Number(input.operationalIssues.critical) || 0)),
     openOperationalIssues: input.operationalIssues?.open == null ? null : Math.max(0, Math.floor(Number(input.operationalIssues.open) || 0)),
     confidence: occupancyConfidence,
