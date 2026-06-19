@@ -39,8 +39,7 @@ type DashboardDecisionQueueItem = {
     | "maintenance"
     | "payments"
     | "notices"
-    | "evidence"
-    | "compliance";
+    | "evidence_compliance";
   severity: "critical" | "warning" | "needs_review" | "upcoming" | "informational";
   title: string;
   description: string;
@@ -243,9 +242,20 @@ GET /api/landlord/decision-queue?status=open&limit=10
 
 Optional dashboard-oriented filters:
 
-- `severity=critical,warning,needs_review,upcoming`
-- `workspace=lease,tenant,payments,maintenance,property,notices`
+- `severity=critical`
+- `severity=warning`
+- `severity=needs_review`
+- `severity=upcoming`
+- `workspace=lease`
+- `workspace=tenant`
+- `workspace=payments`
+- `workspace=maintenance`
+- `workspace=property`
+- `workspace=notices`
+- `workspace=evidence_compliance`
 - `limit=5` for preview widgets.
+
+The merged queue API accepts one severity and one workspace filter value per request. Dashboard implementations that need a mixed preview should either request an unfiltered open queue with a small limit and apply display rules client-side, or issue separate focused requests where that is justified.
 
 Dashboard should not require a new route if the queue API can provide stable sorting and filtering. A later summary endpoint can be considered only if performance or layout needs justify it.
 
