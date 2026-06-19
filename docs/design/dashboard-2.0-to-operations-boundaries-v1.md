@@ -274,7 +274,7 @@ Dashboard should not require the user to understand the source generator. Operat
 
 ## Recommended Implementation Sequence
 
-1. Expose the read-only normalized landlord decision queue API.
+1. Use the merged read-only normalized landlord decision queue API.
 2. Add Dashboard 2.0 data adapter using the queue for preview sections.
 3. Implement Decision Queue Preview on Dashboard with strict caps.
 4. Implement Operations full queue consumption with filters.

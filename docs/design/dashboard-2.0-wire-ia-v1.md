@@ -287,7 +287,7 @@ Dashboard content should not rely on page-level context that disappears when the
 
 ## Implementation Sequence Recommendation
 
-1. Merge or finalize read-only decision queue API.
+1. Use the merged read-only decision queue API as the decision-oriented source.
 2. Add a Dashboard 2.0 adapter contract that consumes queue summaries without changing visual layout.
 3. Replace dashboard decision/action panels with queue-driven preview widgets.
 4. Add Operations full-queue consumption.

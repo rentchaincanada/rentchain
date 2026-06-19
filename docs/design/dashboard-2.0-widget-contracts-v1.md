@@ -6,7 +6,7 @@ This document defines stable information contracts for Dashboard 2.0 widgets.
 
 It is a design-only contract. It does not add TypeScript types, API routes, UI components, CSS, backend services, or runtime behavior.
 
-The contracts assume a future read-only normalized landlord decision queue API and existing domain summaries. They are written to help Dashboard 2.0 implementation avoid drifting into a filing cabinet or duplicate Operations page.
+The contracts assume the merged read-only normalized landlord decision queue API and existing domain summaries. They are written to help Dashboard 2.0 implementation avoid drifting into a filing cabinet or duplicate Operations page.
 
 ## Shared Contract Principles
 
@@ -235,7 +235,7 @@ Rules:
 
 ## Dashboard Queue Query Recommendations
 
-Future Dashboard 2.0 can use a queue request equivalent to:
+Dashboard 2.0 can use a queue request equivalent to:
 
 ```txt
 GET /api/landlord/decision-queue?status=open&limit=10
