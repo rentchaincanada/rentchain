@@ -16,25 +16,26 @@ This is a documentation-only audit. It does not implement code, routes, UI, API 
 
 ## Executive Summary
 
-Dashboard 2.0 implementation should not start until the review queue is resolved, especially PR #1185 because it provides the read-only Decision Queue API contract.
+Dashboard 2.0 implementation should not start until the held architecture queue is resolved. PR #1185 is now merged and provides the read-only Decision Queue API contract; portfolio and financial readiness still depend on the pending PR #1191 normalization work and any follow-on API exposure decision.
 
 Readiness summary:
 
 | Section | Readiness | Reason |
 | --- | --- | --- |
 | Portfolio Status | Partial | Landlord-scoped counts exist in `/api/dashboard/summary`, but rent collection and occupancy are split across newer and legacy sources. |
-| Decision Queue | Strong after PR #1185 | Normalization service exists on `main`; API exposure is pending review in PR #1185. |
+| Decision Queue | Strong | Normalization service and read-only API exposure are merged through PR #1185. |
 | Upcoming Actions | Partial | Lease expiry/notice and tenant move-in readiness exist; move-out, inspections, and maintenance scheduling are not yet unified into a dashboard-ready feed. |
 | Financial Snapshot | Partial | Lease ledger/payment APIs exist, but portfolio-level collected/outstanding/cash-flow data is split and some dashboard rent fields remain zeroed. |
 | Portfolio Detail | Moderate | Properties, tenants, leases, and maintenance sources exist, but some property overview services are legacy/unscoped and should not be reused directly without landlord scoping. |
 
 Recommendation:
 
-1. Merge/review #1185 before Dashboard implementation.
+1. Treat merged PR #1185 as the Decision Queue API baseline for Dashboard implementation.
 2. Use `/api/dashboard/summary` only as a transitional summary source.
 3. Use Decision Queue API for decisions, not legacy dashboard action prompts.
 4. Add a frontend dashboard adapter that clearly marks unavailable/degraded sections.
-5. Defer any new backend aggregation endpoint until implementation proves the existing APIs cannot safely support the view models.
+5. Use pending PR #1191 as the portfolio/financial normalization baseline once its narrow stabilization fixes land.
+6. Defer any new backend aggregation endpoint until implementation proves the existing APIs cannot safely support the view models.
 
 ## Confidence Levels
 
@@ -61,7 +62,7 @@ Recommendation:
 | Active leases | `leaseRoutes.ts` active/current lease routes and dashboard summary lease query | Medium | Lease sources are landlord-scoped in lease routes. Dashboard summary already queries leases but primarily uses them for notice summary, not full portfolio health. |
 | Occupancy | `dashboardRoutes.ts` active tenant/property counts; `portfolioOverviewService.ts`; lease/unit projections | Low to Medium | Dashboard summary exposes active tenant count, not a full occupied/total/vacancy model. `portfolioOverviewService.ts` computes occupancy but currently loads all properties/units without landlord scoping. |
 | Rent collection | `dashboardRoutes.ts` rent object; lease ledger/payment routes; `paymentsRoutes.ts`; `ledgerRoutes.ts`; `ledgerV2Routes.ts` | Low to Medium | Dashboard summary currently returns `collectedCents`, `expectedCents`, and `delinquentCents` as zero. Lease/ledger/payment sources exist, but portfolio rollup is not dashboard-ready. |
-| Critical issues | Normalized decision queue service/API | High after PR #1185 | This is the correct source for critical issue count. Do not derive critical counts from legacy dashboard actions. |
+| Critical issues | Normalized decision queue service/API | High | This is the correct source for critical issue count. Do not derive critical counts from legacy dashboard actions. |
 
 ### Data Quality Issues
 
@@ -78,7 +79,7 @@ Recommendation:
 
 ### Recommended Fixes
 
-1. Use Decision Queue API for critical count once #1185 merges.
+1. Use the merged Decision Queue API for critical count.
 2. Use existing landlord-scoped `/api/dashboard/summary` for transitional property/unit/tenant counts.
 3. Add a Dashboard frontend adapter that labels rent/occupancy as degraded when the source is incomplete.
 4. Later consider a landlord-scoped portfolio summary endpoint if implementation reveals too much cross-source joining in the frontend.
@@ -98,7 +99,7 @@ Recommendation:
 | --- | --- | --- | --- |
 | Normalized model | `rentchain-api/src/services/landlordDecisionQueue/landlordDecisionQueueTypes.ts` | High | Includes id, landlordId, sourceType, workspace, severity, recommended action, due dates, status, dedupe/sort, and related refs. |
 | Normalization service | `rentchain-api/src/services/landlordDecisionQueue/landlordDecisionQueueService.ts` | High | Normalizes decision inbox, unified inbox, scoped signals, message signals, dedupe, and deterministic sorting. |
-| API endpoint | PR #1185 `GET /api/landlord/decision-queue` | Pending/High after merge | API is ready for review but not merged. Dashboard 2.0 should wait for this contract before implementation. |
+| API endpoint | PR #1185 `GET /api/landlord/decision-queue` | High | API is merged and should be treated as the Dashboard decision-source baseline. |
 | Severity model | `docs/audit/decision-severity-model-v1.md` | High | Defines critical, warning, needs_review, upcoming, informational. |
 | Workspace routing | `docs/audit/decision-routing-model-v1.md` and pending IA docs | High | Defines Dashboard preview, Operations full queue, owning workspace resolution. |
 | Messaging source types | Decision queue types/service | High | Includes `message_thread`, `message_unread_priority`, `message_notice_relevance`, `message_maintenance_follow_up`, `message_support_escalation`, `unified_inbox_event`. |
@@ -107,15 +108,15 @@ Recommendation:
 
 - The normalization service can accept multiple source signal arrays, but Dashboard 2.0 should not assume every source category has live generators wired into the API yet.
 - Unified inbox normalization filters informational items, but message actionability still depends on source records providing meaningful priority/status.
-- The API route is still pending in #1185; implementation should not duplicate the service contract in frontend code.
+- The API route is merged in #1185; implementation should not duplicate the service contract in frontend code.
 
 ### Blockers
 
-- PR #1185 must be reviewed/merged or explicitly accepted as the source contract before Dashboard implementation starts.
+- PR #1185 is now the merged source contract for Dashboard decision-oriented widgets.
 
 ### Recommended Fixes
 
-1. Merge #1185 through standard review.
+1. Use merged PR #1185 as the source contract.
 2. Use the API response directly for Decision Queue Preview.
 3. Limit Dashboard preview to critical, warning, blocking needs_review, and near-term upcoming items.
 4. Route full queue actions to Operations, not Dashboard.
@@ -151,7 +152,7 @@ Recommendation:
 
 ### Blockers
 
-- Dashboard 2.0 can show a limited Upcoming Actions preview from the decision queue after #1185, but should not promise full move-in/move-out/inspection coverage until those generators are wired into the queue.
+- Dashboard 2.0 can show a limited Upcoming Actions preview from the merged decision queue, but should not promise full move-in/move-out/inspection coverage until those generators are wired into the queue.
 
 ### Recommended Fixes
 
@@ -233,7 +234,7 @@ Recommendation:
 
 1. Use compact counts and workspace routes only.
 2. Do not render full tenant, lease, property, or maintenance tables on Dashboard.
-3. Annotate Portfolio Detail rows with queue counts by workspace after #1185.
+3. Annotate Portfolio Detail rows with queue counts by workspace from the merged Decision Queue API.
 4. Route into Properties, Tenants, Leases, Maintenance, Ledger, Messaging, and Trust/Compliance.
 5. Keep source workspace detail authoritative.
 
@@ -241,7 +242,7 @@ Recommendation:
 
 | Blocker | Affected sections | Severity | Recommended resolution |
 | --- | --- | --- | --- |
-| PR #1185 not merged | Decision Queue, Portfolio Status critical count, Upcoming Actions, Financial Snapshot warnings, Portfolio Detail annotations | High | Wait for standard review and merge before implementation. |
+| Portfolio/financial normalization pending in PR #1191 | Portfolio Status, Financial Snapshot, Portfolio Detail financial/occupancy confidence | High | Land narrow stabilization fixes, then use the normalization service as the backend baseline for any portfolio/financial API exposure. |
 | Dashboard summary rent fields are zeroed | Financial Snapshot, Portfolio Status | High | Use degraded state or add/identify reliable financial rollup before showing collected/outstanding totals. |
 | Portfolio overview service appears unscoped | Portfolio Status, Financial Snapshot, Portfolio Detail | High | Do not use until landlord scoping is verified/fixed. |
 | Upcoming action sources are fragmented | Upcoming Actions | Medium | Start with decision queue upcoming items and add generators later. |
@@ -251,7 +252,7 @@ Recommendation:
 
 Dashboard 2.0 implementation should begin only after:
 
-1. #1185 is merged or explicitly approved as the API contract despite pending review.
+1. #1185 remains the merged Decision Queue API contract.
 2. #1186, #1187, and #1188 are merged or explicitly approved as implementation source docs.
 3. The first implementation plan accepts degraded states for incomplete financial/portfolio data.
 4. The implementation does not attempt to solve financial rollups, maintenance scheduling aggregation, and portfolio overview scoping in the same PR unless separately approved.
