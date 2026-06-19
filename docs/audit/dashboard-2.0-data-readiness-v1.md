@@ -110,7 +110,7 @@ Recommendation:
 - Unified inbox normalization filters informational items, but message actionability still depends on source records providing meaningful priority/status.
 - The API route is merged in #1185; implementation should not duplicate the service contract in frontend code.
 
-### Blockers
+### Contract Status
 
 - PR #1185 is now the merged source contract for Dashboard decision-oriented widgets.
 
@@ -253,13 +253,13 @@ Recommendation:
 Dashboard 2.0 implementation should begin only after:
 
 1. #1185 remains the merged Decision Queue API contract.
-2. #1186, #1187, and #1188 are merged or explicitly approved as implementation source docs.
+2. #1186, #1187, and #1188 are merged as implementation source docs.
 3. The first implementation plan accepts degraded states for incomplete financial/portfolio data.
 4. The implementation does not attempt to solve financial rollups, maintenance scheduling aggregation, and portfolio overview scoping in the same PR unless separately approved.
 
 ## Recommended Fix Sequence Before Or During Implementation
 
-1. Merge Decision Queue API.
+1. Use the merged Decision Queue API.
 2. Implement Dashboard data adapter with explicit degraded states.
 3. Use Decision Queue API for Decision Queue Preview and critical counts.
 4. Use existing dashboard summary for activation/property/unit/tenant counts only.
