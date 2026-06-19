@@ -1,1550 +1,600 @@
 import React from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
+import {
+  AlertCircle,
+  ArrowRight,
+  Banknote,
+  Building2,
+  CheckCircle2,
+  ClipboardList,
+  Clock3,
+  ExternalLink,
+  ListChecks,
+  Route,
+  WalletCards,
+} from "lucide-react";
 import { MacShell } from "../components/layout/MacShell";
-import { Card, Section, Button } from "../components/ui/Ui";
-import { spacing, text, colors } from "../styles/tokens";
-import { KpiStrip } from "../components/dashboard/KpiStrip";
-import { ActionRequiredPanel } from "../components/dashboard/ActionRequiredPanel";
-import { RecentEventsCard } from "../components/dashboard/RecentEventsCard";
-import { PortfolioCredibilitySummaryCard } from "../components/dashboard/PortfolioCredibilitySummaryCard";
-import { debugApiBase } from "@/api/baseUrl";
-import { fetchDashboardSummary } from "../api/dashboard";
-import { fetchProperties } from "../api/propertiesApi";
-import { unitsForProperty } from "../lib/propertyCounts";
-import { useApplications } from "../hooks/useApplications";
-import { useOnboardingState } from "../hooks/useOnboardingState";
-import { useTenants } from "../hooks/useTenants";
-import { listTenantInvites } from "../api/tenantInvites";
-import { track } from "../lib/analytics";
-import { useAuth } from "../context/useAuth";
-import { useToast } from "../components/ui/ToastProvider";
-import { useCapabilities } from "../hooks/useCapabilities";
-import { buildOnboardingSteps } from "../lib/onboardingSteps";
-import { getApplicationPrereqState } from "../lib/applicationPrereqs";
-import { CreatePropertyFirstModal } from "../components/properties/CreatePropertyFirstModal";
-import { buildCreatePropertyUrl, buildReturnTo } from "../lib/propertyGate";
-import { SendApplicationModal } from "../components/properties/SendApplicationModal";
-import { AddExpenseModal } from "../components/expenses/AddExpenseModal";
-import { useUnitsForProperty } from "../hooks/useUnitsForProperty";
-import { listReferrals } from "../api/referralsApi";
-import { markDashboardVisit } from "@/features/upgradeNudges/nudgeStore";
-import { GettingStartedCard } from "../components/onboarding/GettingStartedCard";
-import { LandlordWelcomeModal } from "../components/onboarding/LandlordWelcomeModal";
-import { SCREENING_ENABLED } from "../config/screening";
-import { openUpgradeFlow } from "@/billing/openUpgradeFlow";
-import { UpgradeNudgeInlineCard } from "@/features/upgradeNudges/UpgradeNudgeInlineCard";
-import { canUseTimeline, normalizeTimelinePlan } from "@/features/automation/timeline/timelineEntitlements";
-import { normalizePlan } from "@/lib/plan";
-import { getLandlordActivation, type LandlordActivationSummary } from "@/api/activationApi";
+import { Card, SkeletonBlock } from "../components/ui/Ui";
+import { colors, spacing, text } from "../styles/tokens";
 import {
-  fetchLandlordTransUnionOnboardingAnalytics,
-  type LandlordTransUnionOnboardingAnalytics,
-} from "@/api/landlordAnalyticsApi";
-import { LandlordActivationFlowCard } from "@/components/activation/LandlordActivationFlowCard";
-import { clearPostUpgradeState, getPostUpgradeContent, getPostUpgradeState } from "@/lib/postUpgrade";
+  fetchLandlordDecisionQueue,
+  type LandlordDecisionQueueItem,
+  type LandlordDecisionQueueResponse,
+  type LandlordDecisionQueueSeverity,
+  type LandlordDecisionQueueWorkspace,
+} from "@/api/landlordDecisionQueueApi";
 import {
-  decisionDisplayCopy,
-  decisionSeverityStyle,
-  decisionStatusCopy,
-  normalizeDecisionItems,
-  summarizeDecisionItems,
-  type DecisionActionType,
-  type DecisionItem,
-} from "@/lib/decisions/decisionDisplay";
-import { patchDecisionAction } from "@/api/decisionApi";
-import { DecisionContextPanel } from "@/components/decisions/DecisionContextPanel";
+  fetchLandlordPortfolioStatusFinancial,
+  type LandlordPortfolioStatusFinancialResponse,
+  type PortfolioDataQualityFlag,
+  type PortfolioMetricConfidence,
+} from "@/api/landlordPortfolioStatusFinancialApi";
 
-const StarterOnboardingPanel = React.lazy(
-  () => import("../components/dashboard/StarterOnboardingPanel")
-);
-const TIMELINE_NUDGE_DISMISSED_AT_KEY = "nudge.timeline.dismissedAt";
-const TIMELINE_NUDGE_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
-const LANDLORD_WELCOME_PENDING_KEY = "rentchain.landlordWelcome.pending";
-const LANDLORD_WELCOME_SEEN_KEY = "rentchain.landlordWelcome.seen";
+type Loadable<T> = {
+  data: T | null;
+  loading: boolean;
+  error: string | null;
+};
 
-class OnboardingErrorBoundary extends React.Component<
-  { onError: () => void; children: React.ReactNode },
-  { hasError: boolean }
-> {
-  private didLog = false;
-  constructor(props: { onError: () => void; children: React.ReactNode }) {
-    super(props);
-    this.state = { hasError: false };
-  }
+type MetricState = "trusted" | "degraded" | "unavailable";
 
-  static getDerivedStateFromError() {
-    return { hasError: true };
-  }
+const sectionCard: React.CSSProperties = {
+  display: "grid",
+  gap: spacing.md,
+  minWidth: 0,
+};
 
-  componentDidCatch() {
-    if (!this.didLog) {
-      this.didLog = true;
-      console.error("[onboarding] render crashed");
-    }
-    this.props.onError();
-  }
+const compactButton: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 8,
+  minHeight: 38,
+  padding: "8px 12px",
+  borderRadius: 8,
+  border: `1px solid ${colors.borderStrong}`,
+  background: "#fff",
+  color: text.primary,
+  fontWeight: 750,
+  textDecoration: "none",
+  fontSize: 14,
+};
 
-  render() {
-    if (this.state.hasError) {
-      return (
-        <Card style={{ padding: spacing.md, border: `1px solid ${colors.border}` }}>
-          <div style={{ fontWeight: 700, marginBottom: 10 }}>Get started</div>
-          <div style={{ color: text.muted, marginBottom: 12 }}>
-            Something went wrong while loading onboarding.
-          </div>
-          <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
-            <Button onClick={() => window.location.reload()}>Reload</Button>
-            <Button variant="ghost" onClick={() => window.location.assign("/dashboard")}>
-              Go to Dashboard
-            </Button>
-          </div>
-        </Card>
-      );
-    }
-    return this.props.children;
-  }
+function getCurrentMonth(): string {
+  return new Date().toISOString().slice(0, 7);
 }
 
-function formatDate(ts: number | null): string {
-  if (!ts) return "—";
-  try {
-    return new Intl.DateTimeFormat(undefined, {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(new Date(ts));
-  } catch {
-    return new Date(ts).toISOString();
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message ? error.message : fallback;
+}
+
+function metricState(confidence: PortfolioMetricConfidence | null | undefined): MetricState {
+  if (confidence === "high") return "trusted";
+  if (confidence === "medium" || confidence === "low") return "degraded";
+  return "unavailable";
+}
+
+function stateLabel(state: MetricState) {
+  if (state === "trusted") return "Trusted";
+  if (state === "degraded") return "Degraded";
+  return "Unavailable";
+}
+
+function stateStyle(state: MetricState): React.CSSProperties {
+  if (state === "trusted") {
+    return { background: "#ecfdf5", color: "#047857", border: "1px solid #a7f3d0" };
   }
+  if (state === "degraded") {
+    return { background: "#fffbeb", color: "#92400e", border: "1px solid #fde68a" };
+  }
+  return { background: "#f8fafc", color: "#64748b", border: "1px solid #cbd5e1" };
 }
 
-function localDecisionStatus(decision: DecisionItem, actionType: DecisionActionType): DecisionItem {
-  const status =
-    actionType === "reviewed"
-      ? "reviewed"
-      : actionType === "snoozed"
-      ? "snoozed"
-      : actionType === "assigned"
-      ? "assigned"
-      : actionType === "dismissed"
-      ? "dismissed"
-      : "resolved";
-  return { ...decision, status };
+function severityStyle(severity: LandlordDecisionQueueSeverity): React.CSSProperties {
+  if (severity === "critical") return { background: "#fef2f2", color: "#991b1b", border: "1px solid #fecaca" };
+  if (severity === "warning" || severity === "needs_review") {
+    return { background: "#fff7ed", color: "#9a3412", border: "1px solid #fed7aa" };
+  }
+  if (severity === "upcoming") return { background: "#eff6ff", color: "#1d4ed8", border: "1px solid #bfdbfe" };
+  return { background: "#f8fafc", color: "#475569", border: "1px solid #cbd5e1" };
 }
 
-function DashboardDecisionSummaryPanel({
-  decisions,
-  pendingId,
-  onAction,
-}: {
-  decisions: DecisionItem[];
-  pendingId: string | null;
-  onAction: (decision: DecisionItem, actionType: DecisionActionType) => void;
-}) {
-  const summary = summarizeDecisionItems(decisions);
-  const cells = [
-    { label: "Overdue", value: summary.overdue, severity: "critical" as const },
-    { label: "Underpaid", value: summary.underpaid, severity: "warning" as const },
-    { label: "Missing", value: summary.missing, severity: "critical" as const },
-    { label: "Failed", value: summary.failed, severity: "critical" as const },
-    { label: "Manual Review", value: summary.manualReview, severity: "warning" as const },
-  ];
+function workspaceLabel(workspace: LandlordDecisionQueueWorkspace): string {
+  const labels: Record<LandlordDecisionQueueWorkspace, string> = {
+    dashboard: "Dashboard",
+    operations: "Operations",
+    tenant: "Tenant",
+    lease: "Lease",
+    property: "Property",
+    maintenance: "Maintenance",
+    payments: "Payments",
+    notices: "Notices",
+    evidence_compliance: "Evidence",
+  };
+  return labels[workspace] || "Operations";
+}
+
+function formatPercent(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return "Unavailable";
+  return `${Math.round(value * 100)}%`;
+}
+
+function formatMoney(cents: number | null | undefined): string {
+  if (cents == null || !Number.isFinite(cents)) return "Unavailable";
+  return new Intl.NumberFormat(undefined, {
+    style: "currency",
+    currency: "CAD",
+    maximumFractionDigits: 0,
+  }).format(cents / 100);
+}
+
+function formatDate(value: string | null | undefined): string {
+  if (!value) return "No due date";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "No due date";
+  return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(date);
+}
+
+function cleanFlags(flags: PortfolioDataQualityFlag[] | null | undefined): string[] {
+  return (flags || []).slice(0, 3).map((flag) => flag.replace(/_/g, " "));
+}
+
+function useNarrowDashboardLayout(): boolean {
+  const [isNarrow, setIsNarrow] = React.useState(false);
+
+  React.useEffect(() => {
+    const media = window.matchMedia("(max-width: 900px)");
+    const update = () => setIsNarrow(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+
+  return isNarrow;
+}
+
+function operationalHref(item: LandlordDecisionQueueItem): string {
+  const href = String(item.recommendedActionHref || "").trim();
+  return href.startsWith("/") ? href : "/operations";
+}
+
+function StatusPill({ state }: { state: MetricState }) {
   return (
-    <Card
+    <span
       style={{
-        padding: spacing.md,
-        border: `1px solid ${colors.border}`,
-        display: "grid",
-        gap: spacing.sm,
-        minWidth: 0,
-        width: "100%",
-        boxSizing: "border-box",
-        overflow: "hidden",
+        ...stateStyle(state),
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        width: "fit-content",
+        borderRadius: 8,
+        padding: "4px 8px",
+        fontSize: 12,
+        fontWeight: 800,
       }}
     >
-      <div>
-        <div style={{ fontWeight: 800 }}>Decision summary</div>
-        <div style={{ color: text.muted, fontSize: 13, marginTop: 3 }}>
-          Read-only decisions from detected rent and lease signals.
-        </div>
-        <Link to="/decision-inbox" style={{ display: "inline-block", marginTop: 6, color: "#2563eb", fontWeight: 800 }}>
-          Open decision inbox
-        </Link>
+      {state === "trusted" ? <CheckCircle2 size={14} /> : state === "degraded" ? <AlertCircle size={14} /> : <Clock3 size={14} />}
+      {stateLabel(state)}
+    </span>
+  );
+}
+
+function MetricTile({
+  label,
+  value,
+  state,
+  helper,
+}: {
+  label: string;
+  value: string;
+  state: MetricState;
+  helper?: string;
+}) {
+  return (
+    <div
+      style={{
+        display: "grid",
+        gap: 8,
+        padding: 14,
+        minWidth: 0,
+        border: `1px solid ${colors.border}`,
+        borderRadius: 8,
+        background: "#fff",
+      }}
+    >
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
+        <div style={{ color: text.muted, fontSize: 13, fontWeight: 750 }}>{label}</div>
+        <StatusPill state={state} />
       </div>
-      {summary.allTotal === 0 ? (
-        <div style={{ color: "#166534", background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 10, padding: 10 }}>
-          No issues detected. Everything is up to date.
+      <div style={{ color: text.primary, fontSize: 26, fontWeight: 850, lineHeight: 1 }}>{value}</div>
+      {helper ? <div style={{ color: text.subtle, fontSize: 13, lineHeight: 1.45 }}>{helper}</div> : null}
+    </div>
+  );
+}
+
+function SectionHeader({
+  icon,
+  title,
+  subtitle,
+  action,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  subtitle: string;
+  action?: React.ReactNode;
+}) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", gap: spacing.md, alignItems: "flex-start", flexWrap: "wrap" }}>
+      <div style={{ display: "flex", gap: 10, minWidth: 0 }}>
+        <div
+          aria-hidden="true"
+          style={{
+            width: 36,
+            height: 36,
+            flex: "0 0 auto",
+            borderRadius: 8,
+            display: "grid",
+            placeItems: "center",
+            background: "#eef2ff",
+            color: "#1d4ed8",
+          }}
+        >
+          {icon}
         </div>
+        <div style={{ display: "grid", gap: 3, minWidth: 0 }}>
+          <h2 style={{ margin: 0, fontSize: 18, letterSpacing: 0 }}>{title}</h2>
+          <div style={{ color: text.muted, fontSize: 14, lineHeight: 1.45 }}>{subtitle}</div>
+        </div>
+      </div>
+      {action}
+    </div>
+  );
+}
+
+function LoadingSection({ title }: { title: string }) {
+  return (
+    <Card style={sectionCard}>
+      <SectionHeader icon={<Clock3 size={18} />} title={title} subtitle="Loading current operational state." />
+      <SkeletonBlock lines={4} label={`Loading ${title}`} />
+    </Card>
+  );
+}
+
+function ErrorSection({ title, message, onRetry }: { title: string; message: string; onRetry: () => void }) {
+  return (
+    <Card style={sectionCard}>
+      <SectionHeader icon={<AlertCircle size={18} />} title={title} subtitle="This section could not load. Other dashboard sections remain available." />
+      <div style={{ color: text.muted, lineHeight: 1.5 }}>{message}</div>
+      <button type="button" onClick={onRetry} style={{ ...compactButton, width: "fit-content" }}>
+        Retry section
+      </button>
+    </Card>
+  );
+}
+
+function PortfolioStatusSection({ portfolio }: { portfolio: LandlordPortfolioStatusFinancialResponse }) {
+  const status = portfolio.portfolioStatus;
+  const state = metricState(portfolio.confidence.occupancy);
+  const flags = cleanFlags(status.dataQualityFlags);
+  return (
+    <Card style={sectionCard} data-testid="portfolio-status-section">
+      <SectionHeader
+        icon={<Building2 size={18} />}
+        title="Portfolio Status"
+        subtitle="The current operating position across properties, units, and leases."
+        action={
+          <Link to="/portfolio-health" style={compactButton}>
+            Portfolio detail <ArrowRight size={16} />
+          </Link>
+        }
+      />
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 170px), 1fr))", gap: spacing.sm }}>
+        <MetricTile label="Occupancy" value={formatPercent(status.occupancyRate)} state={state} helper={`${status.occupiedUnits} occupied, ${status.vacantUnits} vacant`} />
+        <MetricTile label="Current leases" value={String(status.currentLeaseCount)} state={state} helper={`${status.noticePeriodUnits} in notice, ${status.signedFutureLeaseCount} upcoming`} />
+        <MetricTile label="Review units" value={String(status.reviewRequiredUnits)} state={state} helper="Conflicts stay visible instead of changing counts silently." />
+      </div>
+      {flags.length > 0 ? (
+        <div style={{ color: text.muted, fontSize: 13 }}>Data quality: {flags.join(", ")}</div>
       ) : (
-        <>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 130px), 1fr))",
-              gap: spacing.sm,
-              minWidth: 0,
-              boxSizing: "border-box",
-            }}
-          >
-            {cells.map((cell) => {
-              const tone = decisionSeverityStyle[cell.severity];
-              return (
-                <div
-                  key={cell.label}
-                  style={{
-                    border: `1px solid ${tone.border}`,
-                    background: tone.bg,
-                    borderRadius: 10,
-                    padding: 10,
-                    minWidth: 0,
-                    boxSizing: "border-box",
-                  }}
-                >
-                  <div style={{ color: tone.color, fontSize: 12, fontWeight: 700 }}>{cell.label}</div>
-                  <strong style={{ color: tone.color, fontSize: 20 }}>{cell.value}</strong>
-                </div>
-              );
-            })}
-          </div>
-          <div style={{ display: "grid", gap: 6 }}>
-            {decisions.slice(0, 3).map((decision) => {
-              const copy = decisionDisplayCopy[decision.decisionType];
-              const tone = decisionSeverityStyle[decision.severity];
-              return (
-                <div
-                  key={decision.decisionId}
-                  style={{
-                    display: "grid",
-                    gap: 6,
-                    color: text.primary,
-                    borderTop: `1px solid ${colors.border}`,
-                    paddingTop: 8,
-                    minWidth: 0,
-                    boxSizing: "border-box",
-                  }}
-                >
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                  <span style={{ border: `1px solid ${tone.border}`, background: tone.bg, color: tone.color, borderRadius: 999, padding: "2px 8px", fontSize: 12, fontWeight: 800 }}>
-                    {copy.badge}
-                  </span>
-                    <span style={{ border: "1px solid #cbd5e1", borderRadius: 999, padding: "2px 8px", fontSize: 12, fontWeight: 800 }}>
-                      {decisionStatusCopy[decision.status || "detected"]}
-                    </span>
-                  <span>{copy.label}</span>
-                  <span style={{ color: text.muted, overflowWrap: "anywhere" }}>{decision.reason}</span>
-                  </div>
-                  <DecisionContextPanel decision={decision} compact />
-                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                    {(["reviewed", "snoozed", "assigned", "dismissed", "resolved"] as DecisionActionType[]).map((actionType) => (
-                      <button
-                        key={actionType}
-                        type="button"
-                        disabled={pendingId === decision.decisionId || !decision.leaseId}
-                        onClick={() => onAction(decision, actionType)}
-                        style={{ border: "1px solid #cbd5e1", background: "#fff", borderRadius: 8, padding: "5px 8px", fontWeight: 700 }}
-                      >
-                        {pendingId === decision.decisionId
-                          ? "Saving..."
-                          : actionType === "reviewed"
-                          ? "Mark reviewed"
-                          : actionType === "snoozed"
-                          ? "Snooze"
-                          : actionType === "assigned"
-                          ? "Assign"
-                          : actionType === "dismissed"
-                          ? "Dismiss"
-                          : "Resolve"}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </>
+        <div style={{ color: "#047857", fontSize: 13 }}>No portfolio data-quality flags reported.</div>
       )}
     </Card>
   );
 }
 
-function FreeTierJourneyCard({
-  propertiesCount,
-  unitsCount,
-  applicantsCount,
-  screeningReady,
-  leaseReady,
-  applicantActionLabel,
-  onAddProperty,
-  onAddUnit,
-  onAddApplicant,
-  onScreening,
-  onCreateLease,
-}: {
-  propertiesCount: number;
-  unitsCount: number;
-  applicantsCount: number;
-  screeningReady: boolean;
-  leaseReady: boolean;
-  applicantActionLabel: string;
-  onAddProperty: () => void;
-  onAddUnit: () => void;
-  onAddApplicant: () => void;
-  onScreening: () => void;
-  onCreateLease: () => void;
-}) {
-  const hasProperty = propertiesCount > 0;
-  const hasUnit = unitsCount > 0;
-  const hasApplicant = applicantsCount > 0;
-  const steps = [
-    {
-      id: "property",
-      label: "Add property",
-      done: hasProperty,
-      helper: hasProperty ? `${propertiesCount} propert${propertiesCount === 1 ? "y" : "ies"} added` : "Start with the rental address.",
-      action: onAddProperty,
-      actionLabel: hasProperty ? "View properties" : "Add property",
-    },
-    {
-      id: "unit",
-      label: "Add unit",
-      done: hasUnit,
-      helper: hasUnit
-        ? `${unitsCount} unit${unitsCount === 1 ? "" : "s"} added`
-        : hasProperty
-        ? "Add rent, beds, baths, and occupancy."
-        : "Add a property before unit setup.",
-      action: hasProperty ? onAddUnit : onAddProperty,
-      actionLabel: hasProperty ? (hasUnit ? "View units" : "Add unit") : "Add property",
-    },
-    {
-      id: "applicant",
-      label: "Add applicant",
-      done: hasApplicant,
-      helper: hasApplicant
-        ? `${applicantsCount} applicant${applicantsCount === 1 ? "" : "s"} started`
-        : hasUnit
-        ? "Track applicant intake after a unit exists."
-        : "Add a unit before applicant intake.",
-      action: hasUnit ? onAddApplicant : hasProperty ? onAddUnit : onAddProperty,
-      actionLabel: hasUnit ? (hasApplicant ? "View applicants" : applicantActionLabel) : hasProperty ? "Add unit" : "Add property",
-    },
-    {
-      id: "screening",
-      label: "Run screening",
-      done: hasApplicant && screeningReady,
-      helper: hasApplicant
-        ? screeningReady
-          ? "Screening setup is connected."
-          : "Screening is the upgrade-ready next step."
-        : "Add an applicant before screening appears.",
-      action: hasApplicant ? onScreening : hasUnit ? onAddApplicant : hasProperty ? onAddUnit : onAddProperty,
-      actionLabel: hasApplicant
-        ? screeningReady
-          ? "Run screening"
-          : "Review screening"
-        : hasUnit
-        ? "Add applicant"
-        : hasProperty
-        ? "Add unit"
-        : "Add property",
-    },
-    {
-      id: "lease",
-      label: "Create lease",
-      done: hasApplicant && leaseReady,
-      helper: hasApplicant ? "Prepare lease documents after applicant and screening context." : "Add an applicant before lease setup.",
-      action: hasApplicant ? onCreateLease : hasUnit ? onAddApplicant : hasProperty ? onAddUnit : onAddProperty,
-      actionLabel: hasApplicant ? "Create lease" : hasUnit ? "Add applicant" : hasProperty ? "Add unit" : "Add property",
-    },
-  ];
-  const nextStep = steps.find((step) => !step.done) || steps[steps.length - 1];
-
+function FinancialSnapshotSection({ portfolio }: { portfolio: LandlordPortfolioStatusFinancialResponse }) {
+  const financial = portfolio.financialSnapshot;
+  const state = metricState(portfolio.confidence.financial);
+  const flags = cleanFlags(financial.dataQualityFlags);
   return (
-    <Card
-      data-testid="free-tier-journey-card"
+    <Card style={sectionCard} data-testid="financial-snapshot-section">
+      <SectionHeader
+        icon={<Banknote size={18} />}
+        title="Financial Snapshot"
+        subtitle={`Rent collection view for ${financial.period.month}. Missing sources degrade individual metrics, not the whole dashboard.`}
+        action={
+          <Link to="/payments" style={compactButton}>
+            Payments workspace <ArrowRight size={16} />
+          </Link>
+        }
+      />
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 170px), 1fr))", gap: spacing.sm }}>
+        <MetricTile label="Expected rent" value={formatMoney(financial.expectedMonthlyRentCents)} state={state} helper={`${financial.activeLeaseRentTermsCount} leases with rent terms`} />
+        <MetricTile label="Collected" value={formatMoney(financial.collectedCurrentMonthCents)} state={state} helper={`Collection rate ${formatPercent(financial.rentCollectionRate)}`} />
+        <MetricTile label="Outstanding" value={formatMoney(financial.outstandingCurrentMonthCents)} state={state} helper={`${financial.leasesMissingRentTermsCount} leases missing terms`} />
+      </div>
+      {flags.length > 0 ? (
+        <div style={{ color: text.muted, fontSize: 13 }}>Data quality: {flags.join(", ")}</div>
+      ) : (
+        <div style={{ color: "#047857", fontSize: 13 }}>No financial data-quality flags reported.</div>
+      )}
+    </Card>
+  );
+}
+
+function DecisionQueuePreview({ queue }: { queue: LandlordDecisionQueueResponse }) {
+  const items = queue.items.slice(0, 4);
+  return (
+    <Card style={sectionCard} data-testid="decision-queue-section">
+      <SectionHeader
+        icon={<ClipboardList size={18} />}
+        title="Decision Queue Preview"
+        subtitle="The most important open decisions. Full triage and execution stay in Operations."
+        action={
+          <Link to="/operations" style={compactButton}>
+            Full queue <ArrowRight size={16} />
+          </Link>
+        }
+      />
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 150px), 1fr))", gap: spacing.sm }}>
+        <MetricTile label="Open" value={String(queue.summary.open)} state="trusted" />
+        <MetricTile label="Needs review" value={String(queue.summary.needsReview)} state={queue.summary.needsReview > 0 ? "degraded" : "trusted"} />
+        <MetricTile label="Blocked" value={String(queue.summary.blocked)} state={queue.summary.blocked > 0 ? "degraded" : "trusted"} />
+      </div>
+      {items.length === 0 ? (
+        <div style={{ border: `1px solid ${colors.border}`, borderRadius: 8, padding: 14, color: text.muted }}>
+          No open decisions. New operational decisions will appear here before routing to their owning workspace.
+        </div>
+      ) : (
+        <div style={{ display: "grid", gap: 10 }}>
+          {items.map((item) => (
+            <DecisionRow key={item.id} item={item} />
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function DecisionRow({ item }: { item: LandlordDecisionQueueItem }) {
+  return (
+    <div
       style={{
-        padding: spacing.md,
-        border: `1px solid ${colors.border}`,
         display: "grid",
-        gap: spacing.md,
+        gap: 8,
+        padding: 12,
+        border: `1px solid ${colors.border}`,
+        borderRadius: 8,
+        background: "#fff",
       }}
     >
-      <div style={{ display: "flex", justifyContent: "space-between", gap: spacing.md, flexWrap: "wrap" }}>
-        <div style={{ display: "grid", gap: 4, minWidth: 0 }}>
-          <div style={{ fontWeight: 800, fontSize: 18 }}>Start in order</div>
-          <div style={{ color: text.muted, lineHeight: 1.55 }}>
-            Free tier works best when setup follows property, unit, applicant, screening, then lease.
-          </div>
-        </div>
-        <Button onClick={nextStep.action}>{nextStep.actionLabel}</Button>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        <span style={{ ...severityStyle(item.severity), borderRadius: 8, padding: "3px 8px", fontSize: 12, fontWeight: 850 }}>
+          {item.severity.replace(/_/g, " ")}
+        </span>
+        <span style={{ border: `1px solid ${colors.border}`, borderRadius: 8, padding: "3px 8px", color: text.muted, fontSize: 12, fontWeight: 800 }}>
+          {workspaceLabel(item.workspace)}
+        </span>
+        <span style={{ color: text.subtle, fontSize: 12 }}>{formatDate(item.dueAt)}</span>
       </div>
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 160px), 1fr))",
-          gap: spacing.sm,
-        }}
-      >
-        {steps.map((step, index) => (
-          <button
-            key={step.id}
-            type="button"
-            onClick={step.action}
+      <div style={{ display: "grid", gap: 4 }}>
+        <div style={{ fontWeight: 850, color: text.primary, overflowWrap: "anywhere" }}>{item.title || "Review required"}</div>
+        <div style={{ color: text.muted, fontSize: 14, lineHeight: 1.45, overflowWrap: "anywhere" }}>{item.description || "Open the workspace to review the next step."}</div>
+      </div>
+      <Link to={operationalHref(item)} style={{ ...compactButton, width: "fit-content" }}>
+        {item.recommendedActionLabel || "Open workspace"} <ExternalLink size={15} />
+      </Link>
+    </div>
+  );
+}
+
+function UpcomingActions({ queue }: { queue: LandlordDecisionQueueResponse | null }) {
+  const actions = (queue?.items || [])
+    .filter((item) => item.dueAt || item.severity === "upcoming")
+    .slice(0, 4);
+  return (
+    <Card style={sectionCard} data-testid="upcoming-actions-section">
+      <SectionHeader
+        icon={<ListChecks size={18} />}
+        title="Upcoming Actions"
+        subtitle="Time-bound work derived from normalized decision items."
+        action={
+          <Link to="/operations?status=open_state" style={compactButton}>
+            Operations <ArrowRight size={16} />
+          </Link>
+        }
+      />
+      {actions.length === 0 ? (
+        <div style={{ border: `1px solid ${colors.border}`, borderRadius: 8, padding: 14, color: text.muted }}>
+          No dated actions are due right now. When lease, payment, notice, or maintenance decisions have dates, they appear here.
+        </div>
+      ) : (
+        <div style={{ display: "grid", gap: 10 }}>
+          {actions.map((item) => (
+            <div key={item.id} style={{ display: "flex", justifyContent: "space-between", gap: 12, borderBottom: `1px solid ${colors.border}`, paddingBottom: 10 }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontWeight: 800, overflowWrap: "anywhere" }}>{item.title}</div>
+                <div style={{ color: text.muted, fontSize: 13 }}>{workspaceLabel(item.workspace)} · {formatDate(item.dueAt)}</div>
+              </div>
+              <Link to={operationalHref(item)} aria-label={`Open ${item.title}`} style={{ ...compactButton, flex: "0 0 auto" }}>
+                <ArrowRight size={16} />
+              </Link>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function WorkspaceRoutingSection() {
+  const routes = [
+    { label: "Operations full queue", href: "/operations", icon: <ClipboardList size={17} />, helper: "Execution workspace" },
+    { label: "Properties", href: "/properties", icon: <Building2 size={17} />, helper: "Portfolio records" },
+    { label: "Leases", href: "/leases", icon: <Route size={17} />, helper: "Lease workspace" },
+    { label: "Payments", href: "/payments", icon: <WalletCards size={17} />, helper: "Financial workspace" },
+  ];
+  return (
+    <Card style={sectionCard} data-testid="workspace-routing-section">
+      <SectionHeader
+        icon={<Route size={18} />}
+        title="Portfolio Detail / Workspace Routing"
+        subtitle="Dashboard summarizes. Operations and owning workspaces handle execution."
+      />
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 190px), 1fr))", gap: spacing.sm }}>
+        {routes.map((route) => (
+          <Link
+            key={route.href}
+            to={route.href}
             style={{
-              textAlign: "left",
-              border: `1px solid ${step.done ? "rgba(16,185,129,0.35)" : colors.border}`,
-              background: step.done ? "rgba(236,253,245,0.88)" : colors.panel,
-              borderRadius: 8,
-              padding: 12,
               display: "grid",
-              gap: 6,
-              cursor: "pointer",
-              minWidth: 0,
+              gap: 8,
+              minHeight: 88,
+              padding: 14,
+              borderRadius: 8,
+              border: `1px solid ${colors.border}`,
+              background: "#fff",
+              color: text.primary,
+              textDecoration: "none",
             }}
           >
-            <div style={{ color: step.done ? "#047857" : text.muted, fontSize: 12, fontWeight: 900 }}>
-              Step {index + 1}
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
+              <span style={{ color: "#1d4ed8" }}>{route.icon}</span>
+              <ArrowRight size={16} color={text.subtle} />
             </div>
-            <div style={{ color: text.primary, fontWeight: 800 }}>{step.label}</div>
-            <div style={{ color: text.muted, fontSize: 13, lineHeight: 1.45 }}>{step.helper}</div>
-          </button>
+            <div>
+              <div style={{ fontWeight: 850 }}>{route.label}</div>
+              <div style={{ color: text.muted, fontSize: 13, marginTop: 3 }}>{route.helper}</div>
+            </div>
+          </Link>
         ))}
       </div>
     </Card>
   );
 }
 
-const DashboardPage: React.FC = () => {
-  // Guardrail: declare derived values used in hook deps above the hooks that depend on them.
-  const [data, setData] = React.useState<any | null>(null);
-  const [decisionRows, setDecisionRows] = React.useState<DecisionItem[]>([]);
-  const [decisionActionPendingId, setDecisionActionPendingId] = React.useState<string | null>(null);
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState<string | null>(null);
-  const [lastUpdatedAt, setLastUpdatedAt] = React.useState<number | null>(null);
-  const { applications, loading: applicationsLoading } = useApplications();
-  const { tenants, loading: tenantsLoading } = useTenants();
-  const { user, ready: authReady, isLoading: authLoading } = useAuth();
-  const { caps, features } = useCapabilities();
-  const { showToast } = useToast();
-  const location = useLocation();
-  const navigate = useNavigate();
-  const apiBase = debugApiBase();
-  const showDebug =
-    typeof window !== "undefined" && new URLSearchParams(window.location.search).get("debug") === "1";
-  const isMobile =
-    typeof window !== "undefined" ? window.matchMedia("(max-width: 768px)").matches : false;
-  const meLoaded = authReady && !authLoading && Boolean(user?.id);
-  const roleLower = String(user?.actorRole || user?.role || "").toLowerCase();
-  const isAdmin = roleLower === "admin";
-  const isLandlord = roleLower === "landlord";
-  const timelineEnabled = canUseTimeline(user?.plan || "");
-  const planNormalized = normalizeTimelinePlan(user?.plan || "");
-  const currentPlan = normalizePlan(caps?.plan || user?.plan || "free");
-  const isFreePlan = currentPlan === "free";
-  const shouldConsiderTimelineNudge = meLoaded && !isAdmin && !timelineEnabled;
-  const [showTimelineNudge, setShowTimelineNudge] = React.useState(false);
-  const timelineNudgeViewedRef = React.useRef(false);
-  const canManualScreen = isAdmin || features?.screening_pay_per_use !== false;
-  const screeningWorkflowLabel = "Screening workflow setup";
-  const openActionsRef = React.useRef<HTMLDivElement | null>(null);
-  const canUseReferrals = isLandlord || isAdmin;
-  const [properties, setProperties] = React.useState<any[]>([]);
-  const [propsLoading, setPropsLoading] = React.useState(false);
-  const [invitesCount, setInvitesCount] = React.useState(0);
-  const [invitesLoading, setInvitesLoading] = React.useState(false);
-  const [propertyGateOpen, setPropertyGateOpen] = React.useState(false);
-  const [pendingPropertyAction, setPendingPropertyAction] = React.useState<"create_application" | null>(null);
-  const [sendApplicationOpen, setSendApplicationOpen] = React.useState(false);
-  const [addExpenseOpen, setAddExpenseOpen] = React.useState(false);
-  const [modalPropertyId, setModalPropertyId] = React.useState<string | null>(null);
-  const [modalUnitId, setModalUnitId] = React.useState<string | null>(null);
-  const [onboardingChunkError, setOnboardingChunkError] = React.useState(false);
-  const [referralsCount, setReferralsCount] = React.useState(0);
-  const [activationSummary, setActivationSummary] = React.useState<LandlordActivationSummary | null>(null);
-  const [activationLoading, setActivationLoading] = React.useState(false);
-  const [activationError, setActivationError] = React.useState<string | null>(null);
-  const [transUnionFunnel, setTransUnionFunnel] = React.useState<LandlordTransUnionOnboardingAnalytics | null>(null);
-  const [transUnionFunnelLoading, setTransUnionFunnelLoading] = React.useState(false);
-  const [showWelcomeModal, setShowWelcomeModal] = React.useState(false);
-  const [postUpgradePlan, setPostUpgradePlan] = React.useState<"starter" | "pro" | "elite" | null>(null);
-  const onboarding = useOnboardingState();
-  const prevDerivedRef = React.useRef({
-    propertyAdded: false,
-    unitAdded: false,
-    tenantInvited: false,
-    applicationCreated: false,
+export default function DashboardPage() {
+  const isNarrow = useNarrowDashboardLayout();
+  const [portfolio, setPortfolio] = React.useState<Loadable<LandlordPortfolioStatusFinancialResponse>>({
+    data: null,
+    loading: true,
+    error: null,
   });
-  const nudgeReadyRef = React.useRef(false);
-  const dashboardVisitMarkedRef = React.useRef(false);
-  const loadDashboard = React.useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const summary = await fetchDashboardSummary();
-      setData(summary);
-      setDecisionRows(normalizeDecisionItems((summary as any)?.decisions));
-      setLastUpdatedAt(Date.now());
-    } catch (err: any) {
-      setError(err?.message || "Failed to load dashboard");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-  const refetch = React.useCallback(() => {
-    void loadDashboard();
-  }, [loadDashboard]);
-
-  const dismissWelcomeModal = React.useCallback(() => {
-    if (typeof window !== "undefined" && user?.id) {
-      window.localStorage.setItem(`${LANDLORD_WELCOME_SEEN_KEY}.${user.id}`, "1");
-      window.localStorage.removeItem(`${LANDLORD_WELCOME_PENDING_KEY}.${user.id}`);
-    }
-    setShowWelcomeModal(false);
-  }, [user?.id]);
-
-  const handleStartSetupWelcome = React.useCallback(() => {
-    dismissWelcomeModal();
-    window.setTimeout(() => {
-      const target = document.querySelector('[data-testid="landlord-activation-card"]');
-      if (target instanceof HTMLElement) {
-        target.scrollIntoView({ behavior: "smooth", block: "start" });
-      }
-    }, 0);
-  }, [dismissWelcomeModal]);
-
-  React.useEffect(() => {
-    void loadDashboard();
-  }, [loadDashboard]);
-
-  React.useEffect(() => {
-    if (!SCREENING_ENABLED || (!isLandlord && !isAdmin)) {
-      setTransUnionFunnel(null);
-      setTransUnionFunnelLoading(false);
-      return;
-    }
-
-    let alive = true;
-    (async () => {
-      try {
-        setTransUnionFunnelLoading(true);
-        const data = await fetchLandlordTransUnionOnboardingAnalytics();
-        if (alive) setTransUnionFunnel(data);
-      } catch {
-        if (alive) setTransUnionFunnel(null);
-      } finally {
-        if (alive) setTransUnionFunnelLoading(false);
-      }
-    })();
-
-    return () => {
-      alive = false;
-    };
-  }, [isAdmin, isLandlord]);
-
-  React.useEffect(() => {
-    let alive = true;
-    const loadProps = async () => {
-      try {
-        setPropsLoading(true);
-        const res: any = await fetchProperties();
-        const list = Array.isArray(res?.items)
-          ? res.items
-          : Array.isArray(res?.properties)
-          ? res.properties
-          : Array.isArray(res)
-          ? res
-          : [];
-        if (alive) setProperties(list);
-      } catch {
-        if (alive) setProperties([]);
-      } finally {
-        if (alive) setPropsLoading(false);
-      }
-    };
-    void loadProps();
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  React.useEffect(() => {
-    let active = true;
-    const loadReferrals = async () => {
-      if (!meLoaded || !canUseReferrals) return;
-      try {
-        const rows = await listReferrals();
-        if (active) setReferralsCount(rows.length);
-      } catch {
-        if (active) setReferralsCount(0);
-      }
-    };
-    void loadReferrals();
-    return () => {
-      active = false;
-    };
-  }, [meLoaded, canUseReferrals]);
-
-  const loadActivation = React.useCallback(async () => {
-    if (!isLandlord) return;
-    try {
-      setActivationLoading(true);
-      setActivationError(null);
-      const next = await getLandlordActivation();
-      setActivationSummary(next);
-    } catch (err: any) {
-      setActivationError(err?.message || "Failed to load activation steps.");
-    } finally {
-      setActivationLoading(false);
-    }
-  }, [isLandlord]);
-
-  React.useEffect(() => {
-    if (!meLoaded || !isLandlord) return;
-    void loadActivation();
-  }, [isLandlord, loadActivation, meLoaded]);
-
-  React.useEffect(() => {
-    const state = getPostUpgradeState();
-    if (!state?.plan) return;
-    setPostUpgradePlan(state.plan);
-  }, []);
-
-  const dismissPostUpgradeBanner = React.useCallback(() => {
-    clearPostUpgradeState();
-    setPostUpgradePlan(null);
-  }, []);
-
-  const postUpgradeContent = postUpgradePlan ? getPostUpgradeContent(postUpgradePlan) : null;
-
-  React.useEffect(() => {
-    if (typeof window === "undefined" || !meLoaded || !isLandlord || !user?.id) return;
-    const pending = window.localStorage.getItem(`${LANDLORD_WELCOME_PENDING_KEY}.${user.id}`) === "1";
-    const seen = window.localStorage.getItem(`${LANDLORD_WELCOME_SEEN_KEY}.${user.id}`) === "1";
-    setShowWelcomeModal(pending && !seen);
-  }, [isLandlord, meLoaded, user?.id]);
-
-  React.useEffect(() => {
-    let alive = true;
-    const loadInvites = async () => {
-      try {
-        setInvitesLoading(true);
-        const res = await listTenantInvites();
-        if (alive) {
-          setInvitesCount(Array.isArray(res?.items) ? res.items.length : 0);
-        }
-      } catch {
-        if (alive) setInvitesCount(0);
-      } finally {
-        if (alive) setInvitesLoading(false);
-      }
-    };
-    void loadInvites();
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  React.useEffect(() => {
-    if (showDebug) {
-      console.log("[debug] apiBase", apiBase);
-    }
-  }, [showDebug, apiBase]);
-
-  React.useEffect(() => {
-    if (import.meta.env.DEV) {
-      console.debug("[onboarding]", {
-        authReady,
-        meLoaded,
-        planLoaded: Boolean(user?.plan),
-        isMobile,
-      });
-    }
-  }, [authReady, meLoaded, user?.plan, isMobile]);
-
-  React.useEffect(() => {
-    if (!meLoaded || !user?.id || dashboardVisitMarkedRef.current) return;
-    dashboardVisitMarkedRef.current = true;
-    markDashboardVisit(String(user.id));
-  }, [meLoaded, user?.id]);
-
-  React.useEffect(() => {
-    if (!shouldConsiderTimelineNudge) {
-      setShowTimelineNudge(false);
-      return;
-    }
-    try {
-      const dismissedAt = Number(localStorage.getItem(TIMELINE_NUDGE_DISMISSED_AT_KEY) || "0");
-      if (!dismissedAt || Date.now() - dismissedAt > TIMELINE_NUDGE_COOLDOWN_MS) {
-        setShowTimelineNudge(true);
-      } else {
-        setShowTimelineNudge(false);
-      }
-    } catch {
-      setShowTimelineNudge(true);
-    }
-  }, [shouldConsiderTimelineNudge]);
-
-  React.useEffect(() => {
-    const dataReadyForNudge =
-      !loading && !propsLoading && !applicationsLoading && !tenantsLoading && !invitesLoading && !error;
-    if (!dataReadyForNudge || !showTimelineNudge || timelineNudgeViewedRef.current) return;
-    timelineNudgeViewedRef.current = true;
-    try {
-      track("dashboard_timeline_nudge_viewed", { planNormalized });
-    } catch {
-      // telemetry must never interrupt UX
-    }
-  }, [
-    loading,
-    propsLoading,
-    applicationsLoading,
-    tenantsLoading,
-    invitesLoading,
-    error,
-    showTimelineNudge,
-    planNormalized,
-  ]);
-
-  React.useEffect(() => {
-    if (import.meta.env.DEV) {
-      console.debug("[dashboard gates]", {
-        loadingSummary: loading,
-        applicationsLoading,
-        propsLoading,
-        propertiesCount: properties?.length ?? null,
-        applicationsCount: applications?.length ?? null,
-      });
-    }
-  }, [loading, applicationsLoading, propsLoading, properties, applications]);
-
-  const derivedPropertiesCount = properties.length;
-  const derivedUnitsCount = properties.reduce((sum, p) => sum + unitsForProperty(p), 0);
-  const applicationsCount =
-    typeof data?.kpis?.applicationsCount === "number" ? data.kpis.applicationsCount : applications.length;
-  const tenantCount = tenants.length;
-  const kpis = {
-    propertiesCount: derivedPropertiesCount,
-    unitsCount: derivedUnitsCount,
-    tenantsCount: data?.kpis?.tenantsCount ?? 0,
-    openActionsCount: data?.kpis?.openActionsCount ?? 0,
-    delinquentCount: data?.kpis?.delinquentCount ?? 0,
-    screeningsCount: data?.kpis?.screeningsCount ?? 0,
-  };
-  const transUnionStarted = transUnionFunnel?.totals.started ?? 0;
-  const transUnionConnected = transUnionFunnel?.totals.connected ?? 0;
-  const screeningSetupComplete = SCREENING_ENABLED && transUnionConnected > 0;
-  const transUnionConversionLabel =
-    transUnionFunnel?.conversionRate == null ? "—" : `${Math.round(transUnionFunnel.conversionRate * 100)}%`;
-  const transUnionDropOffInsight =
-    transUnionStarted > transUnionConnected
-      ? `${transUnionStarted - transUnionConnected} onboarding start${
-          transUnionStarted - transUnionConnected === 1 ? "" : "s"
-        } still need credential connection.`
-      : transUnionStarted > 0
-        ? "No onboarding drop-off right now."
-        : "No onboarding starts recorded yet.";
-  const events = Array.isArray(data?.events) ? data.events : [];
-  const dashboardDecisions = decisionRows;
-
-  const handleDashboardDecisionAction = async (decision: DecisionItem, actionType: DecisionActionType) => {
-    if (!decision.leaseId) return;
-    setDecisionActionPendingId(decision.decisionId);
-    try {
-      const result = await patchDecisionAction(decision.decisionId, {
-        leaseId: decision.leaseId,
-        actionType,
-        decision,
-        assignedTo: actionType === "assigned" ? "operations" : undefined,
-        snoozedUntil: actionType === "snoozed" ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() : undefined,
-      });
-      const nextDecision = result?.decision || localDecisionStatus(decision, actionType);
-      setDecisionRows((current) => current.map((item) => (item.decisionId === decision.decisionId ? nextDecision : item)));
-    } catch (err) {
-      showToast("Unable to update decision right now.", "error");
-    } finally {
-      setDecisionActionPendingId(null);
-    }
-  };
-
-  React.useEffect(() => {
-    if (location.hash !== "#open-actions") return;
-    const node = openActionsRef.current;
-    if (!node) return;
-    window.setTimeout(() => {
-      node.scrollIntoView({ behavior: "smooth", block: "start" });
-      node.focus();
-    }, 0);
-  }, [location.hash]);
-
-  const fallbackActions = React.useMemo(() => {
-    const items: Array<{ id: string; title: string; severity: "info"; href: string }> = [];
-    if (derivedPropertiesCount === 0) {
-      items.push({
-        id: "add-property",
-        title: "Add a property",
-        severity: "info",
-        href: "/properties",
-      });
-    }
-    if (derivedPropertiesCount > 0 && derivedUnitsCount === 0) {
-      items.push({
-        id: "add-unit",
-        title: "Add a unit",
-        severity: "info",
-        href: "/properties?openAddUnit=1",
-      });
-    }
-    if (derivedUnitsCount > 0 && applicationsCount === 0) {
-      items.push({
-        id: "add-applicant",
-        title: isFreePlan ? "Track an applicant" : "Add an applicant",
-        severity: "info",
-        href: isFreePlan ? "/applications" : "/applications?openSendApplication=1",
-      });
-    }
-    if (SCREENING_ENABLED && canManualScreen && applicationsCount > 0 && (kpis.screeningsCount ?? 0) === 0) {
-      items.push({
-        id: "run-first-screening",
-        title: "Set up screening workflow",
-        severity: "info",
-        href: "/applications?openTransUnionAccess=1",
-      });
-    }
-    return items;
-  }, [applicationsCount, canManualScreen, derivedPropertiesCount, derivedUnitsCount, isFreePlan, kpis.screeningsCount]);
-  const rawActions = Array.isArray(data?.actions) && data.actions.length > 0 ? data.actions : fallbackActions;
-  const visibleActions = rawActions.filter((item: any) => {
-    const id = String(item?.id || "");
-    if (id === "add-unit") return derivedPropertiesCount > 0;
-    if (id === "add-applicant") return derivedUnitsCount > 0;
-    if (id === "run-first-screening") return applicationsCount > 0;
-    if (id === "invite-tenant") return derivedPropertiesCount > 0 && derivedUnitsCount > 0;
-    return true;
+  const [queue, setQueue] = React.useState<Loadable<LandlordDecisionQueueResponse>>({
+    data: null,
+    loading: true,
+    error: null,
   });
-  const actions = visibleActions.length > 0 ? visibleActions : fallbackActions;
-  const leaseNoticeSummary = data?.leaseNoticeSummary || {
-    expiringSoon: 0,
-    pendingResponse: 0,
-    renewed: 0,
-    quitting: 0,
-    noResponse: 0,
-  };
-
-  const dataReady =
-    !loading && !propsLoading && !applicationsLoading && !tenantsLoading && !invitesLoading && !error;
-  const countsReady = !propsLoading && !applicationsLoading && !tenantsLoading && !invitesLoading;
-  const hasNoProperties = dataReady && (kpis?.propertiesCount ?? 0) === 0;
-  const hasNoApplications = dataReady && applicationsCount === 0;
-  const hasPortfolioContext = derivedPropertiesCount > 0;
-  const hasUnitContext = derivedUnitsCount > 0;
-  const hasApplicantContext = applicationsCount > 0;
-  const showEmptyCTA = hasNoProperties;
-  const showGettingStartedCard = isLandlord && showEmptyCTA;
-  const showScreeningWorkflowCard = dataReady && hasApplicantContext;
-  const progressLoading = !dataReady || onboarding.loading;
-  const showOnboardingSkeleton = onboarding.loading && !isAdmin;
-  const showStarterOnboarding =
-    meLoaded &&
-    !onboarding.loading &&
-    !onboarding.dismissed &&
-    !onboardingChunkError;
-  const showAdvancedCollapsed = showStarterOnboarding;
-
-  const handleCreateApplicationClick = () => {
-    const prereq = getApplicationPrereqState({
-      propertiesCount: derivedPropertiesCount,
-      unitsCount: derivedUnitsCount,
-    });
-    if (prereq.missingProperty) {
-      track("onboarding_step_clicked", {
-        stepKey: "applicationCreated",
-        blockedBy: "no_property",
-        source: "dashboard",
-      });
-      setPendingPropertyAction("create_application");
-      setPropertyGateOpen(true);
-      return;
-    }
-    if (prereq.missingUnit) {
-      track("onboarding_step_clicked", {
-        stepKey: "applicationCreated",
-        blockedBy: "no_units",
-        source: "dashboard",
-      });
-      navigate("/properties?openAddUnit=1");
-      return;
-    }
-    if (isFreePlan) {
-      track("onboarding_step_clicked", {
-        stepKey: "applicationCreated",
-        source: "dashboard",
-        mode: "manual_intake",
-      });
-      navigate("/applications");
-      return;
-    }
-    track("onboarding_step_clicked", {
-      stepKey: "applicationCreated",
-      source: "dashboard",
-    });
-    setModalPropertyId(propertyOptions[0]?.id || null);
-    setModalUnitId(null);
-    setSendApplicationOpen(true);
-  };
-
-  const derivedSteps = React.useMemo(
-    () => ({
-      propertyAdded: derivedPropertiesCount > 0,
-      unitAdded: derivedUnitsCount > 0,
-      tenantInvited: tenantCount > 0 || invitesCount > 0,
-      applicationCreated: applicationsCount > 0,
-    }),
-    [derivedPropertiesCount, derivedUnitsCount, tenantCount, invitesCount, applicationsCount]
-  );
+  const [refreshKey, setRefreshKey] = React.useState(0);
 
   React.useEffect(() => {
-    if (progressLoading || !countsReady) return;
-    (Object.keys(derivedSteps) as Array<keyof typeof derivedSteps>).forEach((key) => {
-      if (derivedSteps[key] && !onboarding.steps[key]) {
-        onboarding.markStepComplete(key, "derived");
-      }
-    });
-  }, [derivedSteps, onboarding, progressLoading, countsReady]);
+    let alive = true;
+    const periodMonth = getCurrentMonth();
 
-  React.useEffect(() => {
-    if (progressLoading || !countsReady) return;
-    if (!nudgeReadyRef.current) {
-      nudgeReadyRef.current = true;
-      prevDerivedRef.current = {
-        propertyAdded: derivedSteps.propertyAdded,
-        unitAdded: derivedSteps.unitAdded,
-        tenantInvited: derivedSteps.tenantInvited,
-        applicationCreated: derivedSteps.applicationCreated,
-      };
-      return;
-    }
-    const prev = prevDerivedRef.current;
-    if (!prev.propertyAdded && derivedSteps.propertyAdded) {
-      showToast({ message: "Nice — add units next.", variant: "success" });
-    } else if (!prev.unitAdded && derivedSteps.unitAdded) {
-      showToast({ message: "Great — add an applicant next.", variant: "success" });
-    } else if (!prev.tenantInvited && derivedSteps.tenantInvited) {
-      showToast({ message: "Invite sent — create an application next.", variant: "success" });
-    } else if (!prev.applicationCreated && derivedSteps.applicationCreated) {
-      showToast({ message: "Application started — screening is next.", variant: "success" });
-    }
-    prevDerivedRef.current = {
-      propertyAdded: derivedSteps.propertyAdded,
-      unitAdded: derivedSteps.unitAdded,
-      tenantInvited: derivedSteps.tenantInvited,
-      applicationCreated: derivedSteps.applicationCreated,
+    setPortfolio((current) => ({ ...current, loading: true, error: null }));
+    setQueue((current) => ({ ...current, loading: true, error: null }));
+
+    void fetchLandlordPortfolioStatusFinancial({ periodMonth })
+      .then((data) => {
+        if (alive) setPortfolio({ data, loading: false, error: null });
+      })
+      .catch((error) => {
+        if (alive) setPortfolio({ data: null, loading: false, error: errorMessage(error, "Portfolio status could not load.") });
+      });
+
+    void fetchLandlordDecisionQueue({ status: "open_state", limit: 6 })
+      .then((data) => {
+        if (alive) setQueue({ data, loading: false, error: null });
+      })
+      .catch((error) => {
+        if (alive) setQueue({ data: null, loading: false, error: errorMessage(error, "Decision queue could not load.") });
+      });
+
+    return () => {
+      alive = false;
     };
-  }, [derivedSteps, progressLoading, showToast, countsReady]);
+  }, [refreshKey]);
 
-  React.useEffect(() => {
-    if (!showStarterOnboarding || onboarding.loading) return;
-    track("onboarding_viewed");
-  }, [showStarterOnboarding, onboarding.loading]);
-
-  const propertyOptions = React.useMemo(
-    () =>
-      properties.map((p) => ({
-        id: String(p?.id || p?.propertyId || ""),
-        name: p?.name || p?.address || "Property",
-      })).filter((p) => p.id),
-    [properties]
-  );
-
-  const {
-    units: modalUnits,
-    loading: modalUnitsLoading,
-    error: modalUnitsError,
-    refetch: refetchModalUnits,
-  } = useUnitsForProperty(modalPropertyId, sendApplicationOpen);
+  const generatedAt = portfolio.data?.generatedAt || queue.data?.generatedAt || null;
+  const portfolioState = metricState(portfolio.data?.confidence.occupancy);
+  const financialState = metricState(portfolio.data?.confidence.financial);
 
   return (
-    <MacShell title="RentChain · Dashboard" showTopNav={false}>
-      <LandlordWelcomeModal
-        open={showWelcomeModal}
-        onStartSetup={handleStartSetupWelcome}
-        onExploreDashboard={dismissWelcomeModal}
-      />
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: spacing.lg,
-          padding: isMobile
-            ? `${spacing.sm}px 0 ${spacing.md}px`
-            : `${spacing.md}px ${spacing.lg}px`,
-          minWidth: 0,
-        }}
-      >
-        {error ? (
-          <Card style={{ padding: spacing.md, border: `1px solid ${colors.border}` }}>
-            <div style={{ fontWeight: 800, color: colors.danger, marginBottom: 8 }}>Couldn't load dashboard</div>
-            <div style={{ marginBottom: 12 }}>{error}</div>
-            <Button onClick={refetch}>Retry</Button>
-          </Card>
-        ) : null}
-
-        {!dataReady && !error ? (
-          <Card
-            style={{
-              padding: spacing.md,
-              border: `1px solid ${colors.border}`,
-              background: colors.card,
-            }}
-          >
-            <div style={{ fontWeight: 700, marginBottom: 10 }}>Loading your dashboard...</div>
-            <div style={{ display: "grid", gap: 10 }}>
-              <div style={{ height: 12, borderRadius: 999, background: "rgba(15,23,42,0.08)" }} />
-              <div style={{ height: 12, width: "80%", borderRadius: 999, background: "rgba(15,23,42,0.08)" }} />
-              <div style={{ height: 12, width: "60%", borderRadius: 999, background: "rgba(15,23,42,0.08)" }} />
-              <div style={{ height: 180, borderRadius: 12, background: "rgba(15,23,42,0.05)" }} />
+    <MacShell title="RentChain · Dashboard 2.0" showTopNav={false}>
+      <div style={{ display: "grid", gap: spacing.lg, minWidth: 0 }}>
+        <header style={{ display: "grid", gap: spacing.sm }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: spacing.md, alignItems: "flex-start", flexWrap: "wrap" }}>
+            <div style={{ display: "grid", gap: 6, minWidth: 0 }}>
+              <h1 style={{ margin: 0, fontSize: "clamp(1.6rem, 3vw, 2.15rem)", letterSpacing: 0, color: text.primary }}>
+                Operational Home
+              </h1>
+              <div style={{ color: text.muted, lineHeight: 1.55, maxWidth: 760 }}>
+                Portfolio health, decisions, upcoming work, and financial state in one place. Execution stays in Operations and owning workspaces.
+              </div>
             </div>
-          </Card>
-        ) : null}
-
-        {showOnboardingSkeleton ? (
-          <Card style={{ padding: spacing.md, border: `1px solid ${colors.border}` }}>
-            <div style={{ fontWeight: 700, marginBottom: 10 }}>Get started</div>
-            <div style={{ display: "grid", gap: 8 }}>
-              <div style={{ height: 12, borderRadius: 999, background: "rgba(15,23,42,0.08)" }} />
-              <div style={{ height: 12, width: "70%", borderRadius: 999, background: "rgba(15,23,42,0.08)" }} />
-              <div style={{ height: 12, width: "85%", borderRadius: 999, background: "rgba(15,23,42,0.08)" }} />
-              <div style={{ height: 12, width: "55%", borderRadius: 999, background: "rgba(15,23,42,0.08)" }} />
-            </div>
-          </Card>
-        ) : null}
-
-        {dataReady ? (
-          <FreeTierJourneyCard
-            propertiesCount={derivedPropertiesCount}
-            unitsCount={derivedUnitsCount}
-            applicantsCount={applicationsCount}
-            screeningReady={screeningSetupComplete}
-            leaseReady={false}
-            applicantActionLabel={isFreePlan ? "Track applicant" : "Add applicant"}
-            onAddProperty={() => navigate("/properties?focus=addProperty")}
-            onAddUnit={() => navigate("/properties?openAddUnit=1")}
-            onAddApplicant={handleCreateApplicationClick}
-            onScreening={() => navigate(screeningSetupComplete ? "/applications" : "/applications?openTransUnionAccess=1")}
-            onCreateLease={() => navigate("/properties?openLeasePack=1")}
-          />
-        ) : null}
-
-        {dataReady ? (
-          <div
-            data-testid="dashboard-kpi-decision-stack"
-            style={{
-              display: "grid",
-              gap: spacing.xl,
-              minWidth: 0,
-              width: "100%",
-              boxSizing: "border-box",
-              clear: "both",
-              alignItems: "start",
-            }}
-          >
-            <KpiStrip
-              kpis={kpis}
-              loading={loading}
-              links={{
-                propertiesCount: "/properties",
-                unitsCount: "/properties",
-                tenantsCount: "/tenants",
-                openActionsCount: "/dashboard#open-actions",
-                delinquentCount: "/payments?filter=delinquent",
-              }}
-            />
-          </div>
-        ) : null}
-        {dataReady ? (
-          <div style={{ marginTop: spacing.md }}>
-            <PortfolioCredibilitySummaryCard
-              summary={data?.portfolioCredibilitySummary ?? null}
-              activeLeasesHref="/leases"
-              reviewItemsHref="/applications?status=review"
-            />
-          </div>
-        ) : null}
-        {dataReady &&
-        (leaseNoticeSummary.expiringSoon > 0 ||
-          leaseNoticeSummary.pendingResponse > 0 ||
-          leaseNoticeSummary.renewed > 0 ||
-          leaseNoticeSummary.quitting > 0 ||
-          leaseNoticeSummary.noResponse > 0) ? (
-          <Card style={{ padding: spacing.md, border: `1px solid ${colors.border}` }}>
-            <div style={{ fontWeight: 700, marginBottom: spacing.sm }}>Lease notice status</div>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
-                gap: spacing.sm,
-              }}
-            >
-              {[
-                { label: "Expiring soon", value: leaseNoticeSummary.expiringSoon, href: "/portfolio-health?entry=lease-renewals&status=expiring" },
-                { label: "Pending response", value: leaseNoticeSummary.pendingResponse, href: "/portfolio-health?entry=lease-renewals&status=pending-response" },
-                { label: "Renewed", value: leaseNoticeSummary.renewed, href: "/leases?view=active" },
-                { label: "Quitting", value: leaseNoticeSummary.quitting, href: "/leases?view=active" },
-                { label: "No response", value: leaseNoticeSummary.noResponse, href: "/portfolio-health?entry=lease-renewals&status=no-response" },
-              ].map((item) => (
-                <Link
-                  key={item.label}
-                  to={item.href}
-                  style={{
-                    display: "block",
-                    padding: spacing.sm,
-                    borderRadius: 12,
-                    border: `1px solid ${colors.border}`,
-                    background: colors.panel,
-                    textDecoration: "none",
-                    color: "inherit",
-                  }}
-                >
-                  <div style={{ color: text.muted, fontSize: 12, marginBottom: 6 }}>{item.label}</div>
-                  <div style={{ fontSize: 24, fontWeight: 800 }}>{item.value}</div>
-                </Link>
-              ))}
-            </div>
-          </Card>
-        ) : null}
-        {dataReady && showTimelineNudge ? (
-          <UpgradeNudgeInlineCard
-            type="GENERIC_UPGRADE"
-            title="New: Automation Timeline (Pro)"
-            body="Track applications -> screening -> leases -> payments in one unified event ledger. Includes Integrity Verified + Insights + Filters."
-            primaryCtaLabel="Unlock with Pro"
-            secondaryCtaLabel="Dismiss"
-            onUpgrade={() => {
-              try {
-                track("dashboard_timeline_nudge_clicked", {
-                  planNormalized,
-                  source: "dashboard_nudge",
-                });
-              } catch {
-                // telemetry must never interrupt UX
-              }
-              void openUpgradeFlow({
-                navigate,
-                fallbackPath: "/pricing",
-                currentPlan: planNormalized,
-              });
-            }}
-            onDismiss={() => {
-              try {
-                localStorage.setItem(TIMELINE_NUDGE_DISMISSED_AT_KEY, String(Date.now()));
-              } catch {
-                // no-op
-              }
-              setShowTimelineNudge(false);
-            }}
-          />
-        ) : null}
-        {dataReady && showTimelineNudge ? (
-          <div style={{ marginTop: -8 }}>
-            <button
-              type="button"
-              onClick={() => navigate("/pricing")}
-              style={{
-                border: "none",
-                background: "transparent",
-                color: colors.accent,
-                cursor: "pointer",
-                padding: 0,
-                fontSize: 13,
-                fontWeight: 600,
-              }}
-            >
-              Learn more
+            <button type="button" onClick={() => setRefreshKey((key) => key + 1)} style={compactButton}>
+              Refresh
             </button>
           </div>
-        ) : null}
-        {dataReady && postUpgradeContent ? (
-          <Card
-            style={{
-              border: "1px solid rgba(16,185,129,0.28)",
-              background: "linear-gradient(135deg, rgba(16,185,129,0.08), rgba(59,130,246,0.06))",
-              display: "grid",
-              gap: spacing.sm,
-            }}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", gap: spacing.md, flexWrap: "wrap" }}>
-              <div style={{ display: "grid", gap: 6 }}>
-                <div style={{ fontWeight: 800, fontSize: 16 }}>{postUpgradeContent.title}</div>
-                <div style={{ color: text.muted, fontSize: 14 }}>{postUpgradeContent.dashboardBanner}</div>
-              </div>
-              <Button variant="ghost" onClick={dismissPostUpgradeBanner}>
-                Dismiss
-              </Button>
-            </div>
-            <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
-              <Button onClick={() => navigate(postUpgradeContent.primaryAction.to)}>
-                {postUpgradeContent.primaryAction.label}
-              </Button>
-              <Button variant="secondary" onClick={() => navigate(postUpgradeContent.secondaryAction.to)}>
-                {postUpgradeContent.secondaryAction.label}
-              </Button>
-            </div>
-          </Card>
-        ) : null}
-
-        {dataReady ? (
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
-              gap: spacing.md,
-            }}
-          >
-            <div id="open-actions" ref={openActionsRef} tabIndex={-1}>
-              <ActionRequiredPanel
-                items={actions}
-                loading={loading}
-                viewAllEnabled={false}
-                title="Action required"
-                emptyLabel="No pending actions. Add a property to begin setup."
-              />
-            </div>
-            <Card style={{ padding: spacing.md, border: `1px solid ${colors.border}` }}>
-              <div style={{ fontWeight: 700, marginBottom: spacing.sm }}>Quick actions</div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: spacing.sm }}>
-                <Button
-                  variant="secondary"
-                  onClick={() => navigate("/properties")}
-                  aria-label="Add property"
-                  disabled={progressLoading}
-                >
-                  Add property
-                </Button>
-                {hasPortfolioContext ? (
-                  <Button
-                    variant="secondary"
-                    onClick={() => navigate("/properties?openAddUnit=1")}
-                    aria-label="Add unit"
-                    disabled={progressLoading}
-                  >
-                    Add unit
-                  </Button>
-                ) : null}
-                {hasUnitContext ? (
-                  <Button
-                    variant="secondary"
-                    onClick={handleCreateApplicationClick}
-                    aria-label={isFreePlan ? "Track applicant" : "Add applicant"}
-                    disabled={progressLoading}
-                  >
-                    {isFreePlan ? "Track applicant" : "Add applicant"}
-                  </Button>
-                ) : null}
-                {hasApplicantContext ? (
-                  <Button
-                    variant="secondary"
-                    onClick={() => navigate("/properties?openLeasePack=1")}
-                    aria-label="Create lease"
-                    disabled={progressLoading}
-                  >
-                    Create lease
-                  </Button>
-                ) : null}
-                <Button
-                  variant="secondary"
-                  onClick={() => setAddExpenseOpen(true)}
-                  aria-label="Add expense"
-                  disabled={progressLoading}
-                >
-                  Add Expense
-                </Button>
-                {hasApplicantContext ? (
-                  !SCREENING_ENABLED ? (
-                    <Button variant="primary" onClick={() => navigate("/applications")}>
-                      {screeningWorkflowLabel}
-                    </Button>
-                  ) : screeningSetupComplete ? (
-                    <Button variant="primary" onClick={() => navigate("/applications")}>
-                      Run screening
-                    </Button>
-                  ) : (
-                    <Button variant="primary" onClick={() => navigate("/applications?openTransUnionAccess=1")}>
-                      Set up screening workflow
-                    </Button>
-                  )
-                ) : null}
-              </div>
-            </Card>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            <StatusPill state={portfolioState} />
+            <StatusPill state={financialState} />
+            <span style={{ color: text.subtle, fontSize: 13, alignSelf: "center" }}>
+              {generatedAt ? `Generated ${new Date(generatedAt).toLocaleString()}` : "Generating current state"}
+            </span>
           </div>
-        ) : null}
+        </header>
 
-        {isLandlord ? (
-          <LandlordActivationFlowCard
-            summary={activationSummary}
-            loading={activationLoading}
-            error={activationError}
-            onRetry={() => {
-              void loadActivation();
-            }}
-          />
-        ) : null}
-
-        {showStarterOnboarding && !isAdmin ? (
-          <>
-            <React.Suspense
-              fallback={
-                <Card style={{ padding: spacing.md, border: `1px solid ${colors.border}` }}>
-                  <div style={{ fontWeight: 700, marginBottom: 10 }}>Get started</div>
-                  <div style={{ display: "grid", gap: 8 }}>
-                    <div style={{ height: 12, borderRadius: 999, background: "rgba(15,23,42,0.08)" }} />
-                    <div style={{ height: 12, width: "70%", borderRadius: 999, background: "rgba(15,23,42,0.08)" }} />
-                    <div style={{ height: 12, width: "85%", borderRadius: 999, background: "rgba(15,23,42,0.08)" }} />
-                    <div style={{ height: 12, width: "55%", borderRadius: 999, background: "rgba(15,23,42,0.08)" }} />
-                  </div>
-                </Card>
-              }
-            >
-              <OnboardingErrorBoundary onError={() => setOnboardingChunkError(true)}>
-                <StarterOnboardingPanel
-                  steps={buildOnboardingSteps({
-                    onboarding,
-                    navigate,
-                    track,
-                  propertiesCount: derivedPropertiesCount,
-                  unitsCount: derivedUnitsCount,
-                  plan: currentPlan,
-                })}
-                  loading={progressLoading}
-                  onDismiss={() => onboarding.dismissOnboarding()}
-                />
-              </OnboardingErrorBoundary>
-            </React.Suspense>
-          </>
-        ) : null}
-
-        {!progressLoading && onboarding.dismissed && !isAdmin ? (
-          <div style={{ display: "flex", alignItems: "center", gap: 10, color: text.muted }}>
-            <span>Onboarding hidden.</span>
-            <button
-              type="button"
-              onClick={() => onboarding.showOnboarding()}
-              style={{
-                border: "none",
-                background: "transparent",
-                padding: 0,
-                color: colors.accent,
-                cursor: "pointer",
-                fontWeight: 600,
-              }}
-            >
-              Show onboarding
-            </button>
-          </div>
-        ) : null}
-
-        {dataReady && showGettingStartedCard ? (
-          <GettingStartedCard
-            propertiesCount={derivedPropertiesCount}
-            unitsCount={derivedUnitsCount}
-            applicationsCount={applicationsCount}
-            screeningsCount={kpis.screeningsCount ?? 0}
-            onAddProperty={() => navigate("/properties")}
-            onAddApplicant={handleCreateApplicationClick}
-            applicantActionLabel={isFreePlan ? "Track applicant manually" : "Add first applicant"}
-          />
-        ) : null}
-
-        {dataReady &&
-        !showStarterOnboarding &&
-        derivedSteps.propertyAdded &&
-        derivedSteps.unitAdded &&
-        derivedSteps.applicationCreated ? (
-          <Card style={{ padding: spacing.md }}>
-            <div style={{ fontWeight: 700, marginBottom: 6 }}>Your applicant workflow is set up</div>
-            <div style={{ color: text.muted, marginBottom: 12 }}>
-              Next up: review screening workflow setup.
-            </div>
-            <Button onClick={() => navigate(screeningSetupComplete ? "/applications" : "/applications?openTransUnionAccess=1")}>
-              {screeningSetupComplete ? "Run screening" : "Set up screening workflow"}
-            </Button>
-          </Card>
-        ) : null}
-
-        {dataReady && !showEmptyCTA && hasNoApplications && hasUnitContext ? (
-          <Card style={{ padding: spacing.md, border: `1px solid ${colors.border}` }}>
-            <div style={{ fontWeight: 700, marginBottom: 6 }}>Next: add an applicant</div>
-            <div style={{ color: text.muted, marginBottom: 12 }}>
-              Send an application link once the property and unit are ready.
-            </div>
-            <Button onClick={handleCreateApplicationClick}>
-              Add applicant
-            </Button>
-          </Card>
-        ) : null}
-
-        {showScreeningWorkflowCard ? (
-          <Card style={{ padding: spacing.md, border: `1px solid ${colors.border}` }}>
-            <div style={{ fontWeight: 700, marginBottom: 6 }}>Screening workflow</div>
-            <div style={{ color: text.muted, marginBottom: 12 }}>
-              {SCREENING_ENABLED
-                ? screeningSetupComplete
-                  ? "Your configured screening provider is connected. Go to Applications to start screening."
-                  : "Open the screening workflow to review provider setup, consent requirements, and manual/offline options."
-                : "Open the screening workflow to review provider paths, consent requirements, and manual/offline options."}
-            </div>
-            <Button onClick={() => navigate(screeningSetupComplete ? "/applications" : "/applications?openTransUnionAccess=1")}>
-              {screeningSetupComplete ? "Run screening" : "Set up screening workflow"}
-            </Button>
-          </Card>
-        ) : null}
-
-        {showScreeningWorkflowCard && SCREENING_ENABLED ? (
-          <Card style={{ padding: spacing.md, border: `1px solid ${colors.border}` }}>
-            <div style={{ fontWeight: 700, marginBottom: 6 }}>Provider setup funnel</div>
-            <div style={{ color: text.muted, marginBottom: 12 }}>
-              {transUnionFunnelLoading
-                ? "Loading onboarding funnel..."
-                : `Started → Connected ${transUnionConversionLabel}`}
-            </div>
-            {!transUnionFunnelLoading ? (
-              <div style={{ display: "grid", gap: 6, color: text.primary, fontSize: 14 }}>
-                <div>Viewed: {transUnionFunnel?.totals.viewed ?? 0}</div>
-                <div>Started: {transUnionStarted}</div>
-                <div>Email clicked: {transUnionFunnel?.totals.emailClicked ?? 0}</div>
-                <div>Connected: {transUnionConnected}</div>
-                <div style={{ color: text.muted }}>{transUnionDropOffInsight}</div>
-              </div>
+        <div
+          data-testid="dashboard-operational-grid"
+          style={{
+            display: "grid",
+            gridTemplateColumns: isNarrow ? "1fr" : "minmax(0, 1.25fr) minmax(280px, 0.75fr)",
+            gap: spacing.lg,
+          }}
+        >
+          <div style={{ display: "grid", gap: spacing.lg, minWidth: 0 }}>
+            {portfolio.loading ? (
+              <LoadingSection title="Portfolio Status" />
+            ) : portfolio.error ? (
+              <ErrorSection title="Portfolio Status" message={portfolio.error} onRetry={() => setRefreshKey((key) => key + 1)} />
+            ) : portfolio.data ? (
+              <PortfolioStatusSection portfolio={portfolio.data} />
             ) : null}
-          </Card>
-        ) : null}
 
-        {dataReady ? (
-          <details
-            style={{
-              border: `1px solid ${colors.border}`,
-              borderRadius: 8,
-              padding: spacing.md,
-              background: colors.card,
-            }}
-          >
-            <summary style={{ cursor: "pointer", fontWeight: 800 }}>Decision inbox summary</summary>
-            <div style={{ marginTop: spacing.md }}>
-              <DashboardDecisionSummaryPanel
-                decisions={dashboardDecisions}
-                pendingId={decisionActionPendingId}
-                onAction={handleDashboardDecisionAction}
-              />
-            </div>
-          </details>
-        ) : null}
+            {queue.loading ? (
+              <LoadingSection title="Decision Queue Preview" />
+            ) : queue.error ? (
+              <ErrorSection title="Decision Queue Preview" message={queue.error} onRetry={() => setRefreshKey((key) => key + 1)} />
+            ) : queue.data ? (
+              <DecisionQueuePreview queue={queue.data} />
+            ) : null}
 
-        {dataReady && canUseReferrals ? (
-          <Card style={{ padding: spacing.md, border: `1px solid ${colors.border}` }}>
-            <div style={{ fontWeight: 700, marginBottom: 6 }}>Invite another landlord</div>
-            <div style={{ color: text.muted, marginBottom: 12 }}>
-              Referrals sent: {referralsCount}
-            </div>
-            <Button onClick={() => navigate("/referrals")}>Refer a landlord</Button>
-          </Card>
-        ) : null}
-
-        {dataReady && showAdvancedCollapsed ? (
-          <details
-            style={{
-              border: `1px solid ${colors.border}`,
-              borderRadius: 12,
-              padding: spacing.md,
-              background: colors.card,
-            }}
-          >
-            <summary style={{ cursor: "pointer", fontWeight: 700 }}>More insights</summary>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
-                gap: spacing.md,
-                marginTop: spacing.md,
-              }}
-            >
-              <RecentEventsCard
-                events={events}
-                loading={loading}
-                onOpenLedger={(leaseId) => navigate(leaseId ? `/leases/${leaseId}/ledger` : "/leases")}
-                title="Recent activity"
-                emptyLabel="No recent activity yet. Add a property to start activity tracking."
-              />
-            </div>
-          </details>
-        ) : dataReady ? (
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr",
-              gap: spacing.md,
-            }}
-          >
-            <RecentEventsCard
-              events={events}
-              loading={loading}
-              onOpenLedger={(leaseId) => navigate(leaseId ? `/leases/${leaseId}/ledger` : "/leases")}
-              title="Recent activity"
-              emptyLabel="No recent activity yet. Add a property to start activity tracking."
-            />
+            <WorkspaceRoutingSection />
           </div>
-        ) : null}
 
-        <Section>
-          <div style={{ color: text.muted, fontSize: 12, textAlign: "right" }}>
-            Last updated: {formatDate(lastUpdatedAt)}
-          </div>
-        </Section>
-
-        {showDebug ? (
-          <Section>
-            <div style={{ color: text.muted, fontSize: 12 }}>
-              API Base: {apiBase.normalized || "(relative)"}
-            </div>
-            <div style={{ color: text.muted, fontSize: 12 }}>
-              API Base Raw: {apiBase.raw ?? "(unset)"}
-            </div>
-          </Section>
-        ) : null}
+          <aside style={{ display: "grid", gap: spacing.lg, alignContent: "start", minWidth: 0 }}>
+            {queue.loading ? <LoadingSection title="Upcoming Actions" /> : <UpcomingActions queue={queue.data} />}
+            {portfolio.loading ? (
+              <LoadingSection title="Financial Snapshot" />
+            ) : portfolio.error ? (
+              <ErrorSection title="Financial Snapshot" message={portfolio.error} onRetry={() => setRefreshKey((key) => key + 1)} />
+            ) : portfolio.data ? (
+              <FinancialSnapshotSection portfolio={portfolio.data} />
+            ) : null}
+          </aside>
+        </div>
       </div>
-      <CreatePropertyFirstModal
-        open={propertyGateOpen}
-        onClose={() => setPropertyGateOpen(false)}
-        onCreate={() => {
-          const returnTo = buildReturnTo(pendingPropertyAction || "create_application");
-          navigate(buildCreatePropertyUrl(returnTo));
-          setPropertyGateOpen(false);
-        }}
-      />
-      <SendApplicationModal
-        open={sendApplicationOpen}
-        onClose={() => setSendApplicationOpen(false)}
-        properties={propertyOptions}
-        propertyId={modalPropertyId}
-        units={modalUnits}
-        unitsLoading={modalUnitsLoading}
-        unitsError={modalUnitsError}
-        onUnitsRetry={refetchModalUnits}
-        initialUnitId={modalUnitId}
-        onPropertyChange={(nextId) => {
-          setModalPropertyId(nextId);
-          setModalUnitId(null);
-        }}
-        onUnitChange={(nextId) => setModalUnitId(nextId)}
-      />
-      <AddExpenseModal
-        open={addExpenseOpen}
-        properties={propertyOptions}
-        defaultPropertyId={propertyOptions[0]?.id || null}
-        onClose={() => setAddExpenseOpen(false)}
-      />
     </MacShell>
   );
-};
-
-export default DashboardPage;
+}
