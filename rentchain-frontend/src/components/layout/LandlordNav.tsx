@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Building2, Inbox, LayoutDashboard, Menu, ScrollText, X } from "lucide-react";
-import { Navigate, useLocation, useNavigate } from "react-router-dom";
+import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import TopNav from "./TopNav";
 import { useAuth } from "../../context/useAuth";
 import { fetchLandlordConversations } from "../../api/messagesApi";
@@ -22,6 +22,37 @@ const landlordMobileTabs = [
   { to: "/applications", label: "Applicants", icon: ScrollText },
   { to: "/landlord/unified-inbox", label: "Inbox", icon: Inbox },
 ];
+
+const stickyWorkspaceIds = new Set([
+  "dashboard",
+  "operations",
+  "properties",
+  "tenants",
+  "leases",
+  "payments",
+  "unified-inbox",
+  "work-orders",
+]);
+
+const workspaceAliases: Array<{ prefix: string; label: string }> = [
+  { prefix: "/landlord/inbox", label: "Inbox" },
+  { prefix: "/landlord/unified-inbox", label: "Inbox" },
+  { prefix: "/work-orders", label: "Work Orders" },
+  { prefix: "/maintenance", label: "Maintenance" },
+];
+
+function isRouteActive(pathname: string, target: string): boolean {
+  return pathname === target || pathname.startsWith(`${target}/`);
+}
+
+function resolveWorkspaceLabel(pathname: string, items: Array<{ to: string; label: string }>): string {
+  const alias = workspaceAliases.find((entry) => isRouteActive(pathname, entry.prefix));
+  if (alias) return alias.label;
+  const match = [...items]
+    .sort((left, right) => right.to.length - left.to.length)
+    .find((item) => isRouteActive(pathname, item.to));
+  return match?.label || "Workspace";
+}
 
 function includesAdminAuthority(value: unknown): boolean {
   if (Array.isArray(value)) {
@@ -74,6 +105,7 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
   }
   const visibleItems = navLoading || !isLandlordWorkspace ? [] : getVisibleNavItems(effectiveRole, features);
   const drawerItems = visibleItems.filter((item) => item.showInDrawer !== false);
+  const workspaceItems = visibleItems.filter((item) => stickyWorkspaceIds.has(item.id));
   const primaryDrawerItems = drawerItems.filter((item) => !item.requiresAdmin);
   const adminDrawerItems = drawerItems.filter((item) => item.requiresAdmin);
   const orderedPrimaryDrawerItems = React.useMemo(
@@ -90,6 +122,7 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
       ? landlordMobileTabs.filter((item) => !item.requiresMessaging || features?.messaging !== false)
       : [];
   const showMobileBottomNav = effectiveRole === "landlord" && !isAdminLikeContext;
+  const workspaceLabel = resolveWorkspaceLabel(loc.pathname, visibleItems);
   const shellClassName = [
     "rc-landlord-shell",
     showMobileBottomNav ? "rc-landlord-shell--mobile-tabs" : "",
@@ -206,11 +239,28 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
     <div className={shellClassName}>
       <div className="rc-landlord-topnav">
         <TopNav />
+        <div className="rc-landlord-workspace-bar" aria-label="Workspace context">
+          <div className="rc-landlord-workspace-context">
+            <span>Current workspace</span>
+            <strong>{workspaceLabel}</strong>
+          </div>
+          <nav className="rc-landlord-workspace-links" aria-label="Workspace navigation">
+            {workspaceItems.map(({ id, to, label }) => (
+              <Link
+                key={id}
+                to={to}
+                className={isRouteActive(loc.pathname, to) || (id === "unified-inbox" && isRouteActive(loc.pathname, "/landlord/inbox")) ? "active" : ""}
+              >
+                {label}
+              </Link>
+            ))}
+          </nav>
+        </div>
       </div>
 
       <div className="rc-landlord-mobile-topbar">
         <RentChainLogo href="/dashboard" size="sm" />
-        <span className="rc-landlord-mobile-role">{effectiveRole === "admin" ? "Admin" : "Landlord"}</span>
+        <span className="rc-landlord-mobile-role">{workspaceLabel}</span>
         <button
           type="button"
           className="rc-landlord-mobile-menu"

@@ -97,6 +97,36 @@ describe("LandlordNav mobile drawer", () => {
     expect(within(drawer).getByRole("button", { name: "Work Orders" })).toBeInTheDocument();
   });
 
+  it("renders a sticky workspace context bar with primary landlord workspace links", () => {
+    renderLandlordNav("/payments");
+
+    const context = screen.getByLabelText("Workspace context");
+    const workspaceNav = screen.getByRole("navigation", { name: "Workspace navigation" });
+
+    expect(document.querySelector(".rc-landlord-topnav")).toBeInTheDocument();
+    expect(context).toHaveTextContent("Current workspace");
+    expect(context).toHaveTextContent("Payments");
+    expect(within(workspaceNav).getByRole("link", { name: "Dashboard" })).toHaveAttribute("href", "/dashboard");
+    expect(within(workspaceNav).getByRole("link", { name: "Operations" })).toHaveAttribute("href", "/operations");
+    expect(within(workspaceNav).getByRole("link", { name: "Properties" })).toHaveAttribute("href", "/properties");
+    expect(within(workspaceNav).getByRole("link", { name: "Tenants" })).toHaveAttribute("href", "/tenants");
+    expect(within(workspaceNav).getByRole("link", { name: "Leases" })).toHaveAttribute("href", "/leases");
+    expect(within(workspaceNav).getByRole("link", { name: "Payments" })).toHaveClass("active");
+    expect(within(workspaceNav).getByRole("link", { name: "Inbox" })).toHaveAttribute("href", "/landlord/unified-inbox");
+    expect(within(workspaceNav).getByRole("link", { name: "Work Orders" })).toHaveAttribute("href", "/work-orders");
+  });
+
+  it("keeps canonical inbox context visible for legacy landlord inbox paths", () => {
+    renderLandlordNav("/landlord/inbox");
+
+    const context = screen.getByLabelText("Workspace context");
+    const workspaceNav = screen.getByRole("navigation", { name: "Workspace navigation" });
+
+    expect(context).toHaveTextContent("Inbox");
+    expect(within(workspaceNav).getByRole("link", { name: "Inbox" })).toHaveClass("active");
+    expect(screen.getByText("Inbox", { selector: ".rc-landlord-mobile-role" })).toBeInTheDocument();
+  });
+
   it("keeps the mobile tab bar and close control available while the drawer is open", () => {
     renderLandlordNav();
 
