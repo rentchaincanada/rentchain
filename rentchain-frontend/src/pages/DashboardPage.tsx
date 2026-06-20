@@ -5,6 +5,7 @@ import {
   ArrowRight,
   Banknote,
   Building2,
+  CalendarDays,
   CheckCircle2,
   ClipboardList,
   Clock3,
@@ -154,6 +155,32 @@ function formatDate(value: string | null | undefined): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "No due date";
   return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(date);
+}
+
+function formatShortWeekday(value: Date): string {
+  return new Intl.DateTimeFormat(undefined, { weekday: "short" }).format(value);
+}
+
+function formatShortMonthDay(value: Date): string {
+  return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(value);
+}
+
+function startOfDay(value: Date): Date {
+  return new Date(value.getFullYear(), value.getMonth(), value.getDate());
+}
+
+function addDays(value: Date, days: number): Date {
+  const next = new Date(value);
+  next.setDate(value.getDate() + days);
+  return next;
+}
+
+function isSameCalendarDay(left: Date, right: Date): boolean {
+  return left.getFullYear() === right.getFullYear() && left.getMonth() === right.getMonth() && left.getDate() === right.getDate();
+}
+
+function isSameCalendarMonth(left: Date, right: Date): boolean {
+  return left.getFullYear() === right.getFullYear() && left.getMonth() === right.getMonth();
 }
 
 function cleanFlags(flags: PortfolioDataQualityFlag[] | null | undefined): string[] {
@@ -614,6 +641,130 @@ function UpcomingActions({ queue }: { queue: LandlordDecisionQueueResponse | nul
   );
 }
 
+function CalendarPreviewPanel({ queue }: { queue: LandlordDecisionQueueResponse | null }) {
+  const [view, setView] = React.useState<"week" | "month">("week");
+  const today = React.useMemo(() => startOfDay(new Date()), []);
+  const weekDays = React.useMemo(() => Array.from({ length: 7 }, (_, index) => addDays(today, index)), [today]);
+  const monthDays = React.useMemo(() => {
+    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    return Array.from({ length: new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate() }, (_, index) => addDays(monthStart, index));
+  }, [today]);
+  const datedItems = React.useMemo(
+    () =>
+      (queue?.items || [])
+        .map((item) => {
+          const date = item.dueAt ? new Date(item.dueAt) : null;
+          return date && !Number.isNaN(date.getTime()) ? { item, date } : null;
+        })
+        .filter((entry): entry is { item: LandlordDecisionQueueItem; date: Date } => Boolean(entry))
+        .sort((left, right) => left.date.getTime() - right.date.getTime()),
+    [queue]
+  );
+  const days = view === "week" ? weekDays : monthDays;
+  const visibleItems = datedItems.filter(({ date }) =>
+    view === "week"
+      ? date >= today && date < addDays(today, 7)
+      : isSameCalendarMonth(date, today)
+  );
+
+  return (
+    <Card style={sectionCard} data-testid="calendar-preview-section">
+      <SectionHeader
+        icon={<CalendarDays size={18} />}
+        title="Calendar Preview"
+        subtitle="Quick weekly view of dated operational follow-up."
+        action={
+          <Link to="/scheduling" style={compactButton}>
+            Open Full Schedule <ArrowRight size={16} />
+          </Link>
+        }
+      />
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }} aria-label="Calendar view">
+        {(["week", "month"] as const).map((option) => (
+          <button
+            key={option}
+            type="button"
+            onClick={() => setView(option)}
+            style={{
+              ...compactButton,
+              minHeight: 34,
+              padding: "6px 10px",
+              background: view === option ? "#eff6ff" : "#fff",
+              borderColor: view === option ? "#bfdbfe" : colors.borderStrong,
+              color: view === option ? "#1d4ed8" : text.primary,
+            }}
+          >
+            {option === "week" ? "7-day view" : "Month view"}
+          </button>
+        ))}
+      </div>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: view === "week" ? "repeat(7, minmax(78px, 1fr))" : "repeat(auto-fit, minmax(46px, 1fr))",
+          gap: 8,
+          overflowX: view === "week" ? "auto" : "visible",
+          paddingBottom: view === "week" ? 4 : 0,
+        }}
+      >
+        {days.map((day) => {
+          const dayItems = datedItems.filter(({ date }) => isSameCalendarDay(date, day)).slice(0, view === "week" ? 2 : 1);
+          return (
+            <div
+              key={day.toISOString()}
+              style={{
+                display: "grid",
+                gap: 6,
+                alignContent: "start",
+                minHeight: view === "week" ? 96 : 58,
+                minWidth: view === "week" ? 78 : 0,
+                padding: view === "week" ? 10 : 8,
+                borderRadius: 8,
+                border: `1px solid ${isSameCalendarDay(day, today) ? "#bfdbfe" : colors.border}`,
+                background: isSameCalendarDay(day, today) ? "#eff6ff" : "#fff",
+              }}
+            >
+              <div style={{ display: "grid", gap: 2 }}>
+                <div style={{ color: text.muted, fontSize: 11, fontWeight: 800, whiteSpace: "nowrap" }}>{formatShortWeekday(day)}</div>
+                <div style={{ color: text.primary, fontSize: view === "week" ? 16 : 13, fontWeight: 900, whiteSpace: "nowrap" }}>
+                  {view === "week" ? formatShortMonthDay(day) : day.getDate()}
+                </div>
+              </div>
+              {dayItems.map(({ item }) => (
+                <Link
+                  key={item.id}
+                  to={operationalHref(item)}
+                  style={{
+                    color: "#1d4ed8",
+                    fontSize: 12,
+                    fontWeight: 800,
+                    lineHeight: 1.25,
+                    textDecoration: "none",
+                    overflow: "hidden",
+                    display: "-webkit-box",
+                    WebkitLineClamp: view === "week" ? 2 : 1,
+                    WebkitBoxOrient: "vertical",
+                  }}
+                >
+                  {item.title || "Review item"}
+                </Link>
+              ))}
+              {view === "month" && dayItems.length > 0 ? (
+                <span aria-hidden="true" style={{ width: 6, height: 6, borderRadius: 99, background: "#2563eb" }} />
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+      {visibleItems.length === 0 ? (
+        <div style={{ border: `1px solid ${colors.border}`, borderRadius: 8, padding: 12, color: text.muted }}>
+          No dated schedule items are visible for this {view === "week" ? "week" : "month"}. Upcoming dated decisions will appear here.
+        </div>
+      ) : null}
+    </Card>
+  );
+}
+
 function WorkspaceRoutingSection() {
   const routes = [
     { label: "Operations full queue", href: "/operations", icon: <ClipboardList size={17} />, helper: "Execution workspace" },
@@ -810,6 +961,8 @@ export default function DashboardPage() {
               {queue.loading ? <LoadingSection title="Upcoming Actions" /> : <UpcomingActions queue={queue.data} />}
             </aside>
           </div>
+
+          {queue.loading ? <LoadingSection title="Calendar Preview" /> : <CalendarPreviewPanel queue={queue.data} />}
 
           {portfolio.loading ? (
             <LoadingSection title="Financial Snapshot" />
