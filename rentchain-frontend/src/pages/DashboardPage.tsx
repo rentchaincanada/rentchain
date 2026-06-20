@@ -36,6 +36,7 @@ import { fetchApplications } from "@/api/applicationsApi";
 import { fetchTenants } from "@/api/tenantsApi";
 import { fetchUnifiedInbox } from "@/api/unifiedInboxApi";
 import { listWorkOrders } from "@/api/workOrdersApi";
+import { listLandlordMaintenance } from "@/api/maintenanceWorkflowApi";
 
 type Loadable<T> = {
   data: T | null;
@@ -48,6 +49,7 @@ type MetricState = "trusted" | "degraded" | "unavailable";
 type PortfolioCounts = {
   applicationsPending: number | null;
   tenants: number | null;
+  maintenanceRequests: number | null;
   workOrders: number | null;
   unifiedMessages: number | null;
 };
@@ -168,6 +170,12 @@ function isOpenWorkOrder(workOrder: { status?: unknown }): boolean {
   const status = String(workOrder.status || "").trim().toLowerCase();
   if (!status) return true;
   return !["done", "closed", "completed", "cancelled", "canceled", "resolved"].includes(status);
+}
+
+function isOpenMaintenanceRequest(request: { status?: unknown }): boolean {
+  const status = String(request.status || "").trim().toLowerCase();
+  if (!status) return true;
+  return !["completed", "cancelled", "canceled", "resolved", "closed"].includes(status);
 }
 
 function useNarrowDashboardLayout(): boolean {
@@ -309,8 +317,8 @@ function PortfolioHealthSection({ portfolio }: { portfolio: LandlordPortfolioSta
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 145px), 1fr))",
-          gap: spacing.sm,
+          gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 132px), 1fr))",
+          gap: 10,
           alignItems: "stretch",
         }}
       >
@@ -367,6 +375,7 @@ function PortfolioCountsRow({
     { label: "Units", value: status?.totalUnits ?? null, href: "/properties", icon: <Route size={18} /> },
     { label: "Applications Pending", value: counts.data?.applicationsPending ?? null, href: "/applications", icon: <FileText size={18} /> },
     { label: "Tenants", value: counts.data?.tenants ?? null, href: "/tenants", icon: <Users size={18} /> },
+    { label: "Maintenance Requests", value: counts.data?.maintenanceRequests ?? null, href: "/maintenance", icon: <Wrench size={18} /> },
     { label: "Work Orders", value: counts.data?.workOrders ?? null, href: "/work-orders", icon: <Wrench size={18} /> },
     { label: "Unified Messages", value: counts.data?.unifiedMessages ?? null, href: "/landlord/inbox", icon: <Mail size={18} /> },
     { label: "Leases", value: status?.currentLeaseCount ?? null, href: "/leases", icon: <ClipboardList size={18} /> },
@@ -377,8 +386,8 @@ function PortfolioCountsRow({
       data-testid="portfolio-counts-row"
       style={{
         display: "grid",
-        gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 150px), 1fr))",
-        gap: spacing.sm,
+        gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 136px), 1fr))",
+        gap: 10,
       }}
     >
       {cards.map((card) => {
@@ -389,9 +398,9 @@ function PortfolioCountsRow({
             to={card.href}
             style={{
               display: "grid",
-              gap: 9,
-              minHeight: 96,
-              padding: 14,
+              gap: 8,
+              minHeight: 90,
+              padding: 12,
               borderRadius: 8,
               border: `1px solid ${colors.border}`,
               background: "#fff",
@@ -698,19 +707,27 @@ export default function DashboardPage() {
       fetchApplications(),
       fetchTenants(),
       listWorkOrders(),
+      listLandlordMaintenance(),
       fetchUnifiedInbox("landlord"),
     ])
-      .then(([applicationsResult, tenantsResult, workOrdersResult, inboxResult]) => {
+      .then(([applicationsResult, tenantsResult, workOrdersResult, maintenanceResult, inboxResult]) => {
         if (!alive) return;
         const applications = applicationsResult.status === "fulfilled" && Array.isArray(applicationsResult.value) ? applicationsResult.value : null;
         const tenants = tenantsResult.status === "fulfilled" && Array.isArray(tenantsResult.value) ? tenantsResult.value : null;
         const workOrders = workOrdersResult.status === "fulfilled" && Array.isArray(workOrdersResult.value) ? workOrdersResult.value : null;
+        const maintenanceRequests =
+          maintenanceResult.status === "fulfilled" && Array.isArray(maintenanceResult.value?.items)
+            ? maintenanceResult.value.items
+            : maintenanceResult.status === "fulfilled" && Array.isArray(maintenanceResult.value?.data)
+              ? maintenanceResult.value.data
+              : null;
         const inbox = inboxResult.status === "fulfilled" ? inboxResult.value : null;
 
         setCounts({
           data: {
             applicationsPending: applications ? applications.filter(isPendingApplication).length : null,
             tenants: tenants ? tenants.length : null,
+            maintenanceRequests: maintenanceRequests ? maintenanceRequests.filter(isOpenMaintenanceRequest).length : null,
             workOrders: workOrders ? workOrders.filter(isOpenWorkOrder).length : null,
             unifiedMessages: typeof inbox?.total === "number" ? inbox.total : Array.isArray(inbox?.items) ? inbox.items.length : null,
           },
@@ -719,6 +736,7 @@ export default function DashboardPage() {
             applicationsResult.status === "rejected" ||
             tenantsResult.status === "rejected" ||
             workOrdersResult.status === "rejected" ||
+            maintenanceResult.status === "rejected" ||
             inboxResult.status === "rejected"
               ? "Some portfolio counts could not load."
               : null,

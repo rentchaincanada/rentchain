@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   fetchTenantsMock: vi.fn(),
   fetchUnifiedInboxMock: vi.fn(),
   listWorkOrdersMock: vi.fn(),
+  listLandlordMaintenanceMock: vi.fn(),
 }));
 
 vi.mock("@/api/landlordDecisionQueueApi", () => ({
@@ -37,6 +38,10 @@ vi.mock("@/api/unifiedInboxApi", () => ({
 
 vi.mock("@/api/workOrdersApi", () => ({
   listWorkOrders: mocks.listWorkOrdersMock,
+}));
+
+vi.mock("@/api/maintenanceWorkflowApi", () => ({
+  listLandlordMaintenance: mocks.listLandlordMaintenanceMock,
 }));
 
 const macShellProps = vi.hoisted(() => ({
@@ -236,6 +241,14 @@ describe("DashboardPage", () => {
     mocks.fetchApplicationsMock.mockResolvedValue([{ id: "app-1", status: "SUBMITTED" }, { id: "app-2", status: "APPROVED" }]);
     mocks.fetchTenantsMock.mockResolvedValue([{ id: "tenant-1" }, { id: "tenant-2" }, { id: "tenant-3" }]);
     mocks.listWorkOrdersMock.mockResolvedValue([{ id: "wo-1", status: "open" }, { id: "wo-2", status: "completed" }]);
+    mocks.listLandlordMaintenanceMock.mockResolvedValue({
+      ok: true,
+      items: [
+        { id: "maint-1", status: "submitted" },
+        { id: "maint-2", status: "completed" },
+        { id: "maint-3", status: "in_progress" },
+      ],
+    });
     mocks.fetchUnifiedInboxMock.mockResolvedValue({ ok: true, role: "landlord", items: [], records: [], total: 4, limit: 50, offset: 0 });
   });
 
@@ -252,6 +265,8 @@ describe("DashboardPage", () => {
     expect(screen.getByTestId("portfolio-status-section")).toHaveTextContent("80%");
     expect(screen.getByTestId("portfolio-counts-row")).toHaveTextContent("Applications Pending");
     expect(screen.getByTestId("portfolio-counts-row")).toHaveTextContent("Tenants");
+    expect(screen.getByRole("link", { name: /Maintenance Requests/i })).toHaveAttribute("href", "/maintenance");
+    expect(screen.getByRole("link", { name: /Work Orders/i })).toHaveAttribute("href", "/work-orders");
     expect(screen.getByRole("link", { name: /Unified Messages/i })).toHaveAttribute("href", "/landlord/inbox");
     expect(screen.getByTestId("decision-queue-section")).toHaveTextContent("Decision Queue Preview");
     expect(screen.getByText("Highest-priority decisions needing attention.")).toBeInTheDocument();
@@ -266,6 +281,7 @@ describe("DashboardPage", () => {
     expect(mocks.fetchApplicationsMock).toHaveBeenCalled();
     expect(mocks.fetchTenantsMock).toHaveBeenCalled();
     expect(mocks.listWorkOrdersMock).toHaveBeenCalled();
+    expect(mocks.listLandlordMaintenanceMock).toHaveBeenCalled();
     expect(mocks.fetchUnifiedInboxMock).toHaveBeenCalledWith("landlord");
     expect(screen.queryByText("lease-1")).not.toBeInTheDocument();
     expect(screen.queryByText("payment-1")).not.toBeInTheDocument();
