@@ -26,11 +26,12 @@
   top: 0;
   right: 0;
   left: 0;
-  z-index: 95;
+  z-index: 2400;
   box-sizing: border-box;
-  background: rgba(255, 255, 255, 0.97);
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
-  backdrop-filter: blur(12px);
+  isolation: isolate;
+  background: #ffffff;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.1);
+  box-shadow: 0 16px 34px rgba(15, 23, 42, 0.16);
 }
 
 .rc-landlord-topnav .rc-top-nav {
@@ -46,14 +47,18 @@
 }
 
 .rc-landlord-workspace-bar {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   gap: 16px;
   min-height: var(--rc-landlord-workspace-bar-height);
   height: var(--rc-landlord-workspace-bar-height);
   padding: 6px max(20px, env(safe-area-inset-right, 0px)) 8px max(20px, env(safe-area-inset-left, 0px));
-  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
-  background: rgba(248, 250, 252, 0.96);
+  border-top: 1px solid rgba(15, 23, 42, 0.06);
+  border-bottom: 1px solid rgba(15, 23, 42, 0.14);
+  background: #f8fafc;
+  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.12);
   box-sizing: border-box;
   max-width: 100%;
   overflow: hidden;
