@@ -129,6 +129,7 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
   ].filter(Boolean).join(" ");
   const contentClassName = [
     "rc-landlord-content",
+    "rc-landlord-content--sticky-offset",
     loc.pathname.startsWith("/messages") ? "rc-landlord-content--mobile-flush" : "",
   ].filter(Boolean).join(" ");
 

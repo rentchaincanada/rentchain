@@ -3,6 +3,11 @@
   --rc-mobile-drawer-bottom-offset: calc(
     var(--rc-mobile-bottom-nav-height) + env(safe-area-inset-bottom, 0px)
   );
+  --rc-landlord-desktop-topnav-height: 60px;
+  --rc-landlord-workspace-bar-height: 48px;
+  --rc-landlord-sticky-shell-height: calc(
+    var(--rc-landlord-desktop-topnav-height) + var(--rc-landlord-workspace-bar-height) + env(safe-area-inset-top, 0px)
+  );
 }
 
 .rc-landlord-shell {
@@ -16,22 +21,39 @@
 
 .rc-landlord-topnav {
   display: block;
-  position: sticky;
+  position: fixed;
   top: 0;
+  right: 0;
+  left: 0;
   z-index: 95;
+  box-sizing: border-box;
   background: rgba(255, 255, 255, 0.97);
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
   backdrop-filter: blur(12px);
+}
+
+.rc-landlord-topnav .rc-top-nav {
+  box-sizing: border-box;
+  position: relative !important;
+  top: auto !important;
+  z-index: auto !important;
+  min-height: calc(var(--rc-landlord-desktop-topnav-height) + env(safe-area-inset-top, 0px));
+}
+
+.rc-landlord-topnav .rc-top-nav-inner {
+  min-height: var(--rc-landlord-desktop-topnav-height);
 }
 
 .rc-landlord-workspace-bar {
   display: flex;
   align-items: center;
   gap: 16px;
-  min-height: 48px;
+  min-height: var(--rc-landlord-workspace-bar-height);
+  height: var(--rc-landlord-workspace-bar-height);
   padding: 6px max(20px, env(safe-area-inset-right, 0px)) 8px max(20px, env(safe-area-inset-left, 0px));
   border-bottom: 1px solid rgba(15, 23, 42, 0.08);
   background: rgba(248, 250, 252, 0.96);
+  box-sizing: border-box;
   max-width: 100%;
   overflow: hidden;
 }
@@ -88,12 +110,16 @@
 }
 
 .rc-landlord-content {
-  padding: 12px 0 24px;
+  padding: 0 0 24px;
   box-sizing: border-box;
   width: 100%;
   max-width: 100%;
   min-width: 0;
   overflow-x: hidden;
+}
+
+.rc-landlord-content--sticky-offset {
+  padding-top: calc(var(--rc-landlord-sticky-shell-height) + 12px);
 }
 
 .rc-landlord-mobile-topbar {
