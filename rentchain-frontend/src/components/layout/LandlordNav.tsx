@@ -85,6 +85,8 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
   const [hasUnread, setHasUnread] = useState<boolean>(false);
   const unreadFlag = typeof unreadMessages === "boolean" ? unreadMessages : hasUnread;
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const shellRef = useRef<HTMLDivElement | null>(null);
+  const stickyShellRef = useRef<HTMLDivElement | null>(null);
   const lastFocusedRef = useRef<HTMLElement | null>(null);
   const navLoading = !ready || isLoading || authStatus === "restoring" || !user || capsLoading;
   const isAdminLikeContext = React.useMemo(() => isAdminContext(user), [user]);
@@ -198,6 +200,33 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
     };
   }, [drawerOpen]);
 
+  React.useLayoutEffect(() => {
+    const shell = shellRef.current;
+    const stickyShell = stickyShellRef.current;
+    if (!shell || !stickyShell) return undefined;
+
+    const syncStickyOffset = () => {
+      const height = Math.ceil(stickyShell.getBoundingClientRect().height);
+      if (height > 0) {
+        shell.style.setProperty("--rc-landlord-sticky-shell-measured-height", `${height}px`);
+      }
+    };
+
+    syncStickyOffset();
+    window.addEventListener("resize", syncStickyOffset);
+
+    const observer =
+      typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(() => syncStickyOffset())
+        : null;
+    observer?.observe(stickyShell);
+
+    return () => {
+      window.removeEventListener("resize", syncStickyOffset);
+      observer?.disconnect();
+    };
+  }, [workspaceItems.length, workspaceLabel]);
+
   if (navLoading) {
     return (
       <div
@@ -237,8 +266,8 @@ export const LandlordNav: React.FC<Props> = ({ children, unreadMessages }) => {
   }
 
   return (
-    <div className={shellClassName}>
-      <div className="rc-landlord-topnav">
+    <div className={shellClassName} ref={shellRef}>
+      <div className="rc-landlord-topnav" ref={stickyShellRef}>
         <TopNav />
         <div className="rc-landlord-workspace-bar" aria-label="Workspace context">
           <div className="rc-landlord-workspace-context">

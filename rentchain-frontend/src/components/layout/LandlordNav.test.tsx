@@ -131,6 +131,31 @@ describe("LandlordNav mobile drawer", () => {
     expect(content).toContainElement(screen.getByTestId("page-content"));
   });
 
+  it("stores the measured fixed shell height for the content offset", async () => {
+    const rectSpy = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function getRect() {
+      const height = this.classList.contains("rc-landlord-topnav") ? 148 : 0;
+      return {
+        x: 0,
+        y: 0,
+        top: 0,
+        right: 0,
+        bottom: height,
+        left: 0,
+        width: 0,
+        height,
+        toJSON: () => ({}),
+      };
+    });
+
+    renderLandlordNav("/dashboard");
+
+    await waitFor(() => {
+      expect((document.querySelector(".rc-landlord-shell") as HTMLElement).style.getPropertyValue("--rc-landlord-sticky-shell-measured-height")).toBe("148px");
+    });
+
+    rectSpy.mockRestore();
+  });
+
   it("keeps canonical inbox context visible for legacy landlord inbox paths", () => {
     renderLandlordNav("/landlord/inbox");
 

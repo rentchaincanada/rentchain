@@ -3,11 +3,12 @@
   --rc-mobile-drawer-bottom-offset: calc(
     var(--rc-mobile-bottom-nav-height) + env(safe-area-inset-bottom, 0px)
   );
-  --rc-landlord-desktop-topnav-height: 60px;
+  --rc-landlord-desktop-topnav-height: 72px;
   --rc-landlord-workspace-bar-height: 48px;
   --rc-landlord-sticky-shell-height: calc(
     var(--rc-landlord-desktop-topnav-height) + var(--rc-landlord-workspace-bar-height) + env(safe-area-inset-top, 0px)
   );
+  --rc-landlord-sticky-shell-gap: 20px;
 }
 
 .rc-landlord-shell {
@@ -119,7 +120,10 @@
 }
 
 .rc-landlord-content--sticky-offset {
-  padding-top: calc(var(--rc-landlord-sticky-shell-height) + 12px);
+  padding-top: calc(
+    var(--rc-landlord-sticky-shell-measured-height, var(--rc-landlord-sticky-shell-height)) +
+    var(--rc-landlord-sticky-shell-gap)
+  );
 }
 
 .rc-landlord-mobile-topbar {
