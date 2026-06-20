@@ -8,12 +8,14 @@ interface MacShellProps {
   title?: string;
   children: React.ReactNode;
   showTopNav?: boolean;
+  maxWidth?: number | string;
 }
 
 export const MacShell: React.FC<MacShellProps> = ({
   title = "RentChain",
   children,
   showTopNav = true,
+  maxWidth = layout.maxWidth,
 }) => {
   const renderTopNav = showTopNav;
 
@@ -41,7 +43,7 @@ export const MacShell: React.FC<MacShellProps> = ({
       <main
         className="rc-mac-shell-main"
         style={{
-          maxWidth: layout.maxWidth,
+          maxWidth,
           margin: "0 auto",
           padding: `${spacing.lg} ${layout.pagePadding} ${spacing.xxl}`,
         }}

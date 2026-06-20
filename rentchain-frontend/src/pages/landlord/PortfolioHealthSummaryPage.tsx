@@ -400,7 +400,7 @@ export default function PortfolioHealthSummaryPage() {
             <div style={{ display: "grid", gap: 6 }}>
               <h1 style={{ margin: 0, fontSize: "1.5rem" }}>Portfolio health</h1>
               <div style={{ color: "#475569", maxWidth: 820 }}>
-                A high-level view of overall portfolio health, recent direction, and where follow-through may help most.
+                Review portfolio health and open the workspace that owns each follow-through area.
               </div>
             </div>
             <button
