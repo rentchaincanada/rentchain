@@ -105,6 +105,24 @@ describe("PortfolioHealthSummaryPage", () => {
             status: "watch",
             summary: "Application and screening follow-through may need closer attention.",
           },
+          {
+            key: "maintenance_health",
+            label: "Maintenance health",
+            status: "healthy",
+            summary: "Work order follow-through is steady.",
+          },
+          {
+            key: "workflow_health",
+            label: "Workflow health",
+            status: "watch",
+            summary: "Operational queue follow-through needs review.",
+          },
+          {
+            key: "response_health",
+            label: "Response health",
+            status: "healthy",
+            summary: "Inbox response patterns are steady.",
+          },
         ],
         nextFocus: [
           {
@@ -133,6 +151,10 @@ describe("PortfolioHealthSummaryPage", () => {
     expect((await screen.findAllByText(/stable overall, with a few areas to monitor/i)).length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "Print / Save PDF" })).toBeInTheDocument();
     expect(screen.getAllByText(/Screening health/i).length).toBeGreaterThan(0);
+    expect(screen.getByRole("link", { name: /Screening health.*Review applications/i })).toHaveAttribute("href", "/applications");
+    expect(screen.getByRole("link", { name: /Maintenance health.*Review work orders/i })).toHaveAttribute("href", "/work-orders");
+    expect(screen.getByRole("link", { name: /Workflow health.*Open operations/i })).toHaveAttribute("href", "/operations");
+    expect(screen.getByRole("link", { name: /Response health.*Open inbox/i })).toHaveAttribute("href", "/landlord/inbox");
     expect(screen.getByText(/Resident feedback patterns/i)).toBeInTheDocument();
     expect(screen.getByText(/Workflow follow-through/i)).toBeInTheDocument();
     expect(macShellProps).toHaveBeenCalledWith(expect.objectContaining({ showTopNav: false }));

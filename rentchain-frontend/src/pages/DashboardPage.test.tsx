@@ -1,3 +1,4 @@
+import React from "react";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
@@ -36,6 +37,17 @@ vi.mock("@/api/unifiedInboxApi", () => ({
 
 vi.mock("@/api/workOrdersApi", () => ({
   listWorkOrders: mocks.listWorkOrdersMock,
+}));
+
+const macShellProps = vi.hoisted(() => ({
+  latest: vi.fn(),
+}));
+
+vi.mock("../components/layout/MacShell", () => ({
+  MacShell: ({ children, ...props }: React.PropsWithChildren<Record<string, unknown>>) => {
+    macShellProps.latest(props);
+    return <div>{children}</div>;
+  },
 }));
 
 function installMatchMedia(matches = false) {
@@ -217,6 +229,7 @@ afterEach(() => {
 
 describe("DashboardPage", () => {
   beforeEach(() => {
+    macShellProps.latest.mockReset();
     installMatchMedia(false);
     mocks.fetchLandlordPortfolioStatusFinancialMock.mockResolvedValue(portfolioResponse());
     mocks.fetchLandlordDecisionQueueMock.mockResolvedValue(queueResponse());
@@ -230,7 +243,9 @@ describe("DashboardPage", () => {
     renderDashboard();
 
     expect(await screen.findByTestId("portfolio-status-section")).toHaveTextContent("Portfolio Health");
+    expect(macShellProps.latest).toHaveBeenCalledWith(expect.objectContaining({ maxWidth: 1320, showTopNav: false }));
     expect(screen.getByTestId("portfolio-status-section")).toHaveTextContent("Properties");
+    expect(screen.getByText("Quick view of portfolio occupancy and health.")).toBeInTheDocument();
     expect(screen.getByTestId("portfolio-status-section")).toHaveTextContent("Units");
     expect(screen.getByTestId("portfolio-status-section")).toHaveTextContent("Occupied");
     expect(screen.getByTestId("portfolio-status-section")).toHaveTextContent("Vacant");
@@ -239,9 +254,11 @@ describe("DashboardPage", () => {
     expect(screen.getByTestId("portfolio-counts-row")).toHaveTextContent("Tenants");
     expect(screen.getByRole("link", { name: /Unified Messages/i })).toHaveAttribute("href", "/landlord/inbox");
     expect(screen.getByTestId("decision-queue-section")).toHaveTextContent("Decision Queue Preview");
+    expect(screen.getByText("Highest-priority decisions needing attention.")).toBeInTheDocument();
     expect(screen.getByTestId("decision-queue-section")).toHaveTextContent("Resolve lease renewal");
     expect(screen.getByTestId("upcoming-actions-section")).toHaveTextContent("Upcoming Actions");
     expect(screen.getByTestId("financial-snapshot-section")).toHaveTextContent("Financial Snapshot");
+    expect(screen.getByText(/Current rent collection and outstanding balance overview/i)).toBeInTheDocument();
     expect(screen.getByTestId("workspace-routing-section")).toHaveTextContent("Operations full queue");
 
     expect(mocks.fetchLandlordPortfolioStatusFinancialMock).toHaveBeenCalledWith({ periodMonth: expect.stringMatching(/^\d{4}-\d{2}$/) });

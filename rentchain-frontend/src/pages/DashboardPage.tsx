@@ -299,7 +299,7 @@ function PortfolioHealthSection({ portfolio }: { portfolio: LandlordPortfolioSta
       <SectionHeader
         icon={<Building2 size={18} />}
         title="Portfolio Health"
-        subtitle=""
+        subtitle="Quick view of portfolio occupancy and health."
         action={
           <Link to="/portfolio-health" style={compactButton}>
             Portfolio detail <ArrowRight size={16} />
@@ -430,7 +430,7 @@ function FinancialSnapshotSection({ portfolio }: { portfolio: LandlordPortfolioS
       <SectionHeader
         icon={<Banknote size={18} />}
         title="Financial Snapshot"
-        subtitle={`Rent collection view for ${financial.period.month}.`}
+        subtitle={`Current rent collection and outstanding balance overview for ${financial.period.month}.`}
         action={
           <Link to="/payments" style={compactButton}>
             Payments Workspace <ArrowRight size={16} />
@@ -513,7 +513,7 @@ function DecisionQueuePreview({ queue }: { queue: LandlordDecisionQueueResponse 
       <SectionHeader
         icon={<ClipboardList size={18} />}
         title="Decision Queue Preview"
-        subtitle="Decision and action only. Operations has the full queue."
+        subtitle="Highest-priority decisions needing attention."
         action={
           <Link to="/operations" style={compactButton}>
             View Full Queue <ArrowRight size={16} />
@@ -575,7 +575,7 @@ function UpcomingActions({ queue }: { queue: LandlordDecisionQueueResponse | nul
       <SectionHeader
         icon={<ListChecks size={18} />}
         title="Upcoming Actions"
-        subtitle="Next dated items from the normalized queue."
+        subtitle="Time-sensitive next steps from the operations queue."
         action={
           <Link to="/operations?status=open_state" style={compactButton}>
             Open Operations <ArrowRight size={16} />
@@ -617,7 +617,7 @@ function WorkspaceRoutingSection() {
       <SectionHeader
         icon={<Route size={18} />}
         title="Portfolio Detail / Workspace Routing"
-        subtitle="Dashboard summarizes. Operations and owning workspaces handle execution."
+        subtitle="Open the workspace that owns the next action."
       />
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 190px), 1fr))", gap: spacing.sm }}>
         {routes.map((route) => (
@@ -738,7 +738,7 @@ export default function DashboardPage() {
   const financialState = metricState(portfolio.data?.confidence.financial);
 
   return (
-    <MacShell title="RentChain · Dashboard 2.0" showTopNav={false}>
+    <MacShell title="RentChain · Dashboard 2.0" showTopNav={false} maxWidth={1320}>
       <div style={{ display: "grid", gap: spacing.lg, minWidth: 0 }}>
         <div
           data-testid="dashboard-operational-grid"
