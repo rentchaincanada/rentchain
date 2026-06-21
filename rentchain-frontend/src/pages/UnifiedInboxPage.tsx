@@ -92,6 +92,7 @@ export default function UnifiedInboxPage({ role }: Props) {
   const [statusFilter, setStatusFilter] = React.useState<StatusFilter>("all");
   const [priorityFilter, setPriorityFilter] = React.useState<PriorityFilter>("all");
   const [search, setSearch] = React.useState("");
+  const [localReadAtById, setLocalReadAtById] = React.useState<Record<string, string>>({});
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -111,10 +112,21 @@ export default function UnifiedInboxPage({ role }: Props) {
     void load();
   }, [load]);
 
+  React.useEffect(() => {
+    setLocalReadAtById({});
+  }, [role]);
+
   const records = data?.records || data?.items || [];
   const safeRecords = React.useMemo(
-    () => records.filter((record) => record.audienceRole === role),
-    [records, role]
+    () =>
+      records
+        .filter((record) => record.audienceRole === role)
+        .map((record) => {
+          const localReadAt = localReadAtById[record.id];
+          if (!localReadAt) return record;
+          return { ...record, status: "read" as const, readAt: localReadAt };
+        }),
+    [localReadAtById, records, role]
   );
   const normalizedSearch = normalize(search);
   const filteredRecords = React.useMemo(
@@ -130,6 +142,13 @@ export default function UnifiedInboxPage({ role }: Props) {
   );
   const unreadCount = safeRecords.filter((record) => record.status === "unread").length;
   const priorityCount = safeRecords.filter((record) => record.priority === "critical" || record.priority === "high").length;
+  const markRecordRead = React.useCallback((record: UnifiedInboxRecord) => {
+    if (record.status !== "unread" && record.readAt) return;
+    setLocalReadAtById((current) => {
+      if (current[record.id]) return current;
+      return { ...current, [record.id]: new Date().toISOString() };
+    });
+  }, []);
 
   return (
     <div style={{ display: "grid", gap: spacing.md }}>
@@ -290,7 +309,7 @@ export default function UnifiedInboxPage({ role }: Props) {
               </span>
             </div>
           </Card>
-          <UnifiedInboxList records={filteredRecords} role={role} />
+          <UnifiedInboxList records={filteredRecords} role={role} onOpenRecord={markRecordRead} />
         </>
       ) : null}
     </div>

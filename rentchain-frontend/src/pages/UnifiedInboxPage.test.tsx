@@ -203,6 +203,13 @@ describe("UnifiedInboxPage", () => {
     fireEvent.click(screen.getByRole("tab", { name: /Maintenance 1/i }));
     expect(screen.getAllByText("Pipe leak reported").length).toBeGreaterThan(0);
     expect(screen.queryByText("Lease renewal ready")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Pipe leak reported/i }));
+    const pipeButton = screen.getByRole("button", { name: /Pipe leak reported/i });
+    expect(pipeButton).toHaveAttribute("aria-expanded", "true");
+    expect(pipeButton).toHaveTextContent("Read");
+    expect(screen.getByRole("tab", { name: /Unread 1/i })).toBeInTheDocument();
+    expect(pipeButton.nextElementSibling).toHaveTextContent("Pipe leak reported");
+    expect(pipeButton.nextElementSibling).toHaveTextContent("Status");
     expect(screen.getByRole("link", { name: /Open work orders/i })).toHaveAttribute("href", "/work-orders");
 
     fireEvent.click(screen.getByRole("tab", { name: /All 4/i }));
