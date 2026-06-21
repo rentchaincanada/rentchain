@@ -115,6 +115,45 @@ function mergePersistedUnits(existingUnits: any[] | undefined, persistedUnits: U
   return ordered;
 }
 
+function numericSnapshotValue(value: any) {
+  const next = Number(value);
+  return Number.isFinite(next) ? next : 0;
+}
+
+function safeSnapshotRecord(value: any) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
+export function buildMonthlyOpsSnapshotRows(snapshot: any, propertyLabelById: Record<string, any> = {}) {
+  const properties = safeSnapshotRecord(snapshot?.properties);
+  const aggregate = safeSnapshotRecord(snapshot?.data || snapshot?.totals || snapshot);
+  const rows = Object.entries(properties).map(([propertyId, rawData]) => {
+    const data = safeSnapshotRecord(rawData);
+    const label = propertyLabelById?.[propertyId];
+    return {
+      propertyName: label?.name || propertyId,
+      propertyAddress: label?.subtitle || "",
+      openRequests: numericSnapshotValue(data.openCount ?? data.open ?? data.openRequests),
+      overdueRequests: numericSnapshotValue(data.overdueCount ?? data.overdue ?? data.overdueRequests),
+      highSeverity: numericSnapshotValue(data.highSeverity ?? data.highSeverityCount),
+      oldestOpenDays: data.oldestDays ?? data.oldestOpenDays ?? "",
+    };
+  });
+
+  if (rows.length) return rows;
+
+  return [
+    {
+      propertyName: "Portfolio total",
+      propertyAddress: "No property-level action requests",
+      openRequests: numericSnapshotValue(aggregate.openCount ?? aggregate.open ?? aggregate.openRequests),
+      overdueRequests: numericSnapshotValue(aggregate.overdueCount ?? aggregate.overdue ?? aggregate.overdueRequests),
+      highSeverity: numericSnapshotValue(aggregate.highSeverity ?? aggregate.highSeverityCount),
+      oldestOpenDays: aggregate.oldestDays ?? aggregate.oldestOpenDays ?? "",
+    },
+  ];
+}
+
 function unitSaveErrorMessage(error: any) {
   const code = String(error?.code || error?.error || error?.message || "");
   if (code === "UNIT_ID_UNRESOLVED" || code === "UNIT_PERSISTENCE_FAILED") {
@@ -684,22 +723,13 @@ const PropertiesPage: React.FC = () => {
               type="button"
               onClick={async () => {
                 const snap = await fetchMonthlyOpsSnapshot();
-
-                const rows = Object.entries(snap.properties).map(([propertyId, data]) => {
-                  const label = propertyLabelById?.[propertyId];
-                  return {
-                    propertyName: label?.name || propertyId,
-                    propertyAddress: label?.subtitle || "",
-                    openRequests: data.openCount,
-                    highSeverity: data.highSeverity,
-                    oldestOpenDays: data.oldestDays ?? "",
-                  };
-                });
+                const rows = buildMonthlyOpsSnapshotRows(snap, propertyLabelById);
 
                 const header = [
                   "propertyName",
                   "propertyAddress",
                   "openRequests",
+                  "overdueRequests",
                   "highSeverity",
                   "oldestOpenDays",
                 ];
