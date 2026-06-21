@@ -116,7 +116,7 @@ describe("TenantsPage", () => {
 
   beforeEach(() => {
     mocks.useAuthMock.mockReturnValue({
-      user: { id: "user-1", role: "landlord" },
+      user: { id: "user-1", role: "landlord", plan: "starter" },
       ready: true,
       isLoading: false,
       authStatus: "ready",
@@ -145,12 +145,41 @@ describe("TenantsPage", () => {
       </MemoryRouter>
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: "Unlock Tenant Invites" }));
+    expect(await screen.findByText("Tenant invites require Starter")).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button", { name: "Unlock Tenant Invites" })[0]);
 
     expect(mocks.openUpgradeFlowMock).toHaveBeenCalledWith(
       expect.objectContaining({ fallbackPath: "/pricing" })
     );
     expect(mocks.inviteTenantModalMock).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when cached invite capability is true but the authenticated plan is free", async () => {
+    mocks.useAuthMock.mockReturnValue({
+      user: { id: "user-1", role: "landlord", plan: "free" },
+      ready: true,
+      isLoading: false,
+      authStatus: "ready",
+    });
+    mocks.useCapabilitiesMock.mockReturnValue({
+      caps: { plan: "free" },
+      features: { tenant_invites: true },
+    });
+
+    render(
+      <MemoryRouter>
+        <TenantsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Tenant invites require Starter")).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button", { name: "Unlock Tenant Invites" })[0]);
+
+    expect(mocks.openUpgradeFlowMock).toHaveBeenCalledWith(
+      expect.objectContaining({ fallbackPath: "/pricing" })
+    );
+    expect(mocks.inviteTenantModalMock).not.toHaveBeenCalled();
+    expect(screen.queryByText("Invite modal open")).not.toBeInTheDocument();
   });
 
   it("blocks locked selected-tenant invite actions before rendering the invite modal", async () => {
@@ -171,7 +200,8 @@ describe("TenantsPage", () => {
       </MemoryRouter>
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: "Unlock Tenant Invites" }));
+    expect(await screen.findByText("Tenant invites require Starter")).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button", { name: "Unlock Tenant Invites" })[0]);
 
     expect(mocks.openUpgradeFlowMock).toHaveBeenCalledWith(
       expect.objectContaining({ fallbackPath: "/pricing" })
@@ -187,7 +217,7 @@ describe("TenantsPage", () => {
       </MemoryRouter>
     );
 
-    await screen.findByRole("button", { name: "Unlock Tenant Invites" });
+    expect(await screen.findByText("Tenant invites require Starter")).toBeInTheDocument();
 
     expect(mocks.openUpgradeFlowMock).toHaveBeenCalledWith(
       expect.objectContaining({ fallbackPath: "/pricing" })

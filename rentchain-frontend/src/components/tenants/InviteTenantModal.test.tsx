@@ -95,4 +95,19 @@ describe("InviteTenantModal", () => {
     expect(mocks.fetchProperties).not.toHaveBeenCalled();
     expect(mocks.fetchUnitsForProperty).not.toHaveBeenCalled();
   });
+
+  it("fails closed when the invite feature is cached true but the plan is free", () => {
+    mocks.useCapabilities.mockReturnValue({ caps: { plan: "free" }, features: { tenant_invites: true } });
+    mocks.useAuth.mockReturnValue({ user: { id: "user-1", role: "landlord", plan: "free" } });
+
+    render(<InviteTenantModal open onClose={vi.fn()} />);
+
+    expect(screen.getByText("Upgrade required")).toBeInTheDocument();
+    expect(screen.queryByText("Property")).not.toBeInTheDocument();
+    expect(screen.queryByText("Unit")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Tenant email")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Send invite" })).not.toBeInTheDocument();
+    expect(mocks.fetchProperties).not.toHaveBeenCalled();
+    expect(mocks.fetchUnitsForProperty).not.toHaveBeenCalled();
+  });
 });

@@ -20,6 +20,18 @@
   gap: 12px;
 }
 
+.rc-tenants-upgrade-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid #f5d0fe;
+  border-radius: 14px;
+  background: #faf5ff;
+}
+
 .rc-tenants-list {
   display: flex;
   flex-direction: column;
@@ -73,5 +85,10 @@
 
   .rc-tenants-header {
     position: static;
+  }
+
+  .rc-tenants-upgrade-card {
+    align-items: stretch;
+    flex-direction: column;
   }
 }

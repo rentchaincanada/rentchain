@@ -5,6 +5,7 @@ import { fetchProperties } from "../../api/propertiesApi";
 import { fetchUnitsForProperty } from "../../api/unitsApi";
 import { useCapabilities } from "../../hooks/useCapabilities";
 import { dispatchUpgradePrompt, resolveRequiredPlanLabel } from "../../lib/upgradePrompt";
+import { isPlanAtLeast, normalizePlan } from "../../lib/plan";
 import { track } from "../../lib/analytics";
 import { useAuth } from "../../context/useAuth";
 import { useLanguage } from "../../context/LanguageContext";
@@ -73,15 +74,17 @@ export const InviteTenantModal: React.FC<Props> = ({
   const [unitId, setUnitId] = useState(defaultUnitId || "");
   const [loadingProperties, setLoadingProperties] = useState(false);
   const [loadingUnits, setLoadingUnits] = useState(false);
-  const { features } = useCapabilities();
+  const { caps, features } = useCapabilities();
   const { user } = useAuth();
   const { locale } = useLanguage();
   const { showToast } = useToast();
   const role = String(user?.role || "").toLowerCase();
+  const currentPlan = normalizePlan(caps?.plan || user?.plan || "free");
+  const inviteFeatureEnabled = Boolean(features?.tenant_invites || features?.tenantInvites);
   const canInvite =
     typeof canInviteOverride === "boolean"
       ? canInviteOverride
-      : role === "admin" || Boolean(features?.tenant_invites || features?.tenantInvites);
+      : role === "admin" || (inviteFeatureEnabled && isPlanAtLeast(currentPlan, "starter"));
   const inviteRequiredPlanLabel = resolveRequiredPlanLabel("tenant_invites", user?.plan) || "Starter";
   const inviteUpgradeMessage = `Upgrade to ${inviteRequiredPlanLabel} to send tenant invites.`;
   const inviteUpgradeRedirect =

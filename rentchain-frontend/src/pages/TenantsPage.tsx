@@ -25,6 +25,7 @@ import { useCapabilities } from "@/hooks/useCapabilities";
 import { useTenantDetail } from "@/hooks/useTenantDetail";
 import { openUpgradeFlow } from "@/billing/openUpgradeFlow";
 import { isTargetedHiddenTenantId } from "@/lib/testDataVisibilityTargets";
+import { isPlanAtLeast, normalizePlan } from "@/lib/plan";
 import type { TenantLeaseSummary } from "@/api/tenantDetail";
 import "./TenantsPage.css";
 
@@ -338,12 +339,14 @@ export const TenantsPage: React.FC = () => {
 
   const selectedTenantIdFromUrl = searchParams.get("tenantId");
   const [selectedTenantId, setSelectedTenantId] = useState<string | null>(selectedTenantIdFromUrl);
-  const { features } = useCapabilities();
-  const inviteEnabled = Boolean(features?.tenant_invites || features?.tenantInvites);
+  const { caps, features } = useCapabilities();
+  const role = String(user?.actorRole || user?.role || "").trim().toLowerCase();
+  const currentPlan = normalizePlan(caps?.plan || user?.plan || "free");
+  const inviteFeatureEnabled = Boolean(features?.tenant_invites || features?.tenantInvites);
+  const inviteEnabled = role === "admin" || (inviteFeatureEnabled && isPlanAtLeast(currentPlan, "starter"));
   const upgradeConfirmed = searchParams.get("upgradeConfirmed") === "1";
   const upgradeHighlight = searchParams.get("highlight");
 
-  const role = String(user?.actorRole || user?.role || "").trim().toLowerCase();
   const canViewTenants = role === "landlord" || role === "admin";
 
   const handleInviteAction = useCallback(() => {
@@ -701,6 +704,19 @@ const loadTenants = useCallback(async () => {
             }}
           >
             Upgrade confirmed. Tenant invites are now unlocked for this workspace.
+          </div>
+        ) : null}
+        {!inviteEnabled ? (
+          <div className="rc-tenants-upgrade-card" role="status">
+            <div>
+              <div style={{ fontWeight: 850, color: "#581c87" }}>Tenant invites require Starter</div>
+              <div style={{ marginTop: 3, fontSize: 13, color: "#6b21a8", lineHeight: 1.4 }}>
+                Upgrade before creating invite links. The invite form stays locked on this plan.
+              </div>
+            </div>
+            <Button type="button" variant="secondary" onClick={handleInviteAction}>
+              Unlock Tenant Invites
+            </Button>
           </div>
         ) : null}
       </Card>
