@@ -855,6 +855,79 @@ describe("PropertyDetailPanel", () => {
     );
   });
 
+  it("opens occupancy setup from persisted property units while the unit API catches up", async () => {
+    mocks.fetchUnitsForProperty.mockResolvedValue([]);
+
+    render(
+      <MemoryRouter>
+        <PropertyDetailPanel
+          property={{
+            id: "prop-1",
+            name: "Harbour View",
+            addressLine1: "12 Wharf Street",
+            city: "Halifax",
+            province: "NS",
+            postalCode: "B3H 1A1",
+            country: "Canada",
+            unitCount: 1,
+            totalUnits: 1,
+            amenities: [],
+            units: [{ id: "unit-created-101", unitNumber: "101" }],
+            createdAt: new Date().toISOString(),
+          }}
+          onRefresh={vi.fn()}
+        />
+      </MemoryRouter>
+    );
+
+    const setupButtons = await screen.findAllByRole("button", { name: "Set up current occupancy" });
+    fireEvent.click(setupButtons[0]);
+
+    expect(await screen.findByTestId("unit-edit-modal")).toBeInTheDocument();
+    expect(screen.queryByText(/not ready for occupancy updates/i)).not.toBeInTheDocument();
+    expect(mocks.showToast).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: "Unit not ready",
+      })
+    );
+  });
+
+  it("opens unit edit without occupancy readiness toast when persisted property units are available", async () => {
+    mocks.fetchUnitsForProperty.mockResolvedValue([]);
+
+    render(
+      <MemoryRouter>
+        <PropertyDetailPanel
+          property={{
+            id: "prop-1",
+            name: "Harbour View",
+            addressLine1: "12 Wharf Street",
+            city: "Halifax",
+            province: "NS",
+            postalCode: "B3H 1A1",
+            country: "Canada",
+            unitCount: 1,
+            totalUnits: 1,
+            amenities: [],
+            units: [{ id: "unit-created-101", unitNumber: "101", status: "vacant" }],
+            createdAt: new Date().toISOString(),
+          }}
+          onRefresh={vi.fn()}
+        />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => expect(screen.getAllByRole("button", { name: "Edit" }).length).toBeGreaterThan(1));
+    fireEvent.click(screen.getAllByRole("button", { name: "Edit" }).at(-1)!);
+
+    expect(await screen.findByTestId("unit-edit-modal")).toBeInTheDocument();
+    expect(mocks.showToast).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: "Unit not ready",
+      })
+    );
+  });
+
   it("replaces the edited unit when the save response returns a persisted ID", async () => {
     mocks.fetchUnitsForProperty.mockResolvedValue([
       { id: "unit-persisted-1", unitNumber: "101", status: "vacant" },

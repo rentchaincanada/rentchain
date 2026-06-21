@@ -115,6 +115,45 @@ function mergePersistedUnits(existingUnits: any[] | undefined, persistedUnits: U
   return ordered;
 }
 
+function numericSnapshotValue(value: any) {
+  const next = Number(value);
+  return Number.isFinite(next) ? next : 0;
+}
+
+function safeSnapshotRecord(value: any) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
+export function buildMonthlyOpsSnapshotRows(snapshot: any, propertyLabelById: Record<string, any> = {}) {
+  const properties = safeSnapshotRecord(snapshot?.properties);
+  const aggregate = safeSnapshotRecord(snapshot?.data || snapshot?.totals || snapshot);
+  const rows = Object.entries(properties).map(([propertyId, rawData]) => {
+    const data = safeSnapshotRecord(rawData);
+    const label = propertyLabelById?.[propertyId];
+    return {
+      propertyName: label?.name || propertyId,
+      propertyAddress: label?.subtitle || "",
+      openRequests: numericSnapshotValue(data.openCount ?? data.open ?? data.openRequests),
+      overdueRequests: numericSnapshotValue(data.overdueCount ?? data.overdue ?? data.overdueRequests),
+      highSeverity: numericSnapshotValue(data.highSeverity ?? data.highSeverityCount),
+      oldestOpenDays: data.oldestDays ?? data.oldestOpenDays ?? "",
+    };
+  });
+
+  if (rows.length) return rows;
+
+  return [
+    {
+      propertyName: "Portfolio total",
+      propertyAddress: "No property-level action requests",
+      openRequests: numericSnapshotValue(aggregate.openCount ?? aggregate.open ?? aggregate.openRequests),
+      overdueRequests: numericSnapshotValue(aggregate.overdueCount ?? aggregate.overdue ?? aggregate.overdueRequests),
+      highSeverity: numericSnapshotValue(aggregate.highSeverity ?? aggregate.highSeverityCount),
+      oldestOpenDays: aggregate.oldestDays ?? aggregate.oldestOpenDays ?? "",
+    },
+  ];
+}
+
 function unitSaveErrorMessage(error: any) {
   const code = String(error?.code || error?.error || error?.message || "");
   if (code === "UNIT_ID_UNRESOLVED" || code === "UNIT_PERSISTENCE_FAILED") {
@@ -183,6 +222,7 @@ const PropertiesPage: React.FC = () => {
   const [actionRequests, setActionRequests] = useState<PropertyActionRequest[]>([]);
   const [actionRequestsLoading, setActionRequestsLoading] = useState(false);
   const addPropertyRef = useRef<HTMLDivElement | null>(null);
+  const [isAddPropertyOpen, setIsAddPropertyOpen] = useState(false);
   const [actionRequestsError, setActionRequestsError] = useState<string | null>(null);
   const [actionFilter, setActionFilter] = useState<ActionRequestStatus | "all">("all");
   const [activeRequest, setActiveRequest] = useState<PropertyActionRequest | null>(null);
@@ -222,6 +262,16 @@ const PropertiesPage: React.FC = () => {
   const totalOpenAcrossPortfolio = useMemo(() => Object.values(actionCounts || {}).reduce((a, b) => a + (b || 0), 0), [
     actionCounts,
   ]);
+
+  const openAddPropertyForm = useCallback(() => {
+    setIsAddPropertyOpen(true);
+    window.requestAnimationFrame(() => {
+      const scrollIntoView = addPropertyRef.current?.scrollIntoView;
+      if (typeof scrollIntoView === "function") {
+        scrollIntoView.call(addPropertyRef.current, { behavior: "smooth", block: "start" });
+      }
+    });
+  }, []);
 
   const propertyLabelById = useMemo(() => {
     const out: Record<string, { name: string; subtitle?: string }> = {};
@@ -419,6 +469,7 @@ const PropertiesPage: React.FC = () => {
 
   const handlePropertyCreated = (property: Property) => {
     if (property?.id) {
+      setIsAddPropertyOpen(false);
       setProperties((prev) => [...prev, property]);
       setSelectedPropertyId(property.id);
       setRecentlyCreatedPropertyId(property.id);
@@ -558,36 +609,29 @@ const PropertiesPage: React.FC = () => {
         className="page-content"
         style={{ display: "flex", flexDirection: "column", gap: spacing.lg }}
       >
-        <div className="rc-properties-header" style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div className="rc-properties-title-row" style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{ fontWeight: 800, fontSize: "1.2rem" }}>Properties</div>
-            <div
-              className="rc-properties-counts"
-              style={{
-                padding: "6px 10px",
-                borderRadius: 12,
-                border: "1px solid rgba(148,163,184,0.35)",
-                fontSize: 12,
-                fontWeight: 700,
-                color: text.muted,
-                display: "inline-flex",
-                gap: 8,
-                alignItems: "center",
-              }}
-              title={`Properties ${currentProperties} - Units ${unitsUsed}`}
-            >
-            <span>
-              Props: {currentProperties}
-            </span>
-            <span aria-hidden="true">·</span>
-            <span>
-              Units: {unitsUsed}
-            </span>
+        <div className="rc-properties-header">
+          <div className="rc-properties-title-stack">
+            <div className="rc-properties-title-row">
+              <div className="rc-properties-page-title">Properties</div>
+              <div
+                className="rc-properties-counts"
+                title={`Properties ${currentProperties} - Units ${unitsUsed}`}
+              >
+                <span>{currentProperties} props</span>
+                <span aria-hidden="true">·</span>
+                <span>{unitsUsed} units</span>
+              </div>
             </div>
+            <div className="rc-properties-helper">{archiveHelpCopy}</div>
           </div>
-          <div style={{ color: text.muted, fontSize: 13 }}>{archiveHelpCopy}</div>
-
-          <div className="rc-properties-header-actions" style={{ display: "flex", gap: 8 }}>
+          <div className="rc-properties-header-actions">
+            <Button
+              type="button"
+              onClick={openAddPropertyForm}
+              className="rc-properties-add-button"
+            >
+              Add Property
+            </Button>
             {selectedPropertyId ? (
               <button
                 type="button"
@@ -679,22 +723,13 @@ const PropertiesPage: React.FC = () => {
               type="button"
               onClick={async () => {
                 const snap = await fetchMonthlyOpsSnapshot();
-
-                const rows = Object.entries(snap.properties).map(([propertyId, data]) => {
-                  const label = propertyLabelById?.[propertyId];
-                  return {
-                    propertyName: label?.name || propertyId,
-                    propertyAddress: label?.subtitle || "",
-                    openRequests: data.openCount,
-                    highSeverity: data.highSeverity,
-                    oldestOpenDays: data.oldestDays ?? "",
-                  };
-                });
+                const rows = buildMonthlyOpsSnapshotRows(snap, propertyLabelById);
 
                 const header = [
                   "propertyName",
                   "propertyAddress",
                   "openRequests",
+                  "overdueRequests",
                   "highSeverity",
                   "oldestOpenDays",
                 ];
@@ -730,32 +765,49 @@ const PropertiesPage: React.FC = () => {
           </div>
         </div>
 
-        <Card elevated ref={addPropertyRef}>
-          <h1 style={{ margin: 0, fontSize: "1.4rem", fontWeight: 700 }}>
-            {properties.length === 0 ? "Start here: add your first property" : "Add a new property"}
-          </h1>
-          <p
-            style={{
-              marginTop: 6,
-              marginBottom: 14,
-              color: text.muted,
-              fontSize: "0.95rem",
-            }}
-          >
-            {properties.length === 0
-              ? "Start your rental workflow by adding one property. You only need the address, city, and total units to get moving."
-              : "Capture units, rents, and amenities. Newly added properties will show up in your list and rent roll below."}
-          </p>
-          <AddPropertyForm
-            onCreated={handlePropertyCreated}
-            onExistingPropertyId={(existingId) => {
-              setSelectedPropertyId(existingId);
-              const next = new URLSearchParams(location.search);
-              next.set("propertyId", existingId);
-              navigate({ pathname: location.pathname, search: next.toString() }, { replace: true });
-            }}
-          />
-        </Card>
+        <div ref={addPropertyRef}>
+          {isAddPropertyOpen ? (
+            <Card elevated>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
+                <div>
+                  <h1 style={{ margin: 0, fontSize: "1.4rem", fontWeight: 700 }}>
+                    {properties.length === 0 ? "Start here: add your first property" : "Add a new property"}
+                  </h1>
+                  <p
+                    style={{
+                      marginTop: 6,
+                      marginBottom: 14,
+                      color: text.muted,
+                      fontSize: "0.95rem",
+                    }}
+                  >
+                    {properties.length === 0
+                      ? "Start your rental workflow by adding one property. You only need the address, city, and total units to get moving."
+                      : "Capture units, rents, and amenities. Newly added properties will show up in your list and rent roll below."}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setIsAddPropertyOpen(false)}
+                  style={{ whiteSpace: "nowrap" }}
+                >
+                  Hide form
+                </Button>
+              </div>
+              <AddPropertyForm
+                onCreated={handlePropertyCreated}
+                onExistingPropertyId={(existingId) => {
+                  setIsAddPropertyOpen(false);
+                  setSelectedPropertyId(existingId);
+                  const next = new URLSearchParams(location.search);
+                  next.set("propertyId", existingId);
+                  navigate({ pathname: location.pathname, search: next.toString() }, { replace: true });
+                }}
+              />
+            </Card>
+          ) : null}
+        </div>
 
         <Card
           elevated
@@ -883,7 +935,7 @@ const PropertiesPage: React.FC = () => {
                   <Button
                     onClick={() => {
                       track("empty_state_cta_clicked", { pageKey: "properties", ctaKey: "add_property" });
-                      addPropertyRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                      openAddPropertyForm();
                     }}
                     style={{ width: "fit-content" }}
                   >
@@ -1567,7 +1619,7 @@ const UnitsModal = ({
         </div>
 
         <div className="rc-modal-body" style={{ padding: 16, overflow: "auto", minHeight: 0 }}>
-          <div style={{ overflowX: "auto" }}>
+          <div className="rc-units-edit-table-wrap">
             <table className="rc-units-edit-table" style={{ width: "100%", minWidth: 980, tableLayout: "fixed", borderCollapse: "collapse" }}>
               <colgroup>
                 <col style={{ width: "13%" }} />
@@ -1704,6 +1756,117 @@ const UnitsModal = ({
                 ))}
               </tbody>
             </table>
+          </div>
+          <div className="rc-units-edit-mobile-list" aria-label="Add units mobile form">
+            {units.map((u, idx) => {
+              const occupied = (u.status ?? "vacant") === "occupied";
+              return (
+                <div className="rc-units-edit-mobile-card" key={idx}>
+                  <div className="rc-units-edit-mobile-card-header">
+                    <div>Unit {idx + 1}</div>
+                    <button
+                      type="button"
+                      onClick={() => removeRow(idx)}
+                      className="rc-units-edit-remove-button"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                  <label className="rc-units-edit-field">
+                    Unit number
+                    <input
+                      aria-label={`Mobile unit number ${idx + 1}`}
+                      value={u.unitNumber}
+                      onChange={(e) => updateUnit(idx, "unitNumber", e.target.value)}
+                      style={baseFieldStyle}
+                    />
+                  </label>
+                  <div className="rc-units-edit-mobile-grid">
+                    <label className="rc-units-edit-field">
+                      Beds
+                      <input
+                        aria-label={`Mobile beds ${idx + 1}`}
+                        type="number"
+                        value={u.beds}
+                        onChange={(e) => updateUnit(idx, "beds", e.target.value)}
+                        style={baseFieldStyle}
+                      />
+                    </label>
+                    <label className="rc-units-edit-field">
+                      Baths
+                      <input
+                        aria-label={`Mobile baths ${idx + 1}`}
+                        type="number"
+                        value={u.baths}
+                        onChange={(e) => updateUnit(idx, "baths", e.target.value)}
+                        style={baseFieldStyle}
+                      />
+                    </label>
+                  </div>
+                  <div className="rc-units-edit-mobile-grid">
+                    <label className="rc-units-edit-field">
+                      Sqft
+                      <input
+                        aria-label={`Mobile square footage ${idx + 1}`}
+                        type="number"
+                        value={u.sqft}
+                        onChange={(e) => updateUnit(idx, "sqft", e.target.value)}
+                        style={baseFieldStyle}
+                      />
+                    </label>
+                    <label className="rc-units-edit-field">
+                      Market rent
+                      <input
+                        aria-label={`Mobile market rent ${idx + 1}`}
+                        type="number"
+                        value={u.marketRent}
+                        onChange={(e) => updateUnit(idx, "marketRent", e.target.value)}
+                        onFocus={() => {
+                          if (String(u.marketRent ?? "") === "0") {
+                            updateUnit(idx, "marketRent", "");
+                          }
+                        }}
+                        style={baseFieldStyle}
+                      />
+                    </label>
+                  </div>
+                  <label className="rc-units-edit-field">
+                    Status
+                    <select
+                      aria-label={`Mobile status ${idx + 1}`}
+                      value={u.status ?? "vacant"}
+                      onChange={(e) => updateUnit(idx, "status", e.target.value)}
+                      style={baseFieldStyle}
+                    >
+                      <option value="vacant">Vacant</option>
+                      <option value="occupied">Occupied</option>
+                    </select>
+                  </label>
+                  <label className="rc-units-edit-field">
+                    Occupant
+                    <input
+                      aria-label={`Mobile occupant name ${idx + 1}`}
+                      value={u.occupantName ?? ""}
+                      onChange={(e) => updateUnit(idx, "occupantName", e.target.value)}
+                      disabled={!occupied}
+                      placeholder={occupied ? "Tenant name" : "Vacant"}
+                      style={occupied ? activeOccupancyFieldStyle : inactiveOccupancyFieldStyle}
+                    />
+                  </label>
+                  <label className="rc-units-edit-field">
+                    Lease end
+                    <input
+                      aria-label={`Mobile lease end date ${idx + 1}`}
+                      type="date"
+                      value={u.leaseEndDate ?? ""}
+                      onChange={(e) => updateUnit(idx, "leaseEndDate", e.target.value)}
+                      disabled={!occupied}
+                      style={occupied ? activeOccupancyFieldStyle : inactiveOccupancyFieldStyle}
+                    />
+                  </label>
+                </div>
+              );
+            })}
           </div>
           {error ? (
             <div

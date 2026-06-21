@@ -1,11 +1,12 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import PropertiesPage from "./PropertiesPage";
+import PropertiesPage, { buildMonthlyOpsSnapshotRows } from "./PropertiesPage";
 
 const mocks = vi.hoisted(() => ({
   fetchPropertiesMock: vi.fn(),
   fetchCountsMock: vi.fn(),
+  fetchMonthlyOpsSnapshotMock: vi.fn(),
   addUnitsManualMock: vi.fn(),
   patchCreatedUnitOccupancyMetadataMock: vi.fn(),
   showToastMock: vi.fn(),
@@ -96,7 +97,7 @@ vi.mock("../api/actionRequestsApi", () => ({
 }));
 
 vi.mock("../api/actionSnapshotApi", () => ({
-  fetchMonthlyOpsSnapshot: vi.fn().mockResolvedValue({ properties: {} }),
+  fetchMonthlyOpsSnapshot: mocks.fetchMonthlyOpsSnapshotMock,
 }));
 
 vi.mock("../api/onboardingApi", () => ({
@@ -138,6 +139,7 @@ describe("PropertiesPage", () => {
     cleanup();
     mocks.fetchPropertiesMock.mockReset();
     mocks.fetchCountsMock.mockReset();
+    mocks.fetchMonthlyOpsSnapshotMock.mockReset();
     mocks.addUnitsManualMock.mockReset();
     mocks.patchCreatedUnitOccupancyMetadataMock.mockReset();
     mocks.showToastMock.mockReset();
@@ -152,6 +154,7 @@ describe("PropertiesPage", () => {
           : [{ id: "prop-1", name: "Active Property", portfolioStatus: "active" }],
     }));
     mocks.fetchCountsMock.mockResolvedValue({ counts: {} });
+    mocks.fetchMonthlyOpsSnapshotMock.mockResolvedValue({ properties: {} });
     mocks.addUnitsManualMock.mockResolvedValue({
       ok: true,
       created: 1,
@@ -177,6 +180,7 @@ describe("PropertiesPage", () => {
       </MemoryRouter>
     );
 
+    fireEvent.click(await screen.findByRole("button", { name: "Add Property" }));
     const setupButtons = await screen.findAllByRole("button", {
       name: "Complete property setup",
     });
@@ -249,6 +253,58 @@ describe("PropertiesPage", () => {
     expect(mocks.printSummaryDocumentMock).toHaveBeenCalledWith("summary");
   });
 
+  it("downloads a zero-activity monthly ops snapshot when property details are omitted", async () => {
+    mocks.fetchMonthlyOpsSnapshotMock.mockResolvedValue({
+      ok: true,
+      data: {
+        openCount: 0,
+        overdueCount: 0,
+        highSeverityCount: 0,
+      },
+    });
+    const createObjectUrl = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:monthly-ops");
+    const revokeObjectUrl = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
+
+    render(
+      <MemoryRouter>
+        <PropertiesPage />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Monthly Ops Snapshot" }));
+
+    await waitFor(() => {
+      expect(mocks.fetchMonthlyOpsSnapshotMock).toHaveBeenCalled();
+    });
+    expect(createObjectUrl).toHaveBeenCalledWith(expect.any(Blob));
+    expect(revokeObjectUrl).toHaveBeenCalledWith("blob:monthly-ops");
+
+    createObjectUrl.mockRestore();
+    revokeObjectUrl.mockRestore();
+  });
+
+  it("builds a safe monthly ops CSV row for aggregate-only empty snapshots", () => {
+    expect(
+      buildMonthlyOpsSnapshotRows({
+        ok: true,
+        data: {
+          openCount: 0,
+          overdueCount: 0,
+          highSeverityCount: 0,
+        },
+      })
+    ).toEqual([
+      {
+        propertyName: "Portfolio total",
+        propertyAddress: "No property-level action requests",
+        openRequests: 0,
+        overdueRequests: 0,
+        highSeverity: 0,
+        oldestOpenDays: "",
+      },
+    ]);
+  });
+
   it("shows a guided first-property empty state for new users", async () => {
     mocks.fetchPropertiesMock.mockResolvedValue({ items: [] });
 
@@ -263,7 +319,36 @@ describe("PropertiesPage", () => {
       screen.getByText("Add your first property to begin managing tenants, leases, and maintenance in one place.")
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Add your first property" })).toBeInTheDocument();
+    expect(screen.queryByText("Start here: add your first property")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add your first property" }));
+
     expect(screen.getByText("Start here: add your first property")).toBeInTheDocument();
+  });
+
+  it("keeps the add property form collapsed until requested and supports hiding it", async () => {
+    render(
+      <MemoryRouter>
+        <PropertiesPage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(mocks.fetchPropertiesMock).toHaveBeenCalledWith({ status: "active" });
+    });
+
+    expect(screen.queryByText("Add form")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add Property" }));
+
+    expect(screen.getByText("Add a new property")).toBeInTheDocument();
+    expect(screen.getByText("Add form")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Hide form" })).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: "Show form" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Hide form" }));
+
+    expect(screen.queryByText("Add form")).not.toBeInTheDocument();
   });
 
   it("shows a free-safe next step after property creation", async () => {
@@ -275,12 +360,14 @@ describe("PropertiesPage", () => {
       </MemoryRouter>
     );
 
+    fireEvent.click(await screen.findByRole("button", { name: "Add Property" }));
     const setupButtons = await screen.findAllByRole("button", {
       name: "Complete property setup",
     });
     fireEvent.click(setupButtons[0]);
 
     expect(await screen.findByText("Your first property is set up")).toBeInTheDocument();
+    expect(screen.queryByText("Add form")).not.toBeInTheDocument();
     expect(screen.getByText("Step 1 complete")).toBeInTheDocument();
     expect(screen.getByText("Step 2 next")).toBeInTheDocument();
     expect(screen.getByText("Add your first unit")).toBeInTheDocument();
@@ -305,6 +392,7 @@ describe("PropertiesPage", () => {
       </MemoryRouter>
     );
 
+    fireEvent.click(await screen.findByRole("button", { name: "Add Property" }));
     const setupButtons = await screen.findAllByRole("button", {
       name: "Complete property setup",
     });
@@ -429,6 +517,7 @@ describe("PropertiesPage", () => {
       </MemoryRouter>
     );
 
+    fireEvent.click(await screen.findByRole("button", { name: "Add Property" }));
     const setupButtons = await screen.findAllByRole("button", {
       name: "Complete property setup",
     });
@@ -471,6 +560,7 @@ describe("PropertiesPage", () => {
 
     fireEvent.click(await screen.findByTestId("property-table-add-units-prop-1"));
     expect(await screen.findByText("Add Units")).toBeInTheDocument();
+    expect(screen.getByLabelText("Add units mobile form")).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Unit number 1"), { target: { value: "301" } });
     fireEvent.change(screen.getByLabelText("Beds 1"), { target: { value: "2" } });

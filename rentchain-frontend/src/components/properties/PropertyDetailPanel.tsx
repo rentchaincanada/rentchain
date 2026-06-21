@@ -644,7 +644,8 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
 
   useEffect(() => {
     let cancelled = false;
-    setUnits(property?.units || []);
+    const propertyUnits = Array.isArray(property?.units) ? property.units : [];
+    setUnits(propertyUnits);
 
     const loadUnits = async () => {
       const pid = property?.id;
@@ -664,6 +665,10 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
           setUnits(res);
           return;
         }
+        if (propertyUnits.length > 0) {
+          setUnits(propertyUnits);
+          return;
+        }
         const count = (property as any)?.unitCount ?? 0;
         if (count > 0) {
           setUnits(
@@ -675,6 +680,10 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
         }
       } catch (e) {
         if (cancelled) return;
+        if (propertyUnits.length > 0) {
+          setUnits(propertyUnits);
+          return;
+        }
         const count = (property as any)?.unitCount ?? 0;
         if (count > 0) {
           setUnits(
@@ -1058,8 +1067,9 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
             <div style={{ color: "#475569", fontSize: "0.8rem" }}>
               PID: {property.pid || "--"}
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div className="rc-property-status-row" style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span
+                className="rc-property-status-badge"
                 style={{
                   padding: "2px 8px",
                   borderRadius: 999,
@@ -1076,6 +1086,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                 {propertyStatus}
               </span>
               <span
+                className="rc-property-status-badge"
                 style={{
                   padding: "2px 8px",
                   borderRadius: 999,
@@ -1618,21 +1629,27 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
           </div>
           {showOccupancyPrompt ? (
             <div
+              className="rc-occupancy-setup-panel"
               style={{
                 marginBottom: 12,
-                padding: "14px 16px",
+                padding: "12px 14px",
                 borderRadius: 14,
                 border: "1px solid rgba(37,99,235,0.18)",
                 background: "rgba(37,99,235,0.06)",
-                display: "grid",
-                gap: 8,
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: 12,
+                flexWrap: "wrap",
               }}
             >
-              <div style={{ fontWeight: 700, color: "#0f172a" }}>
-                Do any of these units already have active tenants?
-              </div>
-              <div style={{ color: "#475569", fontSize: "0.92rem", lineHeight: 1.6 }}>
-                Set current occupancy now to keep your occupancy and rent views accurate. You can still upgrade later to create full lease records, tenant history, and verified reporting.
+              <div style={{ display: "grid", gap: 3, minWidth: 0 }}>
+                <div style={{ fontWeight: 750, color: "#0f172a" }}>
+                  Current occupancy
+                </div>
+                <div style={{ color: "#475569", fontSize: "0.85rem", lineHeight: 1.35 }}>
+                  Mark active tenants now; full lease setup can come later.
+                </div>
               </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <button

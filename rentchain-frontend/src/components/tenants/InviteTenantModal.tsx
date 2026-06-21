@@ -5,6 +5,7 @@ import { fetchProperties } from "../../api/propertiesApi";
 import { fetchUnitsForProperty } from "../../api/unitsApi";
 import { useCapabilities } from "../../hooks/useCapabilities";
 import { dispatchUpgradePrompt, resolveRequiredPlanLabel } from "../../lib/upgradePrompt";
+import { isPlanAtLeast, normalizePlan } from "../../lib/plan";
 import { track } from "../../lib/analytics";
 import { useAuth } from "../../context/useAuth";
 import { useLanguage } from "../../context/LanguageContext";
@@ -20,6 +21,7 @@ interface Props {
   defaultLeaseId?: string;
   defaultTenantEmail?: string;
   defaultTenantName?: string;
+  canInviteOverride?: boolean;
 }
 
 type PropertyOption = { id: string; name: string };
@@ -57,6 +59,7 @@ export const InviteTenantModal: React.FC<Props> = ({
   defaultUnitId,
   defaultTenantEmail,
   defaultTenantName,
+  canInviteOverride,
 }) => {
   const [tenantEmail, setTenantEmail] = useState("");
   const [tenantName, setTenantName] = useState("");
@@ -71,12 +74,17 @@ export const InviteTenantModal: React.FC<Props> = ({
   const [unitId, setUnitId] = useState(defaultUnitId || "");
   const [loadingProperties, setLoadingProperties] = useState(false);
   const [loadingUnits, setLoadingUnits] = useState(false);
-  const { features } = useCapabilities();
+  const { caps, features } = useCapabilities();
   const { user } = useAuth();
   const { locale } = useLanguage();
   const { showToast } = useToast();
   const role = String(user?.role || "").toLowerCase();
-  const canInvite = role === "admin" || features?.tenant_invites !== false;
+  const currentPlan = normalizePlan(caps?.plan || user?.plan || "free");
+  const inviteFeatureEnabled = Boolean(features?.tenant_invites || features?.tenantInvites);
+  const canInvite =
+    typeof canInviteOverride === "boolean"
+      ? canInviteOverride
+      : role === "admin" || (inviteFeatureEnabled && isPlanAtLeast(currentPlan, "starter"));
   const inviteRequiredPlanLabel = resolveRequiredPlanLabel("tenant_invites", user?.plan) || "Starter";
   const inviteUpgradeMessage = `Upgrade to ${inviteRequiredPlanLabel} to send tenant invites.`;
   const inviteUpgradeRedirect =
@@ -125,6 +133,13 @@ export const InviteTenantModal: React.FC<Props> = ({
 
   React.useEffect(() => {
     if (!open) return;
+    if (!canInvite) {
+      setProperties([]);
+      setUnits([]);
+      setPropertyId("");
+      setUnitId("");
+      return;
+    }
     let mounted = true;
     (async () => {
       setLoadingProperties(true);
@@ -161,10 +176,10 @@ export const InviteTenantModal: React.FC<Props> = ({
     return () => {
       mounted = false;
     };
-  }, [open, defaultPropertyId, propertyId]);
+  }, [open, canInvite, defaultPropertyId, propertyId]);
 
   React.useEffect(() => {
-    if (!open || !propertyId) {
+    if (!open || !canInvite || !propertyId) {
       setUnits([]);
       setUnitId("");
       return;
@@ -202,7 +217,7 @@ export const InviteTenantModal: React.FC<Props> = ({
     return () => {
       mounted = false;
     };
-  }, [open, propertyId, defaultUnitId]);
+  }, [open, canInvite, propertyId, defaultUnitId]);
 
   if (!open) return null;
   const selectedUnitRequiresLease = unitId ? units.find((u) => u.id === unitId)?.inviteEligible === false : false;
@@ -213,6 +228,15 @@ export const InviteTenantModal: React.FC<Props> = ({
       currentPlan: currentPlan || undefined,
       source,
       redirectTo: inviteUpgradeRedirect,
+    });
+  };
+
+  const handleUpgradeRequired = () => {
+    promptInviteUpgrade("tenants_invite_modal_open");
+    showToast({
+      message: "Tenant invites require an upgrade",
+      description: inviteUpgradeMessage,
+      variant: "warning",
     });
   };
 
@@ -362,6 +386,28 @@ export const InviteTenantModal: React.FC<Props> = ({
             Close
           </Button>
         </div>
+
+        {!canInvite ? (
+          <div
+            role="status"
+            style={{
+              display: "grid",
+              gap: 10,
+              padding: 12,
+              borderRadius: 12,
+              border: "1px solid #f5d0fe",
+              background: "#faf5ff",
+              color: "#581c87",
+            }}
+          >
+            <div style={{ fontWeight: 750 }}>Upgrade required</div>
+            <div style={{ fontSize: 13, lineHeight: 1.45 }}>{inviteUpgradeMessage}</div>
+            <Button type="button" onClick={handleUpgradeRequired} style={{ justifySelf: "start" }}>
+              Unlock tenant invites
+            </Button>
+          </div>
+        ) : (
+          <>
 
         <div style={{ display: "grid", gap: 6 }}>
           <label style={{ fontSize: 13 }}>Property</label>
@@ -556,6 +602,8 @@ export const InviteTenantModal: React.FC<Props> = ({
             {loading ? "Sending..." : "Send invite"}
           </Button>
         </div>
+          </>
+        )}
         </div>
       </div>
     </div>

@@ -16,6 +16,7 @@ type InviteTenantModalProps = {
   defaultTenantName?: string;
   defaultPropertyId?: string;
   defaultUnitId?: string;
+  canInviteOverride?: boolean;
 };
 
 const mocks = vi.hoisted(() => ({
@@ -115,7 +116,7 @@ describe("TenantsPage", () => {
 
   beforeEach(() => {
     mocks.useAuthMock.mockReturnValue({
-      user: { id: "user-1", role: "landlord" },
+      user: { id: "user-1", role: "landlord", plan: "starter" },
       ready: true,
       isLoading: false,
       authStatus: "ready",
@@ -144,11 +145,88 @@ describe("TenantsPage", () => {
       </MemoryRouter>
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: "Unlock Tenant Invites" }));
+    expect(await screen.findByText("Tenant invites require Starter")).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button", { name: "Unlock Tenant Invites" })[0]);
 
     expect(mocks.openUpgradeFlowMock).toHaveBeenCalledWith(
       expect.objectContaining({ fallbackPath: "/pricing" })
     );
+    expect(mocks.inviteTenantModalMock).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when cached invite capability is true but the authenticated plan is free", async () => {
+    mocks.useAuthMock.mockReturnValue({
+      user: { id: "user-1", role: "landlord", plan: "free" },
+      ready: true,
+      isLoading: false,
+      authStatus: "ready",
+    });
+    mocks.useCapabilitiesMock.mockReturnValue({
+      caps: { plan: "free" },
+      features: { tenant_invites: true },
+    });
+
+    render(
+      <MemoryRouter>
+        <TenantsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Tenant invites require Starter")).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button", { name: "Unlock Tenant Invites" })[0]);
+
+    expect(mocks.openUpgradeFlowMock).toHaveBeenCalledWith(
+      expect.objectContaining({ fallbackPath: "/pricing" })
+    );
+    expect(mocks.inviteTenantModalMock).not.toHaveBeenCalled();
+    expect(screen.queryByText("Invite modal open")).not.toBeInTheDocument();
+  });
+
+  it("blocks locked selected-tenant invite actions before rendering the invite modal", async () => {
+    mocks.fetchTenantsMock.mockResolvedValue([
+      {
+        id: "tenant-1",
+        fullName: "Taylor Tenant",
+        email: "tenant@example.com",
+        propertyId: "property-1",
+        unitId: "unit-4",
+      },
+    ]);
+    mocks.fetchTenantTenanciesMock.mockResolvedValue([]);
+
+    render(
+      <MemoryRouter initialEntries={["/tenants?tenantId=tenant-1"]}>
+        <TenantsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Tenant invites require Starter")).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button", { name: "Unlock Tenant Invites" })[0]);
+
+    expect(mocks.openUpgradeFlowMock).toHaveBeenCalledWith(
+      expect.objectContaining({ fallbackPath: "/pricing" })
+    );
+    expect(mocks.inviteTenantModalMock).not.toHaveBeenCalled();
+    expect(screen.queryByText("Invite modal open")).not.toBeInTheDocument();
+  });
+
+  it("does not open the invite modal from a deep link when tenant invites are locked", async () => {
+    render(
+      <MemoryRouter initialEntries={["/tenants?invite=1&upgradeConfirmed=1&highlight=tenants"]}>
+        <TenantsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Tenant invites require Starter")).toBeInTheDocument();
+
+    expect(mocks.openUpgradeFlowMock).toHaveBeenCalledWith(
+      expect.objectContaining({ fallbackPath: "/pricing" })
+    );
+    expect(screen.queryByText("Invite modal open")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Upgrade confirmed. Tenant invites are now unlocked for this workspace.")
+    ).not.toBeInTheDocument();
+    expect(mocks.inviteTenantModalMock).not.toHaveBeenCalled();
   });
 
   it("shows a tenant action hub with edit, note, and invite actions", async () => {

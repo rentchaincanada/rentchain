@@ -3,6 +3,35 @@
   min-height: 0;
 }
 
+.rc-tenants-page {
+  position: relative;
+  z-index: 0;
+  padding-top: 8px;
+  scroll-margin-top: calc(var(--rc-landlord-sticky-shell-measured-height, var(--rc-landlord-sticky-shell-height, 120px)) + 24px);
+}
+
+.rc-tenants-header {
+  position: relative;
+  z-index: 0;
+}
+
+.rc-tenants-header > div:first-child {
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.rc-tenants-upgrade-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid #f5d0fe;
+  border-radius: 14px;
+  background: #faf5ff;
+}
+
 .rc-tenants-list {
   display: flex;
   flex-direction: column;
@@ -12,7 +41,7 @@
 
 .rc-tenants-search {
   position: sticky;
-  top: 0;
+  top: calc(var(--rc-landlord-sticky-shell-measured-height, var(--rc-landlord-sticky-shell-height, 120px)) + 8px);
   z-index: 5;
   background: #ffffff;
   padding: 8px 0 10px;
@@ -49,14 +78,17 @@
   }
 
   .rc-tenants-search {
-    top: 0;
+    position: static;
     padding-top: 6px;
     padding-bottom: 8px;
   }
 
   .rc-tenants-header {
-    position: sticky;
-    top: 0;
-    z-index: 6;
+    position: static;
+  }
+
+  .rc-tenants-upgrade-card {
+    align-items: stretch;
+    flex-direction: column;
   }
 }

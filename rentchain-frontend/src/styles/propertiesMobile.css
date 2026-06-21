@@ -72,6 +72,83 @@
   display: none;
 }
 
+.rc-properties-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+}
+
+.rc-properties-title-stack {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.rc-properties-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.rc-properties-page-title {
+  color: #0f172a;
+  font-size: 1.25rem;
+  font-weight: 850;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.rc-properties-counts {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  max-width: 100%;
+  padding: 6px 10px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 999px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.rc-properties-helper {
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.35;
+  max-width: 680px;
+}
+
+.rc-properties-header-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.rc-properties-add-button {
+  padding: 7px 12px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.rc-property-status-row {
+  flex-wrap: wrap;
+}
+
+.rc-property-status-badge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  white-space: nowrap;
+  word-break: keep-all;
+  overflow-wrap: normal;
+}
+
 @media (max-width: 768px) {
   .rc-property-selector-row {
     grid-template-columns: 1fr;
@@ -150,20 +227,34 @@
   }
 
   .rc-properties-header {
-    flex-direction: column;
+    grid-template-columns: 1fr;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .rc-properties-title-row {
+    flex-wrap: wrap;
     align-items: flex-start;
     gap: 8px;
   }
 
-  .rc-properties-title-row {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 4px;
+  .rc-properties-page-title {
+    font-size: 1.15rem;
+  }
+
+  .rc-properties-helper {
+    font-size: 12px;
+    line-height: 1.35;
   }
 
   .rc-properties-header-actions {
     flex-wrap: wrap;
     width: 100%;
+    justify-content: flex-start;
+  }
+
+  .rc-properties-add-button {
+    min-height: 40px;
   }
 
   .rc-properties-pill {
@@ -256,6 +347,63 @@
 
   .rc-add-property-form label {
     color: #0f172a;
+  }
+
+  .rc-unit-edit-overlay {
+    align-items: stretch !important;
+    justify-content: center !important;
+    padding: 8px !important;
+  }
+
+  .rc-unit-edit-panel {
+    align-self: center;
+    width: min(100%, calc(100vw - 16px)) !important;
+    max-width: none !important;
+    max-height: calc(100vh - 16px) !important;
+    padding: 12px !important;
+    gap: 10px !important;
+    overflow-x: hidden !important;
+  }
+
+  .rc-unit-edit-panel input,
+  .rc-unit-edit-panel select,
+  .rc-unit-edit-panel textarea {
+    width: 100%;
+    box-sizing: border-box;
+    min-width: 0;
+    font-size: 0.92rem;
+  }
+
+  .rc-unit-edit-two-col {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+
+  .rc-unit-edit-actions {
+    position: sticky;
+    bottom: -12px;
+    margin: 0 -12px -12px;
+    padding: 10px 12px;
+    background: #ffffff;
+    border-top: 1px solid rgba(148, 163, 184, 0.22);
+  }
+
+  .rc-unit-edit-actions button {
+    flex: 1 1 0;
+    min-height: 40px;
+  }
+
+  .rc-occupancy-setup-panel {
+    align-items: stretch !important;
+  }
+
+  .rc-occupancy-setup-panel > div:last-child {
+    width: 100%;
+  }
+
+  .rc-occupancy-setup-panel button {
+    flex: 1 1 140px;
+    min-height: 38px;
   }
 
   .rc-add-property-units-table input {

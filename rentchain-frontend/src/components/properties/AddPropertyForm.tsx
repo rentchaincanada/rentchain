@@ -72,7 +72,6 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
   const [successText, setSuccessText] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState(true);
   const [complianceExpanded, setComplianceExpanded] = useState(false);
   const [unitsExpanded, setUnitsExpanded] = useState(false);
   const { showToast } = useToast();
@@ -375,32 +374,15 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-      <button
-        type="button"
-        onClick={() => setExpanded((prev) => !prev)}
+      <form
+        className="rc-add-property-form"
+        onSubmit={handleSubmit}
         style={{
-          alignSelf: "flex-start",
-          padding: "6px 12px",
-          borderRadius: radius.pill,
-          border: `1px solid ${colors.border}`,
-          background: colors.card,
-          color: text.primary,
-          cursor: "pointer",
+          display: "flex",
+          flexDirection: "column",
+          gap: 16,
         }}
       >
-        {expanded ? "Hide form" : "Show form"}
-      </button>
-
-      {!expanded ? null : (
-        <form
-          className="rc-add-property-form"
-          onSubmit={handleSubmit}
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: 16,
-          }}
-        >
           <div
             style={{
               borderRadius: 12,
@@ -1004,8 +986,7 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
       >
         {isSubmitting ? "Saving..." : isPreviewingCsv ? "Previewing CSV..." : "Create property"}
       </button>
-    </form>
-      )}
+      </form>
     </div>
   );
 };

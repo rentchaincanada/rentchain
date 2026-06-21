@@ -694,43 +694,43 @@ export const PropertyRegistryStatusCard: React.FC<Props> = ({ property, onOpenSu
   );
 
   return (
-    <Card style={{ display: "grid", gap: 12 }}>
+    <Card style={{ display: "grid", gap: 10, padding: 14 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-        <div>
+        <div style={{ display: "grid", gap: 4 }}>
           <div style={{ fontSize: 12, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.6 }}>
             Compliance / Registry
           </div>
-          <div style={{ fontSize: 18, fontWeight: 700 }}>Compliance / Registry Readiness</div>
+          <div style={{ fontSize: 15, fontWeight: 800 }}>Registry readiness</div>
+          {!loading && data?.readiness ? (
+            <div style={{ color: "#64748b", fontSize: 12 }}>
+              {data.readiness.schemaLabel}
+              {data.readiness.readinessStatus !== "verified" ? ` · ${data.readiness.completionPercent}% complete` : ""}
+            </div>
+          ) : null}
         </div>
-        {data?.readiness ? <Pill tone={readinessTone(data.readiness.readinessStatus)}>{readinessLabel(data.readiness.readinessStatus)}</Pill> : null}
+        <div style={{ display: "inline-flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          {data?.readiness ? <Pill tone={readinessTone(data.readiness.readinessStatus)}>{readinessLabel(data.readiness.readinessStatus)}</Pill> : null}
+          {!loading && data ? (
+            <Button type="button" variant="secondary" onClick={() => setDetailsOpen(true)} style={{ padding: "6px 10px", fontSize: 12 }}>
+              View details
+            </Button>
+          ) : null}
+        </div>
       </div>
 
       {loading ? <div style={{ color: "#475569" }}>Checking registry and readiness…</div> : null}
       {!loading && error ? <div style={{ color: "#b91c1c" }}>{error}</div> : null}
 
       {!loading && data?.readiness ? (
-        <div style={{ display: "grid", gap: 10 }}>
-          <div style={{ color: "#475569", lineHeight: 1.5 }}>{compactSupportingLine(data.readiness)}</div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-            <Pill tone="muted">{data.readiness.schemaLabel}</Pill>
-            {data.readiness.readinessStatus !== "verified" ? (
-              <Pill tone="muted">{data.readiness.completionPercent}% complete</Pill>
-            ) : null}
-{filingStatusLabel(workflowStatus) ? (
-  <Pill tone={filingStatusTone(workflowStatus)}>{filingStatusLabel(workflowStatus)}</Pill>
-) : null}
-          
-          </div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <Button type="button" variant="secondary" onClick={() => setDetailsOpen(true)}>
-              View details
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          {filingStatusLabel(workflowStatus) ? (
+            <Pill tone={filingStatusTone(workflowStatus)}>{filingStatusLabel(workflowStatus)}</Pill>
+          ) : null}
+          {onOpenSubmissionAssistant && shouldShowCompactAssistantCta(data.readiness) ? (
+            <Button type="button" onClick={onOpenSubmissionAssistant} style={{ padding: "6px 10px", fontSize: 12 }}>
+              {data.readiness.assistant.ctaLabel}
             </Button>
-            {onOpenSubmissionAssistant && shouldShowCompactAssistantCta(data.readiness) ? (
-              <Button type="button" onClick={onOpenSubmissionAssistant}>
-                {data.readiness.assistant.ctaLabel}
-              </Button>
-            ) : null}
-          </div>
+          ) : null}
         </div>
       ) : null}
 
