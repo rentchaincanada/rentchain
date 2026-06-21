@@ -83,6 +83,50 @@ export function filterPaymentsByDashboardContext(
   return [];
 }
 
+function normalizeFilterValue(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function uniqueSortedValues(values: string[]) {
+  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean))).sort((a, b) =>
+    a.localeCompare(b)
+  );
+}
+
+function applyPaymentsWorkspaceFilters(
+  payments: PaymentRecord[],
+  searchTerm: string,
+  statusFilter: string,
+  methodFilter: string,
+  getTenantLabel: (payment: PaymentRecord) => string,
+  getPropertyLabel: (payment: PaymentRecord) => string
+) {
+  const normalizedSearch = normalizeFilterValue(searchTerm);
+  const normalizedStatus = normalizeFilterValue(statusFilter);
+  const normalizedMethod = normalizeFilterValue(methodFilter);
+
+  return payments.filter((payment) => {
+    const status = normalizeFilterValue(String(payment.status || ""));
+    const method = normalizeFilterValue(String(payment.method || ""));
+    if (normalizedStatus && status !== normalizedStatus) return false;
+    if (normalizedMethod && method !== normalizedMethod) return false;
+    if (!normalizedSearch) return true;
+
+    const searchable = [
+      getTenantLabel(payment),
+      getPropertyLabel(payment),
+      payment.amount != null ? String(payment.amount) : "",
+      payment.paidAt || "",
+      payment.method || "",
+      payment.notes || "",
+      payment.status || "",
+    ]
+      .join(" ")
+      .toLowerCase();
+    return searchable.includes(normalizedSearch);
+  });
+}
+
 function dashboardContextLabel(context: PaymentsDashboardContext | null, periodMonth: string) {
   if (context === "current_month") return `Current month payments (${periodMonth})`;
   if (context === "collected") return "Collected payments";
@@ -119,6 +163,9 @@ const PaymentsPage: React.FC = () => {
   const { payments, loading, error, refresh } = usePayments();
   const [searchParams, setSearchParams] = useSearchParams();
   const [rows, setRows] = useState<PaymentRecord[]>([]);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [methodFilter, setMethodFilter] = useState("");
   const [exporting, setExporting] = useState<null | "csv" | "xls">(null);
   const [labelMap, setLabelMap] = useState<{ tenants: Map<string, string>; properties: Map<string, string> }>({
     tenants: new Map(),
@@ -131,7 +178,6 @@ const PaymentsPage: React.FC = () => {
 
   const dashboardContext = normalizeDashboardContext(searchParams.get("context"));
   const contextPeriodMonth = normalizePeriodMonth(searchParams.get("period"));
-  const visibleRows = filterPaymentsByDashboardContext(rows, dashboardContext, contextPeriodMonth);
   const isDashboardContextActive = Boolean(dashboardContext);
   const contextLabel = dashboardContextLabel(dashboardContext, contextPeriodMonth);
   const contextDescription = dashboardContextDescription(dashboardContext);
@@ -142,6 +188,54 @@ const PaymentsPage: React.FC = () => {
     next.delete("period");
     next.delete("source");
     setSearchParams(next, { replace: true });
+  };
+
+  const getTenantLabel = (payment: PaymentRecord) => {
+    const record = payment as any;
+    return (
+      tenantLabelFromValue(record.tenant) ||
+      tenantLabelFromValue(record.tenantProfile) ||
+      String(record.tenantName || record.tenantDisplayName || record.applicantName || "").trim() ||
+      labelMap.tenants.get(String(payment.tenantId || "").trim()) ||
+      (payment.tenantId ? formatOperationalReference("tenant", payment.tenantId) : "Tenant")
+    );
+  };
+  const getPropertyLabel = (payment: PaymentRecord) => {
+    const record = payment as any;
+    const propertyLabel =
+      propertyLabelFromValue(record.property) ||
+      String(record.propertyName || record.propertyDisplayName || record.propertyDisplayLabel || "").trim() ||
+      labelMap.properties.get(String(payment.propertyId || "").trim()) ||
+      "";
+    const unitLabel = String(record.unitName || record.unitNumber || record.unitLabel || record.unitDisplayLabel || "").trim();
+    const formattedUnit = unitLabel ? (/^unit\b/i.test(unitLabel) ? unitLabel : `Unit ${unitLabel}`) : "";
+    if (propertyLabel && formattedUnit) return `${propertyLabel} / ${formattedUnit}`;
+    const propertyId = String(payment.propertyId || "").trim();
+    const unitId = String(record.unitId || "").trim();
+    if (propertyLabel || formattedUnit) return propertyLabel || formattedUnit;
+    if (propertyId && unitId) return `${formatOperationalReference("property", propertyId)} / ${formatOperationalReference("unit", unitId)}`;
+    if (propertyId) return formatOperationalReference("property", propertyId);
+    if (unitId) return formatOperationalReference("unit", unitId);
+    return "Property";
+  };
+
+  const contextRows = filterPaymentsByDashboardContext(rows, dashboardContext, contextPeriodMonth);
+  const visibleRows = applyPaymentsWorkspaceFilters(
+    contextRows,
+    searchTerm,
+    statusFilter,
+    methodFilter,
+    getTenantLabel,
+    getPropertyLabel
+  );
+  const statusOptions = uniqueSortedValues(rows.map((payment) => String(payment.status || "")));
+  const methodOptions = uniqueSortedValues(rows.map((payment) => String(payment.method || "")));
+  const isWorkspaceFilterActive = Boolean(searchTerm.trim() || statusFilter || methodFilter);
+
+  const clearWorkspaceFilters = () => {
+    setSearchTerm("");
+    setStatusFilter("");
+    setMethodFilter("");
   };
 
   useEffect(() => {
@@ -184,35 +278,6 @@ const PaymentsPage: React.FC = () => {
       cancelled = true;
     };
   }, []);
-
-  const getTenantLabel = (payment: PaymentRecord) => {
-    const record = payment as any;
-    return (
-      tenantLabelFromValue(record.tenant) ||
-      tenantLabelFromValue(record.tenantProfile) ||
-      String(record.tenantName || record.tenantDisplayName || record.applicantName || "").trim() ||
-      labelMap.tenants.get(String(payment.tenantId || "").trim()) ||
-      (payment.tenantId ? formatOperationalReference("tenant", payment.tenantId) : "Tenant")
-    );
-  };
-  const getPropertyLabel = (payment: PaymentRecord) => {
-    const record = payment as any;
-    const propertyLabel =
-      propertyLabelFromValue(record.property) ||
-      String(record.propertyName || record.propertyDisplayName || record.propertyDisplayLabel || "").trim() ||
-      labelMap.properties.get(String(payment.propertyId || "").trim()) ||
-      "";
-    const unitLabel = String(record.unitName || record.unitNumber || record.unitLabel || record.unitDisplayLabel || "").trim();
-    const formattedUnit = unitLabel ? (/^unit\b/i.test(unitLabel) ? unitLabel : `Unit ${unitLabel}`) : "";
-    if (propertyLabel && formattedUnit) return `${propertyLabel} / ${formattedUnit}`;
-    const propertyId = String(payment.propertyId || "").trim();
-    const unitId = String(record.unitId || "").trim();
-    if (propertyLabel || formattedUnit) return propertyLabel || formattedUnit;
-    if (propertyId && unitId) return `${formatOperationalReference("property", propertyId)} / ${formatOperationalReference("unit", unitId)}`;
-    if (propertyId) return formatOperationalReference("property", propertyId);
-    if (unitId) return formatOperationalReference("unit", unitId);
-    return "Property";
-  };
 
   const triggerExport = async (format: "csv" | "xls") => {
     try {
@@ -343,6 +408,92 @@ const PaymentsPage: React.FC = () => {
       ) : null}
 
       <Card>
+        <div style={{ display: "grid", gap: spacing.sm }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: spacing.sm, flexWrap: "wrap" }}>
+            <div>
+              <div style={{ fontSize: "1rem", fontWeight: 700, color: text.primary }}>Payment Filters</div>
+              <div style={{ fontSize: "0.9rem", color: text.muted }}>Search and narrow recorded payment rows.</div>
+            </div>
+            {isWorkspaceFilterActive ? (
+              <Button variant="secondary" onClick={clearWorkspaceFilters}>
+                Clear workspace filters
+              </Button>
+            ) : null}
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 180px), 1fr))", gap: spacing.sm }}>
+            <label style={{ display: "grid", gap: 6, color: text.muted, fontSize: "0.84rem", fontWeight: 700 }}>
+              Search
+              <input
+                aria-label="Search payments"
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                placeholder="Tenant, property, notes..."
+                style={{
+                  width: "100%",
+                  boxSizing: "border-box",
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: 8,
+                  padding: "0.65rem 0.75rem",
+                  color: text.primary,
+                  fontSize: "0.95rem",
+                }}
+              />
+            </label>
+            <label style={{ display: "grid", gap: 6, color: text.muted, fontSize: "0.84rem", fontWeight: 700 }}>
+              Status
+              <select
+                aria-label="Filter payments by status"
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value)}
+                style={{
+                  width: "100%",
+                  boxSizing: "border-box",
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: 8,
+                  padding: "0.65rem 0.75rem",
+                  color: text.primary,
+                  fontSize: "0.95rem",
+                  background: "#fff",
+                }}
+              >
+                <option value="">All statuses</option>
+                {statusOptions.map((status) => (
+                  <option key={status} value={status}>
+                    {status}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label style={{ display: "grid", gap: 6, color: text.muted, fontSize: "0.84rem", fontWeight: 700 }}>
+              Method
+              <select
+                aria-label="Filter payments by method"
+                value={methodFilter}
+                onChange={(event) => setMethodFilter(event.target.value)}
+                style={{
+                  width: "100%",
+                  boxSizing: "border-box",
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: 8,
+                  padding: "0.65rem 0.75rem",
+                  color: text.primary,
+                  fontSize: "0.95rem",
+                  background: "#fff",
+                }}
+              >
+                <option value="">All methods</option>
+                {methodOptions.map((method) => (
+                  <option key={method} value={method}>
+                    {method}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </div>
+      </Card>
+
+      <Card>
         <div style={{ display: "grid", gap: spacing.xs }}>
           <div style={{ fontSize: "1rem", fontWeight: 700, color: text.primary }}>Financial Activity</div>
           <div style={{ fontSize: "0.92rem", color: text.primary }}>
@@ -362,7 +513,9 @@ const PaymentsPage: React.FC = () => {
         {error && <div style={{ color: colors.danger, fontSize: "0.95rem" }}>Failed to load payments: {error}</div>}
         {!loading && !error && visibleRows.length === 0 && (
           <div style={{ fontSize: "0.95rem", color: text.muted }}>
-            {isDashboardContextActive
+            {isWorkspaceFilterActive
+              ? "No payments match these workspace filters. Clear workspace filters to return to the available payment rows."
+              : isDashboardContextActive
               ? `No payments match ${contextLabel.toLowerCase()}. Clear the filter to return to all recorded payments.`
               : "No payments recorded yet."}
           </div>

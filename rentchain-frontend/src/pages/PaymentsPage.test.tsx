@@ -111,6 +111,10 @@ describe("PaymentsPage", () => {
     expect(screen.getAllByText("123 Main St / Unit 3A").length).toBeGreaterThan(0);
     expect(screen.getAllByText("e-transfer").length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: "Clear filter" })).not.toBeInTheDocument();
+    expect(screen.getByText("Payment Filters")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Search payments" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Filter payments by status" })).toHaveValue("");
+    expect(screen.getByRole("combobox", { name: "Filter payments by method" })).toHaveValue("");
   });
 
   it("routes PDF export through the shared print helper", async () => {
@@ -368,6 +372,60 @@ describe("PaymentsPage", () => {
 
     expect((await screen.findAllByText("May Tenant")).length).toBeGreaterThan(0);
     expect(screen.queryByText("Current month payments (2026-06)")).not.toBeInTheDocument();
+    expect(screen.getByText("Payment Filters")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Search payments" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Filter payments by status" })).toHaveValue("");
+    expect(screen.getByRole("combobox", { name: "Filter payments by method" })).toHaveValue("");
+  });
+
+  it("keeps normal workspace filters available after clearing Dashboard context", async () => {
+    mocks.usePayments.mockReturnValue({
+      payments: [
+        {
+          id: "payment-june",
+          tenantId: "tenant-1",
+          propertyId: "prop-1",
+          amount: 1800,
+          paidAt: "2026-06-03",
+          method: "e-transfer",
+          notes: "June rent",
+          status: "Recorded",
+          source: "payments",
+        },
+        {
+          id: "payment-may",
+          tenantId: "tenant-2",
+          propertyId: "prop-1",
+          amount: 1700,
+          paidAt: "2026-05-03",
+          method: "cheque",
+          notes: "May rent",
+          status: "Recorded",
+          source: "payments",
+        },
+      ],
+      loading: false,
+      error: null,
+    });
+    mocks.fetchTenants.mockResolvedValue([
+      { id: "tenant-1", fullName: "June Tenant" },
+      { id: "tenant-2", fullName: "May Tenant" },
+    ]);
+
+    renderPaymentsPage("/payments?context=current_month&period=2026-06&source=dashboard");
+
+    fireEvent.click(await screen.findByRole("button", { name: "Clear filter" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Search payments" }), { target: { value: "May" } });
+
+    expect(await screen.findByText("Clear workspace filters")).toBeInTheDocument();
+    expect((await screen.findAllByText("May Tenant")).length).toBeGreaterThan(0);
+    expect(screen.queryByText("June Tenant")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear workspace filters" }));
+
+    expect((await screen.findAllByText("June Tenant")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("May Tenant")).length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: "Clear workspace filters" })).not.toBeInTheDocument();
   });
 
   it("renders a calm empty state for empty Dashboard context results", async () => {
