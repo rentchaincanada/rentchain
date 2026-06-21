@@ -210,7 +210,19 @@ describe("UnifiedInboxPage", () => {
     expect(screen.getByRole("tab", { name: /Unread 1/i })).toBeInTheDocument();
     expect(pipeButton.nextElementSibling).toHaveTextContent("Pipe leak reported");
     expect(pipeButton.nextElementSibling).toHaveTextContent("Status");
+    expect(screen.getByTestId("unified-inbox-detail-panel")).toHaveStyle({
+      background: "#f8fafc",
+      boxShadow: "none",
+    });
     expect(screen.getByRole("link", { name: /Open work orders/i })).toHaveAttribute("href", "/work-orders");
+
+    fireEvent.click(screen.getByRole("tab", { name: /Unread 1/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Outstanding rent balance/i }));
+    const paymentButton = screen.getByRole("button", { name: /Outstanding rent balance/i });
+    expect(paymentButton).toHaveAttribute("aria-expanded", "true");
+    expect(paymentButton).toHaveTextContent("Read");
+    expect(screen.getByRole("tab", { name: /Unread 0/i })).toBeInTheDocument();
+    expect(screen.getByTestId("unified-inbox-detail-panel")).toHaveTextContent("Outstanding rent balance");
 
     fireEvent.click(screen.getByRole("tab", { name: /All 4/i }));
     fireEvent.change(screen.getByLabelText("Search inbox"), { target: { value: "balance" } });
@@ -219,8 +231,9 @@ describe("UnifiedInboxPage", () => {
 
     fireEvent.change(screen.getByLabelText("Search inbox"), { target: { value: "" } });
     fireEvent.change(screen.getByLabelText("Filter inbox status"), { target: { value: "read" } });
-    expect(screen.getAllByText("Lease renewal ready").length).toBeGreaterThan(0);
+    fireEvent.change(screen.getByLabelText("Filter inbox priority"), { target: { value: "low" } });
     expect(screen.getAllByText("System notice").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Lease renewal ready")).not.toBeInTheDocument();
     expect(screen.queryByText("Outstanding rent balance")).not.toBeInTheDocument();
   });
 

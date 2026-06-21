@@ -166,7 +166,21 @@ export function UnifiedInboxList({ records, role, onOpenRecord }: Props) {
               </div>
             </button>
             {active ? (
-              <Card elevated style={{ display: "grid", gap: spacing.md, marginTop: `-${spacing.xs}` }}>
+              <Card
+                data-testid="unified-inbox-detail-panel"
+                style={{
+                  background: "#f8fafc",
+                  borderColor: "rgba(37, 99, 235, 0.16)",
+                  borderLeft: `3px solid ${colors.accent}`,
+                  boxShadow: "none",
+                  display: "grid",
+                  gap: spacing.md,
+                  marginLeft: spacing.md,
+                  marginTop: `-${spacing.xs}`,
+                  maxWidth: `calc(100% - ${spacing.md})`,
+                  padding: spacing.md,
+                }}
+              >
                 <div style={{ display: "grid", gap: 6 }}>
                   <div style={{ color: text.muted, fontSize: "0.86rem", fontWeight: 700 }}>
                     {SOURCE_LABELS[record.sourceKind]}

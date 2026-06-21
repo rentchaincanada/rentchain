@@ -93,6 +93,7 @@ export default function UnifiedInboxPage({ role }: Props) {
   const [priorityFilter, setPriorityFilter] = React.useState<PriorityFilter>("all");
   const [search, setSearch] = React.useState("");
   const [localReadAtById, setLocalReadAtById] = React.useState<Record<string, string>>({});
+  const [openedRecordId, setOpenedRecordId] = React.useState<string | null>(null);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -114,6 +115,7 @@ export default function UnifiedInboxPage({ role }: Props) {
 
   React.useEffect(() => {
     setLocalReadAtById({});
+    setOpenedRecordId(null);
   }, [role]);
 
   const records = data?.records || data?.items || [];
@@ -140,14 +142,26 @@ export default function UnifiedInboxPage({ role }: Props) {
       }),
     [activeTab, normalizedSearch, priorityFilter, safeRecords, statusFilter]
   );
+  const displayedRecords = React.useMemo(() => {
+    if (!openedRecordId || filteredRecords.some((record) => record.id === openedRecordId)) {
+      return filteredRecords;
+    }
+    const openedRecord = safeRecords.find((record) => record.id === openedRecordId);
+    if (!openedRecord) return filteredRecords;
+    return [openedRecord, ...filteredRecords];
+  }, [filteredRecords, openedRecordId, safeRecords]);
   const unreadCount = safeRecords.filter((record) => record.status === "unread").length;
   const priorityCount = safeRecords.filter((record) => record.priority === "critical" || record.priority === "high").length;
   const markRecordRead = React.useCallback((record: UnifiedInboxRecord) => {
+    setOpenedRecordId(record.id);
     if (record.status !== "unread" && record.readAt) return;
     setLocalReadAtById((current) => {
       if (current[record.id]) return current;
       return { ...current, [record.id]: new Date().toISOString() };
     });
+  }, []);
+  const resetFilterContext = React.useCallback(() => {
+    setOpenedRecordId(null);
   }, []);
 
   return (
@@ -195,7 +209,10 @@ export default function UnifiedInboxPage({ role }: Props) {
                     role="tab"
                     aria-selected={selected}
                     aria-label={`${tab.label} ${count}`}
-                    onClick={() => setActiveTab(tab.id)}
+                    onClick={() => {
+                      resetFilterContext();
+                      setActiveTab(tab.id);
+                    }}
                     style={{
                       border: selected ? `1px solid ${colors.accent}` : `1px solid ${colors.border}`,
                       borderRadius: 999,
@@ -235,7 +252,10 @@ export default function UnifiedInboxPage({ role }: Props) {
                   <input
                     type="search"
                     value={search}
-                    onChange={(event) => setSearch(event.target.value)}
+                    onChange={(event) => {
+                      resetFilterContext();
+                      setSearch(event.target.value);
+                    }}
                     placeholder="Search messages"
                     aria-label="Search inbox"
                     style={{
@@ -254,7 +274,10 @@ export default function UnifiedInboxPage({ role }: Props) {
                 Status
                 <select
                   value={statusFilter}
-                  onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}
+                  onChange={(event) => {
+                    resetFilterContext();
+                    setStatusFilter(event.target.value as StatusFilter);
+                  }}
                   aria-label="Filter inbox status"
                   style={{
                     border: `1px solid ${colors.border}`,
@@ -277,7 +300,10 @@ export default function UnifiedInboxPage({ role }: Props) {
                 Priority
                 <select
                   value={priorityFilter}
-                  onChange={(event) => setPriorityFilter(event.target.value as PriorityFilter)}
+                  onChange={(event) => {
+                    resetFilterContext();
+                    setPriorityFilter(event.target.value as PriorityFilter);
+                  }}
                   aria-label="Filter inbox priority"
                   style={{
                     border: `1px solid ${colors.border}`,
@@ -309,7 +335,7 @@ export default function UnifiedInboxPage({ role }: Props) {
               </span>
             </div>
           </Card>
-          <UnifiedInboxList records={filteredRecords} role={role} onOpenRecord={markRecordRead} />
+          <UnifiedInboxList records={displayedRecords} role={role} onOpenRecord={markRecordRead} />
         </>
       ) : null}
     </div>
