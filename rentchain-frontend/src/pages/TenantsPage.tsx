@@ -355,6 +355,12 @@ export const TenantsPage: React.FC = () => {
     setInviteOpen(true);
   }, [inviteEnabled, navigate]);
 
+  useEffect(() => {
+    if (!inviteEnabled && inviteOpen) {
+      setInviteOpen(false);
+    }
+  }, [inviteEnabled, inviteOpen]);
+
   const refreshTenantTenancies = useCallback(async (tenantId: string) => {
     const nextTenancies = await fetchTenantTenancies(tenantId);
     setTenants((prev) =>
@@ -1163,17 +1169,19 @@ const loadTenants = useCallback(async () => {
         />
       </Card>
 
-      <InviteTenantModal
-        open={inviteOpen}
-        onClose={() => setInviteOpen(false)}
-        defaultPropertyId={selectedTenant?.propertyId || undefined}
-        defaultUnitId={selectedTenant?.unitId || undefined}
-        defaultTenantEmail={selectedTenant?.email || undefined}
-        defaultTenantName={selectedTenant?.fullName || selectedTenant?.name || undefined}
-        onInviteCreated={() => {
-          void loadTenants();
-        }}
-      />
+      {inviteEnabled ? (
+        <InviteTenantModal
+          open={inviteOpen}
+          onClose={() => setInviteOpen(false)}
+          defaultPropertyId={selectedTenant?.propertyId || undefined}
+          defaultUnitId={selectedTenant?.unitId || undefined}
+          defaultTenantEmail={selectedTenant?.email || undefined}
+          defaultTenantName={selectedTenant?.fullName || selectedTenant?.name || undefined}
+          onInviteCreated={() => {
+            void loadTenants();
+          }}
+        />
+      ) : null}
 
       {tenantEdit.open ? (
         <div

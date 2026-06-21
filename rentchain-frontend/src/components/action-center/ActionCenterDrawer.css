@@ -1,0 +1,26 @@
+.rc-action-center-backdrop {
+  top: var(--rc-landlord-sticky-shell-measured-height, var(--rc-landlord-sticky-shell-height, 120px));
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 2300;
+}
+
+.rc-action-center-drawer {
+  top: var(--rc-landlord-sticky-shell-measured-height, var(--rc-landlord-sticky-shell-height, 120px));
+  height: calc(100dvh - var(--rc-landlord-sticky-shell-measured-height, var(--rc-landlord-sticky-shell-height, 120px)));
+  z-index: 2301;
+}
+
+@media (max-width: 820px) {
+  .rc-action-center-backdrop {
+    top: 0;
+    z-index: 3000;
+  }
+
+  .rc-action-center-drawer {
+    top: 0;
+    height: 100dvh;
+    z-index: 3001;
+  }
+}

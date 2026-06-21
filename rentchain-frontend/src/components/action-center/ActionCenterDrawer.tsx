@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { fetchActionCenter } from "../../api/actionCenterApi";
 import type { ActionRequest } from "../../api/actionRequestsApi";
 import { fixActionForRequest } from "../../services/actionRequestFixRouter";
+import "./ActionCenterDrawer.css";
 
 function shortId(v: any, n = 8) {
   const s = typeof v === "string" ? v : "";
@@ -202,25 +203,21 @@ export function ActionCenterDrawer({
   return (
     <>
       <div
+        className="rc-action-center-backdrop"
         onClick={onClose}
         style={{
           position: "fixed",
-          inset: 0,
           background: "rgba(2,6,23,0.35)",
-          zIndex: 50,
         }}
       />
 
       <div
-        className="rc-safe-drawer"
+        className="rc-safe-drawer rc-action-center-drawer"
         style={{
           position: "fixed",
-          top: 0,
           right: 0,
-          height: "100dvh",
           width: "min(480px, 92vw)",
           background: "white",
-          zIndex: 51,
           boxShadow: "0 25px 60px rgba(2,6,23,0.25)",
           borderLeft: "1px solid rgba(148,163,184,0.25)",
           display: "flex",

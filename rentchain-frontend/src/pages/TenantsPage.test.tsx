@@ -149,6 +149,7 @@ describe("TenantsPage", () => {
     expect(mocks.openUpgradeFlowMock).toHaveBeenCalledWith(
       expect.objectContaining({ fallbackPath: "/pricing" })
     );
+    expect(mocks.inviteTenantModalMock).not.toHaveBeenCalled();
   });
 
   it("does not open the invite modal from a deep link when tenant invites are locked", async () => {
@@ -167,6 +168,7 @@ describe("TenantsPage", () => {
     expect(
       screen.queryByText("Upgrade confirmed. Tenant invites are now unlocked for this workspace.")
     ).not.toBeInTheDocument();
+    expect(mocks.inviteTenantModalMock).not.toHaveBeenCalled();
   });
 
   it("shows a tenant action hub with edit, note, and invite actions", async () => {
