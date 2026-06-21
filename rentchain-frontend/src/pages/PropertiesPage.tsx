@@ -183,6 +183,7 @@ const PropertiesPage: React.FC = () => {
   const [actionRequests, setActionRequests] = useState<PropertyActionRequest[]>([]);
   const [actionRequestsLoading, setActionRequestsLoading] = useState(false);
   const addPropertyRef = useRef<HTMLDivElement | null>(null);
+  const [isAddPropertyOpen, setIsAddPropertyOpen] = useState(false);
   const [actionRequestsError, setActionRequestsError] = useState<string | null>(null);
   const [actionFilter, setActionFilter] = useState<ActionRequestStatus | "all">("all");
   const [activeRequest, setActiveRequest] = useState<PropertyActionRequest | null>(null);
@@ -222,6 +223,16 @@ const PropertiesPage: React.FC = () => {
   const totalOpenAcrossPortfolio = useMemo(() => Object.values(actionCounts || {}).reduce((a, b) => a + (b || 0), 0), [
     actionCounts,
   ]);
+
+  const openAddPropertyForm = useCallback(() => {
+    setIsAddPropertyOpen(true);
+    window.requestAnimationFrame(() => {
+      const scrollIntoView = addPropertyRef.current?.scrollIntoView;
+      if (typeof scrollIntoView === "function") {
+        scrollIntoView.call(addPropertyRef.current, { behavior: "smooth", block: "start" });
+      }
+    });
+  }, []);
 
   const propertyLabelById = useMemo(() => {
     const out: Record<string, { name: string; subtitle?: string }> = {};
@@ -419,6 +430,7 @@ const PropertiesPage: React.FC = () => {
 
   const handlePropertyCreated = (property: Property) => {
     if (property?.id) {
+      setIsAddPropertyOpen(false);
       setProperties((prev) => [...prev, property]);
       setSelectedPropertyId(property.id);
       setRecentlyCreatedPropertyId(property.id);
@@ -561,6 +573,17 @@ const PropertiesPage: React.FC = () => {
         <div className="rc-properties-header" style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <div className="rc-properties-title-row" style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <div style={{ fontWeight: 800, fontSize: "1.2rem" }}>Properties</div>
+            <Button
+              type="button"
+              onClick={openAddPropertyForm}
+              style={{
+                padding: "7px 12px",
+                fontSize: 13,
+                whiteSpace: "nowrap",
+              }}
+            >
+              Add Property
+            </Button>
             <div
               className="rc-properties-counts"
               style={{
@@ -730,32 +753,49 @@ const PropertiesPage: React.FC = () => {
           </div>
         </div>
 
-        <Card elevated ref={addPropertyRef}>
-          <h1 style={{ margin: 0, fontSize: "1.4rem", fontWeight: 700 }}>
-            {properties.length === 0 ? "Start here: add your first property" : "Add a new property"}
-          </h1>
-          <p
-            style={{
-              marginTop: 6,
-              marginBottom: 14,
-              color: text.muted,
-              fontSize: "0.95rem",
-            }}
-          >
-            {properties.length === 0
-              ? "Start your rental workflow by adding one property. You only need the address, city, and total units to get moving."
-              : "Capture units, rents, and amenities. Newly added properties will show up in your list and rent roll below."}
-          </p>
-          <AddPropertyForm
-            onCreated={handlePropertyCreated}
-            onExistingPropertyId={(existingId) => {
-              setSelectedPropertyId(existingId);
-              const next = new URLSearchParams(location.search);
-              next.set("propertyId", existingId);
-              navigate({ pathname: location.pathname, search: next.toString() }, { replace: true });
-            }}
-          />
-        </Card>
+        <div ref={addPropertyRef}>
+          {isAddPropertyOpen ? (
+            <Card elevated>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
+                <div>
+                  <h1 style={{ margin: 0, fontSize: "1.4rem", fontWeight: 700 }}>
+                    {properties.length === 0 ? "Start here: add your first property" : "Add a new property"}
+                  </h1>
+                  <p
+                    style={{
+                      marginTop: 6,
+                      marginBottom: 14,
+                      color: text.muted,
+                      fontSize: "0.95rem",
+                    }}
+                  >
+                    {properties.length === 0
+                      ? "Start your rental workflow by adding one property. You only need the address, city, and total units to get moving."
+                      : "Capture units, rents, and amenities. Newly added properties will show up in your list and rent roll below."}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setIsAddPropertyOpen(false)}
+                  style={{ whiteSpace: "nowrap" }}
+                >
+                  Hide form
+                </Button>
+              </div>
+              <AddPropertyForm
+                onCreated={handlePropertyCreated}
+                onExistingPropertyId={(existingId) => {
+                  setIsAddPropertyOpen(false);
+                  setSelectedPropertyId(existingId);
+                  const next = new URLSearchParams(location.search);
+                  next.set("propertyId", existingId);
+                  navigate({ pathname: location.pathname, search: next.toString() }, { replace: true });
+                }}
+              />
+            </Card>
+          ) : null}
+        </div>
 
         <Card
           elevated
@@ -883,7 +923,7 @@ const PropertiesPage: React.FC = () => {
                   <Button
                     onClick={() => {
                       track("empty_state_cta_clicked", { pageKey: "properties", ctaKey: "add_property" });
-                      addPropertyRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                      openAddPropertyForm();
                     }}
                     style={{ width: "fit-content" }}
                   >

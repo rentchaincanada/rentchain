@@ -177,6 +177,7 @@ describe("PropertiesPage", () => {
       </MemoryRouter>
     );
 
+    fireEvent.click(await screen.findByRole("button", { name: "Add Property" }));
     const setupButtons = await screen.findAllByRole("button", {
       name: "Complete property setup",
     });
@@ -263,7 +264,34 @@ describe("PropertiesPage", () => {
       screen.getByText("Add your first property to begin managing tenants, leases, and maintenance in one place.")
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Add your first property" })).toBeInTheDocument();
+    expect(screen.queryByText("Start here: add your first property")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add your first property" }));
+
     expect(screen.getByText("Start here: add your first property")).toBeInTheDocument();
+  });
+
+  it("keeps the add property form collapsed until requested and supports hiding it", async () => {
+    render(
+      <MemoryRouter>
+        <PropertiesPage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(mocks.fetchPropertiesMock).toHaveBeenCalledWith({ status: "active" });
+    });
+
+    expect(screen.queryByText("Add form")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add Property" }));
+
+    expect(screen.getByText("Add a new property")).toBeInTheDocument();
+    expect(screen.getByText("Add form")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Hide form" }));
+
+    expect(screen.queryByText("Add form")).not.toBeInTheDocument();
   });
 
   it("shows a free-safe next step after property creation", async () => {
@@ -275,12 +303,14 @@ describe("PropertiesPage", () => {
       </MemoryRouter>
     );
 
+    fireEvent.click(await screen.findByRole("button", { name: "Add Property" }));
     const setupButtons = await screen.findAllByRole("button", {
       name: "Complete property setup",
     });
     fireEvent.click(setupButtons[0]);
 
     expect(await screen.findByText("Your first property is set up")).toBeInTheDocument();
+    expect(screen.queryByText("Add form")).not.toBeInTheDocument();
     expect(screen.getByText("Step 1 complete")).toBeInTheDocument();
     expect(screen.getByText("Step 2 next")).toBeInTheDocument();
     expect(screen.getByText("Add your first unit")).toBeInTheDocument();
@@ -305,6 +335,7 @@ describe("PropertiesPage", () => {
       </MemoryRouter>
     );
 
+    fireEvent.click(await screen.findByRole("button", { name: "Add Property" }));
     const setupButtons = await screen.findAllByRole("button", {
       name: "Complete property setup",
     });
@@ -429,6 +460,7 @@ describe("PropertiesPage", () => {
       </MemoryRouter>
     );
 
+    fireEvent.click(await screen.findByRole("button", { name: "Add Property" }));
     const setupButtons = await screen.findAllByRole("button", {
       name: "Complete property setup",
     });

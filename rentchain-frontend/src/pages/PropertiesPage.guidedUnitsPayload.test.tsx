@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import PropertiesPage from "./PropertiesPage";
@@ -121,6 +121,7 @@ vi.mock("../lib/analytics", () => ({
 
 describe("PropertiesPage guided unit payload", () => {
   beforeEach(() => {
+    cleanup();
     mocks.apiFetchMock.mockReset();
     mocks.fetchPropertiesMock.mockReset();
     mocks.fetchCountsMock.mockReset();
@@ -158,6 +159,7 @@ describe("PropertiesPage guided unit payload", () => {
       </MemoryRouter>
     );
 
+    fireEvent.click(await screen.findByRole("button", { name: "Add Property" }));
     const setupButtons = await screen.findAllByRole("button", {
       name: "Complete property setup",
     });
