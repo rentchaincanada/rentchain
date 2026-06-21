@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { PropertyCredibilitySummaryCard } from "./PropertyCredibilitySummaryCard";
 
@@ -28,6 +28,8 @@ describe("PropertyCredibilitySummaryCard", () => {
 
     expect(screen.getByText("Property credibility summary")).toBeInTheDocument();
     expect(screen.getByText("Watch")).toBeInTheDocument();
+    expect(screen.queryByText("Active leases")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "View details" }));
     expect(screen.getByText("Active leases")).toBeInTheDocument();
     expect(screen.getByText("Missing credibility")).toBeInTheDocument();
     expect(screen.getByText("4")).toBeInTheDocument();
@@ -36,6 +38,10 @@ describe("PropertyCredibilitySummaryCard", () => {
   it("renders the empty state when no summary data is available", () => {
     render(<PropertyCredibilitySummaryCard summary={null} />);
 
+    expect(
+      screen.queryByText("Credibility summary will appear as lease and tenant history becomes available.")
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "View details" }));
     expect(
       screen.getByText("Credibility summary will appear as lease and tenant history becomes available.")
     ).toBeInTheDocument();
@@ -60,6 +66,10 @@ describe("PropertyCredibilitySummaryCard", () => {
       />
     );
 
+    expect(
+      screen.queryByText("Credibility summary will appear as lease and tenant history becomes available.")
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "View details" }));
     expect(
       screen.getByText("Credibility summary will appear as lease and tenant history becomes available.")
     ).toBeInTheDocument();

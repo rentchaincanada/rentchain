@@ -570,47 +570,29 @@ const PropertiesPage: React.FC = () => {
         className="page-content"
         style={{ display: "flex", flexDirection: "column", gap: spacing.lg }}
       >
-        <div className="rc-properties-header" style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div className="rc-properties-title-row" style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{ fontWeight: 800, fontSize: "1.2rem" }}>Properties</div>
+        <div className="rc-properties-header">
+          <div className="rc-properties-title-stack">
+            <div className="rc-properties-title-row">
+              <div className="rc-properties-page-title">Properties</div>
+              <div
+                className="rc-properties-counts"
+                title={`Properties ${currentProperties} - Units ${unitsUsed}`}
+              >
+                <span>{currentProperties} props</span>
+                <span aria-hidden="true">·</span>
+                <span>{unitsUsed} units</span>
+              </div>
+            </div>
+            <div className="rc-properties-helper">{archiveHelpCopy}</div>
+          </div>
+          <div className="rc-properties-header-actions">
             <Button
               type="button"
               onClick={openAddPropertyForm}
-              style={{
-                padding: "7px 12px",
-                fontSize: 13,
-                whiteSpace: "nowrap",
-              }}
+              className="rc-properties-add-button"
             >
               Add Property
             </Button>
-            <div
-              className="rc-properties-counts"
-              style={{
-                padding: "6px 10px",
-                borderRadius: 12,
-                border: "1px solid rgba(148,163,184,0.35)",
-                fontSize: 12,
-                fontWeight: 700,
-                color: text.muted,
-                display: "inline-flex",
-                gap: 8,
-                alignItems: "center",
-              }}
-              title={`Properties ${currentProperties} - Units ${unitsUsed}`}
-            >
-            <span>
-              Props: {currentProperties}
-            </span>
-            <span aria-hidden="true">·</span>
-            <span>
-              Units: {unitsUsed}
-            </span>
-            </div>
-          </div>
-          <div style={{ color: text.muted, fontSize: 13 }}>{archiveHelpCopy}</div>
-
-          <div className="rc-properties-header-actions" style={{ display: "flex", gap: 8 }}>
             {selectedPropertyId ? (
               <button
                 type="button"
@@ -1607,7 +1589,7 @@ const UnitsModal = ({
         </div>
 
         <div className="rc-modal-body" style={{ padding: 16, overflow: "auto", minHeight: 0 }}>
-          <div style={{ overflowX: "auto" }}>
+          <div className="rc-units-edit-table-wrap">
             <table className="rc-units-edit-table" style={{ width: "100%", minWidth: 980, tableLayout: "fixed", borderCollapse: "collapse" }}>
               <colgroup>
                 <col style={{ width: "13%" }} />
@@ -1744,6 +1726,117 @@ const UnitsModal = ({
                 ))}
               </tbody>
             </table>
+          </div>
+          <div className="rc-units-edit-mobile-list" aria-label="Add units mobile form">
+            {units.map((u, idx) => {
+              const occupied = (u.status ?? "vacant") === "occupied";
+              return (
+                <div className="rc-units-edit-mobile-card" key={idx}>
+                  <div className="rc-units-edit-mobile-card-header">
+                    <div>Unit {idx + 1}</div>
+                    <button
+                      type="button"
+                      onClick={() => removeRow(idx)}
+                      className="rc-units-edit-remove-button"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                  <label className="rc-units-edit-field">
+                    Unit number
+                    <input
+                      aria-label={`Mobile unit number ${idx + 1}`}
+                      value={u.unitNumber}
+                      onChange={(e) => updateUnit(idx, "unitNumber", e.target.value)}
+                      style={baseFieldStyle}
+                    />
+                  </label>
+                  <div className="rc-units-edit-mobile-grid">
+                    <label className="rc-units-edit-field">
+                      Beds
+                      <input
+                        aria-label={`Mobile beds ${idx + 1}`}
+                        type="number"
+                        value={u.beds}
+                        onChange={(e) => updateUnit(idx, "beds", e.target.value)}
+                        style={baseFieldStyle}
+                      />
+                    </label>
+                    <label className="rc-units-edit-field">
+                      Baths
+                      <input
+                        aria-label={`Mobile baths ${idx + 1}`}
+                        type="number"
+                        value={u.baths}
+                        onChange={(e) => updateUnit(idx, "baths", e.target.value)}
+                        style={baseFieldStyle}
+                      />
+                    </label>
+                  </div>
+                  <div className="rc-units-edit-mobile-grid">
+                    <label className="rc-units-edit-field">
+                      Sqft
+                      <input
+                        aria-label={`Mobile square footage ${idx + 1}`}
+                        type="number"
+                        value={u.sqft}
+                        onChange={(e) => updateUnit(idx, "sqft", e.target.value)}
+                        style={baseFieldStyle}
+                      />
+                    </label>
+                    <label className="rc-units-edit-field">
+                      Market rent
+                      <input
+                        aria-label={`Mobile market rent ${idx + 1}`}
+                        type="number"
+                        value={u.marketRent}
+                        onChange={(e) => updateUnit(idx, "marketRent", e.target.value)}
+                        onFocus={() => {
+                          if (String(u.marketRent ?? "") === "0") {
+                            updateUnit(idx, "marketRent", "");
+                          }
+                        }}
+                        style={baseFieldStyle}
+                      />
+                    </label>
+                  </div>
+                  <label className="rc-units-edit-field">
+                    Status
+                    <select
+                      aria-label={`Mobile status ${idx + 1}`}
+                      value={u.status ?? "vacant"}
+                      onChange={(e) => updateUnit(idx, "status", e.target.value)}
+                      style={baseFieldStyle}
+                    >
+                      <option value="vacant">Vacant</option>
+                      <option value="occupied">Occupied</option>
+                    </select>
+                  </label>
+                  <label className="rc-units-edit-field">
+                    Occupant
+                    <input
+                      aria-label={`Mobile occupant name ${idx + 1}`}
+                      value={u.occupantName ?? ""}
+                      onChange={(e) => updateUnit(idx, "occupantName", e.target.value)}
+                      disabled={!occupied}
+                      placeholder={occupied ? "Tenant name" : "Vacant"}
+                      style={occupied ? activeOccupancyFieldStyle : inactiveOccupancyFieldStyle}
+                    />
+                  </label>
+                  <label className="rc-units-edit-field">
+                    Lease end
+                    <input
+                      aria-label={`Mobile lease end date ${idx + 1}`}
+                      type="date"
+                      value={u.leaseEndDate ?? ""}
+                      onChange={(e) => updateUnit(idx, "leaseEndDate", e.target.value)}
+                      disabled={!occupied}
+                      style={occupied ? activeOccupancyFieldStyle : inactiveOccupancyFieldStyle}
+                    />
+                  </label>
+                </div>
+              );
+            })}
           </div>
           {error ? (
             <div

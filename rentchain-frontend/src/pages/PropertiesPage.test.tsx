@@ -503,6 +503,7 @@ describe("PropertiesPage", () => {
 
     fireEvent.click(await screen.findByTestId("property-table-add-units-prop-1"));
     expect(await screen.findByText("Add Units")).toBeInTheDocument();
+    expect(screen.getByLabelText("Add units mobile form")).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Unit number 1"), { target: { value: "301" } });
     fireEvent.change(screen.getByLabelText("Beds 1"), { target: { value: "2" } });

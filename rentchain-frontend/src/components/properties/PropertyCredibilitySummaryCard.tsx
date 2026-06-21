@@ -1,7 +1,7 @@
-import React from "react";
+import React, { useState } from "react";
 import { RiskScoreBadge } from "@/components/leases/RiskScoreBadge";
 import type { PropertyCredibilitySummary } from "@/types/credibilitySummary";
-import { colors, radius, shadows, spacing, text } from "@/styles/tokens";
+import { colors, radius, spacing, text } from "@/styles/tokens";
 
 interface PropertyCredibilitySummaryCardProps {
   summary?: PropertyCredibilitySummary | null;
@@ -50,41 +50,65 @@ const MetricTile: React.FC<{ label: string; value: React.ReactNode; caption?: Re
 );
 
 export const PropertyCredibilitySummaryCard: React.FC<PropertyCredibilitySummaryCardProps> = ({ summary, leaseHref = "/leases" }) => {
+  const [detailsOpen, setDetailsOpen] = useState(false);
+
   if (!summary || summary.healthStatus === "unknown") {
     return (
       <section
         style={{
-          borderRadius: radius.xl,
-          border: `1px solid ${colors.borderStrong}`,
-          background: "linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.96))",
-          boxShadow: shadows.soft,
-          padding: spacing.lg,
+          borderRadius: radius.lg,
+          border: `1px solid ${colors.border}`,
+          background: "rgba(255,255,255,0.96)",
+          padding: spacing.md,
           display: "grid",
-          gap: spacing.md,
+          gap: detailsOpen ? spacing.md : 0,
         }}
       >
-        <div style={{ display: "grid", gap: 6 }}>
-          <div style={{ color: text.primary, fontSize: "1rem", fontWeight: 800 }}>Property credibility summary</div>
-          <div style={{ color: text.muted, fontSize: 13, lineHeight: 1.6 }}>
-            This summary reflects current lease and tenant credibility signals for this property. Decision support only.
+        <div style={{ display: "flex", justifyContent: "space-between", gap: spacing.md, alignItems: "center", flexWrap: "wrap" }}>
+          <div style={{ display: "grid", gap: 4 }}>
+            <div style={{ color: text.primary, fontSize: "0.95rem", fontWeight: 800 }}>Property credibility summary</div>
+            <div style={{ color: text.muted, fontSize: 12 }}>Limited data</div>
           </div>
-          <a href={leaseHref} style={{ color: "#2563eb", fontSize: 13, fontWeight: 700 }}>
-            View related leases
-          </a>
+          <button
+            type="button"
+            onClick={() => setDetailsOpen((value) => !value)}
+            style={{
+              border: `1px solid ${colors.borderStrong}`,
+              background: "#fff",
+              borderRadius: radius.md,
+              color: text.primary,
+              cursor: "pointer",
+              fontSize: 12,
+              fontWeight: 750,
+              padding: "6px 10px",
+            }}
+          >
+            {detailsOpen ? "Hide details" : "View details"}
+          </button>
         </div>
-        <div
-          style={{
-            borderRadius: radius.lg,
-            border: `1px dashed ${colors.borderStrong}`,
-            background: "rgba(248,250,252,0.92)",
-            padding: spacing.md,
-            color: text.muted,
-            fontSize: 13,
-            lineHeight: 1.6,
-          }}
-        >
-          Credibility summary will appear as lease and tenant history becomes available.
-        </div>
+        {detailsOpen ? (
+          <>
+            <div style={{ color: text.muted, fontSize: 13, lineHeight: 1.5 }}>
+              This summary reflects current lease and tenant credibility signals for this property. Decision support only.
+            </div>
+            <a href={leaseHref} style={{ color: "#2563eb", fontSize: 13, fontWeight: 700 }}>
+              View related leases
+            </a>
+            <div
+              style={{
+                borderRadius: radius.lg,
+                border: `1px dashed ${colors.borderStrong}`,
+                background: "rgba(248,250,252,0.92)",
+                padding: spacing.md,
+                color: text.muted,
+                fontSize: 13,
+                lineHeight: 1.5,
+              }}
+            >
+              Credibility summary will appear as lease and tenant history becomes available.
+            </div>
+          </>
+        ) : null}
       </section>
     );
   }
@@ -94,70 +118,94 @@ export const PropertyCredibilitySummaryCard: React.FC<PropertyCredibilitySummary
   return (
     <section
       style={{
-        borderRadius: radius.xl,
-        border: `1px solid ${colors.borderStrong}`,
-        background: "linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.96))",
-        boxShadow: shadows.soft,
-        padding: spacing.lg,
+        borderRadius: radius.lg,
+        border: `1px solid ${colors.border}`,
+        background: "rgba(255,255,255,0.96)",
+        padding: spacing.md,
         display: "grid",
-        gap: spacing.md,
+        gap: detailsOpen ? spacing.md : 0,
       }}
     >
-      <div style={{ display: "flex", justifyContent: "space-between", gap: spacing.md, alignItems: "flex-start", flexWrap: "wrap" }}>
-        <div style={{ display: "grid", gap: 6 }}>
-          <div style={{ color: text.primary, fontSize: "1rem", fontWeight: 800 }}>Property credibility summary</div>
-          <div style={{ color: text.muted, fontSize: 13, lineHeight: 1.6 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: spacing.md, alignItems: "center", flexWrap: "wrap" }}>
+        <div style={{ display: "grid", gap: 4 }}>
+          <div style={{ color: text.primary, fontSize: "0.95rem", fontWeight: 800 }}>Property credibility summary</div>
+          <div style={{ color: text.muted, fontSize: 12 }}>
+            {summary.activeLeaseCount} active leases · {summary.lowConfidenceCount} review items
+          </div>
+        </div>
+        <div style={{ display: "inline-flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              padding: "5px 9px",
+              borderRadius: radius.pill,
+              border: `1px solid ${tone.border}`,
+              background: tone.background,
+              color: tone.color,
+              fontSize: 12,
+              fontWeight: 800,
+            }}
+          >
+            {tone.label}
+          </span>
+          <button
+            type="button"
+            onClick={() => setDetailsOpen((value) => !value)}
+            style={{
+              border: `1px solid ${colors.borderStrong}`,
+              background: "#fff",
+              borderRadius: radius.md,
+              color: text.primary,
+              cursor: "pointer",
+              fontSize: 12,
+              fontWeight: 750,
+              padding: "6px 10px",
+            }}
+          >
+            {detailsOpen ? "Hide details" : "View details"}
+          </button>
+        </div>
+      </div>
+
+      {detailsOpen ? (
+        <>
+          <div style={{ color: text.muted, fontSize: 13, lineHeight: 1.5 }}>
             This summary reflects current lease and tenant credibility signals for this property. Decision support only.
           </div>
           <a href={leaseHref} style={{ color: "#2563eb", fontSize: 13, fontWeight: 700 }}>
             View related leases
           </a>
-        </div>
-        <span
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            padding: "6px 10px",
-            borderRadius: radius.pill,
-            border: `1px solid ${tone.border}`,
-            background: tone.background,
-            color: tone.color,
-            fontSize: 12,
-            fontWeight: 800,
-          }}
-        >
-          {tone.label}
-        </span>
-      </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: spacing.md }}>
+            <MetricTile
+              label="Tenant score average"
+              value={<RiskScoreBadge grade={summary.tenantScoreGradeAverage} score={summary.tenantScoreAverage} />}
+              caption={`${summary.tenantsWithScoreCount} tenants with score`}
+            />
+            <MetricTile
+              label="Lease risk average"
+              value={<RiskScoreBadge grade={summary.leaseRiskGradeAverage} score={summary.leaseRiskAverage} />}
+              caption={`${summary.leasesWithRiskCount} leases with risk`}
+            />
+            <MetricTile
+              label="Active leases"
+              value={summary.activeLeaseCount}
+              caption="Current lease agreements in this rollup"
+            />
+            <MetricTile
+              label="Review items"
+              value={summary.lowConfidenceCount}
+              caption="Low-confidence records to review"
+            />
+          </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: spacing.md }}>
-        <MetricTile
-          label="Tenant score average"
-          value={<RiskScoreBadge grade={summary.tenantScoreGradeAverage} score={summary.tenantScoreAverage} />}
-          caption={`${summary.tenantsWithScoreCount} tenants with score`}
-        />
-        <MetricTile
-          label="Lease risk average"
-          value={<RiskScoreBadge grade={summary.leaseRiskGradeAverage} score={summary.leaseRiskAverage} />}
-          caption={`${summary.leasesWithRiskCount} leases with risk`}
-        />
-        <MetricTile
-          label="Active leases"
-          value={summary.activeLeaseCount}
-          caption="Current lease agreements in this rollup"
-        />
-        <MetricTile
-          label="Review items"
-          value={summary.lowConfidenceCount}
-          caption="Low-confidence records to review"
-        />
-      </div>
-
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: spacing.md }}>
-        <MetricTile label="Missing credibility" value={summary.missingCredibilityCount} caption="Records without current score or risk data" />
-        <MetricTile label="Tenant score avg" value={formatAverage(summary.tenantScoreAverage)} caption={summary.tenantScoreAverage != null ? `Grade ${summary.tenantScoreGradeAverage}` : "No tenant scores yet"} />
-        <MetricTile label="Lease risk avg" value={formatAverage(summary.leaseRiskAverage)} caption={summary.leaseRiskAverage != null ? `Grade ${summary.leaseRiskGradeAverage}` : "No lease risk yet"} />
-      </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: spacing.md }}>
+            <MetricTile label="Missing credibility" value={summary.missingCredibilityCount} caption="Records without current score or risk data" />
+            <MetricTile label="Tenant score avg" value={formatAverage(summary.tenantScoreAverage)} caption={summary.tenantScoreAverage != null ? `Grade ${summary.tenantScoreGradeAverage}` : "No tenant scores yet"} />
+            <MetricTile label="Lease risk avg" value={formatAverage(summary.leaseRiskAverage)} caption={summary.leaseRiskAverage != null ? `Grade ${summary.leaseRiskGradeAverage}` : "No lease risk yet"} />
+          </div>
+        </>
+      ) : null}
     </section>
   );
 };
