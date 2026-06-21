@@ -97,6 +97,76 @@ describe("LandlordNav mobile drawer", () => {
     expect(within(drawer).getByRole("button", { name: "Work Orders" })).toBeInTheDocument();
   });
 
+  it("renders a sticky workspace context bar with primary landlord workspace links", () => {
+    renderLandlordNav("/payments");
+
+    const context = screen.getByLabelText("Workspace context");
+    const workspaceNav = screen.getByRole("navigation", { name: "Workspace navigation" });
+    const shell = document.querySelector(".rc-landlord-topnav");
+    const content = document.querySelector(".rc-landlord-content");
+
+    expect(shell).toBeInTheDocument();
+    expect(content).toHaveClass("rc-landlord-content--sticky-offset");
+    expect(shell?.nextElementSibling).toBe(document.querySelector(".rc-landlord-mobile-topbar"));
+    expect(context).toHaveTextContent("Current workspace");
+    expect(context).toHaveTextContent("Payments");
+    expect(within(workspaceNav).getByRole("link", { name: "Dashboard" })).toHaveAttribute("href", "/dashboard");
+    expect(within(workspaceNav).getByRole("link", { name: "Operations" })).toHaveAttribute("href", "/operations");
+    expect(within(workspaceNav).getByRole("link", { name: "Properties" })).toHaveAttribute("href", "/properties");
+    expect(within(workspaceNav).getByRole("link", { name: "Tenants" })).toHaveAttribute("href", "/tenants");
+    expect(within(workspaceNav).getByRole("link", { name: "Leases" })).toHaveAttribute("href", "/leases");
+    expect(within(workspaceNav).getByRole("link", { name: "Payments" })).toHaveClass("active");
+    expect(within(workspaceNav).getByRole("link", { name: "Inbox" })).toHaveAttribute("href", "/landlord/unified-inbox");
+    expect(within(workspaceNav).getByRole("link", { name: "Work Orders" })).toHaveAttribute("href", "/work-orders");
+  });
+
+  it("renders page content in the offset shell region below sticky navigation", () => {
+    renderLandlordNav("/operations");
+
+    const topNav = document.querySelector(".rc-landlord-topnav");
+    const content = document.querySelector(".rc-landlord-content");
+
+    expect(topNav).toBeInTheDocument();
+    expect(content).toHaveClass("rc-landlord-content--sticky-offset");
+    expect(content).toContainElement(screen.getByTestId("page-content"));
+  });
+
+  it("stores the measured fixed shell height for the content offset", async () => {
+    const rectSpy = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function getRect() {
+      const height = this.classList.contains("rc-landlord-topnav") ? 148 : 0;
+      return {
+        x: 0,
+        y: 0,
+        top: 0,
+        right: 0,
+        bottom: height,
+        left: 0,
+        width: 0,
+        height,
+        toJSON: () => ({}),
+      };
+    });
+
+    renderLandlordNav("/dashboard");
+
+    await waitFor(() => {
+      expect((document.querySelector(".rc-landlord-shell") as HTMLElement).style.getPropertyValue("--rc-landlord-sticky-shell-measured-height")).toBe("148px");
+    });
+
+    rectSpy.mockRestore();
+  });
+
+  it("keeps canonical inbox context visible for legacy landlord inbox paths", () => {
+    renderLandlordNav("/landlord/inbox");
+
+    const context = screen.getByLabelText("Workspace context");
+    const workspaceNav = screen.getByRole("navigation", { name: "Workspace navigation" });
+
+    expect(context).toHaveTextContent("Inbox");
+    expect(within(workspaceNav).getByRole("link", { name: "Inbox" })).toHaveClass("active");
+    expect(screen.getByText("Inbox", { selector: ".rc-landlord-mobile-role" })).toBeInTheDocument();
+  });
+
   it("keeps the mobile tab bar and close control available while the drawer is open", () => {
     renderLandlordNav();
 
