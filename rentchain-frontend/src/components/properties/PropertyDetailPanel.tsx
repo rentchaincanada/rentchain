@@ -1067,8 +1067,9 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
             <div style={{ color: "#475569", fontSize: "0.8rem" }}>
               PID: {property.pid || "--"}
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div className="rc-property-status-row" style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span
+                className="rc-property-status-badge"
                 style={{
                   padding: "2px 8px",
                   borderRadius: 999,
@@ -1085,6 +1086,7 @@ export const PropertyDetailPanel: React.FC<PropertyDetailPanelProps> = ({
                 {propertyStatus}
               </span>
               <span
+                className="rc-property-status-badge"
                 style={{
                   padding: "2px 8px",
                   borderRadius: 999,

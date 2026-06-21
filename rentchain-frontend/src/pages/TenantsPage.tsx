@@ -349,6 +349,7 @@ export const TenantsPage: React.FC = () => {
   const handleInviteAction = useCallback(() => {
     if (!inviteEnabled) {
       void openUpgradeFlow({ navigate, fallbackPath: "/pricing" });
+      setInviteOpen(false);
       return;
     }
     setInviteOpen(true);
@@ -653,7 +654,7 @@ const loadTenants = useCallback(async () => {
 
   return (
     <TenantsErrorBoundary>
-      <div className="page-content" style={{ display: "flex", flexDirection: "column", gap: spacing.lg }}>
+      <div className="page-content rc-tenants-page" style={{ display: "flex", flexDirection: "column", gap: spacing.lg }}>
       <Card elevated className="rc-tenants-header">
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div>

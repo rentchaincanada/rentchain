@@ -136,6 +136,19 @@
   white-space: nowrap;
 }
 
+.rc-property-status-row {
+  flex-wrap: wrap;
+}
+
+.rc-property-status-badge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  white-space: nowrap;
+  word-break: keep-all;
+  overflow-wrap: normal;
+}
+
 @media (max-width: 768px) {
   .rc-property-selector-row {
     grid-template-columns: 1fr;

@@ -22,6 +22,7 @@ import "../../styles/propertiesMobile.css";
 interface AddPropertyFormProps {
   onCreated?: (property: Property) => void;
   onExistingPropertyId?: (id: string) => void;
+  showInternalToggle?: boolean;
 }
 
 interface UnitRow extends UnitInput {
@@ -50,6 +51,7 @@ const emptyUnitRow = (): UnitRow => ({
 export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
   onCreated,
   onExistingPropertyId,
+  showInternalToggle = true,
 }) => {
   const { user } = useAuth();
   const isFreePlan = String(user?.plan || "free").toLowerCase() === "free";
@@ -375,21 +377,23 @@ export const AddPropertyForm: React.FC<AddPropertyFormProps> = ({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-      <button
-        type="button"
-        onClick={() => setExpanded((prev) => !prev)}
-        style={{
-          alignSelf: "flex-start",
-          padding: "6px 12px",
-          borderRadius: radius.pill,
-          border: `1px solid ${colors.border}`,
-          background: colors.card,
-          color: text.primary,
-          cursor: "pointer",
-        }}
-      >
-        {expanded ? "Hide form" : "Show form"}
-      </button>
+      {showInternalToggle ? (
+        <button
+          type="button"
+          onClick={() => setExpanded((prev) => !prev)}
+          style={{
+            alignSelf: "flex-start",
+            padding: "6px 12px",
+            borderRadius: radius.pill,
+            border: `1px solid ${colors.border}`,
+            background: colors.card,
+            color: text.primary,
+            cursor: "pointer",
+          }}
+        >
+          {expanded ? "Hide form" : "Show form"}
+        </button>
+      ) : null}
 
       {!expanded ? null : (
         <form

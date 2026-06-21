@@ -3,6 +3,10 @@
   min-height: 0;
 }
 
+.rc-tenants-page {
+  scroll-margin-top: calc(var(--rc-landlord-sticky-shell-measured-height, var(--rc-landlord-sticky-shell-height, 120px)) + 24px);
+}
+
 .rc-tenants-list {
   display: flex;
   flex-direction: column;
@@ -49,14 +53,12 @@
   }
 
   .rc-tenants-search {
-    top: 0;
+    position: static;
     padding-top: 6px;
     padding-bottom: 8px;
   }
 
   .rc-tenants-header {
-    position: sticky;
-    top: 0;
-    z-index: 6;
+    position: static;
   }
 }

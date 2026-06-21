@@ -76,7 +76,7 @@ export const InviteTenantModal: React.FC<Props> = ({
   const { locale } = useLanguage();
   const { showToast } = useToast();
   const role = String(user?.role || "").toLowerCase();
-  const canInvite = role === "admin" || features?.tenant_invites !== false;
+  const canInvite = role === "admin" || Boolean(features?.tenant_invites || features?.tenantInvites);
   const inviteRequiredPlanLabel = resolveRequiredPlanLabel("tenant_invites", user?.plan) || "Starter";
   const inviteUpgradeMessage = `Upgrade to ${inviteRequiredPlanLabel} to send tenant invites.`;
   const inviteUpgradeRedirect =
@@ -213,6 +213,15 @@ export const InviteTenantModal: React.FC<Props> = ({
       currentPlan: currentPlan || undefined,
       source,
       redirectTo: inviteUpgradeRedirect,
+    });
+  };
+
+  const handleUpgradeRequired = () => {
+    promptInviteUpgrade("tenants_invite_modal_open");
+    showToast({
+      message: "Tenant invites require an upgrade",
+      description: inviteUpgradeMessage,
+      variant: "warning",
     });
   };
 
@@ -362,6 +371,28 @@ export const InviteTenantModal: React.FC<Props> = ({
             Close
           </Button>
         </div>
+
+        {!canInvite ? (
+          <div
+            role="status"
+            style={{
+              display: "grid",
+              gap: 10,
+              padding: 12,
+              borderRadius: 12,
+              border: "1px solid #f5d0fe",
+              background: "#faf5ff",
+              color: "#581c87",
+            }}
+          >
+            <div style={{ fontWeight: 750 }}>Upgrade required</div>
+            <div style={{ fontSize: 13, lineHeight: 1.45 }}>{inviteUpgradeMessage}</div>
+            <Button type="button" onClick={handleUpgradeRequired} style={{ justifySelf: "start" }}>
+              Unlock tenant invites
+            </Button>
+          </div>
+        ) : (
+          <>
 
         <div style={{ display: "grid", gap: 6 }}>
           <label style={{ fontSize: 13 }}>Property</label>
@@ -556,6 +587,8 @@ export const InviteTenantModal: React.FC<Props> = ({
             {loading ? "Sending..." : "Send invite"}
           </Button>
         </div>
+          </>
+        )}
         </div>
       </div>
     </div>

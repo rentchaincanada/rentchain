@@ -766,6 +766,7 @@ const PropertiesPage: React.FC = () => {
                 </Button>
               </div>
               <AddPropertyForm
+                showInternalToggle={false}
                 onCreated={handlePropertyCreated}
                 onExistingPropertyId={(existingId) => {
                   setIsAddPropertyOpen(false);

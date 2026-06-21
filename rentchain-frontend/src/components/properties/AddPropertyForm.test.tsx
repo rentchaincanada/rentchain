@@ -99,6 +99,14 @@ describe("AddPropertyForm", () => {
     expect(screen.queryByPlaceholderText("1800")).not.toBeInTheDocument();
   });
 
+  it("can hide its internal show-hide control when a parent owns collapse state", () => {
+    render(<AddPropertyForm showInternalToggle={false} />);
+
+    expect(screen.queryByRole("button", { name: "Hide form" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Show form" })).not.toBeInTheDocument();
+    expect(screen.getByText("Only three details are required to get started")).toBeInTheDocument();
+  });
+
   it("submits the first-property path with only the required fields", async () => {
     render(<AddPropertyForm onCreated={vi.fn()} />);
 

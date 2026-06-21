@@ -151,6 +151,24 @@ describe("TenantsPage", () => {
     );
   });
 
+  it("does not open the invite modal from a deep link when tenant invites are locked", async () => {
+    render(
+      <MemoryRouter initialEntries={["/tenants?invite=1&upgradeConfirmed=1&highlight=tenants"]}>
+        <TenantsPage />
+      </MemoryRouter>
+    );
+
+    await screen.findByRole("button", { name: "Unlock Tenant Invites" });
+
+    expect(mocks.openUpgradeFlowMock).toHaveBeenCalledWith(
+      expect.objectContaining({ fallbackPath: "/pricing" })
+    );
+    expect(screen.queryByText("Invite modal open")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Upgrade confirmed. Tenant invites are now unlocked for this workspace.")
+    ).not.toBeInTheDocument();
+  });
+
   it("shows a tenant action hub with edit, note, and invite actions", async () => {
     mocks.useCapabilitiesMock.mockReturnValue({
       features: { tenant_invites: true },
