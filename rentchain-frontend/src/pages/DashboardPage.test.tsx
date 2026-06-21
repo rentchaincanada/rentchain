@@ -279,6 +279,10 @@ describe("DashboardPage", () => {
     expect(screen.getByRole("button", { name: "7-day view" })).toBeInTheDocument();
     expect(screen.getByTestId("financial-snapshot-section")).toHaveTextContent("Financial Snapshot");
     expect(screen.getByText(/Current rent collection and outstanding balance overview/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Payments Workspace/i })).toHaveAttribute(
+      "href",
+      "/payments?context=current_month&period=2026-06&source=dashboard"
+    );
     expect(screen.getByTestId("workspace-routing-section")).toHaveTextContent("Operations full queue");
 
     expect(mocks.fetchLandlordPortfolioStatusFinancialMock).toHaveBeenCalledWith({ periodMonth: expect.stringMatching(/^\d{4}-\d{2}$/) });

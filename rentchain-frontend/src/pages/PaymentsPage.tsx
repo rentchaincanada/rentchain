@@ -1,5 +1,6 @@
 // rentchain-frontend/src/pages/PaymentsPage.tsx
 import React, { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { usePayments } from "../hooks/usePayments";
 import {
   getCanonicalPaymentEditId,
@@ -16,6 +17,87 @@ import { triggerBlobDownload } from "../utils/downloadBlob";
 import { buildCsvBlob } from "../utils/csvExport";
 import { formatOperationalReference } from "@/lib/identityReferences";
 import { PaymentCsvImportPreviewCard } from "@/components/ledger/PaymentCsvImportPreviewCard";
+
+type PaymentsDashboardContext = "outstanding" | "collected" | "needs_review" | "current_month";
+
+const DASHBOARD_CONTEXTS = new Set<PaymentsDashboardContext>([
+  "outstanding",
+  "collected",
+  "needs_review",
+  "current_month",
+]);
+
+function currentMonthKey() {
+  return new Date().toISOString().slice(0, 7);
+}
+
+function normalizeDashboardContext(value: string | null): PaymentsDashboardContext | null {
+  const context = String(value || "").trim().toLowerCase();
+  return DASHBOARD_CONTEXTS.has(context as PaymentsDashboardContext) ? (context as PaymentsDashboardContext) : null;
+}
+
+function normalizePeriodMonth(value: string | null) {
+  const period = String(value || "").trim();
+  return /^\d{4}-\d{2}$/.test(period) ? period : currentMonthKey();
+}
+
+function paymentMonth(payment: PaymentRecord) {
+  const raw = String(payment.paidAt || "").trim();
+  if (!raw) return "";
+  const parsed = new Date(raw);
+  if (Number.isFinite(parsed.getTime())) return parsed.toISOString().slice(0, 7);
+  return /^\d{4}-\d{2}/.test(raw) ? raw.slice(0, 7) : "";
+}
+
+function paymentNeedsReview(payment: PaymentRecord) {
+  const status = String(payment.status || "").trim().toLowerCase();
+  const method = String(payment.method || "").trim().toLowerCase();
+  const notes = String(payment.notes || "").trim().toLowerCase();
+  return (
+    status.includes("review") ||
+    status.includes("failed") ||
+    status.includes("unmatched") ||
+    method.includes("review") ||
+    notes.includes("review")
+  );
+}
+
+export function filterPaymentsByDashboardContext(
+  payments: PaymentRecord[],
+  context: PaymentsDashboardContext | null,
+  periodMonth: string
+) {
+  if (!context) return payments;
+  if (context === "current_month") {
+    return payments.filter((payment) => paymentMonth(payment) === periodMonth);
+  }
+  if (context === "collected") {
+    return payments.filter((payment) => {
+      const status = String(payment.status || "").trim().toLowerCase();
+      return status === "recorded" || status === "paid" || status === "collected" || Boolean(payment.paidAt);
+    });
+  }
+  if (context === "needs_review") {
+    return payments.filter(paymentNeedsReview);
+  }
+  return [];
+}
+
+function dashboardContextLabel(context: PaymentsDashboardContext | null, periodMonth: string) {
+  if (context === "current_month") return `Current month payments (${periodMonth})`;
+  if (context === "collected") return "Collected payments";
+  if (context === "needs_review") return "Payments needing review";
+  if (context === "outstanding") return "Outstanding rent context";
+  return "";
+}
+
+function dashboardContextDescription(context: PaymentsDashboardContext | null) {
+  if (context === "current_month") return "Opened from Dashboard Financial Snapshot. Showing payments recorded for this month.";
+  if (context === "collected") return "Showing recorded payments that appear collected or paid.";
+  if (context === "needs_review") return "Showing payment rows with review, failed, or unmatched signals.";
+  if (context === "outstanding") return "Outstanding balances are not recorded payment rows yet. Use lease ledger views for charges and unmatched balances.";
+  return "";
+}
 
 function tenantLabelFromValue(value: any): string {
   return (
@@ -35,6 +117,7 @@ function propertyLabelFromValue(value: any): string {
 
 const PaymentsPage: React.FC = () => {
   const { payments, loading, error, refresh } = usePayments();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [rows, setRows] = useState<PaymentRecord[]>([]);
   const [exporting, setExporting] = useState<null | "csv" | "xls">(null);
   const [labelMap, setLabelMap] = useState<{ tenants: Map<string, string>; properties: Map<string, string> }>({
@@ -45,6 +128,21 @@ const PaymentsPage: React.FC = () => {
   useEffect(() => {
     setRows(payments);
   }, [payments]);
+
+  const dashboardContext = normalizeDashboardContext(searchParams.get("context"));
+  const contextPeriodMonth = normalizePeriodMonth(searchParams.get("period"));
+  const visibleRows = filterPaymentsByDashboardContext(rows, dashboardContext, contextPeriodMonth);
+  const isDashboardContextActive = Boolean(dashboardContext);
+  const contextLabel = dashboardContextLabel(dashboardContext, contextPeriodMonth);
+  const contextDescription = dashboardContextDescription(dashboardContext);
+
+  const clearDashboardContext = () => {
+    const next = new URLSearchParams(searchParams);
+    next.delete("context");
+    next.delete("period");
+    next.delete("source");
+    setSearchParams(next, { replace: true });
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -121,7 +219,7 @@ const PaymentsPage: React.FC = () => {
       setExporting(format);
       const blob = buildCsvBlob(
         ["tenant", "property_unit", "amount", "paid_date", "method", "notes"],
-        rows.map((payment) => [
+        visibleRows.map((payment) => [
           getTenantLabel(payment),
           getPropertyLabel(payment),
           Number(payment.amount || 0),
@@ -230,6 +328,20 @@ const PaymentsPage: React.FC = () => {
 
       <PaymentCsvImportPreviewCard onImportComplete={refresh} />
 
+      {isDashboardContextActive ? (
+        <Card>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: spacing.md, flexWrap: "wrap" }}>
+            <div style={{ display: "grid", gap: 4 }}>
+              <div style={{ fontWeight: 800, color: text.primary }}>{contextLabel}</div>
+              <div style={{ color: text.muted, fontSize: "0.92rem" }}>{contextDescription}</div>
+            </div>
+            <Button variant="secondary" onClick={clearDashboardContext}>
+              Clear filter
+            </Button>
+          </div>
+        </Card>
+      ) : null}
+
       <Card>
         <div style={{ display: "grid", gap: spacing.xs }}>
           <div style={{ fontSize: "1rem", fontWeight: 700, color: text.primary }}>Financial Activity</div>
@@ -248,11 +360,15 @@ const PaymentsPage: React.FC = () => {
       <Card>
         {loading && <div style={{ fontSize: "0.95rem", color: text.muted }}>Loading payments...</div>}
         {error && <div style={{ color: colors.danger, fontSize: "0.95rem" }}>Failed to load payments: {error}</div>}
-        {!loading && !error && rows.length === 0 && (
-          <div style={{ fontSize: "0.95rem", color: text.muted }}>No payments recorded yet.</div>
+        {!loading && !error && visibleRows.length === 0 && (
+          <div style={{ fontSize: "0.95rem", color: text.muted }}>
+            {isDashboardContextActive
+              ? `No payments match ${contextLabel.toLowerCase()}. Clear the filter to return to all recorded payments.`
+              : "No payments recorded yet."}
+          </div>
         )}
 
-        {!loading && !error && rows.length > 0 && (
+        {!loading && !error && visibleRows.length > 0 && (
           <div style={{ overflowX: "auto" }}>
             <table
               style={{
@@ -279,7 +395,7 @@ const PaymentsPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((p) => (
+                {visibleRows.map((p) => (
                   <tr key={p.id} style={{ borderBottom: `1px solid ${colors.border}` }}>
                     <td style={{ padding: "0.5rem 0.4rem" }}>{getTenantLabel(p)}</td>
                     <td style={{ padding: "0.5rem 0.4rem" }}>{getPropertyLabel(p)}</td>
@@ -337,7 +453,7 @@ const PaymentsPage: React.FC = () => {
           <div className="printTitle">Payments summary</div>
           <div className="printMeta">
             <div>Generated: {new Date().toLocaleString()}</div>
-            <div>Rows: {rows.length}</div>
+            <div>Rows: {visibleRows.length}</div>
           </div>
         </div>
         <div className="printH3">Recorded payments</div>
@@ -353,7 +469,7 @@ const PaymentsPage: React.FC = () => {
             </tr>
           </thead>
           <tbody>
-            {rows.map((payment) => (
+            {visibleRows.map((payment) => (
               <tr key={payment.id}>
                 <td>{getTenantLabel(payment)}</td>
                 <td>{getPropertyLabel(payment)}</td>

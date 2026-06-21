@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { MemoryRouter } from "react-router-dom";
 import PaymentsPage from "./PaymentsPage";
 
 const mocks = vi.hoisted(() => ({
@@ -48,6 +49,14 @@ vi.mock("@/components/ledger/PaymentCsvImportPreviewCard", () => ({
   PaymentCsvImportPreviewCard: () => <div>AI-assisted payment CSV import</div>,
 }));
 
+function renderPaymentsPage(initialEntry = "/payments") {
+  return render(
+    <MemoryRouter initialEntries={[initialEntry]}>
+      <PaymentsPage />
+    </MemoryRouter>
+  );
+}
+
 describe("PaymentsPage", () => {
   afterEach(() => {
     cleanup();
@@ -78,7 +87,7 @@ describe("PaymentsPage", () => {
   });
 
   it("renders the recorded-payments framing, explainer, and export controls", async () => {
-    render(<PaymentsPage />);
+    renderPaymentsPage();
 
     expect(screen.getByText("Payments (recorded)")).toBeInTheDocument();
     expect(
@@ -101,10 +110,11 @@ describe("PaymentsPage", () => {
     expect((await screen.findAllByText("Taylor Tenant")).length).toBeGreaterThan(0);
     expect(screen.getAllByText("123 Main St / Unit 3A").length).toBeGreaterThan(0);
     expect(screen.getAllByText("e-transfer").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: "Clear filter" })).not.toBeInTheDocument();
   });
 
   it("routes PDF export through the shared print helper", async () => {
-    render(<PaymentsPage />);
+    renderPaymentsPage();
 
     fireEvent.click((await screen.findAllByRole("button", { name: "Print / Save PDF" }))[0]);
     expect(mocks.printSummaryDocument).toHaveBeenCalledWith("summary");
@@ -123,7 +133,7 @@ describe("PaymentsPage", () => {
       return originalCreateElement(tagName);
     }) as any);
 
-    render(<PaymentsPage />);
+    renderPaymentsPage();
 
     fireEvent.click((await screen.findAllByRole("button", { name: "Export CSV" }))[0]);
     await waitFor(() => expect(createObjectURL).toHaveBeenCalledTimes(1));
@@ -160,7 +170,7 @@ describe("PaymentsPage", () => {
     mocks.fetchTenants.mockResolvedValue([]);
     mocks.fetchProperties.mockResolvedValue({ items: [] });
 
-    render(<PaymentsPage />);
+    renderPaymentsPage();
 
     expect((await screen.findAllByText("Tenant ref tenant-2")).length).toBeGreaterThan(0);
     expect((await screen.findAllByText("Property ref prop-2")).length).toBeGreaterThan(0);
@@ -205,7 +215,7 @@ describe("PaymentsPage", () => {
       error: null,
     });
 
-    render(<PaymentsPage />);
+    renderPaymentsPage();
 
     await screen.findAllByText("Taylor Tenant");
     expect(await screen.findAllByRole("button", { name: "Edit" })).toHaveLength(1);
@@ -244,7 +254,7 @@ describe("PaymentsPage", () => {
       .mockReturnValueOnce("e-transfer")
       .mockReturnValueOnce("April rent adjusted");
 
-    render(<PaymentsPage />);
+    renderPaymentsPage();
 
     fireEvent.click((await screen.findAllByRole("button", { name: "Edit" }))[0]);
 
@@ -284,7 +294,7 @@ describe("PaymentsPage", () => {
       error: null,
     });
 
-    render(<PaymentsPage />);
+    renderPaymentsPage();
 
     await screen.findAllByText("Taylor Tenant");
     expect(await screen.findAllByRole("button", { name: "Edit" })).toHaveLength(1);
@@ -308,9 +318,83 @@ describe("PaymentsPage", () => {
       error: null,
     });
 
-    render(<PaymentsPage />);
+    renderPaymentsPage();
 
     await screen.findAllByText("Taylor Tenant");
     expect(await screen.findAllByRole("button", { name: "Edit" })).toHaveLength(1);
+  });
+
+  it("applies and clears the Dashboard current-month context filter", async () => {
+    mocks.usePayments.mockReturnValue({
+      payments: [
+        {
+          id: "payment-june",
+          tenantId: "tenant-1",
+          propertyId: "prop-1",
+          amount: 1800,
+          paidAt: "2026-06-03",
+          method: "e-transfer",
+          notes: "June rent",
+          status: "Recorded",
+          source: "payments",
+        },
+        {
+          id: "payment-may",
+          tenantId: "tenant-2",
+          propertyId: "prop-1",
+          amount: 1700,
+          paidAt: "2026-05-03",
+          method: "cheque",
+          notes: "May rent",
+          status: "Recorded",
+          source: "payments",
+        },
+      ],
+      loading: false,
+      error: null,
+    });
+    mocks.fetchTenants.mockResolvedValue([
+      { id: "tenant-1", fullName: "June Tenant" },
+      { id: "tenant-2", fullName: "May Tenant" },
+    ]);
+
+    renderPaymentsPage("/payments?context=current_month&period=2026-06&source=dashboard");
+
+    expect(await screen.findByText("Current month payments (2026-06)")).toBeInTheDocument();
+    expect((await screen.findAllByText("June Tenant")).length).toBeGreaterThan(0);
+    expect(screen.queryByText("May Tenant")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear filter" }));
+
+    expect((await screen.findAllByText("May Tenant")).length).toBeGreaterThan(0);
+    expect(screen.queryByText("Current month payments (2026-06)")).not.toBeInTheDocument();
+  });
+
+  it("renders a calm empty state for empty Dashboard context results", async () => {
+    mocks.usePayments.mockReturnValue({
+      payments: [
+        {
+          id: "payment-may",
+          tenantId: "tenant-1",
+          propertyId: "prop-1",
+          amount: 1700,
+          paidAt: "2026-05-03",
+          method: "cheque",
+          notes: "May rent",
+          status: "Recorded",
+          source: "payments",
+        },
+      ],
+      loading: false,
+      error: null,
+    });
+
+    renderPaymentsPage("/payments?context=current_month&period=2026-06&source=dashboard");
+
+    expect(await screen.findByText("Current month payments (2026-06)")).toBeInTheDocument();
+    expect(
+      screen.getByText("No payments match current month payments (2026-06). Clear the filter to return to all recorded payments.")
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Clear filter" })).toBeInTheDocument();
   });
 });
