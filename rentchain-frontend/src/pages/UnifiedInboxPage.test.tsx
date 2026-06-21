@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import UnifiedInboxPage from "./UnifiedInboxPage";
 import type { UnifiedInboxRecord } from "../api/unifiedInboxApi";
@@ -106,6 +106,115 @@ describe("UnifiedInboxPage", () => {
     expect(await screen.findByRole("heading", { name: "Unified inbox" })).toBeInTheDocument();
     expect(screen.getAllByText("Work order update").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Work order").length).toBeGreaterThan(0);
+  });
+
+  it("filters landlord inbox records with operational tabs, status, and search", async () => {
+    mocks.fetchUnifiedInbox.mockResolvedValue({
+      ok: true,
+      role: "landlord",
+      items: [
+        record({
+          id: "maintenance-priority",
+          audienceRole: "landlord",
+          sourceKind: "landlord.maintenance",
+          title: "Pipe leak reported",
+          body: "Maintenance priority at Unit 204",
+          priority: "high",
+          status: "unread",
+        }),
+        record({
+          id: "lease-ready",
+          audienceRole: "landlord",
+          sourceKind: "landlord.lease",
+          title: "Lease renewal ready",
+          body: "Renewal waiting for review",
+          priority: "normal",
+          status: "read",
+        }),
+        record({
+          id: "payment-balance",
+          audienceRole: "landlord",
+          sourceKind: "landlord.message",
+          title: "Outstanding rent balance",
+          body: "Payment follow-up needed",
+          priority: "normal",
+          status: "unread",
+        }),
+        record({
+          id: "notice-system",
+          audienceRole: "landlord",
+          sourceKind: "landlord.notice",
+          title: "System notice",
+          body: "Notice delivery update",
+          priority: "low",
+          status: "read",
+        }),
+      ],
+      records: [
+        record({
+          id: "maintenance-priority",
+          audienceRole: "landlord",
+          sourceKind: "landlord.maintenance",
+          title: "Pipe leak reported",
+          body: "Maintenance priority at Unit 204",
+          priority: "high",
+          status: "unread",
+        }),
+        record({
+          id: "lease-ready",
+          audienceRole: "landlord",
+          sourceKind: "landlord.lease",
+          title: "Lease renewal ready",
+          body: "Renewal waiting for review",
+          priority: "normal",
+          status: "read",
+        }),
+        record({
+          id: "payment-balance",
+          audienceRole: "landlord",
+          sourceKind: "landlord.message",
+          title: "Outstanding rent balance",
+          body: "Payment follow-up needed",
+          priority: "normal",
+          status: "unread",
+        }),
+        record({
+          id: "notice-system",
+          audienceRole: "landlord",
+          sourceKind: "landlord.notice",
+          title: "System notice",
+          body: "Notice delivery update",
+          priority: "low",
+          status: "read",
+        }),
+      ],
+      total: 4,
+      limit: 20,
+      offset: 0,
+    });
+
+    render(<UnifiedInboxPage role="landlord" />);
+
+    expect(await screen.findByRole("heading", { name: "Unified inbox" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Maintenance 1/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Payments 1/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /System 1/i })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: /Maintenance 1/i }));
+    expect(screen.getAllByText("Pipe leak reported").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Lease renewal ready")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Open work orders/i })).toHaveAttribute("href", "/work-orders");
+
+    fireEvent.click(screen.getByRole("tab", { name: /All 4/i }));
+    fireEvent.change(screen.getByLabelText("Search inbox"), { target: { value: "balance" } });
+    expect(screen.getAllByText("Outstanding rent balance").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Pipe leak reported")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Search inbox"), { target: { value: "" } });
+    fireEvent.change(screen.getByLabelText("Filter inbox status"), { target: { value: "read" } });
+    expect(screen.getAllByText("Lease renewal ready").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("System notice").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Outstanding rent balance")).not.toBeInTheDocument();
   });
 
   it("shows a safe error state when the inbox cannot load", async () => {

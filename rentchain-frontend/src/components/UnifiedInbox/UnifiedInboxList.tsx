@@ -1,5 +1,5 @@
 import React from "react";
-import { ChevronRight, Inbox } from "lucide-react";
+import { ArrowUpRight, ChevronRight, Inbox } from "lucide-react";
 import type { UnifiedInboxRecord, UnifiedInboxRole, UnifiedInboxSourceKind } from "../../api/unifiedInboxApi";
 import { Card } from "../ui/Ui";
 import { colors, radius, spacing, text } from "../../styles/tokens";
@@ -48,6 +48,27 @@ function priorityTone(priority: UnifiedInboxRecord["priority"]) {
   return { color: "#075985", background: "#e0f2fe" };
 }
 
+function workspaceForRecord(record: UnifiedInboxRecord, role: UnifiedInboxRole) {
+  if (role === "tenant") return null;
+  if (role === "contractor") return null;
+  if (record.sourceKind.includes("maintenance") || record.sourceKind.includes("work_order")) {
+    return { href: "/work-orders", label: "Open work orders" };
+  }
+  if (record.sourceKind.includes("lease")) {
+    return { href: "/leases", label: "Open leases" };
+  }
+  if (record.sourceKind.includes("application") || record.sourceKind.includes("screening") || record.sourceKind.includes("viewing")) {
+    return { href: "/applications", label: "Open applications" };
+  }
+  if (/\b(payment|payments|rent|invoice|charge|balance|outstanding|collection)\b/i.test(record.title + " " + record.body)) {
+    return { href: "/payments", label: "Open payments" };
+  }
+  if (record.sourceKind.includes("message")) {
+    return { href: "/landlord/unified-inbox", label: "Stay in inbox" };
+  }
+  return null;
+}
+
 function formatDate(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "Date unavailable";
@@ -71,6 +92,7 @@ export function UnifiedInboxList({ records, role }: Props) {
   const safeRecords = records.filter((record) => isSafeRecordForRole(record, role));
   const [selectedId, setSelectedId] = React.useState<string | null>(safeRecords[0]?.id || null);
   const selected = safeRecords.find((record) => record.id === selectedId) || safeRecords[0] || null;
+  const selectedWorkspace = selected ? workspaceForRecord(selected, role) : null;
 
   React.useEffect(() => {
     if (!safeRecords.length) {
@@ -172,11 +194,30 @@ export function UnifiedInboxList({ records, role }: Props) {
                 <span style={{ color: text.muted }}>Updated</span>
                 <strong>{formatDate(selected.occurredAt)}</strong>
               </div>
-              <div style={{ display: "flex", justifyContent: "space-between", gap: spacing.sm }}>
-                <span style={{ color: text.muted }}>Visibility</span>
-                <strong>{formatStatus(selected.audienceRole)}</strong>
-              </div>
             </div>
+            {selectedWorkspace ? (
+              <a
+                href={selectedWorkspace.href}
+                style={{
+                  alignItems: "center",
+                  background: colors.accent,
+                  borderRadius: 999,
+                  color: "#fff",
+                  display: "inline-flex",
+                  fontSize: "0.95rem",
+                  fontWeight: 800,
+                  gap: 8,
+                  justifySelf: "start",
+                  padding: "10px 14px",
+                  textDecoration: "none",
+                }}
+              >
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                  {selectedWorkspace.label}
+                  <ArrowUpRight size={16} aria-hidden="true" />
+                </span>
+              </a>
+            ) : null}
           </>
         ) : null}
       </Card>
