@@ -288,6 +288,8 @@ describe("PropertiesPage", () => {
 
     expect(screen.getByText("Add a new property")).toBeInTheDocument();
     expect(screen.getByText("Add form")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Hide form" })).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: "Show form" })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Hide form" }));
 
