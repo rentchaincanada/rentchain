@@ -4,7 +4,20 @@
 }
 
 .rc-tenants-page {
+  position: relative;
+  z-index: 0;
+  padding-top: 8px;
   scroll-margin-top: calc(var(--rc-landlord-sticky-shell-measured-height, var(--rc-landlord-sticky-shell-height, 120px)) + 24px);
+}
+
+.rc-tenants-header {
+  position: relative;
+  z-index: 0;
+}
+
+.rc-tenants-header > div:first-child {
+  flex-wrap: wrap;
+  gap: 12px;
 }
 
 .rc-tenants-list {
@@ -16,7 +29,7 @@
 
 .rc-tenants-search {
   position: sticky;
-  top: 0;
+  top: calc(var(--rc-landlord-sticky-shell-measured-height, var(--rc-landlord-sticky-shell-height, 120px)) + 8px);
   z-index: 5;
   background: #ffffff;
   padding: 8px 0 10px;

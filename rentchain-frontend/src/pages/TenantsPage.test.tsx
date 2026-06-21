@@ -16,6 +16,7 @@ type InviteTenantModalProps = {
   defaultTenantName?: string;
   defaultPropertyId?: string;
   defaultUnitId?: string;
+  canInviteOverride?: boolean;
 };
 
 const mocks = vi.hoisted(() => ({
@@ -150,6 +151,33 @@ describe("TenantsPage", () => {
       expect.objectContaining({ fallbackPath: "/pricing" })
     );
     expect(mocks.inviteTenantModalMock).not.toHaveBeenCalled();
+  });
+
+  it("blocks locked selected-tenant invite actions before rendering the invite modal", async () => {
+    mocks.fetchTenantsMock.mockResolvedValue([
+      {
+        id: "tenant-1",
+        fullName: "Taylor Tenant",
+        email: "tenant@example.com",
+        propertyId: "property-1",
+        unitId: "unit-4",
+      },
+    ]);
+    mocks.fetchTenantTenanciesMock.mockResolvedValue([]);
+
+    render(
+      <MemoryRouter initialEntries={["/tenants?tenantId=tenant-1"]}>
+        <TenantsPage />
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Unlock Tenant Invites" }));
+
+    expect(mocks.openUpgradeFlowMock).toHaveBeenCalledWith(
+      expect.objectContaining({ fallbackPath: "/pricing" })
+    );
+    expect(mocks.inviteTenantModalMock).not.toHaveBeenCalled();
+    expect(screen.queryByText("Invite modal open")).not.toBeInTheDocument();
   });
 
   it("does not open the invite modal from a deep link when tenant invites are locked", async () => {

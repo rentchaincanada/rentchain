@@ -81,4 +81,18 @@ describe("InviteTenantModal", () => {
     expect(screen.queryByLabelText("Tenant email")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Send invite" })).not.toBeInTheDocument();
   });
+
+  it("honors an explicit locked invite state without loading property or unit selectors", () => {
+    mocks.useCapabilities.mockReturnValue({ features: { tenant_invites: true } });
+    mocks.useAuth.mockReturnValue({ user: { id: "user-1", role: "admin", plan: "free" } });
+
+    render(<InviteTenantModal open onClose={vi.fn()} canInviteOverride={false} />);
+
+    expect(screen.getByText("Upgrade required")).toBeInTheDocument();
+    expect(screen.queryByText("Property")).not.toBeInTheDocument();
+    expect(screen.queryByText("Unit")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Tenant email")).not.toBeInTheDocument();
+    expect(mocks.fetchProperties).not.toHaveBeenCalled();
+    expect(mocks.fetchUnitsForProperty).not.toHaveBeenCalled();
+  });
 });

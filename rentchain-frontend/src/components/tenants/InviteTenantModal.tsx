@@ -20,6 +20,7 @@ interface Props {
   defaultLeaseId?: string;
   defaultTenantEmail?: string;
   defaultTenantName?: string;
+  canInviteOverride?: boolean;
 }
 
 type PropertyOption = { id: string; name: string };
@@ -57,6 +58,7 @@ export const InviteTenantModal: React.FC<Props> = ({
   defaultUnitId,
   defaultTenantEmail,
   defaultTenantName,
+  canInviteOverride,
 }) => {
   const [tenantEmail, setTenantEmail] = useState("");
   const [tenantName, setTenantName] = useState("");
@@ -76,7 +78,10 @@ export const InviteTenantModal: React.FC<Props> = ({
   const { locale } = useLanguage();
   const { showToast } = useToast();
   const role = String(user?.role || "").toLowerCase();
-  const canInvite = role === "admin" || Boolean(features?.tenant_invites || features?.tenantInvites);
+  const canInvite =
+    typeof canInviteOverride === "boolean"
+      ? canInviteOverride
+      : role === "admin" || Boolean(features?.tenant_invites || features?.tenantInvites);
   const inviteRequiredPlanLabel = resolveRequiredPlanLabel("tenant_invites", user?.plan) || "Starter";
   const inviteUpgradeMessage = `Upgrade to ${inviteRequiredPlanLabel} to send tenant invites.`;
   const inviteUpgradeRedirect =
@@ -125,6 +130,13 @@ export const InviteTenantModal: React.FC<Props> = ({
 
   React.useEffect(() => {
     if (!open) return;
+    if (!canInvite) {
+      setProperties([]);
+      setUnits([]);
+      setPropertyId("");
+      setUnitId("");
+      return;
+    }
     let mounted = true;
     (async () => {
       setLoadingProperties(true);
@@ -161,10 +173,10 @@ export const InviteTenantModal: React.FC<Props> = ({
     return () => {
       mounted = false;
     };
-  }, [open, defaultPropertyId, propertyId]);
+  }, [open, canInvite, defaultPropertyId, propertyId]);
 
   React.useEffect(() => {
-    if (!open || !propertyId) {
+    if (!open || !canInvite || !propertyId) {
       setUnits([]);
       setUnitId("");
       return;
@@ -202,7 +214,7 @@ export const InviteTenantModal: React.FC<Props> = ({
     return () => {
       mounted = false;
     };
-  }, [open, propertyId, defaultUnitId]);
+  }, [open, canInvite, propertyId, defaultUnitId]);
 
   if (!open) return null;
   const selectedUnitRequiresLease = unitId ? units.find((u) => u.id === unitId)?.inviteEligible === false : false;

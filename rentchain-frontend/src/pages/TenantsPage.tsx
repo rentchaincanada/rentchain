@@ -1177,6 +1177,7 @@ const loadTenants = useCallback(async () => {
           defaultUnitId={selectedTenant?.unitId || undefined}
           defaultTenantEmail={selectedTenant?.email || undefined}
           defaultTenantName={selectedTenant?.fullName || selectedTenant?.name || undefined}
+          canInviteOverride={inviteEnabled}
           onInviteCreated={() => {
             void loadTenants();
           }}
