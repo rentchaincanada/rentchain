@@ -258,6 +258,7 @@ describe("LandlordNav mobile drawer", () => {
     const drawer = screen.getByRole("dialog", { name: "Navigation menu" });
     const inboxButtons = within(drawer).getAllByRole("button", { name: "Inbox" });
     expect(inboxButtons).toHaveLength(1);
+    expect(within(drawer).queryByRole("button", { name: "Messages" })).not.toBeInTheDocument();
 
     fireEvent.click(inboxButtons[0]);
 
