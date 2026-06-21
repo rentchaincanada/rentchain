@@ -1,5 +1,5 @@
 import React from "react";
-import { ChevronRight, Inbox } from "lucide-react";
+import { ArrowUpRight, ChevronRight, Inbox } from "lucide-react";
 import type { UnifiedInboxRecord, UnifiedInboxRole, UnifiedInboxSourceKind } from "../../api/unifiedInboxApi";
 import { Card } from "../ui/Ui";
 import { colors, radius, spacing, text } from "../../styles/tokens";
@@ -7,6 +7,7 @@ import { colors, radius, spacing, text } from "../../styles/tokens";
 type Props = {
   records: UnifiedInboxRecord[];
   role: UnifiedInboxRole;
+  onOpenRecord?: (record: UnifiedInboxRecord) => void;
 };
 
 const SOURCE_LABELS: Record<UnifiedInboxSourceKind, string> = {
@@ -48,6 +49,27 @@ function priorityTone(priority: UnifiedInboxRecord["priority"]) {
   return { color: "#075985", background: "#e0f2fe" };
 }
 
+function workspaceForRecord(record: UnifiedInboxRecord, role: UnifiedInboxRole) {
+  if (role === "tenant") return null;
+  if (role === "contractor") return null;
+  if (record.sourceKind.includes("maintenance") || record.sourceKind.includes("work_order")) {
+    return { href: "/work-orders", label: "Open work orders" };
+  }
+  if (record.sourceKind.includes("lease")) {
+    return { href: "/leases", label: "Open leases" };
+  }
+  if (record.sourceKind.includes("application") || record.sourceKind.includes("screening") || record.sourceKind.includes("viewing")) {
+    return { href: "/applications", label: "Open applications" };
+  }
+  if (/\b(payment|payments|rent|invoice|charge|balance|outstanding|collection)\b/i.test(record.title + " " + record.body)) {
+    return { href: "/payments", label: "Open payments" };
+  }
+  if (record.sourceKind.includes("message")) {
+    return { href: "/landlord/unified-inbox", label: "Stay in inbox" };
+  }
+  return null;
+}
+
 function formatDate(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "Date unavailable";
@@ -67,18 +89,18 @@ function isSafeRecordForRole(record: UnifiedInboxRecord, role: UnifiedInboxRole)
   return record.audienceRole === role;
 }
 
-export function UnifiedInboxList({ records, role }: Props) {
+export function UnifiedInboxList({ records, role, onOpenRecord }: Props) {
   const safeRecords = records.filter((record) => isSafeRecordForRole(record, role));
-  const [selectedId, setSelectedId] = React.useState<string | null>(safeRecords[0]?.id || null);
-  const selected = safeRecords.find((record) => record.id === selectedId) || safeRecords[0] || null;
+  const [selectedId, setSelectedId] = React.useState<string | null>(null);
+  const selected = safeRecords.find((record) => record.id === selectedId) || null;
 
   React.useEffect(() => {
     if (!safeRecords.length) {
       setSelectedId(null);
       return;
     }
-    if (!safeRecords.some((record) => record.id === selectedId)) {
-      setSelectedId(safeRecords[0].id);
+    if (selectedId && !safeRecords.some((record) => record.id === selectedId)) {
+      setSelectedId(null);
     }
   }, [safeRecords, selectedId]);
 
@@ -97,24 +119,22 @@ export function UnifiedInboxList({ records, role }: Props) {
   }
 
   return (
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))",
-        gap: spacing.md,
-      }}
-    >
-      <div style={{ display: "grid", gap: spacing.sm }}>
-        {safeRecords.map((record) => {
-          const active = record.id === selected?.id;
-          const priority = priorityTone(record.priority);
-          const status = statusTone(record.status);
-          return (
+    <div style={{ display: "grid", gap: spacing.sm }}>
+      {safeRecords.map((record) => {
+        const active = record.id === selected?.id;
+        const priority = priorityTone(record.priority);
+        const status = statusTone(record.status);
+        const selectedWorkspace = active ? workspaceForRecord(record, role) : null;
+        return (
+          <React.Fragment key={record.id}>
             <button
-              key={record.id}
               type="button"
-              onClick={() => setSelectedId(record.id)}
+              onClick={() => {
+                setSelectedId(record.id);
+                onOpenRecord?.(record);
+              }}
               aria-current={active ? "true" : undefined}
+              aria-expanded={active}
               style={{
                 textAlign: "left",
                 border: active ? `1px solid ${colors.accent}` : `1px solid ${colors.border}`,
@@ -145,41 +165,71 @@ export function UnifiedInboxList({ records, role }: Props) {
                 <span style={{ color: text.subtle, fontSize: 12 }}>{formatDate(record.occurredAt)}</span>
               </div>
             </button>
-          );
-        })}
-      </div>
-
-      <Card elevated style={{ alignSelf: "start", display: "grid", gap: spacing.md }}>
-        {selected ? (
-          <>
-            <div style={{ display: "grid", gap: 6 }}>
-              <div style={{ color: text.muted, fontSize: "0.86rem", fontWeight: 700 }}>
-                {SOURCE_LABELS[selected.sourceKind]}
-              </div>
-              <div style={{ color: text.primary, fontSize: "1.2rem", fontWeight: 850 }}>{selected.title}</div>
-              <div style={{ color: text.secondary, lineHeight: 1.6 }}>{selected.body}</div>
-            </div>
-            <div style={{ display: "grid", gap: 10 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", gap: spacing.sm }}>
-                <span style={{ color: text.muted }}>Status</span>
-                <strong>{formatStatus(selected.status)}</strong>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", gap: spacing.sm }}>
-                <span style={{ color: text.muted }}>Priority</span>
-                <strong>{formatStatus(selected.priority)}</strong>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", gap: spacing.sm }}>
-                <span style={{ color: text.muted }}>Updated</span>
-                <strong>{formatDate(selected.occurredAt)}</strong>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", gap: spacing.sm }}>
-                <span style={{ color: text.muted }}>Visibility</span>
-                <strong>{formatStatus(selected.audienceRole)}</strong>
-              </div>
-            </div>
-          </>
-        ) : null}
-      </Card>
+            {active ? (
+              <Card
+                data-testid="unified-inbox-detail-panel"
+                style={{
+                  background: "#f8fafc",
+                  borderColor: "rgba(37, 99, 235, 0.16)",
+                  borderLeft: `3px solid ${colors.accent}`,
+                  boxShadow: "none",
+                  display: "grid",
+                  gap: spacing.md,
+                  marginLeft: spacing.md,
+                  marginTop: `-${spacing.xs}`,
+                  maxWidth: `calc(100% - ${spacing.md})`,
+                  padding: spacing.md,
+                }}
+              >
+                <div style={{ display: "grid", gap: 6 }}>
+                  <div style={{ color: text.muted, fontSize: "0.86rem", fontWeight: 700 }}>
+                    {SOURCE_LABELS[record.sourceKind]}
+                  </div>
+                  <div style={{ color: text.primary, fontSize: "1.2rem", fontWeight: 850 }}>{record.title}</div>
+                  <div style={{ color: text.secondary, lineHeight: 1.6 }}>{record.body}</div>
+                </div>
+                <div style={{ display: "grid", gap: 10 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: spacing.sm }}>
+                    <span style={{ color: text.muted }}>Status</span>
+                    <strong>{formatStatus(record.status)}</strong>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: spacing.sm }}>
+                    <span style={{ color: text.muted }}>Priority</span>
+                    <strong>{formatStatus(record.priority)}</strong>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: spacing.sm }}>
+                    <span style={{ color: text.muted }}>Updated</span>
+                    <strong>{formatDate(record.occurredAt)}</strong>
+                  </div>
+                </div>
+                {selectedWorkspace ? (
+                  <a
+                    href={selectedWorkspace.href}
+                    style={{
+                      alignItems: "center",
+                      background: colors.accent,
+                      borderRadius: 999,
+                      color: "#fff",
+                      display: "inline-flex",
+                      fontSize: "0.95rem",
+                      fontWeight: 800,
+                      gap: 8,
+                      justifySelf: "start",
+                      padding: "10px 14px",
+                      textDecoration: "none",
+                    }}
+                  >
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                      {selectedWorkspace.label}
+                      <ArrowUpRight size={16} aria-hidden="true" />
+                    </span>
+                  </a>
+                ) : null}
+              </Card>
+            ) : null}
+          </React.Fragment>
+        );
+      })}
     </div>
   );
 }

@@ -111,8 +111,8 @@ const TopNav: React.FC = () => {
               <Button
                 className="rc-top-nav-optional-action"
                 variant="secondary"
-                onClick={() => navigate("/messages")}
-                aria-label={hasUnreadMessages ? "Messages (unread)" : "Messages"}
+                onClick={() => navigate("/landlord/inbox")}
+                aria-label={hasUnreadMessages ? "Inbox (unread)" : "Inbox"}
                 style={{
                   position: "relative",
                   borderRadius: radius.pill,
@@ -124,7 +124,7 @@ const TopNav: React.FC = () => {
                   paddingRight: hasUnreadMessages ? "16px" : undefined,
                 }}
               >
-                Messages
+                Inbox
                 {hasUnreadMessages ? (
                   <span
                     aria-hidden="true"

@@ -56,13 +56,13 @@ describe("TopNav", () => {
     });
   });
 
-  it("renders a landlord messages shortcut and routes to /messages", async () => {
+  it("renders a landlord inbox shortcut and routes to the unified inbox", async () => {
     render(<TopNav />);
 
-    const messagesButton = await screen.findByRole("button", { name: "Messages" });
+    const messagesButton = await screen.findByRole("button", { name: "Inbox" });
     fireEvent.click(messagesButton);
 
-    expect(mocks.navigateMock).toHaveBeenCalledWith("/messages");
+    expect(mocks.navigateMock).toHaveBeenCalledWith("/landlord/inbox");
   });
 
   it("shows unread indicator from existing conversation unread data", async () => {
@@ -71,7 +71,7 @@ describe("TopNav", () => {
     render(<TopNav />);
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Messages (unread)" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Inbox (unread)" })).toBeInTheDocument();
     });
   });
 });
