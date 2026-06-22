@@ -162,6 +162,37 @@ function seedInvitation(overrides: Partial<StoredDoc> = {}) {
   return invitation;
 }
 
+function seedGrant(overrides: Partial<StoredDoc> = {}) {
+  const grant = {
+    grantId: overrides.grantId || `delegated_grant_${readCollection("delegatedAccessGrants").length + 1}`,
+    landlordId: "landlord-1",
+    delegateUserId: "delegate-user-1",
+    delegateEmail: "manager@example.com",
+    role: "property_manager",
+    status: "active",
+    permissionScope: {
+      role: "property_manager",
+      workspaceScopes: ["dashboard", "operations", "properties"],
+      propertyScope: { mode: "selected", propertyIds: ["property-1"], unitIds: ["unit-1"] },
+      resourceScope: { workOrderIds: ["work-order-1"] },
+      permissionFlags: ["view", "edit", "assign"],
+      billingAccess: false,
+      exportAccess: false,
+    },
+    createdByUserId: "owner-user-1",
+    createdAt: "2026-06-22T12:00:00.000Z",
+    acceptedAt: "2026-06-22T12:00:00.000Z",
+    updatedAt: "2026-06-22T12:00:00.000Z",
+    revokedAt: null,
+    revokedByUserId: null,
+    revocationReason: null,
+    auditEventIds: [],
+    ...overrides,
+  };
+  writeCollectionDoc("delegatedAccessGrants", grant.grantId, grant);
+  return grant;
+}
+
 async function acceptInvite(router: any, token = "valid-token", user: Record<string, unknown> | null = {
   id: "delegate-user-1",
   role: "landlord_delegate",
@@ -528,5 +559,228 @@ describe("delegatedAccessInvitationRoutes", () => {
     expect(second.body.error).toBe("INVITATION_NOT_PENDING");
     expect(readCollection("delegatedAccessGrants")).toHaveLength(1);
     expect(readCollection("delegatedAccessAuditEvents")).toHaveLength(1);
+  });
+
+  it("lists grants for the authenticated landlord only and ignores query landlord scope", async () => {
+    const router = (await import("../delegatedAccessInvitationRoutes")).default;
+    seedGrant({ grantId: "active-grant", status: "active" });
+    seedGrant({
+      grantId: "revoked-grant",
+      status: "revoked",
+      revokedAt: "2026-06-23T12:00:00.000Z",
+      revokedByUserId: "owner-user-1",
+      updatedAt: "2026-06-23T12:00:00.000Z",
+    });
+    seedGrant({ grantId: "other-landlord-grant", landlordId: "landlord-2" });
+    seedGrant({ grantId: "suspended-grant", status: "suspended" });
+
+    const response = await invokeRouter(router, {
+      method: "GET",
+      url: "/delegated-access/grants?landlordId=landlord-2",
+      user: ownerUser,
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.grants.map((grant: any) => grant.grantId).sort()).toEqual(["active-grant", "revoked-grant"]);
+    expect(JSON.stringify(response.body)).not.toContain("tokenHash");
+    expect(JSON.stringify(response.body)).not.toContain("valid-token");
+  });
+
+  it("lists delegate summaries for active and revoked grants", async () => {
+    const router = (await import("../delegatedAccessInvitationRoutes")).default;
+    seedGrant({ grantId: "active-grant" });
+    seedGrant({
+      grantId: "revoked-grant",
+      status: "revoked",
+      role: "maintenance_coordinator",
+      revokedAt: "2026-06-23T12:00:00.000Z",
+      revokedByUserId: "owner-user-1",
+      updatedAt: "2026-06-23T12:00:00.000Z",
+      permissionScope: {
+        role: "maintenance_coordinator",
+        workspaceScopes: ["work_orders"],
+        propertyScope: { mode: "selected", propertyIds: ["property-2"] },
+        resourceScope: {},
+        permissionFlags: ["view", "assign"],
+        billingAccess: false,
+        exportAccess: false,
+      },
+    });
+    seedGrant({
+      grantId: "second-delegate",
+      delegateUserId: "delegate-user-2",
+      delegateEmail: "auditor@example.com",
+      role: "read_only_auditor",
+      permissionScope: {
+        role: "read_only_auditor",
+        workspaceScopes: ["evidence_exports"],
+        propertyScope: { mode: "all_current_properties", propertyIds: [] },
+        resourceScope: {},
+        permissionFlags: ["view", "export"],
+        billingAccess: false,
+        exportAccess: true,
+      },
+    });
+
+    const response = await invokeRouter(router, {
+      method: "GET",
+      url: "/delegated-access/delegates?landlordId=landlord-2",
+      user: ownerUser,
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.delegates).toHaveLength(2);
+    expect(response.body.delegates[0]).toEqual(
+      expect.objectContaining({
+        delegateUserId: expect.any(String),
+        roles: expect.any(Array),
+        activeGrantCount: expect.any(Number),
+        revokedGrantCount: expect.any(Number),
+        workspaceScopes: expect.any(Array),
+      })
+    );
+    const manager = response.body.delegates.find((delegate: any) => delegate.delegateUserId === "delegate-user-1");
+    expect(manager).toEqual(
+      expect.objectContaining({
+        delegateEmail: "manager@example.com",
+        roles: ["maintenance_coordinator", "property_manager"],
+        activeGrantCount: 1,
+        revokedGrantCount: 1,
+        propertyScopeSummary: "selected:2",
+      })
+    );
+    expect(manager.workspaceScopes).toEqual(["dashboard", "operations", "properties", "work_orders"]);
+  });
+
+  it("requires owner privileges for delegate and grant management routes", async () => {
+    const router = (await import("../delegatedAccessInvitationRoutes")).default;
+    seedGrant();
+    const delegateUser = { id: "delegate-user-1", role: "landlord_delegate", landlordId: "landlord-1" };
+
+    const delegates = await invokeRouter(router, {
+      method: "GET",
+      url: "/delegated-access/delegates",
+      user: delegateUser,
+    });
+    expect(delegates.status).toBe(403);
+
+    const grants = await invokeRouter(router, {
+      method: "GET",
+      url: "/delegated-access/grants",
+      user: delegateUser,
+    });
+    expect(grants.status).toBe(403);
+
+    const revoke = await invokeRouter(router, {
+      method: "POST",
+      url: "/delegated-access/grants/delegated_grant_1/revoke",
+      user: delegateUser,
+      body: { reason: "turnover" },
+    });
+    expect(revoke.status).toBe(403);
+  });
+
+  it("revokes an active grant without deleting it and records metadata-only audit", async () => {
+    const router = (await import("../delegatedAccessInvitationRoutes")).default;
+    const { evaluateDelegatedAccessPermission } = await import("../../lib/delegatedAccess");
+    seedGrant({ grantId: "grant-to-revoke" });
+
+    const response = await invokeRouter(router, {
+      method: "POST",
+      url: "/delegated-access/grants/grant-to-revoke/revoke",
+      user: ownerUser,
+      body: { reason: "Staff turnover", landlordId: "landlord-2" },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.grant).toEqual(
+      expect.objectContaining({
+        grantId: "grant-to-revoke",
+        landlordId: "landlord-1",
+        status: "revoked",
+        revokedByUserId: "owner-user-1",
+        revocationReason: "Staff turnover",
+      })
+    );
+    expect(readCollection("delegatedAccessGrants")).toHaveLength(1);
+    expect(readCollection("delegatedAccessGrants")[0].status).toBe("revoked");
+
+    const decision = evaluateDelegatedAccessPermission({
+      actorUserId: "delegate-user-1",
+      actingForLandlordId: "landlord-1",
+      isLandlordOwner: false,
+      routeWorkspace: "operations",
+      action: "view",
+      targetResourceType: "operation",
+      propertyId: "property-1",
+      resourceId: "work-order-1",
+      grant: response.body.grant,
+    });
+    expect(decision.allowed).toBe(false);
+    expect(decision.reason).toBe("grant_not_active");
+
+    const auditEvents = readCollection("delegatedAccessAuditEvents");
+    expect(auditEvents).toHaveLength(1);
+    expect(auditEvents[0]).toEqual(
+      expect.objectContaining({
+        eventType: "delegated_access_revoked",
+        actorUserId: "owner-user-1",
+        actingForLandlordId: "landlord-1",
+        delegatedRole: "landlord_owner",
+        actionType: "grant_revoked",
+        targetResourceType: "delegate_grant",
+        targetResourceId: "grant-to-revoke",
+        outcome: "revoked",
+        metadataOnly: true,
+        immutable: true,
+      })
+    );
+    expect(auditEvents[0].after).toEqual(
+      expect.objectContaining({
+        status: "revoked",
+        delegateUserId: "delegate-user-1",
+        role: "property_manager",
+        propertyScopeMode: "selected",
+        reason: "Staff turnover",
+      })
+    );
+    expect(JSON.stringify(auditEvents[0])).not.toContain("tokenHash");
+    expect(JSON.stringify(auditEvents[0])).not.toContain("valid-token");
+  });
+
+  it("fails closed for unknown, cross-landlord, and already revoked grant revocation", async () => {
+    const router = (await import("../delegatedAccessInvitationRoutes")).default;
+    seedGrant({ grantId: "other-landlord-grant", landlordId: "landlord-2" });
+    seedGrant({
+      grantId: "already-revoked",
+      status: "revoked",
+      revokedByUserId: "owner-user-1",
+      revokedAt: "2026-06-23T12:00:00.000Z",
+      updatedAt: "2026-06-23T12:00:00.000Z",
+    });
+
+    const unknown = await invokeRouter(router, {
+      method: "POST",
+      url: "/delegated-access/grants/missing-grant/revoke",
+      user: ownerUser,
+    });
+    expect(unknown.status).toBe(404);
+    expect(unknown.body.error).toBe("GRANT_NOT_FOUND");
+
+    const crossLandlord = await invokeRouter(router, {
+      method: "POST",
+      url: "/delegated-access/grants/other-landlord-grant/revoke",
+      user: ownerUser,
+    });
+    expect(crossLandlord.status).toBe(404);
+
+    const alreadyRevoked = await invokeRouter(router, {
+      method: "POST",
+      url: "/delegated-access/grants/already-revoked/revoke",
+      user: ownerUser,
+    });
+    expect(alreadyRevoked.status).toBe(409);
+    expect(alreadyRevoked.body.error).toBe("GRANT_NOT_ACTIVE");
+    expect(readCollection("delegatedAccessAuditEvents")).toHaveLength(0);
   });
 });

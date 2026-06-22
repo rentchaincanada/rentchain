@@ -1,0 +1,496 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mission Brief - Delegated Access Owner Management API V1</title>
+    <style>
+      @page {
+        size: 16in 9in;
+        margin: 0;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: #f5f7fb;
+        color: #091532;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      .brief {
+        width: 1600px;
+        min-height: 900px;
+        margin: 0 auto;
+        background:
+          linear-gradient(180deg, #071a37 0, #071a37 120px, transparent 120px),
+          #ffffff;
+        box-shadow: 0 20px 80px rgba(9, 21, 50, 0.18);
+      }
+
+      header {
+        height: 120px;
+        display: grid;
+        place-items: center;
+        text-align: center;
+        padding: 18px 48px 20px;
+        color: #ffffff;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 40px;
+        line-height: 1.1;
+        letter-spacing: 0;
+        font-weight: 800;
+      }
+
+      h1 span {
+        color: #7ee36d;
+      }
+
+      .subtitle {
+        margin-top: 8px;
+        font-size: 22px;
+        color: rgba(255, 255, 255, 0.86);
+      }
+
+      main {
+        display: grid;
+        grid-template-columns: 42% 58%;
+        gap: 0;
+        min-height: 780px;
+      }
+
+      section {
+        padding: 22px 28px;
+      }
+
+      .left {
+        border-right: 1px solid #dce3ee;
+      }
+
+      .right {
+        display: grid;
+        grid-template-columns: 1.45fr 0.82fr;
+        gap: 18px;
+      }
+
+      h2 {
+        margin: 0 0 10px;
+        font-size: 25px;
+        line-height: 1.15;
+        color: #091532;
+      }
+
+      h3 {
+        margin: 0 0 8px;
+        font-size: 17px;
+        color: #132b5c;
+      }
+
+      p {
+        margin: 0 0 12px;
+        font-size: 17px;
+        line-height: 1.38;
+      }
+
+      .block {
+        margin-bottom: 18px;
+        padding-bottom: 18px;
+        border-bottom: 1px solid #e2e8f0;
+      }
+
+      .block:last-child {
+        border-bottom: 0;
+        margin-bottom: 0;
+        padding-bottom: 0;
+      }
+
+      ul {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        display: grid;
+        gap: 8px;
+      }
+
+      li {
+        position: relative;
+        padding-left: 24px;
+        font-size: 16px;
+        line-height: 1.3;
+      }
+
+      li::before {
+        content: "";
+        position: absolute;
+        left: 2px;
+        top: 8px;
+        width: 8px;
+        height: 8px;
+        border-radius: 999px;
+        background: #12a150;
+      }
+
+      .non-goals {
+        border: 1px solid #f1b7b7;
+        background: #fff8f8;
+        border-radius: 8px;
+        padding: 16px 18px;
+      }
+
+      .non-goals h2 {
+        color: #9f1239;
+        font-size: 20px;
+      }
+
+      .non-goals li::before {
+        background: #e11d48;
+      }
+
+      .principles {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 10px;
+      }
+
+      .principle {
+        display: grid;
+        grid-template-columns: 28px 1fr;
+        gap: 10px;
+        align-items: start;
+        font-size: 15px;
+        line-height: 1.35;
+      }
+
+      .icon {
+        width: 26px;
+        height: 26px;
+        border: 1px solid #193a76;
+        border-radius: 7px;
+        display: grid;
+        place-items: center;
+        color: #193a76;
+        font-weight: 800;
+        font-size: 13px;
+      }
+
+      .table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 15px;
+        overflow: hidden;
+        border: 1px solid #dce3ee;
+        border-radius: 4px;
+      }
+
+      .table th {
+        background: #071a37;
+        color: #ffffff;
+        text-align: left;
+        padding: 12px 14px;
+        font-size: 15px;
+      }
+
+      .table td {
+        border-top: 1px solid #e2e8f0;
+        padding: 12px 14px;
+        vertical-align: top;
+      }
+
+      .method {
+        display: inline-flex;
+        min-width: 64px;
+        justify-content: center;
+        border-radius: 4px;
+        padding: 6px 8px;
+        font-weight: 800;
+        font-size: 13px;
+      }
+
+      .get {
+        color: #047857;
+        background: #ecfdf5;
+        border: 1px solid #a7f3d0;
+      }
+
+      .post {
+        color: #b91c1c;
+        background: #fff1f2;
+        border: 1px solid #fecdd3;
+      }
+
+      code,
+      pre {
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      }
+
+      pre {
+        margin: 0;
+        padding: 14px;
+        font-size: 13px;
+        line-height: 1.32;
+        color: #0f172a;
+        background: #f8fafc;
+        border: 1px solid #dce3ee;
+        border-radius: 6px;
+        white-space: pre-wrap;
+      }
+
+      .side-card {
+        background: #f5f7fb;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 16px;
+        margin-bottom: 16px;
+      }
+
+      .side-card h2 {
+        font-size: 19px;
+      }
+
+      .side-card li {
+        font-size: 15px;
+      }
+
+      .criteria-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+        margin-top: 16px;
+      }
+
+      .criteria {
+        border: 1px solid #dce3ee;
+        border-radius: 8px;
+        padding: 14px;
+        background: #ffffff;
+      }
+
+      .criteria h2 {
+        font-size: 18px;
+      }
+
+      .criteria li {
+        font-size: 14px;
+      }
+    </style>
+  </head>
+  <body>
+    <article class="brief">
+      <header>
+        <div>
+          <h1>Next Mission: <span>feat/delegated-access-owner-management-api-v1</span></h1>
+          <div class="subtitle">Backend-only owner management APIs for delegated access.</div>
+        </div>
+      </header>
+
+      <main>
+        <section class="left">
+          <div class="block">
+            <h2>Mission Goal</h2>
+            <p>
+              Provide landlord-owner-only APIs to view delegates, view grants, and revoke access with
+              landlord-scoped reads, safe responses, and metadata-only audit coverage.
+            </p>
+          </div>
+
+          <div class="block">
+            <h2>Scope</h2>
+            <ul>
+              <li>List delegates for the authenticated landlord owner.</li>
+              <li>List active and revoked grants for the authenticated landlord owner.</li>
+              <li>Revoke an active grant by grantId without deleting the grant record.</li>
+              <li>Resolve landlord scope only from auth context.</li>
+              <li>Record metadata-only audit events for revocation.</li>
+            </ul>
+          </div>
+
+          <div class="block non-goals">
+            <h2>Non-goals</h2>
+            <ul>
+              <li>No UI or delegate management screens.</li>
+              <li>No email dispatch or notifications.</li>
+              <li>No new invitation creation or acceptance behavior.</li>
+              <li>No Firestore security rule changes unless absolutely required.</li>
+              <li>No billing delegation.</li>
+              <li>No property manager company hierarchy.</li>
+              <li>No contractor organizations.</li>
+              <li>No scheduling integration.</li>
+            </ul>
+          </div>
+
+          <div class="block">
+            <h2>Key Principles</h2>
+            <div class="principles">
+              <div class="principle">
+                <div class="icon">O</div>
+                <div><strong>Owner-only:</strong> all endpoints require landlord owner privileges.</div>
+              </div>
+              <div class="principle">
+                <div class="icon">L</div>
+                <div><strong>Landlord scoped:</strong> query and body params cannot override auth landlordId.</div>
+              </div>
+              <div class="principle">
+                <div class="icon">F</div>
+                <div><strong>Fail closed:</strong> unknown grants, unknown landlords, and invalid states deny access.</div>
+              </div>
+              <div class="principle">
+                <div class="icon">S</div>
+                <div><strong>Safe responses:</strong> do not expose tokens, hashes, or sensitive internal metadata.</div>
+              </div>
+              <div class="principle">
+                <div class="icon">A</div>
+                <div><strong>Audit continuity:</strong> revocation creates append-safe metadata-only audit records.</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="right">
+          <div>
+            <div class="block">
+              <h2>API Endpoints</h2>
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th style="width: 110px;">Method</th>
+                    <th>Endpoint</th>
+                    <th>Description</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><span class="method get">GET</span></td>
+                    <td><code>/api/landlord/delegated-access/delegates</code></td>
+                    <td>List delegate summaries for the landlord.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="method get">GET</span></td>
+                    <td><code>/api/landlord/delegated-access/grants</code></td>
+                    <td>List active and revoked grants for the landlord.</td>
+                  </tr>
+                  <tr>
+                    <td><span class="method post">POST</span></td>
+                    <td><code>/api/landlord/delegated-access/grants/:grantId/revoke</code></td>
+                    <td>Revoke an active delegate grant by ID.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="block">
+              <h2>Data Returned</h2>
+              <h3>Delegates summary</h3>
+              <pre>[
+  {
+    "delegateUserId": "user_abc123",
+    "email": "delegate@example.com",
+    "roles": ["property_manager"],
+    "activeGrantCount": 2,
+    "revokedGrantCount": 1,
+    "workspaceScopes": ["operations", "properties"],
+    "propertyScopeSummary": "selected",
+    "lastActiveAt": null
+  }
+]</pre>
+              <h3 style="margin-top: 14px;">Grant detail</h3>
+              <pre>[
+  {
+    "grantId": "grant_abc123",
+    "delegateUserId": "user_abc123",
+    "delegateEmail": "delegate@example.com",
+    "role": "property_manager",
+    "status": "active",
+    "permissionScope": {
+      "workspaceScopes": ["operations"],
+      "propertyScope": { "mode": "selected", "propertyIds": ["property_001"] },
+      "resourceScope": {},
+      "permissionFlags": ["view", "edit"],
+      "billingAccess": false
+    },
+    "createdAt": "2026-06-22T10:00:00.000Z",
+    "revokedAt": null,
+    "revokedByUserId": null
+  }
+]</pre>
+            </div>
+
+            <div class="criteria-grid">
+              <div class="criteria">
+                <h2>Acceptance Criteria</h2>
+                <ul>
+                  <li>Owner can list delegates and grants for their landlord only.</li>
+                  <li>Query/body landlord overrides are ignored.</li>
+                  <li>Active grants revoke successfully.</li>
+                  <li>Revoked or unknown grants cannot be revoked again.</li>
+                  <li>Responses exclude token/hash and sensitive metadata.</li>
+                </ul>
+              </div>
+              <div class="criteria">
+                <h2>Validation Requirements</h2>
+                <ul>
+                  <li>Focused backend tests.</li>
+                  <li>Backend build.</li>
+                  <li><code>git diff --check</code>.</li>
+                  <li>No manual preview QA required unless consumed by UI.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <aside>
+            <div class="side-card">
+              <h2>Revocation Behavior</h2>
+              <ul>
+                <li>Only active grants can be revoked.</li>
+                <li>Revocation marks status as revoked.</li>
+                <li>Grant record is preserved.</li>
+                <li>Permission evaluator must deny revoked grants immediately.</li>
+                <li>Revocation stores actor, timestamp, and optional reason.</li>
+              </ul>
+            </div>
+
+            <div class="side-card">
+              <h2>Audit Events</h2>
+              <ul>
+                <li>Record delegated_access_revoked.</li>
+                <li>Include actorUserId and actingForLandlordId.</li>
+                <li>Include target grant and delegate user references.</li>
+                <li>Include role, scope summary, reason, outcome, and timestamp.</li>
+                <li>Keep audit metadata-only; no tokens or sensitive payloads.</li>
+              </ul>
+            </div>
+
+            <div class="side-card">
+              <h2>Risk Controls</h2>
+              <ul>
+                <li>Fail closed on ambiguous owner, landlord, grant, or scope.</li>
+                <li>Do not allow cross-landlord grant visibility.</li>
+                <li>Do not expose invitation tokens or token hashes.</li>
+                <li>Keep billing and settings owner-only.</li>
+                <li>Preserve immutable audit trail for access removal.</li>
+              </ul>
+            </div>
+
+            <div class="side-card">
+              <h2>Merge Readiness Criteria</h2>
+              <ul>
+                <li>Contract review confirms owner-only scope and safe responses.</li>
+                <li>Focused tests cover list, scope, revoke, denied states, and audit.</li>
+                <li>Backend build and diff check pass.</li>
+                <li>No unrelated files or adjacent roadmap work included.</li>
+                <li>Review gate satisfied or explicit override authorized.</li>
+              </ul>
+            </div>
+          </aside>
+        </section>
+      </main>
+    </article>
+  </body>
+</html>
