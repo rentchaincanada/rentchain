@@ -5,7 +5,10 @@ import {
   cancelDelegatedAccessInvitationRecord,
   createDelegatedAccessInvitationRecord,
   expireDelegatedAccessInvitationRecord,
+  listDelegatedAccessDelegateRecords,
+  listDelegatedAccessGrantRecords,
   listDelegatedAccessInvitationRecords,
+  revokeDelegatedAccessGrantRecord,
 } from "../services/delegatedAccessInvitationService";
 
 const router = Router();
@@ -39,11 +42,17 @@ function handleError(res: any, error: unknown) {
   if (code === "delegated_invitation_not_found") {
     return res.status(404).json({ ok: false, error: "INVITATION_NOT_FOUND" });
   }
+  if (code === "delegated_grant_not_found") {
+    return res.status(404).json({ ok: false, error: "GRANT_NOT_FOUND" });
+  }
   if (code === "invalid_invitation_token") {
     return res.status(404).json({ ok: false, error: "INVITATION_NOT_FOUND" });
   }
   if (code === "invitation_not_pending") {
     return res.status(409).json({ ok: false, error: "INVITATION_NOT_PENDING" });
+  }
+  if (code === "grant_not_active") {
+    return res.status(409).json({ ok: false, error: "GRANT_NOT_ACTIVE" });
   }
   if (code === "invitation_expired") {
     return res.status(410).json({ ok: false, error: "INVITATION_EXPIRED" });
@@ -56,6 +65,51 @@ function handleError(res: any, error: unknown) {
 }
 
 router.use(requireAuth);
+
+router.get("/delegated-access/delegates", async (req: any, res) => {
+  const context = ownerContext(req);
+  if (!context) return forbidden(res);
+
+  try {
+    const result = await listDelegatedAccessDelegateRecords({
+      landlordId: context.landlordId,
+    });
+    return res.status(200).json({ ok: true, delegates: result.delegates });
+  } catch (error) {
+    return handleError(res, error);
+  }
+});
+
+router.get("/delegated-access/grants", async (req: any, res) => {
+  const context = ownerContext(req);
+  if (!context) return forbidden(res);
+
+  try {
+    const result = await listDelegatedAccessGrantRecords({
+      landlordId: context.landlordId,
+    });
+    return res.status(200).json({ ok: true, grants: result.grants });
+  } catch (error) {
+    return handleError(res, error);
+  }
+});
+
+router.post("/delegated-access/grants/:grantId/revoke", async (req: any, res) => {
+  const context = ownerContext(req);
+  if (!context) return forbidden(res);
+
+  try {
+    const result = await revokeDelegatedAccessGrantRecord({
+      landlordId: context.landlordId,
+      actorUserId: context.actorUserId,
+      grantId: req.params.grantId,
+      reason: req.body?.reason,
+    });
+    return res.status(200).json({ ok: true, grant: result.grant });
+  } catch (error) {
+    return handleError(res, error);
+  }
+});
 
 router.post("/delegated-access/invitations/accept", async (req: any, res) => {
   const context = actorContext(req);
