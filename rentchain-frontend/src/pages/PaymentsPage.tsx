@@ -87,10 +87,35 @@ function normalizeFilterValue(value: string) {
   return value.trim().toLowerCase();
 }
 
-function uniqueSortedValues(values: string[]) {
-  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean))).sort((a, b) =>
-    a.localeCompare(b)
-  );
+function readableFilterLabel(value: string) {
+  return value
+    .trim()
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .split(" ")
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function uniqueSortedFilterOptions(values: string[]) {
+  const options = new Map<string, string>();
+  for (const value of values) {
+    const normalized = normalizeFilterValue(value);
+    if (!normalized || options.has(normalized)) continue;
+    options.set(normalized, readableFilterLabel(value));
+  }
+  return Array.from(options.entries())
+    .map(([value, label]) => ({ value, label }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+}
+
+function paidDateKey(payment: PaymentRecord) {
+  const raw = String(payment.paidAt || "").trim();
+  if (!raw) return "";
+  const parsed = new Date(raw);
+  if (Number.isFinite(parsed.getTime())) return parsed.toISOString().slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}/.test(raw) ? raw.slice(0, 10) : "";
 }
 
 function applyPaymentsWorkspaceFilters(
@@ -98,18 +123,25 @@ function applyPaymentsWorkspaceFilters(
   searchTerm: string,
   statusFilter: string,
   methodFilter: string,
+  fromDate: string,
+  toDate: string,
   getTenantLabel: (payment: PaymentRecord) => string,
   getPropertyLabel: (payment: PaymentRecord) => string
 ) {
   const normalizedSearch = normalizeFilterValue(searchTerm);
   const normalizedStatus = normalizeFilterValue(statusFilter);
   const normalizedMethod = normalizeFilterValue(methodFilter);
+  const normalizedFromDate = /^\d{4}-\d{2}-\d{2}$/.test(fromDate) ? fromDate : "";
+  const normalizedToDate = /^\d{4}-\d{2}-\d{2}$/.test(toDate) ? toDate : "";
 
   return payments.filter((payment) => {
     const status = normalizeFilterValue(String(payment.status || ""));
     const method = normalizeFilterValue(String(payment.method || ""));
     if (normalizedStatus && status !== normalizedStatus) return false;
     if (normalizedMethod && method !== normalizedMethod) return false;
+    const paidDate = paidDateKey(payment);
+    if (normalizedFromDate && (!paidDate || paidDate < normalizedFromDate)) return false;
+    if (normalizedToDate && (!paidDate || paidDate > normalizedToDate)) return false;
     if (!normalizedSearch) return true;
 
     const searchable = [
@@ -166,6 +198,9 @@ const PaymentsPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [methodFilter, setMethodFilter] = useState("");
+  const [fromDateFilter, setFromDateFilter] = useState("");
+  const [toDateFilter, setToDateFilter] = useState("");
+  const [isCsvImportOpen, setIsCsvImportOpen] = useState(false);
   const [exporting, setExporting] = useState<null | "csv" | "xls">(null);
   const [labelMap, setLabelMap] = useState<{ tenants: Map<string, string>; properties: Map<string, string> }>({
     tenants: new Map(),
@@ -225,17 +260,21 @@ const PaymentsPage: React.FC = () => {
     searchTerm,
     statusFilter,
     methodFilter,
+    fromDateFilter,
+    toDateFilter,
     getTenantLabel,
     getPropertyLabel
   );
-  const statusOptions = uniqueSortedValues(rows.map((payment) => String(payment.status || "")));
-  const methodOptions = uniqueSortedValues(rows.map((payment) => String(payment.method || "")));
-  const isWorkspaceFilterActive = Boolean(searchTerm.trim() || statusFilter || methodFilter);
+  const statusOptions = uniqueSortedFilterOptions(rows.map((payment) => String(payment.status || "")));
+  const methodOptions = uniqueSortedFilterOptions(rows.map((payment) => String(payment.method || "")));
+  const isWorkspaceFilterActive = Boolean(searchTerm.trim() || statusFilter || methodFilter || fromDateFilter || toDateFilter);
 
   const clearWorkspaceFilters = () => {
     setSearchTerm("");
     setStatusFilter("");
     setMethodFilter("");
+    setFromDateFilter("");
+    setToDateFilter("");
   };
 
   useEffect(() => {
@@ -391,7 +430,26 @@ const PaymentsPage: React.FC = () => {
         </div>
       </Card>
 
-      <PaymentCsvImportPreviewCard onImportComplete={refresh} />
+      <Card>
+        <div style={{ display: "grid", gap: isCsvImportOpen ? spacing.md : 0 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: spacing.sm, flexWrap: "wrap" }}>
+            <div>
+              <div style={{ fontSize: "1rem", fontWeight: 800, color: text.primary }}>AI-assisted payment CSV import</div>
+              <div style={{ fontSize: "0.9rem", color: text.muted }}>Upload payment rows when you need assisted matching.</div>
+            </div>
+            {isCsvImportOpen ? (
+              <Button variant="secondary" onClick={() => setIsCsvImportOpen(false)}>
+                Hide
+              </Button>
+            ) : (
+              <Button variant="secondary" onClick={() => setIsCsvImportOpen(true)}>
+                Upload CSV
+              </Button>
+            )}
+          </div>
+          {isCsvImportOpen ? <PaymentCsvImportPreviewCard onImportComplete={refresh} /> : null}
+        </div>
+      </Card>
 
       {isDashboardContextActive ? (
         <Card>
@@ -420,7 +478,7 @@ const PaymentsPage: React.FC = () => {
               </Button>
             ) : null}
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 180px), 1fr))", gap: spacing.sm }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 170px), 1fr))", gap: spacing.sm }}>
             <label style={{ display: "grid", gap: 6, color: text.muted, fontSize: "0.84rem", fontWeight: 700 }}>
               Search
               <input
@@ -458,8 +516,8 @@ const PaymentsPage: React.FC = () => {
               >
                 <option value="">All statuses</option>
                 {statusOptions.map((status) => (
-                  <option key={status} value={status}>
-                    {status}
+                  <option key={status.value} value={status.value}>
+                    {status.label}
                   </option>
                 ))}
               </select>
@@ -483,11 +541,47 @@ const PaymentsPage: React.FC = () => {
               >
                 <option value="">All methods</option>
                 {methodOptions.map((method) => (
-                  <option key={method} value={method}>
-                    {method}
+                  <option key={method.value} value={method.value}>
+                    {method.label}
                   </option>
                 ))}
               </select>
+            </label>
+            <label style={{ display: "grid", gap: 6, color: text.muted, fontSize: "0.84rem", fontWeight: 700 }}>
+              From date
+              <input
+                aria-label="Filter payments from date"
+                type="date"
+                value={fromDateFilter}
+                onChange={(event) => setFromDateFilter(event.target.value)}
+                style={{
+                  width: "100%",
+                  boxSizing: "border-box",
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: 8,
+                  padding: "0.65rem 0.75rem",
+                  color: text.primary,
+                  fontSize: "0.95rem",
+                }}
+              />
+            </label>
+            <label style={{ display: "grid", gap: 6, color: text.muted, fontSize: "0.84rem", fontWeight: 700 }}>
+              To date
+              <input
+                aria-label="Filter payments to date"
+                type="date"
+                value={toDateFilter}
+                onChange={(event) => setToDateFilter(event.target.value)}
+                style={{
+                  width: "100%",
+                  boxSizing: "border-box",
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: 8,
+                  padding: "0.65rem 0.75rem",
+                  color: text.primary,
+                  fontSize: "0.95rem",
+                }}
+              />
             </label>
           </div>
         </div>

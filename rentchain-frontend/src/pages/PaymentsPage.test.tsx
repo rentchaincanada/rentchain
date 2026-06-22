@@ -46,7 +46,7 @@ vi.mock("../utils/printSummary", () => ({
 }));
 
 vi.mock("@/components/ledger/PaymentCsvImportPreviewCard", () => ({
-  PaymentCsvImportPreviewCard: () => <div>AI-assisted payment CSV import</div>,
+  PaymentCsvImportPreviewCard: () => <div>Payment CSV import panel</div>,
 }));
 
 function renderPaymentsPage(initialEntry = "/payments") {
@@ -107,6 +107,8 @@ describe("PaymentsPage", () => {
     expect(screen.getByRole("button", { name: "Export Spreadsheet (.xls)" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Print / Save PDF" })).toBeInTheDocument();
     expect(screen.getByText("AI-assisted payment CSV import")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Upload CSV" })).toBeInTheDocument();
+    expect(screen.queryByText("Payment CSV import panel")).not.toBeInTheDocument();
     expect((await screen.findAllByText("Taylor Tenant")).length).toBeGreaterThan(0);
     expect(screen.getAllByText("123 Main St / Unit 3A").length).toBeGreaterThan(0);
     expect(screen.getAllByText("e-transfer").length).toBeGreaterThan(0);
@@ -115,6 +117,22 @@ describe("PaymentsPage", () => {
     expect(screen.getByRole("textbox", { name: "Search payments" })).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "Filter payments by status" })).toHaveValue("");
     expect(screen.getByRole("combobox", { name: "Filter payments by method" })).toHaveValue("");
+  });
+
+  it("opens and hides the CSV import panel from a collapsed default state", async () => {
+    renderPaymentsPage();
+
+    expect(screen.queryByText("Payment CSV import panel")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Upload CSV" }));
+
+    expect(screen.getByText("Payment CSV import panel")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Hide" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Hide" }));
+
+    expect(screen.queryByText("Payment CSV import panel")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Upload CSV" })).toBeInTheDocument();
   });
 
   it("routes PDF export through the shared print helper", async () => {
@@ -426,6 +444,114 @@ describe("PaymentsPage", () => {
     expect((await screen.findAllByText("June Tenant")).length).toBeGreaterThan(0);
     expect((await screen.findAllByText("May Tenant")).length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: "Clear workspace filters" })).not.toBeInTheDocument();
+  });
+
+  it("deduplicates status filters case-insensitively and displays readable labels", async () => {
+    mocks.usePayments.mockReturnValue({
+      payments: [
+        {
+          id: "payment-checkout",
+          tenantId: "tenant-1",
+          propertyId: "prop-1",
+          amount: 1800,
+          paidAt: "2026-06-03",
+          method: "stripe",
+          notes: "",
+          status: "checkout_created",
+          source: "payments",
+        },
+        {
+          id: "payment-recorded-lower",
+          tenantId: "tenant-2",
+          propertyId: "prop-1",
+          amount: 1700,
+          paidAt: "2026-06-04",
+          method: "cheque",
+          notes: "",
+          status: "recorded",
+          source: "payments",
+        },
+        {
+          id: "payment-recorded-title",
+          tenantId: "tenant-3",
+          propertyId: "prop-1",
+          amount: 1600,
+          paidAt: "2026-06-05",
+          method: "cash",
+          notes: "",
+          status: "Recorded",
+          source: "payments",
+        },
+      ],
+      loading: false,
+      error: null,
+    });
+    mocks.fetchTenants.mockResolvedValue([
+      { id: "tenant-1", fullName: "Checkout Tenant" },
+      { id: "tenant-2", fullName: "Lower Tenant" },
+      { id: "tenant-3", fullName: "Title Tenant" },
+    ]);
+
+    renderPaymentsPage();
+
+    const statusFilter = screen.getByRole("combobox", { name: "Filter payments by status" });
+    expect(screen.getByRole("option", { name: "Checkout Created" })).toHaveValue("checkout_created");
+    expect(screen.getAllByRole("option", { name: "Recorded" })).toHaveLength(1);
+
+    fireEvent.change(statusFilter, { target: { value: "recorded" } });
+
+    expect((await screen.findAllByText("Lower Tenant")).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Title Tenant").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Checkout Tenant")).not.toBeInTheDocument();
+  });
+
+  it("filters payments by custom paid date range and clears the date filter", async () => {
+    mocks.usePayments.mockReturnValue({
+      payments: [
+        {
+          id: "payment-june",
+          tenantId: "tenant-1",
+          propertyId: "prop-1",
+          amount: 1800,
+          paidAt: "2026-06-03",
+          method: "e-transfer",
+          notes: "June rent",
+          status: "Recorded",
+          source: "payments",
+        },
+        {
+          id: "payment-may",
+          tenantId: "tenant-2",
+          propertyId: "prop-1",
+          amount: 1700,
+          paidAt: "2026-05-03",
+          method: "cheque",
+          notes: "May rent",
+          status: "Recorded",
+          source: "payments",
+        },
+      ],
+      loading: false,
+      error: null,
+    });
+    mocks.fetchTenants.mockResolvedValue([
+      { id: "tenant-1", fullName: "June Tenant" },
+      { id: "tenant-2", fullName: "May Tenant" },
+    ]);
+
+    renderPaymentsPage();
+
+    fireEvent.change(screen.getByLabelText("Filter payments from date"), { target: { value: "2026-06-01" } });
+    fireEvent.change(screen.getByLabelText("Filter payments to date"), { target: { value: "2026-06-30" } });
+
+    expect((await screen.findAllByText("June Tenant")).length).toBeGreaterThan(0);
+    expect(screen.queryByText("May Tenant")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear workspace filters" }));
+
+    expect((await screen.findAllByText("May Tenant")).length).toBeGreaterThan(0);
+    expect(screen.getByLabelText("Filter payments from date")).toHaveValue("");
+    expect(screen.getByLabelText("Filter payments to date")).toHaveValue("");
   });
 
   it("renders a calm empty state for empty Dashboard context results", async () => {
