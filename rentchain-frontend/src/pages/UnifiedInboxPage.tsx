@@ -165,7 +165,15 @@ export default function UnifiedInboxPage({ role }: Props) {
   }, []);
 
   return (
-    <div style={{ display: "grid", gap: spacing.md }}>
+    <div
+      style={{
+        display: "grid",
+        gap: spacing.md,
+        margin: "0 auto",
+        maxWidth: 1320,
+        width: "calc(100% - 32px)",
+      }}
+    >
       <Card elevated style={{ display: "flex", justifyContent: "space-between", gap: spacing.md, flexWrap: "wrap" }}>
         <div style={{ display: "grid", gap: 6, maxWidth: 760 }}>
           <h1 style={{ margin: 0, color: text.primary, fontSize: "1.55rem" }}>{titleForRole(role)}</h1>

@@ -87,9 +87,10 @@ describe("PaymentsPage", () => {
   });
 
   it("renders the recorded-payments framing, explainer, and export controls", async () => {
-    renderPaymentsPage();
+    const { container } = renderPaymentsPage();
 
     expect(screen.getByText("Payments (recorded)")).toBeInTheDocument();
+    expect(container.firstElementChild).toHaveStyle({ margin: "0 auto", maxWidth: "1320px" });
     expect(
       screen.getByText(
         "This page shows recorded rent payments only. Lease charges, credits, and unmatched ledger entries appear in tenant Financial activity and lease ledger views."

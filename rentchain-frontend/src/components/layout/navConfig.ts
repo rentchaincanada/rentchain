@@ -1,5 +1,5 @@
 import type { ComponentType } from "react";
-import { LayoutDashboard, Building2, Users, ScrollText, MessagesSquare, User, ReceiptText, BarChart3, Inbox, ClipboardList, FileText } from "lucide-react";
+import { LayoutDashboard, Building2, Users, ScrollText, MessagesSquare, User, ReceiptText, BarChart3, Inbox, ClipboardList, FileText, CalendarDays } from "lucide-react";
 import { SCREENING_ENABLED } from "../../config/screening";
 
 export type NavItem = {
@@ -127,6 +127,14 @@ export const NAV_ITEMS: NavItem[] = [
     label: "Payments",
     to: "/payments",
     showInDrawer: true,
+  },
+  {
+    id: "scheduling",
+    label: "Scheduling",
+    to: "/scheduling",
+    icon: CalendarDays,
+    showInDrawer: true,
+    requiresLandlordOrAdmin: true,
   },
   {
     id: "expenses",

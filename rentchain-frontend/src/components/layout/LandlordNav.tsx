@@ -30,6 +30,7 @@ const stickyWorkspaceIds = new Set([
   "tenants",
   "leases",
   "payments",
+  "scheduling",
   "unified-inbox",
   "work-orders",
 ]);
@@ -39,6 +40,7 @@ const workspaceAliases: Array<{ prefix: string; label: string }> = [
   { prefix: "/landlord/unified-inbox", label: "Inbox" },
   { prefix: "/work-orders", label: "Work Orders" },
   { prefix: "/maintenance", label: "Maintenance" },
+  { prefix: "/scheduling", label: "Scheduling" },
 ];
 
 function isRouteActive(pathname: string, target: string): boolean {

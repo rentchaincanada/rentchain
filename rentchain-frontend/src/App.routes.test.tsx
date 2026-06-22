@@ -132,6 +132,10 @@ vi.mock("./pages/UnifiedInboxPage", () => ({
   },
 }));
 
+vi.mock("./pages/SchedulingWorkspacePage", () => ({
+  default: () => <h1>Scheduling Workspace Page</h1>,
+}));
+
 vi.mock("./pages/DecisionInboxPage", () => ({
   default: () => <h1>Decision Inbox Page</h1>,
 }));
@@ -359,6 +363,20 @@ describe("Routes: /landlord/inbox", () => {
     expect(
       await screen.findByText("Unified Inbox Page landlord /landlord/unified-inbox?status=unread#updates")
     ).toBeInTheDocument();
+    expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("Routes: /scheduling", () => {
+  it("renders the landlord scheduling workspace route", async () => {
+    const { default: App } = await import("./App");
+    render(
+      <MemoryRouter initialEntries={["/scheduling"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Scheduling Workspace Page/i)).toBeInTheDocument();
     expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
   });
 });
