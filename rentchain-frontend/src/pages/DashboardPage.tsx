@@ -453,6 +453,9 @@ function PortfolioCountsRow({
 
 function FinancialSnapshotSection({ portfolio }: { portfolio: LandlordPortfolioStatusFinancialResponse }) {
   const financial = portfolio.financialSnapshot;
+  const paymentsWorkspaceHref = `/payments?context=current_month&period=${encodeURIComponent(
+    financial.period.month
+  )}&source=dashboard`;
   const state = metricState(portfolio.confidence.financial);
   const flags = cleanFlags(financial.dataQualityFlags);
   const collected = Math.max(0, financial.collectedCurrentMonthCents || 0);
@@ -468,7 +471,7 @@ function FinancialSnapshotSection({ portfolio }: { portfolio: LandlordPortfolioS
         title="Financial Snapshot"
         subtitle={`Current rent collection and outstanding balance overview for ${financial.period.month}.`}
         action={
-          <Link to="/payments" style={compactButton}>
+          <Link to={paymentsWorkspaceHref} style={compactButton}>
             Payments Workspace <ArrowRight size={16} />
           </Link>
         }

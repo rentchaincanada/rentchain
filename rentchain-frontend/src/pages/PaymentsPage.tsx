@@ -1,5 +1,6 @@
 // rentchain-frontend/src/pages/PaymentsPage.tsx
 import React, { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { usePayments } from "../hooks/usePayments";
 import {
   getCanonicalPaymentEditId,
@@ -16,6 +17,163 @@ import { triggerBlobDownload } from "../utils/downloadBlob";
 import { buildCsvBlob } from "../utils/csvExport";
 import { formatOperationalReference } from "@/lib/identityReferences";
 import { PaymentCsvImportPreviewCard } from "@/components/ledger/PaymentCsvImportPreviewCard";
+
+type PaymentsDashboardContext = "outstanding" | "collected" | "needs_review" | "current_month";
+
+const DASHBOARD_CONTEXTS = new Set<PaymentsDashboardContext>([
+  "outstanding",
+  "collected",
+  "needs_review",
+  "current_month",
+]);
+
+function currentMonthKey() {
+  return new Date().toISOString().slice(0, 7);
+}
+
+function normalizeDashboardContext(value: string | null): PaymentsDashboardContext | null {
+  const context = String(value || "").trim().toLowerCase();
+  return DASHBOARD_CONTEXTS.has(context as PaymentsDashboardContext) ? (context as PaymentsDashboardContext) : null;
+}
+
+function normalizePeriodMonth(value: string | null) {
+  const period = String(value || "").trim();
+  return /^\d{4}-\d{2}$/.test(period) ? period : currentMonthKey();
+}
+
+function paymentMonth(payment: PaymentRecord) {
+  const raw = String(payment.paidAt || "").trim();
+  if (!raw) return "";
+  const parsed = new Date(raw);
+  if (Number.isFinite(parsed.getTime())) return parsed.toISOString().slice(0, 7);
+  return /^\d{4}-\d{2}/.test(raw) ? raw.slice(0, 7) : "";
+}
+
+function paymentNeedsReview(payment: PaymentRecord) {
+  const status = String(payment.status || "").trim().toLowerCase();
+  const method = String(payment.method || "").trim().toLowerCase();
+  const notes = String(payment.notes || "").trim().toLowerCase();
+  return (
+    status.includes("review") ||
+    status.includes("failed") ||
+    status.includes("unmatched") ||
+    method.includes("review") ||
+    notes.includes("review")
+  );
+}
+
+export function filterPaymentsByDashboardContext(
+  payments: PaymentRecord[],
+  context: PaymentsDashboardContext | null,
+  periodMonth: string
+) {
+  if (!context) return payments;
+  if (context === "current_month") {
+    return payments.filter((payment) => paymentMonth(payment) === periodMonth);
+  }
+  if (context === "collected") {
+    return payments.filter((payment) => {
+      const status = String(payment.status || "").trim().toLowerCase();
+      return status === "recorded" || status === "paid" || status === "collected" || Boolean(payment.paidAt);
+    });
+  }
+  if (context === "needs_review") {
+    return payments.filter(paymentNeedsReview);
+  }
+  return [];
+}
+
+function normalizeFilterValue(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function readableFilterLabel(value: string) {
+  return value
+    .trim()
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .split(" ")
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function uniqueSortedFilterOptions(values: string[]) {
+  const options = new Map<string, string>();
+  for (const value of values) {
+    const normalized = normalizeFilterValue(value);
+    if (!normalized || options.has(normalized)) continue;
+    options.set(normalized, readableFilterLabel(value));
+  }
+  return Array.from(options.entries())
+    .map(([value, label]) => ({ value, label }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+}
+
+function paidDateKey(payment: PaymentRecord) {
+  const raw = String(payment.paidAt || "").trim();
+  if (!raw) return "";
+  const parsed = new Date(raw);
+  if (Number.isFinite(parsed.getTime())) return parsed.toISOString().slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}/.test(raw) ? raw.slice(0, 10) : "";
+}
+
+function applyPaymentsWorkspaceFilters(
+  payments: PaymentRecord[],
+  searchTerm: string,
+  statusFilter: string,
+  methodFilter: string,
+  fromDate: string,
+  toDate: string,
+  getTenantLabel: (payment: PaymentRecord) => string,
+  getPropertyLabel: (payment: PaymentRecord) => string
+) {
+  const normalizedSearch = normalizeFilterValue(searchTerm);
+  const normalizedStatus = normalizeFilterValue(statusFilter);
+  const normalizedMethod = normalizeFilterValue(methodFilter);
+  const normalizedFromDate = /^\d{4}-\d{2}-\d{2}$/.test(fromDate) ? fromDate : "";
+  const normalizedToDate = /^\d{4}-\d{2}-\d{2}$/.test(toDate) ? toDate : "";
+
+  return payments.filter((payment) => {
+    const status = normalizeFilterValue(String(payment.status || ""));
+    const method = normalizeFilterValue(String(payment.method || ""));
+    if (normalizedStatus && status !== normalizedStatus) return false;
+    if (normalizedMethod && method !== normalizedMethod) return false;
+    const paidDate = paidDateKey(payment);
+    if (normalizedFromDate && (!paidDate || paidDate < normalizedFromDate)) return false;
+    if (normalizedToDate && (!paidDate || paidDate > normalizedToDate)) return false;
+    if (!normalizedSearch) return true;
+
+    const searchable = [
+      getTenantLabel(payment),
+      getPropertyLabel(payment),
+      payment.amount != null ? String(payment.amount) : "",
+      payment.paidAt || "",
+      payment.method || "",
+      payment.notes || "",
+      payment.status || "",
+    ]
+      .join(" ")
+      .toLowerCase();
+    return searchable.includes(normalizedSearch);
+  });
+}
+
+function dashboardContextLabel(context: PaymentsDashboardContext | null, periodMonth: string) {
+  if (context === "current_month") return `Current month payments (${periodMonth})`;
+  if (context === "collected") return "Collected payments";
+  if (context === "needs_review") return "Payments needing review";
+  if (context === "outstanding") return "Outstanding rent context";
+  return "";
+}
+
+function dashboardContextDescription(context: PaymentsDashboardContext | null) {
+  if (context === "current_month") return "Opened from Dashboard Financial Snapshot. Showing payments recorded for this month.";
+  if (context === "collected") return "Showing recorded payments that appear collected or paid.";
+  if (context === "needs_review") return "Showing payment rows with review, failed, or unmatched signals.";
+  if (context === "outstanding") return "Outstanding balances are not recorded payment rows yet. Use lease ledger views for charges and unmatched balances.";
+  return "";
+}
 
 function tenantLabelFromValue(value: any): string {
   return (
@@ -35,7 +193,14 @@ function propertyLabelFromValue(value: any): string {
 
 const PaymentsPage: React.FC = () => {
   const { payments, loading, error, refresh } = usePayments();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [rows, setRows] = useState<PaymentRecord[]>([]);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [methodFilter, setMethodFilter] = useState("");
+  const [fromDateFilter, setFromDateFilter] = useState("");
+  const [toDateFilter, setToDateFilter] = useState("");
+  const [isCsvImportOpen, setIsCsvImportOpen] = useState(false);
   const [exporting, setExporting] = useState<null | "csv" | "xls">(null);
   const [labelMap, setLabelMap] = useState<{ tenants: Map<string, string>; properties: Map<string, string> }>({
     tenants: new Map(),
@@ -45,6 +210,72 @@ const PaymentsPage: React.FC = () => {
   useEffect(() => {
     setRows(payments);
   }, [payments]);
+
+  const dashboardContext = normalizeDashboardContext(searchParams.get("context"));
+  const contextPeriodMonth = normalizePeriodMonth(searchParams.get("period"));
+  const isDashboardContextActive = Boolean(dashboardContext);
+  const contextLabel = dashboardContextLabel(dashboardContext, contextPeriodMonth);
+  const contextDescription = dashboardContextDescription(dashboardContext);
+
+  const clearDashboardContext = () => {
+    const next = new URLSearchParams(searchParams);
+    next.delete("context");
+    next.delete("period");
+    next.delete("source");
+    setSearchParams(next, { replace: true });
+  };
+
+  const getTenantLabel = (payment: PaymentRecord) => {
+    const record = payment as any;
+    return (
+      tenantLabelFromValue(record.tenant) ||
+      tenantLabelFromValue(record.tenantProfile) ||
+      String(record.tenantName || record.tenantDisplayName || record.applicantName || "").trim() ||
+      labelMap.tenants.get(String(payment.tenantId || "").trim()) ||
+      (payment.tenantId ? formatOperationalReference("tenant", payment.tenantId) : "Tenant")
+    );
+  };
+  const getPropertyLabel = (payment: PaymentRecord) => {
+    const record = payment as any;
+    const propertyLabel =
+      propertyLabelFromValue(record.property) ||
+      String(record.propertyName || record.propertyDisplayName || record.propertyDisplayLabel || "").trim() ||
+      labelMap.properties.get(String(payment.propertyId || "").trim()) ||
+      "";
+    const unitLabel = String(record.unitName || record.unitNumber || record.unitLabel || record.unitDisplayLabel || "").trim();
+    const formattedUnit = unitLabel ? (/^unit\b/i.test(unitLabel) ? unitLabel : `Unit ${unitLabel}`) : "";
+    if (propertyLabel && formattedUnit) return `${propertyLabel} / ${formattedUnit}`;
+    const propertyId = String(payment.propertyId || "").trim();
+    const unitId = String(record.unitId || "").trim();
+    if (propertyLabel || formattedUnit) return propertyLabel || formattedUnit;
+    if (propertyId && unitId) return `${formatOperationalReference("property", propertyId)} / ${formatOperationalReference("unit", unitId)}`;
+    if (propertyId) return formatOperationalReference("property", propertyId);
+    if (unitId) return formatOperationalReference("unit", unitId);
+    return "Property";
+  };
+
+  const contextRows = filterPaymentsByDashboardContext(rows, dashboardContext, contextPeriodMonth);
+  const visibleRows = applyPaymentsWorkspaceFilters(
+    contextRows,
+    searchTerm,
+    statusFilter,
+    methodFilter,
+    fromDateFilter,
+    toDateFilter,
+    getTenantLabel,
+    getPropertyLabel
+  );
+  const statusOptions = uniqueSortedFilterOptions(rows.map((payment) => String(payment.status || "")));
+  const methodOptions = uniqueSortedFilterOptions(rows.map((payment) => String(payment.method || "")));
+  const isWorkspaceFilterActive = Boolean(searchTerm.trim() || statusFilter || methodFilter || fromDateFilter || toDateFilter);
+
+  const clearWorkspaceFilters = () => {
+    setSearchTerm("");
+    setStatusFilter("");
+    setMethodFilter("");
+    setFromDateFilter("");
+    setToDateFilter("");
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -87,41 +318,12 @@ const PaymentsPage: React.FC = () => {
     };
   }, []);
 
-  const getTenantLabel = (payment: PaymentRecord) => {
-    const record = payment as any;
-    return (
-      tenantLabelFromValue(record.tenant) ||
-      tenantLabelFromValue(record.tenantProfile) ||
-      String(record.tenantName || record.tenantDisplayName || record.applicantName || "").trim() ||
-      labelMap.tenants.get(String(payment.tenantId || "").trim()) ||
-      (payment.tenantId ? formatOperationalReference("tenant", payment.tenantId) : "Tenant")
-    );
-  };
-  const getPropertyLabel = (payment: PaymentRecord) => {
-    const record = payment as any;
-    const propertyLabel =
-      propertyLabelFromValue(record.property) ||
-      String(record.propertyName || record.propertyDisplayName || record.propertyDisplayLabel || "").trim() ||
-      labelMap.properties.get(String(payment.propertyId || "").trim()) ||
-      "";
-    const unitLabel = String(record.unitName || record.unitNumber || record.unitLabel || record.unitDisplayLabel || "").trim();
-    const formattedUnit = unitLabel ? (/^unit\b/i.test(unitLabel) ? unitLabel : `Unit ${unitLabel}`) : "";
-    if (propertyLabel && formattedUnit) return `${propertyLabel} / ${formattedUnit}`;
-    const propertyId = String(payment.propertyId || "").trim();
-    const unitId = String(record.unitId || "").trim();
-    if (propertyLabel || formattedUnit) return propertyLabel || formattedUnit;
-    if (propertyId && unitId) return `${formatOperationalReference("property", propertyId)} / ${formatOperationalReference("unit", unitId)}`;
-    if (propertyId) return formatOperationalReference("property", propertyId);
-    if (unitId) return formatOperationalReference("unit", unitId);
-    return "Property";
-  };
-
   const triggerExport = async (format: "csv" | "xls") => {
     try {
       setExporting(format);
       const blob = buildCsvBlob(
         ["tenant", "property_unit", "amount", "paid_date", "method", "notes"],
-        rows.map((payment) => [
+        visibleRows.map((payment) => [
           getTenantLabel(payment),
           getPropertyLabel(payment),
           Number(payment.amount || 0),
@@ -228,7 +430,162 @@ const PaymentsPage: React.FC = () => {
         </div>
       </Card>
 
-      <PaymentCsvImportPreviewCard onImportComplete={refresh} />
+      <Card>
+        <div style={{ display: "grid", gap: isCsvImportOpen ? spacing.md : 0 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: spacing.sm, flexWrap: "wrap" }}>
+            <div>
+              <div style={{ fontSize: "1rem", fontWeight: 800, color: text.primary }}>AI-assisted payment CSV import</div>
+              <div style={{ fontSize: "0.9rem", color: text.muted }}>Upload payment rows when you need assisted matching.</div>
+            </div>
+            {isCsvImportOpen ? (
+              <Button variant="secondary" onClick={() => setIsCsvImportOpen(false)}>
+                Hide
+              </Button>
+            ) : (
+              <Button variant="secondary" onClick={() => setIsCsvImportOpen(true)}>
+                Upload CSV
+              </Button>
+            )}
+          </div>
+          {isCsvImportOpen ? <PaymentCsvImportPreviewCard onImportComplete={refresh} /> : null}
+        </div>
+      </Card>
+
+      {isDashboardContextActive ? (
+        <Card>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: spacing.md, flexWrap: "wrap" }}>
+            <div style={{ display: "grid", gap: 4 }}>
+              <div style={{ fontWeight: 800, color: text.primary }}>{contextLabel}</div>
+              <div style={{ color: text.muted, fontSize: "0.92rem" }}>{contextDescription}</div>
+            </div>
+            <Button variant="secondary" onClick={clearDashboardContext}>
+              Clear filter
+            </Button>
+          </div>
+        </Card>
+      ) : null}
+
+      <Card>
+        <div style={{ display: "grid", gap: spacing.sm }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: spacing.sm, flexWrap: "wrap" }}>
+            <div>
+              <div style={{ fontSize: "1rem", fontWeight: 700, color: text.primary }}>Payment Filters</div>
+              <div style={{ fontSize: "0.9rem", color: text.muted }}>Search and narrow recorded payment rows.</div>
+            </div>
+            {isWorkspaceFilterActive ? (
+              <Button variant="secondary" onClick={clearWorkspaceFilters}>
+                Clear workspace filters
+              </Button>
+            ) : null}
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 170px), 1fr))", gap: spacing.sm }}>
+            <label style={{ display: "grid", gap: 6, color: text.muted, fontSize: "0.84rem", fontWeight: 700 }}>
+              Search
+              <input
+                aria-label="Search payments"
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                placeholder="Tenant, property, notes..."
+                style={{
+                  width: "100%",
+                  boxSizing: "border-box",
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: 8,
+                  padding: "0.65rem 0.75rem",
+                  color: text.primary,
+                  fontSize: "0.95rem",
+                }}
+              />
+            </label>
+            <label style={{ display: "grid", gap: 6, color: text.muted, fontSize: "0.84rem", fontWeight: 700 }}>
+              Status
+              <select
+                aria-label="Filter payments by status"
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value)}
+                style={{
+                  width: "100%",
+                  boxSizing: "border-box",
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: 8,
+                  padding: "0.65rem 0.75rem",
+                  color: text.primary,
+                  fontSize: "0.95rem",
+                  background: "#fff",
+                }}
+              >
+                <option value="">All statuses</option>
+                {statusOptions.map((status) => (
+                  <option key={status.value} value={status.value}>
+                    {status.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label style={{ display: "grid", gap: 6, color: text.muted, fontSize: "0.84rem", fontWeight: 700 }}>
+              Method
+              <select
+                aria-label="Filter payments by method"
+                value={methodFilter}
+                onChange={(event) => setMethodFilter(event.target.value)}
+                style={{
+                  width: "100%",
+                  boxSizing: "border-box",
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: 8,
+                  padding: "0.65rem 0.75rem",
+                  color: text.primary,
+                  fontSize: "0.95rem",
+                  background: "#fff",
+                }}
+              >
+                <option value="">All methods</option>
+                {methodOptions.map((method) => (
+                  <option key={method.value} value={method.value}>
+                    {method.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label style={{ display: "grid", gap: 6, color: text.muted, fontSize: "0.84rem", fontWeight: 700 }}>
+              From date
+              <input
+                aria-label="Filter payments from date"
+                type="date"
+                value={fromDateFilter}
+                onChange={(event) => setFromDateFilter(event.target.value)}
+                style={{
+                  width: "100%",
+                  boxSizing: "border-box",
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: 8,
+                  padding: "0.65rem 0.75rem",
+                  color: text.primary,
+                  fontSize: "0.95rem",
+                }}
+              />
+            </label>
+            <label style={{ display: "grid", gap: 6, color: text.muted, fontSize: "0.84rem", fontWeight: 700 }}>
+              To date
+              <input
+                aria-label="Filter payments to date"
+                type="date"
+                value={toDateFilter}
+                onChange={(event) => setToDateFilter(event.target.value)}
+                style={{
+                  width: "100%",
+                  boxSizing: "border-box",
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: 8,
+                  padding: "0.65rem 0.75rem",
+                  color: text.primary,
+                  fontSize: "0.95rem",
+                }}
+              />
+            </label>
+          </div>
+        </div>
+      </Card>
 
       <Card>
         <div style={{ display: "grid", gap: spacing.xs }}>
@@ -248,11 +605,17 @@ const PaymentsPage: React.FC = () => {
       <Card>
         {loading && <div style={{ fontSize: "0.95rem", color: text.muted }}>Loading payments...</div>}
         {error && <div style={{ color: colors.danger, fontSize: "0.95rem" }}>Failed to load payments: {error}</div>}
-        {!loading && !error && rows.length === 0 && (
-          <div style={{ fontSize: "0.95rem", color: text.muted }}>No payments recorded yet.</div>
+        {!loading && !error && visibleRows.length === 0 && (
+          <div style={{ fontSize: "0.95rem", color: text.muted }}>
+            {isWorkspaceFilterActive
+              ? "No payments match these workspace filters. Clear workspace filters to return to the available payment rows."
+              : isDashboardContextActive
+              ? `No payments match ${contextLabel.toLowerCase()}. Clear the filter to return to all recorded payments.`
+              : "No payments recorded yet."}
+          </div>
         )}
 
-        {!loading && !error && rows.length > 0 && (
+        {!loading && !error && visibleRows.length > 0 && (
           <div style={{ overflowX: "auto" }}>
             <table
               style={{
@@ -279,7 +642,7 @@ const PaymentsPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((p) => (
+                {visibleRows.map((p) => (
                   <tr key={p.id} style={{ borderBottom: `1px solid ${colors.border}` }}>
                     <td style={{ padding: "0.5rem 0.4rem" }}>{getTenantLabel(p)}</td>
                     <td style={{ padding: "0.5rem 0.4rem" }}>{getPropertyLabel(p)}</td>
@@ -337,7 +700,7 @@ const PaymentsPage: React.FC = () => {
           <div className="printTitle">Payments summary</div>
           <div className="printMeta">
             <div>Generated: {new Date().toLocaleString()}</div>
-            <div>Rows: {rows.length}</div>
+            <div>Rows: {visibleRows.length}</div>
           </div>
         </div>
         <div className="printH3">Recorded payments</div>
@@ -353,7 +716,7 @@ const PaymentsPage: React.FC = () => {
             </tr>
           </thead>
           <tbody>
-            {rows.map((payment) => (
+            {visibleRows.map((payment) => (
               <tr key={payment.id}>
                 <td>{getTenantLabel(payment)}</td>
                 <td>{getPropertyLabel(payment)}</td>
