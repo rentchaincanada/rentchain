@@ -403,7 +403,16 @@ const PaymentsPage: React.FC = () => {
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: spacing.lg }}>
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: spacing.lg,
+        margin: "0 auto",
+        maxWidth: 1320,
+        width: "calc(100% - 32px)",
+      }}
+    >
       <Card elevated>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: spacing.md }}>
           <div>

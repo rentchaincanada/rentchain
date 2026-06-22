@@ -6,6 +6,7 @@ import {
   FileText,
   ListChecks,
   MonitorCheck,
+  Plus,
   ShieldCheck,
   Wrench,
 } from "lucide-react";
@@ -19,6 +20,11 @@ type WorkspaceItem = {
   detail: string;
   status: string;
   to: string;
+};
+
+type ScheduleNote = {
+  id: string;
+  text: string;
 };
 
 const viewings: WorkspaceItem[] = [
@@ -171,40 +177,52 @@ export default function SchedulingWorkspacePage() {
   const [calendarView, setCalendarView] = React.useState<CalendarView>("month");
   const [activeMonth, setActiveMonth] = React.useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
   const [selectedDate, setSelectedDate] = React.useState(() => new Date(today.getFullYear(), today.getMonth(), today.getDate()));
-  const [notesByDate, setNotesByDate] = React.useState<Record<string, string>>({});
+  const [notesByDate, setNotesByDate] = React.useState<Record<string, ScheduleNote[]>>({});
   const [noteDraft, setNoteDraft] = React.useState("");
 
   const selectedKey = dayKey(selectedDate);
-  const selectedNote = notesByDate[selectedKey] || "";
+  const selectedNotes = notesByDate[selectedKey] || [];
   const days = calendarView === "month" ? buildMonthDays(activeMonth) : buildWeekDays(selectedDate);
 
   const selectDate = (date: Date) => {
     const next = new Date(date.getFullYear(), date.getMonth(), date.getDate());
     setSelectedDate(next);
     setActiveMonth(new Date(next.getFullYear(), next.getMonth(), 1));
-    setNoteDraft(notesByDate[dayKey(next)] || "");
+    setNoteDraft("");
   };
 
-  const saveNote = () => {
-    const trimmed = noteDraft.trim();
+  const addNote = () => {
+    const note: ScheduleNote = {
+      id: `note-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      text: noteDraft.trim(),
+    };
     setNotesByDate((current) => {
+      const currentNotes = current[selectedKey] || [];
+      return { ...current, [selectedKey]: [...currentNotes, note] };
+    });
+    setNoteDraft("");
+  };
+
+  const updateNote = (noteId: string, value: string) => {
+    setNotesByDate((current) => {
+      const nextNotes = (current[selectedKey] || []).map((note) =>
+        note.id === noteId ? { ...note, text: value } : note
+      );
+      return { ...current, [selectedKey]: nextNotes };
+    });
+  };
+
+  const deleteNote = (noteId: string) => {
+    setNotesByDate((current) => {
+      const nextNotes = (current[selectedKey] || []).filter((note) => note.id !== noteId);
       const next = { ...current };
-      if (trimmed) {
-        next[selectedKey] = trimmed;
+      if (nextNotes.length) {
+        next[selectedKey] = nextNotes;
       } else {
         delete next[selectedKey];
       }
       return next;
     });
-  };
-
-  const deleteNote = () => {
-    setNotesByDate((current) => {
-      const next = { ...current };
-      delete next[selectedKey];
-      return next;
-    });
-    setNoteDraft("");
   };
 
   const moveMonth = (offset: number) => {
@@ -383,10 +401,32 @@ export default function SchedulingWorkspacePage() {
           white-space: nowrap;
         }
         .scheduling-note-actions,
+        .scheduling-note-list,
+        .scheduling-note-row,
         .scheduling-shortcuts {
           display: flex;
           gap: ${spacing.sm};
           flex-wrap: wrap;
+        }
+        .scheduling-note-list {
+          display: grid;
+          gap: ${spacing.sm};
+        }
+        .scheduling-note-row {
+          align-items: center;
+          border: 1px solid ${colors.border};
+          border-radius: ${radius.md};
+          background: #f8fafc;
+          padding: ${spacing.sm};
+        }
+        .scheduling-note-row input {
+          flex: 1 1 220px;
+          min-width: 0;
+        }
+        .scheduling-local-note {
+          color: ${text.subtle};
+          font-size: 0.82rem;
+          line-height: 1.4;
         }
         .scheduling-review-list {
           margin: 0;
@@ -431,6 +471,12 @@ export default function SchedulingWorkspacePage() {
           }
           .scheduling-note-actions .scheduling-link-button,
           .scheduling-shortcuts .scheduling-link-button {
+            width: 100%;
+          }
+          .scheduling-note-row input,
+          .scheduling-note-row button,
+          .scheduling-note-actions input,
+          .scheduling-note-actions button {
             width: 100%;
           }
         }
@@ -507,7 +553,7 @@ export default function SchedulingWorkspacePage() {
                     aria-pressed={isSelected}
                   >
                     <strong>{day.getDate()}</strong>
-                    {notesByDate[key] ? <span>Note</span> : null}
+                    {notesByDate[key]?.length ? <span>{notesByDate[key].length} note{notesByDate[key].length === 1 ? "" : "s"}</span> : null}
                   </button>
                 );
               })}
@@ -518,21 +564,44 @@ export default function SchedulingWorkspacePage() {
             <SectionHeader icon={FileText} title="Notes" />
             <div style={{ display: "grid", gap: spacing.sm }}>
               <strong>{formatDay(selectedDate)}</strong>
+              <div className="scheduling-local-note">Notes are local to this Phase 1 scheduling preview.</div>
+              {selectedNotes.length ? (
+                <div className="scheduling-note-list" aria-label="Saved schedule notes">
+                  {selectedNotes.map((note, index) => (
+                    <div key={note.id} className="scheduling-note-row">
+                      <Input
+                        aria-label={`Edit note ${index + 1}`}
+                        value={note.text}
+                        onChange={(event) => updateNote(note.id, event.target.value)}
+                        placeholder="Note text"
+                      />
+                      <Button type="button" variant="secondary" onClick={() => updateNote(note.id, note.text)}>
+                        Save
+                      </Button>
+                      <Button type="button" variant="ghost" onClick={() => deleteNote(note.id)}>
+                        Delete
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="scheduling-local-note">No notes for this day.</div>
+              )}
               <Input
-                aria-label="Schedule note"
+                aria-label="New schedule note"
                 value={noteDraft}
                 onChange={(event) => setNoteDraft(event.target.value)}
-                placeholder={selectedNote || "Add a note for this day"}
+                placeholder="Add another note for this day"
               />
               <div className="scheduling-note-actions">
-                <Button type="button" variant="secondary" onClick={() => setNoteDraft("")}>
-                  Add note
+                <Button type="button" onClick={addNote} aria-label="Add note">
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                    <Plus size={16} aria-hidden="true" />
+                    Add note
+                  </span>
                 </Button>
-                <Button type="button" onClick={saveNote}>
-                  Save note
-                </Button>
-                <Button type="button" variant="ghost" onClick={deleteNote} disabled={!selectedNote && !noteDraft}>
-                  Delete note
+                <Button type="button" variant="ghost" onClick={() => setNoteDraft("")} disabled={!noteDraft}>
+                  Clear draft
                 </Button>
               </div>
             </div>

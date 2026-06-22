@@ -65,9 +65,10 @@ describe("UnifiedInboxPage", () => {
   });
 
   it("loads the tenant unified inbox and renders only tenant-safe projected records", async () => {
-    render(<UnifiedInboxPage role="tenant" />);
+    const { container } = render(<UnifiedInboxPage role="tenant" />);
 
     expect(await screen.findByRole("heading", { name: "Tenant inbox" })).toBeInTheDocument();
+    expect(container.firstElementChild).toHaveStyle({ margin: "0 auto", maxWidth: "1320px" });
     await waitFor(() => expect(mocks.fetchUnifiedInbox).toHaveBeenCalledWith("tenant"));
     expect(screen.getAllByText("Viewing scheduled").length).toBeGreaterThan(0);
     expect(screen.queryByText("Landlord only")).not.toBeInTheDocument();
