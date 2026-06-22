@@ -174,6 +174,15 @@ export const NAV_ITEMS: NavItem[] = [
     requiresLandlordOrAdmin: true,
   },
   {
+    id: "delegated-access",
+    label: "Delegate Management",
+    to: "/account/delegated-access",
+    icon: User,
+    showInDrawer: false,
+    showInTabs: false,
+    requiresLandlordOrAdmin: true,
+  },
+  {
     id: "onboarding-hardening",
     label: "Onboarding",
     to: "/onboarding-hardening",

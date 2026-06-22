@@ -106,9 +106,10 @@ describe("DelegatedAccessPage", () => {
   });
 
   it("lists delegates, pending invitations, and active grants without showing internal ids or token data", async () => {
-    render(<DelegatedAccessPage />);
+    const { container } = render(<DelegatedAccessPage />);
 
     expect(await screen.findByRole("heading", { name: "Delegate Management" })).toBeInTheDocument();
+    expect(container.firstElementChild).toHaveStyle({ margin: "0 auto", maxWidth: "1320px" });
     expect(screen.getByText("Never share your login. Invite delegates to their own account.")).toBeInTheDocument();
     expect(screen.getByText("assistant@example.com")).toBeInTheDocument();
     expect(screen.getAllByText("manager@example.com").length).toBeGreaterThan(0);
@@ -186,12 +187,33 @@ describe("DelegatedAccessPage", () => {
     mocks.useAuthMock.mockReturnValue({
       user: { id: "delegate-user-1", role: "landlord_delegate", email: "delegate@example.com" },
     });
+    mocks.fetchDelegates.mockResolvedValue([
+      {
+        delegateUserId: "delegate-user-1",
+        delegateEmail: "manager@example.com",
+        roles: ["property_manager"],
+        activeGrantCount: 1,
+        revokedGrantCount: 0,
+        workspaceScopes: ["dashboard"],
+        propertyScopeSummary: "all_current_properties",
+        lastActiveAt: "2026-06-22T12:00:00.000Z",
+      },
+    ]);
+    mocks.fetchGrants.mockResolvedValue([grant()]);
+    mocks.fetchInvitations.mockResolvedValue([invitation()]);
 
     render(<DelegatedAccessPage />);
 
     expect(screen.getByText("Delegate management is available only to landlord owners.")).toBeInTheDocument();
     expect(mocks.fetchDelegates).not.toHaveBeenCalled();
+    expect(mocks.fetchGrants).not.toHaveBeenCalled();
+    expect(mocks.fetchInvitations).not.toHaveBeenCalled();
+    expect(mocks.createInvitation).not.toHaveBeenCalled();
+    expect(mocks.revokeGrant).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: "Invite Delegate" })).not.toBeInTheDocument();
+    expect(screen.queryByText("manager@example.com")).not.toBeInTheDocument();
+    expect(screen.queryByText("assistant@example.com")).not.toBeInTheDocument();
+    expect(screen.queryByText("Property Manager")).not.toBeInTheDocument();
   });
 
   it("filters visible records by status", async () => {

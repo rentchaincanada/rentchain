@@ -1,6 +1,6 @@
 import React from "react";
 import { ShieldCheck, UserPlus } from "lucide-react";
-import { Button, Card, EmptyState, Input, Pill, Section, SkeletonBlock } from "../components/ui/Ui";
+import { Button, Card, EmptyState, Input, Pill, SkeletonBlock } from "../components/ui/Ui";
 import { useToast } from "../components/ui/ToastProvider";
 import { useAuth } from "../context/useAuth";
 import {
@@ -296,19 +296,35 @@ export default function DelegatedAccessPage() {
 
   if (!canManage) {
     return (
-      <Section style={{ maxWidth: 1080, margin: "0 auto", display: "grid", gap: spacing.md }}>
+      <div
+        style={{
+          maxWidth: 1180,
+          margin: "0 auto",
+          width: "calc(100% - 32px)",
+          display: "grid",
+          gap: spacing.md,
+        }}
+      >
         <Card elevated>
           <h1 style={{ margin: 0, fontSize: "1.5rem" }}>Delegate Management</h1>
           <p style={{ margin: "8px 0 0", color: text.muted }}>
             Delegate management is available only to landlord owners.
           </p>
         </Card>
-      </Section>
+      </div>
     );
   }
 
   return (
-    <Section style={{ maxWidth: 1180, margin: "0 auto", display: "grid", gap: spacing.md }}>
+    <div
+      style={{
+        maxWidth: 1320,
+        margin: "0 auto",
+        width: "calc(100% - 32px)",
+        display: "grid",
+        gap: spacing.md,
+      }}
+    >
       <Card elevated style={{ display: "grid", gap: spacing.md }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: spacing.md, flexWrap: "wrap" }}>
           <div style={{ display: "grid", gap: 6 }}>
@@ -629,6 +645,6 @@ export default function DelegatedAccessPage() {
           </div>
         )}
       </Card>
-    </Section>
+    </div>
   );
 }
