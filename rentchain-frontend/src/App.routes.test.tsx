@@ -136,6 +136,10 @@ vi.mock("./pages/SchedulingWorkspacePage", () => ({
   default: () => <h1>Scheduling Workspace Page</h1>,
 }));
 
+vi.mock("./pages/DelegatedAccessPage", () => ({
+  default: () => <h1>Delegate Management Page</h1>,
+}));
+
 vi.mock("./pages/DecisionInboxPage", () => ({
   default: () => <h1>Decision Inbox Page</h1>,
 }));
@@ -377,6 +381,20 @@ describe("Routes: /scheduling", () => {
     );
 
     expect(await screen.findByText(/Scheduling Workspace Page/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("Routes: /account/delegated-access", () => {
+  it("renders the delegated access management route", async () => {
+    const { default: App } = await import("./App");
+    render(
+      <MemoryRouter initialEntries={["/account/delegated-access"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Delegate Management Page/i)).toBeInTheDocument();
     expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
   });
 });

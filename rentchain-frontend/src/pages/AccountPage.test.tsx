@@ -70,5 +70,7 @@ describe("AccountPage", () => {
       screen.getByText("Uses the same billing access level shown in your workspace and checkout flow.")
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Security controls coming soon" })).toBeDisabled();
+    expect(screen.getByText("Delegated Access")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Manage delegates" })).toBeInTheDocument();
   });
 });
