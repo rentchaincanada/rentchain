@@ -121,6 +121,12 @@ const AccountPage: React.FC = () => {
           </Button>
         </HubCard>
 
+        <HubCard title="Delegated Access" description="Invite staff or trusted collaborators to use their own account instead of sharing yours.">
+          <Button type="button" onClick={() => navigate("/account/delegated-access")}>
+            Manage delegates
+          </Button>
+        </HubCard>
+
         <HubCard title="Billing & Plans" description="View your plan, receipts, and manage paid upgrades with pricing that matches checkout.">
           <Button type="button" onClick={() => navigate("/billing")}>
             Billing

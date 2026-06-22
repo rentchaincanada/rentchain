@@ -191,6 +191,7 @@ const ReferralsPage = lazy(() => import("./pages/ReferralsPage"));
 const AccountPage = lazy(() => import("./pages/AccountPage"));
 const AccountProfilePage = lazy(() => import("./pages/account/AccountProfilePage"));
 const AccountDataPage = lazy(() => import("./pages/account/AccountDataPage"));
+const DelegatedAccessPage = lazy(() => import("./pages/DelegatedAccessPage"));
 const ExpensesPage = lazy(() => import("./pages/ExpensesPage"));
 const WorkOrdersPage = lazy(() => import("./pages/landlord/WorkOrdersPage"));
 const WorkOrderNewPage = lazy(() => import("./pages/landlord/WorkOrderNewPage"));
@@ -928,6 +929,20 @@ function App() {
                 <Suspense fallback={null}>
                   <ReferralsPage />
                 </Suspense>
+              </LandlordNav>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/account/delegated-access"
+          element={
+            <RequireAuth>
+              <LandlordNav>
+                <AccountRouteGate>
+                  <Suspense fallback={null}>
+                    <DelegatedAccessPage />
+                  </Suspense>
+                </AccountRouteGate>
               </LandlordNav>
             </RequireAuth>
           }

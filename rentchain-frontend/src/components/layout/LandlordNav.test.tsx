@@ -167,6 +167,21 @@ describe("LandlordNav mobile drawer", () => {
     expect(screen.getByText("Inbox", { selector: ".rc-landlord-mobile-role" })).toBeInTheDocument();
   });
 
+  it("keeps delegate management in the sticky workspace shell", () => {
+    renderLandlordNav("/account/delegated-access");
+
+    const context = screen.getByLabelText("Workspace context");
+    const workspaceNav = screen.getByRole("navigation", { name: "Workspace navigation" });
+    const topNav = document.querySelector(".rc-landlord-topnav");
+    const content = document.querySelector(".rc-landlord-content");
+
+    expect(topNav).toBeInTheDocument();
+    expect(content).toHaveClass("rc-landlord-content--sticky-offset");
+    expect(context).toHaveTextContent("Delegate Management");
+    expect(within(workspaceNav).getByRole("link", { name: "Delegate Management" })).toHaveClass("active");
+    expect(screen.getByText("Delegate Management", { selector: ".rc-landlord-mobile-role" })).toBeInTheDocument();
+  });
+
   it("keeps the mobile tab bar and close control available while the drawer is open", () => {
     renderLandlordNav();
 
