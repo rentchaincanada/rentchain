@@ -8,6 +8,7 @@ import {
   listDelegatedAccessDelegateRecords,
   listDelegatedAccessGrantRecords,
   listDelegatedAccessInvitationRecords,
+  resendDelegatedAccessInvitationEmailRecord,
   revokeDelegatedAccessGrantRecord,
 } from "../services/delegatedAccessInvitationService";
 
@@ -17,13 +18,14 @@ function asString(value: unknown, max = 240): string {
   return String(value ?? "").trim().slice(0, max);
 }
 
-function ownerContext(req: any): { actorUserId: string; landlordId: string } | null {
+function ownerContext(req: any): { actorUserId: string; landlordId: string; actorEmail: string | null } | null {
   const role = asString(req.user?.role, 80).toLowerCase();
   if (role !== "landlord") return null;
   const actorUserId = asString(req.user?.id || req.user?.uid || req.user?.sub, 240);
   const landlordId = asString(req.user?.landlordId || req.user?.id, 240);
+  const actorEmail = asString(req.user?.email, 320) || null;
   if (!actorUserId || !landlordId) return null;
-  return { actorUserId, landlordId };
+  return { actorUserId, landlordId, actorEmail };
 }
 
 function actorContext(req: any): { actorUserId: string; actorEmail: string | null } | null {
@@ -135,6 +137,7 @@ router.post("/delegated-access/invitations", async (req: any, res) => {
     const result = await createDelegatedAccessInvitationRecord({
       landlordId: context.landlordId,
       actorUserId: context.actorUserId,
+      actorEmail: context.actorEmail,
       inviteeEmail: req.body?.inviteeEmail,
       role: req.body?.role,
       propertyScope: req.body?.propertyScope,
@@ -143,7 +146,33 @@ router.post("/delegated-access/invitations", async (req: any, res) => {
       permissionFlags: Array.isArray(req.body?.permissionFlags) ? req.body.permissionFlags : [],
       expiresAt: req.body?.expiresAt,
     });
-    return res.status(201).json({ ok: true, invitation: result.invitation });
+    return res.status(201).json({
+      ok: true,
+      invitation: result.invitation,
+      emailDispatch: { status: result.emailDispatched ? "sent" : "failed" },
+    });
+  } catch (error) {
+    return handleError(res, error);
+  }
+});
+
+router.post("/delegated-access/invitations/:invitationId/resend", async (req: any, res) => {
+  const context = ownerContext(req);
+  if (!context) return forbidden(res);
+
+  try {
+    const result = await resendDelegatedAccessInvitationEmailRecord({
+      landlordId: context.landlordId,
+      actorUserId: context.actorUserId,
+      actorEmail: context.actorEmail,
+      invitationId: req.params.invitationId,
+    });
+    return res.status(result.emailDispatched ? 200 : 502).json({
+      ok: result.emailDispatched,
+      invitation: result.invitation,
+      emailDispatch: { status: result.emailDispatched ? "sent" : "failed" },
+      ...(result.emailDispatched ? {} : { error: "EMAIL_DISPATCH_FAILED" }),
+    });
   } catch (error) {
     return handleError(res, error);
   }

@@ -5,6 +5,7 @@ type StoredDoc = Record<string, any>;
 
 const collections = vi.hoisted(() => new Map<string, Map<string, StoredDoc>>());
 const generatedIds = vi.hoisted(() => ({ value: 0 }));
+const sendEmailMock = vi.hoisted(() => vi.fn(async () => undefined));
 const fakeDb = vi.hoisted(() => ({
   collection(name: string) {
     if (!collections.has(name)) collections.set(name, new Map());
@@ -45,6 +46,10 @@ const fakeDb = vi.hoisted(() => ({
 
 vi.mock("../../firebase", () => ({
   db: fakeDb,
+}));
+
+vi.mock("../../services/emailService", () => ({
+  sendEmail: sendEmailMock,
 }));
 
 vi.mock("../../middleware/requireAuth", () => ({
@@ -116,7 +121,7 @@ async function invokeRouter(
   });
 }
 
-const ownerUser = { id: "owner-user-1", role: "landlord", landlordId: "landlord-1" };
+const ownerUser = { id: "owner-user-1", role: "landlord", landlordId: "landlord-1", email: "owner@example.com" };
 
 const validInviteBody = {
   inviteeEmail: "manager@example.com",
@@ -211,9 +216,12 @@ describe("delegatedAccessInvitationRoutes", () => {
     collections.clear();
     generatedIds.value = 0;
     vi.clearAllMocks();
+    process.env.EMAIL_FROM = "no-reply@example.test";
+    process.env.PUBLIC_APP_URL = "https://app.example.test";
+    sendEmailMock.mockResolvedValue(undefined);
   });
 
-  it("allows a landlord owner to create a scoped pending invitation with an audit event", async () => {
+  it("allows a landlord owner to create a scoped pending invitation and dispatches email without token response leakage", async () => {
     const router = (await import("../delegatedAccessInvitationRoutes")).default;
 
     const response = await createInvite(router, { landlordId: "other-landlord" });
@@ -227,17 +235,35 @@ describe("delegatedAccessInvitationRoutes", () => {
         role: "property_manager",
         status: "pending",
         workspaceScopes: ["dashboard", "operations", "properties"],
+        emailDispatch: expect.objectContaining({ status: "sent", attemptCount: 1 }),
       })
     );
     expect(JSON.stringify(response.body)).not.toContain("tokenHash");
+    expect(response.body.emailDispatch).toEqual({ status: "sent" });
 
     const invitations = readCollection("delegatedAccessInvitations");
     expect(invitations).toHaveLength(1);
-    expect(invitations[0]).toEqual(expect.objectContaining({ tokenHash: expect.any(String) }));
+    expect(invitations[0]).toEqual(
+      expect.objectContaining({
+        tokenHash: expect.any(String),
+        emailDispatch: expect.objectContaining({ status: "sent", attemptCount: 1 }),
+      })
+    );
     expect(invitations[0].landlordId).toBe("landlord-1");
+    expect(sendEmailMock).toHaveBeenCalledTimes(1);
+    const emailPayload = sendEmailMock.mock.calls[0][0];
+    expect(emailPayload.to).toBe("manager@example.com");
+    expect(emailPayload.subject).toContain("owner@example.com");
+    expect(emailPayload.text).toContain("Assigned role: Property Manager");
+    expect(emailPayload.text).toContain("Use your own RentChain account");
+    expect(emailPayload.text).toContain("/delegated-access/accept?token=");
+    const rawToken = String(emailPayload.text).match(/token=([A-Za-z0-9_-]+)/)?.[1];
+    expect(rawToken).toBeTruthy();
+    expect(sha256(rawToken!)).toBe(invitations[0].tokenHash);
+    expect(JSON.stringify(response.body)).not.toContain(rawToken!);
 
     const auditEvents = readCollection("delegatedAccessAuditEvents");
-    expect(auditEvents).toHaveLength(1);
+    expect(auditEvents).toHaveLength(2);
     expect(auditEvents[0]).toEqual(
       expect.objectContaining({
         eventType: "delegated_invite_created",
@@ -249,7 +275,16 @@ describe("delegatedAccessInvitationRoutes", () => {
       })
     );
     expect(auditEvents[0].after).not.toHaveProperty("tokenHash");
-    expect(auditEvents.map((event) => event.eventType)).not.toContain("delegated_invite_sent");
+    expect(auditEvents[1]).toEqual(
+      expect.objectContaining({
+        eventType: "delegated_invite_sent",
+        actionType: "invite_email_dispatched",
+        outcome: "allowed",
+        metadataOnly: true,
+      })
+    );
+    expect(JSON.stringify(auditEvents)).not.toContain(rawToken!);
+    expect(JSON.stringify(auditEvents)).not.toContain("tokenHash");
   });
 
   it("rejects non-owner invitation creation", async () => {
@@ -259,6 +294,47 @@ describe("delegatedAccessInvitationRoutes", () => {
 
     expect(response.status).toBe(403);
     expect(readCollection("delegatedAccessInvitations")).toHaveLength(0);
+  });
+
+  it("keeps created invitation retryable when initial email dispatch fails", async () => {
+    sendEmailMock.mockRejectedValueOnce(new Error("mail_failed secret_token_like_value_abcdefghijklmnopqrstuvwxyz"));
+    const router = (await import("../delegatedAccessInvitationRoutes")).default;
+
+    const response = await createInvite(router);
+
+    expect(response.status).toBe(201);
+    expect(response.body.ok).toBe(true);
+    expect(response.body.emailDispatch).toEqual({ status: "failed" });
+    expect(response.body.invitation.emailDispatch).toEqual(
+      expect.objectContaining({
+        status: "failed",
+        attemptCount: 1,
+        lastFailureReason: expect.stringContaining("mail_failed"),
+      })
+    );
+    expect(JSON.stringify(response.body)).not.toContain("secret_token_like_value");
+    expect(JSON.stringify(response.body)).not.toContain("tokenHash");
+
+    const invitations = readCollection("delegatedAccessInvitations");
+    expect(invitations).toHaveLength(1);
+    expect(invitations[0].status).toBe("pending");
+    expect(invitations[0].emailDispatch.status).toBe("failed");
+
+    const auditEvents = readCollection("delegatedAccessAuditEvents");
+    expect(auditEvents.map((event) => event.eventType)).toEqual([
+      "delegated_invite_created",
+      "delegated_invite_sent",
+    ]);
+    const failedEvent = auditEvents[1];
+    expect(failedEvent).toEqual(
+      expect.objectContaining({
+        actionType: "invite_email_dispatch_failed",
+        outcome: "failed",
+        metadataOnly: true,
+      })
+    );
+    expect(JSON.stringify(failedEvent)).not.toContain("secret_token_like_value");
+    expect(JSON.stringify(failedEvent)).not.toContain("tokenHash");
   });
 
   it("rejects invalid roles and invalid scopes", async () => {
@@ -413,6 +489,112 @@ describe("delegatedAccessInvitationRoutes", () => {
     });
 
     expect(response.status).toBe(404);
+  });
+
+  it("resends pending unexpired invitations and refreshes the stored token hash without token response leakage", async () => {
+    const router = (await import("../delegatedAccessInvitationRoutes")).default;
+    const created = await createInvite(router);
+    const invitationId = created.body.invitation.invitationId;
+    const originalHash = readCollection("delegatedAccessInvitations")[0].tokenHash;
+    sendEmailMock.mockClear();
+
+    const response = await invokeRouter(router, {
+      method: "POST",
+      url: `/delegated-access/invitations/${invitationId}/resend`,
+      user: ownerUser,
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.ok).toBe(true);
+    expect(response.body.emailDispatch).toEqual({ status: "sent" });
+    expect(response.body.invitation.emailDispatch).toEqual(
+      expect.objectContaining({ status: "sent", attemptCount: 2 })
+    );
+    expect(JSON.stringify(response.body)).not.toContain("tokenHash");
+    expect(sendEmailMock).toHaveBeenCalledTimes(1);
+
+    const emailPayload = sendEmailMock.mock.calls[0][0];
+    const rawToken = String(emailPayload.text).match(/token=([A-Za-z0-9_-]+)/)?.[1];
+    expect(rawToken).toBeTruthy();
+    const updatedInvitation = readCollection("delegatedAccessInvitations")[0];
+    expect(updatedInvitation.tokenHash).not.toBe(originalHash);
+    expect(updatedInvitation.tokenHash).toBe(sha256(rawToken!));
+    expect(JSON.stringify(response.body)).not.toContain(rawToken!);
+
+    const auditEvents = readCollection("delegatedAccessAuditEvents");
+    expect(auditEvents.map((event) => event.actionType)).toContain("invite_email_resent");
+    expect(JSON.stringify(auditEvents)).not.toContain(rawToken!);
+    expect(JSON.stringify(auditEvents)).not.toContain("tokenHash");
+  });
+
+  it("preserves existing token hash and marks retryable failure when resend dispatch fails", async () => {
+    const router = (await import("../delegatedAccessInvitationRoutes")).default;
+    const created = await createInvite(router);
+    const invitationId = created.body.invitation.invitationId;
+    const originalHash = readCollection("delegatedAccessInvitations")[0].tokenHash;
+    sendEmailMock.mockRejectedValueOnce(new Error("provider_unavailable secret_token_like_value_abcdefghijklmnopqrstuvwxyz"));
+
+    const response = await invokeRouter(router, {
+      method: "POST",
+      url: `/delegated-access/invitations/${invitationId}/resend`,
+      user: ownerUser,
+    });
+
+    expect(response.status).toBe(502);
+    expect(response.body.ok).toBe(false);
+    expect(response.body.error).toBe("EMAIL_DISPATCH_FAILED");
+    expect(response.body.invitation.emailDispatch).toEqual(
+      expect.objectContaining({ status: "failed", attemptCount: 2 })
+    );
+    const updatedInvitation = readCollection("delegatedAccessInvitations")[0];
+    expect(updatedInvitation.tokenHash).toBe(originalHash);
+    expect(updatedInvitation.emailDispatch.status).toBe("failed");
+    expect(JSON.stringify(response.body)).not.toContain("secret_token_like_value");
+    expect(JSON.stringify(response.body)).not.toContain("tokenHash");
+
+    const failedEvent = readCollection("delegatedAccessAuditEvents").find(
+      (event) => event.actionType === "invite_email_resend_failed"
+    );
+    expect(failedEvent).toEqual(expect.objectContaining({ outcome: "failed", metadataOnly: true }));
+    expect(JSON.stringify(failedEvent)).not.toContain("secret_token_like_value");
+    expect(JSON.stringify(failedEvent)).not.toContain("tokenHash");
+  });
+
+  it("fails closed when resending non-pending, expired, or cross-landlord invitations", async () => {
+    const router = (await import("../delegatedAccessInvitationRoutes")).default;
+    seedInvitation({ invitationId: "accepted-invitation", status: "accepted", acceptedByUserId: "delegate-1" });
+    seedInvitation({
+      invitationId: "expired-invitation",
+      expiresAt: "2026-06-01T12:00:00.000Z",
+      tokenHash: sha256("expired-resend-token"),
+    });
+    seedInvitation({
+      invitationId: "other-landlord-invitation",
+      landlordId: "landlord-2",
+      tokenHash: sha256("other-landlord-token"),
+    });
+
+    const accepted = await invokeRouter(router, {
+      method: "POST",
+      url: "/delegated-access/invitations/accepted-invitation/resend",
+      user: ownerUser,
+    });
+    expect(accepted.status).toBe(409);
+
+    const expired = await invokeRouter(router, {
+      method: "POST",
+      url: "/delegated-access/invitations/expired-invitation/resend",
+      user: ownerUser,
+    });
+    expect(expired.status).toBe(410);
+
+    const crossLandlord = await invokeRouter(router, {
+      method: "POST",
+      url: "/delegated-access/invitations/other-landlord-invitation/resend",
+      user: ownerUser,
+    });
+    expect(crossLandlord.status).toBe(404);
+    expect(sendEmailMock).not.toHaveBeenCalled();
   });
 
   it("accepts a valid pending token for the authenticated delegate account", async () => {

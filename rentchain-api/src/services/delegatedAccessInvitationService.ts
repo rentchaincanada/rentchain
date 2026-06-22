@@ -8,12 +8,14 @@ import {
   revokeDelegatedAccessGrant,
   transitionDelegatedInvitationStatus,
   type DelegatedAccessAuditEvent,
+  type DelegatedAccessEmailDispatchMetadata,
   type DelegatedAccessGrant,
   type DelegatedAccessInvitation,
   type DelegatedAccessInvitationStatus,
   type DelegatedAccessPropertyScope,
   type DelegatedAccessResourceScope,
 } from "../lib/delegatedAccess";
+import { sendDelegatedAccessInvitationEmail } from "./delegatedAccessEmailService";
 
 export const DELEGATED_ACCESS_INVITATIONS_COLLECTION = "delegatedAccessInvitations";
 export const DELEGATED_ACCESS_GRANTS_COLLECTION = "delegatedAccessGrants";
@@ -57,6 +59,7 @@ export type DelegatedDelegateSummary = {
 type CreateInvitationInput = {
   landlordId: string;
   actorUserId: string;
+  actorEmail?: string | null;
   inviteeEmail: string;
   role: string;
   propertyScope: DelegatedAccessPropertyScope;
@@ -64,6 +67,14 @@ type CreateInvitationInput = {
   resourceScope?: DelegatedAccessResourceScope;
   permissionFlags: string[];
   expiresAt: string;
+  now?: string;
+};
+
+type DispatchInvitationEmailInput = {
+  landlordId: string;
+  actorUserId: string;
+  actorEmail?: string | null;
+  invitationId: string;
   now?: string;
 };
 
@@ -110,8 +121,9 @@ function timingSafeEqualHex(a: string, b: string): boolean {
   return left.length === right.length && crypto.timingSafeEqual(left, right);
 }
 
-function createTokenHash(): string {
-  return sha256(crypto.randomBytes(32).toString("hex"));
+function createInvitationToken(): { rawToken: string; tokenHash: string } {
+  const rawToken = crypto.randomBytes(32).toString("base64url");
+  return { rawToken, tokenHash: sha256(rawToken) };
 }
 
 function projectInvitation(invitation: DelegatedAccessInvitation): DelegatedInvitationProjection {
@@ -163,14 +175,134 @@ async function saveGrant(grant: DelegatedAccessGrant, firestore: DelegatedAccess
   await ref.set(grant, { merge: false });
 }
 
+function maskedFailureReason(error: unknown): string {
+  const message = error instanceof Error ? error.message : "email_dispatch_failed";
+  return cleanString(message.replace(/[A-Za-z0-9_-]{24,}/g, "[redacted]"), 160) || "email_dispatch_failed";
+}
+
+function nextDispatchMetadata(
+  current: DelegatedAccessEmailDispatchMetadata | null | undefined,
+  status: "sent" | "failed",
+  now: string,
+  failureReason: string | null = null
+): DelegatedAccessEmailDispatchMetadata {
+  return {
+    status,
+    attemptCount: Number(current?.attemptCount || 0) + 1,
+    lastAttemptAt: now,
+    lastSentAt: status === "sent" ? now : current?.lastSentAt || null,
+    lastFailedAt: status === "failed" ? now : current?.lastFailedAt || null,
+    lastFailureReason: status === "failed" ? failureReason : null,
+  };
+}
+
+function permissionScopeForInvitation(invitation: DelegatedAccessInvitation) {
+  return {
+    role: invitation.role,
+    workspaceScopes: invitation.workspaceScopes,
+    propertyScope: invitation.propertyScope,
+    resourceScope: invitation.resourceScope,
+    permissionFlags: invitation.permissionFlags,
+    billingAccess: false as const,
+    exportAccess: invitation.permissionFlags.includes("export"),
+  };
+}
+
+async function dispatchDelegatedAccessInvitationEmail(
+  input: {
+    invitation: DelegatedAccessInvitation;
+    rawToken: string;
+    actorUserId: string;
+    actorEmail?: string | null;
+    now: string;
+    actionType: "invite_email_dispatched" | "invite_email_resent";
+  },
+  firestore: DelegatedAccessFirestoreLike
+): Promise<{ invitation: DelegatedAccessInvitation; auditEvent: DelegatedAccessAuditEvent; sent: boolean }> {
+  try {
+    await sendDelegatedAccessInvitationEmail({
+      invitation: input.invitation,
+      rawToken: input.rawToken,
+      invitedByEmail: input.actorEmail || null,
+    });
+    const auditEvent = buildDelegatedAccessAuditEvent({
+      eventType: "delegated_invite_sent",
+      actorUserId: input.actorUserId,
+      actingForLandlordId: input.invitation.landlordId,
+      delegatedRole: "landlord_owner",
+      permissionScope: permissionScopeForInvitation(input.invitation),
+      actionType: input.actionType,
+      targetResourceType: "delegate_invitation",
+      targetResourceId: input.invitation.invitationId,
+      timestamp: input.now,
+      outcome: "allowed",
+      before: {
+        status: input.invitation.status,
+        emailDispatchStatus: input.invitation.emailDispatch?.status || "not_sent",
+      },
+      after: {
+        status: input.invitation.status,
+        emailDispatchStatus: "sent",
+        attemptCount: Number(input.invitation.emailDispatch?.attemptCount || 0) + 1,
+      },
+    });
+    const updated = {
+      ...input.invitation,
+      emailDispatch: nextDispatchMetadata(input.invitation.emailDispatch, "sent", input.now),
+      auditEventIds: [...input.invitation.auditEventIds, auditEvent.eventId],
+    };
+    await saveInvitation(updated, firestore);
+    await appendAuditEvent(auditEvent, firestore);
+    return { invitation: updated, auditEvent, sent: true };
+  } catch (error) {
+    const reason = maskedFailureReason(error);
+    const auditEvent = buildDelegatedAccessAuditEvent({
+      eventType: "delegated_invite_sent",
+      actorUserId: input.actorUserId,
+      actingForLandlordId: input.invitation.landlordId,
+      delegatedRole: "landlord_owner",
+      permissionScope: permissionScopeForInvitation(input.invitation),
+      actionType: input.actionType === "invite_email_resent" ? "invite_email_resend_failed" : "invite_email_dispatch_failed",
+      targetResourceType: "delegate_invitation",
+      targetResourceId: input.invitation.invitationId,
+      timestamp: input.now,
+      outcome: "failed",
+      before: {
+        status: input.invitation.status,
+        emailDispatchStatus: input.invitation.emailDispatch?.status || "not_sent",
+      },
+      after: {
+        status: input.invitation.status,
+        emailDispatchStatus: "failed",
+        attemptCount: Number(input.invitation.emailDispatch?.attemptCount || 0) + 1,
+      },
+      reason,
+    });
+    const updated = {
+      ...input.invitation,
+      emailDispatch: nextDispatchMetadata(input.invitation.emailDispatch, "failed", input.now, reason),
+      auditEventIds: [...input.invitation.auditEventIds, auditEvent.eventId],
+    };
+    await saveInvitation(updated, firestore);
+    await appendAuditEvent(auditEvent, firestore);
+    return { invitation: updated, auditEvent, sent: false };
+  }
+}
+
 export async function createDelegatedAccessInvitationRecord(
   input: CreateInvitationInput,
   options: ServiceOptions = {}
-): Promise<{ invitation: DelegatedInvitationProjection; auditEvent: DelegatedAccessAuditEvent }> {
+): Promise<{
+  invitation: DelegatedInvitationProjection;
+  auditEvent: DelegatedAccessAuditEvent;
+  emailAuditEvent: DelegatedAccessAuditEvent;
+  emailDispatched: boolean;
+}> {
   const firestore = delegatedDb(options.firestore);
   const landlordId = requireString(input.landlordId, "missing_landlord_id");
   const actorUserId = requireString(input.actorUserId, "missing_actor_user_id");
   const now = input.now || new Date().toISOString();
+  const token = createInvitationToken();
   const invitation = createDelegatedAccessInvitation({
     landlordId,
     inviteeEmail: input.inviteeEmail,
@@ -179,7 +311,7 @@ export async function createDelegatedAccessInvitationRecord(
     workspaceScopes: input.workspaceScopes,
     resourceScope: input.resourceScope,
     permissionFlags: input.permissionFlags,
-    tokenHash: createTokenHash(),
+    tokenHash: token.tokenHash,
     expiresAt: input.expiresAt,
     createdByUserId: actorUserId,
     createdAt: now,
@@ -217,7 +349,23 @@ export async function createDelegatedAccessInvitationRecord(
   };
   await saveInvitation(withAudit, firestore);
   await appendAuditEvent(auditEvent, firestore);
-  return { invitation: projectInvitation(withAudit), auditEvent };
+  const emailResult = await dispatchDelegatedAccessInvitationEmail(
+    {
+      invitation: withAudit,
+      rawToken: token.rawToken,
+      actorUserId,
+      actorEmail: input.actorEmail,
+      now,
+      actionType: "invite_email_dispatched",
+    },
+    firestore
+  );
+  return {
+    invitation: projectInvitation(emailResult.invitation),
+    auditEvent,
+    emailAuditEvent: emailResult.auditEvent,
+    emailDispatched: emailResult.sent,
+  };
 }
 
 export async function listDelegatedAccessInvitationRecords(
@@ -368,6 +516,100 @@ export async function listDelegatedAccessDelegateRecords(
   const landlordId = requireString(input.landlordId, "missing_landlord_id");
   const grants = await listGrantsForLandlord(landlordId, firestore);
   return { delegates: summarizeDelegates(grants) };
+}
+
+export async function resendDelegatedAccessInvitationEmailRecord(
+  input: DispatchInvitationEmailInput,
+  options: ServiceOptions = {}
+): Promise<{
+  invitation: DelegatedInvitationProjection;
+  auditEvent: DelegatedAccessAuditEvent;
+  emailDispatched: boolean;
+}> {
+  const firestore = delegatedDb(options.firestore);
+  const landlordId = requireString(input.landlordId, "missing_landlord_id");
+  const actorUserId = requireString(input.actorUserId, "missing_actor_user_id");
+  const invitationId = requireString(input.invitationId, "missing_invitation_id");
+  const now = input.now || new Date().toISOString();
+  const invitation = await loadInvitationForLandlord(landlordId, invitationId, firestore);
+  if (!invitation) throw new Error("delegated_invitation_not_found");
+  if (invitation.status !== "pending") throw new Error("invitation_not_pending");
+  if (isDelegatedInvitationExpired(invitation, now)) throw new Error("invitation_expired");
+
+  const token = createInvitationToken();
+  const emailInvitation: DelegatedAccessInvitation = {
+    ...invitation,
+    tokenHash: token.tokenHash,
+  };
+
+  try {
+    await sendDelegatedAccessInvitationEmail({
+      invitation: emailInvitation,
+      rawToken: token.rawToken,
+      invitedByEmail: input.actorEmail || null,
+    });
+    const auditEvent = buildDelegatedAccessAuditEvent({
+      eventType: "delegated_invite_sent",
+      actorUserId,
+      actingForLandlordId: landlordId,
+      delegatedRole: "landlord_owner",
+      permissionScope: permissionScopeForInvitation(invitation),
+      actionType: "invite_email_resent",
+      targetResourceType: "delegate_invitation",
+      targetResourceId: invitation.invitationId,
+      timestamp: now,
+      outcome: "allowed",
+      before: {
+        status: invitation.status,
+        emailDispatchStatus: invitation.emailDispatch?.status || "not_sent",
+      },
+      after: {
+        status: invitation.status,
+        emailDispatchStatus: "sent",
+        attemptCount: Number(invitation.emailDispatch?.attemptCount || 0) + 1,
+      },
+    });
+    const updated = {
+      ...emailInvitation,
+      emailDispatch: nextDispatchMetadata(invitation.emailDispatch, "sent", now),
+      auditEventIds: [...invitation.auditEventIds, auditEvent.eventId],
+    };
+    await saveInvitation(updated, firestore);
+    await appendAuditEvent(auditEvent, firestore);
+    return { invitation: projectInvitation(updated), auditEvent, emailDispatched: true };
+  } catch (error) {
+    const reason = maskedFailureReason(error);
+    const auditEvent = buildDelegatedAccessAuditEvent({
+      eventType: "delegated_invite_sent",
+      actorUserId,
+      actingForLandlordId: landlordId,
+      delegatedRole: "landlord_owner",
+      permissionScope: permissionScopeForInvitation(invitation),
+      actionType: "invite_email_resend_failed",
+      targetResourceType: "delegate_invitation",
+      targetResourceId: invitation.invitationId,
+      timestamp: now,
+      outcome: "failed",
+      before: {
+        status: invitation.status,
+        emailDispatchStatus: invitation.emailDispatch?.status || "not_sent",
+      },
+      after: {
+        status: invitation.status,
+        emailDispatchStatus: "failed",
+        attemptCount: Number(invitation.emailDispatch?.attemptCount || 0) + 1,
+      },
+      reason,
+    });
+    const updated = {
+      ...invitation,
+      emailDispatch: nextDispatchMetadata(invitation.emailDispatch, "failed", now, reason),
+      auditEventIds: [...invitation.auditEventIds, auditEvent.eventId],
+    };
+    await saveInvitation(updated, firestore);
+    await appendAuditEvent(auditEvent, firestore);
+    return { invitation: projectInvitation(updated), auditEvent, emailDispatched: false };
+  }
 }
 
 export async function acceptDelegatedAccessInvitationRecord(

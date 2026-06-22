@@ -192,6 +192,7 @@ const AccountPage = lazy(() => import("./pages/AccountPage"));
 const AccountProfilePage = lazy(() => import("./pages/account/AccountProfilePage"));
 const AccountDataPage = lazy(() => import("./pages/account/AccountDataPage"));
 const DelegatedAccessPage = lazy(() => import("./pages/DelegatedAccessPage"));
+const DelegatedAccessAcceptPage = lazy(() => import("./pages/DelegatedAccessAcceptPage"));
 const ExpensesPage = lazy(() => import("./pages/ExpensesPage"));
 const WorkOrdersPage = lazy(() => import("./pages/landlord/WorkOrdersPage"));
 const WorkOrderNewPage = lazy(() => import("./pages/landlord/WorkOrderNewPage"));
@@ -408,6 +409,7 @@ function App() {
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/auth/action" element={<AuthActionPage />} />
         <Route path="/auth/onboard" element={<AuthOnboardPage />} />
+        <Route path="/delegated-access/accept" element={suspensePage(<DelegatedAccessAcceptPage />)} />
         <Route path="/signing/complete" element={<SigningCompletePage />} />
         <Route
           path="/tenant/login"

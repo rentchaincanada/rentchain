@@ -140,6 +140,13 @@ vi.mock("./pages/DelegatedAccessPage", () => ({
   default: () => <h1>Delegate Management Page</h1>,
 }));
 
+vi.mock("./pages/DelegatedAccessAcceptPage", () => ({
+  default: () => {
+    const location = useLocation();
+    return <h1>{`Delegated Access Accept ${location.pathname}${location.search}`}</h1>;
+  },
+}));
+
 vi.mock("./pages/DecisionInboxPage", () => ({
   default: () => <h1>Decision Inbox Page</h1>,
 }));
@@ -396,6 +403,18 @@ describe("Routes: /account/delegated-access", () => {
 
     expect(await screen.findByText(/Delegate Management Page/i)).toBeInTheDocument();
     expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("Routes: /delegated-access/accept", () => {
+  it("renders the delegated access acceptance route with query token preserved", async () => {
+    const { default: App } = await import("./App");
+    render(
+      <MemoryRouter initialEntries={["/delegated-access/accept?token=test-token"]}>
+        <App />
+      </MemoryRouter>
+    );
+    expect(await screen.findByRole("heading", { name: /Delegated Access Accept \/delegated-access\/accept\?token=test-token/i })).toBeInTheDocument();
   });
 });
 

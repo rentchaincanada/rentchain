@@ -133,6 +133,17 @@ export async function cancelDelegatedAccessInvitation(invitationId: string) {
   );
 }
 
+export async function acceptDelegatedAccessInvitation(token: string) {
+  return apiFetch<{ ok: true; invitation: DelegatedAccessInvitation; grant: DelegatedAccessGrant }>(
+    "/landlord/delegated-access/invitations/accept",
+    {
+      method: "POST",
+      body: { token },
+      suppressToasts: true,
+    }
+  );
+}
+
 export async function revokeDelegatedAccessGrant(grantId: string, reason?: string) {
   return apiFetch<{ ok: true; grant: DelegatedAccessGrant }>(
     `/landlord/delegated-access/grants/${encodeURIComponent(grantId)}/revoke`,
