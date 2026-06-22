@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { requireAuth } from "../middleware/requireAuth";
 import {
+  acceptDelegatedAccessInvitationRecord,
   cancelDelegatedAccessInvitationRecord,
   createDelegatedAccessInvitationRecord,
   expireDelegatedAccessInvitationRecord,
@@ -22,6 +23,13 @@ function ownerContext(req: any): { actorUserId: string; landlordId: string } | n
   return { actorUserId, landlordId };
 }
 
+function actorContext(req: any): { actorUserId: string; actorEmail: string | null } | null {
+  const actorUserId = asString(req.user?.id || req.user?.uid || req.user?.sub, 240);
+  if (!actorUserId) return null;
+  const actorEmail = asString(req.user?.email, 320) || null;
+  return { actorUserId, actorEmail };
+}
+
 function forbidden(res: any) {
   return res.status(403).json({ ok: false, error: "FORBIDDEN" });
 }
@@ -31,8 +39,14 @@ function handleError(res: any, error: unknown) {
   if (code === "delegated_invitation_not_found") {
     return res.status(404).json({ ok: false, error: "INVITATION_NOT_FOUND" });
   }
+  if (code === "invalid_invitation_token") {
+    return res.status(404).json({ ok: false, error: "INVITATION_NOT_FOUND" });
+  }
   if (code === "invitation_not_pending") {
     return res.status(409).json({ ok: false, error: "INVITATION_NOT_PENDING" });
+  }
+  if (code === "invitation_expired") {
+    return res.status(410).json({ ok: false, error: "INVITATION_EXPIRED" });
   }
   if (code.startsWith("invalid_") || code.startsWith("missing_") || code.includes("_not_allowed")) {
     return res.status(400).json({ ok: false, error: code.toUpperCase() });
@@ -42,6 +56,22 @@ function handleError(res: any, error: unknown) {
 }
 
 router.use(requireAuth);
+
+router.post("/delegated-access/invitations/accept", async (req: any, res) => {
+  const context = actorContext(req);
+  if (!context) return forbidden(res);
+
+  try {
+    const result = await acceptDelegatedAccessInvitationRecord({
+      actorUserId: context.actorUserId,
+      actorEmail: context.actorEmail,
+      token: req.body?.token,
+    });
+    return res.status(200).json({ ok: true, invitation: result.invitation, grant: result.grant });
+  } catch (error) {
+    return handleError(res, error);
+  }
+});
 
 router.post("/delegated-access/invitations", async (req: any, res) => {
   const context = ownerContext(req);

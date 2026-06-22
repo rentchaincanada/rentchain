@@ -2,10 +2,12 @@ import crypto from "crypto";
 import { db } from "../firebase";
 import {
   buildDelegatedAccessAuditEvent,
+  createDelegatedAccessGrant,
   createDelegatedAccessInvitation,
   isDelegatedInvitationExpired,
   transitionDelegatedInvitationStatus,
   type DelegatedAccessAuditEvent,
+  type DelegatedAccessGrant,
   type DelegatedAccessInvitation,
   type DelegatedAccessInvitationStatus,
   type DelegatedAccessPropertyScope,
@@ -13,6 +15,7 @@ import {
 } from "../lib/delegatedAccess";
 
 export const DELEGATED_ACCESS_INVITATIONS_COLLECTION = "delegatedAccessInvitations";
+export const DELEGATED_ACCESS_GRANTS_COLLECTION = "delegatedAccessGrants";
 export const DELEGATED_ACCESS_AUDIT_EVENTS_COLLECTION = "delegatedAccessAuditEvents";
 
 type SnapshotLike = {
@@ -38,6 +41,7 @@ export type DelegatedAccessFirestoreLike = {
 };
 
 export type DelegatedInvitationProjection = Omit<DelegatedAccessInvitation, "tokenHash">;
+export type DelegatedGrantProjection = DelegatedAccessGrant;
 
 type CreateInvitationInput = {
   landlordId: string;
@@ -49,6 +53,13 @@ type CreateInvitationInput = {
   resourceScope?: DelegatedAccessResourceScope;
   permissionFlags: string[];
   expiresAt: string;
+  now?: string;
+};
+
+type AcceptInvitationInput = {
+  actorUserId: string;
+  actorEmail?: string | null;
+  token: string;
   now?: string;
 };
 
@@ -74,6 +85,12 @@ function sha256(value: string): string {
   return crypto.createHash("sha256").update(value).digest("hex");
 }
 
+function timingSafeEqualHex(a: string, b: string): boolean {
+  const left = Buffer.from(a, "hex");
+  const right = Buffer.from(b, "hex");
+  return left.length === right.length && crypto.timingSafeEqual(left, right);
+}
+
 function createTokenHash(): string {
   return sha256(crypto.randomBytes(32).toString("hex"));
 }
@@ -81,6 +98,10 @@ function createTokenHash(): string {
 function projectInvitation(invitation: DelegatedAccessInvitation): DelegatedInvitationProjection {
   const { tokenHash: _tokenHash, ...safe } = invitation;
   return safe;
+}
+
+function projectGrant(grant: DelegatedAccessGrant): DelegatedGrantProjection {
+  return grant;
 }
 
 function invitationFromSnapshot(snapshot: SnapshotLike): DelegatedAccessInvitation | null {
@@ -105,6 +126,16 @@ async function saveInvitation(invitation: DelegatedAccessInvitation, firestore: 
     .doc(invitation.invitationId);
   if (!ref.set) throw new Error("delegated_access_invitation_write_unavailable");
   await ref.set(invitation, { merge: false });
+}
+
+async function createGrant(grant: DelegatedAccessGrant, firestore: DelegatedAccessFirestoreLike) {
+  const ref = firestore.collection<DelegatedAccessGrant>(DELEGATED_ACCESS_GRANTS_COLLECTION).doc(grant.grantId);
+  if (ref.create) {
+    await ref.create(grant);
+    return;
+  }
+  if (!ref.set) throw new Error("delegated_access_grant_write_unavailable");
+  await ref.set(grant, { merge: false });
 }
 
 export async function createDelegatedAccessInvitationRecord(
@@ -199,6 +230,90 @@ async function loadInvitationForLandlord(
   const invitation = invitationFromSnapshot(snapshot);
   if (!invitation || invitation.landlordId !== landlordId) return null;
   return invitation;
+}
+
+async function loadInvitationByTokenHash(
+  tokenHash: string,
+  firestore: DelegatedAccessFirestoreLike
+): Promise<DelegatedAccessInvitation | null> {
+  const snapshot = await firestore.collection<DelegatedAccessInvitation>(DELEGATED_ACCESS_INVITATIONS_COLLECTION).get?.();
+  const invitations = (snapshot?.docs || [])
+    .map(invitationFromSnapshot)
+    .filter((invitation): invitation is DelegatedAccessInvitation => Boolean(invitation));
+  return invitations.find((invitation) => timingSafeEqualHex(invitation.tokenHash, tokenHash)) || null;
+}
+
+function stableGrantId(invitation: DelegatedAccessInvitation, delegateUserId: string): string {
+  const digest = sha256(JSON.stringify([invitation.invitationId, delegateUserId])).slice(0, 24);
+  return `delegated_grant_${digest}`;
+}
+
+export async function acceptDelegatedAccessInvitationRecord(
+  input: AcceptInvitationInput,
+  options: ServiceOptions = {}
+): Promise<{
+  invitation: DelegatedInvitationProjection;
+  grant: DelegatedGrantProjection;
+  auditEvent: DelegatedAccessAuditEvent;
+}> {
+  const firestore = delegatedDb(options.firestore);
+  const actorUserId = requireString(input.actorUserId, "missing_actor_user_id");
+  const rawToken = requireString(input.token, "missing_invitation_token", 2000);
+  const now = input.now || new Date().toISOString();
+  const tokenHash = sha256(rawToken);
+  const invitation = await loadInvitationByTokenHash(tokenHash, firestore);
+  if (!invitation) throw new Error("invalid_invitation_token");
+  if (invitation.status !== "pending") throw new Error("invitation_not_pending");
+  if (isDelegatedInvitationExpired(invitation, now)) throw new Error("invitation_expired");
+
+  const accepted = transitionDelegatedInvitationStatus(invitation, "accepted", {
+    acceptedByUserId: actorUserId,
+    timestamp: now,
+  });
+  const grant = createDelegatedAccessGrant({
+    grantId: stableGrantId(invitation, actorUserId),
+    landlordId: invitation.landlordId,
+    delegateUserId: actorUserId,
+    delegateEmail: input.actorEmail || invitation.inviteeEmail,
+    role: invitation.role,
+    propertyScope: invitation.propertyScope,
+    workspaceScopes: invitation.workspaceScopes,
+    resourceScope: invitation.resourceScope,
+    permissionFlags: invitation.permissionFlags,
+    createdByUserId: invitation.createdByUserId,
+    createdAt: now,
+    acceptedAt: now,
+  });
+  const auditEvent = buildDelegatedAccessAuditEvent({
+    eventType: "delegated_invite_accepted",
+    actorUserId,
+    actingForLandlordId: invitation.landlordId,
+    delegatedRole: invitation.role,
+    permissionScope: grant.permissionScope,
+    actionType: "invite_accepted",
+    targetResourceType: "delegate_invitation",
+    targetResourceId: invitation.invitationId,
+    timestamp: now,
+    outcome: "allowed",
+    before: { status: invitation.status },
+    after: {
+      status: accepted.status,
+      grantId: grant.grantId,
+      role: grant.role,
+      workspaceScopes: grant.permissionScope.workspaceScopes,
+      propertyScopeMode: grant.permissionScope.propertyScope.mode,
+    },
+  });
+  const grantWithAudit = { ...grant, auditEventIds: [auditEvent.eventId] };
+  const invitationWithAudit = { ...accepted, auditEventIds: [...accepted.auditEventIds, auditEvent.eventId] };
+  await createGrant(grantWithAudit, firestore);
+  await saveInvitation(invitationWithAudit, firestore);
+  await appendAuditEvent(auditEvent, firestore);
+  return {
+    invitation: projectInvitation(invitationWithAudit),
+    grant: projectGrant(grantWithAudit),
+    auditEvent,
+  };
 }
 
 export async function cancelDelegatedAccessInvitationRecord(

@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 type StoredDoc = Record<string, any>;
@@ -60,6 +61,10 @@ function readCollection(name: string): StoredDoc[] {
 function writeCollectionDoc(name: string, id: string, data: StoredDoc) {
   if (!collections.has(name)) collections.set(name, new Map());
   collections.get(name)!.set(id, data);
+}
+
+function sha256(value: string): string {
+  return crypto.createHash("sha256").update(value).digest("hex");
 }
 
 async function invokeRouter(
@@ -128,6 +133,45 @@ async function createInvite(router: any, body: Record<string, unknown> = {}, use
     url: "/delegated-access/invitations",
     user,
     body: { ...validInviteBody, ...body },
+  });
+}
+
+function seedInvitation(overrides: Partial<StoredDoc> = {}) {
+  const invitation = {
+    invitationId: overrides.invitationId || `delegated_invitation_${readCollection("delegatedAccessInvitations").length + 1}`,
+    landlordId: "landlord-1",
+    inviteeEmail: "manager@example.com",
+    role: "property_manager",
+    propertyScope: { mode: "selected", propertyIds: ["property-1"], unitIds: ["unit-1"] },
+    workspaceScopes: ["dashboard", "operations", "properties"],
+    resourceScope: { workOrderIds: ["work-order-1"] },
+    permissionFlags: ["view", "edit", "assign"],
+    status: "pending",
+    tokenHash: sha256("valid-token"),
+    expiresAt: "2026-07-22T12:00:00.000Z",
+    createdByUserId: "owner-user-1",
+    createdAt: "2026-06-22T12:00:00.000Z",
+    acceptedByUserId: null,
+    acceptedAt: null,
+    cancelledByUserId: null,
+    cancelledAt: null,
+    auditEventIds: [],
+    ...overrides,
+  };
+  writeCollectionDoc("delegatedAccessInvitations", invitation.invitationId, invitation);
+  return invitation;
+}
+
+async function acceptInvite(router: any, token = "valid-token", user: Record<string, unknown> | null = {
+  id: "delegate-user-1",
+  role: "landlord_delegate",
+  email: "manager@example.com",
+}) {
+  return await invokeRouter(router, {
+    method: "POST",
+    url: "/delegated-access/invitations/accept",
+    user,
+    body: { token },
   });
 }
 
@@ -338,5 +382,151 @@ describe("delegatedAccessInvitationRoutes", () => {
     });
 
     expect(response.status).toBe(404);
+  });
+
+  it("accepts a valid pending token for the authenticated delegate account", async () => {
+    const router = (await import("../delegatedAccessInvitationRoutes")).default;
+    seedInvitation();
+
+    const response = await acceptInvite(router);
+
+    expect(response.status).toBe(200);
+    expect(response.body.ok).toBe(true);
+    expect(response.body.invitation).toEqual(
+      expect.objectContaining({
+        status: "accepted",
+        acceptedByUserId: "delegate-user-1",
+        landlordId: "landlord-1",
+        role: "property_manager",
+      })
+    );
+    expect(response.body.grant).toEqual(
+      expect.objectContaining({
+        landlordId: "landlord-1",
+        delegateUserId: "delegate-user-1",
+        delegateEmail: "manager@example.com",
+        role: "property_manager",
+        status: "active",
+      })
+    );
+    expect(response.body.grant.permissionScope).toEqual(
+      expect.objectContaining({
+        role: "property_manager",
+        workspaceScopes: ["dashboard", "operations", "properties"],
+        propertyScope: { mode: "selected", propertyIds: ["property-1"], unitIds: ["unit-1"] },
+        resourceScope: expect.objectContaining({ workOrderIds: ["work-order-1"] }),
+        permissionFlags: ["view", "edit", "assign"],
+        billingAccess: false,
+      })
+    );
+    expect(JSON.stringify(response.body)).not.toContain("valid-token");
+    expect(JSON.stringify(response.body)).not.toContain("tokenHash");
+
+    const storedInvitation = readCollection("delegatedAccessInvitations")[0];
+    expect(storedInvitation.status).toBe("accepted");
+    expect(storedInvitation.tokenHash).toBe(sha256("valid-token"));
+
+    const grants = readCollection("delegatedAccessGrants");
+    expect(grants).toHaveLength(1);
+    expect(grants[0].delegateUserId).toBe("delegate-user-1");
+    expect(grants[0].permissionScope.billingAccess).toBe(false);
+
+    const auditEvents = readCollection("delegatedAccessAuditEvents");
+    expect(auditEvents).toHaveLength(1);
+    expect(auditEvents[0]).toEqual(
+      expect.objectContaining({
+        eventType: "delegated_invite_accepted",
+        actorUserId: "delegate-user-1",
+        actingForLandlordId: "landlord-1",
+        delegatedRole: "property_manager",
+        targetResourceType: "delegate_invitation",
+        targetResourceId: "delegated_invitation_1",
+        metadataOnly: true,
+        immutable: true,
+      })
+    );
+    expect(JSON.stringify(auditEvents[0])).not.toContain("valid-token");
+    expect(JSON.stringify(auditEvents[0])).not.toContain("tokenHash");
+  });
+
+  it("rejects invalid tokens without leaking token data", async () => {
+    const router = (await import("../delegatedAccessInvitationRoutes")).default;
+    seedInvitation();
+
+    const response = await acceptInvite(router, "wrong-token");
+
+    expect(response.status).toBe(404);
+    expect(response.body).toEqual({ ok: false, error: "INVITATION_NOT_FOUND" });
+    expect(JSON.stringify(response.body)).not.toContain("wrong-token");
+    expect(readCollection("delegatedAccessGrants")).toHaveLength(0);
+  });
+
+  it("rejects expired, cancelled, and already accepted invitations without creating duplicate grants", async () => {
+    const router = (await import("../delegatedAccessInvitationRoutes")).default;
+    seedInvitation({
+      invitationId: "expired-invitation",
+      tokenHash: sha256("expired-token"),
+      expiresAt: "2026-06-01T12:00:00.000Z",
+    });
+    seedInvitation({
+      invitationId: "cancelled-invitation",
+      tokenHash: sha256("cancelled-token"),
+      status: "cancelled",
+      cancelledByUserId: "owner-user-1",
+      cancelledAt: "2026-06-20T12:00:00.000Z",
+    });
+    seedInvitation({
+      invitationId: "accepted-invitation",
+      tokenHash: sha256("accepted-token"),
+      status: "accepted",
+      acceptedByUserId: "delegate-user-2",
+      acceptedAt: "2026-06-20T12:00:00.000Z",
+    });
+
+    const expired = await acceptInvite(router, "expired-token");
+    expect(expired.status).toBe(410);
+    expect(expired.body.error).toBe("INVITATION_EXPIRED");
+
+    const cancelled = await acceptInvite(router, "cancelled-token");
+    expect(cancelled.status).toBe(409);
+    expect(cancelled.body.error).toBe("INVITATION_NOT_PENDING");
+
+    const accepted = await acceptInvite(router, "accepted-token");
+    expect(accepted.status).toBe(409);
+    expect(accepted.body.error).toBe("INVITATION_NOT_PENDING");
+
+    expect(readCollection("delegatedAccessGrants")).toHaveLength(0);
+  });
+
+  it("requires an authenticated accepting user and does not accept on behalf of another user", async () => {
+    const router = (await import("../delegatedAccessInvitationRoutes")).default;
+    seedInvitation();
+
+    const unauthenticated = await acceptInvite(router, "valid-token", null);
+    expect(unauthenticated.status).toBe(401);
+
+    const response = await acceptInvite(router, "valid-token", {
+      id: "actual-delegate-user",
+      role: "landlord_delegate",
+      email: "different@example.com",
+    });
+    expect(response.status).toBe(200);
+    expect(response.body.invitation.acceptedByUserId).toBe("actual-delegate-user");
+    expect(response.body.grant.delegateUserId).toBe("actual-delegate-user");
+    expect(response.body.grant.delegateEmail).toBe("different@example.com");
+  });
+
+  it("rejects double acceptance without creating a duplicate grant", async () => {
+    const router = (await import("../delegatedAccessInvitationRoutes")).default;
+    seedInvitation();
+
+    const first = await acceptInvite(router);
+    expect(first.status).toBe(200);
+
+    const second = await acceptInvite(router);
+    expect(second.status).toBe(409);
+    expect(second.body.error).toBe("INVITATION_NOT_PENDING");
+    expect(readCollection("delegatedAccessGrants")).toHaveLength(1);
+    expect(readCollection("delegatedAccessAuditEvents")).toHaveLength(1);
   });
 });
