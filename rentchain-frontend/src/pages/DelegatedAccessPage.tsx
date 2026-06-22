@@ -4,6 +4,7 @@ import { Button, Card, EmptyState, Input, Pill, SkeletonBlock } from "../compone
 import { useToast } from "../components/ui/ToastProvider";
 import { useAuth } from "../context/useAuth";
 import {
+  cancelDelegatedAccessInvitation,
   createDelegatedAccessInvitation,
   fetchDelegatedAccessDelegates,
   fetchDelegatedAccessGrants,
@@ -158,7 +159,7 @@ export default function DelegatedAccessPage() {
   const [invitations, setInvitations] = React.useState<DelegatedAccessInvitation[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = React.useState<"all" | "pending" | "active" | "revoked" | "expired">("all");
+  const [statusFilter, setStatusFilter] = React.useState<"all" | "pending" | "active" | "revoked" | "expired" | "cancelled">("all");
   const [inviteOpen, setInviteOpen] = React.useState(false);
   const [inviteEmail, setInviteEmail] = React.useState("");
   const [inviteRole, setInviteRole] = React.useState<DelegatedAccessRole>("property_manager");
@@ -168,6 +169,7 @@ export default function DelegatedAccessPage() {
   const [expiresAt, setExpiresAt] = React.useState(defaultExpiryDate());
   const [submitting, setSubmitting] = React.useState(false);
   const [revokingGrantId, setRevokingGrantId] = React.useState<string | null>(null);
+  const [cancellingInvitationId, setCancellingInvitationId] = React.useState<string | null>(null);
   const [revocationReason, setRevocationReason] = React.useState("");
   const canManage = isOwnerRole(user);
 
@@ -199,11 +201,13 @@ export default function DelegatedAccessPage() {
   }, [load]);
 
   const pendingInvitations = invitations.filter((invitation) => invitation.status === "pending");
+  const cancelledInvitations = invitations.filter((invitation) => invitation.status === "cancelled");
   const expiredInvitations = invitations.filter((invitation) => invitation.status === "expired");
   const activeGrants = grants.filter((grant) => grant.status === "active");
   const revokedGrants = grants.filter((grant) => grant.status === "revoked");
   const accessRows = [
     ...pendingInvitations.map((invitation) => ({ kind: "invitation" as const, status: invitation.status, invitation })),
+    ...cancelledInvitations.map((invitation) => ({ kind: "invitation" as const, status: invitation.status, invitation })),
     ...expiredInvitations.map((invitation) => ({ kind: "invitation" as const, status: invitation.status, invitation })),
     ...grants.map((grant) => ({ kind: "grant" as const, status: grant.status, grant })),
   ].filter((row) => statusFilter === "all" || row.status === statusFilter);
@@ -294,6 +298,30 @@ export default function DelegatedAccessPage() {
     }
   };
 
+  const handleCancelInvitation = async (invitation: DelegatedAccessInvitation) => {
+    if (invitation.status !== "pending") return;
+    setCancellingInvitationId(invitation.invitationId);
+    try {
+      const result = await cancelDelegatedAccessInvitation(invitation.invitationId);
+      setInvitations((current) =>
+        current.map((item) => (item.invitationId === invitation.invitationId ? result.invitation : item))
+      );
+      showToast({
+        message: "Invitation cancelled",
+        description: "The pending invitation can no longer be accepted.",
+        variant: "success",
+      });
+    } catch (err: any) {
+      showToast({
+        message: "Could not cancel invitation",
+        description: err?.message || "The invitation is unchanged.",
+        variant: "error",
+      });
+    } finally {
+      setCancellingInvitationId(null);
+    }
+  };
+
   if (!canManage) {
     return (
       <div
@@ -355,6 +383,7 @@ export default function DelegatedAccessPage() {
         <StatusCard label="Pending" value={pendingInvitations.length} />
         <StatusCard label="Active" value={activeGrants.length} />
         <StatusCard label="Revoked" value={revokedGrants.length} />
+        <StatusCard label="Cancelled" value={cancelledInvitations.length} />
         <StatusCard label="Expired" value={expiredInvitations.length} />
       </div>
 
@@ -487,7 +516,7 @@ export default function DelegatedAccessPage() {
             <div style={{ color: text.muted, fontSize: 13 }}>Who can access this landlord workspace and what state they are in.</div>
           </div>
           <div style={{ display: "flex", gap: spacing.xs, flexWrap: "wrap" }}>
-            {(["all", "pending", "active", "revoked", "expired"] as const).map((status) => (
+            {(["all", "pending", "active", "revoked", "cancelled", "expired"] as const).map((status) => (
               <Button
                 key={status}
                 type="button"
@@ -549,7 +578,27 @@ export default function DelegatedAccessPage() {
                       Workspaces: {labelList(invitation.workspaceScopes, workspaceLabels)} · Permissions:{" "}
                       {labelList(invitation.permissionFlags, permissionLabels)}
                     </div>
-                    <div style={{ color: text.muted, fontSize: 13 }}>Expires {formatDate(invitation.expiresAt)}</div>
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        gap: spacing.sm,
+                        alignItems: "center",
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <div style={{ color: text.muted, fontSize: 13 }}>Expires {formatDate(invitation.expiresAt)}</div>
+                      {invitation.status === "pending" ? (
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          disabled={cancellingInvitationId === invitation.invitationId}
+                          onClick={() => void handleCancelInvitation(invitation)}
+                        >
+                          {cancellingInvitationId === invitation.invitationId ? "Cancelling..." : "Cancel Invitation"}
+                        </Button>
+                      ) : null}
+                    </div>
                   </div>
                 );
               }

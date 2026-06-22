@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   fetchGrants: vi.fn(),
   fetchInvitations: vi.fn(),
   createInvitation: vi.fn(),
+  cancelInvitation: vi.fn(),
   revokeGrant: vi.fn(),
 }));
 
@@ -30,6 +31,7 @@ vi.mock("../api/delegatedAccessApi", async () => {
     fetchDelegatedAccessGrants: mocks.fetchGrants,
     fetchDelegatedAccessInvitations: mocks.fetchInvitations,
     createDelegatedAccessInvitation: mocks.createInvitation,
+    cancelDelegatedAccessInvitation: mocks.cancelInvitation,
     revokeDelegatedAccessGrant: mocks.revokeGrant,
   };
 });
@@ -97,6 +99,10 @@ describe("DelegatedAccessPage", () => {
     mocks.fetchGrants.mockResolvedValue([grant()]);
     mocks.fetchInvitations.mockResolvedValue([invitation()]);
     mocks.createInvitation.mockResolvedValue({ ok: true, invitation: invitation({ inviteeEmail: "new@example.com" }) });
+    mocks.cancelInvitation.mockResolvedValue({
+      ok: true,
+      invitation: invitation({ status: "cancelled", cancelledAt: "2026-06-23T12:00:00.000Z" }),
+    });
     mocks.revokeGrant.mockResolvedValue({ ok: true, grant: grant({ status: "revoked" }) });
   });
 
@@ -146,6 +152,41 @@ describe("DelegatedAccessPage", () => {
         description: expect.stringMatching(/Email dispatch is not enabled yet/i),
       })
     );
+  });
+
+  it("cancels pending invitations and removes the cancel action after cancellation", async () => {
+    render(<DelegatedAccessPage />);
+
+    expect(await screen.findByText("assistant@example.com")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cancel Invitation" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel Invitation" }));
+
+    await waitFor(() => expect(mocks.cancelInvitation).toHaveBeenCalledWith("invitation-internal-1"));
+    const visibleRecords = screen.getAllByTestId("delegated-access-record");
+    const invitationRecord = visibleRecords.find((record) => record.textContent?.includes("assistant@example.com"));
+    expect(invitationRecord).toBeTruthy();
+    expect(invitationRecord).toHaveAttribute("data-status", "cancelled");
+    expect(invitationRecord).toHaveTextContent("Cancelled");
+    expect(screen.queryByRole("button", { name: "Cancel Invitation" })).not.toBeInTheDocument();
+    expect(mocks.showToast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: "Invitation cancelled",
+      })
+    );
+  });
+
+  it("does not offer cancel for cancelled or expired invitations", async () => {
+    mocks.fetchInvitations.mockResolvedValue([
+      invitation({ invitationId: "cancelled-invitation", inviteeEmail: "cancelled@example.com", status: "cancelled" }),
+      invitation({ invitationId: "expired-invitation", inviteeEmail: "expired@example.com", status: "expired" }),
+    ]);
+
+    render(<DelegatedAccessPage />);
+
+    expect(await screen.findByText("cancelled@example.com")).toBeInTheDocument();
+    expect(screen.getByText("expired@example.com")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Cancel Invitation" })).not.toBeInTheDocument();
   });
 
   it("revokes an active grant and leaves revoked grants as non-repeatable records", async () => {
