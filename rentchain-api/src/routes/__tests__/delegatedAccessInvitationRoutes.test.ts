@@ -790,7 +790,7 @@ describe("delegatedAccessInvitationRoutes", () => {
   });
 
   it("lists only active grants assigned to the authenticated delegate without property ids", async () => {
-    const router = (await import("../delegatedAccessInvitationRoutes")).default;
+    const { default: router, delegatedAccessSelfRoutes } = await import("../delegatedAccessInvitationRoutes");
     seedGrant({ grantId: "delegate-active-grant", status: "active" });
     seedGrant({ grantId: "delegate-revoked-grant", status: "revoked" });
     seedGrant({ grantId: "other-delegate-active-grant", delegateUserId: "delegate-user-2", status: "active" });
@@ -821,6 +821,43 @@ describe("delegatedAccessInvitationRoutes", () => {
     expect(JSON.stringify(response.body)).not.toContain("property-1");
     expect(JSON.stringify(response.body)).not.toContain("unit-1");
     expect(JSON.stringify(response.body)).not.toContain("tokenHash");
+
+    const selfRouteResponse = await invokeRouter(delegatedAccessSelfRoutes, {
+      method: "GET",
+      url: "/my-grants",
+      user: { id: "delegate-user-1", role: "delegate", email: "manager@example.com" },
+    });
+
+    expect(selfRouteResponse.status).toBe(200);
+    expect(selfRouteResponse.body.grants).toHaveLength(1);
+    expect(JSON.stringify(selfRouteResponse.body)).not.toContain("property-1");
+  });
+
+  it("keeps delegated self grants authenticated and delegate-scoped", async () => {
+    const { delegatedAccessSelfRoutes } = await import("../delegatedAccessInvitationRoutes");
+    seedGrant({ grantId: "delegate-active-grant", status: "active" });
+
+    const unauthenticated = await invokeRouter(delegatedAccessSelfRoutes, {
+      method: "GET",
+      url: "/my-grants",
+      user: null,
+    });
+    expect(unauthenticated.status).toBe(401);
+
+    const ownerSession = await invokeRouter(delegatedAccessSelfRoutes, {
+      method: "GET",
+      url: "/my-grants",
+      user: ownerUser,
+    });
+    expect(ownerSession.status).toBe(403);
+
+    const wrongDelegate = await invokeRouter(delegatedAccessSelfRoutes, {
+      method: "GET",
+      url: "/my-grants",
+      user: { id: "delegate-user-2", role: "delegate", email: "other@example.com" },
+    });
+    expect(wrongDelegate.status).toBe(200);
+    expect(wrongDelegate.body.grants).toEqual([]);
   });
 
   it("lists delegate summaries for active and revoked grants", async () => {

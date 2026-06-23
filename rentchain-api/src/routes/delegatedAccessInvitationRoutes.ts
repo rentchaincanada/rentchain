@@ -14,6 +14,7 @@ import {
 } from "../services/delegatedAccessInvitationService";
 
 const router = Router();
+const selfRouter = Router();
 
 function asString(value: unknown, max = 240): string {
   return String(value ?? "").trim().slice(0, max);
@@ -81,7 +82,7 @@ function handleError(res: any, error: unknown) {
 
 router.use(requireAuth);
 
-router.get("/delegated-access/my-grants", async (req: any, res) => {
+async function handleMyDelegatedAccessGrants(req: any, res: any) {
   const context = delegateContext(req);
   if (!context) return forbidden(res);
 
@@ -93,7 +94,12 @@ router.get("/delegated-access/my-grants", async (req: any, res) => {
   } catch (error) {
     return handleError(res, error);
   }
-});
+}
+
+selfRouter.use(requireAuth);
+selfRouter.get("/my-grants", handleMyDelegatedAccessGrants);
+
+router.get("/delegated-access/my-grants", handleMyDelegatedAccessGrants);
 
 router.get("/delegated-access/delegates", async (req: any, res) => {
   const context = ownerContext(req);
@@ -253,4 +259,5 @@ router.post("/delegated-access/invitations/:invitationId/expire", async (req: an
   }
 });
 
+export const delegatedAccessSelfRoutes = selfRouter;
 export default router;

@@ -124,7 +124,7 @@ export async function fetchDelegatedAccessGrants(): Promise<DelegatedAccessGrant
 
 export async function fetchMyDelegatedAccessGrants(): Promise<DelegatedAccessActiveGrant[]> {
   const response = await apiFetch<{ ok: true; grants: DelegatedAccessActiveGrant[] }>(
-    "/landlord/delegated-access/my-grants"
+    "/delegated-access/my-grants"
   );
   return response.grants || [];
 }
