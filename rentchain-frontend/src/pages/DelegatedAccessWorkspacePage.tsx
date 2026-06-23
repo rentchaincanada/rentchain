@@ -1,6 +1,6 @@
 import React from "react";
-import { Navigate } from "react-router-dom";
-import { BriefcaseBusiness, LayoutDashboard, ShieldCheck } from "lucide-react";
+import { Navigate, useNavigate } from "react-router-dom";
+import { BriefcaseBusiness, LayoutDashboard, LogOut, ShieldCheck } from "lucide-react";
 import {
   fetchMyDelegatedAccessGrants,
   type DelegatedAccessActiveGrant,
@@ -55,7 +55,8 @@ function workspaceSummary(scope: DelegatedAccessWorkspaceScope): string {
 }
 
 export default function DelegatedAccessWorkspacePage() {
-  const { user, authStatus, isLoading, ready } = useAuth();
+  const navigate = useNavigate();
+  const { user, authStatus, isLoading, ready, logout } = useAuth();
   const role = String((user as any)?.actorRole || user?.role || "").trim().toLowerCase();
   const [grants, setGrants] = React.useState<DelegatedAccessActiveGrant[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -96,9 +97,54 @@ export default function DelegatedAccessWorkspacePage() {
 
   const workspaces = uniqueWorkspaces(grants);
   const selectedLabel = workspaceLabels[selectedWorkspace] || "Workspace";
+  const delegateEmail = String(user?.email || "").trim();
+
+  const handleSignOut = async () => {
+    await logout();
+    navigate("/login", { replace: true });
+  };
 
   return (
     <main style={{ minHeight: "100vh", background: "#f8fafc", color: text.primary }}>
+      <div
+        style={{
+          borderBottom: "1px solid #e2e8f0",
+          background: "#ffffff",
+        }}
+      >
+        <div
+          style={{
+            maxWidth: 1180,
+            margin: "0 auto",
+            padding: "14px 18px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 16,
+            flexWrap: "wrap",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+            <div style={{ fontWeight: 900, fontSize: 18, color: colors.accent }}>RentChain</div>
+            <div style={{ width: 1, height: 22, background: "#cbd5e1" }} aria-hidden="true" />
+            <div style={{ color: text.muted, fontSize: 14, fontWeight: 700 }}>Delegated workspace</div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <Pill tone="accent">Delegate account</Pill>
+            {delegateEmail ? <span style={{ color: text.muted, fontSize: 13 }}>{delegateEmail}</span> : null}
+            <Button
+              type="button"
+              onClick={handleSignOut}
+              variant="ghost"
+              style={{ borderRadius: 8, display: "inline-flex", alignItems: "center", gap: 8 }}
+            >
+              <LogOut size={16} aria-hidden="true" />
+              Sign out
+            </Button>
+          </div>
+        </div>
+      </div>
+
       <div style={{ maxWidth: 1180, margin: "0 auto", padding: "32px 18px 48px", display: "grid", gap: 22 }}>
         <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
           <div>
@@ -107,7 +153,6 @@ export default function DelegatedAccessWorkspacePage() {
             </div>
             <h1 style={{ margin: "6px 0 0", fontSize: 30, lineHeight: 1.15 }}>Assigned Workspaces</h1>
           </div>
-          <Pill tone="accent">Delegate account</Pill>
         </header>
 
         {authLoading || loading ? (

@@ -28,6 +28,9 @@ function safeFailureMessage(error: unknown): string {
   const code = String(error instanceof Error ? error.message : error || "").toUpperCase();
   if (code.includes("EXPIRED")) return "This invitation has expired. Ask the landlord owner to send a new invitation.";
   if (code.includes("NOT_PENDING")) return "This invitation is no longer pending. It may have been cancelled or already accepted.";
+  if (code.includes("INVITEE_EMAIL_MISMATCH")) {
+    return "This invitation was sent to a different email. Sign out and sign in with the invited email.";
+  }
   if (code.includes("NOT_FOUND") || code.includes("INVALID")) return "This invitation link is invalid or no longer available.";
   return "We could not accept this invitation. Ask the landlord owner to verify the invitation status.";
 }
@@ -35,7 +38,7 @@ function safeFailureMessage(error: unknown): string {
 export default function DelegatedAccessAcceptPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, isLoading, ready, authStatus } = useAuth();
+  const { user, isLoading, ready, authStatus, logout } = useAuth();
   const token = React.useMemo(() => new URLSearchParams(location.search).get("token")?.trim() || "", [location.search]);
   const [state, setState] = React.useState<AcceptState>("idle");
   const [message, setMessage] = React.useState("");
@@ -60,6 +63,13 @@ export default function DelegatedAccessAcceptPage() {
       setState("failed");
       setMessage(safeFailureMessage(error));
     }
+  };
+
+  const handleUseAnotherAccount = async () => {
+    if (signedIn) {
+      await logout();
+    }
+    navigate(loginUrl);
   };
 
   if (!token) {
@@ -154,7 +164,7 @@ export default function DelegatedAccessAcceptPage() {
                 </>
               )}
               {signedIn ? (
-                <Button type="button" onClick={() => navigate(loginUrl)} variant="secondary">
+                <Button type="button" onClick={handleUseAnotherAccount} variant="secondary">
                   Use another account
                 </Button>
               ) : null}

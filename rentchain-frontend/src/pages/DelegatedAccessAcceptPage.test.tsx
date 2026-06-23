@@ -1,16 +1,18 @@
 import React from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import DelegatedAccessAcceptPage from "./DelegatedAccessAcceptPage";
 
 const mocks = vi.hoisted(() => ({
   acceptInvitation: vi.fn(),
+  logout: vi.fn(),
   authState: {
     user: { id: "delegate-user-1", email: "delegate@example.com", role: "delegate" },
     isLoading: false,
     ready: true,
     authStatus: "authed",
+    logout: vi.fn(),
   } as any,
 }));
 
@@ -38,12 +40,17 @@ describe("DelegatedAccessAcceptPage", () => {
       isLoading: false,
       ready: true,
       authStatus: "authed",
+      logout: mocks.logout,
     };
     mocks.acceptInvitation.mockResolvedValue({
       ok: true,
       invitation: { status: "accepted" },
       grant: { status: "active" },
     });
+  });
+
+  afterEach(() => {
+    cleanup();
   });
 
   it("shows a safe invalid-link state when token is missing", () => {
@@ -60,6 +67,7 @@ describe("DelegatedAccessAcceptPage", () => {
       isLoading: false,
       ready: true,
       authStatus: "guest",
+      logout: mocks.logout,
     };
 
     renderPage();
@@ -90,5 +98,20 @@ describe("DelegatedAccessAcceptPage", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("This invitation has expired.");
     expect(screen.queryByText("raw-token-should-not-render")).not.toBeInTheDocument();
+  });
+
+  it("explains wrong-email sessions and signs out before using another account", async () => {
+    mocks.acceptInvitation.mockRejectedValueOnce(new Error("INVITEE_EMAIL_MISMATCH"));
+
+    renderPage("/delegated-access/accept?token=valid-token");
+
+    fireEvent.click(screen.getByRole("button", { name: "Accept invitation" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "This invitation was sent to a different email. Sign out and sign in with the invited email."
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Use another account" }));
+
+    await waitFor(() => expect(mocks.logout).toHaveBeenCalledTimes(1));
   });
 });

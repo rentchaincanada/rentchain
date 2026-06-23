@@ -1,5 +1,5 @@
 import React from "react";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import DelegatedAccessWorkspacePage from "./DelegatedAccessWorkspacePage";
@@ -8,6 +8,7 @@ import type { DelegatedAccessActiveGrant } from "../api/delegatedAccessApi";
 const mocks = vi.hoisted(() => ({
   fetchMyGrants: vi.fn(),
   useAuthMock: vi.fn(),
+  logout: vi.fn(),
 }));
 
 vi.mock("../api/delegatedAccessApi", async () => {
@@ -61,6 +62,7 @@ describe("DelegatedAccessWorkspacePage", () => {
       isLoading: false,
       ready: true,
       authStatus: "authed",
+      logout: mocks.logout,
     });
     mocks.fetchMyGrants.mockResolvedValue([grant()]);
   });
@@ -83,6 +85,9 @@ describe("DelegatedAccessWorkspacePage", () => {
     const { container } = renderPage();
 
     expect(await screen.findByRole("heading", { name: "Assigned Workspaces" })).toBeInTheDocument();
+    expect(screen.getByText("RentChain")).toBeInTheDocument();
+    expect(screen.getAllByText("Delegate account").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Sign out" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Dashboard" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Operations" })).toBeInTheDocument();
     expect(screen.getByText("Property Manager")).toBeInTheDocument();
@@ -91,6 +96,14 @@ describe("DelegatedAccessWorkspacePage", () => {
     expect(container).not.toHaveTextContent("grant-internal-1");
     expect(container).not.toHaveTextContent(/billing/i);
     expect(container).not.toHaveTextContent(/settings/i);
+  });
+
+  it("signs the delegate out from the workspace header", async () => {
+    renderPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Sign out" }));
+
+    await waitFor(() => expect(mocks.logout).toHaveBeenCalledTimes(1));
   });
 
   it("shows a clear empty state when the delegate has no active grants", async () => {
