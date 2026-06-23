@@ -134,12 +134,17 @@ export async function getUserEntitlements(
     if (enabled) capabilities.push(key as CapabilityKey);
   }
 
+  const scopedLandlordId =
+    role === "landlord"
+      ? landlordContext.landlordId || landlordIdHint || cleanUserId
+      : landlordIdHint;
+
   const entitlements: UserEntitlements = {
     userId: cleanUserId,
     role,
     plan,
     capabilities: sortedCapabilities(capabilities),
-    landlordId: landlordContext.landlordId || landlordIdHint || (role === "landlord" ? cleanUserId : null),
+    landlordId: scopedLandlordId || null,
   };
   if (cacheKey && hints.requestCache) hints.requestCache[cacheKey] = entitlements;
   return entitlements;

@@ -62,6 +62,14 @@ export type DelegatedAccessInvitation = {
   createdAt: string;
   acceptedAt: string | null;
   cancelledAt: string | null;
+  emailDispatch?: {
+    status: "sent" | "failed" | "not_sent";
+    attemptCount?: number;
+    lastAttemptAt?: string | null;
+    lastSentAt?: string | null;
+    lastFailedAt?: string | null;
+    lastFailureReason?: string | null;
+  };
 };
 
 export type DelegatedAccessGrant = {
@@ -76,6 +84,11 @@ export type DelegatedAccessGrant = {
   updatedAt: string;
   revokedAt: string | null;
   revocationReason: string | null;
+};
+
+export type DelegatedAccessActiveGrant = Omit<DelegatedAccessGrant, "grantId" | "delegateUserId"> & {
+  landlordWorkspaceLabel: string;
+  propertyScopeSummary: string;
 };
 
 export type DelegatedAccessDelegateSummary = {
@@ -110,6 +123,13 @@ export async function fetchDelegatedAccessGrants(): Promise<DelegatedAccessGrant
   return response.grants || [];
 }
 
+export async function fetchMyDelegatedAccessGrants(): Promise<DelegatedAccessActiveGrant[]> {
+  const response = await apiFetch<{ ok: true; grants: DelegatedAccessActiveGrant[] }>(
+    "/delegated-access/my-grants"
+  );
+  return response.grants || [];
+}
+
 export async function fetchDelegatedAccessInvitations(): Promise<DelegatedAccessInvitation[]> {
   const response = await apiFetch<{ ok: true; invitations: DelegatedAccessInvitation[] }>(
     "/landlord/delegated-access/invitations"
@@ -118,7 +138,11 @@ export async function fetchDelegatedAccessInvitations(): Promise<DelegatedAccess
 }
 
 export async function createDelegatedAccessInvitation(input: CreateDelegatedAccessInvitationInput) {
-  return apiFetch<{ ok: true; invitation: DelegatedAccessInvitation }>("/landlord/delegated-access/invitations", {
+  return apiFetch<{
+    ok: true;
+    invitation: DelegatedAccessInvitation;
+    emailDispatch?: { status: "sent" | "failed" | "not_sent" };
+  }>("/landlord/delegated-access/invitations", {
     method: "POST",
     body: input,
   });
@@ -129,6 +153,17 @@ export async function cancelDelegatedAccessInvitation(invitationId: string) {
     `/landlord/delegated-access/invitations/${encodeURIComponent(invitationId)}/cancel`,
     {
       method: "POST",
+    }
+  );
+}
+
+export async function acceptDelegatedAccessInvitation(token: string) {
+  return apiFetch<{ ok: true; invitation: DelegatedAccessInvitation; grant: DelegatedAccessGrant }>(
+    "/landlord/delegated-access/invitations/accept",
+    {
+      method: "POST",
+      body: { token },
+      suppressToasts: true,
     }
   );
 }

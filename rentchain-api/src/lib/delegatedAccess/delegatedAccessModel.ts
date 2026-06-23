@@ -211,6 +211,14 @@ export function createDelegatedAccessInvitation(input: InvitationInput): Delegat
     acceptedAt: null,
     cancelledByUserId: null,
     cancelledAt: null,
+    emailDispatch: {
+      status: "not_sent",
+      attemptCount: 0,
+      lastAttemptAt: null,
+      lastSentAt: null,
+      lastFailedAt: null,
+      lastFailureReason: null,
+    },
     auditEventIds: [],
   };
 }

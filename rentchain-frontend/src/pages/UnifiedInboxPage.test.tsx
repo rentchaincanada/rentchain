@@ -197,7 +197,7 @@ describe("UnifiedInboxPage", () => {
     render(<UnifiedInboxPage role="landlord" />);
 
     expect(await screen.findByRole("heading", { name: "Unified inbox" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /Maintenance 1/i })).toBeInTheDocument();
+    expect(await screen.findByRole("tab", { name: /Maintenance 1/i })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Payments 1/i })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /System 1/i })).toBeInTheDocument();
 

@@ -150,6 +150,7 @@ export type DelegatedAccessInvitation = {
   acceptedAt: string | null;
   cancelledByUserId: string | null;
   cancelledAt: string | null;
+  emailDispatch: DelegatedAccessEmailDispatchMetadata | null;
   auditEventIds: string[];
 };
 
@@ -215,6 +216,17 @@ export type DelegatedAccessEvaluationDecision = {
 };
 
 export type DelegatedAccessAuditOutcome = "allowed" | "denied" | "revoked" | "expired" | "failed" | "blocked";
+
+export type DelegatedAccessEmailDispatchStatus = "not_sent" | "sent" | "failed";
+
+export type DelegatedAccessEmailDispatchMetadata = {
+  status: DelegatedAccessEmailDispatchStatus;
+  attemptCount: number;
+  lastAttemptAt: string | null;
+  lastSentAt: string | null;
+  lastFailedAt: string | null;
+  lastFailureReason: string | null;
+};
 
 export type DelegatedAccessAuditEvent = {
   eventId: string;

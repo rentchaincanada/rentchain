@@ -8,12 +8,14 @@ import {
   revokeDelegatedAccessGrant,
   transitionDelegatedInvitationStatus,
   type DelegatedAccessAuditEvent,
+  type DelegatedAccessEmailDispatchMetadata,
   type DelegatedAccessGrant,
   type DelegatedAccessInvitation,
   type DelegatedAccessInvitationStatus,
   type DelegatedAccessPropertyScope,
   type DelegatedAccessResourceScope,
 } from "../lib/delegatedAccess";
+import { sendDelegatedAccessInvitationEmail } from "./delegatedAccessEmailService";
 
 export const DELEGATED_ACCESS_INVITATIONS_COLLECTION = "delegatedAccessInvitations";
 export const DELEGATED_ACCESS_GRANTS_COLLECTION = "delegatedAccessGrants";
@@ -43,6 +45,20 @@ export type DelegatedAccessFirestoreLike = {
 
 export type DelegatedInvitationProjection = Omit<DelegatedAccessInvitation, "tokenHash">;
 export type DelegatedGrantProjection = DelegatedAccessGrant;
+export type DelegatedActiveGrantProjection = Omit<
+  DelegatedAccessGrant,
+  "grantId" | "landlordId" | "delegateUserId" | "createdByUserId" | "revokedByUserId" | "auditEventIds"
+> & {
+  landlordWorkspaceLabel: string;
+  propertyScopeSummary: string;
+  permissionScope: Omit<DelegatedAccessGrant["permissionScope"], "propertyScope"> & {
+    propertyScope: {
+      mode: DelegatedAccessPropertyScope["mode"];
+      propertyIds: [];
+      unitIds?: [];
+    };
+  };
+};
 export type DelegatedDelegateSummary = {
   delegateUserId: string;
   delegateEmail: string | null;
@@ -57,6 +73,7 @@ export type DelegatedDelegateSummary = {
 type CreateInvitationInput = {
   landlordId: string;
   actorUserId: string;
+  actorEmail?: string | null;
   inviteeEmail: string;
   role: string;
   propertyScope: DelegatedAccessPropertyScope;
@@ -67,9 +84,18 @@ type CreateInvitationInput = {
   now?: string;
 };
 
+type DispatchInvitationEmailInput = {
+  landlordId: string;
+  actorUserId: string;
+  actorEmail?: string | null;
+  invitationId: string;
+  now?: string;
+};
+
 type AcceptInvitationInput = {
   actorUserId: string;
   actorEmail?: string | null;
+  actorRole?: string | null;
   token: string;
   now?: string;
 };
@@ -104,14 +130,23 @@ function sha256(value: string): string {
   return crypto.createHash("sha256").update(value).digest("hex");
 }
 
+function normalizeEmail(value: unknown): string {
+  return cleanString(value, 320).toLowerCase();
+}
+
+function normalizeRole(value: unknown): string {
+  return cleanString(value, 80).toLowerCase();
+}
+
 function timingSafeEqualHex(a: string, b: string): boolean {
   const left = Buffer.from(a, "hex");
   const right = Buffer.from(b, "hex");
   return left.length === right.length && crypto.timingSafeEqual(left, right);
 }
 
-function createTokenHash(): string {
-  return sha256(crypto.randomBytes(32).toString("hex"));
+function createInvitationToken(): { rawToken: string; tokenHash: string } {
+  const rawToken = crypto.randomBytes(32).toString("base64url");
+  return { rawToken, tokenHash: sha256(rawToken) };
 }
 
 function projectInvitation(invitation: DelegatedAccessInvitation): DelegatedInvitationProjection {
@@ -121,6 +156,77 @@ function projectInvitation(invitation: DelegatedAccessInvitation): DelegatedInvi
 
 function projectGrant(grant: DelegatedAccessGrant): DelegatedGrantProjection {
   return grant;
+}
+
+function safeWorkspaceLabel(value: unknown, landlordId: string): string | null {
+  const label = cleanString(value, 160).replace(/\s+/g, " ");
+  if (!label || label === landlordId) return null;
+  return label;
+}
+
+function workspaceLabelFromRecord(data: Record<string, unknown> | undefined, landlordId: string): string | null {
+  if (!data) return null;
+  const candidates = [
+    data.email,
+    data.ownerEmail,
+    data.workspaceEmail,
+    data.displayName,
+    data.workspaceName,
+    data.companyName,
+    data.businessName,
+    data.legalName,
+    data.name,
+  ];
+  for (const candidate of candidates) {
+    const label = safeWorkspaceLabel(candidate, landlordId);
+    if (label) return label;
+  }
+  return null;
+}
+
+async function resolveLandlordWorkspaceLabel(
+  landlordId: string,
+  firestore: DelegatedAccessFirestoreLike
+): Promise<string> {
+  const workspaceCollections = ["users", "accounts", "landlords"] as const;
+  for (const collectionName of workspaceCollections) {
+    try {
+      const snapshot = await firestore.collection<Record<string, unknown>>(collectionName).doc(landlordId).get?.();
+      const label = workspaceLabelFromRecord(snapshot?.exists ? snapshot.data() : undefined, landlordId);
+      if (label) return label;
+    } catch {
+      // Best-effort label enrichment must not block delegate self-access.
+    }
+  }
+  return "Landlord workspace";
+}
+
+async function projectActiveDelegateGrant(
+  grant: DelegatedAccessGrant,
+  firestore: DelegatedAccessFirestoreLike
+): Promise<DelegatedActiveGrantProjection> {
+  const {
+    grantId: _grantId,
+    landlordId: _landlordId,
+    delegateUserId: _delegateUserId,
+    createdByUserId: _createdByUserId,
+    revokedByUserId: _revokedByUserId,
+    auditEventIds: _auditEventIds,
+    ...safe
+  } = grant;
+  return {
+    ...safe,
+    landlordWorkspaceLabel: await resolveLandlordWorkspaceLabel(grant.landlordId, firestore),
+    propertyScopeSummary: propertyScopeSummary([grant]),
+    permissionScope: {
+      ...grant.permissionScope,
+      propertyScope: {
+        mode: grant.permissionScope.propertyScope.mode,
+        propertyIds: [],
+        ...(grant.permissionScope.propertyScope.unitIds?.length ? { unitIds: [] } : {}),
+      },
+    },
+  };
 }
 
 function invitationFromSnapshot(snapshot: SnapshotLike): DelegatedAccessInvitation | null {
@@ -163,14 +269,134 @@ async function saveGrant(grant: DelegatedAccessGrant, firestore: DelegatedAccess
   await ref.set(grant, { merge: false });
 }
 
+function maskedFailureReason(error: unknown): string {
+  const message = error instanceof Error ? error.message : "email_dispatch_failed";
+  return cleanString(message.replace(/[A-Za-z0-9_-]{24,}/g, "[redacted]"), 160) || "email_dispatch_failed";
+}
+
+function nextDispatchMetadata(
+  current: DelegatedAccessEmailDispatchMetadata | null | undefined,
+  status: "sent" | "failed",
+  now: string,
+  failureReason: string | null = null
+): DelegatedAccessEmailDispatchMetadata {
+  return {
+    status,
+    attemptCount: Number(current?.attemptCount || 0) + 1,
+    lastAttemptAt: now,
+    lastSentAt: status === "sent" ? now : current?.lastSentAt || null,
+    lastFailedAt: status === "failed" ? now : current?.lastFailedAt || null,
+    lastFailureReason: status === "failed" ? failureReason : null,
+  };
+}
+
+function permissionScopeForInvitation(invitation: DelegatedAccessInvitation) {
+  return {
+    role: invitation.role,
+    workspaceScopes: invitation.workspaceScopes,
+    propertyScope: invitation.propertyScope,
+    resourceScope: invitation.resourceScope,
+    permissionFlags: invitation.permissionFlags,
+    billingAccess: false as const,
+    exportAccess: invitation.permissionFlags.includes("export"),
+  };
+}
+
+async function dispatchDelegatedAccessInvitationEmail(
+  input: {
+    invitation: DelegatedAccessInvitation;
+    rawToken: string;
+    actorUserId: string;
+    actorEmail?: string | null;
+    now: string;
+    actionType: "invite_email_dispatched" | "invite_email_resent";
+  },
+  firestore: DelegatedAccessFirestoreLike
+): Promise<{ invitation: DelegatedAccessInvitation; auditEvent: DelegatedAccessAuditEvent; sent: boolean }> {
+  try {
+    await sendDelegatedAccessInvitationEmail({
+      invitation: input.invitation,
+      rawToken: input.rawToken,
+      invitedByEmail: input.actorEmail || null,
+    });
+    const auditEvent = buildDelegatedAccessAuditEvent({
+      eventType: "delegated_invite_sent",
+      actorUserId: input.actorUserId,
+      actingForLandlordId: input.invitation.landlordId,
+      delegatedRole: "landlord_owner",
+      permissionScope: permissionScopeForInvitation(input.invitation),
+      actionType: input.actionType,
+      targetResourceType: "delegate_invitation",
+      targetResourceId: input.invitation.invitationId,
+      timestamp: input.now,
+      outcome: "allowed",
+      before: {
+        status: input.invitation.status,
+        emailDispatchStatus: input.invitation.emailDispatch?.status || "not_sent",
+      },
+      after: {
+        status: input.invitation.status,
+        emailDispatchStatus: "sent",
+        attemptCount: Number(input.invitation.emailDispatch?.attemptCount || 0) + 1,
+      },
+    });
+    const updated = {
+      ...input.invitation,
+      emailDispatch: nextDispatchMetadata(input.invitation.emailDispatch, "sent", input.now),
+      auditEventIds: [...input.invitation.auditEventIds, auditEvent.eventId],
+    };
+    await saveInvitation(updated, firestore);
+    await appendAuditEvent(auditEvent, firestore);
+    return { invitation: updated, auditEvent, sent: true };
+  } catch (error) {
+    const reason = maskedFailureReason(error);
+    const auditEvent = buildDelegatedAccessAuditEvent({
+      eventType: "delegated_invite_sent",
+      actorUserId: input.actorUserId,
+      actingForLandlordId: input.invitation.landlordId,
+      delegatedRole: "landlord_owner",
+      permissionScope: permissionScopeForInvitation(input.invitation),
+      actionType: input.actionType === "invite_email_resent" ? "invite_email_resend_failed" : "invite_email_dispatch_failed",
+      targetResourceType: "delegate_invitation",
+      targetResourceId: input.invitation.invitationId,
+      timestamp: input.now,
+      outcome: "failed",
+      before: {
+        status: input.invitation.status,
+        emailDispatchStatus: input.invitation.emailDispatch?.status || "not_sent",
+      },
+      after: {
+        status: input.invitation.status,
+        emailDispatchStatus: "failed",
+        attemptCount: Number(input.invitation.emailDispatch?.attemptCount || 0) + 1,
+      },
+      reason,
+    });
+    const updated = {
+      ...input.invitation,
+      emailDispatch: nextDispatchMetadata(input.invitation.emailDispatch, "failed", input.now, reason),
+      auditEventIds: [...input.invitation.auditEventIds, auditEvent.eventId],
+    };
+    await saveInvitation(updated, firestore);
+    await appendAuditEvent(auditEvent, firestore);
+    return { invitation: updated, auditEvent, sent: false };
+  }
+}
+
 export async function createDelegatedAccessInvitationRecord(
   input: CreateInvitationInput,
   options: ServiceOptions = {}
-): Promise<{ invitation: DelegatedInvitationProjection; auditEvent: DelegatedAccessAuditEvent }> {
+): Promise<{
+  invitation: DelegatedInvitationProjection;
+  auditEvent: DelegatedAccessAuditEvent;
+  emailAuditEvent: DelegatedAccessAuditEvent;
+  emailDispatched: boolean;
+}> {
   const firestore = delegatedDb(options.firestore);
   const landlordId = requireString(input.landlordId, "missing_landlord_id");
   const actorUserId = requireString(input.actorUserId, "missing_actor_user_id");
   const now = input.now || new Date().toISOString();
+  const token = createInvitationToken();
   const invitation = createDelegatedAccessInvitation({
     landlordId,
     inviteeEmail: input.inviteeEmail,
@@ -179,7 +405,7 @@ export async function createDelegatedAccessInvitationRecord(
     workspaceScopes: input.workspaceScopes,
     resourceScope: input.resourceScope,
     permissionFlags: input.permissionFlags,
-    tokenHash: createTokenHash(),
+    tokenHash: token.tokenHash,
     expiresAt: input.expiresAt,
     createdByUserId: actorUserId,
     createdAt: now,
@@ -217,7 +443,23 @@ export async function createDelegatedAccessInvitationRecord(
   };
   await saveInvitation(withAudit, firestore);
   await appendAuditEvent(auditEvent, firestore);
-  return { invitation: projectInvitation(withAudit), auditEvent };
+  const emailResult = await dispatchDelegatedAccessInvitationEmail(
+    {
+      invitation: withAudit,
+      rawToken: token.rawToken,
+      actorUserId,
+      actorEmail: input.actorEmail,
+      now,
+      actionType: "invite_email_dispatched",
+    },
+    firestore
+  );
+  return {
+    invitation: projectInvitation(emailResult.invitation),
+    auditEvent,
+    emailAuditEvent: emailResult.auditEvent,
+    emailDispatched: emailResult.sent,
+  };
 }
 
 export async function listDelegatedAccessInvitationRecords(
@@ -275,6 +517,18 @@ async function listGrantsForLandlord(
     .sort((a, b) => String(b.updatedAt || b.createdAt).localeCompare(String(a.updatedAt || a.createdAt)));
 }
 
+async function listActiveGrantsForDelegate(
+  delegateUserId: string,
+  firestore: DelegatedAccessFirestoreLike
+): Promise<DelegatedAccessGrant[]> {
+  const snapshot = await firestore.collection<DelegatedAccessGrant>(DELEGATED_ACCESS_GRANTS_COLLECTION).get?.();
+  return (snapshot?.docs || [])
+    .map(grantFromSnapshot)
+    .filter((grant): grant is DelegatedAccessGrant => Boolean(grant))
+    .filter((grant) => grant.delegateUserId === delegateUserId && grant.status === "active")
+    .sort((a, b) => String(b.updatedAt || b.createdAt).localeCompare(String(a.updatedAt || a.createdAt)));
+}
+
 async function loadGrantForLandlord(
   landlordId: string,
   grantId: string,
@@ -297,6 +551,22 @@ async function loadInvitationByTokenHash(
     .map(invitationFromSnapshot)
     .filter((invitation): invitation is DelegatedAccessInvitation => Boolean(invitation));
   return invitations.find((invitation) => timingSafeEqualHex(invitation.tokenHash, tokenHash)) || null;
+}
+
+export async function resolveDelegatedAccessInvitationSignupContext(
+  input: { token: string; email: string; now?: string },
+  options: ServiceOptions = {}
+): Promise<{ invitation: DelegatedInvitationProjection }> {
+  const firestore = delegatedDb(options.firestore);
+  const rawToken = requireString(input.token, "missing_invitation_token", 2000);
+  const email = normalizeEmail(input.email);
+  if (!email) throw new Error("missing_invitee_email");
+  const invitation = await loadInvitationByTokenHash(sha256(rawToken), firestore);
+  if (!invitation) throw new Error("invalid_invitation_token");
+  if (invitation.status !== "pending") throw new Error("invitation_not_pending");
+  if (isDelegatedInvitationExpired(invitation, input.now || new Date())) throw new Error("invitation_expired");
+  if (normalizeEmail(invitation.inviteeEmail) !== email) throw new Error("invitee_email_mismatch");
+  return { invitation: projectInvitation(invitation) };
 }
 
 function stableGrantId(invitation: DelegatedAccessInvitation, delegateUserId: string): string {
@@ -370,6 +640,110 @@ export async function listDelegatedAccessDelegateRecords(
   return { delegates: summarizeDelegates(grants) };
 }
 
+export async function listActiveDelegatedAccessGrantRecordsForDelegate(
+  input: { actorUserId: string },
+  options: ServiceOptions = {}
+): Promise<{ grants: DelegatedActiveGrantProjection[] }> {
+  const firestore = delegatedDb(options.firestore);
+  const actorUserId = requireString(input.actorUserId, "missing_actor_user_id");
+  const grants = await listActiveGrantsForDelegate(actorUserId, firestore);
+  return { grants: await Promise.all(grants.map((grant) => projectActiveDelegateGrant(grant, firestore))) };
+}
+
+export async function resendDelegatedAccessInvitationEmailRecord(
+  input: DispatchInvitationEmailInput,
+  options: ServiceOptions = {}
+): Promise<{
+  invitation: DelegatedInvitationProjection;
+  auditEvent: DelegatedAccessAuditEvent;
+  emailDispatched: boolean;
+}> {
+  const firestore = delegatedDb(options.firestore);
+  const landlordId = requireString(input.landlordId, "missing_landlord_id");
+  const actorUserId = requireString(input.actorUserId, "missing_actor_user_id");
+  const invitationId = requireString(input.invitationId, "missing_invitation_id");
+  const now = input.now || new Date().toISOString();
+  const invitation = await loadInvitationForLandlord(landlordId, invitationId, firestore);
+  if (!invitation) throw new Error("delegated_invitation_not_found");
+  if (invitation.status !== "pending") throw new Error("invitation_not_pending");
+  if (isDelegatedInvitationExpired(invitation, now)) throw new Error("invitation_expired");
+
+  const token = createInvitationToken();
+  const emailInvitation: DelegatedAccessInvitation = {
+    ...invitation,
+    tokenHash: token.tokenHash,
+  };
+
+  try {
+    await sendDelegatedAccessInvitationEmail({
+      invitation: emailInvitation,
+      rawToken: token.rawToken,
+      invitedByEmail: input.actorEmail || null,
+    });
+    const auditEvent = buildDelegatedAccessAuditEvent({
+      eventType: "delegated_invite_sent",
+      actorUserId,
+      actingForLandlordId: landlordId,
+      delegatedRole: "landlord_owner",
+      permissionScope: permissionScopeForInvitation(invitation),
+      actionType: "invite_email_resent",
+      targetResourceType: "delegate_invitation",
+      targetResourceId: invitation.invitationId,
+      timestamp: now,
+      outcome: "allowed",
+      before: {
+        status: invitation.status,
+        emailDispatchStatus: invitation.emailDispatch?.status || "not_sent",
+      },
+      after: {
+        status: invitation.status,
+        emailDispatchStatus: "sent",
+        attemptCount: Number(invitation.emailDispatch?.attemptCount || 0) + 1,
+      },
+    });
+    const updated = {
+      ...emailInvitation,
+      emailDispatch: nextDispatchMetadata(invitation.emailDispatch, "sent", now),
+      auditEventIds: [...invitation.auditEventIds, auditEvent.eventId],
+    };
+    await saveInvitation(updated, firestore);
+    await appendAuditEvent(auditEvent, firestore);
+    return { invitation: projectInvitation(updated), auditEvent, emailDispatched: true };
+  } catch (error) {
+    const reason = maskedFailureReason(error);
+    const auditEvent = buildDelegatedAccessAuditEvent({
+      eventType: "delegated_invite_sent",
+      actorUserId,
+      actingForLandlordId: landlordId,
+      delegatedRole: "landlord_owner",
+      permissionScope: permissionScopeForInvitation(invitation),
+      actionType: "invite_email_resend_failed",
+      targetResourceType: "delegate_invitation",
+      targetResourceId: invitation.invitationId,
+      timestamp: now,
+      outcome: "failed",
+      before: {
+        status: invitation.status,
+        emailDispatchStatus: invitation.emailDispatch?.status || "not_sent",
+      },
+      after: {
+        status: invitation.status,
+        emailDispatchStatus: "failed",
+        attemptCount: Number(invitation.emailDispatch?.attemptCount || 0) + 1,
+      },
+      reason,
+    });
+    const updated = {
+      ...invitation,
+      emailDispatch: nextDispatchMetadata(invitation.emailDispatch, "failed", now, reason),
+      auditEventIds: [...invitation.auditEventIds, auditEvent.eventId],
+    };
+    await saveInvitation(updated, firestore);
+    await appendAuditEvent(auditEvent, firestore);
+    return { invitation: projectInvitation(updated), auditEvent, emailDispatched: false };
+  }
+}
+
 export async function acceptDelegatedAccessInvitationRecord(
   input: AcceptInvitationInput,
   options: ServiceOptions = {}
@@ -381,12 +755,16 @@ export async function acceptDelegatedAccessInvitationRecord(
   const firestore = delegatedDb(options.firestore);
   const actorUserId = requireString(input.actorUserId, "missing_actor_user_id");
   const rawToken = requireString(input.token, "missing_invitation_token", 2000);
+  const actorEmail = normalizeEmail(input.actorEmail);
+  const actorRole = normalizeRole(input.actorRole);
   const now = input.now || new Date().toISOString();
   const tokenHash = sha256(rawToken);
   const invitation = await loadInvitationByTokenHash(tokenHash, firestore);
   if (!invitation) throw new Error("invalid_invitation_token");
   if (invitation.status !== "pending") throw new Error("invitation_not_pending");
   if (isDelegatedInvitationExpired(invitation, now)) throw new Error("invitation_expired");
+  if (!actorEmail || actorEmail !== normalizeEmail(invitation.inviteeEmail)) throw new Error("invitee_email_mismatch");
+  if (["admin", "landlord", "owner"].includes(actorRole)) throw new Error("delegate_account_role_conflict");
 
   const accepted = transitionDelegatedInvitationStatus(invitation, "accepted", {
     acceptedByUserId: actorUserId,
@@ -396,7 +774,7 @@ export async function acceptDelegatedAccessInvitationRecord(
     grantId: stableGrantId(invitation, actorUserId),
     landlordId: invitation.landlordId,
     delegateUserId: actorUserId,
-    delegateEmail: input.actorEmail || invitation.inviteeEmail,
+    delegateEmail: actorEmail,
     role: invitation.role,
     propertyScope: invitation.propertyScope,
     workspaceScopes: invitation.workspaceScopes,

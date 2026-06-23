@@ -5,25 +5,29 @@ import {
   cancelDelegatedAccessInvitationRecord,
   createDelegatedAccessInvitationRecord,
   expireDelegatedAccessInvitationRecord,
+  listActiveDelegatedAccessGrantRecordsForDelegate,
   listDelegatedAccessDelegateRecords,
   listDelegatedAccessGrantRecords,
   listDelegatedAccessInvitationRecords,
+  resendDelegatedAccessInvitationEmailRecord,
   revokeDelegatedAccessGrantRecord,
 } from "../services/delegatedAccessInvitationService";
 
 const router = Router();
+const selfRouter = Router();
 
 function asString(value: unknown, max = 240): string {
   return String(value ?? "").trim().slice(0, max);
 }
 
-function ownerContext(req: any): { actorUserId: string; landlordId: string } | null {
+function ownerContext(req: any): { actorUserId: string; landlordId: string; actorEmail: string | null } | null {
   const role = asString(req.user?.role, 80).toLowerCase();
   if (role !== "landlord") return null;
   const actorUserId = asString(req.user?.id || req.user?.uid || req.user?.sub, 240);
   const landlordId = asString(req.user?.landlordId || req.user?.id, 240);
+  const actorEmail = asString(req.user?.email, 320) || null;
   if (!actorUserId || !landlordId) return null;
-  return { actorUserId, landlordId };
+  return { actorUserId, landlordId, actorEmail };
 }
 
 function actorContext(req: any): { actorUserId: string; actorEmail: string | null } | null {
@@ -31,6 +35,12 @@ function actorContext(req: any): { actorUserId: string; actorEmail: string | nul
   if (!actorUserId) return null;
   const actorEmail = asString(req.user?.email, 320) || null;
   return { actorUserId, actorEmail };
+}
+
+function delegateContext(req: any): { actorUserId: string; actorEmail: string | null } | null {
+  const role = asString(req.user?.actorRole || req.user?.role, 80).toLowerCase();
+  if (role !== "delegate") return null;
+  return actorContext(req);
 }
 
 function forbidden(res: any) {
@@ -57,6 +67,12 @@ function handleError(res: any, error: unknown) {
   if (code === "invitation_expired") {
     return res.status(410).json({ ok: false, error: "INVITATION_EXPIRED" });
   }
+  if (code === "invitee_email_mismatch") {
+    return res.status(403).json({ ok: false, error: "INVITEE_EMAIL_MISMATCH" });
+  }
+  if (code === "delegate_account_role_conflict") {
+    return res.status(403).json({ ok: false, error: "DELEGATE_ACCOUNT_ROLE_CONFLICT" });
+  }
   if (code.startsWith("invalid_") || code.startsWith("missing_") || code.includes("_not_allowed")) {
     return res.status(400).json({ ok: false, error: code.toUpperCase() });
   }
@@ -65,6 +81,25 @@ function handleError(res: any, error: unknown) {
 }
 
 router.use(requireAuth);
+
+async function handleMyDelegatedAccessGrants(req: any, res: any) {
+  const context = delegateContext(req);
+  if (!context) return forbidden(res);
+
+  try {
+    const result = await listActiveDelegatedAccessGrantRecordsForDelegate({
+      actorUserId: context.actorUserId,
+    });
+    return res.status(200).json({ ok: true, grants: result.grants });
+  } catch (error) {
+    return handleError(res, error);
+  }
+}
+
+selfRouter.use(requireAuth);
+selfRouter.get("/my-grants", handleMyDelegatedAccessGrants);
+
+router.get("/delegated-access/my-grants", handleMyDelegatedAccessGrants);
 
 router.get("/delegated-access/delegates", async (req: any, res) => {
   const context = ownerContext(req);
@@ -119,6 +154,7 @@ router.post("/delegated-access/invitations/accept", async (req: any, res) => {
     const result = await acceptDelegatedAccessInvitationRecord({
       actorUserId: context.actorUserId,
       actorEmail: context.actorEmail,
+      actorRole: req.user?.actorRole || req.user?.role || null,
       token: req.body?.token,
     });
     return res.status(200).json({ ok: true, invitation: result.invitation, grant: result.grant });
@@ -135,6 +171,7 @@ router.post("/delegated-access/invitations", async (req: any, res) => {
     const result = await createDelegatedAccessInvitationRecord({
       landlordId: context.landlordId,
       actorUserId: context.actorUserId,
+      actorEmail: context.actorEmail,
       inviteeEmail: req.body?.inviteeEmail,
       role: req.body?.role,
       propertyScope: req.body?.propertyScope,
@@ -143,7 +180,33 @@ router.post("/delegated-access/invitations", async (req: any, res) => {
       permissionFlags: Array.isArray(req.body?.permissionFlags) ? req.body.permissionFlags : [],
       expiresAt: req.body?.expiresAt,
     });
-    return res.status(201).json({ ok: true, invitation: result.invitation });
+    return res.status(201).json({
+      ok: true,
+      invitation: result.invitation,
+      emailDispatch: { status: result.emailDispatched ? "sent" : "failed" },
+    });
+  } catch (error) {
+    return handleError(res, error);
+  }
+});
+
+router.post("/delegated-access/invitations/:invitationId/resend", async (req: any, res) => {
+  const context = ownerContext(req);
+  if (!context) return forbidden(res);
+
+  try {
+    const result = await resendDelegatedAccessInvitationEmailRecord({
+      landlordId: context.landlordId,
+      actorUserId: context.actorUserId,
+      actorEmail: context.actorEmail,
+      invitationId: req.params.invitationId,
+    });
+    return res.status(result.emailDispatched ? 200 : 502).json({
+      ok: result.emailDispatched,
+      invitation: result.invitation,
+      emailDispatch: { status: result.emailDispatched ? "sent" : "failed" },
+      ...(result.emailDispatched ? {} : { error: "EMAIL_DISPATCH_FAILED" }),
+    });
   } catch (error) {
     return handleError(res, error);
   }
@@ -196,4 +259,5 @@ router.post("/delegated-access/invitations/:invitationId/expire", async (req: an
   }
 });
 
+export const delegatedAccessSelfRoutes = selfRouter;
 export default router;

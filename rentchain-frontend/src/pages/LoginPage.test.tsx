@@ -101,4 +101,18 @@ describe("LoginPage", () => {
 
     expect(screen.getByText("Contractor invitation detected")).toBeInTheDocument();
   });
+
+  it("preserves delegated access acceptance redirect when linking to signup", () => {
+    render(
+      <MemoryRouter initialEntries={["/login?next=/delegated-access/accept%3Ftoken%3Dsafe-token"]}>
+        <LoginPage />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText("Delegated access invitation detected")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Create free account" })).toHaveAttribute(
+      "href",
+      "/signup?next=%2Fdelegated-access%2Faccept%3Ftoken%3Dsafe-token"
+    );
+  });
 });

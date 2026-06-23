@@ -34,6 +34,7 @@ import {
 } from "../services/tenantPortal/tenantInviteService";
 import { createTenancyIfMissing } from "../services/tenanciesService";
 import { syncPropertyUnitOccupancyForTenantContext } from "../services/tenantPortal/tenantOccupancySyncService";
+import { resolveDelegatedAccessInvitationSignupContext } from "../services/delegatedAccessInvitationService";
 
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET || "dev-secret";
@@ -98,6 +99,10 @@ function tokenFingerprint(value: string): string {
 
 function hashToken(input: string) {
   return crypto.createHash("sha256").update(String(input || "").trim()).digest("hex");
+}
+
+function isDelegatedAccessSignupSource(value: string): boolean {
+  return value === "delegated_access" || value === "delegate" || value === "delegated-access";
 }
 
 function asOnboardString(value: unknown): string | null {
@@ -715,8 +720,62 @@ router.post("/signup", rateLimitAuth, async (req, res) => {
       landlordId: string | null;
       maskedEmail: string | null;
     } | null = null;
+    let delegatedInviteContext: {
+      token: string;
+      invitationId: string;
+      landlordId: string;
+      role: string;
+    } | null = null;
 
-    if (inviteToken || inviteSource === "contractor") {
+    if (isDelegatedAccessSignupSource(inviteSource)) {
+      if (!inviteToken) {
+        return res.status(400).json({
+          ok: false,
+          code: "MISSING_INVITE_TOKEN",
+          error: "Delegated access invite token is required for signup",
+        });
+      }
+      try {
+        const resolved = await resolveDelegatedAccessInvitationSignupContext({
+          token: inviteToken,
+          email,
+        });
+        delegatedInviteContext = {
+          token: inviteToken,
+          invitationId: resolved.invitation.invitationId,
+          landlordId: resolved.invitation.landlordId,
+          role: resolved.invitation.role,
+        };
+        onboardLog("signup_context", {
+          correlationId: signupCorrelationId,
+          inviteType: "delegated_access",
+          status: resolved.invitation.status,
+          token: tokenFingerprint(inviteToken),
+          invitationId: resolved.invitation.invitationId,
+        });
+      } catch (error: any) {
+        const code = String(error?.message || "invalid_invitation_token");
+        const status =
+          code === "invitation_expired"
+            ? 410
+            : code === "invitee_email_mismatch"
+            ? 403
+            : code === "invitation_not_pending"
+            ? 409
+            : 404;
+        onboardLog("signup_context_rejected", {
+          correlationId: signupCorrelationId,
+          inviteType: "delegated_access",
+          token: tokenFingerprint(inviteToken),
+          reason: code,
+        });
+        return res.status(status).json({
+          ok: false,
+          code: code.toUpperCase(),
+          error: "Delegated access invite is invalid or cannot be used for this account.",
+        });
+      }
+    } else if (inviteToken || inviteSource === "contractor") {
       if (!inviteToken) {
         return res.status(400).json({
           ok: false,
@@ -785,6 +844,58 @@ router.post("/signup", rateLimitAuth, async (req, res) => {
     }
 
     const uid = userRecord.uid;
+    if (delegatedInviteContext) {
+      const delegateDoc = {
+        id: uid,
+        email,
+        role: "delegate",
+        landlordId: null,
+        delegatedAccess: {
+          status: "pending_acceptance",
+          invitationId: delegatedInviteContext.invitationId,
+          landlordId: delegatedInviteContext.landlordId,
+          role: delegatedInviteContext.role,
+        },
+        status: "active",
+        approved: true,
+        approvedAt: now,
+        approvedBy: "delegated_access_invite_signup",
+        createdAt: now,
+        updatedAt: now,
+      };
+      await db.collection("users").doc(uid).set(delegateDoc, { merge: true });
+      await db.collection("accounts").doc(uid).set(delegateDoc, { merge: true });
+
+      const token = signAuthToken({
+        sub: uid,
+        email,
+        role: "delegate",
+        permissions: [],
+        revokedPermissions: [],
+      });
+      onboardLog("signup_completed", {
+        correlationId: signupCorrelationId,
+        mode: "delegated_access_invite",
+        issuedRole: "delegate",
+        token: tokenFingerprint(delegatedInviteContext.token),
+        invitationId: delegatedInviteContext.invitationId,
+        email: maskEmail(email),
+        userId: uid,
+      });
+      return res.status(201).json({
+        ok: true,
+        token,
+        showLandlordWelcome: false,
+        user: {
+          id: uid,
+          email,
+          role: "delegate",
+          landlordId: null,
+          approved: true,
+        },
+      });
+    }
+
     if (contractorInviteContext) {
       const invitedBy = contractorInviteContext.landlordId ? [contractorInviteContext.landlordId] : [];
       await db.collection("users").doc(uid).set(
@@ -1633,6 +1744,39 @@ router.post("/login", rateLimitAuth, async (req, res) => {
           role: "contractor",
           actorRole: "contractor",
           contractorId,
+        },
+      });
+    }
+
+    if (persistedRole === "delegate") {
+      step = "delegate_jwt_sign";
+      claims = {
+        sub: fbUser.id,
+        email: fbUser.email,
+        role: "delegate",
+        permissions: Array.isArray(persistedUser?.permissions)
+          ? persistedUser.permissions
+          : Array.isArray(persistedAccount?.permissions)
+          ? persistedAccount.permissions
+          : [],
+        revokedPermissions: Array.isArray(persistedUser?.revokedPermissions)
+          ? persistedUser.revokedPermissions
+          : Array.isArray(persistedAccount?.revokedPermissions)
+          ? persistedAccount.revokedPermissions
+          : [],
+      } as const;
+      const token = signAuthToken(claims, { expiresIn: "7d" });
+      sessionUser = await buildCanonicalSessionUserFromClaims({ ...claims, ver: 1 } as any, {
+        requestCache: {},
+      });
+      return res.status(200).json({
+        ok: true,
+        token,
+        user: {
+          ...sessionUser,
+          role: "delegate",
+          actorRole: "delegate",
+          landlordId: null,
         },
       });
     }

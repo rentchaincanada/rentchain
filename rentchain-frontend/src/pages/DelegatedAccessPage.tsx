@@ -102,6 +102,12 @@ function statusLabel(status: string) {
     .join(" ");
 }
 
+function inviteToastDescription(status?: string | null) {
+  if (status === "sent") return "Invitation email was sent to the delegate.";
+  if (status === "failed") return "Invitation was saved, but email delivery failed. Use resend after delivery is restored.";
+  return "Invitation was saved. Confirm email delivery status before relying on the link.";
+}
+
 function isOwnerRole(user: any) {
   const role = String(user?.actorRole || user?.role || "").trim().toLowerCase();
   return role === "landlord";
@@ -163,7 +169,6 @@ export default function DelegatedAccessPage() {
   const [inviteOpen, setInviteOpen] = React.useState(false);
   const [inviteEmail, setInviteEmail] = React.useState("");
   const [inviteRole, setInviteRole] = React.useState<DelegatedAccessRole>("property_manager");
-  const [propertyScopeMode, setPropertyScopeMode] = React.useState<DelegatedAccessPropertyScopeMode>("all_current_properties");
   const [workspaceScopes, setWorkspaceScopes] = React.useState<DelegatedAccessWorkspaceScope[]>(defaultWorkspaces);
   const [permissionFlags, setPermissionFlags] = React.useState<DelegatedAccessPermissionAction[]>(defaultPermissions);
   const [expiresAt, setExpiresAt] = React.useState(defaultExpiryDate());
@@ -215,7 +220,6 @@ export default function DelegatedAccessPage() {
   const resetInvite = () => {
     setInviteEmail("");
     setInviteRole("property_manager");
-    setPropertyScopeMode("all_current_properties");
     setWorkspaceScopes(defaultWorkspaces);
     setPermissionFlags(defaultPermissions);
     setExpiresAt(defaultExpiryDate());
@@ -250,16 +254,16 @@ export default function DelegatedAccessPage() {
       const input: CreateDelegatedAccessInvitationInput = {
         inviteeEmail: inviteEmail,
         role: inviteRole,
-        propertyScope: { mode: propertyScopeMode, propertyIds: [] },
+        propertyScope: { mode: "all_current_properties", propertyIds: [] },
         workspaceScopes,
         permissionFlags,
         expiresAt: toIsoDate(expiresAt),
       };
-      await createDelegatedAccessInvitation(input);
+      const result = await createDelegatedAccessInvitation(input);
       showToast({
         message: "Delegate invitation created",
-        description: "Email dispatch is not enabled yet. Share acceptance instructions only when that flow is approved.",
-        variant: "success",
+        description: inviteToastDescription(result.emailDispatch?.status || result.invitation.emailDispatch?.status),
+        variant: result.emailDispatch?.status === "failed" ? "warning" : "success",
       });
       resetInvite();
       setInviteOpen(false);
@@ -393,7 +397,7 @@ export default function DelegatedAccessPage() {
             <UserPlus size={20} />
             <div>
               <h2 style={{ margin: 0, fontSize: "1.1rem" }}>Invite Delegate</h2>
-              <div style={{ color: text.muted, fontSize: 13 }}>Creates a pending invitation. Email dispatch is out of scope for v1.</div>
+              <div style={{ color: text.muted, fontSize: 13 }}>Creates a pending invitation and sends the acceptance email.</div>
             </div>
           </div>
           <form onSubmit={handleInvite} style={{ display: "grid", gap: spacing.md }}>
@@ -431,25 +435,24 @@ export default function DelegatedAccessPage() {
                   ))}
                 </select>
               </label>
-              <label style={{ display: "grid", gap: 6, fontWeight: 700 }}>
+              <div style={{ display: "grid", gap: 6, fontWeight: 700 }}>
                 Property scope
-                <select
+                <div
                   aria-label="Property scope"
-                  value={propertyScopeMode}
-                  onChange={(event) => setPropertyScopeMode(event.target.value as DelegatedAccessPropertyScopeMode)}
                   style={{
                     minHeight: 42,
                     border: `1px solid ${colors.border}`,
                     borderRadius: radius.md,
-                    background: colors.card,
+                    background: "#f8fafc",
                     padding: "10px 12px",
                     color: text.primary,
+                    display: "flex",
+                    alignItems: "center",
                   }}
                 >
-                  <option value="all_current_properties">All current properties</option>
-                  <option value="none">No property scope</option>
-                </select>
-              </label>
+                  All current properties
+                </div>
+              </div>
               <label style={{ display: "grid", gap: 6, fontWeight: 700 }}>
                 Expires
                 <Input
