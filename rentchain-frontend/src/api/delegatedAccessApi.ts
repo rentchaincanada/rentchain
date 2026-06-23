@@ -87,6 +87,7 @@ export type DelegatedAccessGrant = {
 };
 
 export type DelegatedAccessActiveGrant = Omit<DelegatedAccessGrant, "grantId" | "delegateUserId"> & {
+  landlordWorkspaceLabel: string;
   propertyScopeSummary: string;
 };
 

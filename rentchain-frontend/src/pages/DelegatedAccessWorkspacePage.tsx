@@ -220,6 +220,9 @@ export default function DelegatedAccessWorkspacePage() {
                         <strong>{roleLabels[grant.role]}</strong>
                         <Pill tone="accent">Active</Pill>
                       </div>
+                      <div style={{ color: text.primary, fontSize: 14, fontWeight: 700 }}>
+                        Landlord workspace: {grant.landlordWorkspaceLabel || "Landlord workspace"}
+                      </div>
                       <div style={{ color: text.muted, fontSize: 14 }}>{propertyScopeLabel(grant)}</div>
                       <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                         {grant.permissionScope.workspaceScopes.map((scope) => (

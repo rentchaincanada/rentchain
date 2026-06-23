@@ -49,6 +49,7 @@ export type DelegatedActiveGrantProjection = Omit<
   DelegatedAccessGrant,
   "grantId" | "landlordId" | "delegateUserId" | "createdByUserId" | "revokedByUserId" | "auditEventIds"
 > & {
+  landlordWorkspaceLabel: string;
   propertyScopeSummary: string;
   permissionScope: Omit<DelegatedAccessGrant["permissionScope"], "propertyScope"> & {
     propertyScope: {
@@ -157,7 +158,53 @@ function projectGrant(grant: DelegatedAccessGrant): DelegatedGrantProjection {
   return grant;
 }
 
-function projectActiveDelegateGrant(grant: DelegatedAccessGrant): DelegatedActiveGrantProjection {
+function safeWorkspaceLabel(value: unknown, landlordId: string): string | null {
+  const label = cleanString(value, 160).replace(/\s+/g, " ");
+  if (!label || label === landlordId) return null;
+  return label;
+}
+
+function workspaceLabelFromRecord(data: Record<string, unknown> | undefined, landlordId: string): string | null {
+  if (!data) return null;
+  const candidates = [
+    data.email,
+    data.ownerEmail,
+    data.workspaceEmail,
+    data.displayName,
+    data.workspaceName,
+    data.companyName,
+    data.businessName,
+    data.legalName,
+    data.name,
+  ];
+  for (const candidate of candidates) {
+    const label = safeWorkspaceLabel(candidate, landlordId);
+    if (label) return label;
+  }
+  return null;
+}
+
+async function resolveLandlordWorkspaceLabel(
+  landlordId: string,
+  firestore: DelegatedAccessFirestoreLike
+): Promise<string> {
+  const workspaceCollections = ["users", "accounts", "landlords"] as const;
+  for (const collectionName of workspaceCollections) {
+    try {
+      const snapshot = await firestore.collection<Record<string, unknown>>(collectionName).doc(landlordId).get?.();
+      const label = workspaceLabelFromRecord(snapshot?.exists ? snapshot.data() : undefined, landlordId);
+      if (label) return label;
+    } catch {
+      // Best-effort label enrichment must not block delegate self-access.
+    }
+  }
+  return "Landlord workspace";
+}
+
+async function projectActiveDelegateGrant(
+  grant: DelegatedAccessGrant,
+  firestore: DelegatedAccessFirestoreLike
+): Promise<DelegatedActiveGrantProjection> {
   const {
     grantId: _grantId,
     landlordId: _landlordId,
@@ -169,6 +216,7 @@ function projectActiveDelegateGrant(grant: DelegatedAccessGrant): DelegatedActiv
   } = grant;
   return {
     ...safe,
+    landlordWorkspaceLabel: await resolveLandlordWorkspaceLabel(grant.landlordId, firestore),
     propertyScopeSummary: propertyScopeSummary([grant]),
     permissionScope: {
       ...grant.permissionScope,
@@ -599,7 +647,7 @@ export async function listActiveDelegatedAccessGrantRecordsForDelegate(
   const firestore = delegatedDb(options.firestore);
   const actorUserId = requireString(input.actorUserId, "missing_actor_user_id");
   const grants = await listActiveGrantsForDelegate(actorUserId, firestore);
-  return { grants: grants.map(projectActiveDelegateGrant) };
+  return { grants: await Promise.all(grants.map((grant) => projectActiveDelegateGrant(grant, firestore))) };
 }
 
 export async function resendDelegatedAccessInvitationEmailRecord(

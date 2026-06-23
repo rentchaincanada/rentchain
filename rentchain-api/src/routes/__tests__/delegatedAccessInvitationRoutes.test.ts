@@ -791,7 +791,24 @@ describe("delegatedAccessInvitationRoutes", () => {
 
   it("lists only active grants assigned to the authenticated delegate without property ids", async () => {
     const { default: router, delegatedAccessSelfRoutes } = await import("../delegatedAccessInvitationRoutes");
+    writeCollectionDoc("users", "landlord-1", { email: "owner@example.com", displayName: "Owner Raw Label" });
+    writeCollectionDoc("accounts", "landlord-2", { email: "elite-owner@example.com" });
     seedGrant({ grantId: "delegate-active-grant", status: "active" });
+    seedGrant({
+      grantId: "delegate-second-active-grant",
+      landlordId: "landlord-2",
+      status: "active",
+      updatedAt: "2026-06-23T12:00:00.000Z",
+      permissionScope: {
+        role: "property_manager",
+        workspaceScopes: ["dashboard", "operations", "properties"],
+        propertyScope: { mode: "selected", propertyIds: ["property-2"], unitIds: ["unit-2"] },
+        resourceScope: { workOrderIds: ["work-order-2"] },
+        permissionFlags: ["view", "edit", "assign"],
+        billingAccess: false,
+        exportAccess: false,
+      },
+    });
     seedGrant({ grantId: "delegate-revoked-grant", status: "revoked" });
     seedGrant({ grantId: "other-delegate-active-grant", delegateUserId: "delegate-user-2", status: "active" });
 
@@ -802,7 +819,11 @@ describe("delegatedAccessInvitationRoutes", () => {
     });
 
     expect(response.status).toBe(200);
-    expect(response.body.grants).toHaveLength(1);
+    expect(response.body.grants).toHaveLength(2);
+    expect(response.body.grants.map((grant: any) => grant.landlordWorkspaceLabel).sort()).toEqual([
+      "elite-owner@example.com",
+      "owner@example.com",
+    ]);
     expect(response.body.grants[0]).toEqual(
       expect.objectContaining({
         delegateEmail: "manager@example.com",
@@ -816,10 +837,14 @@ describe("delegatedAccessInvitationRoutes", () => {
       })
     );
     expect(JSON.stringify(response.body)).not.toContain("landlord-1");
+    expect(JSON.stringify(response.body)).not.toContain("landlord-2");
     expect(JSON.stringify(response.body)).not.toContain("delegate-active-grant");
+    expect(JSON.stringify(response.body)).not.toContain("delegate-second-active-grant");
     expect(JSON.stringify(response.body)).not.toContain("delegate-user-1");
     expect(JSON.stringify(response.body)).not.toContain("property-1");
+    expect(JSON.stringify(response.body)).not.toContain("property-2");
     expect(JSON.stringify(response.body)).not.toContain("unit-1");
+    expect(JSON.stringify(response.body)).not.toContain("unit-2");
     expect(JSON.stringify(response.body)).not.toContain("tokenHash");
 
     const selfRouteResponse = await invokeRouter(delegatedAccessSelfRoutes, {
@@ -829,7 +854,7 @@ describe("delegatedAccessInvitationRoutes", () => {
     });
 
     expect(selfRouteResponse.status).toBe(200);
-    expect(selfRouteResponse.body.grants).toHaveLength(1);
+    expect(selfRouteResponse.body.grants).toHaveLength(2);
     expect(JSON.stringify(selfRouteResponse.body)).not.toContain("property-1");
   });
 
