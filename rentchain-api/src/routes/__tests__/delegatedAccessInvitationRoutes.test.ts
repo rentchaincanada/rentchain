@@ -789,6 +789,40 @@ describe("delegatedAccessInvitationRoutes", () => {
     expect(JSON.stringify(response.body)).not.toContain("valid-token");
   });
 
+  it("lists only active grants assigned to the authenticated delegate without property ids", async () => {
+    const router = (await import("../delegatedAccessInvitationRoutes")).default;
+    seedGrant({ grantId: "delegate-active-grant", status: "active" });
+    seedGrant({ grantId: "delegate-revoked-grant", status: "revoked" });
+    seedGrant({ grantId: "other-delegate-active-grant", delegateUserId: "delegate-user-2", status: "active" });
+
+    const response = await invokeRouter(router, {
+      method: "GET",
+      url: "/delegated-access/my-grants?landlordId=landlord-2",
+      user: { id: "delegate-user-1", role: "delegate", email: "manager@example.com" },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.grants).toHaveLength(1);
+    expect(response.body.grants[0]).toEqual(
+      expect.objectContaining({
+        delegateEmail: "manager@example.com",
+        role: "property_manager",
+        status: "active",
+        propertyScopeSummary: "selected:1",
+        permissionScope: expect.objectContaining({
+          workspaceScopes: ["dashboard", "operations", "properties"],
+          propertyScope: { mode: "selected", propertyIds: [], unitIds: [] },
+        }),
+      })
+    );
+    expect(JSON.stringify(response.body)).not.toContain("landlord-1");
+    expect(JSON.stringify(response.body)).not.toContain("delegate-active-grant");
+    expect(JSON.stringify(response.body)).not.toContain("delegate-user-1");
+    expect(JSON.stringify(response.body)).not.toContain("property-1");
+    expect(JSON.stringify(response.body)).not.toContain("unit-1");
+    expect(JSON.stringify(response.body)).not.toContain("tokenHash");
+  });
+
   it("lists delegate summaries for active and revoked grants", async () => {
     const router = (await import("../delegatedAccessInvitationRoutes")).default;
     seedGrant({ grantId: "active-grant" });

@@ -193,6 +193,7 @@ const AccountProfilePage = lazy(() => import("./pages/account/AccountProfilePage
 const AccountDataPage = lazy(() => import("./pages/account/AccountDataPage"));
 const DelegatedAccessPage = lazy(() => import("./pages/DelegatedAccessPage"));
 const DelegatedAccessAcceptPage = lazy(() => import("./pages/DelegatedAccessAcceptPage"));
+const DelegatedAccessWorkspacePage = lazy(() => import("./pages/DelegatedAccessWorkspacePage"));
 const ExpensesPage = lazy(() => import("./pages/ExpensesPage"));
 const WorkOrdersPage = lazy(() => import("./pages/landlord/WorkOrdersPage"));
 const WorkOrderNewPage = lazy(() => import("./pages/landlord/WorkOrderNewPage"));
@@ -361,6 +362,17 @@ const AccountRouteGate: React.FC<{ children: React.ReactNode }> = ({ children })
   return <Navigate to={getRoleDefaultDestination(role as any)} replace />;
 };
 
+const LandlordDashboardRoute: React.FC = () => {
+  const { user } = useAuth();
+  const role = String(user?.actorRole || user?.role || "").trim().toLowerCase();
+  if (role === "delegate") return <Navigate to={getRoleDefaultDestination("delegate")} replace />;
+  return (
+    <LandlordNav>
+      <DashboardPage />
+    </LandlordNav>
+  );
+};
+
 const TenantEntryRouteGate: React.FC = () => {
   const location = useLocation();
   const tenantToken = typeof window === "undefined" ? null : getTenantToken();
@@ -410,6 +422,14 @@ function App() {
         <Route path="/auth/action" element={<AuthActionPage />} />
         <Route path="/auth/onboard" element={<AuthOnboardPage />} />
         <Route path="/delegated-access/accept" element={suspensePage(<DelegatedAccessAcceptPage />)} />
+        <Route
+          path="/delegated-access/workspace"
+          element={
+            <RequireAuth>
+              {suspensePage(<DelegatedAccessWorkspacePage />)}
+            </RequireAuth>
+          }
+        />
         <Route path="/signing/complete" element={<SigningCompletePage />} />
         <Route
           path="/tenant/login"
@@ -471,9 +491,7 @@ function App() {
           path="/dashboard"
           element={
             <RequireAuth>
-              <LandlordNav>
-                <DashboardPage />
-              </LandlordNav>
+              <LandlordDashboardRoute />
             </RequireAuth>
           }
         />

@@ -78,7 +78,7 @@ describe("DelegatedAccessAcceptPage", () => {
 
     await waitFor(() => expect(mocks.acceptInvitation).toHaveBeenCalledWith("valid-token"));
     expect(await screen.findByText("Delegated access is now active for your account.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Go to Dashboard" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Go to delegated workspace" })).toBeInTheDocument();
   });
 
   it("shows safe failure messaging without exposing the token", async () => {

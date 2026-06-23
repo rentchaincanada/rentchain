@@ -3,9 +3,26 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const mockAuthState = vi.hoisted(() => ({
+  value: {
+    user: { id: "landlord_1", role: "landlord", landlordId: "landlord_1" },
+    token: "test-token",
+    isLoading: false,
+    ready: true,
+    authStatus: "authed",
+  } as any,
+}));
+
 beforeEach(() => {
   cleanup();
   mockTenantToken = null;
+  mockAuthState.value = {
+    user: { id: "landlord_1", role: "landlord", landlordId: "landlord_1" },
+    token: "test-token",
+    isLoading: false,
+    ready: true,
+    authStatus: "authed",
+  };
 });
 
 vi.stubEnv("VITE_TENANT_PORTAL_ENABLED", "true");
@@ -44,13 +61,7 @@ vi.mock("./pages/contractor/ContractorInviteAcceptPage", () => ({
 let mockTenantToken: string | null = null;
 
 vi.mock("./context/useAuth", () => ({
-  useAuth: () => ({
-    user: { id: "landlord_1", role: "landlord", landlordId: "landlord_1" },
-    token: "test-token",
-    isLoading: false,
-    ready: true,
-    authStatus: "authed",
-  }),
+  useAuth: () => mockAuthState.value,
 }));
 
 vi.mock("./lib/tenantAuth", () => ({
@@ -144,6 +155,13 @@ vi.mock("./pages/DelegatedAccessAcceptPage", () => ({
   default: () => {
     const location = useLocation();
     return <h1>{`Delegated Access Accept ${location.pathname}${location.search}`}</h1>;
+  },
+}));
+
+vi.mock("./pages/DelegatedAccessWorkspacePage", () => ({
+  default: () => {
+    const location = useLocation();
+    return <h1>{`Delegated Access Workspace ${location.pathname}${location.search}`}</h1>;
   },
 }));
 
@@ -415,6 +433,42 @@ describe("Routes: /delegated-access/accept", () => {
       </MemoryRouter>
     );
     expect(await screen.findByRole("heading", { name: /Delegated Access Accept \/delegated-access\/accept\?token=test-token/i })).toBeInTheDocument();
+  });
+});
+
+describe("Routes: /delegated-access/workspace", () => {
+  it("renders the delegated access workspace route", async () => {
+    mockAuthState.value = {
+      user: { id: "delegate-user-1", role: "delegate", landlordId: null },
+      token: "test-token",
+      isLoading: false,
+      ready: true,
+      authStatus: "authed",
+    };
+    const { default: App } = await import("./App");
+    render(
+      <MemoryRouter initialEntries={["/delegated-access/workspace"]}>
+        <App />
+      </MemoryRouter>
+    );
+    expect(await screen.findByRole("heading", { name: /Delegated Access Workspace \/delegated-access\/workspace/i })).toBeInTheDocument();
+  });
+
+  it("redirects delegated dashboard sessions to the delegated workspace", async () => {
+    mockAuthState.value = {
+      user: { id: "delegate-user-1", role: "delegate", landlordId: null },
+      token: "test-token",
+      isLoading: false,
+      ready: true,
+      authStatus: "authed",
+    };
+    const { default: App } = await import("./App");
+    render(
+      <MemoryRouter initialEntries={["/dashboard"]}>
+        <App />
+      </MemoryRouter>
+    );
+    expect(await screen.findByRole("heading", { name: /Delegated Access Workspace \/delegated-access\/workspace/i })).toBeInTheDocument();
   });
 });
 

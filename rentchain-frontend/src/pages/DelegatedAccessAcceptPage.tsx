@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { acceptDelegatedAccessInvitation } from "../api/delegatedAccessApi";
 import { Button, Card } from "../components/ui/Ui";
 import { useAuth } from "../context/useAuth";
+import { getRoleDefaultDestination } from "../lib/authDestination";
 
 type AcceptState = "idle" | "accepting" | "accepted" | "failed";
 
@@ -45,6 +46,7 @@ export default function DelegatedAccessAcceptPage() {
   const signupUrl = `/signup?${authSearch}`;
   const authLoading = authStatus === "restoring" || isLoading || !ready;
   const signedIn = Boolean(user);
+  const postAcceptDestination = getRoleDefaultDestination(((user as any)?.actorRole || user?.role || "delegate") as any);
 
   const handleAccept = async () => {
     if (!token || !signedIn || state === "accepting") return;
@@ -91,8 +93,8 @@ export default function DelegatedAccessAcceptPage() {
               You can now open RentChain and use the delegated workspaces assigned by the landlord owner.
             </p>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <Button type="button" onClick={() => navigate("/dashboard")}>
-                Go to Dashboard
+              <Button type="button" onClick={() => navigate(postAcceptDestination)}>
+                Go to delegated workspace
               </Button>
               <Button type="button" onClick={() => navigate("/account")} variant="secondary">
                 Go to Account

@@ -86,6 +86,10 @@ export type DelegatedAccessGrant = {
   revocationReason: string | null;
 };
 
+export type DelegatedAccessActiveGrant = Omit<DelegatedAccessGrant, "grantId" | "delegateUserId"> & {
+  propertyScopeSummary: string;
+};
+
 export type DelegatedAccessDelegateSummary = {
   delegateUserId: string;
   delegateEmail: string | null;
@@ -115,6 +119,13 @@ export async function fetchDelegatedAccessDelegates(): Promise<DelegatedAccessDe
 
 export async function fetchDelegatedAccessGrants(): Promise<DelegatedAccessGrant[]> {
   const response = await apiFetch<{ ok: true; grants: DelegatedAccessGrant[] }>("/landlord/delegated-access/grants");
+  return response.grants || [];
+}
+
+export async function fetchMyDelegatedAccessGrants(): Promise<DelegatedAccessActiveGrant[]> {
+  const response = await apiFetch<{ ok: true; grants: DelegatedAccessActiveGrant[] }>(
+    "/landlord/delegated-access/my-grants"
+  );
   return response.grants || [];
 }
 

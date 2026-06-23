@@ -5,6 +5,7 @@ import {
   cancelDelegatedAccessInvitationRecord,
   createDelegatedAccessInvitationRecord,
   expireDelegatedAccessInvitationRecord,
+  listActiveDelegatedAccessGrantRecordsForDelegate,
   listDelegatedAccessDelegateRecords,
   listDelegatedAccessGrantRecords,
   listDelegatedAccessInvitationRecords,
@@ -33,6 +34,12 @@ function actorContext(req: any): { actorUserId: string; actorEmail: string | nul
   if (!actorUserId) return null;
   const actorEmail = asString(req.user?.email, 320) || null;
   return { actorUserId, actorEmail };
+}
+
+function delegateContext(req: any): { actorUserId: string; actorEmail: string | null } | null {
+  const role = asString(req.user?.actorRole || req.user?.role, 80).toLowerCase();
+  if (role !== "delegate") return null;
+  return actorContext(req);
 }
 
 function forbidden(res: any) {
@@ -73,6 +80,20 @@ function handleError(res: any, error: unknown) {
 }
 
 router.use(requireAuth);
+
+router.get("/delegated-access/my-grants", async (req: any, res) => {
+  const context = delegateContext(req);
+  if (!context) return forbidden(res);
+
+  try {
+    const result = await listActiveDelegatedAccessGrantRecordsForDelegate({
+      actorUserId: context.actorUserId,
+    });
+    return res.status(200).json({ ok: true, grants: result.grants });
+  } catch (error) {
+    return handleError(res, error);
+  }
+});
 
 router.get("/delegated-access/delegates", async (req: any, res) => {
   const context = ownerContext(req);

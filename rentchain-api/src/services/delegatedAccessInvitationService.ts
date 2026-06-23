@@ -45,6 +45,19 @@ export type DelegatedAccessFirestoreLike = {
 
 export type DelegatedInvitationProjection = Omit<DelegatedAccessInvitation, "tokenHash">;
 export type DelegatedGrantProjection = DelegatedAccessGrant;
+export type DelegatedActiveGrantProjection = Omit<
+  DelegatedAccessGrant,
+  "grantId" | "landlordId" | "delegateUserId" | "createdByUserId" | "revokedByUserId" | "auditEventIds"
+> & {
+  propertyScopeSummary: string;
+  permissionScope: Omit<DelegatedAccessGrant["permissionScope"], "propertyScope"> & {
+    propertyScope: {
+      mode: DelegatedAccessPropertyScope["mode"];
+      propertyIds: [];
+      unitIds?: [];
+    };
+  };
+};
 export type DelegatedDelegateSummary = {
   delegateUserId: string;
   delegateEmail: string | null;
@@ -142,6 +155,30 @@ function projectInvitation(invitation: DelegatedAccessInvitation): DelegatedInvi
 
 function projectGrant(grant: DelegatedAccessGrant): DelegatedGrantProjection {
   return grant;
+}
+
+function projectActiveDelegateGrant(grant: DelegatedAccessGrant): DelegatedActiveGrantProjection {
+  const {
+    grantId: _grantId,
+    landlordId: _landlordId,
+    delegateUserId: _delegateUserId,
+    createdByUserId: _createdByUserId,
+    revokedByUserId: _revokedByUserId,
+    auditEventIds: _auditEventIds,
+    ...safe
+  } = grant;
+  return {
+    ...safe,
+    propertyScopeSummary: propertyScopeSummary([grant]),
+    permissionScope: {
+      ...grant.permissionScope,
+      propertyScope: {
+        mode: grant.permissionScope.propertyScope.mode,
+        propertyIds: [],
+        ...(grant.permissionScope.propertyScope.unitIds?.length ? { unitIds: [] } : {}),
+      },
+    },
+  };
 }
 
 function invitationFromSnapshot(snapshot: SnapshotLike): DelegatedAccessInvitation | null {
@@ -432,6 +469,18 @@ async function listGrantsForLandlord(
     .sort((a, b) => String(b.updatedAt || b.createdAt).localeCompare(String(a.updatedAt || a.createdAt)));
 }
 
+async function listActiveGrantsForDelegate(
+  delegateUserId: string,
+  firestore: DelegatedAccessFirestoreLike
+): Promise<DelegatedAccessGrant[]> {
+  const snapshot = await firestore.collection<DelegatedAccessGrant>(DELEGATED_ACCESS_GRANTS_COLLECTION).get?.();
+  return (snapshot?.docs || [])
+    .map(grantFromSnapshot)
+    .filter((grant): grant is DelegatedAccessGrant => Boolean(grant))
+    .filter((grant) => grant.delegateUserId === delegateUserId && grant.status === "active")
+    .sort((a, b) => String(b.updatedAt || b.createdAt).localeCompare(String(a.updatedAt || a.createdAt)));
+}
+
 async function loadGrantForLandlord(
   landlordId: string,
   grantId: string,
@@ -541,6 +590,16 @@ export async function listDelegatedAccessDelegateRecords(
   const landlordId = requireString(input.landlordId, "missing_landlord_id");
   const grants = await listGrantsForLandlord(landlordId, firestore);
   return { delegates: summarizeDelegates(grants) };
+}
+
+export async function listActiveDelegatedAccessGrantRecordsForDelegate(
+  input: { actorUserId: string },
+  options: ServiceOptions = {}
+): Promise<{ grants: DelegatedActiveGrantProjection[] }> {
+  const firestore = delegatedDb(options.firestore);
+  const actorUserId = requireString(input.actorUserId, "missing_actor_user_id");
+  const grants = await listActiveGrantsForDelegate(actorUserId, firestore);
+  return { grants: grants.map(projectActiveDelegateGrant) };
 }
 
 export async function resendDelegatedAccessInvitationEmailRecord(
