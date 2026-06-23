@@ -121,6 +121,9 @@ describe("DelegatedAccessPage", () => {
     expect(await screen.findByRole("heading", { name: "Delegate Management" })).toBeInTheDocument();
     expect(container.firstElementChild).toHaveStyle({ margin: "0 auto", maxWidth: "1320px" });
     expect(screen.getByText("Never share your login. Invite delegates to their own account.")).toBeInTheDocument();
+    expect(screen.getByRole("tablist", { name: "Delegated access status filters" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Active access" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Invitation history" })).toBeInTheDocument();
     expect(screen.getByText("assistant@example.com")).toBeInTheDocument();
     expect(screen.getAllByText("manager@example.com").length).toBeGreaterThan(0);
     expect(screen.getByText("Property Manager")).toBeInTheDocument();
@@ -295,7 +298,7 @@ describe("DelegatedAccessPage", () => {
     render(<DelegatedAccessPage />);
 
     expect(await screen.findByText("assistant@example.com")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Revoked" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Revoked" }));
 
     const visibleRecords = screen.getAllByTestId("delegated-access-record");
     expect(visibleRecords).toHaveLength(1);
@@ -303,5 +306,24 @@ describe("DelegatedAccessPage", () => {
     expect(visibleRecords[0]).toHaveTextContent("former@example.com");
     expect(visibleRecords[0]).not.toHaveTextContent("assistant@example.com");
     expect(visibleRecords[0]).not.toHaveTextContent("manager@example.com");
+  });
+
+  it("shows filter-specific empty states without hiding preserved history", async () => {
+    render(<DelegatedAccessPage />);
+
+    expect(await screen.findByText("assistant@example.com")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Cancelled" })).toHaveAttribute("aria-selected", "false");
+
+    fireEvent.click(screen.getByRole("tab", { name: "Cancelled" }));
+
+    expect(screen.getByRole("tab", { name: "Cancelled" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("No cancelled records")).toBeInTheDocument();
+    expect(screen.getByText("History is preserved here when records enter this state.")).toBeInTheDocument();
+    expect(screen.queryByText("assistant@example.com")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "All" }));
+
+    expect(await screen.findByText("assistant@example.com")).toBeInTheDocument();
+    expect(screen.getAllByText("manager@example.com").length).toBeGreaterThan(0);
   });
 });

@@ -59,6 +59,12 @@ const permissions = Object.keys(permissionLabels) as DelegatedAccessPermissionAc
 
 const defaultWorkspaces: DelegatedAccessWorkspaceScope[] = ["dashboard", "operations"];
 const defaultPermissions: DelegatedAccessPermissionAction[] = ["view"];
+type AccessStatusFilter = "all" | "pending" | "active" | "cancelled" | "expired" | "revoked";
+type AccessRow =
+  | { kind: "invitation"; status: DelegatedAccessInvitation["status"]; invitation: DelegatedAccessInvitation }
+  | { kind: "grant"; status: DelegatedAccessGrant["status"]; grant: DelegatedAccessGrant };
+
+const statusFilters: AccessStatusFilter[] = ["all", "pending", "active", "cancelled", "expired", "revoked"];
 
 function labelList<T extends string>(items: T[], labels: Record<T, string>) {
   if (!items.length) return "None";
@@ -106,6 +112,19 @@ function inviteToastDescription(status?: string | null) {
   if (status === "sent") return "Invitation email was sent to the delegate.";
   if (status === "failed") return "Invitation was saved, but email delivery failed. Use resend after delivery is restored.";
   return "Invitation was saved. Confirm email delivery status before relying on the link.";
+}
+
+function filteredEmptyState(status: AccessStatusFilter) {
+  if (status === "all") {
+    return {
+      title: "No delegated access yet",
+      body: "Invite delegates when you need staff or external collaborators to use their own account instead of sharing yours.",
+    };
+  }
+  return {
+    title: `No ${statusLabel(status).toLowerCase()} records`,
+    body: "History is preserved here when records enter this state.",
+  };
 }
 
 function isOwnerRole(user: any) {
@@ -165,7 +184,7 @@ export default function DelegatedAccessPage() {
   const [invitations, setInvitations] = React.useState<DelegatedAccessInvitation[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = React.useState<"all" | "pending" | "active" | "revoked" | "expired" | "cancelled">("all");
+  const [statusFilter, setStatusFilter] = React.useState<AccessStatusFilter>("all");
   const [inviteOpen, setInviteOpen] = React.useState(false);
   const [inviteEmail, setInviteEmail] = React.useState("");
   const [inviteRole, setInviteRole] = React.useState<DelegatedAccessRole>("property_manager");
@@ -210,12 +229,25 @@ export default function DelegatedAccessPage() {
   const expiredInvitations = invitations.filter((invitation) => invitation.status === "expired");
   const activeGrants = grants.filter((grant) => grant.status === "active");
   const revokedGrants = grants.filter((grant) => grant.status === "revoked");
-  const accessRows = [
+  const allAccessRows: AccessRow[] = [
     ...pendingInvitations.map((invitation) => ({ kind: "invitation" as const, status: invitation.status, invitation })),
     ...cancelledInvitations.map((invitation) => ({ kind: "invitation" as const, status: invitation.status, invitation })),
     ...expiredInvitations.map((invitation) => ({ kind: "invitation" as const, status: invitation.status, invitation })),
     ...grants.map((grant) => ({ kind: "grant" as const, status: grant.status, grant })),
-  ].filter((row) => statusFilter === "all" || row.status === statusFilter);
+  ];
+  const accessRows = allAccessRows.filter((row) => statusFilter === "all" || row.status === statusFilter);
+  const activeAccessRows = accessRows.filter((row) => row.kind === "grant" && row.status === "active");
+  const invitationHistoryRows = accessRows.filter((row) => row.kind === "invitation");
+  const grantHistoryRows = accessRows.filter((row) => row.kind === "grant" && row.status !== "active");
+  const statusCounts: Record<AccessStatusFilter, number> = {
+    all: allAccessRows.length,
+    pending: pendingInvitations.length,
+    active: activeGrants.length,
+    cancelled: cancelledInvitations.length,
+    expired: allAccessRows.filter((row) => row.status === "expired").length,
+    revoked: revokedGrants.length,
+  };
+  const emptyState = filteredEmptyState(statusFilter);
 
   const resetInvite = () => {
     setInviteEmail("");
@@ -324,6 +356,127 @@ export default function DelegatedAccessPage() {
     } finally {
       setCancellingInvitationId(null);
     }
+  };
+
+  const renderInvitationRecord = (invitation: DelegatedAccessInvitation) => (
+    <div
+      key={`invitation-${invitation.invitationId}`}
+      data-testid="delegated-access-record"
+      data-status={invitation.status}
+      style={{
+        display: "grid",
+        gap: spacing.xs,
+        padding: spacing.md,
+        border: `1px solid ${colors.border}`,
+        borderRadius: radius.md,
+        background: colors.card,
+      }}
+    >
+      <div style={{ display: "flex", justifyContent: "space-between", gap: spacing.sm, flexWrap: "wrap" }}>
+        <div>
+          <div style={{ fontWeight: 900 }}>{invitation.inviteeEmail}</div>
+          <div style={{ color: text.muted, fontSize: 13 }}>
+            {roleLabels[invitation.role]} · {propertyScopeLabel(invitation.propertyScope.mode)}
+          </div>
+        </div>
+        <Pill tone={statusTone(invitation.status)}>{statusLabel(invitation.status)}</Pill>
+      </div>
+      <div style={{ color: text.secondary, fontSize: 13 }}>
+        Workspaces: {labelList(invitation.workspaceScopes, workspaceLabels)} · Permissions:{" "}
+        {labelList(invitation.permissionFlags, permissionLabels)}
+      </div>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          gap: spacing.sm,
+          alignItems: "center",
+          flexWrap: "wrap",
+        }}
+      >
+        <div style={{ color: text.muted, fontSize: 13 }}>Expires {formatDate(invitation.expiresAt)}</div>
+        {invitation.status === "pending" ? (
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={cancellingInvitationId === invitation.invitationId}
+            onClick={() => void handleCancelInvitation(invitation)}
+          >
+            {cancellingInvitationId === invitation.invitationId ? "Cancelling..." : "Cancel Invitation"}
+          </Button>
+        ) : null}
+      </div>
+    </div>
+  );
+
+  const renderGrantRecord = (grant: DelegatedAccessGrant) => (
+    <div
+      key={`grant-${grant.grantId}`}
+      data-testid="delegated-access-record"
+      data-status={grant.status}
+      style={{
+        display: "grid",
+        gap: spacing.sm,
+        padding: spacing.md,
+        border: `1px solid ${colors.border}`,
+        borderRadius: radius.md,
+        background: grant.status === "revoked" ? "#f8fafc" : colors.card,
+      }}
+    >
+      <div style={{ display: "flex", justifyContent: "space-between", gap: spacing.sm, flexWrap: "wrap" }}>
+        <div>
+          <div style={{ fontWeight: 900 }}>{grant.delegateEmail || "Delegate account"}</div>
+          <div style={{ color: text.muted, fontSize: 13 }}>
+            {roleLabels[grant.role]} · {propertyScopeLabel(grant.permissionScope.propertyScope.mode)}
+          </div>
+        </div>
+        <Pill tone={statusTone(grant.status)}>{statusLabel(grant.status)}</Pill>
+      </div>
+      <div style={{ color: text.secondary, fontSize: 13 }}>
+        Workspaces: {labelList(grant.permissionScope.workspaceScopes, workspaceLabels)} · Permissions:{" "}
+        {labelList(grant.permissionScope.permissionFlags, permissionLabels)}
+      </div>
+      <div style={{ color: text.muted, fontSize: 13 }}>
+        Accepted {formatDate(grant.acceptedAt)} · Updated {formatDate(grant.updatedAt)}
+        {grant.revokedAt ? ` · Revoked ${formatDate(grant.revokedAt)}` : ""}
+      </div>
+      {grant.status === "active" ? (
+        <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap", alignItems: "center" }}>
+          <Input
+            aria-label={`Revocation reason for ${grant.delegateEmail || "delegate"}`}
+            value={revokingGrantId === grant.grantId ? revocationReason : revocationReason}
+            onChange={(event) => setRevocationReason(event.target.value)}
+            placeholder="Optional revocation reason"
+            style={{ maxWidth: 320 }}
+          />
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={Boolean(revokingGrantId)}
+            onClick={() => void handleRevoke(grant)}
+          >
+            {revokingGrantId === grant.grantId ? "Revoking..." : "Revoke Access"}
+          </Button>
+        </div>
+      ) : grant.revocationReason ? (
+        <div style={{ color: text.muted, fontSize: 13 }}>Reason: {grant.revocationReason}</div>
+      ) : null}
+    </div>
+  );
+
+  const renderSection = (title: string, body: string, rows: AccessRow[]) => {
+    if (rows.length === 0) return null;
+    return (
+      <section style={{ display: "grid", gap: spacing.sm }}>
+        <div>
+          <h3 style={{ margin: 0, fontSize: "1rem" }}>{title}</h3>
+          <div style={{ color: text.muted, fontSize: 13 }}>{body}</div>
+        </div>
+        <div style={{ display: "grid", gap: spacing.sm }}>
+          {rows.map((row) => (row.kind === "invitation" ? renderInvitationRecord(row.invitation) : renderGrantRecord(row.grant)))}
+        </div>
+      </section>
+    );
   };
 
   if (!canManage) {
@@ -518,16 +671,20 @@ export default function DelegatedAccessPage() {
             <h2 style={{ margin: 0, fontSize: "1.1rem" }}>Access Overview</h2>
             <div style={{ color: text.muted, fontSize: 13 }}>Who can access this landlord workspace and what state they are in.</div>
           </div>
-          <div style={{ display: "flex", gap: spacing.xs, flexWrap: "wrap" }}>
-            {(["all", "pending", "active", "revoked", "cancelled", "expired"] as const).map((status) => (
+          <div role="tablist" aria-label="Delegated access status filters" style={{ display: "flex", gap: spacing.xs, flexWrap: "wrap" }}>
+            {statusFilters.map((status) => (
               <Button
                 key={status}
                 type="button"
+                role="tab"
+                aria-selected={statusFilter === status}
+                aria-label={statusLabel(status)}
                 variant={statusFilter === status ? "primary" : "secondary"}
                 onClick={() => setStatusFilter(status)}
-                style={{ padding: "8px 12px", fontSize: 13 }}
+                style={{ padding: "8px 12px", fontSize: 13, display: "inline-flex", alignItems: "center", gap: 8 }}
               >
-                {statusLabel(status)}
+                <span>{statusLabel(status)}</span>
+                <span aria-hidden="true" style={{ opacity: 0.75 }}>{statusCounts[status]}</span>
               </Button>
             ))}
           </div>
@@ -543,126 +700,33 @@ export default function DelegatedAccessPage() {
         ) : null}
         {!loading && !error && accessRows.length === 0 ? (
           <EmptyState
-            title="No delegated access yet"
-            body="Invite delegates when you need staff or external collaborators to use their own account instead of sharing yours."
-            action={<Button type="button" onClick={() => setInviteOpen(true)}>Invite Delegate</Button>}
+            title={emptyState.title}
+            body={emptyState.body}
+            action={
+              statusFilter === "all" || statusFilter === "pending" ? (
+                <Button type="button" onClick={() => setInviteOpen(true)}>Invite Delegate</Button>
+              ) : undefined
+            }
           />
         ) : null}
 
         {!loading && !error && accessRows.length > 0 ? (
           <div style={{ display: "grid", gap: spacing.sm }}>
-            {accessRows.map((row) => {
-              if (row.kind === "invitation") {
-                const invitation = row.invitation;
-                return (
-                  <div
-                    key={`invitation-${invitation.invitationId}`}
-                    data-testid="delegated-access-record"
-                    data-status={invitation.status}
-                    style={{
-                      display: "grid",
-                      gap: spacing.xs,
-                      padding: spacing.md,
-                      border: `1px solid ${colors.border}`,
-                      borderRadius: radius.md,
-                      background: colors.card,
-                    }}
-                  >
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: spacing.sm, flexWrap: "wrap" }}>
-                      <div>
-                        <div style={{ fontWeight: 900 }}>{invitation.inviteeEmail}</div>
-                        <div style={{ color: text.muted, fontSize: 13 }}>
-                          {roleLabels[invitation.role]} · {propertyScopeLabel(invitation.propertyScope.mode)}
-                        </div>
-                      </div>
-                      <Pill tone={statusTone(invitation.status)}>{statusLabel(invitation.status)}</Pill>
-                    </div>
-                    <div style={{ color: text.secondary, fontSize: 13 }}>
-                      Workspaces: {labelList(invitation.workspaceScopes, workspaceLabels)} · Permissions:{" "}
-                      {labelList(invitation.permissionFlags, permissionLabels)}
-                    </div>
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        gap: spacing.sm,
-                        alignItems: "center",
-                        flexWrap: "wrap",
-                      }}
-                    >
-                      <div style={{ color: text.muted, fontSize: 13 }}>Expires {formatDate(invitation.expiresAt)}</div>
-                      {invitation.status === "pending" ? (
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          disabled={cancellingInvitationId === invitation.invitationId}
-                          onClick={() => void handleCancelInvitation(invitation)}
-                        >
-                          {cancellingInvitationId === invitation.invitationId ? "Cancelling..." : "Cancel Invitation"}
-                        </Button>
-                      ) : null}
-                    </div>
-                  </div>
-                );
-              }
-
-              const grant = row.grant;
-              return (
-                <div
-                  key={`grant-${grant.grantId}`}
-                  data-testid="delegated-access-record"
-                  data-status={grant.status}
-                  style={{
-                    display: "grid",
-                    gap: spacing.sm,
-                    padding: spacing.md,
-                    border: `1px solid ${colors.border}`,
-                    borderRadius: radius.md,
-                    background: grant.status === "revoked" ? "#f8fafc" : colors.card,
-                  }}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: spacing.sm, flexWrap: "wrap" }}>
-                    <div>
-                      <div style={{ fontWeight: 900 }}>{grant.delegateEmail || "Delegate account"}</div>
-                      <div style={{ color: text.muted, fontSize: 13 }}>
-                        {roleLabels[grant.role]} ·{" "}
-                        {propertyScopeLabel(grant.permissionScope.propertyScope.mode)}
-                      </div>
-                    </div>
-                    <Pill tone={statusTone(grant.status)}>{statusLabel(grant.status)}</Pill>
-                  </div>
-                  <div style={{ color: text.secondary, fontSize: 13 }}>
-                    Workspaces: {labelList(grant.permissionScope.workspaceScopes, workspaceLabels)} · Permissions:{" "}
-                    {labelList(grant.permissionScope.permissionFlags, permissionLabels)}
-                  </div>
-                  <div style={{ color: text.muted, fontSize: 13 }}>
-                    Accepted {formatDate(grant.acceptedAt)} · Updated {formatDate(grant.updatedAt)}
-                    {grant.revokedAt ? ` · Revoked ${formatDate(grant.revokedAt)}` : ""}
-                  </div>
-                  {grant.status === "active" ? (
-                    <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap", alignItems: "center" }}>
-                      <Input
-                        aria-label={`Revocation reason for ${grant.delegateEmail || "delegate"}`}
-                        value={revokingGrantId === grant.grantId ? revocationReason : revocationReason}
-                        onChange={(event) => setRevocationReason(event.target.value)}
-                        placeholder="Optional revocation reason"
-                        style={{ maxWidth: 320 }}
-                      />
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        disabled={Boolean(revokingGrantId)}
-                        onClick={() => void handleRevoke(grant)}
-                      >
-                        {revokingGrantId === grant.grantId ? "Revoking..." : "Revoke Access"}
-                      </Button>
-                    </div>
-                  ) : grant.revocationReason ? (
-                    <div style={{ color: text.muted, fontSize: 13 }}>Reason: {grant.revocationReason}</div>
-                  ) : null}
-                </div>
-              );
-            })}
+            {renderSection(
+              "Active access",
+              "Accepted grants that can currently use delegated workspace access.",
+              activeAccessRows
+            )}
+            {renderSection(
+              "Invitation history",
+              "Pending, cancelled, and expired invitations remain visible for review.",
+              invitationHistoryRows
+            )}
+            {renderSection(
+              "Revoked access",
+              "Revoked grants stay preserved as historical access records.",
+              grantHistoryRows
+            )}
           </div>
         ) : null}
       </Card>
