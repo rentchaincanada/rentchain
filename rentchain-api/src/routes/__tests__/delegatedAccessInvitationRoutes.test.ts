@@ -200,7 +200,7 @@ function seedGrant(overrides: Partial<StoredDoc> = {}) {
 
 async function acceptInvite(router: any, token = "valid-token", user: Record<string, unknown> | null = {
   id: "delegate-user-1",
-  role: "landlord_delegate",
+  role: "delegate",
   email: "manager@example.com",
 }) {
   return await invokeRouter(router, {
@@ -217,6 +217,8 @@ describe("delegatedAccessInvitationRoutes", () => {
     generatedIds.value = 0;
     vi.clearAllMocks();
     process.env.EMAIL_FROM = "no-reply@example.test";
+    delete process.env.DELEGATED_ACCESS_ACCEPTANCE_BASE_URL;
+    delete process.env.DELEGATED_ACCESS_FRONTEND_URL;
     process.env.PUBLIC_APP_URL = "https://app.example.test";
     sendEmailMock.mockResolvedValue(undefined);
   });
@@ -285,6 +287,17 @@ describe("delegatedAccessInvitationRoutes", () => {
     );
     expect(JSON.stringify(auditEvents)).not.toContain(rawToken!);
     expect(JSON.stringify(auditEvents)).not.toContain("tokenHash");
+  });
+
+  it("uses the delegated access acceptance URL override for preview email links", async () => {
+    process.env.DELEGATED_ACCESS_ACCEPTANCE_BASE_URL = "https://rentchain-preview.vercel.app";
+    const router = (await import("../delegatedAccessInvitationRoutes")).default;
+
+    const response = await createInvite(router);
+
+    expect(response.status).toBe(201);
+    const emailPayload = sendEmailMock.mock.calls[0][0];
+    expect(emailPayload.text).toContain("https://rentchain-preview.vercel.app/delegated-access/accept?token=");
   });
 
   it("rejects non-owner invitation creation", async () => {
@@ -711,22 +724,30 @@ describe("delegatedAccessInvitationRoutes", () => {
     expect(readCollection("delegatedAccessGrants")).toHaveLength(0);
   });
 
-  it("requires an authenticated accepting user and does not accept on behalf of another user", async () => {
+  it("requires an authenticated invited delegate user and rejects mismatched or owner sessions", async () => {
     const router = (await import("../delegatedAccessInvitationRoutes")).default;
     seedInvitation();
 
     const unauthenticated = await acceptInvite(router, "valid-token", null);
     expect(unauthenticated.status).toBe(401);
 
-    const response = await acceptInvite(router, "valid-token", {
+    const mismatched = await acceptInvite(router, "valid-token", {
       id: "actual-delegate-user",
-      role: "landlord_delegate",
+      role: "delegate",
       email: "different@example.com",
     });
-    expect(response.status).toBe(200);
-    expect(response.body.invitation.acceptedByUserId).toBe("actual-delegate-user");
-    expect(response.body.grant.delegateUserId).toBe("actual-delegate-user");
-    expect(response.body.grant.delegateEmail).toBe("different@example.com");
+    expect(mismatched.status).toBe(403);
+    expect(mismatched.body.error).toBe("INVITEE_EMAIL_MISMATCH");
+
+    const ownerSession = await acceptInvite(router, "valid-token", {
+      id: "manager-owner-user",
+      role: "landlord",
+      landlordId: "manager-owner-user",
+      email: "manager@example.com",
+    });
+    expect(ownerSession.status).toBe(403);
+    expect(ownerSession.body.error).toBe("DELEGATE_ACCOUNT_ROLE_CONFLICT");
+    expect(readCollection("delegatedAccessGrants")).toHaveLength(0);
   });
 
   it("rejects double acceptance without creating a duplicate grant", async () => {
@@ -837,7 +858,7 @@ describe("delegatedAccessInvitationRoutes", () => {
   it("requires owner privileges for delegate and grant management routes", async () => {
     const router = (await import("../delegatedAccessInvitationRoutes")).default;
     seedGrant();
-    const delegateUser = { id: "delegate-user-1", role: "landlord_delegate", landlordId: "landlord-1" };
+    const delegateUser = { id: "delegate-user-1", role: "delegate", landlordId: null };
 
     const delegates = await invokeRouter(router, {
       method: "GET",

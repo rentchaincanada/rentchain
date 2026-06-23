@@ -39,7 +39,10 @@ const SignupPage: React.FC = () => {
     }
     return resolved.destination;
   }, [location.search, user?.actorRole, user?.role]);
-  const inviteContextType = React.useMemo<"contractor" | "tenant" | "landlord" | null>(() => {
+  const inviteContextType = React.useMemo<"contractor" | "tenant" | "landlord" | "delegated_access" | null>(() => {
+    if (nextPath.startsWith("/delegated-access/accept?")) {
+      return "delegated_access";
+    }
     if (nextPath.startsWith("/contractor/invite/") || nextPath.startsWith("/contractor/signup?invite=")) {
       return "contractor";
     }
@@ -95,6 +98,12 @@ const SignupPage: React.FC = () => {
         body: "Create your account to continue your RentChain landlord workspace setup.",
       };
     }
+    if (inviteContextType === "delegated_access") {
+      return {
+        title: "Delegated access invitation",
+        body: "Create your own account to accept this landlord workspace invitation. Do not use the landlord owner's login.",
+      };
+    }
     return null;
   }, [inviteContextType]);
   const contractorOnboardContext = React.useMemo(() => {
@@ -108,6 +117,15 @@ const SignupPage: React.FC = () => {
       return { token, source };
     } catch {
       return { token: "", source: "" };
+    }
+  }, [nextPath]);
+  const delegatedAccessContext = React.useMemo(() => {
+    if (!nextPath.startsWith("/delegated-access/accept?")) return { token: "" };
+    try {
+      const nextUrl = new URL(nextPath, window.location.origin);
+      return { token: String(nextUrl.searchParams.get("token") || "").trim() };
+    } catch {
+      return { token: "" };
     }
   }, [nextPath]);
   const [email, setEmail] = useState("");
@@ -131,6 +149,7 @@ const SignupPage: React.FC = () => {
       const normalizedEmail = email.trim().toLowerCase();
       const isContractorOnboardSignup =
         contractorOnboardContext.source === "contractor" && Boolean(contractorOnboardContext.token);
+      const isDelegatedAccessSignup = Boolean(delegatedAccessContext.token);
       if (import.meta.env.DEV && isContractorOnboardSignup) {
         console.info("[signup] contractor invite context detected", {
           email: maskEmail(normalizedEmail),
@@ -142,6 +161,12 @@ const SignupPage: React.FC = () => {
       await signup(normalizedEmail, password, fullName.trim() || undefined, {
         inviteToken: isContractorOnboardSignup ? contractorOnboardContext.token : undefined,
         inviteSource: isContractorOnboardSignup ? "contractor" : undefined,
+        ...(isDelegatedAccessSignup
+          ? {
+              inviteToken: delegatedAccessContext.token,
+              inviteSource: "delegated_access",
+            }
+          : {}),
       });
       if (import.meta.env.DEV) {
         console.info("[signup] completed", {

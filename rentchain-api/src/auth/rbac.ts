@@ -3,6 +3,7 @@ export type Role =
   | "admin"
   | "landlord"
   | "contractor"
+  | "delegate"
   | "manager"
   | "staff"
   | "tenant"
@@ -45,6 +46,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "billing.manage",
   ],
   contractor: [],
+  delegate: [],
   manager: [
     "properties.edit",
     "units.manage",

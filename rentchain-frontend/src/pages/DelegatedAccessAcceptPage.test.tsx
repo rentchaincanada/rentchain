@@ -7,7 +7,7 @@ import DelegatedAccessAcceptPage from "./DelegatedAccessAcceptPage";
 const mocks = vi.hoisted(() => ({
   acceptInvitation: vi.fn(),
   authState: {
-    user: { id: "delegate-user-1", email: "delegate@example.com", role: "landlord_delegate" },
+    user: { id: "delegate-user-1", email: "delegate@example.com", role: "delegate" },
     isLoading: false,
     ready: true,
     authStatus: "authed",
@@ -34,7 +34,7 @@ describe("DelegatedAccessAcceptPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.authState = {
-      user: { id: "delegate-user-1", email: "delegate@example.com", role: "landlord_delegate" },
+      user: { id: "delegate-user-1", email: "delegate@example.com", role: "delegate" },
       isLoading: false,
       ready: true,
       authStatus: "authed",
@@ -66,6 +66,7 @@ describe("DelegatedAccessAcceptPage", () => {
 
     expect(screen.getByRole("heading", { name: "Accept delegated access invitation" })).toBeInTheDocument();
     expect(screen.getByText("Sign in to accept this invitation.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create account to accept" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Sign in to accept" })).toBeInTheDocument();
     expect(mocks.acceptInvitation).not.toHaveBeenCalled();
   });

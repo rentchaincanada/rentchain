@@ -102,6 +102,12 @@ function statusLabel(status: string) {
     .join(" ");
 }
 
+function inviteToastDescription(status?: string | null) {
+  if (status === "sent") return "Invitation email was sent to the delegate.";
+  if (status === "failed") return "Invitation was saved, but email delivery failed. Use resend after delivery is restored.";
+  return "Invitation was saved. Confirm email delivery status before relying on the link.";
+}
+
 function isOwnerRole(user: any) {
   const role = String(user?.actorRole || user?.role || "").trim().toLowerCase();
   return role === "landlord";
@@ -255,11 +261,11 @@ export default function DelegatedAccessPage() {
         permissionFlags,
         expiresAt: toIsoDate(expiresAt),
       };
-      await createDelegatedAccessInvitation(input);
+      const result = await createDelegatedAccessInvitation(input);
       showToast({
         message: "Delegate invitation created",
-        description: "Email dispatch is not enabled yet. Share acceptance instructions only when that flow is approved.",
-        variant: "success",
+        description: inviteToastDescription(result.emailDispatch?.status || result.invitation.emailDispatch?.status),
+        variant: result.emailDispatch?.status === "failed" ? "warning" : "success",
       });
       resetInvite();
       setInviteOpen(false);
@@ -393,7 +399,7 @@ export default function DelegatedAccessPage() {
             <UserPlus size={20} />
             <div>
               <h2 style={{ margin: 0, fontSize: "1.1rem" }}>Invite Delegate</h2>
-              <div style={{ color: text.muted, fontSize: 13 }}>Creates a pending invitation. Email dispatch is out of scope for v1.</div>
+              <div style={{ color: text.muted, fontSize: 13 }}>Creates a pending invitation and sends the acceptance email.</div>
             </div>
           </div>
           <form onSubmit={handleInvite} style={{ display: "grid", gap: spacing.md }}>

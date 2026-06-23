@@ -81,6 +81,7 @@ type DispatchInvitationEmailInput = {
 type AcceptInvitationInput = {
   actorUserId: string;
   actorEmail?: string | null;
+  actorRole?: string | null;
   token: string;
   now?: string;
 };
@@ -113,6 +114,14 @@ function requireString(value: unknown, code: string, max = 500): string {
 
 function sha256(value: string): string {
   return crypto.createHash("sha256").update(value).digest("hex");
+}
+
+function normalizeEmail(value: unknown): string {
+  return cleanString(value, 320).toLowerCase();
+}
+
+function normalizeRole(value: unknown): string {
+  return cleanString(value, 80).toLowerCase();
 }
 
 function timingSafeEqualHex(a: string, b: string): boolean {
@@ -447,6 +456,22 @@ async function loadInvitationByTokenHash(
   return invitations.find((invitation) => timingSafeEqualHex(invitation.tokenHash, tokenHash)) || null;
 }
 
+export async function resolveDelegatedAccessInvitationSignupContext(
+  input: { token: string; email: string; now?: string },
+  options: ServiceOptions = {}
+): Promise<{ invitation: DelegatedInvitationProjection }> {
+  const firestore = delegatedDb(options.firestore);
+  const rawToken = requireString(input.token, "missing_invitation_token", 2000);
+  const email = normalizeEmail(input.email);
+  if (!email) throw new Error("missing_invitee_email");
+  const invitation = await loadInvitationByTokenHash(sha256(rawToken), firestore);
+  if (!invitation) throw new Error("invalid_invitation_token");
+  if (invitation.status !== "pending") throw new Error("invitation_not_pending");
+  if (isDelegatedInvitationExpired(invitation, input.now || new Date())) throw new Error("invitation_expired");
+  if (normalizeEmail(invitation.inviteeEmail) !== email) throw new Error("invitee_email_mismatch");
+  return { invitation: projectInvitation(invitation) };
+}
+
 function stableGrantId(invitation: DelegatedAccessInvitation, delegateUserId: string): string {
   const digest = sha256(JSON.stringify([invitation.invitationId, delegateUserId])).slice(0, 24);
   return `delegated_grant_${digest}`;
@@ -623,12 +648,16 @@ export async function acceptDelegatedAccessInvitationRecord(
   const firestore = delegatedDb(options.firestore);
   const actorUserId = requireString(input.actorUserId, "missing_actor_user_id");
   const rawToken = requireString(input.token, "missing_invitation_token", 2000);
+  const actorEmail = normalizeEmail(input.actorEmail);
+  const actorRole = normalizeRole(input.actorRole);
   const now = input.now || new Date().toISOString();
   const tokenHash = sha256(rawToken);
   const invitation = await loadInvitationByTokenHash(tokenHash, firestore);
   if (!invitation) throw new Error("invalid_invitation_token");
   if (invitation.status !== "pending") throw new Error("invitation_not_pending");
   if (isDelegatedInvitationExpired(invitation, now)) throw new Error("invitation_expired");
+  if (!actorEmail || actorEmail !== normalizeEmail(invitation.inviteeEmail)) throw new Error("invitee_email_mismatch");
+  if (["admin", "landlord", "owner"].includes(actorRole)) throw new Error("delegate_account_role_conflict");
 
   const accepted = transitionDelegatedInvitationStatus(invitation, "accepted", {
     acceptedByUserId: actorUserId,
@@ -638,7 +667,7 @@ export async function acceptDelegatedAccessInvitationRecord(
     grantId: stableGrantId(invitation, actorUserId),
     landlordId: invitation.landlordId,
     delegateUserId: actorUserId,
-    delegateEmail: input.actorEmail || invitation.inviteeEmail,
+    delegateEmail: actorEmail,
     role: invitation.role,
     propertyScope: invitation.propertyScope,
     workspaceScopes: invitation.workspaceScopes,

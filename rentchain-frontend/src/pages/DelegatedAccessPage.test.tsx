@@ -98,7 +98,11 @@ describe("DelegatedAccessPage", () => {
     ]);
     mocks.fetchGrants.mockResolvedValue([grant()]);
     mocks.fetchInvitations.mockResolvedValue([invitation()]);
-    mocks.createInvitation.mockResolvedValue({ ok: true, invitation: invitation({ inviteeEmail: "new@example.com" }) });
+    mocks.createInvitation.mockResolvedValue({
+      ok: true,
+      invitation: invitation({ inviteeEmail: "new@example.com", emailDispatch: { status: "sent" } }),
+      emailDispatch: { status: "sent" },
+    });
     mocks.cancelInvitation.mockResolvedValue({
       ok: true,
       invitation: invitation({ status: "cancelled", cancelledAt: "2026-06-23T12:00:00.000Z" }),
@@ -149,7 +153,29 @@ describe("DelegatedAccessPage", () => {
     expect(mocks.showToast).toHaveBeenCalledWith(
       expect.objectContaining({
         message: "Delegate invitation created",
-        description: expect.stringMatching(/Email dispatch is not enabled yet/i),
+        description: expect.stringMatching(/Invitation email was sent/i),
+      })
+    );
+  });
+
+  it("warns when the invitation is saved but email dispatch fails", async () => {
+    mocks.createInvitation.mockResolvedValueOnce({
+      ok: true,
+      invitation: invitation({ inviteeEmail: "new@example.com", emailDispatch: { status: "failed" } }),
+      emailDispatch: { status: "failed" },
+    });
+    render(<DelegatedAccessPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Invite Delegate" }));
+    fireEvent.change(screen.getByLabelText("Delegate email"), { target: { value: "new@example.com" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create Invitation" }));
+
+    await waitFor(() => expect(mocks.createInvitation).toHaveBeenCalledTimes(1));
+    expect(mocks.showToast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: "Delegate invitation created",
+        description: expect.stringMatching(/email delivery failed/i),
+        variant: "warning",
       })
     );
   });
@@ -226,7 +252,7 @@ describe("DelegatedAccessPage", () => {
 
   it("blocks non-owner users before loading delegate data", async () => {
     mocks.useAuthMock.mockReturnValue({
-      user: { id: "delegate-user-1", role: "landlord_delegate", email: "delegate@example.com" },
+      user: { id: "delegate-user-1", role: "delegate", email: "delegate@example.com" },
     });
     mocks.fetchDelegates.mockResolvedValue([
       {

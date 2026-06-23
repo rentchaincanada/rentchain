@@ -14,7 +14,14 @@ function safeString(value: unknown, max = 500): string {
 }
 
 function appBaseUrl(): string {
-  return safeString(process.env.PUBLIC_APP_URL || process.env.APP_BASE_URL || "https://www.rentchain.ai").replace(/\/$/, "");
+  const explicit =
+    process.env.DELEGATED_ACCESS_ACCEPTANCE_BASE_URL ||
+    process.env.DELEGATED_ACCESS_FRONTEND_URL ||
+    process.env.PUBLIC_APP_URL ||
+    process.env.APP_BASE_URL;
+  const vercelPreview = process.env.VERCEL_BRANCH_URL || process.env.VERCEL_URL;
+  const base = explicit || (vercelPreview ? `https://${vercelPreview}` : "https://www.rentchain.ai");
+  return safeString(base).replace(/\/$/, "");
 }
 
 function roleLabel(role: string): string {

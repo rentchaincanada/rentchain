@@ -62,6 +62,14 @@ export type DelegatedAccessInvitation = {
   createdAt: string;
   acceptedAt: string | null;
   cancelledAt: string | null;
+  emailDispatch?: {
+    status: "sent" | "failed" | "not_sent";
+    attemptCount?: number;
+    lastAttemptAt?: string | null;
+    lastSentAt?: string | null;
+    lastFailedAt?: string | null;
+    lastFailureReason?: string | null;
+  };
 };
 
 export type DelegatedAccessGrant = {
@@ -118,7 +126,11 @@ export async function fetchDelegatedAccessInvitations(): Promise<DelegatedAccess
 }
 
 export async function createDelegatedAccessInvitation(input: CreateDelegatedAccessInvitationInput) {
-  return apiFetch<{ ok: true; invitation: DelegatedAccessInvitation }>("/landlord/delegated-access/invitations", {
+  return apiFetch<{
+    ok: true;
+    invitation: DelegatedAccessInvitation;
+    emailDispatch?: { status: "sent" | "failed" | "not_sent" };
+  }>("/landlord/delegated-access/invitations", {
     method: "POST",
     body: input,
   });

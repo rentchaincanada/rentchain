@@ -40,7 +40,9 @@ export default function DelegatedAccessAcceptPage() {
   const [message, setMessage] = React.useState("");
 
   const currentPath = `${location.pathname}${location.search || ""}`;
-  const loginUrl = `/login?${new URLSearchParams({ next: currentPath, reason: "missing" }).toString()}`;
+  const authSearch = new URLSearchParams({ next: currentPath, reason: "missing" }).toString();
+  const loginUrl = `/login?${authSearch}`;
+  const signupUrl = `/signup?${authSearch}`;
   const authLoading = authStatus === "restoring" || isLoading || !ready;
   const signedIn = Boolean(user);
 
@@ -140,13 +142,20 @@ export default function DelegatedAccessAcceptPage() {
                   {state === "accepting" ? "Accepting..." : "Accept invitation"}
                 </Button>
               ) : (
-                <Button type="button" onClick={() => navigate(loginUrl)}>
-                  Sign in to accept
-                </Button>
+                <>
+                  <Button type="button" onClick={() => navigate(signupUrl)}>
+                    Create account to accept
+                  </Button>
+                  <Button type="button" onClick={() => navigate(loginUrl)} variant="secondary">
+                    Sign in to accept
+                  </Button>
+                </>
               )}
-              <Button type="button" onClick={() => navigate("/login")} variant="secondary">
-                Use another account
-              </Button>
+              {signedIn ? (
+                <Button type="button" onClick={() => navigate(loginUrl)} variant="secondary">
+                  Use another account
+                </Button>
+              ) : null}
             </div>
           </div>
         )}

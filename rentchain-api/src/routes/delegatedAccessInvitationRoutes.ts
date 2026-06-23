@@ -59,6 +59,12 @@ function handleError(res: any, error: unknown) {
   if (code === "invitation_expired") {
     return res.status(410).json({ ok: false, error: "INVITATION_EXPIRED" });
   }
+  if (code === "invitee_email_mismatch") {
+    return res.status(403).json({ ok: false, error: "INVITEE_EMAIL_MISMATCH" });
+  }
+  if (code === "delegate_account_role_conflict") {
+    return res.status(403).json({ ok: false, error: "DELEGATE_ACCOUNT_ROLE_CONFLICT" });
+  }
   if (code.startsWith("invalid_") || code.startsWith("missing_") || code.includes("_not_allowed")) {
     return res.status(400).json({ ok: false, error: code.toUpperCase() });
   }
@@ -121,6 +127,7 @@ router.post("/delegated-access/invitations/accept", async (req: any, res) => {
     const result = await acceptDelegatedAccessInvitationRecord({
       actorUserId: context.actorUserId,
       actorEmail: context.actorEmail,
+      actorRole: req.user?.actorRole || req.user?.role || null,
       token: req.body?.token,
     });
     return res.status(200).json({ ok: true, invitation: result.invitation, grant: result.grant });

@@ -40,7 +40,10 @@ export const LoginPage: React.FC = () => {
     }
     return resolved.destination;
   }, [location.search, user?.actorRole, user?.role]);
-  const inviteContextType = React.useMemo<"contractor" | "tenant" | "landlord" | null>(() => {
+  const inviteContextType = React.useMemo<"contractor" | "tenant" | "landlord" | "delegated_access" | null>(() => {
+    if (nextPath.startsWith("/delegated-access/accept?")) {
+      return "delegated_access";
+    }
     if (nextPath.startsWith("/contractor/invite/") || nextPath.startsWith("/contractor/signup?invite=")) {
       return "contractor";
     }
@@ -94,6 +97,12 @@ export const LoginPage: React.FC = () => {
       return {
         title: "Landlord setup detected",
         body: "Sign in or create an account to continue your RentChain landlord setup.",
+      };
+    }
+    if (inviteContextType === "delegated_access") {
+      return {
+        title: "Delegated access invitation detected",
+        body: "Sign in or create your own account to accept this landlord workspace invitation.",
       };
     }
     return null;
@@ -242,7 +251,10 @@ export const LoginPage: React.FC = () => {
       }
       footer={
         <>
-          <Link to="/signup" style={{ color: colors.accent, textDecoration: "none", fontWeight: 600 }}>
+          <Link
+            to={nextPath !== "/dashboard" ? `/signup?next=${encodeURIComponent(nextPath)}` : "/signup"}
+            style={{ color: colors.accent, textDecoration: "none", fontWeight: 600 }}
+          >
             Create free account
           </Link>
           <Link to="/tenant" style={{ color: colors.accent, textDecoration: "none", fontWeight: 600 }}>
