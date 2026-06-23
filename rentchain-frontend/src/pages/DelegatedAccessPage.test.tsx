@@ -136,6 +136,8 @@ describe("DelegatedAccessPage", () => {
     render(<DelegatedAccessPage />);
 
     fireEvent.click(await screen.findByRole("button", { name: "Invite Delegate" }));
+    expect(screen.queryByRole("combobox", { name: "Property scope" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Property scope")).toHaveTextContent("All current properties");
     fireEvent.change(screen.getByLabelText("Delegate email"), { target: { value: "new@example.com" } });
     fireEvent.change(screen.getByLabelText("Delegate role"), { target: { value: "maintenance_coordinator" } });
     fireEvent.click(screen.getByLabelText("Properties"));

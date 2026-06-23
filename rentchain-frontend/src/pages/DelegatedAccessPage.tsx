@@ -169,7 +169,6 @@ export default function DelegatedAccessPage() {
   const [inviteOpen, setInviteOpen] = React.useState(false);
   const [inviteEmail, setInviteEmail] = React.useState("");
   const [inviteRole, setInviteRole] = React.useState<DelegatedAccessRole>("property_manager");
-  const [propertyScopeMode, setPropertyScopeMode] = React.useState<DelegatedAccessPropertyScopeMode>("all_current_properties");
   const [workspaceScopes, setWorkspaceScopes] = React.useState<DelegatedAccessWorkspaceScope[]>(defaultWorkspaces);
   const [permissionFlags, setPermissionFlags] = React.useState<DelegatedAccessPermissionAction[]>(defaultPermissions);
   const [expiresAt, setExpiresAt] = React.useState(defaultExpiryDate());
@@ -221,7 +220,6 @@ export default function DelegatedAccessPage() {
   const resetInvite = () => {
     setInviteEmail("");
     setInviteRole("property_manager");
-    setPropertyScopeMode("all_current_properties");
     setWorkspaceScopes(defaultWorkspaces);
     setPermissionFlags(defaultPermissions);
     setExpiresAt(defaultExpiryDate());
@@ -256,7 +254,7 @@ export default function DelegatedAccessPage() {
       const input: CreateDelegatedAccessInvitationInput = {
         inviteeEmail: inviteEmail,
         role: inviteRole,
-        propertyScope: { mode: propertyScopeMode, propertyIds: [] },
+        propertyScope: { mode: "all_current_properties", propertyIds: [] },
         workspaceScopes,
         permissionFlags,
         expiresAt: toIsoDate(expiresAt),
@@ -437,25 +435,24 @@ export default function DelegatedAccessPage() {
                   ))}
                 </select>
               </label>
-              <label style={{ display: "grid", gap: 6, fontWeight: 700 }}>
+              <div style={{ display: "grid", gap: 6, fontWeight: 700 }}>
                 Property scope
-                <select
+                <div
                   aria-label="Property scope"
-                  value={propertyScopeMode}
-                  onChange={(event) => setPropertyScopeMode(event.target.value as DelegatedAccessPropertyScopeMode)}
                   style={{
                     minHeight: 42,
                     border: `1px solid ${colors.border}`,
                     borderRadius: radius.md,
-                    background: colors.card,
+                    background: "#f8fafc",
                     padding: "10px 12px",
                     color: text.primary,
+                    display: "flex",
+                    alignItems: "center",
                   }}
                 >
-                  <option value="all_current_properties">All current properties</option>
-                  <option value="none">No property scope</option>
-                </select>
-              </label>
+                  All current properties
+                </div>
+              </div>
               <label style={{ display: "grid", gap: 6, fontWeight: 700 }}>
                 Expires
                 <Input
