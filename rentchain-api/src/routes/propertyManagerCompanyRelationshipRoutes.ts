@@ -8,6 +8,13 @@ import {
   suspendLandlordCompanyRelationshipRecord,
   terminateLandlordCompanyRelationshipRecord,
 } from "../services/propertyManagerCompanyRelationshipService";
+import {
+  createPropertyManagerCompanyStaffAssignmentRecord,
+  listPropertyManagerCompanyStaffAssignmentRecords,
+  reactivatePropertyManagerCompanyStaffAssignmentRecord,
+  removePropertyManagerCompanyStaffAssignmentRecord,
+  suspendPropertyManagerCompanyStaffAssignmentRecord,
+} from "../services/propertyManagerCompanyStaffAssignmentService";
 
 const router = Router();
 const companyRouter = Router();
@@ -37,7 +44,12 @@ function forbidden(res: any) {
 
 function handleError(res: any, error: unknown) {
   const code = error instanceof Error ? error.message : "property_manager_company_relationship_failed";
-  if (code === "landlord_company_relationship_not_found" || code === "property_manager_company_not_found") {
+  if (
+    code === "landlord_company_relationship_not_found" ||
+    code === "property_manager_company_not_found" ||
+    code === "property_manager_company_staff_assignment_not_found" ||
+    code === "property_manager_company_staff_membership_not_found"
+  ) {
     return res.status(404).json({ ok: false, error: code.toUpperCase() });
   }
   if (
@@ -46,7 +58,10 @@ function handleError(res: any, error: unknown) {
     code === "relationship_not_pending" ||
     code === "relationship_already_terminated" ||
     code === "invalid_relationship_status_transition" ||
-    code === "relationship_activation_requires_company_acceptance"
+    code === "relationship_activation_requires_company_acceptance" ||
+    code === "staff_assignment_not_active" ||
+    code === "staff_assignment_not_suspended" ||
+    code === "staff_assignment_already_removed"
   ) {
     return res.status(409).json({ ok: false, error: code.toUpperCase() });
   }
@@ -57,13 +72,18 @@ function handleError(res: any, error: unknown) {
     code === "property_manager_company_membership_not_found" ||
     code === "property_manager_company_membership_not_active" ||
     code === "property_manager_company_acceptance_role_not_allowed" ||
-    code === "property_manager_company_membership_mismatch"
+    code === "property_manager_company_membership_mismatch" ||
+    code === "company_assignment_manager_required" ||
+    code === "membership_not_active" ||
+    code === "invalid_company_role" ||
+    code === "invalid_membership_status"
   ) {
     return res.status(403).json({ ok: false, error: code.toUpperCase() });
   }
   if (
     code.startsWith("invalid_") ||
     code.startsWith("missing_") ||
+    code === "assignment_scope_exceeds_relationship_scope" ||
     code.includes("_not_allowed") ||
     code.includes("_mismatch")
   ) {
@@ -160,6 +180,92 @@ router.post("/property-manager-company-relationships/:relationshipId/terminate",
 });
 
 companyRouter.use(requireAuth);
+
+companyRouter.get("/:companyId/staff-assignments", async (req: any, res) => {
+  const context = actorContext(req);
+  if (!context) return forbidden(res);
+
+  try {
+    const result = await listPropertyManagerCompanyStaffAssignmentRecords({
+      actorUserId: context.actorUserId,
+      companyId: req.params.companyId,
+      relationshipId: req.query?.relationshipId,
+    });
+    return res.status(200).json({ ok: true, assignments: result.assignments });
+  } catch (error) {
+    return handleError(res, error);
+  }
+});
+
+companyRouter.post("/:companyId/staff-assignments", async (req: any, res) => {
+  const context = actorContext(req);
+  if (!context) return forbidden(res);
+
+  try {
+    const result = await createPropertyManagerCompanyStaffAssignmentRecord({
+      actorUserId: context.actorUserId,
+      companyId: req.params.companyId,
+      relationshipId: req.body?.relationshipId,
+      staffUserId: req.body?.staffUserId,
+      staffRole: req.body?.staffRole,
+      propertyScope: req.body?.propertyScope,
+      workspaceScopes: Array.isArray(req.body?.workspaceScopes) ? req.body.workspaceScopes : [],
+    });
+    return res.status(201).json({ ok: true, assignment: result.assignment });
+  } catch (error) {
+    return handleError(res, error);
+  }
+});
+
+companyRouter.post("/:companyId/staff-assignments/:assignmentId/suspend", async (req: any, res) => {
+  const context = actorContext(req);
+  if (!context) return forbidden(res);
+
+  try {
+    const result = await suspendPropertyManagerCompanyStaffAssignmentRecord({
+      actorUserId: context.actorUserId,
+      companyId: req.params.companyId,
+      assignmentId: req.params.assignmentId,
+      reason: req.body?.reason,
+    });
+    return res.status(200).json({ ok: true, assignment: result.assignment });
+  } catch (error) {
+    return handleError(res, error);
+  }
+});
+
+companyRouter.post("/:companyId/staff-assignments/:assignmentId/reactivate", async (req: any, res) => {
+  const context = actorContext(req);
+  if (!context) return forbidden(res);
+
+  try {
+    const result = await reactivatePropertyManagerCompanyStaffAssignmentRecord({
+      actorUserId: context.actorUserId,
+      companyId: req.params.companyId,
+      assignmentId: req.params.assignmentId,
+    });
+    return res.status(200).json({ ok: true, assignment: result.assignment });
+  } catch (error) {
+    return handleError(res, error);
+  }
+});
+
+companyRouter.post("/:companyId/staff-assignments/:assignmentId/remove", async (req: any, res) => {
+  const context = actorContext(req);
+  if (!context) return forbidden(res);
+
+  try {
+    const result = await removePropertyManagerCompanyStaffAssignmentRecord({
+      actorUserId: context.actorUserId,
+      companyId: req.params.companyId,
+      assignmentId: req.params.assignmentId,
+      reason: req.body?.reason,
+    });
+    return res.status(200).json({ ok: true, assignment: result.assignment });
+  } catch (error) {
+    return handleError(res, error);
+  }
+});
 
 companyRouter.post("/:companyId/relationships/:relationshipId/accept", async (req: any, res) => {
   const context = actorContext(req);

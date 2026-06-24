@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mission Brief - Property Manager Company Staff Assignment API V1</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: #eef1f5;
+        color: #142033;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        padding: 32px;
+        background: #eef1f5;
+      }
+
+      .brief {
+        max-width: 1280px;
+        margin: 0 auto;
+        background: #ffffff;
+        border: 1px solid #d7dde7;
+        box-shadow: 0 18px 50px rgba(20, 32, 51, 0.12);
+      }
+
+      header {
+        padding: 28px 32px;
+        border-bottom: 1px solid #d7dde7;
+        background: #142033;
+        color: #ffffff;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin-top: 0;
+      }
+
+      h1 {
+        margin-bottom: 8px;
+        font-size: 26px;
+        line-height: 1.2;
+        letter-spacing: 0;
+      }
+
+      h1 span {
+        color: #8fd6ff;
+      }
+
+      .subtitle {
+        max-width: 900px;
+        color: #d6e7f4;
+        font-size: 15px;
+        line-height: 1.5;
+      }
+
+      main {
+        display: grid;
+        grid-template-columns: minmax(0, 1.08fr) minmax(360px, 0.92fr);
+      }
+
+      section {
+        padding: 28px 32px;
+      }
+
+      .left {
+        border-right: 1px solid #d7dde7;
+      }
+
+      .block {
+        margin-bottom: 24px;
+      }
+
+      .block:last-child {
+        margin-bottom: 0;
+      }
+
+      h2 {
+        margin-bottom: 10px;
+        color: #142033;
+        font-size: 15px;
+        line-height: 1.25;
+        letter-spacing: 0;
+        text-transform: uppercase;
+      }
+
+      h3 {
+        margin-bottom: 8px;
+        color: #2b3c55;
+        font-size: 14px;
+        line-height: 1.3;
+      }
+
+      p,
+      li,
+      td,
+      th {
+        font-size: 14px;
+        line-height: 1.48;
+      }
+
+      ul {
+        margin: 0;
+        padding-left: 18px;
+      }
+
+      li + li {
+        margin-top: 6px;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .card {
+        padding: 14px;
+        border: 1px solid #d7dde7;
+        background: #f8fafc;
+      }
+
+      .card strong {
+        display: block;
+        margin-bottom: 5px;
+        color: #142033;
+      }
+
+      .pill-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .pill {
+        padding: 6px 9px;
+        border: 1px solid #c8d2df;
+        background: #f4f7fb;
+        color: #26374f;
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .panel {
+        padding: 14px 16px;
+        border-left: 4px solid #246bfe;
+        background: #f4f8ff;
+      }
+
+      .warning {
+        border-left-color: #b7791f;
+        background: #fff8e8;
+      }
+
+      .success {
+        border-left-color: #16895a;
+        background: #f0fff7;
+      }
+
+      .table {
+        width: 100%;
+        border-collapse: collapse;
+        border: 1px solid #d7dde7;
+        background: #ffffff;
+      }
+
+      .table th,
+      .table td {
+        padding: 9px 10px;
+        border-bottom: 1px solid #e4e9f1;
+        text-align: left;
+        vertical-align: top;
+      }
+
+      .table th {
+        background: #f4f7fb;
+        color: #142033;
+        font-size: 12px;
+        text-transform: uppercase;
+      }
+
+      code {
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+        font-size: 12px;
+        color: #1b4f9c;
+      }
+
+      .compact li {
+        font-size: 13px;
+      }
+
+      @media (max-width: 920px) {
+        body {
+          padding: 16px;
+        }
+
+        main {
+          grid-template-columns: 1fr;
+        }
+
+        .left {
+          border-right: 0;
+          border-bottom: 1px solid #d7dde7;
+        }
+
+        .grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <article class="brief">
+      <header>
+        <h1>Next Mission: <span>feat/property-manager-company-staff-assignment-api-v1</span></h1>
+        <div class="subtitle">
+          Backend/API-only routes and services for Company Owner/Admin staff assignment management. This mission exposes
+          controlled create, list, suspend, reactivate, and remove operations on top of the merged staff assignment
+          foundations, while preserving scope ceilings, metadata-only audit events, and fail-closed authority.
+        </div>
+      </header>
+
+      <main>
+        <section class="left">
+          <div class="block">
+            <h2>Mission Goal</h2>
+            <p>
+              Add company-scoped backend APIs that let active Company Owners/Admins manage PM company staff assignments
+              for active landlord-company relationships. Assignment APIs must preserve the distinction between company
+              membership and landlord relationship authority: membership alone grants no landlord access, and assignment
+              only narrows authority already granted by an active relationship.
+            </p>
+          </div>
+
+          <div class="block">
+            <h2>Required APIs</h2>
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Operation</th>
+                  <th>Contract</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Create assignment</td>
+                  <td>Company Owner/Admin creates an active assignment under an active landlord-company relationship.</td>
+                </tr>
+                <tr>
+                  <td>List assignments</td>
+                  <td>Company Owner/Admin gets company-scoped list, optionally relationship-scoped, using safe projections only.</td>
+                </tr>
+                <tr>
+                  <td>Suspend assignment</td>
+                  <td><code>active -> suspended</code>; access blocked temporarily and audit preserved.</td>
+                </tr>
+                <tr>
+                  <td>Reactivate assignment</td>
+                  <td><code>suspended -> active</code>; only if relationship, membership, and scope remain valid.</td>
+                </tr>
+                <tr>
+                  <td>Remove assignment</td>
+                  <td><code>active/suspended -> removed</code>; no hard delete, history preserved.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="block">
+            <h2>Route Shape</h2>
+            <div class="panel">
+              Proposed mount: <code>/api/property-manager-companies/:companyId/staff-assignments</code>, with
+              relationship-specific filtering via path or query where practical. All company and relationship authority
+              must resolve server-side; request body/query data cannot override company, landlord, relationship, or scope
+              ownership.
+            </div>
+          </div>
+
+          <div class="block">
+            <h2>Create Contract</h2>
+            <ul>
+              <li>Authenticated actor is required.</li>
+              <li>Actor must have active Company Owner/Admin membership for <code>:companyId</code>.</li>
+              <li>Target staff user must have active membership in the same PM company.</li>
+              <li>Relationship must exist, belong to the same PM company, and be <code>active</code>.</li>
+              <li>Staff role must be one predefined assignment template.</li>
+              <li>Assignment property/workspace scope must be within the relationship ceiling.</li>
+              <li>Billing/settings scope remains denied.</li>
+              <li>Assignment creation cannot broaden landlord-approved authority or activate access by itself.</li>
+            </ul>
+          </div>
+
+          <div class="block">
+            <h2>Lifecycle Contract</h2>
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Valid</th>
+                  <th>Invalid</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>active -> suspended</code></td>
+                  <td><code>removed -> active</code></td>
+                </tr>
+                <tr>
+                  <td><code>suspended -> active</code></td>
+                  <td><code>removed -> suspended</code></td>
+                </tr>
+                <tr>
+                  <td><code>active -> removed</code></td>
+                  <td><code>removed -> removed</code></td>
+                </tr>
+                <tr>
+                  <td><code>suspended -> removed</code></td>
+                  <td><code>suspended -> suspended</code> and <code>active -> active</code></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="block">
+            <h2>Audit Contract</h2>
+            <p>Every lifecycle action must append metadata-only audit events:</p>
+            <div class="pill-row">
+              <span class="pill">staff_assignment_created</span>
+              <span class="pill">staff_assignment_suspended</span>
+              <span class="pill">staff_assignment_reactivated</span>
+              <span class="pill">staff_assignment_removed</span>
+            </div>
+            <p style="margin-top: 12px">
+              Metadata must include actorUserId, actorCompanyId, actingForLandlordId, relationshipId, assignmentId,
+              staffUserId, role/template, scope, transition, outcome, timestamp, and reason where applicable. Audit
+              payloads must not expose secrets, provider payloads, or user-facing raw ID labels.
+            </p>
+          </div>
+        </section>
+
+        <section>
+          <div class="block">
+            <h2>Security Model</h2>
+            <ul class="compact">
+              <li>Company Owner/Admin only for create, list, suspend, reactivate, and remove.</li>
+              <li>Regional Manager, Property Manager, Leasing Agent, Office Administrator, Maintenance Coordinator, Read-only Staff, and unknown roles are denied.</li>
+              <li>Inactive actor memberships and inactive target staff memberships are denied.</li>
+              <li>Company-scoped only; no cross-company assignment access.</li>
+              <li>No cross-landlord access or body/query landlord override.</li>
+              <li>Pending, suspended, terminated, missing, or malformed relationships fail closed.</li>
+              <li>Malformed assignment, membership, relationship, role, status, or scope fails closed.</li>
+              <li>Assignment scope may narrow but never broaden relationship scope.</li>
+              <li><code>settings_billing</code> remains denied in V1.</li>
+              <li>Explicit deny wins in service/evaluator flows.</li>
+              <li>Safe projections must omit audit internals and avoid raw IDs as user-facing labels.</li>
+            </ul>
+          </div>
+
+          <div class="block">
+            <h2>Files To Inspect First</h2>
+            <ul class="compact">
+              <li><code>rentchain-api/src/lib/propertyManagerCompany/propertyManagerCompanyTypes.ts</code></li>
+              <li><code>rentchain-api/src/lib/propertyManagerCompany/propertyManagerCompanyModel.ts</code></li>
+              <li><code>rentchain-api/src/lib/propertyManagerCompany/permissionEvaluation.ts</code></li>
+              <li><code>rentchain-api/src/lib/propertyManagerCompany/propertyManagerCompanyAudit.ts</code></li>
+              <li><code>rentchain-api/src/services/propertyManagerCompanyRelationshipService.ts</code></li>
+              <li><code>rentchain-api/src/routes/propertyManagerCompanyRelationshipRoutes.ts</code></li>
+              <li><code>rentchain-api/src/routes/__tests__/propertyManagerCompanyRelationshipRoutes.test.ts</code></li>
+            </ul>
+          </div>
+
+          <div class="block">
+            <h2>Non-Goals</h2>
+            <div class="panel warning">
+              No UI, company dashboard, emails, contractor organizations, billing delegation, custom permissions,
+              frontend routes, production data migration, or backfill work.
+            </div>
+          </div>
+
+          <div class="block">
+            <h2>Validation Plan</h2>
+            <ul class="compact">
+              <li>Focused backend route and service tests for create, list, suspend, reactivate, and remove.</li>
+              <li>Company Owner/Admin authority tests and non-admin/unknown role denial tests.</li>
+              <li>Scope ceiling tests for selected properties, all-current-properties, workspace scope, and billing denial.</li>
+              <li>Cross-company and cross-landlord denial tests.</li>
+              <li>Lifecycle transition tests for active, suspended, removed, and invalid states.</li>
+              <li>Audit event shape tests for all assignment lifecycle events.</li>
+              <li>Safe projection tests: no raw audit internals and no user-facing raw ID labels.</li>
+              <li>Regression tests for relationship lifecycle and delegated-access behavior where touched.</li>
+              <li>Backend build and <code>git diff --check</code>.</li>
+            </ul>
+          </div>
+
+          <div class="block">
+            <h2>Review Gate</h2>
+            <div class="panel success">
+              Stop after this Mission Brief is reviewed. Implementation should begin only after approval, then proceed
+              in a draft PR on <code>feat/property-manager-company-staff-assignment-api-v1</code>.
+            </div>
+          </div>
+        </section>
+      </main>
+    </article>
+  </body>
+</html>
