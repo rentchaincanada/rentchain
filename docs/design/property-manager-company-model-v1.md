@@ -107,7 +107,7 @@ Recommended V1 hierarchy:
 | Leasing Agent | Handles leasing/application workflows | Limited tenant, application, and lease workflow access |
 | Office Administrator | Supports administrative workflows | Operational inbox, scheduling, documentation, and task support where scoped |
 | Maintenance Coordinator | Handles operations and work orders | Work-order and scheduling focused |
-| Read-only Auditor | Reviews assigned information | No mutation or export unless explicitly granted by template/scope |
+| Read-only Staff | Reviews assigned information | No mutation or export unless explicitly granted by template/scope |
 
 Company Owner is not the same as Landlord Owner. A user may hold both roles in different contexts, but authority must be resolved by active context.
 
@@ -142,7 +142,7 @@ Recommended templates:
 - Leasing Agent
 - Office Administrator
 - Maintenance Coordinator
-- Read-only Auditor
+- Read-only Staff
 - Regional Manager
 
 Templates should be product-owned permission bundles combined with explicit workspace/property scope. They should not expose raw action flags to landlords or PM company admins in V1.
@@ -184,7 +184,8 @@ Boundaries:
 - No landlord billing/settings authority.
 - No access outside assigned landlord-company relationship scope.
 - No custom permission expansion.
-- No staff-to-staff delegation unless acting with Company Owner/Admin authority.
+- No staff-to-staff delegation.
+- Any staff assignment capability must be an admin-approved company assignment workflow, not invitation or sub-delegation authority.
 - No authority to terminate landlord-company relationships unless explicitly held as Company Owner/Admin and allowed by future workflow.
 
 ## Landlord to PM Company Relationship Model
