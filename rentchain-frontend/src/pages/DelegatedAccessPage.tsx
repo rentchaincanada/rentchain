@@ -193,8 +193,9 @@ export default function DelegatedAccessPage() {
   const [expiresAt, setExpiresAt] = React.useState(defaultExpiryDate());
   const [submitting, setSubmitting] = React.useState(false);
   const [revokingGrantId, setRevokingGrantId] = React.useState<string | null>(null);
+  const [confirmingRevokeGrant, setConfirmingRevokeGrant] = React.useState<DelegatedAccessGrant | null>(null);
   const [cancellingInvitationId, setCancellingInvitationId] = React.useState<string | null>(null);
-  const [revocationReason, setRevocationReason] = React.useState("");
+  const [revocationReasons, setRevocationReasons] = React.useState<Record<string, string>>({});
   const canManage = isOwnerRole(user);
 
   const load = React.useCallback(async () => {
@@ -271,6 +272,10 @@ export default function DelegatedAccessPage() {
     });
   };
 
+  const updateRevocationReason = (grantId: string, value: string) => {
+    setRevocationReasons((current) => ({ ...current, [grantId]: value }));
+  };
+
   const handleInvite = async (event: React.FormEvent) => {
     event.preventDefault();
     if (workspaceScopes.length === 0 || permissionFlags.length === 0) {
@@ -311,17 +316,22 @@ export default function DelegatedAccessPage() {
     }
   };
 
-  const handleRevoke = async (grant: DelegatedAccessGrant) => {
+  const handleConfirmRevoke = async (grant: DelegatedAccessGrant) => {
     if (grant.status !== "active") return;
     setRevokingGrantId(grant.grantId);
     try {
-      await revokeDelegatedAccessGrant(grant.grantId, revocationReason);
+      await revokeDelegatedAccessGrant(grant.grantId, revocationReasons[grant.grantId] || "");
       showToast({
         message: "Access revoked",
         description: "Future delegated actions for this grant are now blocked.",
         variant: "success",
       });
-      setRevocationReason("");
+      setRevocationReasons((current) => {
+        const next = { ...current };
+        delete next[grant.grantId];
+        return next;
+      });
+      setConfirmingRevokeGrant(null);
       await load();
     } catch (err: any) {
       showToast({
@@ -441,22 +451,62 @@ export default function DelegatedAccessPage() {
         {grant.revokedAt ? ` · Revoked ${formatDate(grant.revokedAt)}` : ""}
       </div>
       {grant.status === "active" ? (
-        <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap", alignItems: "center" }}>
-          <Input
-            aria-label={`Revocation reason for ${grant.delegateEmail || "delegate"}`}
-            value={revokingGrantId === grant.grantId ? revocationReason : revocationReason}
-            onChange={(event) => setRevocationReason(event.target.value)}
-            placeholder="Optional revocation reason"
-            style={{ maxWidth: 320 }}
-          />
-          <Button
-            type="button"
-            variant="secondary"
-            disabled={Boolean(revokingGrantId)}
-            onClick={() => void handleRevoke(grant)}
-          >
-            {revokingGrantId === grant.grantId ? "Revoking..." : "Revoke Access"}
-          </Button>
+        <div style={{ display: "grid", gap: spacing.sm }}>
+          <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap", alignItems: "center" }}>
+            <Input
+              aria-label={`Revocation reason for ${grant.delegateEmail || "delegate"}`}
+              value={revocationReasons[grant.grantId] || ""}
+              onChange={(event) => updateRevocationReason(grant.grantId, event.target.value)}
+              placeholder="Optional revocation reason"
+              style={{ maxWidth: 320 }}
+            />
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={Boolean(revokingGrantId)}
+              onClick={() => setConfirmingRevokeGrant(grant)}
+            >
+              Revoke Access
+            </Button>
+          </div>
+          {confirmingRevokeGrant?.grantId === grant.grantId ? (
+            <div
+              role="alertdialog"
+              aria-label={`Confirm revoke access for ${grant.delegateEmail || "delegate"}`}
+              style={{
+                display: "grid",
+                gap: spacing.xs,
+                padding: spacing.sm,
+                border: `1px solid ${colors.border}`,
+                borderRadius: radius.md,
+                background: "#fff7ed",
+              }}
+            >
+              <div style={{ fontWeight: 900 }}>
+                Are you sure you want to revoke access for {grant.delegateEmail || "this delegate"}?
+              </div>
+              <div style={{ color: text.secondary, fontSize: 13 }}>
+                {roleLabels[grant.role]} · {propertyScopeLabel(grant.permissionScope.propertyScope.mode)} · Revocation blocks future delegated access.
+              </div>
+              <div style={{ display: "flex", gap: spacing.sm, flexWrap: "wrap" }}>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={revokingGrantId === grant.grantId}
+                  onClick={() => setConfirmingRevokeGrant(null)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  disabled={Boolean(revokingGrantId)}
+                  onClick={() => void handleConfirmRevoke(grant)}
+                >
+                  {revokingGrantId === grant.grantId ? "Revoking..." : "Confirm revoke"}
+                </Button>
+              </div>
+            </div>
+          ) : null}
         </div>
       ) : grant.revocationReason ? (
         <div style={{ color: text.muted, fontSize: 13 }}>Reason: {grant.revocationReason}</div>
@@ -740,20 +790,25 @@ export default function DelegatedAccessPage() {
             {delegates.map((delegate) => (
               <div
                 key={delegate.delegateUserId}
+                data-testid="delegate-summary-row"
                 style={{
-                  display: "grid",
-                  gridTemplateColumns: "minmax(180px, 1fr) auto",
+                  display: "flex",
+                  alignItems: "flex-start",
+                  justifyContent: "space-between",
+                  flexWrap: "wrap",
                   gap: spacing.sm,
                   padding: spacing.sm,
                   borderRadius: radius.md,
                   border: `1px solid ${colors.border}`,
                 }}
               >
-                <div>
-                  <div style={{ fontWeight: 900 }}>{delegate.delegateEmail || "Delegate account"}</div>
+                <div style={{ flex: "1 1 220px", minWidth: 0 }}>
+                  <div style={{ fontWeight: 900, overflowWrap: "anywhere" }}>
+                    {delegate.delegateEmail || "Delegate account"}
+                  </div>
                   <div style={{ color: text.muted, fontSize: 13 }}>{labelList(delegate.roles, roleLabels)}</div>
                 </div>
-                <div style={{ color: text.muted, fontSize: 13, textAlign: "right" }}>
+                <div style={{ color: text.muted, fontSize: 13, flex: "1 1 140px", minWidth: 0 }}>
                   {delegate.activeGrantCount} active · {delegate.revokedGrantCount} revoked
                 </div>
               </div>
