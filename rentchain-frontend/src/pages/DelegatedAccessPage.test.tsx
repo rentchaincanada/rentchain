@@ -1,5 +1,5 @@
 import React from "react";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import DelegatedAccessPage from "./DelegatedAccessPage";
 import type { DelegatedAccessGrant, DelegatedAccessInvitation } from "../api/delegatedAccessApi";
@@ -121,6 +121,10 @@ describe("DelegatedAccessPage", () => {
     expect(await screen.findByRole("heading", { name: "Delegate Management" })).toBeInTheDocument();
     expect(container.firstElementChild).toHaveStyle({ margin: "0 auto", maxWidth: "1320px" });
     expect(screen.getByText("Never share your login. Invite delegates to their own account.")).toBeInTheDocument();
+    expect(screen.getByRole("tablist", { name: "Delegated access status filters" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Active access" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Invitation history" })).toBeInTheDocument();
+    expect(screen.getByTestId("delegate-summary-row")).toHaveStyle({ display: "flex", flexWrap: "wrap" });
     expect(screen.getByText("assistant@example.com")).toBeInTheDocument();
     expect(screen.getAllByText("manager@example.com").length).toBeGreaterThan(0);
     expect(screen.getByText("Property Manager")).toBeInTheDocument();
@@ -236,9 +240,53 @@ describe("DelegatedAccessPage", () => {
       target: { value: "Staff turnover" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Revoke Access" }));
+    expect(mocks.revokeGrant).not.toHaveBeenCalled();
+    expect(screen.getByRole("alertdialog", { name: "Confirm revoke access for manager@example.com" })).toHaveTextContent(
+      "Are you sure you want to revoke access for manager@example.com?"
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("alertdialog", { name: "Confirm revoke access for manager@example.com" })).not.toBeInTheDocument();
+    expect(mocks.revokeGrant).not.toHaveBeenCalled();
 
+    fireEvent.click(screen.getByRole("button", { name: "Revoke Access" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm revoke" }));
     await waitFor(() => expect(mocks.revokeGrant).toHaveBeenCalledWith("grant-internal-1", "Staff turnover"));
     expect(screen.getByText("Reason: Staff turnover")).toBeInTheDocument();
+  });
+
+  it("keeps revocation reasons independent for each active grant and revokes only the confirmed grant", async () => {
+    mocks.fetchGrants.mockResolvedValue([
+      grant(),
+      grant({
+        grantId: "grant-internal-2",
+        delegateUserId: "delegate-user-2",
+        delegateEmail: "ops@example.com",
+      }),
+    ]);
+    render(<DelegatedAccessPage />);
+
+    expect(await screen.findByText("ops@example.com")).toBeInTheDocument();
+    const managerReason = screen.getByLabelText("Revocation reason for manager@example.com");
+    const opsReason = screen.getByLabelText("Revocation reason for ops@example.com");
+
+    fireEvent.change(managerReason, { target: { value: "Manager reason" } });
+    expect(managerReason).toHaveValue("Manager reason");
+    expect(opsReason).toHaveValue("");
+
+    fireEvent.change(opsReason, { target: { value: "Ops reason" } });
+    expect(managerReason).toHaveValue("Manager reason");
+    expect(opsReason).toHaveValue("Ops reason");
+
+    const opsRecord = screen
+      .getAllByTestId("delegated-access-record")
+      .find((record) => record.textContent?.includes("ops@example.com"));
+    expect(opsRecord).toBeTruthy();
+    fireEvent.click(within(opsRecord!).getByRole("button", { name: "Revoke Access" }));
+    expect(mocks.revokeGrant).not.toHaveBeenCalled();
+    fireEvent.click(within(opsRecord!).getByRole("button", { name: "Confirm revoke" }));
+
+    await waitFor(() => expect(mocks.revokeGrant).toHaveBeenCalledWith("grant-internal-2", "Ops reason"));
+    expect(mocks.revokeGrant).not.toHaveBeenCalledWith("grant-internal-1", "Manager reason");
   });
 
   it("shows a calm empty state when there are no delegates, grants, or invitations", async () => {
@@ -295,7 +343,7 @@ describe("DelegatedAccessPage", () => {
     render(<DelegatedAccessPage />);
 
     expect(await screen.findByText("assistant@example.com")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Revoked" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Revoked" }));
 
     const visibleRecords = screen.getAllByTestId("delegated-access-record");
     expect(visibleRecords).toHaveLength(1);
@@ -303,5 +351,24 @@ describe("DelegatedAccessPage", () => {
     expect(visibleRecords[0]).toHaveTextContent("former@example.com");
     expect(visibleRecords[0]).not.toHaveTextContent("assistant@example.com");
     expect(visibleRecords[0]).not.toHaveTextContent("manager@example.com");
+  });
+
+  it("shows filter-specific empty states without hiding preserved history", async () => {
+    render(<DelegatedAccessPage />);
+
+    expect(await screen.findByText("assistant@example.com")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Cancelled" })).toHaveAttribute("aria-selected", "false");
+
+    fireEvent.click(screen.getByRole("tab", { name: "Cancelled" }));
+
+    expect(screen.getByRole("tab", { name: "Cancelled" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("No cancelled records")).toBeInTheDocument();
+    expect(screen.getByText("History is preserved here when records enter this state.")).toBeInTheDocument();
+    expect(screen.queryByText("assistant@example.com")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "All" }));
+
+    expect(await screen.findByText("assistant@example.com")).toBeInTheDocument();
+    expect(screen.getAllByText("manager@example.com").length).toBeGreaterThan(0);
   });
 });
