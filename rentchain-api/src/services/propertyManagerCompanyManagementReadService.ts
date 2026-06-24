@@ -3,8 +3,10 @@ import {
   LANDLORD_COMPANY_RELATIONSHIP_STATUSES,
   PROPERTY_MANAGER_COMPANY_MEMBERSHIP_STATUSES,
   PROPERTY_MANAGER_COMPANY_ROLES,
+  PROPERTY_MANAGER_COMPANY_STAFF_ASSIGNMENT_ROLES,
   PROPERTY_MANAGER_COMPANY_STAFF_ASSIGNMENT_STATUSES,
   PROPERTY_MANAGER_COMPANY_STATUSES,
+  buildRelationshipScope,
   type LandlordCompanyRelationship,
   type PropertyManagerCompany,
   type PropertyManagerCompanyMembership,
@@ -145,13 +147,26 @@ function hasValidCompanyShape(company: PropertyManagerCompany | null): company i
 function hasValidRelationshipShape(
   relationship: LandlordCompanyRelationship | null
 ): relationship is LandlordCompanyRelationship {
-  return Boolean(
-    relationship &&
+  if (
+    !(
+      relationship &&
       cleanString(relationship.relationshipId, 200) &&
       cleanString(relationship.landlordId, 200) &&
       cleanString(relationship.propertyManagerCompanyId, 200) &&
       LANDLORD_COMPANY_RELATIONSHIP_STATUSES.includes(relationship.status)
-  );
+    )
+  ) {
+    return false;
+  }
+  try {
+    buildRelationshipScope({
+      propertyScope: relationship.relationshipScope?.propertyScope,
+      workspaceScopes: relationship.relationshipScope?.workspaceScopes || [],
+    });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function hasValidMembershipShape(membership: PropertyManagerCompanyMembership | null): membership is PropertyManagerCompanyMembership {
@@ -167,14 +182,28 @@ function hasValidMembershipShape(membership: PropertyManagerCompanyMembership | 
 function hasValidAssignmentShape(
   assignment: PropertyManagerCompanyStaffAssignment | null
 ): assignment is PropertyManagerCompanyStaffAssignment {
-  return Boolean(
-    assignment &&
+  if (
+    !(
+      assignment &&
       cleanString(assignment.assignmentId, 200) &&
       cleanString(assignment.propertyManagerCompanyId, 200) &&
       cleanString(assignment.relationshipId, 200) &&
       cleanString(assignment.staffUserId, 200) &&
+      PROPERTY_MANAGER_COMPANY_STAFF_ASSIGNMENT_ROLES.includes(assignment.staffRole) &&
       PROPERTY_MANAGER_COMPANY_STAFF_ASSIGNMENT_STATUSES.includes(assignment.status)
-  );
+    )
+  ) {
+    return false;
+  }
+  try {
+    buildRelationshipScope({
+      propertyScope: assignment.propertyScope,
+      workspaceScopes: assignment.workspaceScopes,
+    });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function loadCompanies(firestore: PropertyManagerCompanyRelationshipFirestoreLike): Promise<PropertyManagerCompany[]> {

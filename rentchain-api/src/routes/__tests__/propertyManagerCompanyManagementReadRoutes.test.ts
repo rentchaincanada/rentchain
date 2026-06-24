@@ -266,6 +266,13 @@ describe("property manager company management read routes", () => {
     seedAssignment({ assignmentId: "assignment-suspended", status: "suspended" });
     seedAssignment({ assignmentId: "assignment-other-landlord", relationshipId: "relationship-other-landlord" });
     seedRelationship({ relationshipId: "relationship-malformed", status: "unknown" });
+    seedRelationship({
+      relationshipId: "relationship-billing-scope",
+      relationshipScope: {
+        propertyScope: { mode: "all_current_properties", propertyIds: [] },
+        workspaceScopes: ["settings_billing"],
+      },
+    });
 
     const response = await invokeRouter(router, {
       method: "GET",
@@ -295,6 +302,7 @@ describe("property manager company management read routes", () => {
     expect(serialized).not.toContain("auditEventIds");
     expect(serialized).not.toContain("terminationReason");
     expect(serialized).not.toContain("relationship-other-landlord");
+    expect(serialized).not.toContain("relationship-billing-scope");
   });
 
   it("allows landlord owners to view staff assigned under their relationship only", async () => {
@@ -443,6 +451,8 @@ describe("property manager company management read routes", () => {
     seedAssignment({ assignmentId: "assignment-active", relationshipId: "relationship-active" });
     seedAssignment({ assignmentId: "assignment-second", relationshipId: "relationship-second", status: "removed" });
     seedAssignment({ assignmentId: "assignment-other-company", propertyManagerCompanyId: "pm-company-2", relationshipId: "relationship-other" });
+    seedAssignment({ assignmentId: "assignment-billing-scope", workspaceScopes: ["settings_billing"] });
+    seedAssignment({ assignmentId: "assignment-invalid-role", staffRole: "company_admin" });
 
     const response = await invokeRouter(propertyManagerCompanyRoutes, {
       method: "GET",
@@ -463,6 +473,8 @@ describe("property manager company management read routes", () => {
     );
     const serialized = JSON.stringify(response.body.assignments);
     expect(serialized).not.toContain("assignment-other-company");
+    expect(serialized).not.toContain("assignment-billing-scope");
+    expect(serialized).not.toContain("assignment-invalid-role");
     expect(serialized).not.toContain("auditEventIds");
     expect(serialized).not.toContain("removedReason");
     expect(serialized).not.toContain("assignedByUserId");
@@ -473,5 +485,40 @@ describe("property manager company management read routes", () => {
       user: companyAdminUser,
     });
     expect(crossRelationship.status).toBe(404);
+  });
+
+  it("does not mutate stored records when serving read projections", async () => {
+    const { default: router, propertyManagerCompanyRoutes } = await import("../propertyManagerCompanyRelationshipRoutes");
+    seedBaseCompanyData();
+    seedAssignment({ assignmentId: "assignment-active" });
+    const before = JSON.stringify(Array.from(collections.entries()));
+
+    await invokeRouter(router, {
+      method: "GET",
+      url: "/property-manager-companies/search",
+      user: ownerUser,
+    });
+    await invokeRouter(router, {
+      method: "GET",
+      url: "/property-manager-company-relationships",
+      user: ownerUser,
+    });
+    await invokeRouter(propertyManagerCompanyRoutes, {
+      method: "GET",
+      url: "/pm-company-1/relationships",
+      user: companyAdminUser,
+    });
+    await invokeRouter(propertyManagerCompanyRoutes, {
+      method: "GET",
+      url: "/pm-company-1/members",
+      user: companyAdminUser,
+    });
+    await invokeRouter(propertyManagerCompanyRoutes, {
+      method: "GET",
+      url: "/pm-company-1/staff-assignments",
+      user: companyAdminUser,
+    });
+
+    expect(JSON.stringify(Array.from(collections.entries()))).toBe(before);
   });
 });
