@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 type StoredDoc = Record<string, any>;
 
 const collections = vi.hoisted(() => new Map<string, Map<string, StoredDoc>>());
+const reads = vi.hoisted(() => new Map<string, number>());
 const signInWithPasswordMock = vi.hoisted(() => vi.fn());
 const getUserMock = vi.hoisted(() => vi.fn());
 
@@ -24,6 +25,8 @@ const fakeDb = vi.hoisted(() => ({
         return {
           id: docId,
           async get() {
+            const key = `${name}/${docId}`;
+            reads.set(key, (reads.get(key) || 0) + 1);
             return {
               id: docId,
               exists: collection.has(docId),
@@ -40,6 +43,8 @@ const fakeDb = vi.hoisted(() => ({
         return {
           limit: (_count: number) => ({
             async get() {
+              const key = `${name}:query:${field}`;
+              reads.set(key, (reads.get(key) || 0) + 1);
               const docs = Array.from(collection.entries())
                 .filter(([, data]) => (op === "==" ? data?.[field] === value : false))
                 .map(([id, data]) => ({ id, exists: true, data: () => copy(data) }));
@@ -186,6 +191,7 @@ function seedProfile(uid: string, email: string, role: string, extra: StoredDoc 
 describe("auth login property manager company profiles", () => {
   beforeEach(() => {
     collections.clear();
+    reads.clear();
     vi.clearAllMocks();
     process.env.JWT_SECRET = "test-secret";
     process.env.FIREBASE_API_KEY = "test-firebase-key";
@@ -235,6 +241,8 @@ describe("auth login property manager company profiles", () => {
       approved: true,
     });
     expect(collectionSize("landlords")).toBe(0);
+    expect(reads.get("landlords/pm-admin-user-1") || 0).toBe(0);
+    expect(reads.get("landlords:query:email") || 0).toBe(0);
 
     const { propertyManagerCompanyRoutes } = await import("../propertyManagerCompanyRelationshipRoutes");
     const companyContext = await invokeRouter(propertyManagerCompanyRoutes, {
@@ -272,6 +280,26 @@ describe("auth login property manager company profiles", () => {
 
     expect(landlordResponse.status).toBe(403);
     expect(landlordResponse.body.error).toBe("FORBIDDEN");
+  });
+
+  it("fails closed when a PM company profile includes landlord scope", async () => {
+    seedAuthUser("pm-admin-user-1", "admin+propertymanager@rentchain.ai");
+    seedProfile("pm-admin-user-1", "admin+propertymanager@rentchain.ai", "property_manager_company", {
+      landlordId: "landlord-scope-1",
+    });
+
+    const authRouter = (await import("../authRoutes")).default;
+    const response = await invokeRouter(authRouter, {
+      method: "POST",
+      url: "/login",
+      body: { email: "admin+propertymanager@rentchain.ai", password: "secretpass" },
+    });
+
+    expect(response.status).toBe(403);
+    expect(response.body.code).toBe("UNSUPPORTED_ACCOUNT_ROLE");
+    expect(collectionSize("landlords")).toBe(0);
+    expect(reads.get("landlords/pm-admin-user-1") || 0).toBe(0);
+    expect(reads.get("landlords:query:email") || 0).toBe(0);
   });
 
   it("keeps existing landlord login behavior", async () => {

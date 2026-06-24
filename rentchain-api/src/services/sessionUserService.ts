@@ -7,7 +7,7 @@ export type HydratedSessionUser = {
   id: string;
   email?: string;
   role: Role;
-  landlordId?: string;
+  landlordId?: string | null;
   tenantId?: string;
   approved?: boolean;
   plan?: string;
@@ -34,7 +34,7 @@ type BaseUser = {
   id: string;
   email?: string;
   role: Role;
-  landlordId?: string;
+  landlordId?: string | null;
   tenantId?: string;
   permissions?: Permission[];
   revokedPermissions?: Permission[];
@@ -54,6 +54,10 @@ async function applyEntitlements(
   claimsPlan: string | null,
   requestCache: Record<string, UserEntitlements> | undefined
 ): Promise<HydratedSessionUser> {
+  if (baseUser.role === "property_manager_company" && String(baseUser.landlordId || "").trim()) {
+    throw new Error("LANDLORD_SCOPE_MISMATCH");
+  }
+
   const entitlements = await getUserEntitlements(baseUser.id, {
     claimsRole: baseUser.role,
     claimsPlan,
@@ -61,16 +65,18 @@ async function applyEntitlements(
     emailHint: baseUser.email,
     requestCache,
   });
+  const resolvedRole = entitlements.role as Role;
+  const resolvedLandlordId =
+    resolvedRole === "property_manager_company"
+      ? null
+      : entitlements.landlordId ||
+        (resolvedRole === "landlord" || resolvedRole === "admin" ? baseUser.id : baseUser.landlordId);
 
   return {
     ...baseUser,
-    role: entitlements.role as Role,
-    landlordId:
-      entitlements.landlordId ||
-      (entitlements.role === "landlord" || entitlements.role === "admin"
-        ? baseUser.id
-        : baseUser.landlordId),
-    approved: entitlements.role === "admin" || entitlements.role === "tenant" ? true : approved,
+    role: resolvedRole,
+    landlordId: resolvedLandlordId,
+    approved: resolvedRole === "admin" || resolvedRole === "tenant" ? true : approved,
     plan: entitlements.plan,
     capabilities: entitlements.capabilities,
     entitlements,
@@ -133,13 +139,17 @@ export async function buildCanonicalSessionUserFromClaims(
       if (typeof leadApproved === "boolean") approved = leadApproved;
     }
 
+    const unhydratedLandlordId =
+      baseUser.role === "property_manager_company"
+        ? null
+        : baseUser.role === "landlord" || baseUser.role === "admin"
+        ? baseUser.landlordId || baseUser.id
+        : baseUser.landlordId;
+
     return applyEntitlements(
       {
         ...baseUser,
-        landlordId:
-          baseUser.role === "landlord" || baseUser.role === "admin"
-            ? baseUser.landlordId || baseUser.id
-            : baseUser.landlordId,
+        landlordId: unhydratedLandlordId,
       },
       approved,
       claimsPlan,
@@ -158,8 +168,13 @@ export async function buildCanonicalSessionUserFromClaims(
   const userDoc = userSnap.exists ? (userSnap.data() as any) : {};
   const accountDoc = accountSnap.exists ? (accountSnap.data() as any) : {};
   const mergedDoc = { ...accountDoc, ...userDoc } as any;
+  const mergedRole = (mergedDoc.role ?? baseUser.role) as Role;
   if (mergedDoc?.disabled === true) {
     throw new Error("ACCOUNT_DISABLED");
+  }
+
+  if (mergedRole === "property_manager_company" && String(mergedDoc?.landlordId || baseUser.landlordId || "").trim()) {
+    throw new Error("LANDLORD_SCOPE_MISMATCH");
   }
 
   if (mergedDoc?.landlordId && baseUser.landlordId && mergedDoc.landlordId !== baseUser.landlordId) {
@@ -241,15 +256,12 @@ export async function buildCanonicalSessionUserFromClaims(
     {
       id: baseUser.id,
       email: mergedDoc.email ?? baseUser.email,
-      role: (mergedDoc.role ?? baseUser.role) as Role,
+      role: mergedRole,
       landlordId:
-        (mergedDoc.landlordId ?? baseUser.landlordId) ||
-        (mergedDoc.role === "landlord" ||
-        mergedDoc.role === "admin" ||
-        baseUser.role === "landlord" ||
-        baseUser.role === "admin"
-          ? baseUser.id
-          : undefined),
+        mergedRole === "property_manager_company"
+          ? null
+          : (mergedDoc.landlordId ?? baseUser.landlordId) ||
+            (mergedRole === "landlord" || mergedRole === "admin" ? baseUser.id : undefined),
       tenantId: mergedDoc.tenantId ?? baseUser.tenantId,
       permissions: Array.isArray(mergedDoc.permissions) ? mergedDoc.permissions : baseUser.permissions,
       revokedPermissions: Array.isArray(mergedDoc.revokedPermissions)

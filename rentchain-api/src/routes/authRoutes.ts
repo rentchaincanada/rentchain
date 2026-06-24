@@ -1819,6 +1819,16 @@ router.post("/login", rateLimitAuth, async (req, res) => {
 
     if (persistedRole === "property_manager_company") {
       step = "property_manager_company_jwt_sign";
+      const persistedLandlordId = String(persistedUser?.landlordId || persistedAccount?.landlordId || "").trim();
+      if (persistedLandlordId) {
+        return loginError(
+          res,
+          403,
+          "UNSUPPORTED_ACCOUNT_ROLE",
+          "Property manager company profile cannot include landlord scope"
+        );
+      }
+
       claims = {
         sub: fbUser.id,
         email: fbUser.email,
