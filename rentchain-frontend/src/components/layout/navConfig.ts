@@ -183,6 +183,15 @@ export const NAV_ITEMS: NavItem[] = [
     requiresLandlordOrAdmin: true,
   },
   {
+    id: "pm-company-management",
+    label: "PM Companies",
+    to: "/account/property-manager-companies",
+    icon: Building2,
+    showInDrawer: false,
+    showInTabs: false,
+    requiresLandlordOrAdmin: true,
+  },
+  {
     id: "onboarding-hardening",
     label: "Onboarding",
     to: "/onboarding-hardening",

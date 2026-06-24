@@ -194,6 +194,7 @@ const AccountDataPage = lazy(() => import("./pages/account/AccountDataPage"));
 const DelegatedAccessPage = lazy(() => import("./pages/DelegatedAccessPage"));
 const DelegatedAccessAcceptPage = lazy(() => import("./pages/DelegatedAccessAcceptPage"));
 const DelegatedAccessWorkspacePage = lazy(() => import("./pages/DelegatedAccessWorkspacePage"));
+const PropertyManagerCompanyManagementPage = lazy(() => import("./pages/PropertyManagerCompanyManagementPage"));
 const ExpensesPage = lazy(() => import("./pages/ExpensesPage"));
 const WorkOrdersPage = lazy(() => import("./pages/landlord/WorkOrdersPage"));
 const WorkOrderNewPage = lazy(() => import("./pages/landlord/WorkOrderNewPage"));
@@ -964,6 +965,30 @@ function App() {
                   </Suspense>
                 </AccountRouteGate>
               </LandlordNav>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/account/property-manager-companies"
+          element={
+            <RequireAuth>
+              <LandlordNav>
+                <AccountRouteGate>
+                  <Suspense fallback={null}>
+                    <PropertyManagerCompanyManagementPage />
+                  </Suspense>
+                </AccountRouteGate>
+              </LandlordNav>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/property-manager-companies/management"
+          element={
+            <RequireAuth>
+              <Suspense fallback={null}>
+                <PropertyManagerCompanyManagementPage />
+              </Suspense>
             </RequireAuth>
           }
         />

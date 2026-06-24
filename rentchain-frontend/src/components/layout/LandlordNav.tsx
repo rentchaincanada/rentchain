@@ -34,9 +34,11 @@ const stickyWorkspaceIds = new Set([
   "unified-inbox",
   "work-orders",
   "delegated-access",
+  "pm-company-management",
 ]);
 
 const workspaceAliases: Array<{ prefix: string; label: string }> = [
+  { prefix: "/account/property-manager-companies", label: "PM Companies" },
   { prefix: "/account/delegated-access", label: "Delegate Management" },
   { prefix: "/landlord/inbox", label: "Inbox" },
   { prefix: "/landlord/unified-inbox", label: "Inbox" },
