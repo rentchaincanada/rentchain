@@ -35,6 +35,14 @@ export function getRoleDefaultDestination(role: AuthRole): string {
   return "/dashboard";
 }
 
+function resolveRoleScopedDestination(role: AuthRole, destination: string): string {
+  const value = String(role || "").trim().toLowerCase();
+  if (value === "property_manager_company" && destination === "/dashboard") {
+    return PROPERTY_MANAGER_COMPANY_DEFAULT_DESTINATION;
+  }
+  return destination;
+}
+
 export function getSafeTenantRedirect(raw: string | null | undefined): string | null {
   const value = getSafeInternalRedirect(raw);
   if (!value) return null;
@@ -73,13 +81,31 @@ export function resolvePostAuthDestination(input: {
   fallback?: string;
 }): { destination: string; usedFallback: boolean; source: string } {
   const explicit = getSafeInternalRedirect(input.explicitDestination || null);
-  if (explicit) return { destination: explicit, usedFallback: false, source: "explicit" };
+  if (explicit) {
+    return {
+      destination: resolveRoleScopedDestination(input.role, explicit),
+      usedFallback: false,
+      source: "explicit",
+    };
+  }
 
   const backend = getSafeInternalRedirect(input.backendRedirect || null);
-  if (backend) return { destination: backend, usedFallback: false, source: "backend" };
+  if (backend) {
+    return {
+      destination: resolveRoleScopedDestination(input.role, backend),
+      usedFallback: false,
+      source: "backend",
+    };
+  }
 
   const fromSearch = readDestinationFromSearch(input.search || "");
-  if (fromSearch) return { destination: fromSearch, usedFallback: false, source: "query" };
+  if (fromSearch) {
+    return {
+      destination: resolveRoleScopedDestination(input.role, fromSearch),
+      usedFallback: false,
+      source: "query",
+    };
+  }
 
   if (input.role) {
     return {
@@ -90,7 +116,11 @@ export function resolvePostAuthDestination(input: {
   }
 
   const fallback = getSafeInternalRedirect(input.fallback || "/dashboard") || "/dashboard";
-  return { destination: fallback, usedFallback: true, source: "fallback" };
+  return {
+    destination: resolveRoleScopedDestination(input.role, fallback),
+    usedFallback: true,
+    source: "fallback",
+  };
 }
 
 export function resolveTenantPostAuthDestination(input: {

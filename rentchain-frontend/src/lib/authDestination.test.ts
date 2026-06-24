@@ -4,6 +4,7 @@ import {
   getRoleDefaultDestination,
   PROPERTY_MANAGER_COMPANY_DEFAULT_DESTINATION,
   getSafeTenantRedirect,
+  resolvePostAuthDestination,
   resolveTenantPostAuthDestination,
   TENANT_DEFAULT_DESTINATION,
 } from "./authDestination";
@@ -21,6 +22,15 @@ describe("authDestination tenant routing", () => {
     expect(getRoleDefaultDestination("property_manager_company")).toBe(
       PROPERTY_MANAGER_COMPANY_DEFAULT_DESTINATION
     );
+  });
+
+  it("does not preserve dashboard as the PM company post-auth destination", () => {
+    expect(
+      resolvePostAuthDestination({
+        search: "?next=/dashboard",
+        role: "property_manager_company",
+      }).destination
+    ).toBe(PROPERTY_MANAGER_COMPANY_DEFAULT_DESTINATION);
   });
 
   it("rejects public tenant entry routes as post-auth destinations", () => {
