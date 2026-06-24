@@ -114,6 +114,46 @@ describe("property manager company audit foundations", () => {
     });
   });
 
+  it("builds metadata-only staff assignment audit events", () => {
+    const activeRelationship = relationship();
+    const event = buildPropertyManagerCompanyAuditEvent({
+      eventType: "staff_assignment_created",
+      actorUserId: "company-admin-1",
+      actorCompanyId: "pm-company-1",
+      propertyManagerCompanyId: "pm-company-1",
+      actingForLandlordId: "landlord-1",
+      relationshipId: activeRelationship.relationshipId,
+      assignmentId: "assignment-1",
+      staffUserId: "staff-user-1",
+      role: "property_manager",
+      scope: activeRelationship.relationshipScope,
+      targetResourceType: "staff_assignment",
+      targetResourceId: "assignment-1",
+      outcome: "created",
+      timestamp: "2026-06-24T04:00:00.000Z",
+      statusTransition: { from: null, to: "active" },
+    });
+
+    expect(event).toMatchObject({
+      eventType: "staff_assignment_created",
+      actorUserId: "company-admin-1",
+      actorCompanyId: "pm-company-1",
+      propertyManagerCompanyId: "pm-company-1",
+      actingForLandlordId: "landlord-1",
+      relationshipId: activeRelationship.relationshipId,
+      assignmentId: "assignment-1",
+      staffUserId: "staff-user-1",
+      role: "property_manager",
+      targetResourceType: "staff_assignment",
+      targetResourceId: "assignment-1",
+      outcome: "created",
+      statusTransition: { from: null, to: "active" },
+      metadataOnly: true,
+      appendOnly: true,
+      immutable: true,
+    });
+  });
+
   it("rejects unknown audit event types", () => {
     expect(() =>
       buildPropertyManagerCompanyAuditEvent({

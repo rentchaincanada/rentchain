@@ -18,6 +18,8 @@ type AuditInput = {
   propertyManagerCompanyId?: string | null;
   actingForLandlordId?: string | null;
   relationshipId?: string | null;
+  assignmentId?: string | null;
+  staffUserId?: string | null;
   role?: PropertyManagerCompanyRole | null;
   scope?: PropertyManagerCompanyRelationshipScope | null;
   targetResourceType: PropertyManagerCompanyAuditTargetResourceType;
@@ -70,6 +72,8 @@ function stableEventId(input: Omit<AuditInput, "eventId"> & { timestamp: string 
         input.propertyManagerCompanyId,
         input.actingForLandlordId,
         input.relationshipId,
+        input.assignmentId,
+        input.staffUserId,
         input.role,
         input.targetResourceType,
         input.targetResourceId,
@@ -93,6 +97,8 @@ export function buildPropertyManagerCompanyAuditEvent(input: AuditInput): Proper
     propertyManagerCompanyId: input.propertyManagerCompanyId ? cleanString(input.propertyManagerCompanyId, 200) : null,
     actingForLandlordId: input.actingForLandlordId ? cleanString(input.actingForLandlordId, 200) : null,
     relationshipId: input.relationshipId ? cleanString(input.relationshipId, 200) : null,
+    assignmentId: input.assignmentId ? cleanString(input.assignmentId, 200) : null,
+    staffUserId: input.staffUserId ? cleanString(input.staffUserId, 200) : null,
     role: input.role || null,
     scope: input.scope || null,
     targetResourceType: assertTargetResourceType(input.targetResourceType),

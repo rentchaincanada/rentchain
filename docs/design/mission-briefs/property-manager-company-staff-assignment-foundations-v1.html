@@ -1,0 +1,421 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mission Brief - Property Manager Company Staff Assignment Foundations V1</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: #eef1f5;
+        color: #142033;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        padding: 32px;
+        background: #eef1f5;
+      }
+
+      .brief {
+        max-width: 1280px;
+        margin: 0 auto;
+        background: #ffffff;
+        border: 1px solid #d7dde7;
+        box-shadow: 0 18px 50px rgba(20, 32, 51, 0.12);
+      }
+
+      header {
+        padding: 28px 32px;
+        border-bottom: 1px solid #d7dde7;
+        background: #142033;
+        color: #ffffff;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin-top: 0;
+      }
+
+      h1 {
+        margin-bottom: 8px;
+        font-size: 26px;
+        line-height: 1.2;
+        letter-spacing: 0;
+      }
+
+      h1 span {
+        color: #8fd6ff;
+      }
+
+      .subtitle {
+        max-width: 900px;
+        color: #d6e7f4;
+        font-size: 15px;
+        line-height: 1.5;
+      }
+
+      main {
+        display: grid;
+        grid-template-columns: minmax(0, 1.08fr) minmax(360px, 0.92fr);
+      }
+
+      section {
+        padding: 28px 32px;
+      }
+
+      .left {
+        border-right: 1px solid #d7dde7;
+      }
+
+      .block {
+        margin-bottom: 24px;
+      }
+
+      .block:last-child {
+        margin-bottom: 0;
+      }
+
+      h2 {
+        margin-bottom: 10px;
+        color: #142033;
+        font-size: 15px;
+        line-height: 1.25;
+        letter-spacing: 0;
+        text-transform: uppercase;
+      }
+
+      h3 {
+        margin-bottom: 8px;
+        color: #2b3c55;
+        font-size: 14px;
+        line-height: 1.3;
+      }
+
+      p,
+      li,
+      td,
+      th {
+        font-size: 14px;
+        line-height: 1.48;
+      }
+
+      ul {
+        margin: 0;
+        padding-left: 18px;
+      }
+
+      li + li {
+        margin-top: 6px;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .card {
+        padding: 14px;
+        border: 1px solid #d7dde7;
+        background: #f8fafc;
+      }
+
+      .card strong {
+        display: block;
+        margin-bottom: 5px;
+        color: #142033;
+      }
+
+      .pill-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .pill {
+        padding: 6px 9px;
+        border: 1px solid #c8d2df;
+        background: #f4f7fb;
+        color: #26374f;
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .panel {
+        padding: 14px 16px;
+        border-left: 4px solid #246bfe;
+        background: #f4f8ff;
+      }
+
+      .warning {
+        border-left-color: #b7791f;
+        background: #fff8e8;
+      }
+
+      .success {
+        border-left-color: #16895a;
+        background: #f0fff7;
+      }
+
+      .table {
+        width: 100%;
+        border-collapse: collapse;
+        border: 1px solid #d7dde7;
+        background: #ffffff;
+      }
+
+      .table th,
+      .table td {
+        padding: 9px 10px;
+        border-bottom: 1px solid #e4e9f1;
+        text-align: left;
+        vertical-align: top;
+      }
+
+      .table th {
+        background: #f4f7fb;
+        color: #142033;
+        font-size: 12px;
+        text-transform: uppercase;
+      }
+
+      code {
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+        font-size: 12px;
+        color: #1b4f9c;
+      }
+
+      .compact li {
+        font-size: 13px;
+      }
+
+      @media (max-width: 920px) {
+        body {
+          padding: 16px;
+        }
+
+        main {
+          grid-template-columns: 1fr;
+        }
+
+        .left {
+          border-right: 0;
+          border-bottom: 1px solid #d7dde7;
+        }
+
+        .grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <article class="brief">
+      <header>
+        <h1>Next Mission: <span>feat/property-manager-company-staff-assignment-foundations-v1</span></h1>
+        <div class="subtitle">
+          Backend foundations for assigning Property Manager Company staff to accepted landlord-company relationships.
+          This mission adds assignment records, lifecycle helpers, scope ceiling checks, audit foundations, and
+          permission-evaluation preparation without UI, dashboards, emails, billing delegation, or contractor work.
+        </div>
+      </header>
+
+      <main>
+        <section class="left">
+          <div class="block">
+            <h2>Mission Goal</h2>
+            <p>
+              Add backend-only foundations for assigning active PM company staff to active landlord-company
+              relationships. Assignment authority must stay inside the PM company owner/admin hierarchy, staff access
+              must remain capped by the landlord-approved relationship scope, and assignment history must be preserved
+              through append-safe audit metadata.
+            </p>
+          </div>
+
+          <div class="block">
+            <h2>Foundation Scope</h2>
+            <div class="grid">
+              <div class="card">
+                <strong>Membership distinction</strong>
+                Company membership means the user belongs to the PM company. Staff assignment means the user is
+                authorized to operate for one specific landlord-company relationship. Membership never implies
+                assignment.
+              </div>
+              <div class="card">
+                <strong>Assignment model</strong>
+                assignmentId, propertyManagerCompanyId, relationshipId, staffUserId, assignedByUserId,
+                staffRole/template, status, propertyScope, workspaceScope, timestamps, and lifecycle reasons.
+              </div>
+              <div class="card">
+                <strong>Lifecycle helpers</strong>
+                create, suspend, reactivate, and remove assignments. No hard delete. Suspended and removed assignments
+                block access while preserving history.
+              </div>
+              <div class="card">
+                <strong>Scope ceiling</strong>
+                assignment property/workspace scope cannot exceed the active landlord-company relationship scope.
+                Assignment only narrows authority already granted by the relationship. Billing/settings stays
+                landlord-owner only in V1.
+              </div>
+              <div class="card">
+                <strong>Permission prep</strong>
+                Prepare helper logic for future evaluation requiring actor, active membership, active relationship,
+                active assignment, role template, scope, and explicit-deny handling.
+              </div>
+            </div>
+          </div>
+
+          <div class="block">
+            <h2>Authority Rule</h2>
+            <div class="panel">
+              A staff assignment may be created only after both active company membership and an active
+              landlord-company relationship exist. Assignment never creates authority by itself; it only narrows
+              landlord-approved operating authority already granted through the active relationship. A PM company member
+              may belong to the company and still have zero landlord assignments.
+            </div>
+          </div>
+
+          <div class="block">
+            <h2>Assignment Lifecycle</h2>
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Action</th>
+                  <th>Required state</th>
+                  <th>Result</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Create</td>
+                  <td>Active Company Owner/Admin, active company membership, active relationship, valid staff role.</td>
+                  <td><code>active</code> assignment with scope at or below relationship ceiling.</td>
+                </tr>
+                <tr>
+                  <td>Suspend</td>
+                  <td>Active assignment managed by active Company Owner/Admin.</td>
+                  <td><code>suspended</code>; access blocked temporarily, history preserved.</td>
+                </tr>
+                <tr>
+                  <td>Reactivate</td>
+                  <td>Suspended assignment, active relationship, active staff membership, scope still valid.</td>
+                  <td><code>active</code>; access can be evaluated again.</td>
+                </tr>
+                <tr>
+                  <td>Remove</td>
+                  <td>Active or suspended assignment managed by active Company Owner/Admin.</td>
+                  <td><code>removed</code>; access blocked and history preserved. Recreate explicitly if needed.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="block">
+            <h2>Role Templates</h2>
+            <p>Assignment roles are predefined operating templates only:</p>
+            <div class="pill-row">
+              <span class="pill">regional_manager</span>
+              <span class="pill">property_manager</span>
+              <span class="pill">leasing_agent</span>
+              <span class="pill">office_administrator</span>
+              <span class="pill">maintenance_coordinator</span>
+              <span class="pill">read_only_staff</span>
+            </div>
+            <p style="margin-top: 12px">
+              Company Owner/Admin are management roles and do not automatically grant landlord-workspace access unless a
+              separate scoped assignment is created. Custom permissions are out of scope.
+            </p>
+          </div>
+
+          <div class="block">
+            <h2>Audit Contract</h2>
+            <p>Assignment lifecycle actions must build metadata-only events:</p>
+            <div class="pill-row">
+              <span class="pill">staff_assignment_created</span>
+              <span class="pill">staff_assignment_suspended</span>
+              <span class="pill">staff_assignment_reactivated</span>
+              <span class="pill">staff_assignment_removed</span>
+            </div>
+            <p style="margin-top: 12px">
+              Metadata should include actorUserId, actorCompanyId, propertyManagerCompanyId, actingForLandlordId,
+              relationshipId, assignmentId, staffUserId, role/template, scope, status transition, outcome, timestamp,
+              and reason where applicable. Do not include secrets, provider payloads, or user-facing raw ID labels.
+            </p>
+          </div>
+        </section>
+
+        <section>
+          <div class="block">
+            <h2>Security Model</h2>
+            <ul class="compact">
+              <li>Assignment creation/suspension/reactivation/removal requires active Company Owner/Admin membership.</li>
+              <li>Non-admin PM staff cannot assign or manage staff assignments.</li>
+              <li>Assignment target staff must have active company membership for the same PM company.</li>
+              <li>Relationship must exist, belong to the same PM company, and be <code>active</code>.</li>
+              <li>Pending, suspended, terminated, malformed, or cross-company relationships fail closed.</li>
+              <li>Assignment scope cannot exceed relationship property scope or workspace scope.</li>
+              <li>Selected-property ceilings must reject properties outside the relationship scope.</li>
+              <li>Workspace ceilings must reject scopes not granted by the relationship.</li>
+              <li><code>settings_billing</code> is always denied for assignments in V1.</li>
+              <li>Explicit deny wins in future access evaluation.</li>
+              <li>Suspended or removed assignments deny access.</li>
+              <li>No landlord-facing staff management or revocation UI is introduced in this mission.</li>
+            </ul>
+          </div>
+
+          <div class="block">
+            <h2>Files To Inspect First</h2>
+            <ul class="compact">
+              <li><code>rentchain-api/src/lib/propertyManagerCompany/propertyManagerCompanyTypes.ts</code></li>
+              <li><code>rentchain-api/src/lib/propertyManagerCompany/propertyManagerCompanyModel.ts</code></li>
+              <li><code>rentchain-api/src/lib/propertyManagerCompany/permissionEvaluation.ts</code></li>
+              <li><code>rentchain-api/src/lib/propertyManagerCompany/propertyManagerCompanyAudit.ts</code></li>
+              <li><code>rentchain-api/src/services/propertyManagerCompanyRelationshipService.ts</code></li>
+              <li><code>rentchain-api/src/lib/propertyManagerCompany/__tests__/</code></li>
+            </ul>
+          </div>
+
+          <div class="block">
+            <h2>Non-Goals</h2>
+            <div class="panel warning">
+              No UI, company dashboard, frontend routes, emails, contractor organizations, billing delegation, custom
+              permissions, landlord-facing staff management UI, production data migration, or backfill work.
+            </div>
+          </div>
+
+          <div class="block">
+            <h2>Validation Plan</h2>
+            <ul class="compact">
+              <li>Focused backend tests for assignment model validation and lifecycle transitions.</li>
+              <li>Company Owner/Admin authority tests, plus non-admin and inactive membership denial tests.</li>
+              <li>Relationship status tests for active allow and pending/suspended/terminated denial.</li>
+              <li>Scope ceiling tests for selected properties, all-current-properties, workspace scope, and billing denial.</li>
+              <li>Permission-evaluation tests for suspended/removed assignment denial and active assignment preparation.</li>
+              <li>Role validation tests for allowed assignment templates and custom/unknown role denial.</li>
+              <li>Audit event shape tests for created, suspended, reactivated, and removed events.</li>
+              <li>Malformed persisted data fail-closed tests.</li>
+              <li>Backend build and <code>git diff --check</code>.</li>
+            </ul>
+          </div>
+
+          <div class="block">
+            <h2>Review Gate</h2>
+            <div class="panel success">
+              Stop after this Mission Brief is reviewed. Implementation should begin only after approval, then proceed
+              in a draft PR on <code>feat/property-manager-company-staff-assignment-foundations-v1</code>.
+            </div>
+          </div>
+        </section>
+      </main>
+    </article>
+  </body>
+</html>

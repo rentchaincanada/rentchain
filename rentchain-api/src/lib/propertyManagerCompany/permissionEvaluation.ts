@@ -5,18 +5,21 @@ import type {
   PropertyManagerCompanyEvaluationReason,
   PropertyManagerCompanyMembership,
   PropertyManagerCompanyRelationshipScope,
+  PropertyManagerCompanyStaffAssignment,
+  PropertyManagerCompanyStaffAssignmentRole,
 } from "./propertyManagerCompanyTypes";
 import {
   LANDLORD_COMPANY_RELATIONSHIP_STATUSES,
   PROPERTY_MANAGER_COMPANY_MEMBERSHIP_STATUSES,
   PROPERTY_MANAGER_COMPANY_PROPERTY_SCOPE_MODES,
   PROPERTY_MANAGER_COMPANY_ROLES,
+  PROPERTY_MANAGER_COMPANY_STAFF_ASSIGNMENT_ROLES,
+  PROPERTY_MANAGER_COMPANY_STAFF_ASSIGNMENT_STATUSES,
   PROPERTY_MANAGER_COMPANY_WORKSPACE_SCOPES,
 } from "./propertyManagerCompanyTypes";
+import { buildRelationshipScope, isAssignmentScopeWithinRelationshipScope } from "./propertyManagerCompanyModel";
 
-const ROLE_ALLOWED_ACTIONS: Record<PropertyManagerCompanyMembership["role"], readonly string[]> = {
-  company_owner: ["view", "create", "edit", "approve", "export", "assign", "message"],
-  company_admin: ["view", "create", "edit", "approve", "export", "assign", "message"],
+const ROLE_ALLOWED_ACTIONS: Record<PropertyManagerCompanyStaffAssignmentRole, readonly string[]> = {
   regional_manager: ["view", "edit", "approve", "assign", "message", "export"],
   property_manager: ["view", "create", "edit", "approve", "assign", "message", "export"],
   leasing_agent: ["view", "create", "edit", "message"],
@@ -38,7 +41,7 @@ function denied(
     actorCompanyId: request.membership?.companyId || request.relationship?.propertyManagerCompanyId || null,
     actingForLandlordId: request.actingForLandlordId || null,
     relationshipId: request.relationship?.relationshipId || null,
-    role: request.membership?.role || null,
+    role: request.assignment?.staffRole || request.membership?.role || null,
     scope: scope || request.relationship?.relationshipScope || null,
     auditRequired: true,
   };
@@ -56,7 +59,7 @@ function allowed(
     actorCompanyId: request.membership?.companyId || null,
     actingForLandlordId: request.actingForLandlordId || null,
     relationshipId: request.relationship?.relationshipId || null,
-    role: request.membership?.role || null,
+    role: request.assignment?.staffRole || null,
     scope,
     auditRequired:
       request.action !== "view" || request.routeWorkspace === "payments" || request.routeWorkspace === "evidence_exports",
@@ -77,6 +80,13 @@ function hasPropertyAccess(scope: PropertyManagerCompanyRelationshipScope, prope
   return scope.propertyScope.propertyIds.includes(propertyId);
 }
 
+function assignmentScope(assignment: PropertyManagerCompanyStaffAssignment): PropertyManagerCompanyRelationshipScope {
+  return {
+    propertyScope: assignment.propertyScope,
+    workspaceScopes: assignment.workspaceScopes,
+  };
+}
+
 function hasValidMembershipShape(membership: PropertyManagerCompanyMembership): PropertyManagerCompanyEvaluationReason | null {
   if (!PROPERTY_MANAGER_COMPANY_ROLES.includes(membership.role)) return "invalid_membership_role";
   if (!PROPERTY_MANAGER_COMPANY_MEMBERSHIP_STATUSES.includes(membership.status)) return "invalid_membership_status";
@@ -91,6 +101,27 @@ function hasValidRelationshipShape(relationship: LandlordCompanyRelationship): P
   if (!Array.isArray(scope.workspaceScopes)) return "invalid_scope";
   if (!scope.workspaceScopes.every((workspace) => PROPERTY_MANAGER_COMPANY_WORKSPACE_SCOPES.includes(workspace))) {
     return "invalid_scope";
+  }
+  return null;
+}
+
+function hasValidAssignmentShape(assignment: PropertyManagerCompanyStaffAssignment): PropertyManagerCompanyEvaluationReason | null {
+  if (!PROPERTY_MANAGER_COMPANY_STAFF_ASSIGNMENT_ROLES.includes(assignment.staffRole)) return "invalid_assignment_role";
+  if (!PROPERTY_MANAGER_COMPANY_STAFF_ASSIGNMENT_STATUSES.includes(assignment.status)) return "invalid_assignment_status";
+  const scope = assignmentScope(assignment);
+  if (!PROPERTY_MANAGER_COMPANY_PROPERTY_SCOPE_MODES.includes(scope.propertyScope?.mode)) return "invalid_assignment_scope";
+  if (!Array.isArray(scope.propertyScope.propertyIds)) return "invalid_assignment_scope";
+  if (!Array.isArray(scope.workspaceScopes)) return "invalid_assignment_scope";
+  if (!scope.workspaceScopes.every((workspace) => PROPERTY_MANAGER_COMPANY_WORKSPACE_SCOPES.includes(workspace))) {
+    return "invalid_assignment_scope";
+  }
+  try {
+    buildRelationshipScope({
+      propertyScope: scope.propertyScope,
+      workspaceScopes: scope.workspaceScopes,
+    });
+  } catch {
+    return "invalid_assignment_scope";
   }
   return null;
 }
@@ -122,10 +153,29 @@ export function evaluatePropertyManagerCompanyAccess(
     return denied(request, "relationship_landlord_mismatch", relationship.relationshipScope);
   }
 
-  const scope = relationship.relationshipScope;
+  const assignment = request.assignment;
+  if (!assignment) return denied(request, "missing_staff_assignment", relationship.relationshipScope);
+  const invalidAssignmentReason = hasValidAssignmentShape(assignment);
+  const assignmentResolvedScope = assignmentScope(assignment);
+  if (invalidAssignmentReason) return denied(request, invalidAssignmentReason, assignmentResolvedScope);
+  if (assignment.propertyManagerCompanyId !== membership.companyId) {
+    return denied(request, "assignment_company_mismatch", assignmentResolvedScope);
+  }
+  if (assignment.relationshipId !== relationship.relationshipId) {
+    return denied(request, "assignment_relationship_mismatch", assignmentResolvedScope);
+  }
+  if (assignment.staffUserId !== request.actorUserId) {
+    return denied(request, "assignment_actor_mismatch", assignmentResolvedScope);
+  }
+  if (assignment.status !== "active") return denied(request, "assignment_not_active", assignmentResolvedScope);
+  if (!isAssignmentScopeWithinRelationshipScope(assignmentResolvedScope, relationship.relationshipScope)) {
+    return denied(request, "assignment_scope_exceeds_relationship", assignmentResolvedScope);
+  }
+
+  const scope = assignmentResolvedScope;
   if (!scope.workspaceScopes.includes(request.routeWorkspace)) return denied(request, "workspace_scope_denied", scope);
   if (!hasPropertyAccess(scope, request.propertyId)) return denied(request, "property_scope_denied", scope);
-  if (!ROLE_ALLOWED_ACTIONS[membership.role].includes(request.action)) return denied(request, "role_template_denied", scope);
+  if (!ROLE_ALLOWED_ACTIONS[assignment.staffRole].includes(request.action)) return denied(request, "role_template_denied", scope);
 
   return allowed(request, scope);
 }
