@@ -114,6 +114,9 @@ async function invokeRouter(
 const ownerUser = { id: "owner-user-1", role: "landlord", landlordId: "landlord-1", email: "owner@example.com" };
 const otherOwnerUser = { id: "owner-user-2", role: "landlord", landlordId: "landlord-2", email: "other@example.com" };
 const delegateUser = { id: "delegate-user-1", role: "delegate", landlordId: null, email: "delegate@example.com" };
+const companyOwnerUser = { id: "company-owner-1", role: "property_manager_company", email: "owner@elite.example" };
+const companyAdminUser = { id: "company-admin-1", role: "property_manager_company", email: "admin@elite.example" };
+const companyStaffUser = { id: "company-staff-1", role: "property_manager_company", email: "staff@elite.example" };
 
 const validRelationshipBody = {
   propertyManagerCompanyId: "pm-company-1",
@@ -134,6 +137,27 @@ function seedCompany(overrides: Partial<StoredDoc> = {}) {
   };
   writeCollectionDoc("propertyManagerCompanies", company.companyId, company);
   return company;
+}
+
+function seedMembership(overrides: Partial<StoredDoc> = {}) {
+  const membership = {
+    membershipId: overrides.membershipId || `pm-membership-${readCollection("propertyManagerCompanyMemberships").length + 1}`,
+    companyId: "pm-company-1",
+    userId: "company-admin-1",
+    role: "company_admin",
+    status: "active",
+    invitedByUserId: "company-owner-1",
+    createdByUserId: "company-owner-1",
+    createdAt: "2026-06-24T00:30:00.000Z",
+    updatedAt: "2026-06-24T00:30:00.000Z",
+    suspendedAt: null,
+    suspendedByUserId: null,
+    removedAt: null,
+    removedByUserId: null,
+    ...overrides,
+  };
+  writeCollectionDoc("propertyManagerCompanyMemberships", membership.membershipId, membership);
+  return membership;
 }
 
 function seedRelationship(overrides: Partial<StoredDoc> = {}) {
@@ -292,6 +316,240 @@ describe("property manager company relationship routes", () => {
     });
     expect(delegate.status).toBe(403);
     expect(delegate.body.error).toBe("FORBIDDEN");
+  });
+
+  it("allows active company owners and admins to accept pending relationships for their own company", async () => {
+    const { propertyManagerCompanyRoutes } = await import("../propertyManagerCompanyRelationshipRoutes");
+    seedMembership({ userId: "company-admin-1", role: "company_admin" });
+    const pending = seedRelationship({
+      relationshipId: "relationship-pending",
+      status: "pending",
+      acceptedByCompanyAdminUserId: null,
+      startedAt: null,
+      relationshipScope: {
+        propertyScope: { mode: "selected_properties", propertyIds: ["property-1", "property-2"] },
+        workspaceScopes: ["dashboard", "operations"],
+      },
+    });
+
+    const response = await invokeRouter(propertyManagerCompanyRoutes, {
+      method: "POST",
+      url: "/pm-company-1/relationships/relationship-pending/accept",
+      user: companyAdminUser,
+      body: {
+        landlordId: "landlord-override",
+        relationshipScope: {
+          propertyScope: { mode: "all_current_properties", propertyIds: [] },
+          workspaceScopes: ["settings_billing"],
+        },
+      },
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.relationship).toEqual(
+      expect.objectContaining({
+        relationshipId: "relationship-pending",
+        landlordId: "landlord-1",
+        propertyManagerCompanyId: "pm-company-1",
+        propertyManagerCompanyLabel: "Elite Property Management",
+        status: "active",
+        acceptedByCompanyAdminUserId: "company-admin-1",
+      })
+    );
+    expect(response.body.relationship.relationshipScope).toEqual(pending.relationshipScope);
+    expect(response.body.relationship).not.toHaveProperty("auditEventIds");
+
+    const stored = readCollection("landlordCompanyRelationships").find(
+      (relationship) => relationship.relationshipId === "relationship-pending"
+    );
+    expect(stored).toEqual(
+      expect.objectContaining({
+        status: "active",
+        acceptedByCompanyAdminUserId: "company-admin-1",
+      })
+    );
+    expect(stored?.relationshipScope).toEqual(pending.relationshipScope);
+
+    const auditEvents = readCollection("propertyManagerCompanyAuditEvents");
+    expect(auditEvents).toHaveLength(1);
+    expect(auditEvents[0]).toEqual(
+      expect.objectContaining({
+        eventType: "landlord_company_relationship_activated",
+        actorUserId: "company-admin-1",
+        actorCompanyId: "pm-company-1",
+        propertyManagerCompanyId: "pm-company-1",
+        actingForLandlordId: "landlord-1",
+        relationshipId: "relationship-pending",
+        role: "company_admin",
+        scope: pending.relationshipScope,
+        outcome: "allowed",
+        statusTransition: { from: "pending", to: "active" },
+        metadataOnly: true,
+      })
+    );
+
+    seedMembership({
+      membershipId: "pm-membership-owner",
+      userId: "company-owner-1",
+      role: "company_owner",
+    });
+    seedRelationship({
+      relationshipId: "relationship-owner-pending",
+      status: "pending",
+      acceptedByCompanyAdminUserId: null,
+      startedAt: null,
+    });
+    const ownerAccepted = await invokeRouter(propertyManagerCompanyRoutes, {
+      method: "POST",
+      url: "/pm-company-1/relationships/relationship-owner-pending/accept",
+      user: companyOwnerUser,
+    });
+    expect(ownerAccepted.status).toBe(200);
+    expect(ownerAccepted.body.relationship.acceptedByCompanyAdminUserId).toBe("company-owner-1");
+  });
+
+  it("denies non-admin, inactive, removed, and malformed memberships during acceptance", async () => {
+    const { propertyManagerCompanyRoutes } = await import("../propertyManagerCompanyRelationshipRoutes");
+    const deniedRoles = ["property_manager", "leasing_agent", "maintenance_coordinator", "read_only_staff", "regional_manager", "unknown"];
+
+    for (const role of deniedRoles) {
+      collections.get("propertyManagerCompanyMemberships")?.clear();
+      collections.get("landlordCompanyRelationships")?.clear();
+      seedMembership({ role, userId: "company-staff-1" });
+      seedRelationship({
+        relationshipId: `relationship-${role}`,
+        status: "pending",
+        acceptedByCompanyAdminUserId: null,
+        startedAt: null,
+      });
+
+      const response = await invokeRouter(propertyManagerCompanyRoutes, {
+        method: "POST",
+        url: `/pm-company-1/relationships/relationship-${role}/accept`,
+        user: companyStaffUser,
+      });
+      expect(response.status).toBe(403);
+      expect(response.body.error).toBe("PROPERTY_MANAGER_COMPANY_ACCEPTANCE_ROLE_NOT_ALLOWED");
+    }
+
+    const deniedStatuses = ["suspended", "removed", "invited", "unknown"];
+    for (const status of deniedStatuses) {
+      collections.get("propertyManagerCompanyMemberships")?.clear();
+      collections.get("landlordCompanyRelationships")?.clear();
+      seedMembership({ status, userId: "company-admin-1", role: "company_admin" });
+      seedRelationship({
+        relationshipId: `relationship-membership-${status}`,
+        status: "pending",
+        acceptedByCompanyAdminUserId: null,
+        startedAt: null,
+      });
+
+      const response = await invokeRouter(propertyManagerCompanyRoutes, {
+        method: "POST",
+        url: `/pm-company-1/relationships/relationship-membership-${status}/accept`,
+        user: companyAdminUser,
+      });
+      expect(response.status).toBe(403);
+      expect(response.body.error).toBe("PROPERTY_MANAGER_COMPANY_MEMBERSHIP_NOT_ACTIVE");
+    }
+  });
+
+  it("prevents landlord-only, cross-company, and inactive-company acceptance", async () => {
+    const { propertyManagerCompanyRoutes } = await import("../propertyManagerCompanyRelationshipRoutes");
+    seedMembership({ userId: "company-admin-1", role: "company_admin" });
+    seedRelationship({
+      relationshipId: "relationship-pending",
+      status: "pending",
+      acceptedByCompanyAdminUserId: null,
+      startedAt: null,
+    });
+
+    const landlordAttempt = await invokeRouter(propertyManagerCompanyRoutes, {
+      method: "POST",
+      url: "/pm-company-1/relationships/relationship-pending/accept",
+      user: ownerUser,
+    });
+    expect(landlordAttempt.status).toBe(403);
+    expect(landlordAttempt.body.error).toBe("PROPERTY_MANAGER_COMPANY_MEMBERSHIP_NOT_FOUND");
+
+    seedCompany({ companyId: "pm-company-2", companyName: "Second Company", safeDisplayLabel: "Second Company" });
+    seedRelationship({
+      relationshipId: "relationship-company-2",
+      propertyManagerCompanyId: "pm-company-2",
+      status: "pending",
+      acceptedByCompanyAdminUserId: null,
+      startedAt: null,
+    });
+    const crossCompany = await invokeRouter(propertyManagerCompanyRoutes, {
+      method: "POST",
+      url: "/pm-company-1/relationships/relationship-company-2/accept",
+      user: companyAdminUser,
+    });
+    expect(crossCompany.status).toBe(404);
+    expect(crossCompany.body.error).toBe("LANDLORD_COMPANY_RELATIONSHIP_NOT_FOUND");
+
+    seedCompany({ companyId: "pm-company-suspended", status: "suspended" });
+    seedMembership({
+      membershipId: "suspended-company-membership",
+      companyId: "pm-company-suspended",
+      userId: "company-admin-1",
+      role: "company_admin",
+    });
+    seedRelationship({
+      relationshipId: "relationship-suspended-company",
+      propertyManagerCompanyId: "pm-company-suspended",
+      status: "pending",
+      acceptedByCompanyAdminUserId: null,
+      startedAt: null,
+    });
+    const inactiveCompany = await invokeRouter(propertyManagerCompanyRoutes, {
+      method: "POST",
+      url: "/pm-company-suspended/relationships/relationship-suspended-company/accept",
+      user: companyAdminUser,
+    });
+    expect(inactiveCompany.status).toBe(409);
+    expect(inactiveCompany.body.error).toBe("PROPERTY_MANAGER_COMPANY_NOT_ACTIVE");
+  });
+
+  it("fails closed for non-pending or malformed relationships during acceptance", async () => {
+    const { propertyManagerCompanyRoutes } = await import("../propertyManagerCompanyRelationshipRoutes");
+    seedMembership({ userId: "company-admin-1", role: "company_admin" });
+    const deniedStatuses = ["active", "suspended", "terminated", "unknown"];
+
+    for (const status of deniedStatuses) {
+      seedRelationship({
+        relationshipId: `relationship-${status}`,
+        status,
+        acceptedByCompanyAdminUserId: status === "active" ? "company-admin-1" : null,
+        startedAt: status === "active" ? "2026-06-24T02:00:00.000Z" : null,
+      });
+
+      const response = await invokeRouter(propertyManagerCompanyRoutes, {
+        method: "POST",
+        url: `/pm-company-1/relationships/relationship-${status}/accept`,
+        user: companyAdminUser,
+      });
+      expect(response.status).toBe(409);
+      expect(response.body.error).toBe("RELATIONSHIP_NOT_PENDING");
+    }
+
+    seedRelationship({
+      relationshipId: "relationship-malformed-scope",
+      status: "pending",
+      acceptedByCompanyAdminUserId: null,
+      startedAt: null,
+      relationshipScope: {
+        propertyScope: { mode: "selected_properties", propertyIds: [] },
+        workspaceScopes: ["dashboard"],
+      },
+    });
+    const malformedScope = await invokeRouter(propertyManagerCompanyRoutes, {
+      method: "POST",
+      url: "/pm-company-1/relationships/relationship-malformed-scope/accept",
+      user: companyAdminUser,
+    });
+    expect(malformedScope.status).toBe(400);
+    expect(malformedScope.body.error).toBe("MISSING_SELECTED_PROPERTY_SCOPE");
   });
 
   it("supports active to suspended to active to terminated lifecycle transitions with audit", async () => {

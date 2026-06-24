@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { requireAuth } from "../middleware/requireAuth";
 import {
+  acceptLandlordCompanyRelationshipRecord,
   createLandlordCompanyRelationshipRecord,
   listLandlordCompanyRelationshipRecords,
   reactivateLandlordCompanyRelationshipRecord,
@@ -9,6 +10,7 @@ import {
 } from "../services/propertyManagerCompanyRelationshipService";
 
 const router = Router();
+const companyRouter = Router();
 
 function asString(value: unknown, max = 240): string {
   return String(value ?? "").trim().slice(0, max);
@@ -23,6 +25,12 @@ function ownerContext(req: any): { actorUserId: string; landlordId: string } | n
   return { actorUserId, landlordId };
 }
 
+function actorContext(req: any): { actorUserId: string } | null {
+  const actorUserId = asString(req.user?.id || req.user?.uid || req.user?.sub, 240);
+  if (!actorUserId) return null;
+  return { actorUserId };
+}
+
 function forbidden(res: any) {
   return res.status(403).json({ ok: false, error: "FORBIDDEN" });
 }
@@ -35,6 +43,7 @@ function handleError(res: any, error: unknown) {
   if (
     code === "relationship_not_active" ||
     code === "relationship_not_suspended" ||
+    code === "relationship_not_pending" ||
     code === "relationship_already_terminated" ||
     code === "invalid_relationship_status_transition" ||
     code === "relationship_activation_requires_company_acceptance"
@@ -43,6 +52,14 @@ function handleError(res: any, error: unknown) {
   }
   if (code === "property_manager_company_not_active") {
     return res.status(409).json({ ok: false, error: "PROPERTY_MANAGER_COMPANY_NOT_ACTIVE" });
+  }
+  if (
+    code === "property_manager_company_membership_not_found" ||
+    code === "property_manager_company_membership_not_active" ||
+    code === "property_manager_company_acceptance_role_not_allowed" ||
+    code === "property_manager_company_membership_mismatch"
+  ) {
+    return res.status(403).json({ ok: false, error: code.toUpperCase() });
   }
   if (
     code.startsWith("invalid_") ||
@@ -142,4 +159,23 @@ router.post("/property-manager-company-relationships/:relationshipId/terminate",
   }
 });
 
+companyRouter.use(requireAuth);
+
+companyRouter.post("/:companyId/relationships/:relationshipId/accept", async (req: any, res) => {
+  const context = actorContext(req);
+  if (!context) return forbidden(res);
+
+  try {
+    const result = await acceptLandlordCompanyRelationshipRecord({
+      actorUserId: context.actorUserId,
+      companyId: req.params.companyId,
+      relationshipId: req.params.relationshipId,
+    });
+    return res.status(200).json({ ok: true, relationship: result.relationship });
+  } catch (error) {
+    return handleError(res, error);
+  }
+});
+
+export const propertyManagerCompanyRoutes = companyRouter;
 export default router;

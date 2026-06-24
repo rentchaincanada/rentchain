@@ -1,6 +1,8 @@
 import { db } from "../firebase";
 import {
+  activateLandlordCompanyRelationship,
   buildPropertyManagerCompanyAuditEvent,
+  buildRelationshipScope,
   createLandlordCompanyRelationship,
   reactivateLandlordCompanyRelationship,
   suspendLandlordCompanyRelationship,
@@ -10,10 +12,12 @@ import {
   type PropertyManagerCompany,
   type PropertyManagerCompanyAuditEvent,
   type PropertyManagerCompanyAuditOutcome,
+  type PropertyManagerCompanyMembership,
   type PropertyManagerCompanyPropertyScope,
 } from "../lib/propertyManagerCompany";
 
 export const PROPERTY_MANAGER_COMPANIES_COLLECTION = "propertyManagerCompanies";
+export const PROPERTY_MANAGER_COMPANY_MEMBERSHIPS_COLLECTION = "propertyManagerCompanyMemberships";
 export const LANDLORD_COMPANY_RELATIONSHIPS_COLLECTION = "landlordCompanyRelationships";
 export const PROPERTY_MANAGER_COMPANY_AUDIT_EVENTS_COLLECTION = "propertyManagerCompanyAuditEvents";
 
@@ -57,6 +61,13 @@ type LifecycleInput = {
   now?: string;
 };
 
+type AcceptRelationshipInput = {
+  actorUserId: string;
+  companyId: string;
+  relationshipId: string;
+  now?: string;
+};
+
 type ServiceOptions = {
   firestore?: PropertyManagerCompanyRelationshipFirestoreLike;
 };
@@ -93,6 +104,12 @@ function companyFromSnapshot(snapshot: SnapshotLike): PropertyManagerCompany | n
   return data as PropertyManagerCompany;
 }
 
+function membershipFromSnapshot(snapshot: SnapshotLike): PropertyManagerCompanyMembership | null {
+  const data = snapshot.data();
+  if (!data) return null;
+  return data as PropertyManagerCompanyMembership;
+}
+
 function safeCompanyLabel(company: PropertyManagerCompany | null, propertyManagerCompanyId: string): string {
   const label = cleanString(company?.safeDisplayLabel || company?.companyName, 160).replace(/\s+/g, " ");
   if (!label || label === propertyManagerCompanyId) return "Property manager company";
@@ -111,6 +128,18 @@ async function loadCompany(
   return companyFromSnapshot(snapshot);
 }
 
+async function loadRelationship(
+  relationshipId: string,
+  firestore: PropertyManagerCompanyRelationshipFirestoreLike
+): Promise<LandlordCompanyRelationship | null> {
+  const ref = firestore
+    .collection<LandlordCompanyRelationship>(LANDLORD_COMPANY_RELATIONSHIPS_COLLECTION)
+    .doc(relationshipId);
+  const snapshot = await ref.get?.();
+  if (!snapshot?.exists) return null;
+  return relationshipFromSnapshot(snapshot);
+}
+
 async function requireActiveCompany(
   propertyManagerCompanyId: string,
   firestore: PropertyManagerCompanyRelationshipFirestoreLike
@@ -119,6 +148,35 @@ async function requireActiveCompany(
   if (!company) throw new Error("property_manager_company_not_found");
   if (company.status !== "active") throw new Error("property_manager_company_not_active");
   return company;
+}
+
+async function requireCompanyAcceptanceMembership(
+  companyId: string,
+  actorUserId: string,
+  firestore: PropertyManagerCompanyRelationshipFirestoreLike
+): Promise<PropertyManagerCompanyMembership> {
+  const snapshot = await firestore.collection<PropertyManagerCompanyMembership>(PROPERTY_MANAGER_COMPANY_MEMBERSHIPS_COLLECTION).get?.();
+  const membership = (snapshot?.docs || [])
+    .map(membershipFromSnapshot)
+    .find((candidate): candidate is PropertyManagerCompanyMembership => {
+      return Boolean(candidate && candidate.companyId === companyId && candidate.userId === actorUserId);
+    });
+  if (!membership) throw new Error("property_manager_company_membership_not_found");
+  if (membership.companyId !== companyId || membership.userId !== actorUserId) {
+    throw new Error("property_manager_company_membership_mismatch");
+  }
+  if (membership.status !== "active") throw new Error("property_manager_company_membership_not_active");
+  if (!["company_owner", "company_admin"].includes(membership.role)) {
+    throw new Error("property_manager_company_acceptance_role_not_allowed");
+  }
+  return membership;
+}
+
+function assertRelationshipScopeValid(relationship: LandlordCompanyRelationship) {
+  buildRelationshipScope({
+    propertyScope: relationship.relationshipScope?.propertyScope as PropertyManagerCompanyPropertyScope,
+    workspaceScopes: relationship.relationshipScope?.workspaceScopes || [],
+  });
 }
 
 async function projectRelationship(
@@ -177,6 +235,7 @@ async function loadRelationshipForLandlord(
 function buildRelationshipAuditEvent(input: {
   eventType:
     | "landlord_company_relationship_created"
+    | "landlord_company_relationship_activated"
     | "landlord_company_relationship_suspended"
     | "landlord_company_relationship_reactivated"
     | "landlord_company_relationship_terminated";
@@ -190,15 +249,17 @@ function buildRelationshipAuditEvent(input: {
   outcome: PropertyManagerCompanyAuditOutcome;
   timestamp: string;
   reason?: string | null;
+  actorCompanyId?: string | null;
+  role?: PropertyManagerCompanyMembership["role"] | null;
 }): PropertyManagerCompanyAuditEvent {
   return buildPropertyManagerCompanyAuditEvent({
     eventType: input.eventType,
     actorUserId: input.actorUserId,
-    actorCompanyId: null,
+    actorCompanyId: input.actorCompanyId || null,
     propertyManagerCompanyId: input.propertyManagerCompanyId,
     actingForLandlordId: input.landlordId,
     relationshipId: input.relationshipId,
-    role: null,
+    role: input.role || null,
     scope: input.relationshipScope,
     targetResourceType: "landlord_company_relationship",
     targetResourceId: input.relationshipId,
@@ -302,6 +363,49 @@ export async function suspendLandlordCompanyRelationshipRecord(
     reason: input.reason || null,
   });
   const withAudit = { ...suspended, auditEventIds: [...suspended.auditEventIds, auditEvent.eventId] };
+  await saveRelationship(withAudit, firestore);
+  await appendAuditEvent(auditEvent, firestore);
+  return { relationship: await projectRelationship(withAudit, firestore), auditEvent };
+}
+
+export async function acceptLandlordCompanyRelationshipRecord(
+  input: AcceptRelationshipInput,
+  options: ServiceOptions = {}
+): Promise<{ relationship: LandlordCompanyRelationshipProjection; auditEvent: PropertyManagerCompanyAuditEvent }> {
+  const firestore = relationshipDb(options.firestore);
+  const actorUserId = requireString(input.actorUserId, "missing_actor_user_id");
+  const companyId = requireString(input.companyId, "missing_property_manager_company_id");
+  const relationshipId = requireString(input.relationshipId, "missing_relationship_id");
+  const now = input.now || new Date().toISOString();
+
+  await requireActiveCompany(companyId, firestore);
+  const membership = await requireCompanyAcceptanceMembership(companyId, actorUserId, firestore);
+  const relationship = await loadRelationship(relationshipId, firestore);
+  if (!relationship || relationship.propertyManagerCompanyId !== companyId) {
+    throw new Error("landlord_company_relationship_not_found");
+  }
+  if (relationship.status !== "pending") throw new Error("relationship_not_pending");
+  assertRelationshipScopeValid(relationship);
+
+  const activated = activateLandlordCompanyRelationship(relationship, {
+    acceptedByCompanyAdminUserId: actorUserId,
+    startedAt: now,
+  });
+  const auditEvent = buildRelationshipAuditEvent({
+    eventType: "landlord_company_relationship_activated",
+    actorUserId,
+    actorCompanyId: companyId,
+    propertyManagerCompanyId: activated.propertyManagerCompanyId,
+    landlordId: activated.landlordId,
+    relationshipId: activated.relationshipId,
+    relationshipScope: activated.relationshipScope,
+    from: "pending",
+    to: "active",
+    outcome: "allowed",
+    timestamp: now,
+    role: membership.role,
+  });
+  const withAudit = { ...activated, auditEventIds: [...activated.auditEventIds, auditEvent.eventId] };
   await saveRelationship(withAudit, firestore);
   await appendAuditEvent(auditEvent, firestore);
   return { relationship: await projectRelationship(withAudit, firestore), auditEvent };
