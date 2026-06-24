@@ -446,7 +446,7 @@ describe("Routes: property manager company management", () => {
 
   it("renders the standalone company-admin management route", async () => {
     mockAuthState.value = {
-      user: { id: "company-admin-1", role: "property_manager_company_admin" },
+      user: { id: "company-admin-1", role: "property_manager_company", landlordId: null },
       token: "test-token",
       isLoading: false,
       ready: true,
@@ -455,6 +455,25 @@ describe("Routes: property manager company management", () => {
     const { default: App } = await import("./App");
     render(
       <MemoryRouter initialEntries={["/property-manager-companies/management"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/PM Company Management Page \/property-manager-companies\/management/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
+  });
+
+  it("redirects PM company dashboard sessions to standalone PM company management", async () => {
+    mockAuthState.value = {
+      user: { id: "company-admin-1", role: "property_manager_company", landlordId: null },
+      token: "test-token",
+      isLoading: false,
+      ready: true,
+      authStatus: "authed",
+    };
+    const { default: App } = await import("./App");
+    render(
+      <MemoryRouter initialEntries={["/dashboard"]}>
         <App />
       </MemoryRouter>
     );

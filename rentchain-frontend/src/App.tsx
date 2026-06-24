@@ -367,6 +367,9 @@ const LandlordDashboardRoute: React.FC = () => {
   const { user } = useAuth();
   const role = String(user?.actorRole || user?.role || "").trim().toLowerCase();
   if (role === "delegate") return <Navigate to={getRoleDefaultDestination("delegate")} replace />;
+  if (role === "property_manager_company") {
+    return <Navigate to={getRoleDefaultDestination("property_manager_company")} replace />;
+  }
   return (
     <LandlordNav>
       <DashboardPage />

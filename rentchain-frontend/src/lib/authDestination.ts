@@ -1,7 +1,16 @@
-export type AuthRole = "landlord" | "tenant" | "contractor" | "admin" | "delegate" | null | undefined;
+export type AuthRole =
+  | "landlord"
+  | "tenant"
+  | "contractor"
+  | "admin"
+  | "delegate"
+  | "property_manager_company"
+  | null
+  | undefined;
 
 export const TENANT_DEFAULT_DESTINATION = "/tenant/dashboard";
 export const DELEGATED_ACCESS_DEFAULT_DESTINATION = "/delegated-access/workspace";
+export const PROPERTY_MANAGER_COMPANY_DEFAULT_DESTINATION = "/property-manager-companies/management";
 
 export function getSafeInternalRedirect(raw: string | null | undefined): string | null {
   const value = String(raw || "").trim();
@@ -22,6 +31,7 @@ export function getRoleDefaultDestination(role: AuthRole): string {
   if (value === "contractor") return "/contractor";
   if (value === "admin") return "/admin";
   if (value === "delegate") return DELEGATED_ACCESS_DEFAULT_DESTINATION;
+  if (value === "property_manager_company") return PROPERTY_MANAGER_COMPANY_DEFAULT_DESTINATION;
   return "/dashboard";
 }
 
