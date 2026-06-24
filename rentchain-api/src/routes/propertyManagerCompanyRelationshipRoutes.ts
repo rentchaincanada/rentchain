@@ -3,14 +3,21 @@ import { requireAuth } from "../middleware/requireAuth";
 import {
   acceptLandlordCompanyRelationshipRecord,
   createLandlordCompanyRelationshipRecord,
-  listLandlordCompanyRelationshipRecords,
   reactivateLandlordCompanyRelationshipRecord,
   suspendLandlordCompanyRelationshipRecord,
   terminateLandlordCompanyRelationshipRecord,
 } from "../services/propertyManagerCompanyRelationshipService";
 import {
+  listCompanyMembersForManagement,
+  listCompanyRelationshipManagementRecords,
+  listCompanyStaffAssignmentsForManagement,
+  listLandlordPropertyManagerRelationshipManagementRecords,
+  listLandlordRelationshipStaffAssignmentsForManagement,
+  listMyPropertyManagerCompanyContexts,
+  searchPropertyManagerCompaniesForLandlord,
+} from "../services/propertyManagerCompanyManagementReadService";
+import {
   createPropertyManagerCompanyStaffAssignmentRecord,
-  listPropertyManagerCompanyStaffAssignmentRecords,
   reactivatePropertyManagerCompanyStaffAssignmentRecord,
   removePropertyManagerCompanyStaffAssignmentRecord,
   suspendPropertyManagerCompanyStaffAssignmentRecord,
@@ -74,6 +81,7 @@ function handleError(res: any, error: unknown) {
     code === "property_manager_company_acceptance_role_not_allowed" ||
     code === "property_manager_company_membership_mismatch" ||
     code === "company_assignment_manager_required" ||
+    code === "company_management_read_role_not_allowed" ||
     code === "membership_not_active" ||
     code === "invalid_company_role" ||
     code === "invalid_membership_status"
@@ -95,12 +103,26 @@ function handleError(res: any, error: unknown) {
 
 router.use(requireAuth);
 
+router.get("/property-manager-companies/search", async (req: any, res) => {
+  const context = ownerContext(req);
+  if (!context) return forbidden(res);
+
+  try {
+    const result = await searchPropertyManagerCompaniesForLandlord({
+      query: req.query?.q,
+    });
+    return res.status(200).json({ ok: true, companies: result.companies });
+  } catch (error) {
+    return handleError(res, error);
+  }
+});
+
 router.get("/property-manager-company-relationships", async (req: any, res) => {
   const context = ownerContext(req);
   if (!context) return forbidden(res);
 
   try {
-    const result = await listLandlordCompanyRelationshipRecords({
+    const result = await listLandlordPropertyManagerRelationshipManagementRecords({
       landlordId: context.landlordId,
     });
     return res.status(200).json({ ok: true, relationships: result.relationships });
@@ -123,6 +145,21 @@ router.post("/property-manager-company-relationships", async (req: any, res) => 
       requestedStatus: req.body?.status,
     });
     return res.status(201).json({ ok: true, relationship: result.relationship });
+  } catch (error) {
+    return handleError(res, error);
+  }
+});
+
+router.get("/property-manager-company-relationships/:relationshipId/staff-assignments", async (req: any, res) => {
+  const context = ownerContext(req);
+  if (!context) return forbidden(res);
+
+  try {
+    const result = await listLandlordRelationshipStaffAssignmentsForManagement({
+      landlordId: context.landlordId,
+      relationshipId: req.params.relationshipId,
+    });
+    return res.status(200).json({ ok: true, assignments: result.assignments });
   } catch (error) {
     return handleError(res, error);
   }
@@ -181,12 +218,56 @@ router.post("/property-manager-company-relationships/:relationshipId/terminate",
 
 companyRouter.use(requireAuth);
 
+companyRouter.get("/my-companies", async (req: any, res) => {
+  const context = actorContext(req);
+  if (!context) return forbidden(res);
+
+  try {
+    const result = await listMyPropertyManagerCompanyContexts({
+      actorUserId: context.actorUserId,
+    });
+    return res.status(200).json({ ok: true, companies: result.companies });
+  } catch (error) {
+    return handleError(res, error);
+  }
+});
+
+companyRouter.get("/:companyId/relationships", async (req: any, res) => {
+  const context = actorContext(req);
+  if (!context) return forbidden(res);
+
+  try {
+    const result = await listCompanyRelationshipManagementRecords({
+      actorUserId: context.actorUserId,
+      companyId: req.params.companyId,
+    });
+    return res.status(200).json({ ok: true, relationships: result.relationships });
+  } catch (error) {
+    return handleError(res, error);
+  }
+});
+
+companyRouter.get("/:companyId/members", async (req: any, res) => {
+  const context = actorContext(req);
+  if (!context) return forbidden(res);
+
+  try {
+    const result = await listCompanyMembersForManagement({
+      actorUserId: context.actorUserId,
+      companyId: req.params.companyId,
+    });
+    return res.status(200).json({ ok: true, members: result.members });
+  } catch (error) {
+    return handleError(res, error);
+  }
+});
+
 companyRouter.get("/:companyId/staff-assignments", async (req: any, res) => {
   const context = actorContext(req);
   if (!context) return forbidden(res);
 
   try {
-    const result = await listPropertyManagerCompanyStaffAssignmentRecords({
+    const result = await listCompanyStaffAssignmentsForManagement({
       actorUserId: context.actorUserId,
       companyId: req.params.companyId,
       relationshipId: req.query?.relationshipId,

@@ -1,0 +1,445 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mission Brief - Property Manager Company Management Read API V1</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: #eef2f6;
+        color: #142033;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        padding: 28px;
+        background: #eef2f6;
+      }
+
+      .brief {
+        max-width: 1280px;
+        margin: 0 auto;
+        border: 1px solid #d5dde8;
+        background: #ffffff;
+        box-shadow: 0 18px 50px rgba(20, 32, 51, 0.12);
+      }
+
+      header {
+        padding: 26px 30px;
+        background: #142033;
+        color: #ffffff;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin-top: 0;
+      }
+
+      h1 {
+        margin-bottom: 8px;
+        font-size: 26px;
+        line-height: 1.2;
+        letter-spacing: 0;
+      }
+
+      h1 span {
+        color: #8fd6ff;
+      }
+
+      .subtitle {
+        max-width: 930px;
+        color: #d8e7f4;
+        font-size: 15px;
+        line-height: 1.5;
+      }
+
+      main {
+        display: grid;
+        grid-template-columns: minmax(0, 1.05fr) minmax(390px, 0.95fr);
+      }
+
+      section {
+        padding: 26px 30px;
+      }
+
+      .left {
+        border-right: 1px solid #d5dde8;
+      }
+
+      .block {
+        margin-bottom: 23px;
+      }
+
+      .block:last-child {
+        margin-bottom: 0;
+      }
+
+      h2 {
+        margin-bottom: 10px;
+        color: #142033;
+        font-size: 14px;
+        line-height: 1.25;
+        letter-spacing: 0;
+        text-transform: uppercase;
+      }
+
+      h3 {
+        margin-bottom: 8px;
+        color: #2a3d55;
+        font-size: 14px;
+      }
+
+      p,
+      li,
+      td,
+      th {
+        font-size: 13.5px;
+        line-height: 1.46;
+      }
+
+      ul {
+        margin: 0;
+        padding-left: 18px;
+      }
+
+      li + li {
+        margin-top: 6px;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .card {
+        padding: 14px;
+        border: 1px solid #d5dde8;
+        background: #f8fafc;
+      }
+
+      .card strong {
+        display: block;
+        margin-bottom: 5px;
+      }
+
+      .panel {
+        padding: 14px 16px;
+        border-left: 4px solid #246bfe;
+        background: #f4f8ff;
+      }
+
+      .warning {
+        border-left-color: #b7791f;
+        background: #fff8e8;
+      }
+
+      .success {
+        border-left-color: #16895a;
+        background: #f0fff7;
+      }
+
+      .table {
+        width: 100%;
+        border-collapse: collapse;
+        border: 1px solid #d5dde8;
+        background: #ffffff;
+      }
+
+      .table th,
+      .table td {
+        padding: 8px 9px;
+        border-bottom: 1px solid #e3e9f1;
+        text-align: left;
+        vertical-align: top;
+      }
+
+      .table th {
+        background: #f4f7fb;
+        font-size: 12px;
+        text-transform: uppercase;
+      }
+
+      .pill-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .pill {
+        padding: 6px 9px;
+        border: 1px solid #c8d2df;
+        background: #f4f7fb;
+        color: #26374f;
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      code {
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+        font-size: 12px;
+        color: #1b4f9c;
+      }
+
+      @media (max-width: 920px) {
+        body {
+          padding: 14px;
+        }
+
+        main {
+          grid-template-columns: 1fr;
+        }
+
+        .left {
+          border-right: 0;
+          border-bottom: 1px solid #d5dde8;
+        }
+
+        .grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <article class="brief">
+      <header>
+        <h1>Mission Brief: <span>Property Manager Company Management Read API V1</span></h1>
+        <p class="subtitle">
+          Add safe read-only backend APIs required before the PM Company Management UI can be implemented. This mission
+          fills discovery and projection gaps only; it must not add write behavior, UI routes, emails, billing authority,
+          contractor organization behavior, or custom permissions.
+        </p>
+      </header>
+
+      <main>
+        <section class="left">
+          <div class="block">
+            <h2>1. Mission Goal</h2>
+            <p>
+              Provide server-authorized, projection-safe read surfaces for landlord owners and PM Company Owners/Admins
+              so the next UI mission can render company relationships, company context, staff membership, and assignment
+              state without raw-ID entry or cross-tenant/company leakage.
+            </p>
+          </div>
+
+          <div class="block">
+            <h2>2. Scope</h2>
+            <div class="grid">
+              <div class="card">
+                <strong>Landlord Reads</strong>
+                <ul>
+                  <li>Safe PM company discovery/lookup for relationship creation.</li>
+                  <li>Landlord-scoped relationship list with safe company label and relationship scope.</li>
+                  <li>Landlord-visible staff assignment summaries under landlord-owned relationships.</li>
+                </ul>
+              </div>
+              <div class="card">
+                <strong>Company Reads</strong>
+                <ul>
+                  <li>Actor company context list for active Company Owner/Admin memberships.</li>
+                  <li>Company-scoped relationship list with safe landlord workspace label.</li>
+                  <li>Company member list and assignment projections for management UI.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div class="block">
+            <h2>3. Required Read Surfaces</h2>
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Surface</th>
+                  <th>Expected Projection</th>
+                  <th>Authority</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Company discovery / lookup</td>
+                  <td>Company reference token/id for API use, safe display label, status if needed.</td>
+                  <td>Authenticated landlord owner; no private company metadata.</td>
+                </tr>
+                <tr>
+                  <td>Landlord relationship listing</td>
+                  <td>Company label, relationship status, scope, lifecycle timestamps, safe assignment summary.</td>
+                  <td>Landlord scope from auth context only.</td>
+                </tr>
+                <tr>
+                  <td>Company relationship listing</td>
+                  <td>Safe landlord workspace label, status, scope, pending acceptance marker, timestamps.</td>
+                  <td>Active Company Owner/Admin membership for that company.</td>
+                </tr>
+                <tr>
+                  <td>Company membership/staff listing</td>
+                  <td>Safe staff label, role, status, lifecycle timestamps needed by UI.</td>
+                  <td>Active Company Owner/Admin membership for that company.</td>
+                </tr>
+                <tr>
+                  <td>Staff assignment projections</td>
+                  <td>Staff label, role, status, scope, relationship reference, lifecycle timestamps.</td>
+                  <td>Company Owner/Admin or landlord owner scoped to the relationship.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="block">
+            <h2>4. Proposed API Shape</h2>
+            <ul>
+              <li><code>GET /api/landlord/property-manager-companies/search?q=...</code></li>
+              <li><code>GET /api/landlord/property-manager-company-relationships</code> with enriched safe summaries.</li>
+              <li><code>GET /api/landlord/property-manager-company-relationships/:relationshipId/staff-assignments</code></li>
+              <li><code>GET /api/property-manager-companies/my-companies</code></li>
+              <li><code>GET /api/property-manager-companies/:companyId/relationships</code></li>
+              <li><code>GET /api/property-manager-companies/:companyId/members</code></li>
+              <li><code>GET /api/property-manager-companies/:companyId/staff-assignments?relationshipId=...</code> safe projection hardening.</li>
+            </ul>
+            <p>
+              Exact route names may follow local conventions during implementation, but the authority and projection
+              contracts above are required.
+            </p>
+          </div>
+
+          <div class="block">
+            <h2>5. Projection Rules</h2>
+            <ul>
+              <li>Raw IDs may be returned only as opaque API references needed for follow-up API calls, never as labels.</li>
+              <li>User-facing labels must use safe company, landlord workspace, and staff display labels.</li>
+              <li>Do not expose audit event IDs, internal membership IDs as labels, token-like fields, private metadata, billing data, or unrelated PII.</li>
+              <li>Assignment summaries must preserve role, status, scope, and timestamps without widening visibility.</li>
+            </ul>
+          </div>
+
+          <div class="block">
+            <h2>6. Security Model</h2>
+            <ul>
+              <li>Landlord reads derive landlord scope from authenticated landlord owner context only.</li>
+              <li>Company reads require active Company Owner/Admin membership for the requested company.</li>
+              <li>Query/body cannot override landlord or company authority.</li>
+              <li>Cross-landlord and cross-company records are hidden or denied fail-closed.</li>
+              <li>Malformed company, membership, relationship, or assignment records fail closed.</li>
+              <li>Billing/settings remain out of scope and must not be included in management projections.</li>
+            </ul>
+          </div>
+        </section>
+
+        <section>
+          <div class="block">
+            <h2>7. Non-Goals</h2>
+            <div class="pill-row">
+              <span class="pill">No UI</span>
+              <span class="pill">No dashboard</span>
+              <span class="pill">No create/update/delete behavior</span>
+              <span class="pill">No emails</span>
+              <span class="pill">No contractor organizations</span>
+              <span class="pill">No billing delegation</span>
+              <span class="pill">No custom permissions</span>
+              <span class="pill">No migrations/backfills</span>
+            </div>
+          </div>
+
+          <div class="block">
+            <h2>8. Existing API Gap</h2>
+            <div class="panel warning">
+              <p>
+                Current write/lifecycle APIs require known company, relationship, and staff user identifiers. The UI
+                cannot safely collect those identifiers from humans. This mission adds the missing read model layer that
+                lets the UI select safe labels while still sending canonical API references server-side.
+              </p>
+            </div>
+          </div>
+
+          <div class="block">
+            <h2>9. Implementation Plan</h2>
+            <ul>
+              <li>Add backend read service helpers near existing PM company relationship/assignment services.</li>
+              <li>Reuse existing Firestore collection constants and projection-safe patterns.</li>
+              <li>Add landlord routes under the existing landlord PM company route namespace.</li>
+              <li>Add company routes under <code>/api/property-manager-companies</code>.</li>
+              <li>Keep existing write APIs unchanged except for projection hardening if needed.</li>
+            </ul>
+          </div>
+
+          <div class="block">
+            <h2>10. Tests</h2>
+            <ul>
+              <li>Company discovery returns only safe active company projections.</li>
+              <li>Landlord relationship list is auth-landlord scoped and includes safe assignment summary.</li>
+              <li>Company relationship list requires active Company Owner/Admin and denies non-admin roles.</li>
+              <li>Company member list includes active, suspended, and removed members with safe staff labels, role, status, and no private metadata.</li>
+              <li>Landlord and company assignment projections deny cross-landlord/cross-company reads.</li>
+              <li>Malformed records and unknown roles/statuses fail closed.</li>
+            </ul>
+          </div>
+
+          <div class="block">
+            <h2>11. QA / Validation</h2>
+            <ul>
+              <li>Focused backend route/service tests for each read surface.</li>
+              <li>Cross-landlord and cross-company denial tests.</li>
+              <li>Safe projection tests for no audit IDs, no raw IDs as labels, no private metadata leakage.</li>
+              <li>Backend build.</li>
+              <li><code>git diff --check</code>.</li>
+              <li>No frontend build required unless implementation unexpectedly touches frontend, which is out of scope.</li>
+            </ul>
+          </div>
+
+          <div class="block">
+            <h2>12. Risks</h2>
+            <ul>
+              <li>Company discovery could overexpose private company data if not tightly projected.</li>
+              <li>Staff labels may be limited until user profile display-name data is available; email-safe labels may be needed.</li>
+              <li>Landlord-visible staff assignment summaries must not become staff management authority.</li>
+              <li>Relationship assignment summaries must not imply billing/settings access.</li>
+            </ul>
+          </div>
+
+          <div class="block">
+            <h2>13. Acceptance Criteria</h2>
+            <ul>
+              <li>All required read surfaces exist and are covered by backend tests.</li>
+              <li>Landlord reads cannot escape authenticated landlord scope.</li>
+              <li>Company reads cannot escape active Company Owner/Admin company scope.</li>
+              <li>Safe projections include labels/status/scope/timestamps and exclude private metadata.</li>
+              <li>No write behavior, UI, emails, billing delegation, contractor orgs, custom permissions, or migrations are added.</li>
+            </ul>
+          </div>
+
+          <div class="block">
+            <h2>14. Merge Readiness Criteria</h2>
+            <div class="panel success">
+              <ul>
+                <li>Mission Brief reviewed and accepted before implementation.</li>
+                <li>Focused backend tests pass.</li>
+                <li>Backend build passes.</li>
+                <li><code>git diff --check</code> passes.</li>
+                <li>Contract review confirms safe projections and no scope creep.</li>
+                <li>PR remains draft until checks and contract review are complete.</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="block">
+            <h2>15. Next Mission Unblocked</h2>
+            <p>
+              After this read API lands, the UI mission
+              <code>feat/property-manager-company-management-ui-v1</code> can proceed with safe selectable company,
+              relationship, member, and assignment data.
+            </p>
+          </div>
+        </section>
+      </main>
+    </article>
+  </body>
+</html>
