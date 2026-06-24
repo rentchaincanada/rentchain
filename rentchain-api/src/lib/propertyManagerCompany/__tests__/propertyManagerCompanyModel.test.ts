@@ -5,9 +5,13 @@ import {
   createLandlordCompanyRelationship,
   createPropertyManagerCompany,
   createPropertyManagerCompanyMembership,
+  createPropertyManagerCompanyStaffAssignment,
   removePropertyManagerCompanyMembership,
+  removePropertyManagerCompanyStaffAssignment,
+  reactivatePropertyManagerCompanyStaffAssignment,
   suspendLandlordCompanyRelationship,
   suspendPropertyManagerCompanyMembership,
+  suspendPropertyManagerCompanyStaffAssignment,
   terminateLandlordCompanyRelationship,
 } from "../propertyManagerCompanyModel";
 
@@ -214,5 +218,214 @@ describe("property manager company model foundations", () => {
         createdByLandlordOwnerUserId: "landlord-owner-1",
       })
     ).toThrow(new PropertyManagerCompanyValidationError("company_billing_scope_not_allowed"));
+  });
+
+  it("creates staff assignments only under active membership and active relationship scope ceilings", () => {
+    const pending = createLandlordCompanyRelationship({
+      landlordId: "landlord-1",
+      propertyManagerCompanyId: "pm-company-1",
+      propertyScope: {
+        mode: "selected_properties",
+        propertyIds: ["property-a", "property-b"],
+      },
+      workspaceScopes: ["dashboard", "operations"],
+      createdByLandlordOwnerUserId: "landlord-owner-1",
+      createdAt: "2026-06-24T02:00:00.000Z",
+    });
+    const relationship = activateLandlordCompanyRelationship(pending, {
+      acceptedByCompanyAdminUserId: "company-admin-1",
+      startedAt: "2026-06-24T03:00:00.000Z",
+    });
+    const adminMembership = createPropertyManagerCompanyMembership({
+      companyId: "pm-company-1",
+      userId: "company-admin-1",
+      role: "company_admin",
+      createdByUserId: "company-owner-1",
+    });
+    const staffMembership = createPropertyManagerCompanyMembership({
+      companyId: "pm-company-1",
+      userId: "staff-user-1",
+      role: "property_manager",
+      createdByUserId: "company-admin-1",
+    });
+
+    const assignment = createPropertyManagerCompanyStaffAssignment({
+      relationship,
+      assignedByMembership: adminMembership,
+      staffMembership,
+      staffRole: "property_manager",
+      propertyScope: { mode: "selected_properties", propertyIds: ["property-a"] },
+      workspaceScopes: ["dashboard"],
+      createdAt: "2026-06-24T04:00:00.000Z",
+    });
+
+    expect(assignment).toMatchObject({
+      propertyManagerCompanyId: "pm-company-1",
+      relationshipId: relationship.relationshipId,
+      staffUserId: "staff-user-1",
+      assignedByUserId: "company-admin-1",
+      staffRole: "property_manager",
+      status: "active",
+      propertyScope: { mode: "selected_properties", propertyIds: ["property-a"] },
+      workspaceScopes: ["dashboard"],
+      createdAt: "2026-06-24T04:00:00.000Z",
+      suspendedAt: null,
+      removedAt: null,
+    });
+    expect(assignment.assignmentId).toMatch(/^pm_staff_assignment_/);
+
+    expect(() =>
+      createPropertyManagerCompanyStaffAssignment({
+        relationship,
+        assignedByMembership: adminMembership,
+        staffMembership,
+        staffRole: "property_manager",
+        propertyScope: { mode: "selected_properties", propertyIds: ["property-a", "property-b", "property-c"] },
+        workspaceScopes: ["dashboard"],
+      })
+    ).toThrow(new PropertyManagerCompanyValidationError("assignment_scope_exceeds_relationship_scope"));
+
+    expect(() =>
+      createPropertyManagerCompanyStaffAssignment({
+        relationship,
+        assignedByMembership: adminMembership,
+        staffMembership,
+        staffRole: "property_manager",
+        propertyScope: { mode: "selected_properties", propertyIds: ["property-a"] },
+        workspaceScopes: ["dashboard", "operations", "settings_billing"],
+      })
+    ).toThrow(new PropertyManagerCompanyValidationError("company_billing_scope_not_allowed"));
+
+    expect(() =>
+      createPropertyManagerCompanyStaffAssignment({
+        relationship: pending,
+        assignedByMembership: adminMembership,
+        staffMembership,
+        staffRole: "property_manager",
+        propertyScope: { mode: "selected_properties", propertyIds: ["property-a"] },
+        workspaceScopes: ["dashboard"],
+      })
+    ).toThrow(new PropertyManagerCompanyValidationError("relationship_not_active"));
+  });
+
+  it("requires Company Owner/Admin authority and predefined assignment roles", () => {
+    const relationship = activateLandlordCompanyRelationship(
+      createLandlordCompanyRelationship({
+        landlordId: "landlord-1",
+        propertyManagerCompanyId: "pm-company-1",
+        propertyScope: { mode: "all_current_properties", propertyIds: [] },
+        workspaceScopes: ["dashboard", "operations"],
+        createdByLandlordOwnerUserId: "landlord-owner-1",
+      }),
+      { acceptedByCompanyAdminUserId: "company-admin-1" }
+    );
+    const propertyManagerMembership = createPropertyManagerCompanyMembership({
+      companyId: "pm-company-1",
+      userId: "property-manager-1",
+      role: "property_manager",
+      createdByUserId: "company-admin-1",
+    });
+    const staffMembership = createPropertyManagerCompanyMembership({
+      companyId: "pm-company-1",
+      userId: "staff-user-1",
+      role: "leasing_agent",
+      createdByUserId: "company-admin-1",
+    });
+
+    expect(() =>
+      createPropertyManagerCompanyStaffAssignment({
+        relationship,
+        assignedByMembership: propertyManagerMembership,
+        staffMembership,
+        staffRole: "leasing_agent",
+        propertyScope: { mode: "all_current_properties", propertyIds: [] },
+        workspaceScopes: ["dashboard"],
+      })
+    ).toThrow(new PropertyManagerCompanyValidationError("company_assignment_manager_required"));
+
+    const adminMembership = createPropertyManagerCompanyMembership({
+      companyId: "pm-company-1",
+      userId: "company-admin-1",
+      role: "company_admin",
+      createdByUserId: "company-owner-1",
+    });
+    expect(() =>
+      createPropertyManagerCompanyStaffAssignment({
+        relationship,
+        assignedByMembership: adminMembership,
+        staffMembership,
+        staffRole: "company_admin",
+        propertyScope: { mode: "all_current_properties", propertyIds: [] },
+        workspaceScopes: ["dashboard"],
+      })
+    ).toThrow(new PropertyManagerCompanyValidationError("invalid_staff_assignment_role"));
+  });
+
+  it("supports staff assignment suspend, reactivate, and remove without hard delete", () => {
+    const relationship = activateLandlordCompanyRelationship(
+      createLandlordCompanyRelationship({
+        landlordId: "landlord-1",
+        propertyManagerCompanyId: "pm-company-1",
+        propertyScope: { mode: "all_current_properties", propertyIds: [] },
+        workspaceScopes: ["dashboard", "operations"],
+        createdByLandlordOwnerUserId: "landlord-owner-1",
+      }),
+      { acceptedByCompanyAdminUserId: "company-admin-1" }
+    );
+    const adminMembership = createPropertyManagerCompanyMembership({
+      companyId: "pm-company-1",
+      userId: "company-admin-1",
+      role: "company_admin",
+      createdByUserId: "company-owner-1",
+    });
+    const staffMembership = createPropertyManagerCompanyMembership({
+      companyId: "pm-company-1",
+      userId: "staff-user-1",
+      role: "maintenance_coordinator",
+      createdByUserId: "company-admin-1",
+    });
+    const assignment = createPropertyManagerCompanyStaffAssignment({
+      relationship,
+      assignedByMembership: adminMembership,
+      staffMembership,
+      staffRole: "maintenance_coordinator",
+      propertyScope: { mode: "all_current_properties", propertyIds: [] },
+      workspaceScopes: ["operations"],
+    });
+
+    const suspended = suspendPropertyManagerCompanyStaffAssignment(assignment, {
+      actorMembership: adminMembership,
+      suspendedAt: "2026-06-25T00:00:00.000Z",
+      reason: "Coverage pause",
+    });
+    expect(suspended).toMatchObject({
+      status: "suspended",
+      suspendedByUserId: "company-admin-1",
+      suspendedReason: "Coverage pause",
+    });
+
+    const reactivated = reactivatePropertyManagerCompanyStaffAssignment(suspended, {
+      actorMembership: adminMembership,
+      staffMembership,
+      relationship,
+      reactivatedAt: "2026-06-26T00:00:00.000Z",
+    });
+    expect(reactivated).toMatchObject({
+      status: "active",
+      reactivatedByUserId: "company-admin-1",
+      reactivatedAt: "2026-06-26T00:00:00.000Z",
+    });
+
+    const removed = removePropertyManagerCompanyStaffAssignment(reactivated, {
+      actorMembership: adminMembership,
+      removedAt: "2026-06-27T00:00:00.000Z",
+      reason: "Staff changed",
+    });
+    expect(removed).toMatchObject({
+      status: "removed",
+      removedByUserId: "company-admin-1",
+      removedReason: "Staff changed",
+    });
+    expect(removed.assignmentId).toBe(assignment.assignmentId);
   });
 });

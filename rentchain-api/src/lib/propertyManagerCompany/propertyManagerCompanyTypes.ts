@@ -19,6 +19,21 @@ export const PROPERTY_MANAGER_COMPANY_ROLES = [
 
 export type PropertyManagerCompanyRole = (typeof PROPERTY_MANAGER_COMPANY_ROLES)[number];
 
+export const PROPERTY_MANAGER_COMPANY_STAFF_ASSIGNMENT_ROLES = [
+  "regional_manager",
+  "property_manager",
+  "leasing_agent",
+  "office_administrator",
+  "maintenance_coordinator",
+  "read_only_staff",
+] as const;
+
+export type PropertyManagerCompanyStaffAssignmentRole = (typeof PROPERTY_MANAGER_COMPANY_STAFF_ASSIGNMENT_ROLES)[number];
+
+export const PROPERTY_MANAGER_COMPANY_STAFF_ASSIGNMENT_STATUSES = ["active", "suspended", "removed"] as const;
+
+export type PropertyManagerCompanyStaffAssignmentStatus = (typeof PROPERTY_MANAGER_COMPANY_STAFF_ASSIGNMENT_STATUSES)[number];
+
 export const LANDLORD_COMPANY_RELATIONSHIP_STATUSES = ["pending", "active", "suspended", "terminated"] as const;
 
 export type LandlordCompanyRelationshipStatus = (typeof LANDLORD_COMPANY_RELATIONSHIP_STATUSES)[number];
@@ -66,6 +81,10 @@ export const PROPERTY_MANAGER_COMPANY_AUDIT_EVENT_TYPES = [
   "landlord_company_relationship_suspended",
   "landlord_company_relationship_reactivated",
   "landlord_company_relationship_terminated",
+  "staff_assignment_created",
+  "staff_assignment_suspended",
+  "staff_assignment_reactivated",
+  "staff_assignment_removed",
   "property_manager_company_staff_assignment_changed",
 ] as const;
 
@@ -140,6 +159,29 @@ export type LandlordCompanyRelationship = {
   auditEventIds: string[];
 };
 
+export type PropertyManagerCompanyStaffAssignment = {
+  assignmentId: string;
+  propertyManagerCompanyId: string;
+  relationshipId: string;
+  staffUserId: string;
+  assignedByUserId: string;
+  staffRole: PropertyManagerCompanyStaffAssignmentRole;
+  status: PropertyManagerCompanyStaffAssignmentStatus;
+  propertyScope: PropertyManagerCompanyPropertyScope;
+  workspaceScopes: PropertyManagerCompanyWorkspaceScope[];
+  createdAt: string;
+  updatedAt: string;
+  suspendedAt: string | null;
+  suspendedByUserId: string | null;
+  suspendedReason: string | null;
+  reactivatedAt: string | null;
+  reactivatedByUserId: string | null;
+  removedAt: string | null;
+  removedByUserId: string | null;
+  removedReason: string | null;
+  auditEventIds: string[];
+};
+
 export type PropertyManagerCompanyEvaluationRequest = {
   actorUserId: string | null;
   actingForLandlordId: string | null;
@@ -150,6 +192,7 @@ export type PropertyManagerCompanyEvaluationRequest = {
   propertyId?: string | null;
   membership?: PropertyManagerCompanyMembership | null;
   relationship?: LandlordCompanyRelationship | null;
+  assignment?: PropertyManagerCompanyStaffAssignment | null;
   explicitDenyReasons?: string[];
 };
 
@@ -168,6 +211,15 @@ export type PropertyManagerCompanyEvaluationReason =
   | "invalid_scope"
   | "relationship_not_active"
   | "relationship_landlord_mismatch"
+  | "missing_staff_assignment"
+  | "invalid_assignment_status"
+  | "invalid_assignment_role"
+  | "invalid_assignment_scope"
+  | "assignment_not_active"
+  | "assignment_actor_mismatch"
+  | "assignment_relationship_mismatch"
+  | "assignment_company_mismatch"
+  | "assignment_scope_exceeds_relationship"
   | "workspace_scope_denied"
   | "property_scope_denied"
   | "role_template_denied"
@@ -188,6 +240,11 @@ export type PropertyManagerCompanyEvaluationDecision = {
 
 export type PropertyManagerCompanyAuditOutcome = "allowed" | "denied" | "created" | "suspended" | "removed" | "terminated" | "failed";
 
+export type PropertyManagerCompanyAuditTransitionStatus =
+  | LandlordCompanyRelationshipStatus
+  | PropertyManagerCompanyMembershipStatus
+  | PropertyManagerCompanyStaffAssignmentStatus;
+
 export type PropertyManagerCompanyAuditEvent = {
   eventId: string;
   eventType: PropertyManagerCompanyAuditEventType;
@@ -196,6 +253,8 @@ export type PropertyManagerCompanyAuditEvent = {
   propertyManagerCompanyId: string | null;
   actingForLandlordId: string | null;
   relationshipId: string | null;
+  assignmentId: string | null;
+  staffUserId: string | null;
   role: PropertyManagerCompanyRole | null;
   scope: PropertyManagerCompanyRelationshipScope | null;
   targetResourceType: PropertyManagerCompanyAuditTargetResourceType;
@@ -204,8 +263,8 @@ export type PropertyManagerCompanyAuditEvent = {
   timestamp: string;
   reason: string | null;
   statusTransition: {
-    from: LandlordCompanyRelationshipStatus | null;
-    to: LandlordCompanyRelationshipStatus | null;
+    from: PropertyManagerCompanyAuditTransitionStatus | null;
+    to: PropertyManagerCompanyAuditTransitionStatus | null;
   } | null;
   metadataOnly: true;
   appendOnly: true;

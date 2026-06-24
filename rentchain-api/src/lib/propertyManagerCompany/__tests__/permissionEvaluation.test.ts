@@ -3,7 +3,9 @@ import {
   activateLandlordCompanyRelationship,
   createLandlordCompanyRelationship,
   createPropertyManagerCompanyMembership,
+  createPropertyManagerCompanyStaffAssignment,
   suspendLandlordCompanyRelationship,
+  suspendPropertyManagerCompanyStaffAssignment,
   terminateLandlordCompanyRelationship,
 } from "../propertyManagerCompanyModel";
 import { evaluatePropertyManagerCompanyAccess } from "../permissionEvaluation";
@@ -39,6 +41,31 @@ function activeRelationship() {
   });
 }
 
+function adminMembership() {
+  return createPropertyManagerCompanyMembership({
+    companyId: "pm-company-1",
+    userId: "company-admin-1",
+    role: "company_admin",
+    createdByUserId: "company-owner-1",
+    createdAt: "2026-06-24T00:00:00.000Z",
+  });
+}
+
+function activeAssignment(role: Parameters<typeof createPropertyManagerCompanyStaffAssignment>[0]["staffRole"] = "property_manager") {
+  return createPropertyManagerCompanyStaffAssignment({
+    relationship: activeRelationship(),
+    assignedByMembership: adminMembership(),
+    staffMembership: activeMembership("property_manager"),
+    staffRole: role,
+    propertyScope: {
+      mode: "selected_properties",
+      propertyIds: ["property-1"],
+    },
+    workspaceScopes: ["dashboard", "operations", "properties"],
+    createdAt: "2026-06-24T04:00:00.000Z",
+  });
+}
+
 const baseRequest = {
   actorUserId: "staff-user-1",
   actingForLandlordId: "landlord-1",
@@ -55,6 +82,7 @@ describe("property manager company permission evaluation", () => {
       ...baseRequest,
       membership: activeMembership(),
       relationship: activeRelationship(),
+      assignment: activeAssignment(),
     });
 
     expect(decision).toMatchObject({
@@ -68,12 +96,27 @@ describe("property manager company permission evaluation", () => {
     });
   });
 
+  it("does not imply landlord access from company membership without staff assignment", () => {
+    const decision = evaluatePropertyManagerCompanyAccess({
+      ...baseRequest,
+      membership: activeMembership(),
+      relationship: activeRelationship(),
+      assignment: null,
+    });
+
+    expect(decision).toMatchObject({
+      allowed: false,
+      reason: "missing_staff_assignment",
+    });
+  });
+
   it("fails closed when membership is missing, inactive, or mismatched to actor", () => {
     expect(
       evaluatePropertyManagerCompanyAccess({
         ...baseRequest,
         membership: null,
         relationship: activeRelationship(),
+        assignment: activeAssignment(),
       })
     ).toMatchObject({
       allowed: false,
@@ -89,6 +132,7 @@ describe("property manager company permission evaluation", () => {
         ...baseRequest,
         membership: suspendedMembership,
         relationship: activeRelationship(),
+        assignment: activeAssignment(),
       })
     ).toMatchObject({
       allowed: false,
@@ -103,6 +147,7 @@ describe("property manager company permission evaluation", () => {
           userId: "other-user",
         },
         relationship: activeRelationship(),
+        assignment: activeAssignment(),
       })
     ).toMatchObject({
       allowed: false,
@@ -116,6 +161,7 @@ describe("property manager company permission evaluation", () => {
         ...baseRequest,
         membership: activeMembership(),
         relationship: pendingRelationship(),
+        assignment: activeAssignment(),
       })
     ).toMatchObject({
       allowed: false,
@@ -131,6 +177,7 @@ describe("property manager company permission evaluation", () => {
         ...baseRequest,
         membership: activeMembership(),
         relationship: suspended,
+        assignment: activeAssignment(),
       })
     ).toMatchObject({
       allowed: false,
@@ -146,6 +193,7 @@ describe("property manager company permission evaluation", () => {
         ...baseRequest,
         membership: activeMembership(),
         relationship: terminated,
+        assignment: activeAssignment(),
       })
     ).toMatchObject({
       allowed: false,
@@ -161,6 +209,7 @@ describe("property manager company permission evaluation", () => {
         targetResourceType: "landlord_workspace",
         membership: activeMembership(),
         relationship: activeRelationship(),
+        assignment: activeAssignment(),
       })
     ).toMatchObject({
       allowed: false,
@@ -174,6 +223,7 @@ describe("property manager company permission evaluation", () => {
         targetResourceId: "property-2",
         membership: activeMembership(),
         relationship: activeRelationship(),
+        assignment: activeAssignment(),
       })
     ).toMatchObject({
       allowed: false,
@@ -190,6 +240,7 @@ describe("property manager company permission evaluation", () => {
         targetResourceType: "billing_settings",
         membership: activeMembership("company_owner"),
         relationship: activeRelationship(),
+        assignment: activeAssignment("regional_manager"),
       })
     ).toMatchObject({
       allowed: false,
@@ -204,6 +255,7 @@ describe("property manager company permission evaluation", () => {
         action: "edit",
         membership: activeMembership("read_only_staff"),
         relationship: activeRelationship(),
+        assignment: activeAssignment("read_only_staff"),
       })
     ).toMatchObject({
       allowed: false,
@@ -216,6 +268,7 @@ describe("property manager company permission evaluation", () => {
         action: "edit",
         membership: activeMembership("property_manager"),
         relationship: activeRelationship(),
+        assignment: activeAssignment("property_manager"),
       })
     ).toMatchObject({
       allowed: true,
@@ -232,6 +285,7 @@ describe("property manager company permission evaluation", () => {
           role: "custom_role" as any,
         },
         relationship: activeRelationship(),
+        assignment: activeAssignment(),
       })
     ).toMatchObject({
       allowed: false,
@@ -246,6 +300,7 @@ describe("property manager company permission evaluation", () => {
           status: "paused" as any,
         },
         relationship: activeRelationship(),
+        assignment: activeAssignment(),
       })
     ).toMatchObject({
       allowed: false,
@@ -260,6 +315,7 @@ describe("property manager company permission evaluation", () => {
           ...activeRelationship(),
           status: "paused" as any,
         },
+        assignment: activeAssignment(),
       })
     ).toMatchObject({
       allowed: false,
@@ -280,10 +336,132 @@ describe("property manager company permission evaluation", () => {
             workspaceScopes: ["properties"],
           },
         },
+        assignment: activeAssignment(),
       })
     ).toMatchObject({
       allowed: false,
       reason: "invalid_scope",
+    });
+  });
+
+  it("fails closed for suspended, removed, mismatched, or malformed assignments", () => {
+    const active = activeAssignment();
+    expect(
+      evaluatePropertyManagerCompanyAccess({
+        ...baseRequest,
+        membership: activeMembership(),
+        relationship: activeRelationship(),
+        assignment: suspendPropertyManagerCompanyStaffAssignment(active, {
+          actorMembership: adminMembership(),
+          suspendedAt: "2026-06-25T00:00:00.000Z",
+        }),
+      })
+    ).toMatchObject({
+      allowed: false,
+      reason: "assignment_not_active",
+    });
+
+    expect(
+      evaluatePropertyManagerCompanyAccess({
+        ...baseRequest,
+        membership: activeMembership(),
+        relationship: activeRelationship(),
+        assignment: {
+          ...active,
+          status: "removed",
+        },
+      })
+    ).toMatchObject({
+      allowed: false,
+      reason: "assignment_not_active",
+    });
+
+    expect(
+      evaluatePropertyManagerCompanyAccess({
+        ...baseRequest,
+        membership: activeMembership(),
+        relationship: activeRelationship(),
+        assignment: {
+          ...active,
+          staffUserId: "other-user",
+        },
+      })
+    ).toMatchObject({
+      allowed: false,
+      reason: "assignment_actor_mismatch",
+    });
+
+    expect(
+      evaluatePropertyManagerCompanyAccess({
+        ...baseRequest,
+        membership: activeMembership(),
+        relationship: activeRelationship(),
+        assignment: {
+          ...active,
+          relationshipId: "other-relationship",
+        },
+      })
+    ).toMatchObject({
+      allowed: false,
+      reason: "assignment_relationship_mismatch",
+    });
+
+    expect(
+      evaluatePropertyManagerCompanyAccess({
+        ...baseRequest,
+        membership: activeMembership(),
+        relationship: activeRelationship(),
+        assignment: {
+          ...active,
+          staffRole: "custom_role" as any,
+        },
+      })
+    ).toMatchObject({
+      allowed: false,
+      reason: "invalid_assignment_role",
+    });
+  });
+
+  it("enforces assignment scope as a ceiling below the landlord relationship", () => {
+    const dashboardOnly = createPropertyManagerCompanyStaffAssignment({
+      relationship: activeRelationship(),
+      assignedByMembership: adminMembership(),
+      staffMembership: activeMembership("property_manager"),
+      staffRole: "property_manager",
+      propertyScope: {
+        mode: "selected_properties",
+        propertyIds: ["property-1"],
+      },
+      workspaceScopes: ["dashboard"],
+    });
+
+    expect(
+      evaluatePropertyManagerCompanyAccess({
+        ...baseRequest,
+        routeWorkspace: "operations",
+        targetResourceType: "landlord_workspace",
+        membership: activeMembership(),
+        relationship: activeRelationship(),
+        assignment: dashboardOnly,
+      })
+    ).toMatchObject({
+      allowed: false,
+      reason: "workspace_scope_denied",
+    });
+
+    expect(
+      evaluatePropertyManagerCompanyAccess({
+        ...baseRequest,
+        membership: activeMembership(),
+        relationship: activeRelationship(),
+        assignment: {
+          ...activeAssignment(),
+          propertyScope: { mode: "selected_properties", propertyIds: ["property-1", "property-2"] },
+        },
+      })
+    ).toMatchObject({
+      allowed: false,
+      reason: "assignment_scope_exceeds_relationship",
     });
   });
 });
