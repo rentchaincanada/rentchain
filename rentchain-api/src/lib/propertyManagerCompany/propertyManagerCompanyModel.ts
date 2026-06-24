@@ -236,8 +236,14 @@ export function createLandlordCompanyRelationship(input: RelationshipInput): Lan
   if (!isLandlordCompanyRelationshipStatus(status)) {
     throw new PropertyManagerCompanyValidationError("invalid_relationship_status");
   }
+  if (status !== "pending") {
+    throw new PropertyManagerCompanyValidationError("relationship_activation_requires_company_acceptance");
+  }
   const relationshipScope = buildRelationshipScope(input);
-  const startedAt = input.startedAt ? parseDate(input.startedAt, "invalid_started_at") : status === "active" ? createdAt : null;
+  if (input.acceptedByCompanyAdminUserId) {
+    throw new PropertyManagerCompanyValidationError("relationship_activation_requires_company_acceptance");
+  }
+  if (input.startedAt) throw new PropertyManagerCompanyValidationError("relationship_activation_requires_company_acceptance");
   return {
     relationshipId: input.relationshipId || hashId("landlord_pm_relationship", [landlordId, propertyManagerCompanyId, createdAt]),
     landlordId,
@@ -245,10 +251,10 @@ export function createLandlordCompanyRelationship(input: RelationshipInput): Lan
     status,
     relationshipScope,
     createdByLandlordOwnerUserId,
-    acceptedByCompanyAdminUserId: input.acceptedByCompanyAdminUserId ? cleanString(input.acceptedByCompanyAdminUserId, 200) : null,
+    acceptedByCompanyAdminUserId: null,
     createdAt,
     updatedAt: createdAt,
-    startedAt,
+    startedAt: null,
     suspendedAt: null,
     suspendedByUserId: null,
     reactivatedAt: null,

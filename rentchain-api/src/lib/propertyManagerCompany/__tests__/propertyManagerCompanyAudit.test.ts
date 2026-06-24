@@ -29,6 +29,7 @@ describe("property manager company audit foundations", () => {
       eventType: "landlord_company_relationship_activated",
       actorUserId: "company-admin-1",
       actorCompanyId: "pm-company-1",
+      propertyManagerCompanyId: "pm-company-1",
       actingForLandlordId: "landlord-1",
       relationshipId: activeRelationship.relationshipId,
       role: "company_admin",
@@ -38,12 +39,14 @@ describe("property manager company audit foundations", () => {
       outcome: "allowed",
       timestamp: "2026-06-24T02:00:00.000Z",
       reason: "relationship accepted",
+      statusTransition: { from: "pending", to: "active" },
     });
 
     expect(event).toMatchObject({
       eventType: "landlord_company_relationship_activated",
       actorUserId: "company-admin-1",
       actorCompanyId: "pm-company-1",
+      propertyManagerCompanyId: "pm-company-1",
       actingForLandlordId: "landlord-1",
       relationshipId: activeRelationship.relationshipId,
       role: "company_admin",
@@ -51,6 +54,7 @@ describe("property manager company audit foundations", () => {
       targetResourceId: activeRelationship.relationshipId,
       outcome: "allowed",
       timestamp: "2026-06-24T02:00:00.000Z",
+      statusTransition: { from: "pending", to: "active" },
       metadataOnly: true,
       appendOnly: true,
       immutable: true,
@@ -64,6 +68,7 @@ describe("property manager company audit foundations", () => {
       eventType: "property_manager_company_membership_created",
       actorUserId: "company-admin-1",
       actorCompanyId: "pm-company-1",
+      propertyManagerCompanyId: "pm-company-1",
       role: "company_admin",
       targetResourceType: "company_membership",
       targetResourceId: "membership-1",
@@ -85,22 +90,26 @@ describe("property manager company audit foundations", () => {
       eventType: "landlord_company_relationship_terminated",
       actorUserId: "landlord-owner-1",
       actingForLandlordId: "landlord-1",
+      propertyManagerCompanyId: "pm-company-1",
       relationshipId: "relationship-1",
       targetResourceType: "landlord_company_relationship",
       targetResourceId: "relationship-1",
       outcome: "terminated",
       timestamp: "2026-06-26T00:00:00.000Z",
       reason: "Contract ended",
+      statusTransition: { from: "suspended", to: "terminated" },
     });
 
     expect(terminationEvent).toMatchObject({
       eventType: "landlord_company_relationship_terminated",
       actorUserId: "landlord-owner-1",
       actorCompanyId: null,
+      propertyManagerCompanyId: "pm-company-1",
       actingForLandlordId: "landlord-1",
       relationshipId: "relationship-1",
       outcome: "terminated",
       reason: "Contract ended",
+      statusTransition: { from: "suspended", to: "terminated" },
       metadataOnly: true,
     });
   });
