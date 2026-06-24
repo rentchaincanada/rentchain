@@ -193,6 +193,7 @@ export type PropertyManagerCompanyAuditEvent = {
   eventType: PropertyManagerCompanyAuditEventType;
   actorUserId: string;
   actorCompanyId: string | null;
+  propertyManagerCompanyId: string | null;
   actingForLandlordId: string | null;
   relationshipId: string | null;
   role: PropertyManagerCompanyRole | null;
@@ -202,6 +203,10 @@ export type PropertyManagerCompanyAuditEvent = {
   outcome: PropertyManagerCompanyAuditOutcome;
   timestamp: string;
   reason: string | null;
+  statusTransition: {
+    from: LandlordCompanyRelationshipStatus | null;
+    to: LandlordCompanyRelationshipStatus | null;
+  } | null;
   metadataOnly: true;
   appendOnly: true;
   immutable: true;

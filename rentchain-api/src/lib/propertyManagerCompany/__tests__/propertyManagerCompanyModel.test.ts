@@ -111,6 +111,36 @@ describe("property manager company model foundations", () => {
     expect(relationship.relationshipId).toMatch(/^landlord_pm_relationship_/);
   });
 
+  it("does not allow relationship creation to bypass company-admin acceptance", () => {
+    expect(() =>
+      createLandlordCompanyRelationship({
+        landlordId: "landlord-1",
+        propertyManagerCompanyId: "pm-company-1",
+        propertyScope: {
+          mode: "all_current_properties",
+          propertyIds: [],
+        },
+        workspaceScopes: ["dashboard"],
+        createdByLandlordOwnerUserId: "landlord-owner-1",
+        status: "active",
+      })
+    ).toThrow(new PropertyManagerCompanyValidationError("relationship_activation_requires_company_acceptance"));
+
+    expect(() =>
+      createLandlordCompanyRelationship({
+        landlordId: "landlord-1",
+        propertyManagerCompanyId: "pm-company-1",
+        propertyScope: {
+          mode: "all_current_properties",
+          propertyIds: [],
+        },
+        workspaceScopes: ["dashboard"],
+        createdByLandlordOwnerUserId: "landlord-owner-1",
+        acceptedByCompanyAdminUserId: "company-admin-1",
+      })
+    ).toThrow(new PropertyManagerCompanyValidationError("relationship_activation_requires_company_acceptance"));
+  });
+
   it("supports active, suspended, reactivated, and terminated relationship transitions", () => {
     const pending = createLandlordCompanyRelationship({
       landlordId: "landlord-1",

@@ -160,6 +160,7 @@ import landlordInboxRoutes from "./routes/landlordInboxRoutes";
 import landlordDecisionInboxRoutes from "./routes/landlordDecisionInboxRoutes";
 import landlordDecisionQueueRoutes from "./routes/landlordDecisionQueueRoutes";
 import delegatedAccessInvitationRoutes, { delegatedAccessSelfRoutes } from "./routes/delegatedAccessInvitationRoutes";
+import propertyManagerCompanyRelationshipRoutes from "./routes/propertyManagerCompanyRelationshipRoutes";
 import landlordInstitutionalExportGenerationRoutes from "./routes/landlordInstitutionalExportGenerationRoutes";
 import landlordInstitutionExportsRoutes from "./routes/landlordInstitutionExportsRoutes";
 import landlordAuditComplianceRoutes from "./routes/landlordAuditComplianceRoutes";
@@ -520,6 +521,8 @@ app.use("/api/delegated-access", routeSource("delegatedAccessInvitationRoutes.ts
 console.log("[route-mount] delegatedAccessSelfRoutes mounted at /api/delegated-access");
 app.use("/api/landlord", routeSource("delegatedAccessInvitationRoutes.ts"), delegatedAccessInvitationRoutes);
 console.log("[route-mount] delegatedAccessInvitationRoutes mounted at /api/landlord");
+app.use("/api/landlord", routeSource("propertyManagerCompanyRelationshipRoutes.ts"), propertyManagerCompanyRelationshipRoutes);
+console.log("[route-mount] propertyManagerCompanyRelationshipRoutes mounted at /api/landlord");
 app.use("/api/landlord/institutional-exports", rateLimitEvidenceExportReview);
 app.use("/api/landlord", routeSource("landlordInstitutionalExportGenerationRoutes.ts"), landlordInstitutionalExportGenerationRoutes);
 console.log("[route-mount] landlordInstitutionalExportGenerationRoutes mounted at /api/landlord");

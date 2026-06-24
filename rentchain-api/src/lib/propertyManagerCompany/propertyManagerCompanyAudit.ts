@@ -15,6 +15,7 @@ type AuditInput = {
   eventType: string;
   actorUserId: string;
   actorCompanyId?: string | null;
+  propertyManagerCompanyId?: string | null;
   actingForLandlordId?: string | null;
   relationshipId?: string | null;
   role?: PropertyManagerCompanyRole | null;
@@ -24,6 +25,7 @@ type AuditInput = {
   outcome: PropertyManagerCompanyAuditOutcome;
   timestamp?: string;
   reason?: string | null;
+  statusTransition?: PropertyManagerCompanyAuditEvent["statusTransition"];
 };
 
 function cleanString(value: unknown, max = 500): string {
@@ -65,6 +67,7 @@ function stableEventId(input: Omit<AuditInput, "eventId"> & { timestamp: string 
         input.eventType,
         input.actorUserId,
         input.actorCompanyId,
+        input.propertyManagerCompanyId,
         input.actingForLandlordId,
         input.relationshipId,
         input.role,
@@ -87,6 +90,7 @@ export function buildPropertyManagerCompanyAuditEvent(input: AuditInput): Proper
     eventType: assertAuditEventType(input.eventType),
     actorUserId: requireString(input.actorUserId, "missing_actor_user_id"),
     actorCompanyId: input.actorCompanyId ? cleanString(input.actorCompanyId, 200) : null,
+    propertyManagerCompanyId: input.propertyManagerCompanyId ? cleanString(input.propertyManagerCompanyId, 200) : null,
     actingForLandlordId: input.actingForLandlordId ? cleanString(input.actingForLandlordId, 200) : null,
     relationshipId: input.relationshipId ? cleanString(input.relationshipId, 200) : null,
     role: input.role || null,
@@ -96,6 +100,7 @@ export function buildPropertyManagerCompanyAuditEvent(input: AuditInput): Proper
     outcome: input.outcome,
     timestamp,
     reason: input.reason ? cleanString(input.reason, 500) : null,
+    statusTransition: input.statusTransition || null,
     metadataOnly: true,
     appendOnly: true,
     immutable: true,

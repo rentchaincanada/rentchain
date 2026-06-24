@@ -1,0 +1,450 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mission Brief - Property Manager Company Relationship API V1</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: #eef1f5;
+        color: #142033;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        padding: 32px;
+        background: #eef1f5;
+      }
+
+      .brief {
+        max-width: 1280px;
+        margin: 0 auto;
+        background: #ffffff;
+        border: 1px solid #d7dde7;
+        box-shadow: 0 18px 50px rgba(20, 32, 51, 0.12);
+      }
+
+      header {
+        padding: 28px 32px;
+        border-bottom: 1px solid #d7dde7;
+        background: #142033;
+        color: #ffffff;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin-top: 0;
+      }
+
+      h1 {
+        margin-bottom: 8px;
+        font-size: 26px;
+        line-height: 1.2;
+        letter-spacing: 0;
+      }
+
+      h1 span {
+        color: #8fd6ff;
+      }
+
+      .subtitle {
+        max-width: 900px;
+        color: #d6e7f4;
+        font-size: 15px;
+        line-height: 1.5;
+      }
+
+      main {
+        display: grid;
+        grid-template-columns: minmax(0, 1.08fr) minmax(360px, 0.92fr);
+      }
+
+      section {
+        padding: 28px 32px;
+      }
+
+      .left {
+        border-right: 1px solid #d7dde7;
+      }
+
+      .block {
+        margin-bottom: 24px;
+      }
+
+      .block:last-child {
+        margin-bottom: 0;
+      }
+
+      h2 {
+        margin-bottom: 10px;
+        color: #142033;
+        font-size: 15px;
+        line-height: 1.25;
+        letter-spacing: 0;
+        text-transform: uppercase;
+      }
+
+      h3 {
+        margin-bottom: 8px;
+        color: #2b3c55;
+        font-size: 14px;
+        line-height: 1.3;
+      }
+
+      p,
+      li,
+      td,
+      th {
+        font-size: 14px;
+        line-height: 1.48;
+      }
+
+      ul {
+        margin: 0;
+        padding-left: 18px;
+      }
+
+      li + li {
+        margin-top: 6px;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .card {
+        padding: 14px;
+        border: 1px solid #d7dde7;
+        background: #f8fafc;
+      }
+
+      .card strong {
+        display: block;
+        margin-bottom: 5px;
+        color: #142033;
+      }
+
+      .pill-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .pill {
+        padding: 6px 9px;
+        border: 1px solid #c8d2df;
+        background: #f4f7fb;
+        color: #26374f;
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .panel {
+        padding: 14px 16px;
+        border-left: 4px solid #246bfe;
+        background: #f4f8ff;
+      }
+
+      .warning {
+        border-left-color: #b7791f;
+        background: #fff8e8;
+      }
+
+      .success {
+        border-left-color: #16895a;
+        background: #f0fff7;
+      }
+
+      .table {
+        width: 100%;
+        border-collapse: collapse;
+        border: 1px solid #d7dde7;
+        background: #ffffff;
+      }
+
+      .table th,
+      .table td {
+        padding: 9px 10px;
+        border-bottom: 1px solid #e4e9f1;
+        text-align: left;
+        vertical-align: top;
+      }
+
+      .table th {
+        background: #f4f7fb;
+        color: #142033;
+        font-size: 12px;
+        text-transform: uppercase;
+      }
+
+      code {
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+        font-size: 12px;
+        color: #1b4f9c;
+      }
+
+      .compact li {
+        font-size: 13px;
+      }
+
+      @media (max-width: 920px) {
+        body {
+          padding: 16px;
+        }
+
+        main {
+          grid-template-columns: 1fr;
+        }
+
+        .left {
+          border-right: 0;
+          border-bottom: 1px solid #d7dde7;
+        }
+
+        .grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <article class="brief">
+      <header>
+        <h1>Next Mission: <span>feat/property-manager-company-relationship-api-v1</span></h1>
+        <div class="subtitle">
+          Backend/API-only lifecycle endpoints for landlord-to-property-manager-company relationships, built on the
+          merged Property Manager Company foundations. The mission keeps landlord ownership authoritative, fails closed
+          on ambiguous scope, requires mutual acceptance before activation, and records metadata-only audit events for
+          every lifecycle action.
+        </div>
+      </header>
+
+      <main>
+        <section class="left">
+          <div class="block">
+            <h2>Mission Goal</h2>
+            <p>
+              Expose backend API foundations that let landlord owners list, create, suspend, reactivate, and terminate
+              Property Manager Company relationships, while modeling activation as a PM Company Admin acceptance step.
+              New relationships must start pending and must not grant company authority until the company side accepts.
+            </p>
+          </div>
+
+          <div class="block">
+            <h2>Ownership And Acceptance Model</h2>
+            <div class="panel">
+              Landlord relationship authority originates from the landlord side, but activation requires mutual
+              acceptance: Landlord Owner creates the relationship, the record starts pending, and a PM Company Admin
+              acceptance action moves it to active. The PM company cannot self-grant access, and the landlord remains
+              the data owner.
+            </div>
+          </div>
+
+          <div class="block">
+            <h2>Proposed API Surface</h2>
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Action</th>
+                  <th>Endpoint Shape</th>
+                  <th>Contract</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>List</td>
+                  <td><code>GET /api/landlord/property-manager-company-relationships</code></td>
+                  <td>Return only relationships for the authenticated landlord owner context.</td>
+                </tr>
+                <tr>
+                  <td>Create</td>
+                  <td><code>POST /api/landlord/property-manager-company-relationships</code></td>
+                  <td>Create a preserved relationship record in pending status. Do not create active relationships by default.</td>
+                </tr>
+                <tr>
+                  <td>Accept / Activate</td>
+                  <td><code>POST /api/property-manager-company/relationships/:relationshipId/accept</code></td>
+                  <td>
+                    Move a pending relationship to active only when an authorized PM Company Admin accepts. If this
+                    route is deferred, the service model must still assume mutual acceptance.
+                  </td>
+                </tr>
+                <tr>
+                  <td>Suspend</td>
+                  <td><code>POST /api/landlord/property-manager-company-relationships/:relationshipId/suspend</code></td>
+                  <td>Temporarily block access while preserving relationship and audit history.</td>
+                </tr>
+                <tr>
+                  <td>Reactivate</td>
+                  <td><code>POST /api/landlord/property-manager-company-relationships/:relationshipId/reactivate</code></td>
+                  <td>Return a suspended relationship to active when scope and ownership still validate.</td>
+                </tr>
+                <tr>
+                  <td>Terminate</td>
+                  <td><code>POST /api/landlord/property-manager-company-relationships/:relationshipId/terminate</code></td>
+                  <td>Block access, preserve history, and store termination metadata. No hard delete.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="block">
+            <h2>Status Behavior</h2>
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Transition</th>
+                  <th>Allowed</th>
+                  <th>Meaning</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>pending -> active</code></td>
+                  <td>Yes, by PM Company Admin acceptance</td>
+                  <td>Company consent is recorded before scoped authority can exist.</td>
+                </tr>
+                <tr>
+                  <td><code>active -> suspended</code></td>
+                  <td>Yes, by landlord owner</td>
+                  <td>Temporarily blocks access while preserving relationship history.</td>
+                </tr>
+                <tr>
+                  <td><code>suspended -> active</code></td>
+                  <td>Yes, by landlord owner reactivation</td>
+                  <td>Restores an existing accepted relationship when scope and ownership still validate.</td>
+                </tr>
+                <tr>
+                  <td><code>active -> terminated</code></td>
+                  <td>Yes, by landlord owner</td>
+                  <td>Ends the relationship, blocks access, and preserves audit/history.</td>
+                </tr>
+                <tr>
+                  <td><code>suspended -> terminated</code></td>
+                  <td>Yes, by landlord owner</td>
+                  <td>Ends a paused relationship without reactivating it first.</td>
+                </tr>
+                <tr>
+                  <td><code>pending -> terminated</code></td>
+                  <td>Yes, by landlord owner</td>
+                  <td>Stops a proposed relationship before company acceptance without deleting history.</td>
+                </tr>
+                <tr>
+                  <td><code>pending -> suspended</code></td>
+                  <td>No in V1</td>
+                  <td>Use termination semantics for a pending relationship that should not proceed.</td>
+                </tr>
+                <tr>
+                  <td>Other transitions</td>
+                  <td>No</td>
+                  <td>
+                    <code>terminated -> active</code>, <code>terminated -> suspended</code>, repeated same-status
+                    mutations, unknown statuses, and malformed records fail closed.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="block">
+            <h2>Audit Contract</h2>
+            <p>Each lifecycle action creates a metadata-only event:</p>
+            <div class="pill-row">
+              <span class="pill">relationship_created</span>
+              <span class="pill">relationship_activated</span>
+              <span class="pill">relationship_suspended</span>
+              <span class="pill">relationship_reactivated</span>
+              <span class="pill">relationship_terminated</span>
+            </div>
+            <p style="margin-top: 12px">
+              Event metadata must preserve actor user, property manager company, landlord context, relationship,
+              status transition, property and workspace scope, target resource, outcome, timestamp, and reason where
+              applicable. Audit payloads must not contain secrets, raw provider payloads, or user-facing raw ID labels.
+            </p>
+          </div>
+        </section>
+
+        <section>
+          <div class="block">
+            <h2>Security Model</h2>
+            <ul class="compact">
+              <li>Landlord-side relationship management is landlord-owner only.</li>
+              <li>PM company activation requires an authorized PM Company Admin acceptance action.</li>
+              <li>Landlord scope resolves from authenticated server context, not query or body input.</li>
+              <li>Cross-landlord relationship reads or mutations are denied.</li>
+              <li>Property Manager Company existence and active company status are validated before creation.</li>
+              <li>Suspended or terminated companies cannot receive new active relationships.</li>
+              <li>Property and workspace scopes are validated before create or status mutation.</li>
+              <li>Relationship scope supports all current properties, selected properties, and workspace scope.</li>
+              <li>Relationship scope is a ceiling; future staff assignments cannot exceed it.</li>
+              <li>Invalid status transitions are rejected and audited as failures where appropriate.</li>
+              <li>Billing and settings authority remains landlord-owner only.</li>
+              <li>Malformed persisted records, unknown statuses, and unsupported scopes fail closed.</li>
+              <li>Responses use safe labels and projections; raw internal IDs are not user-facing labels.</li>
+            </ul>
+          </div>
+
+          <div class="block">
+            <h2>Future Compatibility</h2>
+            <ul class="compact">
+              <li>One landlord can hold relationships with multiple PM companies.</li>
+              <li>One PM company can serve many landlords through separate landlord-approved relationships.</li>
+              <li>The relationship model must support future staff assignments without changing ownership semantics.</li>
+              <li>The future PM company console must consume accepted relationships, not self-created grants.</li>
+            </ul>
+          </div>
+
+          <div class="block">
+            <h2>Implementation Boundaries</h2>
+            <div class="panel warning">
+              Backend/API only. No frontend routes, no landlord or company dashboard, no invite emails, no staff
+              assignment UI, no contractor organizations, no billing delegation, no custom permissions, and no migration
+              or backfill work.
+            </div>
+          </div>
+
+          <div class="block">
+            <h2>Files To Inspect First</h2>
+            <ul class="compact">
+              <li><code>rentchain-api/src/lib/propertyManagerCompany/*</code></li>
+              <li>Existing landlord owner route and service patterns under <code>rentchain-api/src</code></li>
+              <li>Existing audit append helpers and delegated-access lifecycle tests</li>
+              <li>Backend test setup for authenticated landlord owner and cross-landlord denial coverage</li>
+            </ul>
+          </div>
+
+          <div class="block">
+            <h2>Validation Plan</h2>
+            <ul class="compact">
+              <li>Focused backend route and service tests for all six lifecycle actions.</li>
+              <li>Owner/auth scope tests proving landlord scope cannot be overridden by request input.</li>
+              <li>Status transition tests for pending, active, suspended, reactivated, and terminated behavior.</li>
+              <li>Cross-landlord denial tests for list, mutation, and malformed relationship records.</li>
+              <li>Audit event shape tests for required metadata and safe failure outcomes.</li>
+              <li>Backend build and <code>git diff --check</code>.</li>
+            </ul>
+          </div>
+
+          <div class="block">
+            <h2>Review Gate</h2>
+            <div class="panel success">
+              Stop after this Mission Brief is reviewed. Implementation should begin only after approval, then proceed
+              in a draft PR on <code>feat/property-manager-company-relationship-api-v1</code>.
+            </div>
+          </div>
+        </section>
+      </main>
+    </article>
+  </body>
+</html>
