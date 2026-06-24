@@ -195,8 +195,9 @@ describe("PropertyManagerCompanyManagementPage", () => {
     await waitFor(() => expect(mocks.searchCompanies).toHaveBeenCalledWith("elite"));
     expect(screen.getByText("Search results")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Elite Property Management" }));
-    expect(screen.getByText("Selected PM Company")).toBeInTheDocument();
-    expect(screen.getByText("Ready to create pending relationship")).toBeInTheDocument();
+    expect(screen.getByText("Selected Company")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Change Company" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("PM company search")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Create pending relationship" }));
 
     await waitFor(() => expect(mocks.createLandlordRelationship).toHaveBeenCalledTimes(1));
@@ -205,6 +206,22 @@ describe("PropertyManagerCompanyManagementPage", () => {
       propertyScope: { mode: "all_current_properties", propertyIds: [] },
       workspaceScopes: ["dashboard", "operations"],
     });
+  });
+
+  it("lets landlords change the selected PM company before creating a relationship", async () => {
+    render(<PropertyManagerCompanyManagementPage />);
+
+    await screen.findByText("Elite Property Management");
+    fireEvent.change(screen.getByLabelText("PM company search"), { target: { value: "elite" } });
+    fireEvent.click(screen.getByRole("button", { name: "Search companies" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Elite Property Management" }));
+
+    expect(screen.getByText("Selected Company")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Change Company" }));
+
+    expect(screen.getByLabelText("PM company search")).toBeInTheDocument();
+    expect(screen.queryByText("Selected Company")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create pending relationship" })).toBeDisabled();
   });
 
   it("shows a clear no-results state when no active PM companies match search", async () => {
@@ -218,7 +235,7 @@ describe("PropertyManagerCompanyManagementPage", () => {
 
     expect(await screen.findByText("No PM companies found")).toBeInTheDocument();
     expect(screen.getByText("Try another company name or verify the company has been created and activated.")).toBeInTheDocument();
-    expect(screen.queryByText("Ready to create pending relationship")).not.toBeInTheDocument();
+    expect(screen.queryByText("Selected Company")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Create pending relationship" })).toBeDisabled();
   });
 

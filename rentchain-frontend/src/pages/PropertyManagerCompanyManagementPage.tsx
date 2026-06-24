@@ -550,6 +550,12 @@ export default function PropertyManagerCompanyManagementPage() {
     }
   };
 
+  const changeSelectedCompany = () => {
+    setSelectedLookup(null);
+    setHasSearchedCompanies(false);
+    setSearchResults([]);
+  };
+
   const createRelationship = async () => {
     if (!selectedLookup || !relationshipWorkspaces.length) return;
     setBusy(true);
@@ -897,65 +903,68 @@ export default function PropertyManagerCompanyManagementPage() {
                   Search a Property Manager Company. Select a company. Create a pending relationship. The company must
                   accept before access becomes active.
                 </div>
-                <label className="pmc-label">
-                  PM company search
-                  <Input
-                    value={searchQuery}
-                    onChange={(event) => setSearchQuery(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        event.preventDefault();
-                        void searchCompanies();
-                      }
-                    }}
-                    placeholder="Search by company label"
-                  />
-                </label>
-                <Button type="button" variant="secondary" disabled={busy} onClick={searchCompanies}>
-                  Search companies
-                </Button>
-                {hasSearchedCompanies ? (
-                  <div className="pmc-search-results" aria-live="polite">
-                    <div style={{ fontWeight: 900 }}>Search results</div>
-                    {searchResults.length ? (
-                      <div style={{ display: "grid", gap: spacing.xs }}>
-                        {searchResults.map((company) => (
-                          <button
-                            key={company.propertyManagerCompanyId}
-                            type="button"
-                            className="pmc-result-button"
-                            aria-pressed={selectedLookup?.propertyManagerCompanyId === company.propertyManagerCompanyId}
-                            onClick={() => setSelectedLookup(company)}
-                          >
-                            {company.companyLabel}
-                          </button>
-                        ))}
-                      </div>
-                    ) : (
-                      <EmptyState
-                        title="No PM companies found"
-                        body="Try another company name or verify the company has been created and activated."
-                        style={{ background: colors.card }}
-                      />
-                    )}
-                  </div>
-                ) : null}
                 {selectedLookup ? (
                   <div className="pmc-selected-company" aria-live="polite">
                     <div>
                       <div style={{ color: text.muted, fontSize: 12, fontWeight: 800, textTransform: "uppercase" }}>
-                        Selected PM Company
+                        Selected Company
                       </div>
-                      <div style={{ fontWeight: 900, overflowWrap: "anywhere" }}>{selectedLookup.companyLabel}</div>
-                    </div>
-                    <div>
-                      <div style={{ color: text.muted, fontSize: 12, fontWeight: 800, textTransform: "uppercase" }}>
-                        Relationship Status
+                      <div style={{ display: "flex", gap: 8, alignItems: "center", fontWeight: 900, overflowWrap: "anywhere" }}>
+                        <CheckCircle2 size={18} aria-hidden="true" />
+                        {selectedLookup.companyLabel}
                       </div>
-                      <div style={{ fontWeight: 900 }}>Ready to create pending relationship</div>
                     </div>
+                    <Button type="button" variant="secondary" onClick={changeSelectedCompany}>
+                      Change Company
+                    </Button>
                   </div>
-                ) : null}
+                ) : (
+                  <>
+                    <label className="pmc-label">
+                      PM company search
+                      <Input
+                        value={searchQuery}
+                        onChange={(event) => setSearchQuery(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            event.preventDefault();
+                            void searchCompanies();
+                          }
+                        }}
+                        placeholder="Search by company label"
+                      />
+                    </label>
+                    <Button type="button" variant="secondary" disabled={busy} onClick={searchCompanies}>
+                      Search companies
+                    </Button>
+                    {hasSearchedCompanies ? (
+                      <div className="pmc-search-results" aria-live="polite">
+                        <div style={{ fontWeight: 900 }}>Search results</div>
+                        {searchResults.length ? (
+                          <div style={{ display: "grid", gap: spacing.xs }}>
+                            {searchResults.map((company) => (
+                              <button
+                                key={company.propertyManagerCompanyId}
+                                type="button"
+                                className="pmc-result-button"
+                                aria-pressed={false}
+                                onClick={() => setSelectedLookup(company)}
+                              >
+                                {company.companyLabel}
+                              </button>
+                            ))}
+                          </div>
+                        ) : (
+                          <EmptyState
+                            title="No PM companies found"
+                            body="Try another company name or verify the company has been created and activated."
+                            style={{ background: colors.card }}
+                          />
+                        )}
+                      </div>
+                    ) : null}
+                  </>
+                )}
                 {searchResults.length && !selectedLookup ? (
                   <div className="pmc-helper">Select a PM company result before creating a pending relationship.</div>
                 ) : null}
