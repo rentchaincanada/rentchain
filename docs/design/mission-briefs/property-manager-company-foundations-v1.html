@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mission Brief - Property Manager Company Foundations V1</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: #eef1f5;
+        color: #142033;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        padding: 32px;
+        background: #eef1f5;
+      }
+
+      .brief {
+        max-width: 1280px;
+        margin: 0 auto;
+        background: #ffffff;
+        border: 1px solid #d7dde7;
+        box-shadow: 0 18px 50px rgba(20, 32, 51, 0.12);
+      }
+
+      header {
+        padding: 28px 32px;
+        border-bottom: 1px solid #d7dde7;
+        background: #142033;
+        color: #ffffff;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin-top: 0;
+      }
+
+      h1 {
+        margin-bottom: 8px;
+        font-size: 26px;
+        line-height: 1.2;
+        letter-spacing: 0;
+      }
+
+      h1 span {
+        color: #8fd6ff;
+      }
+
+      .subtitle {
+        max-width: 860px;
+        color: #d6e7f4;
+        font-size: 15px;
+        line-height: 1.5;
+      }
+
+      main {
+        display: grid;
+        grid-template-columns: minmax(0, 1.1fr) minmax(360px, 0.9fr);
+        gap: 0;
+      }
+
+      section {
+        padding: 28px 32px;
+      }
+
+      .left {
+        border-right: 1px solid #d7dde7;
+      }
+
+      .block {
+        margin-bottom: 24px;
+      }
+
+      .block:last-child {
+        margin-bottom: 0;
+      }
+
+      h2 {
+        margin-bottom: 10px;
+        color: #142033;
+        font-size: 15px;
+        line-height: 1.25;
+        letter-spacing: 0;
+        text-transform: uppercase;
+      }
+
+      h3 {
+        margin-bottom: 8px;
+        color: #2b3c55;
+        font-size: 14px;
+        line-height: 1.3;
+      }
+
+      p,
+      li,
+      td,
+      th {
+        font-size: 14px;
+        line-height: 1.48;
+      }
+
+      ul {
+        margin: 0;
+        padding-left: 18px;
+      }
+
+      li + li {
+        margin-top: 6px;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .card {
+        padding: 14px;
+        border: 1px solid #d7dde7;
+        background: #f8fafc;
+      }
+
+      .card strong {
+        display: block;
+        margin-bottom: 5px;
+        color: #142033;
+      }
+
+      .pill-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .pill {
+        padding: 6px 9px;
+        border: 1px solid #c8d2df;
+        background: #f4f7fb;
+        color: #26374f;
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .panel {
+        padding: 14px 16px;
+        border-left: 4px solid #246bfe;
+        background: #f4f8ff;
+      }
+
+      .warning {
+        border-left-color: #b7791f;
+        background: #fff8e8;
+      }
+
+      .success {
+        border-left-color: #16895a;
+        background: #f0fff7;
+      }
+
+      .table {
+        width: 100%;
+        border-collapse: collapse;
+        border: 1px solid #d7dde7;
+        background: #ffffff;
+      }
+
+      .table th,
+      .table td {
+        padding: 9px 10px;
+        border-bottom: 1px solid #e4e9f1;
+        text-align: left;
+        vertical-align: top;
+      }
+
+      .table th {
+        background: #f4f7fb;
+        color: #142033;
+        font-size: 12px;
+        text-transform: uppercase;
+      }
+
+      code {
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+        font-size: 12px;
+        color: #1b4f9c;
+      }
+
+      .compact li {
+        font-size: 13px;
+      }
+
+      @media (max-width: 920px) {
+        body {
+          padding: 16px;
+        }
+
+        main {
+          grid-template-columns: 1fr;
+        }
+
+        .left {
+          border-right: 0;
+          border-bottom: 1px solid #d7dde7;
+        }
+
+        .grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <article class="brief">
+      <header>
+        <h1>Next Mission: <span>feat/property-manager-company-foundations-v1</span></h1>
+        <div class="subtitle">
+          Backend foundations for Property Manager Companies, using Delegated Access V1 as the governance
+          reference pattern: fail closed, preserve actor attribution, keep audit metadata append-safe, and avoid UI
+          until backend foundations are stable.
+        </div>
+      </header>
+
+      <main>
+        <section class="left">
+          <div class="block">
+            <h2>Mission Goal</h2>
+            <p>
+              Implement backend-only model and helper foundations for Property Manager Companies so future UI and
+              workflow missions can build on stable company identity, membership, role templates, landlord-company
+              relationships, relationship status behavior, authorization evaluation, and audit event builders.
+            </p>
+          </div>
+
+          <div class="block">
+            <h2>Scope</h2>
+            <div class="grid">
+              <div class="card">
+                <strong>Company identity</strong>
+                propertyManagerCompany with company name, status, createdByUserId, createdAt, updatedAt, and safe
+                display label. Distinct from delegates and individual users. No public branding/profile.
+              </div>
+              <div class="card">
+                <strong>Membership</strong>
+                companyId, userId, role, status, invited/created by, createdAt, updatedAt, suspendedAt, and removedAt
+                where applicable.
+              </div>
+              <div class="card">
+                <strong>Role templates</strong>
+                Company Owner, Company Admin, Regional Manager, Property Manager, Leasing Agent, Office Administrator,
+                Maintenance Coordinator, and Read-only Staff.
+              </div>
+              <div class="card">
+                <strong>Relationship foundation</strong>
+                landlordId, propertyManagerCompanyId, status, property scope, workspace scope, lifecycle timestamps,
+                accepting admin, and termination reason.
+              </div>
+            </div>
+          </div>
+
+          <div class="block">
+            <h2>Relationship Status Behavior</h2>
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Status</th>
+                  <th>Authorization Behavior</th>
+                  <th>History Behavior</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>pending</code></td>
+                  <td>Does not grant access.</td>
+                  <td>Relationship draft/history is preserved.</td>
+                </tr>
+                <tr>
+                  <td><code>active</code></td>
+                  <td>Can grant scoped access when membership, role, workspace, and property checks pass.</td>
+                  <td>Lifecycle and evaluated scope remain auditable.</td>
+                </tr>
+                <tr>
+                  <td><code>suspended</code></td>
+                  <td>Blocks access temporarily.</td>
+                  <td>Relationship and audit history are preserved for possible reactivation.</td>
+                </tr>
+                <tr>
+                  <td><code>terminated</code></td>
+                  <td>Blocks access permanently unless a future reviewed reactivation process exists.</td>
+                  <td>Final relationship state and audit history are preserved.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="block">
+            <h2>Authorization Foundation</h2>
+            <div class="panel">
+              Helper functions only. No route integration unless needed for tests and explicitly reviewed.
+            </div>
+            <ul style="margin-top: 12px;">
+              <li>Landlord remains data owner; PM company receives scoped operating authority only.</li>
+              <li>Keep company membership separate from landlord-company relationships.</li>
+              <li>Evaluate authenticated user.</li>
+              <li>Require active company membership.</li>
+              <li>Require active landlord-company relationship.</li>
+              <li>Apply predefined staff role/template.</li>
+              <li>Evaluate property scope: all-current-properties or selected-properties.</li>
+              <li>Evaluate workspace scope.</li>
+              <li>Fail closed on malformed, missing, pending, suspended, terminated, or out-of-scope state.</li>
+              <li>Keep billing/settings landlord-owner only.</li>
+            </ul>
+          </div>
+
+          <div class="block non-goals">
+            <h2>Non-goals</h2>
+            <div class="pill-row">
+              <span class="pill">No UI</span>
+              <span class="pill">No frontend routes</span>
+              <span class="pill">No dashboard</span>
+              <span class="pill">No invite emails</span>
+              <span class="pill">No staff assignment UI</span>
+              <span class="pill">No contractor organizations</span>
+              <span class="pill">No billing delegation</span>
+              <span class="pill">No custom permissions</span>
+              <span class="pill">No staff-to-staff delegation</span>
+              <span class="pill">No migration/backfill</span>
+              <span class="pill">No production route exposure</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="right">
+          <div class="block">
+            <h2>Audit Foundations</h2>
+            <p>
+              Add metadata-only event builders. They should produce stable event shapes without persisting secrets,
+              broad payloads, raw provider data, or user-facing raw IDs.
+            </p>
+            <div class="grid">
+              <div class="card compact">
+                <strong>Event builders</strong>
+                <ul>
+                  <li>company created</li>
+                  <li>membership created</li>
+                  <li>membership suspended</li>
+                  <li>membership removed</li>
+                  <li>relationship created</li>
+                  <li>relationship activated</li>
+                </ul>
+              </div>
+              <div class="card compact">
+                <strong>More lifecycle events</strong>
+                <ul>
+                  <li>relationship suspended</li>
+                  <li>relationship reactivated</li>
+                  <li>relationship terminated</li>
+                  <li>staff assignment changed if modeled</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div class="block">
+            <h2>Audit Shape</h2>
+            <table class="table">
+              <tbody>
+                <tr>
+                  <th>Required metadata</th>
+                  <td>
+                    actorUserId, actorCompanyId when applicable, actingForLandlordId, relationshipId, role, scope,
+                    target resource, outcome, timestamp.
+                  </td>
+                </tr>
+                <tr>
+                  <th>Safety</th>
+                  <td>Metadata-only, projection-safe, no public labels built from raw internal IDs.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="block">
+            <h2>Role and Permission Rules</h2>
+            <ul>
+              <li>No custom roles.</li>
+              <li>No raw permission builder.</li>
+              <li>Use predefined templates only.</li>
+              <li>Company Owner/Admin manage staff; ordinary staff cannot invite or delegate to other staff.</li>
+              <li>Company staff cannot exceed landlord-company relationship scope.</li>
+              <li>Explicit deny wins over role/template permissions.</li>
+              <li>Suspended and terminated relationships fail closed.</li>
+              <li>Billing/settings remain landlord-owner only.</li>
+            </ul>
+          </div>
+
+          <div class="block">
+            <h2>Test Plan</h2>
+            <ul>
+              <li>Company creation model validation.</li>
+              <li>Membership creation and status validation.</li>
+              <li>Role/template validation.</li>
+              <li>Relationship creation and status validation.</li>
+              <li>Pending relationship does not grant access.</li>
+              <li>Suspended relationship blocks access.</li>
+              <li>Terminated relationship blocks access.</li>
+              <li>Active relationship can pass evaluation.</li>
+              <li>Company staff cannot exceed landlord relationship scope.</li>
+              <li>Billing/settings denied.</li>
+              <li>Audit event shape.</li>
+              <li>No raw IDs in user-facing labels/projections if projections exist.</li>
+            </ul>
+          </div>
+
+          <div class="block">
+            <h2>Validation Requirements</h2>
+            <div class="panel success">
+              After this brief is reviewed and approved: implement on this branch, open a draft PR, run focused backend
+              tests, backend build, and <code>git diff --check</code>. Confirm no frontend changes unless unavoidable.
+            </div>
+          </div>
+
+          <div class="block">
+            <h2>Stop Gate</h2>
+            <div class="panel warning">
+              This artifact is the first action. Stop for review before implementation planning, backend edits, route
+              exposure, schema changes, or PR implementation work.
+            </div>
+          </div>
+        </section>
+      </main>
+    </article>
+  </body>
+</html>
