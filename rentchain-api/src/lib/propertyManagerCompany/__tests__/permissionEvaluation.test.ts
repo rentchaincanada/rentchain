@@ -222,4 +222,68 @@ describe("property manager company permission evaluation", () => {
       reason: "allowed_company_staff",
     });
   });
+
+  it("fails closed for unknown role, status, or scope values from untrusted records", () => {
+    expect(
+      evaluatePropertyManagerCompanyAccess({
+        ...baseRequest,
+        membership: {
+          ...activeMembership(),
+          role: "custom_role" as any,
+        },
+        relationship: activeRelationship(),
+      })
+    ).toMatchObject({
+      allowed: false,
+      reason: "invalid_membership_role",
+    });
+
+    expect(
+      evaluatePropertyManagerCompanyAccess({
+        ...baseRequest,
+        membership: {
+          ...activeMembership(),
+          status: "paused" as any,
+        },
+        relationship: activeRelationship(),
+      })
+    ).toMatchObject({
+      allowed: false,
+      reason: "invalid_membership_status",
+    });
+
+    expect(
+      evaluatePropertyManagerCompanyAccess({
+        ...baseRequest,
+        membership: activeMembership(),
+        relationship: {
+          ...activeRelationship(),
+          status: "paused" as any,
+        },
+      })
+    ).toMatchObject({
+      allowed: false,
+      reason: "invalid_relationship_status",
+    });
+
+    expect(
+      evaluatePropertyManagerCompanyAccess({
+        ...baseRequest,
+        membership: activeMembership(),
+        relationship: {
+          ...activeRelationship(),
+          relationshipScope: {
+            propertyScope: {
+              mode: "tenant_selected" as any,
+              propertyIds: ["property-1"],
+            },
+            workspaceScopes: ["properties"],
+          },
+        },
+      })
+    ).toMatchObject({
+      allowed: false,
+      reason: "invalid_scope",
+    });
+  });
 });

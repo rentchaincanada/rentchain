@@ -1,9 +1,17 @@
 import type {
+  LandlordCompanyRelationship,
+  PropertyManagerCompanyEvaluationRequest,
   PropertyManagerCompanyEvaluationDecision,
   PropertyManagerCompanyEvaluationReason,
-  PropertyManagerCompanyEvaluationRequest,
   PropertyManagerCompanyMembership,
   PropertyManagerCompanyRelationshipScope,
+} from "./propertyManagerCompanyTypes";
+import {
+  LANDLORD_COMPANY_RELATIONSHIP_STATUSES,
+  PROPERTY_MANAGER_COMPANY_MEMBERSHIP_STATUSES,
+  PROPERTY_MANAGER_COMPANY_PROPERTY_SCOPE_MODES,
+  PROPERTY_MANAGER_COMPANY_ROLES,
+  PROPERTY_MANAGER_COMPANY_WORKSPACE_SCOPES,
 } from "./propertyManagerCompanyTypes";
 
 const ROLE_ALLOWED_ACTIONS: Record<PropertyManagerCompanyMembership["role"], readonly string[]> = {
@@ -69,6 +77,24 @@ function hasPropertyAccess(scope: PropertyManagerCompanyRelationshipScope, prope
   return scope.propertyScope.propertyIds.includes(propertyId);
 }
 
+function hasValidMembershipShape(membership: PropertyManagerCompanyMembership): PropertyManagerCompanyEvaluationReason | null {
+  if (!PROPERTY_MANAGER_COMPANY_ROLES.includes(membership.role)) return "invalid_membership_role";
+  if (!PROPERTY_MANAGER_COMPANY_MEMBERSHIP_STATUSES.includes(membership.status)) return "invalid_membership_status";
+  return null;
+}
+
+function hasValidRelationshipShape(relationship: LandlordCompanyRelationship): PropertyManagerCompanyEvaluationReason | null {
+  if (!LANDLORD_COMPANY_RELATIONSHIP_STATUSES.includes(relationship.status)) return "invalid_relationship_status";
+  const scope = relationship.relationshipScope;
+  if (!PROPERTY_MANAGER_COMPANY_PROPERTY_SCOPE_MODES.includes(scope?.propertyScope?.mode)) return "invalid_scope";
+  if (!Array.isArray(scope.propertyScope.propertyIds)) return "invalid_scope";
+  if (!Array.isArray(scope.workspaceScopes)) return "invalid_scope";
+  if (!scope.workspaceScopes.every((workspace) => PROPERTY_MANAGER_COMPANY_WORKSPACE_SCOPES.includes(workspace))) {
+    return "invalid_scope";
+  }
+  return null;
+}
+
 export function evaluatePropertyManagerCompanyAccess(
   request: PropertyManagerCompanyEvaluationRequest
 ): PropertyManagerCompanyEvaluationDecision {
@@ -79,11 +105,15 @@ export function evaluatePropertyManagerCompanyAccess(
 
   const membership = request.membership;
   if (!membership) return denied(request, "missing_company_membership");
+  const invalidMembershipReason = hasValidMembershipShape(membership);
+  if (invalidMembershipReason) return denied(request, invalidMembershipReason);
   if (membership.status !== "active") return denied(request, "membership_not_active");
   if (membership.userId !== request.actorUserId) return denied(request, "membership_actor_mismatch");
 
   const relationship = request.relationship;
   if (!relationship) return denied(request, "missing_landlord_company_relationship");
+  const invalidRelationshipReason = hasValidRelationshipShape(relationship);
+  if (invalidRelationshipReason) return denied(request, invalidRelationshipReason, relationship.relationshipScope);
   if (relationship.status !== "active") return denied(request, "relationship_not_active", relationship.relationshipScope);
   if (relationship.landlordId !== request.actingForLandlordId) {
     return denied(request, "relationship_landlord_mismatch", relationship.relationshipScope);
