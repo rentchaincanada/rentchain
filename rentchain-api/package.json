@@ -25,6 +25,7 @@
     "test:e2e": "npm run preflight && FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 ALLOW_LOCAL_PROD_FIRESTORE=false playwright test --config=../playwright.config.ts --project=api-chromium",
     "test:e2e:ui": "npm run preflight && FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 ALLOW_LOCAL_PROD_FIRESTORE=false playwright test --config=../playwright.config.ts --project=api-chromium --ui",
     "test:e2e:debug": "npm run preflight && FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 ALLOW_LOCAL_PROD_FIRESTORE=false playwright test --config=../playwright.config.ts --project=api-chromium --headed --debug",
+    "fixture:pm-company-preview": "npm run preflight && ts-node-dev --transpile-only --exit-child src/scripts/propertyManagerCompanyPreviewFixture.ts",
     "test:docker": "docker run --rm -v \"$PWD/..:/workspace/rentchain\" -w /workspace/rentchain/rentchain-api rentchain-dev npm run test:e2e",
     "storage-state:export": "npm run preflight && ts-node tests/storage-state/export-storage-state.ts ./.smoke-storage-state",
     "smoke": "node scripts/smoke-safe-build.js",
