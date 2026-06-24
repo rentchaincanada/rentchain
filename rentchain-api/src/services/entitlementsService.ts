@@ -102,11 +102,20 @@ export async function getUserEntitlements(
   const role = normalizeRole(user?.role ?? hints.claimsRole);
   const landlordIdHint = String(user?.landlordId || hints.landlordIdHint || "").trim() || null;
   const emailHint = String(user?.email || hints.emailHint || "").trim().toLowerCase() || null;
-  const landlordContext = await loadLandlordPlan({
-    landlordId: landlordIdHint,
-    userId: cleanUserId,
-    email: emailHint,
-  });
+  if (role === "property_manager_company" && landlordIdHint) {
+    throw new Error("LANDLORD_SCOPE_MISMATCH");
+  }
+
+  const effectiveLandlordIdHint = role === "property_manager_company" ? null : landlordIdHint;
+  const shouldLoadLandlordPlan =
+    role === "landlord" || role === "admin" || Boolean(effectiveLandlordIdHint);
+  const landlordContext = shouldLoadLandlordPlan
+    ? await loadLandlordPlan({
+        landlordId: effectiveLandlordIdHint,
+        userId: cleanUserId,
+        email: emailHint,
+      })
+    : { landlordId: null, planRaw: null };
 
   const planRaw =
     (landlordContext.planRaw && String(landlordContext.planRaw).trim()) ||
@@ -135,9 +144,11 @@ export async function getUserEntitlements(
   }
 
   const scopedLandlordId =
-    role === "landlord"
-      ? landlordContext.landlordId || landlordIdHint || cleanUserId
-      : landlordIdHint;
+    role === "property_manager_company"
+      ? null
+      : role === "landlord"
+      ? landlordContext.landlordId || effectiveLandlordIdHint || cleanUserId
+      : effectiveLandlordIdHint;
 
   const entitlements: UserEntitlements = {
     userId: cleanUserId,

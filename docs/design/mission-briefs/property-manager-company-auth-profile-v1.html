@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mission Brief - Property Manager Company Auth Profile V1</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: #eef2f6;
+        color: #142033;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        padding: 28px;
+        background: #eef2f6;
+      }
+
+      .brief {
+        max-width: 1280px;
+        margin: 0 auto;
+        border: 1px solid #d5dde8;
+        background: #ffffff;
+        box-shadow: 0 18px 50px rgba(20, 32, 51, 0.12);
+      }
+
+      header {
+        padding: 26px 30px;
+        background: #142033;
+        color: #ffffff;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin-top: 0;
+      }
+
+      h1 {
+        margin-bottom: 8px;
+        font-size: 26px;
+        line-height: 1.2;
+        letter-spacing: 0;
+      }
+
+      h1 span {
+        color: #8fd6ff;
+      }
+
+      .subtitle {
+        max-width: 940px;
+        color: #d8e7f4;
+        font-size: 15px;
+        line-height: 1.5;
+      }
+
+      main {
+        display: grid;
+        grid-template-columns: minmax(0, 1.05fr) minmax(390px, 0.95fr);
+      }
+
+      section {
+        padding: 26px 30px;
+      }
+
+      .left {
+        border-right: 1px solid #d5dde8;
+      }
+
+      .block {
+        margin-bottom: 23px;
+      }
+
+      .block:last-child {
+        margin-bottom: 0;
+      }
+
+      h2 {
+        margin-bottom: 10px;
+        color: #142033;
+        font-size: 14px;
+        line-height: 1.25;
+        letter-spacing: 0;
+        text-transform: uppercase;
+      }
+
+      h3 {
+        margin-bottom: 8px;
+        color: #2a3d55;
+        font-size: 14px;
+      }
+
+      p,
+      li,
+      td,
+      th {
+        font-size: 13.5px;
+        line-height: 1.46;
+      }
+
+      ul {
+        margin: 0;
+        padding-left: 18px;
+      }
+
+      li + li {
+        margin-top: 6px;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .card {
+        padding: 14px;
+        border: 1px solid #d5dde8;
+        background: #f8fafc;
+      }
+
+      .card strong {
+        display: block;
+        margin-bottom: 5px;
+      }
+
+      .panel {
+        padding: 14px 16px;
+        border-left: 4px solid #246bfe;
+        background: #f4f8ff;
+      }
+
+      .warning {
+        border-left-color: #b7791f;
+        background: #fff8e8;
+      }
+
+      .success {
+        border-left-color: #16895a;
+        background: #f0fff7;
+      }
+
+      .table {
+        width: 100%;
+        border-collapse: collapse;
+        border: 1px solid #d5dde8;
+        background: #ffffff;
+      }
+
+      .table th,
+      .table td {
+        padding: 8px 9px;
+        border-bottom: 1px solid #e3e9f1;
+        text-align: left;
+        vertical-align: top;
+      }
+
+      .table th {
+        background: #f4f7fb;
+        font-size: 12px;
+        text-transform: uppercase;
+      }
+
+      .pill-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .pill {
+        padding: 6px 9px;
+        border: 1px solid #c8d2df;
+        background: #f4f7fb;
+        color: #26374f;
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      code {
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+        font-size: 12px;
+        color: #1b4f9c;
+      }
+
+      @media (max-width: 920px) {
+        body {
+          padding: 14px;
+        }
+
+        main {
+          grid-template-columns: 1fr;
+        }
+
+        .left {
+          border-right: 0;
+          border-bottom: 1px solid #d5dde8;
+        }
+
+        .grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <article class="brief">
+      <header>
+        <h1>Mission Brief: <span>Property Manager Company Auth Profile V1</span></h1>
+        <p class="subtitle">
+          Add safe PM-company app profile and session support so a PM Company Owner/Admin can log in and reach company
+          management APIs without becoming a landlord owner, without creating a landlord workspace, and without weakening
+          existing delegate, contractor, or landlord login behavior.
+        </p>
+      </header>
+
+      <main>
+        <section class="left">
+          <div class="block">
+            <h2>1. Mission Goal</h2>
+            <p>
+              Introduce the minimum backend auth/profile foundation required for PM company users. The immediate QA
+              target is <code>admin+propertymanager@rentchain.ai</code>, which has a Firebase Auth user and an active
+              <code>company_admin</code> membership for <code>Acme Property Management QA</code>, but currently cannot
+              safely log in because password login is landlord-biased.
+            </p>
+          </div>
+
+          <div class="block">
+            <h2>2. Current Blocker</h2>
+            <div class="panel warning">
+              <p>
+                <code>/api/auth/login</code> calls <code>validateLandlordCredentials()</code>, which authenticates with
+                Firebase and then reads or creates <code>landlords/{uid}</code>. PM company users must not pass through
+                that provisioning path. Existing delegate signup avoided this by writing <code>users/{uid}</code> and
+                <code>accounts/{uid}</code> with <code>role: delegate</code>, and login has an explicit delegate branch.
+              </p>
+            </div>
+          </div>
+
+          <div class="block">
+            <h2>3. Proposed Profile Contract</h2>
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Field</th>
+                  <th>V1 Contract</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>role</code></td>
+                  <td><code>property_manager_company</code> as a non-landlord session role.</td>
+                </tr>
+                <tr>
+                  <td><code>accountType</code></td>
+                  <td><code>property_manager_company</code> for explicit profile classification.</td>
+                </tr>
+                <tr>
+                  <td><code>landlordId</code></td>
+                  <td><code>null</code>; never infer the user id as landlord scope for this role.</td>
+                </tr>
+                <tr>
+                  <td><code>approved/status</code></td>
+                  <td><code>approved: true</code>, <code>status: active</code> for governed QA profile setup.</td>
+                </tr>
+                <tr>
+                  <td>Authority source</td>
+                  <td>Active <code>propertyManagerCompanyMemberships</code>, not role claims alone.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="block">
+            <h2>4. Implementation Scope</h2>
+            <div class="grid">
+              <div class="card">
+                <strong>Login path hardening</strong>
+                Split Firebase password validation from landlord profile loading. After Firebase auth succeeds, load
+                <code>users/accounts</code>, resolve persisted safe roles first, and only run landlord provisioning for
+                confirmed landlord users.
+              </div>
+              <div class="card">
+                <strong>PM company session branch</strong>
+                Issue a token/session with a non-landlord role, <code>landlordId: null</code>, empty owner permissions,
+                and no billing/settings authority.
+              </div>
+              <div class="card">
+                <strong>Governed profile setup</strong>
+                Add a narrow dry-run-first setup path for PM company app profiles. It may create/update
+                <code>users/{uid}</code> and <code>accounts/{uid}</code> only, with safe PM company fields.
+              </div>
+              <div class="card">
+                <strong>Authorization compatibility</strong>
+                Preserve current PM company APIs: company authority still comes from active Company Owner/Admin
+                membership checks using the authenticated actor id.
+              </div>
+            </div>
+          </div>
+
+          <div class="block">
+            <h2>5. Non-Goals</h2>
+            <ul>
+              <li>No PM Company UI changes in this mission.</li>
+              <li>No relationship, acceptance, or staff assignment feature changes.</li>
+              <li>No billing delegation, contractor organizations, tenant-facing PM UI, or custom permissions.</li>
+              <li>No customer data migration and no broad auth redesign beyond safe PM-company profile support.</li>
+              <li>No creation of <code>landlords/{uid}</code>, landlord workspace, landlord account, or owner billing authority for PM company users.</li>
+            </ul>
+          </div>
+        </section>
+
+        <section>
+          <div class="block">
+            <h2>6. Safety Rules</h2>
+            <ul>
+              <li>PM company login must fail closed for missing, malformed, disabled, or ambiguous app profiles.</li>
+              <li>Persisted <code>delegate</code> and <code>contractor</code> login branches must remain safe.</li>
+              <li>Landlord login behavior must remain available for existing landlord users.</li>
+              <li>PM company users must not receive landlord owner permissions, billing/settings access, or landlord workspace defaults.</li>
+              <li>Normal setup output must not print raw IDs; safe labels only.</li>
+            </ul>
+          </div>
+
+          <div class="block">
+            <h2>7. QA Profile Target</h2>
+            <div class="panel">
+              <p>
+                The governed setup path should support the existing Firebase Auth user
+                <code>admin+propertymanager@rentchain.ai</code> and create/update a neutral PM-company app profile only
+                after review. The existing fixture membership remains the source of company admin authority.
+              </p>
+            </div>
+          </div>
+
+          <div class="block">
+            <h2>8. Required Tests</h2>
+            <ul>
+              <li>PM company admin login succeeds with a safe PM company profile.</li>
+              <li>PM company admin login does not create <code>landlords/{uid}</code>.</li>
+              <li>PM company session role is non-landlord and carries no landlordId.</li>
+              <li>PM company admin can call <code>/api/property-manager-companies/my-companies</code>.</li>
+              <li>PM company admin cannot call landlord-owner relationship routes.</li>
+              <li>Existing landlord, delegate, and contractor login tests still pass.</li>
+              <li>Unknown, missing, disabled, or malformed profiles fail closed.</li>
+            </ul>
+          </div>
+
+          <div class="block">
+            <h2>9. Validation Plan</h2>
+            <ul>
+              <li>Focused backend auth/session tests.</li>
+              <li>Focused PM company route authority tests if route expectations change.</li>
+              <li>Backend build.</li>
+              <li>Frontend build only if frontend route guards or role typing are touched.</li>
+              <li><code>git diff --check</code>.</li>
+            </ul>
+          </div>
+
+          <div class="block">
+            <h2>10. Acceptance Criteria</h2>
+            <div class="panel success">
+              <p>
+                A PM Company Admin can authenticate as a non-landlord actor, resolve company authority through active
+                membership, and access PM company admin APIs. The same actor cannot access landlord-owner routes, and no
+                landlord profile or workspace is created as a side effect.
+              </p>
+            </div>
+          </div>
+
+          <div class="block">
+            <h2>11. Post-Merge Gate</h2>
+            <p>
+              After this mission merges, use the governed setup path to create the safe app profile for
+              <code>admin+propertymanager@rentchain.ai</code>, confirm login, then resume #1229 manual QA. #1229 remains
+              draft until that QA passes.
+            </p>
+          </div>
+        </section>
+      </main>
+    </article>
+  </body>
+</html>
