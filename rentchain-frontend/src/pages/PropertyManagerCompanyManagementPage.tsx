@@ -404,7 +404,7 @@ function AssignmentRow({
 }
 
 export default function PropertyManagerCompanyManagementPage() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const { showToast } = useToast();
   const canUseLandlordSurface = userIsLandlord(user);
   const [mode, setMode] = React.useState<SurfaceMode>(canUseLandlordSurface ? "landlord" : "company");
@@ -835,6 +835,9 @@ export default function PropertyManagerCompanyManagementPage() {
               onClick={() => setMode("company")}
             >
               PM company admin
+            </Button>
+            <Button type="button" variant="ghost" onClick={() => void logout()}>
+              Sign out
             </Button>
           </div>
         </div>

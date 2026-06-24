@@ -10,6 +10,7 @@ import type {
 
 const mocks = vi.hoisted(() => ({
   useAuth: vi.fn(),
+  logout: vi.fn(),
   showToast: vi.fn(),
   searchCompanies: vi.fn(),
   fetchLandlordRelationships: vi.fn(),
@@ -122,6 +123,7 @@ describe("PropertyManagerCompanyManagementPage", () => {
   beforeEach(() => {
     mocks.useAuth.mockReturnValue({
       user: { id: "owner-user-1", role: "landlord", actorRole: "landlord", email: "owner@example.com" },
+      logout: mocks.logout,
     });
     mocks.searchCompanies.mockResolvedValue([
       { propertyManagerCompanyId: "pm-company-internal-1", companyLabel: "Elite Property Management", status: "active" },
@@ -256,5 +258,45 @@ describe("PropertyManagerCompanyManagementPage", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Remove" }));
 
     await waitFor(() => expect(mocks.removeAssignment).toHaveBeenCalledWith("pm-company-internal-1", "assignment-internal-1"));
+  });
+
+  it("shows account context and sign out on the standalone company-admin surface", async () => {
+    render(<PropertyManagerCompanyManagementPage />);
+
+    expect(await screen.findByText("Signed in as owner@example.com")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
+
+    expect(mocks.logout).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows landlord and company empty states without implying deletion", async () => {
+    mocks.fetchLandlordRelationships.mockResolvedValueOnce([]);
+    mocks.fetchCompanyRelationships.mockResolvedValue([]);
+    mocks.fetchCompanyAssignments.mockResolvedValue([]);
+
+    render(<PropertyManagerCompanyManagementPage />);
+
+    expect(await screen.findByText("No PM company relationships")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: "PM company admin" }));
+
+    expect(await screen.findByText("No company relationships")).toBeInTheDocument();
+    expect(screen.getByText("No staff assignments")).toBeInTheDocument();
+    expect(screen.getByText(/Assignment history will remain visible/i)).toBeInTheDocument();
+  });
+
+  it("does not show admin controls for non-admin company staff without active company admin context", async () => {
+    mocks.useAuth.mockReturnValue({
+      user: { id: "staff-user-1", role: "property_manager", email: "staff@example.com" },
+      logout: mocks.logout,
+    });
+    mocks.fetchLandlordRelationships.mockResolvedValueOnce([]);
+    mocks.fetchMyCompanies.mockResolvedValueOnce([]);
+
+    render(<PropertyManagerCompanyManagementPage />);
+
+    expect(await screen.findByText("No PM company admin context")).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Landlord owner" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Create staff assignment")).not.toBeInTheDocument();
+    expect(screen.queryByText("Create pending relationship")).not.toBeInTheDocument();
   });
 });
