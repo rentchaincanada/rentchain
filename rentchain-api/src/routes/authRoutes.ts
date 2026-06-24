@@ -3,7 +3,7 @@ import { Router, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import admin from "firebase-admin";
-import { generateJwtForLandlord } from "../services/authService";
+import { generateJwtForLandlord, signInWithPassword } from "../services/authService";
 import { authenticateJwt } from "../middleware/authMiddleware";
 import { DEMO_LANDLORD, DEMO_LANDLORD_EMAIL } from "../config/authConfig";
 import {
@@ -20,7 +20,6 @@ import { resolvePlan } from "../entitlements/plans";
 import { z } from "zod";
 import { maybeGrantMicroLiveFromLead } from "../services/microLiveGrant";
 import { signAuthToken, verifyAuthToken } from "../auth/jwt";
-import { validateLandlordCredentials } from "../services/authService";
 import { getOrCreateAccount } from "../services/accountService";
 import { getOrCreateLandlordProfile } from "../services/landlordProfileService";
 import { db, FieldValue } from "../firebase";
@@ -113,6 +112,42 @@ function asOnboardString(value: unknown): string | null {
 function normalizeOnboardEmail(value: unknown): string | null {
   const next = String(value || "").trim().toLowerCase();
   return next || null;
+}
+
+function normalizePersistedLoginRole(value: unknown): string {
+  return String(value || "").trim().toLowerCase();
+}
+
+function isKnownPersistedLoginRole(role: string): boolean {
+  return [
+    "",
+    "admin",
+    "contractor",
+    "delegate",
+    "landlord",
+    "owner",
+    "property_manager_company",
+  ].includes(role);
+}
+
+async function validateFirebasePasswordIdentity(
+  email: string,
+  password: string
+): Promise<{ id: string; email: string } | null> {
+  const fb = await signInWithPassword(email, password);
+  if (!fb) return null;
+
+  const authUser = await admin.auth().getUser(fb.uid);
+  if (!authUser.emailVerified) {
+    const err: any = new Error("EMAIL_NOT_VERIFIED");
+    err.code = "EMAIL_NOT_VERIFIED";
+    throw err;
+  }
+
+  return {
+    id: fb.uid,
+    email: String(authUser.email || fb.email || email).trim().toLowerCase(),
+  };
 }
 
 async function loadApplicationForTenantInvite(applicationId: string | null) {
@@ -1686,7 +1721,7 @@ router.post("/login", rateLimitAuth, async (req, res) => {
     }
 
     step = "firebase_signin";
-    const fbUser = await validateLandlordCredentials(email, password);
+    const fbUser = await validateFirebasePasswordIdentity(email, password);
     if (!fbUser) {
       return loginError(res, 401, "INVALID_CREDENTIALS");
     }
@@ -1698,15 +1733,16 @@ router.post("/login", rateLimitAuth, async (req, res) => {
     ]);
     const persistedUser = userSnap.exists ? (userSnap.data() as any) : {};
     const persistedAccount = accountSnap.exists ? (accountSnap.data() as any) : {};
-    const persistedRole = String(
+    const persistedRole = normalizePersistedLoginRole(
       persistedUser?.actorRole ||
         persistedUser?.role ||
         persistedAccount?.actorRole ||
         persistedAccount?.role ||
         ""
-    )
-      .trim()
-      .toLowerCase();
+    );
+    if (!isKnownPersistedLoginRole(persistedRole)) {
+      return loginError(res, 403, "UNSUPPORTED_ACCOUNT_ROLE", "Unsupported account profile role");
+    }
 
     let claims: any;
     let sessionUser: any;
@@ -1776,6 +1812,40 @@ router.post("/login", rateLimitAuth, async (req, res) => {
           ...sessionUser,
           role: "delegate",
           actorRole: "delegate",
+          landlordId: null,
+        },
+      });
+    }
+
+    if (persistedRole === "property_manager_company") {
+      step = "property_manager_company_jwt_sign";
+      claims = {
+        sub: fbUser.id,
+        email: fbUser.email,
+        role: "property_manager_company",
+        landlordId: undefined,
+        permissions: Array.isArray(persistedUser?.permissions)
+          ? persistedUser.permissions
+          : Array.isArray(persistedAccount?.permissions)
+          ? persistedAccount.permissions
+          : [],
+        revokedPermissions: Array.isArray(persistedUser?.revokedPermissions)
+          ? persistedUser.revokedPermissions
+          : Array.isArray(persistedAccount?.revokedPermissions)
+          ? persistedAccount.revokedPermissions
+          : [],
+      } as const;
+      const token = signAuthToken(claims, { expiresIn: "7d" });
+      sessionUser = await buildCanonicalSessionUserFromClaims({ ...claims, ver: 1 } as any, {
+        requestCache: {},
+      });
+      return res.status(200).json({
+        ok: true,
+        token,
+        user: {
+          ...sessionUser,
+          role: "property_manager_company",
+          actorRole: "property_manager_company",
           landlordId: null,
         },
       });
