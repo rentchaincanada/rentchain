@@ -56,12 +56,33 @@ Existing strategy and audit docs:
 | --- | --- | --- | --- |
 | Standalone renewal route | `/lease-renewal` | No route found in `App.tsx`. | Hidden/missing as a direct discovery route. |
 | Portfolio renewal workbench | `/portfolio-health?entry=lease-renewals` | Loads expiring lease renewal operator inputs and allows saving renewal term/deadline choices. | Best current portfolio-level renewal workbench. |
-| Lease-specific renewal workflow | `/leases/:leaseId/workflows/renewal` | Shows lease-specific renewal workflow guidance. | Best current lease-level execution surface. |
+| Lease-specific renewal workflow | `/leases/:leaseId/workflows/renewal` | Shows lease-specific renewal workflow guidance. | Best current lease-level execution route, but it does not currently expose the same unit-specific renewal operator input actions as the portfolio renewal workbench. |
 | Leases page | `/leases` | Displays lease status labels and jurisdiction policy guidance, including Renewal Review links to lease workflow pages. | Useful source workspace, but not a portfolio renewal queue. |
 | Dashboard | `/dashboard` | Shows decision queue, upcoming actions, workspace routing, and links to `/portfolio-health` generally. | Summarizes renewal risk only when queue items exist; does not expose a stable renewal entry. |
 | Operations | `/operations` | Builds lease-ending and policy signals, currently sending lease lifecycle signals to `/leases` or lease summary destinations. | Good candidate for triage, but renewal-specific destinations are less direct than existing workflow pages. |
 | Decision/analytics | analytics decision paths | Renewal decisions use `/portfolio-health?entry=lease-renewals&propertyId=...`. | Strong evidence that portfolio health is already used as renewal workbench. |
 | Tenant response | tenant notice route | Tenant renewal response sets lease status to `renewal_accepted` or `move_out_pending`. | Confirms lease record is the canonical state target for response outcome. |
+
+## Preview QA Findings
+
+User preview QA confirmed the following with lease `oTmWc8UxDj9u7Asgaqe7`:
+
+- `/leases/oTmWc8UxDj9u7Asgaqe7/workflows/renewal` opens successfully.
+- `/portfolio-health?entry=lease-renewals` shows renewal operator inputs for the unit.
+- `/leases` exposes workflow buttons such as renewal and rent increase guidance.
+
+Confirmed gaps:
+
+- The lease-level renewal workflow route exists and is reachable directly, but it is not easily discoverable through normal navigation.
+- On `/operations`, the "Lease lifecycle source workflow" link routes to `/leases/:id/summary`, not `/leases/:leaseId/workflows/renewal`.
+- Renewal-specific Operations signals should route to `/leases/:leaseId/workflows/renewal` when safe lease context exists.
+- The lease-level renewal workflow opens, but it does not display the same unit-specific renewal operator input options that appear in `/portfolio-health?entry=lease-renewals`.
+- This creates an execution mismatch: Portfolio Health has actionable renewal inputs, while the lease-level workflow page is less useful for completing renewal review.
+
+Separate issue observed during QA:
+
+- On `/operations`, selecting reviewer prompts Save/Cancel, but reviewer assignment does not persist after refresh.
+- Treat this as a separate suspected manual-review persistence/projection bug unless implementation work proves it shares the same routing path.
 
 ## Current Backend Renewal Model
 
@@ -135,6 +156,7 @@ Do not build a new standalone `/lease-renewal` page in RC1 unless a later implem
 
 - Operations lease-ending signals route to `/leases` or lease summary destinations rather than directly to `/leases/:leaseId/workflows/renewal` when the required next action is renewal-specific.
 - Decision-routing docs already identify `/leases/:leaseId/workflows/renewal` as the preferred destination for lease-expiring decisions, but the live Operations signal path is less specific.
+- The lease-level renewal workflow is reachable but less actionable than the portfolio renewal workbench because renewal operator inputs are currently edited in `/portfolio-health?entry=lease-renewals`.
 - Portfolio-health empty copy says no expiring leases are visible for the scope. That is accurate for the current filter, but the RC1 demo may need clearer distinction between no expiring leases, no pending responses, and no no-response cases.
 
 ### Not Found
@@ -188,8 +210,10 @@ Recommended scope:
 - Add a focused Renewal entry point from the Leases workspace or Dashboard upcoming-actions area.
 - Route renewal-specific Operations signals to `/leases/:leaseId/workflows/renewal` when safe lease context exists.
 - Preserve `/portfolio-health?entry=lease-renewals` as the portfolio-level renewal workbench.
+- Preserve `/leases/:leaseId/workflows/renewal` as the lease-level renewal execution surface.
+- Ensure the lease-level renewal workflow shows enough unit-specific renewal context/actions to be useful, or clearly links back to `/portfolio-health?entry=lease-renewals` for editing renewal inputs.
 - Keep lease records and lease notices as source of truth.
-- Add route/nav tests for the redirect and focused entry points.
+- Add route/navigation tests for the redirect, focused entry points, and Operations renewal-signal destination.
 
 Non-goals for that mission:
 
@@ -199,6 +223,19 @@ Non-goals for that mission:
 - no PAD
 - no broad dashboard redesign
 - no new renewal collection
+- no new standalone renewal page unless the redirect model cannot support the existing route structure
+
+## Separate Follow-Up Candidate
+
+```text
+fix/operations-manual-review-assignment-persistence-v1
+```
+
+Recommended scope:
+
+- Investigate why reviewer/manual assignment changes on `/operations` prompt Save/Cancel but do not persist after refresh.
+- Confirm whether the issue is frontend state only, API persistence, projection refresh, or missing backend write.
+- Keep this separate from renewal routing unless implementation proves the persistence bug shares the same route/data path.
 
 ## RC1 Demo Readiness Conclusion
 
