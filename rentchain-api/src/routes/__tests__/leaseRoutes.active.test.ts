@@ -354,6 +354,54 @@ describe("leaseRoutes GET /active", () => {
     expect(res.body?.leases?.[0]?.paymentMethod).toBeUndefined();
   });
 
+  it("returns lifecycle summary on landlord-scoped single lease detail responses", async () => {
+    seedDoc("properties", "prop-1", { landlordId: "landlord-1", name: "Harbour View", province: "NS" });
+    seedDoc("tenants", "tenant-1", { landlordId: "landlord-1", fullName: "Jane Tenant", email: "jane@example.com" });
+    seedDoc("leases", "lease-1", {
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      tenantId: "tenant-1",
+      tenantIds: ["tenant-1"],
+      primaryTenantId: "tenant-1",
+      unitId: "unit-1",
+      unitNumber: "101",
+      monthlyRent: 1850,
+      dueDay: 1,
+      startDate: "2026-01-01",
+      endDate: "2099-12-31",
+      status: "active",
+      nextNoticeDueAt: "2099-10-01T00:00:00.000Z",
+      createdAt: 1,
+      updatedAt: 2,
+    });
+
+    const router = (await import("../leaseRoutes")).default;
+    const res = await invokeRouter(router, { method: "GET", url: "/lease-1" });
+
+    expect(res.status).toBe(200);
+    expect(res.body?.lease).toEqual(
+      expect.objectContaining({
+        id: "lease-1",
+        propertyName: "Harbour View",
+        tenantName: "Jane Tenant",
+        leaseLifecycleSummary: expect.objectContaining({
+          lifecycleStatus: "active",
+          lifecycleLabel: "Active",
+          requiredNextAction: "none",
+          daysUntilExpiry: expect.any(Number),
+        }),
+        jurisdictionProvince: "NS",
+        jurisdictionPolicies: expect.arrayContaining([
+          expect.objectContaining({
+            jurisdiction: "NS",
+            legalAdvice: false,
+          }),
+        ]),
+      })
+    );
+    expect(res.body?.lease?.leaseLifecycleSummary?.daysUntilExpiry).toBeGreaterThan(0);
+  });
+
   it("does not project an active lease as signed without signature metadata", async () => {
     seedDoc("properties", "prop-1", { landlordId: "landlord-1", name: "Harbour View" });
     seedDoc("tenants", "tenant-1", { landlordId: "landlord-1", fullName: "Jane Tenant", email: "jane@example.com" });

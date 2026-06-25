@@ -60,7 +60,7 @@ const WORKFLOWS: Record<WorkflowKey, WorkflowConfig> = {
     policyKeys: ["notice_workflow_readiness"],
     facts: [
       { label: "Lease status", value: (lease) => prettyValue(lease.status) },
-      { label: "Lifecycle", value: (lease) => lease.leaseLifecycleSummary?.lifecycleLabel || "Lifecycle status unavailable" },
+      { label: "Lifecycle", value: (lease) => lifecycleStatusLabel(lease) },
       { label: "Next action", value: (lease) => prettyValue(lease.leaseLifecycleSummary?.requiredNextAction || "review lease context") },
     ],
     reviewItems: [
@@ -94,7 +94,7 @@ const WORKFLOWS: Record<WorkflowKey, WorkflowConfig> = {
     policyKeys: ["lease_renewal_review"],
     facts: [
       { label: "Lease end", value: (lease) => formatDate(lease.endDate) },
-      { label: "Lifecycle", value: (lease) => lease.leaseLifecycleSummary?.lifecycleLabel || "Lifecycle status unavailable" },
+      { label: "Lifecycle", value: (lease) => lifecycleStatusLabel(lease) },
       { label: "Days until end", value: (lease) => daysUntilEndLabel(lease) },
     ],
     reviewItems: [
@@ -112,7 +112,7 @@ const WORKFLOWS: Record<WorkflowKey, WorkflowConfig> = {
     facts: [
       { label: "Lease end", value: (lease) => formatDate(lease.endDate) },
       { label: "Tenant", value: (lease) => lease.tenantName || "Tenant not linked" },
-      { label: "Lifecycle", value: (lease) => lease.leaseLifecycleSummary?.lifecycleLabel || "Lifecycle status unavailable" },
+      { label: "Lifecycle", value: (lease) => lifecycleStatusLabel(lease) },
     ],
     reviewItems: [
       "Confirm move-out timing and any required notice context.",
@@ -166,11 +166,30 @@ function propertyLabel(lease: LandlordActiveLease) {
   return lease.unitNumber ? `${property} · Unit ${lease.unitNumber}` : property;
 }
 
+function daysUntilDate(value: string | null | undefined) {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  const today = new Date();
+  const todayDay = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
+  const endDay = Date.UTC(parsed.getUTCFullYear(), parsed.getUTCMonth(), parsed.getUTCDate());
+  return Math.ceil((endDay - todayDay) / 86_400_000);
+}
+
+function lifecycleStatusLabel(lease: LandlordActiveLease) {
+  const label = String(lease.leaseLifecycleSummary?.lifecycleLabel || "").trim();
+  if (label) return label;
+  if (lease.endDate) return "Lifecycle summary pending";
+  return "Lifecycle status unavailable";
+}
+
 function daysUntilEndLabel(lease: LandlordActiveLease) {
-  const days = lease.leaseLifecycleSummary?.daysUntilExpiry;
+  const summaryDays = lease.leaseLifecycleSummary?.daysUntilExpiry;
+  const days = typeof summaryDays === "number" ? summaryDays : daysUntilDate(lease.endDate);
   if (typeof days !== "number") return "Not available";
   if (days < 0) return "Lease end has passed";
   if (days === 0) return "Lease ends today";
+  if (days === 1) return "1 day";
   return `${days} days`;
 }
 
@@ -227,26 +246,28 @@ export default function LandlordLeaseWorkflowPage() {
   const ledgerPath = lease ? `/leases/${encodeURIComponent(lease.id)}/ledger` : `/leases/${encodeURIComponent(leaseId)}/ledger`;
 
   return (
-    <div style={{ display: "grid", gap: 16, maxWidth: 920 }}>
-      <div style={{ display: "grid", gap: 6 }}>
-        <div style={{ fontSize: 12, color: "#2563eb", fontWeight: 800, textTransform: "uppercase", letterSpacing: 0 }}>
-          {workflow.eyebrow}
+    <div data-testid="lease-workflow-page" style={workflowPageStyle}>
+      <section style={workflowOverviewStyle} aria-label="Workflow overview">
+        <div style={{ display: "grid", gap: 6 }}>
+          <div style={{ fontSize: 12, color: "#2563eb", fontWeight: 800, textTransform: "uppercase", letterSpacing: 0 }}>
+            {workflow.eyebrow}
+          </div>
+          <h1 style={{ margin: 0, fontSize: 26, letterSpacing: 0, color: "#0f172a" }}>{workflow.title}</h1>
+          <div style={{ color: "#475569", lineHeight: 1.6 }}>{workflow.purpose}</div>
         </div>
-        <h1 style={{ margin: 0, fontSize: 26, letterSpacing: 0, color: "#0f172a" }}>{workflow.title}</h1>
-        <div style={{ color: "#475569", lineHeight: 1.6 }}>{workflow.purpose}</div>
-      </div>
 
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <Link to="/leases" style={buttonLinkStyle}>
-          Back to leases
-        </Link>
-        <Link to={summaryPath} style={buttonLinkStyle}>
-          Lease summary
-        </Link>
-        <Link to={ledgerPath} style={buttonLinkStyle}>
-          Ledger
-        </Link>
-      </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <Link to="/leases" style={buttonLinkStyle}>
+            Back to leases
+          </Link>
+          <Link to={summaryPath} style={buttonLinkStyle}>
+            Lease summary
+          </Link>
+          <Link to={ledgerPath} style={buttonLinkStyle}>
+            Ledger
+          </Link>
+        </div>
+      </section>
 
       {loading ? <div>Loading workflow review…</div> : null}
       {error ? <div style={{ color: "#b91c1c" }}>{error}</div> : null}
@@ -311,6 +332,22 @@ const buttonLinkStyle: React.CSSProperties = {
   color: "#0f172a",
   background: "#fff",
   fontWeight: 700,
+};
+
+const workflowPageStyle: React.CSSProperties = {
+  width: "100%",
+  maxWidth: 1040,
+  display: "grid",
+  gap: 16,
+};
+
+const workflowOverviewStyle: React.CSSProperties = {
+  border: "1px solid #dbe4ee",
+  borderRadius: 8,
+  background: "#f8fafc",
+  padding: 18,
+  display: "grid",
+  gap: 14,
 };
 
 const panelStyle: React.CSSProperties = {
