@@ -284,6 +284,7 @@ describe("DashboardPage", () => {
       "/payments?context=current_month&period=2026-06&source=dashboard"
     );
     expect(screen.getByTestId("workspace-routing-section")).toHaveTextContent("Operations full queue");
+    expect(screen.getByRole("link", { name: /Renewals/i })).toHaveAttribute("href", "/lease-renewal");
 
     expect(mocks.fetchLandlordPortfolioStatusFinancialMock).toHaveBeenCalledWith({ periodMonth: expect.stringMatching(/^\d{4}-\d{2}$/) });
     expect(mocks.fetchLandlordDecisionQueueMock).toHaveBeenCalledWith({ status: "open_state", limit: 6 });

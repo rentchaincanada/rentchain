@@ -773,6 +773,7 @@ function WorkspaceRoutingSection() {
     { label: "Operations full queue", href: "/operations", icon: <ClipboardList size={17} />, helper: "Execution workspace" },
     { label: "Properties", href: "/properties", icon: <Building2 size={17} />, helper: "Portfolio records" },
     { label: "Leases", href: "/leases", icon: <Route size={17} />, helper: "Lease workspace" },
+    { label: "Renewals", href: "/lease-renewal", icon: <CalendarDays size={17} />, helper: "Renewal workbench" },
     { label: "Payments", href: "/payments", icon: <WalletCards size={17} />, helper: "Financial workspace" },
   ];
   return (

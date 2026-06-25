@@ -913,6 +913,7 @@ function App() {
             </RequireAuth>
           }
         />
+        <Route path="/lease-renewal" element={<Navigate to="/portfolio-health?entry=lease-renewals" replace />} />
         <Route
           path="/portfolio-score"
           element={

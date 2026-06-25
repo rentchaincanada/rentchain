@@ -454,6 +454,23 @@ describe("deriveCommandCenterSignals", () => {
         contextLabel: "North Towers · 101 · John Smith",
       })
     );
+
+    const renewalTimingSignal = signals.find((signal) => signal.id === "lease-ending:lease-1");
+    expect(renewalTimingSignal).toEqual(
+      expect.objectContaining({
+        destination: "/leases/lease-1/workflows/renewal",
+        scopedLeaseId: "lease-1",
+      })
+    );
+    expect(scopedSourceDestinationForSignal(renewalTimingSignal!)).toBe("/leases/lease-1/workflows/renewal");
+
+    const renewalPolicySignal = signals.find((signal) => signal.id === "policy:lease-1:lease_renewal_review");
+    expect(renewalPolicySignal).toEqual(
+      expect.objectContaining({
+        destination: "/leases/lease-1/workflows/renewal",
+        scopedLeaseId: "lease-1",
+      })
+    );
   });
 
   it("keeps the generic lease fallback when no scoped lease id is available", () => {

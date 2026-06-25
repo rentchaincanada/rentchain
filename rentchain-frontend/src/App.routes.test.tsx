@@ -129,7 +129,10 @@ vi.mock("./pages/admin/PortfolioScoreHistoryPage", () => ({
 }));
 
 vi.mock("./pages/landlord/PortfolioHealthSummaryPage", () => ({
-  default: () => <h1>Portfolio Health Summary</h1>,
+  default: () => {
+    const location = useLocation();
+    return <h1>{`Portfolio Health Summary ${location.pathname}${location.search}`}</h1>;
+  },
 }));
 
 vi.mock("./pages/landlord/LandlordAnalyticsPage", () => ({
@@ -983,6 +986,20 @@ describe("Routes: /portfolio-health", () => {
     );
 
     expect(await screen.findByText(/Portfolio Health Summary/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("Routes: /lease-renewal", () => {
+  it("redirects the legacy renewal route to the portfolio renewal workbench", async () => {
+    const { default: App } = await import("./App");
+    render(
+      <MemoryRouter initialEntries={["/lease-renewal"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Portfolio Health Summary /portfolio-health?entry=lease-renewals")).toBeInTheDocument();
     expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
   });
 });

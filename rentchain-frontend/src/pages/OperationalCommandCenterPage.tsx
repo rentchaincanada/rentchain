@@ -297,6 +297,10 @@ function leaseSummaryDestination(leaseId: string) {
   return `/leases/${encodeURIComponent(leaseId)}/summary`;
 }
 
+function leaseRenewalWorkflowDestination(leaseId: string) {
+  return `/leases/${encodeURIComponent(leaseId)}/workflows/renewal`;
+}
+
 export function scopedSourceDestinationForSignal(signal: CommandCenterSignal) {
   const scopedLeaseId = String(signal.scopedLeaseId || "").trim();
   if (scopedLeaseId && signal.destination === "/leases") return leaseSummaryDestination(scopedLeaseId);
@@ -726,7 +730,7 @@ export function deriveCommandCenterSignals(input: {
         title: "Lease ending soon",
         description: `Lease ends ${formatDate(lease.endDate)}. Review renewal, notice, or move-out workflow timing.`,
         contextLabel: baseLabel,
-        destination: "/leases",
+        destination: leaseRenewalWorkflowDestination(lease.id),
         source: "Lease operations · lifecycle timing",
         workflowStatus: "Upcoming",
         reviewStatus: endingIn <= 30 ? "Needs review" : "Upcoming",
@@ -747,7 +751,7 @@ export function deriveCommandCenterSignals(input: {
         title: policy.label,
         description: `${policy.reason} ${policy.disclaimer}`,
         contextLabel: baseLabel,
-        destination: "/leases",
+        destination: policy.policyKey.includes("renewal") ? leaseRenewalWorkflowDestination(lease.id) : "/leases",
         source: `Jurisdiction workflow · ${policy.jurisdiction}`,
         workflowStatus: label(policy.status),
         reviewStatus: "Review needed",
