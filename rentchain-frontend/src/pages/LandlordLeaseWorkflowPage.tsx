@@ -174,6 +174,12 @@ function daysUntilEndLabel(lease: LandlordActiveLease) {
   return `${days} days`;
 }
 
+function portfolioRenewalInputsPath(lease: LandlordActiveLease) {
+  const params = new URLSearchParams({ entry: "lease-renewals" });
+  if (lease.propertyId) params.set("propertyId", lease.propertyId);
+  return `/portfolio-health?${params.toString()}`;
+}
+
 function matchingPolicy(lease: LandlordActiveLease, config: WorkflowConfig): JurisdictionPolicyGuidance | null {
   const policies = Array.isArray(lease.jurisdictionPolicies) ? lease.jurisdictionPolicies : [];
   return policies.find((policy) => config.policyKeys.includes(policy.policyKey)) || null;
@@ -267,6 +273,19 @@ export default function LandlordLeaseWorkflowPage() {
               ))}
             </ul>
           </section>
+
+          {workflow.key === "renewal" ? (
+            <section style={panelStyle} aria-label="Renewal operator inputs">
+              <h2 style={sectionHeadingStyle}>Renewal operator inputs</h2>
+              <div style={{ color: "#334155", lineHeight: 1.6 }}>
+                Use the portfolio renewal workbench to review unit-specific renewal inputs such as proposed rent,
+                term dates, response deadline, and renewal recommendation before preparing tenant-facing notices.
+              </div>
+              <Link to={portfolioRenewalInputsPath(lease)} style={{ ...buttonLinkStyle, width: "fit-content" }}>
+                Open renewal inputs
+              </Link>
+            </section>
+          ) : null}
 
           <section style={panelStyle} aria-label="Jurisdiction context">
             <h2 style={sectionHeadingStyle}>Jurisdiction context</h2>

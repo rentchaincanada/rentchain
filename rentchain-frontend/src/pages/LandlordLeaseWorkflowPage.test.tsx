@@ -141,4 +141,17 @@ describe("LandlordLeaseWorkflowPage", () => {
     expect(await screen.findByRole("heading", { name: "Execution Review" })).toBeInTheDocument();
     expect(screen.getByText("Review the lease package, signature state, and document readiness before treating execution as complete.")).toBeInTheDocument();
   });
+
+  it("preserves the lease renewal workflow and links to portfolio renewal inputs", async () => {
+    renderWorkflow("/leases/lease-1/workflows/renewal");
+
+    expect(await screen.findByRole("heading", { name: "Renewal Review" })).toBeInTheDocument();
+    expect(screen.getByText("Review lease end timing and renewal context before deciding on renewal, continuation, or move-out next steps.")).toBeInTheDocument();
+    expect(screen.getByText("Expiring soon")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Renewal operator inputs" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open renewal inputs" })).toHaveAttribute(
+      "href",
+      "/portfolio-health?entry=lease-renewals&propertyId=prop-1"
+    );
+  });
 });
