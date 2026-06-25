@@ -1511,6 +1511,48 @@ async function enrichLeaseRow(raw: any) {
   };
 }
 
+function buildLeaseWorkflowGuidanceProjection(lease: any, rawLease: any | null, latestNotice: any | null) {
+  const leaseLifecycleSummary = deriveLeaseLifecycleSummary({
+    lease: {
+      status: lease?.status,
+      leaseStartDate: lease?.startDate,
+      leaseEndDate: lease?.endDate,
+      nextNoticeDueAt: rawLease?.nextNoticeDueAt,
+    },
+    latestNotice,
+    noResponse: latestNotice ? computeNoResponseState(latestNotice) : false,
+  });
+  return {
+    leaseLifecycleSummary,
+    jurisdictionPolicies: evaluateJurisdictionPolicy({
+      province: rawLease?.province || rawLease?.provinceState || null,
+      propertyProvince: lease?.jurisdictionProvince || null,
+      jurisdictionProvince: rawLease?.jurisdictionProvince || null,
+      leaseStatus: lease?.status,
+      leaseStartDate: lease?.startDate,
+      leaseEndDate: lease?.endDate,
+      leaseExecutionStatus: lease?.leaseExecution?.executionStatus,
+      leaseLifecycleStatus: leaseLifecycleSummary.lifecycleStatus,
+      stateCoherence: lease?.stateCoherence || null,
+    }).results,
+  };
+}
+
+async function loadLatestLeaseNoticeForProjection(leaseId: string, landlordId: string) {
+  const normalizedLeaseId = String(leaseId || "").trim();
+  const normalizedLandlordId = String(landlordId || "").trim();
+  if (!normalizedLeaseId || !normalizedLandlordId) return null;
+  const noticeSnap = await db
+    .collection("leaseNotices")
+    .where("landlordId", "==", normalizedLandlordId)
+    .where("leaseId", "==", normalizedLeaseId)
+    .get()
+    .catch(() => null);
+  return (noticeSnap?.docs || [])
+    .map((doc: any) => ({ id: doc.id, ...(doc.data() as any) }))
+    .sort((a: any, b: any) => Number(b.updatedAt || b.createdAt || 0) - Number(a.updatedAt || a.createdAt || 0))[0] || null;
+}
+
 async function listLandlordLeaseRows(landlordId: string, opts?: { archived?: boolean | null }) {
   const collectionRef: any = (db as any).collection("leases");
   if (!collectionRef || typeof collectionRef.where !== "function") {
@@ -1549,30 +1591,9 @@ async function listLandlordLeaseRows(landlordId: string, opts?: { archived?: boo
   return mergedLeases.map((lease: any) => {
     const rawLease = rawLeaseById.get(String(lease?.id || "").trim()) || null;
     const latestNotice = latestNoticeByLeaseId.get(String(lease?.id || "").trim()) || null;
-    const leaseLifecycleSummary = deriveLeaseLifecycleSummary({
-      lease: {
-        status: lease?.status,
-        leaseStartDate: lease?.startDate,
-        leaseEndDate: lease?.endDate,
-        nextNoticeDueAt: rawLease?.nextNoticeDueAt,
-      },
-      latestNotice,
-      noResponse: latestNotice ? computeNoResponseState(latestNotice) : false,
-    });
     return {
       ...lease,
-      leaseLifecycleSummary,
-      jurisdictionPolicies: evaluateJurisdictionPolicy({
-        province: rawLease?.province || rawLease?.provinceState || null,
-        propertyProvince: lease?.jurisdictionProvince || null,
-        jurisdictionProvince: rawLease?.jurisdictionProvince || null,
-        leaseStatus: lease?.status,
-        leaseStartDate: lease?.startDate,
-        leaseEndDate: lease?.endDate,
-        leaseExecutionStatus: lease?.leaseExecution?.executionStatus,
-        leaseLifecycleStatus: leaseLifecycleSummary.lifecycleStatus,
-        stateCoherence: lease?.stateCoherence || null,
-      }).results,
+      ...buildLeaseWorkflowGuidanceProjection(lease, rawLease, latestNotice),
     };
   });
 }
@@ -3452,7 +3473,15 @@ router.get("/:id", requireLandlord, async (req: any, res: Response) => {
       console.warn("[state-machine] lease advisory invalid", { route: "lease_detail" });
     }
     if (result.source === "firestore") {
-      return res.json({ lease: await enrichLeaseRow({ id: String(req.params?.id || "").trim(), ...(result.lease as any) }) });
+      const rawLease = { id: String(req.params?.id || "").trim(), ...(result.lease as any) };
+      const lease = await enrichLeaseRow(rawLease);
+      const latestNotice = await loadLatestLeaseNoticeForProjection(lease.id, landlordId);
+      return res.json({
+        lease: {
+          ...lease,
+          ...buildLeaseWorkflowGuidanceProjection(lease, rawLease, latestNotice),
+        },
+      });
     }
     return res.json({ lease: result.lease });
   } catch (err) {

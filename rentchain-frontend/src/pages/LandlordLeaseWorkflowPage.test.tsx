@@ -140,6 +140,11 @@ describe("LandlordLeaseWorkflowPage", () => {
     renderWorkflow("/leases/lease-1/workflows/execution");
     expect(await screen.findByRole("heading", { name: "Execution Review" })).toBeInTheDocument();
     expect(screen.getByText("Review the lease package, signature state, and document readiness before treating execution as complete.")).toBeInTheDocument();
+    expect(screen.getByTestId("lease-workflow-page")).toHaveStyle({ maxWidth: "1040px" });
+    expect(screen.getByLabelText("Workflow overview")).toHaveStyle({
+      background: "#f8fafc",
+      borderRadius: "8px",
+    });
   });
 
   it("preserves the lease renewal workflow and links to portfolio renewal inputs", async () => {
@@ -148,10 +153,39 @@ describe("LandlordLeaseWorkflowPage", () => {
     expect(await screen.findByRole("heading", { name: "Renewal Review" })).toBeInTheDocument();
     expect(screen.getByText("Review lease end timing and renewal context before deciding on renewal, continuation, or move-out next steps.")).toBeInTheDocument();
     expect(screen.getByText("Expiring soon")).toBeInTheDocument();
+    expect(screen.getByText("30 days")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Renewal operator inputs" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open renewal inputs" })).toHaveAttribute(
       "href",
       "/portfolio-health?entry=lease-renewals&propertyId=prop-1"
     );
+  });
+
+  it("uses lease end date fallback copy when lifecycle summary is absent", async () => {
+    mocks.getLeaseById.mockResolvedValueOnce({
+      lease: {
+        id: "lease-no-summary",
+        propertyId: "prop-1",
+        propertyName: "Harbour View",
+        unitNumber: "101",
+        monthlyRent: 1850,
+        startDate: "2026-01-01",
+        endDate: "2099-12-31",
+        status: "active",
+        tenantName: "Jane Tenant",
+        tenantEmail: "jane@example.com",
+        leaseExecution: null,
+        paymentReadiness: null,
+        jurisdictionPolicies: [],
+      },
+    });
+
+    renderWorkflow("/leases/lease-no-summary/workflows/renewal");
+
+    expect(await screen.findByRole("heading", { name: "Renewal Review" })).toBeInTheDocument();
+    expect(screen.getByText("December 31, 2099")).toBeInTheDocument();
+    expect(screen.getByText("Lifecycle summary pending")).toBeInTheDocument();
+    expect(screen.getByText(/days$/)).toBeInTheDocument();
+    expect(screen.queryByText("Not available")).not.toBeInTheDocument();
   });
 });
