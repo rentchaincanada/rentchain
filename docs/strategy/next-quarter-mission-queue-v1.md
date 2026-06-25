@@ -83,7 +83,7 @@ Scope:
 - audit payment architecture for PAD readiness
 - identify mandate, consent, return, cancellation, reconciliation, and support gaps
 
-### `audit/screening-certn-readiness-v1`
+### `audit/screening-provider-readiness-v1`
 
 Scope:
 
@@ -130,7 +130,7 @@ Scope:
 - landlord/admin review
 - audit trail
 
-### `feat/certn-application-screening-dispatch-v1`
+### `feat/application-screening-provider-dispatch-v1`
 
 Scope:
 

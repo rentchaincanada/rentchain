@@ -13,6 +13,8 @@ It separates current capability from future roadmap. It does not change pricing,
 
 RentChain is shifting from construction mode into enterprise validation and execution planning.
 
+RentChain should be positioned as a Governed Housing Operations Platform, not generic landlord software. The current strategic value is the governed connection between landlord operations, tenant workflows, delegated actors, property manager companies, evidence, audit, and revenue lifecycle execution.
+
 The current platform has strong governance-first foundations:
 
 - authenticated landlord, tenant, delegate, contractor, and property manager company account patterns

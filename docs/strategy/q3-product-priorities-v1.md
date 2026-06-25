@@ -9,6 +9,8 @@ Scope: strategic product prioritization only; no implementation.
 
 PM Company support is now one of RentChain's strongest enterprise differentiators. It reflects how real large landlords operate with external or separate property management companies.
 
+This priority reinforces RentChain's Governed Housing Operations Platform posture by making multi-actor housing operations traceable, permissioned, and auditable.
+
 ### Business Value
 
 - supports professional property management operations
@@ -82,9 +84,9 @@ Enterprise feedback identified screening as required.
 
 ### Required Missions
 
-- `audit/screening-certn-readiness-v1`
+- `audit/screening-provider-readiness-v1`
 - `feat/manual-screening-workflow-v1`
-- `feat/certn-application-screening-dispatch-v1`
+- `feat/application-screening-provider-dispatch-v1`
 
 ### Non-Goals
 
@@ -159,3 +161,33 @@ Enterprise feedback confirmed need for workflows beyond current Free, Starter, P
 Stabilization and revenue workflows come before institutional differentiation.
 
 Institutional reporting, board/tribunal packages, policy orchestration, and broad enterprise audit consoles should remain later-phase work until PAD, screening, vacancy publishing, PM Company polish, and renewal continuity are stable.
+
+## Execution Sequencing
+
+### Phase A: Platform Polish
+
+- PM Company polish
+- email notifications
+- lease/document hardening
+- mobile information architecture
+- assignment UX
+
+### Phase B: Revenue Workflow Foundations
+
+- PAD readiness and authorization foundations
+- manual screening
+- provider-backed screening automation after manual workflow readiness
+
+### Phase C: Lease-Up And Vacancy Publishing
+
+- renewal visibility audit
+- renewal-to-vacancy pipeline
+- vacancy publishing source of truth
+- public-safe vacancy listing/feed
+
+### Phase D: Enterprise Integrations
+
+- enterprise pricing and packaging
+- enterprise API key management
+- portfolio reporting
+- accounting export framework

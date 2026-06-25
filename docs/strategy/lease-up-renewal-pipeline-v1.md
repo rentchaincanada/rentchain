@@ -10,7 +10,7 @@ The renewal pipeline is strategic. It is not just a page.
 For enterprise landlords, renewal decisions create downstream revenue and operational consequences:
 
 ```text
-Renewal -> Vacancy -> Listing -> Inquiry -> Application -> Screening -> Approval -> Lease -> Occupancy -> Operations
+Renewal -> Vacancy Scheduling -> Public Listing -> Viewing Requests -> Applications -> Screening -> Approval -> Lease -> Occupancy -> Operations
 ```
 
 RentChain should treat this as a revenue lifecycle.
