@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const loadLandlordAnalyticsSnapshot = vi.hoisted(() => vi.fn());
 const deriveLeaseDecisionsForInbox = vi.hoisted(() => vi.fn());
+const derivePaymentConsistentDecisionInbox = vi.hoisted(() => vi.fn());
 const getUnifiedInbox = vi.hoisted(() => vi.fn());
 const writeCanonicalEventMock = vi.hoisted(() => vi.fn());
 let mockUser: any;
@@ -10,11 +11,10 @@ vi.mock("../../services/landlord/landlordAnalyticsSnapshot", () => ({
   loadLandlordAnalyticsSnapshot,
 }));
 
-vi.mock("../landlordDecisionInboxRoutes", async (importOriginal) => {
-  const original = await importOriginal<typeof import("../landlordDecisionInboxRoutes")>();
+vi.mock("../landlordDecisionInboxRoutes", () => {
   return {
-    ...original,
     deriveLeaseDecisionsForInbox,
+    derivePaymentConsistentDecisionInbox,
   };
 });
 
@@ -125,6 +125,10 @@ describe("landlordDecisionQueueRoutes", () => {
     mockUser = { id: "landlord-1", landlordId: "landlord-1", role: "landlord", email: "landlord@example.com" };
     loadLandlordAnalyticsSnapshot.mockResolvedValue({ decisions: { items: [analyticsDecision()] } });
     deriveLeaseDecisionsForInbox.mockResolvedValue([]);
+    derivePaymentConsistentDecisionInbox.mockImplementation(async ({ analyticsDecisions, leaseDecisions }: any) => {
+      const { deriveDecisionInbox } = await import("../../lib/decisions/deriveDecisionInbox");
+      return deriveDecisionInbox({ analyticsDecisions, leaseDecisions });
+    });
     getUnifiedInbox.mockResolvedValue({
       ok: true,
       role: "landlord",

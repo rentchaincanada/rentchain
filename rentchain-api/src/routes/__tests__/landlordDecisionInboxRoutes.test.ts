@@ -277,6 +277,109 @@ describe("landlordDecisionInboxRoutes", () => {
     );
   });
 
+  it("does not emit active missing-payment decisions when canonical payment evidence covers the lease obligation", async () => {
+    seedLease();
+    seedDoc("payments", "payment-canonical-overpaid", {
+      leaseId: "lease-1",
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      amountCents: 220000,
+      currency: "cad",
+      status: "recorded",
+      effectiveDate: "2026-04-01",
+      source: "imported_bank_payment",
+    });
+    loadLandlordAnalyticsSnapshot.mockResolvedValue({ decisions: { items: [] } });
+    const router = (await import("../landlordDecisionInboxRoutes")).default;
+
+    const res = await invokeRouter(router, { method: "GET", url: "/decision-inbox?type=billing" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.items).toEqual([]);
+    expect(res.body.summary.total).toBe(0);
+  });
+
+  it("does not emit active missing-payment decisions when ledger-entry payment evidence covers the lease obligation", async () => {
+    seedLease();
+    seedDoc("ledgerEntries", "ledger-payment-overpaid", {
+      leaseId: "lease-1",
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      entryType: "payment",
+      amountCents: -220000,
+      effectiveDate: "2026-04-01",
+      source: "manual_ledger_payment",
+    });
+    loadLandlordAnalyticsSnapshot.mockResolvedValue({ decisions: { items: [] } });
+    const router = (await import("../landlordDecisionInboxRoutes")).default;
+
+    const res = await invokeRouter(router, { method: "GET", url: "/decision-inbox?type=billing" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.items).toEqual([]);
+    expect(res.body.summary.total).toBe(0);
+  });
+
+  it("suppresses stale analytics missing-payment decisions when current lease ledger evidence is settled", async () => {
+    seedLease();
+    seedDoc("ledgerEntries", "ledger-payment-settled", {
+      leaseId: "lease-1",
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      entryType: "payment",
+      amountCents: 220000,
+      effectiveDate: "2026-04-01",
+      source: "manual_ledger_payment",
+    });
+    loadLandlordAnalyticsSnapshot.mockResolvedValue({
+      decisions: {
+        items: [
+          analyticsDecision({
+            id: "stale_missing_payment:lease-1",
+            decisionType: "missing_payment",
+            actionLabel: "Review Missing Payment",
+            recommendedAction: "Review Missing Payment",
+            destination: "/leases/lease-1/ledger",
+            executionMapping: { resourceType: "lease", resourceId: "lease-1" },
+          }),
+        ],
+      },
+    });
+    const router = (await import("../landlordDecisionInboxRoutes")).default;
+
+    const res = await invokeRouter(router, { method: "GET", url: "/decision-inbox?type=billing" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.items).toEqual([]);
+    expect(res.body.summary.total).toBe(0);
+  });
+
+  it("preserves genuine missing-payment decisions when no payment evidence covers the lease obligation", async () => {
+    seedLease();
+    loadLandlordAnalyticsSnapshot.mockResolvedValue({ decisions: { items: [] } });
+    const router = (await import("../landlordDecisionInboxRoutes")).default;
+
+    const res = await invokeRouter(router, { method: "GET", url: "/decision-inbox?type=billing" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          source: "lease_ledger",
+          type: "billing",
+          title: "Review Missing Payment",
+          destination: "/leases/lease-1/ledger",
+        }),
+      ])
+    );
+  });
+
   it("does not expose another landlord's lease decisions", async () => {
     seedLease({ id: "lease-other", landlordId: "landlord-2" });
     loadLandlordAnalyticsSnapshot.mockResolvedValue({ decisions: { items: [] } });

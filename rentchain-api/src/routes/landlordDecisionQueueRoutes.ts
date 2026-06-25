@@ -2,8 +2,7 @@ import { Router } from "express";
 import { requireAuth } from "../middleware/requireAuth";
 import { requireLandlord } from "../middleware/requireLandlord";
 import { loadLandlordAnalyticsSnapshot } from "../services/landlord/landlordAnalyticsSnapshot";
-import { deriveDecisionInbox } from "../lib/decisions/deriveDecisionInbox";
-import { deriveLeaseDecisionsForInbox } from "./landlordDecisionInboxRoutes";
+import { deriveLeaseDecisionsForInbox, derivePaymentConsistentDecisionInbox } from "./landlordDecisionInboxRoutes";
 import { getUnifiedInbox } from "../services/unifiedInbox";
 import {
   deriveLandlordDecisionQueue,
@@ -95,7 +94,8 @@ router.get("/decision-queue", requireAuth, requireLandlord, async (req: any, res
       getUnifiedInbox({ role: "landlord", landlordId }, { limit: MAX_LIMIT }),
     ]);
 
-    const decisionInbox = deriveDecisionInbox({
+    const decisionInbox = await derivePaymentConsistentDecisionInbox({
+      landlordId,
       analyticsDecisions: Array.isArray(snapshot?.decisions?.items) ? snapshot.decisions.items : [],
       leaseDecisions,
     });
