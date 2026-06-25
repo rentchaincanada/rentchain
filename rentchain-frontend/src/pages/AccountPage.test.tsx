@@ -72,5 +72,7 @@ describe("AccountPage", () => {
     expect(screen.getByRole("button", { name: "Security controls coming soon" })).toBeDisabled();
     expect(screen.getByText("Delegated Access")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Manage delegates" })).toBeInTheDocument();
+    expect(screen.getByText("PM Company Management")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Manage PM companies" })).toBeInTheDocument();
   });
 });

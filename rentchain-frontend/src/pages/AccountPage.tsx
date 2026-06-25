@@ -127,6 +127,12 @@ const AccountPage: React.FC = () => {
           </Button>
         </HubCard>
 
+        <HubCard title="PM Company Management" description="Coordinate property manager company relationships and staff assignments.">
+          <Button type="button" onClick={() => navigate("/account/property-manager-companies")}>
+            Manage PM companies
+          </Button>
+        </HubCard>
+
         <HubCard title="Billing & Plans" description="View your plan, receipts, and manage paid upgrades with pricing that matches checkout.">
           <Button type="button" onClick={() => navigate("/billing")}>
             Billing

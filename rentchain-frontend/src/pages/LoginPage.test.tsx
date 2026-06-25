@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import LoginPage from "./LoginPage";
 
@@ -79,6 +79,42 @@ describe("LoginPage", () => {
     await waitFor(() => {
       expect(mocks.login).toHaveBeenCalledWith("landlord@example.com", "secret-password", undefined);
     });
+  });
+
+  it("routes PM company login responses to PM company management instead of dashboard", async () => {
+    mocks.login.mockResolvedValueOnce({
+      requires2fa: false,
+      user: {
+        id: "pm-company-admin-1",
+        email: "admin+propertymanager@rentchain.ai",
+        role: "property_manager_company",
+        landlordId: null,
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/login?next=/dashboard"]}>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/dashboard" element={<div>Landlord dashboard</div>} />
+          <Route
+            path="/property-manager-companies/management"
+            element={<div>PM Company Management</div>}
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    fireEvent.change(screen.getByLabelText("Email"), {
+      target: { value: "admin+propertymanager@rentchain.ai" },
+    });
+    fireEvent.change(screen.getByLabelText("Password"), {
+      target: { value: "safe-password" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+
+    expect(await screen.findByText("PM Company Management")).toBeInTheDocument();
+    expect(screen.queryByText("Landlord dashboard")).not.toBeInTheDocument();
   });
 
   it("shows expired session context without changing auth behavior", () => {

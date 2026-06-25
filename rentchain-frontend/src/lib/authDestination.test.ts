@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   DELEGATED_ACCESS_DEFAULT_DESTINATION,
   getRoleDefaultDestination,
+  PROPERTY_MANAGER_COMPANY_DEFAULT_DESTINATION,
   getSafeTenantRedirect,
+  resolvePostAuthDestination,
   resolveTenantPostAuthDestination,
   TENANT_DEFAULT_DESTINATION,
 } from "./authDestination";
@@ -14,6 +16,21 @@ describe("authDestination tenant routing", () => {
 
   it("uses the delegated workspace as the delegate role default", () => {
     expect(getRoleDefaultDestination("delegate")).toBe(DELEGATED_ACCESS_DEFAULT_DESTINATION);
+  });
+
+  it("uses PM company management as the PM company role default", () => {
+    expect(getRoleDefaultDestination("property_manager_company")).toBe(
+      PROPERTY_MANAGER_COMPANY_DEFAULT_DESTINATION
+    );
+  });
+
+  it("does not preserve dashboard as the PM company post-auth destination", () => {
+    expect(
+      resolvePostAuthDestination({
+        search: "?next=/dashboard",
+        role: "property_manager_company",
+      }).destination
+    ).toBe(PROPERTY_MANAGER_COMPANY_DEFAULT_DESTINATION);
   });
 
   it("rejects public tenant entry routes as post-auth destinations", () => {

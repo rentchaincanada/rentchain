@@ -1,0 +1,496 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mission Brief - Property Manager Company Management UI V1</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: #eef2f6;
+        color: #142033;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        padding: 28px;
+        background: #eef2f6;
+      }
+
+      .brief {
+        max-width: 1280px;
+        margin: 0 auto;
+        border: 1px solid #d5dde8;
+        background: #ffffff;
+        box-shadow: 0 18px 50px rgba(20, 32, 51, 0.12);
+      }
+
+      header {
+        padding: 26px 30px;
+        background: #142033;
+        color: #ffffff;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin-top: 0;
+      }
+
+      h1 {
+        margin-bottom: 8px;
+        font-size: 26px;
+        line-height: 1.2;
+        letter-spacing: 0;
+      }
+
+      h1 span {
+        color: #8fd6ff;
+      }
+
+      .subtitle {
+        max-width: 920px;
+        color: #d8e7f4;
+        font-size: 15px;
+        line-height: 1.5;
+      }
+
+      main {
+        display: grid;
+        grid-template-columns: minmax(0, 1.05fr) minmax(380px, 0.95fr);
+      }
+
+      section {
+        padding: 26px 30px;
+      }
+
+      .left {
+        border-right: 1px solid #d5dde8;
+      }
+
+      .block {
+        margin-bottom: 24px;
+      }
+
+      .block:last-child {
+        margin-bottom: 0;
+      }
+
+      h2 {
+        margin-bottom: 10px;
+        color: #142033;
+        font-size: 14px;
+        line-height: 1.25;
+        letter-spacing: 0;
+        text-transform: uppercase;
+      }
+
+      h3 {
+        margin-bottom: 8px;
+        color: #2a3d55;
+        font-size: 14px;
+      }
+
+      p,
+      li,
+      td,
+      th {
+        font-size: 13.5px;
+        line-height: 1.46;
+      }
+
+      ul {
+        margin: 0;
+        padding-left: 18px;
+      }
+
+      li + li {
+        margin-top: 6px;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .card {
+        padding: 14px;
+        border: 1px solid #d5dde8;
+        background: #f8fafc;
+      }
+
+      .card strong {
+        display: block;
+        margin-bottom: 5px;
+      }
+
+      .panel {
+        padding: 14px 16px;
+        border-left: 4px solid #246bfe;
+        background: #f4f8ff;
+      }
+
+      .warning {
+        border-left-color: #b7791f;
+        background: #fff8e8;
+      }
+
+      .success {
+        border-left-color: #16895a;
+        background: #f0fff7;
+      }
+
+      .table {
+        width: 100%;
+        border-collapse: collapse;
+        border: 1px solid #d5dde8;
+        background: #ffffff;
+      }
+
+      .table th,
+      .table td {
+        padding: 8px 9px;
+        border-bottom: 1px solid #e3e9f1;
+        text-align: left;
+        vertical-align: top;
+      }
+
+      .table th {
+        background: #f4f7fb;
+        font-size: 12px;
+        text-transform: uppercase;
+      }
+
+      .pill-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .pill {
+        padding: 6px 9px;
+        border: 1px solid #c8d2df;
+        background: #f4f7fb;
+        color: #26374f;
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      code {
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+        font-size: 12px;
+        color: #1b4f9c;
+      }
+
+      @media (max-width: 920px) {
+        body {
+          padding: 14px;
+        }
+
+        main {
+          grid-template-columns: 1fr;
+        }
+
+        .left {
+          border-right: 0;
+          border-bottom: 1px solid #d5dde8;
+        }
+
+        .grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <article class="brief">
+      <header>
+        <h1>Mission Brief: <span>Property Manager Company Management UI V1</span></h1>
+        <p class="subtitle">
+          Design the first owner/admin interface for landlord-to-property-manager-company relationships and staff
+          assignments. The prerequisite management read APIs are now merged, so the next implementation can proceed
+          as a frontend/UI mission using safe server projections rather than raw identifier entry.
+        </p>
+      </header>
+
+      <main>
+        <section class="left">
+          <div class="block">
+            <h2>1. Mission Goal</h2>
+            <p>
+              Introduce a governed UI layer where landlord owners can review PM company relationships and where PM
+              Company Owners/Admins can accept relationships and manage staff assignments, while preserving landlord
+              data ownership, company consent, assignment scope ceilings, and fail-closed permission boundaries.
+            </p>
+          </div>
+
+          <div class="block">
+            <h2>2. Scope</h2>
+            <div class="grid">
+              <div class="card">
+                <strong>Landlord Side</strong>
+                <ul>
+                  <li>View pending, active, suspended, and terminated PM company relationships.</li>
+                  <li>Create pending relationships when the PM company can be selected by safe label.</li>
+                  <li>Suspend, reactivate, or terminate relationships with confirmation.</li>
+                  <li>Show relationship scope and clear pending acceptance copy.</li>
+                </ul>
+              </div>
+              <div class="card">
+                <strong>Company Side</strong>
+                <ul>
+                  <li>Company Owner/Admin views pending and active relationships for their company.</li>
+                  <li>Accept pending relationships without modifying landlord-approved scope.</li>
+                  <li>View and manage staff assignments for active relationships.</li>
+                  <li>Use predefined assignment role templates only.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div class="block">
+            <h2>3. Non-Goals</h2>
+            <div class="pill-row">
+              <span class="pill">No contractor organizations</span>
+              <span class="pill">No billing delegation</span>
+              <span class="pill">No custom permissions</span>
+              <span class="pill">No public branding profile</span>
+              <span class="pill">No tenant-facing PM UI</span>
+              <span class="pill">No emails</span>
+              <span class="pill">No migrations/backfills</span>
+              <span class="pill">No dashboard redesign</span>
+            </div>
+          </div>
+
+          <div class="block">
+            <h2>4. User Roles</h2>
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Role</th>
+                  <th>V1 UI Authority</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Landlord Owner</td>
+                  <td>Creates pending relationships, sees landlord-scoped relationships, suspends/reactivates/terminates.</td>
+                </tr>
+                <tr>
+                  <td>PM Company Owner/Admin</td>
+                  <td>Accepts pending relationships and manages company staff assignments within approved scope.</td>
+                </tr>
+                <tr>
+                  <td>Regional Manager / Staff Roles</td>
+                  <td>May receive assignments later; no staff management or relationship acceptance authority in V1.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="block">
+            <h2>5. Landlord UX Flow</h2>
+            <ul>
+              <li>Open PM Company Management from the landlord account/workspace shell.</li>
+              <li>Review relationship cards grouped by pending, active, suspended, and terminated.</li>
+              <li>Create a pending relationship by selecting a PM company safe label and relationship scope.</li>
+              <li>See copy: <code>Access becomes active only after the PM company accepts.</code></li>
+              <li>Confirm before suspend, reactivate, or terminate; termination must clearly preserve history.</li>
+            </ul>
+          </div>
+
+          <div class="block">
+            <h2>6. PM Company Admin UX Flow</h2>
+            <ul>
+              <li>Open PM Company Management from a company-scoped account surface.</li>
+              <li>Select one of the actor's PM companies by safe label if they belong to multiple companies.</li>
+              <li>Review pending relationships and accept without altering landlord-approved scope.</li>
+              <li>Review active relationships before creating staff assignments.</li>
+              <li>See suspended/terminated relationships as blocked, preserved history.</li>
+            </ul>
+          </div>
+
+          <div class="block">
+            <h2>7. Staff Assignment UX Flow</h2>
+            <ul>
+              <li>Company Owner/Admin selects an active landlord-company relationship.</li>
+              <li>Select active company staff from a safe member list, not by raw user ID.</li>
+              <li>Choose role template: Regional Manager, Property Manager, Leasing Agent, Office Administrator,
+                Maintenance Coordinator, or Read-only Staff.</li>
+              <li>Choose scope that narrows, never broadens, the relationship scope.</li>
+              <li>Confirm before suspend, reactivate, or remove; removed assignments remain visible as history.</li>
+            </ul>
+          </div>
+
+          <div class="block">
+            <h2>8. API Endpoints Used</h2>
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Surface</th>
+                  <th>Current Endpoint</th>
+                  <th>Readiness</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Landlord relationship list/create/lifecycle</td>
+                  <td><code>/api/landlord/property-manager-company-relationships</code></td>
+                  <td>Available for relationship list/create and suspend/reactivate/terminate.</td>
+                </tr>
+                <tr>
+                  <td>Landlord company discovery</td>
+                  <td><code>/api/landlord/property-manager-companies/search?q=...</code></td>
+                  <td>Available for safe PM company selection before pending relationship creation.</td>
+                </tr>
+                <tr>
+                  <td>Landlord staff assignment visibility</td>
+                  <td><code>/api/landlord/property-manager-company-relationships/:relationshipId/staff-assignments</code></td>
+                  <td>Available for read-only staff visibility under landlord-owned relationships.</td>
+                </tr>
+                <tr>
+                  <td>Company admin context</td>
+                  <td><code>/api/property-manager-companies/my-companies</code></td>
+                  <td>Available for selecting company context by safe label and active Owner/Admin role.</td>
+                </tr>
+                <tr>
+                  <td>Company relationship list</td>
+                  <td><code>/api/property-manager-companies/:companyId/relationships</code></td>
+                  <td>Available for pending/active/suspended/terminated company relationship views.</td>
+                </tr>
+                <tr>
+                  <td>Company relationship acceptance</td>
+                  <td><code>/api/property-manager-companies/:companyId/relationships/:relationshipId/accept</code></td>
+                  <td>Available; accepts pending relationships without changing landlord-approved scope.</td>
+                </tr>
+                <tr>
+                  <td>Company member list</td>
+                  <td><code>/api/property-manager-companies/:companyId/members</code></td>
+                  <td>Available for selecting active staff by safe label and showing suspended/removed history.</td>
+                </tr>
+                <tr>
+                  <td>Company staff assignments</td>
+                  <td><code>/api/property-manager-companies/:companyId/staff-assignments</code></td>
+                  <td>Available for safe list/create/suspend/reactivate/remove assignment workflow.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section>
+          <div class="block">
+            <h2>API Sufficiency Finding</h2>
+            <div class="panel success">
+              <p>
+                Existing APIs are now <strong>sufficient</strong> for a safe V1 management UI after
+                <code>feat/property-manager-company-management-read-api-v1</code>. The UI can render selectable company,
+                relationship, member, and assignment records using safe labels while retaining opaque API references only
+                inside client state and request payloads.
+              </p>
+              <p>
+                Implementation should proceed as frontend/UI only, using existing read and lifecycle APIs. Do not add new
+                backend behavior unless manual QA identifies a genuine API contract gap.
+              </p>
+            </div>
+          </div>
+
+          <div class="block">
+            <h2>Available Read Support</h2>
+            <ul>
+              <li>Company discovery/selection by safe label for landlord relationship creation.</li>
+              <li>Authenticated company context with only active Company Owner/Admin memberships.</li>
+              <li>Company-scoped relationship list for pending/active/suspended/terminated records.</li>
+              <li>Company member list with active, suspended, and removed members for safe staff selection/history.</li>
+              <li>Landlord-visible staff assignment list for relationship transparency.</li>
+              <li>Safe projections include labels, statuses, scopes, and timestamps without raw IDs as labels.</li>
+            </ul>
+          </div>
+
+          <div class="block">
+            <h2>9. State/Status Display</h2>
+            <ul>
+              <li>Relationship: Pending, Active, Suspended, Terminated.</li>
+              <li>Assignment: Active, Suspended, Removed.</li>
+              <li>Pending relationship copy must emphasize PM company acceptance is required.</li>
+              <li>Suspended blocks access temporarily; terminated/removed preserve history and block access.</li>
+            </ul>
+          </div>
+
+          <div class="block">
+            <h2>10. Safety / Permission Warnings</h2>
+            <ul>
+              <li>Landlord owner, PM company, company staff, and assignments must be visually distinct.</li>
+              <li>No shared logins, staff-to-staff delegation, chain delegation, or custom permission builder.</li>
+              <li>Billing/settings remain landlord-owner only and must never be selectable.</li>
+              <li>Relationship scope is the ceiling; assignment scope can only narrow it.</li>
+              <li>Confirm suspend, terminate, and remove before API mutation.</li>
+            </ul>
+          </div>
+
+          <div class="block">
+            <h2>11. Mobile Expectations</h2>
+            <ul>
+              <li>Default to compact grouped sections with counts and clear state labels.</li>
+              <li>Relationship and assignment actions should move into menus or bottom-safe confirmation panels.</li>
+              <li>Long company/staff labels must wrap or truncate without overlapping state badges.</li>
+              <li>History sections may be collapsible but must not imply deletion.</li>
+            </ul>
+          </div>
+
+          <div class="block">
+            <h2>12. Risks</h2>
+            <ul>
+              <li>Company-side navigation/auth destination is not yet modeled in frontend routing.</li>
+              <li>The UI must keep opaque API references out of visible labels, exports, and empty-state text.</li>
+              <li>Company member labels may be generic when no profile display label exists; the UI should handle that calmly.</li>
+              <li>Landlord-visible staff assignment summaries are read-only transparency, not staff management authority.</li>
+            </ul>
+          </div>
+
+          <div class="block">
+            <h2>13. Acceptance Criteria</h2>
+            <ul>
+              <li>Mission Brief accepted before UI implementation starts.</li>
+              <li>UI uses merged read APIs for company, relationship, member, and assignment selection.</li>
+              <li>No raw company/user/landlord/property IDs appear as visible labels.</li>
+              <li>All mutations require confirmation and preserve backend lifecycle semantics.</li>
+              <li>Company-side management is limited to active Company Owner/Admin users.</li>
+            </ul>
+          </div>
+
+          <div class="block">
+            <h2>14. QA Checklist</h2>
+            <ul>
+              <li>Verify landlord relationship list and lifecycle actions with safe labels.</li>
+              <li>Verify company admin can list and accept pending relationships.</li>
+              <li>Verify staff assignment create/list/suspend/reactivate/remove with scope ceiling enforcement.</li>
+              <li>Verify non-admin staff cannot manage relationships or assignments.</li>
+              <li>Verify mobile grouped sections, confirmations, empty states, and no text overlap.</li>
+            </ul>
+          </div>
+
+          <div class="block">
+            <h2>15. Merge Readiness Criteria</h2>
+            <div class="panel success">
+              <ul>
+                <li>Brief references the merged management read APIs and approved lifecycle APIs.</li>
+                <li>No implementation, backend, schema, auth, billing, contractor, or frontend runtime change in this brief revision.</li>
+                <li><code>git diff --check</code> passes.</li>
+                <li>Operator review confirms frontend/UI implementation may proceed next.</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+      </main>
+    </article>
+  </body>
+</html>

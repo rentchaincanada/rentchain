@@ -182,6 +182,17 @@ describe("LandlordNav mobile drawer", () => {
     expect(screen.getByText("Delegate Management", { selector: ".rc-landlord-mobile-role" })).toBeInTheDocument();
   });
 
+  it("keeps PM company management in the sticky workspace shell", () => {
+    renderLandlordNav("/account/property-manager-companies");
+
+    const context = screen.getByLabelText("Workspace context");
+    const workspaceNav = screen.getByRole("navigation", { name: "Workspace navigation" });
+
+    expect(context).toHaveTextContent("PM Companies");
+    expect(within(workspaceNav).getByRole("link", { name: "PM Companies" })).toHaveClass("active");
+    expect(screen.getByText("PM Companies", { selector: ".rc-landlord-mobile-role" })).toBeInTheDocument();
+  });
+
   it("keeps the mobile tab bar and close control available while the drawer is open", () => {
     renderLandlordNav();
 

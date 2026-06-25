@@ -186,6 +186,11 @@ export const LoginPage: React.FC = () => {
         return;
       }
 
+      const postLoginDestination = resolvePostAuthDestination({
+        search: location.search,
+        role: String(result.user?.role || "").toLowerCase() || undefined,
+        fallback: "/dashboard",
+      }).destination;
       const dbg = localStorage.getItem(DEBUG_AUTH_KEY) === "1";
       try {
         localStorage.setItem(JUST_LOGGED_IN_KEY, String(Date.now()));
@@ -206,6 +211,7 @@ export const LoginPage: React.FC = () => {
           destination: nextPath,
         });
       }
+      navigate(postLoginDestination, { replace: true });
     } catch (err: unknown) {
       const message =
         err instanceof Error ? err.message : "Invalid email or password";

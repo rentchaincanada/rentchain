@@ -165,6 +165,13 @@ vi.mock("./pages/DelegatedAccessWorkspacePage", () => ({
   },
 }));
 
+vi.mock("./pages/PropertyManagerCompanyManagementPage", () => ({
+  default: () => {
+    const location = useLocation();
+    return <h1>{`PM Company Management Page ${location.pathname}`}</h1>;
+  },
+}));
+
 vi.mock("./pages/DecisionInboxPage", () => ({
   default: () => <h1>Decision Inbox Page</h1>,
 }));
@@ -420,6 +427,58 @@ describe("Routes: /account/delegated-access", () => {
     );
 
     expect(await screen.findByText(/Delegate Management Page/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("Routes: property manager company management", () => {
+  it("renders the landlord account management route", async () => {
+    const { default: App } = await import("./App");
+    render(
+      <MemoryRouter initialEntries={["/account/property-manager-companies"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/PM Company Management Page \/account\/property-manager-companies/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
+  });
+
+  it("renders the standalone company-admin management route", async () => {
+    mockAuthState.value = {
+      user: { id: "company-admin-1", role: "property_manager_company", landlordId: null },
+      token: "test-token",
+      isLoading: false,
+      ready: true,
+      authStatus: "authed",
+    };
+    const { default: App } = await import("./App");
+    render(
+      <MemoryRouter initialEntries={["/property-manager-companies/management"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/PM Company Management Page \/property-manager-companies\/management/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
+  });
+
+  it("redirects PM company dashboard sessions to standalone PM company management", async () => {
+    mockAuthState.value = {
+      user: { id: "company-admin-1", role: "property_manager_company", landlordId: null },
+      token: "test-token",
+      isLoading: false,
+      ready: true,
+      authStatus: "authed",
+    };
+    const { default: App } = await import("./App");
+    render(
+      <MemoryRouter initialEntries={["/dashboard"]}>
+        <App />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/PM Company Management Page \/property-manager-companies\/management/i)).toBeInTheDocument();
     expect(screen.queryByText(/Page not found/i)).not.toBeInTheDocument();
   });
 });
