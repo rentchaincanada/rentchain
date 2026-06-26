@@ -298,6 +298,25 @@ describe("landlordOperatorReviewRoutes", () => {
     expect(listDocs("operatorReviewManualMetadata")).toEqual([]);
   });
 
+  it("requires authentication for manual review metadata updates", async () => {
+    mockUser = null;
+    const router = (await import("../landlordOperatorReviewRoutes")).default;
+
+    const res = await invokeRouter(router, {
+      method: "PUT",
+      url: "/operator-reviews/manual-metadata",
+      body: {
+        scope: "decision",
+        scopeId: "decision-1",
+        reviewStatus: "in_review",
+        assignmentTarget: "finance_reviewer",
+      },
+    });
+
+    expect(res.status).toBe(401);
+    expect(listDocs("operatorReviewManualMetadata")).toEqual([]);
+  });
+
   it("blocks non-landlord users", async () => {
     mockUser = { id: "tenant-1", role: "tenant" };
     const router = (await import("../landlordOperatorReviewRoutes")).default;
