@@ -200,7 +200,7 @@ export function normalizeDecisionInboxItems(
       description: asString(item.description, 500) || "Review this decision context.",
       recommendedActionLabel: "Review",
       recommendedActionHref: safeHref(item.destination, "/operations"),
-      dueAt: null,
+      dueAt: normalizeDate(item.dueAt),
       createdAt: normalizeDate(item.createdAt),
       updatedAt: normalizeDate(item.updatedAt),
       status: statusFromDecisionInbox(item.status),

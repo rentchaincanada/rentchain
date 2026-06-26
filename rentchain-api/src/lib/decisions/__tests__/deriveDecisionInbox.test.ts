@@ -16,7 +16,13 @@ function leaseDecision(overrides: Partial<Decision> = {}): Decision {
     severity: "critical",
     status: "detected",
     reason: "Expected rent payment is missing.",
-    metadata: { source: "delinquency_signal" },
+    metadata: {
+      source: "delinquency_signal",
+      dueDate: "2026-05-01",
+      expectedAmountCents: 180000,
+      paidAmountCents: 0,
+      outstandingAmountCents: 180000,
+    },
     createdAt: "2026-05-05T12:00:00.000Z",
     updatedAt: "2026-05-05T12:00:00.000Z",
     ...overrides,
@@ -83,7 +89,10 @@ describe("deriveDecisionInbox", () => {
           status: "open",
           type: "billing",
           source: "lease_ledger",
+          description:
+            "Expected rent payment is missing. Due 2026-05-01; Expected $1,800.00; paid $0.00; outstanding $1,800.00.",
           destination: "/leases/lease-1/ledger",
+          dueAt: "2026-05-01T00:00:00.000Z",
           automationEligible: false,
           workflow: expect.objectContaining({
             queue: "delinquency_review",

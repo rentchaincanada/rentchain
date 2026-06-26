@@ -277,6 +277,286 @@ describe("landlordDecisionInboxRoutes", () => {
     );
   });
 
+  it("does not emit active missing-payment decisions when canonical payment evidence covers the lease obligation", async () => {
+    seedLease();
+    seedDoc("payments", "payment-canonical-overpaid", {
+      leaseId: "lease-1",
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      amountCents: 220000,
+      currency: "cad",
+      status: "recorded",
+      effectiveDate: "2026-04-01",
+      source: "imported_bank_payment",
+    });
+    loadLandlordAnalyticsSnapshot.mockResolvedValue({ decisions: { items: [] } });
+    const router = (await import("../landlordDecisionInboxRoutes")).default;
+
+    const res = await invokeRouter(router, { method: "GET", url: "/decision-inbox?type=billing" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.items).toEqual([]);
+    expect(res.body.summary.total).toBe(0);
+  });
+
+  it("does not emit active missing-payment decisions when ledger-entry payment evidence covers the lease obligation", async () => {
+    seedLease();
+    seedDoc("ledgerEntries", "ledger-payment-overpaid", {
+      leaseId: "lease-1",
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      entryType: "payment",
+      amountCents: -220000,
+      effectiveDate: "2026-04-01",
+      source: "manual_ledger_payment",
+    });
+    loadLandlordAnalyticsSnapshot.mockResolvedValue({ decisions: { items: [] } });
+    const router = (await import("../landlordDecisionInboxRoutes")).default;
+
+    const res = await invokeRouter(router, { method: "GET", url: "/decision-inbox?type=billing" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.items).toEqual([]);
+    expect(res.body.summary.total).toBe(0);
+  });
+
+  it("suppresses stale analytics missing-payment decisions when current lease ledger evidence is settled", async () => {
+    seedLease();
+    seedDoc("ledgerEntries", "ledger-payment-settled", {
+      leaseId: "lease-1",
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      entryType: "payment",
+      amountCents: 220000,
+      effectiveDate: "2026-04-01",
+      source: "manual_ledger_payment",
+    });
+    loadLandlordAnalyticsSnapshot.mockResolvedValue({
+      decisions: {
+        items: [
+          analyticsDecision({
+            id: "stale_missing_payment:lease-1",
+            decisionType: "missing_payment",
+            actionLabel: "Review Missing Payment",
+            recommendedAction: "Review Missing Payment",
+            destination: "/leases/lease-1/ledger",
+            executionMapping: { resourceType: "lease", resourceId: "lease-1" },
+          }),
+        ],
+      },
+    });
+    const router = (await import("../landlordDecisionInboxRoutes")).default;
+
+    const res = await invokeRouter(router, { method: "GET", url: "/decision-inbox?type=billing" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.items).toEqual([]);
+    expect(res.body.summary.total).toBe(0);
+  });
+
+  it("suppresses stale analytics missing-payment decisions when the ledger destination uses a persisted lease alias", async () => {
+    seedDoc("leases", "lease-doc-1", {
+      leaseId: "lease-public-1",
+      landlordId: "landlord-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      tenantId: "tenant-1",
+      monthlyRent: 1800,
+      startDate: "2026-04-01",
+      endDate: "2027-03-31",
+      dueDate: "2026-04-01",
+      signedAt: "2026-04-01T00:00:00.000Z",
+      status: "active",
+    });
+    seedDoc("ledgerEntries", "ledger-payment-alias-settled", {
+      leaseId: "lease-public-1",
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      entryType: "payment",
+      amountCents: 220000,
+      effectiveDate: "2026-04-01",
+      source: "manual_ledger_payment",
+    });
+    loadLandlordAnalyticsSnapshot.mockResolvedValue({
+      decisions: {
+        items: [
+          analyticsDecision({
+            id: "stale_missing_payment:lease-public-1",
+            decisionType: "missing_payment",
+            actionLabel: "Review Missing Payment",
+            recommendedAction: "Review Missing Payment",
+            destination: "/leases/lease-public-1/ledger",
+            executionMapping: { resourceType: "lease", resourceId: "lease-public-1" },
+          }),
+        ],
+      },
+    });
+    const router = (await import("../landlordDecisionInboxRoutes")).default;
+
+    const res = await invokeRouter(router, { method: "GET", url: "/decision-inbox?type=billing" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.items).toEqual([]);
+    expect(res.body.summary.total).toBe(0);
+  });
+
+  it("suppresses stale analytics missing-payment decisions when the related lease id is stale but the ledger destination is settled", async () => {
+    seedLease({ id: "76c2961b-eae5-4574-9f51-66096976b5dc", monthlyRent: 1500 });
+    seedDoc("ledgerEntries", "ledger-payment-settled-route-id", {
+      leaseId: "76c2961b-eae5-4574-9f51-66096976b5dc",
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      entryType: "payment",
+      amountCents: 150000,
+      effectiveDate: "2026-04-01",
+      source: "manual_ledger_payment",
+    });
+    loadLandlordAnalyticsSnapshot.mockResolvedValue({
+      decisions: {
+        items: [
+          analyticsDecision({
+            id: "stale_missing_payment:internal-source-lease-id",
+            decisionType: "missing_payment",
+            actionLabel: "Review Missing Payment",
+            recommendedAction: "Review Missing Payment",
+            destination: "/leases/76c2961b-eae5-4574-9f51-66096976b5dc/ledger",
+            executionMapping: { resourceType: "lease", resourceId: "internal-source-lease-id" },
+          }),
+        ],
+      },
+    });
+    const router = (await import("../landlordDecisionInboxRoutes")).default;
+
+    const res = await invokeRouter(router, { method: "GET", url: "/decision-inbox?type=billing" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.items).toEqual([]);
+    expect(res.body.summary.total).toBe(0);
+  });
+
+  it("suppresses stale analytics missing-payment decisions for an overpaid up-to-date lease", async () => {
+    seedLease({ id: "bd89a684-7e0a-439e-9b88-29d11de1bcfe", monthlyRent: 1500 });
+    seedDoc("payments", "payment-canonical-overpaid-bd89", {
+      leaseId: "bd89a684-7e0a-439e-9b88-29d11de1bcfe",
+      landlordId: "landlord-1",
+      tenantId: "tenant-1",
+      propertyId: "prop-1",
+      unitId: "unit-1",
+      amountCents: 180000,
+      currency: "cad",
+      status: "reconciled",
+      effectiveDate: "2026-04-01",
+      source: "imported_bank_payment",
+    });
+    loadLandlordAnalyticsSnapshot.mockResolvedValue({
+      decisions: {
+        items: [
+          analyticsDecision({
+            id: "stale_missing_payment:bd89a684-7e0a-439e-9b88-29d11de1bcfe",
+            decisionType: "missing_payment",
+            actionLabel: "Review Missing Payment",
+            recommendedAction: "Review Missing Payment",
+            destination: "/leases/bd89a684-7e0a-439e-9b88-29d11de1bcfe/ledger",
+            executionMapping: { resourceType: "lease", resourceId: "bd89a684-7e0a-439e-9b88-29d11de1bcfe" },
+          }),
+        ],
+      },
+    });
+    const router = (await import("../landlordDecisionInboxRoutes")).default;
+
+    const res = await invokeRouter(router, { method: "GET", url: "/decision-inbox?type=billing" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.items).toEqual([]);
+    expect(res.body.summary.total).toBe(0);
+    expect(JSON.stringify(res.body)).not.toContain("bd89a684-7e0a-439e-9b88-29d11de1bcfe");
+    expect(JSON.stringify(res.body)).not.toContain("Review Missing Payment");
+  });
+
+  it("suppresses analytics missing-payment decisions that cannot be validated by a live unsettled lease obligation", async () => {
+    loadLandlordAnalyticsSnapshot.mockResolvedValue({
+      decisions: {
+        items: [
+          analyticsDecision({
+            id: "stale_missing_payment:missing-source-lease",
+            decisionType: "missing_payment",
+            actionLabel: "Review Missing Payment",
+            recommendedAction: "Review Missing Payment",
+            destination: "/leases/missing-source-lease/ledger",
+            executionMapping: { resourceType: "lease", resourceId: "missing-source-lease" },
+          }),
+        ],
+      },
+    });
+    const router = (await import("../landlordDecisionInboxRoutes")).default;
+
+    const res = await invokeRouter(router, { method: "GET", url: "/decision-inbox?type=billing" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.items).toEqual([]);
+    expect(res.body.summary.total).toBe(0);
+  });
+
+  it("preserves genuine missing-payment decisions when no payment evidence covers the lease obligation", async () => {
+    seedLease();
+    loadLandlordAnalyticsSnapshot.mockResolvedValue({ decisions: { items: [] } });
+    const router = (await import("../landlordDecisionInboxRoutes")).default;
+
+    const res = await invokeRouter(router, { method: "GET", url: "/decision-inbox?type=billing" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          source: "lease_ledger",
+          type: "billing",
+          title: "Review Missing Payment",
+          destination: "/leases/lease-1/ledger",
+          dueAt: "2026-04-01T00:00:00.000Z",
+          description: expect.stringContaining("outstanding $1,800.00"),
+        }),
+      ])
+    );
+  });
+
+  it("preserves genuine overdue missing-payment decisions with safe obligation context", async () => {
+    seedLease({
+      id: "y7XM6BFXIzWW0fV3mu1L",
+      monthlyRent: 2000,
+      dueDate: "2026-04-01",
+      startDate: "2026-04-01",
+      endDate: "2027-03-31",
+    });
+    loadLandlordAnalyticsSnapshot.mockResolvedValue({ decisions: { items: [] } });
+    const router = (await import("../landlordDecisionInboxRoutes")).default;
+
+    const res = await invokeRouter(router, { method: "GET", url: "/decision-inbox?type=billing" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          source: "lease_ledger",
+          type: "billing",
+          title: "Review Missing Payment",
+          destination: "/leases/y7XM6BFXIzWW0fV3mu1L/ledger",
+          dueAt: "2026-04-01T00:00:00.000Z",
+          description: expect.stringContaining("Expected $2,000.00"),
+        }),
+      ])
+    );
+  });
+
   it("does not expose another landlord's lease decisions", async () => {
     seedLease({ id: "lease-other", landlordId: "landlord-2" });
     loadLandlordAnalyticsSnapshot.mockResolvedValue({ decisions: { items: [] } });

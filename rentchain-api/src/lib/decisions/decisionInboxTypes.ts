@@ -88,6 +88,7 @@ export type DecisionInboxItem = {
   automatedWorkflow?: AutomatedWorkflowPreview;
   agentActions?: PolicyGatedAgentAction[];
   delinquencyActions?: DelinquencyActionDescriptor[];
+  dueAt?: string | null;
   createdAt: string | null;
   updatedAt: string | null;
 };
