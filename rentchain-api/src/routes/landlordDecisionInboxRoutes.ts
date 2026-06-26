@@ -110,16 +110,37 @@ async function loadDecisionActionsForLease(leaseId: string) {
 }
 
 async function loadLeaseForLandlord(leaseId: string, landlordId: string) {
-  const snap = await db.collection("leases").doc(leaseId).get().catch(() => null);
-  if (!snap?.exists) return null;
-  const lease = { id: snap.id, ...((snap.data() as any) || {}) };
-  return [lease?.landlordId, lease?.ownerId, lease?.userId].some((value) => asString(value, 240) === landlordId)
-    ? lease
-    : null;
+  const normalizedLeaseId = asString(leaseId, 240);
+  if (!normalizedLeaseId) return null;
+
+  const candidates = new Map<string, any>();
+  const directSnap = await db.collection("leases").doc(normalizedLeaseId).get().catch(() => null);
+  if (directSnap?.exists) {
+    candidates.set(directSnap.id, { id: directSnap.id, ...((directSnap.data() as any) || {}) });
+  }
+
+  async function collectByField(field: "id" | "leaseId") {
+    const snap = await db.collection("leases").where(field, "==", normalizedLeaseId).get().catch(() => null);
+    for (const doc of snap?.docs || []) {
+      candidates.set(doc.id, { id: doc.id, ...((doc.data() as any) || {}) });
+    }
+  }
+
+  await Promise.all([collectByField("id"), collectByField("leaseId")]);
+
+  return (
+    Array.from(candidates.values()).find((lease) => {
+      const isScopedToLandlord = [lease?.landlordId, lease?.ownerId, lease?.userId].some(
+        (value) => asString(value, 240) === landlordId
+      );
+      if (!isScopedToLandlord) return false;
+      return [lease?.id, lease?.leaseId].some((value) => asString(value, 240) === normalizedLeaseId);
+    }) || null
+  );
 }
 
 async function buildLeaseObligationRowsForDecisionInbox(lease: any, landlordId: string) {
-  const leaseId = asString(lease?.id, 240);
+  const leaseId = asString(lease?.leaseId || lease?.id, 240);
   if (!leaseId) return [];
   const [rentPayments, paymentIntents, canonicalPaymentEvidence] = await Promise.all([
     loadLeaseRentPayments(leaseId, landlordId),
@@ -152,7 +173,7 @@ export async function deriveLeaseDecisionsForInbox(landlordId: string): Promise<
   const leases = await loadLandlordLeases(landlordId);
   const nested = await Promise.all(
     leases.map(async (lease) => {
-      const leaseId = asString(lease?.id, 240);
+      const leaseId = asString(lease?.leaseId || lease?.id, 240);
       if (!leaseId) return [];
       const [obligationRows, actions] = await Promise.all([
         buildLeaseObligationRowsForDecisionInbox(lease, landlordId),
@@ -177,48 +198,62 @@ export async function deriveLeaseDecisionsForInbox(landlordId: string): Promise<
   return nested.flat();
 }
 
-function leaseIdFromDecisionItem(item: DecisionInboxItem): string {
+function leaseIdsFromDecisionItem(item: DecisionInboxItem): string[] {
+  const ids: string[] = [];
   const relatedLeaseId = item.relatedEntity?.kind === "lease" ? asString(item.relatedEntity.id, 240) : "";
-  if (relatedLeaseId) return relatedLeaseId;
+  if (relatedLeaseId) ids.push(relatedLeaseId);
   const destination = asString(item.destination, 600);
   const match = destination.match(/\/leases\/([^/?#]+)\/ledger(?:[/?#]|$)/);
-  if (!match?.[1]) return "";
-  try {
-    return decodeURIComponent(match[1]);
-  } catch {
-    return match[1];
+  if (match?.[1]) {
+    try {
+      ids.push(decodeURIComponent(match[1]));
+    } catch {
+      ids.push(match[1]);
+    }
   }
+  return Array.from(new Set(ids.map((id) => asString(id, 240)).filter(Boolean)));
 }
 
 function isActivePaymentDecisionItem(item: DecisionInboxItem): boolean {
   if (item.status === "resolved" || item.status === "dismissed") return false;
   if (item.type !== "billing" && item.workflow?.queue !== "delinquency_review") return false;
-  return Boolean(leaseIdFromDecisionItem(item));
+  return leaseIdsFromDecisionItem(item).length > 0;
 }
 
-async function isLeasePaymentObligationSettled(leaseId: string, landlordId: string): Promise<boolean> {
+type LeasePaymentObligationState = "settled" | "unsettled" | "unknown";
+
+async function getLeasePaymentObligationState(leaseId: string, landlordId: string): Promise<LeasePaymentObligationState> {
   const lease = await loadLeaseForLandlord(leaseId, landlordId);
-  if (!lease) return false;
+  if (!lease) return "unknown";
   const obligationRows = await buildLeaseObligationRowsForDecisionInbox(lease, landlordId);
-  if (obligationRows.length === 0) return false;
+  if (obligationRows.length === 0) return "unknown";
   const summary = summarizePaymentObligationLedger(obligationRows);
-  if (summary.outstandingAmountCents > 0) return false;
-  return deriveDelinquencySignals(obligationRows).length === 0;
+  if (summary.outstandingAmountCents > 0) return "unsettled";
+  return deriveDelinquencySignals(obligationRows).length === 0 ? "settled" : "unsettled";
 }
 
 async function suppressSettledPaymentDecisionItems(landlordId: string, items: DecisionInboxItem[]) {
-  const settledByLeaseId = new Map<string, boolean>();
+  const obligationStateByLeaseId = new Map<string, LeasePaymentObligationState>();
   const result: DecisionInboxItem[] = [];
   for (const item of items) {
     if (!isActivePaymentDecisionItem(item)) {
       result.push(item);
       continue;
     }
-    const leaseId = leaseIdFromDecisionItem(item);
-    if (!settledByLeaseId.has(leaseId)) {
-      settledByLeaseId.set(leaseId, await isLeasePaymentObligationSettled(leaseId, landlordId));
+    const leaseIds = leaseIdsFromDecisionItem(item);
+    let settled = false;
+    let unsettled = false;
+    for (const leaseId of leaseIds) {
+      if (!obligationStateByLeaseId.has(leaseId)) {
+        obligationStateByLeaseId.set(leaseId, await getLeasePaymentObligationState(leaseId, landlordId));
+      }
+      const state = obligationStateByLeaseId.get(leaseId);
+      settled = settled || state === "settled";
+      unsettled = unsettled || state === "unsettled";
     }
-    if (!settledByLeaseId.get(leaseId)) result.push(item);
+    if (settled) continue;
+    if (item.source === "analytics" && !unsettled) continue;
+    result.push(item);
   }
   return result;
 }

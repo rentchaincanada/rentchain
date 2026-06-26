@@ -15,6 +15,7 @@ function decisionInboxItem(overrides: Partial<DecisionInboxItem> = {}): Decision
     relatedEntity: { kind: "lease", id: "lease-1", label: "Lease 1" },
     destination: "/leases/lease-1/ledger",
     automationEligible: false,
+    dueAt: null,
     workflow: {
       queue: "delinquency_review",
       workflowState: "new",
@@ -62,6 +63,7 @@ describe("landlordDecisionQueueService", () => {
           severity: "critical",
           type: "billing",
           destination: "/leases/lease-1/ledger",
+          dueAt: "2026-05-01T00:00:00.000Z",
         }),
       ],
     });
@@ -78,6 +80,7 @@ describe("landlordDecisionQueueService", () => {
       ["decision_queue:decision_inbox:payment-critical", "critical", "payments"],
       ["decision_queue:decision_inbox:lease-warning", "warning", "lease"],
     ]);
+    expect(queue.items.find((item) => item.sourceId === "payment-critical")?.dueAt).toBe("2026-05-01T00:00:00.000Z");
   });
 
   it("includes messaging source types without importing the entire inbox as critical work", () => {

@@ -48,7 +48,7 @@ export async function loadLeaseCanonicalPaymentsForObligationLedger(
       const source = asString(record?.source, 120).toLowerCase();
       const status = asString(record?.status, 120).toLowerCase();
       if (source === "rent_payment_checkout") return false;
-      return !status || status === "recorded" || status === "paid" || status === "completed";
+      return !status || status === "recorded" || status === "paid" || status === "completed" || status === "reconciled";
     })
     .map((record: any) => ({
       id: asString(record?.id, 240),

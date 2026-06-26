@@ -154,6 +154,33 @@ function destinationForLeaseDecision(decision: SourceDecision): string | null {
   return `/leases/${encodeURIComponent(leaseId)}/summary`;
 }
 
+function formatCurrencyCents(value: unknown): string | null {
+  const cents = Number(value);
+  if (!Number.isFinite(cents) || cents < 0) return null;
+  return `$${(Math.round(cents) / 100).toLocaleString("en-CA", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+function paymentDecisionDescription(decision: SourceDecision): string {
+  const base = asString(decision.reason, 1000) || "Decision context is available for review.";
+  const type = asString(decision.decisionType, 120) || "";
+  if (!type.includes("rent") && !type.includes("payment")) return base;
+
+  const dueDate = normalizeDate(decision.metadata?.dueDate);
+  const expected = formatCurrencyCents(decision.metadata?.expectedAmountCents);
+  const paid = formatCurrencyCents(decision.metadata?.paidAmountCents);
+  const outstanding = formatCurrencyCents(decision.metadata?.outstandingAmountCents);
+  const details = [
+    dueDate ? `Due ${dueDate.slice(0, 10)}` : null,
+    expected ? `Expected ${expected}` : null,
+    paid ? `paid ${paid}` : null,
+    outstanding ? `outstanding ${outstanding}` : null,
+  ].filter(Boolean);
+  return details.length ? `${base} ${details.join("; ")}.` : base;
+}
+
 function relatedEntityForLeaseDecision(decision: SourceDecision): DecisionInboxItem["relatedEntity"] {
   const leaseId = asString(decision.leaseId, 240);
   if (leaseId) {
@@ -190,7 +217,7 @@ export function decisionInboxItemFromLeaseDecision(decision: SourceDecision): De
   const base: Omit<DecisionInboxItem, "workflow"> = {
     id: asString(decision.decisionId, 600) || fallbackId("lease_ledger", decision.decisionId, decision.decisionType),
     title: titleCase(decision.decisionType),
-    description: asString(decision.reason, 1000) || "Decision context is available for review.",
+    description: paymentDecisionDescription(decision),
     severity: decisionEngineSeverity(decision.severity),
     status: decisionStatus(decision.status),
     type,
@@ -198,6 +225,7 @@ export function decisionInboxItemFromLeaseDecision(decision: SourceDecision): De
     relatedEntity: relatedEntityForLeaseDecision(decision),
     destination: destinationForLeaseDecision(decision),
     automationEligible: false,
+    dueAt: normalizeDate(decision.metadata?.dueDate),
     createdAt: normalizeDate(decision.createdAt),
     updatedAt: normalizeDate(decision.updatedAt),
   };
@@ -221,6 +249,7 @@ export function decisionInboxItemFromAnalyticsDecision(decision: LandlordAgentDe
     relatedEntity: relatedEntityForAnalyticsDecision(decision),
     destination: asString(decision.destination || decision.href, 500),
     automationEligible: false,
+    dueAt: null,
     createdAt: null,
     updatedAt: normalizeDate(decision.reviewedAt || decision.executedAt || decision.executionOutcomeAt),
   };

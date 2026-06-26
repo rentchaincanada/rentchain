@@ -676,6 +676,62 @@ describe("OperationalCommandCenterPage", () => {
     expect(mocks.macShellProps).toHaveBeenCalledWith(expect.objectContaining({ title: "Operational command center" }));
   });
 
+  it("does not recreate a missing-payment review card when the decision inbox suppresses a paid ledger", async () => {
+    mocks.fetchDecisionInbox.mockResolvedValueOnce({
+      items: [],
+      filters: { severity: [], status: [], type: [], queue: [], workflowState: [], escalationLevel: [] },
+      summary: { total: 0, critical: 0, high: 0, open: 0, blocked: 0 },
+      workflowSummary: { new: 0, underReview: 0, escalated: 0, critical: 0 },
+      automationSummary: { total: 0, pending: 0, derived: 0, blocked: 0, completed: 0, escalationFlagged: 0, reviewRequired: 0 },
+      agentActionSummary: { total: 0, suggested: 0, blocked: 0, unavailable: 0, acknowledged: 0, reviewRequired: 0, escalationSuggested: 0 },
+    });
+    mocks.getActiveLeasesForLandlord.mockResolvedValueOnce({
+      leases: [
+        lease({
+          id: "76c2961b-eae5-4574-9f51-66096976b5dc",
+          paymentReadiness: {
+            readinessStatus: "ready_to_configure",
+            readinessLabel: "Payment setup ready",
+            readinessDescription: "Rent terms and payment setup are ready.",
+            requiredNextAction: "none",
+            rentTerms: {
+              rentAmountAvailable: true,
+              dueDateAvailable: true,
+              leaseDatesAvailable: true,
+              tenantLinked: true,
+              leaseExecuted: true,
+            },
+            paymentSetup: {
+              processorConnected: true,
+              moneyMovementEnabled: true,
+              storedPaymentMethod: true,
+            },
+          },
+          stateCoherence: { ...lease().stateCoherence, flags: { ...lease().stateCoherence.flags, requiresReview: false, hasStateConflict: false } },
+          leaseExecution: { ...lease().leaseExecution, executionStatus: "fully_executed" },
+          signatureStatus: "signed",
+          leasePdfStatus: "ready",
+          jurisdictionPolicies: [],
+          endDate: "2027-07-31",
+        }),
+      ],
+    });
+
+    render(
+      <MemoryRouter>
+        <OperationalCommandCenterPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole("heading", { name: "Operational command center" })).toBeInTheDocument();
+    await waitFor(() => expect(mocks.fetchDecisionInbox).toHaveBeenCalled());
+
+    expect(screen.queryByText("Payment Ledger Review")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Review Missing Payment/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Decision inbox · Delinquency Review/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Financial status: Review required/i)).not.toBeInTheDocument();
+  });
+
   it("keeps free-safe operations content visible when lease-driven signals are locked", async () => {
     mocks.useEntitlements.mockReturnValue({
       loading: false,

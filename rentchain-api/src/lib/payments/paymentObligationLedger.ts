@@ -329,7 +329,7 @@ function paymentFallsWithinLeaseTerm(payment: PaymentObligationCanonicalPaymentI
 function canonicalPaymentCanReconcile(payment: PaymentObligationCanonicalPaymentInput): boolean {
   const status = asString(payment.status, 80);
   if (!status) return true;
-  return status === "recorded" || status === "paid" || status === "completed";
+  return status === "recorded" || status === "paid" || status === "completed" || status === "reconciled";
 }
 
 export function derivePaymentObligationStatus(input: StatusInput): {
