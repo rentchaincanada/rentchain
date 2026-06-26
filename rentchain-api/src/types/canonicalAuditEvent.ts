@@ -9,6 +9,7 @@ export const CANONICAL_AUDIT_EVENT_TYPES = [
   "operator_review_note_added",
   "operator_review_outcome_recorded",
   "operator_review_session_closed",
+  "operator_review_manual_metadata_updated",
 ] as const;
 
 export type CanonicalAuditEventType = (typeof CANONICAL_AUDIT_EVENT_TYPES)[number];
@@ -69,6 +70,9 @@ export type OperatorReviewAuditMetadata = {
   scope: string;
   scopeId: string;
   reviewStatus: string;
+  assignmentTarget?: string;
+  previousReviewStatus?: string | null;
+  previousAssignmentTarget?: string | null;
   noteSummary?: string;
   outcome?: string | null;
   manualOnly: true;

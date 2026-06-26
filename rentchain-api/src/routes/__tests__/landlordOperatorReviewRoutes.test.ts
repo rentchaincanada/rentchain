@@ -208,6 +208,96 @@ describe("landlordOperatorReviewRoutes", () => {
     expect(res.body.sessions).toEqual([]);
   });
 
+  it("persists landlord-scoped manual review metadata and rehydrates it by scope", async () => {
+    const router = (await import("../landlordOperatorReviewRoutes")).default;
+
+    const update = await invokeRouter(router, {
+      method: "PUT",
+      url: "/operator-reviews/manual-metadata",
+      body: {
+        scope: "decision",
+        scopeId: "decision-1",
+        reviewStatus: "in_review",
+        assignmentTarget: "finance_reviewer",
+      },
+    });
+
+    expect(update.status).toBe(200);
+    expect(update.body.metadata).toEqual(
+      expect.objectContaining({
+        landlordId: "landlord-1",
+        scope: "decision",
+        scopeId: "decision-1",
+        reviewStatus: "in_review",
+        assignmentTarget: "finance_reviewer",
+        manualOnly: true,
+        systemGenerated: false,
+      })
+    );
+
+    const list = await invokeRouter(router, {
+      method: "GET",
+      url: "/operator-reviews/manual-metadata?scope=decision&scopeId=decision-1",
+    });
+
+    expect(list.status).toBe(200);
+    expect(list.body.metadata).toEqual([
+      expect.objectContaining({
+        scope: "decision",
+        scopeId: "decision-1",
+        reviewStatus: "in_review",
+        assignmentTarget: "finance_reviewer",
+      }),
+    ]);
+    expect(listDocs("canonicalEvents")).toEqual([
+      expect.objectContaining({
+        eventType: "operator_review_manual_metadata_updated",
+        visibility: "landlord_operator_internal",
+        appendOnly: true,
+        rawIdsIncluded: false,
+      }),
+    ]);
+  });
+
+  it("keeps manual review metadata isolated per landlord", async () => {
+    const router = (await import("../landlordOperatorReviewRoutes")).default;
+    await invokeRouter(router, {
+      method: "PUT",
+      url: "/operator-reviews/manual-metadata",
+      body: {
+        scope: "workflow",
+        scopeId: "lease-coherence:lease-1",
+        reviewStatus: "blocked",
+        assignmentTarget: "property_manager",
+      },
+    });
+
+    mockUser = { id: "landlord-2", landlordId: "landlord-2", role: "landlord", email: "other@example.com" };
+    const list = await invokeRouter(router, { method: "GET", url: "/operator-reviews/manual-metadata" });
+
+    expect(list.status).toBe(200);
+    expect(list.body.metadata).toEqual([]);
+  });
+
+  it("fails closed for invalid manual review metadata values", async () => {
+    const router = (await import("../landlordOperatorReviewRoutes")).default;
+
+    const res = await invokeRouter(router, {
+      method: "PUT",
+      url: "/operator-reviews/manual-metadata",
+      body: {
+        scope: "decision",
+        scopeId: "decision-1",
+        reviewStatus: "active",
+        assignmentTarget: "landlord_owner",
+      },
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("OPERATOR_REVIEW_MANUAL_METADATA_INVALID");
+    expect(listDocs("operatorReviewManualMetadata")).toEqual([]);
+  });
+
   it("blocks non-landlord users", async () => {
     mockUser = { id: "tenant-1", role: "tenant" };
     const router = (await import("../landlordOperatorReviewRoutes")).default;

@@ -8,6 +8,12 @@ import {
   type DecisionInboxResponse,
 } from "@/api/decisionInboxApi";
 import { getActiveLeasesForLandlord, type LandlordActiveLease } from "@/api/leasesApi";
+import {
+  fetchOperatorReviewManualMetadata,
+  updateOperatorReviewManualMetadata,
+  type OperatorReviewManualMetadata,
+  type OperatorReviewScope,
+} from "@/api/operatorReviewApi";
 import { fetchProperties, type Property } from "@/api/propertiesApi";
 import { MacShell } from "@/components/layout/MacShell";
 import { LockedFeature } from "@/components/billing/LockedFeature";
@@ -15,6 +21,12 @@ import {
   OperationalReviewQueue,
   type OperationalReviewQueueItem,
 } from "@/components/reviewWorkspaces/OperationalReviewQueue";
+import {
+  reviewAssignmentLabel,
+  reviewStatusLabel,
+  type ReviewAssignmentTarget,
+  type ReviewLifecycleStatus,
+} from "@/components/reviewWorkspaces/ReviewAssignmentStatusControls";
 import { ReviewWorkspacePanel, type ReviewWorkspaceUiModel } from "@/components/reviewWorkspaces/ReviewWorkspacePanel";
 import { Card, Section } from "@/components/ui/Ui";
 import { useEntitlements } from "@/hooks/useEntitlements";
@@ -77,6 +89,8 @@ export type CommandCenterSignal = {
   timingState?: "upcoming" | "current";
   riskState?: "delinquent" | "high_risk" | "review" | "informational";
   scopedLeaseId?: string | null;
+  manualReviewScope?: OperatorReviewScope;
+  manualReviewScopeId?: string;
 };
 
 type CategoryConfig = {
@@ -301,6 +315,49 @@ function leaseRenewalWorkflowDestination(leaseId: string) {
   return `/leases/${encodeURIComponent(leaseId)}/workflows/renewal`;
 }
 
+function manualReviewScopeForSignal(signal: CommandCenterSignal): { scope: OperatorReviewScope; scopeId: string } {
+  if (signal.id.startsWith("decision:")) {
+    return { scope: "decision", scopeId: signal.id.replace(/^decision:/, "") };
+  }
+  return { scope: "workflow", scopeId: signal.id };
+}
+
+function manualMetadataKey(scope: OperatorReviewScope, scopeId: string) {
+  return `${scope}:${scopeId}`;
+}
+
+function metadataMap(items: OperatorReviewManualMetadata[]) {
+  const next: Record<string, OperatorReviewManualMetadata> = {};
+  for (const item of items || []) {
+    if (!item?.scope || !item?.scopeId) continue;
+    next[manualMetadataKey(item.scope, item.scopeId)] = item;
+  }
+  return next;
+}
+
+function applyManualReviewMetadata(
+  signals: CommandCenterSignal[],
+  metadataByKey: Record<string, OperatorReviewManualMetadata>
+) {
+  return signals.map((signal) => {
+    const scope = manualReviewScopeForSignal(signal);
+    const metadata = metadataByKey[manualMetadataKey(scope.scope, scope.scopeId)];
+    const base = {
+      ...signal,
+      manualReviewScope: scope.scope,
+      manualReviewScopeId: scope.scopeId,
+    };
+    if (!metadata) return base;
+    const assignmentLabel = reviewAssignmentLabel(metadata.assignmentTarget as ReviewAssignmentTarget);
+    return {
+      ...base,
+      reviewStatus: reviewStatusLabel(metadata.reviewStatus as ReviewLifecycleStatus),
+      assignmentState: metadata.assignmentTarget === "unassigned" ? "unassigned" : "assigned",
+      assignmentLabel,
+    };
+  });
+}
+
 export function scopedSourceDestinationForSignal(signal: CommandCenterSignal) {
   const scopedLeaseId = String(signal.scopedLeaseId || "").trim();
   if (scopedLeaseId && signal.destination === "/leases") return leaseSummaryDestination(scopedLeaseId);
@@ -308,13 +365,18 @@ export function scopedSourceDestinationForSignal(signal: CommandCenterSignal) {
 }
 
 export function reviewWorkspacePreviewForSignal(signal: CommandCenterSignal): ReviewWorkspaceUiModel {
+  const scope = signal.manualReviewScope && signal.manualReviewScopeId
+    ? { scope: signal.manualReviewScope, scopeId: signal.manualReviewScopeId }
+    : manualReviewScopeForSignal(signal);
   return {
-    workspaceReference: `manual-review-preview:${signal.category}:${signal.priorityGroup}`,
+    workspaceReference: `manual-review-preview:${scope.scope}:${scope.scopeId}`,
     workspaceType: workspaceTypeForSignal(signal),
     reviewStatus: signal.reviewStatus,
     reviewPriority: label(signal.priorityGroup),
     routingReason: routingReasonForSignal(signal),
     assignmentLabel: signal.assignmentLabel || "Unassigned",
+    manualReviewScope: scope.scope,
+    manualReviewScopeId: scope.scopeId,
     sensitivityClass: signal.category === "screening" || signal.category === "documents" ? "restricted" : "sensitive",
     visibilityClass: "landlord_operational",
     manualOnly: true,
@@ -357,6 +419,8 @@ export function deriveOperationalReviewQueueItems(signals: CommandCenterSignal[]
       visibilityClass: preview.visibilityClass,
       evidenceLabel: evidenceLink?.label || "Source workflow evidence",
       relatedResourceLabel: relatedResource?.label || "Scoped operational context",
+      manualReviewScope: preview.manualReviewScope,
+      manualReviewScopeId: preview.manualReviewScopeId,
       manualOnly: true,
       autonomousActionsEnabled: false,
     };
@@ -956,6 +1020,7 @@ export default function OperationalCommandCenterPage() {
   const [dashboardData, setDashboardData] = React.useState<DashboardSummaryData | null>(null);
   const [leases, setLeases] = React.useState<LandlordActiveLease[]>([]);
   const [properties, setProperties] = React.useState<Property[]>([]);
+  const [manualReviewMetadata, setManualReviewMetadata] = React.useState<Record<string, OperatorReviewManualMetadata>>({});
   const [leaseSignalsLocked, setLeaseSignalsLocked] = React.useState(false);
   const [search, setSearch] = React.useState("");
   const [activeFilter, setActiveFilter] = React.useState<CommandCenterFilter>("all");
@@ -983,11 +1048,12 @@ export default function OperationalCommandCenterPage() {
                 throw err;
               })
           : Promise.resolve({ locked: true, leases: [] as LandlordActiveLease[] });
-        const [[decisionResponse, dashboardResponse, propertyResponse], leaseResponse] = await Promise.all([
+        const [[decisionResponse, dashboardResponse, propertyResponse, manualMetadataResponse], leaseResponse] = await Promise.all([
           Promise.all([
             fetchDecisionInbox(),
             fetchDashboardSummary(),
             fetchProperties({ status: "active" }),
+            fetchOperatorReviewManualMetadata().catch(() => []),
           ]),
           leaseRequest,
         ]);
@@ -997,6 +1063,7 @@ export default function OperationalCommandCenterPage() {
         setLeases(leaseResponse.leases || []);
         setLeaseSignalsLocked(leaseResponse.locked);
         setProperties(propertyResponse.properties || propertyResponse.items || []);
+        setManualReviewMetadata(metadataMap(manualMetadataResponse || []));
       } catch (err) {
         if (!mounted) return;
         setError(errorMessage(err));
@@ -1009,9 +1076,13 @@ export default function OperationalCommandCenterPage() {
     };
   }, [entitlements.loading, leaseSignalsEnabled]);
 
-  const signals = React.useMemo(
+  const baseSignals = React.useMemo(
     () => deriveCommandCenterSignals({ decisions: decisionData?.items || [], leases, properties }),
     [decisionData?.items, leases, properties]
+  );
+  const signals = React.useMemo(
+    () => applyManualReviewMetadata(baseSignals, manualReviewMetadata),
+    [baseSignals, manualReviewMetadata]
   );
   const visibleSignals = React.useMemo(
     () => filterOperationalItems(signals, { search, filter: activeFilter, workflowType, reviewStatus, assignment, escalation, timingRisk }),
@@ -1038,6 +1109,23 @@ export default function OperationalCommandCenterPage() {
   function clearFilters() {
     setSearch("");
     applySavedView("all_operational");
+  }
+
+  async function persistManualReviewChange(
+    scope: OperatorReviewScope,
+    scopeId: string,
+    next: { status: ReviewLifecycleStatus; assignment: ReviewAssignmentTarget }
+  ) {
+    const metadata = await updateOperatorReviewManualMetadata({
+      scope,
+      scopeId,
+      reviewStatus: next.status,
+      assignmentTarget: next.assignment,
+    });
+    setManualReviewMetadata((current) => ({
+      ...current,
+      [manualMetadataKey(metadata.scope, metadata.scopeId)]: metadata,
+    }));
   }
 
   return (
@@ -1397,7 +1485,14 @@ export default function OperationalCommandCenterPage() {
               <span>Adjust the view or reset filters to return to the full operational queue.</span>
             </Card>
           ) : null}
-          {!loading && !error && visibleSignals.length ? <OperationalReviewQueue items={reviewQueueItems} /> : null}
+          {!loading && !error && visibleSignals.length ? (
+            <OperationalReviewQueue
+              items={reviewQueueItems}
+              onManualReviewChange={(item, next) =>
+                persistManualReviewChange(item.manualReviewScope as OperatorReviewScope, item.manualReviewScopeId, next)
+              }
+            />
+          ) : null}
           {!loading && !error && visibleSignals.length ? (
             <div style={{ display: "grid", gap: 16 }}>
               {prioritySummary.map((group) => (
@@ -1480,7 +1575,16 @@ export default function OperationalCommandCenterPage() {
                             <span>Assignment: {signal.assignmentLabel || "Unassigned"}</span>
                             <span>Escalation: {signal.escalationLabel || "Not escalated"}</span>
                           </div>
-                          <ReviewWorkspacePanel workspace={reviewWorkspacePreviewForSignal(signal)} />
+                          <ReviewWorkspacePanel
+                            workspace={reviewWorkspacePreviewForSignal(signal)}
+                            onManualReviewChange={(workspace, next) =>
+                              persistManualReviewChange(
+                                workspace.manualReviewScope as OperatorReviewScope,
+                                workspace.manualReviewScopeId,
+                                next
+                              )
+                            }
+                          />
                         </Card>
                       ))}
                     </div>

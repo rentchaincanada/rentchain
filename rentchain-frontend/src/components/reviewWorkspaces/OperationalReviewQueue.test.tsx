@@ -1,6 +1,6 @@
 import React from "react";
 import { MemoryRouter } from "react-router-dom";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { OperationalReviewQueue, type OperationalReviewQueueItem } from "./OperationalReviewQueue";
 
@@ -26,6 +26,8 @@ function queueItem(overrides: Partial<OperationalReviewQueueItem> = {}): Operati
     visibilityClass: "landlord_operational",
     evidenceLabel: "Payments / obligations source workflow",
     relatedResourceLabel: "North Towers · Unit 104 · James Smith",
+    manualReviewScope: "decision",
+    manualReviewScopeId: "decision-1",
     manualOnly: true,
     autonomousActionsEnabled: false,
     ...overrides,
@@ -200,7 +202,7 @@ describe("OperationalReviewQueue", () => {
     expect(parseInt(cancelStyle.minHeight, 10)).toBeGreaterThanOrEqual(44);
   });
 
-  it("prevents auto-submit and requires explicit confirmation for mobile UX", () => {
+  it("prevents auto-submit and requires explicit confirmation for mobile UX", async () => {
     render(
       <MemoryRouter>
         <OperationalReviewQueue items={[queueItem()]} />
@@ -226,7 +228,7 @@ describe("OperationalReviewQueue", () => {
     fireEvent.click(confirmButton);
 
     // Now should show updated status
-    expect(screen.getByText("Manual assignment: Finance reviewer")).toBeInTheDocument();
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText("Manual assignment: Finance reviewer")).toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   });
 });

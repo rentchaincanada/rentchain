@@ -1,7 +1,11 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { Card } from "@/components/ui/Ui";
-import { ReviewAssignmentStatusControls } from "./ReviewAssignmentStatusControls";
+import {
+  ReviewAssignmentStatusControls,
+  type ReviewAssignmentTarget,
+  type ReviewLifecycleStatus,
+} from "./ReviewAssignmentStatusControls";
 
 export type ReviewWorkspaceUiLink = {
   label: string;
@@ -21,6 +25,8 @@ export type ReviewWorkspaceUiModel = {
   reviewPriority: string;
   routingReason: string;
   assignmentLabel: string;
+  manualReviewScope: string;
+  manualReviewScopeId: string;
   sensitivityClass: "sensitive" | "restricted" | string;
   visibilityClass: "landlord_operational" | "admin_support" | string;
   manualOnly: true;
@@ -49,7 +55,16 @@ function metadataCell(labelText: string, value: string) {
   );
 }
 
-export function ReviewWorkspacePanel({ workspace }: { workspace: ReviewWorkspaceUiModel }) {
+export function ReviewWorkspacePanel({
+  workspace,
+  onManualReviewChange,
+}: {
+  workspace: ReviewWorkspaceUiModel;
+  onManualReviewChange?: (
+    workspace: ReviewWorkspaceUiModel,
+    next: { status: ReviewLifecycleStatus; assignment: ReviewAssignmentTarget }
+  ) => void | Promise<void>;
+}) {
   return (
     <Card
       style={{
@@ -111,6 +126,7 @@ export function ReviewWorkspacePanel({ workspace }: { workspace: ReviewWorkspace
         title={label(workspace.workspaceType)}
         initialStatus={workspace.reviewStatus}
         initialAssignment={workspace.assignmentLabel}
+        onChange={(next) => onManualReviewChange?.(workspace, next)}
       />
 
       <div style={{ display: "grid", gap: 5, minWidth: 0 }}>
@@ -185,7 +201,7 @@ export function ReviewWorkspacePanel({ workspace }: { workspace: ReviewWorkspace
       </div>
 
       <div style={{ color: "#64748b", fontSize: 12 }}>
-        Internal workspace reference: {safeLabel(workspace.workspaceReference, "Manual review handoff preview")}
+        Internal workspace reference: Manual review handoff preview
       </div>
     </Card>
   );
