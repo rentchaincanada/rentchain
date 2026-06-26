@@ -96,6 +96,11 @@ function selectedAssignmentReason(value: ReviewAssignmentTarget) {
   return REVIEW_ASSIGNMENT_OPTIONS.find((option) => option.value === value)?.reason || REVIEW_ASSIGNMENT_OPTIONS[0].reason;
 }
 
+function errorMessage(error: unknown) {
+  if (error instanceof Error && error.message) return error.message;
+  return "Manual review metadata could not be saved.";
+}
+
 export function ReviewAssignmentStatusControls({
   itemId,
   title,
@@ -107,7 +112,7 @@ export function ReviewAssignmentStatusControls({
   title: string;
   initialStatus: string;
   initialAssignment: string;
-  onChange?: (next: { status: ReviewLifecycleStatus; assignment: ReviewAssignmentTarget }) => void;
+  onChange?: (next: { status: ReviewLifecycleStatus; assignment: ReviewAssignmentTarget }) => void | Promise<void>;
 }) {
   const [status, setStatus] = React.useState<ReviewLifecycleStatus>(() => normalizeReviewLifecycleStatus(initialStatus));
   const [assignment, setAssignment] = React.useState<ReviewAssignmentTarget>(() =>
@@ -117,6 +122,8 @@ export function ReviewAssignmentStatusControls({
   const [showConfirmation, setShowConfirmation] = React.useState<boolean>(false);
   const [pendingStatus, setPendingStatus] = React.useState<ReviewLifecycleStatus | null>(null);
   const [pendingAssignment, setPendingAssignment] = React.useState<ReviewAssignmentTarget | null>(null);
+  const [saving, setSaving] = React.useState<boolean>(false);
+  const [saveError, setSaveError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     setStatus(normalizeReviewLifecycleStatus(initialStatus));
@@ -131,6 +138,7 @@ export function ReviewAssignmentStatusControls({
       setPendingStatus(nextStatus);
       setPendingChanges(true);
       setShowConfirmation(true);
+      setSaveError(null);
     }
   }
 
@@ -139,19 +147,25 @@ export function ReviewAssignmentStatusControls({
       setPendingAssignment(nextAssignment);
       setPendingChanges(true);
       setShowConfirmation(true);
+      setSaveError(null);
     }
   }
 
-  function confirmChanges() {
-    if (pendingStatus !== null) {
-      setStatus(pendingStatus);
-      onChange?.({ status: pendingStatus, assignment });
+  async function confirmChanges() {
+    const nextStatus = pendingStatus ?? status;
+    const nextAssignment = pendingAssignment ?? assignment;
+    try {
+      setSaving(true);
+      setSaveError(null);
+      await onChange?.({ status: nextStatus, assignment: nextAssignment });
+      setStatus(nextStatus);
+      setAssignment(nextAssignment);
+      resetPendingState();
+    } catch (error) {
+      setSaveError(errorMessage(error));
+    } finally {
+      setSaving(false);
     }
-    if (pendingAssignment !== null) {
-      setAssignment(pendingAssignment);
-      onChange?.({ status, assignment: pendingAssignment });
-    }
-    resetPendingState();
   }
 
   function cancelChanges() {
@@ -163,6 +177,7 @@ export function ReviewAssignmentStatusControls({
     setPendingAssignment(null);
     setPendingChanges(false);
     setShowConfirmation(false);
+    setSaveError(null);
   }
 
   return (
@@ -242,6 +257,12 @@ export function ReviewAssignmentStatusControls({
         <span>Review status note: {selectedStatusDescription(pendingStatus ?? status)}</span>
       </div>
 
+      {saveError ? (
+        <div role="alert" style={{ color: "#b91c1c", fontSize: 12, fontWeight: 800, lineHeight: 1.4 }}>
+          {saveError}
+        </div>
+      ) : null}
+
       {showConfirmation && (
         <div
           role="dialog"
@@ -268,24 +289,26 @@ export function ReviewAssignmentStatusControls({
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button
               onClick={confirmChanges}
+              disabled={saving}
               style={{
-                backgroundColor: "#059669",
+                backgroundColor: saving ? "#94a3b8" : "#059669",
                 color: "#fff",
                 border: "none",
                 borderRadius: 6,
                 padding: "10px 16px",
                 fontSize: 14,
                 fontWeight: 600,
-                cursor: "pointer",
+                cursor: saving ? "not-allowed" : "pointer",
                 minHeight: 44,
                 minWidth: 80,
               }}
               aria-describedby={`${itemId}-confirm-help`}
             >
-              Confirm changes
+              {saving ? "Saving..." : "Confirm changes"}
             </button>
             <button
               onClick={cancelChanges}
+              disabled={saving}
               style={{
                 backgroundColor: "#6b7280",
                 color: "#fff",
@@ -294,7 +317,7 @@ export function ReviewAssignmentStatusControls({
                 padding: "10px 16px",
                 fontSize: 14,
                 fontWeight: 600,
-                cursor: "pointer",
+                cursor: saving ? "not-allowed" : "pointer",
                 minHeight: 44,
                 minWidth: 80,
               }}

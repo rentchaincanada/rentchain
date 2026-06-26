@@ -1,7 +1,11 @@
 import React, { memo, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { Card } from "@/components/ui/Ui";
-import { ReviewAssignmentStatusControls } from "./ReviewAssignmentStatusControls";
+import {
+  ReviewAssignmentStatusControls,
+  type ReviewAssignmentTarget,
+  type ReviewLifecycleStatus,
+} from "./ReviewAssignmentStatusControls";
 
 export type OperationalReviewQueueItem = {
   queueItemId: string;
@@ -20,6 +24,8 @@ export type OperationalReviewQueueItem = {
   visibilityClass: string;
   evidenceLabel: string;
   relatedResourceLabel: string;
+  manualReviewScope: string;
+  manualReviewScopeId: string;
   manualOnly: true;
   autonomousActionsEnabled: false;
 };
@@ -47,7 +53,16 @@ function metadata(labelText: string, value: string | null | undefined) {
   );
 }
 
-const OperationalReviewQueueCard = memo(function OperationalReviewQueueCard({ item }: { item: OperationalReviewQueueItem }) {
+const OperationalReviewQueueCard = memo(function OperationalReviewQueueCard({
+  item,
+  onManualReviewChange,
+}: {
+  item: OperationalReviewQueueItem;
+  onManualReviewChange?: (
+    item: OperationalReviewQueueItem,
+    next: { status: ReviewLifecycleStatus; assignment: ReviewAssignmentTarget }
+  ) => void | Promise<void>;
+}) {
   const display = useMemo(
     () => ({
       title: safeDisplayLabel(item.title, "Operational review item"),
@@ -131,6 +146,7 @@ const OperationalReviewQueueCard = memo(function OperationalReviewQueueCard({ it
         title={display.title}
         initialStatus={item.reviewStatus}
         initialAssignment={item.assignmentLabel}
+        onChange={(next) => onManualReviewChange?.(item, next)}
       />
 
       <div style={{ display: "grid", gap: 5 }}>
@@ -172,7 +188,16 @@ const OperationalReviewQueueCard = memo(function OperationalReviewQueueCard({ it
   );
 });
 
-export const OperationalReviewQueue = memo(function OperationalReviewQueue({ items }: { items: OperationalReviewQueueItem[] }) {
+export const OperationalReviewQueue = memo(function OperationalReviewQueue({
+  items,
+  onManualReviewChange,
+}: {
+  items: OperationalReviewQueueItem[];
+  onManualReviewChange?: (
+    item: OperationalReviewQueueItem,
+    next: { status: ReviewLifecycleStatus; assignment: ReviewAssignmentTarget }
+  ) => void | Promise<void>;
+}) {
   const assignedCount = useMemo(
     () => items.filter((item) => !/^unassigned$/i.test(item.assignmentLabel)).length,
     [items]
@@ -216,7 +241,7 @@ export const OperationalReviewQueue = memo(function OperationalReviewQueue({ ite
           }}
         >
           {items.map((item) => (
-            <OperationalReviewQueueCard key={item.queueItemId} item={item} />
+            <OperationalReviewQueueCard key={item.queueItemId} item={item} onManualReviewChange={onManualReviewChange} />
           ))}
         </div>
       ) : (

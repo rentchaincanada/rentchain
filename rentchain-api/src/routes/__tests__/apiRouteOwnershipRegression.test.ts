@@ -216,6 +216,7 @@ async function buildRuntimeOwnershipApp() {
   const messagesRoutes = (await import("../messagesRoutes")).default;
   const landlordEvidencePackRoutes = (await import("../landlordEvidencePackRoutes")).default;
   const landlordEvidencePackageGenerationRoutes = (await import("../landlordEvidencePackageGenerationRoutes")).default;
+  const landlordOperatorReviewRoutes = (await import("../landlordOperatorReviewRoutes")).default;
   const internalReportsRoutes = (await import("../internalReportsRoutes")).default;
   const telemetryRoutes = (await import("../telemetryRoutes")).default;
   const screeningRoutes = (await import("../screeningRoutes")).default;
@@ -233,6 +234,7 @@ async function buildRuntimeOwnershipApp() {
   app.use("/api", routeSource("messagesRoutes.ts"), messagesRoutes);
   app.use("/api/landlord", routeSource("landlordEvidencePackRoutes.ts"), landlordEvidencePackRoutes);
   app.use("/api/landlord", routeSource("landlordEvidencePackageGenerationRoutes.ts"), landlordEvidencePackageGenerationRoutes);
+  app.use("/api/landlord", routeSource("landlordOperatorReviewRoutes.ts"), landlordOperatorReviewRoutes);
   app.use("/api/internal", routeSource("internalReportsRoutes.ts"), internalReportsRoutes);
   app.get("/api/__probe/revision", routeSource("app.build.ts:/api/__probe/revision"), (_req, res) =>
     res.json({
@@ -511,6 +513,36 @@ describe("API route ownership regression", () => {
     expect(res.headers["x-route-source"]).toBe("leaseRoutes.ts");
     expect(res.headers["x-route-source"]).not.toBe("screeningJobsAdminRoutes.ts");
     expect(res.body?.error).not.toBe("Not Found");
+  });
+
+  it("keeps operator review manual metadata owned by operator review routes before screening job fallback", async () => {
+    authState.user = { id: "landlord-1", landlordId: "landlord-1", role: "landlord", email: "landlord@example.test" };
+    const app = await buildRuntimeOwnershipApp();
+
+    const res = await invokeApp(app, {
+      method: "PUT",
+      url: "/api/landlord/operator-reviews/manual-metadata",
+      headers: { authorization: "Bearer landlord-token" },
+      body: {
+        scope: "decision",
+        scopeId: "decision-1",
+        reviewStatus: "in_review",
+        assignmentTarget: "finance_reviewer",
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.headers["x-route-source"]).toBe("landlordOperatorReviewRoutes.ts");
+    expect(res.headers["x-route-source"]).not.toBe("screeningJobsAdminRoutes.ts");
+    expect(res.body?.metadata).toEqual(
+      expect.objectContaining({
+        scope: "decision",
+        scopeId: "decision-1",
+        reviewStatus: "in_review",
+        assignmentTarget: "finance_reviewer",
+        manualOnly: true,
+      })
+    );
   });
 
   it("keeps telemetry and screening history owned by explicit routers before screening job fallback", async () => {

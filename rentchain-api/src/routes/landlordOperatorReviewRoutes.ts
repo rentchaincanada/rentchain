@@ -5,17 +5,22 @@ import { requireLandlord } from "../middleware/requireLandlord";
 import { appendCanonicalAuditEvent, safeAuditReference } from "../lib/canonicalAudit/appendCanonicalAuditEvent";
 import {
   addOperatorReviewNote,
+  buildOperatorReviewManualMetadata,
   buildOperatorReviewSession,
   closeOperatorReviewSession,
+  normalizeOperatorReviewManualMetadata,
   normalizeOperatorReviewActor,
   normalizeOperatorReviewSession,
+  parseOperatorReviewManualMetadataUpdateRequest,
   parseOperatorReviewCloseRequest,
   parseOperatorReviewNoteRequest,
   parseOperatorReviewOpenRequest,
 } from "../lib/operatorReviews/buildOperatorReviewSession";
 import {
+  OPERATOR_REVIEW_MANUAL_METADATA_COLLECTION,
   OPERATOR_REVIEW_SESSIONS_COLLECTION,
   type OperatorReviewEventType,
+  type OperatorReviewManualMetadata,
   type OperatorReviewScope,
   type OperatorReviewSession,
 } from "../lib/operatorReviews/operatorReviewTypes";
@@ -82,12 +87,57 @@ async function writeReviewEvent(input: {
   });
 }
 
+async function writeManualMetadataEvent(input: {
+  metadata: OperatorReviewManualMetadata;
+  previous: OperatorReviewManualMetadata | null;
+  actor: ReturnType<typeof actorFromReq>;
+}) {
+  await appendCanonicalAuditEvent({
+    eventType: "operator_review_manual_metadata_updated",
+    actor: {
+      role: input.actor.role,
+      operatorRef: input.actor.userId,
+      rawIdsIncluded: false,
+    },
+    authority: {
+      role: input.actor.role,
+      landlordRef: input.metadata.landlordId,
+      supportAllowed: false,
+      rawIdsIncluded: false,
+    },
+    sourceReferenceId: input.metadata.manualMetadataId,
+    timestamp: input.metadata.updatedAt,
+    visibility: "landlord_operator_internal",
+    metadata: {
+      reviewSessionId: safeAuditReference("manual_review_metadata", input.metadata.manualMetadataId),
+      scope: input.metadata.scope,
+      scopeId: safeAuditReference("review_scope", input.metadata.scopeId),
+      reviewStatus: input.metadata.reviewStatus,
+      assignmentTarget: input.metadata.assignmentTarget,
+      previousReviewStatus: input.previous?.reviewStatus || null,
+      previousAssignmentTarget: input.previous?.assignmentTarget || null,
+      noteSummary: "Manual review metadata updated.",
+      manualOnly: true,
+      metadataOnly: true,
+      rawIdsIncluded: false,
+    },
+  });
+}
+
 async function loadSessionForLandlord(reviewSessionId: string, landlordId: string) {
   const snap = await db.collection(OPERATOR_REVIEW_SESSIONS_COLLECTION).doc(reviewSessionId).get();
   if (!snap.exists) return null;
   const session = normalizeOperatorReviewSession({ id: snap.id, ...((snap.data() as any) || {}) });
   if (!session || session.landlordId !== landlordId) return null;
   return session;
+}
+
+async function loadManualMetadataForLandlord(manualMetadataId: string, landlordId: string) {
+  const snap = await db.collection(OPERATOR_REVIEW_MANUAL_METADATA_COLLECTION).doc(manualMetadataId).get();
+  if (!snap.exists) return null;
+  const metadata = normalizeOperatorReviewManualMetadata({ id: snap.id, ...((snap.data() as any) || {}) });
+  if (!metadata || metadata.landlordId !== landlordId) return null;
+  return metadata;
 }
 
 router.get("/operator-reviews", requireAuth, requireLandlord, async (req: any, res) => {
@@ -133,6 +183,52 @@ router.post("/operator-reviews", requireAuth, requireLandlord, async (req: any, 
   } catch (err: any) {
     console.error("[landlordOperatorReviewRoutes] open failed", err?.message || err);
     return res.status(500).json({ ok: false, error: "OPERATOR_REVIEW_OPEN_FAILED" });
+  }
+});
+
+router.get("/operator-reviews/manual-metadata", requireAuth, requireLandlord, async (req: any, res) => {
+  try {
+    const landlordId = landlordIdFromReq(req);
+    if (!landlordId) return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+    const scope = asString(req.query?.scope, 80) as OperatorReviewScope;
+    const scopeId = asString(req.query?.scopeId, 500);
+    let query: any = db.collection(OPERATOR_REVIEW_MANUAL_METADATA_COLLECTION).where("landlordId", "==", landlordId);
+    if (scope) query = query.where("scope", "==", scope);
+    if (scopeId) query = query.where("scopeId", "==", scopeId);
+    const snap = await query.get();
+    const metadata = (snap.docs || [])
+      .map((doc: any) => normalizeOperatorReviewManualMetadata({ id: doc.id, ...((doc.data() as any) || {}) }))
+      .filter(Boolean)
+      .sort((a: OperatorReviewManualMetadata, b: OperatorReviewManualMetadata) => b.updatedAt.localeCompare(a.updatedAt));
+    return res.json({ ok: true, metadata });
+  } catch (err: any) {
+    console.error("[landlordOperatorReviewRoutes] manual metadata list failed", err?.message || err);
+    return res.status(500).json({ ok: false, error: "OPERATOR_REVIEW_MANUAL_METADATA_LIST_FAILED" });
+  }
+});
+
+router.put("/operator-reviews/manual-metadata", requireAuth, requireLandlord, async (req: any, res) => {
+  try {
+    const landlordId = landlordIdFromReq(req);
+    const request = parseOperatorReviewManualMetadataUpdateRequest(req.body);
+    if (!landlordId || !request) {
+      return res.status(400).json({ ok: false, error: "OPERATOR_REVIEW_MANUAL_METADATA_INVALID" });
+    }
+    const actor = actorFromReq(req);
+    const manualMetadataId = buildOperatorReviewManualMetadata({ landlordId, request, actor }).manualMetadataId;
+    const previous = await loadManualMetadataForLandlord(manualMetadataId, landlordId);
+    const metadata = buildOperatorReviewManualMetadata({
+      landlordId,
+      request,
+      actor,
+      existing: previous,
+    });
+    await db.collection(OPERATOR_REVIEW_MANUAL_METADATA_COLLECTION).doc(metadata.manualMetadataId).set(metadata, { merge: false });
+    await writeManualMetadataEvent({ metadata, previous, actor });
+    return res.json({ ok: true, metadata });
+  } catch (err: any) {
+    console.error("[landlordOperatorReviewRoutes] manual metadata update failed", err?.message || err);
+    return res.status(500).json({ ok: false, error: "OPERATOR_REVIEW_MANUAL_METADATA_UPDATE_FAILED" });
   }
 });
 

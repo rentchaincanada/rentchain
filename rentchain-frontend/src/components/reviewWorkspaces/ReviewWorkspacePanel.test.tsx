@@ -16,6 +16,8 @@ function workspace(overrides: Partial<ReviewWorkspaceUiModel> = {}): ReviewWorks
     reviewPriority: "Critical",
     routingReason: "Delinquency or payment evidence review",
     assignmentLabel: "Operations owned",
+    manualReviewScope: "decision",
+    manualReviewScopeId: "decision-1",
     sensitivityClass: "sensitive",
     visibilityClass: "landlord_operational",
     manualOnly: true,

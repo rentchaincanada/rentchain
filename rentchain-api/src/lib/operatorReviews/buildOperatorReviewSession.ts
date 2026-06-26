@@ -3,11 +3,15 @@ import type {
   OperatorReviewActor,
   OperatorReviewCloseRequest,
   OperatorReviewEvidenceReference,
+  OperatorReviewManualMetadata,
+  OperatorReviewManualMetadataUpdateRequest,
   OperatorReviewNote,
   OperatorReviewNoteRequest,
   OperatorReviewOpenRequest,
   OperatorReviewOutcome,
   OperatorReviewOutcomeResult,
+  OperatorManualAssignmentTarget,
+  OperatorManualReviewStatus,
   OperatorReviewScope,
   OperatorReviewSession,
   OperatorReviewStatus,
@@ -28,6 +32,23 @@ const VALID_OUTCOMES = new Set<OperatorReviewOutcomeResult>([
   "unresolved",
 ]);
 const VALID_CLOSE_STATUSES = new Set<OperatorReviewStatus>(["completed", "escalated", "abandoned"]);
+const VALID_MANUAL_REVIEW_STATUSES = new Set<OperatorManualReviewStatus>([
+  "open",
+  "needs_review",
+  "in_review",
+  "awaiting_information",
+  "blocked",
+  "resolved",
+  "closed",
+]);
+const VALID_MANUAL_ASSIGNMENT_TARGETS = new Set<OperatorManualAssignmentTarget>([
+  "unassigned",
+  "operations",
+  "property_manager",
+  "finance_reviewer",
+  "document_reviewer",
+  "screening_reviewer",
+]);
 
 function asString(value: unknown, max = 1000): string {
   return String(value ?? "").trim().slice(0, max);
@@ -60,6 +81,15 @@ export function operatorReviewSessionId(input: {
   scopeId: string;
 }): string {
   const clean = cleanIdPart(["operator_review", input.landlordId, input.scope, input.scopeId].join(":"));
+  return clean || crypto.createHash("sha256").update(JSON.stringify(input)).digest("hex");
+}
+
+export function operatorReviewManualMetadataId(input: {
+  landlordId: string;
+  scope: OperatorReviewScope;
+  scopeId: string;
+}): string {
+  const clean = cleanIdPart(["operator_review_manual_metadata", input.landlordId, input.scope, input.scopeId].join(":"));
   return clean || crypto.createHash("sha256").update(JSON.stringify(input)).digest("hex");
 }
 
@@ -164,6 +194,43 @@ export function normalizeOperatorReviewSession(raw: unknown): OperatorReviewSess
   };
 }
 
+export function normalizeOperatorReviewManualMetadata(raw: unknown): OperatorReviewManualMetadata | null {
+  const data = (raw || {}) as Record<string, unknown>;
+  const manualMetadataId = asString(data.manualMetadataId || data.id, 240);
+  const landlordId = asString(data.landlordId, 240);
+  const scope = asString(data.scope, 80) as OperatorReviewScope;
+  const scopeId = asString(data.scopeId, 500);
+  const reviewStatus = asString(data.reviewStatus, 80) as OperatorManualReviewStatus;
+  const assignmentTarget = asString(data.assignmentTarget, 80) as OperatorManualAssignmentTarget;
+  const createdAt = toIsoDate(data.createdAt);
+  const updatedAt = toIsoDate(data.updatedAt) || createdAt;
+  if (
+    !manualMetadataId ||
+    !landlordId ||
+    !VALID_SCOPES.has(scope) ||
+    !scopeId ||
+    !VALID_MANUAL_REVIEW_STATUSES.has(reviewStatus) ||
+    !VALID_MANUAL_ASSIGNMENT_TARGETS.has(assignmentTarget) ||
+    !createdAt ||
+    !updatedAt
+  ) {
+    return null;
+  }
+  return {
+    manualMetadataId,
+    landlordId,
+    scope,
+    scopeId,
+    reviewStatus,
+    assignmentTarget,
+    manualOnly: true,
+    systemGenerated: false,
+    createdAt,
+    updatedAt,
+    updatedBy: normalizeOperatorReviewActor(data.updatedBy),
+  };
+}
+
 export function parseOperatorReviewOpenRequest(body: unknown): OperatorReviewOpenRequest | null {
   const data = (body || {}) as Record<string, unknown>;
   const scope = asString(data.scope, 80) as OperatorReviewScope;
@@ -174,6 +241,30 @@ export function parseOperatorReviewOpenRequest(body: unknown): OperatorReviewOpe
     scopeId,
     linkedEvidence: normalizeEvidenceReferences(data.linkedEvidence),
     note: sanitizeOperatorReviewNote(data.note) || null,
+  };
+}
+
+export function parseOperatorReviewManualMetadataUpdateRequest(
+  body: unknown
+): OperatorReviewManualMetadataUpdateRequest | null {
+  const data = (body || {}) as Record<string, unknown>;
+  const scope = asString(data.scope, 80) as OperatorReviewScope;
+  const scopeId = asString(data.scopeId, 500);
+  const reviewStatus = asString(data.reviewStatus, 80) as OperatorManualReviewStatus;
+  const assignmentTarget = asString(data.assignmentTarget, 80) as OperatorManualAssignmentTarget;
+  if (
+    !VALID_SCOPES.has(scope) ||
+    !scopeId ||
+    !VALID_MANUAL_REVIEW_STATUSES.has(reviewStatus) ||
+    !VALID_MANUAL_ASSIGNMENT_TARGETS.has(assignmentTarget)
+  ) {
+    return null;
+  }
+  return {
+    scope,
+    scopeId,
+    reviewStatus,
+    assignmentTarget,
   };
 }
 
@@ -232,6 +323,35 @@ export function buildOperatorReviewSession(input: {
     manualOnly: true,
     systemGenerated: false,
     updatedAt: openedAt,
+  };
+}
+
+export function buildOperatorReviewManualMetadata(input: {
+  landlordId: string;
+  request: OperatorReviewManualMetadataUpdateRequest;
+  actor: OperatorReviewActor;
+  existing?: OperatorReviewManualMetadata | null;
+  now?: string;
+}): OperatorReviewManualMetadata {
+  const updatedAt = toIsoDate(input.now) || new Date().toISOString();
+  return {
+    manualMetadataId:
+      input.existing?.manualMetadataId ||
+      operatorReviewManualMetadataId({
+        landlordId: input.landlordId,
+        scope: input.request.scope,
+        scopeId: input.request.scopeId,
+      }),
+    landlordId: input.landlordId,
+    scope: input.request.scope,
+    scopeId: input.request.scopeId,
+    reviewStatus: input.request.reviewStatus,
+    assignmentTarget: input.request.assignmentTarget,
+    manualOnly: true,
+    systemGenerated: false,
+    createdAt: input.existing?.createdAt || updatedAt,
+    updatedAt,
+    updatedBy: input.actor,
   };
 }
 

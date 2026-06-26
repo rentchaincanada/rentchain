@@ -14,6 +14,8 @@ const mocks = vi.hoisted(() => ({
   fetchDecisionInbox: vi.fn(),
   fetchDashboardSummary: vi.fn(),
   getActiveLeasesForLandlord: vi.fn(),
+  fetchOperatorReviewManualMetadata: vi.fn(),
+  updateOperatorReviewManualMetadata: vi.fn(),
   fetchProperties: vi.fn(),
   macShellProps: vi.fn(),
   useEntitlements: vi.fn(),
@@ -36,6 +38,15 @@ vi.mock("@/api/leasesApi", async () => {
   return {
     ...actual,
     getActiveLeasesForLandlord: mocks.getActiveLeasesForLandlord,
+  };
+});
+
+vi.mock("@/api/operatorReviewApi", async () => {
+  const actual = await vi.importActual<any>("@/api/operatorReviewApi");
+  return {
+    ...actual,
+    fetchOperatorReviewManualMetadata: mocks.fetchOperatorReviewManualMetadata,
+    updateOperatorReviewManualMetadata: mocks.updateOperatorReviewManualMetadata,
   };
 });
 
@@ -379,7 +390,7 @@ describe("deriveCommandCenterSignals", () => {
     const preview = reviewWorkspacePreviewForSignal(sourceSignal!);
     expect(preview).toEqual(
       expect.objectContaining({
-        workspaceReference: "manual-review-preview:payments:critical",
+        workspaceReference: "manual-review-preview:decision:decision-1",
         workspaceType: "payment_ledger_review",
         reviewStatus: "Open",
         reviewPriority: "Critical",
@@ -556,6 +567,8 @@ describe("OperationalCommandCenterPage", () => {
     mocks.fetchDecisionInbox.mockReset();
     mocks.fetchDashboardSummary.mockReset();
     mocks.getActiveLeasesForLandlord.mockReset();
+    mocks.fetchOperatorReviewManualMetadata.mockReset();
+    mocks.updateOperatorReviewManualMetadata.mockReset();
     mocks.fetchProperties.mockReset();
     mocks.macShellProps.mockReset();
     mocks.useEntitlements.mockReset();
@@ -587,6 +600,19 @@ describe("OperationalCommandCenterPage", () => {
       events: [],
     });
     mocks.getActiveLeasesForLandlord.mockResolvedValue({ leases: [lease()] });
+    mocks.fetchOperatorReviewManualMetadata.mockResolvedValue([]);
+    mocks.updateOperatorReviewManualMetadata.mockImplementation(async (input: any) => ({
+      manualMetadataId: `metadata:${input.scope}:${input.scopeId}`,
+      landlordId: "landlord-1",
+      scope: input.scope,
+      scopeId: input.scopeId,
+      reviewStatus: input.reviewStatus,
+      assignmentTarget: input.assignmentTarget,
+      manualOnly: true,
+      systemGenerated: false,
+      createdAt: "2026-05-01T00:00:00.000Z",
+      updatedAt: "2026-05-01T00:00:00.000Z",
+    }));
     mocks.fetchProperties.mockResolvedValue({
       properties: [
         {
@@ -781,6 +807,80 @@ describe("OperationalCommandCenterPage", () => {
     fireEvent.change(screen.getByLabelText("Search operational items"), { target: { value: "no matching workflow" } });
     expect(screen.getByText("No operational items match this triage view.")).toBeInTheDocument();
     expect(screen.getByText(/Current filters:/)).toBeInTheDocument();
+  });
+
+  it("rehydrates persisted manual review metadata for payment and non-payment operations cards", async () => {
+    mocks.fetchOperatorReviewManualMetadata.mockResolvedValueOnce([
+      {
+        manualMetadataId: "metadata:decision:decision-1",
+        landlordId: "landlord-1",
+        scope: "decision",
+        scopeId: "decision-1",
+        reviewStatus: "in_review",
+        assignmentTarget: "finance_reviewer",
+        manualOnly: true,
+        systemGenerated: false,
+        createdAt: "2026-05-01T00:00:00.000Z",
+        updatedAt: "2026-05-02T00:00:00.000Z",
+      },
+      {
+        manualMetadataId: "metadata:workflow:lease-coherence:lease-1",
+        landlordId: "landlord-1",
+        scope: "workflow",
+        scopeId: "lease-coherence:lease-1",
+        reviewStatus: "blocked",
+        assignmentTarget: "property_manager",
+        manualOnly: true,
+        systemGenerated: false,
+        createdAt: "2026-05-01T00:00:00.000Z",
+        updatedAt: "2026-05-02T00:00:00.000Z",
+      },
+    ]);
+
+    render(
+      <MemoryRouter>
+        <OperationalCommandCenterPage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => expect(mocks.fetchOperatorReviewManualMetadata).toHaveBeenCalled());
+
+    expect(screen.getAllByText("Review status: In review").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Assignment: Finance reviewer").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Review status: Blocked").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Assignment: Property manager").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Manual status: In review").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Manual assignment: Finance reviewer").length).toBeGreaterThan(0);
+  });
+
+  it("persists manual review status and assigned reviewer changes from Operations controls", async () => {
+    render(
+      <MemoryRouter>
+        <OperationalCommandCenterPage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => expect(screen.getAllByText("Review missing payment").length).toBeGreaterThan(0));
+
+    fireEvent.change(screen.getAllByLabelText("Review status for Review missing payment")[0], {
+      target: { value: "in_review" },
+    });
+    fireEvent.change(screen.getAllByLabelText("Assigned reviewer for Review missing payment")[0], {
+      target: { value: "finance_reviewer" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Confirm changes/i }));
+
+    await waitFor(() =>
+      expect(mocks.updateOperatorReviewManualMetadata).toHaveBeenCalledWith({
+        scope: "decision",
+        scopeId: "decision-1",
+        reviewStatus: "in_review",
+        assignmentTarget: "finance_reviewer",
+      })
+    );
+
+    await waitFor(() => expect(screen.getAllByText("Manual status: In review").length).toBeGreaterThan(0));
+    expect(screen.getAllByText("Assignment: Finance reviewer").length).toBeGreaterThan(0);
   });
 
   it("supports combined triage facets while preserving search and reset behavior", async () => {

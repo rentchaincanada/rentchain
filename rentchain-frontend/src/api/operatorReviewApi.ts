@@ -8,6 +8,21 @@ export type OperatorReviewScope =
   | "audit_compliance";
 
 export type OperatorReviewStatus = "open" | "completed" | "escalated" | "abandoned";
+export type OperatorManualReviewStatus =
+  | "open"
+  | "needs_review"
+  | "in_review"
+  | "awaiting_information"
+  | "blocked"
+  | "resolved"
+  | "closed";
+export type OperatorManualAssignmentTarget =
+  | "unassigned"
+  | "operations"
+  | "property_manager"
+  | "finance_reviewer"
+  | "document_reviewer"
+  | "screening_reviewer";
 
 export type OperatorReviewOutcomeResult =
   | "reviewed"
@@ -58,6 +73,19 @@ export type OperatorReviewSession = {
   updatedAt: string;
 };
 
+export type OperatorReviewManualMetadata = {
+  manualMetadataId: string;
+  landlordId: string;
+  scope: OperatorReviewScope;
+  scopeId: string;
+  reviewStatus: OperatorManualReviewStatus;
+  assignmentTarget: OperatorManualAssignmentTarget;
+  manualOnly: true;
+  systemGenerated: false;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type OpenOperatorReviewSessionInput = {
   scope: OperatorReviewScope;
   scopeId: string;
@@ -71,6 +99,13 @@ export type CloseOperatorReviewSessionInput = {
   status?: OperatorReviewStatus;
 };
 
+export type UpdateOperatorReviewManualMetadataInput = {
+  scope: OperatorReviewScope;
+  scopeId: string;
+  reviewStatus: OperatorManualReviewStatus;
+  assignmentTarget: OperatorManualAssignmentTarget;
+};
+
 export async function fetchOperatorReviewSessions(params: {
   scope: OperatorReviewScope;
   scopeId: string;
@@ -80,6 +115,33 @@ export async function fetchOperatorReviewSessions(params: {
     `/landlord/operator-reviews?${search.toString()}`
   );
   return response.sessions || [];
+}
+
+export async function fetchOperatorReviewManualMetadata(params: {
+  scope?: OperatorReviewScope;
+  scopeId?: string;
+} = {}): Promise<OperatorReviewManualMetadata[]> {
+  const search = new URLSearchParams();
+  if (params.scope) search.set("scope", params.scope);
+  if (params.scopeId) search.set("scopeId", params.scopeId);
+  const suffix = search.toString() ? `?${search.toString()}` : "";
+  const response = await apiFetch<{ ok: true; metadata: OperatorReviewManualMetadata[] }>(
+    `/landlord/operator-reviews/manual-metadata${suffix}`
+  );
+  return response.metadata || [];
+}
+
+export async function updateOperatorReviewManualMetadata(
+  input: UpdateOperatorReviewManualMetadataInput
+): Promise<OperatorReviewManualMetadata> {
+  const response = await apiFetch<{ ok: true; metadata: OperatorReviewManualMetadata }>(
+    "/landlord/operator-reviews/manual-metadata",
+    {
+      method: "PUT",
+      body: input,
+    }
+  );
+  return response.metadata;
 }
 
 export async function openOperatorReviewSession(
