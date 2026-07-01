@@ -163,22 +163,47 @@ function decisionTimingLabel(item: LandlordDecisionQueueItem): string {
   return "Action needed";
 }
 
-function decisionDestinationLabel(item: LandlordDecisionQueueItem): string {
-  const label = String(item.recommendedActionLabel || "").trim();
-  if (label) return label;
+function isGenericActionLabel(label: string): boolean {
+  return ["open", "review", "view"].includes(label.trim().toLowerCase());
+}
+
+function decisionDestinationCopy(item: LandlordDecisionQueueItem): { meta: string; action: string } {
   const href = String(item.recommendedActionHref || "").trim();
-  if (href.includes("/ledger")) return "Open ledger";
-  if (href.includes("/applications")) return "Open applications";
-  if (href.includes("/analytics")) return "Open analytics";
-  if (href.includes("/messages")) return "Open messages";
-  if (href.includes("/operations")) return "Open operations";
-  return `Open ${workspaceLabel(item.workspace).toLowerCase()}`;
+  const label = String(item.recommendedActionLabel || "").trim();
+
+  if (href.includes("/applications")) {
+    return { meta: "Applications · Review funnel", action: "Review applications" };
+  }
+  if (href.includes("entry=revenue-pressure")) {
+    return { meta: "Revenue analytics · Review exposure", action: "View revenue analytics" };
+  }
+  if (href.includes("entry=vacancy-readiness")) {
+    return { meta: "Vacancy analytics · Review readiness", action: "View vacancy readiness" };
+  }
+  if (href.includes("entry=lease-renewals")) {
+    return { meta: "Lease renewals · Review operator inputs", action: "Review renewals" };
+  }
+  if (href.includes("/ledger")) {
+    return { meta: "Payment ledger · Review obligation", action: label && !isGenericActionLabel(label) ? label : "Open ledger" };
+  }
+  if (href.includes("/messages")) {
+    return { meta: "Messages · Review thread", action: label && !isGenericActionLabel(label) ? label : "Open messages" };
+  }
+  if (href.includes("/operations")) {
+    return { meta: "Operations queue · Review work", action: label && !isGenericActionLabel(label) ? label : "Open operations" };
+  }
+  if (label && !isGenericActionLabel(label)) {
+    return { meta: `${workspaceLabel(item.workspace)} · ${label}`, action: label };
+  }
+  return { meta: `${workspaceLabel(item.workspace)} · Review next step`, action: `Open ${workspaceLabel(item.workspace).toLowerCase()}` };
+}
+
+function decisionDestinationLabel(item: LandlordDecisionQueueItem): string {
+  return decisionDestinationCopy(item).action;
 }
 
 function decisionContextLabel(item: LandlordDecisionQueueItem): string {
-  const destination = decisionDestinationLabel(item);
-  if (item.workspace === "payments") return `${workspaceLabel(item.workspace)} decision -> ${destination}`;
-  return `${workspaceLabel(item.workspace)} workspace -> ${destination}`;
+  return decisionDestinationCopy(item).meta;
 }
 
 function decisionReason(item: LandlordDecisionQueueItem): string {
@@ -653,7 +678,7 @@ function UpcomingActions({ queue }: { queue: LandlordDecisionQueueResponse | nul
         title="Upcoming Actions"
         subtitle="Time-sensitive next steps from the operations queue."
         action={
-          <Link to="/operations?status=open_state" style={compactButton}>
+          <Link to="/operations" style={compactButton}>
             Open Operations <ArrowRight size={16} />
           </Link>
         }

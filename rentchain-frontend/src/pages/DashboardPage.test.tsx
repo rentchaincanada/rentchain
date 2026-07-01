@@ -272,7 +272,7 @@ describe("DashboardPage", () => {
     expect(screen.getByText("Highest-priority decisions needing attention.")).toBeInTheDocument();
     expect(screen.getByTestId("decision-queue-section")).toHaveTextContent("Resolve lease renewal");
     expect(screen.getByTestId("decision-queue-section")).toHaveTextContent("A lease needs a renewal decision before the notice window closes.");
-    expect(screen.getByTestId("decision-queue-section")).toHaveTextContent("Lease workspace -> Open lease workspace");
+    expect(screen.getByTestId("decision-queue-section")).toHaveTextContent("Lease · Open lease workspace");
     expect(screen.getByTestId("decision-queue-section")).toHaveTextContent("Due");
     expect(screen.getByTestId("decision-queue-section")).toHaveTextContent("Review outstanding rent");
     expect(screen.getByTestId("decision-queue-section")).toHaveTextContent("Outstanding $2,000.00 for the March rent period.");
@@ -281,6 +281,7 @@ describe("DashboardPage", () => {
       "/leases/lease-1/ledger"
     );
     expect(screen.getByTestId("upcoming-actions-section")).toHaveTextContent("Upcoming Actions");
+    expect(screen.getByRole("link", { name: /Open Operations/i })).toHaveAttribute("href", "/operations");
     expect(screen.getByTestId("calendar-preview-section")).toHaveTextContent("Calendar Preview");
     expect(screen.getByTestId("calendar-preview-section")).toHaveTextContent("Resolve lease renewal");
     expect(screen.getByRole("link", { name: /Open Full Schedule/i })).toHaveAttribute("href", "/scheduling");
@@ -304,6 +305,111 @@ describe("DashboardPage", () => {
     expect(mocks.fetchUnifiedInboxMock).toHaveBeenCalledWith("landlord");
     expect(screen.queryByText("lease-1")).not.toBeInTheDocument();
     expect(screen.queryByText("payment-1")).not.toBeInTheDocument();
+  });
+
+  it("uses specific Dashboard decision destination labels for common RC1 cards", async () => {
+    mocks.fetchLandlordDecisionQueueMock.mockResolvedValue(
+      queueResponse({
+        items: [
+          {
+            id: "applications-decision",
+            sourceType: "application",
+            sourceId: "application-source",
+            workspace: "operations",
+            severity: "needs_review",
+            title: "Review submitted applications",
+            description: "Submitted applications are ready for review.",
+            recommendedActionLabel: "Review",
+            recommendedActionHref: "/applications?entry=application-funnel&status=SUBMITTED",
+            dueAt: null,
+            createdAt: "2026-06-18T12:00:00.000Z",
+            updatedAt: "2026-06-19T12:00:00.000Z",
+            status: "open",
+            dedupeKey: "applications",
+            sortKey: "1",
+            priorityRank: 10,
+          },
+          {
+            id: "revenue-decision",
+            sourceType: "analytics",
+            sourceId: "revenue-source",
+            workspace: "payments",
+            severity: "critical",
+            title: "Review revenue pressure",
+            description: "Revenue exposure needs attention.",
+            recommendedActionLabel: "Review",
+            recommendedActionHref: "/analytics?entry=revenue-pressure",
+            dueAt: null,
+            createdAt: "2026-06-18T12:00:00.000Z",
+            updatedAt: "2026-06-19T12:00:00.000Z",
+            status: "open",
+            dedupeKey: "revenue",
+            sortKey: "2",
+            priorityRank: 20,
+          },
+          {
+            id: "vacancy-decision",
+            sourceType: "analytics",
+            sourceId: "vacancy-source",
+            workspace: "lease",
+            severity: "warning",
+            title: "View vacancy readiness",
+            description: "Vacancy readiness needs review.",
+            recommendedActionLabel: "Review",
+            recommendedActionHref: "/analytics?entry=vacancy-readiness",
+            dueAt: null,
+            createdAt: "2026-06-18T12:00:00.000Z",
+            updatedAt: "2026-06-19T12:00:00.000Z",
+            status: "open",
+            dedupeKey: "vacancy",
+            sortKey: "3",
+            priorityRank: 30,
+          },
+          {
+            id: "renewals-decision",
+            sourceType: "lease",
+            sourceId: "renewals-source",
+            workspace: "lease",
+            severity: "needs_review",
+            title: "Open renewals focus",
+            description: "Renewal operator inputs need review.",
+            recommendedActionLabel: "Review",
+            recommendedActionHref: "/portfolio-health?entry=lease-renewals",
+            dueAt: null,
+            createdAt: "2026-06-18T12:00:00.000Z",
+            updatedAt: "2026-06-19T12:00:00.000Z",
+            status: "open",
+            dedupeKey: "renewals",
+            sortKey: "4",
+            priorityRank: 40,
+          },
+        ],
+      })
+    );
+
+    renderDashboard();
+
+    expect(await screen.findByText("Review submitted applications")).toBeInTheDocument();
+    expect(screen.getByTestId("decision-queue-section")).toHaveTextContent("Applications · Review funnel");
+    expect(screen.getByRole("link", { name: /Review applications: Review submitted applications/i })).toHaveAttribute(
+      "href",
+      "/applications?entry=application-funnel&status=SUBMITTED"
+    );
+    expect(screen.getByTestId("decision-queue-section")).toHaveTextContent("Revenue analytics · Review exposure");
+    expect(screen.getByRole("link", { name: /View revenue analytics: Review revenue pressure/i })).toHaveAttribute(
+      "href",
+      "/analytics?entry=revenue-pressure"
+    );
+    expect(screen.getByTestId("decision-queue-section")).toHaveTextContent("Vacancy analytics · Review readiness");
+    expect(screen.getByRole("link", { name: /View vacancy readiness: View vacancy readiness/i })).toHaveAttribute(
+      "href",
+      "/analytics?entry=vacancy-readiness"
+    );
+    expect(screen.getByTestId("decision-queue-section")).toHaveTextContent("Lease renewals · Review operator inputs");
+    expect(screen.getByRole("link", { name: /Review renewals: Open renewals focus/i })).toHaveAttribute(
+      "href",
+      "/portfolio-health?entry=lease-renewals"
+    );
   });
 
   it("keeps decision queue content visible when portfolio data fails", async () => {
