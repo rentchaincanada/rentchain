@@ -56,7 +56,7 @@ describe("OperationalReviewQueue", () => {
     expect(screen.queryByText("Delinquency or payment evidence review")).not.toBeInTheDocument();
     openDetails();
     expect(screen.getByRole("button", { name: /Hide details and manual controls for Review missing payment/i })).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByTestId("operational-review-card-grid")).not.toContainElement(
+    expect(screen.getAllByTestId("operational-review-card-row")[0].nextElementSibling).toBe(
       screen.getByTestId("operational-review-details-panel")
     );
     expect(screen.getByText("Delinquency or payment evidence review")).toBeInTheDocument();
@@ -77,7 +77,7 @@ describe("OperationalReviewQueue", () => {
     expect(screen.queryByText(/tenant-visible review/i)).not.toBeInTheDocument();
   });
 
-  it("renders one full-width details panel outside the card grid when switching expanded cards", () => {
+  it("renders one full-width details panel after the row containing the selected card", () => {
     render(
       <MemoryRouter>
         <OperationalReviewQueue
@@ -94,25 +94,39 @@ describe("OperationalReviewQueue", () => {
               manualReviewScope: "workflow",
               manualReviewScopeId: "lease-2",
             }),
+            queueItem({
+              queueItemId: "manual-review-queue:deposit:lease-3",
+              title: "Review deposit issue",
+              contextLabel: "West Towers · Unit 309",
+              destination: "/leases/lease-3/workflows/deposit",
+              workspaceType: "deposit_review",
+              evidenceLabel: "Deposit source workflow",
+              relatedResourceLabel: "West Towers · Unit 309",
+              manualReviewScope: "workflow",
+              manualReviewScopeId: "lease-3",
+            }),
           ]}
         />
       </MemoryRouter>
     );
 
     openDetails();
-    expect(screen.getByTestId("operational-review-card-grid")).not.toContainElement(
-      screen.getByTestId("operational-review-details-panel")
-    );
+    let rows = screen.getAllByTestId("operational-review-card-row");
+    expect(rows[0].nextElementSibling).toBe(screen.getByTestId("operational-review-details-panel"));
     expect(screen.getByRole("button", { name: /Hide details and manual controls for Review missing payment/i })).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByRole("button", { name: /Details and manual controls for Review lease lifecycle/i })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByRole("button", { name: /Details and manual controls for Review deposit issue/i })).toHaveAttribute("aria-expanded", "false");
 
-    openDetails("Review lease lifecycle");
+    openDetails("Review deposit issue");
 
+    rows = screen.getAllByTestId("operational-review-card-row");
     expect(screen.getAllByTestId("operational-review-details-panel")).toHaveLength(1);
+    expect(rows[1].nextElementSibling).toBe(screen.getByTestId("operational-review-details-panel"));
     expect(screen.getByRole("button", { name: /Details and manual controls for Review missing payment/i })).toHaveAttribute("aria-expanded", "false");
-    expect(screen.getByRole("button", { name: /Hide details and manual controls for Review lease lifecycle/i })).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByTestId("operational-review-details-panel")).toHaveTextContent("Review lease lifecycle");
-    expect(screen.getByTestId("operational-review-details-panel")).toHaveTextContent("South Towers · Unit 205");
+    expect(screen.getByRole("button", { name: /Details and manual controls for Review lease lifecycle/i })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByRole("button", { name: /Hide details and manual controls for Review deposit issue/i })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByTestId("operational-review-details-panel")).toHaveTextContent("Review deposit issue");
+    expect(screen.getByTestId("operational-review-details-panel")).toHaveTextContent("West Towers · Unit 309");
   });
 
   it("updates manual assignment and status metadata without adding mutation actions", () => {

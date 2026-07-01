@@ -1,4 +1,4 @@
-import React, { memo, useEffect, useMemo, useState } from "react";
+import React, { memo, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Card } from "@/components/ui/Ui";
 import {
@@ -85,6 +85,23 @@ function metadataItemsForItem(item: OperationalReviewQueueItem, display: ReturnT
     { labelText: "Sensitivity", value: display.sensitivity },
     { labelText: "Visibility", value: display.visibility },
   ];
+}
+
+const REVIEW_CARD_MIN_WIDTH = 280;
+const REVIEW_CARD_GRID_GAP = 10;
+
+function cardsPerReviewRowForWidth(width: number) {
+  if (!Number.isFinite(width) || width <= 0) return 2;
+  return Math.max(1, Math.floor((width + REVIEW_CARD_GRID_GAP) / (REVIEW_CARD_MIN_WIDTH + REVIEW_CARD_GRID_GAP)));
+}
+
+function chunkReviewRows<T>(items: T[], cardsPerRow: number) {
+  const size = Math.max(1, cardsPerRow);
+  const rows: T[][] = [];
+  for (let index = 0; index < items.length; index += size) {
+    rows.push(items.slice(index, index + size));
+  }
+  return rows;
 }
 
 const OperationalReviewQueueCard = memo(function OperationalReviewQueueCard({
@@ -318,6 +335,8 @@ export const OperationalReviewQueue = memo(function OperationalReviewQueue({
   ) => void | Promise<void>;
 }) {
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
+  const gridRef = useRef<HTMLDivElement | null>(null);
+  const [cardsPerRow, setCardsPerRow] = useState(2);
   const assignedCount = useMemo(
     () => items.filter((item) => !/^unassigned$/i.test(item.assignmentLabel)).length,
     [items]
@@ -326,12 +345,30 @@ export const OperationalReviewQueue = memo(function OperationalReviewQueue({
     () => items.find((item) => item.queueItemId === expandedItemId) || null,
     [expandedItemId, items]
   );
+  const itemRows = useMemo(() => chunkReviewRows(items, cardsPerRow), [cardsPerRow, items]);
 
   useEffect(() => {
     if (expandedItemId && !expandedItem) {
       setExpandedItemId(null);
     }
   }, [expandedItem, expandedItemId]);
+
+  useEffect(() => {
+    const updateCardsPerRow = () => {
+      setCardsPerRow(cardsPerReviewRowForWidth(gridRef.current?.clientWidth || 0));
+    };
+
+    updateCardsPerRow();
+
+    if (typeof ResizeObserver !== "undefined" && gridRef.current) {
+      const observer = new ResizeObserver(updateCardsPerRow);
+      observer.observe(gridRef.current);
+      return () => observer.disconnect();
+    }
+
+    window.addEventListener("resize", updateCardsPerRow);
+    return () => window.removeEventListener("resize", updateCardsPerRow);
+  }, []);
 
   const handleToggleDetails = React.useCallback((item: OperationalReviewQueueItem) => {
     setExpandedItemId((current) => (current === item.queueItemId ? null : item.queueItemId));
@@ -368,21 +405,45 @@ export const OperationalReviewQueue = memo(function OperationalReviewQueue({
       {items.length ? (
         <div
           data-testid="operational-review-card-grid"
+          ref={gridRef}
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))",
             gap: 10,
             minWidth: 0,
           }}
         >
-          {items.map((item) => (
-            <OperationalReviewQueueCard
-              key={item.queueItemId}
-              item={item}
-              isExpanded={expandedItemId === item.queueItemId}
-              onToggleDetails={handleToggleDetails}
-            />
-          ))}
+          {itemRows.map((row, rowIndex) => {
+            const rowHasExpandedItem = row.some((item) => item.queueItemId === expandedItemId);
+            return (
+              <React.Fragment key={row.map((item) => item.queueItemId).join("|") || rowIndex}>
+                <div
+                  data-testid="operational-review-card-row"
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))",
+                    gap: 10,
+                    minWidth: 0,
+                  }}
+                >
+                  {row.map((item) => (
+                    <OperationalReviewQueueCard
+                      key={item.queueItemId}
+                      item={item}
+                      isExpanded={expandedItemId === item.queueItemId}
+                      onToggleDetails={handleToggleDetails}
+                    />
+                  ))}
+                </div>
+                {rowHasExpandedItem && expandedItem ? (
+                  <OperationalReviewQueueDetailsPanel
+                    item={expandedItem}
+                    onManualReviewChange={onManualReviewChange}
+                    onClose={() => setExpandedItemId(null)}
+                  />
+                ) : null}
+              </React.Fragment>
+            );
+          })}
         </div>
       ) : (
         <div style={{ color: "#64748b", fontSize: 13, lineHeight: 1.5 }}>
@@ -390,13 +451,6 @@ export const OperationalReviewQueue = memo(function OperationalReviewQueue({
           operational queue.
         </div>
       )}
-      {expandedItem ? (
-        <OperationalReviewQueueDetailsPanel
-          item={expandedItem}
-          onManualReviewChange={onManualReviewChange}
-          onClose={() => setExpandedItemId(null)}
-        />
-      ) : null}
     </Card>
   );
 });
