@@ -1,4 +1,4 @@
-import React, { memo, useMemo } from "react";
+import React, { memo, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Card } from "@/components/ui/Ui";
 import {
@@ -57,31 +57,47 @@ function compactMetadata(labelText: string, value: string | null | undefined) {
   if (!value) return null;
   return (
     <span style={{ color: "#334155", fontSize: 13, fontWeight: 800, lineHeight: 1.35 }}>
-      {labelText}: <span style={{ color: "#0f172a" }}>{value}</span>
+      {labelText}: {value}
     </span>
   );
 }
 
+function displayForItem(item: OperationalReviewQueueItem) {
+  return {
+    title: safeDisplayLabel(item.title, "Operational review item"),
+    context: safeDisplayLabel(item.contextLabel, "Operational review context"),
+    workspaceType: label(item.workspaceType),
+    sensitivity: label(item.sensitivityClass),
+    visibility: label(item.visibilityClass),
+    evidence: safeDisplayLabel(item.evidenceLabel, "Open source workflow evidence"),
+    relatedResource: safeDisplayLabel(item.relatedResourceLabel, "Scoped resource context"),
+  };
+}
+
+function metadataItemsForItem(item: OperationalReviewQueueItem, display: ReturnType<typeof displayForItem>) {
+  return [
+    { labelText: "Routing reason", value: item.routingReason },
+    { labelText: "Source", value: item.sourceLabel },
+    { labelText: "Review status", value: item.reviewStatus },
+    { labelText: "Assignment", value: item.assignmentLabel },
+    { labelText: "Workflow status", value: item.workflowStatus },
+    { labelText: "Financial status", value: item.financialStatus || null },
+    { labelText: "Sensitivity", value: display.sensitivity },
+    { labelText: "Visibility", value: display.visibility },
+  ];
+}
+
 const OperationalReviewQueueCard = memo(function OperationalReviewQueueCard({
   item,
-  onManualReviewChange,
+  isExpanded,
+  onToggleDetails,
 }: {
   item: OperationalReviewQueueItem;
-  onManualReviewChange?: (
-    item: OperationalReviewQueueItem,
-    next: { status: ReviewLifecycleStatus; assignment: ReviewAssignmentTarget }
-  ) => void | Promise<void>;
+  isExpanded: boolean;
+  onToggleDetails: (item: OperationalReviewQueueItem) => void;
 }) {
   const display = useMemo(
-    () => ({
-      title: safeDisplayLabel(item.title, "Operational review item"),
-      context: safeDisplayLabel(item.contextLabel, "Operational review context"),
-      workspaceType: label(item.workspaceType),
-      sensitivity: label(item.sensitivityClass),
-      visibility: label(item.visibilityClass),
-      evidence: safeDisplayLabel(item.evidenceLabel, "Open source workflow evidence"),
-      relatedResource: safeDisplayLabel(item.relatedResourceLabel, "Scoped resource context"),
-    }),
+    () => displayForItem(item),
     [
       item.contextLabel,
       item.evidenceLabel,
@@ -90,29 +106,6 @@ const OperationalReviewQueueCard = memo(function OperationalReviewQueueCard({
       item.title,
       item.visibilityClass,
       item.workspaceType,
-    ]
-  );
-
-  const metadataItems = useMemo(
-    () => [
-      { labelText: "Routing reason", value: item.routingReason },
-      { labelText: "Source", value: item.sourceLabel },
-      { labelText: "Review status", value: item.reviewStatus },
-      { labelText: "Assignment", value: item.assignmentLabel },
-      { labelText: "Workflow status", value: item.workflowStatus },
-      { labelText: "Financial status", value: item.financialStatus || null },
-      { labelText: "Sensitivity", value: display.sensitivity },
-      { labelText: "Visibility", value: display.visibility },
-    ],
-    [
-      display.sensitivity,
-      display.visibility,
-      item.assignmentLabel,
-      item.financialStatus,
-      item.reviewStatus,
-      item.routingReason,
-      item.sourceLabel,
-      item.workflowStatus,
     ]
   );
 
@@ -165,56 +158,151 @@ const OperationalReviewQueueCard = memo(function OperationalReviewQueueCard({
         {display.evidence}
       </Link>
 
-      <details style={{ borderTop: "1px solid #e2e8f0", paddingTop: 10 }}>
-        <summary style={{ color: "#334155", fontSize: 13, fontWeight: 900, cursor: "pointer", minHeight: 32 }}>
-          Details and manual controls
-        </summary>
-        <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
-          <div
+      <button
+        type="button"
+        aria-expanded={isExpanded}
+        aria-label={`${isExpanded ? "Hide details and manual controls" : "Details and manual controls"} for ${display.title}`}
+        onClick={() => onToggleDetails(item)}
+        style={{
+          border: `1px solid ${isExpanded ? "#93c5fd" : "#dbe3ef"}`,
+          background: isExpanded ? "#eff6ff" : "#ffffff",
+          color: "#1d4ed8",
+          borderRadius: 6,
+          padding: "8px 12px",
+          minHeight: 44,
+          width: "fit-content",
+          fontSize: 13,
+          fontWeight: 900,
+          cursor: "pointer",
+        }}
+      >
+        {isExpanded ? "Hide details and manual controls" : "Details and manual controls"}
+      </button>
+    </Card>
+  );
+});
+
+const OperationalReviewQueueDetailsPanel = memo(function OperationalReviewQueueDetailsPanel({
+  item,
+  onManualReviewChange,
+  onClose,
+}: {
+  item: OperationalReviewQueueItem;
+  onManualReviewChange?: (
+    item: OperationalReviewQueueItem,
+    next: { status: ReviewLifecycleStatus; assignment: ReviewAssignmentTarget }
+  ) => void | Promise<void>;
+  onClose: () => void;
+}) {
+  const display = useMemo(
+    () => displayForItem(item),
+    [
+      item.contextLabel,
+      item.evidenceLabel,
+      item.relatedResourceLabel,
+      item.sensitivityClass,
+      item.title,
+      item.visibilityClass,
+      item.workspaceType,
+    ]
+  );
+  const metadataItems = useMemo(
+    () => metadataItemsForItem(item, display),
+    [
+      display,
+      item.assignmentLabel,
+      item.financialStatus,
+      item.reviewStatus,
+      item.routingReason,
+      item.sourceLabel,
+      item.workflowStatus,
+    ]
+  );
+
+  return (
+    <Card
+      data-testid="operational-review-details-panel"
+      style={{
+        borderRadius: 10,
+        padding: 14,
+        border: "1px solid #bfdbfe",
+        background: "#f8fbff",
+        display: "grid",
+        gap: 12,
+        minWidth: 0,
+        boxSizing: "border-box",
+      }}
+    >
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "start" }}>
+        <div style={{ display: "grid", gap: 5, minWidth: 0 }}>
+          <span style={{ color: "#1d4ed8", fontSize: 12, fontWeight: 900, textTransform: "uppercase" }}>
+            Details and manual controls
+          </span>
+          <strong style={{ color: "#0f172a", fontSize: 16, overflowWrap: "anywhere" }}>{display.title}</strong>
+          <span style={{ color: "#475569", fontSize: 13, lineHeight: 1.5 }}>{display.context}</span>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          style={{
+            border: "1px solid #cbd5e1",
+            background: "#ffffff",
+            color: "#334155",
+            borderRadius: 6,
+            padding: "8px 12px",
+            minHeight: 44,
+            fontSize: 13,
+            fontWeight: 900,
+            cursor: "pointer",
+          }}
+        >
+          Close details
+        </button>
+      </div>
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 200px), 1fr))",
+          gap: 10,
+          minWidth: 0,
+        }}
+      >
+        {metadataItems.map((entry) => (
+          <React.Fragment key={entry.labelText}>{metadata(entry.labelText, entry.value)}</React.Fragment>
+        ))}
+      </div>
+
+      <ReviewAssignmentStatusControls
+        itemId={item.queueItemId}
+        title={display.title}
+        initialStatus={item.reviewStatus}
+        initialAssignment={item.assignmentLabel}
+        onChange={(next) => onManualReviewChange?.(item, next)}
+      />
+
+      <div style={{ display: "grid", gap: 5 }}>
+        <span style={{ color: "#334155", fontSize: 12, fontWeight: 900 }}>Related resource context</span>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <span
             style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 200px), 1fr))",
-              gap: 8,
-              minWidth: 0,
+              border: "1px solid #dbe3ef",
+              borderRadius: 999,
+              padding: "8px 12px",
+              color: "#475569",
+              fontSize: 13,
+              fontWeight: 800,
+              background: "#fff",
+              minHeight: 44,
+              display: "inline-flex",
+              alignItems: "center",
+              lineHeight: 1.4,
             }}
           >
-            {metadataItems.map((entry) => (
-              <React.Fragment key={entry.labelText}>{metadata(entry.labelText, entry.value)}</React.Fragment>
-            ))}
-          </div>
-
-          <ReviewAssignmentStatusControls
-            itemId={item.queueItemId}
-            title={display.title}
-            initialStatus={item.reviewStatus}
-            initialAssignment={item.assignmentLabel}
-            onChange={(next) => onManualReviewChange?.(item, next)}
-          />
-
-          <div style={{ display: "grid", gap: 5 }}>
-            <span style={{ color: "#334155", fontSize: 12, fontWeight: 900 }}>Related resource context</span>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-              <span
-                style={{
-                  border: "1px solid #e2e8f0",
-                  borderRadius: 999,
-                  padding: "8px 12px",
-                  color: "#475569",
-                  fontSize: 13,
-                  fontWeight: 800,
-                  background: "#fff",
-                  minHeight: 44,
-                  display: "inline-flex",
-                  alignItems: "center",
-                  lineHeight: 1.4,
-                }}
-              >
-                {display.relatedResource}
-              </span>
-            </div>
-          </div>
+            {display.relatedResource}
+          </span>
         </div>
-      </details>
+      </div>
     </Card>
   );
 });
@@ -229,10 +317,25 @@ export const OperationalReviewQueue = memo(function OperationalReviewQueue({
     next: { status: ReviewLifecycleStatus; assignment: ReviewAssignmentTarget }
   ) => void | Promise<void>;
 }) {
+  const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
   const assignedCount = useMemo(
     () => items.filter((item) => !/^unassigned$/i.test(item.assignmentLabel)).length,
     [items]
   );
+  const expandedItem = useMemo(
+    () => items.find((item) => item.queueItemId === expandedItemId) || null,
+    [expandedItemId, items]
+  );
+
+  useEffect(() => {
+    if (expandedItemId && !expandedItem) {
+      setExpandedItemId(null);
+    }
+  }, [expandedItem, expandedItemId]);
+
+  const handleToggleDetails = React.useCallback((item: OperationalReviewQueueItem) => {
+    setExpandedItemId((current) => (current === item.queueItemId ? null : item.queueItemId));
+  }, []);
 
   return (
     <Card
@@ -264,6 +367,7 @@ export const OperationalReviewQueue = memo(function OperationalReviewQueue({
 
       {items.length ? (
         <div
+          data-testid="operational-review-card-grid"
           style={{
             display: "grid",
             gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))",
@@ -272,7 +376,12 @@ export const OperationalReviewQueue = memo(function OperationalReviewQueue({
           }}
         >
           {items.map((item) => (
-            <OperationalReviewQueueCard key={item.queueItemId} item={item} onManualReviewChange={onManualReviewChange} />
+            <OperationalReviewQueueCard
+              key={item.queueItemId}
+              item={item}
+              isExpanded={expandedItemId === item.queueItemId}
+              onToggleDetails={handleToggleDetails}
+            />
           ))}
         </div>
       ) : (
@@ -281,6 +390,13 @@ export const OperationalReviewQueue = memo(function OperationalReviewQueue({
           operational queue.
         </div>
       )}
+      {expandedItem ? (
+        <OperationalReviewQueueDetailsPanel
+          item={expandedItem}
+          onManualReviewChange={onManualReviewChange}
+          onClose={() => setExpandedItemId(null)}
+        />
+      ) : null}
     </Card>
   );
 });

@@ -675,6 +675,7 @@ describe("OperationalCommandCenterPage", () => {
     expect(screen.getByText("Operational review queue")).toBeInTheDocument();
     expect(screen.getByText(/does not create workspaces, route work automatically, or change source records/i)).toBeInTheDocument();
     expect(screen.getAllByText("Details and manual controls").length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: /Details and manual controls for Review missing payment/i }));
     expect(screen.getAllByText("Related resource context").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Review missing payment").length).toBeGreaterThan(1);
     expect(screen.getAllByText(/does not create a workspace, route work automatically, or change source records/i).length).toBeGreaterThan(0);
@@ -862,6 +863,8 @@ describe("OperationalCommandCenterPage", () => {
     );
 
     await waitFor(() => expect(screen.getAllByText("Review missing payment").length).toBeGreaterThan(0));
+
+    fireEvent.click(screen.getByRole("button", { name: /Details and manual controls for Review missing payment/i }));
 
     fireEvent.change(screen.getAllByLabelText("Review status for Review missing payment")[0], {
       target: { value: "in_review" },
