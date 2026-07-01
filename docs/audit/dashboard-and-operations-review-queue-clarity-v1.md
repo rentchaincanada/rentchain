@@ -80,6 +80,8 @@ Current row behavior is intentionally sparse. `DecisionRow` does not render:
 
 For undated items, `formatDate(null)` returns `No due date`. That is technically accurate for some queue records, but it reads like missing data instead of a deliberate state.
 
+The backend queue type can carry optional related refs such as `propertyId`, `unitId`, `tenantId`, and `leaseId`, but the current frontend API type does not include those optional refs. Those refs should not be rendered as labels, but they are useful routing/lookup inputs for a future safe context projection.
+
 ## Observed Dashboard Labels And Destinations
 
 The observed labels are not hardcoded in Dashboard. They come from decision/analytics/unified-inbox adapters and are normalized into the decision queue.
@@ -93,6 +95,13 @@ The observed labels are not hardcoded in Dashboard. They come from decision/anal
 | Payment decisions | decision inbox payment path | `/leases/:leaseId/ledger` | Correct destination after PR #1262, but Dashboard cards need safe amount/due/context projection. |
 
 The route destinations can be valid while still being unclear. The follow-up should not assume every route is wrong; it should improve card copy, context, and destination labels.
+
+Payment-specific audit note:
+
+- Current payment cards can show `Review Missing Payment`, `Payments workspace`, a due date such as `Mar 31`, and severity.
+- Route tests confirm genuine overdue decisions can carry `recommendedActionHref: "/leases/:leaseId/ledger"`, `dueAt`, and description text containing an amount such as `outstanding $2,000.00`.
+- The queue does not yet provide a Dashboard-ready safe context projection for property/building, unit, tenant, expected amount, paid amount, outstanding amount, payment period, reason code, or current ledger state.
+- The Dashboard should not parse these values from description text. A follow-up should expose structured, projection-safe context.
 
 ## Current Operations Review Queue
 
@@ -198,6 +207,14 @@ Default visible fields:
 - reason/action line
 - severity
 - destination label, such as `Open ledger`, `Open applications`, `Open vacancy readiness`
+
+Payment cards should add structured context when available:
+
+- amount outstanding
+- due date or payment period
+- reason for alert
+- ledger state summary
+- property/building, unit, and tenant only from safe landlord-scoped labels
 
 Hide by default:
 
@@ -305,6 +322,8 @@ Recommended scope: frontend-first clarity work with a small backend projection a
    - show reason/action copy
    - replace generic `No due date` with `Action needed`, `No deadline`, or omit the line depending on item type
    - use destination labels such as `Open ledger`, `Open applications`, `Open analytics`, `Open messages`
+   - update the frontend decision queue type to include any new safe context projection
+   - do not render raw related refs as user-facing labels
 
 2. Operations Review Queue:
    - introduce compact default card layout
@@ -322,6 +341,7 @@ Recommended scope: frontend-first clarity work with a small backend projection a
 
 5. Tests:
    - Dashboard card renders context/action/destination copy
+   - Dashboard payment card renders due/amount/reason context when available
    - Dashboard undated item does not render confusing `No due date`
    - Operations compact card hides advanced metadata by default
    - Operations detail expansion shows metadata and evidence links
@@ -332,6 +352,7 @@ Recommended scope: frontend-first clarity work with a small backend projection a
 
 - Dashboard shows the top 3-4 highest-priority decisions with clear action, context, and destination labels.
 - Dashboard cards show property/unit/tenant/payment context when projection-safe.
+- Dashboard payment cards show structured amount/due/reason context instead of relying on broad workspace/date copy or parsing description text.
 - Undated items do not default to confusing `No due date` copy.
 - `Open` destinations remain correct for applications, analytics, messages, operations, and lease ledgers.
 - Operations cards are scannable by default.
