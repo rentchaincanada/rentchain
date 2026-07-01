@@ -674,7 +674,8 @@ describe("OperationalCommandCenterPage", () => {
     expect(screen.getByTestId("operational-review-queue")).toBeInTheDocument();
     expect(screen.getByText("Operational review queue")).toBeInTheDocument();
     expect(screen.getByText(/does not create workspaces, route work automatically, or change source records/i)).toBeInTheDocument();
-    expect(screen.getAllByText("Scoped evidence/resource links").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Details and manual controls").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Related resource context").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Review missing payment").length).toBeGreaterThan(1);
     expect(screen.getAllByText(/does not create a workspace, route work automatically, or change source records/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText("Payment Ledger Review").length).toBeGreaterThan(0);

@@ -157,6 +157,60 @@ function formatDate(value: string | null | undefined): string {
   return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(date);
 }
 
+function decisionTimingLabel(item: LandlordDecisionQueueItem): string {
+  if (item.dueAt) return `Due ${formatDate(item.dueAt)}`;
+  if (item.severity === "upcoming") return "Upcoming action";
+  return "Action needed";
+}
+
+function isGenericActionLabel(label: string): boolean {
+  return ["open", "review", "view"].includes(label.trim().toLowerCase());
+}
+
+function decisionDestinationCopy(item: LandlordDecisionQueueItem): { meta: string; action: string } {
+  const href = String(item.recommendedActionHref || "").trim();
+  const label = String(item.recommendedActionLabel || "").trim();
+
+  if (href.includes("/applications")) {
+    return { meta: "Applications · Review funnel", action: "Review applications" };
+  }
+  if (href.includes("entry=revenue-pressure")) {
+    return { meta: "Revenue analytics · Review exposure", action: "View revenue analytics" };
+  }
+  if (href.includes("entry=vacancy-readiness")) {
+    return { meta: "Vacancy analytics · Review readiness", action: "View vacancy readiness" };
+  }
+  if (href.includes("entry=lease-renewals")) {
+    return { meta: "Lease renewals · Review operator inputs", action: "Review renewals" };
+  }
+  if (href.includes("/ledger")) {
+    return { meta: "Payment ledger · Review obligation", action: label && !isGenericActionLabel(label) ? label : "Open ledger" };
+  }
+  if (href.includes("/messages")) {
+    return { meta: "Messages · Review thread", action: label && !isGenericActionLabel(label) ? label : "Open messages" };
+  }
+  if (href.includes("/operations")) {
+    return { meta: "Operations queue · Review work", action: label && !isGenericActionLabel(label) ? label : "Open operations" };
+  }
+  if (label && !isGenericActionLabel(label)) {
+    return { meta: `${workspaceLabel(item.workspace)} · ${label}`, action: label };
+  }
+  return { meta: `${workspaceLabel(item.workspace)} · Review next step`, action: `Open ${workspaceLabel(item.workspace).toLowerCase()}` };
+}
+
+function decisionDestinationLabel(item: LandlordDecisionQueueItem): string {
+  return decisionDestinationCopy(item).action;
+}
+
+function decisionContextLabel(item: LandlordDecisionQueueItem): string {
+  return decisionDestinationCopy(item).meta;
+}
+
+function decisionReason(item: LandlordDecisionQueueItem): string {
+  const description = String(item.description || "").replace(/\s+/g, " ").trim();
+  return description || "Review the recommended next step for this operational decision.";
+}
+
 function formatShortWeekday(value: Date): string {
   return new Intl.DateTimeFormat(undefined, { weekday: "short" }).format(value);
 }
@@ -575,31 +629,39 @@ function DecisionQueuePreview({ queue }: { queue: LandlordDecisionQueueResponse 
 }
 
 function DecisionRow({ item }: { item: LandlordDecisionQueueItem }) {
+  const destinationLabel = decisionDestinationLabel(item);
   return (
     <div
       style={{
-        display: "flex",
-        justifyContent: "space-between",
+        display: "grid",
+        gridTemplateColumns: "minmax(0, 1fr) auto",
         gap: 12,
-        alignItems: "center",
-        flexWrap: "wrap",
+        alignItems: "start",
         padding: 12,
         border: `1px solid ${colors.border}`,
         borderRadius: 8,
         background: "#fff",
       }}
     >
-      <div style={{ display: "grid", gap: 5, minWidth: 0, flex: "1 1 240px" }}>
+      <div style={{ display: "grid", gap: 7, minWidth: 0 }}>
         <div style={{ fontWeight: 850, color: text.primary, overflowWrap: "anywhere" }}>{item.title || "Review required"}</div>
         <div style={{ color: text.muted, fontSize: 13, lineHeight: 1.35, overflowWrap: "anywhere" }}>
-          {workspaceLabel(item.workspace)} workspace · {formatDate(item.dueAt)}
+          {decisionContextLabel(item)}
         </div>
-        <span style={{ ...severityStyle(item.severity), borderRadius: 8, padding: "3px 8px", fontSize: 12, fontWeight: 850, width: "fit-content", whiteSpace: "nowrap" }}>
-          {item.severity.replace(/_/g, " ")}
-        </span>
+        <div style={{ color: "#334155", fontSize: 13, lineHeight: 1.45, overflowWrap: "anywhere" }}>
+          {decisionReason(item)}
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <span style={{ ...severityStyle(item.severity), borderRadius: 8, padding: "3px 8px", fontSize: 12, fontWeight: 850, width: "fit-content", whiteSpace: "nowrap" }}>
+            {item.severity.replace(/_/g, " ")}
+          </span>
+          <span style={{ color: text.muted, fontSize: 12, fontWeight: 750 }}>
+            {decisionTimingLabel(item)}
+          </span>
+        </div>
       </div>
-      <Link to={operationalHref(item)} style={{ ...compactButton, width: "fit-content" }}>
-        Open
+      <Link to={operationalHref(item)} aria-label={`${destinationLabel}: ${item.title || "Review required"}`} style={{ ...compactButton, width: "fit-content", whiteSpace: "nowrap" }}>
+        {destinationLabel}
       </Link>
     </div>
   );
@@ -616,14 +678,14 @@ function UpcomingActions({ queue }: { queue: LandlordDecisionQueueResponse | nul
         title="Upcoming Actions"
         subtitle="Time-sensitive next steps from the operations queue."
         action={
-          <Link to="/operations?status=open_state" style={compactButton}>
+          <Link to="/operations" style={compactButton}>
             Open Operations <ArrowRight size={16} />
           </Link>
         }
       />
       {actions.length === 0 ? (
         <div style={{ border: `1px solid ${colors.border}`, borderRadius: 8, padding: 14, color: text.muted }}>
-          No dated actions are due right now. When lease, payment, notice, or maintenance decisions have dates, they appear here.
+          No upcoming dated actions are due right now. Reviewable work may still appear in Decision Queue Preview or the Operations review queue.
         </div>
       ) : (
         <div style={{ display: "grid", gap: 10 }}>

@@ -53,6 +53,15 @@ function metadata(labelText: string, value: string | null | undefined) {
   );
 }
 
+function compactMetadata(labelText: string, value: string | null | undefined) {
+  if (!value) return null;
+  return (
+    <span style={{ color: "#334155", fontSize: 13, fontWeight: 800, lineHeight: 1.35 }}>
+      {labelText}: <span style={{ color: "#0f172a" }}>{value}</span>
+    </span>
+  );
+}
+
 const OperationalReviewQueueCard = memo(function OperationalReviewQueueCard({
   item,
   onManualReviewChange,
@@ -114,7 +123,7 @@ const OperationalReviewQueueCard = memo(function OperationalReviewQueueCard({
         padding: 12,
         border: "1px solid rgba(15, 23, 42, 0.08)",
         display: "grid",
-        gap: 10,
+        gap: 12,
         minWidth: 0,
         overflowWrap: "anywhere",
       }}
@@ -130,60 +139,82 @@ const OperationalReviewQueueCard = memo(function OperationalReviewQueueCard({
 
       <div
         style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 200px), 1fr))",
+          display: "flex",
+          flexWrap: "wrap",
           gap: 8,
+          alignItems: "center",
           minWidth: 0,
         }}
       >
-        {metadataItems.map((entry) => (
-          <React.Fragment key={entry.labelText}>{metadata(entry.labelText, entry.value)}</React.Fragment>
-        ))}
+        {compactMetadata("Manual status", item.reviewStatus)}
+        {compactMetadata("Assigned reviewer", item.assignmentLabel)}
       </div>
 
-      <ReviewAssignmentStatusControls
-        itemId={item.queueItemId}
-        title={display.title}
-        initialStatus={item.reviewStatus}
-        initialAssignment={item.assignmentLabel}
-        onChange={(next) => onManualReviewChange?.(item, next)}
-      />
+      <Link to={item.destination} style={{
+        color: "#2563eb",
+        fontSize: 14,
+        fontWeight: 900,
+        padding: "8px 0",
+        minHeight: 44,
+        display: "inline-flex",
+        alignItems: "center",
+        textDecoration: "none",
+        borderRadius: 4,
+        width: "fit-content"
+      }}>
+        {display.evidence}
+      </Link>
 
-      <div style={{ display: "grid", gap: 5 }}>
-        <span style={{ color: "#334155", fontSize: 12, fontWeight: 900 }}>Scoped evidence/resource links</span>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-          <Link to={item.destination} style={{
-            color: "#2563eb",
-            fontSize: 14,
-            fontWeight: 900,
-            padding: "8px 0",
-            minHeight: 44,
-            display: "inline-flex",
-            alignItems: "center",
-            textDecoration: "none",
-            borderRadius: 4
-          }}>
-            {display.evidence}
-          </Link>
-          <span
+      <details style={{ borderTop: "1px solid #e2e8f0", paddingTop: 10 }}>
+        <summary style={{ color: "#334155", fontSize: 13, fontWeight: 900, cursor: "pointer", minHeight: 32 }}>
+          Details and manual controls
+        </summary>
+        <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
+          <div
             style={{
-              border: "1px solid #e2e8f0",
-              borderRadius: 999,
-              padding: "8px 12px",
-              color: "#475569",
-              fontSize: 13,
-              fontWeight: 800,
-              background: "#fff",
-              minHeight: 44,
-              display: "inline-flex",
-              alignItems: "center",
-              lineHeight: 1.4,
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 200px), 1fr))",
+              gap: 8,
+              minWidth: 0,
             }}
           >
-            {display.relatedResource}
-          </span>
+            {metadataItems.map((entry) => (
+              <React.Fragment key={entry.labelText}>{metadata(entry.labelText, entry.value)}</React.Fragment>
+            ))}
+          </div>
+
+          <ReviewAssignmentStatusControls
+            itemId={item.queueItemId}
+            title={display.title}
+            initialStatus={item.reviewStatus}
+            initialAssignment={item.assignmentLabel}
+            onChange={(next) => onManualReviewChange?.(item, next)}
+          />
+
+          <div style={{ display: "grid", gap: 5 }}>
+            <span style={{ color: "#334155", fontSize: 12, fontWeight: 900 }}>Related resource context</span>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <span
+                style={{
+                  border: "1px solid #e2e8f0",
+                  borderRadius: 999,
+                  padding: "8px 12px",
+                  color: "#475569",
+                  fontSize: 13,
+                  fontWeight: 800,
+                  background: "#fff",
+                  minHeight: 44,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  lineHeight: 1.4,
+                }}
+              >
+                {display.relatedResource}
+              </span>
+            </div>
+          </div>
         </div>
-      </div>
+      </details>
     </Card>
   );
 });
