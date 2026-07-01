@@ -157,6 +157,35 @@ function formatDate(value: string | null | undefined): string {
   return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(date);
 }
 
+function decisionTimingLabel(item: LandlordDecisionQueueItem): string {
+  if (item.dueAt) return `Due ${formatDate(item.dueAt)}`;
+  if (item.severity === "upcoming") return "Upcoming action";
+  return "Action needed";
+}
+
+function decisionDestinationLabel(item: LandlordDecisionQueueItem): string {
+  const label = String(item.recommendedActionLabel || "").trim();
+  if (label) return label;
+  const href = String(item.recommendedActionHref || "").trim();
+  if (href.includes("/ledger")) return "Open ledger";
+  if (href.includes("/applications")) return "Open applications";
+  if (href.includes("/analytics")) return "Open analytics";
+  if (href.includes("/messages")) return "Open messages";
+  if (href.includes("/operations")) return "Open operations";
+  return `Open ${workspaceLabel(item.workspace).toLowerCase()}`;
+}
+
+function decisionContextLabel(item: LandlordDecisionQueueItem): string {
+  const destination = decisionDestinationLabel(item);
+  if (item.workspace === "payments") return `${workspaceLabel(item.workspace)} decision -> ${destination}`;
+  return `${workspaceLabel(item.workspace)} workspace -> ${destination}`;
+}
+
+function decisionReason(item: LandlordDecisionQueueItem): string {
+  const description = String(item.description || "").replace(/\s+/g, " ").trim();
+  return description || "Review the recommended next step for this operational decision.";
+}
+
 function formatShortWeekday(value: Date): string {
   return new Intl.DateTimeFormat(undefined, { weekday: "short" }).format(value);
 }
@@ -575,31 +604,39 @@ function DecisionQueuePreview({ queue }: { queue: LandlordDecisionQueueResponse 
 }
 
 function DecisionRow({ item }: { item: LandlordDecisionQueueItem }) {
+  const destinationLabel = decisionDestinationLabel(item);
   return (
     <div
       style={{
-        display: "flex",
-        justifyContent: "space-between",
+        display: "grid",
+        gridTemplateColumns: "minmax(0, 1fr) auto",
         gap: 12,
-        alignItems: "center",
-        flexWrap: "wrap",
+        alignItems: "start",
         padding: 12,
         border: `1px solid ${colors.border}`,
         borderRadius: 8,
         background: "#fff",
       }}
     >
-      <div style={{ display: "grid", gap: 5, minWidth: 0, flex: "1 1 240px" }}>
+      <div style={{ display: "grid", gap: 7, minWidth: 0 }}>
         <div style={{ fontWeight: 850, color: text.primary, overflowWrap: "anywhere" }}>{item.title || "Review required"}</div>
         <div style={{ color: text.muted, fontSize: 13, lineHeight: 1.35, overflowWrap: "anywhere" }}>
-          {workspaceLabel(item.workspace)} workspace · {formatDate(item.dueAt)}
+          {decisionContextLabel(item)}
         </div>
-        <span style={{ ...severityStyle(item.severity), borderRadius: 8, padding: "3px 8px", fontSize: 12, fontWeight: 850, width: "fit-content", whiteSpace: "nowrap" }}>
-          {item.severity.replace(/_/g, " ")}
-        </span>
+        <div style={{ color: "#334155", fontSize: 13, lineHeight: 1.45, overflowWrap: "anywhere" }}>
+          {decisionReason(item)}
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <span style={{ ...severityStyle(item.severity), borderRadius: 8, padding: "3px 8px", fontSize: 12, fontWeight: 850, width: "fit-content", whiteSpace: "nowrap" }}>
+            {item.severity.replace(/_/g, " ")}
+          </span>
+          <span style={{ color: text.muted, fontSize: 12, fontWeight: 750 }}>
+            {decisionTimingLabel(item)}
+          </span>
+        </div>
       </div>
-      <Link to={operationalHref(item)} style={{ ...compactButton, width: "fit-content" }}>
-        Open
+      <Link to={operationalHref(item)} aria-label={`${destinationLabel}: ${item.title || "Review required"}`} style={{ ...compactButton, width: "fit-content", whiteSpace: "nowrap" }}>
+        {destinationLabel}
       </Link>
     </div>
   );
@@ -623,7 +660,7 @@ function UpcomingActions({ queue }: { queue: LandlordDecisionQueueResponse | nul
       />
       {actions.length === 0 ? (
         <div style={{ border: `1px solid ${colors.border}`, borderRadius: 8, padding: 14, color: text.muted }}>
-          No dated actions are due right now. When lease, payment, notice, or maintenance decisions have dates, they appear here.
+          No upcoming dated actions are due right now. Reviewable work may still appear in Decision Queue Preview or the Operations review queue.
         </div>
       ) : (
         <div style={{ display: "grid", gap: 10 }}>

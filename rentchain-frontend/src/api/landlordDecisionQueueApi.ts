@@ -24,6 +24,12 @@ export type LandlordDecisionQueueItem = {
   id: string;
   sourceType: string;
   sourceId: string;
+  propertyId?: string | null;
+  unitId?: string | null;
+  tenantId?: string | null;
+  leaseId?: string | null;
+  maintenanceRequestId?: string | null;
+  noticeId?: string | null;
   workspace: LandlordDecisionQueueWorkspace;
   severity: LandlordDecisionQueueSeverity;
   title: string;

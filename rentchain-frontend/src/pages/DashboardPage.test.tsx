@@ -192,10 +192,10 @@ function queueResponse(overrides: Partial<LandlordDecisionQueueResponse> = {}): 
         workspace: "payments",
         severity: "upcoming",
         title: "Review outstanding rent",
-        description: "A rent collection item is coming due.",
-        recommendedActionLabel: "Open payments",
-        recommendedActionHref: "/payments",
-        dueAt: null,
+        description: "Outstanding $2,000.00 for the March rent period.",
+        recommendedActionLabel: "Open ledger",
+        recommendedActionHref: "/leases/lease-1/ledger",
+        dueAt: "2026-03-31T00:00:00.000Z",
         createdAt: "2026-06-18T12:00:00.000Z",
         updatedAt: "2026-06-19T12:00:00.000Z",
         status: "pending",
@@ -271,6 +271,15 @@ describe("DashboardPage", () => {
     expect(screen.getByTestId("decision-queue-section")).toHaveTextContent("Decision Queue Preview");
     expect(screen.getByText("Highest-priority decisions needing attention.")).toBeInTheDocument();
     expect(screen.getByTestId("decision-queue-section")).toHaveTextContent("Resolve lease renewal");
+    expect(screen.getByTestId("decision-queue-section")).toHaveTextContent("A lease needs a renewal decision before the notice window closes.");
+    expect(screen.getByTestId("decision-queue-section")).toHaveTextContent("Lease workspace -> Open lease workspace");
+    expect(screen.getByTestId("decision-queue-section")).toHaveTextContent("Due");
+    expect(screen.getByTestId("decision-queue-section")).toHaveTextContent("Review outstanding rent");
+    expect(screen.getByTestId("decision-queue-section")).toHaveTextContent("Outstanding $2,000.00 for the March rent period.");
+    expect(screen.getByRole("link", { name: /Open ledger: Review outstanding rent/i })).toHaveAttribute(
+      "href",
+      "/leases/lease-1/ledger"
+    );
     expect(screen.getByTestId("upcoming-actions-section")).toHaveTextContent("Upcoming Actions");
     expect(screen.getByTestId("calendar-preview-section")).toHaveTextContent("Calendar Preview");
     expect(screen.getByTestId("calendar-preview-section")).toHaveTextContent("Resolve lease renewal");
@@ -295,7 +304,6 @@ describe("DashboardPage", () => {
     expect(mocks.fetchUnifiedInboxMock).toHaveBeenCalledWith("landlord");
     expect(screen.queryByText("lease-1")).not.toBeInTheDocument();
     expect(screen.queryByText("payment-1")).not.toBeInTheDocument();
-    expect(screen.queryByText("A lease needs a renewal decision before the notice window closes.")).not.toBeInTheDocument();
   });
 
   it("keeps decision queue content visible when portfolio data fails", async () => {
@@ -354,7 +362,7 @@ describe("DashboardPage", () => {
     renderDashboard();
 
     expect(await screen.findByText("No open decisions. New operational decisions will appear here before routing to their owning workspace.")).toBeInTheDocument();
-    expect(screen.getByText("No dated actions are due right now. When lease, payment, notice, or maintenance decisions have dates, they appear here.")).toBeInTheDocument();
+    expect(screen.getByText("No upcoming dated actions are due right now. Reviewable work may still appear in Decision Queue Preview or the Operations review queue.")).toBeInTheDocument();
     expect(screen.getByText("No dated schedule items are visible for this week. Upcoming dated decisions will appear here.")).toBeInTheDocument();
   });
 

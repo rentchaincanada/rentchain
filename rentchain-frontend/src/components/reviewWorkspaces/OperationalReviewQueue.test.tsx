@@ -50,6 +50,7 @@ describe("OperationalReviewQueue", () => {
     expect(screen.getByText("Delinquency or payment evidence review")).toBeInTheDocument();
     expect(screen.getAllByText("Operations owned").length).toBeGreaterThan(0);
     expect(screen.getByText("Review required")).toBeInTheDocument();
+    expect(screen.getByText("Details and manual controls")).toBeInTheDocument();
     expect(screen.getByLabelText("Review status for Review missing payment")).toHaveValue("open");
     expect(screen.getByLabelText("Assigned reviewer for Review missing payment")).toHaveValue("operations");
     expect(screen.getByText("Manual status: Open")).toBeInTheDocument();
