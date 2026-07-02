@@ -227,8 +227,8 @@ describe("TenantDetailPanel", () => {
     expect(screen.getAllByText("Active").length).toBeGreaterThan(0);
     expect(screen.getByText("Needs review: Draft lease / Review Required occupancy")).toBeInTheDocument();
     expect(screen.getByText("Showing the most recent charges and payments from the current lease ledger.")).toBeInTheDocument();
-    expect(screen.getByText("Use the current lease ledger to record charges and payments.")).toBeInTheDocument();
-    expect(screen.getByText("Showing the latest 10 entries here. Open current lease ledger for the full history.")).toBeInTheDocument();
+    expect(screen.getByText("Use the current payment ledger to record charges and payments.")).toBeInTheDocument();
+    expect(screen.getByText("Showing the latest 10 entries here. Open payment ledger for the full history.")).toBeInTheDocument();
     expect(
       screen.getByText(
         "Tenant activity is recorded separately and does not add charges or payments to the current lease ledger."

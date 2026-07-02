@@ -276,7 +276,7 @@ describe("DashboardPage", () => {
     expect(screen.getByTestId("decision-queue-section")).toHaveTextContent("Due");
     expect(screen.getByTestId("decision-queue-section")).toHaveTextContent("Review outstanding rent");
     expect(screen.getByTestId("decision-queue-section")).toHaveTextContent("Outstanding $2,000.00 for the March rent period.");
-    expect(screen.getByRole("link", { name: /Open ledger: Review outstanding rent/i })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /Open payment ledger: Review outstanding rent/i })).toHaveAttribute(
       "href",
       "/leases/lease-1/ledger"
     );

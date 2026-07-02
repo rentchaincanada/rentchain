@@ -318,7 +318,7 @@ describe("LandlordActiveLeasesPage", () => {
     expect(screen.getAllByText(/Rent terms ready for future setup/i).length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: /Enable rent collection/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "View lease" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Ledger" })).toHaveAttribute("href", "/leases/lease-1/ledger");
+    expect(screen.getByRole("link", { name: "Payment ledger" })).toHaveAttribute("href", "/leases/lease-1/ledger");
     expect(screen.getByRole("link", { name: "Email" })).toHaveAttribute(
       "href",
       expect.stringContaining("mailto:jane%40example.com")
@@ -728,7 +728,7 @@ describe("LandlordActiveLeasesPage", () => {
     expect(await screen.findByText(/Needs review: Draft lease · Review needed occupancy/i)).toBeInTheDocument();
     expect(screen.getByText("Review needed")).toBeInTheDocument();
     expect(screen.getByText("Recorded ledger payment activity present")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Ledger" })).toHaveAttribute("href", "/leases/lease-review/ledger");
+    expect(screen.getByRole("link", { name: "Payment ledger" })).toHaveAttribute("href", "/leases/lease-review/ledger");
   });
 
   it("maps landlord payment blockers without exposing raw codes", async () => {
@@ -811,7 +811,7 @@ describe("LandlordActiveLeasesPage", () => {
     expect((await screen.findAllByText("Harbour View")).length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "Primary lease document unavailable" })).toBeDisabled();
     expect(screen.getByRole("link", { name: "Lease summary" })).toHaveAttribute("href", "/leases/lease-1/summary");
-    expect(screen.getByRole("link", { name: "Ledger" })).toHaveAttribute("href", "/leases/lease-1/ledger");
+    expect(screen.getByRole("link", { name: "Payment ledger" })).toHaveAttribute("href", "/leases/lease-1/ledger");
     expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
   });
 
@@ -1031,7 +1031,7 @@ describe("LandlordActiveLeasesPage", () => {
 
     expect(await screen.findByTestId("lease-mobile-card")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "View lease" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Ledger" })).toHaveAttribute("href", "/leases/lease-1/ledger");
+    expect(screen.getByRole("link", { name: "Payment ledger" })).toHaveAttribute("href", "/leases/lease-1/ledger");
     expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Archive lease" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Enable rent collection/i })).toBeInTheDocument();

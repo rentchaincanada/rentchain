@@ -264,7 +264,7 @@ export default function LandlordLeaseWorkflowPage() {
             Lease summary
           </Link>
           <Link to={ledgerPath} style={buttonLinkStyle}>
-            Ledger
+            Payment ledger
           </Link>
         </div>
       </section>

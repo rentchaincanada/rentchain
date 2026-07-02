@@ -1053,7 +1053,7 @@ const loadTenants = useCallback(async () => {
                       >
                         <div style={{ display: "grid", gap: 4, minWidth: 220 }}>
                           <div style={{ fontSize: 16, fontWeight: 700, color: text.primary }}>
-                            Lease ledger
+                            Payment ledger
                           </div>
                           <div style={{ fontSize: 13, color: text.muted, lineHeight: 1.45 }}>
                             Current lease charges, payments, balances, and exports.
@@ -1061,9 +1061,9 @@ const loadTenants = useCallback(async () => {
                         </div>
                         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                           {[
-                            "View ledger",
+                            "Open payment ledger",
                             "Record payment",
-                            "Export ledger",
+                            "Export payment ledger",
                           ].map((label) => (
                             <button
                               key={label}
@@ -1114,7 +1114,7 @@ const loadTenants = useCallback(async () => {
                       </div>
                       {!selectedLeaseLedgerPath ? (
                         <div style={{ fontSize: 12, color: text.muted }}>
-                          Link a current lease before using lease ledger actions.
+                          Link a current lease before using payment ledger actions.
                         </div>
                       ) : null}
                     </div>
