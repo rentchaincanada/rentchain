@@ -46,11 +46,29 @@
   max-width: 100%;
 }
 
-.lease-ledger-csv-panel pre {
+.lease-ledger-csv-panel *,
+.lease-ledger-csv-panel *::before,
+.lease-ledger-csv-panel *::after {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.lease-ledger-csv-panel section > div,
+.lease-ledger-csv-panel section > div > div {
+  min-width: 0;
   max-width: 100%;
 }
 
+.lease-ledger-csv-panel pre {
+  max-width: 100%;
+  white-space: pre;
+  word-break: normal;
+}
+
 .lease-ledger-csv-panel input[type="file"] {
+  width: 100%;
   max-width: 100%;
 }
 
@@ -92,7 +110,8 @@
 
 .lease-ledger-decision-summary span,
 .lease-ledger-next-action span,
-.lease-ledger-obligation-card span {
+.lease-ledger-obligation-card span,
+.lease-ledger-entry-card span {
   display: block;
   color: #64748b;
   font-size: 12px;
@@ -101,7 +120,8 @@
 
 .lease-ledger-decision-summary strong,
 .lease-ledger-next-action strong,
-.lease-ledger-obligation-card strong {
+.lease-ledger-obligation-card strong,
+.lease-ledger-entry-card strong {
   color: #0f172a;
   overflow-wrap: anywhere;
 }
@@ -121,11 +141,18 @@
   min-width: 0;
 }
 
-.lease-ledger-obligation-cards {
+.lease-ledger-obligation-cards,
+.lease-ledger-entry-cards {
   display: none;
 }
 
-.lease-ledger-obligation-card {
+.lease-ledger-obligations-table,
+.lease-ledger-entries-table {
+  max-width: 100%;
+}
+
+.lease-ledger-obligation-card,
+.lease-ledger-entry-card {
   display: grid;
   gap: 10px;
   min-width: 0;
@@ -135,20 +162,23 @@
   padding: 12px;
 }
 
-.lease-ledger-obligation-card-header {
+.lease-ledger-obligation-card-header,
+.lease-ledger-entry-card-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
 }
 
-.lease-ledger-obligation-card-grid {
+.lease-ledger-obligation-card-grid,
+.lease-ledger-entry-card-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 
-.lease-ledger-obligation-card-section {
+.lease-ledger-obligation-card-section,
+.lease-ledger-entry-card-section {
   display: grid;
   gap: 4px;
   min-width: 0;
@@ -177,18 +207,21 @@
     align-items: stretch;
   }
 
-  .lease-ledger-obligations-table {
+  .lease-ledger-obligations-table,
+  .lease-ledger-entries-table {
     display: none;
   }
 
-  .lease-ledger-obligation-cards {
+  .lease-ledger-obligation-cards,
+  .lease-ledger-entry-cards {
     display: grid;
     gap: 10px;
   }
 }
 
 @media (min-width: 761px) {
-  .lease-ledger-obligations-table {
+  .lease-ledger-obligations-table,
+  .lease-ledger-entries-table {
     display: block;
   }
 }

@@ -582,6 +582,46 @@ function ObligationMobileCard({
   );
 }
 
+function LedgerEntryMobileCard({ entry }: { entry: LeaseLedgerEntry }) {
+  const amountColor = entry.entryType === "payment" ? "#047857" : "#0f172a";
+  return (
+    <article className="lease-ledger-entry-card">
+      <div className="lease-ledger-entry-card-header">
+        <div>
+          <span>Date</span>
+          <strong>{formatDate(entry.effectiveDate)}</strong>
+        </div>
+        <div>
+          <span>Amount</span>
+          <strong style={{ color: amountColor }}>{formatSignedCurrencyCents(entry.amountCents, entry.entryType)}</strong>
+        </div>
+      </div>
+      <div className="lease-ledger-entry-card-grid">
+        <div>
+          <span>Type</span>
+          <strong>{readableText(entry.entryType)}</strong>
+        </div>
+        <div>
+          <span>Category</span>
+          <strong>{readableText(entry.category)}</strong>
+        </div>
+        <div>
+          <span>Method/ref</span>
+          <strong>{[entry.method, entry.reference].filter(Boolean).join(" · ") || "—"}</strong>
+        </div>
+        <div>
+          <span>Balance</span>
+          <strong>{formatCurrencyCents(entry.balanceCents)}</strong>
+        </div>
+      </div>
+      <div className="lease-ledger-entry-card-section">
+        <span>Notes</span>
+        <strong>{entry.notes || "—"}</strong>
+      </div>
+    </article>
+  );
+}
+
 function prettyEvidenceStatus(row: LeaseObligationLedgerRow): string {
   const evidence = String(row.evidenceStatus || "").trim();
   if (evidence) return evidence.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
@@ -1151,25 +1191,23 @@ export default function LeaseLedgerPage() {
 
       {loading ? (
         <div>Loading ledger…</div>
+      ) : entries.length === 0 ? (
+        <div style={{ border: "1px solid #e2e8f0", borderRadius: 12, padding: 12, color: "#64748b", background: "#fff" }}>
+          No ledger entries for this range.
+        </div>
       ) : (
-        <div style={{ overflowX: "auto", border: "1px solid #e2e8f0", borderRadius: 12 }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 860 }}>
-            <thead>
-              <tr style={{ background: "#f8fafc" }}>
-                {["Date", "Type", "Category", "Amount", "Method/Ref", "Notes", "Balance"].map((h) => (
-                  <th key={h} style={{ textAlign: "left", padding: 10, borderBottom: "1px solid #e2e8f0" }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {entries.length === 0 ? (
-                <tr>
-                  <td colSpan={7} style={{ padding: 12, color: "#64748b" }}>
-                    No ledger entries for this range.
-                  </td>
+        <>
+          <div className="lease-ledger-entries-table" style={{ overflowX: "auto", border: "1px solid #e2e8f0", borderRadius: 12 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 860 }}>
+              <thead>
+                <tr style={{ background: "#f8fafc" }}>
+                  {["Date", "Type", "Category", "Amount", "Method/Ref", "Notes", "Balance"].map((h) => (
+                    <th key={h} style={{ textAlign: "left", padding: 10, borderBottom: "1px solid #e2e8f0" }}>{h}</th>
+                  ))}
                 </tr>
-              ) : (
-                entries.map((entry) => (
+              </thead>
+              <tbody>
+                {entries.map((entry) => (
                   <tr key={entry.id}>
                     <td style={{ padding: 10, borderBottom: "1px solid #f1f5f9" }}>{entry.effectiveDate}</td>
                     <td style={{ padding: 10, borderBottom: "1px solid #f1f5f9", textTransform: "capitalize" }}>{entry.entryType}</td>
@@ -1183,11 +1221,16 @@ export default function LeaseLedgerPage() {
                     <td style={{ padding: 10, borderBottom: "1px solid #f1f5f9" }}>{entry.notes || "—"}</td>
                     <td style={{ padding: 10, borderBottom: "1px solid #f1f5f9" }}>{formatCurrencyCents(entry.balanceCents)}</td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="lease-ledger-entry-cards" aria-label="Ledger entry cards">
+            {entries.map((entry) => (
+              <LedgerEntryMobileCard key={entry.id} entry={entry} />
+            ))}
+          </div>
+        </>
       )}
 
       {monthlyRows.length ? (

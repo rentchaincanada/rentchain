@@ -451,8 +451,11 @@ describe("LeaseLedgerPage", () => {
     expect((await screen.findAllByText("Harbour View · Unit 101")).length).toBeGreaterThan(0);
     expect(screen.getAllByText("$1,450.00").length).toBeGreaterThan(0);
     expect(screen.getAllByText("$100.00").length).toBeGreaterThan(0);
-    expect(screen.getByText("+$1,450.00")).toBeInTheDocument();
-    expect(screen.getByText("-$100.00")).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Method/Ref" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Ledger entry cards")).toBeInTheDocument();
+    expect(screen.getAllByText("+$1,450.00").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("-$100.00").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Balance").length).toBeGreaterThan(0);
     expect(screen.queryByText("145000")).not.toBeInTheDocument();
     expect(screen.queryByText("10000")).not.toBeInTheDocument();
   });
@@ -706,7 +709,7 @@ describe("LeaseLedgerPage", () => {
     expect(await screen.findByText("Obligation ledger is not available yet for this lease.")).toBeInTheDocument();
     expect(screen.getByText("All rent obligations are up to date.")).toBeInTheDocument();
     expect(screen.getByText("No issues detected. Everything is up to date.")).toBeInTheDocument();
-    expect(screen.getByText("+$1,450.00")).toBeInTheDocument();
+    expect(screen.getAllByText("+$1,450.00").length).toBeGreaterThan(0);
     expect(screen.getAllByText("$1,450.00").length).toBeGreaterThan(0);
   });
 
