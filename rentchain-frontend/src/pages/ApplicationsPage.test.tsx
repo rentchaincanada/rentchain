@@ -124,8 +124,9 @@ vi.mock("@/api/screeningApi", () => ({
 }));
 
 vi.mock("../components/layout/ResponsiveMasterDetail", () => ({
-  ResponsiveMasterDetail: ({ master, detail }: any) => (
+  ResponsiveMasterDetail: ({ searchSlot, master, detail }: any) => (
     <div>
+      <div>{searchSlot}</div>
       <div>{master}</div>
       <div>{detail}</div>
     </div>
@@ -575,6 +576,11 @@ describe("ApplicationsPage", () => {
     });
 
     expect(screen.getByRole("button", { name: "Send screening invite" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open screening setup" })).toBeInTheDocument();
+    expect(screen.queryByText("Screening Provider")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open screening setup" }));
+
     expect(screen.getAllByText("Screening provider setup").length).toBeGreaterThan(0);
     expect(screen.getByText("Screening Provider")).toBeInTheDocument();
     expect(screen.getAllByText("Screening workflow").length).toBeGreaterThan(0);
@@ -589,6 +595,45 @@ describe("ApplicationsPage", () => {
     expect(screen.queryByText("TransUnion Connection")).not.toBeInTheDocument();
     expect(screen.getByText("Application Funnel")).toBeInTheDocument();
     expect(screen.getByText("40%")).toBeInTheDocument();
+  });
+
+  it("exposes the supported in-progress status filter and requests in-progress records", async () => {
+    const { container } = render(
+      <MemoryRouter>
+        <ApplicationsPage />
+      </MemoryRouter>
+    );
+
+    await screen.findByText("Jamie Stone");
+    const statusSelect = container.querySelector(".rc-applications-filter") as HTMLSelectElement;
+
+    expect(screen.getByRole("option", { name: "In progress" })).toBeInTheDocument();
+    expect(statusSelect).toBeTruthy();
+    fireEvent.change(statusSelect, { target: { value: "IN_PROGRESS" } });
+
+    await waitFor(() => {
+      expect(mocks.fetchRentalApplications).toHaveBeenCalledWith(
+        expect.objectContaining({
+          propertyId: undefined,
+          status: "IN_PROGRESS",
+        })
+      );
+    });
+  });
+
+  it("explains a funnel-linked submitted filter when no submitted records are returned", async () => {
+    mocks.fetchRentalApplications.mockResolvedValue([]);
+
+    render(
+      <MemoryRouter initialEntries={["/applications?entry=application-funnel&status=SUBMITTED"]}>
+        <ApplicationsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Application funnel review")).toBeInTheDocument();
+    expect(await screen.findByText("No submitted applications found")).toBeInTheDocument();
+    expect(screen.getByText(/The Application Funnel includes started and in-progress application-link activity/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "View all statuses" })).toBeInTheDocument();
   });
 
   it("hydrates analytics application-funnel query params into valid filters", async () => {
@@ -659,7 +704,7 @@ describe("ApplicationsPage", () => {
 
     expect(await screen.findByText("Application Funnel")).toBeInTheDocument();
     expect(screen.getByText("Started")).toBeInTheDocument();
-    expect(screen.getByText("In progress")).toBeInTheDocument();
+    expect(screen.getAllByText("In progress").length).toBeGreaterThan(0);
     expect(screen.getByText("Completed")).toBeInTheDocument();
     expect(screen.getByText("Conversion")).toBeInTheDocument();
     expect(screen.getByText("40%")).toBeInTheDocument();
@@ -742,6 +787,8 @@ describe("ApplicationsPage", () => {
     );
 
     await screen.findAllByRole("heading", { name: "Applications" });
+    fireEvent.click(screen.getByRole("button", { name: "Open screening setup" }));
+
     expect(
       screen.getAllByText("Next step: choose an applicant, then start screening from that application.").length
     ).toBeGreaterThan(0);
