@@ -34,6 +34,10 @@ function queueItem(overrides: Partial<OperationalReviewQueueItem> = {}): Operati
   };
 }
 
+function openDetails(title = "Review missing payment") {
+  fireEvent.click(screen.getByRole("button", { name: new RegExp(`Details and manual controls for ${title}`, "i") }));
+}
+
 describe("OperationalReviewQueue", () => {
   it("renders manual-only review queue metadata without action controls", () => {
     render(
@@ -47,25 +51,82 @@ describe("OperationalReviewQueue", () => {
     expect(screen.getByText("Review missing payment")).toBeInTheDocument();
     expect(screen.getAllByText("North Towers · Unit 104 · James Smith").length).toBeGreaterThan(0);
     expect(screen.getByText("Payment Ledger Review")).toBeInTheDocument();
+    expect(screen.getByText("Assigned reviewer: Operations owned")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Details and manual controls for Review missing payment/i })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("Delinquency or payment evidence review")).not.toBeInTheDocument();
+    openDetails();
+    expect(screen.getByRole("button", { name: /Hide details and manual controls for Review missing payment/i })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getAllByTestId("operational-review-card-row")[0].nextElementSibling).toBe(
+      screen.getByTestId("operational-review-details-panel")
+    );
     expect(screen.getByText("Delinquency or payment evidence review")).toBeInTheDocument();
-    expect(screen.getAllByText("Operations owned").length).toBeGreaterThan(0);
     expect(screen.getByText("Review required")).toBeInTheDocument();
-    expect(screen.getByText("Details and manual controls")).toBeInTheDocument();
     expect(screen.getByLabelText("Review status for Review missing payment")).toHaveValue("open");
     expect(screen.getByLabelText("Assigned reviewer for Review missing payment")).toHaveValue("operations");
-    expect(screen.getByText("Manual status: Open")).toBeInTheDocument();
+    expect(screen.getAllByText("Manual status: Open").length).toBeGreaterThan(0);
     expect(screen.getByText("Manual assignment: Operations owned")).toBeInTheDocument();
     expect(screen.getByText(/They do not route work automatically, change source records, or alter financial status/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Payments / obligations source workflow" })).toHaveAttribute(
       "href",
       "/leases/lease-1/ledger"
     );
-    expect(screen.queryByRole("button")).not.toBeInTheDocument();
     expect(screen.queryByText(/create review workspace/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/auto.?route/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/mutate ledger/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/institutional sharing/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/tenant-visible review/i)).not.toBeInTheDocument();
+  });
+
+  it("renders one full-width details panel after the row containing the selected card", () => {
+    render(
+      <MemoryRouter>
+        <OperationalReviewQueue
+          items={[
+            queueItem(),
+            queueItem({
+              queueItemId: "manual-review-queue:lease:lease-2",
+              title: "Review lease lifecycle",
+              contextLabel: "South Towers · Unit 205",
+              destination: "/leases/lease-2/workflows/renewal",
+              workspaceType: "lease_lifecycle_review",
+              evidenceLabel: "Lease lifecycle source workflow",
+              relatedResourceLabel: "South Towers · Unit 205",
+              manualReviewScope: "workflow",
+              manualReviewScopeId: "lease-2",
+            }),
+            queueItem({
+              queueItemId: "manual-review-queue:deposit:lease-3",
+              title: "Review deposit issue",
+              contextLabel: "West Towers · Unit 309",
+              destination: "/leases/lease-3/workflows/deposit",
+              workspaceType: "deposit_review",
+              evidenceLabel: "Deposit source workflow",
+              relatedResourceLabel: "West Towers · Unit 309",
+              manualReviewScope: "workflow",
+              manualReviewScopeId: "lease-3",
+            }),
+          ]}
+        />
+      </MemoryRouter>
+    );
+
+    openDetails();
+    let rows = screen.getAllByTestId("operational-review-card-row");
+    expect(rows[0].nextElementSibling).toBe(screen.getByTestId("operational-review-details-panel"));
+    expect(screen.getByRole("button", { name: /Hide details and manual controls for Review missing payment/i })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: /Details and manual controls for Review lease lifecycle/i })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByRole("button", { name: /Details and manual controls for Review deposit issue/i })).toHaveAttribute("aria-expanded", "false");
+
+    openDetails("Review deposit issue");
+
+    rows = screen.getAllByTestId("operational-review-card-row");
+    expect(screen.getAllByTestId("operational-review-details-panel")).toHaveLength(1);
+    expect(rows[1].nextElementSibling).toBe(screen.getByTestId("operational-review-details-panel"));
+    expect(screen.getByRole("button", { name: /Details and manual controls for Review missing payment/i })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByRole("button", { name: /Details and manual controls for Review lease lifecycle/i })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByRole("button", { name: /Hide details and manual controls for Review deposit issue/i })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByTestId("operational-review-details-panel")).toHaveTextContent("Review deposit issue");
+    expect(screen.getByTestId("operational-review-details-panel")).toHaveTextContent("West Towers · Unit 309");
   });
 
   it("updates manual assignment and status metadata without adding mutation actions", () => {
@@ -74,6 +135,8 @@ describe("OperationalReviewQueue", () => {
         <OperationalReviewQueue items={[queueItem()]} />
       </MemoryRouter>
     );
+
+    openDetails();
 
     fireEvent.change(screen.getByLabelText("Review status for Review missing payment"), {
       target: { value: "in_review" },
@@ -116,6 +179,7 @@ describe("OperationalReviewQueue", () => {
     expect(screen.getByText("Operational review item")).toBeInTheDocument();
     expect(screen.getByText("Operational review context")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open source workflow evidence" })).toBeInTheDocument();
+    openDetails("Operational review item");
     expect(screen.getByText("Scoped resource context")).toBeInTheDocument();
     expect(screen.queryByText(/Decision decision:/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Lease JK6S7JQ2HsMj8m8RFI76/i)).not.toBeInTheDocument();
@@ -138,6 +202,8 @@ describe("OperationalReviewQueue", () => {
         <OperationalReviewQueue items={[queueItem()]} />
       </MemoryRouter>
     );
+
+    openDetails();
 
     // Check that interactive elements have adequate touch target sizing
     const selectElements = container.querySelectorAll('select');
@@ -162,6 +228,8 @@ describe("OperationalReviewQueue", () => {
       </MemoryRouter>
     );
 
+    openDetails();
+
     const statusSelect = screen.getByLabelText("Review status for Review missing payment");
     expect(statusSelect).toHaveAttribute('aria-describedby');
 
@@ -179,6 +247,8 @@ describe("OperationalReviewQueue", () => {
         <OperationalReviewQueue items={[queueItem()]} />
       </MemoryRouter>
     );
+
+    openDetails();
 
     // Change status to trigger confirmation
     fireEvent.change(screen.getByLabelText("Review status for Review missing payment"), {
@@ -211,7 +281,8 @@ describe("OperationalReviewQueue", () => {
     );
 
     // Initially shows current status
-    expect(screen.getByText("Manual status: Open")).toBeInTheDocument();
+    expect(screen.getAllByText("Manual status: Open").length).toBeGreaterThan(0);
+    openDetails();
 
     // Change assignment
     fireEvent.change(screen.getByLabelText("Assigned reviewer for Review missing payment"), {
@@ -219,7 +290,7 @@ describe("OperationalReviewQueue", () => {
     });
 
     // Status should still show original value until confirmed
-    expect(screen.getByText("Manual status: Open")).toBeInTheDocument();
+    expect(screen.getAllByText("Manual status: Open").length).toBeGreaterThan(0);
 
     // Should show pending state
     expect(screen.getByText(/Change pending confirmation/i)).toBeInTheDocument();
