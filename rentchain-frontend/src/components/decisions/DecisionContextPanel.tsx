@@ -124,7 +124,9 @@ export function DecisionContextPanel({
 
       <div style={{ display: "grid", gap: 4 }}>
         <div style={{ color: "#334155", fontSize: 12, fontWeight: 800, textTransform: "uppercase" }}>Review workflow trail</div>
-        <div style={{ color: "#64748b", fontSize: 12 }}>Tracks operational review actions only.</div>
+        <div style={{ color: "#64748b", fontSize: 12 }}>
+          Tracks operational review actions only; reviewed or resolved status does not mark rent paid.
+        </div>
         <div style={{ color: "#475569", fontSize: 12 }}>
           Workflow status: <strong>{decisionStatusCopy[decision.status || "detected"]}</strong>
         </div>

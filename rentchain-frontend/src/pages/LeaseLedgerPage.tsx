@@ -92,6 +92,15 @@ function obligationOutstandingCents(row: LeaseObligationLedgerRow): number {
   return Math.max(0, Number(row.expectedAmountCents || 0) - Number(row.paidAmountCents || 0));
 }
 
+function totalOutstandingObligationCents(
+  obligationRows: LeaseObligationLedgerRow[],
+  obligationSummary: LeaseObligationLedgerSummary | null
+): number {
+  const summaryOutstanding = Number(obligationSummary?.outstandingAmountCents);
+  if (Number.isFinite(summaryOutstanding) && summaryOutstanding > 0) return Math.round(summaryOutstanding);
+  return obligationRows.reduce((sum, row) => sum + obligationOutstandingCents(row), 0);
+}
+
 const obligationStatusCopy: Record<PaymentObligationStatus, { label: string; bg: string; color: string; border: string }> = {
   expected: { label: "Expected", bg: "#eff6ff", color: "#1d4ed8", border: "#bfdbfe" },
   pending: { label: "Pending", bg: "#fef9c3", color: "#854d0e", border: "#fde68a" },
@@ -704,6 +713,11 @@ export default function LeaseLedgerPage() {
   const [paymentNotes, setPaymentNotes] = useState("");
 
   const decisionSummary = useMemo(() => summarizeDecisionItems(decisions), [decisions]);
+  const outstandingObligationCents = useMemo(
+    () => totalOutstandingObligationCents(obligationRows, obligationSummary),
+    [obligationRows, obligationSummary]
+  );
+  const hasUnallocatedCreditNotice = totals.balanceCents < 0 && outstandingObligationCents > 0;
 
   const monthlyRows = useMemo(() => {
     return Object.entries(monthlyTotals).sort((a, b) => (a[0] < b[0] ? 1 : -1));
@@ -993,6 +1007,17 @@ export default function LeaseLedgerPage() {
           <strong>{formatCurrencyCents(totals.balanceCents)}</strong>
         </div>
       </div>
+      {hasUnallocatedCreditNotice ? (
+        <div style={{ border: "1px solid #fde68a", borderRadius: 12, padding: 12, background: "#fffbeb", color: "#713f12", display: "grid", gap: 4 }}>
+          <strong>Credit balance needs allocation review</strong>
+          <span>
+            This lease has an aggregate credit balance of {formatCurrencyCents(totals.balanceCents)}, but{" "}
+            {formatCurrencyCents(outstandingObligationCents)} remains outstanding on specific obligations because payments have not been
+            matched or allocated to those obligations.
+          </span>
+          <span>Review the obligation rows before resolving overdue decisions.</span>
+        </div>
+      ) : null}
 
       <section className="lease-ledger-csv-card">
         <div className="lease-ledger-csv-card-header">
