@@ -1,0 +1,194 @@
+.lease-ledger-page {
+  box-sizing: border-box;
+  display: grid;
+  gap: 14px;
+  width: min(100%, 1180px);
+  margin: 0 auto;
+  padding: clamp(12px, 3vw, 24px);
+}
+
+.lease-ledger-page *,
+.lease-ledger-page *::before,
+.lease-ledger-page *::after {
+  box-sizing: border-box;
+}
+
+.lease-ledger-actions,
+.lease-ledger-csv-card-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.lease-ledger-actions {
+  justify-content: flex-end;
+}
+
+.lease-ledger-csv-card {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+  padding: 12px;
+}
+
+.lease-ledger-csv-card-header {
+  align-items: center;
+  justify-content: space-between;
+}
+
+.lease-ledger-csv-panel,
+.lease-ledger-csv-panel section {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.lease-ledger-csv-panel pre {
+  max-width: 100%;
+}
+
+.lease-ledger-csv-panel input[type="file"] {
+  max-width: 100%;
+}
+
+.lease-ledger-advanced-reference {
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.lease-ledger-advanced-reference summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.lease-ledger-decision-card {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+  padding: 12px;
+}
+
+.lease-ledger-decision-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+  gap: 8px;
+}
+
+.lease-ledger-decision-summary > div,
+.lease-ledger-next-action {
+  min-width: 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+  padding: 10px;
+}
+
+.lease-ledger-decision-summary span,
+.lease-ledger-next-action span,
+.lease-ledger-obligation-card span {
+  display: block;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.lease-ledger-decision-summary strong,
+.lease-ledger-next-action strong,
+.lease-ledger-obligation-card strong {
+  color: #0f172a;
+  overflow-wrap: anywhere;
+}
+
+.lease-ledger-decision-primary {
+  grid-column: 1 / -1;
+}
+
+.lease-ledger-next-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.lease-ledger-next-action > div {
+  min-width: 0;
+}
+
+.lease-ledger-obligation-cards {
+  display: none;
+}
+
+.lease-ledger-obligation-card {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+  padding: 12px;
+}
+
+.lease-ledger-obligation-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.lease-ledger-obligation-card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.lease-ledger-obligation-card-section {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+@media (max-width: 760px) {
+  .lease-ledger-page {
+    padding: 12px;
+  }
+
+  .lease-ledger-actions {
+    justify-content: stretch;
+    width: 100%;
+  }
+
+  .lease-ledger-actions > a,
+  .lease-ledger-actions > button,
+  .lease-ledger-csv-card-header > button,
+  .lease-ledger-next-action > button {
+    flex: 1 1 140px;
+    min-width: 0;
+  }
+
+  .lease-ledger-csv-card-header,
+  .lease-ledger-next-action {
+    align-items: stretch;
+  }
+
+  .lease-ledger-obligations-table {
+    display: none;
+  }
+
+  .lease-ledger-obligation-cards {
+    display: grid;
+    gap: 10px;
+  }
+}
+
+@media (min-width: 761px) {
+  .lease-ledger-obligations-table {
+    display: block;
+  }
+}

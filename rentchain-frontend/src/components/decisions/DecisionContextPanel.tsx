@@ -1,8 +1,17 @@
-import React from "react";
+import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import type { LeaseDelinquencySignal, LeaseObligationLedgerRow } from "@/api/leaseLedgerApi";
 import { decisionStatusCopy, type DecisionItem } from "@/lib/decisions/decisionDisplay";
 import { buildDecisionContextLinks, buildDecisionEvidenceItems } from "@/lib/decisions/decisionContext";
+
+type InternalEvidenceMode = "inline" | "advanced";
+
+function isInternalEvidenceItem(label: string): boolean {
+  return (
+    label.startsWith("Internal ") ||
+    label === "Provider payment reference"
+  );
+}
 
 export function DecisionContextPanel({
   decision,
@@ -10,15 +19,22 @@ export function DecisionContextPanel({
   delinquencySignals,
   includeAdminReviewLink = false,
   compact = false,
+  internalEvidenceMode = "inline",
 }: {
   decision: DecisionItem;
   obligationRows?: LeaseObligationLedgerRow[] | null;
   delinquencySignals?: LeaseDelinquencySignal[] | null;
   includeAdminReviewLink?: boolean;
   compact?: boolean;
+  internalEvidenceMode?: InternalEvidenceMode;
 }) {
+  const [showAdvancedEvidence, setShowAdvancedEvidence] = useState(false);
   const links = buildDecisionContextLinks(decision, { includeAdminReviewLink });
   const evidenceItems = buildDecisionEvidenceItems(decision, { obligationRows, delinquencySignals });
+  const defaultEvidenceItems =
+    internalEvidenceMode === "advanced" ? evidenceItems.filter((item) => !isInternalEvidenceItem(item.label)) : evidenceItems;
+  const advancedEvidenceItems =
+    internalEvidenceMode === "advanced" ? evidenceItems.filter((item) => isInternalEvidenceItem(item.label)) : [];
   const latestAction = decision.latestAction;
 
   return (
@@ -65,13 +81,45 @@ export function DecisionContextPanel({
       <div style={{ display: "grid", gap: 6 }}>
         <div style={{ color: "#334155", fontSize: 12, fontWeight: 800, textTransform: "uppercase" }}>Evidence</div>
         <dl style={{ display: "grid", gridTemplateColumns: compact ? "1fr" : "repeat(auto-fit, minmax(170px, 1fr))", gap: 8, margin: 0 }}>
-          {evidenceItems.map((item) => (
+          {defaultEvidenceItems.map((item) => (
             <div key={`${item.label}-${item.value}`} style={{ display: "grid", gap: 2 }}>
               <dt style={{ color: "#64748b", fontSize: 12 }}>{item.label}</dt>
               <dd style={{ color: "#0f172a", fontSize: 13, fontWeight: 700, margin: 0, overflowWrap: "anywhere" }}>{item.value}</dd>
             </div>
           ))}
         </dl>
+        {advancedEvidenceItems.length ? (
+          <div style={{ display: "grid", gap: 8 }}>
+            <button
+              type="button"
+              aria-expanded={showAdvancedEvidence}
+              onClick={() => setShowAdvancedEvidence((current) => !current)}
+              style={{
+                justifySelf: "start",
+                border: "1px solid #cbd5e1",
+                borderRadius: 8,
+                background: "#fff",
+                padding: "6px 9px",
+                fontWeight: 800,
+              }}
+            >
+              {showAdvancedEvidence ? "Hide advanced evidence" : "Show advanced evidence"}
+            </button>
+            {showAdvancedEvidence ? (
+              <dl
+                aria-label="Advanced evidence"
+                style={{ display: "grid", gridTemplateColumns: compact ? "1fr" : "repeat(auto-fit, minmax(170px, 1fr))", gap: 8, margin: 0 }}
+              >
+                {advancedEvidenceItems.map((item) => (
+                  <div key={`${item.label}-${item.value}`} style={{ display: "grid", gap: 2 }}>
+                    <dt style={{ color: "#64748b", fontSize: 12 }}>{item.label}</dt>
+                    <dd style={{ color: "#0f172a", fontSize: 13, fontWeight: 700, margin: 0, overflowWrap: "anywhere" }}>{item.value}</dd>
+                  </div>
+                ))}
+              </dl>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       <div style={{ display: "grid", gap: 4 }}>

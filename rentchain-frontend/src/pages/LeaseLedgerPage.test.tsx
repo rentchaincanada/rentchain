@@ -473,6 +473,7 @@ describe("LeaseLedgerPage", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "Financial status" })).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "Financial signal" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Payment obligation cards")).toBeInTheDocument();
     expect(screen.queryByRole("columnheader", { name: "Status" })).not.toBeInTheDocument();
     expect(screen.queryByRole("columnheader", { name: "Delinquency" })).not.toBeInTheDocument();
     expect(screen.getAllByText("Expected").length).toBeGreaterThan(0);
@@ -484,7 +485,7 @@ describe("LeaseLedgerPage", () => {
     expect(screen.getByText("$4,200.00")).toBeInTheDocument();
     expect(screen.getAllByText("1").length).toBeGreaterThan(0);
     expect(screen.getAllByText("$1,350.00").length).toBeGreaterThan(0);
-    expect(screen.getByText("$1,500.00")).toBeInTheDocument();
+    expect(screen.getAllByText("$1,500.00").length).toBeGreaterThan(0);
     expect(screen.queryByText("1015000")).not.toBeInTheDocument();
     expect(screen.queryByText("595000")).not.toBeInTheDocument();
     expect(screen.queryByText("420000")).not.toBeInTheDocument();
@@ -494,11 +495,31 @@ describe("LeaseLedgerPage", () => {
     expect(screen.getAllByText("Overpaid").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Missing").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Failed").length).toBeGreaterThan(0);
-    expect(screen.getByText("Manual review")).toBeInTheDocument();
+    expect(screen.getAllByText("Manual review").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Unknown").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Reconciled").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Manual Review Required").length).toBeGreaterThan(0);
-    expect(screen.getByText(new Date(2026, 4, 5).toLocaleDateString())).toBeInTheDocument();
+    expect(screen.getAllByText(new Date(2026, 4, 5).toLocaleDateString()).length).toBeGreaterThan(0);
+  });
+
+  it("keeps the payment CSV import collapsed until the landlord opens it", async () => {
+    render(
+      <MemoryRouter initialEntries={["/leases/lease-1/ledger"]}>
+        <Routes>
+          <Route path="/leases/:leaseId/ledger" element={<LeaseLedgerPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("AI-assisted payment CSV import")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Import payments CSV" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Payment CSV file")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Import payments CSV" }));
+
+    expect(screen.getByRole("button", { name: "Hide" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Payment CSV file")).toBeInTheDocument();
+    expect(screen.getByLabelText("Payment CSV import assistant")).toBeInTheDocument();
   });
 
   it("renders delinquency summary cards and row-level signal reasons", async () => {
@@ -519,11 +540,11 @@ describe("LeaseLedgerPage", () => {
     expect(await screen.findByText("$4,250.00")).toBeInTheDocument();
     expect(screen.queryByText("425000")).not.toBeInTheDocument();
 
-    expect(screen.getByText("Overdue — Rent past due date (obligation missing after due date)")).toBeInTheDocument();
-    expect(screen.getByText("Missing — No rent payment found after due date (missing rent payment after due date)")).toBeInTheDocument();
-    expect(screen.getByText("Underpaid — Partial payment received (obligation partially paid)")).toBeInTheDocument();
-    expect(screen.getByText("Failed — Payment did not complete (obligation payment failed)")).toBeInTheDocument();
-    expect(screen.getByText("Manual review required — Payment mismatch or incomplete evidence (obligation requires manual review)")).toBeInTheDocument();
+    expect(screen.getAllByText("Overdue — Rent past due date (obligation missing after due date)").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Missing — No rent payment found after due date (missing rent payment after due date)").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Underpaid — Partial payment received (obligation partially paid)").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Failed — Payment did not complete (obligation payment failed)").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Manual review required — Payment mismatch or incomplete evidence (obligation requires manual review)").length).toBeGreaterThan(0);
   });
 
   it("renders read-only lease decisions derived from delinquency signals", async () => {
@@ -543,9 +564,10 @@ describe("LeaseLedgerPage", () => {
     expect(screen.getByText("Overdue Rent")).toBeInTheDocument();
     expect(screen.getAllByText("Financial signal").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Workflow status").length).toBeGreaterThan(0);
-    expect(
-      screen.getAllByText("Workflow actions update review handling only. Financial status is derived from payments, obligations, and reconciliation evidence.").length
-    ).toBeGreaterThan(0);
+    expect(screen.getAllByText("Recommended next action").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Record payment").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Property / unit").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Harbour View · Unit 101").length).toBeGreaterThan(0);
     expect(screen.getByText("Active critical decisions")).toBeInTheDocument();
     expect(screen.getByText("Active warning decisions")).toBeInTheDocument();
     expect(screen.getByText("Active decision count")).toBeInTheDocument();
@@ -560,8 +582,14 @@ describe("LeaseLedgerPage", () => {
     expect(screen.getByRole("link", { name: "Jane Tenant" })).toHaveAttribute("href", "/tenants?tenantId=tenant-1");
     expect(screen.queryByText(/Unit ref/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Tenant ref/i)).not.toBeInTheDocument();
+    expect(screen.queryByText("Internal Property ID")).not.toBeInTheDocument();
+    expect(screen.queryByText("Internal Lease ID")).not.toBeInTheDocument();
+    expect(screen.queryByText("Provider payment reference")).not.toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button", { name: "Show advanced evidence" })[0]);
+    expect(screen.getAllByText("Internal Property ID").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Internal Unit ID").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Internal Tenant ID").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Internal Lease ID").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Outstanding amount").length).toBeGreaterThan(0);
     expect(screen.getAllByText("$1,450.00").length).toBeGreaterThan(0);
     expect(screen.getByText("Underpaid Rent")).toBeInTheDocument();

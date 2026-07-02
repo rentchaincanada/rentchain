@@ -34,8 +34,10 @@ import {
   type DecisionItem,
   type DecisionSeverity,
 } from "@/lib/decisions/decisionDisplay";
+import { findRelatedDelinquencySignal, findRelatedObligationRow } from "@/lib/decisions/decisionContext";
 import { DecisionContextPanel } from "@/components/decisions/DecisionContextPanel";
 import { PaymentCsvImportPreviewCard } from "@/components/ledger/PaymentCsvImportPreviewCard";
+import "./LeaseLedgerPage.css";
 
 type ChargeType = "rent" | "fee" | "adjustment";
 type PaymentMethod = "cash" | "etransfer" | "cheque" | "bank" | "card" | "other";
@@ -269,6 +271,85 @@ function DecisionActionControls({
   );
 }
 
+function readableText(value: unknown, fallback = "Not available"): string {
+  const text = String(value ?? "").trim();
+  if (!text) return fallback;
+  return text.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function metadataNumber(decision: DecisionItem, key: string): number | null {
+  const value = Number(decision.metadata?.[key]);
+  return Number.isFinite(value) ? value : null;
+}
+
+function metadataString(decision: DecisionItem, key: string): string | null {
+  const value = String(decision.metadata?.[key] ?? "").trim();
+  return value || null;
+}
+
+function recommendedDecisionAction(decision: DecisionItem): { label: string; cta: "record_payment" | "resolve"; helper: string } {
+  switch (decision.decisionType) {
+    case "review_overdue_rent":
+    case "review_underpaid_rent":
+    case "review_missing_payment":
+      return {
+        label: "Record payment or contact the tenant, then resolve once the ledger is updated.",
+        cta: "record_payment",
+        helper: "Opens the existing record payment workflow.",
+      };
+    case "review_failed_payment":
+      return {
+        label: "Review payment evidence and follow up before resolving the issue.",
+        cta: "resolve",
+        helper: "Marks the operational review item resolved only.",
+      };
+    case "review_manual_payment_issue":
+      return {
+        label: "Review the mismatch and resolve after the evidence is reconciled.",
+        cta: "resolve",
+        helper: "Marks the operational review item resolved only.",
+      };
+    default:
+      return {
+        label: "Review the issue and resolve when the source record is correct.",
+        cta: "resolve",
+        helper: "Marks the operational review item resolved only.",
+      };
+  }
+}
+
+function buildDecisionSummaryFacts(
+  decision: DecisionItem,
+  lease: LandlordActiveLease | null,
+  obligationRows: LeaseObligationLedgerRow[],
+  delinquencySignals: LeaseDelinquencySignal[]
+) {
+  const displayDecision = withDecisionReviewContext(decision, lease);
+  const reviewContext = displayDecision.metadata?.reviewContext as Record<string, string | undefined> | undefined;
+  const relatedRow = findRelatedObligationRow(displayDecision, obligationRows);
+  const relatedSignal = findRelatedDelinquencySignal(displayDecision, delinquencySignals);
+  const outstandingAmountCents =
+    relatedSignal?.outstandingAmountCents ??
+    metadataNumber(displayDecision, "outstandingAmountCents") ??
+    (relatedRow ? obligationOutstandingCents(relatedRow) : null);
+  const dueDate = relatedSignal?.dueDate || relatedRow?.dueDate || metadataString(displayDecision, "dueDate");
+  const obligationStatus = relatedRow?.obligationStatus || metadataString(displayDecision, "obligationStatus");
+  const propertyUnitLabel =
+    reviewContext?.propertyLabel && reviewContext?.unitLabel
+      ? `${reviewContext.propertyLabel} · ${reviewContext.unitLabel}`
+      : reviewContext?.propertyLabel || reviewContext?.unitLabel || "Property / unit context available";
+
+  return {
+    displayDecision,
+    tenantLabel: reviewContext?.tenantName || (displayDecision.tenantId ? "Tenant context available" : "Tenant not linked"),
+    propertyUnitLabel,
+    outstandingAmount: outstandingAmountCents != null ? formatCurrencyCents(outstandingAmountCents) : "Not available",
+    dueDate: dueDate ? formatDate(dueDate) : "Not available",
+    obligationStatus: readableText(obligationStatus),
+    recommendedAction: recommendedDecisionAction(displayDecision),
+  };
+}
+
 function buildDecisionReviewContext(lease: LandlordActiveLease | null): Record<string, string> | null {
   if (!lease) return null;
   const propertyLabel = formatOperationalLabel({
@@ -314,6 +395,7 @@ function DecisionRow({
   delinquencySignals,
   pending,
   onAction,
+  onRecordPayment,
 }: {
   decision: DecisionItem;
   lease: LandlordActiveLease | null;
@@ -321,20 +403,12 @@ function DecisionRow({
   delinquencySignals: LeaseDelinquencySignal[];
   pending: boolean;
   onAction: (decision: DecisionItem, actionType: DecisionActionType) => void;
+  onRecordPayment: () => void;
 }) {
   const copy = decisionDisplayCopy[decision.decisionType];
-  const displayDecision = withDecisionReviewContext(decision, lease);
-  const reviewContext = displayDecision.metadata?.reviewContext as Record<string, string | undefined> | undefined;
-  const propertyUnitLabel =
-    reviewContext?.propertyLabel && reviewContext?.unitLabel
-      ? `${reviewContext.propertyLabel} · ${reviewContext.unitLabel}`
-      : reviewContext?.propertyLabel || reviewContext?.unitLabel || null;
-  const context = [
-    propertyUnitLabel,
-    reviewContext?.tenantName || (decision.tenantId ? "Tenant context available" : null),
-  ].filter(Boolean);
+  const summary = buildDecisionSummaryFacts(decision, lease, obligationRows, delinquencySignals);
   return (
-    <div style={{ border: "1px solid #e2e8f0", borderRadius: 12, padding: 12, background: "#fff", display: "grid", gap: 6 }}>
+    <div className="lease-ledger-decision-card">
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
         <strong>{copy.label}</strong>
       </div>
@@ -346,15 +420,56 @@ function DecisionRow({
           {decisionStatusCopy[decision.status || "detected"]}
         </span>
       </div>
-      <div style={{ color: "#475569" }}>{decision.reason}</div>
-      <div style={{ color: "#64748b", fontSize: 12 }}>
-        Workflow actions update review handling only. Financial status is derived from payments, obligations, and reconciliation evidence.
+      <div className="lease-ledger-decision-summary">
+        <div className="lease-ledger-decision-primary">
+          <span>Issue</span>
+          <strong>{decision.reason}</strong>
+        </div>
+        <div>
+          <span>Tenant</span>
+          <strong>{summary.tenantLabel}</strong>
+        </div>
+        <div>
+          <span>Property / unit</span>
+          <strong>{summary.propertyUnitLabel}</strong>
+        </div>
+        <div>
+          <span>Outstanding</span>
+          <strong>{summary.outstandingAmount}</strong>
+        </div>
+        <div>
+          <span>Due date</span>
+          <strong>{summary.dueDate}</strong>
+        </div>
+        <div>
+          <span>Obligation status</span>
+          <strong>{summary.obligationStatus}</strong>
+        </div>
       </div>
-      {context.length ? <div style={{ color: "#64748b", fontSize: 12 }}>{context.join(" · ")}</div> : null}
+      <div className="lease-ledger-next-action">
+        <div>
+          <span>Recommended next action</span>
+          <strong>{summary.recommendedAction.label}</strong>
+        </div>
+        {summary.recommendedAction.cta === "record_payment" ? (
+          <button type="button" onClick={onRecordPayment} title={summary.recommendedAction.helper}>
+            Record payment
+          </button>
+        ) : (
+          <button type="button" disabled={pending} onClick={() => onAction(decision, "resolved")} title={summary.recommendedAction.helper}>
+            {pending ? "Saving..." : "Review / resolve"}
+          </button>
+        )}
+      </div>
       {decision.latestAction ? (
         <div style={{ color: "#64748b", fontSize: 12 }}>Last action: {decisionStatusCopy[decision.latestAction.nextStatus]}</div>
       ) : null}
-      <DecisionContextPanel decision={displayDecision} obligationRows={obligationRows} delinquencySignals={delinquencySignals} />
+      <DecisionContextPanel
+        decision={summary.displayDecision}
+        obligationRows={obligationRows}
+        delinquencySignals={delinquencySignals}
+        internalEvidenceMode="advanced"
+      />
       <DecisionActionControls decision={decision} pending={pending} onAction={onAction} />
     </div>
   );
@@ -418,6 +533,52 @@ function DelinquencyIndicators({
         </span>
       ))}
     </div>
+  );
+}
+
+function ObligationMobileCard({
+  row,
+  signals,
+}: {
+  row: LeaseObligationLedgerRow;
+  signals: LeaseDelinquencySignal[];
+}) {
+  return (
+    <article className="lease-ledger-obligation-card">
+      <div className="lease-ledger-obligation-card-header">
+        <div>
+          <span>Period</span>
+          <strong>{formatPeriod(row)}</strong>
+        </div>
+        <ObligationStatusBadge status={row.obligationStatus || "unknown"} />
+      </div>
+      <div className="lease-ledger-obligation-card-grid">
+        <div>
+          <span>Due date</span>
+          <strong>{formatDate(row.dueDate)}</strong>
+        </div>
+        <div>
+          <span>Expected</span>
+          <strong>{formatCurrencyCents(row.expectedAmountCents)}</strong>
+        </div>
+        <div>
+          <span>Paid</span>
+          <strong>{formatCurrencyCents(row.paidAmountCents)}</strong>
+        </div>
+        <div>
+          <span>Outstanding</span>
+          <strong>{formatCurrencyCents(obligationOutstandingCents(row))}</strong>
+        </div>
+      </div>
+      <div className="lease-ledger-obligation-card-section">
+        <span>Financial signal</span>
+        <DelinquencyIndicators row={row} signals={signals} />
+      </div>
+      <div className="lease-ledger-obligation-card-section">
+        <span>Evidence</span>
+        <strong>{prettyEvidenceStatus(row)}</strong>
+      </div>
+    </article>
   );
 }
 
@@ -489,6 +650,7 @@ export default function LeaseLedgerPage() {
   const [lease, setLease] = useState<LandlordActiveLease | null>(null);
   const [notes, setNotes] = useState<LeaseNote[]>([]);
   const [noteText, setNoteText] = useState("");
+  const [isCsvImportOpen, setIsCsvImportOpen] = useState(false);
 
   const [chargeDate, setChargeDate] = useState(todayIso());
   const [chargeType, setChargeType] = useState<ChargeType>("rent");
@@ -730,7 +892,7 @@ export default function LeaseLedgerPage() {
   }
 
   return (
-    <div style={{ padding: 16, display: "grid", gap: 14 }}>
+    <div className="lease-ledger-page">
       <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", justifyContent: "space-between" }}>
         <div>
           <h1 style={{ margin: 0, fontSize: "1.2rem" }}>Lease Ledger</h1>
@@ -739,7 +901,10 @@ export default function LeaseLedgerPage() {
               ? `${formatOperationalLabel({ kind: "property", label: lease.propertyName || lease.propertyAddress, fallbackLabel: "Property", internalId: lease.propertyId })} · ${formatOperationalLabel({ kind: "unit", label: lease.unitNumber ? `Unit ${lease.unitNumber}` : lease.unitLabel, fallbackLabel: "Unit", internalId: lease.unitId })}`
               : "Lease ledger"}
           </div>
-          <div style={{ color: "#64748b", marginTop: 2, fontSize: 12 }}>{formatInternalReference("lease", leaseId)}</div>
+          <details className="lease-ledger-advanced-reference">
+            <summary>Advanced lease reference</summary>
+            <div>{formatInternalReference("lease", leaseId)}</div>
+          </details>
           {lease ? (
             <div style={{ color: "#334155", marginTop: 6, display: "grid", gap: 2 }}>
               <div>
@@ -749,7 +914,7 @@ export default function LeaseLedgerPage() {
             </div>
           ) : null}
         </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <div className="lease-ledger-actions">
           <Link to="/leases?view=archived">View archive</Link>
           <button aria-label="Add lease note" onClick={() => setShowNoteModal(true)}>Add note</button>
           <button onClick={() => setShowChargeModal(true)}>Add charge</button>
@@ -789,7 +954,24 @@ export default function LeaseLedgerPage() {
         </div>
       </div>
 
-      <PaymentCsvImportPreviewCard />
+      <section className="lease-ledger-csv-card">
+        <div className="lease-ledger-csv-card-header">
+          <div>
+            <div style={{ fontSize: "1rem", fontWeight: 800, color: "#0f172a" }}>AI-assisted payment CSV import</div>
+            <div style={{ color: "#475569", fontSize: 13, marginTop: 3 }}>
+              Upload payment rows when you need assisted matching.
+            </div>
+          </div>
+          <button type="button" onClick={() => setIsCsvImportOpen((current) => !current)}>
+            {isCsvImportOpen ? "Hide" : "Import payments CSV"}
+          </button>
+        </div>
+        {isCsvImportOpen ? (
+          <div className="lease-ledger-csv-panel">
+            <PaymentCsvImportPreviewCard onImportComplete={() => void loadLedger({ showLoading: false })} />
+          </div>
+        ) : null}
+      </section>
 
       {lease?.leaseExecution ? (
         <div style={{ border: "1px solid #e2e8f0", borderRadius: 10, padding: 12, background: "#fff", display: "grid", gap: 8 }}>
@@ -853,6 +1035,7 @@ export default function LeaseLedgerPage() {
                   delinquencySignals={delinquencySignals}
                   pending={decisionActionPendingId === decision.decisionId}
                   onAction={handleDecisionAction}
+                  onRecordPayment={() => setShowPaymentModal(true)}
                 />
               ))}
             </div>
@@ -925,7 +1108,8 @@ export default function LeaseLedgerPage() {
             Obligation ledger is not available yet for this lease.
           </div>
         ) : (
-          <div style={{ overflowX: "auto", border: "1px solid #e2e8f0", borderRadius: 12 }}>
+          <>
+          <div className="lease-ledger-obligations-table" style={{ overflowX: "auto", border: "1px solid #e2e8f0", borderRadius: 12 }}>
             <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1080 }}>
               <thead>
                 <tr style={{ background: "#f8fafc" }}>
@@ -954,6 +1138,12 @@ export default function LeaseLedgerPage() {
               </tbody>
             </table>
           </div>
+          <div className="lease-ledger-obligation-cards" aria-label="Payment obligation cards">
+            {obligationRows.map((row) => (
+              <ObligationMobileCard key={row.rowId} row={row} signals={delinquencySignals} />
+            ))}
+          </div>
+          </>
         )}
       </section>
 
