@@ -1106,7 +1106,7 @@ describe("ApplicationsPage", () => {
     expect(mocks.fetchRentalApplication).not.toHaveBeenCalled();
   });
 
-  it("shows Send reminder for eligible in-progress rows and updates the row after success", async () => {
+  it("shows reminder unavailable for in-progress rows without an applicant email", async () => {
     const now = Date.now();
     mocks.fetchRentalApplications.mockResolvedValue([
       {
@@ -1114,6 +1114,51 @@ describe("ApplicationsPage", () => {
         source: "application_link",
         applicantName: "In-progress applicant",
         email: null,
+        propertyId: "prop-1",
+        unitId: "unit-1",
+        status: "IN_PROGRESS",
+        submittedAt: null,
+        lastActivityAt: now - 8 * 24 * 60 * 60 * 1000,
+        completionPercent: 3,
+        partialProgress: {
+          status: "in_progress",
+          completionPercent: 3,
+          currentStep: "personal_info",
+          completedSections: [],
+          missingSections: ["personal_info", "residential_history", "employment", "references_assets", "consent"],
+          hasCoApplicant: false,
+          viewingChoice: null,
+          startedAt: now - 9 * 24 * 60 * 60 * 1000,
+          lastActivityAt: now - 8 * 24 * 60 * 60 * 1000,
+          submittedAt: null,
+          reminderEligibleAt: now - 60_000,
+          reminderSentAt: now - 25 * 60 * 60 * 1000,
+        },
+      },
+    ]);
+
+    render(
+      <MemoryRouter>
+        <ApplicationsPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("Missing email")).toBeInTheDocument();
+    expect(screen.getByText("Reminder unavailable until applicant email is added.")).toBeInTheDocument();
+    expect(screen.queryByText("Ready to remind")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Send again" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Send reminder" })).not.toBeInTheDocument();
+    expect(mocks.sendApplicationLinkReminder).not.toHaveBeenCalled();
+  });
+
+  it("shows Send reminder for eligible in-progress rows and updates the row after success", async () => {
+    const now = Date.now();
+    mocks.fetchRentalApplications.mockResolvedValue([
+      {
+        id: "link-1",
+        source: "application_link",
+        applicantName: "In-progress applicant",
+        email: "progress@example.com",
         propertyId: "prop-1",
         unitId: "unit-1",
         status: "IN_PROGRESS",
@@ -1166,7 +1211,7 @@ describe("ApplicationsPage", () => {
         id: "link-1",
         source: "application_link",
         applicantName: "In-progress applicant",
-        email: null,
+        email: "progress@example.com",
         propertyId: "prop-1",
         unitId: "unit-1",
         status: "IN_PROGRESS",
@@ -1209,7 +1254,7 @@ describe("ApplicationsPage", () => {
         id: "link-1",
         source: "application_link",
         applicantName: "In-progress applicant",
-        email: null,
+        email: "progress@example.com",
         propertyId: "prop-1",
         unitId: "unit-1",
         status: "IN_PROGRESS",
@@ -1259,7 +1304,7 @@ describe("ApplicationsPage", () => {
         id: "link-1",
         source: "application_link",
         applicantName: "In-progress applicant",
-        email: null,
+        email: "progress@example.com",
         propertyId: "prop-1",
         unitId: "unit-1",
         status: "IN_PROGRESS",

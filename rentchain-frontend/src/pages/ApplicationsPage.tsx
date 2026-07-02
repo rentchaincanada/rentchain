@@ -1886,6 +1886,7 @@ const ApplicationsPage: React.FC = () => {
 
   const canSendPartialReminder = useCallback((application: RentalApplicationSummary) => {
     if (application.source !== "application_link") return false;
+    if (!String(application.email || "").trim()) return false;
     const partialProgress = application.partialProgress;
     if (!partialProgress) return false;
     if (partialProgress.submittedAt) return false;
@@ -1908,9 +1909,11 @@ const ApplicationsPage: React.FC = () => {
 
   const getPartialReminderState = useCallback((application: RentalApplicationSummary) => {
     const partialProgress = application.partialProgress;
+    const missingEmail = !String(application.email || "").trim();
     if (application.source !== "application_link" || !partialProgress) {
       return {
         ready: false,
+        missingEmail,
         recentlyReminded: false,
         reminderSentAt: null as number | null,
         actionLabel: "Send reminder",
@@ -1923,6 +1926,7 @@ const ApplicationsPage: React.FC = () => {
     const ready = canSendPartialReminder(application);
     return {
       ready,
+      missingEmail,
       recentlyReminded,
       reminderSentAt,
       actionLabel: reminderSentAt ? "Send again" : "Send reminder",
@@ -2851,7 +2855,27 @@ const ApplicationsPage: React.FC = () => {
                             <div style={{ color: text.subtle, fontSize: 12 }}>
                               Partial application only. Full application details appear after submission.
                             </div>
-                            {partialReminderState?.reminderSentAt ? (
+                            {partialReminderState?.missingEmail ? (
+                              <div style={{ display: "grid", gap: 4 }}>
+                                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                                  <span
+                                    style={{
+                                      color: "#92400e",
+                                      background: "rgba(245,158,11,0.14)",
+                                      borderRadius: 999,
+                                      padding: "2px 8px",
+                                      fontSize: 11,
+                                      fontWeight: 700,
+                                    }}
+                                  >
+                                    Missing email
+                                  </span>
+                                </div>
+                                <div style={{ color: text.subtle, fontSize: 12 }}>
+                                  Reminder unavailable until applicant email is added.
+                                </div>
+                              </div>
+                            ) : partialReminderState?.reminderSentAt ? (
                               <div style={{ display: "grid", gap: 4 }}>
                                 <div style={{ color: text.subtle, fontSize: 12 }}>
                                   Reminder sent {new Date(partialReminderState.reminderSentAt).toLocaleString()}
